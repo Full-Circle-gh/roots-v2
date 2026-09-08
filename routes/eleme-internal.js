@@ -27,6 +27,11 @@ const inventory = require('../lib/inventory');
 const { packUnits, packDeduct } = require('../lib/pack-units');
 const { productUnitCostYuan } = require('../lib/product-cost');
 const { settlementGap, describeSettlementGap } = require('../lib/channel-settlement');
+// Shared with meituan-internal, and the one place these two files deliberately
+// are NOT copies: "some of this order never came off the shelf" is one fact
+// about our own stock, worded the same whichever platform sent it — and the
+// copies had already drifted on exactly that (see the module's header).
+const { notifyStockGaps } = require('../lib/channel-line-report');
 
 const INTERNAL_SECRET = process.env.ELEME_INTERNAL_SECRET || 'eleme-daemon-internal';
 
@@ -614,12 +619,21 @@ router.post('/ingest-order', (req, res) => {
 
     const unresolved = [];
     let deducted = 0;
+    // Lines the shelf could not cover. Meituan has flagged these since it was
+    // written; this copy never did, so an Eleme oversell was recorded as a Δ0
+    // ledger row and nothing else — six of them on the live database by
+    // 2026-09-08, indistinguishable from a no-op.
+    const oversold = [];
     for (const it of bornVoid ? [] : items) {
-      if (!it.productId) { unresolved.push({ name: it.name, sku: it.sku, qty: it.qty, reason: it.matchBy }); continue; }
+      if (!it.productId) { unresolved.push({ name: it.name, nameEn: it.nameEn, sku: it.sku, qty: it.qty, reason: it.matchBy }); continue; }
       const cur  = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?').get(storeId, it.productId);
       const oldQ = cur ? cur.physical_qty : 0;
       // One six-pack is one line of one, and six off the shelf.
       const took = packDeduct(it.qty, it.units);
+      // The clamp below keeps a channel oversell from driving us negative. That
+      // is deliberate (§39's per-channel debt), but it also means the shortfall
+      // vanishes into a Δ0 row unless it is recorded here.
+      if (oldQ < took) oversold.push({ name: it.name, nameEn: it.nameEn, sku: it.sku, have: oldQ, want: took });
       inventory.adjustStock({
         storeId, productId: it.productId,
         newPhysicalQty: Math.max(0, oldQ - took),
@@ -645,6 +659,30 @@ router.post('/ingest-order', (req, res) => {
         );
       } catch (logErr) { console.error('[eleme-internal] order_unsynced log failed:', logErr.message); }
     }
+
+    // The oversell, in the log Meituan has always written it to.
+    if (oversold.length) {
+      try {
+        db.prepare(`
+          INSERT INTO eleme_sync_log (store_code, event_type, status, detail, error_msg)
+          VALUES (?, 'order_oversold', 'warn', ?, ?)
+        `).run(
+          storeCode || null,
+          JSON.stringify({ ref, oversold }),
+          `${oversold.length} line(s) exceeded on-hand (clamped at 0): ` +
+            oversold.map(o => `${o.nameEn || o.name}${o.sku ? ` (${o.sku})` : ''} have ${o.have} want ${o.want}`).join('; ')
+        );
+      } catch (logErr) { console.error('[eleme-internal] order_oversold log failed:', logErr.message); }
+    }
+
+    // ── AND OUT LOUD ─────────────────────────────────────────────────────────
+    // Everything above goes into a table with no index, no screen and nothing
+    // watching it. That is how 54 undeducted lines accumulated from June to
+    // September and were found only because the stock numbers looked wrong to a
+    // human. The cutlery answer and orphaned heating options are filtered out
+    // first — they are not products, they arrive on nearly every order, and an
+    // alert that fires on all of them buries the ones that matter.
+    notifyStockGaps({ channel: 'eleme', storeCode, orderNo, unresolved, oversold });
 
     // The order's own two money readings disagree by more than fees and a
     // promotion can explain. NOT an error and never a reason to reject the order

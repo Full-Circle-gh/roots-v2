@@ -153,6 +153,12 @@ stub('../lib/inventory', {
   adjustStock: (args) => { deductions.push(args); return { ok: true }; },
 });
 stub('../lib/product-cost', { productUnitCostYuan: () => null });
+// The merchant alert, captured rather than sent. lib/channel-line-report requires
+// these two lazily, so stubbing them here is what keeps the test off the real
+// alert config and the real tenant database.
+const alerts = [];
+stub('../lib/ops-alert', { alertMerchant: (tenantId, text) => { alerts.push({ tenantId, text }); } });
+stub('../lib/tenant-db', { ROOTS_TENANT_ID: 1 });
 
 const router = require(path.join(REPO, 'routes', 'eleme-internal.js'));
 
@@ -165,6 +171,7 @@ function handler(method, route) {
 let seq = 0;
 function ingest(items, extra = {}) {
   deductions.length = 0;
+  alerts.length = 0;
   const req = { body: { storeId: 7, storeCode: 'tianhe',
                         order: { elemeOrderId: `2000000000000000${++seq}`, items,
                                  total: 100, statusDesc: '已完成', ...extra } },
@@ -282,6 +289,31 @@ console.log('\nF · a genuinely ambiguous name is STILL refused');
   check('reason is ambiguous', r.body.unresolved[0] && r.body.unresolved[0].reason === 'ambiguous',
     JSON.stringify(r.body.unresolved));
   check('nothing was deducted', deductions.length === 0, JSON.stringify(deductions));
+}
+
+// ── G · the ingest says so out loud ──────────────────────────────────────────
+// The route's own wiring, not the classifier in isolation: an unmatched line
+// reaches the merchant, and the cutlery answer does not. Both halves matter —
+// this alert only survives contact with a real Meituan order rate if it stays
+// quiet about the option lines that arrive on nearly every one.
+console.log('\nG · an unmatched line reaches the merchant; an option line does not');
+{
+  const r = ingest([{ name: '中东鹰嘴豆泥套餐 Hummus Combo', qty: 1, unitPrice: 64, lineTotal: 64 }]);
+  check('the line was left unresolved', r.body.unresolved.length === 1, JSON.stringify(r.body.unresolved));
+  check('exactly one alert fired', alerts.length === 1, JSON.stringify(alerts));
+  check('it names the order', alerts[0] && alerts[0].text.includes(r.body.orderNo), JSON.stringify(alerts));
+  check('it says the stock was not deducted', alerts[0] && alerts[0].text.includes('库存未扣减'), JSON.stringify(alerts));
+
+  ingest([{ name: '无需餐具 No cutlery（0份）', qty: 1, unitPrice: 0, lineTotal: 0 }]);
+  check('the cutlery answer alerts nobody', alerts.length === 0, JSON.stringify(alerts));
+
+  // An oversell is a different fault from an unmatched line, and reaches the
+  // merchant on its own — Eleme had no detection for this at all until now.
+  db.exec('UPDATE retail_store_stock SET physical_qty = 0 WHERE store_id = 7 AND product_id = 300');
+  const o = ingest([{ name: 'Roasted Pumpkin Soup', sku: 'RT-330', qty: 2, unitPrice: 30, lineTotal: 60 }]);
+  check('the order still lands', o.code === 200 && o.body.ok, JSON.stringify(o));
+  check('the oversell alerts', alerts.length === 1 && alerts[0].text.includes('库存不足'), JSON.stringify(alerts));
+  check('and says what was short', alerts[0] && alerts[0].text.includes('wanted 2, had 0'), JSON.stringify(alerts));
 }
 
 console.log(failures ? `\n${failures} check(s) failed\n` : '\nall checks passed\n');
