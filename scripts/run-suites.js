@@ -103,8 +103,7 @@ const SLOW = new Set([
   'test_mobile_team.js', 'test_mobile_trend.js', 'test_mobile_dots.js',
   'test_mobile_customer_record.js', 'test_mobile_mirrored_order.js',
   'test_mobile_mirrored_order_info.js',
-  'test_stock_home.js', 'test_stock_screens.js',
-  'test_stock_receiving.js', 'test_stock_picking.js', 'test_finance_presentation.js',
+  'test_finance_presentation.js',
   // Drives Chromium for its render pass, so it belongs in the shard where
   // REQUIRE_BROWSER=1 — in the fast shard the render half would skip and report
   // a tick, which is the failure this list exists to stop.
@@ -194,6 +193,9 @@ function discover() {
     alias: aliased.get(file) || null,        // null = no npm script names it
     slow: isSlow(file),
     quarantined: Object.prototype.hasOwnProperty.call(QUARANTINE, file),
+    // The other half of the union's asymmetry. `onDisk` is by definition on
+    // disk; an alias is a claim about a file, and a claim can outlive it.
+    missing: !fs.existsSync(path.join(SCRIPTS, file)),
   }));
 }
 
@@ -306,7 +308,38 @@ function main() {
   const shard = at >= 0 ? (argv[at + 1] || '').trim() : '';
   const onlyQuarantined = argv.includes('--quarantined');
 
-  let plan = discover();
+  const full = discover();
+
+  /* AN ALIAS THAT OUTLIVED ITS FILE. The suite is in the plan only because
+     package.json still points at it, so the runner hands node a path that is
+     not there and the suite fails with MODULE_NOT_FOUND and an EMPTY require
+     stack — which names neither the alias that asked for it nor the deletion
+     that left it behind. Four of those (test_stock_home / _screens / _picking /
+     _receiving) sat red in the slow shard from §48 step 4, which deleted the
+     stock app and the four browser suites that rendered it and recorded the
+     cost in its own message, but did not take the aliases with them.
+     Deregistering them is not skipping a test: the page they rendered does not
+     exist, and test_kitchen_stock_visibility covers what replaced it.
+
+     Asked of the WHOLE discovery, not the sharded plan. isSlow() decides by
+     READING the source for a browser marker, and a file that is not there reads
+     as fast — so a stale alias would be a failure in one shard and invisible in
+     the other, which is the silence this runner exists to break. Both shards
+     refuse, and neither runs a suite first: a plan that is lying about what
+     exists is not worth twelve minutes to disprove.
+
+     --list is exempt on purpose. Seeing the plan is how you diagnose this, and
+     it annotates the row instead. */
+  const missing = full.filter((e) => e.missing);
+  if (missing.length && !argv.includes('--list')) {
+    console.error('These npm scripts name a test file that is not on disk:\n');
+    for (const e of missing) console.error(`  ${e.alias}  →  scripts/${e.file}`);
+    console.error('\nDelete the alias if the suite went with the code it tested,' +
+      '\nrestore the file if it did not. Either way nothing ran.');
+    process.exit(2);
+  }
+
+  let plan = full;
   if (shard === 'fast') plan = plan.filter((e) => !e.slow);
   else if (shard === 'slow') plan = plan.filter((e) => e.slow);
   else if (shard) { console.error(`unknown shard "${shard}" — use fast or slow`); process.exit(2); }
@@ -315,7 +348,9 @@ function main() {
   if (argv.includes('--list')) {
     for (const e of plan) {
       console.log([e.file, e.slow ? 'slow' : 'fast', e.quarantined ? 'quarantined' : '',
-        e.alias ? '' : 'no npm alias'].filter(Boolean).join('\t'));
+        e.alias ? '' : 'no npm alias',
+        e.missing ? `MISSING — ${e.alias} names a file that is not on disk` : '',
+      ].filter(Boolean).join('\t'));
     }
     console.log(`\n${plan.length} suite(s).`);
     return;
@@ -367,4 +402,4 @@ function main() {
    file would run the entire suite as a side effect. */
 if (require.main === module) main();
 
-module.exports = { tail, FAIL_MARK, SLOW, QUARANTINE };
+module.exports = { tail, FAIL_MARK, SLOW, QUARANTINE, discover };
