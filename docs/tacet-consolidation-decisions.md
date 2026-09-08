@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.154
+# Tacet shared-core consolidation — decisions record, v4.155
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-08 · v4.155 — **§67 ADDED: A VARIANT FAMILY IS EDITED FROM THE SHEET ITS CARD OPENS, AND SAVE WRITES THE FAMILY.** Reported by Ash from the phone with the sheet open on `Raspberry Mango Sorbet · SKU (3-210) X5`: *"on mobile, if product have variants - cant change"*. **The catalogue collapses a family into one card — correctly — and then opened only its representative**, `members.find(m => m._id === p.gid) || members[0]`, whichever size happens to own the group. The other sizes were printed along the card's second line as TEXT, and were reachable from nowhere on the phone: not the card, not the sheet, not search, which matches the same collapsed units. A price or a count on any size but one could only be changed from a desktop. **The sheet carries the family now** — a chip row under the quick-edit note, one chip per size, the marked one being the size on screen. **Switching writes nothing, and THEREFORE Save writes the family**: once the sheet moves between sizes freely, a Save that took only what was in front of the operator would drop the rest silently, so pending edits are held per product id and Save walks every size and writes the ones that changed. Save-on-switch and warn-on-switch are both recorded as rejected, as is turning the card's size line into three ~40px targets. **A failure part-way through a family no longer claims nothing changed** — the count of writes that landed picks the message, and the partial one says the rest can be pressed again; one composed pair, declared in `docs/tacet-delivery-vocabulary.md` v1.34. **And one bug it uncovered, fixed in the same pass because it is the same box:** `render()` rebuilds the price `<input>` on every paint, so a price typed and then followed by a tap on a stock stepper was painted back to the stored figure — no variants required, and shipping for as long as the sheet has had both controls.
 
 2026-09-08 · v4.154 — **A QR ORDER CAN BE CANCELLED — BY THE CUSTOMER OR AT THE TILL — AND THE CUSTOMER STOPS LOSING IT WHEN THEY CLOSE THE SHEET. §44's "no login, no session, no cookie" IS NARROWED, NOT OVERTURNED — DECIDED by Ash, 2026-09-08.** Two reports from the counter on the day §44's till flow went live, and they turn out to be one problem: *"if a customer eventually doesnt want the order there should be an option to cancel it from his side or from till"*, and *"after customer placed the order, closed the pop up window where his order number by mistake. he has no way to see his order, order number or anything its all dissaper."* **THE SECOND IS THE PREREQUISITE FOR THE FIRST**, which is why they are ruled together: a customer who cannot get back to their order cannot cancel it either, and the cancel would have been a control only reachable on the one screen they had just lost. **THE ORDER ALREADY HAD A DURABLE PAGE AND NOBODY COULD FIND IT.** §50 gave every QR order a `pay_token` and a page at `/s/:shopCode/pay/:token`, and that page only ever said whether the order was paid. It now carries the number, the name, the amount and the way to cancel, and is the customer's order page rather than a payment screen — **one page for "what did I order", "has it been paid" and "I changed my mind"**, which is three problems answered by a route that already existed. **§44's STATELESSNESS IS NARROWED TO IDENTITY, WHICH IS WHAT IT WAS ALWAYS ABOUT.** The menu now writes ONE thing to the phone that placed the order: the address of that order, the number and the amount, under a per-shop key, expiring in twelve hours. **It is a receipt, not an identity** — it says nothing about who anybody is, it is written by the phone that placed the order and readable only by that phone, and the unguessable token was already the authority it hands back. **The basket is still not persisted and that rule is untouched**: a basket surviving a reload would be a stale order waiting to be submitted by accident, while a PLACED order is the opposite — it exists, and forgetting it is the defect. **The twelve hours are load-bearing rather than tidy**: `shop_order_code` restarts at 1 each trading day (§49), so a bar left up overnight would not merely be old, it would name an order that belongs to somebody else today. **THE TOKEN IS THE AUTHORITY FOR CANCELLING, because on this page there is nothing else it could be** — no login, no session, no account. A wrong token, a malformed one and the right token through another shop's code all 404, the same answer the pay page gives, so neither route confirms which guesses hit something real; a suite drives all three and asserts the order is untouched by each. **ONLY WHILE UNPAID, and the transition is guarded IN the UPDATE rather than around it** (`AND status = 'pending_payment'`), so a customer cancelling at the same moment a cashier takes the money loses the race cleanly instead of both appearing to win. **It releases the reservation** — §45 has a QR order reserving on submit, and a cancel that left the hold behind would take a drink off the shelf for nobody until the sweep noticed. **No points, vouchers or balance are reversed, and that is a property of this door rather than an omission**: a QR order is placed with no `customer_id`, so there is no account any of them could have come from. **THE CONTROL IS A DISCLOSURE AND A PLAIN FORM — NO SCRIPT AT ALL.** This is the page a customer reaches when something has gone wrong, which is the worst possible place for a control that needs a working script, and it must run in every browser WeChat has ever shipped and in the camera-app browsers §50 already copes with. **Rejected: `confirm()`** — a browser dialog is the thing the till is asserted never to open, and a customer surface holds the same line; the disclosure IS the second step. **AT THE TILL, cancelling goes through the admin's own status transition**, which already releases the reservation and is the path staff have always cancelled by — nothing new is written for a state the system understands. **AND A WORD COLLISION IS CLOSED: the control that BACKS OUT of a recalled order said "Cancel"**, beside a control that cancels the customer's order. The same word for opposite outcomes, and the destructive one is the one a cashier reaches for by habit; backing out now says Back. **NO CHINESE WAS COMPOSED.** Every string is a live pair from the mini app's own order screen, where a customer cancels exactly this — `Cancel order · 取消订单`, `Cancel this order? · 取消此订单?`, `You can place a new one anytime. · 您可以随时重新下单。` (`miniapp/pages/order/order.js:99-101, 275-277`) — plus `Cancelled · 已取消`, the admin's and the mini app's own label for this status. No entry in `docs/tacet-delivery-vocabulary.md` is owed. **ONE FALSE ASSERTION IS CORRECTED IN PASSING, and it matters more than the line it was on.** `test_shop_menu.js` held that a cancelled order's page still said `请到收银台付款。` — it passed, and it was measuring nothing: the basket script is inlined by `shell()` on every page and contains that string as a literal, so the assertion matched the SCRIPT and would have gone green for a page that rendered nothing at all. It is now scoped to the rendered block, which is what it always meant to say. Code, tests and docs; no schema, no migration.
 
@@ -6788,3 +6790,58 @@ existing bilingual age helpers. **No entry in `docs/tacet-delivery-vocabulary.md
    next reader does not take this row's gate as evidence the others have one.
 2. **THE DESKTOP HAS NO READY LIST OF ITS OWN**, by the ruling above. If that is ever revisited, the thing to preserve
    is that `seen_at` is stamped by whatever screen actually shows the rows — not by the dashboard row being clicked.
+
+## §67 — A VARIANT FAMILY IS EDITED FROM THE SHEET IT COLLAPSES INTO, AND SAVE WRITES THE FAMILY
+
+Reported by Ash, 2026-09-08, from the phone, with a screenshot of the product sheet open on
+`Raspberry Mango Sorbet · SKU (3-210) X5`: *"on mobile, if product have variants - cant change"*.
+
+### What was actually broken
+
+The phone's catalogue collapses a variant family into **one card** — three sizes of one sorbet are three rows and one
+card, which is right and is what the card was built for: without the collapse the list reads as three unrelated
+products with almost the same name. The card prints the sizes along its second line, `X1 · X5 · X10`.
+
+**That line is text.** Tapping the card ran `openProduct(rep.sku)`, where the representative is
+`members.find(m => m._id === p.gid) || members[0]` — whichever size happens to own the group. Every other size in the
+family was on screen, named, and **reachable from nowhere on this phone**: not from the card, not from the sheet the
+card opens, not from search (`prodFiltered` matches the same collapsed units). A price or a count on any size but one
+could only be changed from a desktop.
+
+### The ruling
+
+**The sheet carries the family.** A row of size chips sits under the quick-edit note; the marked one is the size being
+edited; tapping another switches the sheet to it. One tap target on the card, as before — the card is a picture and a
+name, and turning its size line into three small buttons is a worse thing to hit at 390px than a chip row inside the
+sheet that opens.
+
+- **Rejected: the size line on the card becomes buttons.** Three ~40px targets inside a scrolling list row, and the
+  operator still has no way to compare the sizes once they are in the sheet.
+- **Rejected: one row per size in the catalogue.** That is the list as it read before the families were collapsed, and
+  it is the thing the collapse was built to fix.
+
+**Switching a size writes nothing.** It is a change of view, not a save.
+
+**Therefore Save writes the family, not the size on screen.** This is the decision the rest follows from. Once the sheet
+can move between sizes without writing, an operator can set a price on `X1`, a count on `X10`, and press Save — and a
+Save that took only what was in front of them would drop the rest **silently**, which is the failure mode this record
+exists to refuse. Pending edits are held per product id (`sheetPrice`, and `sheetStep` keyed `st_<pid>_<storeId>`), and
+Save walks every size and writes the ones that changed. A family of one is a family of one and behaves exactly as
+before.
+
+- **Rejected: save-on-switch.** It writes on a navigation, which no other control in this app does.
+- **Rejected: warn-on-switch.** A modal between two chips, on every switch, to protect a case the state can simply
+  carry.
+
+**A failure part-way through a family says so.** `That did not save. Nothing has changed` is the message for one write;
+across several it can be a lie, and an operator told it will retype figures that are already in. The count of writes
+that landed decides which of the two messages is shown, and the partial one says the rest can be pressed again — a
+figure written twice writes the same figure. The pair is composed and declared in
+`docs/tacet-delivery-vocabulary.md` v1.34.
+
+### The one it uncovered, fixed in the same pass because it is the same box
+
+`render()` rewrites the whole shell, so the price `<input>` is rebuilt on every paint. A price **typed and then
+followed by a tap on a stock stepper** was painted back to the stored figure, and the typing was gone — no variants
+required, and shipping for as long as the sheet has had both controls. The price now lives in state and is captured on
+input, which is also what lets it survive a trip to a sibling size.
