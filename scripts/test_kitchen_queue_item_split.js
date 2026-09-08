@@ -203,4 +203,34 @@ const o8 = seedKitchenOrder(['Boxes'], { toRole: 'store' });
 got = getOrder(o8.id);
 eq(got.body.data.items[0].recorded_at, undefined, 'a transfer line carries no recorded_at at all');
 
+// ── 8. Every line jumping straight to prepared (§71) ────────────────────────
+//
+// THE PATH BOTH QUEUES NOW TAKE. Ash, 2026-09-08: "start making step is not
+// neccesary. should start from MARK AS MADE. save one click for the kitchen."
+// The clients stopped sending 'received' at all, so a whole request is now
+// closed by a run of sent → prepared jumps and the order NEVER passes through
+// 'received' on its way. Case 4 proves one such jump is legal; this proves the
+// consequence that actually matters — that the rollup, the push and the
+// broadcast still fire, exactly once, on a request that skipped the middle
+// status entirely. Nothing about them was changed, which is precisely why a
+// suite has to say so: they were only ever exercised from 'received'.
+section('Case 8 — a request closed without ever passing through received still rolls, once');
+
+const o9 = seedKitchenOrder(['Peanut Butter', 'BioCurcumin+']);
+const pushedBeforeJump = notes.operator.length, sseBeforeJump = notes.sse.length;
+
+r = putItem(o9.id, o9.itemIds[0], 'prepared');
+ok(r.body && r.body.success, 'the first line goes straight to prepared');
+eq(orderRow(o9.id).status, 'sent', 'the order is still sent — the second line has not been made');
+eq(notes.operator.length, pushedBeforeJump, 'nothing pushed yet');
+
+r = putItem(o9.id, o9.itemIds[1], 'prepared');
+ok(r.body && r.body.success, 'and so does the last one');
+eq(orderRow(o9.id).status, 'prepared', 'the order rolls sent → prepared in one move');
+eq(orderRow(o9.id).received_at, null, "and never stamps received_at — it was never 'received'");
+ok(!!orderRow(o9.id).prepared_at, 'prepared_at is stamped by the rollup');
+eq(r.body.order_status, 'prepared', 'the response reports the rolled status');
+eq(notes.operator.length, pushedBeforeJump + 1, 'the push fires exactly once, on the roll');
+eq(notes.sse.length, sseBeforeJump + 1, 'and the broadcast exactly once alongside it');
+
 done();

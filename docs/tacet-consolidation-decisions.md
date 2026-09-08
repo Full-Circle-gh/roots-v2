@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.166
+# Tacet shared-core consolidation — decisions record, v4.167
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-08 · v4.167 — **THE KITCHEN QUEUE CARRIES A CLOCK, SAYS WHAT ARRIVED, AND CLOSES A LINE IN ONE TAP (§71).** Three observations of one screen, reported from the kitchen in one sitting against three screenshots of Tacet Mobile's queue: *"time is miising of each request"*, *"if for exmaple im on 'done' amd i get a new order 'to make' need to have some kind of a small dot notification"*, and *"start making step is not neccesary. should stRT FROM MARK AS MADE. save one click for the kitchen"*. **THE CLOCK IS THE REQUEST'S, AND IT IS THE SAME CLOCK ON BOTH TABS** — `sent_at`, falling back to `created_at`, rather than the finish time on Done, because a column whose meaning changes with the tab is a column that gets misread on the morning somebody is in a hurry. The day is carried WITH the hour rather than instead of it: `fmtDay` alone answers "Yesterday" and drops the time on the one row where how long a thing has been sitting matters most, and kitchen requests are the one direction exempt from the queue's overnight archive sweep, so genuinely old work sits there by design. **THE DOT IS THE SCREEN'S, NOT THE ACCOUNT'S**: one 6px Sage pip on the To make segment, never a count and never red, per-device and per-session — the deliberate opposite of §48's server-side `seen_at`, because this answers *something arrived while I was reading the other tab*, which is a fact about one person's screen and which another phone clearing would be wrong about. It polls only while the queue is on screen (there is nothing to poll for when nobody is looking at the tabs, and the app already carries two background heartbeats), the first answer of a session is a baseline that lights nothing, and standing on To make IS reading it. No chime and no toast — a new request already pushes and prints. **"START MAKING" IS DELETED FROM BOTH QUEUES.** The `sent → received → prepared` walk spent a tap per product on a status nothing reads: no push, no print, no stock movement and no screen hangs off a kitchen line being `received`. **The server is not changed** — its guard is a forward move, so `sent → prepared` was always legal — and a line left at `received` by the old flow reads exactly like a fresh one. `public/stock.html` drops the same step in the same commit, because a workflow that differs between two screens the same kitchen may open is worse than either. **NO CHINESE WAS COMPOSED**: `Mark as made · 标记完成` and `标记已完成` are already live on the two screens edited, `Start making · 开始制作` is deleted rather than replaced, the clock renders through the existing helpers and the dot has no text. No entry in `docs/tacet-delivery-vocabulary.md` is owed. **PROVED WHERE THE SIDE EFFECTS LIVE:** `test_kitchen_queue_item_split.js` gains case 8 — a request closed without ever passing through `received` still rolls to `prepared`, stamps no `received_at`, and fires the push and the broadcast exactly once — because those had only ever been exercised from `received`. `npm run test:fast` green, and every browser suite this change touches run individually (CLAUDE.md) rather than by reaching for the slow shard: `test_stock_home.js`, `test_mobile_screens.js`, `test_mobile_dots.js`, `test_stock_screens.js`, `test_mobile_nav.js` and `test_kitchen_stock_visibility.js`, all green. **RECORDED RATHER THAN QUIETLY CARRIED:** `test_mobile_production.js` has EIGHT cases failing on `main` — they drive `kqAdvance`, the whole-order command §61 deleted — verified red on the base commit before this change and equally red after, with all fourteen cases this change adds or edits passing. They are §61's to repair, in their own PR. Code, tests and docs; no schema, no migration, no new route, no new string.
 
 2026-09-08 · v4.166 — **THE UNDO ON THE RECEIVE LINE WAS DEAD FOR AN HOUR. §70 addendum records it; the ruling it corrects is v4.164's, shipped the same hour.** Reported from the floor with a screenshot of RPO-0030, Goji Berries open on its counter, *"cant click now , not checked yet"* — the button circled in red. **§70 ruled that pressing the answer a RECORDED line already holds should open it to be corrected rather than un-answer it, and the ruling is sound; the wiring was not.** The guard went into `recvArrived`, and the only control that ever reaches `recvArrived` on an answered line is the "Not checked yet" undo — the arrived chip renders only on an UNanswered line. So the guard set `recvOpenLine` to the id it already held, the render changed nothing, and the row had no other way to close: **a dead button on the one control that row offered.** The correction path §70 named — tapping the folded row — already went straight to `recvOpenLine` and was never the thing the guard affected. **THE CHECK THAT WOULD HAVE CAUGHT IT is the one I did not make: I verified the RULE was sound and never asked which control reaches it.** The case added here presses the button through the DOM and asserts the screen MOVED, because the whole failure was a handler that ran and painted nothing. **Now: on a line not yet recorded, "Not checked yet" un-answers exactly as before. On a recorded one that sentence is no longer available to say — the receipt is written and the stock is booked — so the control becomes `Done` and folds the correction away, and the way back to nothing is the counter beside it, where a zero IS a correction and a zero does reverse the stock. It is drawn ONLY where pressing it would fold the row**; on a recorded line mid-correction there is no button rather than an inert one, which is the rule the bug earned. **A SECOND DEFECT, OLDER THAN AUTO-SAVE, FELL OUT OF THE SAME READING.** "Not checked yet" borrowed `recvArrived`'s toggle, whose first test is `on && recv > 0`; on a line answered *nothing arrived* that is false, so the press fell through to the else branch and marked the line **fully arrived** — the one control for "I have not checked this" asserting the whole order had turned up. It has its own command now, `recvUnanswer`, which says only what it does. **NO CHINESE WAS COMPOSED**: `Done · 完成` is live six times in this file, including on this same screen (the damage panel's own Done), and is taken verbatim. **Both defects were proven to fail with the fix reverted**, each through the button rather than the command — `test_mobile_receiving.js` 163 → 171 assertions, 43 cases. `npm run test:fast` green at 176. Code, tests and docs; no schema, no migration, no server change.
 
@@ -7278,3 +7280,109 @@ recorded rather than smuggled in behind a bug fix.
 
 `Done · 完成` is taken verbatim — live six times in `public/m.html`, including on this same screen. No Chinese was
 composed.
+
+## §71 — THE KITCHEN QUEUE CARRIES A CLOCK, TELLS THE COOK WHAT ARRIVED, AND CLOSES A LINE IN ONE TAP
+
+Decided by Ash, 2026-09-08, from the kitchen, against three screenshots of Tacet Mobile's Kitchen queue — the Done
+list, the To make list, and `PR-260908-009` open on its two lines:
+
+1. *"picture 1 time is miising of each request"*
+2. *"picture #2 - if for exmaple im on 'done' amd i get a new order 'to make' need to have some kind of a small dot
+   notification"*
+3. *"picture #3 - start making step is not neccesary. should stRT FROM MARK AS MADE. save one click for the kitchen"*
+
+Three separate observations of one screen, taken in one sitting, and they are one change: the queue as the kitchen
+actually stands in front of it.
+
+### 1. The clock is the REQUEST's, and it is the same clock on both tabs
+
+Every row said what to make and never when it was wanted. A request raised at 08:10 and one raised twenty minutes ago
+read identically, so *which of these has been waiting* could not be answered from the list at all — on the one screen
+where it is the whole question.
+
+**It is the time the request was RAISED (`sent_at`, falling back to `created_at`), on the To make tab and the Done tab
+alike.** One meaning for one column: the same request read on either tab shows the same clock, and the list's own sort
+— urgent first, then newest first (§65) — becomes legible instead of arbitrary.
+
+- **Rejected: the finish time on the Done tab.** More useful in the moment and it makes the column mean two different
+  things depending on which tab you are standing on. A column whose meaning moves is a column that gets misread on the
+  morning somebody is in a hurry, which is every morning.
+- **Rejected: an age ("40m ago").** §66 put an age on the warehouse's Needs-you row, and that is a fire in a strip that
+  sorts by it. This is a worklist somebody reads down; a wall clock is what a kitchen already runs on.
+
+**The day is carried with the hour, not instead of it.** `fmtDay` answers "Yesterday" and drops the time with it —
+precisely on the row where how long a thing has been sitting matters most. Kitchen prep legitimately spans days, which
+is why these rows are the one direction exempt from the queue's own overnight archive sweep (`routes/restock.js`), so
+the queue holds genuinely old work by design. Today renders as the clock alone.
+
+### 2. A dot on "To make", and it is the SCREEN's dot, not the account's
+
+The queue was fetched exactly once per visit. A request raised while the cook was reading Done, or standing inside
+another request, was invisible until they thought to leave the screen and come back.
+
+**One 6px Sage dot on the segment, never a count and never red** — the same chrome every other piece of arriving work
+in this app gets (§48, §66). No chime and no toast: the ding belongs to a customer arriving, and a new kitchen request
+already fires a push and prints a slip.
+
+**It is per-device and per-session, and that is the deliberate difference from `seen_at`.** The warehouse's dot (§48)
+is a shared server-side fact because one person looking should clear it for the whole team. This one answers *something
+arrived while I was reading the other tab* — a fact about the screen in front of one person, which another phone
+clearing would be wrong about.
+
+**The poll runs only while the queue is on screen.** There is nothing to poll for when nobody is looking at the tabs,
+and the app already carries two background heartbeats (orders, kitchen-ready). Twenty seconds, its own `fetch` rather
+than `api()` for the reason `fetchUnseenOrders` states at length: a 401 out of a heartbeat would navigate a phone
+sitting on a counter to the login screen.
+
+**The first answer of a session is a baseline and lights nothing** — a queue holding four requests when the app opens
+is a backlog the cook can see, not four things that just arrived. Same rule as the other two pollers.
+
+**Standing on "To make" IS reading it,** stamped where the rows land rather than in each of the three commands that can
+bring them up. On that tab the list itself is the notification and the poll refreshes it in place; it repaints only when
+the rows actually changed.
+
+### 3. "Start making" is deleted, from both queues
+
+A kitchen line walked `sent → received → prepared`, and the middle step recorded something nothing reads: **no push, no
+print, no stock movement, and no screen anywhere hangs off a kitchen line or order being `received`** —
+`routes/restock.js` fires on `sent` and `prepared` only. What it cost was a tap per product, in a kitchen, on a phone,
+with wet hands — and a queue where half the lines read "Start making" and half read "Mark as made" for no difference
+the cook could act on.
+
+**The server is not changed.** Its guard is a FORWARD move, so `sent → prepared` was already legal; the clients simply
+stopped spending a round trip on the middle status. The rollup, the push fan-out and the slip print still fire exactly
+once, on the roll to `prepared`, from a request that now never passes through `received` —
+`scripts/test_kitchen_queue_item_split.js` case 8 asserts exactly that, because those side effects had only ever been
+exercised from `received`.
+
+**A line left at `received` by the old flow reads exactly like a fresh one:** one button, still to make. Nothing needs
+migrating and nothing is stranded.
+
+**Both queues change in the same commit.** Tacet Mobile moves one LINE at a time (§61); `public/stock.html` still moves
+the whole order and is the whole product for a role locked to it. A workflow that differs between two screens the same
+kitchen may open is worse than either version of it.
+
+- **Rejected: keeping `received` as an optional "I've started this" marker.** Nobody reads it, and an optional step is
+  a step somebody still has to decide about.
+- **Not done: removing `'received'` from the per-item endpoint's accepted statuses.** It is what makes an in-flight line
+  from the old flow harmless, and the whole-order door still uses it for transfers.
+
+### No Chinese was composed
+
+`Mark as made · 标记完成` (mobile) and `Mark as made · 标记已完成` (`public/stock.html`) are both already live on the
+screens being edited and are used exactly as they stand; `Start making · 开始制作` is deleted, not replaced. The clock
+renders through the existing `fmtDay`/`fmtTime` helpers — a numeral needs no label in either language — and the dot has
+no text at all. **No entry in `docs/tacet-delivery-vocabulary.md` is owed for this change.**
+
+### Recorded, and deliberately NOT fixed here
+
+1. **`scripts/test_mobile_production.js` has eight cases failing on `main`, and they are not this change's.** They drive
+   `APP.cmd('kqAdvance', …)` — the whole-order command §61 deleted — so they have been red since §61 shipped, unseen
+   because the suite lives in the slow shard, which is not run (`CLAUDE.md`). Verified by running the suite on the base
+   commit before this change and after: eight failures both times, and every case this change adds or edits passes.
+   Repairing them means deciding what the whole-order hand-over cases should now assert, which is §61's question, not
+   this one's — a separate PR.
+2. **`public/stock.html`'s queue rows carry no clock and no dot.** Only the one-tap rule crosses to that surface,
+   because the rule is a fact about how the kitchen works and must not differ between two screens; the clock and the dot
+   are screen furniture on a list Ash was not looking at.
+

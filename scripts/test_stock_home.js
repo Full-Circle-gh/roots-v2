@@ -378,11 +378,15 @@ const CASES = {
      log with no path to inventory"). So the single sentence explaining where
      the stock went named the one step that has never moved any, and the step
      that DOES — Add stock — went unmentioned. */
+  /* §71 (2026-09-08): "Start making" is gone. A request opened straight from
+     'sent' now offers the one button that closes it, and the note it carries
+     is the one naming the screen that actually moves the stock — the second
+     variant existed only for the state that took two taps to leave. */
   'queue-detail-says-stock-does-not-move': {
     js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250']),
-    expect: ['RS-260904-002', 'Hummus Asli', 'Start making',
-             'Stock changes when you record what you made, not here'],
-    absent: ['when the batch is logged'] },
+    expect: ['RS-260904-002', 'Hummus Asli', 'Mark as made',
+             'Next you record what you made and what went on the shelf'],
+    absent: ['when the batch is logged', 'Start making'] },
 
   /* ── What you made ───────────────────────────────────────────────────────
      Marking a kitchen request made closes it and moves NO stock — the server
@@ -392,11 +396,12 @@ const CASES = {
      closes that gap, and the two properties that make it safe: the quantities
      are a proposal, and nothing is written until somebody says so. */
 
-  // Two taps: sent → received → prepared. The second one closes the request,
-  // and the lines land on the screen that adds them.
+  // ONE tap, from 'sent' straight to 'prepared' (§71) — it used to take two,
+  // and the step in between recorded nothing anybody reads. That one tap
+  // closes the request, and the lines land on the screen that adds them.
   'made-hands-the-lines-to-add-stock': { mode: 'add', kitchenOnly: true,
     js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
-             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400']),
+             "'[data-kqnext]'", '400']),
     expect: ['What you made', 'RS-260904-002', 'Marked made — the shelf has not changed yet',
              'Hummus Asli', '1-10', '+6', '6 units'],
     checkStatus: (st) => (st && st.status === 'prepared') ? null
@@ -439,7 +444,7 @@ const CASES = {
   // A full line never asks. The question is the exception, not the flow.
   'a-full-line-is-never-asked-why': { mode: 'add', kitchenOnly: true,
     js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
-             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400']),
+             "'[data-kqnext]'", '400']),
     absent: ['short — why?'],
     check: (out) => /data-send="disabled"/.test(out)
       ? 'Record was disabled on a line with nothing short' : null },
@@ -463,7 +468,7 @@ const CASES = {
      however carefully they were ordered. */
   'record-writes-the-batch-not-a-bare-delta': { mode: 'add', kitchenOnly: true,
     js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
-             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400', "'[data-hdadd]'", '400']),
+             "'[data-kqnext]'", '400', "'[data-hdadd]'", '400']),
     expect: ['Recorded', '6 units on the shelf', 'The request is closed'],
     checkProd: (p) => {
       if (p.length !== 1) return `${p.length} writes, expected 1`;
@@ -498,7 +503,7 @@ const CASES = {
   // shelf is now right.
   'skip-writes-nothing-and-says-so': { mode: 'add', kitchenOnly: true,
     js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
-             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400']),
+             "'[data-kqnext]'", '400']),
     expect: ['Skip — record nothing', 'Skipping records no batch'],
     checkProd: (p) => p.length ? 'a write went out on a screen nobody confirmed' : null },
 
@@ -507,7 +512,7 @@ const CASES = {
   // forgives, and the retry must not be able to add it twice.
   'a-failed-line-says-so-and-keeps-its-amount': { mode: 'add', kitchenOnly: true, patchFail: true,
     js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
-             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400', "'[data-hdadd]'", '400']),
+             "'[data-kqnext]'", '400', "'[data-hdadd]'", '400']),
     expect: ['Not recorded', 'Nothing was counted twice', '+6'],
     absent: ['On the shelf'] },
 
@@ -527,7 +532,7 @@ const CASES = {
      under, and the shelf is short until they say what reached it. */
   'made-hands-over-to-a-recount-operator-who-can-record': { kitchenOnly: true,
     js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
-             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400']),
+             "'[data-kqnext]'", '400']),
     expect: ['What you made', 'RS-260904-002', 'Hummus Asli', '+6'],
     checkStatus: (st) => (st && st.status === 'prepared') ? null
       : `the request did not close (status ${st && st.status})`,
@@ -541,7 +546,7 @@ const CASES = {
      this file has always asserted — on the honest condition now. */
   'a-recount-operator-who-cannot-record-gets-the-queue-back': { kitchenOnly: true, noLogProd: true,
     js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
-             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400']),
+             "'[data-kqnext]'", '400']),
     expect: ['Production', 'To make'],
     absent: ['What you made'] },
 
@@ -551,7 +556,7 @@ const CASES = {
      request and no record of what they made. */
   'a-shelf-that-has-not-arrived-still-opens-the-screen': { kitchenOnly: true, hangShelf: true,
     js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
-             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400']),
+             "'[data-kqnext]'", '400']),
     expect: ['What you made', 'RS-260904-002', 'Loading'],
     checkStatus: (st) => (st && st.status === 'prepared') ? null
       : `the request did not close (status ${st && st.status})`,
@@ -619,14 +624,21 @@ const CASES = {
   'made-hands-over-in-cn': { mode: 'add', kitchenOnly: true,
     pre: "localStorage.setItem('roots-admin-lang','cn');",
     js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250',
-             "'[data-kqnext]'", '300', "'[data-kqnext]'", '400']),
+             "'[data-kqnext]'", '400']),
     expect: ['登记制作', '已标记完成 — 库存尚未变动', '登记', '跳过 — 不登记'] },
 
-  'queue-advances-sent-to-received': {
+  /* §71: ONE TAP, AND IT IS THE ONE THAT CLOSES THE REQUEST. This asserted the
+     opposite — sent → received on the first tap — which is the step Ash had
+     removed ("start making step is not neccesary. should start from MARK AS
+     MADE. save one click for the kitchen"). It is kept, inverted, rather than
+     deleted: the whole point of the change is which status the FIRST tap
+     writes, so a case naming that is the one that would catch the middle step
+     growing back. */
+  'queue-closes-the-request-on-the-first-tap': {
     js: seq(["'[data-kqopen-home]'", '250', "'[data-kqopen=\"91\"]'", '250', "'[data-kqnext]'", '300']),
     checkStatus: (st) => {
       if (!st) return 'nothing was written';
-      if (st.status !== 'received') return `wrote status ${st.status}, expected received`;
+      if (st.status !== 'prepared') return `wrote status ${st.status}, expected prepared`;
       return null;
     } },
 
