@@ -16495,7 +16495,9 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // request found out by remembering to go and look.
     //
     // THE CLAUSE IS lib/kitchen-ready.js's, not a copy of it. This row opens the
-    // list at /stock?go=ready, and a fire that disagrees with the queue it opens
+    // list — the desktop's own drawer (§73) and Tacet Mobile's kitchenready
+    // screen; it was /stock?go=ready until §48 step 4 — and a fire that
+    // disagrees with the queue it opens
     // means one of the two is lying (the rule the Reviews row above states).
     //
     // TWO AUDIENCE GATES, both answering an honest ZERO rather than a 403 —

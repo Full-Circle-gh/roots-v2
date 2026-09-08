@@ -3176,7 +3176,8 @@ const MORE_GROUPS=[
      so it can only be linked to — and until it was, an operator who held both
      tools had no route between them in either direction.
 
-     NOTHING IN THIS LIST LEAVES FOR /stock ANY MORE (§48). Two rows used to:
+     NOTHING IN THIS LIST LEAVES FOR /stock ANY MORE (§48), and as of step 4
+     there is nothing to leave for. Two rows used to:
      Kitchen queue, which carried ?go=queue, and Transfers, which opened that
      app's launcher because Pick, Receive, Ask the kitchen and Ask for stock had
      no rows of their own. They have rows of their own now, so the launcher held
@@ -3185,11 +3186,11 @@ const MORE_GROUPS=[
      this file keeps out. The rows stay put on a quiet day for the reason the
      launcher's tiles did: "Nothing to pick" is what tells somebody the tool is
      there before the morning they need it. */
-  {h:['Operations','运营'],rows:[['neworder','file-plus','New order','新建订单'],['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['till','calculator','Counter till','前台收银','/till'],['kitchenqueue','chef-hat','Kitchen queue','厨房制作队列'],['stockapp','package-plus','Add stock','加库存','/stock?go=add'],
+  {h:['Operations','运营'],rows:[['neworder','file-plus','New order','新建订单'],['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['till','calculator','Counter till','前台收银','/till'],['kitchenqueue','chef-hat','Kitchen queue','厨房制作队列'],['stockapp','package-plus','Add stock','加库存'],
     /* THE TWO REQUEST SCREENS, IN THIS APP (§48). They had no rows of their
-       own and lived on /stock's launcher, which the Transfers row above still
-       reaches for what has not moved yet. As each of those flows lands here
-       that launcher empties, and the row goes with the last of them. */
+       own and lived on /stock's launcher; they have rows here now, the launcher
+       emptied, and the Transfers row that reached it went with the last of
+       them. The app itself is deleted (§48 step 4). */
     ['askkitchen','chef-hat','Ask the kitchen','向厨房下单'],['askstock','package','Ask for stock','申请补货'],
     ['kitchenready','circle-check','Ready from the kitchen','厨房已完成'],
     ['receivexfer','truck','Receive delivery','收货'],['pick','route','Pick','拣货'],
@@ -3219,13 +3220,17 @@ function moreGroups(){
    difference that had stopped existing. */
 function moreRow(r){
   const label = r[0]==='stockapp' ? stockAppLabel() : [r[2],r[3]];
-  /* The stock row is the one that can go either way, by the same rule the
-     server picks the mode with (retail-inventory quick-stock/context): an
-     operator who only ADDS gets the screen this app now carries; anyone holding
-     the absolute recount still leaves for /stock, where that flow lives. */
-  const inApp = r[0]==='stockapp' && stockAppInApp();
-  const href = inApp ? null : (r[4]||null);
-  const route = inApp ? 'stockadd' : r[0];
+  /* THE STOCK ROW NO LONGER GOES EITHER WAY. It used to: an operator who only
+     ADDED got the screen this app carries, and anyone holding the absolute
+     recount left for /stock, where that flow still lived. Both modes came here
+     (§46, §48 step 2) and step 4 deleted that app, so the fork and the
+     `stockAppInApp()` that drove it are gone with it. Worth the words because
+     the fork was not merely redundant by the end — with the row's external href
+     removed there was nothing for its false branch to open, and it would have
+     pushed `stockapp`, a route no SUBS entry answers.
+     `href` stays for the rows that really are elsewhere: /till. */
+  const href = r[4]||null;
+  const route = r[0]==='stockapp' ? 'stockadd' : r[0];
   return {key:r[0], icon:r[1], en:label[0], zh:label[1], href,
           cmd: href ? `APP.cmd('leave','${href}')` : `APP.cmd('push','${route}')`};
 }
@@ -12617,22 +12622,6 @@ function canRoute(k){
   if(k==='till') return mCan('till:use') && mCan('orders:edit');
   return mCan(ROUTE_CAP[k]);
 }
-/* The Quick Stock app is a separate PWA, so its row LEAVES rather than pushing a
-   screen. Its label is the mode the operator will actually land in: /stock picks
-   add-vs-recount by role, and recount is what anyone holding both resolves to
-   (routes/retail-inventory.js quick-stock/context), so recount wins here too. */
-/* NOBODY LEAVES THIS APP FOR THE SHELF ANY MORE (§48).
-   This used to read `!recount && add`: an operator who could only ADD got the
-   screen this app carries, and anyone holding the absolute recount left for
-   /stock, where that flow lived. It lives here now, so the test is simply
-   whether they hold either capability.
-
-   It also settles something §46 left awkward. Granting a kitchen the recount
-   capability — which is what turns the count and the correction on — used to
-   flip this to false, so the grant ALSO moved them into a different app and
-   renamed the row they had been tapping. A permission should change what a
-   screen shows, never which app it is in. */
-function stockAppInApp(){ return mCan('quickstock:add') || mCan('quickstock:recount'); }
 /* NAMED FOR THE JOB THEY HOLD, not for where the screen lives. Someone who can
    add is there to log what they made, whether or not they can also correct the
    count; someone who can only count is doing the other job entirely. */

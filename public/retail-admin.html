@@ -10808,56 +10808,39 @@
             <div id="ops-recycle-body" class="muted" style="font-size:13px">Loading… · 加载中…</div>
           </div>
 
-          <!-- ── Quick Stock (mobile) ── -->
-          <!-- THE TWO "Open …" BUTTONS BELOW NAVIGATE IN THIS TAB, and carry
-               ?from=dashboard. They used to be window.open(_blank), which made
-               an admin previewing the staff app land in a second tab whose Back
-               went to '/m?to=more' — the phone app — because lib/app-home.js
-               knows one way out and these were doors it had never been told
-               about. Ash, on the pair of them: "i dont see any reason for this
-               to be a new window".
+          <!-- ── The staff phone app ── -->
+          <!-- ONE CARD, WHERE THERE WERE TWO (§48 step 4). "Quick Stock" and
+               "Add Stock" were the same app described twice, under two names,
+               because the ROLE decided which view opened — and the second card
+               said so itself: "It's the same link as Quick Stock." Both named an
+               app that no longer exists: public/stock.html is deleted and every
+               screen it held is in Tacet Mobile, which is what the link opens
+               now. Ash: "the whole quick stock indenended app is over. i need it
+               to go away. i want all to be unified as one."
 
-               The staff LINK beside them is deliberately NOT touched.
-               qsStockLink() (10-extras.js) stays a bare /stock: a staffer
-               opening it on a phone came from nowhere, and ?from= would offer
-               them a Back into a back office their role is locked out of
-               (server.js bounces stockAppOnly roles off every backend page).
-               A door names where it came from; a link handed to somebody else
-               has no such claim to make. -->
-          <!-- NO SWITCH HERE ANY MORE (§53). This section used to carry an
-               injected .feat-bar and "off" card driven by FEATURE_CATALOG /
-               FEATURE_HOMES; the quickStock feature is deleted, so what is left
-               is the card itself — what the app is, and the staff link. -->
+               THE BUTTON NAVIGATES IN THIS TAB and carries no ?from=. It used to
+               be window.open(_blank) — Ash: "i dont see any reason for this to
+               be a new window" — and then a same-tab link with ?from=dashboard,
+               which existed only so the separate app's Back knew where it came
+               from. /m is not a separate document and has the app's own
+               navigation, so there is nothing left for the provenance to answer.
+
+               The staff LINK stays bare, which is the rule it always kept: a
+               staffer opening it came from nowhere, and a ?from= would offer
+               them a Back into a back office their role is locked out of.
+
+               NO SWITCH HERE (§53): the quickStock feature is deleted, so what
+               is left is the card itself — what the app is, and the link. -->
           <div id="qs-home">
             <div class="group-card">
               <div class="group-card-head">
-                <h3>Quick Stock · 手机库存</h3>
-                <div class="muted">A lightweight, phone-first stock app for your shop staff — they open it on a phone, search a product, and tap to adjust the count. No PC, no access to the rest of this back office. Each staffer only edits the store they're assigned to (Settings → Team → assign a store). Open it on a phone and tap <b>Add to Home Screen</b> to use it like an installed app, then share the link below with staff. · 面向门店员工的轻量级手机库存应用:在手机上打开、搜索商品、点按即可调整库存。无需电脑,也无法进入后台其他功能。每位员工只能编辑其所分配的门店(设置 → 团队 → 分配门店)。在手机上打开后点按<b>“添加到主屏幕”</b>即可像已安装的应用一样使用,再把下面的链接发给员工。</div>
+                <h3>Tacet on a phone · 手机上的 Tacet</h3>
+                <div class="muted">The same Tacet, on your staff's phones. What they see follows the role you gave them (Settings → Team): a shop staffer counts that store's shelves, a kitchen staffer enters only <b>how many they just made</b>. No PC, and no access to the rest of this back office. Open it on a phone and tap <b>Add to Home Screen</b> to use it like an installed app, then share the link below with staff. · 同一个 Tacet,装在员工手机上。看到哪些功能取决于你为其设置的角色(设置 → 团队):门店员工盘点本店货架,后厨员工<b>只需输入刚制作的数量</b>。无需电脑,也无法进入后台其他功能。在手机上打开后点按<b>“添加到主屏幕”</b>即可像已安装的应用一样使用,再把下面的链接发给员工。</div>
               </div>
               <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:4px 2px 2px;">
-                <button class="btn btn-primary" onclick="window.location.href='/stock?from=dashboard'">Open Quick Stock · 打开手机库存</button>
+                <button class="btn btn-primary" onclick="window.location.href='/m'">Open Tacet · 打开 Tacet</button>
                 <button class="btn" id="qs-copy-link" onclick="qsCopyStockLink()">Copy staff link · 复制员工链接</button>
                 <code id="qs-link" style="font-size:12px;color:var(--text-3);"></code>
-              </div>
-            </div>
-          </div>
-
-          <!-- ── Add Stock (kitchen mobile) ── -->
-          <!-- Same tab, same ?from=dashboard, same reason as #qs-home above. -->
-          <!-- Same /stock app as Quick Stock — the view is chosen by role: a
-               kitchen-role staffer (Settings → Team) gets this relative "add what
-               you made" flow; warehouse staff get the recount flow.
-               NO SWITCH HERE ANY MORE (§53), for the reason given on #qs-home. -->
-          <div id="ka-home">
-            <div class="group-card">
-              <div class="group-card-head">
-                <h3>Add Stock · 加库存</h3>
-                <div class="muted">A phone app for your kitchen / production staff. They open it, search a product, and enter only <b>how many they just made</b> — it's added to the current shelf count. They never see or recount the existing stock, so there's no double-counting. It's the same link as Quick Stock: a staffer with the <b>kitchen</b> role (Settings → Team → set role + assign a store) opens it and lands on this add view automatically; warehouse staff get the recount view. Open it on a phone and tap <b>Add to Home Screen</b> to use it like an installed app. · 面向后厨/生产员工的手机应用。打开后搜索商品,只需输入<b>刚制作的数量</b>,即可加入当前库存。他们看不到也无需清点现有库存,不会重复计数。与“手机库存”是同一链接:角色为<b>后厨</b>的员工(设置 → 团队 → 设置角色并分配门店)打开后自动进入此“加库存”视图,仓库员工则进入清点视图。在手机上打开后点按<b>“添加到主屏幕”</b>即可像已安装的应用一样使用。</div>
-              </div>
-              <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:4px 2px 2px;">
-                <button class="btn btn-primary" onclick="window.location.href='/stock?from=dashboard'">Open Add Stock · 打开加库存</button>
-                <button class="btn" onclick="qsCopyStockLink()">Copy staff link · 复制员工链接</button>
-                <code id="ka-link" style="font-size:12px;color:var(--text-3);"></code>
               </div>
             </div>
           </div>

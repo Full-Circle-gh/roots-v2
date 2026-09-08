@@ -202,8 +202,10 @@ it('no second copy of the clause has grown back anywhere', () => {
   // it. The clause is four conditions; `seen_at IS NULL` next to a to_role test
   // is the fingerprint, and lib/kitchen-ready.js is the one place it may appear.
   const suspects = [];
+  // public/stock.html left this list with the app itself (§48 step 4); the
+  // desktop's own list joined it, and is the newest place a copy could grow.
   for (const rel of ['routes/retail.js', 'routes/restock.js',
-                     'public/m.html', 'public/stock.html',
+                     'public/m.html',
                      'public/retail-admin/03-dashboard.js']) {
     const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
     if (/COALESCE\(to_role,\s*'warehouse'\)\s*=\s*'kitchen'[\s\S]{0,200}?seen_at IS NULL/.test(src)) {
@@ -789,12 +791,16 @@ it('a line made today reads as a bare clock; an older one carries its date', () 
     'every row carries a date again, or none of them does');
 });
 
-it('and the pair is /stock\'s own — the Chinese hangs the verb on the other side', () => {
-  const STOCK_HTML = fs.readFileSync(path.join(ROOT, 'public', 'stock.html'), 'utf8');
-  assert.ok(/t\('made ' \+ when, when \+ ' 完成'\)/.test(STOCK_HTML),
-    'the live pair moved — re-check what the desktop is lifting');
+it('and the time pair is the retired app\'s own, still uncomposed', () => {
+  /* WAS asserted against public/stock.html, which carried it live. §48 step 4
+     deleted that page, so the source this was lifted FROM is gone and the
+     desktop is now the only place the pair ships. That does not make it
+     composed — it was lifted whole while the source stood, and the vocabulary
+     lock owes nothing for a string that was already live. What is asserted now
+     is the shape itself, because the thing worth catching is somebody
+     "correcting" the Chinese to put 完成 in front, where the English puts it. */
   assert.ok(/cuT\(`made \$\{w\}`, `\$\{w\} 完成`\)/.test(KR_RENDER),
-    'the desktop composed its own instead of lifting the live pair');
+    'the time pair drifted from the one lifted out of the retired app');
 });
 
 it('made_at goes through the shared formatter, never a local slice', () => {

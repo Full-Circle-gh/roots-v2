@@ -3204,7 +3204,12 @@ window.onLangChange(function () {
 // on/off switch (injected) plus a "open / copy link" helper. The app itself
 // lives at /stock (served on the same origin, self-authenticating).
 // ════════════════════════════════════════════════════════════════
-function qsStockLink() { return location.origin + '/stock'; }
+/* THE LINK HANDED TO STAFF. `/m` since §48 step 4 — `/stock` is a redirect onto
+   this same address now, and handing somebody a link that bounces is handing
+   them the old app's name to remember. Still bare, with no ?from=: whoever opens
+   it came from nowhere, and a Back into a back office their role is locked out
+   of is worse than no Back at all. */
+function qsStockLink() { return location.origin + '/m'; }
 function qsCopyStockLink() {
   const link = qsStockLink();
   const done = () => toast(cuT('Link copied · 链接已复制', '链接已复制'));
@@ -3215,13 +3220,13 @@ function qsCopyStockLink() {
     fail();
   }
 }
-// Populate the shown link once the DOM is ready (the code elements are static).
-// Quick Stock and Add Stock share the same /stock link — the view is chosen by
-// the staffer's role, so both cards show the same URL.
+// Populate the shown link once the DOM is ready (the code element is static).
+// ONE card and ONE id since §48 step 4: `ka-link` belonged to the "Add Stock"
+// card, which described this same app under a second name and is deleted.
 (function () {
   function fill() {
     const link = qsStockLink();
-    ['qs-link', 'ka-link'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = link; });
+    const el = document.getElementById('qs-link'); if (el) el.textContent = link;
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fill);
   else fill();

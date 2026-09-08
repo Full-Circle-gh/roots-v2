@@ -119,7 +119,9 @@ t('an unseeded tenant still has a way out', () => {
 const fs = require('fs');
 const ROOT = path.join(__dirname, '..');
 const read = (...r) => fs.readFileSync(path.join(ROOT, ...r), 'utf8');
-const STOCK_HTML = read('public', 'stock.html');
+/* public/stock.html IS GONE (§48 step 4), so the till is the only page left
+   carrying its own way back. What that costs this file is recorded case by case
+   below rather than quietly dropped. */
 const TILL_HTML = read('public', 'till.html');
 const DASH_JS = read('public', 'retail-admin', '03-dashboard.js');
 const CORE_JS = read('public', 'retail-admin', '01-core.js');
@@ -132,18 +134,21 @@ function slice(src, where) {
   assert.ok(m, 'homeFromDoor has gone from ' + where + ' — that way back is unguarded again');
   return m[0];
 }
-const FN_STOCK = slice(STOCK_HTML, 'public/stock.html');
 const FN_TILL = slice(TILL_HTML, 'public/till.html');
 
-/* THE COPY IS THE DESIGN AND THIS IS WHAT MAKES IT SAFE. Neither page loads an
-   external script — the till rings up sales on a counter's network — so the
-   rule cannot live in a shared file without turning the way back into a second
-   request. It is duplicated instead, and duplication is only survivable if
-   drift cannot ship: a door added to one page and not the other, or a
-   dashboard URL corrected in one place, fails HERE. */
-t('both pages carry the same door table, to the byte', () => {
-  assert.strictEqual(FN_TILL, FN_STOCK,
-    'public/stock.html and public/till.html have drifted — one of them now sends Back somewhere the other does not');
+/* WAS: "both pages carry the same door table, to the byte." The copy WAS the
+   design — neither page loads an external script, so the rule could not live in
+   a shared file without turning the way back into a second request, and this
+   case was what made duplicating it survivable.
+
+   THERE IS NOTHING LEFT TO DRIFT AGAINST. §48 step 4 deleted public/stock.html,
+   so the till is the only page carrying homeFromDoor, and a comparison with one
+   operand is not a comparison. The rules below still run against the till's
+   real shipped copy, which is what the byte check was ultimately protecting.
+   If a second page ever grows its own way back, restore this case with it. */
+t('the till still carries a door table at all', () => {
+  assert.ok(/dashboard:/.test(FN_TILL),
+    'homeFromDoor has lost its door table — /till?from=dashboard sends Back to the phone app again');
 });
 
 // Applied exactly as both pages apply it: the door replaces home and label, and
@@ -156,9 +161,12 @@ function backAfter(fn, search, seed) {
   if (door) { state.home = door.home; state.homeLabel = door.label; }
   return state;
 }
-// Run every rule against BOTH shipped copies, so a divergence is caught by what
-// it DOES and not only by the text comparison above.
-const PAGES = [['/stock', FN_STOCK], ['/till', FN_TILL]];
+// Run every rule against the shipped copy, so the behaviour is caught by what it
+// DOES and not only by reading the source. It used to run against BOTH copies —
+// /stock's and the till's — which is what made the byte comparison above more
+// than a formality; §48 step 4 deleted the first page, and the loop is kept
+// rather than unrolled so restoring a second door is adding one array entry.
+const PAGES = [['/till', FN_TILL]];
 const each = (search, seed) => PAGES.map(([n, fn]) => [n, backAfter(fn, search, seed)]);
 
 console.log('\nThe door that is not in /m:');
@@ -172,8 +180,11 @@ t('no ?from= at all leaves the server\'s answer exactly as it was', () => {
 
 t('?from=dashboard sends Back to the dashboard, not to the phone', () => {
   for (const [n, r] of each('?from=dashboard')) assert.strictEqual(r.home, '/?tab=dashboard', n);
-  // and alongside the deep link the kitchen-ready row actually sends
-  assert.strictEqual(backAfter(FN_STOCK, '?go=ready&from=dashboard').home, '/?tab=dashboard');
+  /* The second half of this case checked '?go=ready&from=dashboard' — the deep
+     link the desktop kitchen-ready row used to send. Both the row's navigation
+     and the page that read it are gone (§48 step 4, §73): the row opens a drawer
+     in the shell now. The ?from= rule itself still holds for every door that
+     remains, which is what the loop above asserts. */
 });
 
 t('and names it what that screen calls itself', () => {
@@ -251,17 +262,20 @@ t('and so does every desktop door into the till', () => {
    things: window.open is why a second window appeared at all, ?from= is why
    the way out of it was wrong. Fixing one and not the other leaves half the
    report standing. */
-t('the Settings previews open /stock in THIS tab, and say where from', () => {
-  const buttons = ADMIN_HTML.match(/<button[^>]*onclick="[^"]*\/stock[^"]*"[^>]*>/g) || [];
-  assert.ok(buttons.length >= 2,
-    'the Quick Stock / Add Stock preview buttons have gone from public/retail-admin.html');
-  for (const b of buttons) {
-    assert.ok(!/window\.open/.test(b),
-      'a Settings button still opens /stock in a new window: ' + b.slice(0, 90));
-    assert.ok(/from=dashboard/.test(b),
-      'a Settings button opens /stock without saying where from — Back there lands on the phone app: '
-        + b.slice(0, 90));
-  }
+/* WAS: "the Settings previews open /stock in THIS tab, and say where from" —
+   TWO buttons, each carrying ?from=dashboard so the separate app's Back knew
+   where it came from. §48 step 4 leaves ONE button opening /m, and it carries
+   no provenance BY DESIGN: /m is not a separate document, it has the app's own
+   navigation, and there is nothing left for a ?from= to answer. The two cards
+   became one because they always described one app under two names. */
+t('the Settings preview opens Tacet in THIS tab, and names no door', () => {
+  const buttons = ADMIN_HTML.match(/<button[^>]*onclick="[^"]*window\.location\.href='\/m'[^"]*"[^>]*>/g) || [];
+  assert.strictEqual(buttons.length, 1,
+    'the staff-app preview button has gone from public/retail-admin.html, or grew a twin again');
+  assert.ok(!/window\.open/.test(buttons[0]),
+    'the Settings button opens the app in a new window again: ' + buttons[0].slice(0, 90));
+  assert.ok(!/\/stock/.test(ADMIN_HTML.match(/<div id="qs-home">[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/)?.[0] || ''),
+    'the card still points at the app §48 deleted');
 });
 
 /* AND THE STAFF LINK IS THE EXCEPTION, stated so nobody "fixes" it later. It is
@@ -283,13 +297,12 @@ t('but the PHONE\'s till row is left alone — More really is where it came from
     "m.html's Counter till row should still open a bare /till — its operator came from More");
 });
 
-t('/stock still recognises its ?go= with the door appended after it', () => {
-  // homeWanted()'s regex ends on (?:&|$). '?go=ready&from=dashboard' has to keep
-  // matching or the deep link silently becomes a launcher.
-  const m = /var m = (\/\(\?:[^\n]*?\/)\.exec/.exec(STOCK_HTML);
-  assert.ok(m, 'homeWanted()\'s ?go= pattern could not be found in public/stock.html');
-  const re = eval(m[1]);
-  assert.strictEqual((re.exec('?go=ready&from=dashboard') || [])[1], 'ready');
-});
+/* WAS: "/stock still recognises its ?go= with the door appended after it" —
+   homeWanted()'s pattern in public/stock.html had to keep matching
+   '?go=ready&from=dashboard' or the deep link silently became a launcher. Both
+   the page and the ?go= vocabulary are deleted (§48 step 4): the desktop row
+   opens a drawer in the shell, and routes/restock.js sends '/m?to=<screen>'.
+   Nothing is left to assert, and scripts/test_kitchen_ready_dashboard.js holds
+   what replaced it. */
 
 console.log('\nok — ' + checks + ' back-link rules hold.\n');
