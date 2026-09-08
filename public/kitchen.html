@@ -1165,8 +1165,15 @@ function renderRequestsTab() {
     return;
   }
   body.innerHTML = tabBar + rows.map(o => {
-    const purpose = o.purpose === 'order' ? '📦 For order · 用于发货' : o.purpose === 'shelf' ? '🛒 For shelf · 货架补货' : '';
-    const purposeChip = purpose ? `<span style="display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:${o.purpose==='order'?'rgba(204,217,0,.15)':'rgba(37,99,235,.10)'};color:var(--text);margin-top:4px">${purpose}</span>` : '';
+    // §65. Urgent is a third purpose, and the list is already SORTED on it
+    // server-side — these rows arrive at the top. The chip says why they are
+    // there; it is not what puts them there.
+    const purpose = o.purpose === 'order'  ? '📦 For order · 用于发货'
+                  : o.purpose === 'shelf'  ? '🛒 For shelf · 货架补货'
+                  : o.purpose === 'urgent' ? '⚡ Urgent · make first · 加急 · 优先制作' : '';
+    const purposeBg = o.purpose === 'urgent' ? 'var(--danger-soft)'
+                    : o.purpose === 'order'  ? 'rgba(204,217,0,.15)' : 'rgba(37,99,235,.10)';
+    const purposeChip = purpose ? `<span style="display:inline-block;font-size:11px;font-weight:${o.purpose==='urgent'?800:700};padding:3px 9px;border-radius:99px;background:${purposeBg};color:${o.purpose==='urgent'?'var(--danger)':'var(--text)'};margin-top:4px">${purpose}</span>` : '';
     const statusPill = o.status === 'sent' ? '<span style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;background:rgba(37,99,235,.18);color:#1d4ed8">Sent · 已发</span>'
                     : o.status === 'received' ? '<span style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;background:rgba(224,184,80,.20);color:#92660d">Received · 处理中</span>'
                     : o.status === 'prepared' ? '<span style="font-size:10px;font-weight:800;padding:3px 9px;border-radius:99px;background:rgba(109,179,63,.18);color:#3d7a1e">Prepared · 已备货</span>'
@@ -1236,8 +1243,9 @@ function _renderKitchenReqBody() {
   // formally tapping "In Preparation". Locked only once status hits
   // 'prepared' (terminal).
   const canCheck = o.status === 'sent' || o.status === 'received';
-  const purpose = o.purpose === 'order' ? '📦 For an outgoing order · 用于发货'
-                 : o.purpose === 'shelf' ? '🛒 For shelf restock · 货架补货' : '';
+  const purpose = o.purpose === 'order'  ? '📦 For an outgoing order · 用于发货'
+                 : o.purpose === 'shelf'  ? '🛒 For shelf restock · 货架补货'
+                 : o.purpose === 'urgent' ? '⚡ Urgent — make this first · 加急 — 请优先制作' : '';
   const ov = document.getElementById('moreOv');
   const titleEl = ov.querySelector('.ov-title');
   const body = ov.querySelector('.ov-body') || document.getElementById('moreBody');
@@ -1257,7 +1265,7 @@ function _renderKitchenReqBody() {
     : '';
 
   body.innerHTML = `
-    ${purpose ? `<div style="padding:10px 12px;background:${o.purpose==='order'?'rgba(204,217,0,.10)':'rgba(37,99,235,.08)'};border-radius:10px;font-size:13px;font-weight:700;margin-bottom:12px">${purpose}</div>` : ''}
+    ${purpose ? `<div style="padding:10px 12px;background:${o.purpose==='urgent'?'var(--danger-soft)':o.purpose==='order'?'rgba(204,217,0,.10)':'rgba(37,99,235,.08)'};${o.purpose==='urgent'?'border:1px solid var(--danger);color:var(--danger);':''}border-radius:10px;font-size:13px;font-weight:${o.purpose==='urgent'?800:700};margin-bottom:12px">${purpose}</div>` : ''}
     ${o.notes ? `<div style="padding:8px 12px;background:rgba(204,217,0,.08);border-radius:10px;font-size:12px;margin-bottom:10px"><strong>📝 Note · 备注:</strong> ${esc(o.notes)}</div>` : ''}
     <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 0 6px;gap:8px">
       <div style="font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">Items · 物料 (${total})</div>

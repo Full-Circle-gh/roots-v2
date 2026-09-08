@@ -137,6 +137,7 @@
     "test:restock-notifications": "node scripts/test_restock_notifications.js",
     "test:kitchen-queue": "node scripts/test_kitchen_queue_reachable.js",
     "test:kitchen-ready": "node scripts/test_kitchen_ready_signal.js",
+    "test:restock-urgent": "node scripts/test_restock_urgent.js",
     "test:guanyi-expiry": "node scripts/test_guanyi_session_expiry.js",
     "test:stock-movement": "node scripts/test_stock_two_step.js && node scripts/test_stock_two_step_tenant2.js",
     "test:restock-handles": "node scripts/test_restock_tenant_handle.js && node scripts/test_restock_tenant2_split.js && node scripts/test_created_by_fk_migration.js",

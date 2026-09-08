@@ -151,6 +151,25 @@ const printStatus = (id) =>
   ok(slip.includes('For the 2pm run'), 'the requester note survives to paper');
   ok(!slip.includes('￥'), 'NOTHING on a production ticket is priced');
 
+  /* §65's third purpose, and the one reason the slip cares which it is. The
+     paper is the one place a cook reads a request with no screen to sort it for
+     them, so an urgent slip has to carry the priority in ink — CENTRED AND
+     BOLD, the weight the slip reserves for its own headers, not the inline bold
+     the other two purposes get. A slip that said 加急 in the same voice as
+     货架补货 would have moved nothing. */
+  const rush = feie.renderKitchenRequest(
+    { id: 6, rs_number: 'PR-2609-0008', purpose: 'urgent', store_name: 'Warehouse',
+      sent_at: '2026-09-08 09:00:00' }, KITCHEN_ITEMS, 'Roots');
+  ok(rush.includes('<CB>加急 — 请优先制作</CB>'), 'an urgent request prints LOUDER — the header weight, not the body weight');
+  ok(rush.includes('URGENT — make first'), 'and in English too, on the line below, like every other pair on this slip');
+  ok(!rush.includes('用于发货') && !rush.includes('货架补货'),
+     'it prints INSTEAD of the other two, not beside them — purpose is one value, and two would say the request is both');
+
+  // A request raised before the field existed still prints nothing rather than
+  // guessing, and the third value must not have changed that.
+  const noPurpose = feie.renderKitchenRequest({ rs_number: 'PR-OLD' }, KITCHEN_ITEMS, 'Roots');
+  ok(!/用于发货|货架补货|加急/.test(noPurpose), 'a request from before the field existed still claims no reason at all');
+
   // A cook reads the quantity off the right-hand column. A bilingual name long
   // enough to fill the width must not push it onto its own line.
   const longName = feie.renderKitchenRequest({ rs_number: 'PR-1' }, [
