@@ -474,9 +474,27 @@ button{font:inherit;color:inherit;margin:0}
 }
 .cxo[hidden]{display:none}
 .cxo:active{background:var(--td-raised)}
+.cxo[disabled]{color:var(--td-text2)}
 .cxo.arm{
   background:var(--td-brick-tint);border-color:var(--td-brick);color:var(--td-brick-ink);
 }
+/* The question the armed control answers. It sits ABOVE the control for the
+   same reason the control sits under Mark paid: the cashier reads down to the
+   thing that acts, and a question printed under its own answer is read second. */
+.cxq{
+  margin-top:10px;font-size:14px;font-weight:500;text-align:center;
+  color:var(--td-brick-ink);
+}
+.cxq[hidden]{display:none}
+/* WHAT WENT WRONG, ON THE SCREEN IT WENT WRONG ON. Same ink as the settle
+   screen's .serr — a failure should not look like a different kind of thing
+   depending on which half of the till raised it. */
+.terr{
+  margin-bottom:12px;font-size:14px;text-align:center;
+  color:var(--td-brick-ink);background:var(--td-brick-tint);
+  border-radius:var(--r-control);padding:10px 14px;
+}
+.terr[hidden]{display:none}
 
 /* ---- customer picker: the store picker's sheet, with a search in it ---- */
 .cust-sheet{max-width:460px;gap:10px}
@@ -779,7 +797,9 @@ button{font:inherit;color:inherit;margin:0}
       <div class="foot">
         <div class="sums" id="sums"></div>
         <div class="tot"><span class="lb" id="tot-lb"></span><span class="amt" id="tot-amt">&yen;0.00</span></div>
+        <div class="terr" id="till-err" hidden></div>
         <button class="pay" id="pay" type="button" disabled></button>
+        <div class="cxq" id="cancel-ask" hidden></div>
         <button class="cxo" id="cancel-order" type="button" data-cancel-order="1" hidden></button>
       </div>
     </div>
@@ -878,6 +898,22 @@ button{font:inherit;color:inherit;margin:0}
     // cancelling in the app and the cashier cancelling for them at the counter
     // are doing the same thing to the same order, so it is the same words.
     cancelOrder:  ['Cancel order', '取消订单'],        // miniapp: order.js:99,275
+    // The question the ARMED control answers. Live pair from the CUSTOMER's own
+    // cancel on the QR order page — routes/shop-menu.js:2336, shipped alongside
+    // this control for the same act on the same order. There the question is
+    // asked in words and a button answers it; the till had the question mark
+    // and nothing to answer it with, which is the report this closes.
+    cancelAsk:    ['Cancel this order?', '取消此订单?'], // shop-menu.js:2336
+    // A cancel the SERVER refuses (409). The order moved while this till's list
+    // was up to fifteen seconds stale — the customer cancelled it themselves on
+    // their own page, or another counter took the money for it.
+    //
+    // NOT didNotSave. Nothing failed to save; the order is simply past the point
+    // where cancelling is a thing that can happen, and telling a cashier that it
+    // "did not save" invites the retry that cannot ever succeed. The admin's own
+    // locked pair for this exact 409, from its error catalogue.
+    notCancellable: ['That order is past the point where it can be cancelled.',
+                     '该订单已无法取消。'],            // admin: 01-core.js:193
     // settle
     amount:       ['Amount', '金额'],                  // admin: refund payout dialog
     payMethod:    ['Pay method', '付款方式'],          // admin: retail-admin.html:2829
@@ -1779,10 +1815,43 @@ button{font:inherit;color:inherit;margin:0}
        Only for a recalled order. A basket the till is still building is
        cleared, not cancelled — there is nothing on the server yet to cancel. */
     var cx = $('cancel-order');
+    var cq = $('cancel-ask');
+    var showCx = !!S.recall && !S.recall.loading;
     if (cx) {
-      cx.hidden = !S.recall || S.recall.loading;
-      cx.textContent = S.cxArm ? T('cancelOrder') + '?' : T('cancelOrder');
+      cx.hidden = !showCx;
+      /* THE QUESTION IS A SENTENCE AND THE BUTTON IS ITS ANSWER. It used to be
+         a question mark appended to the control's own label, which stated the
+         question and offered nothing that read as answering it: a cashier who
+         armed it saw "Cancel order?" and, in the report that brought this in,
+         "nothing else". The question now stands above in words, and the control
+         under it says what it does — the shape the customer's own cancel takes
+         on the QR order page for the same act.
+
+         STILL TWO TAPS. The first arms, the second commits, and a tap anywhere
+         else disarms (see wire()) — an armed destructive control left standing
+         while the cashier works elsewhere is one mis-tap from throwing away an
+         order somebody is waiting on. */
+      cx.textContent = S.busy && S.cxArm ? T('cancelOrder') + '…' : T('cancelOrder');
       cx.className = 'cxo' + (S.cxArm ? ' arm' : '');
+      // In flight, it is not a second tap's to press. The label already says so;
+      // this is what makes the label true.
+      cx.disabled = !!S.busy;
+    }
+    if (cq) {
+      cq.hidden = !(showCx && S.cxArm);
+      cq.textContent = T('cancelAsk');
+    }
+    /* WHAT WENT WRONG, WHERE IT WENT WRONG. S.err has always been written by
+       three paths and rendered by one: the settle screen. Both of the paths that
+       write it there ARE on that screen, so their failures spoke — and
+       cancelOrder(), which runs here on the till, set an error into a state
+       nothing on this view drew. A refused cancel and an expired session both
+       came back as the button quietly disarming itself and not one word said.
+       That is the second half of the report. */
+    var te = $('till-err');
+    if (te) {
+      te.hidden = !(S.view === 'till' && S.err);
+      te.textContent = S.err || '';
     }
 
     // THE BAR IS THE ORDER, FOLDED. On a phone the sheet is closed by default,
@@ -2038,7 +2107,9 @@ button{font:inherit;color:inherit;margin:0}
      cancellable. */
   function cancelOrder() {
     if (!S.recall || S.recall.loading || S.busy) return;
-    if (!S.cxArm) { S.cxArm = true; return render(); }
+    // Arming clears whatever the LAST attempt said. An error left standing over
+    // a fresh question reads as an answer to it.
+    if (!S.cxArm) { S.cxArm = true; S.err = ''; return render(); }
     var r = S.recall;
     S.busy = true; S.err = ''; render();
     api('/api/retail-admin/orders/' + r.id + '/status', {
@@ -2046,7 +2117,33 @@ button{font:inherit;color:inherit;margin:0}
       body: JSON.stringify({ status: 'cancelled' })
     }).then(function (j) {
       S.busy = false; S.cxArm = false;
-      if (!j || !j.success) { S.err = T('didNotSave'); return render(); }
+      if (!j || !j.success) {
+        /* THE ORDER MOVED WHILE THE LIST WAS STALE, which is not a save that
+           failed. This till re-reads every fifteen seconds and the customer can
+           now cancel from their own page (routes/shop-menu.js), so the row the
+           cashier tapped may already be cancelled — or another counter may have
+           taken the money for it. The server answers 409 and the transition
+           guard names it; `not_cancellable` is the same refusal from the
+           admin's own cancel route.
+
+           IT IS DROPPED, NOT LEFT UP. An order that cannot be cancelled cannot
+           be paid for either, so leaving it recalled would leave Mark paid
+           pointing at a second refusal. Back to the list, re-read from the
+           server, and the reason on screen. */
+        if (j && (j.error === 'invalid_transition' || j.error === 'not_cancellable')) {
+          S.err = T('notCancellable');
+          S.pend = (S.pend || []).filter(function (o) { return o.id !== r.id; });
+          S.recall = null; S.lines = []; S.sel = null;
+          S.view = 'till'; S.pane = 'pend'; S.paneTouched = true;
+          render();
+          loadPend();
+          return;
+        }
+        // Anything else may well work on a second press, so the order stays
+        // recalled and the control stays where the cashier left it.
+        S.err = T('didNotSave');
+        return render();
+      }
       S.pend = (S.pend || []).filter(function (o) { return o.id !== r.id; });
       S.recall = null; S.lines = []; S.sel = null;
       S.view = 'till'; S.pane = 'pend'; S.paneTouched = true;
@@ -2194,6 +2291,18 @@ button{font:inherit;color:inherit;margin:0}
   /* ---- wiring. Delegated: the grid and the rail re-render constantly. ---- */
   function wire() {
     document.addEventListener('click', function (ev) {
+      /* A STRAY TAP ANSWERS THE CANCEL QUESTION THE SAFE WAY — the rule the
+         leave question already keeps ("a stray tap on the scrim answers stay"),
+         and the armed cancel needs it more: it has no scrim to tap away, and
+         once the cashier has moved on there is nothing else on the till saying
+         it is still armed. Left standing across a customer, it turns the next
+         tap on that control into a cancelled order nobody asked to cancel.
+
+         DISARMING IS NOT SWALLOWING. The tap still does whatever it was for;
+         this only takes the question back down. */
+      if (S.cxArm && !(ev.target && ev.target.closest && ev.target.closest('[data-cancel-order]'))) {
+        S.cxArm = false; render();
+      }
       // The scrim closes the picker: tapping away from a short list is the
       // expected way out, and it is the only dismissal this pop-up needs.
       if (S.pickOpen && ev.target.id === 'storepick') { S.pickOpen = false; return render(); }
