@@ -833,41 +833,20 @@ img{display:block;max-width:100%}
   cursor:pointer;-webkit-tap-highlight-color:transparent}
 .pw button.on{background:var(--lime)}
 
-/* The placed order. The number is the biggest thing on the phone, because the
-   whole of what happens next is somebody calling it across a room. */
-.done{padding:26px 14px 30px;text-align:center}
-.done-n{font-family:var(--f-bear);font-size:76px;line-height:1;
+/* ── THE PLACED ORDER, WHEREVER IT IS DRAWN ──
+   Three surfaces render this block and they are one screen: the sheet that
+   opens the instant the order is submitted, the order page the customer comes
+   back to, and §50's in-page WeChat screen. THE RULES ARE THEREFORE ON .done
+   ITSELF, not on the page that hosts it — see the note at .ordp for what is
+   still the page's own and why.
+   The number is the biggest thing on the phone, because the whole of what
+   happens next is somebody calling it across a room. It no longer sits alone
+   in a centred column, though: .done-hd puts it beside the name and the order
+   reference, and everything below shares that one left edge. */
+.done{padding:22px 14px 26px;text-align:left}
+.done-n{flex:none;font-family:var(--f-bear);font-size:76px;line-height:.82;
   font-variant-numeric:tabular-nums}
-.done-nm{font-family:var(--f-bear);font-size:20px;margin-top:6px}
-.done-h{font-family:var(--f-bear);font-size:17px;margin-top:16px}
-/* What they owe. Second only to the number in size, and boxed in the accent so
-   the eye lands on it without reading — the customer is walking to a counter
-   with two things to carry, the number they will be called by and the amount
-   they will hand over. inline-block so the rule sits on the figure rather than
-   running the width of the sheet. */
-/* THE PADDING IS NOT SYMMETRIC, AND THAT IS WHAT CENTRES IT. Reported on the
-   device: the figure sat visibly high in its box. The cause is the digit
-   substitution above — the numerals are Lilita One while the letters are Bear
-   Serif — and Lilita One's ink OVERSHOOTS its own ascent metric. Measured in
-   Chromium at 34px against the shipped faces: fontAscent 22 but inkAscent 23,
-   fontDescent 8, inkDescent 1. With line-height:1 the half-leading is 2px, the
-   baseline lands at 24, and the ink then occupies 1..25 of a 34px line box —
-   leaving 12px above the glyphs and 20px below them. Symmetric padding cannot
-   fix an asymmetry that is inside the line box.
-   13/5 moves the 8px difference back: 16px above, 16px below, measured to 0.00.
-   Re-measure if the display face or the substitute ever changes — the number is
-   a property of those fonts, not of this layout. */
-.done-amt{display:inline-block;font-family:var(--f-bear);font-size:34px;line-height:1;
-  margin-top:14px;padding:13px 18px 5px;background:var(--lime);border:2px solid var(--ink);
-  font-variant-numeric:tabular-nums}
-/* Where the browser can trim the line box to the glyphs themselves, do that and
-   let the padding go back to symmetric: it is then correct for ANY tenant's
-   display face rather than tuned to the one this theme ships. The fallback
-   above stays because the browser that matters most here — WeChat's — is
-   usually many Chromium versions behind. */
-@supports (text-box: trim-both cap alphabetic){
-  .done-amt{text-box:trim-both cap alphabetic;padding:14px 18px}
-}
+.done-nm{font-family:var(--f-bear);font-size:20px;line-height:1.1;overflow-wrap:anywhere}
 .done-s{font-size:14px;color:var(--olive);margin-top:8px}
 
 /* WHAT THEY ORDERED, and it is the basket's own row with the stepper taken
@@ -879,13 +858,13 @@ img{display:block;max-width:100%}
    THE ROWS COME BACK FROM retail_order_items, which has carried a bilingual
    name per line since the order was written. Nothing is composed for this: the
    customer reads the same product name they tapped on the menu.
-   .ln, .ln-t, .ln-r and .ln-p are the basket's, reused rather than restyled —
-   a placed line and a line still in the basket are the same line, and two
-   layouts for it would be two answers to the same question.
-   LEFT-ALIGNED INSIDE A CENTRED SCREEN. .done centres everything, which is
-   right for a number somebody calls across a room and wrong for a column of
-   names and prices: a ragged centre cannot be read down. */
-.done-it{text-align:left;margin-top:18px}
+   .ln, .ln-t, .ln-r and .ln-p ARE the basket's classes, but a placed line is
+   laid out differently from one still in the basket and the difference is not
+   an inconsistency — see .done-it .ln below. The basket stacks its name over
+   its controls to make room for a stepper; a placed line has no stepper, so it
+   reads as one row. Same classes, one rule apiece, keyed on .done-it.
+   LEFT-ALIGNED, like the rest of .done: a column of names and prices cannot be
+   read down a ragged centre. */
 /* The quantity, where the stepper used to be. Olive and quiet, because on a
    placed order it states a fact rather than offering a control. */
 .ln-q{flex:none;font-variant-numeric:tabular-nums;font-size:14px;color:var(--olive)}
@@ -906,7 +885,7 @@ img{display:block;max-width:100%}
 .cx-go{margin-top:12px;width:100%;border:2px solid var(--ink);background:var(--oat);
   color:var(--ink);padding:11px;font:inherit;font-family:var(--f-bear);font-size:15px;
   cursor:pointer;-webkit-tap-highlight-color:transparent}
-.done-o{font-size:12px;color:var(--olive);margin-top:14px;
+.done-o{font-size:12px;color:var(--olive);margin-top:4px;
   font-variant-numeric:tabular-nums}
 
 /* THE WAY OFF THIS PAGE, and it is a box rather than a second underlined line.
@@ -946,19 +925,24 @@ img{display:block;max-width:100%}
    the order is for, what is in it, what it comes to — and a rail at the bottom
    that gives the page a floor.
 
-   SCOPED TO .ordp, WHICH IS THIS ROUTE ONLY, and everything here is therefore
-   an override of the .done rules above rather than an edit to them. The done
-   sheet the customer sees the instant they submit, and the in-page WeChat
-   rail, draw the same classes and are deliberately left as they were: neither
-   was what was reported and neither was in the mockup that was approved.
-   Bringing them across is a separate change, and worth making. */
+   .ordp IS THE PAGE'S OWN FURNITURE AND NOTHING ELSE — the full-height column,
+   the rail at the foot, the tone the status carries. Everything about the
+   BLOCK itself lives on .done above, where all three surfaces that draw a
+   placed order can reach it.
+   IT DID NOT START THAT WAY, AND THE CORRECTION IS THE RECORD. v4.162 scoped
+   the whole treatment here, leaving the done sheet and the WeChat screen on the
+   old centred column with the old stacked rows — named at the time as a
+   divergence that ought to be closed. It was reported from a phone the same
+   day, against the done sheet, in the same words as the first report: "the
+   quantity still not in the same line." One order drawn three ways is one
+   screen, and a rule that only reaches one of them is half a rule. */
 .ordp{display:flex;flex-direction:column;min-height:100vh}
 /* dvh where it exists: on a phone 100vh is the chrome-less height, so the rail
    would sit below the fold until the address bar hid itself. WeChat's Chromium
    runs several versions behind, so vh stays as the floor and dvh is the
    improvement rather than the requirement. */
 @supports (height:100dvh){.ordp{min-height:100dvh}}
-.ordp .done{flex:1;text-align:left;padding:22px 14px 26px}
+.ordp .done{flex:1}
 
 /* WHO THE ORDER IS FOR. The number keeps all 76px of it — the whole of what
    happens next is somebody calling it across a room — but it stops being the
@@ -968,12 +952,9 @@ img{display:block;max-width:100%}
    THE ORDER CODE COMES UP HERE from below the total, where it was stranded
    between the amount and a button. It identifies the order, so it belongs with
    the rest of the order's identity rather than in the middle of the money. */
-.ordp .done-hd{display:flex;align-items:flex-end;gap:14px;
+.done-hd{display:flex;align-items:flex-end;gap:14px;
   padding-bottom:16px;border-bottom:2px solid var(--ink)}
-.ordp .done-n{flex:none;line-height:.82}
-.ordp .done-who{flex:1;min-width:0;padding-bottom:4px}
-.ordp .done-nm{margin-top:0;line-height:1.1;overflow-wrap:anywhere}
-.ordp .done-o{margin-top:4px}
+.done-who{flex:1;min-width:0;padding-bottom:4px}
 
 /* THE STATUS IS A CHIP, not a third line of display type. It is the one thing
    on this screen that changes between visits, and a bordered box is how the
@@ -988,11 +969,16 @@ img{display:block;max-width:100%}
      (none)  lime   still to hand over at the counter
      .paid   ink    settled — the ink chip the order list already wears
      .void   olive  cancelled: nothing owed, so nothing calls */
-.ordp .done-h{display:inline-block;margin-top:16px;padding:7px 13px;
-  border:2px solid var(--ink);background:var(--lime);font-size:15px;line-height:1.1}
-.ordp.paid .done-h{background:var(--ink);color:var(--oat);border-color:var(--ink)}
+.done-h{display:inline-block;margin-top:16px;padding:7px 13px;
+  border:2px solid var(--ink);background:var(--lime);
+  font-family:var(--f-bear);font-size:15px;line-height:1.1}
+/* #payOk IS the paid face — it is what the WeChat screen reveals when the
+   charge lands — so it carries the settled tone by name. The order page
+   keeps its tone on the wrapper because its .done element must stay exactly
+   div class="done" and nothing else: three checks find the block by those
+   bytes. */
+.ordp.paid .done-h,#payOk .done-h{background:var(--ink);color:var(--oat);border-color:var(--ink)}
 .ordp.void .done-h{background:transparent;color:var(--olive);border-color:var(--olive)}
-.ordp .done-s{margin-top:8px}
 
 /* ONE ROW PER LINE. The row this page borrows from the basket stacks the name
    over the quantity because a BASKET needs that width for a stepper; a placed
@@ -1002,12 +988,12 @@ img{display:block;max-width:100%}
    where a receipt puts them. A long name in either language still wraps inside
    its own column — .ln-t keeps the min-width:0 it is given above and the pair
    on the right is flex:none, so the price cannot be pushed off the edge. */
-.ordp .done-it{margin-top:20px;border-top:1px solid rgba(0,0,0,.14)}
-.ordp .done-it .ln{flex-direction:row;align-items:baseline;gap:12px;padding:11px 0;
+.done-it{text-align:left;margin-top:20px;border-top:1px solid rgba(0,0,0,.14)}
+.done-it .ln{flex-direction:row;align-items:baseline;gap:12px;padding:11px 0;
   border-bottom:1px solid rgba(0,0,0,.14)}
-.ordp .done-it .ln-t{flex:1}
-.ordp .done-it .ln-r{flex:none;gap:10px}
-.ordp .done-it .ln-p{min-width:62px;text-align:right}
+.done-it .ln-t{flex:1}
+.done-it .ln-r{flex:none;gap:10px}
+.done-it .ln-p{min-width:62px;text-align:right}
 
 /* THE TOTAL KEEPS ITS SIZE AND GAINS ITS EDGES AND A LABEL. Still the
    second-biggest thing on the phone and still boxed in the accent where money
@@ -1018,17 +1004,20 @@ img{display:block;max-width:100%}
    file draws a hundred lines up. Nothing is composed: the figure quoted before
    they submitted and the figure they come back to are now the same labelled
    row, which is the whole reason for reusing it rather than minting a word. */
-.ordp .done-amt{display:flex;align-items:baseline;justify-content:space-between;
-  gap:12px;width:100%;margin-top:18px;padding:13px 16px 11px;font-size:34px}
-.ordp.paid .done-amt{background:transparent}
+.done-amt{display:flex;align-items:baseline;justify-content:space-between;
+  gap:12px;width:100%;margin-top:18px;padding:13px 16px 11px;
+  font-family:var(--f-bear);font-size:34px;line-height:1;
+  background:var(--lime);border:2px solid var(--ink);
+  font-variant-numeric:tabular-nums}
+.ordp.paid .done-amt,#payOk .done-amt{background:transparent}
 .ordp.void .done-amt{background:transparent;border-color:var(--olive);color:var(--olive)}
-.ordp .done-amt-l{font-size:15px;line-height:1}
+.done-amt-l{font-size:15px;line-height:1}
 /* The cap-trim above is written for a figure alone in its box. Here the box
    holds a label as well, so the trim moves onto the figure itself and the box
    goes back to symmetric padding. */
 @supports (text-box: trim-both cap alphabetic){
-  .ordp .done-amt{text-box:normal;padding:14px 16px}
-  .ordp .done-amt-v{text-box:trim-both cap alphabetic}
+  .done-amt{padding:14px 16px}
+  .done-amt-v{text-box:trim-both cap alphabetic}
 }
 
 /* THE PAGE GETS A FLOOR. Back moves out of the middle of an empty half-screen
@@ -1578,9 +1567,22 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `if(mine[i].u!==e0.u)nx.push(mine[i])}mine=nx;` +
   `try{localStorage.setItem(OKEY,JSON.stringify(mine))}catch(e){/* a phone that cannot remember still shows the bar for this visit; mine is set in memory above */}}` +
   `paintBar();` +
-  `body.innerHTML='<div class="done"><div class="done-n">'+esc(String(d.order_code))+'</div>'+` +
-  `'<div class="done-nm">'+esc(String(d.name||''))+'</div>'+` +
+  // ONE BLOCK WITH ONE LEFT EDGE, the same one the order page draws: the number
+  // that will be called, the name it will be called with, and the reference
+  // that identifies the order, rather than three centred lines and the
+  // reference stranded at the bottom under the money.
+  `body.innerHTML='<div class="done"><div class="done-hd">'+` +
+  `'<div class="done-n">'+esc(String(d.order_code))+'</div>'+` +
+  `'<div class="done-who"><div class="done-nm">'+esc(String(d.name||''))+'</div>'+` +
+  `'<div class="done-o">'+bi(${JSON.stringify('Order')},${JSON.stringify('订单号')})+' '+esc(String(d.order_no||''))+'</div>'+` +
+  `'</div></div>'+` +
   `'<div class="done-h">'+bi(${JSON.stringify('Order placed!')},${JSON.stringify('下单成功！')})+'</div>'+` +
+  // THE SUB-LINE MOVES ABOVE THE AMOUNT, which is where the order page has
+  // always had it. It used to sit below, and the note that stood here said the
+  // difference was harmless because what had to agree was the lines-then-figure
+  // reading. With the two surfaces now drawing the same block, "harmless" is
+  // not a reason to keep them different.
+  `'<div class="done-s">'+bi(${JSON.stringify('Pay at the counter.')},${JSON.stringify('请到收银台付款。')})+'</div>'+` +
   // WHAT THEY ORDERED, IMMEDIATELY ABOVE THE AMOUNT. The lines and then what
   // they come to — the order the basket they just closed read in, and the order
   // a receipt reads in. A total printed above the things it totals asks the
@@ -1596,9 +1598,8 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // bar use, so the number they were shown before submitting is the number
   // they are shown after it — a second formatter here could round differently
   // and would be read as a price that changed at the till.
-  `'<div class="done-amt">'+money(d.total)+'</div>'+` +
-  `'<div class="done-s">'+bi(${JSON.stringify('Pay at the counter.')},${JSON.stringify('请到收银台付款。')})+'</div>'+` +
-  `'<div class="done-o">'+bi(${JSON.stringify('Order')},${JSON.stringify('订单号')})+' '+esc(String(d.order_no||''))+'</div>'+` +
+  `'<div class="done-amt"><span class="done-amt-l">'+bi(${JSON.stringify('Total')},${JSON.stringify('合计')})+'</span>'+` +
+  `'<span class="done-amt-v">'+money(d.total)+'</span></div>'+` +
   // NO LINK HERE. The way back is the bar, which appears the moment this sheet
   // closes and carries the same number and amount — one route to the order
   // page, not two. A link here would also have needed a label, and the only
@@ -2858,12 +2859,30 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
   // blocks are one document and only CSS chooses between them.
   const lines = orderLines(order.id, normalizeCurrency(cfg('currency', null)));
 
-  const paid = `<div class="done" id="payOk" hidden>` +
+  // THE SAME BLOCK THE OTHER TWO SURFACES DRAW — see the .done rules. One order
+  // rendered three ways is one screen, and this face was the last of the three
+  // still on the old centred column.
+  const head = `<div class="done-hd">` +
     `<div class="done-n">${esc(String(order.shop_order_code == null ? '' : order.shop_order_code))}</div>` +
-    `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
+    `<div class="done-who">` +
+      `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
+      `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
+    `</div>` +
+  `</div>`;
+  // AND IT SAYS WHAT IS BEING CHARGED. This screen has shown the lines since
+  // v4.160 and never the figure they come to — on the one page whose whole
+  // purpose is a customer about to hand money over. Same labelled row as the
+  // order page, same formatter, so the two cannot disagree.
+  const amount = `<div class="done-amt">` +
+    `<span class="done-amt-l">${bi('Total', '合计')}</span>` +
+    `<span class="done-amt-v">${esc(money(order.total, normalizeCurrency(cfg('currency', null))))}</span>` +
+  `</div>`;
+
+  const paid = `<div class="done" id="payOk" hidden>` +
+    head +
     PAID_MAIN +
     lines +
-    `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
+    amount +
     // BOTH FACES OF THIS PAGE GET THE WAY BACK, not only the one that renders
     // first. They are two blocks in one document with CSS choosing between
     // them, so a link on the waiting screen alone would vanish at the moment
@@ -2898,11 +2917,10 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
     title: brandText(), vars, faces: fontFaces(fonts),
     body: `<div class="bar">${toggle(lang)}</div>` +
       `<div class="done" id="payWait">` +
-        `<div class="done-n">${esc(String(order.shop_order_code == null ? '' : order.shop_order_code))}</div>` +
-        `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
+        head +
         COUNTER_MAIN +
         lines +
-        `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
+        amount +
         backLink(req) +
       `</div>` + paid +
       `<script>${script}</script>`,
