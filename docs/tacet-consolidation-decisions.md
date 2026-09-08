@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.164
+# Tacet shared-core consolidation — decisions record, v4.166
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-08 · v4.166 — **THE UNDO ON THE RECEIVE LINE WAS DEAD FOR AN HOUR. §70 addendum records it; the ruling it corrects is v4.164's, shipped the same hour.** Reported from the floor with a screenshot of RPO-0030, Goji Berries open on its counter, *"cant click now , not checked yet"* — the button circled in red. **§70 ruled that pressing the answer a RECORDED line already holds should open it to be corrected rather than un-answer it, and the ruling is sound; the wiring was not.** The guard went into `recvArrived`, and the only control that ever reaches `recvArrived` on an answered line is the "Not checked yet" undo — the arrived chip renders only on an UNanswered line. So the guard set `recvOpenLine` to the id it already held, the render changed nothing, and the row had no other way to close: **a dead button on the one control that row offered.** The correction path §70 named — tapping the folded row — already went straight to `recvOpenLine` and was never the thing the guard affected. **THE CHECK THAT WOULD HAVE CAUGHT IT is the one I did not make: I verified the RULE was sound and never asked which control reaches it.** The case added here presses the button through the DOM and asserts the screen MOVED, because the whole failure was a handler that ran and painted nothing. **Now: on a line not yet recorded, "Not checked yet" un-answers exactly as before. On a recorded one that sentence is no longer available to say — the receipt is written and the stock is booked — so the control becomes `Done` and folds the correction away, and the way back to nothing is the counter beside it, where a zero IS a correction and a zero does reverse the stock. It is drawn ONLY where pressing it would fold the row**; on a recorded line mid-correction there is no button rather than an inert one, which is the rule the bug earned. **A SECOND DEFECT, OLDER THAN AUTO-SAVE, FELL OUT OF THE SAME READING.** "Not checked yet" borrowed `recvArrived`'s toggle, whose first test is `on && recv > 0`; on a line answered *nothing arrived* that is false, so the press fell through to the else branch and marked the line **fully arrived** — the one control for "I have not checked this" asserting the whole order had turned up. It has its own command now, `recvUnanswer`, which says only what it does. **NO CHINESE WAS COMPOSED**: `Done · 完成` is live six times in this file, including on this same screen (the damage panel's own Done), and is taken verbatim. **Both defects were proven to fail with the fix reverted**, each through the button rather than the command — `test_mobile_receiving.js` 163 → 171 assertions, 43 cases. `npm run test:fast` green at 176. Code, tests and docs; no schema, no migration, no server change.
 
 2026-09-08 · v4.164 — **THE RECEIVE SCREEN SAVES ITSELF, AND ONE VISIT IS ONE DELIVERY. §70 records it.** Asked from a phone with a screenshot of a nineteen-product order: *"no need the button 'record delivery' should be auto saving"*. **The button was the last thing between a delivery somebody had counted and a delivery the system knew about**, and it sat at the foot of the list — a scroll away from the work, disabled until something was marked, on a screen where sixteen products were still unanswered. It earned nothing by being there: every per-product answer above it was already a complete statement about one product. **Every answer now schedules the write and the pause sends it (1200 ms, last tap wins), and leaving the screen — Back, or the phone going to the lock screen — spends whatever the timer was still holding.** Rejected: a write per tap (a dozen stock-and-finance passes where one belongs); rejected: writing only on the way out, which loses the delivery if the app is killed mid-count, the one failure `scripts/test_mobile_receiving.js` names at its head as unforgivable. **THE COLLISION THIS TURNED ON IS THAT A DELIVERY IS NOT A SAVE.** The Received list shows one row per receipt that brought a line for the FIRST time (`DELIVERY_SQL`), so that a person reads van-loads rather than button presses — and a screen writing on every pause would have put one van in that list as many times as the counting paused, destroying the derivation the list is built on. **So a save may now name the receipt to add its lines to**: the first write of a visit opens the delivery and answers with its id, every later write in that visit amends it, `received_at` is not touched, and a line answered twice in one visit is REPLACED on the receipt rather than listed twice — the delivery brought four, not "five, then four". Corrections ACROSS visits are still their own receipt, which is what the journal reads as a revision, and that is unchanged. **The desktop passes nothing and is untouched** — one press of Save there is one delivery, as it always was. **A named receipt that no longer qualifies opens a new one rather than refusing**, because the desk can undo a receive while the door is still counting and an extra row in the journal is a blemish where a refusal at the door is the failure above. **TWO COSTS, BOTH RECORDED RATHER THAN GLOSSED.** An answer that has been recorded can no longer be un-answered by pressing its control again — clearing `qty_received` back to null would leave the booked units on the shelf, since `applyReceivedToStock` skips a null line and reverses nothing — so that press now opens the line to be CORRECTED, and `Not 40` books the zero that does reverse the stock; undo is untouched for the second or so before the pause is spent, which is where a mis-tap is caught. And a confirmed short line with no reason yet is HELD BACK rather than blocking: the server refuses the whole payload over one such line, and with no button to grey out that refusal would have stranded the twelve lines that ARE answerable behind the one that is not. **The confirmation screen is gone with the button that reached it** — it was the receipt for one deliberate save, and there is no such moment now; the summary card's eyebrow changes tense instead. **ONE CHINESE PAIR WAS COMPOSED and adds no new word** — the amber line now says the held lines are not recorded, from this screen's own existing warning plus the 「X的不会Y」 shape of Add stock's live `已登记的不会重复计入`; declared with six verbatim lifts and four deletions in `docs/tacet-delivery-vocabulary.md` v1.35. **Proved by a new `scripts/test_receive_amend.js`** (26 assertions, fast shard: the amend, the replace, the desktop's unchanged behaviour, and both ways a named receipt is refused — each counted through the real deliveries endpoint rather than a `COUNT(*)` that would agree with a broken derivation) **and by four new cases in `scripts/test_mobile_receiving.js`** (163 assertions, green). `npm run test:fast` green at 176. Code, tests and docs; no schema, no migration, no new route.
 
@@ -7233,3 +7235,44 @@ whether it is recorded yet.
 
 Proved by `scripts/test_receive_amend.js` (the journal, server-side) and the cases added to
 `scripts/test_mobile_receiving.js` (the screen).
+
+### §70 addendum — the undo was wired to the wrong control (2026-09-08)
+
+§70 above rules that an answer the server has already recorded cannot be taken back by pressing its control again, and
+that the press should open the line to be **corrected** instead. **That ruling stands. Where it was applied was wrong,
+and the screen was broken by it for an hour.**
+
+The guard went into `recvArrived`. The only control that reaches `recvArrived` on an already-answered line is the
+"Not checked yet" undo — the arrived chip is rendered only when the line is UNanswered, and the folded row's own tap
+goes straight to `recvOpenLine` and always did. So the guard's entire reach was the undo, and on a reopened line it set
+`recvOpenLine` to the id it already held: the handler ran, the render changed nothing, and the row had no other way to
+close. Reported within the hour, on RPO-0030's Goji Berries: *"cant click now , not checked yet"*.
+
+**What I checked and what I did not.** I checked that the rule was sound — that un-answering a recorded line cannot
+reverse booked stock, which is true and is why `applyReceivedToStock` skips a null line. I never asked which control
+would actually hit the guard. The rule was right about the world and wrong about the screen.
+
+**The ruling, restated where it belongs:**
+
+- **Not yet recorded** — "Not checked yet" un-answers the line, exactly as before. Nothing was written, so nothing is
+  owed.
+- **Already recorded** — that sentence is no longer available to say. The button becomes `Done` and folds the
+  correction away; the way back to nothing is the counter beside it, where a zero is a correction and a zero *does*
+  reverse the stock.
+- **Drawn only where it would move the screen.** On a recorded line mid-correction — a changed count, or damage — there
+  is no button rather than an inert one. The row stays open on its counter, which is what a short line looks like
+  anyway.
+
+**A second defect, older than auto-save, fell out of the same reading.** "Not checked yet" borrowed `recvArrived`'s
+toggle, whose first test is `on && recv > 0`. On a line answered *nothing arrived* that is false, so the press fell
+through to the else branch and marked the line **fully arrived** — the one control for "I have not checked this"
+asserting the whole order had turned up. The undo has its own command now (`recvUnanswer`) and states only what it does.
+
+**Still open, and not decided here: taking a recorded line back to *unanswered* has no path at all.** Correcting it to
+zero is the nearest thing, and it is a different fact — it says the goods did not come, where the operator may mean
+they have not looked yet. Giving the screen the true undo means teaching `applyReceivedToStock` to reverse a line whose
+`qty_received` goes back to null, which is a change to the shared stock and money path and is Ash's to rule on. It is
+recorded rather than smuggled in behind a bug fix.
+
+`Done · 完成` is taken verbatim — live six times in `public/m.html`, including on this same screen. No Chinese was
+composed.
