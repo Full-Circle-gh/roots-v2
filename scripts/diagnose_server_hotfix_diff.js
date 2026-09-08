@@ -12,15 +12,39 @@
  * blobs have never existed in this repository. Three of them are live
  * application code: lib/geocode.js, lib/po-returns.js, lib/qingyun-payload.js.
  *
- * They were edited directly on the server. deploy.yml only ever COPIES files it
- * computes as changed, so a hand-edit sits there indefinitely — production runs
- * code that is in no branch, no commit and no backup.
+ * deploy.yml only ever COPIES files it computes as changed, so anything that
+ * reaches the box by another route sits there indefinitely. This prints the
+ * difference so the change can be read and judged rather than guessed at.
  *
- * THE BYTES ON THE BOX ARE THE ONLY COPY. A full-sync, or any future deploy
- * that happens to touch one of these three, overwrites them and whatever was
- * fixed is gone with no record it existed. This prints the difference so the
- * change can be read, judged, and either committed properly or discarded on
- * purpose rather than by accident.
+ * ── AND THE FIRST THING IT PRINTED WAS MISREAD, WHICH IS WHY THE CHECK BELOW
+ *    EXISTS ────────────────────────────────────────────────────────────────
+ * Run #94 (2026-09-07) diffed those three and rendered every line of each as
+ * removed-and-re-added with identical text. That reads exactly like a wholesale
+ * rewrite, and it was recorded as one: production running code main does not
+ * contain, the box holding the only copy, urgent.
+ *
+ * It was a LINE-ENDING CONVERSION. The box's copies are main's own bytes with
+ * CRLF terminators — one extra byte per line, +720 / +257 / +1081 against files
+ * of 720 / 257 / 1081 lines, and each predicted size reproduces the reported one
+ * to the byte. The content is identical. Nothing was hand-edited and nothing was
+ * ever at risk of being lost.
+ *
+ * TWO THINGS CONSPIRED, and neither announces itself:
+ *   1. This script split both sides on '\n', so every box line kept a trailing
+ *      '\r' and NO line compared equal. The LCS correctly found zero common
+ *      lines and emitted a full rewrite.
+ *   2. A CI log viewer eats a lone '\r', so the two sides printed identically.
+ *      The evidence that they differed was the very character being swallowed.
+ *
+ * `git cat-file -e` was right and misleading at once: .gitattributes opens with
+ * `* text=auto`, so this repository stores LF and only LF. A CRLF copy of ANY
+ * tracked file can never match a committed blob however faithful its content, so
+ * "these bytes were never committed" is what a pure line-ending change looks
+ * like, and says nothing whatever about the code.
+ *
+ * So: classify the difference BEFORE diffing it. A file that matches once line
+ * endings are normalised is reported as exactly that, in one line, and its
+ * content diff is not printed — there is nothing in it to read.
  *
  * READ-ONLY
  * ---------
@@ -68,6 +92,24 @@ function redact(text) {
   t = t.replace(/\b[A-Fa-f0-9]{32,}\b/g, (m) => tag(m));
   t = t.replace(/\b[A-Za-z0-9+/]{40,}={0,2}\b/g, (m) => tag(m));
   return t;
+}
+
+// ── Line endings ───────────────────────────────────────────────────────────
+// Normalise CRLF and lone CR to LF. Every comparison below runs on normalised
+// text, so a terminator change can never masquerade as a content change — and
+// the terminators themselves are reported separately, as their own finding.
+const toLF = (s) => s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+// How a file's lines are terminated, said in words rather than left to arithmetic.
+function eol(raw) {
+  const crlf = (raw.match(/\r\n/g) || []).length;
+  const cr = (raw.match(/\r(?!\n)/g) || []).length;
+  const lf = (raw.match(/(?<!\r)\n/g) || []).length;
+  const parts = [];
+  if (lf) parts.push(`${lf} LF`);
+  if (crlf) parts.push(`${crlf} CRLF`);
+  if (cr) parts.push(`${cr} CR`);
+  return parts.length ? parts.join(' + ') : 'no line terminator';
 }
 
 // ── A minimal unified diff (LCS), so no process is spawned ─────────────────
@@ -140,7 +182,7 @@ if (!fs.existsSync(stagedLib)) {
 const files = walk(stagedLib).sort();
 console.log(`comparing ${files.length} staged lib/*.js file(s) against the box\n`);
 
-let differing = 0, missing = 0, identical = 0;
+let differing = 0, missing = 0, identical = 0, eolOnly = 0;
 for (const rel of files) {
   const repoPath = path.join(stagedLib, rel);
   const boxPath = path.join(BOX, 'lib', rel);
@@ -150,12 +192,27 @@ for (const rel of files) {
   const boxRaw = fs.readFileSync(boxPath, 'utf8');
   if (repoRaw === boxRaw) { identical++; continue; }
 
-  differing++;
-  const repoTxt = redact(repoRaw), boxTxt = redact(boxRaw);
+  const repoLF = toLF(repoRaw), boxLF = toLF(boxRaw);
+
   console.log('═'.repeat(72));
   console.log(`DIFFERS  lib/${rel}`);
-  console.log(`   repo ${repoRaw.length} bytes, ${repoRaw.split('\n').length} lines`);
-  console.log(`   box  ${boxRaw.length} bytes, ${boxRaw.split('\n').length} lines`);
+  console.log(`   repo ${repoRaw.length} bytes, ${repoLF.split('\n').length - 1} lines, ${eol(repoRaw)}`);
+  console.log(`   box  ${boxRaw.length} bytes, ${boxLF.split('\n').length - 1} lines, ${eol(boxRaw)}`);
+
+  // CLASSIFY BEFORE DIFFING. A terminator change makes every line differ, so a
+  // content diff of one is 100% noise and reads like a rewrite. See the header.
+  if (repoLF === boxLF) {
+    eolOnly++;
+    console.log('   LINE ENDINGS ONLY — identical once normalised to LF. The content is');
+    console.log('   byte-for-byte main\'s. Nothing was edited; no diff is printed because');
+    console.log('   there is nothing in it. .gitattributes is `* text=auto`, so this repo');
+    console.log('   stores LF: a CRLF copy matches no commit yet contains no change.');
+    console.log(`   Delta is ${boxRaw.length - repoRaw.length} bytes over ${boxLF.split('\n').length - 1} lines.`);
+    continue;
+  }
+
+  differing++;
+  const repoTxt = redact(repoLF), boxTxt = redact(boxLF);
   if (repoTxt === boxTxt) {
     console.log('   ⚠ IDENTICAL AFTER REDACTION — the ONLY difference is inside a redacted');
     console.log('     value. That is a credential edited in place on the server.');
@@ -168,8 +225,15 @@ for (const rel of files) {
 }
 
 console.log('\n' + '═'.repeat(72));
-console.log(`summary: ${identical} identical, ${differing} differ, ${missing} missing on box`);
-console.log(differing
-  ? 'RESULT: production is running lib/ code that main does not contain.'
-  : 'RESULT: every staged lib/ file on the box matches this checkout.');
+console.log(`summary: ${identical} identical, ${eolOnly} line-endings-only, ` +
+            `${differing} differ in content, ${missing} missing on box`);
+if (differing) {
+  console.log('RESULT: production is running lib/ code that main does not contain.');
+} else if (eolOnly) {
+  console.log(`RESULT: no content difference anywhere. ${eolOnly} file(s) differ only in`);
+  console.log('        line endings — a transfer converted them, nobody edited them.');
+  console.log('        A full_sync restores LF and costs nothing.');
+} else {
+  console.log('RESULT: every staged lib/ file on the box matches this checkout.');
+}
 process.exit(0);
