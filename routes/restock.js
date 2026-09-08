@@ -161,9 +161,10 @@ const PUSH_AUDIENCE = {
     //
     // IT NOW HAS A DOOR. This carried no `go` because there was no screen at the
     // asking end to open — the notification told somebody their hummus was made
-    // and then handed them a launcher to go hunting through. /stock?go=ready is
-    // the list of what the kitchen has finished and nobody has collected, which
-    // is the thing the alert is about.
+    // and then handed them a launcher to go hunting through. `ready` is the list
+    // of what the kitchen has finished and nobody has collected, which is the
+    // thing the alert is about; it opens /m?to=kitchenready now, and did open
+    // /stock?go=ready until §48 step 4 retired that app.
     prepared:  { caps: ['restock:request', 'restock:pick'], at: null, go: 'ready' },
   },
 };
@@ -269,10 +270,20 @@ function _fireRestockPush(orderId, kind, actorTenantUserId) {
     const storeId = audience.at === 'from' ? o.from_store_id
                   : audience.at === 'to'   ? o.to_store_id
                   : null;
-    // A door onto the screen the work is on, not onto the app's front page.
-    // /stock reads ?go= itself and refuses one the operator was not answered
-    // for, so a link can never grant access to a screen a capability does not.
-    const url = audience.go ? '/stock?go=' + audience.go : '/stock';
+    /* A door onto the screen the work is on, not onto the app's front page.
+       TACET MOBILE, since §48 step 4 deleted the app these used to open. `?to=`
+       is that app's own deep-link parameter and it takes a screen key, so the
+       old `go` vocabulary is translated here rather than taught to the phone —
+       one table, in the file that owns the audience it belongs to.
+       The safety property is unchanged and is the phone's, not this table's:
+       m.html ignores a `?to=` it does not recognise, and its push() refuses a
+       route the operator's capabilities do not reach, so a link can never grant
+       access to a screen a capability does not. */
+    const GO_SCREEN = {
+      pick: 'pick', receive: 'receivexfer', queue: 'kitchenqueue', ready: 'kitchenready',
+    };
+    const screen = GO_SCREEN[audience.go];
+    const url = screen ? '/m?to=' + screen : '/m';
     // `event` names the switch this alert answers to (audit E-10).
     Promise.resolve(_push.sendPushToOperatorsWithCaps(currentTenantId(), audience.caps, {
       title, body, url, tag: 'rs-' + orderId + '-' + kind, event: 'restock',
@@ -918,12 +929,13 @@ function genRsNumber(prefix = 'RS') {
 
 // ── Orders list (with item count + progress) ────────────────────────────────
 router.get('/api/restock', requireRestockAccess, (req, res) => {
-  // A KITCHEN SESSION MAY LIST ITS OWN INBOX AND NOTHING ELSE, and the refusal
-  // is what keeps the Stock home off the kitchen host. public/stock.html probes
-  // this route with `to_role=store`; a 403 tells it there is one job here and it
-  // lands on the counting list, exactly as it did before the launcher existed.
-  // Without this the probe would succeed, the launcher would paint on the wrong
-  // host, and every tile on it would fail at the first write — a door that opens
+  // A KITCHEN SESSION MAY LIST ITS OWN INBOX AND NOTHING ELSE. The refusal used
+  // to do a second job as well, and that job is gone: the retired /stock app
+  // probed this route with `to_role=store` and read a 403 as "there is one job
+  // here", which is what kept its Transfers launcher off the kitchen host.
+  // Nothing probes it now — Tacet Mobile gates each row on a capability instead
+  // — but the refusal itself is load-bearing on its own terms and stays: a
+  // kitchen session reading the store's transfers is a door that opens
   // onto a wall. public/kitchen.html always asks for to_role=kitchen.
   if (_kitchenScopedSession(req) && req.query.to_role !== 'kitchen') {
     return res.status(403).json({

@@ -79,7 +79,12 @@ const capsOf = (n) => (Array.isArray(n.caps) ? n.caps : [n.caps]).join('+');
   eq(notes.operator.length, 1, 'raising it notified the operators');
   eq(capsOf(last()), 'restock:pick', 'the location that HAS the stock is asked to pick it');
   eq(last().opts.storeId, WH, 'at the supplying location, not the asking one');
-  eq(last().msg.url, '/stock?go=pick', 'and the notification opens the run, not a menu');
+  /* TACET MOBILE, NOT THE RETIRED APP (§48 step 4). These used to read
+     '/stock?go=pick' and friends; the `go` vocabulary belonged to a page that no
+     longer exists, and routes/restock.js now translates it to that app's own
+     `?to=<screen>` deep link. What is asserted is unchanged in substance: the
+     notification opens the SCREEN the work is on, never the app's front page. */
+  eq(last().msg.url, '/m?to=pick', 'and the notification opens the run, not a menu');
   // The body names the end the reader is NOT at. store_name is free text that a
   // store→store ask never sets, so the order's own locations have to answer it.
   const shopName = h.db.prepare('SELECT name_en FROM retail_stores WHERE id = ?').get(SHOP).name_en;
@@ -93,7 +98,7 @@ const capsOf = (n) => (Array.isArray(n.caps) ? n.caps : [n.caps]).join('+');
   eq(notes.operator.length, 1, 'dispatch notified the operators');
   eq(capsOf(last()), 'restock:receive', 'the far end is told to expect it');
   eq(last().opts.storeId, SHOP, 'at the destination');
-  eq(last().msg.url, '/stock?go=receive', 'opening the delivery waiting to be counted');
+  eq(last().msg.url, '/m?to=receivexfer', 'opening the delivery waiting to be counted');
 
   // ── THE ONE THAT SENT NOTHING AT ALL. Counting a delivery in is the close-out
   //    the sender waits for, and PUT /:id/receive had no push of any kind.
@@ -117,7 +122,7 @@ const capsOf = (n) => (Array.isArray(n.caps) ? n.caps : [n.caps]).join('+');
   const kid = kitchen.body.id;
   eq(capsOf(last()), 'restock:fulfil', 'the people who work the queue are told');
   eq(last().opts.storeId, null, 'the kitchen is not a store, so nothing is store-scoped');
-  eq(last().msg.url, '/stock?go=queue', 'and it opens the queue');
+  eq(last().msg.url, '/m?to=kitchenqueue', 'and it opens the queue');
 
   notes.operator.length = 0;
   eq((await call('PUT', `/api/restock/${kid}/status`, { status: 'prepared' })).status, 200, 'the kitchen makes it');

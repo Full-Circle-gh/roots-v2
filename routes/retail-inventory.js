@@ -807,12 +807,23 @@ router.put('/api/retail-admin/config/gz-excluded-districts', requireRetailAdmin,
 // migration drops the two config rows so a stored `false` cannot sit in the
 // database meaning nothing.
 //
-// `enabled` ITSELF STAYS, HARDCODED TRUE, AND THAT IS DELIBERATE. /stock is an
-// installed PWA: its shell is network-first and not precached, so a stale copy
-// is bounded but not impossible, and a cached stock.html still testing this
-// field would read an omitted `enabled` as falsy and show every staffer the
-// closed screen. One constant removes that failure mode. It goes when the app
-// does, in §48's last step.
+// `enabled` ITSELF STAYS, HARDCODED TRUE. The reason it was kept is now spent
+// and a different one has taken its place, so both are written down rather than
+// the line being deleted on a stale rationale.
+//
+// SPENT: "a cached stock.html still testing this field would read an omitted
+// `enabled` as falsy and show every staffer the closed screen." §48 step 4
+// deleted that page; /stock is a redirect, and there is no shell left to cache.
+// This line said it goes when the app does — and on that reasoning alone it
+// would go here.
+//
+// LIVE: the sentence above it, that "Tacet Mobile's Add stock screen never read
+// `enabled`", HAS SINCE STOPPED BEING TRUE. public/m.html tests
+// `qs.ctx.enabled===false` and paints an empty state on it. Dropping the field
+// server-side would leave that branch permanently unreachable — dead code
+// testing a field nobody sends — which is a worse resting state than one
+// constant. Retiring it properly means removing both halves in one change, and
+// that is its own small change, not §48's.
 const QUICK_STOCK_ENABLED = true;
 
 // GET /api/retail-admin/quick-stock/context

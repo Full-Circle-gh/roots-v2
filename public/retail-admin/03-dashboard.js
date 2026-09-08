@@ -1338,34 +1338,156 @@ function dashOpenProductFromFeed(productId) {
 // lowest stock first. Reuses the Products page's own quick-filter (PA_STATUS
 // 'restock') instead of dumping the operator on the full catalogue. paLoad()
 // is async on first open, so poll briefly for the catalogue before applying.
-// "Ready from the kitchen" → the list that already exists, at /stock?go=ready.
-//
-// A SEPARATE DOCUMENT, DELIBERATELY, and the alternative was building a second
-// copy of this list inside the admin. The Quick Stock app already renders it,
-// the phone already opens exactly this URL from its own More row, and two
-// surfaces rendering one list is the drift this codebase works to keep out —
-// so the desktop opens the same screen rather than growing a twin of it.
-//
-// AND THE NAVIGATION IS THE POINT, not a side effect: /stock stamps `seen_at`
-// for the rows it draws, which is the only acknowledgement this direction has.
-// A row that merely stated the count with nowhere to go would never clear from
-// this dashboard at all — the fire would burn until somebody picked up a phone.
-//
-// Same tab, no window.open: a popup blocker eats the second kind, silently, and
-// the operator is left tapping a row that does nothing. /stock reads ?go= itself
-// and refuses one the operator was not answered for, so this link can never open
-// a screen a capability does not.
-//
-// &from=dashboard IS WHAT MAKES THE WAY BACK TRUE. /stock is a separate
-// document with its own Back, and that Back is answered by lib/app-home.js —
-// which knows one way out, '/m?to=more', because until this row existed every
-// door into that app was a row in Tacet Mobile. Opening it from here in the
-// same tab therefore sent a person at a PC to the phone app when they hit
-// Back: a screen they were never on, and no way back to this board. The link
-// names the door it is, /stock reads it (homeFromDoor in public/stock.html)
-// and returns them to this dashboard by name.
-function dashOpenKitchenReady() {
-  window.location.href = '/stock?go=ready&from=dashboard';
+/* "Ready from the kitchen" → THIS admin's own list, in a drawer over the board.
+   §73 rules it; what follows is why the previous answer stopped being right.
+
+   IT USED TO LEAVE. The row set window.location to /stock?go=ready, and a
+   person at a PC landed in a 390px phone app titled "Quick stock · 库存" with
+   the back office gone from around them — which is what Ash reported from the
+   floor: "why it change address and called 'quick stock' … i want all to be
+   unified as one."
+
+   §66 CHOSE THAT DOOR AND ITS REASONING WAS SOUND: the Quick Stock app already
+   rendered this list, the phone already opened exactly that URL, and two
+   surfaces rendering one list is the drift this codebase works to keep out. It
+   even named the price — "the sidebar goes, you return with Back" — and
+   accepted it. §48 step 4 deletes that app, so the premise goes, and the drift
+   argument inverts with it: after the deletion there is ONE other renderer
+   (Tacet Mobile) and the desktop has none. Building it here makes the second of
+   two, which is what Receiving, Waste, Purchasing and Delivery already are.
+
+   THE STAMP IS THE POINT, and it is a requirement rather than a nicety. Opening
+   the list is the only acknowledgement this direction has (§48: a server-side
+   `seen_at`), so a desktop list that merely RENDERED would leave the fire it
+   opens burning until somebody picked up a phone — exactly the failure §66
+   rejected "a row that states the count with nowhere to go" for. This drawer
+   posts the stamp on paint, through the same endpoint the phone posts to. */
+function dashOpenKitchenReady(ev) {
+  // The opening click must not bubble to the dw-dismiss outside-click handler,
+  // which would shut the drawer the moment it opens (the stock drawer above
+  // takes the same precaution, for the same reason).
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  const d = document.getElementById('db-kready-drawer'); if (!d) return;
+  d.classList.add('open');
+  d.setAttribute('aria-hidden', 'false');
+  dashKreadyLoad();
+}
+
+// The lines the kitchen has finished and nobody has collected — the same
+// endpoint and the same rows the phone's own list reads, never a second query.
+let TD_KREADY = null;       // last payload — repainted on a language toggle
+let TD_KREADY_SEEN = false; // one stamp per open, cleared on each load
+
+async function dashKreadyLoad() {
+  const body = document.getElementById('db-kready-body'); if (!body) return;
+  body.innerHTML = `<div class="td-muted">${cuT('Loading…', '加载中…')}</div>`;
+  TD_KREADY = null; TD_KREADY_SEEN = false;
+  try {
+    const j = await api('/api/restock/kitchen-ready/lines');
+    TD_KREADY = Array.isArray(j) ? j : ((j && j.data) || []);
+  } catch (e) { /* render paints the retry line */ }
+  dashKreadyRender();
+  dashKreadyMarkSeen();
+}
+
+function dashKreadyRender() {
+  const d = document.getElementById('db-kready-drawer');
+  if (!d || !d.classList.contains('open')) return;
+  const body = document.getElementById('db-kready-body');
+  const pill = document.getElementById('db-kready-pill');
+  if (!body) return;
+  if (!TD_KREADY) {
+    body.innerHTML = `<div class="td-muted">${cuT('Could not load. Close and try again.', '加载失败，请关闭后重试。')}</div>`;
+    if (pill) pill.style.display = 'none';
+    return;
+  }
+  const cn = window.cuLang && cuLang() === 'cn';
+  if (pill) { pill.textContent = String(TD_KREADY.length); pill.style.display = TD_KREADY.length ? '' : 'none'; }
+  if (!TD_KREADY.length) {
+    body.innerHTML = `<div class="td-attn-clear">${cuT('Nothing waiting', '暂无待处理')}</div>`;
+    return;
+  }
+  /* Product names are DATA and carry no EN/CN pair of their own, so the fall
+     back runs the other way in each language — the same resolution the fire's
+     preview above makes, and the phone's krLineName. */
+  const nameOf = (it) => (cn ? (it.product_cn || it.product_name) : (it.product_name || it.product_cn)) || it.sku || '—';
+  /* WHAT IT WAS FOR, in the request's own words. Three live pairs lifted whole
+     from the phone's krPurpose — nothing composed, so the vocabulary lock owes
+     no entry. A request from before §65 carries no purpose and says nothing. */
+  const purposeOf = (it) => it.purpose === 'order' ? cuT('For an order', '用于发货')
+    : it.purpose === 'shelf' ? cuT('For the shelf', '货架补货')
+    : it.purpose === 'urgent' ? cuT('Urgent order', '加急订单') : '';
+  /* WHEN THE KITCHEN FINISHED IT — a bare clock for today, the date as well for
+     anything older. Almost every line on this list was made this morning, and
+     "Sep 8," in front of each one is a column of noise that pushed the time
+     itself out of the row: the first build of this drawer truncated to
+     "made Sep 8, 5:…" at the drawer's own width, losing the one fact the row is
+     read for.
+
+     THROUGH THE SHARED FORMATTER, NEVER A LOCAL CLOCK. `made_at` is a zoneless
+     UTC string, and every engine reads one as LOCAL — which is the bug class
+     td-datetime exists to close, and which `/stock` has never closed: krMade
+     there formats with `d.getHours()`, so the "made 15:07" on that screen is
+     the VIEWER's clock, not the store's. This is that screen's figure corrected
+     rather than copied, and 'machine' is compared against tdToday() so "today"
+     means the store's day too.
+
+     The pair is `/stock`'s own — "made 15:07" / "15:07 完成", note the side the
+     Chinese hangs the verb on — so nothing here is composed. */
+  const madeOf = (it) => {
+    if (!window.tdWhen || !it.made_at) return '';
+    const sameDay = window.tdToday && tdWhen(it.made_at, 'machine') === tdToday();
+    const w = tdWhen(it.made_at, sameDay ? 'time' : 'dateTime');
+    return w ? cuT(`made ${w}`, `${w} 完成`) : '';
+  };
+  body.innerHTML = TD_KREADY.map((it) => {
+    const meta = [it.rs_number || '', purposeOf(it), madeOf(it)].filter(Boolean).join(' · ');
+    return `<div class="td-kr-row">
+      <span class="qty" data-no-i18n>${Number(it.qty_requested || 0)}</span>
+      <span class="name"><span class="nm" data-no-i18n>${escapeHtml(nameOf(it))}</span>${
+        meta ? `<span class="meta" data-no-i18n>${escapeHtml(meta)}</span>` : ''}</span>${
+        it.seen_at ? '' : '<span class="unseen" aria-hidden="true"></span>'}
+    </div>`;
+  }).join('');
+}
+
+/* READING IT IS THE ACKNOWLEDGEMENT, and this is the whole of it — no button
+   and no confirmation, because there is nothing to confirm: the goods are on
+   the shelf and the stock is already right.
+
+   THE IDS IT ACTUALLY DREW, never "everything unseen". The kitchen can mark
+   something made between this list painting and the post landing, and clearing
+   a line nobody has laid eyes on is the one failure that would make the fire
+   worth ignoring. Same rule, same reason, as the phone's krMarkSeen.
+
+   A FAILURE IS SILENT AND HARMLESS: nothing the operator did has gone wrong,
+   and the worst case is the fire still lit on the next poll — the safe
+   direction to fail in. */
+async function dashKreadyMarkSeen() {
+  if (TD_KREADY_SEEN || !Array.isArray(TD_KREADY)) return;
+  const ids = TD_KREADY.filter(it => !it.seen_at).map(it => Number(it.id)).filter(Number.isInteger);
+  if (!ids.length) return;
+  TD_KREADY_SEEN = true;
+  try {
+    // `item_ids`, because the ids are lines (§69).
+    await api('/api/restock/kitchen-ready/seen', { method: 'POST', body: { item_ids: ids } });
+  } catch (e) { TD_KREADY_SEEN = false; return; }
+  const now = new Date().toISOString();
+  TD_KREADY.forEach(it => { if (ids.indexOf(Number(it.id)) >= 0) it.seen_at = now; });
+  /* And the Needs-you row goes out with it, off the snapshot the strip already
+     holds rather than on the next poll a minute later. Without this the
+     operator reads the list, closes the drawer, and is told again by the row
+     they just answered — for up to a minute, which is exactly long enough to
+     send somebody to look twice. Drops the stamped ids rather than zeroing the
+     key: the kitchen can finish something while this drawer is open, and that
+     one has genuinely not been seen. */
+  const kr = DASH_OPS && DASH_OPS.kitchen_ready;
+  if (kr) {
+    kr.items = (kr.items || []).filter(it => ids.indexOf(Number(it.id)) < 0);
+    kr.count = Math.max(0, Number(kr.count || 0) - ids.length);
+    if (typeof tdAttnRender === 'function') tdAttnRender();
+  }
+  dashKreadyRender();
 }
 
 function dashOpenRestock() {
@@ -1520,7 +1642,7 @@ function tdInit() {
   tdObservationRender();   // no-op until the Today payload lands; hides itself
   tdEnsureStores();   // populate the Running-low store dropdown (multi-store only)
   // Language toggle repaints the JS-built strings (greeting, date, recap, attention).
-  if (window.onLangChange) onLangChange(() => { tdGreetRender(); tdDateRender(); tdObservationRender(); tdRecapHeadPaint(); tdRecapRender(); tdRecapWorkRender(); tdRecapWorkBtnSync(); tdAttnRender(); tdSecPaint(); dashUnhandledRender(); dashNeedsPointRender(); dashStockDrawerRender(); });
+  if (window.onLangChange) onLangChange(() => { tdGreetRender(); tdDateRender(); tdObservationRender(); tdRecapHeadPaint(); tdRecapRender(); tdRecapWorkRender(); tdRecapWorkBtnSync(); tdAttnRender(); tdSecPaint(); dashUnhandledRender(); dashNeedsPointRender(); dashStockDrawerRender(); dashKreadyRender(); });
   tdRecapLoad();     // reads the last-seen stamp BEFORE tdSeenInit overwrites it
   tdSeenInit();
   tdOpsLoad();
@@ -2913,7 +3035,7 @@ function tdAttnRender() {
       state: krShown.length
         ? krShown.join(cuT(', ', '，')) + (krRest > 0 ? ` +${krRest} ${cuT('more', '更多')}` : '')
         : null,
-      cta: cuT('View', '查看'), go: 'dashOpenKitchenReady()',
+      cta: cuT('View', '查看'), go: 'dashOpenKitchenReady(event)',
     });
   }
 

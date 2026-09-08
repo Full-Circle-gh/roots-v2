@@ -202,8 +202,10 @@ it('no second copy of the clause has grown back anywhere', () => {
   // it. The clause is four conditions; `seen_at IS NULL` next to a to_role test
   // is the fingerprint, and lib/kitchen-ready.js is the one place it may appear.
   const suspects = [];
+  // public/stock.html left this list with the app itself (§48 step 4); the
+  // desktop's own list joined it, and is the newest place a copy could grow.
   for (const rel of ['routes/retail.js', 'routes/restock.js',
-                     'public/m.html', 'public/stock.html',
+                     'public/m.html',
                      'public/retail-admin/03-dashboard.js']) {
     const src = fs.readFileSync(path.join(ROOT, rel), 'utf8');
     if (/COALESCE\(to_role,\s*'warehouse'\)\s*=\s*'kitchen'[\s\S]{0,200}?seen_at IS NULL/.test(src)) {
@@ -577,14 +579,30 @@ it('and a brick still beats it — news is not an emergency', () => {
 
 section('   …and where the click goes');
 
-it('the door is the list that already exists, and stamping it read is the point', () => {
+/* WAS: "the door is the list that already exists" — /stock?go=ready, on §66's
+   reasoning that the Quick Stock app already rendered this list. §73 supersedes
+   the destination: the row opens the admin's OWN list, in a drawer over the
+   board, because §48 step 4 deletes that app and the premise with it. What did
+   NOT change is why the row has a door at all, and it is still asserted below:
+   opening the list is the only acknowledgement this direction has. */
+it('the door is this admin\'s own list, and stamping it read is still the point', () => {
   const f = kitchenFire({ count: 1, items: [{}] });
-  assert.strictEqual(f.go, 'dashOpenKitchenReady()');
-  const open = sliceBlock(DASH_JS, 'function dashOpenKitchenReady()');
-  assert.ok(/\/stock\?go=ready/.test(open),
-    'the desktop row must open /stock?go=ready — the URL that stamps seen_at');
+  // `event` so the opening click cannot bubble to the dw-dismiss handler and
+  // shut the drawer in the same gesture that opened it.
+  assert.strictEqual(f.go, 'dashOpenKitchenReady(event)');
+  const open = sliceBlock(DASH_JS, 'function dashOpenKitchenReady(ev)');
+  assert.ok(/db-kready-drawer/.test(open), 'the row opens no drawer, so it opens nothing');
+  assert.ok(/dashKreadyLoad\(\)/.test(open), 'the drawer opens without loading the list');
+  assert.ok(!/\/stock/.test(open), 'the desktop row still leaves for the app §48 retires');
+  assert.ok(!/location\.href/.test(open),
+    'the row navigates again — a PC operator lands in a 390px phone app');
   assert.ok(!/window\.open/.test(open),
     'a popup blocker eats window.open silently, leaving a row that does nothing');
+  // The stamp moved with the list: same endpoint, same line ids, same rule.
+  const seen = sliceBlock(DASH_JS, 'async function dashKreadyMarkSeen()');
+  assert.ok(/kitchen-ready\/seen/.test(seen),
+    'the desktop list does not stamp seen_at — the fire it opens can never clear');
+  assert.ok(/item_ids/.test(seen), 'the stamp sends request ids, not the line ids §69 counts');
 });
 
 it('the row has a door at all', () => {
@@ -706,6 +724,106 @@ it('an envelope that is not an array still degrades to a list', () => {
 it('it reads the LINES route, the one the fire counts', () => {
   assert.ok(/api\('\/api\/restock\/kitchen-ready\/lines'\)/.test(lockedLoadKr()),
     'the list must read the same clause the row counts, or one of the two is lying');
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+section('7 · The list that row opens, on the desktop (§73)');
+
+const ADMIN_HTML = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.html'), 'utf8');
+const ADMIN_CSS  = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.css'), 'utf8');
+const KR_RENDER  = sliceBlock(DASH_JS, 'function dashKreadyRender()');
+
+it('the drawer exists in the shell, and dismisses like its siblings', () => {
+  assert.ok(/id="db-kready-drawer"[^>]*class="side-drawer dw-compact dw-dismiss"/.test(ADMIN_HTML),
+    'the drawer is missing or does not reuse the global side-drawer chrome');
+  assert.ok(/id="db-kready-body"/.test(ADMIN_HTML), 'the drawer has no body to render into');
+});
+
+it('its foot carries no CTA — nothing on this list needs doing', () => {
+  /* The kitchen shelved what it made and recorded the stock itself; the
+     warehouse's only job is to know. The stock drawer beside it DOES carry a
+     primary ("Open restock"), so an empty slot here is a decision rather than
+     an omission, and §1.7's rule against filling the slot with a secondary is
+     what keeps it empty. */
+  const foot = sliceBlock(ADMIN_HTML, '<div class="drawer-foot">',
+    { from: 'id="db-kready-drawer"' });
+  assert.ok(!/btn-primary/.test(foot), 'a primary appeared on a list with nothing to act on');
+});
+
+it('it reads the LINES route — the one the fire counts', () => {
+  const load = sliceBlock(DASH_JS, 'async function dashKreadyLoad()');
+  assert.ok(/kitchen-ready\/lines/.test(load), 'the desktop list reads a different query than the fire');
+  // Same envelope tolerance the phone's loader has: api() may hand back either.
+  assert.ok(/Array\.isArray\(j\)/.test(load), 'an array answer would be unwrapped twice');
+});
+
+it('and stamps on paint rather than asking anyone to confirm', () => {
+  const load = sliceBlock(DASH_JS, 'async function dashKreadyLoad()');
+  assert.ok(/dashKreadyMarkSeen\(\)/.test(load), 'nothing acknowledges the list');
+  assert.ok(!/confirm\(/.test(load), 'the acknowledgement grew a confirmation');
+});
+
+it('the three purpose labels are the phone\'s own, to the character', () => {
+  /* Lifted whole from krPurpose in public/m.html — the vocabulary lock owes no
+     entry only while these are the SAME pairs, so drift here is what this
+     asserts against. */
+  for (const [en, cn] of [['For an order', '用于发货'], ['For the shelf', '货架补货'],
+    ['Urgent order', '加急订单']]) {
+    assert.ok(M_HTML.includes(`T('${en}','${cn}')`), `${en} is no longer the phone's pair`);
+    assert.ok(KR_RENDER.includes(`cuT('${en}', '${cn}')`), `${en} drifted on the desktop`);
+  }
+});
+
+it('a line nobody has read carries the pip, and it is Sage and 6px', () => {
+  assert.ok(/it\.seen_at \? '' :/.test(KR_RENDER), 'the unseen mark is not keyed on seen_at');
+  const css = sliceBlock(ADMIN_CSS, '.td-kr-row .unseen {');
+  assert.ok(/width: 6px/.test(css) && /var\(--td-sage-ink\)/.test(css),
+    'the pip is not the 6px Sage dot the phone draws (§71)');
+});
+
+it('a line made today reads as a bare clock; an older one carries its date', () => {
+  /* The first build of this drawer asked for 'dateTime' on every row, and at
+     the drawer's own width "made Sep 8, 5:…" truncated — losing the one fact
+     the row is read for. Almost every line here was made this morning. */
+  assert.ok(/tdWhen\(it\.made_at, 'machine'\) === tdToday\(\)/.test(KR_RENDER),
+    '"today" is decided by something other than the STORE\'s day');
+  assert.ok(/sameDay \? 'time' : 'dateTime'/.test(KR_RENDER),
+    'every row carries a date again, or none of them does');
+});
+
+it('and the time pair is the retired app\'s own, still uncomposed', () => {
+  /* WAS asserted against public/stock.html, which carried it live. §48 step 4
+     deleted that page, so the source this was lifted FROM is gone and the
+     desktop is now the only place the pair ships. That does not make it
+     composed — it was lifted whole while the source stood, and the vocabulary
+     lock owes nothing for a string that was already live. What is asserted now
+     is the shape itself, because the thing worth catching is somebody
+     "correcting" the Chinese to put 完成 in front, where the English puts it. */
+  assert.ok(/cuT\(`made \$\{w\}`, `\$\{w\} 完成`\)/.test(KR_RENDER),
+    'the time pair drifted from the one lifted out of the retired app');
+});
+
+it('made_at goes through the shared formatter, never a local slice', () => {
+  /* `made_at` is a zoneless UTC string, and every engine reads one as LOCAL —
+     the bug class td-datetime exists to close, and which cost this app eight
+     hours on every stamp once already. */
+  assert.ok(/tdWhen\(it\.made_at, sameDay \? 'time' : 'dateTime'\)/.test(KR_RENDER),
+    'the desktop list formats made_at itself');
+  /* `/stock` is the counter-example and the reason this is asserted rather than
+     assumed: krMade there builds its clock from the browser's own hours, so its
+     "made 15:07" is the VIEWER's timezone. This screen must not inherit that.
+     COMMENTS ARE STRIPPED FIRST — the note beside this code names that call to
+     explain what it is avoiding, and matching the file raw found the sentence
+     rather than a fault. */
+  const codeOnly = KR_RENDER.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.ok(!/\.getHours\(\)|\.getMinutes\(\)/.test(codeOnly),
+    'a local-clock formatter crept in — the same fault /stock still carries');
+  assert.ok(!/made_at\.slice|substring\(/.test(KR_RENDER), 'a hand-rolled time crept in');
+});
+
+it('the language toggle repaints it from the payload it already holds', () => {
+  assert.ok(/dashKreadyRender\(\); \}\);/.test(DASH_JS),
+    'a language flip leaves this drawer in the old language until it is reopened');
 });
 
 /** loadKr's body, anchored so a rename fails loudly rather than passing. */

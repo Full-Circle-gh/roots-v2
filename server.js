@@ -349,24 +349,47 @@ app.use((req, res, next) => {
   // an operator who should be locked down and isn't is a bug, but an operator
   // locked out of the app they use all day by a resolution hiccup is an outage.
   let restricted = false;
+  // THE ROLE'S OWN CAPABILITIES COME OFF THE SAME RECORD, at no extra cost —
+  // recordFor is already being called, and its `caps` decides the handful of
+  // endpoints the two confined roles do NOT share (raising a request is the
+  // clerk's job, not the cook's). §46's principle, applied one layer earlier:
+  // decide by capability, never by job title. Null when the record is
+  // unreadable, and lib/stock-app-only.js refuses the gated entries on null —
+  // the one place in this layer that fails CLOSED, with the reasoning there.
+  let roleCaps = null;
   try {
     const rec = require('./lib/roles').recordFor(u.tenant_id, role);
     restricted = rec ? rec.stockAppOnly : (role === 'kitchen' || role === 'store_stock');
+    roleCaps = rec ? rec.caps : null;
   } catch (e) { restricted = (role === 'kitchen' || role === 'store_stock'); }
   if (!restricted) return next();
   const p = req.path;
   if (p.startsWith('/api/')) {
     // The list lives in lib/stock-app-only.js, with the reasoning for what is on
-    // it — including why the kitchen queue's three calls had to be added, and
-    // why they are scoped by METHOD rather than path.
-    return require('./lib/stock-app-only').stockAppOnlyAllows(req.method, p)
+    // it — including why the kitchen queue's three calls had to be added, why
+    // they are scoped by METHOD rather than path, and why four of them are
+    // scoped by CAPABILITY on top of that.
+    return require('./lib/stock-app-only').stockAppOnlyAllows(req.method, p, roleCaps)
       ? next() : res.status(403).json({ error: 'kitchen_add_only' });
   }
-  // Pages/assets: let the Add Stock app + its static assets through; bounce any
-  // backend page (shell, login, team, billing…) to the app.
-  if (p === '/stock' || p === '/stock-login' || p === '/stock-manifest.webmanifest'
+  /* Pages/assets. THE APP THIS CONFINES TO IS TACET MOBILE (§48 step 3, as
+     amended 2026-09-08): `/m` and its manifest and icons go through, and every
+     backend page bounces THERE rather than to the separate app.
+
+     `/stock` IS STILL ADMITTED, and it is now the REDIRECT rather than an app:
+     step 4 deleted the page and left the door forwarding to `/m`. A confined
+     role tapping an installed home-screen shortcut has to be let as far as that
+     redirect, or the gate would bounce them to `/backend/*` — which this same
+     middleware then bounces back to `/m` anyway, by a longer road and with a
+     login page flashing past on the way. Its manifest and icon stay admitted
+     for the same reason they still exist: the shortcut is installed, and it
+     resolves them on launch. */
+  if (p === '/m' || p === '/m-manifest.webmanifest'
+      || p === '/stock' || p === '/stock-manifest.webmanifest'
       || p === '/stock-icon.svg' || p === '/apple-touch-icon.png' || p === '/favicon.ico') return next();
-  if (p === '/retail-admin' || p.startsWith('/backend/')) return res.redirect('/stock');
+  if (p.startsWith('/tacet-icon-') || p === '/tacet-icon.svg'
+      || p === '/tacet-apple-touch-icon.png') return next();
+  if (p === '/retail-admin' || p.startsWith('/backend/')) return res.redirect('/m');
   return next();   // fonts/css/img and other static assets
 });
 
@@ -914,15 +937,29 @@ app.get('/kitchen-manifest.webmanifest', (req, res) => {
 // its manifest and its four icons. The `/api/restock/*` API in routes/restock.js
 // stays — app.html and kitchen.html still drive restock orders through it.
 
-// Quick Stock — phone-first inventory PWA for shop staff. Per-tenant add-on
-// (toggled in the online-store backend under Settings → Quick Stock). Same
-// public-route PWA pattern as /kitchen so the manifest start_url
-// validates on install; the page self-authenticates against
-// /api/auth/me and bounces unauthenticated visitors to /login. Editing is
-// gated server-side per store (users.retail_store_id) by the stock APIs.
+/* Quick Stock is GONE (§48 step 4). `public/stock.html` is deleted and every
+   job it held lives in Tacet Mobile; what stays here is the door, forwarding.
+   §48: "the retirement leaves /stock redirecting into Tacet rather than 404ing,
+   so an installed icon lands somewhere rather than dying."
+
+   THIS ROUTE OUTLIVES THE APP AND MUST NOT BE TIDIED AWAY. It is the `start_url`
+   of a manifest sitting on staff phones as an installed shortcut, and it is in
+   push notifications sent before this deploy. Deleting it turns every one of
+   those into a 404 on somebody's shift.
+
+   302, NEVER 301. A permanent redirect is cached by the browser and by the
+   installed app's service worker essentially forever — so if `/stock` ever has
+   to mean something again, or this destination changes, a 301 would be
+   unrecallable from every handset that ever followed it. The cost of 302 is one
+   request per launch, which is nothing beside that.
+
+   The `?go=` on an old push URL is dropped rather than translated: those links
+   are minutes-to-hours old at retirement, the screens they named are reachable
+   from the app's own list, and routes/restock.js now sends `/m?to=<screen>`
+   directly. Landing on the app's home is the honest answer to a stale link. */
 app.get('/stock', (req, res) => {
-  res.set('Cache-Control', 'no-cache');
-  res.sendFile(path.join(__dirname, 'public', 'stock.html'));
+  res.set('Cache-Control', 'no-store');
+  res.redirect(302, '/m');
 });
 app.get('/till-manifest.webmanifest', (req, res) => {
   res.type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'till-manifest.webmanifest'));
@@ -930,20 +967,12 @@ app.get('/till-manifest.webmanifest', (req, res) => {
 app.get('/stock-manifest.webmanifest', (req, res) => {
   res.type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'stock-manifest.webmanifest'));
 });
-// Host-aware login redirect for Quick Stock. The same /stock page is reachable
-// on the online-store back office host (backend-operator realm) and on the
-// kitchen host (kitchen-user realm), which have different login pages. The
-// page sends a signed-out staffer here and the server picks the right one by
-// host — keeping the realm logic server-side (where the host routing lives)
-// instead of hardcoding a host in the client. `redirect` returns them to /stock.
-app.get('/stock-login', (req, res) => {
-  const host = (req.hostname || '').toLowerCase();
-  const isBackendHost = host === STORE_HOST || host === STORE_ADMIN_HOST;
-  // login.html honours ?redirect=<same-origin path> and returns the staffer to
-  // /stock after sign-in; backend-login.html ignores params (lands on its own
-  // home), so we just send them to the right login there.
-  res.redirect(302, isBackendHost ? '/backend/login' : '/login?redirect=%2Fstock');
-});
+/* `/stock-login` is DELETED with the page (§48 step 4). It existed because
+   public/stock.html had to send a signed-out staffer to one of two login pages
+   and could not know which host it was on; Tacet Mobile has never needed it —
+   its api() sends a 401/403 to /backend/login itself. Nothing links here that
+   is not the deleted page, and the redirect above catches an installed
+   shortcut before it could ever reach this path. */
 app.get('/stock-icon.svg', (req, res) => {
   res.set('Cache-Control', 'public, max-age=86400');
   res.type('image/svg+xml').sendFile(path.join(__dirname, 'public', 'stock-icon.svg'));
