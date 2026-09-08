@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.160
+# Tacet shared-core consolidation — decisions record, v4.161
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-08 · v4.161 — **THE RECEIVE SCREEN SAVES ITSELF, AND ONE VISIT IS ONE DELIVERY. §69 records it.** Asked from a phone with a screenshot of a nineteen-product order: *"no need the button 'record delivery' should be auto saving"*. **The button was the last thing between a delivery somebody had counted and a delivery the system knew about**, and it sat at the foot of the list — a scroll away from the work, disabled until something was marked, on a screen where sixteen products were still unanswered. It earned nothing by being there: every per-product answer above it was already a complete statement about one product. **Every answer now schedules the write and the pause sends it (1200 ms, last tap wins), and leaving the screen — Back, or the phone going to the lock screen — spends whatever the timer was still holding.** Rejected: a write per tap (a dozen stock-and-finance passes where one belongs); rejected: writing only on the way out, which loses the delivery if the app is killed mid-count, the one failure `scripts/test_mobile_receiving.js` names at its head as unforgivable. **THE COLLISION THIS TURNED ON IS THAT A DELIVERY IS NOT A SAVE.** The Received list shows one row per receipt that brought a line for the FIRST time (`DELIVERY_SQL`), so that a person reads van-loads rather than button presses — and a screen writing on every pause would have put one van in that list as many times as the counting paused, destroying the derivation the list is built on. **So a save may now name the receipt to add its lines to**: the first write of a visit opens the delivery and answers with its id, every later write in that visit amends it, `received_at` is not touched, and a line answered twice in one visit is REPLACED on the receipt rather than listed twice — the delivery brought four, not "five, then four". Corrections ACROSS visits are still their own receipt, which is what the journal reads as a revision, and that is unchanged. **The desktop passes nothing and is untouched** — one press of Save there is one delivery, as it always was. **A named receipt that no longer qualifies opens a new one rather than refusing**, because the desk can undo a receive while the door is still counting and an extra row in the journal is a blemish where a refusal at the door is the failure above. **TWO COSTS, BOTH RECORDED RATHER THAN GLOSSED.** An answer that has been recorded can no longer be un-answered by pressing its control again — clearing `qty_received` back to null would leave the booked units on the shelf, since `applyReceivedToStock` skips a null line and reverses nothing — so that press now opens the line to be CORRECTED, and `Not 40` books the zero that does reverse the stock; undo is untouched for the second or so before the pause is spent, which is where a mis-tap is caught. And a confirmed short line with no reason yet is HELD BACK rather than blocking: the server refuses the whole payload over one such line, and with no button to grey out that refusal would have stranded the twelve lines that ARE answerable behind the one that is not. **The confirmation screen is gone with the button that reached it** — it was the receipt for one deliberate save, and there is no such moment now; the summary card's eyebrow changes tense instead. **ONE CHINESE PAIR WAS COMPOSED and adds no new word** — the amber line now says the held lines are not recorded, from this screen's own existing warning plus the 「X的不会Y」 shape of Add stock's live `已登记的不会重复计入`; declared with six verbatim lifts and four deletions in `docs/tacet-delivery-vocabulary.md` v1.35. **Proved by a new `scripts/test_receive_amend.js`** (26 assertions, fast shard: the amend, the replace, the desktop's unchanged behaviour, and both ways a named receipt is refused — each counted through the real deliveries endpoint rather than a `COUNT(*)` that would agree with a broken derivation) **and by four new cases in `scripts/test_mobile_receiving.js`** (163 assertions, green). `npm run test:fast` green at 176. Code, tests and docs; no schema, no migration, no new route.
 
 2026-09-08 · v4.160 — **THE CUSTOMER CAN SEE WHAT THEY ORDERED. No new section: this is §44 and §50 carrying out what they already say, and it decides nothing.** Reported from a phone, hours after v4.157 went live: *"qr code menu order - after order was made cusotmer cant see the order details at all, nowhere."* **AND THERE WAS NOWHERE, ON ANY SURFACE.** The lines are written to `retail_order_items` the moment a QR order is created — bilingual name, quantity, unit price and line total per row — and **no customer-facing reader ever read them back**. The order page selected the header columns only, so it could show the number, the name, the status and the amount and nothing those figures were FOR; the done sheet was handed the items in the create response and dropped them on the floor. **The customer's own basket is the third copy and it is memory only (§44), cleared on submit** — so between the three, the shop kept every line of every order and showed the customer none of them. The screen in the report is correct in every particular and answers a question nobody asked: a number, a name, an amount, an order number. **THE FIX IS A READ, NOT A FEATURE.** `orderLines()` reads the rows by `order_id` and renders them on `/s/:shopCode/pay/:token` — which reaches all three of its faces at once, because placed, paid and cancelled all render through `payScreen`, and §50's in-page WeChat screen on both of ITS faces, since a customer who dismisses WeChat's own sheet is standing on a counter screen like any other. The done sheet draws the same rows from the `items` the create response has always returned. **WHY BOTH AND NOT ONLY THE PAGE**: they are two views of one order, and a confirm screen richer or poorer than the page its bar links to is how a customer learns not to trust either. **THE ROWS ARE THE BASKET'S OWN ROW WITH THE STEPPER TAKEN OUT** — `.ln`, `.ln-t`, `.ln-r` and `.ln-p` reused rather than restyled, plus one quiet olive `.ln-q` where the stepper was, because on a placed order the quantity states a fact rather than offering a control. A placed line and a line still in the basket are the same line and must not have two layouts. **THE LINES LEAD INTO THE AMOUNT on both surfaces**, and that is the one ordering rule held by a test: a total printed above the things it totals asks the customer to read the screen backwards. (The status sub-line sits below the amount on the done sheet and above it on the order page. That predates this and is left alone — what had to agree between the two is the lines-then-figure reading, and it does.) **A FAILED ITEMS READ RENDERS NO LINES AND NOTHING ELSE CHANGES.** An order page that would not draw because the items table would not answer would cost the customer the number they are about to be called by, which is the one thing that screen exists to carry. **NO CHINESE WAS COMPOSED, AND NONE WAS NEEDED.** `name_en` and `name_cn` are on every row, written from the menu the customer ordered from, so `bi()` has both halves of every string it draws; the quantity is a numeral and the price is a figure, and neither takes a label. **No heading over the list either** — `YOUR BASKET · 购物车` is false on a placed order and anything else would have had to be minted, so the rows sit under the customer's name and read as a receipt without one. **No entry in `docs/tacet-delivery-vocabulary.md` is owed.** **Both halves are held by checks that were proven to fail with their fix reverted**: `test_shop_menu.js` (fast shard) holds that all three faces of the order page name every line in both languages with its quantity and its line total, and that the lines precede the amount; `test_shop_menu_render.js` places a real order in Chromium and compares what the done sheet drew against `retail_order_items` row by row — that file is in the browser shard, which is not run (CLAUDE.md), so it was run individually and green. Code and tests; no schema, no migration, no new route and no new string.
 2026-09-08 · v4.159 — **THE ROLE'S DASHBOARD CARDS REACH THE PHONE, AND THE ONE CARD THAT NEVER HAD A MONEY GATE GETS ONE. §67 addendum records it.** Reported with a screenshot of each side: the Roles editor for Stockroom — *"Has a dashboard"* ticked, layout **The full view**, and **Today, Customers and Unhandled orders UNTICKED** — and the phone's Home underneath it showing **Today: Revenue ¥732, Avg. order ¥222.45, New customers 10**, with *Also today* beneath it. **THE DATA WAS ON THE WIRE THE WHOLE TIME AND THE PHONE THREW IT AWAY.** `/api/backend/me` has shipped `dashboardCards` since the field existed (`routes/backend-auth.js`), and the DESKTOP has honoured it since then (`dashCardGate`, 03-dashboard.js); `public/m.html` read the same endpoint, ignored the key, and drew every card regardless. **The screen was contradicting its own control**: the Roles editor says, in its own words, that the dashboard is *"this role's first screen on desktop and the Home tab on the phone"* and that *"the layout and cards below decide what is on it"* — on the phone they decided nothing. **FOUR OF THE TEN CATALOGUE KEYS HAVE A SECTION OF THEIR OWN ON HOME and are now gated on exactly the key their desktop twin carries**: `recap` → *While you were away*, `needs` → *Needs you*, `orders` → *Today* (the desktop block headed *Today · 今日*), `customers` → *Also today* (the desktop *Customers* card, whose contents are Sessions / Conversion / Returning). **The other six — `unhandled`, `inventory`, `incoming`, `onroad`, `ready`, `delivery` — are desktop cards with NO phone twin**, because the phone surfaces those states as Needs-you fires and Quick actions; **the divergence is named rather than papered over**, and inventing a section on Home to hold a tick would be worse than the gap. **null STAYS "no override" on both surfaces** — a role whose owner never opened that field must not lose every card on the phone. **THE MONEY HALF IS WORSE THAN THE CARD HALF AND WAS FOUND WITH IT.** *Today*'s twin is hidden for the `warehouse`, `dispatch` and `customer-service` boards by `retail-admin.css`; on the phone that card carried **no money gate at all** — not even the `recapNoMoney()` one its own immediate neighbour `vitalsBlock()` already had — so a stock or delivery role read the shop's takings off the FIRST SCREEN THE APP OPENS. It now carries both gates, **in the desktop's order of precedence**: an owner's card override cannot switch the money back ON for a board that hides it (over there the override CLEARS an inline style and the board's CSS rule still wins), so either gate hiding is enough. **THE REPORTING ACCOUNT'S LAYOUT IS `default` ("The full view"), NOT the warehouse board** — which is why neither `recapNoMoney()` nor the `body.pos-warehouse` rules were ever going to save it, and why the card override was the only thing that could. **Verified in Chromium** through the shared `m-probe` harness, four cases: no override leaves Home exactly as it was; the reporting role's own array takes *Today* and *Also today* away with no revenue left on the screen and Quick actions still in place; an unticked `needs` takes the fires with it; and the warehouse board with no override at all now hides the money too. `scripts/test_backend_nav_parity.js` gains §4 (fast shard, 56 assertions total), and the two load-bearing ones were checked to fail with their fix reverted. No Chinese was composed — no string was added. Code, tests and docs; no schema, no migration, no capability grant changed.
@@ -7016,3 +7018,75 @@ figure written twice writes the same figure. The pair is composed and declared i
 followed by a tap on a stock stepper** was painted back to the stored figure, and the typing was gone — no variants
 required, and shipping for as long as the sheet has had both controls. The price now lives in state and is captured on
 input, which is also what lets it survive a trip to a sibling size.
+
+## §69 — THE RECEIVE SCREEN SAVES ITSELF, AND ONE VISIT IS ONE DELIVERY
+
+Asked by Ash, 2026-09-08, from the phone, with a screenshot of a nineteen-product order open on the receive screen:
+*"no need the button 'record delivery' should be auto saving"*.
+
+### What the button cost
+
+`Record delivery` sat at the foot of the list, under the summary card. On the order in the screenshot that is nineteen
+products and sixteen still unanswered — a scroll away from the work, reached after every visit, and disabled until at
+least one product had been marked. It was the last thing between a delivery somebody had counted and a delivery the
+system knew about, and it earned nothing by being there: every answer above it was already a complete, unambiguous
+statement about one product.
+
+### The ruling
+
+**There is no save button. Every answer schedules the write; the pause sends it.** A tap marks the screen dirty and
+starts a 1200 ms timer, the last tap wins, and leaving the screen — Back, or the phone going to the lock screen — spends
+whatever the timer was still holding. The summary card's eyebrow changes tense to say which of the two states the screen
+is in (`About to record` while something is owed, `Recorded` once it is in), and a strip where the button stood reports
+the write.
+
+- **Rejected: a write per tap.** Twelve stock-and-finance passes over one order where one belongs, and see below for
+  what it does to the journal.
+- **Rejected: save only on leaving the screen.** It is the simplest thing that removes the button and it has the one
+  failure this screen may not have — an app killed mid-count loses the delivery. `scripts/test_mobile_receiving.js`
+  names that at its head as the failure nobody forgives.
+
+**The pause is 1200 ms, not Add stock's 700 ms.** Add stock is a stepper under one thumb; this is read the product name,
+find the box, answer. Sized to the gesture, and the number is not load-bearing for correctness — the ruling below is
+what makes the journal right at any pause length.
+
+### The collision this actually turned on, and how it was settled
+
+**A delivery is not a save** (`public/m.html`, the Receiving header; `routes/retail-purchasing.js` `DELIVERY_SQL`). The
+Received list shows one row per receipt that brought a line **for the first time**, so that a person reading it sees
+van-loads rather than button presses. A screen that writes on every pause would have put one van in that list as many
+times as the counting paused — destroying the derivation the list is built on, and only the operator would have known
+it was one van.
+
+**Therefore a save may name the receipt to add its lines to.** The first write of a visit opens the delivery and answers
+with its id; every later write in that visit names it and amends it. `received_at` is not touched — it dates when the
+delivery started being counted. A line answered twice in one visit is **replaced** on the receipt, not listed twice: the
+delivery brought four, not "five, then four". Corrections **across** visits are still their own receipt, which is what
+the journal reads as a revision, and that is unchanged.
+
+**The desktop passes nothing and is untouched.** One press of Save there is one delivery, as it always was.
+
+**A named receipt that no longer qualifies opens a new one rather than refusing.** The desk can undo a receive while the
+door is still counting. An extra row in the journal is a blemish; a delivery refused at the door is the failure above.
+
+### What it cost elsewhere, recorded because both are real
+
+**An answer that has been recorded can no longer be un-answered by pressing the control again.** Clearing `qty_received`
+back to null would leave the booked units on the shelf behind it — `applyReceivedToStock` skips a null line and so
+reverses nothing. So the press that used to undo now **opens the line to be corrected**, and `Not 40` books the zero
+that does reverse the stock. Undo is untouched for the second or so before the pause is spent, which is where a mis-tap
+is caught.
+
+**A confirmed short line with no reason yet is held back, not blocking.** The server refuses the whole payload over one
+such line (`planReceiptReason`), and with no button to grey out that refusal would have stranded the twelve lines that
+ARE answerable behind the one that is not. It is held, and the amber line says those are not recorded — the new half of
+that message, because everything around them now is. The pair is composed and declared in
+`docs/tacet-delivery-vocabulary.md` v1.35.
+
+**The confirmation screen is gone with the button that reached it.** It was the receipt for one deliberate save; there
+is no such moment now, and a screen that threw the list away and said "done" would be lying about a visit with sixteen
+products still to answer. What it said is said in place: the summary card carries the tally, under a heading that says
+whether it is recorded yet.
+
+Proved by `scripts/test_receive_amend.js` (the journal, server-side) and the cases added to
+`scripts/test_mobile_receiving.js` (the screen).
