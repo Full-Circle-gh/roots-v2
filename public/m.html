@@ -692,7 +692,17 @@ const state = {
      They are one piece of work: closing a request moves NO stock, so the lines
      have to be carried to the screen that adds them or the shelf stays short. */
   kq:{list:null,tried:false,tab:'active',order:null,orderId:null,busy:false,err:'',
-      note:''},   // why a closed request did not reach the record screen
+      note:'',    // why a closed request did not reach the record screen
+      /* THE DOT ON "To make" (§71). `seen` is the ids of the requests this
+         phone has actually had in front of it on that tab; `fresh` is how many
+         active requests are not among them — the dot, never a count. Both are
+         per-device and per-session on purpose: this answers "something arrived
+         while I was reading the Done list", which is a fact about THIS screen
+         in front of THIS person, not a shared one like the warehouse's
+         `seen_at`. null, not [], until the first list lands, so the first
+         answer of a session is a baseline and never lights the dot for a
+         backlog that was already there. */
+      seen:null, fresh:0},
   hd:{lines:null,rs:null,rsId:null,reasons:null,busy:false,err:'',done:null,openReason:-1,
       awaiting:null,        // the request whose lines are waiting on the shelf to load
       awaitingItemId:null,  // set alongside `awaiting` when only ONE of its lines is owed (§61)
@@ -924,7 +934,16 @@ reg('pikShort', key=>pikAskShort(String(key)));
 reg('pikDispatch', ()=>pikDispatch());
 reg('pikList', ()=>{ const k=state.pik; k.step='list'; k.result=null; k.err=''; k.tried=false; render(); loadPik(true); });
 reg('kqOpen', id=>kqOpen(id));
-reg('kqList', ()=>{ const k=state.kq; k.order=null; k.orderId=null; k.err=''; render(); });
+/* Coming back out of a request re-reads the queue rather than redrawing the
+   copy it was opened from. Two reasons, and the second is §71's: the request
+   just worked on may have left the list entirely, and anything that arrived
+   while it was open is what the dot is about — clearing that dot against a
+   stale list would hide the very rows it was raised for. `tried` alone, not
+   `list`, so the rows stay on screen while the fetch runs instead of blinking
+   through Loading…. */
+reg('kqList', ()=>{ const k=state.kq; k.order=null; k.orderId=null; k.err='';
+  if(k.tab==='active') k.tried=false;
+  render(); });
 reg('kqTab', t=>{ const k=state.kq; if(k.tab===String(t)) return; k.tab=String(t); k.list=null; k.tried=false; render(); });
 reg('kqItemAdvance', (id,to)=>kqItemAdvance(Number(id),to));
 reg('kqItemRecord', id=>kqItemRecord(Number(id)));
@@ -6936,12 +6955,90 @@ function loadKq(force){
   k.tried=true;
   api('/api/restock?to_role=kitchen&tab='+k.tab).then(j=>{
     k.list=Array.isArray(j)?j:((j&&j.data)||[]);
+    /* HAVING THE "To make" LIST ON SCREEN IS READING IT (§71) — the same rule
+       Orders and the Inbox already follow. Stamped HERE, where the rows land,
+       rather than in each of the three commands that can bring them up
+       (entering the screen, tapping the tab, coming back out of a request):
+       every one of them goes through this fetch, and a rule written once
+       cannot be half-applied. Not stamped while a request is open over the
+       list — an operator inside one is not looking at what else arrived. */
+    if(k.tab==='active'&&k.orderId==null) kqRead();
     k.err=''; render();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
     k.list=[]; k.err=''; render();
   });
 }
+/* WHAT THIS PHONE HAS ALREADY SEEN ON THE "To make" TAB, and the dot put out
+   with it. Called wherever that list is what the operator is looking at. */
+function kqRead(){
+  const k=state.kq;
+  k.seen=(k.list||[]).map(o=>o.id);
+  k.fresh=0;
+}
+/* ── A REQUEST ARRIVED WHILE THEY WERE READING THE DONE LIST (§71) ─────────
+   Reported by Ash from the kitchen: "if for example im on 'done' and i get a
+   new order 'to make' need to have some kind of a small dot notification".
+   A kitchen operator works standing on this screen, and the queue used to be
+   fetched exactly once per visit — a request raised while they were on Done, or
+   inside another request, was invisible until they thought to leave the screen
+   and come back.
+
+   ONE SAGE DOT ON THE SEGMENT, never a count and never red, which is the same
+   answer every other piece of arriving work in this app gets. No chime and no
+   toast: the ding belongs to a customer arriving, and the kitchen already gets
+   a push and a printed slip for a new request.
+
+   IT ONLY RUNS WHILE THE QUEUE IS ON SCREEN. This is a fact about the tab in
+   front of somebody, so there is nothing to poll for when they are elsewhere —
+   and the app already carries two background heartbeats.
+
+   ITS OWN fetch, NOT api(), for the reason fetchUnseenOrders states at length:
+   a 401 out of a heartbeat would navigate a phone sitting on a counter to the
+   login screen. On any failure it goes quiet and tries again. */
+const KQ_POLL_MS=20000;
+let _kqPollBusy=false;
+function kqShowing(){
+  const top=state.stack[state.stack.length-1];
+  return !!top&&top.route==='kitchenqueue';
+}
+function pollKitchenQueue(){
+  if(!kqShowing()||!state.live||_kqPollBusy) return;
+  _kqPollBusy=true;
+  return fetch('/api/restock?to_role=kitchen&tab=active',
+               {credentials:'same-origin',headers:{accept:'application/json'}})
+    .then(r=>r.ok?r.json():null)
+    .then(j=>{
+      _kqPollBusy=false;
+      const rows=j?(Array.isArray(j)?j:(j.data||null)):null;
+      if(!rows) return;
+      const k=state.kq;
+      const ids=rows.map(o=>o.id);
+      /* THE FIRST ANSWER OF A SESSION IS A BASELINE. A queue holding four
+         requests when the app is opened is a backlog the operator can see, not
+         four things that just arrived. */
+      if(k.seen===null){ k.seen=ids; k.fresh=0; return; }
+      /* STANDING ON "To make" WITH NOTHING OPEN: the list itself is the
+         notification, so it is refreshed and nothing is counted. Repainted only
+         when the rows actually changed — render() rewrites the app in one
+         innerHTML, and doing that three times a minute for a list that did not
+         move is the cost the other two pollers are careful about. */
+      if(k.tab==='active'&&k.orderId==null){
+        const moved=(k.list||[]).map(o=>o.id).join(',')!==ids.join(',');
+        k.list=rows; kqRead();
+        if(moved) render();
+        return;
+      }
+      const lit=k.fresh>0;
+      k.fresh=ids.filter(id=>k.seen.indexOf(id)<0).length;
+      if((k.fresh>0)!==lit) render();
+    }).catch(()=>{ _kqPollBusy=false; });
+}
+(function startKitchenQueuePoll(){
+  setInterval(pollKitchenQueue,KQ_POLL_MS);
+  window.addEventListener('focus',pollKitchenQueue);
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) pollKitchenQueue(); });
+})();
 /* THE OPEN ORDER, RE-READ WITHOUT DISTURBING THE SCREEN. kqOpen clears the
    order and shows Loading… — right when somebody taps a request, wrong for a
    refresh behind a screen they are already reading. Used after a batch is
@@ -8619,6 +8716,34 @@ function screenPick(){
         onclick="APP.cmd('pikDispatch')">${k.busy?T('Sending…','发送中…'):T('Dispatch','发货')}</button>
     </div>`;
 }
+/* WHEN IT WAS ASKED FOR (§71), on the row and on the request it opens.
+   Reported by Ash from the kitchen: "time is missing of each request".
+   Every row said what to make and never when it was wanted, so a request
+   raised at 08:10 and one raised twenty minutes ago read identically and the
+   kitchen had no way to tell which had been waiting.
+
+   IT IS THE TIME IT WAS RAISED, on BOTH tabs — not the time it was finished on
+   the Done tab. One meaning for one column: the same request read on either
+   tab shows the same clock, and the list's own order (urgent first, then newest
+   first) becomes legible instead of arbitrary. `sent_at` is stamped as the
+   request is created and `created_at` is the fallback for a row that predates
+   it; fmtDay gives a clock for today, "Yesterday", then a date — kitchen prep
+   legitimately spans days, which is why these rows are exempt from the queue's
+   own overnight sweep (routes/restock.js), so the day matters as much as the
+   hour. A numeral needs no label in either language.
+
+   THE DAY AND THE CLOCK, not one or the other. fmtDay alone answers "Yesterday"
+   and drops the time with it — on the one row where the kitchen most needs to
+   know how long something has been waiting. So the day is prefixed only when
+   there IS one: fmtDay returns the clock itself for today, and comparing the
+   two is what says so without asking the calendar a second question. */
+function kqWhen(o){
+  const v=o&&(o.sent_at||o.created_at);
+  const day=fmtDay(v);
+  if(!day) return '';
+  const time=fmtTime(v);
+  return escAttr(day===time||!time?day:day+' '+time)+' · ';
+}
 function screenKitchenQueue(){
   loadQsCtx(); loadKq();
   const k=state.kq;
@@ -8649,7 +8774,21 @@ function screenKitchenQueue(){
        (routes/restock.js _attachRecorded), so it cannot disagree with them. */
     const rows=items.map(it=>{
       const ist=it.status||'sent';
-      const inext=ist==='sent'?'received':ist==='received'?'prepared':null;
+      /* ONE TAP, NOT TWO (§71). Reported by Ash from the kitchen: "start
+         making step is not neccesary. should start from MARK AS MADE. save
+         one click for the kitchen." A line used to walk sent → received →
+         prepared, and the middle step recorded something nobody reads: no
+         push, no print, no stock movement and no screen anywhere hangs off a
+         kitchen line being 'received' (routes/restock.js fires on 'sent' and
+         'prepared' only). What it cost was a tap per product, in a kitchen,
+         on a phone, with wet hands — and a queue where half the lines said
+         "Start making" and half said "Mark as made" for no difference the
+         operator could act on.
+         The server needs no change: its guard is a FORWARD move, so
+         sent → prepared was already legal and is what this now sends. A line
+         still sitting at 'received' from before this shipped reads exactly the
+         same as a fresh one — one button, still to make. */
+      const inext=ist==='prepared'?null:'prepared';
       const owed=!inext&&!it.recorded_at;
       return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
         <span class="num" style="min-width:44px;font-size:20px;font-weight:500">${xfrNum(it.qty_requested)}</span>
@@ -8657,7 +8796,7 @@ function screenKitchenQueue(){
         ${inext
           ? `<button class="btn2" style="min-height:36px;padding:0 14px;font-size:13px;width:auto"${k.busy?' disabled':''}
                onclick="APP.cmd('kqItemAdvance',${it.id},'${inext}')">${k.busy?T('Saving…','保存中…')
-                :(inext==='received'?T('Start making','开始制作'):T('Mark as made','标记完成'))}</button>`
+                :T('Mark as made','标记完成')}</button>`
           : owed
           ? `<button class="btn2" style="min-height:36px;padding:0 14px;font-size:13px;width:auto"${k.busy?' disabled':''}
                onclick="APP.cmd('kqItemRecord',${it.id})">${T('Record what was made','登记生产批次')}</button>`
@@ -8668,13 +8807,17 @@ function screenKitchenQueue(){
         <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('kqList')">${T('Kitchen queue','厨房制作队列')}</button></div>
       ${err}
       <div style="padding:0 16px 4px;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
-      <div style="padding:0 16px 14px;font-size:13px;color:var(--text-secondary)">${items.length} ${T('items','项')}${p?' · '+escAttr(p):''}</div>
+      <div style="padding:0 16px 14px;font-size:13px;color:var(--text-secondary)">${kqWhen(o)}${items.length} ${T('items','项')}${p?' · '+escAttr(p):''}</div>
       <div>${rows}</div>`;
   }
-  const seg=(key,label)=>`<button class="row" style="min-height:40px;padding:7px 16px;border-radius:999px;width:auto;display:inline-flex;
+  const seg=(key,label,dot)=>`<button class="row" style="min-height:40px;padding:7px 16px;border-radius:999px;width:auto;display:inline-flex;gap:7px;
     border:1px solid ${k.tab===key?'var(--text-primary)':'var(--border-default)'};background:${k.tab===key?'var(--text-primary)':'var(--surface-card)'};
-    color:${k.tab===key?'var(--surface-card)':'var(--text-primary)'};font-size:14px" onclick="APP.cmd('kqTab','${key}')">${label}</button>`;
-  const tabs=`<div style="display:flex;gap:8px;padding:12px 16px">${seg('active',T('To make','待制作'))}${seg('history',T('Done','已完成'))}</div>`;
+    color:${k.tab===key?'var(--surface-card)':'var(--text-primary)'};font-size:14px" onclick="APP.cmd('kqTab','${key}')">${label}${
+    dot?`<span style="width:6px;height:6px;border-radius:50%;background:var(--sage);flex:none"></span>`:''}</button>`;
+  /* §71. The dot rides the tab that is NOT selected — standing on "To make" the
+     rows themselves are the news, and pollKitchenQueue keeps them current. */
+  const tabs=`<div style="display:flex;gap:8px;padding:12px 16px">${
+    seg('active',T('To make','待制作'),k.tab!=='active'&&k.fresh>0)}${seg('history',T('Done','已完成'))}</div>`;
   if(!k.list) return tabs+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   // The note goes ABOVE the empty state, not after it: "Nothing to make" with
   // no explanation is precisely the screen this whole defect showed somebody.
@@ -8686,7 +8829,7 @@ function screenKitchenQueue(){
       onclick="APP.cmd('kqOpen',${o.id})">
       <span style="flex:1;min-width:0">
         <span style="display:block;font-size:15px;font-weight:500">${escAttr(o.rs_number||('#'+o.id))}</span>
-        <span style="display:block;font-size:13px;color:var(--text-secondary)">${(o.item_count||0)} ${T('items','项')}${p?' · '+escAttr(p):''}</span>
+        <span style="display:block;font-size:13px;color:var(--text-secondary)">${kqWhen(o)}${(o.item_count||0)} ${T('items','项')}${p?' · '+escAttr(p):''}</span>
       </span>
       <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>
     </button>`;

@@ -142,15 +142,161 @@ run('production', [
   /* §61 (2026-09-07): the whole-order button and its "next screen asks how
      many reached the shelf" preview are gone. Each line now carries its own
      action, so this fixture's three untouched lines (no `status` on any of
-     them — every line starts at 'sent') each show their own "Start making",
-     not one button for the request. */
+     them — every line starts at 'sent') each show their own button, not one
+     button for the request.
+
+     §71 (2026-09-08): and that button is "Mark as made" on the FIRST tap. The
+     'received' step it used to take on the way is gone from both queues — it
+     fired no push, printed nothing and moved no stock, and it cost the kitchen
+     a tap per product. A line that reads "Start making" anywhere is that step
+     grown back, which is why it is asserted absent rather than merely
+     un-counted. */
   ['an open request shows what was asked for, one action per line',
     QUEUE, [
       ['the request is named', `${body}.indexOf('RS-44')>-1`],
       ['what it asked for', `${body}.indexOf('Hummus Asli')>-1`],
       ['how many', `${body}.indexOf('20')>-1`],
-      ['one line, one action — all three lines have not been started',
-       `(${body}.match(/Start making/g)||[]).length===3`],
+      ['one line, one action — all three lines are still to make',
+       `(${body}.match(/Mark as made/g)||[]).length===3`],
+      ['and no line asks to be started first — that step is gone',
+       `${body}.indexOf('Start making')===-1`],
+    ]],
+
+  /* THE TAP GOES STRAIGHT TO 'prepared' — the whole of §71's saving. The
+     server's guard is a forward move, so one hop was always legal; what
+     matters here is that the CLIENT stopped spending a round trip on the
+     middle step. A line still sitting at 'received' from before this shipped
+     reads exactly like a fresh one, which is the other half of the change. */
+  ['the first tap on a fresh line marks it made, with no step in between',
+    QUEUE + itemStatusStub(1,`{id:44,rs_number:'RS-44',status:'received',purpose:'shelf',items:[
+        {id:1,sku:'1-10',product_name:'Hummus Asli',product_cn:'鹰嘴豆泥',qty_requested:20,status:'prepared'},
+        {id:2,sku:'1-15',product_name:'Turkish Tomato Salad',product_cn:'土耳其番茄沙拉',qty_requested:6,status:'sent'},
+        {id:3,sku:'9-99',product_name:'Something Else',product_cn:'其他',qty_requested:4,status:'sent'}]}`) +
+      "APP.cmd('kqItemAdvance',1,'prepared');", [
+      ['the line went to prepared on the first tap, not to received',
+       "window.__sent.some(function(s){return /\\/api\\/restock\\/44\\/item\\/1\\/status/.test(s.u)&&/prepared/.test(s.b||'')})"],
+      ['and nothing was sent to the step in between',
+       "window.__sent.every(function(s){return !/received/.test(s.b||'')})"],
+    ]],
+
+  ['a line left at the old middle step reads as one still to make',
+    queueOn(`{id:44,rs_number:'RS-44',status:'received',purpose:'shelf',items:[
+      {id:1,sku:'1-10',product_name:'Hummus Asli',product_cn:'鹰嘴豆泥',qty_requested:20,status:'received'},
+      {id:2,sku:'1-15',product_name:'Turkish Tomato Salad',product_cn:'土耳其番茄沙拉',qty_requested:6,status:'sent'},
+      {id:3,sku:'9-99',product_name:'Something Else',product_cn:'其他',qty_requested:4,status:'sent'}]}`), [
+      ['all three offer the same one button', `(${body}.match(/Mark as made/g)||[]).length===3`],
+    ]],
+
+  /* ── §71, THE OTHER TWO HALVES OF THE SAME REPORT ────────────────────────
+     "time is missing of each request" and "if for example im on 'done' and i
+     get a new order 'to make' need to have some kind of a small dot
+     notification". Both are about the LIST, so they are seeded on the list
+     rather than on an open request. The clock is rendered through fmtDay,
+     which the harness inlines the real td-datetime.js for — a stub would let
+     the format drift past this. Asserted as "a clock is there" rather than
+     against a literal, because the value is the store's local time and the
+     suite must not depend on where it is run. */
+  ['every request in the queue says when it was asked for',
+    KITCHEN + `state.kq.tried=true; state.kq.seen=[44,45];
+      state.kq.list=[{id:44,rs_number:'RS-44',item_count:2,purpose:'urgent',
+                      sent_at:new Date(Date.now()-40*60000).toISOString()},
+                     {id:45,rs_number:'RS-45',item_count:1,purpose:'shelf',
+                      created_at:new Date(Date.now()-90*60000).toISOString()}];
+      state.stack=[{route:'kitchenqueue',title:SUBS.kitchenqueue.title}]; render();`, [
+      ['both requests are listed', `${body}.indexOf('RS-44')>-1&&${body}.indexOf('RS-45')>-1`],
+      ['each row carries a clock, before what it asks for',
+       `(${body}.match(/\\d?\\d:\\d\\d[^·]*· \\d+ items/g)||[]).length===2`],
+      ['and what it asks for is still there beside it',
+       `${body}.indexOf('2 items')>-1&&${body}.indexOf('Urgent order')>-1`],
+      /* A row with no stamp at all must lose the separator with it, not
+         render a leading "· 2 items" — the one shape this can get wrong. */
+      ['a request with no stamp shows no stray separator', "kqWhen({})===''"],
+      /* AND A REQUEST FROM YESTERDAY KEEPS ITS CLOCK. fmtDay alone answers
+         "Yesterday" and drops the time — on the row where a kitchen most needs
+         to know how long a thing has been sitting. Kitchen prep spans days by
+         design (these rows are exempt from the queue's overnight sweep), so
+         this is not a corner case. */
+      ['a request from yesterday still says the hour',
+       "/Yesterday \\d?\\d:\\d\\d/.test(kqWhen({created_at:new Date(Date.now()-26*3600000).toISOString()}))"],
+      ['and one from today is the clock alone, not the clock twice',
+       "!/\\d:\\d\\d[^·]*\\d:\\d\\d/.test(kqWhen({sent_at:new Date().toISOString()}))"],
+    ]],
+
+  ['a request arriving while the Done list is open lights a dot on To make',
+    KITCHEN + `state.kq.tried=true; state.kq.tab='history';
+      state.kq.seen=[44]; state.kq.fresh=1; state.kq.list=[];
+      state.stack=[{route:'kitchenqueue',title:SUBS.kitchenqueue.title}]; render();`, [
+      ['the Done list is what is open', `${body}.indexOf('Nothing to make')>-1`],
+      ['and the To make tab carries the dot',
+       "document.getElementById('content').innerHTML.indexOf('var(--sage)')>-1"],
+    ]],
+
+  ['and nothing arriving means no dot at all',
+    KITCHEN + `state.kq.tried=true; state.kq.tab='history';
+      state.kq.seen=[44]; state.kq.fresh=0; state.kq.list=[];
+      state.stack=[{route:'kitchenqueue',title:SUBS.kitchenqueue.title}]; render();`, [
+      ['no dot on a queue nothing has arrived in',
+       "document.getElementById('content').innerHTML.indexOf('var(--sage)')===-1"],
+    ]],
+
+  /* HAVING THE LIST IN FRONT OF YOU IS READING IT. The dot is about what
+     arrived while the operator was looking elsewhere, so standing on "To make"
+     it must never be lit — kqRead stamps the ids and puts it out. */
+  ['reading the To make list puts the dot out and remembers what was on it',
+    KITCHEN + `state.kq.tried=true; state.kq.tab='active'; state.kq.fresh=2;
+      state.kq.list=[{id:44,rs_number:'RS-44',item_count:2,purpose:'urgent'},
+                     {id:45,rs_number:'RS-45',item_count:1,purpose:'shelf'}];
+      kqRead();
+      state.stack=[{route:'kitchenqueue',title:SUBS.kitchenqueue.title}]; render();`, [
+      ['nothing is fresh any more', 'state.kq.fresh===0'],
+      ['and both requests count as seen', 'state.kq.seen.join()===\'44,45\''],
+      ['so no dot rides the tab the operator is standing on',
+       "document.getElementById('content').innerHTML.indexOf('var(--sage)')===-1"],
+    ]],
+
+  /* THE POLL ITSELF (§71), which is what makes the dot possible at all: the
+     queue used to be fetched once per visit, so a request raised while the
+     operator stood on Done was invisible until they left the screen and came
+     back. Driven directly against a stubbed answer — a timer would make this
+     suite wait twenty seconds to prove nothing extra. */
+  ['a request arriving on the poll lights the dot without disturbing the list',
+    KITCHEN + `state.kq.tried=true; state.kq.tab='history'; state.kq.list=[];
+      state.kq.seen=[44]; state.kq.fresh=0;
+      state.stack=[{route:'kitchenqueue',title:SUBS.kitchenqueue.title}]; render();
+      window.fetch=function(u){ return Promise.resolve({ok:true,status:200,json:function(){
+        return Promise.resolve({success:true,data:[{id:44,rs_number:'RS-44',item_count:1},
+                                                   {id:46,rs_number:'RS-46',item_count:2}]}); }}); };
+      pollKitchenQueue();`, [
+      ['the one request it had not seen is what is counted', 'state.kq.fresh===1'],
+      ['the Done list it is standing on is left alone', 'state.kq.list.length===0'],
+      ['and the dot is on the tab', "document.getElementById('content').innerHTML.indexOf('var(--sage)')>-1"],
+    ]],
+
+  /* THE FIRST ANSWER OF A SESSION IS A BASELINE. A queue holding three
+     requests when the app opens is a backlog the operator can see for
+     themselves, not three things that just arrived — the same rule the orders
+     and kitchen-ready heartbeats already keep. */
+  ['a backlog already there when the screen opens lights nothing',
+    KITCHEN + `state.kq.tried=true; state.kq.tab='history'; state.kq.list=[];
+      state.kq.seen=null; state.kq.fresh=0;
+      state.stack=[{route:'kitchenqueue',title:SUBS.kitchenqueue.title}]; render();
+      window.fetch=function(u){ return Promise.resolve({ok:true,status:200,json:function(){
+        return Promise.resolve({success:true,data:[{id:44},{id:45},{id:46}]}); }}); };
+      pollKitchenQueue();`, [
+      ['nothing is counted as fresh', 'state.kq.fresh===0'],
+      ['but all three are remembered, so the next arrival IS', "state.kq.seen.join()==='44,45,46'"],
+      ['and no dot appeared', "document.getElementById('content').innerHTML.indexOf('var(--sage)')===-1"],
+    ]],
+
+  /* AND IT DOES NOT RUN BEHIND THE OPERATOR'S BACK. This is a fact about the
+     tab in front of somebody; off the screen there is nothing to poll for, and
+     the app already carries two background heartbeats. */
+  ['the poll is silent when the queue is not the screen',
+    KITCHEN + `state.stack=[]; state.tab='home'; render();
+      window.__polled=false;
+      window.fetch=function(u){ window.__polled=true; return new Promise(function(){}); };
+      pollKitchenQueue();`, [
+      ['nothing was asked for', 'window.__polled===false'],
     ]],
 
   /* THE HANDOFF, which is the whole reason these three are one piece. */
@@ -212,7 +358,7 @@ run('production', [
       // The item just made (id 1, now 'prepared') draws no button at all —
       // only the two still-pending lines do.
       ['the two still-pending items keep their own action, the made one none',
-       `(${body}.match(/Start making/g)||[]).length===2`],
+       `(${body}.match(/Mark as made/g)||[]).length===2`],
     ]],
 
   // Item 2 (sku 1-15) is used as "the last line" rather than item 3, because
@@ -264,7 +410,7 @@ run('production', [
       ['and it is the only line that does — one door, for one line',
        `(${body}.match(/Record what was made/g)||[]).length===1`],
       ['the two lines not yet made keep their own action',
-       `(${body}.match(/Start making/g)||[]).length===2`],
+       `(${body}.match(/Mark as made/g)||[]).length===2`],
     ]],
 
   ['and that door reopens the record screen on that line alone, advancing nothing',
@@ -285,7 +431,7 @@ run('production', [
       ['nothing offers to record it again',
        `${body}.indexOf('Record what was made')===-1`],
       ['and the lines still to make are unaffected',
-       `(${body}.match(/Start making/g)||[]).length===2`],
+       `(${body}.match(/Mark as made/g)||[]).length===2`],
     ]],
 
   /* THE SHELF ARRIVES AFTER THE TAP, WHICH IS THE ORDINARY CASE ON A PHONE.

@@ -4410,9 +4410,20 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     var o = kq.order;
     var items = (o.items || []).filter(function (it) { return rcNum(it.qty_requested) > 0; });
     var p = kqPurpose(o);
-    var next = o.status === 'sent' ? 'received' : o.status === 'received' ? 'prepared' : null;
-    var label = next === 'received' ? t('Start making', '开始制作')
-              : next === 'prepared' ? t('Mark as made', '标记已完成') : '';
+    /* ONE TAP, NOT TWO (§71). The queue used to walk sent → received →
+       prepared, and "Start making" recorded something nothing reads: no push,
+       no print, no stock movement and no screen hangs off a kitchen request
+       being 'received' (routes/restock.js fires on 'sent' and 'prepared'
+       only). Ash, from the kitchen: "start making step is not neccesary.
+       should start from MARK AS MADE. save one click for the kitchen."
+       The server needs no change — its guard is a FORWARD move, so
+       sent → prepared was already legal. A request left at 'received' by the
+       old flow reads exactly like a fresh one: one button, still to make.
+       Tacet Mobile's own queue (public/m.html), which moves one LINE at a
+       time, drops the same step in the same commit — a workflow that differs
+       between two screens the same kitchen may open is worse than either. */
+    var next = (o.status === 'sent' || o.status === 'received') ? 'prepared' : null;
+    var label = next ? t('Mark as made', '标记已完成') : '';
     return '<div class="rc-wrap">' +
       '<div class="rc-head">' +
         '<button class="rc-back" data-kqlist>' + RC_CHEV + t('Production', '生产') + '</button>' +
@@ -4435,12 +4446,13 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       // says so in its own header). So the one sentence explaining where the
       // stock went named a step that has never moved any. It now names the step
       // that does, which is the screen the next tap opens.
+      // The second sentence used to be the one a 'sent' request got, back when
+      // marking it made was two taps away; there is one tap now, so the branch
+      // that carried it is gone and the note that names the NEXT screen — the
+      // one that actually moves the stock — is what every request shows.
       '<div style="padding:12px 16px 0"><div class="rc-flat rc-note">' +
-        (next === 'prepared'
-          ? t('Marking this made closes the request. Next you record what you made and what went on the shelf — that is what changes the stock.',
-              '标记完成即关闭该申请。随后登记制作数量与实际入库数量 — 库存在那一步才会变动。')
-          : t('Marking this made closes the request. Stock changes when you record what you made, not here.',
-              '标记完成即关闭该申请。库存在登记制作数量时才会变动,不在此处。')) + '</div></div>' +
+        t('Marking this made closes the request. Next you record what you made and what went on the shelf — that is what changes the stock.',
+          '标记完成即关闭该申请。随后登记制作数量与实际入库数量 — 库存在那一步才会变动。') + '</div></div>' +
       '<div class="rc-foot" style="background:transparent;border:none">' +
         '<div style="padding:16px 16px calc(var(--sa-bot) + 24px)">' +
         (next
