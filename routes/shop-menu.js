@@ -77,10 +77,11 @@ const {
   // costed by the same code. A second answer to any of the three would show up
   // as a margin report nobody can reconcile.
   nextOrderNo, taxSettings, costAtSale,
-  // §44: the kitchen ticket prints on SUBMIT for a QR order. Same function the
-  // paid path uses, so the printer resolution, the template and the print_status
-  // the drawer's Reprint reads cannot drift from the till's.
-  autoPrintOrder,
+  // autoPrintOrder is NO LONGER IMPORTED, and its absence is the change rather
+  // than an oversight: §44's print-on-submit was narrowed away on 2026-09-08 and
+  // every QR ticket now comes from markOrderPaid() on the paid transition. See
+  // the note at the end of the submit handler for why nothing was needed inside
+  // autoPrintOrder itself for that to work.
   // §50, the in-page WeChat rail. Composed, never copied: the prepare, the
   // signing and the out_trade_no namespace are the same ones the mini app and
   // the storefront charge through, so a payment placed here settles through
@@ -817,6 +818,14 @@ img{display:block;max-width:100%}
   font-variant-numeric:tabular-nums}
 .done-nm{font-family:var(--f-bear);font-size:20px;margin-top:6px}
 .done-h{font-family:var(--f-bear);font-size:17px;margin-top:16px}
+/* What they owe. Second only to the number in size, and boxed in the accent so
+   the eye lands on it without reading — the customer is walking to a counter
+   with two things to carry, the number they will be called by and the amount
+   they will hand over. inline-block so the rule sits on the figure rather than
+   running the width of the sheet. */
+.done-amt{display:inline-block;font-family:var(--f-bear);font-size:34px;line-height:1;
+  margin-top:14px;padding:9px 18px;background:var(--lime);border:2px solid var(--ink);
+  font-variant-numeric:tabular-nums}
 .done-s{font-size:14px;color:var(--olive);margin-top:8px}
 .done-o{font-size:12px;color:var(--olive);margin-top:14px;
   font-variant-numeric:tabular-nums}
@@ -1200,6 +1209,13 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `body.innerHTML='<div class="done"><div class="done-n">'+esc(String(d.order_code))+'</div>'+` +
   `'<div class="done-nm">'+esc(String(d.name||''))+'</div>'+` +
   `'<div class="done-h">'+bi(${JSON.stringify('Order placed!')},${JSON.stringify('下单成功！')})+'</div>'+` +
+  // THE AMOUNT, because they are about to pay it. The screen has always said
+  // where to pay and never how much, which left the customer to remember a
+  // figure from the basket they just closed. Same money() the basket and the
+  // bar use, so the number they were shown before submitting is the number
+  // they are shown after it — a second formatter here could round differently
+  // and would be read as a price that changed at the till.
+  `'<div class="done-amt">'+money(d.total)+'</div>'+` +
   `'<div class="done-s">'+bi(${JSON.stringify('Pay at the counter.')},${JSON.stringify('请到收银台付款。')})+'</div>'+` +
   `'<div class="done-o">'+bi(${JSON.stringify('Order')},${JSON.stringify('订单号')})+' '+esc(String(d.order_no||''))+'</div>'+` +
   `'</div>';shOpen(sheet)};` +
@@ -1358,7 +1374,27 @@ function notFoundPage(req, res) {
 // Pay's own devMode is checked too. An Official Account with no merchant behind
 // it can obtain an openid and then fail at the charge, which would strand a
 // customer mid-payment on a screen offering them nothing else.
+//
+// AND THE RAIL IS OFF UNTIL THE DOMAIN IS ICP-FILED — Ash, 2026-09-08. JSAPI
+// charges only on a domain registered as a payment directory in the merchant
+// platform, and WeChat does not accept a domain onto that list without an ICP
+// filing. shop.rootskitchenchina.com has none, so every charge this rail raised
+// failed at WeChat rather than in our code: the page was offering a payment it
+// could never take, which is worse than offering none. Every QR order is a
+// counter order until the filing lands.
+//
+// A SWITCH RATHER THAN A DELETION, and rather than unsetting the OA credentials
+// on the box. §50's machinery is correct and still tested — what is missing is
+// a filing, not code — so it stays in the tree behind one flag. Unsetting the
+// credentials would have done the same job here and silently taken out
+// everything else the Official Account is used for; this reaches only the rail
+// it names. Set SHOP_QR_WECHAT_PAY=1 to turn it back on.
+function wxRailEnabled() {
+  return process.env.SHOP_QR_WECHAT_PAY === '1';
+}
+
 function oaReady() {
+  if (!wxRailEnabled()) return false;
   try {
     const p = oaPayContext();
     return !p.oaDevMode && !p.devMode;
@@ -1900,40 +1936,34 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
     return res.status(500).json({ success: false, error: 'order_failed' });
   }
 
-  // THE TICKET PRINTS NOW, NOT WHEN THEY PAY — §44. The customer is walking to
-  // the till; the kitchen should already be making it. AFTER the commit, never
-  // inside it: a printer that is offline must not roll back an order that is
-  // otherwise good, and a slip for an order that failed to save is worse than
-  // no slip. Fire-and-forget by the same reasoning the paid path gives — the
-  // network POST settles long after this response, and the outcome lands on the
-  // order as print_status, where the admin drawer shows it and offers Reprint.
+  // NOTHING PRINTS HERE ANY MORE — Ash, 2026-09-08. §44 ruled the ticket prints
+  // on submit and §50 kept that for every path but in-page WeChat; this narrows
+  // it the rest of the way, so EVERY QR order prints when the money lands and
+  // none prints on submit.
   //
-  // NO STAFF-ACCEPT GATE. §44 leaves one available and Ash ruled on 2026-09-06
-  // that it is not built here: the only place to record "waiting for a human"
-  // is print_status, whose two readers ask solely whether the print FAILED, so
-  // a held order would sit in the admin looking entirely normal with nobody
-  // told to tap anything. That is the pending_accept mistake again — a state
-  // the code knows and no screen does. If phantom orders become real, the
-  // accept step arrives with a surface a person can see, not as a flag.
-  // §50 NARROWS §44 HERE, AND ONLY HERE. A counter order prints now, exactly as
-  // it always has — the customer is walking to the till and the kitchen should
-  // already be making it. AN IN-PAGE WECHAT ORDER DOES NOT: the customer can
-  // submit, close WeChat and never pay, and a ticket printed on submit is food
-  // already made for nobody. Its ticket comes from markOrderPaid() when the
-  // money actually lands.
+  // WHAT CHANGED UNDERNEATH THE OLD RULE. §44's reasoning was that the customer
+  // is walking to a till with staff watching them, so the ticket may as well be
+  // ahead of them. That held while the counter had no way to see the order
+  // before the customer arrived. It now does: the till lists today's unpaid QR
+  // orders and the cashier opens the one whose number the customer is holding
+  // up. The kitchen's signal is that list, not a slip that printed minutes
+  // earlier for someone who may still be deciding.
   //
-  // NOTHING IS NEEDED IN autoPrintOrder FOR THAT SECOND HALF TO WORK, and the
-  // reason is worth stating because it looks like an omission. Its skip guard
-  // is `shop_entry_method='qr' AND print_status='printed'` (it read `source='qr'
-  // until §44's 2026-09-07 amendment) — deliberately narrow, per its
-  // own comment. A WeChat order reaches the paid transition having never
-  // printed, so print_status is null, the guard does not fire, and the paid
-  // path prints it once. A WeChat order that is instead settled at the till
-  // behaves the same way for the same reason.
-  if (!wantsWechat) {
-    try { autoPrintOrder(created.orderId); }
-    catch (e) { console.warn('[shop-menu/print]', created.orderNo, e.message); }
-  }
+  // THE COST IS NAMED RATHER THAN DISCOVERED, because it is the same trade §50
+  // recorded and it now falls on every order: the drink is started when the
+  // customer reaches the counter instead of while they walk. Bought against a
+  // ticket printed for food nobody pays for — which on this page is not
+  // hypothetical, since submitting costs the customer nothing and closing the
+  // tab costs them nothing either.
+  //
+  // NOTHING IS NEEDED IN autoPrintOrder FOR THIS TO WORK, and the reason is
+  // worth keeping because it looks like an omission. Its skip guard is
+  // `shop_entry_method='qr' AND print_status='printed'` (it read `source='qr'`
+  // until §44's 2026-09-07 amendment) — deliberately narrow, per its own
+  // comment. A QR order now reaches the paid transition having never printed,
+  // so print_status is null, the guard does not fire, and the paid path prints
+  // it exactly once, whether the money arrived through the till or through the
+  // in-page rail when that is switched back on.
 
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.status(201).json({

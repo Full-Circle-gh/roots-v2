@@ -2153,14 +2153,86 @@ check('the preference is still read at boot, so the write has a reader',
   /localStorage\.getItem\('tacet-till-store'\)/.test(POS_TILL_SRC), true);
 // Switching shelf means switching stock; the catalogue must be re-read rather
 // than left showing the previous store's.
-check('switching store re-reads the catalogue', /function switchStore[\s\S]{0,600}loadCatalogue\(\)/.test(POS_TILL_SRC), true);
+// The window is 900, matching the shelf assertion below it, and was 600 until
+// 2026-09-08. Both are proxies for "inside switchStore" and nothing more, so
+// the number has to be big enough for the function to grow a line without the
+// assertion going red for a reason that has nothing to do with what it checks —
+// which is exactly what happened when switching shop also had to drop the
+// pending list. loadCatalogue() is still called, and still called there.
+check('switching store re-reads the catalogue', /function switchStore[\s\S]{0,900}loadCatalogue\(\)/.test(POS_TILL_SRC), true);
 check('switching store drops the previous shelf', /function switchStore[\s\S]{0,900}S\.stock = \{\}/.test(POS_TILL_SRC), true);
+// Switching shop must also drop the PREVIOUS shop's waiting list, or the new
+// counter opens showing numbers belonging to the old one — and shop_order_code
+// restarts at 1 per shop per day, so those numbers look perfectly plausible.
+check('switching store drops the previous queue', /function switchStore[\s\S]{0,900}S\.pend = null/.test(POS_TILL_SRC), true);
 // A basket is priced and stock-checked against ONE store.
 check('the store cannot change under a basket', /canSwitch = S\.stores\.length > 1 && !S\.lines\.length/.test(POS_TILL_SRC), true);
 // The picker's id must not sit one character from the settle screen's .spick
 // wallet list — this file already carries a note about that class of collision.
 check('the store picker does not collide with the settle wallet list',
   [/id="storepick"/.test(POS_TILL_SRC), /id="spick"/.test(POS_TILL_SRC)], [true, false]);
+
+// THE TILL'S SCRIPT ACTUALLY PARSES. Every other assertion in this file is a
+// regex over the source, which cannot tell working code from a syntax error —
+// and on 2026-09-08 it did not: a stray `+` inside a ternary shipped a till
+// that would not have booted at all, past a green suite. A blank screen at a
+// counter is the most expensive failure this file exists to prevent, and it is
+// one Function() call to rule out.
+check('the till\'s script parses', (function () {
+  const m = /<script[^>]*>([\s\S]*?)<\/script>/.exec(POS_TILL_SRC);
+  if (!m) return 'no script block found';
+  try { new Function(m[1]); return true; } catch (e) { return 'SyntaxError: ' + e.message; }
+})(), true);
+
+// ── The pending list: settling an order placed on a phone ────────────────
+// Added 2026-09-08. A QR order is retrieved by the number the customer holds
+// up — no scanner, no typing. These hold the parts that reading the file
+// cannot: that the list is narrowed to the right rows, that it cannot be
+// mistaken for the basket, and that settling it PATCHes rather than POSTs.
+check('the pending list asks for unpaid QR orders at THIS shop',
+  [/status=pending_payment/.test(POS_TILL_SRC),
+   /shop_entry_method=qr/.test(POS_TILL_SRC),
+   /store_id=' \+ encodeURIComponent\(S\.storeId\)/.test(POS_TILL_SRC)], [true, true, true]);
+// A recalled order is SETTLED, never created. POSTing it would bill the
+// customer twice, print two tickets and leave a phantom on the shop's day.
+check('settling a recalled order patches the existing row',
+  /function confirmRecall[\s\S]{0,700}method: 'PATCH'/.test(POS_TILL_SRC), true);
+check('...at the status endpoint, with the wallet on the same request',
+  /orders\/' \+ r\.id \+ '\/status'[\s\S]{0,300}recallPayload/.test(POS_TILL_SRC), true);
+check('the recall payload names the tender the status endpoint reads',
+  /recallPayload:[\s\S]{0,120}pay_method: st\.wallet/.test(POS_TILL_SRC), true);
+// The wallet is required for a recalled order exactly as it is for a basket —
+// an order reaching 'paid' with no tender is the unreconcilable row the settle
+// screen exists to prevent, and a recall must not be the way around it.
+check('a recalled order still cannot be confirmed without a wallet',
+  /!S\.busy && \(!!S\.recall \|\| S\.lines\.length > 0\) && m && m\.ready\(S\)/.test(POS_TILL_SRC), true);
+// The settle screen must state the SERVER's total for a recalled order. Deriving
+// it from lines this till never saw is how the counter asks for a different
+// number than the one on the customer's screen.
+check('a recalled order is settled at the total it was placed at',
+  /function settleDue\(\) \{ return S\.recall \? S\.recall\.total : dueNow\(subtotal\(\)\); \}/.test(POS_TILL_SRC), true);
+// The switch is ABSENT when nothing is waiting, so a badge on screen always
+// means there is something behind it — and a shop with no QR orders sees the
+// till exactly as it shipped.
+check('the switch is not drawn when nothing is waiting',
+  /el\.hidden = n === 0;/.test(POS_TILL_SRC), true);
+check('and a pane with nothing in it cannot stay up',
+  /function normalisePane[\s\S]{0,200}S\.pane = 'menu'/.test(POS_TILL_SRC), true);
+// Ash, 2026-09-08: default to the pending list when something is waiting, the
+// menu when nothing is — a DEFAULT, so it never moves the pane under a cashier
+// who has chosen one or has a basket open.
+check('the default never overrides a cashier mid-sale',
+  /if \(S\.paneTouched \|\| S\.view !== 'till' \|\| S\.lines\.length\) return;/.test(POS_TILL_SRC), true);
+// Both panes are full height and take turns. `.pane` sets display:flex, which
+// beats the UA's [hidden] — without the override the pane that is down renders
+// on top of the one that is up.
+check('the hidden pane is actually hidden', /\.pane\[hidden\]\{display:none\}/.test(POS_TILL_SRC), true);
+// Locked pairs, both of them. `pending` is the admin's own label for these very
+// rows (pending_payment), and the walk-in half reuses this screen's own title.
+check('the pending tab uses the admin\'s locked status pair',
+  /pending:\s*\['Pending', '待付款'\]/.test(POS_TILL_SRC), true);
+check('the two tabs are labelled from locked pairs only',
+  /esc\(T\('counterSale'\)\)[\s\S]{0,200}esc\(T\('pending'\)\)/.test(POS_TILL_SRC), true);
 
 // ── The order sheet ──────────────────────────────────────────────────────
 // The first phone layout stacked the rail under the products and capped it, so
