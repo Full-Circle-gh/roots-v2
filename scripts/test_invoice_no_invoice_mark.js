@@ -347,12 +347,17 @@ const { setNoInvoiceMark, setLineInvoiceStatus } = require('../lib/invoice-mark'
   ok(kPoRestore.json.lines_still_marked === 1, 'and reports the lines that kept it', kPoRestore.json);
   const missing = await send('PUT', '/api/purchases/9999/no-invoice', { no_invoice_expected: false });
   ok(missing.status === 404, 'an order that does not exist is still a 404, not a silent success', missing.status);
-  const APP_SRC = fs.readFileSync(path.join(ROOT, 'public', 'app.html'), 'utf8');
-  ok(APP_SRC.includes('l.po_no_invoice'),
-     'the kitchen Invoices tab asks WHERE the mark is before offering to lift it');
-  ok(APP_SRC.includes('poRestoreNoInvoice(${l.po_id})'),
-     'and a row marked by its ORDER offers the order 恢复 — not the line toggle, which wrote a '
-     + 'column that was already 0 while the row never moved');
+  // TWO SCREEN ASSERTIONS STOOD HERE AND ARE GONE (§78). They read
+  // public/app.html to prove the kitchen Invoices tab asked WHERE the mark
+  // was before offering to lift it, and that a row marked by its ORDER
+  // offered the order 恢复 rather than the line toggle — the exact confusion
+  // that wrote a column already 0 while the row never moved. That page is
+  // deleted.
+  //
+  // EVERYTHING ABOVE THIS POINT IS UNCHANGED and is the half that matters:
+  // the two columns, the three writers and the boot reconciliation are all
+  // server-side, still live, and still driven here over HTTP. The Tacet
+  // screen's own assertion follows.
   ok(UI_SRC.includes('lines_still_marked'),
      'the Tacet Invoices tab reads the count back and says it out loud, so no press is silent');
 

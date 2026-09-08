@@ -44,7 +44,6 @@ function it(name, fn) {
 
 const ROOT = path.join(__dirname, '..');
 const PUR = fs.readFileSync(path.join(ROOT, 'routes', 'retail-purchasing.js'), 'utf8');
-const AI  = fs.readFileSync(path.join(ROOT, 'routes', 'ai.js'), 'utf8');
 
 // The guard as the shipped line writes it, so the cases below run the real rule.
 const guard = (unit) => (normaliseUnit(unit) || 'pcs') !== 'pcs';
@@ -108,12 +107,16 @@ const SOURCE = [
   { src: PUR, file: 'routes/retail-purchasing.js',
     name: 'and reported to the operator on the receive response',
     anchor: 'cost_lines_unit_mismatch: stock.costSkippedUnitMismatch,' },
-  { src: AI, file: 'routes/ai.js',
-    name: 'compute_margin delegates the cost derivation',
-    anchor: 'const c = computeRecipeCost(p.recipe_id, db);' },
-  { src: AI, file: 'routes/ai.js',
-    name: 'and imports the one shared derivation to do it',
-    anchor: "const { computeRecipeCost } = require('../lib/recipe-cost');" },
+  // TWO routes/ai.js CASES STOOD HERE AND ARE GONE (§78). They pinned Sprout's
+  // compute_margin tool to the one shared recipe-cost derivation — that it
+  // called computeRecipeCost rather than re-deriving margin itself. Ash
+  // scrapped Sprout with the kitchen app, so the tool, its loop and the whole
+  // agent are deleted, and routes/ai.js no longer imports lib/recipe-cost.js
+  // at all.
+  //
+  // The RULE those cases served is untouched and still covered above: there is
+  // one cost derivation and callers delegate to it. What is gone is one of its
+  // callers, not the rule.
 ];
 
 for (const c of SOURCE) {
@@ -127,40 +130,26 @@ for (const c of SOURCE) {
   });
 }
 
-console.log('\n3 · compute_margin keeps none of its old arithmetic');
+console.log('\n3 · compute_margin — REMOVED WITH SPROUT (§78)');
 
-it('the hand-rolled ingredient query is gone', () => {
-  // It INNER JOINed ingredients, so a line whose material had been deleted
-  // vanished from the cost instead of counting as missing.
-  const m = AI.match(/compute_margin: \(\{[\s\S]*?\n  \},\n/);
-  assert.ok(m, 'the compute_margin handler could not be located');
-  const body = m[0];
-  assert.ok(!/FROM recipe_ingredients ri/.test(body),
-    'compute_margin must not run its own recipe_ingredients query');
-  assert.ok(!/servings \|\| 1/.test(body),
-    'servings || 1 silently prices an uncostable recipe as if it made one serving');
-});
+/* PART 3 STOOD HERE AND IS GONE, with its four cases.
 
-it('an uncostable recipe is refused rather than priced at zero', () => {
-  const m = AI.match(/compute_margin: \(\{[\s\S]*?\n  \},\n/)[0];
-  assert.ok(/c\.costPerServing == null \|\| !\(c\.costPerServing > 0\)/.test(m),
-    'a recipe with no usable cost must say so, not report a 100% margin');
-});
+   It pinned routes/ai.js's compute_margin tool — Sprout's margin answer — to
+   the shared derivation: no hand-rolled recipe_ingredients query, no
+   `servings || 1` pricing an uncostable recipe as if it made one, a null
+   derivation answered rather than thrown on, and no `IN (0)` movers query.
+   compute_margin was the sixth divergent margin implementation when it was
+   written, and these cases are what stopped it drifting back.
 
-it('a recipe that no longer exists is answered, not thrown on', () => {
-  // computeRecipeCost returns null for a missing recipe id.
-  const m = AI.match(/compute_margin: \(\{[\s\S]*?\n  \},\n/)[0];
-  assert.ok(/if \(!c\) return \{/.test(m), 'a null derivation must be handled');
-});
+   Ash scrapped Sprout with the kitchen app, so the tool and its whole agent
+   are deleted and routes/ai.js no longer imports lib/recipe-cost.js.
 
-it('the movers query cannot be built with an empty IN list', () => {
-  // The old code emitted `IN (0)` for a recipe with no lines; the new one skips
-  // the query entirely, so the placeholder join is never empty.
-  const m = AI.match(/compute_margin: \(\{[\s\S]*?\n  \},\n/)[0];
-  assert.ok(/ingredientIds\.length \? db\.prepare\(/.test(m),
-    'the movers query must be skipped when there are no ingredient ids');
-});
-
+   NOTHING IS OWED HERE. These cases guarded a CALLER of the shared
+   derivation, not the derivation itself; the caller is gone, and
+   lib/recipe-cost.js keeps its own suites. Parts 1 and 2 above — the unit
+   comparison and the guard's wiring — are untouched and are what this file is
+   really for.
+*/
 if (fails.length) {
   console.log('\n' + fails.length + ' failure(s).');
   process.exit(1);

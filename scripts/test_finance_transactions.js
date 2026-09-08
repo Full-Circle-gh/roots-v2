@@ -519,8 +519,11 @@ it('the list ships EMPTY — nothing seeds an income category', () => {
   // §36: "The list ships empty. No defaults." The four the kitchen app defaults
   // to are channel facts the order record already carries, and "a dropdown with
   // a wrong option available is what produced the ¥152,309 Mini App mis-filing".
-  const lookups = fs.readFileSync(path.join(ROOT, 'routes', 'lookups.js'), 'utf8');
-  assert.ok(/'payment_method', 'income'\]/.test(lookups), "'income' is a valid kind");
+  // The "'income' is a valid kind" half of this check read routes/lookups.js,
+  // which §78 deleted with the kitchen app — it served /api/categories and
+  // /api/staff and public/app.html was its only caller. The kind's validity was
+  // never the point of this test; §36's rule is that NOTHING SEEDS one, and the
+  // two checks below are where that is enforced. They are unchanged.
   const boot = fs.readFileSync(path.join(ROOT, 'database.js'), 'utf8');
   assert.ok(!/'income',/.test(boot.slice(boot.indexOf('lookups_seed_v1'))),
     'the boot seed must not plant one');

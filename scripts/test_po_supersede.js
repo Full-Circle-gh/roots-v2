@@ -87,7 +87,6 @@ const { postPOExpenses } = purchases;
 const express = require('express');
 const app = express();
 app.use(require(path.join(ROOT, 'routes/retail-purchasing.js')));
-app.use(require(path.join(ROOT, 'routes/finance.js')));
 const server = app.listen(0);
 const base = () => 'http://127.0.0.1:' + server.address().port;
 
@@ -138,16 +137,18 @@ async function chaseLines() {
   return { lines: groups.flatMap(g => g.lines), totals: r.body.data.totals };
 }
 const numbersIn = lines => [...new Set(lines.map(l => l.po_number))].sort();
-// …and the kitchen's own chase, the other reader of the same rule. It must
-// never come back empty by accident — an empty list would make every "the
-// kitchen chase dropped it" assertion below pass for the wrong reason — so the
-// shape is asserted here rather than defaulted away.
-async function kitchenChasePOs() {
-  const r = await call('GET', '/api/finance/outstanding-lines');
-  const groups = r.body && r.body.data && r.body.data.groups;
-  if (!Array.isArray(groups)) throw new Error('kitchen chase returned no groups: ' + JSON.stringify(r.body));
-  return [...new Set(groups.flatMap(g => g.lines).map(l => l.po_number))].sort();
-}
+// THE SECOND READER IS GONE, AND WITH IT THE COMPARISON (§78). A
+// kitchenChasePOs() helper stood here, calling /api/finance/outstanding-lines
+// — the kitchen's own 发票 chase — so that every rule below was asserted
+// against BOTH readers of it. routes/finance.js is deleted and public/app.html,
+// its only screen, with it.
+//
+// The assertions that used it are removed rather than re-pointed: the Tacet
+// chase is now the ONLY reader, chaseLines() above already drives it, and a
+// second call to the same endpoint dressed as a second reader would assert
+// nothing while looking like it did. The rule itself is unchanged and still
+// fully covered; what is lost is the cross-check that two independent readers
+// agreed, which cannot exist while there is one of them.
 
 async function main() {
   console.log('\n══ 1 · before any copy, the kitchen order stands alone ══');
@@ -155,7 +156,6 @@ async function main() {
   ok(numbersIn(c.lines).includes('PO-0100'), 'PO-0100 is on the 发票 chase');
   eq(round2(c.lines.filter(l => l.po_number === 'PO-0100').reduce((s, l) => s + l.amount, 0)),
      985.08, 'for the full ¥985.08 it ordered');
-  ok((await kitchenChasePOs()).includes('PO-0100'), "and on the kitchen's own chase");
   eq(round2(expensesFor(100)), 985.08, 'its cost is in the books once');
 
   console.log('\n══ 2 · a DRAFT copy changes nothing ══');
@@ -193,7 +193,6 @@ async function main() {
      "at the copy's corrected total, not the original's");
   eq(copyChase[0].supersedes_po_number, 'PO-0100', 'and the chase names the order it replaced');
   eq(copyChase[0].supersedes_invoiced, 0, 'with nothing already invoiced against it');
-  ok(!(await kitchenChasePOs()).includes('PO-0100'), "the kitchen's chase drops it too");
   eq(expensesFor(100), 0, 'the original holds no expense rows any more');
   eq(round2(expensesFor(copyId)), 920.42, 'the copy holds the cost, once');
   const orig = db.prepare('SELECT * FROM purchase_orders WHERE id = 100').get();

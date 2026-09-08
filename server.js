@@ -412,25 +412,12 @@ app.use(require('./routes/billing-pay'));    // Mini App Backend billing payment
 app.use(require('./routes/backend-signup')); // Mini App Backend tenant signup / provisioning (gated in Phase 2)
 app.use(require('./routes/saas-admin'));     // Platform owner console — tenants / subscriptions / branding (kitchen-admin gated)
 app.use(require('./routes/store-admin'));    // Platform account-manager console — store-admin.* (platform_admins realm + audit)
-app.use(require('./routes/ingredients'));
-app.use(require('./routes/recipes'));
-app.use(require('./routes/admin'));
 app.use(require('./routes/products'));
 app.use(require('./routes/purchases'));
-app.use(require('./routes/finance'));
-app.use(require('./routes/alerts'));
-app.use(require('./routes/waste'));
-app.use(require('./routes/kitchen'));
-app.use(require('./routes/sales'));
 app.use(require('./routes/restock'));
-app.use(require('./routes/lookups'));
 app.use(require('./routes/ai'));
-app.use(require('./routes/production'));
-app.use(require('./routes/pos'));
-app.use(require('./routes/markets'));
 app.use(require('./routes/push'));
 app.use(require('./routes/events'));
-app.use(require('./routes/feedback'));
 // Public storefront tenant scope — maps the mini-app's AppID → tenant before
 // the retail routes run. Path-scoped to /api/retail (does NOT match the
 // segment-distinct /api/retail-admin, which has its own gate). No-op for Roots.
@@ -746,8 +733,9 @@ function serveShop(req, res) {
   res.sendFile(path.join(__dirname, 'public', 'shop.html'));
 }
 
-// Main app - serves the SPA shell
-const { requireAuth } = require('./middleware/auth');
+// Host router for '/'. This served the kitchen SPA shell until §78; the
+// `requireAuth` import that gated it went with the page, since a redirect to
+// another host discloses nothing and the destination runs its own gate.
 app.get('/', (req, res) => {
   const host = (req.hostname || '').toLowerCase();
   // Platform account-manager console subdomain → the store-admin shell. Self-
@@ -765,11 +753,32 @@ app.get('/', (req, res) => {
   if (lookupStorefrontHost(req.hostname)) {
     return serveShop(req, res);
   }
-  // Everything else (food.* / app.* / bare domain) → kitchen app, auth-gated.
-  requireAuth(req, res, () => {
-    res.set('Cache-Control', 'no-cache');
-    res.sendFile(path.join(__dirname, 'public', 'app.html'));
-  });
+  /* Everything else (food.* / app.* / bare domain) used to serve the kitchen
+     SPA. §78 deleted it, and this is the door left forwarding to the app the
+     staff actually work in.
+
+     THE AUTH GATE GOES WITH THE PAGE IT PROTECTED. `requireAuth` here was
+     guarding `users`-realm access to the SPA; a redirect to another host
+     discloses nothing, and the destination runs its own gate. Leaving the gate
+     would bounce a signed-out visitor to /login, which now leads only to the
+     CMS — a worse answer than sending them where the work is.
+
+     302, NEVER 301, and this route outlives the app for the third time in this
+     retirement: `/` is the `start_url` AND the `scope` of
+     public/manifest.webmanifest, installed on staff devices as "Roots Kitchen
+     Management". A permanent redirect is cached by the browser and the
+     installed service worker essentially forever, so a 301 here would be
+     unrecallable from every device that ever followed it — and unlike /stock
+     and /kitchen, this one is the bare domain, which also fronts the mini
+     app's API, the payment callbacks and the ACME challenge. Those are
+     excluded from the canonical-host redirect above and are untouched by this,
+     which answers `/` alone.
+
+     THE MANIFEST AND ICONS STAY, on the same reasoning as /stock's and
+     /kitchen's: the shortcut is installed now and resolves them on launch.
+     They go once the redirect has been live long enough that nobody opens it. */
+  res.set('Cache-Control', 'no-store');
+  res.redirect(302, 'https://' + STORE_HOST + '/');
 });
 
 // /retail-admin is retired as a standalone URL — the online-store backend now

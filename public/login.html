@@ -238,12 +238,17 @@ function _lastAppRedirect(user) {
   let last = '';
   try { last = localStorage.getItem('last_app') || ''; } catch {}
   if (!last) return null;
-  // Validate same-origin and that the user actually has access. Only ONE
-  // remembered value is still honoured, so there is no longer a permission to
-  // check against it — '/' is the app every holder of a `users` session can
-  // open. The `isAdmin` and `permissions` reads that used to gate the other
-  // branches went with them rather than being left computing nothing.
-  if (last === '/'        ) return '/';
+  // Only ONE remembered value is still honoured, so there is no longer a
+  // permission to check against it — `/cms` is the one surface a `users`
+  // session can open. The `isAdmin` and `permissions` reads that used to gate
+  // the other branches went with them rather than being left computing nothing.
+  //
+  // A remembered '/' is deliberately NOT honoured: every browser that ever
+  // opened the kitchen SPA wrote it, and §78 turned '/' into a redirect off
+  // this realm entirely. Honouring it would send those browsers to a login
+  // they cannot pass — the same trap '/restock' and '/kitchen' are listed for
+  // below.
+  if (last === '/cms') return '/cms';
   // '/restock' is deliberately absent: the page was removed 2026-08-04 and the
   // route is gone, but restock.html had written last_app='/restock' into every
   // warehouse browser, so honouring a remembered value here would 404 them.
@@ -256,29 +261,25 @@ function _lastAppRedirect(user) {
   // /backend/login. A dead end is worse than the dashboard.
   return null;
 }
-// THERE IS ONE PAGE LEFT IN THIS REALM, so this function has one answer.
+// THERE IS ONE PAGE LEFT IN THIS REALM, and it is the mini-app editor.
 //
-// It used to fan a `users` session out across three shells by permission. Both
-// of the others are now gone: `/restock` lost its page on 2026-08-04, and
-// `/kitchen` lost its page to §76. Every branch that survived those two
-// removals returned '/' anyway, so the permission reads they were made of —
-// `role === 'admin'`, then `p.products || p.finance || p.sales` — were deciding
-// between one destination and the same destination.
+// This used to fan a `users` session out across three shells by permission.
+// All three are now gone: `/restock` lost its page on 2026-08-04, `/kitchen`
+// lost its page to §76, and `/` — the kitchen SPA itself — went with §78.
 //
-// They are deleted rather than left standing, because branching that can only
-// reach one answer reads as routing and is not: the next person to look would
-// reasonably believe kitchen-only staff still land somewhere of their own.
+// SO THE DESTINATION IS `/cms`, NOT `/`. This returned '/' until §78, which is
+// now a 302 to the Tacet backend on another host — and Tacet authenticates on
+// `backendUserId` (tenant_users) while every session reaching this function
+// holds `userId` (users). Sending them there would forward them into an app
+// their login cannot open and bounce them to /backend/login. `/cms` is the one
+// surface left that reads THIS realm: it self-authenticates against
+// /api/auth/me, the same session this page just created.
 //
-// WHAT MUST NOT BE DONE HERE, recorded because it is the obvious repair: do not
-// route a `kitchen` holder to `/kitchen`'s replacement. That route now forwards
-// to `/m`, and Tacet Mobile authenticates on `backendUserId` (tenant_users)
-// while every session reaching this function holds `userId` (users) — so it
-// would forward them into an app their login cannot open and bounce them to
-// /backend/login. The `kitchen` and `restock` perms still gate the
-// /api/kitchen and /api/restock endpoints app.html calls; they simply have no
-// page of their own to open any more.
+// THAT IS ALSO THE WHOLE REASON THIS PAGE STILL EXISTS. Once the CMS moves onto
+// Tacet's login, the `users` realm has no surface at all and this page, its
+// realm and its accounts can go together. Until then it has exactly one job.
 function _smartRedirect(user) {
-  return '/';
+  return '/cms';
 }
 async function login() {
   const u = document.getElementById('username').value.trim();

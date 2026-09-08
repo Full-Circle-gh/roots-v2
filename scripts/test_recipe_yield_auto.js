@@ -53,7 +53,11 @@ const DATABASE_JS = read('database.js');
 const SCHEMA_SQL  = read('schema.sql');
 const RECIPES_JS  = read('public', 'retail-admin', '19-recipes.js');
 const RETAIL_ROUTE = read('routes', 'retail-recipes.js');
-const KITCHEN_ROUTE = read('routes', 'recipes.js');
+// THE KITCHEN DOOR IS GONE (§78). routes/recipes.js was deleted with
+// public/app.html, its only caller. Every "both doors" check below is now a
+// one-door check against routes/retail-recipes.js, and each is marked where it
+// changed rather than silently narrowed — a two-operand comparison quietly
+// reduced to one operand still reads like a comparison.
 
 let failures = 0;
 function check(name, fn) {
@@ -383,17 +387,17 @@ check('the retail door stamps the row BEFORE the material recompute divides by i
   assert.ok(find(RETAIL_ROUTE, 'applyAutoYield\\(' + HANDLE + ', recipeId\\)') > 0, 'and on create');
 });
 
-check('the kitchen door stamps it too', () => {
-  const at = KITCHEN_ROUTE.indexOf('applyAutoYield(db, req.params.id)');
-  const fire = KITCHEN_ROUTE.indexOf("fireRecompute(db, { source: 'recipes.update'");
-  assert.ok(at > 0 && fire > at);
-});
+// A 'the kitchen door stamps it too' case stood here. It asserted the same
+// ordering — applyAutoYield before fireRecompute — on routes/recipes.js. That
+// door is deleted (§78); the ordering is still asserted on the surviving door
+// immediately above.
 
 // (3) of the three dangers. The kitchen Cost Sheet replaces recipe_ingredients
 // wholesale and has no control for in_yield; without this it would re-count a
 // deliberately discarded ingredient on every save.
 check('both doors carry in_yield across a delete-and-reinsert', () => {
-  [['routes/recipes.js', KITCHEN_ROUTE], ['routes/retail-recipes.js', RETAIL_ROUTE]].forEach(([name, src]) => {
+  // Was both doors; routes/recipes.js is deleted (§78).
+  [['routes/retail-recipes.js', RETAIL_ROUTE]].forEach(([name, src]) => {
     assert.ok(/prevYield/.test(src), `${name} does not preserve in_yield`);
     assert.ok(src.includes('in_yield,notes') || src.includes('in_yield, notes'),
       `${name} does not write in_yield on insert`);
@@ -404,7 +408,7 @@ check('both doors carry in_yield across a delete-and-reinsert', () => {
 // somebody's save and nothing before that. SQLite settles it at PREPARE time —
 // "table recipes has N columns but M values were supplied" — so every recipe
 // statement both doors ship is prepared here against the real tables.
-check('every recipe/line statement in both doors prepares against the real schema', () => {
+check('every recipe/line statement the door ships prepares against the real schema', () => {
   const db = freshDb();
   const pats = [
     /INSERT INTO recipes[\s\S]*?VALUES \([^)]*\)/g,
@@ -412,7 +416,8 @@ check('every recipe/line statement in both doors prepares against the real schem
     /INSERT INTO recipe_ingredients[\s\S]*?VALUES \([^)]*\)/g,
   ];
   let n = 0;
-  for (const [name, src] of [['routes/recipes.js', KITCHEN_ROUTE], ['routes/retail-recipes.js', RETAIL_ROUTE]]) {
+  // Was both doors; routes/recipes.js is deleted (§78).
+  for (const [name, src] of [['routes/retail-recipes.js', RETAIL_ROUTE]]) {
     for (const re of pats) {
       for (const [sql] of src.matchAll(re)) {
         n++;
@@ -421,12 +426,17 @@ check('every recipe/line statement in both doors prepares against the real schem
       }
     }
   }
-  assert.ok(n >= 8, `expected at least 8 statements, prepared ${n}`);
+  // Was 8 across two doors; routes/recipes.js is deleted (§78) and the
+  // surviving door ships 5. The floor is lowered to what one door actually
+  // prepares rather than to a number that would pass on an empty match — if
+  // the regexes ever stop finding statements, this still goes red.
+  assert.ok(n >= 5, `expected at least 5 statements, prepared ${n}`);
 });
 
 check('a create that carries a typed batch size is filed as manual', () => {
   assert.ok(RETAIL_ROUTE.includes('b.batch_size == null ? 1 : 0'));
-  assert.ok(KITCHEN_ROUTE.includes('batch_size ? 0 : 1'));
+  // The kitchen door's own spelling of this, 'batch_size ? 0 : 1', went with
+  // routes/recipes.js (§78).
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

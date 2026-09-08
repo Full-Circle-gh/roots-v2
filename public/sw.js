@@ -37,7 +37,12 @@ const CACHE = 'roots-v2-shell-unstamped';
 // through tdWhen, so a missing module is a blank app rather than an app with
 // plain dates. Stale-while-revalidate would fetch it on the first ONLINE load,
 // which is one load too late for an installed app opened on a dead signal.
-const SHELL = ['/', '/login', '/m', '/assets/td-datetime.js'];
+// '/' IS NO LONGER PRE-CACHED (§78). It served the kitchen SPA and is now a
+// 302 to the Tacet backend on another host. Caching a cross-origin redirect
+// buys nothing — the destination is not ours to cache and the redirect itself
+// is one request — and an install that pre-caches it would pin a forwarding
+// response into every device's shell cache for the life of the deploy stamp.
+const SHELL = ['/login', '/m', '/assets/td-datetime.js'];
 
 // Heuristic — request that wants HTML?
 function isHTMLRequest(req) {

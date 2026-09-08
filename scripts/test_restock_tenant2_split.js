@@ -190,35 +190,19 @@ t2.prepare(`INSERT INTO restock_items (restock_id, product_id, product_name, sku
   eq(goodsOf(78), 'none', 'goods_state rolled back to none in tenant 2');
   t2.exec('DROP TRIGGER _boom2');
 
-  section('Case E — routes/production.js writes to the tenant, not the shared db');
-  // Production is about to start moving real stock, so it is on tdb() before
-  // that happens rather than after. Today the only damage a wrong handle does
-  // is misfile the log; the assertions are the same either way.
-  const production = require(path.join(h.REPO, 'routes/production.js'));
-  t2.prepare("INSERT INTO recipes (id, name_en, sku, servings) VALUES (4242,'T2 Soup','T2-R-4242',20)").run();
-  const sharedBatchesBefore = h.db.prepare('SELECT COUNT(*) AS n FROM production_batches').get().n;
-
-  const logged = F.inTenant(T, 2, () =>
-    F.callRoute(production, 'post', '/api/production', {
-      body: { date: '2026-09-02', recipe_id: 4242, batches_made: 3 },
-      user: ACTOR, permissions: { kitchen: 1 },
-    }));
-  ok(logged.body && logged.body.success, 'batch logged inside the tenant scope');
-  eq(t2.prepare('SELECT COUNT(*) AS n FROM production_batches').get().n, 1,
-     'the batch landed in TENANT 2');
-  eq(h.db.prepare('SELECT COUNT(*) AS n FROM production_batches').get().n, sharedBatchesBefore,
-     'the shared database got no batch row');
-  // Read back defensively: on a wrong handle there is no row at all, and an
-  // assertion that throws reports worse than one that fails.
-  const batch = t2.prepare('SELECT * FROM production_batches ORDER BY id DESC LIMIT 1').get() || {};
-  eq(batch.recipe_name, 'T2 Soup', 'the recipe was resolved from the tenant catalogue, not the shared one');
-  eq(batch.servings_made, 60, 'servings derived from the tenant recipe (3 × 20)');
-  eq(batch.created_by, 7, 'created_by written with foreign_keys ON — no FK to users any more');
-
-  const listed = F.inTenant(T, 2, () =>
-    F.callRoute(production, 'get', '/api/production', { user: ACTOR, permissions: { kitchen: 1 } }));
-  eq(((listed.body || {}).data || []).length, 1,
-     'the list endpoint reads the tenant, and sees exactly its own row');
+  // CASE E STOOD HERE AND IS GONE (§78).
+  //
+  // It proved routes/production.js wrote a logged batch into the TENANT's
+  // database rather than the shared one — the recipe resolved from the
+  // tenant catalogue, the batch row absent from the shared handle. That
+  // module is deleted with public/app.html, its only caller.
+  //
+  // THE RULE IS NOT LOST WITH IT. Production in Tacet is
+  // routes/retail-production.js, which is on tdb() and carries its own
+  // coverage in test_production_log.js and test_tenant_roles.js. Re-pointing
+  // this case at that door was considered and refused: it takes jars of a
+  // store_product where this took batches of a recipe, so it would be a
+  // rewrite wearing a repoint's name, duplicating suites that already exist.
 
   done();
 })().catch(e => { console.error(e); process.exit(1); });
