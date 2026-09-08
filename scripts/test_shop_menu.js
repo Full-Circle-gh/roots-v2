@@ -1501,6 +1501,81 @@ const soldOut = (row) => /class="sold"/.test(row);
           'a page the customer opened with no language choice invented one for them');
       });
 
+      /* WHAT THE CUSTOMER ORDERED — reported 2026-09-08 from a phone: "after
+         order was made customer cant see the order details at all, nowhere."
+
+         AND THAT WAS EXACT. The lines went into retail_order_items when the
+         order was created and no customer surface ever read them back: this
+         page selected the header columns only, and the done sheet dropped the
+         items the create response had already handed it. The customer's basket
+         is memory only and submitting clears it, so between the two the shop
+         held every line and showed none of them.
+
+         ON ALL THREE FACES, because "what did I order" is a question on a paid
+         order and a cancelled one as much as on an unpaid one — a customer
+         disputing a charge or checking what they just cancelled is the person
+         this screen has to answer.
+
+         SCOPED TO THE RENDERED BLOCK, for the reason the checks above state:
+         shell() inlines the basket script on every page, and an assertion over
+         the whole body can go green on a string literal inside it while the
+         page renders nothing at all. */
+      await checkAsync('THE ORDER PAGE SAYS WHAT WAS ORDERED, on every face', async () => {
+        await resetOrderLimit();
+        // Two lines and a quantity above one, so the check cannot pass on a
+        // page that renders the first item and stops, or one that prints the
+        // ordered quantity as a hard-coded 1.
+        const placed = await post(`/s/${LIVE}/order`, {
+          name: 'Mei',
+          items: [
+            { store_product_id: P_MADE_ON, qty: 2 },     // 32.00 each
+            { store_product_id: P_MADE_ZERO, qty: 1 },   // 30.00
+          ],
+        });
+        assert.strictEqual(placed.status, 201, JSON.stringify(placed.json));
+        const oid = db.prepare('SELECT id FROM retail_orders WHERE order_no = ?')
+          .get(placed.json.data.order_no).id;
+        const url = placed.json.data.order_url;
+
+        for (const [status, label] of [
+          ['pending_payment', 'an unpaid order'],
+          ['paid', 'a paid order'],
+          ['cancelled', 'a cancelled order'],
+        ]) {
+          db.prepare('UPDATE retail_orders SET status = ? WHERE id = ?').run(status, oid);
+          const r = await get(url);
+          assert.strictEqual(r.status, 200, `${label} did not answer`);
+          const from = r.body.indexOf('<div class="done">');
+          assert.ok(from >= 0, `${label}: the order block did not render`);
+          const to = r.body.indexOf('<script', from);
+          const done = r.body.slice(from, to > from ? to : undefined);
+
+          assert.ok(/class="done-it"/.test(done), `${label} listed nothing it was made of`);
+          // BOTH HALVES OF BOTH NAMES. The rows are bilingual like everything
+          // else this page draws, and a Chinese phone that got only the English
+          // name would be back where it started.
+          assert.ok(/Fixture oat latte/.test(done) && /测试燕麦拿铁/.test(done),
+            `${label} did not name the first item in both languages`);
+          assert.ok(/Fixture flat white/.test(done) && /测试馥芮白/.test(done),
+            `${label} stopped after the first line`);
+          // The quantity, and it is the ordered one.
+          assert.ok(/class="ln-q">×2</.test(done), `${label} did not say how many`);
+          // And what each line came to, not only what the order did.
+          assert.ok(/64\.00/.test(done), `${label} gave no line total for the two`);
+          assert.ok(/30\.00/.test(done), `${label} gave no line total for the one`);
+        }
+
+        // AND THE LINES LEAD INTO THE AMOUNT, rather than following it. A total
+        // printed above the things it totals asks the customer to read the
+        // screen backwards, and this is the one ordering assertion that keeps
+        // the two surfaces (this page and the done sheet) reading the same way.
+        db.prepare("UPDATE retail_orders SET status = 'pending_payment' WHERE id = ?").run(oid);
+        const body = (await get(url)).body;
+        const block = body.slice(body.indexOf('<div class="done">'));
+        assert.ok(block.indexOf('class="done-it"') < block.indexOf('class="done-amt"'),
+          'the total was printed above the lines it totals');
+      });
+
       await checkAsync('and with the Official Account withdrawn, the page still answers', async () => {
         db.prepare("UPDATE retail_orders SET status = 'pending_payment' WHERE id = ?").run(wxOrder.id);
         oaOff();
