@@ -823,9 +823,29 @@ img{display:block;max-width:100%}
    with two things to carry, the number they will be called by and the amount
    they will hand over. inline-block so the rule sits on the figure rather than
    running the width of the sheet. */
+/* THE PADDING IS NOT SYMMETRIC, AND THAT IS WHAT CENTRES IT. Reported on the
+   device: the figure sat visibly high in its box. The cause is the digit
+   substitution above — the numerals are Lilita One while the letters are Bear
+   Serif — and Lilita One's ink OVERSHOOTS its own ascent metric. Measured in
+   Chromium at 34px against the shipped faces: fontAscent 22 but inkAscent 23,
+   fontDescent 8, inkDescent 1. With line-height:1 the half-leading is 2px, the
+   baseline lands at 24, and the ink then occupies 1..25 of a 34px line box —
+   leaving 12px above the glyphs and 20px below them. Symmetric padding cannot
+   fix an asymmetry that is inside the line box.
+   13/5 moves the 8px difference back: 16px above, 16px below, measured to 0.00.
+   Re-measure if the display face or the substitute ever changes — the number is
+   a property of those fonts, not of this layout. */
 .done-amt{display:inline-block;font-family:var(--f-bear);font-size:34px;line-height:1;
-  margin-top:14px;padding:9px 18px;background:var(--lime);border:2px solid var(--ink);
+  margin-top:14px;padding:13px 18px 5px;background:var(--lime);border:2px solid var(--ink);
   font-variant-numeric:tabular-nums}
+/* Where the browser can trim the line box to the glyphs themselves, do that and
+   let the padding go back to symmetric: it is then correct for ANY tenant's
+   display face rather than tuned to the one this theme ships. The fallback
+   above stays because the browser that matters most here — WeChat's — is
+   usually many Chromium versions behind. */
+@supports (text-box: trim-both cap alphabetic){
+  .done-amt{text-box:trim-both cap alphabetic;padding:14px 18px}
+}
 .done-s{font-size:14px;color:var(--olive);margin-top:8px}
 .done-o{font-size:12px;color:var(--olive);margin-top:14px;
   font-variant-numeric:tabular-nums}
