@@ -82,8 +82,8 @@
  *
  * Run ON THE SERVER, against data/roots.db. Default is dry-run.
  *
- *   node scripts/restore_order_TC000621.js          # dry run — prints, writes nothing
- *   node scripts/restore_order_TC000621.js --apply  # write
+ *   node scripts/oneoff_restore_order_TC000621.js          # dry run — prints, writes nothing
+ *   node scripts/oneoff_restore_order_TC000621.js --apply  # write
  */
 'use strict';
 
@@ -221,7 +221,7 @@ db.transaction(() => {
       from: 'cancelled', to: 'paid',
       was_cancelled_reason: o.cancelled_reason,
       reason: 'restored_by_hand — paid off-app in points (admin_adjust −926, "[warehouse] order payment")',
-      script: 'scripts/restore_order_TC000621.js',
+      script: 'scripts/oneoff_restore_order_TC000621.js',
       untouched: ['money', 'points ledger', 'retail_payments', 'stock'],
     }), priorLog ? priorLog.tenant_id : null);
   }
