@@ -1769,6 +1769,7 @@ removing a button turns out to need almost no new words, only existing ones put 
 | About to record | 即将登记 | The same eyebrow while something is still owed. Unchanged text, now a tense that can change rather than a permanent heading. |
 | Try again | 重试 | Was already this screen's word for retrying a load that failed; now also the button under a write that failed, because there is no save button left to press again. |
 | Back to Receiving | 返回收货 | Was on the confirmation screen that has been deleted. Now at the foot of the list, where the thumb of somebody who has finished counting already is. |
+| Done | 完成 | **Added 2026-09-08, same day, with §70's addendum.** On a line the server has already recorded, this stands where `Not checked yet` used to and folds the correction away — that line cannot be un-answered, so the undo would have been a dead button, and for an hour it was one. Live six times in `public/m.html` already, including on this very screen: the damage panel's own Done. Taken verbatim; nothing was composed for it. |
 | Nothing confirmed yet. Mark what arrived, product by product. | 尚未确认。请逐项标记到货情况。 | Unchanged, and now carries the whole of "what to do" on an untouched screen — the strip says nothing until there is something to report. |
 
 ### Deleted

@@ -207,18 +207,64 @@ const CASES = [
   // opens the line to be corrected instead, and "Not 5" books the zero that
   // does reverse it. Seeded as the flush leaves it: `was.recv` set to what the
   // server was told.
-  ['an answer the server already has cannot be un-answered by tapping it again',
+  // A RECORDED LINE, REOPENED TO BE CORRECTED — and the row that got stuck.
+  //
+  // Reported from the floor on RPO-0030 within the hour of auto-save shipping:
+  // Goji Berries open on its counter, "Not checked yet" underneath, and *"cant
+  // click now"*. The button was wired to recvArrived, which had a guard sending
+  // an already-recorded line to recvOpenLine — the id it ALREADY held. Nothing
+  // changed on screen, and the row had no other way to close, so the line was a
+  // dead end. Every assertion here is about the row always having a way out.
+  ['a recorded line reopened to be corrected can always be closed again',
     OPEN + `APP.cmd('recvArrived','11');
-      state.recvVals[11].was={recv:5,dmg:0,reason:null}; state.recvSavedAt=Date.now(); render();`, [
+      state.recvVals[11].was={recv:5,dmg:0,reason:null}; state.recvSavedAt=Date.now();
+      APP.cmd('recvOpenLine','11');`, [
     ['it is recorded, so nothing is owed', `rcvSendable().length === 0 && rcvBooked(state.recvPo.items[0]) === true`],
     ['the summary says recorded, not about to record',
       `txt('content').includes('Recorded') && !txt('content').includes('About to record')`],
-    ['pressing Arrived opens the line instead of clearing it',
-      `(APP.cmd('recvArrived','11'), state.recvVals[11].on === true
-        && state.recvVals[11].recv === 5 && String(state.recvOpenLine) === '11')`],
-    ['and Not 5 is still the way to correct it to nothing',
-      `(APP.cmd('recvNotArrived','11'), state.recvVals[11].on === true
-        && state.recvVals[11].recv === 0 && rcvSendable().map(it=>it.id).join(',') === '11')`],
+    // THE BUG, NAMED. "Not checked yet" is not on a recorded line at all — it
+    // is a sentence that stopped being available the moment the receipt was
+    // written, and leaving it on screen is what made it look clickable.
+    ['it does not offer to un-check what is already recorded',
+      `!txt('content').includes('Not checked yet')`],
+    ['it offers the way out instead', `txt('content').includes('Done')`],
+    // The press that used to do nothing. Asserted on the DOM, not the command:
+    // the whole failure was a button whose handler ran and moved no pixels.
+    ['and pressing it folds the row back',
+      `(function(){ var b=[...document.querySelectorAll('button')].find(x=>x.innerText.trim()==='Done');
+         if(!b) return false; var before=txt('content'); b.click();
+         return state.recvOpenLine === null && txt('content') !== before
+                && document.querySelectorAll('.qty:not(.sm)').length === 0; })()`],
+    ['the answer itself survived being folded', `state.recvVals[11].on === true && state.recvVals[11].recv === 5`],
+    // AND THE COUNTER IS STILL THE WAY BACK TO NOTHING. Correcting a recorded
+    // line down to zero makes it a SHORT line like any other, so it owes a
+    // reason before it goes — which is the rule working, not the correction
+    // being refused.
+    ['the counter corrects it down to nothing',
+      `(APP.cmd('recvOpenLine','11'), APP.cmd('recvQtySet','11|0'),
+        state.recvVals[11].recv === 0 && rcvMissingReasons().map(it=>it.id).join(',') === '11')`],
+    ['and it goes once the reason is given',
+      `(APP.cmd('recvReason','11|not_sent'), rcvSendable().map(it=>it.id).join(',') === '11')`],
+  ]],
+
+  // THE OTHER HALF OF THE SAME CONTROL, and a bug that predated auto-save:
+  // "Not checked yet" borrowed recvArrived's toggle, whose first test is
+  // `on && recv > 0`. On a line answered "nothing arrived" that is false, so
+  // the press fell through to the else branch and marked the line FULLY
+  // ARRIVED — the one control for "I have not checked this" asserting the whole
+  // order had turned up. It has its own command now and says only what it does.
+  ['un-checking a line answered "nothing arrived" un-checks it, and does not claim it came',
+    OPEN + `APP.cmd('recvNotArrived','11');`, [
+    ['it is answered at nothing', `state.recvVals[11].on === true && state.recvVals[11].recv === 0`],
+    ['nothing is recorded, so the undo is offered', `txt('content').includes('Not checked yet')`],
+    // TAPPED, not commanded — the defect was in what the BUTTON was wired to,
+    // so calling the right command directly would prove nothing about it.
+    ['and tapping it un-answers rather than marking it arrived',
+      `(function(){ var b=[...document.querySelectorAll('button')]
+         .find(x=>x.innerText.trim()==='Not checked yet');
+         if(!b) return false; b.click();
+         return state.recvVals[11].on === false && state.recvVals[11].recv === 0; })()`],
+    ['so nothing goes on the wire for it', `rcvSendable().length === 0`],
   ]],
 
   // ONE VISIT IS ONE DELIVERY. The Received list shows a row per receipt that
