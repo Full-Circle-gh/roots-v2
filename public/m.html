@@ -2927,8 +2927,18 @@ function screenOrders(){
         </div>`:''}
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...o.ship)}</span>
+          ${/* A TRACKING NUMBER MAY STOP MID-STRING; THE APP'S OWN WORDS MAY NOT.
+                Both used to be nowrap + ellipsis under the same 52% cap, which
+                cut "Ship when ready · overdue" — 174px of app words in a 168px
+                box — down to "Ship when ready · overd…". The cap stays exactly
+                where it was, so the shipping city beside it keeps the width it
+                had; a carrier and a consignment number are data and still stop
+                at the edge, and the fixed vocabulary of ship-by phrases wraps
+                to a second right-aligned line on the rare occasion it needs
+                one. Same rule as the settings rows. */''}
           ${o.deliv?`<span style="display:flex;flex-direction:column;align-items:flex-end;flex:none;max-width:52%">
-            <span class="${o.deliv.num?'num':''}" style="font-size:13px;color:${DELIV_TONE[o.deliv.tone]||'var(--text-secondary)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${o.deliv.text}</span>
+            <span class="${o.deliv.num?'num':''}" style="font-size:13px;color:${DELIV_TONE[o.deliv.tone]||'var(--text-secondary)'};max-width:100%;${
+              o.deliv.num?'overflow:hidden;text-overflow:ellipsis;white-space:nowrap':'text-align:right'}">${o.deliv.text}</span>
             ${o.deliv.sub?`<span style="font-size:11.5px;color:var(--text-secondary);margin-top:1px">${o.deliv.sub}</span>`:''}</span>`:''}</div>
         ${orderMetaLine(o)}
       </button>`).join(''):''}
@@ -9117,8 +9127,21 @@ function screenWhatMade(){
     if(state.qs.itemsErr) return `<div style="padding:24px 16px">
       <div style="font-size:17px;font-weight:500">${T('The shelf didn’t load.','货架加载失败。')}</div>
       <div style="font-size:14px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${
-        T('The request is closed, but nothing has been added to stock yet. Try again, or record the batch from Log a batch.',
-          '该申请已关闭，但库存尚未登记。请重试，或从「登记批次」记录本批次。')}</div>
+        /* WHAT IS ACTUALLY TRUE OF THE REQUEST — the same correction §61 made
+           on the done screen one branch up, which this branch was left out of.
+           A line marked made is not the whole request closed, so "The request
+           is closed" was false on every tap but the last, told to somebody who
+           has just been handed a failure and is deciding what to do about it.
+           NO NEW STRING: the closed half is this sentence's own first clause,
+           split at its full stop in both languages, and the other is kqNote's
+           lead word for word — the sentence this same operator gets when the
+           hand-over is refused outright instead of failing here. */
+        (h.closesRequest?T('The request is closed, but nothing has been added to stock yet.',
+                           '该申请已关闭，但库存尚未登记。')
+                        :T('Marked made — but the stock has not been recorded.',
+                           '已标记完成 — 但库存尚未登记。'))
+        +' '+T('Try again, or record the batch from Log a batch.',
+               '请重试，或从「登记批次」记录本批次。')}</div>
       <button class="btn2" style="width:auto;padding:11px 26px;margin-top:20px"
         onclick="APP.cmd('hdRetryShelf')">${T('Try again','重试')}</button></div>`;
     return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${
@@ -9806,9 +9829,23 @@ function screenSettings(){
         <div class="row" style="cursor:${r.cmd?'pointer':'default'}" ${r.cmd?`onclick="${r.cmd}"`:''}>
           <span style="width:32px;height:32px;border-radius:8px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex:none">${ic('settings',16)}</span>
           <span style="flex:1;min-width:0;display:flex;flex-direction:column">
-            <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.label}</span>
+            <!-- A LABEL WRAPS RATHER THAN CLIPS. It used to be nowrap+ellipsis,
+                 which on a 390px phone cut two of this screen's own sentences in
+                 half: "Alert me when Tacet is closed" needed 223px and had 209,
+                 "Add to home screen" needed 151 and had 124. Truncating DATA is
+                 fine — a customer name in a fixed cell has to stop somewhere —
+                 but these are the app's own words, and half a sentence is not a
+                 shorter sentence. The .row class is min-height, not height, so
+                 a second line simply makes the row taller. -->
+            <span style="font-size:15px;overflow-wrap:anywhere">${r.label}</span>
             ${r.note?`<span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${r.note}</span>`:''}</span>
-          ${(r.tgl||r.feat||r.printer||r.fapiao)?rt(r):`<span style="display:flex;align-items:center;gap:8px;flex:none">${r.value?`<span style="font-size:15px;color:var(--text-secondary);white-space:nowrap">${r.value}</span>`:''}${r.chev||r.value?`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`:''}</span>`}</div>`).join('')}</div></div>`).join('')}
+          ${/* A CHEVRON ON A ROW THAT GOES NOWHERE. It was drawn for a row's
+                value as well as its chev, so "Store profile · on desktop", "Routing ·
+                Nearest store" and "Add to home screen · browser menu" — none of
+                which are tappable — each pointed at a screen that does not
+                exist. It also cost 28px of the row, which is what squeezed "Add
+                to home screen" into a 124px box. It follows the tap now. */''}
+          ${(r.tgl||r.feat||r.printer||r.fapiao)?rt(r):`<span style="display:flex;align-items:center;gap:8px;flex:none">${r.value?`<span style="font-size:15px;color:var(--text-secondary);white-space:nowrap">${r.value}</span>`:''}${r.chev?`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`:''}</span>`}</div>`).join('')}</div></div>`).join('')}
     <button onclick="APP.cmd('signout')" style="width:100%;padding:15px;border:1px solid var(--border-default);border-radius:14px;background:var(--surface-card);color:var(--danger);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer">${T('Sign out','退出登录')}</button>
     <div style="text-align:center;font-size:12px;color:var(--text-secondary);padding:2px 0 6px">tacet · v1.0 · ${T('runs in silence','静默运行')}</div></div>`;
 }
