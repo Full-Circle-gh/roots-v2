@@ -546,7 +546,14 @@ function main() {
     try {
       out = execFileSync(chrome, ['--headless=new', '--disable-gpu', '--no-sandbox',
         '--window-size=500,940', '--virtual-time-budget=2500', '--dump-dom', 'file://' + file],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30000 });
+      /* maxBuffer: --dump-dom writes the WHOLE document to stdout and
+         execFileSync caps that at 1 MiB by default; public/m.html passed
+         1.01 MB on 2026-09-08, so the cap became a tripwire that fires on
+         the next edit to a page and reports itself as "chrome failed …
+         ENOBUFS", which reads like a broken browser. Same fix, and the
+         same 64 MiB, as scripts/lib/m-probe.js — see the argument there. */
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30000,
+        maxBuffer: 64 * 1024 * 1024 });
     } catch (e) { failures.push([name, 'chrome failed: ' + e.message]); continue; }
     const title = (out.match(/<title>([^<]*)<\/title>/) || [])[1] || 'no title';
     const nodes = Number((title.match(/^OK (\d+)/) || [])[1] || 0);
