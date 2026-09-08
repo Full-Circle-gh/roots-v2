@@ -2866,8 +2866,32 @@ function tdAttnRender() {
   // request is. Reading it is what clears it: opening the list stamps `seen_at`
   // server-side, so one person looking puts this row out for the whole warehouse
   // and takes the dot off every other phone with it.
+  //
+  // IT COUNTS PRODUCTS, NOT REQUESTS, AND IT NAMES THEM (§69). Both halves are
+  // one report: *"if only 1 product marked as made, it wont show it on
+  // dashboard, thats a problem, why not to mention the specific product kitchen
+  // made directly on the dashboard this way the user wont need to open the
+  // order, too many clicks."* Counting requests was §61 half-carried — a
+  // request with one of three products made never reaches 'prepared', so this
+  // row stayed dark about a jar already on the shelf. And a request NUMBER is
+  // the one fact about a finished jar the warehouse cannot act on: the name was
+  // two taps down, behind a row whose whole job is to save the trip.
+  //
+  // TWO NAMES AND A TAIL. The meta run truncates at a narrow width by design
+  // (retail-admin.css .td-nmeta: a row that wraps makes the card jump every
+  // time an age ticks), so a third name would ellipsize mid-word rather than
+  // read. "+1 more" is honest about what is not shown and the hover title
+  // carries the rest; the list behind View carries all of it. `count` rather
+  // than `items.length` in the tail — the preview is capped server-side at 8,
+  // and a tail computed from the preview would say "+6" when 14 are waiting.
   const kr = DASH_OPS.kitchen_ready || { count: 0, items: [] };
   if (kr.count && dashCardWants('kitchen_ready')) {
+    const krCn = window.cuLang && cuLang() === 'cn';
+    const krNames = (kr.items || [])
+      .map(it => (krCn ? (it.name_cn || it.name_en) : (it.name_en || it.name_cn)) || '')
+      .filter(Boolean);
+    const krShown = krNames.slice(0, 2);
+    const krRest = Math.max(0, Number(kr.count || 0) - krShown.length);
     fires.push({
       sev: 'amber', icon: 'check',
       // The list's own name, verbatim (public/m.html MORE_GROUPS, and the tile
@@ -2875,6 +2899,11 @@ function tdAttnRender() {
       // words, which is the rule the Reviews row states above.
       label: cuT('Ready from the kitchen', '厨房已完成'),
       n: kr.count, mins: tdOldestMins(kr.items),
+      // Product names are DATA, so they carry no EN/CN pair of their own and
+      // the separator is the one m.html already joins meta fragments with.
+      state: krShown.length
+        ? krShown.join(cuT(', ', '，')) + (krRest > 0 ? ` +${krRest} ${cuT('more', '更多')}` : '')
+        : null,
       cta: cuT('View', '查看'), go: 'dashOpenKitchenReady()',
     });
   }

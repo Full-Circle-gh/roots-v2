@@ -6905,6 +6905,23 @@ db.exec(`
 addColumn('restock_items', 'status',      "TEXT DEFAULT 'sent'");
 addColumn('restock_items', 'received_at', 'DATETIME');
 addColumn('restock_items', 'prepared_at', 'DATETIME');
+// ─────────────────────────────────────────────────────────────────────────
+// THE ACKNOWLEDGEMENT SPLITS TOO — docs/tacet-consolidation-decisions.md §69
+// (2026-09-08). "Ready from the kitchen" counted REQUESTS and stamped
+// restock_orders.seen_at, which §61 had already made the wrong grain: a
+// request with one of three products made never reached 'prepared' at all, so
+// nothing announced the jar that was already on the shelf. Counting lines
+// fixes that, and it forces the stamp down with it — one stamp per request
+// would mean reading the news about the first product silenced the second.
+//
+// NO BACKFILL, AND THAT IS THE POINT. Every row here stays NULL, and
+// lib/kitchen-ready.js reads restock_orders.seen_at ALONGSIDE this column
+// rather than instead of it: under the old clause an order could only be
+// stamped once every one of its lines was done, so an acknowledged order
+// means acknowledged lines. Copying the parent's stamp down would say the
+// same thing twice; leaving it NULL and reading both says it once, and keeps
+// the record of who was told what before this column existed intact.
+addColumn('restock_items', 'seen_at',     'DATETIME');
 // BACKFILL, MAIN DATABASE ONLY. An item's DEFAULT is 'sent', which is wrong
 // for a line that belongs to an order already past that — the ADD COLUMN
 // above would otherwise reopen every in-flight request's lines as "not

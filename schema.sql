@@ -385,6 +385,13 @@ CREATE TABLE IF NOT EXISTS restock_items (
   status        TEXT DEFAULT 'sent',  -- sent|received|prepared, mirrors STATUS_FLOW
   received_at   DATETIME,
   prepared_at   DATETIME,
+  -- "The warehouse has been told this one is made" (decisions §69). The
+  -- acknowledgement moved from the request to the line for the same reason
+  -- the status did: with one stamp per request, reading the news about the
+  -- first product made silenced the second. Set by opening the Ready list;
+  -- restock_orders.seen_at stays as the record of every acknowledgement made
+  -- before this column existed, and lib/kitchen-ready.js reads both.
+  seen_at       DATETIME,
   FOREIGN KEY (restock_id) REFERENCES restock_orders(id) ON DELETE CASCADE,
   FOREIGN KEY (product_id) REFERENCES products(id)
 );

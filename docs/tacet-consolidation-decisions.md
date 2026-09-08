@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.159
+# Tacet shared-core consolidation — decisions record, v4.161
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-08 · v4.161 — **§69 ADDED: "READY FROM THE KITCHEN" COUNTS PRODUCTS, NOT REQUESTS, AND NAMES THEM ON THE ROW.** Reported by Ash from the phone, with a screenshot of the Kitchen queue on `PR-260908-005` — three lines, one of them made — and the Needs-you strip above it showing nothing: *"if only 1 product marked as made , it wont show it on dashbaord ,thats a problem , why not to mention the speicifc product kitchen made directly on the dashbaord this way the user wont need to open the order and check inside ,too many clicks"*. **ONE DEFECT AND ONE ASK, AND THEY HAVE THE SAME FIX.** §61 split the kitchen's WORK to the line and left `restock_orders.status` a ROLLUP that catches up only when every line is done — deliberately, because dispatch, the push fan-out and the slip print are all keyed on it. §66's fire, the phone's dot and the Ready list were all written against that rollup, so a request with one of three products made sat at `sent` and **every surface stayed silent about a jar already on the shelf**. Moving the grain to the line fixes that and, in the same move, gives the row something worth printing: the NAME. **A request number is the one fact about a finished jar the warehouse cannot act on**, and it was two taps down behind a row whose whole job is to save the trip. **THE STAMP HAD TO COME DOWN WITH THE COUNT** — with one `seen_at` per request, reading the news about the first product would have silenced the second — so `restock_items.seen_at` is added and **not backfilled**: `lib/kitchen-ready.js` reads `restock_orders.seen_at` ALONGSIDE it, because under the old clause an order could only be stamped once every line was done, so an acknowledged order means acknowledged lines. **NOTHING RE-LIGHTS ON THE DEPLOY**, which a swap would have done to months of read history. **THE SAME ARM SHAPE COVERS THE OTHER LEGACY GAP**: the clause reads the line's status OR the request's, because §61's backfill was main-database only and a tenant file got the columns with their plain `'sent'` default — so the new clause is a strict SUPERSET of the one it replaces rather than a different set. **THE OLD `{ids:[…]}` REQUEST SHAPE IS STILL HONOURED** on the seen endpoint and resolved to that request's own unseen lines, because a page cached on a phone before this deploy goes on sending it and the sentence it makes is as true per line as it was per request. **TWO NAMES AND AN HONEST TAIL**, on both dashboards: `.td-nmeta` truncates at a narrow width by design (a row that wraps makes the card jump every time an age ticks over), so a third name would ellipsize mid-word rather than read, and the tail counts off the COUNT rather than the 8-line preview. **The two screens the fire opens now list PRODUCTS too** — a fire that disagrees with the queue it opens means one of the two is lying, which is the rule `lib/kitchen-ready.js` exists to keep — and both detail screens stop saying *"the kitchen has put this on the shelf"* over a request that is only partly made, a state they could never be in before. **NO CHINESE WAS COMPOSED.** `more · 更多` is live in `public/retail-admin/16-purchasing.js` in this exact `+N more` construction; `, · ，` is `public/m.html`'s own meta-fragment join; `made · 完成` and `To make · 待制作` are both live on the screens being edited; partial progress is stated as the numeral `1/3` rather than a clause minted for it. No entry in `docs/tacet-delivery-vocabulary.md` is owed. **`scripts/test_kitchen_ready_dashboard.js` gains §2b and the naming section (51 assertions), `scripts/test_kitchen_ready_signal.js` gains the one-of-three section (42)**; the fixture now builds `restock_items` as well, because a suite holding only `restock_orders` proved nothing about a signal counted per line. Code, tests and docs; **one schema change and one migration — `restock_items.seen_at`, added and deliberately not backfilled.**
 
 2026-09-08 · v4.159 — **THE ROLE'S DASHBOARD CARDS REACH THE PHONE, AND THE ONE CARD THAT NEVER HAD A MONEY GATE GETS ONE. §67 addendum records it.** Reported with a screenshot of each side: the Roles editor for Stockroom — *"Has a dashboard"* ticked, layout **The full view**, and **Today, Customers and Unhandled orders UNTICKED** — and the phone's Home underneath it showing **Today: Revenue ¥732, Avg. order ¥222.45, New customers 10**, with *Also today* beneath it. **THE DATA WAS ON THE WIRE THE WHOLE TIME AND THE PHONE THREW IT AWAY.** `/api/backend/me` has shipped `dashboardCards` since the field existed (`routes/backend-auth.js`), and the DESKTOP has honoured it since then (`dashCardGate`, 03-dashboard.js); `public/m.html` read the same endpoint, ignored the key, and drew every card regardless. **The screen was contradicting its own control**: the Roles editor says, in its own words, that the dashboard is *"this role's first screen on desktop and the Home tab on the phone"* and that *"the layout and cards below decide what is on it"* — on the phone they decided nothing. **FOUR OF THE TEN CATALOGUE KEYS HAVE A SECTION OF THEIR OWN ON HOME and are now gated on exactly the key their desktop twin carries**: `recap` → *While you were away*, `needs` → *Needs you*, `orders` → *Today* (the desktop block headed *Today · 今日*), `customers` → *Also today* (the desktop *Customers* card, whose contents are Sessions / Conversion / Returning). **The other six — `unhandled`, `inventory`, `incoming`, `onroad`, `ready`, `delivery` — are desktop cards with NO phone twin**, because the phone surfaces those states as Needs-you fires and Quick actions; **the divergence is named rather than papered over**, and inventing a section on Home to hold a tick would be worse than the gap. **null STAYS "no override" on both surfaces** — a role whose owner never opened that field must not lose every card on the phone. **THE MONEY HALF IS WORSE THAN THE CARD HALF AND WAS FOUND WITH IT.** *Today*'s twin is hidden for the `warehouse`, `dispatch` and `customer-service` boards by `retail-admin.css`; on the phone that card carried **no money gate at all** — not even the `recapNoMoney()` one its own immediate neighbour `vitalsBlock()` already had — so a stock or delivery role read the shop's takings off the FIRST SCREEN THE APP OPENS. It now carries both gates, **in the desktop's order of precedence**: an owner's card override cannot switch the money back ON for a board that hides it (over there the override CLEARS an inline style and the board's CSS rule still wins), so either gate hiding is enough. **THE REPORTING ACCOUNT'S LAYOUT IS `default` ("The full view"), NOT the warehouse board** — which is why neither `recapNoMoney()` nor the `body.pos-warehouse` rules were ever going to save it, and why the card override was the only thing that could. **Verified in Chromium** through the shared `m-probe` harness, four cases: no override leaves Home exactly as it was; the reporting role's own array takes *Today* and *Also today* away with no revenue left on the screen and Quick actions still in place; an unticked `needs` takes the fires with it; and the warehouse board with no override at all now hides the money too. `scripts/test_backend_nav_parity.js` gains §4 (fast shard, 56 assertions total), and the two load-bearing ones were checked to fail with their fix reverted. No Chinese was composed — no string was added. Code, tests and docs; no schema, no migration, no capability grant changed.
 
@@ -7015,3 +7017,140 @@ figure written twice writes the same figure. The pair is composed and declared i
 followed by a tap on a stock stepper** was painted back to the stored figure, and the typing was gone — no variants
 required, and shipping for as long as the sheet has had both controls. The price now lives in state and is captured on
 input, which is also what lets it survive a trip to a sibling size.
+
+## §69 — "READY FROM THE KITCHEN" COUNTS PRODUCTS AND NAMES THEM; THE ACKNOWLEDGEMENT SPLITS WITH IT
+
+Decided by Ash, 2026-09-08, from the phone: a screenshot of the Kitchen queue
+on `PR-260908-005` — three lines, `Maple Cinnamon Almond Butter`,
+`Peanut Butter (100% Peanuts)`, `BioCurcumin+ (Organic)`, one of them already
+marked made — beside a screenshot of the desktop Needs-you strip showing no
+kitchen row at all, and the report: *"if only 1 product marked as made , it
+wont show it on dashbaord ,thats a problem , why not to mention the speicifc
+product kitchen made directly on the dashbaord this way the user wont need to
+open the order and check inside ,too many clicks"*.
+
+Two sentences, one defect and one ask, and they have the same fix.
+
+### What was wrong
+
+§66 gave the warehouse a Needs-you row for work the kitchen had finished, and
+§61 — decided the day before it — split the kitchen's WORK to the line while
+leaving `restock_orders.status` as a rollup that catches up only once every
+line has reached the same point. That rollup is deliberate and stays: dispatch
+(`_applyDispatch`), the push fan-out and the kitchen slip print are all keyed
+on the ORDER's status, and each must fire exactly once, at the moment the whole
+request is actually done.
+
+**Every outward signal was written against that rollup**, and there were three
+of them, all reading the one clause in `lib/kitchen-ready.js`:
+
+- `GET /api/restock/kitchen-ready` — the phone's dot
+- `/dashboard/ops → kitchen_ready` — the Needs-you row, desktop and phone Home
+- the list at `/stock?go=ready`, and the phone's own `kitchenready` screen
+
+So a request with one of three products made sat at `status = 'sent'`, and all
+three answered zero about a jar that was already on the shelf. **The §61
+addendum had fixed this exact shape one screen downstream** — the What-you-made
+hand-over now fires per line — and the outward signal was never brought along.
+
+The second half of the report is about the same row. A fire that says
+`Ready from the kitchen · 3 · oldest 2h` names a COUNT and an AGE, and to find
+out *what* the kitchen made you open the list, open a request, and read its
+lines. **The request number is the one fact about a finished jar that nobody in
+the warehouse can act on.** The name is the whole of what they came for, and it
+was two taps down behind a row whose entire purpose is to save the trip.
+
+### The ruling
+
+**The grain of the signal is the LINE, not the request.**
+`lib/kitchen-ready.js` now joins `restock_items` to `restock_orders` and counts
+finished lines. A finished product is news on its own, whatever its request's
+status says. The pill counts products; the row names them.
+
+**`restock_items` gains its own `seen_at`, and the count forces it.** With one
+stamp per request, reading the news about the first product made would silence
+the second — the acknowledgement has to be as fine-grained as the news. Opening
+the Ready list stamps the LINES it drew, exactly as it stamped the requests it
+drew before.
+
+**The two legacy arms are what make the new clause a strict SUPERSET of the old
+one rather than a different set**, and they are the load-bearing part of this
+ruling:
+
+- **`OR r.status IN ('prepared','delivered')`.** §61's backfill
+  (`restock_item_status_backfill_v1`) ran on the MAIN database only; a tenant
+  file got the new columns with their plain `'sent'` default and no data
+  migration. Reading the rollup as well means a request that closed before §61
+  shipped — or on a tenant that never ran the backfill — still counts, because
+  `_advanceOrderStatus` guarantees an order at `prepared` has every line at
+  `prepared` whether or not the row says so.
+- **`AND r.seen_at IS NULL`.** `restock_items.seen_at` is added and
+  **deliberately NOT backfilled.** Under the old clause `seen_at` could only
+  ever be stamped on a request whose every line was done, so an acknowledged
+  order means acknowledged lines. Dropping this arm would relight months of read
+  history as unread news on the morning this ships. Copying the parent's stamp
+  down would say the same thing twice; leaving it NULL and reading both says it
+  once, and keeps the record of who was told what before this column existed.
+
+**`POST /api/restock/kitchen-ready/seen` takes `item_ids` and still honours
+`ids`.** A page cached on a phone before this deploy goes on sending request
+ids, and the sentence it is making — "I have read this request" — is exactly as
+true per line as it was per request, so `ids` is resolved to that request's own
+unseen finished lines rather than dropped. Reading it as item ids instead would
+have silently acknowledged whichever unrelated lines happened to carry those
+numbers.
+
+**The row names two products and tails the rest.** `retail-admin.css`'s
+`.td-nmeta` truncates at a narrow width by design — a row that wraps to two
+lines makes a five-row card jump every time an age ticks over — so a third name
+would ellipsize mid-word rather than read. `+N more` is honest about what is not
+shown, the hover title carries the whole string, and the list behind *View*
+carries all of it. **The tail counts off the COUNT, never the preview**, which
+is capped server-side at 8: a tail computed from the preview would say `+6`
+while 14 sat waiting.
+
+**Both name columns travel in the payload, not the one matching the request's
+language.** The dashboard's language toggle repaints from the snapshot it
+already holds without re-fetching, so a payload carrying one language would flip
+the row into the wrong one until the next poll.
+
+**The screens the fire opens list products too.** A fire that disagrees with the
+queue it opens means one of the two is lying — the rule `lib/kitchen-ready.js`
+exists to keep — so a row naming products over a list of request numbers is not
+a cosmetic mismatch. `GET /api/restock/kitchen-ready/lines` is the list's
+endpoint: the same clause, minus the two seen arms, because the LIST is a record
+("what did they make today" has to answer the day after somebody glanced at it)
+and only the COUNT is unseen-only. The request is still one tap away, on the row.
+
+**And both detail screens stop lying about a partly-made request.** They can now
+be opened on one — a state they could never be in when only whole requests
+reached them — and *"The kitchen has put this on the shelf and recorded the
+stock. Nothing to do here."* would be a lie about two thirds of the page. Made
+lines carry the tick; the rest carry the kitchen queue's own
+*To make · 待制作*; the request-wide note appears only when it is true of the
+whole request; and progress is stated as the numeral `1/3` beside the live
+*made · 完成*, rather than a clause composed for "some of it is still cooking".
+
+### Scope, and what is deliberately not changed
+
+- **`restock_orders.status` is still the rollup and still fires everything it
+  fired before.** Nothing about dispatch, push, or the slip print is touched.
+  §61's ruling on that stands word for word.
+- **`restock_orders.seen_at` is not dropped or migrated.** It is the record of
+  every acknowledgement made before `restock_items.seen_at` existed, and the
+  clause reads it forever.
+- **No partial quantity within a line**, exactly as §61 ruled. "One of three
+  products" is the axis here; "8 of 12 of one product" remains undecided.
+- **One row per fire, not one per product.** Considered and rejected: three
+  finished products would push three other fires off the top of a strip that
+  sorts oldest-first across all of them, and Needs-you is a strip of what needs
+  answering rather than a feed.
+- **The row fires on MADE, not on made-AND-recorded.** The §61 addendum notes a
+  line can be marked made and its batch left unrecorded; that is the kitchen's
+  own follow-up, tracked on the kitchen's own screen, and the warehouse's
+  question is answered the moment the food exists.
+- **No Chinese was composed.** `more · 更多` is live in
+  `public/retail-admin/16-purchasing.js` in this exact `+N more` construction;
+  `, · ，` is `public/m.html`'s own meta-fragment join; `made · 完成` and
+  `To make · 待制作` are both already live on the screens being edited. No entry
+  in `docs/tacet-delivery-vocabulary.md` is owed.

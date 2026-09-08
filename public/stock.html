@@ -3989,9 +3989,17 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      IT STILL MOVES NO STOCK, and still says so — but as a statement of where
      the stock already went, not as a warning about what this button does. */
 
+  /* THE GRAIN IS THE LINE (decisions §69). `list` held REQUESTS until
+     2026-09-08, which was §61 half-carried: a request with one of three
+     products made never reaches 'prepared', so the tile, the dot and the
+     dashboard fire were all silent about a jar already on the shelf. It holds
+     finished LINES now — the fire that opens this screen counts and names the
+     same lines, and a screen listing request numbers under a row naming
+     products is the two-surfaces-disagreeing failure lib/kitchen-ready.js
+     exists to prevent. */
   var kr = {
-    list: null,     // prepared, unarchived requests addressed to the kitchen
-    order: null,    // the open one, with lines
+    list: null,     // finished, unarchived kitchen lines — the products themselves
+    order: null,    // the open request, with all of its lines
     seen: false,    // this visit has already stamped what it drew
     busy: false, err: '',
   };
@@ -4005,12 +4013,14 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   }
   function krCount() { return krUnseen().length; }
 
-  /* THE SAME LIST ROUTE THE QUEUE READS, from the other side. `tab=history` is
-     defined for this direction as "prepared" (routes/restock.js: for
-     warehouse→kitchen, prepared IS the closure), and the endpoint drops
-     archived rows from every tab by default — so what comes back is exactly
-     "made, and nobody has said they have it". The status filter is belt and
-     braces for a row that reached 'delivered' under an older client. */
+  /* THE CLAUSE'S OWN ENDPOINT, rather than the queue's list route filtered
+     client-side. `?to_role=kitchen&tab=history` returns ORDERS, and there is no
+     order-shaped answer to "which products has the kitchen finished" — a
+     request with two of three lines made belongs on this screen twice over and
+     in that list not at all. routes/restock.js kitchen-ready/lines reads the
+     same clause the dot and the fire read, minus the two seen arms, so what
+     comes back is exactly "made", and `seen_at` on each row says which of them
+     anybody has been told about. */
   /* homeLand() rather than probeAnswered(), and the difference is the whole
      reason krLoad is not a probe. _probes decides whether the LAUNCHER may be
      shown, and this loader answers nothing about that — counting it would let
@@ -4018,10 +4028,8 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      wantReady() reads kr.list, so the landing is re-asked when the list arrives
      and a held boot screen is released by data instead of by the arming timer. */
   function krLoad() {
-    return rcFetch('/api/restock?to_role=kitchen&tab=history').then(function (j) {
-      kr.list = (Array.isArray(j.data) ? j.data : []).filter(function (o) {
-        return o.status === 'prepared';
-      });
+    return rcFetch('/api/restock/kitchen-ready/lines').then(function (j) {
+      kr.list = Array.isArray(j.data) ? j.data : [];
       homeLand();
       krMarkSeen();
       if (state.view === 'home') homeRender();
@@ -4059,7 +4067,9 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     var ids = krUnseen().map(function (o) { return o.id; });
     if (!ids.length) return;
     kr.seen = true;
-    rcFetch('/api/restock/kitchen-ready/seen', { method: 'POST', body: { ids: ids } })
+    // `item_ids`, because the ids are lines now (§69). The endpoint still
+    // honours the old `ids` (requests) for a page cached before this deploy.
+    rcFetch('/api/restock/kitchen-ready/seen', { method: 'POST', body: { item_ids: ids } })
       .then(function () {
         // Locally too, so the tile behind this screen is right on the way out
         // without a second round trip.
@@ -4081,9 +4091,13 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   }
 
   function krMade(o) {
-    var d = rcStamp(o.prepared_at);
+    // `made_at` on a line (kitchen-ready/lines already coalesces the line's own
+    // stamp with its request's, for rows written before §61 split them);
+    // `prepared_at` on the request the detail screen loads.
+    var d = rcStamp(o.made_at || o.prepared_at);
     return d ? clock(d) : '';
   }
+
 
   function krListHtml() {
     var rows = kr.list || [];
@@ -4104,13 +4118,19 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
             t('Nothing finished yet', '暂无已完成') + '</div>' +
             '<div style="font-size:15px;color:var(--text2);margin-top:6px">' +
             t('What the kitchen makes for you shows up here.', '厨房为你制作完成的申请会显示在这里。') + '</div></div>'
-        : rows.map(function (o) {
-            var p = kqPurpose(o), when = krMade(o);
+        /* THE PRODUCT LEADS AND THE REQUEST FOLLOWS IT (§69) — the same
+           inversion the dashboard fire that opens this screen makes, and for
+           the same reason: the name is what the warehouse came to find out and
+           the number is how to go and check. The quantity keeps the rc-qty
+           slot the queue's own rows put it in, so a row here and a row there
+           read the same way round. Tapping still opens the whole request. */
+        : rows.map(function (it) {
+            var p = kqPurpose(it), when = krMade(it);
             return '<div class="rc-hr"></div>' +
-              '<button class="rc-row" data-kropen2="' + o.id + '">' +
-              '<span class="rc-qty num">' + (o.item_count || 0) + '</span>' +
-              '<span class="rc-mid"><span class="rc-nm">' + esc(o.rs_number || ('#' + o.id)) + '</span>' +
-              '<span class="rc-cap">' + t((o.item_count || 0) + ' items', (o.item_count || 0) + ' 项') +
+              '<button class="rc-row" data-kropen2="' + it.restock_id + '">' +
+              '<span class="rc-qty num">' + rcNum(it.qty_requested) + '</span>' +
+              '<span class="rc-mid"><span class="rc-nm">' + esc(kqItemName(it)) + '</span>' +
+              '<span class="rc-cap">' + esc(it.rs_number || ('#' + it.restock_id)) +
               (p ? ' · ' + esc(p) : '') + (when ? ' · ' + t('made ' + when, when + ' 完成') : '') +
               '</span></span>' +
               '<span class="sh-chev">' + RC_CHEV_R + '</span></button>';
@@ -4118,31 +4138,61 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       ) + '</div></div>';
   }
 
+  /* WHICH LINE IS ACTUALLY FINISHED (§69). The list is reached from a fire that
+     counts lines, so this screen now opens on requests that are only PARTLY
+     made — a state it could never be in when only whole requests reached it,
+     and one where "the kitchen has put this on the shelf" would be a lie about
+     two thirds of what is on the page. Reads the line's own status and falls
+     back to the request's, the same pair lib/kitchen-ready.js reads and for the
+     same reason: a line written before §61, or on a tenant that never ran its
+     backfill, carries no status of its own, and the rollup is then the only
+     true thing anybody knows. */
+  function krLineMade(it, o) {
+    var s = (it && it.status) || '', os = (o && o.status) || '';
+    return s === 'prepared' || s === 'delivered' || os === 'prepared' || os === 'delivered';
+  }
+
   function krDetailHtml() {
     var o = kr.order;
     var items = (o.items || []).filter(function (it) { return rcNum(it.qty_requested) > 0; });
+    var made = items.filter(function (it) { return krLineMade(it, o); });
     var p = kqPurpose(o), when = krMade(o);
+    // A NUMERAL RATHER THAN A SENTENCE about partial progress — "1/3 made" is
+    // the same three characters in both languages and needs no clause composed
+    // for the half that is still cooking. The 'made · 完成' pair is the one the
+    // rows on this screen already use.
+    var tally = made.length + '/' + items.length + ' ' + t('made', '完成');
     return '<div class="rc-wrap">' +
       '<div class="rc-head">' +
         '<button class="rc-back" data-krlist>' + RC_CHEV + t('Ready', '已完成') + '</button>' +
         '<div class="rc-h1">' + esc(o.rs_number || ('#' + o.id)) + '</div>' +
-        '<div class="rc-sub">' + t(items.length + ' items', items.length + ' 项') +
+        '<div class="rc-sub">' + esc(tally) +
           (p ? ' · ' + esc(p) : '') + (when ? ' · ' + t('made ' + when, when + ' 完成') : '') + '</div>' +
       '</div>' +
       (kr.err ? '<div class="rc-err">' + esc(kr.err) + '</div>' : '') +
       '<div class="rc-body">' + items.map(function (it) {
+        // 'To make · 待制作' is the kitchen queue's own name for the tab holding
+        // exactly these lines, restructured onto a line rather than a new
+        // string minted for "not this one yet".
+        var cap = krLineMade(it, o) ? (it.sku || '') : t('To make', '待制作');
         return '<div class="rc-hr"></div><div class="rc-row">' +
           '<span class="rc-qty num">' + rcNum(it.qty_requested) + '</span>' +
           '<span class="rc-mid"><span class="rc-nm">' + esc(kqItemName(it)) + '</span>' +
-          '<span class="rc-cap">' + esc(it.sku || '') + '</span></span></div>';
+          '<span class="rc-cap">' + esc(cap) + '</span></span></div>';
       }).join('') + '<div class="rc-hr"></div></div>' +
       /* WHERE THE STOCK ALREADY WENT, which is not the same sentence as the one
          this screen used to carry. That one warned what a button would not do;
          this one says the job is finished — the kitchen shelved it and recorded
-         it, and there is no step left for the person reading. */
-      '<div style="padding:12px 16px 0"><div class="rc-flat rc-note">' +
-        t('The kitchen has put this on the shelf and recorded the stock. Nothing to do here.',
-          '厨房已将其上架并登记库存,此处无需操作。') + '</div></div>' +
+         it, and there is no step left for the person reading.
+         ONLY WHEN IT IS TRUE OF THE WHOLE REQUEST. On a partly-made one the
+         per-line captions above already say which is which, and a request-wide
+         "nothing to do here" over lines still to make would be the lie this
+         note was written to stop telling. */
+      (made.length === items.length
+        ? '<div style="padding:12px 16px 0"><div class="rc-flat rc-note">' +
+          t('The kitchen has put this on the shelf and recorded the stock. Nothing to do here.',
+            '厨房已将其上架并登记库存,此处无需操作。') + '</div></div>'
+        : '') +
       '<div class="rc-foot" style="background:transparent;border:none">' +
         '<div style="padding:16px 16px calc(var(--sa-bot) + 24px)">' +
         '<button class="rc-big" data-krlist>' + t('Done', '完成') + '</button>' +
