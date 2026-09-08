@@ -35,6 +35,11 @@
  *   • VOID orders. channel_stock_restored = 1, or a cancelled/refunded status,
  *     says the stock is deliberately NOT out of our count. "Repairing" one
  *     would take units for an order nobody was charged for.
+ *   • ANY LINE WHOSE SHELF HAS BEEN RE-COUNTED SINCE. An undeducted sale leaves
+ *     the count too high only until somebody re-establishes it; a stock-take
+ *     sets the number to what is physically there and absorbs the miss. From
+ *     that moment the figure is true, and deducting the old sale would make it
+ *     wrong in the other direction. See RECOUNT_REASONS below.
  *
  * ── WHAT IT WRITES, per repaired line ─────────────────────────────────────
  *   retail_order_items   product_id, name_cn, name_en, sku  ← the line stops
@@ -127,8 +132,35 @@ const lines = db.prepare(`
 
 const bySku = db.prepare('SELECT id, name_cn, name_en, sku, is_active FROM store_products WHERE sku = ?');
 
+// ── WHEN A BACKFILL IS STILL THE RIGHT ANSWER, AND WHEN IT IS NOT ───────────
+// Caught by this script's own negative guard on the second dry run (oneoff run
+// 34235000551): twelve store-2 lines from July would have taken 9 units off a
+// shelf showing 0, leaving −9.
+//
+// That is not the guard being fussy — it is the guard being right, and it
+// exposes a hole in the premise. An undeducted sale leaves the count too high
+// ONLY UNTIL SOMEBODY RE-ESTABLISHES IT. A stock-take sets the number to what is
+// physically on the shelf; from that moment the old miss is absorbed and the
+// number is true again. Deducting July's sale from today's re-counted shelf does
+// not fix a stale error, it introduces a fresh one.
+//
+// So the test is per line and evidential, not a date rule: has an ABSOLUTE
+// re-count touched this store and product since the order was placed?
+// `adjustStock`'s default reason 'adjust' is that path — a human setting the
+// figure by hand — as distinct from the movement reasons (an order, a receive, a
+// transfer), which only ever apply a delta to whatever was there and therefore
+// carry the error forward rather than clearing it.
+const RECOUNT_REASONS = ['adjust', 'stocktake', 'count', 'recount'];
+const recountSince = db.prepare(`
+  SELECT reason, created_at FROM retail_stock_ledger
+   WHERE store_id = ? AND product_id = ? AND created_at > ?
+     AND reason IN (${RECOUNT_REASONS.map(() => '?').join(',')})
+   ORDER BY created_at DESC LIMIT 1
+`);
+
 const plan = [];
 const skipped = [];
+const recounted = [];
 // The "S(1-240)" family, collected and reported but never acted on. Meituan
 // sends a code like "1-240s" and the catalogue holds "S(1-240)" — the same
 // thing written two ways, on the evidence of the listing names beside them.
@@ -145,8 +177,20 @@ for (const l of lines) {
   const token = l.sku || (String(name).match(/\d+-\d+/) || [])[0] || null;
   if (!token) { skipped.push({ l, name, why: 'no code — needs a product map row (a decision)' }); continue; }
 
+  // Resolved or not, a line whose shelf has been re-counted since is finished
+  // business — the number is already true and must not be moved again.
+  const settled = (product) => {
+    const r = recountSince.get(l.store_id, product.id, l.placed_at, ...RECOUNT_REASONS);
+    if (!r) return false;
+    recounted.push({ l, name, want, product, at: r.created_at, reason: r.reason });
+    return true;
+  };
+
   const hits = bySku.all(token);
-  if (hits.length === 1) { plan.push({ l, name, want, token, product: hits[0] }); continue; }
+  if (hits.length === 1) {
+    if (!settled(hits[0])) plan.push({ l, name, want, token, product: hits[0] });
+    continue;
+  }
   if (hits.length > 1) { skipped.push({ l, name, why: `code ${token} matches ${hits.length} products` }); continue; }
 
   // No product holds that code as written. One of the three verified aliases?
@@ -154,7 +198,7 @@ for (const l of lines) {
   if (alias) {
     const viaAlias = bySku.all(alias);
     if (viaAlias.length === 1) {
-      plan.push({ l, name, want, token: alias, viaAlias: token, product: viaAlias[0] });
+      if (!settled(viaAlias[0])) plan.push({ l, name, want, token: alias, viaAlias: token, product: viaAlias[0] });
       continue;
     }
     // The alias was verified against a product that is no longer the only one
@@ -212,10 +256,26 @@ for (const [k, units] of net) {
   if ((cur ? cur.physical_qty : 0) - units < 0) negative = true;
 }
 if (negative) {
-  console.error('\nREFUSING: at least one product would go below zero. That is a real signal — the');
-  console.error('shelf is already short of what these orders took — but it is not something this');
-  console.error('script should decide alone. Look at those products first.');
+  console.error('\nREFUSING: at least one product would go below zero.');
+  console.error('');
+  console.error('A shelf that cannot absorb the deduction is saying the over-count is no longer');
+  console.error('there to remove — most likely it was already re-counted, by a path this script');
+  console.error('does not recognise as a re-count. Deducting anyway would invent a shortfall');
+  console.error('rather than correct one. Look at those products before going further.');
   process.exit(1);
+}
+
+// ── Settled by a later re-count ──────────────────────────────────────────────
+if (recounted.length) {
+  console.log('\n' + '='.repeat(78));
+  console.log(`ALREADY SETTLED — ${recounted.length} line(s) whose shelf was re-counted after the sale\n`);
+  console.log('  These lines DID lose stock at the time. A stock-take since has set the figure to');
+  console.log('  what was physically there, which absorbed the miss — the number is true now, and');
+  console.log('  deducting again would make it wrong in the other direction.\n');
+  for (const r of recounted) {
+    console.log(`  ${r.l.order_no} [${r.l.channel}] "${r.name}" x${r.l.qty}  placed ${r.l.placed_at}`);
+    console.log(`    #${r.product.id} ${r.product.name_en} — re-counted '${r.reason}' at ${r.at}`);
+  }
 }
 
 // ── What is deliberately left ────────────────────────────────────────────────
