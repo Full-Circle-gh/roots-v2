@@ -122,6 +122,7 @@
     "test:recipe-autosave": "node scripts/test_recipe_record_autosave.js",
     "test:preorder": "node scripts/test_preorder_local.js",
     "test:local-fresh": "node scripts/test_local_fresh_notice.js",
+    "test:fresh-today": "node scripts/test_fresh_today_batch.js",
     "test:preorder-park": "node scripts/test_preorder_park.js",
     "test:kitchen-po-copy": "node scripts/test_kitchen_po_copy.js && node scripts/test_kitchen_po_picker.js",
     "test:po-supersede": "node scripts/test_po_supersede.js",
