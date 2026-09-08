@@ -847,6 +847,23 @@ img{display:block;max-width:100%}
   .done-amt{text-box:trim-both cap alphabetic;padding:14px 18px}
 }
 .done-s{font-size:14px;color:var(--olive);margin-top:8px}
+/* Cancelling. Quiet by construction — it sits below the order number, is the
+   smallest thing on the screen, and takes two taps. A customer who wants it
+   finds it; one who does not never has it under their thumb.
+   The disclosure IS the confirmation step, which is why there is no script on
+   this page: see the route. (No angle brackets in this comment — it ships
+   inside the stylesheet, and the suite refuses one that could close it.) */
+.cx{margin-top:22px;text-align:center}
+.cx summary{display:inline-block;cursor:pointer;font-size:13px;color:var(--olive);
+  text-decoration:underline;text-underline-offset:3px;list-style:none}
+.cx summary::-webkit-details-marker{display:none}
+.cx-b{margin-top:12px;padding:14px;border:2px solid var(--ink);
+  background:rgba(255,255,255,.72)}
+.cx-q{font-family:var(--f-bear);font-size:15px}
+.cx-s{font-size:13px;color:var(--olive);margin-top:6px}
+.cx-go{margin-top:12px;width:100%;border:2px solid var(--ink);background:var(--oat);
+  color:var(--ink);padding:11px;font:inherit;font-family:var(--f-bear);font-size:15px;
+  cursor:pointer;-webkit-tap-highlight-color:transparent}
 .done-o{font-size:12px;color:var(--olive);margin-top:14px;
   font-variant-numeric:tabular-nums}
 
@@ -1084,7 +1101,43 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `foot=document.getElementById('sheetF'),nEl=document.getElementById('cbarN'),` +
   `vEl=document.getElementById('cbarV'),tEl=document.getElementById('cTot'),` +
   `errEl=document.getElementById('cErr'),nameEl=document.getElementById('cName'),` +
-  `place=document.getElementById('cPlace');` +
+  `place=document.getElementById('cPlace'),lEl=document.getElementById('cbarL');` +
+  /* THE ORDER THIS PHONE ALREADY PLACED, so closing the sheet is not losing it.
+     Reported 2026-09-08: a customer dismissed the sheet carrying their number
+     by mistake and had no way back to it — the number, the amount and the order
+     existed only on that screen.
+
+     A RECEIPT, NOT AN IDENTITY, and that is why it does not reopen §44's "no
+     login, no session, no cookie". Nothing here says who anybody is: it is the
+     address of one order, written by the phone that placed it, readable only by
+     that phone. The unguessable token was already the authority; this just
+     stops the customer being the only copy of it.
+
+     THE BASKET IS STILL NOT PERSISTED, and that rule is untouched. A basket
+     that survived a reload would be a stale order waiting to be submitted by
+     accident, which is the defect the comment below this one describes. A
+     PLACED order is the opposite: it already exists, and forgetting it is the
+     defect.
+
+     Wrapped, because storage throws rather than returns null in a locked-down
+     WeChat webview and in private mode. A phone that cannot remember simply
+     gets the behaviour that shipped. */
+  `var OKEY='tacet-shop-order:'+location.pathname.replace(/\\/+$/,'').split('/').pop();` +
+  `var mine=null;` +
+  `try{var _r=localStorage.getItem(OKEY);if(_r)mine=JSON.parse(_r)}catch(e){mine=null}` +
+  `if(mine&&!(mine.u&&mine.n!=null))mine=null;` +
+  /* AND IT FORGETS. Twelve hours, which is longer than any counter's day and
+     shorter than the gap to the next one — so a customer who comes back
+     tomorrow is not shown yesterday's number, and one who steps out for an
+     hour still is. The number itself restarts at 1 each trading day
+     (lib/shop-order-code.js), so a stale bar would not merely be old, it would
+     name an order that belongs to somebody else today.
+     Bounded here rather than by asking the server, because this runs on the
+     first paint of a page whose whole point is that it renders in one
+     response — a status fetch before the bar can be trusted would put a
+     round trip in front of it. The order page states the truth when tapped. */
+  `if(mine&&(!mine.ts||(Date.now()-mine.ts)>43200000)){mine=null;` +
+  `try{localStorage.removeItem(OKEY)}catch(e){/* storage refused; mine is already null in memory, which is the state this was clearing to */}}` +
   // { pid: {qty, price, en, cn} } — insertion order is the order the customer
   // chose, which is the order the basket lists and the order the kitchen reads.
   `var cart={},sending=false;` +
@@ -1108,10 +1161,24 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var count=function(){var n=0,k=ids();for(var i=0;i<k.length;i++)n+=cart[k[i]].qty;return n};` +
   `var total=function(){var t=0,k=ids();for(var i=0;i<k.length;i++)t+=cart[k[i]].qty*cart[k[i]].price;` +
   `return Math.round(t*100)/100};` +
-  `var paintBar=function(){var n=count();bar.hidden=n===0;` +
+  // ONE BAR, TWO STATES. With something in the basket it is the basket. With
+  // the basket empty and an order already placed from this phone, it is the way
+  // back to that order — the number, what it cost, and a tap that opens the
+  // order's own page. A second bar would have been a second permanent strip of
+  // chrome over the menu both of them exist to serve.
+  //
+  // The label is the live pair the done screen already uses for this noun; the
+  // number and the amount need no other word beside them.
+  `var paintBar=function(){var n=count();` +
+  `var back=(n===0&&mine&&mine.u);` +
+  `bar.hidden=(n===0&&!back);` +
   // The floor under the menu follows the bar's real height rather than a guess,
   // the same measured-not-written-down rule the header uses.
-  `document.documentElement.style.setProperty('--cbarh',(n?bar.offsetHeight:0)+'px');` +
+  `document.documentElement.style.setProperty('--cbarh',(bar.hidden?0:bar.offsetHeight)+'px');` +
+  `if(back){nEl.textContent=String(mine.n);` +
+  `lEl.innerHTML=${JSON.stringify(bi('Order', '订单号'))};` +
+  `vEl.textContent=money(mine.t);return}` +
+  `lEl.innerHTML=${JSON.stringify(bi('YOUR BASKET', '购物车'))};` +
   `nEl.textContent=String(n);vEl.textContent=money(total())};` +
   `var paintSheet=function(){var k=ids(),h='';` +
   `for(var i=0;i<k.length;i++){var it=cart[k[i]];` +
@@ -1169,7 +1236,10 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var iu=e.target.getAttribute&&e.target.getAttribute('data-i');` +
   `if(iu){if(cart[iu]&&cart[iu].qty<20)cart[iu].qty++;paintBar();paintSheet();return}` +
   `},false);` +
+  // The bar's two states answer the tap differently: a basket opens the sheet,
+  // a placed order goes to that order's own page.
   `document.getElementById('cbarOpen').addEventListener('click',function(){` +
+  `if(count()===0&&mine&&mine.u){location.href=mine.u;return}` +
   `errEl.hidden=true;foot.hidden=false;paintSheet();shOpen(sheet)},false);` +
   `var close=function(){shClose(sheet)};` +
   `document.getElementById('sheetX').addEventListener('click',close,false);` +
@@ -1225,7 +1295,12 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `fail(bi(${JSON.stringify('Please try again.')},${JSON.stringify('请重试。')}))})},false);` +
   // THE PLACED ORDER. The number fills the screen because the entire next step
   // is somebody calling it across a room, and the customer's job is to hear it.
-  `var done=function(d){cart={};paintBar();foot.hidden=true;` +
+  `var done=function(d){cart={};foot.hidden=true;` +
+  // REMEMBERED BEFORE IT IS DRAWN, so the one thing that must survive this
+  // screen is written before anything can go wrong drawing it.
+  `if(d.order_url){mine={n:d.order_code,t:d.total,u:d.order_url,ts:Date.now()};` +
+  `try{localStorage.setItem(OKEY,JSON.stringify(mine))}catch(e){/* a phone that cannot remember still shows the bar for this visit; mine is set in memory above */}}` +
+  `paintBar();` +
   `body.innerHTML='<div class="done"><div class="done-n">'+esc(String(d.order_code))+'</div>'+` +
   `'<div class="done-nm">'+esc(String(d.name||''))+'</div>'+` +
   `'<div class="done-h">'+bi(${JSON.stringify('Order placed!')},${JSON.stringify('下单成功！')})+'</div>'+` +
@@ -1238,6 +1313,11 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `'<div class="done-amt">'+money(d.total)+'</div>'+` +
   `'<div class="done-s">'+bi(${JSON.stringify('Pay at the counter.')},${JSON.stringify('请到收银台付款。')})+'</div>'+` +
   `'<div class="done-o">'+bi(${JSON.stringify('Order')},${JSON.stringify('订单号')})+' '+esc(String(d.order_no||''))+'</div>'+` +
+  // NO LINK HERE. The way back is the bar, which appears the moment this sheet
+  // closes and carries the same number and amount — one route to the order
+  // page, not two. A link here would also have needed a label, and the only
+  // locked pair for the noun is 订单号 ("order number"), which reads as a
+  // heading and not as somewhere to go.
   `'</div>';shOpen(sheet)};` +
   `})();`;
 
@@ -1573,7 +1653,7 @@ router.get('/s/:shopCode', (req, res) => {
       `${wxPay ? ' data-wxpay="1"' : ''}>` +
       `<button type="button" class="cbar-b" id="cbarOpen">` +
         `<span class="cbar-n" id="cbarN">0</span>` +
-        `<span class="cbar-l">${bi('YOUR BASKET', '购物车')}</span>` +
+        `<span class="cbar-l" id="cbarL">${bi('YOUR BASKET', '购物车')}</span>` +
         `<span class="cbar-v" id="cbarV"></span>` +
       `</button>` +
     `</div>` +
@@ -1756,6 +1836,19 @@ const ORDER_LIMIT = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, error: 'too_many_orders' },
+});
+
+// Cancelling gets its OWN budget rather than sharing the one above. A hotel's
+// whole floor is behind one IP, so a busy lunch can spend the ordering budget
+// legitimately — and the moment that happens is exactly when somebody needs to
+// undo a mistake. A cancel that fails because other people were ordering would
+// be the worst possible time for this control not to work.
+const CANCEL_LIMIT = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'too_many_requests' },
 });
 
 const MAX_LINES = 40;         // a menu is not a wholesale order form
@@ -2009,6 +2102,13 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
       // "go here next" rather than being told separately which path it is on,
       // so the two cannot disagree.
       ...(wantsWechat ? { pay_url: `/s/${code}/pay/${created.payToken}` } : {}),
+      // WHERE THIS ORDER LIVES FROM NOW ON. Always present, on every path.
+      // Reported 2026-09-08: a customer closed the sheet carrying their number
+      // and had nothing left, because the number only ever existed on that
+      // screen. The order has always had a durable page — this hands the
+      // customer the address of it so the menu can remember it and they can
+      // get back to it.
+      order_url: `/s/${code}/pay/${created.payToken}`,
       // The short code is what staff call and what the customer watches for.
       order_code: created.shopCode,
       order_no: created.orderNo,
@@ -2042,9 +2142,23 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
 // books and the kitchen ticket. What the browser reports back here is used only
 // to choose which screen to show; a customer who claims success they did not
 // have gets a screen, not a paid order.
-function payScreen(req, res, { status, order, main }) {
+// THIS IS THE CUSTOMER'S ORDER PAGE, not only a payment screen. Reported
+// 2026-09-08: a customer closed the sheet that carried their number and had
+// nothing left — no number to be called by, no amount, no order at all. It was
+// only ever on screen, so closing it was losing it.
+//
+// The page for that already existed and only ever showed a status: this route,
+// reached by the unguessable pay_token the order has carried since §50. It now
+// carries the number, the amount and the way to cancel as well, and the menu
+// remembers the token so the customer can get back here. One page for "what did
+// I order", "has it been paid" and "I changed my mind".
+//
+// `extra` is the cancel control, and is passed only where cancelling is
+// actually possible — see the route.
+function payScreen(req, res, { status, order, main, extra }) {
   const { vars, fonts } = themeBits();
   const lang = req.query.lang === 'cn' ? 'cn' : 'en';
+  const cur = normalizeCurrency(cfg('currency', null));
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.status(status).type('html').send(shell({
     lang, hasParam: req.query.lang === 'cn' || req.query.lang === 'en',
@@ -2054,7 +2168,12 @@ function payScreen(req, res, { status, order, main }) {
         `<div class="done-n">${esc(String(order.shop_order_code == null ? '' : order.shop_order_code))}</div>` +
         `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
         main +
+        // The amount, in the same box and the same formatter the done sheet
+        // uses, so the figure the customer was shown when they ordered is the
+        // figure they find when they come back to it.
+        `<div class="done-amt">${esc(money(order.total, cur))}</div>` +
         `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
+        (extra || '') +
       `</div>`,
   }));
 }
@@ -2068,6 +2187,93 @@ const PAID_MAIN =
 const COUNTER_MAIN =
   `<div class="done-h">${bi('Order placed!', '下单成功！')}</div>` +
   `<div class="done-s">${bi('Pay at the counter.', '请到收银台付款。')}</div>`;
+// The third state this page can be in. Reported 2026-09-08: a customer who
+// changed their mind had no way to say so, and staff had no way to clear the
+// order off the counter's list except by taking money for it. `已取消` is the
+// admin's own label for this status (public/retail-admin/04-orders.js:2777) and
+// the mini app's (miniapp/pages/order/order.js:38) — the same word for the same
+// state, not an approximation of one.
+const CANCELLED_MAIN =
+  `<div class="done-h">${bi('Cancelled', '已取消')}</div>`;
+
+/* THE CUSTOMER CANCELS THEIR OWN ORDER — Ash, 2026-09-08.
+   "if a customer eventually doesn't want the order there should be an option to
+   cancel it from his side or from the till."
+
+   THE TOKEN IS THE AUTHORITY, and it is the only one available: this page has
+   no login, no session and no account (§44), so the unguessable pay_token the
+   order has carried since §50 is what proves the person holding it placed the
+   order. Same handle the payment page is reached by, same width, same column.
+
+   ONLY WHILE IT IS STILL UNPAID. Past pending_payment the money has moved or
+   the kitchen has it, and unwinding either is a person's job at the counter,
+   not a button on a phone. The transition is guarded IN THE UPDATE rather than
+   around it — `AND status = 'pending_payment'` — so a cancel racing the
+   cashier's Mark paid loses cleanly instead of both appearing to win.
+
+   IT RELEASES THE HOLD. §45: a QR order reserves on submit, and a cancel that
+   left the reservation behind would take a drink off the shelf for nobody
+   until the sweep noticed. Same inventory call the admin and mini-app cancels
+   already make, with its own reason so the ledger says who did it.
+
+   NO POINTS, VOUCHERS OR BALANCE TO REVERSE, and that is a property of this
+   door rather than an omission: a QR order is placed with no customer_id, so
+   there is no account any of them could have come from. The customer-cancel
+   path in routes/retail.js reverses all three because its orders have one.
+
+   A FORM POST, so it answers with a redirect rather than JSON — the page it
+   came from has no script to read a body. */
+router.post('/s/:shopCode/order/:token/cancel', CANCEL_LIMIT, express.urlencoded({ extended: false, limit: '2kb' }), (req, res) => {
+  const code = String(req.params.shopCode || '');
+  if (!isShopCode(code)) return notFoundPage(req, res);
+  const shop = resolveShop(code);
+  if (!shop) return notFoundPage(req, res);
+
+  const token = String(req.params.token || '');
+  if (!/^[a-f0-9]{16,64}$/i.test(token)) return notFoundPage(req, res);
+
+  const order = tdb().prepare(
+    `SELECT id, status, store_id, shop_entry_method FROM retail_orders WHERE pay_token = ?`
+  ).get(token);
+  // Same 404 the pay page gives for an order that is not this shop's or did not
+  // come in by this door — this route must not confirm which guesses hit
+  // something real either.
+  if (!order || order.store_id !== shop.location_id || order.shop_entry_method !== 'qr') {
+    return notFoundPage(req, res);
+  }
+
+  const flipped = tdb().prepare(
+    `UPDATE retail_orders
+        SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP,
+            cancelled_reason = 'customer_cancelled_qr', updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND status = 'pending_payment'`
+  ).run(order.id);
+
+  if (flipped.changes) {
+    // The pending payment row goes with it, so the admin queue does not keep a
+    // stale 'pending' beside a cancelled order.
+    try {
+      tdb().prepare(
+        "UPDATE retail_payments SET status = 'cancelled' WHERE order_id = ? AND status = 'pending'"
+      ).run(order.id);
+    } catch (e) { console.error('[shop-menu/cancel payments]', e.message); }
+    try { inventory.releaseOrderReservations(order.id, { reason: 'customer_cancelled_qr' }); }
+    catch (e) { console.error('[shop-menu/cancel release]', e.message); }
+    // Ring the counter: the order has to come OFF the pending list as promptly
+    // as it went on, or a cashier calls a number nobody is waiting for.
+    try {
+      let tenantId = null;
+      try { tenantId = require('../lib/tenant-db').currentTenantId(); } catch (e) { tenantId = null; }
+      require('./shop-events').shopOrderPlaced(tenantId, shop.location_id);
+    } catch (e) { /* the till's poll is still the floor */ }
+  }
+
+  // Whether we won the race or not, the customer is sent back to their order
+  // page, which now states what actually happened to it. Losing the race means
+  // it was paid a second before they tapped, and the page says paid — which is
+  // the truth and is more use than an error about it.
+  res.redirect(303, `/s/${encodeURIComponent(code)}/pay/${encodeURIComponent(token)}`);
+});
 
 router.get('/s/:shopCode/pay/:token', async (req, res) => {
   const code = String(req.params.shopCode || '');
@@ -2101,8 +2307,47 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
   }
 
   if (order.status === 'paid') return payScreen(req, res, { status: 200, order, main: PAID_MAIN });
+  // A cancelled order still answers here rather than 404ing. The customer who
+  // just cancelled it lands on this page, and "the order does not exist" is the
+  // wrong thing to tell somebody about an order they placed ten minutes ago.
+  if (order.status === 'cancelled') return payScreen(req, res, { status: 200, order, main: CANCELLED_MAIN });
 
-  const counter = () => payScreen(req, res, { status: 200, order, main: COUNTER_MAIN });
+  /* CANCELLING, and why it is a <details> and a plain form rather than a
+     confirm() and a fetch.
+
+     A DESTRUCTIVE ACTION NEEDS A SECOND STEP, and the disclosure IS that step:
+     tapping "Cancel order" reveals the question and the button that answers it.
+     No JavaScript at all, so it works in every browser WeChat has ever shipped
+     and in the camera-app browsers §50 already has to cope with — and this page
+     is the one place a customer reaches when something has gone wrong, which is
+     the worst possible place for a control that needs a working script.
+
+     NOT confirm(). A browser dialog is the thing the till is asserted never to
+     open, and a customer surface should hold the same line.
+
+     Every string is a live pair from the mini app's own order screen
+     (miniapp/pages/order/order.js:99-101, 275-277) — the customer cancelling on
+     their phone in the app and the one cancelling on their phone at a table are
+     the same person doing the same thing (§30). */
+  const cancelBlock =
+    `<details class="cx">` +
+      `<summary>${bi('Cancel order', '取消订单')}</summary>` +
+      `<div class="cx-b">` +
+        `<div class="cx-q">${bi('Cancel this order?', '取消此订单?')}</div>` +
+        `<div class="cx-s">${bi('You can place a new one anytime.', '您可以随时重新下单。')}</div>` +
+        `<form method="post" action="/s/${esc(code)}/order/${esc(token)}/cancel">` +
+          `<button class="cx-go" type="submit">${bi('Cancel order', '取消订单')}</button>` +
+        `</form>` +
+      `</div>` +
+    `</details>`;
+
+  const counter = () => payScreen(req, res, {
+    status: 200, order, main: COUNTER_MAIN,
+    // Offered only while the order is still unpaid and still this shop's to
+    // cancel. Past that the money has moved or the kitchen has it, and the
+    // answer is a person at the counter rather than a button here.
+    extra: order.status === 'pending_payment' ? cancelBlock : '',
+  });
 
   // Anything other than an order still waiting for money — cancelled, refunded,
   // already in the kitchen — is not payable here. The till can always take it.

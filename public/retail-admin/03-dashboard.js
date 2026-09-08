@@ -282,6 +282,14 @@ const DASH_CARD_CAP = {
   // can only look at.
   reviews:  'reviews:moderate',
   feedback: 'feedback:moderate',
+  // The kitchen finished a warehouse request. Gated on the pair that RAISES
+  // these — the same audience routes/restock.js addresses the 'prepared' push
+  // to. Named explicitly rather than left out of this map, because an unknown
+  // key here means "always show": without the line, an operator who cannot open
+  // the ready list would be told about work waiting behind it. The server
+  // applies the identical gate (lib/kitchen-ready.js canSeeKitchenReady) — this
+  // one keeps the row off the screen, that one keeps the data off the wire.
+  kitchen_ready: ['restock:request', 'restock:pick'],
 };
 function dashCardWants(kind) {
   const cap = DASH_CARD_CAP[kind];
@@ -1330,6 +1338,27 @@ function dashOpenProductFromFeed(productId) {
 // lowest stock first. Reuses the Products page's own quick-filter (PA_STATUS
 // 'restock') instead of dumping the operator on the full catalogue. paLoad()
 // is async on first open, so poll briefly for the catalogue before applying.
+// "Ready from the kitchen" → the list that already exists, at /stock?go=ready.
+//
+// A SEPARATE DOCUMENT, DELIBERATELY, and the alternative was building a second
+// copy of this list inside the admin. The Quick Stock app already renders it,
+// the phone already opens exactly this URL from its own More row, and two
+// surfaces rendering one list is the drift this codebase works to keep out —
+// so the desktop opens the same screen rather than growing a twin of it.
+//
+// AND THE NAVIGATION IS THE POINT, not a side effect: /stock stamps `seen_at`
+// for the rows it draws, which is the only acknowledgement this direction has.
+// A row that merely stated the count with nowhere to go would never clear from
+// this dashboard at all — the fire would burn until somebody picked up a phone.
+//
+// Same tab, no window.open: a popup blocker eats the second kind, silently, and
+// the operator is left tapping a row that does nothing. /stock reads ?go= itself
+// and refuses one the operator was not answered for, so this link can never open
+// a screen a capability does not.
+function dashOpenKitchenReady() {
+  window.location.href = '/stock?go=ready';
+}
+
 function dashOpenRestock() {
   const btn = document.querySelector('.tabs [data-tab="products"]');
   if (btn) btn.click();   // activates Products + triggers paLoad() on first open
@@ -2504,6 +2533,11 @@ const TD_ATTN_ICON = {
   chat:  '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8a2 2 0 0 1 2 2v10l-4-3H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M12 6.5v3"/><path d="M12 12h.01"/></svg>',
   // A channel that has stopped taking stock updates — an unplugged connector.
   plug:  '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v5M15 2v5"/><path d="M6.5 7h11v4.5a5.5 5.5 0 0 1-11 0Z"/><path d="M12 17v4"/></svg>',
+  // Something the kitchen has finished. Lucide's `circle-check`, hand-inlined
+  // to the same geometry the phone's own "Ready from the kitchen" row draws
+  // (public/m.html MORE_GROUPS) — the fire and the door it opens wear the same
+  // mark, which is the rule the star/chat pair above already keeps.
+  check: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>',
 };
 
 // ── Running-low rolling window ─────────────────────────────────────────────
@@ -2812,6 +2846,36 @@ function tdAttnRender() {
       // how old the thread is.
       mins: tdOldestMins(fb.items),
       cta: cuT('Open feedback', '前往反馈'), go: 'dashOpenFeedback()',
+    });
+  }
+
+  // The kitchen finished what the warehouse asked for. warehouse→kitchen closes
+  // at 'prepared' — nothing travels, nothing is collected, the kitchen shelves
+  // what it makes and records the stock itself — so this row is NEWS, not a job.
+  //
+  // IT IS STILL AMBER AND IT STILL CARRIES A CLOCK, which is the whole reason it
+  // is worth putting here. Needs-you sorts severity first, then oldest first,
+  // and a fire with no age sorts LAST. On the Stockroom role the only other fire
+  // that ever appears is Restock needed, which has no clock by design — so a
+  // calm, clockless version of this row would sit permanently underneath the
+  // one thing the warehouse already knew. With an age it leads, every time,
+  // without anyone writing a rule to make it so. And "oldest 4h" is the fact
+  // that decides whether you walk over now or after lunch.
+  //
+  // Ages from `prepared_at` — how long the news has gone unread, not how old the
+  // request is. Reading it is what clears it: opening the list stamps `seen_at`
+  // server-side, so one person looking puts this row out for the whole warehouse
+  // and takes the dot off every other phone with it.
+  const kr = DASH_OPS.kitchen_ready || { count: 0, items: [] };
+  if (kr.count && dashCardWants('kitchen_ready')) {
+    fires.push({
+      sev: 'amber', icon: 'check',
+      // The list's own name, verbatim (public/m.html MORE_GROUPS, and the tile
+      // in public/stock.html) — the row and the screen it opens say the same
+      // words, which is the rule the Reviews row states above.
+      label: cuT('Ready from the kitchen', '厨房已完成'),
+      n: kr.count, mins: tdOldestMins(kr.items),
+      cta: cuT('View', '查看'), go: 'dashOpenKitchenReady()',
     });
   }
 

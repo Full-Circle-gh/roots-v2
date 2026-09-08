@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.152
+# Tacet shared-core consolidation — decisions record, v4.154
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-08 · v4.154 — **A QR ORDER CAN BE CANCELLED — BY THE CUSTOMER OR AT THE TILL — AND THE CUSTOMER STOPS LOSING IT WHEN THEY CLOSE THE SHEET. §44's "no login, no session, no cookie" IS NARROWED, NOT OVERTURNED — DECIDED by Ash, 2026-09-08.** Two reports from the counter on the day §44's till flow went live, and they turn out to be one problem: *"if a customer eventually doesnt want the order there should be an option to cancel it from his side or from till"*, and *"after customer placed the order, closed the pop up window where his order number by mistake. he has no way to see his order, order number or anything its all dissaper."* **THE SECOND IS THE PREREQUISITE FOR THE FIRST**, which is why they are ruled together: a customer who cannot get back to their order cannot cancel it either, and the cancel would have been a control only reachable on the one screen they had just lost. **THE ORDER ALREADY HAD A DURABLE PAGE AND NOBODY COULD FIND IT.** §50 gave every QR order a `pay_token` and a page at `/s/:shopCode/pay/:token`, and that page only ever said whether the order was paid. It now carries the number, the name, the amount and the way to cancel, and is the customer's order page rather than a payment screen — **one page for "what did I order", "has it been paid" and "I changed my mind"**, which is three problems answered by a route that already existed. **§44's STATELESSNESS IS NARROWED TO IDENTITY, WHICH IS WHAT IT WAS ALWAYS ABOUT.** The menu now writes ONE thing to the phone that placed the order: the address of that order, the number and the amount, under a per-shop key, expiring in twelve hours. **It is a receipt, not an identity** — it says nothing about who anybody is, it is written by the phone that placed the order and readable only by that phone, and the unguessable token was already the authority it hands back. **The basket is still not persisted and that rule is untouched**: a basket surviving a reload would be a stale order waiting to be submitted by accident, while a PLACED order is the opposite — it exists, and forgetting it is the defect. **The twelve hours are load-bearing rather than tidy**: `shop_order_code` restarts at 1 each trading day (§49), so a bar left up overnight would not merely be old, it would name an order that belongs to somebody else today. **THE TOKEN IS THE AUTHORITY FOR CANCELLING, because on this page there is nothing else it could be** — no login, no session, no account. A wrong token, a malformed one and the right token through another shop's code all 404, the same answer the pay page gives, so neither route confirms which guesses hit something real; a suite drives all three and asserts the order is untouched by each. **ONLY WHILE UNPAID, and the transition is guarded IN the UPDATE rather than around it** (`AND status = 'pending_payment'`), so a customer cancelling at the same moment a cashier takes the money loses the race cleanly instead of both appearing to win. **It releases the reservation** — §45 has a QR order reserving on submit, and a cancel that left the hold behind would take a drink off the shelf for nobody until the sweep noticed. **No points, vouchers or balance are reversed, and that is a property of this door rather than an omission**: a QR order is placed with no `customer_id`, so there is no account any of them could have come from. **THE CONTROL IS A DISCLOSURE AND A PLAIN FORM — NO SCRIPT AT ALL.** This is the page a customer reaches when something has gone wrong, which is the worst possible place for a control that needs a working script, and it must run in every browser WeChat has ever shipped and in the camera-app browsers §50 already copes with. **Rejected: `confirm()`** — a browser dialog is the thing the till is asserted never to open, and a customer surface holds the same line; the disclosure IS the second step. **AT THE TILL, cancelling goes through the admin's own status transition**, which already releases the reservation and is the path staff have always cancelled by — nothing new is written for a state the system understands. **AND A WORD COLLISION IS CLOSED: the control that BACKS OUT of a recalled order said "Cancel"**, beside a control that cancels the customer's order. The same word for opposite outcomes, and the destructive one is the one a cashier reaches for by habit; backing out now says Back. **NO CHINESE WAS COMPOSED.** Every string is a live pair from the mini app's own order screen, where a customer cancels exactly this — `Cancel order · 取消订单`, `Cancel this order? · 取消此订单?`, `You can place a new one anytime. · 您可以随时重新下单。` (`miniapp/pages/order/order.js:99-101, 275-277`) — plus `Cancelled · 已取消`, the admin's and the mini app's own label for this status. No entry in `docs/tacet-delivery-vocabulary.md` is owed. **ONE FALSE ASSERTION IS CORRECTED IN PASSING, and it matters more than the line it was on.** `test_shop_menu.js` held that a cancelled order's page still said `请到收银台付款。` — it passed, and it was measuring nothing: the basket script is inlined by `shell()` on every page and contains that string as a literal, so the assertion matched the SCRIPT and would have gone green for a page that rendered nothing at all. It is now scoped to the rendered block, which is what it always meant to say. Code, tests and docs; no schema, no migration.
+
+2026-09-08 · v4.153 — **THE WAREHOUSE IS TOLD THE KITCHEN HAS FINISHED ON THE DASHBOARD IT ALREADY READS, AS A ROW WITH A CLOCK ON IT — DECIDED by Ash, 2026-09-08**, from the warehouse account: *"there is no real proper notification right now that i will be able to see properly if i look on mobile or pc … that notification need to come on the dashboard direct."* **THE SIGNAL EXISTED AND WAS UNMISSABLE ONLY IN THE SENSE THAT IT COULD NOT BE SEEN.** §48 gave this direction a `seen_at` fact, a phone dot and a push, and all three are correct; what none of them is, is ON THE FRONT DOOR. The dot is 6px of Sage two taps inside More, the toast needs the app already open, the push is one moment on one handset — and on the DESKTOP there was nothing whatsoever: grepping `public/retail-admin/` for `kitchen-ready` returned zero, because the code had never been written for it. **Rejected: a widget of its own on the desktop dashboard**, which is what was asked for and is the wrong shape — a tenth polling path, a card empty most of the day, and a fix reaching the desktop only. **The ruling is one server key.** `kitchen_ready` joins `/api/retail-admin/dashboard/ops`, which the desktop dashboard and the phone's Home already poll on the same 60-second cycle and already render as *Needs you* — so one change lands the row at the top of BOTH, in the strip that is full width, structurally first, and cannot be dragged away or hidden. **THE ROW IS AMBER AND CARRIES AN AGE, and that is the decision, not the styling.** Needs-you sorts severity, then oldest-first, and a fire with NO age sorts last. On the Stockroom role the only other fire that ever appears is *Restock needed*, which has no clock by design ("15 out of stock" is a state, not a queue) — **so a calm, clockless version of this row would have sat permanently underneath the one thing the warehouse already knew.** With an age it leads, every time, with nobody writing a rule to make it so; and *oldest 4h* is the fact that decides whether you walk over now or after lunch. **Rejected: the calm treatment**, truer to "nothing needs doing" and losing the ordering that makes the row worth having. **THE COST IS NAMED: the row sits under a heading that says *Needs you* and strictly nothing needs doing** — the kitchen shelves what it makes and records the stock itself. Put to Ash beside the alternative; taken. **THE CLICK OPENS THE LIST THAT ALREADY EXISTS, at `/stock?go=ready`, and this is load-bearing rather than convenient: opening the list is the ONLY acknowledgement this direction has** (§48 — the read is a server-side `seen_at`, so one person looking puts the row out for the whole warehouse and takes the dot off every other phone). **Rejected: a row that states the count with nowhere to go** — it could never clear from the desktop at all, and would burn until somebody picked up a phone. **Rejected: building a second ready list inside the admin**, a twin of a screen the Quick Stock app already renders and the phone already opens; the desktop leaves the shell for it instead, and the price — the sidebar goes, you return with Back — was named and accepted. **ONE CLAUSE, NOT TWO.** The four conditions behind the count move to `lib/kitchen-ready.js` and are REQUIRED by both routes rather than retyped in the new one, on the rule the Reviews fire already keeps: a fire that disagrees with the queue it opens means one of the two is lying. A suite asserts both the sharing and the absence of any second copy, and both assertions were verified to fail when the clause is forked. **The two audience gates are applied on the SERVER as well as the client** — the maker is not told about their own output, and an operator who cannot open the list is never told about it — **as an honest zero and never a 403**, this being polled in the background where a refusal bounces a pocketed phone to the login screen. **NO CHINESE WAS COMPOSED.** Both strings are copied from locked live sources: `Ready from the kitchen · 厨房已完成` is the list's own name in `public/m.html` and `public/stock.html`, and `View · 查看` is live in `public/m.html` — so no entry in `docs/tacet-delivery-vocabulary.md` is owed. **THIS SESSION INDEPENDENTLY FOUND AND FIXED THE `m-probe` ENOBUFS TRIPWIRE AND THEN DROPPED ITS FIX**, v4.152's `18ac4ae` having landed the same one — same file, same 64 MiB, same reasoning — while this branch was in flight. **The duplicate is recorded rather than quietly discarded**: two sessions hitting one tripwire on one afternoon is the evidence that it was load-bearing, and v4.152's account of it (m.html crossing 1.01 MB, ~1.2 KB tipping it) is more precise than this one's and is the one to read. Code, tests and docs; no schema, no migration, no capability grant changes.
 
 2026-09-08 · v4.152 — **"ASK THE KITCHEN" GAINS A THIRD PURPOSE, `urgent`, AND IT SORTS THE QUEUE RATHER THAN ONLY COLOURING IT — DECIDED by Ash, 2026-09-08.** §65 records it. **It is a THIRD VALUE OF `purpose`, not a fourth column.** `restock_orders.purpose` is untyped TEXT with no CHECK constraint (`database.js` `addColumn`), so `'urgent'` needs no migration and no back-fill: every existing row keeps the value it has and the two old ones mean exactly what they meant. **Rejected: a separate `urgent` flag orthogonal to `order`/`shelf`**, which buys an urgent SHELF restock nobody has asked for at the price of a schema column, a second piece of request state and a second question on a screen whose whole virtue is that it asks one. **What makes it more than a label is `ORDER BY`.** The queue's only sort was `created_at DESC` — newest first — so an urgent request raised at 09:00 sat below a routine one raised at 09:05 and the kitchen had to notice a chip to find it. Urgent rows now sort ahead of everything else, `created_at DESC` still ordering within each group. **The sort key is `purpose = 'urgent'` and nothing else**, so a store→warehouse row (purpose NULL) is unaffected — this endpoint serves both directions and the change had to be inert for the one it is not about. **It is added in FOUR places because `purpose` is read in four**, and a value understood by three of them is worse than no value at all: the picker in Tacet Mobile, the same picker in `/stock` (which §48 retires but has not yet deleted), the kitchen queue's chip in both its list and its detail, and the printed slip in `lib/feie.js`. **The Chinese is composed, not lifted**, and is declared in `docs/tacet-delivery-vocabulary.md` v1.33 under the 2026-09-06 amendment, with the live pairs it was built from and the ones rejected.
 
@@ -5476,6 +5480,8 @@ The customer selects from that shop's listings, supplies a name, and submits. Th
 
 Payment is taken at the counter on the existing terminal and the order is then marked paid, as counter sales work today. In-page payment is deferred (see below).
 
+> **NARROWED 2026-09-08 (v4.154) — decided by Ash.** Two of this section's properties are qualified, and neither is reversed. **"No login, no session, no cookie and no account" is narrowed to IDENTITY**, which is what it was always about: the menu now writes the ADDRESS of the order just placed — with its number and amount — to the phone that placed it, under a per-shop key that expires in twelve hours. It says nothing about who anybody is, and the unguessable `pay_token` was already the authority it hands back. The basket is still never persisted, for the reason this section gives. **And the customer can now CANCEL while the order is unpaid**, from the order's own page (§50's `/s/:shopCode/pay/:token`, which is no longer a payment screen but the customer's order page) or at the till. Reserved stock is released on either path per §45. See the v4.154 entry.
+
 Phone number is not collected. Name is sufficient for calling an order in a space where the customer is present, and the short code identifies the order for staff. Collecting a phone number would add friction at the point of highest abandonment and bring personal-information obligations for no operational gain.
 
 A staff-accept step between submit and print is to be supported in the design but left switched off. It is the remedy if phantom orders prove to be a problem in practice.
@@ -6701,3 +6707,84 @@ A value that three readers understand and the fourth does not is worse than no v
 - **Urgency does not reach the store→warehouse direction.** Those rows carry no purpose and this change gives them none.
 - **Nothing is escalated over time.** An urgent request does not become more urgent, and a routine one does not become urgent by ageing. Both are questions about a policy nobody has stated.
 - **No new push.** An urgent request broadcasts on exactly the channel every kitchen request already broadcasts on; a separate alarm is a decision about who is woken up and is not this one.
+
+## §66 — THE WAREHOUSE IS TOLD ON THE DASHBOARD IT ALREADY READS, AND THE ROW CARRIES A CLOCK
+
+Decided by Ash, 2026-09-08, from the warehouse account: *"i have products that are ready from the kitchen, there is no
+real proper notification right now that i will be able to see properly if i look on mobile or pc … that notification
+need to come on the dashboard direct. maybe another widget for that? or maybe you have a better advice."*
+
+Put to him as two calls — how loud the row is, and where its click goes — with mockups of each option drawn in the
+product's own tokens, he chose the amber row with an age on it, opening the list that already exists.
+
+### What was already true, and why it was still missed
+
+§48 gave `warehouse→kitchen` a server-side `seen_at`, a dot on the phone and a push, and **all three are correct.** What
+none of them is, is on the front door:
+
+- the dot is 6px of Sage on **More**, two taps from Home, and deliberately never a count and never red;
+- the toast only lands if the app is already open;
+- the push is one moment on one handset — pocket, silent, or swiped off a lock screen;
+- **and on the desktop there was nothing at all.** Grepping `public/retail-admin/` for `kitchen-ready` returned zero
+  hits. This was never a permission or a setting: the code had not been written.
+
+### The ruling
+
+**One server key, two dashboards.** `kitchen_ready` joins `/api/retail-admin/dashboard/ops` — the snapshot the desktop
+dashboard and the phone's Home already poll on the same 60-second cycle, and already render as **Needs you**. The row
+therefore appears at the top of both, in the strip that is full width, structurally first, and cannot be dragged
+elsewhere or hidden.
+
+**Rejected: a widget of its own.** It is what was asked for, and it is the wrong shape — a tenth polling path, a card
+empty most of the day, and a fix that reaches the desktop only.
+
+**The row is amber and carries an age.** This is the decision, not the styling. Needs-you sorts severity, then
+oldest-first, and **a fire with no age sorts last.** On the Stockroom role the only other fire that ever appears is
+*Restock needed*, which has no clock by design — so a calm, clockless version of this row would sit permanently
+underneath the one thing the warehouse already knew. With an age it leads, every time, without anyone writing a rule to
+make it so.
+
+**Rejected: the calm treatment.** Truer to "nothing needs doing", and it loses the ordering that makes the row worth
+having.
+
+**The cost is named rather than discovered:** the row sits under a heading reading *Needs you* while strictly nothing
+needs doing — the kitchen shelves what it makes and records the stock itself. Offered beside the alternative; taken.
+
+### The click, which is load-bearing
+
+**It opens `/stock?go=ready` — the list the phone's own More row opens.** Not a convenience: **opening the list is the
+only acknowledgement this direction has.** The read is a server-side `seen_at` (§48), so one person looking clears the
+row for the whole warehouse and takes the dot off every other phone with it.
+
+- **Rejected: a row that states the count with no door.** It could never clear from the desktop at all — the fire would
+  burn until somebody picked up a phone — and every other row on that card opens something.
+- **Rejected: a second ready list built inside the admin.** A twin of a screen the Quick Stock app already renders and
+  the phone already opens. The desktop leaves the shell instead, and the price was named and accepted: the sidebar goes
+  while you read the list, and you come back with the browser's Back button.
+
+### One clause, not two
+
+The four conditions behind the count — kitchen direction, made, not archived, not yet read — move to
+`lib/kitchen-ready.js` and are **required by both routes rather than retyped in the new one.** A fire that disagrees
+with the queue it opens means one of the two is lying. `scripts/test_kitchen_ready_dashboard.js` asserts both that the
+shipped SQL carries the shared clause and that no second copy has grown back anywhere in the tree; both assertions were
+verified to fail when the clause is deliberately forked.
+
+**Both audience gates are applied on the server as well as the client** — the maker is not told about their own output,
+and an operator who cannot open the list is never told about it — **as an honest zero and never a 403.** This endpoint is
+polled in the background, where a refusal bounces a pocketed phone to the login screen.
+
+### No Chinese was composed
+
+Both strings are copied verbatim from locked live sources: `Ready from the kitchen · 厨房已完成` is the list's own name
+in `public/m.html` and `public/stock.html`, and `View · 查看` is live in `public/m.html`. The age renders through the
+existing bilingual age helpers. **No entry in `docs/tacet-delivery-vocabulary.md` is owed for this change.**
+
+### Recorded, and deliberately NOT fixed here
+
+1. **THE PHONE'S HOME AND THE DESKTOP GATE THEIR FIRES DIFFERENTLY.** `tdAttnRender` runs every row through
+   `dashCardWants()`; `opsFires()` on the phone gates only some of them, so a role without `orders:refund` can still be
+   shown *Refunds waiting* on Home. The new row is gated on both surfaces. The pre-existing divergence is named so the
+   next reader does not take this row's gate as evidence the others have one.
+2. **THE DESKTOP HAS NO READY LIST OF ITS OWN**, by the ruling above. If that is ever revisited, the thing to preserve
+   is that `seen_at` is stamped by whatever screen actually shows the rows — not by the dashboard row being clicked.
