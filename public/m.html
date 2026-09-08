@@ -13432,6 +13432,58 @@ function payNoteOf(r){
    no tracking state, no courier, no missing-waybill warning, and no urgency, so
    `byAmber` was a field that existed and was never once true. */
 const _sched=v=>{ const d=_date(v); return d&&!isNaN(d)?d:null; };
+const _pad2=n=>(n<10?'0':'')+n;
+/* A scheduled time WINDOW stores scheduled_for at the window START, but the
+   order is not late until the window CLOSES. Anchoring urgency on the start is
+   what made a 10:00–12:00 order read 已逾期 at 10:07 on the phone while the
+   desktop, which anchors on the end, read the same order right. The end lives
+   ONLY in the customer's free-text label, so parse it out and rebuild it on the
+   same shop day. Ported from parseSlotEnd/slotEndAnchor in
+   retail-admin/04-orders.js — keep the three in step.
+
+   One deliberate difference from the desktop: it pins the wall-clock to
+   Guangzhou (+8) by hand, and this file already reads whatever zone the account
+   says (TD_TZ), so the rebuild goes through tdFromShopLocal instead of a
+   hardcoded offset — the same reason shipByUrgency below uses shopTodayDate. */
+function _slotEnd(start,label){
+  if(!start||isNaN(start.getTime())||typeof tdFromShopLocal!=='function') return null;
+  const day=shopDayOf(start); if(!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+  const lbl=String(label==null?'':label);
+  let endH=null,endM=0;
+  const m=/(\d{1,2}):(\d{2})\s*(?:[-–—~]|to|至)\s*(\d{1,2}):(\d{2})/.exec(lbl);
+  if(m){ endH=Number(m[3]); endM=Number(m[4]); }
+  else{
+    /* An AM/PM window without colons ("10AM–12PM", "10:30 AM - 12 PM") misses
+       the HH:MM shape above; without this branch it anchors on the start and
+       reads overdue minutes into the window, exactly as HH:MM did. */
+    const ap=/(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(?:[-–—~]|to|至)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i.exec(lbl);
+    if(ap){ endH=Number(ap[4]); endM=Number(ap[5]||0);
+      const mer=ap[6].toLowerCase();
+      if(mer==='pm'&&endH<12) endH+=12; else if(mer==='am'&&endH===12) endH=0; }
+  }
+  if(endH==null||!(endH<=23)||!(endM<=59)) return null;
+  const end=tdFromShopLocal(day+'T'+_pad2(endH)+':'+_pad2(endM));
+  /* A window that ends before it starts is a label we have misread (a slot that
+     crosses midnight, say) — fall back rather than move the deadline earlier. */
+  return end&&end.getTime()>=start.getTime()?end:null;
+}
+function _slotEndAnchor(scheduledFor,label){
+  const start=_sched(scheduledFor); if(!start) return scheduledFor;
+  const end=_slotEnd(start,label);
+  if(end) return end.toISOString();
+  /* No usable window. A DAY-ONLY pick — the same-day chip or a calendar date —
+     is stored at shop MIDNIGHT (the server's "a day, no hour" sentinel), and
+     anchoring on that midnight makes the order read overdue from 00:00 on its
+     OWN delivery day. Collapse it to a bare shop date so urgency compares whole
+     calendar days below instead of treating 00:00 as a missed deadline. A
+     genuinely timed slot isn't midnight, so it stays hour-precise. */
+  const day=shopDayOf(start);
+  if(/^\d{4}-\d{2}-\d{2}$/.test(day)&&typeof tdFromShopLocal==='function'){
+    const mid=tdFromShopLocal(day+'T00:00');
+    if(mid&&mid.getTime()===start.getTime()) return day;
+  }
+  return scheduledFor;
+}
 /* shipByPlan, reduced: the same five kinds and the same urgency anchors. The
    desktop's label prettifiers (humanizeSlotLabel / slotWindowText) are not
    ported — the stored label is used as-is — so a row can read slightly more
@@ -13441,7 +13493,9 @@ function shipByPlan(r){
   if(r.fulfillment_type==='counter') return null;
   if(r.fulfillment_type==='pickup') return {kind:'pickup',
     label:r.delivery_slot_label||T('During pickup hours','营业时间内自取'),
-    sub:T('pickup','自提'), when:r.scheduled_for||null, basis:'arrival', done};
+    sub:T('pickup','自提'),
+    when:r.scheduled_for?_slotEndAnchor(r.scheduled_for,r.delivery_slot_label):null,
+    basis:'arrival', done};
   if(r.promised_ship_date){
     const ship=fmtDateOnly(r.promised_ship_date), arr=r.promised_delivery_date?fmtDateOnly(r.promised_delivery_date):'';
     return {kind:'batch', label:arr||ship,
@@ -13458,7 +13512,8 @@ function shipByPlan(r){
     return {kind:'asap',label:T('Ship when ready','备好即发'),sub:T('courier','快递'),when:r.placed_at||null,basis:'age',done};
   }
   return {kind:'scheduled', label:r.delivery_slot_label||fmtDay(r.scheduled_for),
-    sub:'', when:r.scheduled_for, basis:'arrival', done};
+    sub:'', when:_slotEndAnchor(r.scheduled_for,r.delivery_slot_label),
+    basis:'arrival', done};
 }
 /* shipByUrgency, ported thresholds and all — including the rule that "today" is
    the STORE's today, not the browser's, so an operator abroad does not read

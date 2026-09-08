@@ -285,6 +285,71 @@ button{font:inherit;color:inherit;margin:0}
   grid-column:1/-1;padding:32px;text-align:center;color:var(--td-text2);font-size:14px;
 }
 
+/* ---- the two faces of the entry side --------------------------------------
+   A shop taking QR orders has two jobs at one counter: ring up the walk-in in
+   front of you, and settle the order somebody placed on their phone two minutes
+   ago. They need the same space — the grid and the list are both the full pane
+   — so they take turns rather than splitting it.
+
+   THE SWITCH IS ABSENT, NOT DISABLED, WHEN NOTHING IS WAITING. A shop with no
+   QR orders (or no shop record at all) sees the till exactly as it shipped: no
+   control, no empty list, no word for "nothing here" to translate. That also
+   makes the count the ONLY thing the switch ever says, so a badge on screen
+   always means there is something behind it.
+
+   The rail was considered and rejected: under 700px it is a bottom sheet behind
+   a tap, and a list the counter works from cannot live one gesture away. */
+.pane{flex:1;min-height:0;display:flex;flex-direction:column;gap:12px}
+/* An author `display` beats the UA's [hidden], so without this the pane that is
+   supposed to be down renders on top of the one that is up. */
+.pane[hidden]{display:none}
+.seg{display:flex;gap:8px;flex:none}
+.seg[hidden]{display:none}
+.sbtn{
+  height:44px;padding:0 16px;display:inline-flex;align-items:center;gap:8px;
+  border-radius:var(--r-control);border:1px solid var(--td-border);
+  background:var(--td-surface);color:var(--td-text2);font-size:14px;font-weight:500;
+  white-space:nowrap;
+}
+.sbtn.on{background:var(--td-dusk);border-color:var(--td-dusk);color:#fff}
+.sbtn .b{
+  min-width:22px;height:22px;padding:0 7px;border-radius:999px;
+  background:var(--td-dusk);color:#fff;font-size:12px;font-weight:500;
+  font-variant-numeric:tabular-nums;
+  display:inline-flex;align-items:center;justify-content:center;
+}
+.sbtn.on .b{background:rgba(255,255,255,.26)}
+
+/* ---- one waiting order ----
+   The number is the whole of the retrieval: the customer says it or holds it
+   up, and the cashier's eye has to find it in a list without reading. So it
+   gets the same treatment the customer's own screen gives it — the biggest
+   thing on the row, in its own block, ahead of everything else. */
+.plist{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  display:flex;flex-direction:column;gap:8px;align-content:start}
+.wrow{
+  flex:none;display:flex;align-items:center;gap:14px;padding:10px 14px;min-height:64px;
+  border-radius:var(--r-card);border:1px solid var(--td-border);
+  background:var(--td-surface);text-align:left;width:100%;
+}
+.wrow:active{background:var(--td-raised)}
+.wrow .n{
+  min-width:52px;height:44px;padding:0 10px;flex:none;border-radius:var(--r-control);
+  background:var(--td-dusk-tint);color:var(--td-dusk);
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;font-weight:500;font-variant-numeric:tabular-nums;
+}
+.wrow .who{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.wrow .who b{
+  font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+/* The meta line carries the time, and the DATE too on any row not from the same
+   trading day as the newest — §49 requires the short code be read with its shop
+   and its date, and two days' unpaid orders in one list is exactly where two
+   14s could otherwise sit together. */
+.wrow .who i{font-style:normal;font-size:12px;color:var(--td-text2);font-variant-numeric:tabular-nums}
+.wrow .amt{flex:none;font-size:16px;font-variant-numeric:tabular-nums}
+
 /* ---- right: the order ---- */
 .t-order{
   width:380px;flex:none;background:var(--td-surface);
@@ -678,13 +743,20 @@ button{font:inherit;color:inherit;margin:0}
   </div>
   <div class="t-body">
     <div class="t-entry">
-      <div class="srch">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>
-        <input id="q" type="search" autocomplete="off" autocorrect="off" spellcheck="false">
-        <button class="clr" id="q-clr" type="button" hidden aria-label="clear">&times;</button>
+      <!-- The two faces of the entry side. The switch is EMPTY, and the pane
+           below it is the menu, whenever nothing is waiting to be paid — a
+           shop with no QR orders sees exactly the till that shipped. -->
+      <div class="seg" id="seg" hidden></div>
+      <div class="pane" id="pane-menu">
+        <div class="srch">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>
+          <input id="q" type="search" autocomplete="off" autocorrect="off" spellcheck="false">
+          <button class="clr" id="q-clr" type="button" hidden aria-label="clear">&times;</button>
+        </div>
+        <div class="cats" id="cats"></div>
+        <div class="grid" id="grid"></div>
       </div>
-      <div class="cats" id="cats"></div>
-      <div class="grid" id="grid"></div>
+      <div class="pane" id="pane-pend" hidden></div>
     </div>
     <div class="t-order">
       <div class="sheet-grab"></div>
@@ -755,6 +827,17 @@ button{font:inherit;color:inherit;margin:0}
     leaveSale:    ['Leave without saving?', '未保存就离开?'], // admin: 18-materials.js:417
     leave:        ['Leave', '离开'],                   // admin: 18-materials.js:419
     // entry
+    // The two faces of the entry side. `counterSale` above already names the
+    // walk-in half — it is this screen's own title and the word the sale is
+    // recorded under — so the switch reuses it rather than minting a second
+    // word for the same thing.
+    //
+    // `pending` is the status label the admin already prints for exactly this
+    // state, quoted whole from the pending_payment row of the dashboard's own
+    // status map. These ARE pending_payment orders, so the word is not an
+    // approximation of one — it is the same label the same rows carry
+    // everywhere else in the product.
+    pending:      ['Pending', '待付款'],               // admin: 03-dashboard.js:3419
     searchAdd:    ['Search a product to add…', '搜索商品以添加…'], // admin: 04-orders/products picker
     all:          ['All', '全部'],                     // admin: i18n EN_ONLY_MAP
     outOfStock:   ['Out of stock', '缺货'],            // admin: products grid
@@ -836,6 +919,13 @@ button{font:inherit;color:inherit;margin:0}
       // What this mode contributes to POST /orders. The chosen wallet IS the
       // payment_method; nothing else differs from any other counter sale.
       payload: function (st) { return { payment_method: st.wallet }; },
+      // The same fact for an order that ALREADY EXISTS — a QR order recalled
+      // from the pending list. Different endpoint, different field name:
+      // POST /orders creates a row and calls the tender `payment_method`;
+      // PATCH /orders/:id/status settles one and calls it `pay_method`. The
+      // wallet the cashier tapped is identical, so the vocabulary difference
+      // lives here, in the mode, rather than being remembered at the call site.
+      recallPayload: function (st) { return { status: 'paid', pay_method: st.wallet }; },
       // Ready to confirm? The wallet is REQUIRED — without it the sale records
       // as generic 'offline' and cannot be reconciled against the terminal's
       // daily statement, which is the one thing this screen exists to prevent.
@@ -853,6 +943,33 @@ button{font:inherit;color:inherit;margin:0}
     lines: [], sel: null,
     customer: null, custBusy: false,
     view: 'till',              // till | settle | done
+    /* The QR orders waiting to be paid at THIS shop, and which face of the
+       entry side is up.
+
+       `pend` is null until the first read comes back, which is what stops the
+       switch flickering into existence on a slow first paint and then out
+       again. [] means the read succeeded and nothing is waiting.
+
+       `pane` is only ever set from two places: the auto-default (below) and the
+       cashier's own tap. It is deliberately NOT re-defaulted when orders
+       arrive — yanking the pane out from under someone mid-basket to show them
+       a list is worse than a badge they can ignore.
+
+       SWITCHING SHOP DROPS THIS BACK TO null, not to []. The switch then stays
+       absent until the new shop's own list lands, where [] would have asserted
+       "this counter has nothing waiting" on the strength of the last one's
+       read — and a counter that says nothing is waiting when something is is
+       the one wrong answer this list must never give. */
+    pend: null, pane: 'menu', pendTimer: null,
+    // Has the cashier picked a pane since the last sale ended? Their choice
+    // outranks the default until reset() clears it.
+    paneTouched: false,
+    /* The recalled order, or null when the settle screen is closing a basket
+       this till built. It carries the server's own total: a QR order was priced
+       and taxed when it was placed, and re-deriving that here from lines the
+       till never saw is how the counter ends up asking for a different number
+       than the customer's screen showed. */
+    recall: null,
     home: null, homeLabel: null,  // where Back goes, and what it says — /api/backend/me
     leaveOpen: false,          // is the "leave without saving?" question up?
     mode: 'manual',
@@ -1056,6 +1173,7 @@ button{font:inherit;color:inherit;margin:0}
         $('boot').hidden = true; $('app').hidden = false;
         wire();
         render();
+        startPendPoll();
       })
       .catch(function (e) {
         if (e && e.auth) {
@@ -1117,6 +1235,30 @@ button{font:inherit;color:inherit;margin:0}
   // own fail-open rule in retail.js posClosedForStore.
   function storeOpen(st) { return !S.posOpen || S.posOpen[st.code] !== false; }
 
+  /* The list has to arrive by itself. A customer orders on their phone while
+     the cashier is looking at the screen, and nothing about that reaches this
+     tablet unless it asks — there is no push channel here and a counter is not
+     a place anyone thinks to pull-to-refresh.
+
+     FIFTEEN SECONDS, which is the walk from a table to the till. Slower and the
+     customer beats their own order to the counter; faster buys nothing, because
+     the order was placed before they stood up.
+
+     PAUSED WHILE THE TILL IS NOT THE VIEW. Repainting a list underneath the
+     settle takeover cannot help anyone and can only renumber the badge behind a
+     screen whose whole point is that nothing of the till stays readable. The
+     tab being hidden stops it too: a till left asleep on a counter overnight
+     should not spend the night polling. */
+  function startPendPoll() {
+    loadPend();
+    if (S.pendTimer) clearInterval(S.pendTimer);
+    S.pendTimer = setInterval(function () {
+      if (S.view !== 'till') return;
+      if (document.hidden) return;
+      loadPend();
+    }, 15000);
+  }
+
   function switchStore(id) {
     var st = S.stores.filter(function (x) { return String(x.id) === String(id); })[0];
     S.pickOpen = false;
@@ -1126,7 +1268,10 @@ button{font:inherit;color:inherit;margin:0}
     if (!st || String(st.id) === String(S.storeId)) return render();
     setStore(st);
     S.stock = {}; S.products = []; S.cats = []; S.cat = ''; S.q = '';
+    // Another shop's queue, and its numbers restart at 1 just the same.
+    S.pend = null; S.pane = 'menu'; S.paneTouched = false; S.recall = null;
     render();
+    loadPend();
     loadCatalogue().then(render).catch(function () { render(); });
   }
 
@@ -1195,6 +1340,13 @@ button{font:inherit;color:inherit;margin:0}
     var qi = $('q');
     qi.placeholder = T('searchAdd');
     $('q-clr').hidden = !S.q;
+    normalisePane();
+    renderSeg(); renderPend();
+    // One pane at a time, both full height. `hidden` rather than a class so the
+    // pane that is down is out of the tab order too — a cashier tabbing through
+    // the till must not land in a product grid nobody can see.
+    $('pane-menu').hidden = S.pane !== 'menu';
+    $('pane-pend').hidden = S.pane !== 'pend';
     renderCats(); renderGrid(); renderCust(); renderLines(); renderFoot();
     // The sheet belongs to the till view only. Leaving it open behind the
     // settle takeover would put a scrim and a second pay button under a screen
@@ -1249,6 +1401,130 @@ button{font:inherit;color:inherit;margin:0}
     });
     $('grid').innerHTML = h;
   }
+
+  /* ---- QR orders waiting to be paid ------------------------------------
+     THE NUMBER IS THE WHOLE RETRIEVAL MECHANISM. lib/shop-order-code.js hands
+     each QR order a plain number that restarts every trading day, for exactly
+     this: the customer holds up "12" and the cashier finds 12. No scan, no
+     typing, no second device on the counter. */
+
+  // Three narrowings, each load-bearing. `status` keeps the list to what is
+  // actually owed; `store_id` keeps one shop's numbers out of another's, since
+  // two shops both call 14 on the same afternoon; `shop_entry_method` keeps a
+  // till sale that was abandoned mid-settle out of a list the cashier is meant
+  // to be able to trust — without it the counter is shown its own half-finished
+  // basket as though a customer were standing behind it.
+  function pendUrl() {
+    return '/api/retail-admin/orders?status=pending_payment&channel=shop'
+         + '&shop_entry_method=qr&store_id=' + encodeURIComponent(S.storeId) + '&limit=50';
+  }
+
+  // A FAILED READ CHANGES NOTHING ON SCREEN, deliberately. This runs on a
+  // fifteen-second timer, so a read that blanked the counter's list on a blip
+  // would be a worse failure than the blip — the last good answer stays up and
+  // the next tick tries again.
+  //
+  // AND IT REPORTS NOTHING, which is the part worth defending. The failure that
+  // matters here is an expired session, and it does not stay quiet: the cashier
+  // taps an order, confirms, and confirmRecall says "sign in on the backend" on
+  // the screen where they were about to take money. Saying it here as well would
+  // put an error in a pane behind a switch that may not even be drawn, and would
+  // need a sentence for "the list could not be read" that no locked pair covers.
+  function loadPend() {
+    if (!S.storeId) return;
+    api(pendUrl()).then(function (j) {
+      if (!j || !j.success) return;
+      // shop_order_code is null on anything that did not arrive by QR. The
+      // server filter already excludes those; this is the belt to its braces,
+      // because a row with no number cannot be found by the one thing the
+      // customer knows.
+      S.pend = (j.data || []).filter(function (o) { return o.shop_order_code != null; });
+      autoPane();
+      render();
+    }).catch(function () { /* keep the last good list; the next tick retries */ });
+  }
+
+  // "Default to Pending when something is waiting, Menu when nothing is."
+  // A DEFAULT, which is why it stops at the first sign of work in progress:
+  // once the cashier has chosen a pane it is theirs until the sale ends, and a
+  // basket with lines in it is never taken off the screen. Orders arriving
+  // announce themselves with the badge instead — a count they can ignore beats
+  // a pane that moves under their hands.
+  function autoPane() {
+    if (S.paneTouched || S.view !== 'till' || S.lines.length) return;
+    S.pane = (S.pend && S.pend.length) ? 'pend' : 'menu';
+  }
+
+  // An empty list has no pane to be on. Runs before the panes are drawn so the
+  // switch and the body can never disagree about which face is up.
+  function normalisePane() {
+    if (S.pane === 'pend' && !(S.pend && S.pend.length)) S.pane = 'menu';
+  }
+
+  function renderSeg() {
+    var n = (S.pend && S.pend.length) || 0;
+    var el = $('seg');
+    el.hidden = n === 0;
+    if (!n) { el.innerHTML = ''; return; }
+    el.innerHTML =
+      '<button class="sbtn' + (S.pane === 'menu' ? ' on' : '') + '" type="button" data-pane="menu">'
+    +   esc(T('counterSale')) + '</button>'
+    + '<button class="sbtn' + (S.pane === 'pend' ? ' on' : '') + '" type="button" data-pane="pend">'
+    +   esc(T('pending')) + '<span class="b">' + n + '</span></button>';
+  }
+
+  function renderPend() {
+    var el = $('pane-pend');
+    if (!S.pend || !S.pend.length) { el.innerHTML = ''; return; }
+    // Newest first, as the list arrives. The newest row's trading day is this
+    // list's "today"; any row from another day carries its date, because §49
+    // requires the short code be read with its shop and its date and this is
+    // the one place two 14s could otherwise sit next to each other. The shop
+    // half of that pair is the store this till is locked to.
+    //
+    // NO CLOCK TIME. placed_at is stored UTC and the shop is not, so a time
+    // rendered from it here would be wrong by the offset — and a wrong time at
+    // a counter is worse than none. shop_order_date is the LOCATION's own
+    // trading day (lib/business-date.js) and is the only date safe to print.
+    var top = S.pend[0].shop_order_date || '';
+    var h = '<div class="plist">';
+    S.pend.forEach(function (o) {
+      var d = o.shop_order_date || '';
+      var meta = (d && d !== top) ? d : '';
+      h += '<button class="wrow" type="button" data-recall="' + o.id + '">'
+         + '<span class="n">' + esc(String(o.shop_order_code)) + '</span>'
+         + '<span class="who"><b>' + esc(o.recipient_name || '') + '</b>'
+         + (meta ? '<i>' + esc(meta) + '</i>' : '') + '</span>'
+         + '<span class="amt">' + money(o.total) + '</span>'
+         + '</button>';
+    });
+    el.innerHTML = h + '</div>';
+  }
+
+  // Opening one. A recalled order REPLACES the basket rather than joining it:
+  // this screen settles one thing, and a till that could ring up a walk-in and
+  // a QR order under a single tender would record one payment against two
+  // orders and reconcile against neither.
+  function recall(id) {
+    var o = null, i;
+    for (i = 0; i < (S.pend || []).length; i++) if (S.pend[i].id === id) o = S.pend[i];
+    if (!o) return;
+    S.lines = []; S.sel = null; S.customer = null;
+    S.recall = {
+      id: o.id, order_no: o.order_no, code: o.shop_order_code,
+      name: o.recipient_name || '', total: Number(o.total) || 0
+    };
+    S.wallet = null; S.moreOpen = false; S.err = '';
+    S.view = 'settle';
+    render();
+  }
+
+  // What the settle screen owes. A recalled order states the SERVER's total —
+  // it was priced and taxed when the customer placed it — and a basket derives
+  // its own. Re-deriving a QR order's total here from lines this till never saw
+  // is how the counter ends up asking for a different number than the one on
+  // the customer's screen.
+  function settleDue() { return S.recall ? S.recall.total : dueNow(subtotal()); }
 
   // Walk-ins are anonymous. Attaching a customer is optional and never blocks
   // the sale; when one is attached the row shows the two things that change
@@ -1377,7 +1653,15 @@ button{font:inherit;color:inherit;margin:0}
     // machine will take (audit I-03) — the tax-inclusive amount, with the tax
     // named under it so the cashier can answer "what's the extra?" without
     // going back.
-    var due = dueNow(sub);
+    var due = settleDue();
+    // The subline is the cashier's check that they opened the right row. For a
+    // recalled QR order it repeats the number the customer is holding up and the
+    // name they gave — the only two things the customer can themselves verify.
+    // A basket names the sale instead and shows the tax split; a recalled
+    // order's tax was settled when it was placed and is not re-derived here.
+    var subline = S.recall
+      ? esc(String(S.recall.code) + (S.recall.name ? ' · ' + S.recall.name : ''))
+      : esc(T('counterSale')) + (S.tax ? ' · ' + esc(S.tax.label) + ' ' + money(taxOn(sub)) : '');
     var lead = WALLETS.filter(function (w) { return w.lead; });
     var rest = WALLETS.filter(function (w) { return !w.lead; });
     var walletBtn = function (w) {
@@ -1391,8 +1675,13 @@ button{font:inherit;color:inherit;margin:0}
       + '<div class="smain">'
       +   '<div class="samt"><div class="lb">' + esc(T('amount')) + '</div>'
       +     '<div class="amt">' + money(due) + '</div>'
-      +     '<div class="sb">' + esc(T('counterSale'))
-      +       (S.tax ? ' · ' + esc(S.tax.label) + ' ' + money(taxOn(sub)) : '') + '</div></div>'
+      // The subline is the cashier's check that they opened the right row: for
+      // a recalled QR order it repeats the number the customer is holding up
+      // and the name they gave, which are the only two things the customer can
+      // themselves verify. A basket names the sale instead, and shows the tax
+      // split — a recalled order's tax was settled when it was placed and is
+      // not re-derived here.
+      +     '<div class="sb">' + subline + '</div></div>'
       +   '<div class="spick"><div class="lb">' + esc(T('payMethod')) + '</div>'
       +     lead.map(walletBtn).join('')
       +     (S.moreOpen ? rest.map(walletBtn).join('')
@@ -1409,7 +1698,10 @@ button{font:inherit;color:inherit;margin:0}
 
   function canConfirm() {
     var m = SETTLE_MODES[S.mode];
-    return !S.busy && S.lines.length > 0 && m && m.ready(S);
+    // A recalled order has no lines on this till and never will — it is settled,
+    // not built — so "there is something to charge for" is the recall OR a
+    // basket, never the basket alone.
+    return !S.busy && (!!S.recall || S.lines.length > 0) && m && m.ready(S);
   }
 
   function doneHtml() {
@@ -1468,8 +1760,9 @@ button{font:inherit;color:inherit;margin:0}
   // leaves nothing behind to reconcile.
   function confirm() {
     if (!canConfirm()) return;
-    S.busy = true; S.err = ''; render();
     var mode = SETTLE_MODES[S.mode];
+    if (S.recall) return confirmRecall(mode);
+    S.busy = true; S.err = ''; render();
     var body = Object.assign({
       fulfillment_type: 'counter',
       store_id: S.storeId,
@@ -1517,12 +1810,59 @@ button{font:inherit;color:inherit;margin:0}
     });
   }
 
+  /* Settling an order that ALREADY EXISTS — the QR order the customer placed on
+     their phone. PATCH, never POST: the row was created when they submitted,
+     the money is the only thing about it that has changed, and creating a
+     second order here would charge one customer twice, print two tickets and
+     leave a phantom on the shop's day.
+
+     THE KITCHEN TICKET COMES FROM THIS TRANSITION. markOrderPaid fires
+     autoPrintOrder on the paid transition, and a QR order now reaches it having
+     never printed — routes/shop-menu.js stopped printing on submit on
+     2026-09-08 — so the slip appears when the money lands, which is the whole
+     point of settling here rather than in the admin.
+
+     ONE REQUEST, and the wallet rides on it: the same tap that says "paid" says
+     which wallet took it, so an order cannot reach 'paid' with no tender and
+     become the unreconcilable row the settle screen exists to prevent. */
+  function confirmRecall(mode) {
+    var r = S.recall;
+    S.busy = true; S.err = ''; render();
+    api('/api/retail-admin/orders/' + r.id + '/status', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(mode.recallPayload(S))
+    }).then(function (j) {
+      S.busy = false;
+      if (!j || !j.success) { S.err = T('didNotSave'); render(); return; }
+      S.done = { id: r.id, order_no: r.order_no, total: r.total, wallet: S.wallet };
+      S.view = 'done'; S.printState = 'idle';
+      // It is not waiting any more. Dropped locally so the count is right the
+      // instant the screen changes rather than up to fifteen seconds later —
+      // a cashier who settles 12 and still sees 12 in the list will settle it
+      // twice.
+      S.pend = (S.pend || []).filter(function (o) { return o.id !== r.id; });
+      S.recall = null;
+      render();
+    }).catch(function (e) {
+      S.busy = false;
+      S.err = e && e.auth ? cuT('Sign in on the backend, then reload this page.', '请先在后台登录,然后刷新此页面。')
+                          : T('didNotSave');
+      render();
+    });
+  }
+
   function reset() {
     S.lines = []; S.sel = null; S.customer = null;
     S.wallet = null; S.moreOpen = false; S.err = ''; S.done = null;
     S.view = 'till'; S.printState = 'idle';
     S.q = ''; $('q').value = '';
+    // The sale is over, so the pane goes back to being defaulted rather than
+    // chosen — the next customer decides which face the till should show, not
+    // the last one. Re-read rather than trusting the local drop: another till
+    // at the same counter may have settled something while this one was busy.
+    S.recall = null; S.paneTouched = false;
     render();
+    loadPend();
   }
 
   // Reprint. Printing already happened automatically when the sale settled, so
@@ -1652,8 +1992,14 @@ button{font:inherit;color:inherit;margin:0}
       // Tapping away from the leave question is staying, the same dismissal the
       // store picker takes — and the safe answer is the one a stray tap gives.
       if (S.leaveOpen && ev.target.id === 'leavepick') { S.leaveOpen = false; return render(); }
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave]');
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall]');
       if (!t) return;
+      // Choosing a pane. The flag is what stops the next poll from defaulting
+      // the cashier back off the face they just asked for.
+      if (t.hasAttribute('data-pane')) {
+        S.pane = t.getAttribute('data-pane'); S.paneTouched = true; return render();
+      }
+      if (t.hasAttribute('data-recall')) return recall(Number(t.getAttribute('data-recall')));
       // THE WAY BACK. An empty till leaves on the tap; a basket with lines in it
       // is a sale in progress that nothing has saved yet, so it asks first — in
       // the page, the way every other decision on this screen is made.

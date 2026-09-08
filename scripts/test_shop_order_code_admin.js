@@ -121,6 +121,31 @@ const oneStart = RETAIL_JS.indexOf("router.get('/api/retail-admin/orders/:id'");
 yes(/SELECT o\.\*/.test(RETAIL_JS.slice(oneStart, oneStart + 600)),
   'the drawer endpoint still selects o.*, which is why it needed no edit');
 
+section('The list can be narrowed to the door an order came in by');
+// Added 2026-09-08 with the till's pending list. That list asks for exactly
+// "unpaid QR orders at this shop": status + store_id already existed, and the
+// DOOR did not — §44 forbids splitting a shop's revenue across two channel
+// lines, so `channel` cannot carry the distinction and shop_entry_method has to
+// be filterable instead. Without it the counter is also shown its own till
+// sales abandoned mid-settle, as though a customer were standing behind them.
+// Sliced to the function's REAL extent — from its declaration to the next one
+// at column 0 — rather than to a byte window. buildOrderFilter is long and
+// grows, and a window would either miss the clause or reach past the function
+// into whatever follows it; the first makes this go red for no reason and the
+// second makes it go green for the wrong one.
+const filtStart = RETAIL_JS.indexOf('function buildOrderFilter');
+yes(filtStart > 0, 'buildOrderFilter is still where the list narrows');
+const filtNext = RETAIL_JS.indexOf('\nfunction ', filtStart + 1);
+const filtSrc = RETAIL_JS.slice(filtStart, filtNext > 0 ? filtNext : filtStart + 8000);
+yes(/o\.shop_entry_method = \?/.test(filtSrc),
+  'the list can be narrowed by shop_entry_method');
+// Validated against the vocabulary rather than interpolated. An unknown value
+// must narrow to NOTHING rather than being ignored — a filter that silently
+// widens on a typo would hand the counter every order in the shop.
+yes(/SHOP_ENTRY_METHODS\.includes\(/.test(filtSrc),
+  'the door is checked against SHOP_ENTRY_METHODS before it reaches SQL',
+  'an unvalidated value would either widen the list or reach the query');
+
 section('The chip has a style, and the number is never shown alone (§49)');
 yes(/\.ord-shopno\s*\{/.test(CSS), 'retail-admin.css styles .ord-shopno',
   'unstyled it runs together with the order number and reads as one string');
