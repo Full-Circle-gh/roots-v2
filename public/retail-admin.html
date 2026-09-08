@@ -2009,7 +2009,7 @@
     </div>
 
     <div class="td-foot">
-      <button type="button" class="td-foot-link" onclick="goTab('reports')">The full numbers live in Reports · 完整数据请见「报表」</button>
+      <button type="button" class="td-foot-link" data-cap="reports:view" onclick="goTab('reports')">The full numbers live in Reports · 完整数据请见「报表」</button>
     </div>
 
     </div>
@@ -11656,9 +11656,14 @@
     <!-- Wizard host: setup flows (Eleme/Meituan/JD/Qingyun/Mini App) + Add location render here -->
     <div id="sales-setup-host" style="display:none"></div>
 
-    <!-- SUMMARY — folded across every channel -->
-    <div class="td-kicker" style="margin-top:0">Summary · 概要</div>
-    <div class="db-kpis" id="sales-summary">
+    <!-- SUMMARY — folded across every channel.
+         GATED ON dashboard:view, like every other reading of today's takings.
+         The Sales ROW is any-of (01-core TAB_CAP) so a stock role holding
+         meituan:sync can still reach the channel screens this page is the only
+         door to; that door must not also hand over the money it happens to be
+         standing next to. -->
+    <div class="td-kicker" style="margin-top:0" data-cap="dashboard:view">Summary · 概要</div>
+    <div class="db-kpis" id="sales-summary" data-cap="dashboard:view">
       <div class="db-kpi">
         <div class="lbl">Revenue · 营收</div>
         <div class="val" id="sales-sum-rev">—</div>
@@ -11700,7 +11705,7 @@
           </div>
           <button class="sales-toggle on is-locked" type="button" disabled aria-disabled="true" title="Channel open/close coming soon · 渠道开关即将开放"><span class="knob"></span></button>
         </div>
-        <div class="sales-ch-metrics">
+        <div class="sales-ch-metrics" data-cap="dashboard:view">
           <div><div class="m-l">Revenue today · 今日营收</div><div class="m-n" id="sales-wc-rev">—</div></div>
           <div><div class="m-l">Orders · 订单</div><div class="m-n" id="sales-wc-orders">—</div></div>
           <div><div class="m-l">Avg order · 客单价</div><div class="m-n" id="sales-wc-aov">—</div></div>
@@ -11728,7 +11733,7 @@
           </div>
           <button class="sales-toggle on is-locked" type="button" disabled aria-disabled="true" title="Channel open/close coming soon · 渠道开关即将开放"><span class="knob"></span></button>
         </div>
-        <div class="sales-ch-metrics">
+        <div class="sales-ch-metrics" data-cap="dashboard:view">
           <div><div class="m-l">Revenue today · 今日营收</div><div class="m-n" id="sales-wb-rev">—</div></div>
           <div><div class="m-l">Orders · 订单</div><div class="m-n" id="sales-wb-orders">—</div></div>
           <div><div class="m-l">Avg order · 客单价</div><div class="m-n" id="sales-wb-aov">—</div></div>
@@ -11756,7 +11761,7 @@
           </div>
           <button class="sales-toggle on is-locked" type="button" disabled aria-disabled="true" title="Channel open/close coming soon · 渠道开关即将开放"><span class="knob"></span></button>
         </div>
-        <div class="sales-ch-metrics">
+        <div class="sales-ch-metrics" data-cap="dashboard:view">
           <div><div class="m-l">Revenue today · 今日营收</div><div class="m-n" id="sales-mt-rev">—</div></div>
           <div><div class="m-l">Orders · 订单</div><div class="m-n" id="sales-mt-orders">—</div></div>
           <div><div class="m-l">Avg order · 客单价</div><div class="m-n" id="sales-mt-aov">—</div></div>
@@ -11784,7 +11789,7 @@
           </div>
           <button class="sales-toggle on is-locked" type="button" disabled aria-disabled="true" title="Channel open/close coming soon · 渠道开关即将开放"><span class="knob"></span></button>
         </div>
-        <div class="sales-ch-metrics">
+        <div class="sales-ch-metrics" data-cap="dashboard:view">
           <div><div class="m-l">Revenue today · 今日营收</div><div class="m-n" id="sales-gy-rev">—</div></div>
           <div><div class="m-l">Orders · 订单</div><div class="m-n" id="sales-gy-orders">—</div></div>
           <div><div class="m-l">Avg order · 客单价</div><div class="m-n" id="sales-gy-aov">—</div></div>
@@ -11812,7 +11817,7 @@
           </div>
           <button class="sales-toggle is-locked" type="button" disabled aria-disabled="true" title="Channel open/close coming soon · 渠道开关即将开放"><span class="knob"></span></button>
         </div>
-        <div class="sales-ch-metrics">
+        <div class="sales-ch-metrics" data-cap="dashboard:view">
           <div><div class="m-l">Revenue today · 今日营收</div><div class="m-n" id="sales-el-rev">—</div></div>
           <div><div class="m-l">Orders · 订单</div><div class="m-n" id="sales-el-orders">—</div></div>
           <div><div class="m-l">Avg order · 客单价</div><div class="m-n" id="sales-el-aov">—</div></div>
@@ -11840,7 +11845,7 @@
           </div>
           <button class="sales-toggle on is-locked" type="button" disabled aria-disabled="true" title="Channel open/close coming soon · 渠道开关即将开放"><span class="knob"></span></button>
         </div>
-        <div class="sales-ch-metrics">
+        <div class="sales-ch-metrics" data-cap="dashboard:view">
           <div><div class="m-l">Revenue today · 今日营收</div><div class="m-n" id="sales-ps-rev">—</div></div>
           <div><div class="m-l">Orders · 订单</div><div class="m-n" id="sales-ps-orders">—</div></div>
           <div><div class="m-l">Avg order · 客单价</div><div class="m-n" id="sales-ps-aov">—</div></div>
@@ -11873,7 +11878,7 @@
             </div>
           </div>
         </div>
-        <div class="sales-ch-metrics">
+        <div class="sales-ch-metrics" data-cap="dashboard:view">
           <div><div class="m-l">Revenue today · 今日营收</div><div class="m-n" id="sales-dr-rev">—</div></div>
           <div><div class="m-l">Orders · 订单</div><div class="m-n" id="sales-dr-orders">—</div></div>
           <div><div class="m-l">Avg order · 客单价</div><div class="m-n" id="sales-dr-aov">—</div></div>
