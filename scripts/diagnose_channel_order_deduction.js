@@ -109,6 +109,18 @@ for (const file of files) {
   const col = (t, c) => { try { return db.prepare(`PRAGMA table_info(${t})`).all().some(r => r.name === c); } catch (_) { return false; } };
   if (!has('retail_orders')) { console.log(`\n${file}: no retail_orders table — skipped`); try { db.close(); } catch (_) {} continue; }
 
+  // Where the time went. None of the reads below can use an index — a ledger
+  // row's only link to its order is free text in `note` — so a run that gets
+  // slow gets slow somewhere specific, and a job killed at the ten-minute mark
+  // takes the answer with it. Printed, not silent, and only when it is worth
+  // saying.
+  let mark = Date.now();
+  const step = (what, n) => {
+    const ms = Date.now() - mark;
+    mark = Date.now();
+    if (ms > 250) console.log(`  [${what}: ${(ms / 1000).toFixed(1)}s${n != null ? `, ${n} rows` : ''}]`);
+  };
+
   const orders = all(`
     SELECT id, order_no, channel, status, channel_status, placed_at, created_at,
            store_id, total, channel_stock_restored
@@ -127,6 +139,7 @@ for (const file of files) {
   // they land under 'meituan' too — but a census costs one grouped read and is
   // the difference between "no such orders" and "they are filed under a name
   // this script did not ask for".
+  step('open + census read');
   console.log('\nOrders by channel (all time):');
   for (const r of all(`
     SELECT COALESCE(channel,'(null)') channel, COUNT(*) n, MAX(created_at) newest
@@ -160,16 +173,36 @@ for (const file of files) {
        AND created_at >= datetime('now', ?)
      ORDER BY id
   `, ...REASONS, `-${DAYS} days`) : [];
+  step('ledger window', ledgerWindow.length);
 
   // Same argument for the two sync logs: read the window once, match in JS.
+  //
+  // NARROWED TO THE ORDER EVENTS, and that is not tidiness. These logs also carry
+  // the queue drain, which runs every 10 seconds per daemon — on the order of
+  // 10^5 rows over a fortnight, each with a JSON `detail` — and the unfiltered
+  // window meant marshalling all of them into JS and then running a substring
+  // scan over the lot once per order. `detail` is truncated for the same reason:
+  // this only ever reads the ref out of it, and every one of these events puts
+  // the ref in the first field it writes.
+  const LOG_EVENTS = [
+    'order_import', 'order_unsynced', 'order_born_void', 'order_oversold',
+    'order_total_mismatch', 'order_settlement_mismatch', 'order_status_unmapped',
+    'order_restocked', 'order_rededucted', 'order_void_restock', 'order_void_rededuct',
+    'order_unparsed',
+  ];
   const logWindow = {};
   for (const ch of Object.keys(CH)) {
     logWindow[ch] = has(CH[ch].log) ? all(`
-      SELECT store_code, event_type, status, detail, error_msg, created_at
+      SELECT store_code, event_type, status,
+             substr(detail, 1, 400) AS detail, substr(error_msg, 1, 400) AS error_msg,
+             created_at
         FROM ${CH[ch].log}
-       WHERE created_at >= datetime('now', ?)
+       WHERE event_type IN (${LOG_EVENTS.map(() => '?').join(',')})
+         AND created_at >= datetime('now', ?)
        ORDER BY id DESC
-    `, `-${DAYS} days`) : [];
+       LIMIT 2000
+    `, ...LOG_EVENTS, `-${DAYS} days`) : [];
+    step(`${ch} log window`, logWindow[ch].length);
   }
 
   // ── The headline: of the recent channel orders, how many took stock? ────────
