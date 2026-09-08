@@ -88,12 +88,14 @@ for (const file of files) {
   try { db.exec('CREATE TABLE __ro_probe__ (x)'); } catch (_) { proven = true; }
   if (!proven) { console.error(`FATAL: ${file} accepted a write — reading nothing`); try { db.close(); } catch (_) {} continue; }
 
-  // A SWALLOWED ERROR READS EXACTLY LIKE AN EMPTY TABLE, and that cost a live
-  // run: the first version returned [] on any SQL failure, so a column this
-  // script had guessed wrong would print "no database on this box holds
-  // eleme/meituan orders" — a confident answer about production drawn from a
-  // typo. Failures are announced now, once per distinct statement, and the empty
-  // result is still returned so one bad query never takes the whole survey down.
+  // A SWALLOWED ERROR READS EXACTLY LIKE AN EMPTY TABLE, and this one cost four
+  // wasted runs. The first version returned [] on any SQL failure, so selecting
+  // a column retail_orders does not have (`created_at` — see below) printed "no
+  // database on this box holds eleme/meituan orders" over a table holding 1,556
+  // of them: a confident answer about production, produced by a typo, with
+  // nothing anywhere saying a statement had failed. Failures are announced now,
+  // once per distinct statement, and the empty result is still returned so one
+  // bad query never takes the whole survey down.
   const complained = new Set();
   const moan = (sql, e) => {
     const key = sql.replace(/\s+/g, ' ').trim().slice(0, 80);
@@ -109,11 +111,11 @@ for (const file of files) {
   const col = (t, c) => { try { return db.prepare(`PRAGMA table_info(${t})`).all().some(r => r.name === c); } catch (_) { return false; } };
   if (!has('retail_orders')) { console.log(`\n${file}: no retail_orders table — skipped`); try { db.close(); } catch (_) {} continue; }
 
-  // Where the time went. None of the reads below can use an index — a ledger
-  // row's only link to its order is free text in `note` — so a run that gets
-  // slow gets slow somewhere specific, and a job killed at the ten-minute mark
-  // takes the answer with it. Printed, not silent, and only when it is worth
-  // saying.
+  // Where the time went, if it ever goes anywhere. On the live box every read
+  // below returns in under a millisecond — the tables are small (1,556 orders,
+  // 10k ledger rows, 23k sync-log rows as of 2026-09-08) — so in practice this
+  // prints nothing at all. It is kept for the box this outgrows, and because a
+  // run whose reads are timed is one nobody has to guess about.
   let mark = Date.now();
   const step = (what, n) => {
     const ms = Date.now() - mark;
@@ -121,8 +123,14 @@ for (const file of files) {
     if (ms > 250) console.log(`  [${what}: ${(ms / 1000).toFixed(1)}s${n != null ? `, ${n} rows` : ''}]`);
   };
 
+  // `placed_at`, and NO `created_at`. retail_orders has never had one — its row
+  // clock is placed_at, defaulted to CURRENT_TIMESTAMP (database.js). Selecting
+  // created_at here is what made run #97 of this script report "no database on
+  // this box holds eleme/meituan orders" against a table holding 1,556 of them:
+  // the statement failed, the failure was swallowed, and an empty result reads
+  // exactly like an empty table. That is the bug the `moan` above exists for.
   const orders = all(`
-    SELECT id, order_no, channel, status, channel_status, placed_at, created_at,
+    SELECT id, order_no, channel, status, channel_status, placed_at,
            store_id, total, channel_stock_restored
       FROM retail_orders
      WHERE channel IN ('eleme','meituan')
@@ -142,7 +150,7 @@ for (const file of files) {
   step('open + census read');
   console.log('\nOrders by channel (all time):');
   for (const r of all(`
-    SELECT COALESCE(channel,'(null)') channel, COUNT(*) n, MAX(created_at) newest
+    SELECT COALESCE(channel,'(null)') channel, COUNT(*) n, MAX(placed_at) newest
       FROM retail_orders GROUP BY channel ORDER BY n DESC
   `)) {
     console.log(`  ${String(r.channel).padEnd(14)} ${String(r.n).padStart(6)}   newest ${ago(r.newest)}`);
@@ -159,23 +167,25 @@ for (const file of files) {
   const REASONS = ['eleme_order', 'eleme_cancel', 'eleme_uncancel',
                    'meituan_order', 'meituan_cancel', 'meituan_uncancel'];
 
-  // ── WHY THE LEDGER IS READ PER LINE AND NOT IN ONE WINDOW ──────────────────
-  // The only link from a ledger row back to the order that caused it is free
-  // text in `note` — adjustStock is called here with its default ref_table /
-  // ref_id, so the indexed provenance columns are empty for these rows (see the
-  // PROVENANCE note in lib/inventory.js) — and `note LIKE '%ref%'` can use no
-  // index at all.
-  //
-  // The obvious repair is to read one date-windowed slice of the ledger and
-  // match the refs in JS. It is the wrong one, and it cost two cancelled runs to
-  // learn: `reason` and `created_at` carry no index either, so that slice is a
-  // FULL SCAN of retail_stock_ledger, and one full scan is worse than the many
-  // small reads it replaced. What the table does have is
+  // ── HOW A LEDGER ROW IS TIED BACK TO ITS ORDER ─────────────────────────────
+  // By free text in `note`, and by nothing else: adjustStock is called from the
+  // ingests with its default ref_table / ref_id, so the indexed provenance
+  // columns are empty for these rows (see the PROVENANCE note in
+  // lib/inventory.js). `note LIKE '%ref%'` can use no index, so the read is
+  // shaped around the one index the table does have —
   //     idx_retail_ledger_lookup ON (store_id, product_id, created_at)
-  // which is exactly the shape asked here — a line names its store and its
-  // product, and the order names the day. So the lookup stays per line, seeks
-  // the index, and `reason` and the ref are filtered in JS over the handful of
-  // rows that come back.
+  // which is exactly what a line can name: its store, its product, and its
+  // order's day. `reason` and the ref are then filtered in JS over the handful
+  // of rows that come back.
+  //
+  // AN EARLIER VERSION OF THIS COMMENT SAID THAT SHAPE WAS FORCED ON US BY TWO
+  // TEN-MINUTE RUNS AGAINST PRODUCTION. It was not, and no such runs happened.
+  // Runs #98–#100 were cancelled after one to three minutes each because I
+  // misread how long they had been going, and every one of them was killed
+  // before it could print anything. The measurement that eventually arrived
+  // (scripts/diagnose_channel_probe.js, run #101) says these tables are small
+  // and every read here returns in under a millisecond. The shape below is
+  // still the right one; it just was not bought with the evidence I claimed.
   const ledgerStmt = has('retail_stock_ledger') ? `
     SELECT id, delta, reason, balance_after, created_at, note
       FROM retail_stock_ledger
@@ -184,15 +194,14 @@ for (const file of files) {
   ` : null;
 
   // ── AND WHY THE SYNC LOGS ARE READ BY ROWID TAIL ───────────────────────────
-  // These two tables carry NO index whatsoever, and they also carry the stock
-  // push queue drain, which runs every ten seconds per daemon — on the order of
-  // 10^5 rows a fortnight, each with a JSON `detail`. Any WHERE over them is a
-  // full scan that has to touch every one of those blobs. The rowid is the one
-  // ordering SQLite can seek, so this reads the last LOG_TAIL rows and filters
-  // in JS: bounded work whatever the table has grown to, and the recent tail is
-  // all this survey is ever about. `detail` is truncated because the only thing
-  // read out of it is the ref, and every one of these events writes the ref into
-  // its first field.
+  // These two tables carry no index at all, and they also carry the stock push
+  // queue drain, which runs every ten seconds per daemon, so they grow without
+  // bound while the orders in them do not: 23k rows in meituan_sync_log against
+  // 226 mirrored orders. The rowid is the one ordering SQLite can seek, so this
+  // reads the last LOG_TAIL rows and filters in JS — bounded work whatever the
+  // table grows to, and the recent tail is all this survey is ever about.
+  // `detail` is truncated because the only thing read out of it is the ref, and
+  // every one of these events writes the ref into its first field.
   const LOG_TAIL = parseInt(process.env.DEDUCT_DIAG_LOG_TAIL, 10) || 20000;
   const LOG_EVENTS = new Set([
     'order_import', 'order_unsynced', 'order_born_void', 'order_oversold',
@@ -250,7 +259,7 @@ for (const file of files) {
     // or a later poll could have written for it, and it is what lets the seek
     // use the third column of idx_retail_ledger_lookup.
     const since = (() => {
-      const t = Date.parse(String(o.placed_at || o.created_at || '').replace(' ', 'T') + 'Z');
+      const t = Date.parse(String(o.placed_at || '').replace(' ', 'T') + 'Z');
       return Number.isFinite(t)
         ? new Date(t - 86400000).toISOString().slice(0, 19).replace('T', ' ')
         : '1970-01-01 00:00:00';
@@ -296,7 +305,7 @@ for (const file of files) {
     console.log(`\n#${o.id}  ${o.order_no}  [${o.channel}]  ${ref ? `ref ${ref}` : 'ref ?'}`);
     console.log(`   status=${o.status}  channel_status=${o.channel_status || '-'}  ` +
                 `restored=${o.channel_stock_restored}  store=${o.store_id}  ¥${o.total}`);
-    console.log(`   placed ${o.placed_at || '-'} (${ago(o.placed_at || o.created_at)})` +
+    console.log(`   placed ${o.placed_at || '-'} (${ago(o.placed_at)})` +
                 (impRow ? `  import=${impRow.status}` : '  import=(none)'));
     console.log(`   → ${why}`);
     for (const { it, led, took, ingested } of lines) {
