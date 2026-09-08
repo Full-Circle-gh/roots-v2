@@ -27,7 +27,7 @@
  */
 'use strict';
 
-const { tail, FAIL_MARK } = require('./run-suites');
+const { tail, FAIL_MARK, discover } = require('./run-suites');
 
 let pass = 0; let fail = 0;
 const ok = (m) => { pass++; console.log('  ✓ ' + m); };
@@ -184,6 +184,35 @@ function chipShaped() {
   out.push('', '2 failed');
   const hits = (tail(out.join('\n')).match(/the same assertion/g) || []).length;
   is(hits, 2, 'the early twin of a failure already in the tail is still reported');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+/* AN ALIAS THAT OUTLIVED ITS FILE, held here rather than only in the runner.
+ *
+ * §48 step 4 deleted the standalone stock app and the four browser suites that
+ * rendered it — deliberately, and its commit message recorded the cost by name
+ * — but the four `test:stock-*` aliases stayed in package.json. discover()
+ * unions the aliases with the disk, so all four re-entered the plan, and the
+ * runner handed node four paths that were not there: MODULE_NOT_FOUND with an
+ * empty require stack, naming neither the alias nor the deletion. They sat red
+ * in the slow shard for two days looking like four broken suites.
+ *
+ * main() now refuses the run and names the alias (verified directly: adding a
+ * bogus alias exits 2 and runs nothing). This is the cheaper half of the same
+ * guard — it puts the check in the FAST shard, where it costs milliseconds and
+ * goes red the same day, instead of waiting for a browser run nobody triggers
+ * now that the workflow is manual-only. */
+section('4 · every npm alias names a file that exists');
+{
+  const plan = discover();
+  // Asserted first so the check below cannot pass by the flag having been
+  // dropped: `[].filter(...)` on rows with no `missing` key is silently empty.
+  yes(plan.length > 0 && plan.every((e) => 'missing' in e),
+    'discover() reports the flag on all ' + plan.length + ' rows');
+  const gone = plan.filter((e) => e.missing);
+  yes(gone.length === 0,
+    'no test:/verify: script in package.json points at a deleted suite',
+    gone.map((e) => `${e.alias} → scripts/${e.file}`).join('; '));
 }
 
 // ─────────────────────────────────────────────────────────────────────────
