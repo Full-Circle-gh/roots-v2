@@ -2049,6 +2049,33 @@
         <button class="btn btn-primary" onclick="dashStockDrawerRestock()">Open restock · 前往补货</button>
       </div>
     </aside>
+
+    <!-- "Ready from the kitchen" — the desktop's own list (§73). Opened by the
+         Needs-you row, which used to leave this tab for /stock?go=ready: a
+         390px phone app, with the back office gone from around it. §66 chose
+         that door because the Quick Stock app already rendered the list and
+         building a twin was drift; §48 step 4 deletes that app, so the premise
+         went and the rejection with it.
+
+         NO CTA IN THE FOOT, and the empty slot is the decision. Nothing on this
+         list needs doing — the kitchen shelved what it made and recorded the
+         stock itself, and the warehouse's only job is to KNOW. Reading it IS
+         the acknowledgement (§48's server-side seen_at), which the drawer posts
+         on paint rather than asking anyone to confirm. Reuses the global
+         .side-drawer chrome, like the two above it. -->
+    <aside role="dialog" id="db-kready-drawer" class="side-drawer dw-compact dw-dismiss" aria-hidden="true">
+      <button class="drawer-close" onclick="closeDrawer('#db-kready-drawer')" title="Close · 关闭 (Esc)" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <div class="drawer-head">
+        <h3 style="margin:0;font-size:14px;display:flex;align-items:center;gap:10px"><span>Ready from the kitchen · 厨房已完成</span>
+          <span id="db-kready-pill" class="td-pill td-pill-amber" data-no-i18n style="display:none"></span></h3>
+      </div>
+      <div class="drawer-body" id="db-kready-body"></div>
+      <div class="drawer-foot">
+        <button class="btn" onclick="closeDrawer('#db-kready-drawer')">Close · 关闭</button>
+      </div>
+    </aside>
   </section>
 
   <!-- ─── REPORTS — historical analytics (formerly the Dashboard's deep-dive

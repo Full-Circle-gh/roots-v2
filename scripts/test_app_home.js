@@ -198,14 +198,33 @@ t('?from= cannot MINT a door where the server refused one', () => {
   }
 });
 
-t('the kitchen-ready row sends the provenance it is read for', () => {
-  const open = /function dashOpenKitchenReady\(\)[\s\S]*?\n\}/.exec(DASH_JS);
+/* WAS: "the kitchen-ready row sends the provenance it is read for" — it
+   asserted that the row opened /stock?go=ready&from=dashboard, and that the
+   ?from= was present so Back did not land the PC operator in the phone app.
+   §73 supersedes it: the row does not navigate at all any more, so there is no
+   Back to answer and no provenance to send. What the old case was really
+   protecting is the second half of it, and that survives here: the row must
+   still reach the thing that stamps `seen_at`, or the fire it opens never
+   clears. */
+t('the kitchen-ready row opens in the shell and does not leave for the app', () => {
+  const open = /function dashOpenKitchenReady\([\s\S]*?\n\}/.exec(DASH_JS);
   assert.ok(open, 'dashOpenKitchenReady has gone from the desktop dashboard');
-  assert.ok(/from=dashboard/.test(open[0]),
-    'the desktop row opens /stock without saying where from — Back lands on the phone app again');
-  // Still the URL that stamps seen_at, which is the reason the row navigates at
-  // all (scripts/test_kitchen_ready_dashboard.js holds the other half).
-  assert.ok(/\/stock\?go=ready/.test(open[0]), 'the row no longer opens the list that marks it read');
+  assert.ok(!/location\.href/.test(open[0]),
+    'the desktop row navigates again — a PC operator lands in a 390px phone app');
+  assert.ok(!/\/stock/.test(open[0]), 'the row still names the app §48 retires');
+  assert.ok(/db-kready-drawer/.test(open[0]), 'the row opens no drawer, so it opens nothing');
+});
+
+t('and the desktop list still stamps what it drew, or the fire never clears', () => {
+  assert.ok(/dashKreadyMarkSeen/.test(DASH_JS), 'the desktop list acknowledges nothing');
+  const seen = /async function dashKreadyMarkSeen\([\s\S]*?\n\}/.exec(DASH_JS);
+  assert.ok(seen, 'dashKreadyMarkSeen has gone');
+  assert.ok(/kitchen-ready\/seen/.test(seen[0]),
+    'the stamp does not post to the endpoint the phone posts to');
+  // The ids it DREW, never "everything unseen" — the rule §48 states and the
+  // phone's krMarkSeen keeps. A blanket stamp clears a line nobody has read.
+  assert.ok(/filter\(it => !it\.seen_at\)/.test(seen[0]),
+    'the stamp is not scoped to the unseen rows this drawer actually painted');
 });
 
 t('and so does every desktop door into the till', () => {
