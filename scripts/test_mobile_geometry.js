@@ -13,9 +13,14 @@
  *   • any element wider than the viewport;
  *   • CLIPPED TEXT: a node whose content is wider than its box. Some of that is
  *     intentional (a long customer name in a fixed cell), so the check reports
- *     what is clipped and by how much and leaves the judgement to a reader —
- *     except for the clear-cut case it fails on: a clipped node whose text is
- *     the app's own words rather than data, which is always a design bug.
+ *     what is clipped and by how much and leaves the judgement to a reader.
+ *     IT DOES NOT FAIL ON IT, and the line here used to claim it failed on one
+ *     kind — "a clipped node whose text is the app's own words rather than
+ *     data". The code never did, and could not: nothing at the DOM tells a
+ *     label apart from the name of a customer sitting in it. The prose read
+ *     like a gate, so two clipped sentences on the settings screen sat in this
+ *     report being read as noise until 2026-09-08. A reader has to look at
+ *     this section. If it is empty, keep it empty.
  *   • text under 11px, which is below the design system's floor.
  *
  * Needs a Chromium. Set CHROME_BIN, or let it find Playwright's.
@@ -89,6 +94,16 @@ const PROBE = `
     // zero gap while the ink it holds sits comfortably below; measuring the
     // wrapper reported every screen as broken, including the ones that were
     // fine, which is worse than not measuring at all.
+    //
+    // AND THE SAME MISTAKE ONE LEVEL DOWN, which is what this measured until
+    // 2026-09-08. Skipping wrappers fixed the node that HOLDS padding; a LEAF
+    // carries its own. The whatmade screen waiting for the shelf is one div —
+    // padding:44px 24px, with "Loading…" inside it — so it is a leaf with
+    // text, it paints, and its border box starts flush on the hairline while
+    // the word sits 44px below. It was reported as 0px for as long as the
+    // screen existed. So where a node paints only because of TEXT, the text
+    // is what gets measured; a border or a fill still starts at the box, and
+    // those are measured there.
     var top = null;
     var kids = next.querySelectorAll('*');
     var all = [next].concat([].slice.call(kids));
@@ -97,12 +112,18 @@ const PROBE = `
       if (!b.height) continue;
       var st = getComputedStyle(e);
       if (st.visibility === 'hidden' || st.display === 'none') continue;
-      var paints = (e.children.length === 0 && (e.innerText || '').trim())
-        || st.backgroundColor !== 'rgba(0, 0, 0, 0)'
+      var inks = e.children.length === 0 && (e.innerText || '').trim();
+      var fills = st.backgroundColor !== 'rgba(0, 0, 0, 0)'
         || parseFloat(st.borderTopWidth) > 0 || parseFloat(st.borderWidth) > 0
         || st.backgroundImage !== 'none';
-      if (!paints) continue;
-      if (top == null || b.top < top) top = b.top;
+      if (!inks && !fills) continue;
+      var t = b.top;
+      if (inks && !fills) {
+        var rg = document.createRange(); rg.selectNodeContents(e);
+        var rb = rg.getBoundingClientRect();
+        if (rb.height) t = rb.top;
+      }
+      if (top == null || t < top) top = t;
     }
     if (top != null) out.headGap = Math.round(top - head.getBoundingClientRect().bottom);
   })();
