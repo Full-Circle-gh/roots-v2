@@ -13,9 +13,14 @@
  *   • any element wider than the viewport;
  *   • CLIPPED TEXT: a node whose content is wider than its box. Some of that is
  *     intentional (a long customer name in a fixed cell), so the check reports
- *     what is clipped and by how much and leaves the judgement to a reader —
- *     except for the clear-cut case it fails on: a clipped node whose text is
- *     the app's own words rather than data, which is always a design bug.
+ *     what is clipped and by how much and leaves the judgement to a reader.
+ *     IT DOES NOT FAIL ON IT, and the line here used to claim it failed on one
+ *     kind — "a clipped node whose text is the app's own words rather than
+ *     data". The code never did, and could not: nothing at the DOM tells a
+ *     label apart from the name of a customer sitting in it. The prose read
+ *     like a gate, so two clipped sentences on the settings screen sat in this
+ *     report being read as noise until 2026-09-08. A reader has to look at
+ *     this section. If it is empty, keep it empty.
  *   • text under 11px, which is below the design system's floor.
  *
  * Needs a Chromium. Set CHROME_BIN, or let it find Playwright's.
