@@ -599,7 +599,12 @@ const state = {
   canInstall:false, installBar:false, installSheet:false, refreshing:false, refreshedAt:0,
   orderBusy:null, orderErr:null, replyBusy:false, replyErr:null, revBusy:null, revErr:null, parcelBusy:null,
   printer:null, printerLoading:false, printerBusy:false, printerErr:null,
-  prodStores:null, prodStockReady:false, prodBusy:false, prodErr:null,
+  /* prodStock is keyed by PRODUCT ID, not a single list, because the sheet now
+     moves between the sizes of one variant family without closing: each size
+     has its own per-store rows, and the counts already typed into a sibling
+     have to survive the trip there and back. prodStockReady speaks for the size
+     currently on screen. */
+  prodStock:{}, prodStockPid:null, prodStockReady:false, prodBusy:false, prodErr:null,
   cfg:null, setup:null, zones:null, mirror:null, mirrorLoading:null, mirrorMode:null,
   couponBusy:null, couponErr:null, bcBusy:null, bcErr:null, ask:null, askErr:null,
   custBusy:null, custErr:null, ordersLoadErr:null, custLoadErr:null,
@@ -1201,9 +1206,27 @@ reg('copyTxn', ()=>{
 reg('openProduct', sku=>{
   state.productSku=sku; state.prodErr=null; state.prodBusy=false;
   const p=DB.products.find(x=>x.sku===sku);
-  (state.prodStores||[]).forEach(st=>{ delete sheetStep['st_'+st.id]; });
+  // A fresh sheet starts from what the shop holds, not from what was typed
+  // into the last product opened — every pending edit goes, for every size.
+  state.prodStock={}; state.prodStockPid=null; sheetPrice={};
+  Object.keys(sheetStep).forEach(k=>{ if(k.indexOf('st_')===0) delete sheetStep[k]; });
   state.prodMounted=false; render(); state.prodMounted=true;
   if(p&&p._id!=null) loadProductStock(p._id);
+});
+/* Another size of the SAME family. Nothing is written and nothing pending is
+   dropped: this only changes which size the sheet is showing. */
+reg('pickVariant', id=>{
+  const p=(DB.products||[]).find(x=>String(x._id)===String(id));
+  // Not while a Save is in flight: that write covers the whole family, and
+  // moving the sheet out from under it only makes the result harder to read.
+  if(!p||p.sku===state.productSku||state.prodBusy) return;
+  state.productSku=p.sku; state.prodErr=null;
+  state.prodMounted=true; render();
+  if(p._id!=null) loadProductStock(p._id);
+});
+reg('priceTyped', v=>{
+  const p=DB.products.find(x=>x.sku===state.productSku);
+  if(p&&p._id!=null) sheetPrice[p._id]=v;   // no render: it would eat the keystroke
 });
 reg('closeProduct', ()=>{ state.productSku=null; render(); });
 reg('saveProduct', ()=>saveProductEdits());
@@ -6396,6 +6419,12 @@ function poDeliveries(poId){
 }
 
 let sheetStep={};
+/* The price box, held in state rather than read off the DOM at save time.
+   render() rewrites #app wholesale, so a price typed and then followed by a tap
+   on a stock stepper — or on another size — was painted back to the stored
+   figure and the typing was gone. Keyed by product id, so one size's pending
+   price is not another's. */
+let sheetPrice={};
 const SUBS={
   setup:{title:['Open your store','开店引导'],render:()=>screenSetup()},
   /* Pushed from the Orders header and from More, so Back names whichever of the
@@ -9420,48 +9449,86 @@ async function orderWrite(kind, run){
    catalogue and picked one row out of it.) */
 async function loadProductStock(pid){
   if(pid==null){ state.prodStockReady=true; render(); return; }
-  state.prodStockReady=false; state.prodStores=null; render();
+  // Already read for this size — switching back to it must not blank the
+  // counts the operator has typed there and fetch them again.
+  if(state.prodStock[pid]!==undefined){ state.prodStockReady=true; render(); return; }
+  state.prodStockPid=pid; state.prodStockReady=false; render();
+  let rows=null;
   try{
-    const rows=await api('/products/'+pid+'/store-stocks');
-    state.prodStores=(Array.isArray(rows)?rows:[]).map(r=>({
+    const raw=await api('/products/'+pid+'/store-stocks');
+    rows=(Array.isArray(raw)?raw:[]).map(r=>({
       id:r.store_id, name_en:r.name_en||r.code||('#'+r.store_id), name_cn:r.name_cn||r.name_en||r.code||('#'+r.store_id),
       qty:Number(r.physical_qty||0)}));
-    state.prodStores.forEach(st=>{ sheetStep['st_'+st.id]=st.qty; });
-  }catch(e){ state.prodStores=null; }
+  }catch(e){ rows=null; }
+  state.prodStock[pid]=rows;   // stockCard seeds the steppers off these
+  // A slower read for a size the operator has already switched away from fills
+  // the cache and stops there: the "Loading…" card belongs to whatever is on
+  // screen now, and only that size's own read may clear it.
+  if(state.prodStockPid!==pid) return;
   state.prodStockReady=true; render();
 }
 async function saveProductEdits(){
   const p=DB.products.find(x=>x.sku===state.productSku);
   if(!p||p._id==null||state.prodBusy) return;
-  const priceRaw=(document.getElementById('mPrice')||{}).value;
-  /* AN UNREADABLE PRICE IS NOT ZERO. This was
-     `parseFloat(stripped)||0`, so clearing the box — or leaving anything the
-     strip could not parse — saved the product at nothing and put it on sale at
-     nothing. A price typed as 0 is still honoured; a price that cannot be read
-     stops the save and says so, because the alternative is selling stock for
-     free and finding out from the orders. */
-  const priceTxt=String(priceRaw==null?'':priceRaw).replace(/[^0-9.]/g,'').trim();
-  const price=priceTxt===''?NaN:Number(priceTxt);
-  if(!Number.isFinite(price)||price<0){
-    /* A toast, not state.prodErr: prodErr paints on the products LIST and this
-       runs with the product sheet open over it, where the save's own "Saved"
-       toast is what the operator is already watching for. */
-    showToast(T('Enter a price — a number, 0 or more.','请输入价格 — 0 或以上的数字。'));
-    return;
-  }
-  const stores=state.prodStores||[];
-  state.prodBusy=true; state.prodErr=null; render();
-  try{
-    if(price!==Number(p.priceNum)) await apiWrite('/products/'+p._id,{sell_price:price},'PATCH');
+  /* The box on screen, read once here as well as on every keystroke: a value
+     put there by the browser itself — an autofill, a paste the field answered
+     with no input event — never reached sheetPrice, and saving must not read
+     the old figure back over it. */
+  const box=document.getElementById('mPrice');
+  if(box) sheetPrice[p._id]=box.value;
+  /* Save writes THE FAMILY, not the size in front of you. The sheet moves
+     between sizes without writing anything, so by the time this runs the
+     operator may have set a price on one size and a count on another, and a
+     Save that took only what was on screen would drop the rest without saying
+     so. A family of one is a family of one and behaves exactly as before. */
+  const members=prodFamily(p);
+  const jobs=[];
+  for(const m of (members.length?members:[p])){
+    let price=null;
+    if(sheetPrice[m._id]!=null){
+      /* AN UNREADABLE PRICE IS NOT ZERO. This was
+         `parseFloat(stripped)||0`, so clearing the box — or leaving anything the
+         strip could not parse — saved the product at nothing and put it on sale at
+         nothing. A price typed as 0 is still honoured; a price that cannot be read
+         stops the save and says so, because the alternative is selling stock for
+         free and finding out from the orders. */
+      const priceTxt=String(sheetPrice[m._id]).replace(/[^0-9.]/g,'').trim();
+      const n=priceTxt===''?NaN:Number(priceTxt);
+      if(!Number.isFinite(n)||n<0){
+        // Show the operator the box being complained about before complaining.
+        if(m._id!==p._id){ state.productSku=m.sku; render(); loadProductStock(m._id); }
+        /* A toast, not state.prodErr: prodErr paints on the products LIST and this
+           runs with the product sheet open over it, where the save's own "Saved"
+           toast is what the operator is already watching for. */
+        showToast(T('Enter a price — a number, 0 or more.','请输入价格 — 0 或以上的数字。'));
+        return;
+      }
+      if(n!==Number(m.priceNum)) price=n;
+    }
     // Belt to the read-only card: neither a supplier-direct item nor a bundle
     // has stock of its own, so no stepper is drawn for them — and no write is
     // sent for them either, whatever is left in sheetStep from a previous
     // product's sheet.
-    for(const st of (p.supplier||p.bundle?[]:stores)){
-      const now=Number(sheetStep['st_'+st.id]);
-      if(!isNaN(now)&&now!==st.qty){
-        await apiWrite('/stores/'+st.id+'/stock/'+p._id,{physical_qty:now},'PATCH');
-        st.qty=now;
+    const stock=[];
+    for(const st of (m.supplier||m.bundle?[]:prodStoreRows(m._id))){
+      const now=Number(sheetStep[stockKey(m._id,st.id)]);
+      if(!isNaN(now)&&now!==st.qty) stock.push([st,now]);
+    }
+    if(price!=null||stock.length) jobs.push({m,price,stock});
+  }
+  state.prodBusy=true; state.prodErr=null; render();
+  /* Counted so the failure can tell the truth. A family is several writes, and
+     one of them failing after others have landed is not "nothing has changed" —
+     the operator who is told that will type it all again over figures that are
+     already in. Re-pressing Save re-sends only what is still pending, and a
+     figure written twice writes the same figure. */
+  let landed=0;
+  try{
+    for(const job of jobs){
+      if(job.price!=null){ await apiWrite('/products/'+job.m._id,{sell_price:job.price},'PATCH'); landed++; }
+      for(const [st,now] of job.stock){
+        await apiWrite('/stores/'+st.id+'/stock/'+job.m._id,{physical_qty:now},'PATCH');
+        st.qty=now; landed++;
       }
     }
     state.prodBusy=false; state.productSku=null; render();
@@ -9474,7 +9541,10 @@ async function saveProductEdits(){
   }catch(e){
     state.prodBusy=false;
     if(String(e.message)==='auth') return;
-    state.prodErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.prodErr=landed
+      ? E('Some of that did not save. What did is already in — press Save again for the rest.',
+           '部分内容没有保存成功。已保存的不会重复写入 — 请再按一次「保存」。')
+      : E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   }
 }
@@ -10796,11 +10866,15 @@ function stepperCard(label,key,val,prefix){
       <span class="num" style="font-size:26px;font-weight:500">${prefix||''}${sheetStep[key]}</span>
       <button class="stepbtn" onclick="APP.cmd('stepInc','${key}')">${ic('plus',18,2.25)}</button></div></div>`;
 }
+/* The rows this sheet edits, for one size. Keyed by product id so the counts
+   typed into one size are still there after a trip to its sibling and back. */
+function prodStoreRows(pid){ const r=pid==null?null:state.prodStock[pid]; return Array.isArray(r)?r:[]; }
+function stockKey(pid,storeId){ return 'st_'+pid+'_'+storeId; }
 /* One row per store, because that is where a physical count lives. With no
    store list to read, the phone shows the total and says where to change it —
    spreading one number across two shelves would be a guess. */
 function stockCard(p){
-  const stores=state.prodStores||[];
+  const stores=prodStoreRows(p._id);
   /* Two kinds of product have no stock of their own, and the desktop makes
      both read-only for the same reason: a number typed here would mean
      nothing. A supplier-direct item ships from the supplier; an assembled
@@ -10831,13 +10905,39 @@ function stockCard(p){
     <div class="eyebrow">${T('In stock','库存')}</div>
     ${stores.map((st,i)=>{
       const name=T(st.name_en,st.name_cn);
+      /* Seeded here, the way stepperCard seeds its own: the stepper starts at
+         what the shop holds, and every later render reads back what the
+         operator set. A key that only the loader seeded left a size opened
+         from cache stepping up from zero. */
+      const key=stockKey(p._id,st.id);
+      if(sheetStep[key]==null) sheetStep[key]=st.qty;
       return `<div style="${i?'border-top:1px solid var(--border-default);margin-top:16px;padding-top:16px':'margin-top:12px'}">
         <div style="font-size:15px">${name}</div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
-          <button class="stepbtn" onclick="APP.cmd('stepDec','st_${st.id}')">${ic('minus',18,2.25)}</button>
-          <span class="num" style="font-size:26px;font-weight:500">${sheetStep['st_'+st.id]!=null?sheetStep['st_'+st.id]:0}</span>
-          <button class="stepbtn" onclick="APP.cmd('stepInc','st_${st.id}')">${ic('plus',18,2.25)}</button></div></div>`;
+          <button class="stepbtn" onclick="APP.cmd('stepDec','${key}')">${ic('minus',18,2.25)}</button>
+          <span class="num" style="font-size:26px;font-weight:500">${sheetStep[key]}</span>
+          <button class="stepbtn" onclick="APP.cmd('stepInc','${key}')">${ic('plus',18,2.25)}</button></div></div>`;
     }).join('')}</div>`;
+}
+/* THE SIZES, REACHABLE. A variant family is ONE card in the catalogue — three
+   sizes of the same sorbet read as three near-identical products otherwise —
+   and tapping that card opened the family's representative and nothing else.
+   Every other size was on screen as text and could not be edited from the
+   phone at all: the operator saw the sizes listed on the card, opened it, and
+   got whichever one happened to own the group.
+
+   So the sheet carries the family. The chips switch which size is being
+   edited; what is already typed into a sibling is kept (sheetPrice and
+   sheetStep are both keyed by product id) and Save writes every size that
+   changed, not just the one on screen. Nothing is written by the act of
+   switching. */
+function sheetVariants(p){
+  const fam=prodFamily(p); if(!fam.length) return '';
+  return `<div class="hscroll" style="display:flex;gap:8px;margin:-4px 0 -2px">${fam.map(m=>{
+    const on=m._id===p._id;
+    return `<button class="chip ${on?'on':''}" style="flex:none" onclick="APP.cmd('pickVariant','${m._id}')"
+      ><span>${escAttr(m.vLabel||String(m.sku).replace(/^SKU /,''))}</span></button>`;
+  }).join('')}</div>`;
 }
 function sheetProduct(){
   const p=DB.products.find(x=>x.sku===state.productSku); if(!p) return '';
@@ -10851,6 +10951,7 @@ function sheetProduct(){
          <div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:3px">${p.sku}</div></div><span style="width:36px;flex:none"></span></div></div>
      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px;background:var(--bg)">
        ${noteBar(T('Quick-edit stock and price · full editing on desktop','快改库存与价格 · 完整编辑在电脑端'))}
+       ${sheetVariants(p)}
        ${state.prodErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
          <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
          <span style="font-size:14px;color:var(--brick-ink)">${state.prodErr}</span></div>`:''}
@@ -10858,7 +10959,8 @@ function sheetProduct(){
          <div class="eyebrow">${T('Price','价格')}</div>
          <div style="display:flex;align-items:center;gap:8px;margin-top:12px">
            <span class="num" style="font-size:18px;color:var(--text-secondary)">${CUR}</span>
-           <input id="mPrice" class="num" inputmode="decimal" value="${p.priceNum!=null?p.priceNum:(parseFloat(String(p.price).replace(/[^0-9.]/g,''))||'')}" style="font-size:18px;font-weight:500">
+           <input id="mPrice" class="num" inputmode="decimal" oninput="APP.cmd('priceTyped',this.value)"
+                  value="${escAttr(sheetPrice[p._id]!=null?sheetPrice[p._id]:(p.priceNum!=null?p.priceNum:(parseFloat(String(p.price).replace(/[^0-9.]/g,''))||'')))}" style="font-size:18px;font-weight:500">
          </div>
        </div>
        ${stockCard(p)}
@@ -11878,6 +11980,19 @@ function productCard(u){
       <span style="font-size:12px;color:var(--text-secondary);white-space:nowrap">${T('In shop','上架')}</span></span>
   </div>`;
 }
+/* One order for a family, shared by the card and the sheet, so a size cannot be
+   third in the list and second in the switcher. */
+const prodBySize=(a,b)=>(a.vSort-b.vSort)
+  || String(a.vLabel).localeCompare(String(b.vLabel)) || (a._id-b._id);
+/* The sizes of the product the SHEET has open, or [] when it has none to switch
+   between. A family of one is just a product and gets no switcher. Read from
+   the whole catalogue rather than the filtered rows: a status chip that hides
+   the Out sizes must not also make them unreachable from the sheet. */
+function prodFamily(p){
+  if(!p||!p.gid) return [];
+  const members=(DB.products||[]).filter(m=>m.gid===p.gid).sort(prodBySize);
+  return members.length<2?[]:members;
+}
 /* _paUnits, on a phone: siblings of one variant group collapse into a single
    card carrying its members. A family of one is just a product. */
 function prodUnits(rows){
@@ -11888,8 +12003,7 @@ function prodUnits(rows){
     if(!p.gid){ units.push({group:false,p}); return; }
     if(seen.has(p.gid)) return;
     seen.add(p.gid);
-    const members=byGid.get(p.gid).slice().sort((a,b)=>
-      (a.vSort-b.vSort) || String(a.vLabel).localeCompare(String(b.vLabel)) || (a._id-b._id));
+    const members=byGid.get(p.gid).slice().sort(prodBySize);
     if(members.length<2){ units.push({group:false,p:members[0]}); return; }
     const rep=members.find(m=>m._id===p.gid)||members[0];
     units.push({group:true,p:rep,members});
