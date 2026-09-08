@@ -35,6 +35,10 @@ try { _events = require('./events'); } catch (e) { console.warn('[restock] event
 // rather than on `printer.by_store`. Best-effort and fire-and-forget: a request
 // must never fail to reach the queue because a printer is offline.
 const _kprint = require('../lib/kitchen-print');
+// "Which finished requests still count as news" — shared with routes/retail.js,
+// which reads the same clause for the dashboard's Needs-you row. See the header
+// of that file for why it is one definition and not two.
+const _kready = require('../lib/kitchen-ready');
 function _broadcastRestock(orderId, kind, actorUserId) {
   if (!_events || !_events.broadcast) return;
   try {
@@ -724,11 +728,10 @@ function requireRestockAccess(req, res, next) {
  * confine, and this correctly does nothing. Policy stays where the tenant set
  * it rather than being second-guessed here.
  */
-function _kitchenScopedSession(req) {
-  if (req.restockRealm === 'kitchen') return true;
-  if (!req.caps) return false;
-  return req.caps.has('restock:fulfil') && !req.caps.has('restock:pick');
-}
+// Shared with routes/retail.js for the same reason KITCHEN_READY_WHERE is: the
+// dashboard row must exclude exactly the operators this file excludes, or the
+// maker gets told on the dashboard about work they did themselves.
+const _kitchenScopedSession = _kready.kitchenScopedSession;
 
 function kitchenScopedOrder(req, res, next) {
   if (!_kitchenScopedSession(req)) return next();
@@ -1018,11 +1021,10 @@ router.get('/api/restock', requireRestockAccess, (req, res) => {
  * DECLARED BEFORE /:id, because /:id would otherwise match the word and answer
  * 404 for a row whose id is 'kitchen-ready'.
  */
-const KITCHEN_READY_WHERE = `
-       COALESCE(to_role, 'warehouse') = 'kitchen'
-   AND status = 'prepared'
-   AND archived_at IS NULL
-   AND seen_at IS NULL`;
+// MOVED TO lib/kitchen-ready.js, not copied there. The dashboard's Needs-you
+// row now counts the same requests this endpoint does, and two surfaces reading
+// one clause cannot drift apart the way two clauses eventually do.
+const { KITCHEN_READY_WHERE } = _kready;
 
 router.get('/api/restock/kitchen-ready', requireRestockAccess, tacetOnly, (req, res) => {
   /* THE MAKER IS NOT THE AUDIENCE. A fulfil-only operator is the person who

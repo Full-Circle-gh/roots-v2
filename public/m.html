@@ -7563,6 +7563,17 @@ function krMarkSeen(){
     // The dot behind this screen goes out on the way back rather than on the
     // next poll a minute later.
     state.kitchenReady=Math.max(0,Number(state.kitchenReady||0)-ids.length);
+    /* And so does Home's Needs-you row, which reads the ops snapshot rather
+       than this counter. Without this the operator reads the list, goes back,
+       and is told again by the row they just answered — for up to a minute,
+       which is exactly long enough to send somebody to look twice. Drops the
+       stamped ids rather than zeroing the key: the kitchen can finish something
+       while this screen is open, and that one has genuinely not been seen. */
+    if(state.ops&&state.ops.kitchen_ready){
+      const kr=state.ops.kitchen_ready;
+      kr.items=(kr.items||[]).filter(it=>ids.indexOf(it.id)<0);
+      kr.count=Math.max(0,Number(kr.count||0)-ids.length);
+    }
     render();
   }).catch(()=>{ k.seen=false; });
 }
@@ -9586,6 +9597,22 @@ function opsFires(){
   if(c('feedback_waiting')&&featOn('feedback')){
     add(true,'amber','message-square-text',T('Feedback to answer','反馈待回复'),
       c('feedback_waiting'),items('feedback_waiting'),'',"APP.cmd('inboxGo','feedback')");
+  }
+  /* The kitchen finished what this operator asked for. Until now the whole
+     announcement on this app was a 6px Sage dot on More and a toast that only
+     lands if the phone happens to be awake and open — so a finish that arrived
+     overnight was found by remembering to go and look. Home is where the day
+     starts; this is the screen it belongs on.
+     THE DOT STAYS. It is not made redundant by this row: it is what carries the
+     fact on every screen that is not Home, and on a flatNav role it is the only
+     one there is. Both read the same server-side `seen_at`, so opening the list
+     puts out both at once and neither can outlive the other.
+     Gated on the row it points at, exactly as the inbox count is — a fire must
+     never promise work behind a door this operator cannot open. The server
+     applies the same gate again (lib/kitchen-ready.js) and simply sends no key. */
+  if(c('kitchen_ready')&&canRoute('kitchenready')){
+    add(true,'amber','circle-check',T('Ready from the kitchen','厨房已完成'),
+      c('kitchen_ready'),items('kitchen_ready'),'',"APP.cmd('push','kitchenready')");
   }
   const oos=c('out_of_stock'), low=c('low_stock');
   if(oos+low){

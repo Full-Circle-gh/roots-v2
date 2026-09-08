@@ -65,6 +65,10 @@ const { getTenantDb, rawTenantDb, rawTdb, ROOTS_TENANT_ID, tenantAls, tdb, curre
 const { withTransaction } = require('../lib/db-transaction');
 const { getTenantCreds, setTenantSecrets, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
 const { channelSyncStale } = require('../lib/channel-sync-stale');
+// The dashboard's "the kitchen finished it" row counts exactly the requests
+// routes/restock.js's own kitchen-ready endpoint counts — one clause, required
+// by both, for the reason REVIEW_WAITING_SQL is shared with the Reviews fire.
+const kitchenReady = require('../lib/kitchen-ready');
 // Web Push — optional; wrapped so a missing module never breaks order flow.
 let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
@@ -15714,6 +15718,11 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   // threshold. Empty array is the common case; see that file for the declared
   // channel list and the open-hours-adjusted age calculation.
   let channel_sync_stale = [];
+  // Kitchen requests the kitchen has finished and nobody in the warehouse has
+  // read yet. Same zero-count default as its siblings, and — like the two Inbox
+  // queues above — NOT store-scoped: a kitchen request is a job the kitchen did,
+  // not a shelf, so the header's store picker deliberately leaves it alone.
+  let kitchen_ready = { count: 0, items: [] };
 
   // Optional per-store scope (mirrors the dashboard's store picker). When a
   // store_id is supplied we count that store's own shelf (its retail_store_stock
@@ -16478,6 +16487,53 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     `).all({ preview: previewLimit });
     feedback_waiting = { count: fbCount, items: fbItems };
 
+    // ── The kitchen finished what the warehouse asked for ────────────────
+    // warehouse→kitchen closes at 'prepared': nothing travels, nothing is
+    // collected, and the only thing the asker needs is to know. Until this the
+    // whole announcement was a push plus a 6px dot two taps inside More on the
+    // phone, and NOTHING at all on the desktop — so the person who raised the
+    // request found out by remembering to go and look.
+    //
+    // THE CLAUSE IS lib/kitchen-ready.js's, not a copy of it. This row opens the
+    // list at /stock?go=ready, and a fire that disagrees with the queue it opens
+    // means one of the two is lying (the rule the Reviews row above states).
+    //
+    // TWO AUDIENCE GATES, both answering an honest ZERO rather than a 403 —
+    // this endpoint is polled in the background by every dashboard, and a
+    // refusal here would bounce a phone in a pocket to the login screen:
+    //   • the MAKER is not the audience. A fulfil-only operator marked it made;
+    //     a row telling them their own work is waiting tells them about
+    //     themselves.
+    //   • an operator who cannot open the list is never told about it. A fire
+    //     promising work behind a door the role cannot open is the rule the
+    //     Inbox dot keeps, and dashCardWants() enforces the same thing again
+    //     client-side — server and client, because only one of them is the
+    //     one that stops the data leaving.
+    // ITS OWN try/catch, for the reason the channel-stall note below gives for
+    // isolating one channel from the others: `restock_orders` is the only table
+    // on this endpoint that a tenant may not have migrated yet, and a throw here
+    // would land in the outer catch and take every key computed AFTER it with
+    // it — including the channel-stall rollup, which was fine before this row
+    // existed. A failure now costs this row and nothing else.
+    try {
+      if (!kitchenReady.kitchenScopedSession(req) && kitchenReady.canSeeKitchenReady(req)) {
+        const krCount = tdb().prepare(
+          `SELECT COUNT(*) AS n FROM restock_orders WHERE ${kitchenReady.KITCHEN_READY_WHERE}`
+        ).get().n;
+        // `waiting_since` is the name every other fire's items carry, because
+        // tdOldestMins() and the phone's oldestMins() both read exactly that
+        // key. It counts from when the KITCHEN finished — how long the news has
+        // gone unread, which is the fact the row's "oldest 4h" states.
+        const krItems = tdb().prepare(`
+          SELECT id, rs_number, prepared_at AS waiting_since
+            FROM restock_orders
+           WHERE ${kitchenReady.KITCHEN_READY_WHERE}
+           ORDER BY prepared_at ASC LIMIT @preview
+        `).all({ preview: previewLimit });
+        kitchen_ready = { count: krCount, items: krItems };
+      }
+    } catch (e) { console.warn('[dashboard/ops kitchen_ready]', e.message); }
+
     // ── Channel stock-sync stall ─────────────────────────────────────────
     // channelSyncStale() already isolates one channel's failure from the
     // others (a bad table drops just that entry), so no extra try/catch here.
@@ -16487,7 +16543,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, channel_sync_stale, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, kitchen_ready, channel_sync_stale, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.
