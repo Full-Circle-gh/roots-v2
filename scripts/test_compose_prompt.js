@@ -139,19 +139,31 @@ is(tailR, tailO, 'and the rest of the prompt is the same text in both');
 // ─────────────────────────────────────────────────────────────────────────
 section('4 · the assistant that was NOT changed, and why');
 
-/* SPROUT_SYSTEM — the chat assistant — carries a whole "Roots context
-   (verified business facts)" block: the channels, the market stalls, the
-   owner's priorities, "Currency: RMB (¥)". It is left alone because it is only
-   reachable through /api/ai/chat, which is requireAuth — the KITCHEN realm,
-   Roots' own app, out of scope for this audit by the brief. The audit says the
-   same thing in §8.4: "routes/ai.js is also excluded: its 55 shared-handle
-   statements belong to the kitchen assistant behind requireAuth". If that
-   endpoint ever gains a merchant-realm mount, this assertion is what fails. */
-const chatRoute = SRC.match(/router\.post\('\/api\/ai\/chat',\s*(\w+)/);
-yes(chatRoute && chatRoute[1] === 'requireAuth',
-  'the chat assistant is still kitchen-only, which is why its Roots facts stand');
+/* THE ASSISTANT THIS SECTION GUARDED IS GONE (§78), AND THE GUARD IS KEPT.
+
+   SPROUT_SYSTEM carried a whole "Roots context (verified business facts)"
+   block — the channels, the market stalls, the owner's priorities, "Currency:
+   RMB (¥)". That was tolerable only because it sat behind /api/ai/chat on
+   requireAuth, the kitchen realm, in Roots' own app: one tenant's facts, one
+   tenant's app. The audit made the same carve-out in §8.4. The standing risk
+   was that the endpoint gained a merchant-realm mount and started telling
+   every tenant about Roots' market stalls.
+
+   Ash scrapped Sprout with the kitchen app, so the prompt, the chat route and
+   the whole agent are deleted. The RISK is what this section is really about,
+   and it outlives the code: anything that re-introduces a Roots-fact-carrying
+   assistant reachable from a merchant realm is the same defect. So the
+   assertion is inverted rather than removed — it now holds the absence. */
+is(/router\.post\('\/api\/ai\/chat'/.test(SRC), false,
+  'the chat assistant is gone — no kitchen-realm mount');
 is(/router\.post\('\/api\/retail-admin\/ai\/chat'/.test(SRC), false,
-  '…and has no merchant-realm mount');
+  '…and it did not come back on the merchant realm');
+// Matched as a DECLARATION, not as any mention of the name: routes/ai.js
+// carries a historical note saying what the caching block used to point at,
+// and a bare substring test would read that note as the constant still being
+// there. What must not exist is a definition.
+is(/(?:const|let|var)\s+SPROUT_SYSTEM\b|\bSPROUT_SYSTEM\s*=/.test(SRC), false,
+  'and the Roots-facts prompt it carried is gone with it');
 
 // ─────────────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -187,45 +187,38 @@ const skipRows = fixture.prepare('SELECT id,ingredient_id,po_id,reason,line_unit
 for (const s of skipRows) console.log(`  id=${s.id} ingredient=${s.ingredient_id} po=${s.po_id} ${s.reason} (line ¥${s.line_price} / ${s.line_unit})`);
 check('skip rows stored', skipRows.length, 4);
 
-// ── Does a skip actually reach the Alerts feed? ─────────────────────────────
-// Mount routes/alerts.js on a throwaway express app with auth stubbed out and
-// call the real endpoint over HTTP. Requires the stub to land in the module
-// cache AFTER routes/purchases.js loaded the real middleware and BEFORE
-// routes/alerts.js is required.
-(async () => {
-  const authPath = require.resolve(path.join(ROOT, 'middleware', 'auth.js'));
-  require.cache[authPath] = {
-    id: authPath, filename: authPath, path: path.dirname(authPath), loaded: true, children: [], paths: [],
-    exports: {
-      requireAuth: (req, _res, next) => { req.user = { id: 1, username: 'test', role: 'admin' }; req.permissions = { alerts: 1 }; next(); },
-      requirePermission: () => (_req, _res, next) => next(),
-      requireDelete: (_req, _res, next) => next(),
-      logActivity: () => {},
-    },
-  };
-  const express = require('express');
-  const app = express();
-  app.use(require(path.join(ROOT, 'routes', 'alerts.js')));
-  const server = app.listen(0);
-  const port = server.address().port;
 
-  const feed = await (await fetch(`http://127.0.0.1:${port}/api/alerts/feed`)).json();
-  const badge = await (await fetch(`http://127.0.0.1:${port}/api/alerts/unread-count`)).json();
+// ── WHICH SKIPS ARE STILL OPEN ──────────────────────────────────────────────
+// This block used to mount routes/alerts.js on a throwaway express app and
+// GET /api/alerts/feed + /api/alerts/unread-count, asserting the costSkips
+// section those endpoints assembled. §78 deleted routes/alerts.js — the feed
+// was public/app.html's panel and that page is gone.
+//
+// THE ASSERTIONS ARE KEPT AND RE-AIMED AT THE ROWS, not deleted with the
+// reader. What the feed reported was a projection of ingredient_cost_skips:
+// which skips are unresolved, how many, and how they split by reason. Every
+// one of those is a property of the table that firePriceAlertsForPO — which
+// SURVIVES, and is what this suite exists to test — actually writes. Reading
+// them here asserts the same facts one layer closer to the cause.
+//
+// What is genuinely gone is the round trip: nothing now proves an HTTP reader
+// assembles these rows correctly, because there is no longer such a reader.
+const openSkips = fixture.prepare(
+  'SELECT ingredient_id, po_id, reason FROM ingredient_cost_skips WHERE resolved_at IS NULL ORDER BY id'
+).all();
+console.log('\n── Open (unresolved) rows in ingredient_cost_skips ──────────────');
+for (const s of openSkips) console.log(`  ingredient=${s.ingredient_id} po=${s.po_id} ${s.reason}`);
 
-  console.log('\n── GET /api/alerts/feed → costSkips section ─────────────────────');
-  for (const s of (feed.data.costSkips || [])) {
-    console.log(`  ${s.ingredient_sku} ${s.ingredient_name} — ${s.reason}  (PO ${s.po_number}, line ¥${s.line_price}/${s.line_unit}, cost kept ${s.cost_per_unit}/${s.recipe_unit})`);
-  }
-  console.log('  by reason:', JSON.stringify(feed.data.costSkipsByReason));
-  // Only C-5 is still open — E-40 resolved itself in case 7.
-  check('feed returns the open skips', (feed.data.costSkips || []).length,        3);
-  check('feed count agrees',               feed.data.counts.costSkips,            3);
-  check('badge count includes skips',      badge.breakdown.costSkips,             3);
-  check('by-reason breakdown split',       feed.data.costSkipsByReason.length,    2);
+// Only C-5 is still open on E-40's reason — E-40 resolved itself in case 7,
+// which is why an open count of 3 against 4 stored rows is the assertion.
+check('three skips are still open', openSkips.length, 3);
+check('and one of the four resolved', skipRows.length - openSkips.length, 1);
 
-  server.close();
-  fixture.close();
-  try { fs.unlinkSync(dbFile); } catch {}
-  console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : failures + ' CHECK(S) FAILED'}\n`);
-  process.exit(failures === 0 ? 0 : 1);
-})();
+const byReason = [...new Set(openSkips.map(s => s.reason))].sort();
+console.log('  open reasons:', JSON.stringify(byReason));
+check('the open skips split across two reasons', byReason.length, 2);
+
+fixture.close();
+try { fs.unlinkSync(dbFile); } catch {}
+console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : failures + ' CHECK(S) FAILED'}\n`);
+process.exit(failures === 0 ? 0 : 1);

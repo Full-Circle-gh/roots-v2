@@ -412,25 +412,12 @@ app.use(require('./routes/billing-pay'));    // Mini App Backend billing payment
 app.use(require('./routes/backend-signup')); // Mini App Backend tenant signup / provisioning (gated in Phase 2)
 app.use(require('./routes/saas-admin'));     // Platform owner console — tenants / subscriptions / branding (kitchen-admin gated)
 app.use(require('./routes/store-admin'));    // Platform account-manager console — store-admin.* (platform_admins realm + audit)
-app.use(require('./routes/ingredients'));
-app.use(require('./routes/recipes'));
-app.use(require('./routes/admin'));
 app.use(require('./routes/products'));
 app.use(require('./routes/purchases'));
-app.use(require('./routes/finance'));
-app.use(require('./routes/alerts'));
-app.use(require('./routes/waste'));
-app.use(require('./routes/kitchen'));
-app.use(require('./routes/sales'));
 app.use(require('./routes/restock'));
-app.use(require('./routes/lookups'));
 app.use(require('./routes/ai'));
-app.use(require('./routes/production'));
-app.use(require('./routes/pos'));
-app.use(require('./routes/markets'));
 app.use(require('./routes/push'));
 app.use(require('./routes/events'));
-app.use(require('./routes/feedback'));
 // Public storefront tenant scope — maps the mini-app's AppID → tenant before
 // the retail routes run. Path-scoped to /api/retail (does NOT match the
 // segment-distinct /api/retail-admin, which has its own gate). No-op for Roots.
@@ -746,8 +733,9 @@ function serveShop(req, res) {
   res.sendFile(path.join(__dirname, 'public', 'shop.html'));
 }
 
-// Main app - serves the SPA shell
-const { requireAuth } = require('./middleware/auth');
+// Host router for '/'. This served the kitchen SPA shell until §78; the
+// `requireAuth` import that gated it went with the page, since a redirect to
+// another host discloses nothing and the destination runs its own gate.
 app.get('/', (req, res) => {
   const host = (req.hostname || '').toLowerCase();
   // Platform account-manager console subdomain → the store-admin shell. Self-
@@ -765,11 +753,32 @@ app.get('/', (req, res) => {
   if (lookupStorefrontHost(req.hostname)) {
     return serveShop(req, res);
   }
-  // Everything else (food.* / app.* / bare domain) → kitchen app, auth-gated.
-  requireAuth(req, res, () => {
-    res.set('Cache-Control', 'no-cache');
-    res.sendFile(path.join(__dirname, 'public', 'app.html'));
-  });
+  /* Everything else (food.* / app.* / bare domain) used to serve the kitchen
+     SPA. §78 deleted it, and this is the door left forwarding to the app the
+     staff actually work in.
+
+     THE AUTH GATE GOES WITH THE PAGE IT PROTECTED. `requireAuth` here was
+     guarding `users`-realm access to the SPA; a redirect to another host
+     discloses nothing, and the destination runs its own gate. Leaving the gate
+     would bounce a signed-out visitor to /login, which now leads only to the
+     CMS — a worse answer than sending them where the work is.
+
+     302, NEVER 301, and this route outlives the app for the third time in this
+     retirement: `/` is the `start_url` AND the `scope` of
+     public/manifest.webmanifest, installed on staff devices as "Roots Kitchen
+     Management". A permanent redirect is cached by the browser and the
+     installed service worker essentially forever, so a 301 here would be
+     unrecallable from every device that ever followed it — and unlike /stock
+     and /kitchen, this one is the bare domain, which also fronts the mini
+     app's API, the payment callbacks and the ACME challenge. Those are
+     excluded from the canonical-host redirect above and are untouched by this,
+     which answers `/` alone.
+
+     THE MANIFEST AND ICONS STAY, on the same reasoning as /stock's and
+     /kitchen's: the shortcut is installed now and resolves them on launch.
+     They go once the redirect has been live long enough that nobody opens it. */
+  res.set('Cache-Control', 'no-store');
+  res.redirect(302, 'https://' + STORE_HOST + '/');
 });
 
 // /retail-admin is retired as a standalone URL — the online-store backend now
@@ -912,15 +921,41 @@ app.get('/full-circle', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'full-circle.html'));
 });
 
-// Kitchen station shell. PUBLIC route (no requireAuth) so Chrome can
-// validate the manifest's start_url during PWA install — otherwise it
-// silently fails when the route returns 302→/login. The page itself
-// self-authenticates against the `kitchen` permission via /api/auth/me
-// on load and bounces unauthenticated users to /login, so security is
-// unchanged.
+/* The kitchen station shell is GONE (§76). `public/kitchen.html` is deleted and
+   the two jobs it held live in Tacet Mobile: the restock queue is `/m`'s
+   `kitchenqueue` screen (§71) and logging a batch is its `logbatch` screen,
+   writing through routes/retail-production.js. What stays here is the door,
+   forwarding.
+
+   THE PAGE WAS UNREACHABLE BY THE PEOPLE IT WAS FOR, which is what made this
+   safe rather than merely tidy. It self-authenticated against the `kitchen`
+   PERMISSION on the `users` table — the old realm — and the people who actually
+   cook are Tacet `tenant_users` holding capabilities. routes/retail-production.js
+   records the consequence in its own header: production_batches has been empty
+   since it shipped, because its only two writers were this page and app.html's
+   Production Log and neither had a login the cooks could use.
+
+   THIS ROUTE OUTLIVES THE APP AND MUST NOT BE TIDIED AWAY, for the same reason
+   /stock's does (§48 step 4): it is the `start_url` of a manifest sitting on
+   kitchen tablets as an installed shortcut. Deleting it turns every one of those
+   into a 404 on somebody's shift.
+
+   302, NEVER 301. A permanent redirect is cached by the browser and by the
+   installed app's service worker essentially forever — so if `/kitchen` ever has
+   to mean something again, or this destination changes, a 301 would be
+   unrecallable from every tablet that ever followed it.
+
+   THE MANIFEST AND ICONS STAY, and the cost of that is named rather than
+   discovered: the manifest's `scope` is `/kitchen`, so an installed shortcut now
+   launches, follows this redirect, and lands on `/m` OUTSIDE its own scope —
+   which opens it in a browser tab instead of standalone. That is a downgrade in
+   feel and not a break, it is exactly what the retired /stock shortcut does
+   today, and it is preferred to editing the manifest of an app that is being
+   retired. Manifest and icons go together in their own small change once the
+   redirect has been live long enough that nobody is opening the shortcut. */
 app.get('/kitchen', (req, res) => {
-  res.set('Cache-Control', 'no-cache');
-  res.sendFile(path.join(__dirname, 'public', 'kitchen.html'));
+  res.set('Cache-Control', 'no-store');
+  res.redirect(302, '/m');
 });
 app.get('/kitchen-manifest.webmanifest', (req, res) => {
   res.type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'kitchen-manifest.webmanifest'));
@@ -935,7 +970,8 @@ app.get('/kitchen-manifest.webmanifest', (req, res) => {
 // The /restock station shell was removed on 2026-08-04 — the restock flow is
 // not used; warehouse staff do not raise restock orders anywhere. Gone with it:
 // its manifest and its four icons. The `/api/restock/*` API in routes/restock.js
-// stays — app.html and kitchen.html still drive restock orders through it.
+// stays — app.html still drives restock orders through it (kitchen.html did
+// too until §76 deleted it).
 
 /* Quick Stock is GONE (§48 step 4). `public/stock.html` is deleted and every
    job it held lives in Tacet Mobile; what stays here is the door, forwarding.

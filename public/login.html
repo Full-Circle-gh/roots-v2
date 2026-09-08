@@ -238,34 +238,48 @@ function _lastAppRedirect(user) {
   let last = '';
   try { last = localStorage.getItem('last_app') || ''; } catch {}
   if (!last) return null;
-  // Validate same-origin and that the user actually has access.
-  const isAdmin = user.role === 'admin';
-  const p = user.permissions || {};
-  if (last === '/'        ) return '/';
+  // Only ONE remembered value is still honoured, so there is no longer a
+  // permission to check against it — `/cms` is the one surface a `users`
+  // session can open. The `isAdmin` and `permissions` reads that used to gate
+  // the other branches went with them rather than being left computing nothing.
+  //
+  // A remembered '/' is deliberately NOT honoured: every browser that ever
+  // opened the kitchen SPA wrote it, and §78 turned '/' into a redirect off
+  // this realm entirely. Honouring it would send those browsers to a login
+  // they cannot pass — the same trap '/restock' and '/kitchen' are listed for
+  // below.
+  if (last === '/cms') return '/cms';
   // '/restock' is deliberately absent: the page was removed 2026-08-04 and the
   // route is gone, but restock.html had written last_app='/restock' into every
   // warehouse browser, so honouring a remembered value here would 404 them.
-  if (last === '/kitchen' && (isAdmin || p.kitchen))  return '/kitchen';
+  // '/kitchen' is deliberately absent, on the same reasoning as '/restock'
+  // above and with one addition. The page was deleted (§76) and the route now
+  // forwards to /m — but /m is TACET MOBILE, which authenticates on
+  // `backendUserId` (tenant_users). A session that arrived here holds
+  // `userId` (users), so honouring a remembered '/kitchen' would forward this
+  // user into an app their login cannot open and bounce them straight back to
+  // /backend/login. A dead end is worse than the dashboard.
   return null;
 }
+// THERE IS ONE PAGE LEFT IN THIS REALM, and it is the mini-app editor.
+//
+// This used to fan a `users` session out across three shells by permission.
+// All three are now gone: `/restock` lost its page on 2026-08-04, `/kitchen`
+// lost its page to §76, and `/` — the kitchen SPA itself — went with §78.
+//
+// SO THE DESTINATION IS `/cms`, NOT `/`. This returned '/' until §78, which is
+// now a 302 to the Tacet backend on another host — and Tacet authenticates on
+// `backendUserId` (tenant_users) while every session reaching this function
+// holds `userId` (users). Sending them there would forward them into an app
+// their login cannot open and bounce them to /backend/login. `/cms` is the one
+// surface left that reads THIS realm: it self-authenticates against
+// /api/auth/me, the same session this page just created.
+//
+// THAT IS ALSO THE WHOLE REASON THIS PAGE STILL EXISTS. Once the CMS moves onto
+// Tacet's login, the `users` realm has no surface at all and this page, its
+// realm and its accounts can go together. Until then it has exactly one job.
 function _smartRedirect(user) {
-  if (!user) return '/';
-  if (user.role === 'admin') return '/';
-  const p = user.permissions || {};
-  // `warehouse_inbox` used to short-circuit to /restock here. That page is gone
-  // (2026-08-04) and its holders now fall through to the routing below, which
-  // lands each of them on a tool they already have: the dashboard for anyone
-  // with a manager-level perm, /kitchen for kitchen-only staff.
-  // Manager-level perms = a multi-tool operator → dashboard. We
-  // intentionally exclude common warehouse / kitchen flags like
-  // dashboard / ingredients / purchases / alerts / suppliers because
-  // those are part of the warehouse role's default kit.
-  if (p.products || p.finance || p.sales) return '/';
-  // Otherwise route by single-app perm. The `restock` perm no longer routes
-  // anywhere of its own — it still gates the /api/restock endpoints that
-  // app.html and kitchen.html use, but it has no page to open any more.
-  if (p.kitchen) return '/kitchen';
-  return '/';
+  return '/cms';
 }
 async function login() {
   const u = document.getElementById('username').value.trim();
