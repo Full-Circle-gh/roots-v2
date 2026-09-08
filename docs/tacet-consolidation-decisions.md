@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.151
+# Tacet shared-core consolidation — decisions record, v4.152
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-08 · v4.152 — **"ASK THE KITCHEN" GAINS A THIRD PURPOSE, `urgent`, AND IT SORTS THE QUEUE RATHER THAN ONLY COLOURING IT — DECIDED by Ash, 2026-09-08.** §65 records it. **It is a THIRD VALUE OF `purpose`, not a fourth column.** `restock_orders.purpose` is untyped TEXT with no CHECK constraint (`database.js` `addColumn`), so `'urgent'` needs no migration and no back-fill: every existing row keeps the value it has and the two old ones mean exactly what they meant. **Rejected: a separate `urgent` flag orthogonal to `order`/`shelf`**, which buys an urgent SHELF restock nobody has asked for at the price of a schema column, a second piece of request state and a second question on a screen whose whole virtue is that it asks one. **What makes it more than a label is `ORDER BY`.** The queue's only sort was `created_at DESC` — newest first — so an urgent request raised at 09:00 sat below a routine one raised at 09:05 and the kitchen had to notice a chip to find it. Urgent rows now sort ahead of everything else, `created_at DESC` still ordering within each group. **The sort key is `purpose = 'urgent'` and nothing else**, so a store→warehouse row (purpose NULL) is unaffected — this endpoint serves both directions and the change had to be inert for the one it is not about. **It is added in FOUR places because `purpose` is read in four**, and a value understood by three of them is worse than no value at all: the picker in Tacet Mobile, the same picker in `/stock` (which §48 retires but has not yet deleted), the kitchen queue's chip in both its list and its detail, and the printed slip in `lib/feie.js`. **The Chinese is composed, not lifted**, and is declared in `docs/tacet-delivery-vocabulary.md` v1.33 under the 2026-09-06 amendment, with the live pairs it was built from and the ones rejected.
 
 2026-09-08 · v4.151 — **§64 ADDED: THE PHONE READS THE CATALOGUE TO ITS END, AND THE 500-ROW HALF THAT v4.149'S NEIGHBOURING FIX LEFT OPEN IS CLOSED.** PR #363 made `loadCatalogue` the only writer of `DB.products` and pointed the All chip at the server's `total`, then wrote in the code that the endpoint caps at 500 rows and that *"paging the phone past that cap is a separate change"*. **On a catalogue past 500 every symptom of the original report was still live** — Live / Draft / Low / Out counting a prefix while All counted the shop, a search that could not reach past the cap, a variant family cut in half at the boundary, and an order line's SKU chip refusing to open anything beyond it. `GET /api/retail-admin/products` now takes an `offset` and the phone WALKS the catalogue until it holds the whole shelf. **SERVER-SIDE FILTERING — the obvious answer, and what the Orders and Customers screens already do — WAS REJECTED, for a reason specific to this array: `DB.products` is not the Products screen's list, it is the phone's product lookup, and the ORDERS screen reads it.** A server-filtered array is a view, so an order line's SKU chip would stop resolving the moment a filter was set on Products — the same defect, from the other direction. **`id` is now the last ORDER BY key on that endpoint, and that is not tidiness:** the three sort keys are not unique between them, SQLite may order tied rows differently in two statements, and across LIMIT/OFFSET a tied row can land on both pages or on neither — a two-request read silently gaining a duplicate or losing a product. **The screen is honest at every instant rather than only at the end**: a count got by walking the array draws only while the array is the whole shelf, a refresh never paints fewer products than it already had, a read that reached nothing does not license a count of zero, and where the walk stops short an amber bar names the fraction. One composed pair, declared in `docs/tacet-delivery-vocabulary.md` v1.32. Four things are recorded as deliberately NOT fixed, including the blank screen a first-page failure still leaves and the desktop grid, which still reads one page and says so.
 
@@ -6661,3 +6663,41 @@ Decided 2026-09-08, closing the half that §63's neighbouring fix (PR #363, "sto
 2. **The runaway guard's advice is wrong in the one case that trips it.** `CAT_MAX_PAGES` is 20 — ten thousand products, far past any tenant — and a phone that reached it would be offered a Try again that does the same thing and stops in the same place. It is left as one message for both stopping conditions because the reachable one is a failed page, and a second string for an unreachable state is a string nobody will ever read and everybody will have to maintain.
 3. **The desktop grid still reads one page.** `paLoad()` fetches without an offset and sets `PA_TRUNCATED`, so a catalogue past 500 is still short there — the banner `tdShowTruncation` exists for exactly that and the grid says so rather than lying. The endpoint can now serve it the rest; making it ask is a separate change on a separate surface.
 4. **The boot seed still reads `?limit=50`.** It is a lookup seed, it stands aside the moment `catalogueTried` is set, and it never sets the flag the counts read — all three asserted by `scripts/test_mobile_catalogue_count.js` §3. It is not touched.
+
+## §65 — "ASK THE KITCHEN" HAS A THIRD PURPOSE, AND URGENT MEANS THE QUEUE MOVES
+
+**DECIDED by Ash, 2026-09-08.** Code: this section is written before it.
+
+### The question
+
+"Ask the kitchen" asks one question before it asks anything else — *What is it for?* — and it had two answers: **For an order**, a customer is waiting; **For the shelf**, restocking what we hold. Neither says *make this one first*. A warehouse operator with an order due in two hours and a routine shelf top-up had the same sentence available for both, so the only thing that decided what the kitchen made first was the order the requests happened to arrive in.
+
+### What is decided
+
+**1. `urgent` is a third value of `purpose`, not a new column.**
+
+`restock_orders.purpose` is TEXT with no CHECK constraint — added by `addColumn` in `database.js`, which is how every column on that table arrived. A third value therefore needs **no migration, no back-fill and no default**: existing rows keep `'order'`, `'shelf'` or NULL, and each still means precisely what it meant. The server's whitelist gains one name.
+
+**REJECTED: an `urgent` boolean orthogonal to the purpose.** It would let a shelf restock be urgent, which nobody has asked for and which the request itself argues against — a shelf is by definition the thing that is *not* being waited on. Against that it costs a schema column, a second piece of state in `state.rq`, a second control on a screen whose whole virtue is that it asks one question, and a second thing for the kitchen to read on the card. §39's no-prefill rule also gets harder to hold: a toggle has a default and a default is a reason nobody gave.
+
+**REJECTED: asking about urgency only after "For an order" is picked.** Two taps on the commonest path to spare a third button on the least common one.
+
+**2. Urgency is a SORT, not a colour.**
+
+`GET /api/restock` ordered by `created_at DESC, id DESC` and nothing else. Under that sort an urgent request raised at 09:00 sits *below* a routine one raised at 09:05, and the kitchen finds it only by reading every card. The list now sorts `purpose = 'urgent'` first, with `created_at DESC` still ordering inside each group, so the queue's existing shape is unchanged for everything that is not urgent.
+
+**The key tests `purpose = 'urgent'` and nothing else, deliberately.** That endpoint serves store→warehouse rows as well, where `purpose` is NULL by design; the expression evaluates the same for every one of them and their order does not move. A change to a shared query that is not inert for the direction it is not about is a change to two things.
+
+**3. It is added in four places, because `purpose` is read in four.**
+
+A value that three readers understand and the fourth does not is worse than no value: the fourth prints a blank where a reason belongs, and a blank on a kitchen slip already means *this request predates the field*. So: the picker in Tacet Mobile (`public/m.html`), the same picker in `/stock` (`public/stock.html` — §48 retires that app but has not deleted it, and a slip printed from either must read the same), the kitchen queue's chip in both list and detail (`public/kitchen.html`), and the printed slip (`lib/feie.js`). The two "what was this for" label helpers — `krPurpose` in Tacet, `kqPurpose` in `/stock` — are the same reader and are counted with the pickers.
+
+**4. The Chinese is composed and declared.**
+
+`加急订单` and its sub-line are composed, not lifted, and are recorded in `docs/tacet-delivery-vocabulary.md` v1.33 under the 2026-09-06 amendment with the live pairs they were built from. `加急` is live in `public/retail-admin.html` ("当日达加急"); `优先` is live in the dashboard ("最早优先", "库存最少优先"); `制作` is live in this very screen ("制作完成前库存不变"). Nothing here is a character this repository had not already committed to.
+
+### What is NOT decided here
+
+- **Urgency does not reach the store→warehouse direction.** Those rows carry no purpose and this change gives them none.
+- **Nothing is escalated over time.** An urgent request does not become more urgent, and a routine one does not become urgent by ageing. Both are questions about a policy nobody has stated.
+- **No new push.** An urgent request broadcasts on exactly the channel every kitchen request already broadcasts on; a separate alarm is a decision about who is woken up and is not this one.

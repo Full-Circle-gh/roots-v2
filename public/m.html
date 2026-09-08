@@ -709,7 +709,7 @@ const state = {
      either clears it. The CATALOGUE is shared and cached: both screens list the
      same products and re-reading it on every entry is a wait for nothing. */
   rq:{products:null,tried:false,fromShelf:false,q:'',
-      purpose:null,          // kitchen only: 'order' | 'shelf', no default (§39)
+      purpose:null,          // kitchen only: 'order' | 'shelf' | 'urgent', no default (§39)
       from:null,             // ask-for-stock: the location being asked to supply
       to:null,               // ...and the one asking, where there is a choice
       qty:{},busy:false,err:'',sent:null},
@@ -6746,9 +6746,10 @@ SUBS.sales={title:['Sales','销售'],status:()=>statusSales(),render:()=>screenS
 /* ══ ASKING FOR SOMETHING ══════════════════════════════════════════════════
    Two directions, one shape. Ask the kitchen asks for something to be MADE and
    moves no stock — §39: stock changes when the kitchen makes it, not when
-   somebody asks — so it carries a purpose and no locations. Ask for stock asks
-   another location to SEND what it already has, so it carries the two ends and
-   no purpose.
+   somebody asks — so it carries a purpose ('order', 'shelf', or §65's 'urgent',
+   which is the same request with a claim on the front of the queue) and no
+   locations. Ask for stock asks another location to SEND what it already has,
+   so it carries the two ends and no purpose.
 
    NO product_id IS SENT BY EITHER, and that is deliberate rather than a
    shortcut. `restock_items.product_id` is read as a KITCHEN products.id, and
@@ -7627,8 +7628,9 @@ function krOpen(id){
   });
 }
 function krPurpose(o){
-  return o.purpose==='order' ? T('For an order','用于发货')
-       : o.purpose==='shelf' ? T('For the shelf','货架补货') : '';
+  return o.purpose==='order'  ? T('For an order','用于发货')
+       : o.purpose==='shelf'  ? T('For the shelf','货架补货')
+       : o.purpose==='urgent' ? T('Urgent order','加急订单') : '';
 }
 
 function qsStore(){ const c=state.qs.ctx; if(!c) return null;
@@ -8268,19 +8270,34 @@ function screenAskKitchen(){
      FIRST — before the list, because it is a property of the whole request —
      and nothing is chosen for them: §39's no-prefill rule is that a purpose
      picked on somebody's behalf is a reason they did not give. */
-  const opt=(k,en,zh,subEn,subZh)=>`<button class="row" style="flex:1;min-height:64px;padding:10px 12px;text-align:left;
-    border:1px solid ${r.purpose===k?'var(--text-primary)':'var(--border-default)'};border-radius:12px;
-    background:${r.purpose===k?'var(--text-primary)':'var(--surface-card)'};
-    color:${r.purpose===k?'var(--surface-card)':'var(--text-secondary)'};display:block"
+  /* THE ROW WRAPS RATHER THAN SPLITTING THREE WAYS. Three options across a
+     phone leaves each about a third of 328px, which wraps both the title and
+     the sub-line and makes the commonest two harder to read than they were.
+     So the two that were here keep their half each, and Urgent takes the full
+     width beneath them — which also puts it where its own sentence fits.
+     URGENT WEARS THE DAMAGE COLOUR WHEN CHOSEN, not the plain inversion the
+     other two use. Selecting it is a claim on somebody else's queue position
+     and it should not look like the other two answers to the same question;
+     `.dmgbtn.on` a few thousand lines up is the same pattern for the same
+     reason. */
+  const opt=(k,en,zh,subEn,subZh,wide)=>{
+    const on=r.purpose===k, hot=k==='urgent';
+    const bg  = on ? (hot?'var(--brick-tint)':'var(--text-primary)') : 'var(--surface-card)';
+    const bd  = on ? (hot?'var(--brick)':'var(--text-primary)')      : 'var(--border-default)';
+    const fg  = on ? (hot?'var(--brick-ink)':'var(--surface-card)')  : 'var(--text-secondary)';
+    return `<button class="row" style="flex:1 1 ${wide?'100%':'calc(50% - 4px)'};min-height:64px;padding:10px 12px;text-align:left;
+    border:1px solid ${bd};border-radius:12px;background:${bg};color:${fg};display:block"
     onclick="APP.cmd('rqPurpose','${k}')">
     <b style="display:block;font-size:15px;font-weight:500;line-height:1.3;color:inherit">${T(en,zh)}</b>
     <i style="display:block;font-style:normal;font-size:13px;margin-top:2px;opacity:.75">${T(subEn,subZh)}</i></button>`;
+  };
   return `<div style="margin-top:12px;padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
       T('They make it — nothing moves until it is made.','由厨房制作 — 制作完成前库存不变。')}</div>
     <div style="padding:0 16px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('What is it for?','用途')}</div>
-    <div style="display:flex;gap:8px;padding:0 16px 14px">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;padding:0 16px 14px">
       ${opt('order','For an order','用于发货','A customer is waiting on it','有客户订单等待')}
       ${opt('shelf','For the shelf','货架补货','Restocking what we hold','补充本店库存')}
+      ${opt('urgent','Urgent order','加急订单','Make it first — someone is waiting on it now','请优先制作 — 现在就有人在等',true)}
     </div>
     ${rqPicker()}
     ${rqFoot('rqSendKitchen', !!r.purpose && rqChosen().length>0)}`;

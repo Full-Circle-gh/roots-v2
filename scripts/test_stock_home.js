@@ -620,6 +620,9 @@ const CASES = {
   // that could was deleted in August. This is that door.
   'kitchen-asks-why-first': { js: seq(["'[data-akopen]'", '250']),
     expect: ['Ask the kitchen', 'What is it for?', 'For an order', 'For the shelf',
+             // §65's third answer. It is asked in the same breath as the other
+             // two rather than behind them, so it is expected in the same list.
+             'Urgent order', 'Make it first — someone is waiting on it now',
              'They make it — nothing moves until it is made'],
     // The purpose has no default: the server refuses a kitchen request without
     // one, and a reason picked for him is a reason he did not give.
@@ -629,6 +632,22 @@ const CASES = {
     js: seq(["'[data-akopen]'", '250', "'[data-akinc=\"7\"]'"]),
     expect: ['1 items'],
     check: (out) => /data-send="disabled"/.test(out) ? null : 'Send was live with a product but no purpose' },
+
+  /* THE THIRD OPTION POSTS THE THIRD WORD. A button that renders and then sends
+     'order' is worse than no button: the kitchen sorts on this value and the
+     operator would have been told their request was expedited when it was not.
+     The server's own acceptance of the word is asserted without a browser in
+     scripts/test_restock_urgent.js, which is in the shard that runs. */
+  'kitchen-sends-urgent': {
+    js: seq(["'[data-akopen]'", '250', "'[data-akpurpose=\"urgent\"]'", "'[data-akinc=\"7\"]'",
+             "'[data-aksend]'", '350']),
+    expect: ['Sent to the kitchen'],
+    checkPost: (p) => {
+      if (!p) return 'nothing was posted';
+      if (p.to_role !== 'kitchen') return `posted to_role ${p.to_role}, expected kitchen`;
+      if (p.purpose !== 'urgent') return `posted purpose ${p.purpose}, expected urgent`;
+      return null;
+    } },
 
   'kitchen-sends': {
     js: seq(["'[data-akopen]'", '250', "'[data-akpurpose=\"shelf\"]'", "'[data-akinc=\"7\"]'",

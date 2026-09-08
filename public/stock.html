@@ -522,10 +522,19 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
    Tianhe asking the kitchen to MAKE something. No artboard was drawn for this
    one — the picking and receiving canvases cover the van, not the pot — so it
    borrows their ledger wholesale rather than inventing a third look. */
-.ak-purpose{display:flex;gap:8px;padding:0 16px 12px;flex:none;}
-.ak-opt{flex:1;min-height:64px;border-radius:12px;background:var(--surface);border:1px solid var(--line);
+/* THE ROW WRAPS RATHER THAN SPLITTING THREE WAYS (§65). Three across a phone
+   leaves each about a third of the width and wraps both lines of the two that
+   were already here; so those keep a half each and Urgent takes the row under
+   them, which is also where its own sentence fits. */
+.ak-purpose{display:flex;flex-wrap:wrap;gap:8px;padding:0 16px 12px;flex:none;}
+.ak-opt{flex:1 1 calc(50% - 4px);min-height:64px;border-radius:12px;background:var(--surface);border:1px solid var(--line);
         padding:10px 12px;text-align:left;color:var(--text2);}
+.ak-opt.wide{flex:1 1 100%;}
 .ak-opt.on{background:var(--text);border-color:var(--text);color:var(--bg);}
+/* Urgent wears the damage colour when chosen rather than the plain inversion
+   the other two use: choosing it is a claim on somebody else's place in the
+   queue and should not read as one more answer of the same weight. */
+.ak-opt.hot.on{background:var(--brick-tint);border-color:var(--brick);color:var(--brick-ink);}
 .ak-opt b{display:block;font-size:15px;font-weight:600;line-height:1.3;}
 .ak-opt i{display:block;font-style:normal;font-size:13px;margin-top:2px;opacity:.75;line-height:1.35;}
 .ak-step{display:flex;align-items:center;gap:2px;flex:none;}
@@ -3729,13 +3738,13 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      request since 16 May. This is that door, reopened.
 
      THE PURPOSE IS MANDATORY, and the server has always enforced it — a request
-     without `order` or `shelf` is refused by name. It is asked for first, before
+     without `order`, `shelf` or §65's `urgent` is refused by name. It is asked for first, before
      any product, because it is the thing the kitchen reads first: making
      something for a customer order due today is different work from refilling a
      shelf, and the old page asked for it in a modal after the fact. */
 
   var ak = {
-    purpose: null,      // 'order' | 'shelf' — no default; §39's no-prefill rule
+    purpose: null,      // 'order' | 'shelf' | 'urgent' — no default; §39's no-prefill rule
     qty: {},            // product id -> how many are being asked for
     products: null,     // the catalogue, once fetched
     fromShelf: false,   // true when we fell back to the shelf list
@@ -3903,6 +3912,11 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
           '<b>' + t('For an order', '用于发货') + '</b><i>' + t('A customer is waiting on it', '有客户订单等待') + '</i></button>' +
         '<button class="ak-opt' + (ak.purpose === 'shelf' ? ' on' : '') + '" data-akpurpose="shelf">' +
           '<b>' + t('For the shelf', '货架补货') + '</b><i>' + t('Restocking what we hold', '补充本店库存') + '</i></button>' +
+        // §65. Same question, third answer: an order that jumps the queue. The
+        // kitchen list sorts on it server-side, so this is not a colour.
+        '<button class="ak-opt wide hot' + (ak.purpose === 'urgent' ? ' on' : '') + '" data-akpurpose="urgent">' +
+          '<b>' + t('Urgent order', '加急订单') + '</b><i>' +
+          t('Make it first — someone is waiting on it now', '请优先制作 — 现在就有人在等') + '</i></button>' +
       '</div>' +
       '<div class="ak-search"><input id="akQ" inputmode="search" enterkeyhint="search" ' +
         'placeholder="' + t('Search products', '搜索商品') + '" value="' + esc(ak.q) + '"></div>' +
@@ -4246,8 +4260,9 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   }
 
   function kqPurpose(o) {
-    return o.purpose === 'order' ? t('For an order', '用于发货')
-         : o.purpose === 'shelf' ? t('For the shelf', '货架补货') : '';
+    return o.purpose === 'order'  ? t('For an order', '用于发货')
+         : o.purpose === 'shelf'  ? t('For the shelf', '货架补货')
+         : o.purpose === 'urgent' ? t('Urgent order', '加急订单') : '';
   }
   function kqItemName(it) {
     var n = lang === 'cn' ? (it.product_cn || it.product_name) : (it.product_name || it.product_cn);
