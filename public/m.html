@@ -917,7 +917,6 @@ reg('pikList', ()=>{ const k=state.pik; k.step='list'; k.result=null; k.err=''; 
 reg('kqOpen', id=>kqOpen(id));
 reg('kqList', ()=>{ const k=state.kq; k.order=null; k.orderId=null; k.err=''; render(); });
 reg('kqTab', t=>{ const k=state.kq; if(k.tab===String(t)) return; k.tab=String(t); k.list=null; k.tried=false; render(); });
-reg('kqAdvance', to=>kqAdvance(to));
 reg('kqItemAdvance', (id,to)=>kqItemAdvance(Number(id),to));
 reg('kqItemRecord', id=>kqItemRecord(Number(id)));
 reg('hdBump', (i,d)=>hdBump(Number(i),Number(d)));
@@ -6916,32 +6915,6 @@ function kqNote(why){
   return lead+' '+T('This request asked for no quantities, so there is nothing to add.',
                     '该申请没有数量，无需入库。');
 }
-function kqAdvance(to){
-  const k=state.kq;
-  if(k.busy||!k.order) return;
-  k.busy=true; k.err=''; render();
-  apiWrite('/api/restock/'+k.order.id+'/status',{status:String(to)},'PUT').then(()=>{
-    k.busy=false; k.order.status=String(to);
-    if(String(to)==='prepared'){
-      // Read BEFORE the reload clears it — this is the only copy of what was
-      // asked for, and loadKq drops it.
-      const made=k.order;
-      k.order=null; k.orderId=null; loadKq(true);
-      const why=hdStart(made);
-      if(why===true) return;
-      // It closed and the stock did not move. Say so on the way back, naming
-      // what is missing — never the empty queue on its own.
-      k.note=kqNote(why);
-    }
-    render();
-  }).catch(e=>{
-    if(String(e.message)==='auth') return;
-    k.busy=false;
-    k.err=e.code==='norealm'?T('This account cannot work the kitchen queue.','此账号无法处理厨房队列。')
-                            :(e.message||T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。'));
-    render();
-  });
-}
 /* THE KITCHEN QUEUE SPLIT (decisions §61, corrected same day by Ash: "the
    what you made (stock update) come up only after all products in the list
    marked as made. it should show up after every product marked as made,
@@ -7085,11 +7058,17 @@ function hdResolve(order){
    who has JUST closed a kitchen request: the request is gone from the queue, the
    shelf is still short, and a silent fall-back to an empty list tells them the
    opposite of what happened. `true` when the screen opened, otherwise a reason
-   kqAdvance turns into a sentence. There is no path left that says nothing. */
-/* `item`, when passed, hands over ONE line rather than the whole order (the
-   kitchen queue split correction, decisions §61): every guard below reads
-   the same either way, and only what gets resolved into `state.hd.lines`
-   differs. Omitted, this is the whole-order hand-over §59 was written for. */
+   its callers turn into a sentence through kqNote. There is no path left that
+   says nothing. */
+/* `item` hands over ONE line rather than the whole order (the kitchen queue
+   split correction, decisions §61): every guard below reads the same either
+   way, and only what gets resolved into `state.hd.lines` differs.
+   OMITTING IT IS THE WHOLE-ORDER HAND-OVER §59 WAS WRITTEN FOR, AND NO LIVE
+   CALLER DOES ANY MORE — kqAdvance was the last one and §61 replaced it. The
+   parameter stays optional rather than being made required: `hdResolve` on a
+   whole order is still reached from the awaiting-batch path below, so the shape
+   is not dead, only this entrance to it. Anything wiring a new whole-order
+   button should read §61 first — it was removed on purpose. */
 function hdStart(order,item){
   if(!canRoute('whatmade')) return 'nocap';
   // Nothing was asked for, so there is nothing to hand over. The only refusal
@@ -7149,10 +7128,13 @@ function hdResolveItem(item){ return hdResolve({items:[item]}); }
    quoted back, and the operator says whether it is also what was made. */
 function hdOpen(lines,rs,rsId,closesRequest){
   /* push() DECLINES A ROUTE THIS OPERATOR CANNOT REACH, AND SAYS NOTHING, so
-     answering "opened" without asking sends kqAdvance home believing it handed
-     over: the request closes, the screen does not change, and the early return
-     skips even the re-render. Ask first and let the caller fall through to the
-     queue, which is what it already does for a request with nothing to add. */
+     answering "opened" without asking sends kqItemAdvance home believing it
+     handed over: the line closes, the screen does not change, and the early
+     return skips even the re-render. Ask first and let the caller fall through
+     to the queue, which is what it already does for a request with nothing to
+     add. (This was written against kqAdvance, the whole-order twin §61 deleted;
+     the trap is the same one, and it is now kqItemAdvance and kqItemRecord that
+     would walk into it.) */
   if(!canRoute('whatmade')) return 'nocap';
   const h=state.hd;
   h.lines=lines||null; h.rs=rs||null; h.rsId=rsId||null;
