@@ -61,10 +61,16 @@ t('a nameless role falls back to More rather than to nothing', () => {
   assert.deepStrictEqual(r.homeLabel, { en: 'More', cn: '更多' });
 });
 
-t('a stock-app-only role gets no door — /m would redirect it straight back', () => {
+/* WAS: "a stock-app-only role gets no door — /m would redirect it straight
+   back." True while server.js bounced that role out of Tacet Mobile; §48 step 3
+   re-points the confinement AT this app, so /m is now where the role lives and
+   the door is the truest one on the page. It is a FLAT role — it holds none of
+   the four tab capabilities — so it is named for itself, exactly as the
+   warehouse clerk above is. */
+t('a confined role gets the door into Tacet Mobile, named for its role', () => {
   const r = backToTacet(CLERK, ['quickstock:recount']);
-  assert.strictEqual(r.home, null);
-  assert.strictEqual(r.homeLabel, null);
+  assert.strictEqual(r.home, '/m?to=more');
+  assert.deepStrictEqual(r.homeLabel, { en: 'Shelf clerk', cn: '门店盘点' });
 });
 
 t('unresolved caps fail OPEN to the bar, exactly as m.html mCan() does', () => {

@@ -349,24 +349,45 @@ app.use((req, res, next) => {
   // an operator who should be locked down and isn't is a bug, but an operator
   // locked out of the app they use all day by a resolution hiccup is an outage.
   let restricted = false;
+  // THE ROLE'S OWN CAPABILITIES COME OFF THE SAME RECORD, at no extra cost —
+  // recordFor is already being called, and its `caps` decides the handful of
+  // endpoints the two confined roles do NOT share (raising a request is the
+  // clerk's job, not the cook's). §46's principle, applied one layer earlier:
+  // decide by capability, never by job title. Null when the record is
+  // unreadable, and lib/stock-app-only.js refuses the gated entries on null —
+  // the one place in this layer that fails CLOSED, with the reasoning there.
+  let roleCaps = null;
   try {
     const rec = require('./lib/roles').recordFor(u.tenant_id, role);
     restricted = rec ? rec.stockAppOnly : (role === 'kitchen' || role === 'store_stock');
+    roleCaps = rec ? rec.caps : null;
   } catch (e) { restricted = (role === 'kitchen' || role === 'store_stock'); }
   if (!restricted) return next();
   const p = req.path;
   if (p.startsWith('/api/')) {
     // The list lives in lib/stock-app-only.js, with the reasoning for what is on
-    // it — including why the kitchen queue's three calls had to be added, and
-    // why they are scoped by METHOD rather than path.
-    return require('./lib/stock-app-only').stockAppOnlyAllows(req.method, p)
+    // it — including why the kitchen queue's three calls had to be added, why
+    // they are scoped by METHOD rather than path, and why four of them are
+    // scoped by CAPABILITY on top of that.
+    return require('./lib/stock-app-only').stockAppOnlyAllows(req.method, p, roleCaps)
       ? next() : res.status(403).json({ error: 'kitchen_add_only' });
   }
-  // Pages/assets: let the Add Stock app + its static assets through; bounce any
-  // backend page (shell, login, team, billing…) to the app.
-  if (p === '/stock' || p === '/stock-login' || p === '/stock-manifest.webmanifest'
+  /* Pages/assets. THE APP THIS CONFINES TO IS TACET MOBILE (§48 step 3, as
+     amended 2026-09-08): `/m` and its manifest and icons go through, and every
+     backend page bounces THERE rather than to the separate app.
+
+     `/stock` STAYS OPEN HERE, and that is the migrate-before-delete ordering
+     rather than an oversight. It is an installed PWA sitting on staff phones as
+     a home-screen shortcut; closing it in the same change that opens `/m` would
+     take the app out from under anybody mid-shift who has not yet been moved.
+     Both doors stand until §48 step 4 deletes the second one and leaves the
+     redirect. What must not happen at any point is a role with no app. */
+  if (p === '/m' || p === '/m-manifest.webmanifest'
+      || p === '/stock' || p === '/stock-login' || p === '/stock-manifest.webmanifest'
       || p === '/stock-icon.svg' || p === '/apple-touch-icon.png' || p === '/favicon.ico') return next();
-  if (p === '/retail-admin' || p.startsWith('/backend/')) return res.redirect('/stock');
+  if (p.startsWith('/tacet-icon-') || p === '/tacet-icon.svg'
+      || p === '/tacet-apple-touch-icon.png') return next();
+  if (p === '/retail-admin' || p.startsWith('/backend/')) return res.redirect('/m');
   return next();   // fonts/css/img and other static assets
 });
 

@@ -15083,6 +15083,25 @@ async function loadLive(){
        stands rather than being overwritten with undefined. */
     if(cfg.timezone) window.TD_TZ = cfg.timezone;
   }catch(e){ if(String(e.message)==='auth') return; }
+  /* AN OPERATOR WITH NO TAB BAR HAS NO BOARD TO FILL, so the boot stops here.
+     Everything below this line loads the four tabs — KPIs, orders, products,
+     reviews, coupons, feedback, zones — and `flatNav()` is precisely the
+     operator none of those screens exist for: their tool list IS the home
+     screen (see flatNav's own note). Fetching a revenue board to render nothing
+     was always waste; what makes it a BUG rather than waste is §48 step 3.
+
+     A confined role (kitchen, store_stock) now lives in this app, and
+     lib/stock-app-only.js does not admit `/dashboard` — it is the revenue
+     endpoint, and admitting it to a kitchen phone is the whole thing that gate
+     exists to prevent. So for them these calls do not merely waste a request:
+     `api()` turns a 403 into location.href='/backend/login', server.js bounces
+     that back to '/m', and the app boot-loops. The gate cannot open and the app
+     must not ask — this is the app not asking.
+
+     It is placed AFTER /config deliberately: the store's name titles their home
+     screen when the role record carries no name, and its timezone is what every
+     date on their screens is drawn in. */
+  if(flatNav()) return;
   // dashboard → KPIs + deltas. MUST scope to today (the STORE's date) — the
   // endpoint defaults to a trailing 30 days, so an unscoped call made the
   // "Today" tiles show 30-day totals (and killed the vs-typical-day baseline).
