@@ -9117,8 +9117,21 @@ function screenWhatMade(){
     if(state.qs.itemsErr) return `<div style="padding:24px 16px">
       <div style="font-size:17px;font-weight:500">${T('The shelf didn’t load.','货架加载失败。')}</div>
       <div style="font-size:14px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${
-        T('The request is closed, but nothing has been added to stock yet. Try again, or record the batch from Log a batch.',
-          '该申请已关闭，但库存尚未登记。请重试，或从「登记批次」记录本批次。')}</div>
+        /* WHAT IS ACTUALLY TRUE OF THE REQUEST — the same correction §61 made
+           on the done screen one branch up, which this branch was left out of.
+           A line marked made is not the whole request closed, so "The request
+           is closed" was false on every tap but the last, told to somebody who
+           has just been handed a failure and is deciding what to do about it.
+           NO NEW STRING: the closed half is this sentence's own first clause,
+           split at its full stop in both languages, and the other is kqNote's
+           lead word for word — the sentence this same operator gets when the
+           hand-over is refused outright instead of failing here. */
+        (h.closesRequest?T('The request is closed, but nothing has been added to stock yet.',
+                           '该申请已关闭，但库存尚未登记。')
+                        :T('Marked made — but the stock has not been recorded.',
+                           '已标记完成 — 但库存尚未登记。'))
+        +' '+T('Try again, or record the batch from Log a batch.',
+               '请重试，或从「登记批次」记录本批次。')}</div>
       <button class="btn2" style="width:auto;padding:11px 26px;margin-top:20px"
         onclick="APP.cmd('hdRetryShelf')">${T('Try again','重试')}</button></div>`;
     return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${

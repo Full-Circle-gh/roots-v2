@@ -499,9 +499,9 @@ run('production', [
       ['and the operator is looking at it', `${body}.indexOf('Hummus Asli')>-1`],
     ]],
 
-  /* A SHELF THAT NEVER ARRIVES IS NOT A DEAD END EITHER. The request is closed
-     by the time anybody reaches this screen and there is no way back to it, so
-     the failure has to carry the way forward. */
+  /* A SHELF THAT NEVER ARRIVES IS NOT A DEAD END EITHER. The line is already
+     marked made by the time anybody reaches this screen and there is no way
+     back to it, so the failure has to carry the way forward. */
   ['a shelf that failed says so and offers the way on',
     QUEUE + "state.qs.items=null;state.qs.itemsTried=false;" +
       itemStatusStub(44, 1, AFTER_1, null) +
@@ -510,9 +510,27 @@ run('production', [
       // paints it is the one at the end of kqItemAdvance's chain.
       "APP.cmd('kqItemAdvance',1,'prepared');state.qs.itemsErr='nope';", [
       ['it names what failed', `${body}.indexOf('shelf')>-1`],
-      ['says the stock is not in yet', `${body}.indexOf('nothing has been added to stock yet')>-1`],
+      ['says the stock is not in yet', `${body}.indexOf('the stock has not been recorded')>-1`],
+      /* AND DOES NOT CLAIM THE REQUEST IS CLOSED, because it is not: this was
+         line 1 of 3. That sentence followed from being on this screen at all
+         — the same false claim §61 corrected on the done screen, on the one
+         branch it was never carried to. */
+      ['and does not claim the request is closed',
+       `${body}.indexOf('The request is closed')===-1`],
       ['points at the door that needs no request', `${body}.indexOf('Log a batch')>-1`],
       ['and offers a retry', `${body}.indexOf('Try again')>-1`],
+    ]],
+
+  ['and when it WAS the last line, the same failure says the request is closed',
+    QUEUE + "state.qs.items=null;state.qs.itemsTried=false;" +
+      itemStatusStub(44, 2, AFTER_ALL, null) +
+      "APP.cmd('kqItemAdvance',2,'prepared');state.qs.itemsErr='nope';", [
+      ['the shelf still failed', `${body}.indexOf('shelf')>-1`],
+      ['and this time the request really is closed', "state.hd.closesRequest===true"],
+      ['so it says so', `${body}.indexOf('The request is closed')>-1`],
+      ['and the stock is still not in', `${body}.indexOf('nothing has been added to stock yet')>-1`],
+      ['with the same way forward',
+       `${body}.indexOf('Log a batch')>-1&&${body}.indexOf('Try again')>-1`],
     ]],
 
   /* NOT ONE LINE MATCHED IS A SENTENCE, NOT A SILENCE. The screen has always
