@@ -1554,6 +1554,11 @@ async function loadIntegrationsStatus() {
     // 1) Top-level tabs (+ deep cards within each tab's section)
     document.querySelectorAll('.tabs [data-tab]').forEach(btn => {
       if (gatedOff(btn)) return;
+      // gatedOff reads the FEATURE gate only, and a row applyCapGates has hidden
+      // is still in the DOM — so the palette offered pages the operator's role
+      // excludes, and (now that goTab refuses them) would offer a result that
+      // silently does nothing. Same table as the rail, same answer.
+      if (typeof canTab === 'function' && !canTab(btn.dataset.tab)) return;
       const tab = btn.dataset.tab;
       const title = cleanLabel(btn);
       const it = { type: 'page', title, crumb: '', tab, sub: null, anchor: null,
