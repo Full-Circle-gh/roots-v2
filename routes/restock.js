@@ -126,7 +126,7 @@ function _broadcastRestock(orderId, kind, actorUserId) {
  * client of these endpoints — and the same event now also fans out by
  * capability to the tenant's operators.
  *
- * (This named public/kitchen.html until §74 deleted that page. The realm still
+ * (This named public/kitchen.html until §76 deleted that page. The realm still
  * has a client and the fan-out is unchanged; only the example moved.)
  *
  * THE AUDIENCE IS THE SIDE THAT MUST ACT NEXT, at the location the work is at.
@@ -712,7 +712,7 @@ function _applyReceipt(orderId, actorUser) {
  *
  * THE KITCHEN'S INBOX HAS MOVED, and the gate outliving it is deliberate. This
  * used to name public/kitchen.html as the inbox an "ask the kitchen" request
- * was sent to; §74 deleted that page, and the inbox is now /m's kitchenqueue
+ * was sent to; §76 deleted that page, and the inbox is now /m's kitchenqueue
  * screen — Tacet realm, gated on a capability, not on this. What survives here
  * is the narrowing itself, which is load-bearing for as long as ANY kitchen-
  * realm session can reach these routes. It retires with public/app.html.
@@ -946,7 +946,7 @@ router.get('/api/restock', requireRestockAccess, (req, res) => {
   // Nothing probes it now — Tacet Mobile gates each row on a capability instead
   // — but the refusal itself is load-bearing on its own terms and stays: a
   // kitchen session reading the store's transfers is a door that opens
-  // onto a wall. (public/kitchen.html always asked for to_role=kitchen; §74
+  // onto a wall. (public/kitchen.html always asked for to_role=kitchen; §76
   // deleted it, and the refusal stands on its own terms without that example.)
   if (_kitchenScopedSession(req) && req.query.to_role !== 'kitchen') {
     return res.status(403).json({

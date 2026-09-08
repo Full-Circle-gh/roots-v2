@@ -912,7 +912,7 @@ app.get('/full-circle', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'full-circle.html'));
 });
 
-/* The kitchen station shell is GONE (§74). `public/kitchen.html` is deleted and
+/* The kitchen station shell is GONE (§76). `public/kitchen.html` is deleted and
    the two jobs it held live in Tacet Mobile: the restock queue is `/m`'s
    `kitchenqueue` screen (§71) and logging a batch is its `logbatch` screen,
    writing through routes/retail-production.js. What stays here is the door,
@@ -962,7 +962,7 @@ app.get('/kitchen-manifest.webmanifest', (req, res) => {
 // not used; warehouse staff do not raise restock orders anywhere. Gone with it:
 // its manifest and its four icons. The `/api/restock/*` API in routes/restock.js
 // stays — app.html still drives restock orders through it (kitchen.html did
-// too until §74 deleted it).
+// too until §76 deleted it).
 
 /* Quick Stock is GONE (§48 step 4). `public/stock.html` is deleted and every
    job it held lives in Tacet Mobile; what stays here is the door, forwarding.

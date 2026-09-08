@@ -7432,6 +7432,25 @@
             <label class="stacked">Make every · 每隔</label>
             <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="batch-interval" aria-label="Make every N days · 每隔几天制作" min="1" step="1" value="2" style="width: 70px;"> <span style="font-size:12px;">days · 天</span></span>
           </div>
+          <!-- The order-by hour. saveBatchSchedule() has read #batch-cutoff and
+               REFUSED THE SAVE on a non-numeric value since it was written, and
+               the input it reads was never added to this card — so the whole
+               Fresh batches card could not be saved while the switch was on.
+               Restored here rather than by relaxing the validation, which is the
+               half that was working. -->
+          <div class="field" style="margin: 0;">
+            <label class="stacked" for="batch-cutoff">Order-by hour · 当日截单</label>
+            <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="batch-cutoff" aria-label="Order-by hour · 当日截单" min="0" max="23" step="1" value="20" style="width: 70px;"> <span style="font-size:12px;">:00</span></span>
+          </div>
+          <!-- §74. The hour today's batch reaches the shelf. BLANK IS THE OFF
+               SWITCH and the default: left empty, a sold-out fresh meal is
+               offered for the NEXT batch day exactly as before. Filled, it is
+               offered for TODAY until this hour, and the calendar withdraws
+               every window that starts before it. -->
+          <div class="field" style="margin: 0;">
+            <label class="stacked" for="batch-ready">Ready from the kitchen · 厨房已完成</label>
+            <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="batch-ready" aria-label="Ready from the kitchen · 厨房已完成" min="0" max="23" step="1" placeholder="—" style="width: 70px;"> <span style="font-size:12px;">:00</span></span>
+          </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 240px;">
             <label for="batch-skip" class="stacked">Skip these dates (vacations) · 跳过这些日期(假期)</label>
             <textarea id="batch-skip" rows="3" style="width: 100%; font-family: monospace; font-size: 12px;" placeholder="2026-07-14&#10;2026-07-16"></textarea>

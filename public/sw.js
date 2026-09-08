@@ -60,7 +60,7 @@ self.addEventListener('activate', (e) => {
     // Tell every connected page that a new shell is live so they reload
     // and pick up the latest HTML/JS without the user having to think
     // about it. The page-side handlers are in app.html and m.html (kitchen.html
-    // carried a third until §74 deleted it).
+    // carried a third until §76 deleted it).
     const clients = await self.clients.matchAll({ includeUncontrolled: true });
     for (const c of clients) {
       try { c.postMessage({ type: 'sw-updated' }); } catch {}

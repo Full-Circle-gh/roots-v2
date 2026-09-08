@@ -248,7 +248,7 @@ function _lastAppRedirect(user) {
   // route is gone, but restock.html had written last_app='/restock' into every
   // warehouse browser, so honouring a remembered value here would 404 them.
   // '/kitchen' is deliberately absent, on the same reasoning as '/restock'
-  // above and with one addition. The page was deleted (§74) and the route now
+  // above and with one addition. The page was deleted (§76) and the route now
   // forwards to /m — but /m is TACET MOBILE, which authenticates on
   // `backendUserId` (tenant_users). A session that arrived here holds
   // `userId` (users), so honouring a remembered '/kitchen' would forward this
@@ -260,7 +260,7 @@ function _lastAppRedirect(user) {
 //
 // It used to fan a `users` session out across three shells by permission. Both
 // of the others are now gone: `/restock` lost its page on 2026-08-04, and
-// `/kitchen` lost its page to §74. Every branch that survived those two
+// `/kitchen` lost its page to §76. Every branch that survived those two
 // removals returned '/' anyway, so the permission reads they were made of —
 // `role === 'admin'`, then `p.products || p.finance || p.sales` — were deciding
 // between one destination and the same destination.
