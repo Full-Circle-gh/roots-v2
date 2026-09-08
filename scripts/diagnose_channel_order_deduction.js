@@ -76,20 +76,38 @@ const CH = {
   },
 };
 
+const files = candidates();
+console.log(`Databases to read (${files.length}): ${files.join(', ') || '(none found)'}`);
+
 let examined = 0;
-for (const file of candidates()) {
+for (const file of files) {
   let db;
   try { db = new Database(file, { readonly: true, fileMustExist: true }); }
-  catch (_) { continue; }
+  catch (e) { console.log(`\n${file}: cannot open read-only — ${e.message}`); continue; }
   let proven = false;
   try { db.exec('CREATE TABLE __ro_probe__ (x)'); } catch (_) { proven = true; }
   if (!proven) { console.error(`FATAL: ${file} accepted a write — reading nothing`); try { db.close(); } catch (_) {} continue; }
 
-  const all = (sql, ...a) => { try { return db.prepare(sql).all(...a); } catch (e) { return []; } };
-  const one = (sql, ...a) => { try { return db.prepare(sql).get(...a) || null; } catch (e) { return null; } };
-  const has = (t) => !!one("SELECT name FROM sqlite_master WHERE type='table' AND name=?", t);
+  // A SWALLOWED ERROR READS EXACTLY LIKE AN EMPTY TABLE, and that cost a live
+  // run: the first version returned [] on any SQL failure, so a column this
+  // script had guessed wrong would print "no database on this box holds
+  // eleme/meituan orders" — a confident answer about production drawn from a
+  // typo. Failures are announced now, once per distinct statement, and the empty
+  // result is still returned so one bad query never takes the whole survey down.
+  const complained = new Set();
+  const moan = (sql, e) => {
+    const key = sql.replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (complained.has(key)) return;
+    complained.add(key);
+    console.error(`  ! query failed: ${e.message}\n    ${key}…`);
+  };
+  const all = (sql, ...a) => { try { return db.prepare(sql).all(...a); } catch (e) { moan(sql, e); return []; } };
+  const one = (sql, ...a) => { try { return db.prepare(sql).get(...a) || null; } catch (e) { moan(sql, e); return null; } };
+  // sqlite_master lookups are the one place an "error" is an ordinary answer —
+  // a table that isn't there is a fact, not a fault — so this one stays quiet.
+  const has = (t) => { try { return !!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?").get(t); } catch (_) { return false; } };
   const col = (t, c) => { try { return db.prepare(`PRAGMA table_info(${t})`).all().some(r => r.name === c); } catch (_) { return false; } };
-  if (!has('retail_orders')) { try { db.close(); } catch (_) {} continue; }
+  if (!has('retail_orders')) { console.log(`\n${file}: no retail_orders table — skipped`); try { db.close(); } catch (_) {} continue; }
 
   const orders = all(`
     SELECT id, order_no, channel, status, channel_status, placed_at, created_at,
@@ -99,11 +117,60 @@ for (const file of candidates()) {
      ORDER BY id DESC
      LIMIT ?
   `, LIMIT);
-  if (!orders.length) { try { db.close(); } catch (_) {} continue; }
   examined++;
-
   console.log(`\n${file}`);
   console.log('='.repeat(78));
+
+  // WHAT `channel` ACTUALLY HOLDS on this box, before anything is concluded from
+  // filtering on two of its values. The ingests write 'eleme' and 'meituan'
+  // (routes/*-internal.js), and 闪购 orders come through the Meituan ingest so
+  // they land under 'meituan' too — but a census costs one grouped read and is
+  // the difference between "no such orders" and "they are filed under a name
+  // this script did not ask for".
+  console.log('\nOrders by channel (all time):');
+  for (const r of all(`
+    SELECT COALESCE(channel,'(null)') channel, COUNT(*) n, MAX(created_at) newest
+      FROM retail_orders GROUP BY channel ORDER BY n DESC
+  `)) {
+    console.log(`  ${String(r.channel).padEnd(14)} ${String(r.n).padStart(6)}   newest ${ago(r.newest)}`);
+  }
+
+  if (!orders.length) {
+    console.log('\nNo orders with channel eleme/meituan in this database.');
+    try { db.close(); } catch (_) {}
+    continue;
+  }
+
+  // ── ONE SCAN, NOT ONE PER LINE ─────────────────────────────────────────────
+  // The only link from a ledger row back to the order that caused it is the free
+  // text in `note` (adjustStock is called here with its default ref_table /
+  // ref_id, so the indexed provenance columns are empty for these rows — see the
+  // PROVENANCE note in lib/inventory.js). `note LIKE '%ref%'` cannot use an
+  // index, so asking it once per order line is one full scan of the ledger per
+  // line: the first version of this script ran for ten minutes against the live
+  // database and was killed. Read the window ONCE, match the refs in JS.
+  const PACK_COL = col('retail_order_items', 'pack_units') ? 'oi.pack_units' : '1 AS pack_units';
+
+  const REASONS = ['eleme_order', 'eleme_cancel', 'eleme_uncancel',
+                   'meituan_order', 'meituan_cancel', 'meituan_uncancel'];
+  const ledgerWindow = has('retail_stock_ledger') ? all(`
+    SELECT id, store_id, product_id, delta, reason, balance_after, created_at, note
+      FROM retail_stock_ledger
+     WHERE reason IN (${REASONS.map(() => '?').join(',')})
+       AND created_at >= datetime('now', ?)
+     ORDER BY id
+  `, ...REASONS, `-${DAYS} days`) : [];
+
+  // Same argument for the two sync logs: read the window once, match in JS.
+  const logWindow = {};
+  for (const ch of Object.keys(CH)) {
+    logWindow[ch] = has(CH[ch].log) ? all(`
+      SELECT store_code, event_type, status, detail, error_msg, created_at
+        FROM ${CH[ch].log}
+       WHERE created_at >= datetime('now', ?)
+       ORDER BY id DESC
+    `, `-${DAYS} days`) : [];
+  }
 
   // ── The headline: of the recent channel orders, how many took stock? ────────
   let noDeduct = 0;
@@ -118,7 +185,7 @@ for (const file of candidates()) {
 
     const items = all(`
       SELECT oi.id, oi.product_id, oi.name_cn, oi.name_en, oi.qty,
-             ${col('retail_order_items', 'pack_units') ? 'oi.pack_units' : '1 AS pack_units'},
+             ${PACK_COL},
              p.name_en AS prod_en, p.is_active AS prod_active
         FROM retail_order_items oi
         LEFT JOIN store_products p ON p.id = oi.product_id
@@ -136,15 +203,12 @@ for (const file of candidates()) {
     // that deducted at ingest and was handed back by a later 已取消 poll
     // (reason *_cancel) reads as "not deducted" on the shelf while having a
     // perfectly good ingest row, and the two are only distinguishable together.
+    const mine = new Set([c && c.reason, c && c.back, c && c.again].filter(Boolean));
     const ledgerFor = (productId) => {
-      if (!ref || !has('retail_stock_ledger')) return [];
-      return all(`
-        SELECT id, delta, reason, balance_after, created_at, note
-          FROM retail_stock_ledger
-         WHERE reason IN (?, ?, ?) AND store_id = ? AND product_id = ?
-           AND note LIKE ?
-         ORDER BY id
-      `, c.reason, c.back, c.again, o.store_id, productId, `%${ref}%`);
+      if (!ref) return [];
+      return ledgerWindow.filter(r =>
+        mine.has(r.reason) && r.store_id === o.store_id && r.product_id === productId &&
+        String(r.note || '').includes(ref));
     };
 
     const lines = items.map(it => {
@@ -198,13 +262,10 @@ for (const file of candidates()) {
     }
 
     // What the channel's own sync log said about this order, if anything.
-    if (c && has(c.log) && ref) {
-      const logs = all(`
-        SELECT event_type, status, error_msg, created_at
-          FROM ${c.log}
-         WHERE (detail LIKE ? OR error_msg LIKE ?)
-         ORDER BY id DESC LIMIT 6
-      `, `%${ref}%`, `%${ref}%`);
+    if (c && ref) {
+      const logs = (logWindow[o.channel] || []).filter(l =>
+        String(l.detail || '').includes(ref) || String(l.error_msg || '').includes(ref)
+      ).slice(0, 6);
       for (const l of logs) {
         console.log(`     log  ${l.event_type} [${l.status}] ${String(l.error_msg || '').slice(0, 120)}  (${ago(l.created_at)})`);
       }
@@ -219,14 +280,10 @@ for (const file of candidates()) {
 
   // ── Is this a per-order miss or has the whole path stopped? ────────────────
   console.log(`\nChannel stock ledger activity, last ${DAYS} days:`);
-  for (const reason of ['eleme_order', 'eleme_cancel', 'eleme_uncancel',
-                        'meituan_order', 'meituan_cancel', 'meituan_uncancel']) {
-    const r = one(`
-      SELECT COUNT(*) n, MAX(created_at) newest
-        FROM retail_stock_ledger
-       WHERE reason = ? AND created_at >= datetime('now', ?)
-    `, reason, `-${DAYS} days`);
-    console.log(`  ${reason.padEnd(16)} ${String(r ? r.n : 0).padStart(5)} rows, newest ${ago(r && r.newest)}`);
+  for (const reason of REASONS) {
+    const rows = ledgerWindow.filter(r => r.reason === reason);
+    const newest = rows.length ? rows[rows.length - 1].created_at : null;
+    console.log(`  ${reason.padEnd(16)} ${String(rows.length).padStart(5)} rows, newest ${ago(newest)}`);
   }
   console.log(`\nChannel orders mirrored, last ${DAYS} days:`);
   for (const ch of ['eleme', 'meituan']) {
@@ -257,15 +314,9 @@ for (const file of candidates()) {
 
   // ── Unresolved-line warnings, the most common cause ────────────────────────
   for (const ch of ['eleme', 'meituan']) {
-    const c = CH[ch];
-    if (!has(c.log)) continue;
-    const rows = all(`
-      SELECT store_code, error_msg, created_at
-        FROM ${c.log}
-       WHERE event_type IN ('order_unsynced','order_born_void')
-         AND created_at >= datetime('now', ?)
-       ORDER BY id DESC LIMIT 12
-    `, `-${DAYS} days`);
+    const rows = (logWindow[ch] || [])
+      .filter(r => r.event_type === 'order_unsynced' || r.event_type === 'order_born_void')
+      .slice(0, 12);
     if (rows.length) {
       console.log(`\n${ch} unsynced/born-void warnings (last ${DAYS}d, newest first):`);
       for (const r of rows) console.log(`  ${String(r.store_code || '-').padEnd(10)} ${String(r.error_msg || '').slice(0, 130)}  (${ago(r.created_at)})`);
@@ -275,5 +326,5 @@ for (const file of candidates()) {
   try { db.close(); } catch (_) {}
 }
 
-if (!examined) console.log('no database on this box holds eleme/meituan orders');
+if (!examined) console.log('no database on this box could be opened with a retail_orders table');
 console.log('');
