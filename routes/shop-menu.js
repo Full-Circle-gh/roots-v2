@@ -1985,6 +1985,22 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
   // it exactly once, whether the money arrived through the till or through the
   // in-page rail when that is switched back on.
 
+  // RING THE COUNTER. The till polls every fifteen seconds as its floor, which
+  // means a customer can reach the counter before their own order does. This
+  // is the doorbell: the till re-reads its pending list the moment the socket
+  // says something landed.
+  //
+  // AFTER the commit and fire-and-forget, on exactly the reasoning the print
+  // used to carry here — a dead socket must not roll back an order that is
+  // otherwise good. And it carries no order data, only the shop: the till
+  // re-reads through /api/retail-admin/orders, which enforces the tenant scope
+  // and the capability that this channel deliberately does not try to.
+  try {
+    let tenantId = null;
+    try { tenantId = require('../lib/tenant-db').currentTenantId(); } catch (e) { tenantId = null; }
+    require('./shop-events').shopOrderPlaced(tenantId, shop.location_id);
+  } catch (e) { console.warn('[shop-menu/notify]', created.orderNo, e.message); }
+
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.status(201).json({
     success: true,

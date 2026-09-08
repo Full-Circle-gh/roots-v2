@@ -2259,6 +2259,28 @@ check('both pay buttons are wired, the phone bar included',
   [/\$\('pay'\)\.addEventListener\('click', goSettle\)/.test(POS_TILL_SRC),
    /\$\('bar-pay'\)\.addEventListener\('click', goSettle\)/.test(POS_TILL_SRC)], [true, true]);
 
+// INSTANT, NOT FIFTEEN SECONDS. Reported from the counter, 2026-09-08: a
+// customer can walk from a table to the till faster than the poll, and arrive
+// before their own order does. The server now rings the till when an order
+// lands. Targeting and tenant isolation are held in scripts/test_shop_events.js
+// — these hold the till's half.
+check('the till opens a live channel for its own shop',
+  /new EventSource\('\/api\/retail-admin\/shop-events\?store_id=' \+ encodeURIComponent\(S\.storeId\)\)/.test(POS_TILL_SRC), true);
+check('...and re-reads the list when one lands',
+  /addEventListener\('shop-order'[\s\S]{0,300}loadPend\(\)/.test(POS_TILL_SRC), true);
+// THE POLL IS THE FLOOR AND MUST NOT BE REMOVED. A dropped socket behind a
+// hotel's proxy is silent, and a counter that has quietly stopped seeing orders
+// is a worse failure than one running fifteen seconds behind.
+check('the poll survives beside the live channel',
+  /setInterval\(function \(\) \{[\s\S]{0,220}loadPend\(\);\n    \}, 15000\)/.test(POS_TILL_SRC), true);
+// EventSource retries on its own (~3s). An onerror that closed the stream would
+// turn one bad minute into a socket that never comes back for the rest of the
+// shift.
+check('a blip does not close the channel for good',
+  !/pendES[\s\S]{0,400}onerror[\s\S]{0,120}\.close\(\)/.test(POS_TILL_SRC), true);
+check('switching shop re-points the channel at the new one',
+  /function switchStore[\s\S]{0,900}openPendStream\(\)/.test(POS_TILL_SRC), true);
+
 // Locked pairs, both of them. `pending` is the admin's own label for these very
 // rows (pending_payment), and the walk-in half reuses this screen's own title.
 check('the pending tab uses the admin\'s locked status pair',

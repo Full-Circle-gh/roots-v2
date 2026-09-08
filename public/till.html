@@ -960,7 +960,7 @@ button{font:inherit;color:inherit;margin:0}
        "this counter has nothing waiting" on the strength of the last one's
        read — and a counter that says nothing is waiting when something is is
        the one wrong answer this list must never give. */
-    pend: null, pane: 'menu', pendTimer: null,
+    pend: null, pane: 'menu', pendTimer: null, pendES: null,
     // Has the cashier picked a pane since the last sale ended? Their choice
     // outranks the default until reset() clears it.
     paneTouched: false,
@@ -1257,6 +1257,44 @@ button{font:inherit;color:inherit;margin:0}
       if (document.hidden) return;
       loadPend();
     }, 15000);
+    openPendStream();
+  }
+
+  /* THE DOORBELL. Fifteen seconds is a floor, not an answer: a customer can
+     walk from a table to the counter faster than that, and arrive before their
+     own order does. The server pushes the moment an order lands and the till
+     re-reads immediately.
+
+     THE POLL ABOVE STAYS, deliberately. A dropped socket behind a hotel's
+     proxy is silent, and a counter that has quietly stopped seeing orders is a
+     worse failure than one running fifteen seconds behind. EventSource
+     reconnects itself (~3s), and if it never comes back the poll is still the
+     floor under the whole thing.
+
+     THE EVENT CARRIES NOTHING. It says a store had something happen; the till
+     answers by re-reading its list through the ordinary authenticated
+     endpoint. Nothing about an order travels on this socket, so nothing about
+     one can leak from it.
+
+     SCOPED TO THIS TILL'S SHOP by query param, and again server-side by tenant.
+     Reopened on a store switch for the same reason the list is re-read there. */
+  function openPendStream() {
+    if (!window.EventSource || !S.storeId) return;
+    try { if (S.pendES) S.pendES.close(); } catch (e) {}
+    S.pendES = null;
+    try {
+      var es = new EventSource('/api/retail-admin/shop-events?store_id=' + encodeURIComponent(S.storeId));
+      es.addEventListener('shop-order', function () {
+        // Not while a takeover is up: repainting the list under the settle
+        // screen cannot help anyone, and the poll catches up on the way back.
+        if (S.view !== 'till') return;
+        loadPend();
+      });
+      // No onerror handler that closes: EventSource retries by itself, and
+      // closing here would turn one bad minute into a socket that never
+      // returns for the rest of the shift.
+      S.pendES = es;
+    } catch (e) { /* no live channel; the poll still runs */ }
   }
 
   function switchStore(id) {
@@ -1272,6 +1310,7 @@ button{font:inherit;color:inherit;margin:0}
     S.pend = null; S.pane = 'menu'; S.paneTouched = false; S.recall = null;
     render();
     loadPend();
+    openPendStream();
     loadCatalogue().then(render).catch(function () { render(); });
   }
 
