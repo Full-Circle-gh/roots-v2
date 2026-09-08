@@ -115,9 +115,25 @@ function run(label, cases, opts) {
     fs.writeFileSync(file, src.replace('</body>', harness + '</body>'));
     let out = '';
     try {
+      /* maxBuffer IS NOT A TUNING KNOB HERE — IT IS THE BUG THIS LINE CARRIES.
+         --dump-dom writes the WHOLE rendered document to stdout, and the
+         document is public/m.html plus the harness above plus everything the
+         app renders into it. execFileSync's default cap is 1 MiB; m.html alone
+         passed 1.01 MB on 2026-09-08, so the margin was already down to tens of
+         kilobytes and the app's own rendered markup spends that. Over the cap
+         Node kills the child and throws ENOBUFS, which this helper reports as
+         "chrome failed: … ENOBUFS" — a message that reads like a broken browser
+         and sent one session hunting a Chromium fault that did not exist.
+         WHY IT MATTERS BEYOND ONE SUITE: 33 suites drive this helper, so under
+         the default cap the NEXT edit to m.html — any edit, of any size — turns
+         all of them red at once and blames the browser for it. 64 MiB is not a
+         guess about how big the DOM should get; it is far enough above any
+         plausible document that growth stops being a tripwire. The 30s timeout
+         above still bounds a genuinely runaway render. */
       out = execFileSync(chrome, ['--headless=new', '--disable-gpu', '--no-sandbox',
         '--window-size=500,940', '--virtual-time-budget=2500', '--dump-dom', 'file://' + file],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30000 });
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30000,
+        maxBuffer: 64 * 1024 * 1024 });
     } catch (e) { failures.push(name); console.log(`  ✗ ${name}\n      chrome failed: ${e.message}`); continue; }
     const title = (out.match(/<title>([^<]*)<\/title>/) || [])[1] || 'no title';
     if (title === 'GOOD') { console.log(`  ✓ ${name} — ${checks.length} checks`); asserted += checks.length; }
