@@ -1650,19 +1650,42 @@ reg('recvReason', a=>{ const [id,r]=String(a).split('|'); const v=rcvVal(id); re
 function recvLineFind(id){ return ((state.recvPo&&state.recvPo.items)||[]).find(x=>String(x.id)===String(id)); }
 reg('recvArrived', id=>{
   const v=state.recvVals&&state.recvVals[id], it=recvLineFind(id); if(!v||!it) return;
-  if(v.on&&v.recv>0){
-    /* Recorded already: the undo becomes the corrector (rcvBooked). */
-    if(rcvBooked(it)){ state.recvOpenLine=id; state.recvSaveErr=null; render(); return; }
-    v.on=false; }
+  if(v.on&&v.recv>0){ v.on=false; }
   else { v.on=true; v.recv=rcvOrdered(it); v.dmg=0; v.reason=null; }
   state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; recvTouch(); });
 reg('recvNotArrived', id=>{
   const v=state.recvVals&&state.recvVals[id], it=recvLineFind(id); if(!v) return;
-  if(v.on&&v.recv===0){
-    if(it&&rcvBooked(it)){ state.recvOpenLine=id; state.recvSaveErr=null; render(); return; }
-    v.on=false; }
+  if(v.on&&v.recv===0){ v.on=false; }
   else { v.on=true; v.recv=0; v.dmg=0; v.reason=v.reason||'not_sent'; }
   state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; recvTouch(); });
+/* ── "Not checked yet", and why it is its own command ──────────────────────
+   It used to be wired to recvArrived, borrowing that control's TOGGLE to mean
+   "un-answer". The two are not the same statement and the borrow was wrong in
+   both directions:
+
+     • On a line answered "nothing arrived" (`on`, count 0) the toggle's first
+       test — `v.on && v.recv > 0` — is false, so the press fell through to the
+       ELSE branch and marked the line FULLY ARRIVED. The one control for "I
+       have not checked this" asserted the whole order had turned up.
+     • And once auto-save landed, a guard here for an already-recorded line made
+       the press a no-op: it set recvOpenLine to the id it already held, so the
+       button did nothing and the row could not be closed either. Reported from
+       the floor within the hour, on RPO-0030's Goji Berries.
+
+   So it says what it does and nothing else: this line goes back to unanswered.
+   Refused on a line the server has already recorded, because that is not a
+   thing the screen may quietly claim — see rcvBooked, and the control that
+   stands here instead. */
+reg('recvUnanswer', id=>{
+  const v=state.recvVals&&state.recvVals[id], it=recvLineFind(id); if(!v||!it) return;
+  if(rcvBooked(it)) return;
+  v.on=false;
+  state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; recvTouch(); });
+/* Folds a reopened line back. The counter is a correction in progress; this is
+   the way to say the correction is finished without making one — and it is
+   only ever offered where clearing the flag actually folds the row (rcvLine),
+   so it can never be the dead button it replaces. */
+reg('recvCloseLine', ()=>{ state.recvOpenLine=null; state.recvSaveErr=null; render(); });
 /* One tap for the supplier whose whole van came, one for the supplier who
    simply did not turn up, and pressing either again undoes it. Both answer
    every line in the group — the per-line control is still there to disagree
@@ -6123,7 +6146,12 @@ function rcvLine(it){
      operator works instead of staying a wall of twelve. The number it was
      answered with stays on the row, because "checked" must never be something
      the reader has to infer. Pressing it is the undo. */
-  const folded=came&&!edited&&!v.dmg&&String(state.recvOpenLine)!==String(it.id);
+  /* Whether this line is in a state that CAN fold — answered as ordered and
+     undamaged. Named because the foot of the row asks the same question: a
+     reopened line folds again only if it could have folded in the first place,
+     and the control that folds it is drawn only where that holds. */
+  const canFold=came&&!edited&&!v.dmg;
+  const folded=canFold&&String(state.recvOpenLine)!==String(it.id);
   if(folded) return `<button class="row" style="min-height:52px;padding:11px 14px;gap:10px;border-radius:12px;background:var(--surface-raised)"
     onclick="APP.cmd('recvOpenLine','${it.id}')">
     <span style="flex:none;color:var(--sage-ink);display:flex">${ic('check',17,2)}</span>
@@ -6139,9 +6167,28 @@ function rcvLine(it){
   /* THE WAY BACK from an answered line. With the ordered quantity acting as the
      confirm button there is no chip left to press a second time, so the undo
      that the pair used to carry has to be said out loud. It un-answers — it
-     does not set the count to zero, which is the opposite fact. */
-  const undo=!on?'':`<button class="btn2" style="min-height:34px;padding:0 12px;font-size:12.5px;color:var(--text-secondary);align-self:flex-start;border:none"
-    onclick="APP.cmd('recvArrived','${it.id}')">${T('Not checked yet','尚未核对')}</button>`;
+     does not set the count to zero, which is the opposite fact.
+
+     TWO DIFFERENT SENTENCES, AND THE LINE DECIDES WHICH ONE IS TRUE.
+     Not recorded yet — "Not checked yet" takes the answer back, which costs
+     nothing because nothing was ever written.
+     Already recorded — that sentence is no longer available to say: the receipt
+     is written and the stock is booked, and un-answering on the glass would
+     reverse neither (applyReceivedToStock skips a null line). So the button
+     becomes "Done", which folds the correction away, and the way to take a
+     recorded line back to nothing is the counter beside it — a zero IS a
+     correction, and a zero does reverse the stock.
+     OFFERED ONLY WHERE IT WOULD DO SOMETHING. On a recorded line mid-correction
+     — a changed count, or damage on it — folding is not available and the row
+     stays open showing its counter, which is what a short line looks like
+     anyway. A button that would not move the screen is not drawn: that is
+     exactly the bug this replaces. */
+  const undo=!on?''
+    :rcvBooked(it)
+      ?(canFold?`<button class="btn2" style="min-height:34px;padding:0 12px;font-size:12.5px;color:var(--text-secondary);align-self:flex-start;border:none"
+        onclick="APP.cmd('recvCloseLine','${it.id}')">${T('Done','完成')}</button>`:'')
+      :`<button class="btn2" style="min-height:34px;padding:0 12px;font-size:12.5px;color:var(--text-secondary);align-self:flex-start;border:none"
+        onclick="APP.cmd('recvUnanswer','${it.id}')">${T('Not checked yet','尚未核对')}</button>`;
   const qty=!on?'':`<div style="display:flex;align-items:center;gap:8px">
     <button class="stepbtn" ${v.recv<=0?'disabled':''} aria-label="${T('Less','减少')}" onclick="APP.cmd('recvQty','${it.id}|${-st}')">${ic('minus',22,2)}</button>
     <input class="qty${edited?' edit':''}" inputmode="decimal" value="${rcvFmt(v.recv)}"
