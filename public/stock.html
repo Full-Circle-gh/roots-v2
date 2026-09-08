@@ -1001,7 +1001,8 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       state.fullAccess = d.user.full_access;
       state.home = typeof d.home === 'string' ? d.home : null;
       state.homeLabel = (d.home_label && (d.home_label.en || d.home_label.cn)) ? d.home_label : null;
-      homeFromDoor();
+      var _door = homeFromDoor(state.home);
+      if (_door) { state.home = _door.home; state.homeLabel = _door.label; }
       state.userName = d.user.name || '';
       // The operator's own language wins over this tablet's (audit M-01/M-02).
       // null means they have never chosen, and then the tablet's value stands.
@@ -3605,26 +3606,33 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
      allow-list is the same reason: an unknown ?from= leaves the server's
      answer standing rather than trusting the query string with a URL.
 
-     The table is INSIDE the function so there is no order to get wrong:
-     homeFromDoor is called from the load handler, hundreds of lines above
-     where it is written. '/?tab=dashboard' is the store backend's own deep
-     link (retail-admin 10-extras reads ?tab= and clicks that tab), and the
-     label is that screen's own name in its own dictionary
-     (public/retail-admin.html) — the back link and the screen it opens say the
-     same words, which is the rule the row itself follows. Both strings are
-     quoted from live sources; nothing here is composed. */
-  function homeFromDoor() {
+     PUBLIC/TILL.HTML CARRIES THIS FUNCTION VERBATIM, and that is a copy on
+     purpose. Both pages are single documents that load no external script —
+     the till has to ring up a sale on a counter's network, so a second request
+     to render its own Back is not a trade worth making. The protection against
+     the two drifting apart is not a shared file but an assertion:
+     scripts/test_app_home.js slices this function out of BOTH and fails if the
+     text differs by a byte, so a door added to one and not the other cannot
+     ship. Pure, and takes the home it is correcting, precisely so the two
+     copies can be identical either side of a differently-named state object.
+
+     The table is INSIDE the function so there is no order to get wrong: this
+     is called from the load handler, hundreds of lines above where it is
+     written. '/?tab=dashboard' is the store backend's own deep link
+     (retail-admin 10-extras reads ?tab= and clicks that tab), and the label is
+     that screen's own name in its own dictionary (public/retail-admin.html) —
+     the back link and the screen it opens say the same words, which is the
+     rule the row itself follows. Both strings are quoted from live sources;
+     nothing here is composed. */
+  function homeFromDoor(home) {
     var DOORS = {
       dashboard: { home: '/?tab=dashboard', label: { en: 'Dashboard', cn: '主控台' } },
     };
-    if (!state.home) return;
+    if (!home) return null;
     var m;
     try { m = /(?:^|[?&])from=([a-z]+)(?:&|$)/.exec(location.search || ''); }
-    catch (e) { return; }
-    var door = m && DOORS[m[1]];
-    if (!door) return;
-    state.home = door.home;
-    state.homeLabel = door.label;
+    catch (e) { return null; }
+    return (m && DOORS[m[1]]) || null;
   }
 
   // Every section's back control returns here when the launcher exists, and

@@ -1187,6 +1187,9 @@ button{font:inherit;color:inherit;margin:0}
           var hl = me.user.homeLabel;
           S.homeLabel = (hl && (hl.en || hl.cn)) ? hl : null;
         }
+        // Opened from the desktop backend rather than from /m — see homeFromDoor.
+        var _door = homeFromDoor(S.home);
+        if (_door) { S.home = _door.home; S.homeLabel = _door.label; }
         if (caps && (caps.indexOf('till:use') === -1 || caps.indexOf('orders:edit') === -1)) {
           boot('<p>' + esc(T('noPermission')) + '</p>');
           return;
@@ -1395,6 +1398,49 @@ button{font:inherit;color:inherit;margin:0}
      instead of a list. A decision belongs in the page: a system dialog cannot
      be styled, quieted or translated, and this one has to be readable in
      Chinese behind a counter. */
+  /* WHERE BACK GOES WHEN THE DOOR WAS NOT IN /m.
+     lib/app-home.js answers one question — where does a Tacet Mobile operator
+     go when they leave this till — and its answer is '/m?to=more', because for
+     every door it knew about, More → Operations is where they were. The
+     desktop backend is not one of those doors. The rail's "Counter till", the
+     POS tile, the Sales channel card and the command bar all open this page
+     from a screen that is not /m, so Back handed a person at a PC the phone
+     app: Ash, on the second report of this, "same problem when clicking back
+     from the till".
+
+     A NEW TAB IS STILL NOT AN EXCUSE. Those four all open this page with
+     target=_blank, and the tab having its own history does not make '/m' a
+     truthful answer — a Back that is drawn has to go somewhere the operator
+     recognises, and window.close() on a tab this page did not open itself is
+     the kind of control that silently does nothing.
+
+     So the door says which door it is, and this reads it. Provenance from the
+     caller and not a guess at the client: a viewport is not where somebody
+     came from, and the same desktop backend is what a counter tablet shows.
+
+     IT REDIRECTS AN EXISTING DOOR, IT DOES NOT MINT ONE. A null home is
+     lib/app-home.js refusing a way out to a stock-app-locked role — server.js
+     bounces those out of /m — and a ?from= in a hand-typed URL must not talk
+     this page into offering an exit that would land on a redirect. The
+     allow-list is the same reason: an unknown ?from= leaves the server's
+     answer standing rather than trusting the query string with a URL.
+
+     PUBLIC/STOCK.HTML CARRIES THIS FUNCTION VERBATIM, and that is a copy on
+     purpose — both pages are single documents that load no external script, so
+     the way back cannot become a second request. scripts/test_app_home.js
+     slices it out of BOTH and fails if the text differs by a byte, so a door
+     added to one and not the other cannot ship. */
+  function homeFromDoor(home) {
+    var DOORS = {
+      dashboard: { home: '/?tab=dashboard', label: { en: 'Dashboard', cn: '主控台' } },
+    };
+    if (!home) return null;
+    var m;
+    try { m = /(?:^|[?&])from=([a-z]+)(?:&|$)/.exec(location.search || ''); }
+    catch (e) { return null; }
+    return (m && DOORS[m[1]]) || null;
+  }
+
   function renderLeave() {
     var el = $('leavepick');
     el.hidden = !S.leaveOpen;
