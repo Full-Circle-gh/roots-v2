@@ -27,10 +27,9 @@
  *   • no code in the title, name matches several products or none → which
  *     product the listing means is the merchant's call, and a repair that
  *     guessed would be worse than the over-count it fixed
- *   • a code matching no product — including the "1-240s" family, where the
- *     platform's code and the catalogue's "S(1-240)" look like the same thing
- *     written two ways. LOOKS LIKE is not IS, so this script reports the
- *     correspondence and deducts nothing on it
+ *   • a code matching no product, and not one of the three verified aliases
+ *     below — reported with the product it WOULD name, so it can be corroborated
+ *     the way those three were, rather than acted on because it looks right
  *   • cutlery and heating options (无需餐具, 加热 …) — not products at all, and
  *     nothing should ever be deducted for them
  *   • VOID orders. channel_stock_restored = 1, or a cancelled/refunded status,
@@ -83,6 +82,33 @@ const db = new Database(dbPath);
 
 const CHANNEL_REASON = { eleme: 'eleme_order', meituan: 'meituan_order' };
 
+// ── THREE CODES THE PLATFORM AND THE CATALOGUE WRITE DIFFERENTLY ────────────
+// Meituan sends "1-240s"; the catalogue holds "S(1-240)". The first dry run of
+// this script (oneoff run 34234515945) printed every such pair with the product
+// it would have chosen, and each one is corroborated by a SECOND, INDEPENDENT
+// signal — the product's name matches the listing's, with no reference to the
+// code at all:
+//
+//   3-251s → S(3-251)  #351 Whole-Wheat Pita (Frozen)  ← 皮塔饼（一个）Whole Wheat Pita（～80g）
+//   1-220s → S(1-220)  #354 Pickled Onions             ← （小）腌红洋葱 Onion Pickles（20g）
+//   1-240s → S(1-240)  #355 Harissa Chilli Paste       ← （小）哈里萨辣椒酱 Harrisa（～30g）
+//
+// Two signals agreeing is not an inference any more, so these deduct. An
+// EXPLICIT LIST of three, not the general rule "strip a trailing s and wrap in
+// S(…)": the general rule would also fire on codes nobody has looked at, and
+// each of these was read one at a time against the product it names. A fourth
+// pair appearing later gets the same treatment — printed by the dry run first,
+// added here only once its name corroborates it.
+//
+// The LIVE resolver still cannot read these, so new orders carrying them will
+// keep missing until routes/*-internal.js learns the same thing. That is a
+// separate change; this one is about the stock already lost.
+const VERIFIED_CODE_ALIASES = {
+  '3-251s': 'S(3-251)',
+  '1-220s': 'S(1-220)',
+  '1-240s': 'S(1-240)',
+};
+
 console.log(`db: ${dbPath}`);
 console.log(WRITE ? 'MODE: APPLY — this run writes\n' : 'MODE: dry run — nothing is written\n');
 
@@ -123,7 +149,23 @@ for (const l of lines) {
   if (hits.length === 1) { plan.push({ l, name, want, token, product: hits[0] }); continue; }
   if (hits.length > 1) { skipped.push({ l, name, why: `code ${token} matches ${hits.length} products` }); continue; }
 
-  // No product holds that code. Is it the "N-Ns" ↔ "S(N-N)" shape?
+  // No product holds that code as written. One of the three verified aliases?
+  const alias = VERIFIED_CODE_ALIASES[String(token)];
+  if (alias) {
+    const viaAlias = bySku.all(alias);
+    if (viaAlias.length === 1) {
+      plan.push({ l, name, want, token: alias, viaAlias: token, product: viaAlias[0] });
+      continue;
+    }
+    // The alias was verified against a product that is no longer the only one
+    // holding that SKU. Do not deduct on a list entry the catalogue has moved on
+    // from — say so instead.
+    skipped.push({ l, name, why: `verified alias ${token} → ${alias} now matches ${viaAlias.length} products — re-check it` });
+    continue;
+  }
+
+  // An "N-Ns" shape nobody has confirmed yet. Report the product it WOULD name,
+  // so a person can corroborate it the way the three above were.
   const core = (String(token).match(/\d+-\d+/) || [])[0];
   if (core && /^\d+-\d+s$/i.test(token)) {
     const alt = bySku.all(`S(${core})`);
@@ -141,7 +183,8 @@ for (const p of plan) {
     .get(p.l.store_id, p.product.id);
   const have = cur ? cur.physical_qty : 0;
   console.log(`  ${p.l.order_no} [${p.l.channel}] line #${p.l.line_id}  ${p.l.placed_at}`);
-  console.log(`    "${p.name}" x${p.l.qty} pack=${p.l.pack_units}  → code ${p.token}`);
+  console.log(`    "${p.name}" x${p.l.qty} pack=${p.l.pack_units}  → code ${p.token}` +
+              (p.viaAlias ? `  (platform sent "${p.viaAlias}" — verified alias)` : ''));
   console.log(`    product #${p.product.id} ${p.product.name_en}${p.product.is_active ? '' : '  (INACTIVE)'}`);
   console.log(`    shelf ${have} − ${p.want}`);
   const k = `${p.l.store_id}:${p.product.id}`;
@@ -251,7 +294,8 @@ const apply = db.transaction(() => {
     `).run(p.l.store_id, p.product.id, -p.want, CHANNEL_REASON[p.l.channel],
            p.l.order_id, after, p.l.channel,
            `BACKFILL ${stamp}: ${p.l.channel} ${p.l.order_no} (placed ${p.l.placed_at}) sold ` +
-           `${p.name} x${p.l.qty} and never deducted — line resolved on code ${p.token}`);
+           `${p.name} x${p.l.qty} and never deducted — line resolved on code ${p.token}` +
+           (p.viaAlias ? ` (platform sent "${p.viaAlias}")` : ''));
     repaired++;
   }
   return { repaired, alreadyDone };
