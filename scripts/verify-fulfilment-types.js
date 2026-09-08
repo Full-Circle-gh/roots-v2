@@ -2290,10 +2290,11 @@ check('the till can cancel a recalled order',
 // (§45). Nothing new is written here for a state the system understands.
 check('...through the transition staff have always cancelled by',
   /function cancelOrder[\s\S]{0,600}orders\/' \+ r\.id \+ '\/status'/.test(POS_TILL_SRC), true);
-// Two taps, and no browser dialog — this screen opens none, so the armed state
-// is the confirmation.
+// Two taps, and no browser dialog — this screen opens none, so the question is
+// asked in the page. Arming also clears the last attempt's error: a failure left
+// standing over a fresh question reads as an answer to it.
 check('cancelling takes two taps',
-  /if \(!S\.cxArm\) \{ S\.cxArm = true; return render\(\); \}/.test(POS_TILL_SRC), true);
+  /if \(!S\.cxArm\) \{ S\.cxArm = true; S\.err = ''; return render\(\); \}/.test(POS_TILL_SRC), true);
 // (No dialog assertion here: 'the till opens no browser dialogs' below already
 // holds that for the whole screen, and it matches window.confirm specifically
 // rather than the till's OWN confirm() — the settle handler — which is what a
@@ -2309,7 +2310,57 @@ check('cancelling the order is labelled from the mini app\'s own locked pair',
 // A basket the till is still building is CLEARED, not cancelled — there is
 // nothing on the server yet to cancel.
 check('only a recalled order can be cancelled',
-  /cx\.hidden = !S\.recall \|\| S\.recall\.loading;/.test(POS_TILL_SRC), true);
+  /var showCx = !!S\.recall && !S\.recall\.loading;/.test(POS_TILL_SRC), true);
+
+/* WHAT THE ARMED CONTROL SAYS, AND WHAT A REFUSED ONE SAYS — Ash, 2026-09-08:
+   "since clicking cancel order it show me cancel order with question mark
+   nothing else." Both halves of that were true, and they are separate faults.
+
+   THE QUESTION HAD NO ANSWER. Arming appended a '?' to the control's own label
+   and drew nothing else: the screen stated a question and offered nothing that
+   read as answering it. The question is now a sentence above the control and
+   the control under it is the answer — the shape the CUSTOMER's own cancel
+   already takes on the QR order page (routes/shop-menu.js), for the same act on
+   the same order. */
+check('the armed control asks in words, not with a question mark',
+  /cq\.textContent = T\('cancelAsk'\)/.test(POS_TILL_SRC), true);
+check('...and the question is the customer page\'s own locked pair',
+  /cancelAsk:\s*\['Cancel this order\?', '取消此订单\?'\]/.test(POS_TILL_SRC), true);
+check('the question is drawn only while armed',
+  /cq\.hidden = !\(showCx && S\.cxArm\)/.test(POS_TILL_SRC), true);
+/* A STRAY TAP DISARMS, the rule the leave question already keeps. An armed
+   destructive control has no scrim to tap away and nothing else on the till
+   saying it is still armed, so left standing across a customer it turns the
+   next tap on that control into a cancelled order nobody asked to cancel. */
+check('a tap anywhere else takes the question back down',
+  /if \(S\.cxArm && !\(ev\.target && ev\.target\.closest[\s\S]{0,120}S\.cxArm = false; render\(\);/.test(POS_TILL_SRC), true);
+
+/* THE FAILURE THAT SAID NOTHING. S.err has three writers and had ONE render
+   site: the settle screen. Both settle-screen writers are on that screen, so
+   their failures spoke — and cancelOrder(), which runs on the TILL view, wrote
+   an error into a state nothing on that view drew. A refused cancel and an
+   expired session both came back as the control quietly disarming itself and
+   not one word said, which is the "nothing else" of the report. */
+check('the till view can show what went wrong',
+  /te\.hidden = !\(S\.view === 'till' && S\.err\)/.test(POS_TILL_SRC), true);
+check('...and there is an element for it to show it in',
+  /<div class="terr" id="till-err" hidden><\/div>/.test(POS_TILL_SRC), true);
+/* A 409 IS NOT A SAVE THAT FAILED. The till's list is up to fifteen seconds
+   stale and the customer can now cancel from their own page, so the row the
+   cashier tapped may already be cancelled — or another counter may have taken
+   the money. Saying "that did not save" invites the retry that cannot succeed;
+   the order is simply past the point where cancelling can happen. */
+check('a refused cancel says the order moved on, not that it failed to save',
+  /j\.error === 'invalid_transition' \|\| j\.error === 'not_cancellable'[\s\S]{0,80}S\.err = T\('notCancellable'\)/.test(POS_TILL_SRC), true);
+check('...in the admin\'s own locked pair for that refusal',
+  /notCancellable:\s*\['That order is past the point where it can be cancelled\.',\s*\n?\s*'该订单已无法取消。'\]/.test(POS_TILL_SRC), true);
+/* An order that cannot be cancelled cannot be paid for either, so leaving it
+   recalled would leave Mark paid pointing at a second refusal. */
+check('a refused cancel drops the order off the screen',
+  /S\.err = T\('notCancellable'\);[\s\S]{0,260}S\.recall = null;[\s\S]{0,200}loadPend\(\);/.test(POS_TILL_SRC), true);
+// In flight it is not a second tap's to press, and the label says so.
+check('a cancel in flight says so and cannot be double-sent',
+  /cx\.disabled = !!S\.busy;/.test(POS_TILL_SRC), true);
 
 // Locked pairs, both of them. `pending` is the admin's own label for these very
 // rows (pending_payment), and the walk-in half reuses this screen's own title.
