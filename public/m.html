@@ -2927,8 +2927,18 @@ function screenOrders(){
         </div>`:''}
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...o.ship)}</span>
+          ${/* A TRACKING NUMBER MAY STOP MID-STRING; THE APP'S OWN WORDS MAY NOT.
+                Both used to be nowrap + ellipsis under the same 52% cap, which
+                cut "Ship when ready · overdue" — 174px of app words in a 168px
+                box — down to "Ship when ready · overd…". The cap stays exactly
+                where it was, so the shipping city beside it keeps the width it
+                had; a carrier and a consignment number are data and still stop
+                at the edge, and the fixed vocabulary of ship-by phrases wraps
+                to a second right-aligned line on the rare occasion it needs
+                one. Same rule as the settings rows. */''}
           ${o.deliv?`<span style="display:flex;flex-direction:column;align-items:flex-end;flex:none;max-width:52%">
-            <span class="${o.deliv.num?'num':''}" style="font-size:13px;color:${DELIV_TONE[o.deliv.tone]||'var(--text-secondary)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${o.deliv.text}</span>
+            <span class="${o.deliv.num?'num':''}" style="font-size:13px;color:${DELIV_TONE[o.deliv.tone]||'var(--text-secondary)'};max-width:100%;${
+              o.deliv.num?'overflow:hidden;text-overflow:ellipsis;white-space:nowrap':'text-align:right'}">${o.deliv.text}</span>
             ${o.deliv.sub?`<span style="font-size:11.5px;color:var(--text-secondary);margin-top:1px">${o.deliv.sub}</span>`:''}</span>`:''}</div>
         ${orderMetaLine(o)}
       </button>`).join(''):''}
