@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.157
+# Tacet shared-core consolidation — decisions record, v4.158
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-08 · v4.158 — **§68 ADDED: A VARIANT FAMILY IS EDITED FROM THE SHEET ITS CARD OPENS, AND SAVE WRITES THE FAMILY.** Reported by Ash from the phone with the sheet open on `Raspberry Mango Sorbet · SKU (3-210) X5`: *"on mobile, if product have variants - cant change"*. **The catalogue collapses a family into one card — correctly — and then opened only its representative**, `members.find(m => m._id === p.gid) || members[0]`, whichever size happens to own the group. The other sizes were printed along the card's second line as TEXT, and were reachable from nowhere on the phone: not the card, not the sheet, not search, which matches the same collapsed units. A price or a count on any size but one could only be changed from a desktop. **The sheet carries the family now** — a chip row under the quick-edit note, one chip per size, the marked one being the size on screen. **Switching writes nothing, and THEREFORE Save writes the family**: once the sheet moves between sizes freely, a Save that took only what was in front of the operator would drop the rest silently, so pending edits are held per product id and Save walks every size and writes the ones that changed. Save-on-switch and warn-on-switch are both recorded as rejected, as is turning the card's size line into three ~40px targets. **A failure part-way through a family no longer claims nothing changed** — the count of writes that landed picks the message, and the partial one says the rest can be pressed again; one composed pair, declared in `docs/tacet-delivery-vocabulary.md` v1.34. **And one bug it uncovered, fixed in the same pass because it is the same box:** `render()` rebuilds the price `<input>` on every paint, so a price typed and then followed by a tap on a stock stepper was painted back to the stored figure — no variants required, and shipping for as long as the sheet has had both controls.
 
 2026-09-08 · v4.157 — **THE ORDER PAGE HAS A WAY BACK, THE PHONE REMEMBERS MORE THAN ONE ORDER, AND v4.154's RE-SCAN CASE HAD NEVER ACTUALLY WORKED — DECIDED by Ash, 2026-09-08**, from a phone, hours after v4.154 went live: *"qr code menu order, custoner cant go back from this page. dead end. customer should always be able to see his order even if he goes out fromt he screen completly, scan the qr code again, should have his order there."* **This does not narrow §44 any further and decides nothing new about identity**: v4.154's receipt is the same receipt, doing the job it was written for. Three faults, and the middle one is the serious one. **ONE: THE ORDER PAGE WAS A DEAD END.** Every face of `/s/:shopCode/pay/:token` — order placed, payment received, cancelled — ended at the order and offered nothing but the browser chrome, which inside a WeChat web view is a single X that closes the whole thing. It is worst on the face that says CANCELLED, which reads *"You can place a new one anytime."* and, until now, gave no way to. All three carry a plain link back to the menu, as does §50's in-page payment screen, on both of its faces. **A BOX, NOT A SECOND UNDERLINED LINE**: the cancel beside it is an underlined olive link, and a Back that looked the same would put "leave this page" and "destroy this order" in one visual register a thumb cannot tell apart — so the safe way out is bordered and comes FIRST, and the destructive one stays last and behind its own disclosure. **The language is carried only where the customer's own address carried one**, and that is not tidiness: the pre-paint script takes an explicit `?lang=` over the phone's own language, so appending a lang to every link would force English on a Chinese phone that had simply never touched the toggle — the page would be right and the menu it sent them to would not. **TWO: THE BAR WAS NEVER PAINTED ON LOAD, SO A SECOND SCAN SHOWED NOTHING.** v4.154 read the receipt at startup and then repainted the bar only from `add()`, from the steppers and from the done screen — so closing the sheet worked, because the done screen had just painted it, and RELOADING THE PAGE showed an ordinary empty menu. **A second scan of the QR code is a fresh load**, which is the case the report names and the one v4.154 claimed to have answered. One call at the end of the script fixes it; nothing else changes for a phone with no order, where that call hides a bar that was already hidden. **It is recorded rather than quietly fixed because of HOW it survived**: this behaviour is drawn entirely by script from `localStorage`, so the only suite that can prove it is a browser suite — and the browser shard is not run (CLAUDE.md, Ash's standing instruction). A served-bytes assertion can prove the script was SENT and nothing more. The new checks were run individually, as one file, not as the shard. **THREE: THE RECEIPT IS A LIST, NEWEST FIRST, FIVE DEEP.** It held one order, so a customer who came back for a cake could no longer reach the coffee — or cancel it, the cancel living on the page that address opens. Each entry is judged on its own twelve-hour stamp, so a morning order drops off while one placed ten minutes ago stays. **The cap is a cap on what the PHONE remembers, not on what exists**: a sixth order is placed, printed and paid for exactly as before, and the counter still has it. The bar names the NEWEST — it is the number about to be called, and a bar naming the oldest would name the one already collected. **One order goes straight to its page; several open the sheet's fourth face**, a list of rows, because putting a list in front of the single-order case would charge every customer a tap to be shown one row they then have to tap again. **And the list is repeated at the FOOT of the basket**, since with something in the basket the bar IS the basket — that was the state where the earlier orders used to disappear. **Below every stepper, deliberately**: the basket is memory only (§44) and a tap that leaves the page loses it, so nothing that navigates may sit where a thumb reaching for a + or a − can find it. **A receipt written before the shape changed is read as a list of one**, since a customer holding the old shape mid-trading-day must not be handed an empty bar; and the stored address is checked for SHAPE, not merely presence, because it is read out of storage and put straight into an `href`. **NO CHINESE WAS COMPOSED.** `Back · 返回` is live in six places including `public/till.html`, `public/m.html` and `public/retail-admin/28-shops.js`; `My orders · 我的订单` is the web storefront's own heading for this exact list (`public/shop.html`) and the mini app's (`miniapp/pages/orders/`). No entry in `docs/tacet-delivery-vocabulary.md` is owed. **ONE STALE ASSERTION IS CORRECTED, AND IT IS THE SAME CLASS OF THING v4.154 CORRECTED.** `test_shop_menu_render.js` held that the cart bar is HIDDEN once an order is placed — which was how it proved the basket had been emptied. v4.154 inverted that meaning (an empty basket is exactly when the bar is shown, carrying the order) and the check went red the day it shipped, seen by nobody because that file is in the browser shard. It is corrected rather than relaxed, and the replacement proves more than the original: a bar still saying YOUR BASKET would mean the basket survived, and a bar naming the order means it was emptied AND the order took its place. Code and tests; no schema, no migration.
 
@@ -6888,3 +6890,58 @@ above is correct under either answer, which is why it did not wait on one.
    for a leak nobody has reported. Named so the next reader knows the level was chosen, not missed.
 2. **`opsFires()` and `dashCardWants()` still gate the dashboard's fires differently on the two surfaces** — §66's own
    "deliberately NOT fixed" list already carries this, and nothing here touched it.
+
+## §68 — A VARIANT FAMILY IS EDITED FROM THE SHEET IT COLLAPSES INTO, AND SAVE WRITES THE FAMILY
+
+Reported by Ash, 2026-09-08, from the phone, with a screenshot of the product sheet open on
+`Raspberry Mango Sorbet · SKU (3-210) X5`: *"on mobile, if product have variants - cant change"*.
+
+### What was actually broken
+
+The phone's catalogue collapses a variant family into **one card** — three sizes of one sorbet are three rows and one
+card, which is right and is what the card was built for: without the collapse the list reads as three unrelated
+products with almost the same name. The card prints the sizes along its second line, `X1 · X5 · X10`.
+
+**That line is text.** Tapping the card ran `openProduct(rep.sku)`, where the representative is
+`members.find(m => m._id === p.gid) || members[0]` — whichever size happens to own the group. Every other size in the
+family was on screen, named, and **reachable from nowhere on this phone**: not from the card, not from the sheet the
+card opens, not from search (`prodFiltered` matches the same collapsed units). A price or a count on any size but one
+could only be changed from a desktop.
+
+### The ruling
+
+**The sheet carries the family.** A row of size chips sits under the quick-edit note; the marked one is the size being
+edited; tapping another switches the sheet to it. One tap target on the card, as before — the card is a picture and a
+name, and turning its size line into three small buttons is a worse thing to hit at 390px than a chip row inside the
+sheet that opens.
+
+- **Rejected: the size line on the card becomes buttons.** Three ~40px targets inside a scrolling list row, and the
+  operator still has no way to compare the sizes once they are in the sheet.
+- **Rejected: one row per size in the catalogue.** That is the list as it read before the families were collapsed, and
+  it is the thing the collapse was built to fix.
+
+**Switching a size writes nothing.** It is a change of view, not a save.
+
+**Therefore Save writes the family, not the size on screen.** This is the decision the rest follows from. Once the sheet
+can move between sizes without writing, an operator can set a price on `X1`, a count on `X10`, and press Save — and a
+Save that took only what was in front of them would drop the rest **silently**, which is the failure mode this record
+exists to refuse. Pending edits are held per product id (`sheetPrice`, and `sheetStep` keyed `st_<pid>_<storeId>`), and
+Save walks every size and writes the ones that changed. A family of one is a family of one and behaves exactly as
+before.
+
+- **Rejected: save-on-switch.** It writes on a navigation, which no other control in this app does.
+- **Rejected: warn-on-switch.** A modal between two chips, on every switch, to protect a case the state can simply
+  carry.
+
+**A failure part-way through a family says so.** `That did not save. Nothing has changed` is the message for one write;
+across several it can be a lie, and an operator told it will retype figures that are already in. The count of writes
+that landed decides which of the two messages is shown, and the partial one says the rest can be pressed again — a
+figure written twice writes the same figure. The pair is composed and declared in
+`docs/tacet-delivery-vocabulary.md` v1.34.
+
+### The one it uncovered, fixed in the same pass because it is the same box
+
+`render()` rewrites the whole shell, so the price `<input>` is rebuilt on every paint. A price **typed and then
+followed by a tap on a stock stepper** was painted back to the stored figure, and the typing was gone — no variants
+required, and shipping for as long as the sheet has had both controls. The price now lives in state and is captured on
+input, which is also what lets it survive a trip to a sibling size.
