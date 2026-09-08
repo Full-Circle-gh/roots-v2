@@ -9,11 +9,14 @@
  * because what matters about them is not the paint — it is four rules that are
  * all silent when broken:
  *
- *   • CLOSING A REQUEST IS NOT PUTTING IT ON THE SHELF. The server moves no
+ *   • MARKING A LINE MADE IS NOT PUTTING IT ON THE SHELF. The server moves no
  *     stock for a kitchen request by design, so marking one `prepared` leaves
- *     the shelf exactly as short as it was. The lines must be carried to the
- *     screen that adds them, in the same gesture — a queue that just closes the
- *     request is a shop whose stock silently never arrives.
+ *     the shelf exactly as short as it was. The line must be carried to the
+ *     screen that adds it, in the same gesture — a queue that just marks it and
+ *     stops is a shop whose stock silently never arrives. It reads "a line"
+ *     rather than "the request" because §61 split the gesture: each line
+ *     advances on its own tap and hands over on its own, and the whole-order
+ *     button (kqAdvance) was deleted with it.
  *   • A SHORT LINE MUST SAY WHY BEFORE ANYTHING IS WRITTEN. Made 20, shelved
  *     18: the two missing ones are a fact that gets recorded or a fact that
  *     disappears. The server refuses a bare gap too (gap_reason_required); the
@@ -104,32 +107,54 @@ const CATCH = `window.__sent=[];
 /* THE SHELF, AND WHEN IT ANSWERS. `state.qs.items` is filled by loadQsItems on
    the answer to /stores/:id/stock, two chained round trips after the queue
    first renders — so on a phone the operator can easily tap through before it
-   lands. HANGSHELF holds that one call open forever and lets everything else
-   answer; LATESHELF answers it with this store's list. Between them they pin
-   the race the third §59 report arrived through. */
+   lands. Passed to itemStatusStub below as `shelf`: this list to answer with,
+   or null to hold that one call open forever while everything else answers.
+   Between them they pin the race the third §59 report arrived through. */
 const SHELF_ROWS = `[{product_id:7,name_en:'Hummus Asli',name_cn:'鹰嘴豆泥',sku:'1-10',physical_qty:11},
   {product_id:8,name_en:'Turkish Tomato Salad',name_cn:'土耳其番茄沙拉',sku:'1-15',physical_qty:0}]`;
-const shelfStub = (rows) => `window.__sent=[];
-  window.fetch=function(u,o){ var url=String(u); window.__sent.push({u:url,b:o&&o.body});
-    if(/\\/stores\\/\\d+\\/stock$/.test(url)) ${rows
-      ? `return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true,data:${rows}})}});`
-      : 'return new Promise(function(){});'}
-    return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true})}}); };`;
-const HANGSHELF = shelfStub(null);
-const LATESHELF = shelfStub(SHELF_ROWS);
 
-/* THE PER-ITEM ROUND TRIP (§61). kqItemAdvance PUTs one item's status, then
-   re-GETs the order to see whether the rollup just closed it — that GET's
-   answer, `orderAfter`, is what tells hdStart whether this line was the
-   last one. Distinct from shelfStub, which mocks the separate SHELF fetch
-   this same flow still depends on for matching lines to store ids. */
-const itemStatusStub = (itemId, orderAfter) => `window.__sent=[];
+/* THE PER-ITEM ROUND TRIP (§61), WHICH IS THE ONLY WAY INTO THE RECORD SCREEN
+   FROM THIS QUEUE. kqItemAdvance PUTs one item's status, then re-GETs the order
+   to see whether the rollup just closed it — that GET's answer, `orderAfter`,
+   is what tells hdStart whether this line was the last one. `shelf` mocks the
+   separate /stores/:id/stock fetch the same flow depends on for matching lines
+   to store ids: omit it to let it answer like everything else, pass SHELF_ROWS
+   to have it land, pass null to hold it open.
+
+   IT TAKES THE ORDER ID because not every request in this suite is RS-44 — the
+   two that are refused (nothing stockable here, nothing asked for) are their
+   own orders, and a stub hard-coded to 44 answered their PUT with the generic
+   {success:true} and their re-GET with an order that was not theirs. */
+const itemStatusStub = (orderId, itemId, orderAfter, shelf) => `window.__sent=[];
   window.fetch=function(u,o){ var url=String(u); window.__sent.push({u:url,b:o&&o.body});
-    if(/\\/api\\/restock\\/44\\/item\\/${itemId}\\/status$/.test(url))
+    ${shelf === undefined ? '' : `if(/\\/stores\\/\\d+\\/stock$/.test(url)) ${shelf
+      ? `return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true,data:${shelf}})}});`
+      : 'return new Promise(function(){});'}`}
+    if(/\\/api\\/restock\\/${orderId}\\/item\\/${itemId}\\/status$/.test(url))
       return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true})}});
-    if(/\\/api\\/restock\\/44$/.test(url))
+    if(/\\/api\\/restock\\/${orderId}$/.test(url))
       return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true,data:${orderAfter}})}});
     return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true})}}); };`;
+
+/* THE ORDER AS THE RE-GET BRINGS IT BACK, one line further along than ORDER.
+   AFTER_1 is line 1 made with the other two still to make, so the order itself
+   has not rolled up — the shape every middle tap produces. AFTER_ALL is the
+   last line landing, where the server has carried the ORDER to 'prepared' too,
+   which is the only thing that tells hdStart this tap closed the request. */
+const AFTER_1 = `{id:44,rs_number:'RS-44',status:'received',purpose:'shelf',items:[
+    {id:1,sku:'1-10',product_name:'Hummus Asli',product_cn:'鹰嘴豆泥',qty_requested:20,status:'prepared'},
+    {id:2,sku:'1-15',product_name:'Turkish Tomato Salad',product_cn:'土耳其番茄沙拉',qty_requested:6,status:'sent'},
+    {id:3,sku:'9-99',product_name:'Something Else',product_cn:'其他',qty_requested:4,status:'sent'}]}`;
+// The third line made instead of the first — the one this store has no product
+// for. The order has not rolled up: two lines are still to make.
+const AFTER_3 = `{id:44,rs_number:'RS-44',status:'received',purpose:'shelf',items:[
+    {id:1,sku:'1-10',product_name:'Hummus Asli',product_cn:'鹰嘴豆泥',qty_requested:20,status:'sent'},
+    {id:2,sku:'1-15',product_name:'Turkish Tomato Salad',product_cn:'土耳其番茄沙拉',qty_requested:6,status:'sent'},
+    {id:3,sku:'9-99',product_name:'Something Else',product_cn:'其他',qty_requested:4,status:'prepared'}]}`;
+const AFTER_ALL = `{id:44,rs_number:'RS-44',status:'prepared',purpose:'shelf',items:[
+    {id:1,sku:'1-10',product_name:'Hummus Asli',product_cn:'鹰嘴豆泥',qty_requested:20,status:'prepared'},
+    {id:2,sku:'1-15',product_name:'Turkish Tomato Salad',product_cn:'土耳其番茄沙拉',qty_requested:6,status:'prepared'},
+    {id:3,sku:'9-99',product_name:'Something Else',product_cn:'其他',qty_requested:4,status:'prepared'}]}`;
 
 run('production', [
   ['the queue is a screen in this app, not a door out of it',
@@ -168,10 +193,7 @@ run('production', [
      middle step. A line still sitting at 'received' from before this shipped
      reads exactly like a fresh one, which is the other half of the change. */
   ['the first tap on a fresh line marks it made, with no step in between',
-    QUEUE + itemStatusStub(1,`{id:44,rs_number:'RS-44',status:'received',purpose:'shelf',items:[
-        {id:1,sku:'1-10',product_name:'Hummus Asli',product_cn:'鹰嘴豆泥',qty_requested:20,status:'prepared'},
-        {id:2,sku:'1-15',product_name:'Turkish Tomato Salad',product_cn:'土耳其番茄沙拉',qty_requested:6,status:'sent'},
-        {id:3,sku:'9-99',product_name:'Something Else',product_cn:'其他',qty_requested:4,status:'sent'}]}`) +
+    QUEUE + itemStatusStub(44, 1, AFTER_1) +
       "APP.cmd('kqItemAdvance',1,'prepared');", [
       ['the line went to prepared on the first tap, not to received',
        "window.__sent.some(function(s){return /\\/api\\/restock\\/44\\/item\\/1\\/status/.test(s.u)&&/prepared/.test(s.b||'')})"],
@@ -299,18 +321,34 @@ run('production', [
       ['nothing was asked for', 'window.__polled===false'],
     ]],
 
-  /* THE HANDOFF, which is the whole reason these three are one piece. */
-  ['closing a request hands its lines to the screen that adds them',
-    QUEUE + CATCH + "APP.cmd('kqAdvance','prepared');", [
+  /* THE HANDOFF, which is the whole reason these three are one piece.
+
+     IT IS DRIVEN THROUGH THE LINE, BECAUSE THERE IS NO LONGER A WHOLE-ORDER
+     DOOR. This case and the seven below it were written against `kqAdvance`,
+     which closed the entire request in one tap; §61 replaced it with
+     kqItemAdvance and deleted it, and APP.cmd on a name nothing is registered
+     under does nothing and says nothing — so all eight went on asserting
+     against a gesture the app had stopped offering, and reported the app
+     broken for it. Every rule they hold is still live; only the tap that
+     reaches it changed.
+
+     THE LINE TAPPED HERE IS THE ONE THIS STORE HAS NO PRODUCT FOR (sku 9-99),
+     because that is the fixture's own reason for existing: a line that cannot
+     be matched is the one the screen was most likely to drop, and a dropped
+     line is a product that quietly never reaches the shelf. The matched half
+     is asserted by "marking ONE item made" below. */
+  ['closing a line hands it to the screen that adds it, matched or not',
+    QUEUE + itemStatusStub(44, 3, AFTER_3) + "APP.cmd('kqItemAdvance',3,'prepared');", [
       ['the status went to the server',
-       "window.__sent.some(function(s){return /\\/api\\/restock\\/44\\/status/.test(s.u)&&/prepared/.test(s.b||'')})"],
+       "window.__sent.some(function(s){return /\\/api\\/restock\\/44\\/item\\/3\\/status/.test(s.u)&&/prepared/.test(s.b||'')})"],
       ['and the record screen is what is open now',
        "state.stack[state.stack.length-1].route==='whatmade'"],
       ['carrying the request with it', "state.hd.rs==='RS-44'&&state.hd.rsId===44"],
-      ['all three lines, including the one with no product here', "state.hd.lines.length===3"],
-      ['the two that matched carry this store’s ids',
-       "state.hd.lines[0].id===7&&state.hd.lines[1].id===8"],
-      ['and the one that did not is kept, not dropped', "state.hd.lines[2].id===null"],
+      ['the line came with it', "state.hd.lines.length===1"],
+      ['and the one this store cannot match is kept, not dropped',
+       "state.hd.lines[0].id===null"],
+      ['it is on the screen, said out loud',
+       `${body}.indexOf('Something Else')>-1&&${body}.indexOf('not on this store')>-1`],
       /* THE REGRESSION THIS SUITE COULD NOT SEE. The operator holding this
          queue is in recount mode — every operator who can reach it is — and
          the handover must not read the mode to decide. */
@@ -326,10 +364,7 @@ run('production', [
      a time, against a server response naming that ONE item's new status and
      the order's (unrolled, or rolled) status alongside it. */
   ['marking ONE item made hands over that line alone, not the whole request',
-    QUEUE + itemStatusStub(1,`{id:44,rs_number:'RS-44',status:'received',purpose:'shelf',items:[
-        {id:1,sku:'1-10',product_name:'Hummus Asli',product_cn:'鹰嘴豆泥',qty_requested:20,status:'prepared'},
-        {id:2,sku:'1-15',product_name:'Turkish Tomato Salad',product_cn:'土耳其番茄沙拉',qty_requested:6,status:'sent'},
-        {id:3,sku:'9-99',product_name:'Something Else',product_cn:'其他',qty_requested:4,status:'sent'}]}`) +
+    QUEUE + itemStatusStub(44, 1, AFTER_1) +
       "APP.cmd('kqItemAdvance',1,'prepared');", [
       ['the item PUT went to the server, not the whole-order status door',
        "window.__sent.some(function(s){return /\\/api\\/restock\\/44\\/item\\/1\\/status/.test(s.u)&&/prepared/.test(s.b||'')})"],
@@ -344,10 +379,7 @@ run('production', [
     ]],
 
   ['and back returns to that order’s own list — the products not made yet',
-    QUEUE + itemStatusStub(1,`{id:44,rs_number:'RS-44',status:'received',purpose:'shelf',items:[
-        {id:1,sku:'1-10',product_name:'Hummus Asli',product_cn:'鹰嘴豆泥',qty_requested:20,status:'prepared'},
-        {id:2,sku:'1-15',product_name:'Turkish Tomato Salad',product_cn:'土耳其番茄沙拉',qty_requested:6,status:'sent'},
-        {id:3,sku:'9-99',product_name:'Something Else',product_cn:'其他',qty_requested:4,status:'sent'}]}`) +
+    QUEUE + itemStatusStub(44, 1, AFTER_1) +
       // kqItemAdvance's PUT-then-GET chain has not settled by the time this
       // synchronous line returns — 'back' has to wait for it, same as the
       // settle window below waits for it before the checks run.
@@ -367,10 +399,7 @@ run('production', [
   // unmatched line entirely (hdPending requires l.id != null), so it could
   // never reach h.done and this case would test nothing.
   ['marking the LAST item made closes the request — "The request is closed."',
-    QUEUE + itemStatusStub(2,`{id:44,rs_number:'RS-44',status:'prepared',purpose:'shelf',items:[
-        {id:1,sku:'1-10',product_name:'Hummus Asli',product_cn:'鹰嘴豆泥',qty_requested:20,status:'prepared'},
-        {id:2,sku:'1-15',product_name:'Turkish Tomato Salad',product_cn:'土耳其番茄沙拉',qty_requested:6,status:'prepared'},
-        {id:3,sku:'9-99',product_name:'Something Else',product_cn:'其他',qty_requested:4,status:'prepared'}]}`) +
+    QUEUE + itemStatusStub(44, 2, AFTER_ALL) +
       // Same race as the case above: hdCommit needs kqItemAdvance's own
       // fetch chain to have opened the record screen and filled its line
       // first.
@@ -386,10 +415,7 @@ run('production', [
   // — true for the old whole-order hand-over, false here: two lines are
   // still not made.
   ['marking a MIDDLE item made does not falsely claim the request is closed',
-    QUEUE + itemStatusStub(1,`{id:44,rs_number:'RS-44',status:'received',purpose:'shelf',items:[
-        {id:1,sku:'1-10',product_name:'Hummus Asli',product_cn:'鹰嘴豆泥',qty_requested:20,status:'prepared'},
-        {id:2,sku:'1-15',product_name:'Turkish Tomato Salad',product_cn:'土耳其番茄沙拉',qty_requested:6,status:'sent'},
-        {id:3,sku:'9-99',product_name:'Something Else',product_cn:'其他',qty_requested:4,status:'sent'}]}`) +
+    QUEUE + itemStatusStub(44, 1, AFTER_1) +
       "APP.cmd('kqItemAdvance',1,'prepared');setTimeout(function(){APP.cmd('hdCommit');},20);", [
       ['not the last line — does not close the request', "state.hd.closesRequest===false"],
       ['no false claim that the request is closed',
@@ -443,36 +469,46 @@ run('production', [
      shape §59 was reported in a third time, and it is what these three cases
      hold shut. */
   ['a shelf that has not arrived yet still opens the screen',
-    QUEUE + "state.qs.items=null;state.qs.itemsTried=false;" + HANGSHELF +
-      "APP.cmd('kqAdvance','prepared');", [
-      ['the request still closed',
-       "window.__sent.some(function(s){return /\\/api\\/restock\\/44\\/status/.test(s.u)})"],
+    QUEUE + "state.qs.items=null;state.qs.itemsTried=false;" +
+      itemStatusStub(44, 1, AFTER_1, null) +
+      "APP.cmd('kqItemAdvance',1,'prepared');", [
+      ['the line still went made',
+       "window.__sent.some(function(s){return /\\/api\\/restock\\/44\\/item\\/1\\/status/.test(s.u)})"],
       ['and the record screen is open, not skipped',
        "state.stack[state.stack.length-1].route==='whatmade'"],
       ['carrying the request', "state.hd.rs==='RS-44'&&state.hd.rsId===44"],
       ['its lines held rather than resolved against nothing', "state.hd.lines===null"],
       ['the request remembered so they can be', "state.hd.awaiting!==null"],
+      /* AND WHICH LINE OF IT IS OWED (§61). A per-item hand-over that
+         remembered only the order would resolve the whole request when the
+         shelf landed, handing the operator two lines they never marked made. */
+      ['and the one line of it that is owed', "state.hd.awaitingItemId===1"],
       ['it did go and ask for the shelf',
        "window.__sent.some(function(s){return /\\/stores\\/\\d+\\/stock$/.test(s.u)})"],
       ['and the screen says it is still coming', `${body}.indexOf('Loading')>-1`],
     ]],
 
-  ['and the lines land the moment the shelf does',
-    QUEUE + "state.qs.items=null;state.qs.itemsTried=false;" + LATESHELF +
-      "APP.cmd('kqAdvance','prepared');", [
+  ['and the line lands the moment the shelf does',
+    QUEUE + "state.qs.items=null;state.qs.itemsTried=false;" +
+      itemStatusStub(44, 1, AFTER_1, SHELF_ROWS) +
+      "APP.cmd('kqItemAdvance',1,'prepared');", [
       ['the screen is the record screen', "state.stack[state.stack.length-1].route==='whatmade'"],
-      ['all three lines arrived', "state.hd.lines&&state.hd.lines.length===3"],
-      ['matched to this store’s ids', "state.hd.lines[0].id===7&&state.hd.lines[1].id===8"],
-      ['nothing is left waiting', "state.hd.awaiting===null"],
-      ['and the operator is looking at them', `${body}.indexOf('Hummus Asli')>-1`],
+      ['the line arrived', "state.hd.lines&&state.hd.lines.length===1"],
+      ['matched to this store’s id', "state.hd.lines[0].id===7"],
+      ['nothing is left waiting', "state.hd.awaiting===null&&state.hd.awaitingItemId===null"],
+      ['and the operator is looking at it', `${body}.indexOf('Hummus Asli')>-1`],
     ]],
 
   /* A SHELF THAT NEVER ARRIVES IS NOT A DEAD END EITHER. The request is closed
      by the time anybody reaches this screen and there is no way back to it, so
      the failure has to carry the way forward. */
   ['a shelf that failed says so and offers the way on',
-    QUEUE + "state.qs.items=null;state.qs.itemsTried=false;" + HANGSHELF +
-      "APP.cmd('kqAdvance','prepared');state.qs.itemsErr='nope';render();", [
+    QUEUE + "state.qs.items=null;state.qs.itemsTried=false;" +
+      itemStatusStub(44, 1, AFTER_1, null) +
+      // The shelf call is held open, so loadQsItems' own catch never runs —
+      // the error it would have set is set here instead, and the render that
+      // paints it is the one at the end of kqItemAdvance's chain.
+      "APP.cmd('kqItemAdvance',1,'prepared');state.qs.itemsErr='nope';", [
       ['it names what failed', `${body}.indexOf('shelf')>-1`],
       ['says the stock is not in yet', `${body}.indexOf('nothing has been added to stock yet')>-1`],
       ['points at the door that needs no request', `${body}.indexOf('Log a batch')>-1`],
@@ -488,7 +524,9 @@ run('production', [
       state.kq.order={id:45,rs_number:'RS-45',status:'received',purpose:'shelf',items:[
         {id:9,sku:'9-99',product_name:'Something Else',product_cn:'其他',qty_requested:4}]};
       state.stack=[{route:'kitchenqueue',title:SUBS.kitchenqueue.title}]; render();` +
-      CATCH + "APP.cmd('kqAdvance','prepared');", [
+      itemStatusStub(45, 9, `{id:45,rs_number:'RS-45',status:'prepared',purpose:'shelf',items:[
+        {id:9,sku:'9-99',product_name:'Something Else',product_cn:'其他',qty_requested:4,status:'prepared'}]}`) +
+      "APP.cmd('kqItemAdvance',9,'prepared');", [
       ['the screen opened', "state.stack[state.stack.length-1].route==='whatmade'"],
       ['the line is on it', `${body}.indexOf('Something Else')>-1`],
       ['named as not stockable here', `${body}.indexOf('not on this store')>-1`],
@@ -501,8 +539,8 @@ run('production', [
      the opposite of what happened. That silence is what made one bug take four
      rounds to find, and these cases hold it shut. */
   ['an operator who cannot record a batch is told so, not left guessing',
-    QUEUE + "state.caps=['quickstock:add','restock:fulfil'];" + CATCH +
-      "APP.cmd('kqAdvance','prepared');", [
+    QUEUE + "state.caps=['quickstock:add','restock:fulfil'];" +
+      itemStatusStub(44, 1, AFTER_1) + "APP.cmd('kqItemAdvance',1,'prepared');", [
       ['the queue says the stock did not move', `${body}.indexOf('the stock has not been recorded')>-1`],
       ['and names the permission to ask for', `${body}.indexOf('Record what was made')>-1`],
     ]],
@@ -513,21 +551,23 @@ run('production', [
       state.kq.order={id:46,rs_number:'RS-46',status:'received',purpose:'shelf',
         items:[{id:9,sku:'1-10',product_name:'Hummus Asli',qty_requested:0}]};
       state.stack=[{route:'kitchenqueue',title:SUBS.kitchenqueue.title}]; render();` +
-      CATCH + "APP.cmd('kqAdvance','prepared');", [
+      itemStatusStub(46, 9, `{id:46,rs_number:'RS-46',status:'prepared',purpose:'shelf',
+        items:[{id:9,sku:'1-10',product_name:'Hummus Asli',qty_requested:0,status:'prepared'}]}`) +
+      "APP.cmd('kqItemAdvance',9,'prepared');", [
       ['it is not the record screen', "state.stack[state.stack.length-1].route==='kitchenqueue'"],
       ['and the empty queue explains itself', `${body}.indexOf('no quantities')>-1`],
     ]],
 
   /* THE DEAD TAP, from the other side. push() declines a route this operator
-     cannot reach and says nothing, so hdOpen answering "opened" sent kqAdvance
-     home on a handover that never happened: the request closed, the screen did
+     cannot reach and says nothing, so hdOpen answering "opened" sent the
+     hand-over home on one that never happened: the line closed, the screen did
      not move, and the early return skipped even the re-render. */
-  ['an operator who cannot record a batch closes the request and lands back on the queue',
-    QUEUE + "state.caps=['quickstock:add','restock:fulfil'];" + CATCH +
-      "APP.cmd('kqAdvance','prepared');", [
+  ['an operator who cannot record a batch closes the line and lands back on the queue',
+    QUEUE + "state.caps=['quickstock:add','restock:fulfil'];" +
+      itemStatusStub(44, 1, AFTER_1) + "APP.cmd('kqItemAdvance',1,'prepared');", [
       ['the record screen is refused them', "canRoute('whatmade')===false"],
       ['the status still went to the server',
-       "window.__sent.some(function(s){return /\\/api\\/restock\\/44\\/status/.test(s.u)})"],
+       "window.__sent.some(function(s){return /\\/api\\/restock\\/44\\/item\\/1\\/status/.test(s.u)})"],
       ['they are not sent into a screen they cannot reach',
        "state.stack[state.stack.length-1].route==='kitchenqueue'"],
       ['and the queue is not left holding a closed request', "state.kq.order===null"],
