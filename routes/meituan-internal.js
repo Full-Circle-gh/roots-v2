@@ -14,6 +14,11 @@ const db      = seam(require('../database'));
 const inventory = require('../lib/inventory');
 const { packUnits, packDeduct } = require('../lib/pack-units');
 const { productUnitCostYuan } = require('../lib/product-cost');
+// Shared with eleme-internal, and the one place these two files deliberately are
+// NOT copies: "some of this order never came off the shelf" is one fact about
+// our own stock, worded the same whichever platform sent it — and the copies had
+// already drifted on exactly that (see the module's header).
+const { notifyStockGaps } = require('../lib/channel-line-report');
 
 const INTERNAL_SECRET = process.env.MEITUAN_INTERNAL_SECRET || 'meituan-daemon-internal';
 
@@ -524,7 +529,7 @@ router.post('/ingest-order', (req, res) => {
     const oversold = [];
     let deducted = 0;
     for (const it of bornVoid ? [] : items) {
-      if (!it.productId) { unresolved.push({ name: it.name, sku: it.sku, qty: it.qty, reason: it.matchBy }); continue; }
+      if (!it.productId) { unresolved.push({ name: it.name, nameEn: it.nameEn, sku: it.sku, qty: it.qty, reason: it.matchBy }); continue; }
       const cur  = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?').get(storeId, it.productId);
       const oldQ = cur ? cur.physical_qty : 0;
       // On-hand can't cover the line (oversell, or an already-negative row). We
@@ -602,6 +607,15 @@ router.post('/ingest-order', (req, res) => {
         console.error('[meituan-internal] order_oversold log failed:', logErr.message);
       }
     }
+
+    // ── AND OUT LOUD ─────────────────────────────────────────────────────────
+    // Both logs above go into a table with no index, no screen and nothing
+    // watching it. That is how 54 undeducted lines accumulated from June to
+    // September and were found only because the stock numbers looked wrong to a
+    // human. The cutlery answer and orphaned heating options are filtered out
+    // first — they are not products, they arrive on nearly every Meituan order,
+    // and an alert that fires on all of them buries the ones that matter.
+    notifyStockGaps({ channel: 'meituan', storeCode, orderNo, unresolved, oversold });
 
     // 5. Record what the payload's own item rows said, versus the copy-text parse
     //    we deduct from. This is the evidence for a decision not yet taken: the
