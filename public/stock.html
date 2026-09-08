@@ -1001,6 +1001,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
       state.fullAccess = d.user.full_access;
       state.home = typeof d.home === 'string' ? d.home : null;
       state.homeLabel = (d.home_label && (d.home_label.en || d.home_label.cn)) ? d.home_label : null;
+      homeFromDoor();
       state.userName = d.user.name || '';
       // The operator's own language wins over this tablet's (audit M-01/M-02).
       // null means they have never chosen, and then the tablet's value stands.
@@ -3580,6 +3581,50 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     $('#hTitle').textContent = headTitle();
     measureHead();
     render();
+  }
+
+  /* WHERE BACK GOES WHEN THE DOOR WAS NOT IN /m.
+     lib/app-home.js answers one question — where does a Tacet Mobile operator
+     go when they leave this app — and its answer is '/m?to=more', because for
+     every door it knew about, More → Operations is where they were. The
+     desktop dashboard is a door it does not know about. "Ready from the
+     kitchen" on the store backend opens /stock?go=ready in the same tab, and
+     the way out then handed a person sitting at a PC the phone app: a Back
+     that lands on a screen they were never on, in a product they did not
+     open, with no way back to the board they were reading.
+
+     So the door says which door it is, and this reads it. Provenance from the
+     caller and not a guess at the client: a viewport is not where somebody
+     came from, and the same desktop backend is what a tablet in the warehouse
+     is looking at.
+
+     IT REDIRECTS AN EXISTING DOOR, IT DOES NOT MINT ONE. A null home is
+     lib/app-home.js refusing a way out to a stock-app-locked role — server.js
+     bounces those out of /m — and a ?from= in a hand-typed URL must not talk
+     this app into offering an exit that would land on a redirect. The
+     allow-list is the same reason: an unknown ?from= leaves the server's
+     answer standing rather than trusting the query string with a URL.
+
+     The table is INSIDE the function so there is no order to get wrong:
+     homeFromDoor is called from the load handler, hundreds of lines above
+     where it is written. '/?tab=dashboard' is the store backend's own deep
+     link (retail-admin 10-extras reads ?tab= and clicks that tab), and the
+     label is that screen's own name in its own dictionary
+     (public/retail-admin.html) — the back link and the screen it opens say the
+     same words, which is the rule the row itself follows. Both strings are
+     quoted from live sources; nothing here is composed. */
+  function homeFromDoor() {
+    var DOORS = {
+      dashboard: { home: '/?tab=dashboard', label: { en: 'Dashboard', cn: '主控台' } },
+    };
+    if (!state.home) return;
+    var m;
+    try { m = /(?:^|[?&])from=([a-z]+)(?:&|$)/.exec(location.search || ''); }
+    catch (e) { return; }
+    var door = m && DOORS[m[1]];
+    if (!door) return;
+    state.home = door.home;
+    state.homeLabel = door.label;
   }
 
   // Every section's back control returns here when the launcher exists, and
