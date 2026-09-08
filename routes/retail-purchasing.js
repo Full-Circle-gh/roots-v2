@@ -2750,6 +2750,16 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
     if (any_qty) {
       receipt = recordReceipt(tdb(), {
         poId: po.id, storeId, scope: 'retail',
+        // WHICH DELIVERY THIS SAVE BELONGS TO. Optional, and absent on every
+        // desktop save — one press of Save there is one delivery, as it always
+        // was. The phone's receive screen has no Save: it writes on a pause as
+        // the operator answers products (public/m.html recvFlush), so it names
+        // the receipt its first write of the visit opened and every later write
+        // amends that one. See recordReceipt for why the journal needs it.
+        // Deliberately NOT passed to the return above: a return is its own
+        // movement in the other direction and must never be folded into the
+        // delivery record.
+        intoReceiptId: req.body?.receipt_id ?? null,
         actor: {
           userId: req.user?.id || null,
           label: actorLabel(req),

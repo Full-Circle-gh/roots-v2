@@ -661,7 +661,16 @@ const state = {
   rcvTo:null, rcvToQ:'', rcvToTried:false, rcvToErr:null,
   recvId:null, recvPo:null, recvErr:null, recvBusy:false, recvSaveErr:null,
   recvVals:null, recvDmg:null, recvGroups:null, recvStore:null, recvStoreOpen:false,
-  recvDone:null, poReceipts:null, poReceiptsFor:null,
+  /* THE SCREEN SAVES ITSELF, so these three replace the button that used to.
+     recvReceiptId — the delivery this visit opened, named on every later write
+       so they amend it instead of each opening one of their own. One visit is
+       one van is one row in Received (routes/purchases.js recordReceipt).
+     recvSavedAt — that at least one write has landed, which is the only thing
+       on this screen that can say "it is in" now that no button reports it.
+     recvAgain — an answer that arrived while a write was open, owed to the
+       next one. Two writes must not race each other for the same receipt. */
+  recvReceiptId:null, recvSavedAt:0, recvAgain:false,
+  poReceipts:null, poReceiptsFor:null,
   toast:null, drag:0, dragging:false, faqOpen:null, reviewsSeen:new Set(),
   /* Declared here rather than sprung into existence by whichever loader gets
      there first. There is one state object and well over a hundred keys on it,
@@ -857,7 +866,16 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      how the same announcement goes out twice. */
   if(route==='bcnew') bcfReset();
   state.stack.push({route,title:s.title}); render(); }
-function pop(){ forgetScroll(); state.stack.pop(); render(); }
+/* LEAVING IS THE LAST PAUSE. The receive screen writes on a pause rather than
+   on a button, so the pause the operator never waited out has to be spent here
+   — a delivery that was counted and never reached the server is the one failure
+   that screen may not have (scripts/test_mobile_receiving.js says so at the
+   head). A no-op on every other screen, and on that one whenever the timer has
+   already fired. */
+function pop(){
+  const top=state.stack.length?state.stack[state.stack.length-1].route:null;
+  if(top==='receive') recvFlush();
+  forgetScroll(); state.stack.pop(); render(); }
 
 const CMD={}; function reg(n,f){CMD[n]=f;}
 /* Variadic. It used to be `(n,a)=>CMD[n](a)` — one argument — while two
@@ -1633,7 +1651,7 @@ function recvSet(id,recv,dmg,reason){
   if(reason!==undefined) v.reason=reason;
   const it=(state.recvPo.items||[]).find(x=>String(x.id)===String(id));
   if(it&&v.recv>=rcvOrdered(it)) v.reason=null;
-  state.recvSaveErr=null; render();
+  state.recvSaveErr=null; recvTouch();
 }
 reg('recvQty', a=>{ const [id,d]=String(a).split('|'); recvSet(id,rcvVal(id).recv+Number(d)); });
 reg('recvQtySet', a=>{ const i=String(a).indexOf('|'); recvSet(a.slice(0,i),rcvNum(a.slice(i+1))); });
@@ -1651,14 +1669,19 @@ reg('recvReason', a=>{ const [id,r]=String(a).split('|'); const v=rcvVal(id); re
 function recvLineFind(id){ return ((state.recvPo&&state.recvPo.items)||[]).find(x=>String(x.id)===String(id)); }
 reg('recvArrived', id=>{
   const v=state.recvVals&&state.recvVals[id], it=recvLineFind(id); if(!v||!it) return;
-  if(v.on&&v.recv>0){ v.on=false; }
+  if(v.on&&v.recv>0){
+    /* Recorded already: the undo becomes the corrector (rcvBooked). */
+    if(rcvBooked(it)){ state.recvOpenLine=id; state.recvSaveErr=null; render(); return; }
+    v.on=false; }
   else { v.on=true; v.recv=rcvOrdered(it); v.dmg=0; v.reason=null; }
-  state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; render(); });
+  state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; recvTouch(); });
 reg('recvNotArrived', id=>{
-  const v=state.recvVals&&state.recvVals[id]; if(!v) return;
-  if(v.on&&v.recv===0){ v.on=false; }
+  const v=state.recvVals&&state.recvVals[id], it=recvLineFind(id); if(!v) return;
+  if(v.on&&v.recv===0){
+    if(it&&rcvBooked(it)){ state.recvOpenLine=id; state.recvSaveErr=null; render(); return; }
+    v.on=false; }
   else { v.on=true; v.recv=0; v.dmg=0; v.reason=v.reason||'not_sent'; }
-  state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; render(); });
+  state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; recvTouch(); });
 /* One tap for the supplier whose whole van came, one for the supplier who
    simply did not turn up, and pressing either again undoes it. Both answer
    every line in the group — the per-line control is still there to disagree
@@ -1680,19 +1703,21 @@ reg('recvOpenLine', id=>{ state.recvOpenLine=id; state.recvSaveErr=null; render(
 reg('recvAllArrived', ()=>{
   const items=rcvItems(); if(!items.length) return;
   const undo=items.every(it=>rcvOn(it)&&rcvVal(it.id).recv===rcvOrdered(it));
+  /* The group undo skips lines already recorded, for the reason rcvBooked
+     gives: un-answering one on the glass would not take it off the shelf. */
   items.forEach(it=>{ const v=state.recvVals[it.id]; if(!v) return;
-    if(undo){ v.on=false; } else { v.on=true; v.recv=rcvOrdered(it); v.dmg=0; v.reason=null; } });
-  state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; render(); });
+    if(undo){ if(!rcvBooked(it)) v.on=false; } else { v.on=true; v.recv=rcvOrdered(it); v.dmg=0; v.reason=null; } });
+  state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; recvTouch(); });
 reg('recvGroupNone', name=>{ const g=rcvGroups().find(x=>x.name===name); if(!g) return;
   const undo=rcvGroupState(g.items)==='none';
   g.items.forEach(it=>{ const v=state.recvVals[it.id]; if(!v) return;
-    if(undo){ v.on=false; } else { v.on=true; v.recv=0; v.dmg=0; v.reason='not_sent'; } });
-  state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; render(); });
+    if(undo){ if(!rcvBooked(it)) v.on=false; } else { v.on=true; v.recv=0; v.dmg=0; v.reason='not_sent'; } });
+  state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; recvTouch(); });
 reg('recvGroupAll', name=>{ const g=rcvGroups().find(x=>x.name===name); if(!g) return;
   const s=rcvGroupState(g.items), undo=s==='ok'||s==='issue';
   g.items.forEach(it=>{ const v=state.recvVals[it.id]; if(!v) return;
-    if(undo){ v.on=false; } else { v.on=true; v.recv=rcvOrdered(it); v.dmg=0; v.reason=null; } });
-  state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; render(); });
+    if(undo){ if(!rcvBooked(it)) v.on=false; } else { v.on=true; v.recv=rcvOrdered(it); v.dmg=0; v.reason=null; } });
+  state.recvDmg=null; state.recvSaveErr=null; state.recvOpenLine=null; recvTouch(); });
 /* The server's refusals, in words. Every one of these is reachable by a client
    that has drifted from the rule, so each says what to do rather than echoing
    a code the operator cannot act on. */
@@ -1715,10 +1740,67 @@ function recvErrText(e){
   if(c==='not_found')             return T('This order is no longer there. It may have been cancelled.','该采购单已不存在，可能已被取消。');
   return T('That did not save. Nothing has changed and your counts are still here — try again.','没有保存成功。数据未变动，已填写的数量仍在 — 请重试。');
 }
-reg('recvSave', ()=>{
-  const po=state.recvPo; if(!po||state.recvBusy) return;
-  if(rcvMissingReasons().length) return;
-  state.recvBusy=true; state.recvSaveErr=null; render();
+/* ── The screen records itself ─────────────────────────────────────────────
+   THERE IS NO SAVE BUTTON. What stood here was a CTA at the foot of the list,
+   which on a nineteen-product order is a scroll away from the work and the one
+   thing standing between a delivery that was counted and a delivery that was
+   recorded. Every answer now schedules the write; the pause sends it; leaving
+   the screen sends whatever the pause was still holding.
+
+   THE PAUSE, NOT THE TAP, and that is load-bearing twice over. The Received
+   list shows one row per receipt that brought a line for the first time
+   (routes/retail-purchasing.js DELIVERY_SQL), and each write runs the whole
+   stock and finance pass over the order — so a write per tap would put a
+   dozen deliveries in the journal and a dozen stock passes behind them where
+   one belongs. The receipt half is answered by amending one receipt per visit
+   (recvFlush below); this timer answers the other half.
+
+   Longer than Add stock's 700ms (qsBump) because the gesture is longer: that
+   screen is a stepper under one thumb, this one is read the product name, find
+   the box, answer. */
+const RECV_PAUSE=1200;
+let recvTimer=null;
+function recvTouch(){ clearTimeout(recvTimer); recvTimer=setTimeout(recvFlush,RECV_PAUSE); render(); }
+/* WHAT CAN GO ON THE WIRE RIGHT NOW. A confirmed short line with no reason yet
+   is HELD, not dropped: the server refuses the whole payload over one such line
+   (routes/purchases.js planReceiptReason), and with no button to press, that
+   refusal would strand the twelve lines that ARE answerable behind the one that
+   is not. The amber line on the screen says which are being held, and picking
+   the reason releases them on the next pause. */
+function rcvSendable(){
+  const held=new Set(rcvMissingReasons().map(it=>String(it.id)));
+  return rcvToSend().filter(it=>!held.has(String(it.id)));
+}
+/* ALREADY ON THE SERVER — from this visit or an earlier one. It is what makes
+   an answer un-undoable, and the reason is not squeamishness: clearing
+   qty_received back to null would leave the booked units on the shelf behind
+   it, because applyReceivedToStock skips a null line and so reverses nothing
+   (routes/retail-purchasing.js). The way back from a recorded answer is to
+   CORRECT it — "Not 40" books a zero, and a zero does reverse the stock — so
+   the press that used to undo opens the line to be corrected instead. Undo is
+   untouched on an answer the pause has not yet carried, which is every answer
+   for the second and a bit after it is given. */
+const rcvBooked=it=>{ const w=rcvVal(it.id).was; return !!w&&w.recv!=null; };
+reg('recvRetry', ()=>{ state.recvSaveErr=null; recvFlush(); });
+function recvFlush(){
+  clearTimeout(recvTimer); recvTimer=null;
+  const po=state.recvPo; if(!po) return;
+  /* ONE WRITE AT A TIME, on one receipt. A second PUT landing while the first
+     is open would race it for the same receipt row — and both would read the
+     lines back mid-write. What is answered during a save is remembered and
+     sent the moment it lands. */
+  if(state.recvBusy){ state.recvAgain=true; return; }
+  const send=rcvSendable();
+  if(!send.length){ render(); return; }
+  const poId=po.id, vals=state.recvVals;
+  /* THE ORDER BEING WRITTEN, not a bare true. Everything else on this screen
+     reads it as a yes/no and still can — but a response that lands after the
+     operator has walked away has to be able to tell whether the flag it is
+     about to clear is its own. Left as a boolean, a write whose screen was
+     closed before it answered cleared nobody's flag or everybody's, and one of
+     those leaves mUnsavedWork saying "busy" for the rest of the session — which
+     is a new build that never installs. */
+  state.recvBusy=poId; state.recvSaveErr=null; state.recvAgain=false; render();
   /* ONLY THE PRODUCTS SOMEBODY ANSWERED GO ON THE WIRE, and that is the whole
      of per-product receiving. A line left out of `receipts` is a line the
      receive route never touches (routes/retail-purchasing.js: every column is
@@ -1735,35 +1817,48 @@ reg('recvSave', ()=>{
      does nothing for anyone who omits it (routes/purchases.js
      planReceiptReason). Sending it only on short lines would leave a stale
      reason standing on a line that had just been corrected upwards. */
-  const receipts=rcvToSend().map(it=>{ const v=rcvVal(it.id);
+  const receipts=send.map(it=>{ const v=rcvVal(it.id);
     return { line_id:it.id, qty_received:v.recv, damaged_qty:v.dmg,
              receipt_reason: v.recv<rcvOrdered(it) ? v.reason : null }; });
-  if(!receipts.length){ state.recvBusy=false; render(); return; }
   const body={receipts};
   /* Only when the operator actually moved it, and never when locked — the
      screen does not offer the choice then, and sending it anyway would be
      asking for a refusal we already know the answer to. */
   if(!po.store_locked&&state.recvStore&&state.recvStore!==po.receiving_store_id) body.store_id=state.recvStore;
-  apiWrite('/purchases/'+po.id+'/receive',body,'PUT').then(r=>{
-    state.recvBusy=false;
-    const t=rcvTally(), bits=[];
-    if(t.complete.length) bits.push(LANG==='en'?(t.complete.length+' complete'):(t.complete.length+' 项完好'));
-    if(t.short.length)    bits.push(LANG==='en'?(t.short.length+' short'):(t.short.length+' 项短少'));
-    if(t.dmg.length)      bits.push(LANG==='en'?(t.dmg.length+' damaged'):(t.dmg.length+' 项破损'));
-    if(t.over.length)     bits.push(LANG==='en'?(t.over.length+' over'):(t.over.length+' 项多收'));
-    if(t.none.length)     bits.push(LANG==='en'?(t.none.length+' not sent'):(t.none.length+' 项未发货'));
-    /* What is still coming, said on the confirmation screen — the operator has
-       just deliberately left products unanswered and needs to see that the app
-       understood it as "later", not as "no". */
-    if(t.waiting.length)  bits.push(LANG==='en'?(t.waiting.length+' still to come'):(t.waiting.length+' 项待收'));
-    state.recvDone=bits.join(' · ');
-    /* Both lists the save just changed are now stale. */
+  /* ONE DELIVERY PER VISIT. The first write of a visit opens the receipt and
+     answers with its id; every later write names it and amends it rather than
+     opening another. Without this the Received list would turn one van into as
+     many deliveries as there were pauses in the counting — the very grouping
+     that screen exists to hold (m.html's Receiving header, and DELIVERY_SQL). */
+  if(state.recvReceiptId) body.receipt_id=state.recvReceiptId;
+  apiWrite('/purchases/'+poId+'/receive',body,'PUT').then(r=>{
+    /* WHAT THE SERVER NOW HOLDS, so the next pause sends only what has moved
+       since (rcvDirty). Without it every pause would re-assert every answered
+       line and rewrite the whole receipt each time. Written on the vals object
+       this write was built from rather than through `state`: the operator may
+       have left and opened another order while it was in flight, and this must
+       land on the order it was counted for or on nothing at all. */
+    send.forEach(it=>{ const v=vals&&vals[it.id]; if(!v) return;
+      v.was={recv:v.recv, dmg:v.dmg, reason:(v.recv<rcvOrdered(it)?v.reason:null)||null}; });
+    /* Both lists this write just changed are now stale, whichever screen the
+       operator is on by the time it lands. */
     state.posTried=false; state.rcvTried=false; state.rcvToTried=false; state.poReceiptsFor=null;
-    render(); showToast(T('Delivery recorded','收货已登记'));
-  }).catch(e=>{ state.recvBusy=false;
+    if(state.recvBusy===poId) state.recvBusy=false;
+    if(state.recvId!==poId){ render(); return; }
+    if(r&&r.receipt_id) state.recvReceiptId=r.receipt_id;
+    state.recvSavedAt=Date.now();
+    render();
+    if(state.recvAgain){ state.recvAgain=false; recvFlush(); }
+  }).catch(e=>{
     if(String(e.message)==='auth') return;
+    if(state.recvBusy===poId) state.recvBusy=false;
+    if(state.recvId!==poId){ render(); return; }
+    /* A FAILED WRITE CHANGES NOTHING ON THE SCREEN except to say so. `was` is
+       untouched, so every line it was carrying is still dirty and the retry
+       sends exactly the same work. */
+    state.recvAgain=false;
     state.recvSaveErr=recvErrText(e); render(); });
-});
+}
 
 reg('poStatus', st=>{
   const d=state.poDetail; if(!d||state.poBusy) return;
@@ -5817,7 +5912,13 @@ function loadDelivery(id){
    order rather than being discovered by trying — see the location control. */
 function loadReceive(poId){
   state.recvId=Number(poId); state.recvPo=null; state.recvErr=null; state.recvSaveErr=null;
-  state.recvVals=null; state.recvDmg=null; state.recvStore=null; state.recvStoreOpen=false; state.recvDone=null;
+  state.recvVals=null; state.recvDmg=null; state.recvStore=null; state.recvStoreOpen=false;
+  /* A NEW VISIT IS A NEW DELIVERY. The receipt the last one amended belongs to
+     the van that came then; carrying its id here would hang tomorrow's boxes
+     off yesterday's delivery. The pending write is dropped with it — whatever
+     it was carrying has already been sent by the leave that got us here. */
+  clearTimeout(recvTimer); recvTimer=null;
+  state.recvReceiptId=null; state.recvSavedAt=0; state.recvAgain=false; state.recvBusy=false;
   /* AND THE REOPEN FLAG. It is an id, so leaving it set carries a correction
      that was open on one order onto whatever line happens to share that id on
      the next — a line that then refuses to fold, for no reason on screen. */
@@ -5829,7 +5930,7 @@ function loadReceive(poId){
     /* EVERY LINE IS CONFIRMED ONE AT A TIME. `on` is the confirmation: false
        means nobody has said anything about this product yet, and a line nobody
        has spoken for is NOT SENT — the server leaves qty_received null and the
-       product stays outstanding for the van that brings it (recvSave).
+       product stays outstanding for the van that brings it (recvFlush).
        A whole order arriving at once is still one tap: "All arrived" on the
        supplier header. What the old screen could not say at all is the case
        this exists for — one product of twelve turned up.
@@ -6157,8 +6258,17 @@ function rcvSummary(){
       :('还有 '+t.waiting.length+' 项未确认 —— 将保留在本单，可在下次到货时收货。')}</div>`:'';
   if(!rows) rows=`<div style="padding:7px 0;font-size:13.5px;color:var(--text-secondary)">${
     T('Nothing confirmed yet. Mark what arrived, product by product.','尚未确认。请逐项标记到货情况。')}</div>`;
+  /* THE EYEBROW IS A TENSE, and it has to be able to change now that there is
+     no button between the two. "About to record" was true of every answer while
+     one stood at the foot of the screen; it is true now only of an answer the
+     pause has not yet carried. Once everything on this card is on the server it
+     says so instead — the operator reading it needs to know which of the two
+     they are looking at before they walk away from the pallet. */
+  const owed=rcvSendable().length>0||state.recvBusy;
+  const done=!owed&&state.recvSavedAt>0;
   return `<div class="card" style="padding:14px 16px">
-    <span class="eyebrow" style="display:block;margin-bottom:4px">${T('About to record','即将登记')}</span>${rows}${rest}</div>`;
+    <span class="eyebrow" style="display:block;margin-bottom:4px">${
+      done?T('Recorded','已登记'):T('About to record','即将登记')}</span>${rows}${rest}</div>`;
 }
 function screenReceive(){
   if(state.recvErr) return `<div style="padding:14px 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
@@ -6175,11 +6285,13 @@ function screenReceive(){
      padded div IS the painting box, so its top lands on the header hairline —
      which scripts/test_mobile_geometry.js measures and rightly fails. */
   if(!po) return `<div style="padding:44px 24px;text-align:center"><span style="font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span></div>`;
-  if(state.recvDone) return `<div style="padding:28px 16px;display:flex;flex-direction:column;gap:16px;align-items:center;text-align:center">
-    <span style="color:var(--sage-ink);display:flex">${ic('circle-check',44,1.5)}</span>
-    <span style="font-size:17px;font-weight:500">${T('Delivery recorded','收货已登记')}</span>
-    <span class="num" style="font-size:14px;color:var(--text-secondary);line-height:1.5">${escAttr(state.recvDone)}</span>
-    <button class="btn2" style="margin-top:6px" onclick="APP.cmd('recvBackToList')">${T('Back to Receiving','返回收货')}</button></div>`;
+  /* THE CONFIRMATION SCREEN IS GONE with the button that reached it. It was the
+     receipt for one deliberate save; there is no such moment any more, and a
+     screen that threw the list away and said "done" would now be lying about a
+     visit that is still going — the operator has sixteen products left to
+     answer. What it said is said in place instead: the summary card carries the
+     tally under a heading that changes tense, and the strip at the foot says
+     which of the two states the screen is in. */
   const missing=rcvMissingReasons();
   const items=rcvItems(), answered=rcvAnswered();
   /* ONE TAP FOR THE ORDINARY DELIVERY, and it answers every line rather than
@@ -6192,28 +6304,47 @@ function screenReceive(){
   /* A failed save NEVER clears the screen: everything typed is in state.recvVals
      and stays exactly where it was, with the server's own words above the
      button and the button still there to press again. */
+  /* A FAILED WRITE NEEDS ITS OWN WAY BACK now that there is no button to press
+     again. Everything the operator typed is still in state.recvVals and still
+     dirty, so Try again sends exactly the work that failed. */
   const err=state.recvSaveErr?`<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:14px;background:var(--brick-tint);margin-bottom:10px">
     <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:1px">${ic('triangle-alert',16)}</span>
-    <span style="font-size:13.5px;color:var(--brick-ink)">${state.recvSaveErr}</span></div>`:'';
+    <span style="font-size:13.5px;color:var(--brick-ink)">${state.recvSaveErr}</span></div>
+    <button class="btn2" style="width:100%;margin-bottom:10px" onclick="APP.cmd('recvRetry')">${T('Try again','重试')}</button>`:'';
+  /* THE HELD LINES, and the second half is the new half. A short line with no
+     reason was once the thing that greyed the button, so "still needs a reason"
+     was the whole story. Now everything around it has already been recorded and
+     these have not, which the operator cannot see and must not have to guess:
+     they will walk away from a screen that looks finished. */
   const warn=missing.length?`<div style="display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-radius:14px;background:var(--amber-tint);margin-bottom:10px">
     <span style="flex:none;color:var(--amber-ink);display:flex;margin-top:1px">${ic('triangle-alert',16)}</span>
     <span style="font-size:13.5px;color:var(--amber-ink)">${LANG==='en'
-      ?(missing.length+' short line'+(missing.length>1?'s':'')+' still need'+(missing.length>1?'':'s')+' a reason.')
-      :('还有 '+missing.length+' 项短少未选原因。')}</span></div>`:'';
-  /* Nothing to send is not a failure and gets no alarm colour — it is the
-     screen as it opens. The button is simply not live until a product has been
-     answered, and the line under it says what would make it live. */
-  const send=rcvToSend().length;
-  const hint=!send?`<span style="font-size:12.5px;color:var(--text-secondary);text-align:center;margin-top:9px">${
-    T('Mark at least one product before recording.','请先标记至少一项到货情况。')}</span>`:'';
+      ?(missing.length+' short line'+(missing.length>1?'s':'')+' still need'+(missing.length>1?'':'s')+' a reason — those are not recorded.')
+      :('还有 '+missing.length+' 项短少未选原因 —— 未选原因的不会登记。')}</span></div>`:'';
+  /* THE STRIP THAT REPLACED THE BUTTON. It reports rather than asks: a write is
+     on its way, or everything answered is in. Nothing before the first answer —
+     the summary card above already says what to do, and a status line about a
+     screen nobody has touched is furniture. */
+  const owed=rcvSendable().length>0||state.recvBusy;
+  const status=owed
+    ? `<span style="display:block;text-align:center;font-size:13px;color:var(--text-secondary)">${T('Recording…','登记中…')}</span>`
+    : state.recvSavedAt
+    ? `<span style="display:flex;align-items:center;justify-content:center;gap:7px;font-size:13px;color:var(--sage-ink)">${
+        ic('check',15,2)}${T('Recorded','已登记')}</span>`
+    : '';
+  /* The way out, where the thumb already is. Not a save — there is nothing left
+     to save by the time it is pressed — but the foot of a nineteen-product list
+     is where somebody who has finished counting is standing, and sending them
+     back to the header for it is the same walk the old button made them take. */
+  const done=`<button class="btn2" style="width:100%" onclick="APP.cmd('recvBackToList')">${
+    T('Back to Receiving','返回收货')}</button>`;
   return `<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">
     ${rcvLocation()}
     ${allBtn}
     ${lines}
     ${rcvSummary()}
-    <div style="display:flex;flex-direction:column">${err}${warn}
-      <button class="cta" ${(missing.length||state.recvBusy||!send)?'disabled':''} onclick="APP.cmd('recvSave')">${
-        state.recvBusy?T('Recording…','登记中…'):T('Record delivery','登记收货')}</button>${hint}</div></div>`;
+    <div style="display:flex;flex-direction:column">${err}${warn}${done}
+      ${status?`<span style="margin-top:10px">${status}</span>`:''}</div></div>`;
 }
 
 /* ── The Receiving screen: To receive / Received ─────────────────────────── */
@@ -12913,6 +13044,16 @@ function saveScrollForReturn(){
   }catch(e){}
 }
 window.addEventListener('pagehide',saveScrollForReturn);
+/* AND THE DELIVERY GOES WITH IT. The receive screen writes on a pause; an
+   operator who answers a product and then locks the phone, or takes a call, has
+   given an answer the pause never spent. pagehide and hidden both, because the
+   two fire on different phones for the same gesture — recvFlush is idempotent
+   when there is nothing owed, so firing twice costs nothing.
+   Deliberately not a beacon: the write must be able to report a refusal (a
+   short line's reason, a locked store), and the screen is still there behind
+   the lock to show it. */
+window.addEventListener('pagehide',()=>{ if(state.recvPo) recvFlush(); });
+document.addEventListener('visibilitychange',()=>{ if(document.hidden&&state.recvPo) recvFlush(); });
 function render(){
   /* THE LIST MUST NOT JUMP BACK TO THE TOP. render() replaces the whole app in
      one innerHTML, which destroys the scroller and takes its position with it.
@@ -13284,7 +13425,11 @@ if(IS_IOS&&!STANDALONE){
    holding in their head until it lands. */
 function mUnsavedWork(){
   try{
-    if(state.recvPo&&rcvToSend().length) return true;
+    /* An answer still waiting on the pause, AND a write already on its way:
+       the screen saves itself now, so between the tap and the response there is
+       a second or so in which rcvToSend has emptied on nothing. A reload landing
+       in it would take the screen out from under a delivery mid-write. */
+    if(state.recvPo&&(rcvToSend().length||state.recvBusy)) return true;
     const a=state.qs&&state.qs.add;      for(const k in a) if(a[k]>0) return true;
     const f=state.qs&&state.qs.inflight; for(const k in f) if(f[k]) return true;
   }catch(e){}

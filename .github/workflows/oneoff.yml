@@ -1,0 +1,172 @@
+name: One-off prod repair
+
+# ⚠️ THIS WORKFLOW CHANGES HOW BUILDS WORK — it is the first path by which a
+# committed script can WRITE to the live database from CI. Called out here, in
+# its commit message and in its pull request, per CLAUDE.md ("Changes to how
+# sessions and builds work are never a silent side effect"). Ash's decision,
+# 2026-09-08.
+#
+# It runs ONE committed, reviewable repair script against the live database and
+# prints its output to the Actions log. It ships nothing, restarts nothing, and
+# touches no pm2 process — it copies the named script into /tmp on the box, runs
+# it with node, and deletes it.
+#
+# It is the write-side counterpart of ro-query.yml, and exists for the same
+# reason: repair work needs to reach the live SQLite database from an
+# environment that has no direct SSH to the host, and the deploy key is a
+# repository secret rather than something a developer machine has to hold.
+#
+# ── WHAT KEEPS IT NARROW ──────────────────────────────────────────────────
+#
+#   1. MANUAL DISPATCH ONLY. Nothing triggers it — not a push, not a merge, not
+#      a schedule. A person names the script and presses the button.
+#   2. ONE FILE-NAME SHAPE. It refuses anything but scripts/oneoff_*.js, so the
+#      set of things it can run is exactly the set of files somebody named that
+#      way on purpose, in a commit, in a reviewed pull request.
+#   3. DRY RUN IS THE DEFAULT. `apply` is false unless it is set, and only then
+#      is `--apply` passed. Every oneoff_* script must be dry-run by default and
+#      write only on that flag, so the button pressed twice is how a change is
+#      seen before it is made.
+#   4. A VERIFIED BACKUP FIRST, on the apply path only. sqlite3's online .backup
+#      API (never a byte copy — roots.db carries a live WAL), then
+#      integrity_check, and the run ABORTS if the check is anything but "ok".
+#      The snapshot's path is printed, and it is kept whatever happens.
+#
+# NO NEW CREDENTIAL POWER. It uses the same DEPLOY_HOST / DEPLOY_SSH_KEY secrets
+# deploy.yml already holds, and that key is already root on the box: anyone who
+# can merge to main already ships code that runs as root there. What this adds
+# is a way to run a repair WITHOUT shipping it into the running app — which is
+# narrower than the path that already exists, not wider.
+
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        description: "Path (repo-relative) of the one-off repair to run — scripts/oneoff_*.js"
+        required: true
+      apply:
+        description: "Write. Leave false for a dry run — do a dry run first."
+        type: boolean
+        required: true
+        default: false
+
+concurrency:
+  group: oneoff
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Refuse anything outside the one-off set
+        run: |
+          set -euo pipefail
+          S='${{ inputs.script }}'
+          case "$S" in
+            scripts/oneoff_*.js) ;;
+            *) echo "::error::Only scripts/oneoff_*.js may be run here (got '$S')."; exit 1 ;;
+          esac
+          [ -f "$S" ] || { echo "::error::$S is not in this checkout."; exit 1; }
+          echo "Will run $S (apply=${{ inputs.apply }})"
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          cat > ~/.ssh/config <<EOF
+          Host prod
+            HostName $DEPLOY_HOST
+            User root
+            IdentityFile ~/.ssh/id_deploy
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 20
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Back up the database (apply only)
+        if: inputs.apply
+        run: |
+          set -euo pipefail
+          # The online .backup API, not cp: roots.db carries a live WAL and a
+          # byte copy of the main file alone is torn. integrity_check runs on
+          # the snapshot and the run stops here if it is not "ok" — a repair
+          # must never begin on the strength of a backup nobody checked.
+          # scripts/db-backup.sh takes the same care for the same reason.
+          #
+          # Done through the app's own better-sqlite3 rather than the sqlite3
+          # CLI: that library is guaranteed present on the box (the app will not
+          # boot without it), where the CLI is only assumed.
+          BK="/root/backups/oneoff-$(date -u +%Y%m%d-%H%M%S)-$GITHUB_RUN_ID.db"
+          cat > /tmp/oneoff-backup.js <<'JS'
+          const Database = require('/root/roots-v2/node_modules/better-sqlite3');
+          const dest = process.argv[2];
+          const db = new Database('/root/roots-v2/data/roots.db', { readonly: true, fileMustExist: true });
+          db.backup(dest)
+            .then(() => {
+              const snap = new Database(dest, { readonly: true, fileMustExist: true });
+              const rows = snap.pragma('integrity_check');
+              const verdict = (rows && rows[0] && rows[0].integrity_check) || 'unknown';
+              console.log('integrity_check=' + verdict);
+              process.exit(verdict === 'ok' ? 0 : 1);
+            })
+            .catch((e) => { console.error('backup failed: ' + e.message); process.exit(1); });
+          JS
+          ssh prod "mkdir -p /root/backups"
+          scp -q /tmp/oneoff-backup.js prod:/tmp/oneoff-backup.js
+          set +e
+          OUT="$(ssh prod "node /tmp/oneoff-backup.js '$BK'")"; RC=$?
+          set -e
+          ssh prod "rm -f /tmp/oneoff-backup.js" || true
+          echo "backup: $BK"
+          printf '%s\n' "$OUT"
+          if [ "$RC" != "0" ]; then
+            echo "::error::The backup did not verify. Nothing has been written. Any snapshot is left at $BK."
+            exit 1
+          fi
+          echo "BACKUP=$BK" >> "$GITHUB_ENV"
+
+      - name: Run it
+        run: |
+          set -euo pipefail
+          S='${{ inputs.script }}'
+          STAGE="/tmp/oneoff-$GITHUB_RUN_ID"
+          REMOTE="$STAGE/$(basename "$S")"
+          APPLY=''
+          [ "${{ inputs.apply }}" = "true" ] && APPLY='--apply'
+
+          # Same staging shape as ro-query.yml: the script runs against the LIVE
+          # database but against THIS CHECKOUT's lib/, not the deployed one, so
+          # a repair that has not shipped can still be run. The app's
+          # node_modules is symlinked rather than copied, and the stub
+          # database.js exists only so a `require('../database')` in a staged
+          # module resolves to a real path.
+          #
+          # data/ is NOT staged — the script opens the live database by absolute
+          # path through ROOTS_DB.
+          ssh prod "rm -rf '$STAGE' && mkdir -p '$STAGE'"
+          scp -q "$S" "prod:$REMOTE"
+          for d in lib routes middleware; do
+            [ -d "$d" ] && scp -qr "$d" "prod:$STAGE/$d"
+          done
+          ssh prod "ln -s /root/roots-v2/node_modules '$STAGE/node_modules' && \
+                    printf 'module.exports = {};\n' > '$STAGE/database.js'"
+
+          set +e
+          ssh prod "ROOTS_HOME='$STAGE' ROOTS_DB=/root/roots-v2/data/roots.db node '$REMOTE' $APPLY"; RC=$?
+          set -e
+          ssh prod "rm -rf '$STAGE'"
+          echo "exit=$RC"
+          if [ "${{ inputs.apply }}" = "true" ]; then
+            echo "Backup kept at ${BACKUP:-<none>} on the server."
+          else
+            echo "DRY RUN — nothing was written. Re-run with apply=true once the output above reads right."
+          fi
+          exit $RC
