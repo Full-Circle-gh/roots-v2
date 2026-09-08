@@ -215,6 +215,43 @@ t('and so does every desktop door into the till', () => {
     && /\/till\?from=dashboard/.test(ADMIN_HTML), 'a desktop till door stopped naming itself');
 });
 
+/* THE SAME RULE FOR /stock, AND THE HOLE THAT PROVED IT WAS NEEDED. The first
+   pass at this asserted no bare '/till' and never asked the same of '/stock' —
+   so Settings → Ops kept two `window.open('/stock','_blank')` buttons, the
+   Quick Stock and Add Stock previews, and Back from either still landed on the
+   phone app. The guard passed with the hole in it. Ash found the buttons, not
+   the suite: "i dont see any reason for this to be a new window".
+
+   BOTH HALVES ARE ASSERTED, because same-tab and provenance fix different
+   things: window.open is why a second window appeared at all, ?from= is why
+   the way out of it was wrong. Fixing one and not the other leaves half the
+   report standing. */
+t('the Settings previews open /stock in THIS tab, and say where from', () => {
+  const buttons = ADMIN_HTML.match(/<button[^>]*onclick="[^"]*\/stock[^"]*"[^>]*>/g) || [];
+  assert.ok(buttons.length >= 2,
+    'the Quick Stock / Add Stock preview buttons have gone from public/retail-admin.html');
+  for (const b of buttons) {
+    assert.ok(!/window\.open/.test(b),
+      'a Settings button still opens /stock in a new window: ' + b.slice(0, 90));
+    assert.ok(/from=dashboard/.test(b),
+      'a Settings button opens /stock without saying where from — Back there lands on the phone app: '
+        + b.slice(0, 90));
+  }
+});
+
+/* AND THE STAFF LINK IS THE EXCEPTION, stated so nobody "fixes" it later. It is
+   copied to a clipboard and handed to a shop worker, who came from nowhere —
+   and whose role server.js bounces off every backend page, so a Back onto the
+   dashboard would be a door onto a redirect. A door names where it came from; a
+   link handed to somebody else has no such claim to make. */
+t('but the staff link stays bare — whoever opens it did not come from here', () => {
+  const EXTRAS = read('public', 'retail-admin', '10-extras.js');
+  const fn = /function qsStockLink\(\)[^\n]*/.exec(EXTRAS);
+  assert.ok(fn, 'qsStockLink has gone from public/retail-admin/10-extras.js');
+  assert.ok(!/from=/.test(fn[0]),
+    'the staff link now carries provenance it cannot honour: ' + fn[0]);
+});
+
 t('but the PHONE\'s till row is left alone — More really is where it came from', () => {
   const M_HTML = read('public', 'm.html');
   assert.ok(/\['till','calculator','Counter till','前台收银','\/till'\]/.test(M_HTML),
