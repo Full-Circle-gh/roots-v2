@@ -146,8 +146,14 @@ const CASES = [
     ['every product carries its own answer',
       `[...document.querySelectorAll('.chip')].filter(c=>/arrived$/i.test(c.innerText.trim())).length === 5
        && [...document.querySelectorAll('.chip')].filter(c=>/^Not /.test(c.innerText.trim())).length === 5`],
-    ['and nothing can be recorded until one is given',
-      `document.querySelector('.cta').disabled === true && txt('content').includes('Mark at least one product')`],
+    // THERE IS NO SAVE BUTTON, and the assertion is worth making from both
+    // sides: nothing on the screen offers to record, and nothing is queued to
+    // be recorded either. An untouched screen must be silent — a status line
+    // over a screen nobody has answered would be reporting on nothing.
+    ['nothing offers to record it',
+      `!document.querySelector('.cta') && !/Record delivery|Mark at least one/.test(txt('content'))`],
+    ['and there is nothing on the wire to record',
+      `rcvSendable().length === 0 && !txt('content').includes('Recording')`],
     // TWO controls per product and none per supplier: 10, where two-per-product
     // plus two-per-supplier was 16. The count is asserted so a control that
     // quietly stops rendering is caught; the rule is the two after it, measured
@@ -175,7 +181,8 @@ const CASES = [
     ['the line says what it was answered with', `txt('content').includes('5 kg')`],
     ['and it counts as checked', `state.recvVals[11].on === true && state.recvVals[11].recv === 5`],
     ['the others are still unanswered', `state.recvVals[12].on === false`],
-    ['it can be recorded on its own',   `document.querySelector('.cta').disabled === false`],
+    ['it is queued to be recorded on its own', `rcvSendable().map(it=>it.id).join(',') === '11'`],
+    ['and the screen says so',          `txt('content').includes('Recording')`],
     ['and it is the only thing on the wire',
       `rcvToSend().map(it=>it.id).join(',') === '11'`],
     ['the screen says the rest stay on the order',
@@ -184,9 +191,45 @@ const CASES = [
       `rcvGroupState(rcvGroups().find(g=>g.name==='Green Farm').items) === 'part'`],
     ['a supplier nobody has answered is waiting, not arrived',
       `rcvGroupState(rcvGroups().find(g=>g.name==='Sun Oils').items) === 'wait'`],
+    // THE UNDO SURVIVES THE BUTTON'S REMOVAL, and it has to: the screen now
+    // writes on a pause, and the second or so before that pause is spent is the
+    // whole window an operator has to take back a mis-tap. Untouched here
+    // because nothing has been recorded yet — `was.recv` is null, so the line
+    // is not booked. What happens once it IS booked is the case below.
     ['pressing Arrived again takes the answer back',
       `(APP.cmd('recvArrived','11'), state.recvVals[11].on === false
-        && document.querySelector('.cta').disabled === true)`],
+        && rcvSendable().length === 0)`],
+  ]],
+
+  // ONCE IT IS RECORDED, THE UNDO BECOMES THE CORRECTOR. Clearing an answer the
+  // server has taken cannot un-book the stock — applyReceivedToStock skips a
+  // null line and so reverses nothing — so the press that used to un-answer
+  // opens the line to be corrected instead, and "Not 5" books the zero that
+  // does reverse it. Seeded as the flush leaves it: `was.recv` set to what the
+  // server was told.
+  ['an answer the server already has cannot be un-answered by tapping it again',
+    OPEN + `APP.cmd('recvArrived','11');
+      state.recvVals[11].was={recv:5,dmg:0,reason:null}; state.recvSavedAt=Date.now(); render();`, [
+    ['it is recorded, so nothing is owed', `rcvSendable().length === 0 && rcvBooked(state.recvPo.items[0]) === true`],
+    ['the summary says recorded, not about to record',
+      `txt('content').includes('Recorded') && !txt('content').includes('About to record')`],
+    ['pressing Arrived opens the line instead of clearing it',
+      `(APP.cmd('recvArrived','11'), state.recvVals[11].on === true
+        && state.recvVals[11].recv === 5 && String(state.recvOpenLine) === '11')`],
+    ['and Not 5 is still the way to correct it to nothing',
+      `(APP.cmd('recvNotArrived','11'), state.recvVals[11].on === true
+        && state.recvVals[11].recv === 0 && rcvSendable().map(it=>it.id).join(',') === '11')`],
+  ]],
+
+  // ONE VISIT IS ONE DELIVERY. The Received list shows a row per receipt that
+  // brought a line for the first time (routes/retail-purchasing.js
+  // DELIVERY_SQL), so a screen that writes on every pause has to name the
+  // receipt its first write opened or a single van reads as six deliveries.
+  ['every write after the first amends the delivery the visit opened',
+    OPEN + `APP.cmd('recvArrived','11'); state.recvReceiptId=77;
+      state.recvVals[11].was={recv:5,dmg:0,reason:null}; APP.cmd('recvArrived','12'); render();`, [
+    ['the visit is holding a receipt to amend', `state.recvReceiptId === 77`],
+    ['and only the newly answered line is owed', `rcvSendable().map(it=>it.id).join(',') === '12'`],
   ]],
 
   // THE CORRECTION. A folded row is one tap from its counter — and that tap must
@@ -300,7 +343,7 @@ const CASES = [
   ['a product that did not come', OPEN + `APP.cmd('recvNotArrived','12');`, [
     ['it is answered, at nothing',   `state.recvVals[12].on === true && state.recvVals[12].recv === 0`],
     ['with the reason a no-show has by definition', `state.recvVals[12].reason === 'not_sent'`],
-    ['so the save is not blocked on one', `document.querySelector('.cta').disabled === false`],
+    ['so nothing is held back over a missing reason', `rcvMissingReasons().length === 0`],
     ['and it is recorded, not skipped', `rcvToSend().map(it=>it.id).join(',') === '12'`],
     ['the summary says nothing arrived', `txt('content').includes('Coriander — nothing arrived')`],
   ]],
@@ -318,7 +361,10 @@ const CASES = [
     ['what already came is shown, already answered',
       `state.recvVals[11].on === true && state.recvVals[12].on === true`],
     ['what has not is still unanswered', `state.recvVals[13].on === false`],
-    ['nothing is re-sent on its own',    `rcvToSend().length === 0 && document.querySelector('.cta').disabled === true`],
+    // AND NOTHING IS WRITTEN ON ARRIVAL. The screen saves itself, so "opens
+    // with nothing owed" is now the assertion that keeps a re-opened order from
+    // re-asserting every line it is already holding the moment it paints.
+    ['nothing is re-sent on its own',    `rcvToSend().length === 0 && rcvSendable().length === 0`],
     ['ticking in the new arrival sends only that',
       `(APP.cmd('recvArrived','13'), rcvToSend().map(it=>it.id).join(',') === '13')`],
     ['and correcting an old count sends that too',
@@ -410,10 +456,18 @@ const CASES = [
       `(function(){ var c=[...document.querySelectorAll('.chip')]
          .filter(x=>/Short delivery|Wrong item|Not sent/.test(x.innerText));
          return c.length === 3 && c.every(x=>x.getBoundingClientRect().right <= document.documentElement.clientWidth); })()`],
-    ['the save is blocked until a reason is picked',
-      `document.querySelector('.cta').disabled === true && /needs? a reason/.test(txt('content'))`],
-    ['picking one unblocks it',
-      `(APP.cmd('recvReason','11|short_delivery'), document.querySelector('.cta').disabled === false)`],
+    // THE LINE IS HELD, AND ONLY THAT LINE. With no button to grey out, one
+    // short line with no reason must not strand the four that ARE answerable —
+    // the server refuses the whole payload over it (planReceiptReason), so it
+    // is kept off the wire while everything else goes.
+    ['the line is held back until a reason is picked',
+      `rcvMissingReasons().map(it=>it.id).join(',') === '11'
+       && rcvSendable().map(it=>it.id).sort().join(',') === '12,13,14,15'`],
+    ['and the screen says those are not recorded',
+      `/needs? a reason/.test(txt('content')) && txt('content').includes('not recorded')`],
+    ['picking one releases it',
+      `(APP.cmd('recvReason','11|short_delivery'),
+        rcvMissingReasons().length === 0 && rcvSendable().length === 5)`],
     ['and the summary names the line, not a unit count',
       `txt('content').includes('Mint — 1 kg short')`],
   ]],
@@ -489,7 +543,12 @@ const CASES = [
       `txt('content').includes('3 kg') && txt('content').includes('25 kg')`],
     ['the reason is still picked',     `state.recvVals[11].reason === 'short_delivery'`],
     ['the failure is stated',          `txt('content').includes('That did not save')`],
-    ['and the button is still there',  `!!document.querySelector('.cta')`],
+    // AND THERE IS A WAY BACK FROM IT. The screen writes on a pause, so a
+    // failure has no button to press again — Try again is that button, and it
+    // sends the same work because nothing about `was` moved when the write
+    // failed, leaving every line still dirty.
+    ['Try again is offered',           `txt('content').includes('Try again')`],
+    ['and it still has the work to send', `rcvSendable().length === 5`],
   ]],
 
   ['the delivery list', SEEN, [

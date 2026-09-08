@@ -153,16 +153,50 @@ function receiptLineIds(receipts) {
 // which is the running total the line holds — the column comment in
 // database.js carries that distinction and it is the one asymmetry in this
 // table.
-function recordReceipt(h, { poId, storeId, scope, actor, receipts, note, kind, returns }) {
+function recordReceipt(h, { poId, storeId, scope, actor, receipts, note, kind, returns, intoReceiptId }) {
   const ids = returns ? [...returns.keys()] : receiptLineIds(receipts);
   if (!ids.length) return null;
-  const info = h.prepare(`INSERT INTO po_receipts
-      (po_id, store_id, scope, actor_user_id, actor_label, actor_realm, note, kind)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(poId, storeId ?? null, scope || 'kitchen',
-         actor?.userId ?? null, actor?.label ?? null, actor?.realm ?? null, note ?? null,
-         kind === 'return' ? 'return' : 'receipt');
-  const receiptId = info.lastInsertRowid;
+  // ── AMENDING THE RECEIPT A VISIT ALREADY OPENED ───────────────────────────
+  // `intoReceiptId` names a receipt on this same PO to add these lines to
+  // instead of opening another. It exists for one caller — the phone's receive
+  // screen, which saves itself as the operator answers rather than on a button
+  // (public/m.html recvFlush) — and for one reason: the Received list shows a
+  // row per receipt that brought a line for the FIRST time (DELIVERY_SQL in
+  // routes/retail-purchasing.js), so without this a van counted in over six
+  // pauses would read as six deliveries. One visit, one receipt, one van.
+  //
+  // `received_at` is deliberately NOT touched. It dates when the delivery
+  // started being counted, and a later answer in the same visit is more of that
+  // delivery, not a new one.
+  //
+  // A NAMED RECEIPT THAT NO LONGER QUALIFIES OPENS A NEW ONE rather than
+  // refusing. It can happen — the desk undoes the receive while the door is
+  // still counting — and the answer to "I cannot amend that" must never be
+  // "then nothing is recorded". An extra row in the journal is a blemish; a
+  // delivery lost at the door is the failure this screen may not have.
+  const wantKind = kind === 'return' ? 'return' : 'receipt';
+  let receiptId = null, amended = false;
+  if (intoReceiptId) {
+    const open = h.prepare(
+      "SELECT id FROM po_receipts WHERE id = ? AND po_id = ? AND COALESCE(kind, 'receipt') = ?"
+    ).get(parseInt(intoReceiptId, 10) || 0, poId, wantKind);
+    if (open) { receiptId = open.id; amended = true; }
+  }
+  if (receiptId == null) {
+    const info = h.prepare(`INSERT INTO po_receipts
+        (po_id, store_id, scope, actor_user_id, actor_label, actor_realm, note, kind)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(poId, storeId ?? null, scope || 'kitchen',
+           actor?.userId ?? null, actor?.label ?? null, actor?.realm ?? null, note ?? null,
+           wantKind);
+    receiptId = info.lastInsertRowid;
+  }
+  // A line answered twice in one visit is REPLACED on the receipt, not listed
+  // twice. The receipt is a statement of what this delivery brought, and "5,
+  // then 4" on one delivery is two answers to one question — the correction is
+  // the answer. Corrections ACROSS visits are still their own receipt, which is
+  // what the journal reads as a revision.
+  const drop = h.prepare('DELETE FROM po_receipt_lines WHERE receipt_id = ? AND line_id = ?');
   const read = h.prepare('SELECT qty_received, damaged_qty, receipt_reason, return_reason FROM po_line_items WHERE id = ? AND po_id = ?');
   const ins  = h.prepare(`INSERT INTO po_receipt_lines
       (receipt_id, line_id, qty_received, damaged_qty, receipt_reason, note, returned_qty)
@@ -176,6 +210,7 @@ function recordReceipt(h, { poId, storeId, scope, actor, receipts, note, kind, r
   for (const id of ids) {
     const l = read.get(id, poId);
     if (!l) continue;
+    if (amended) drop.run(receiptId, id);
     // A return row carries the line's return_reason rather than its receipt
     // one: a receipt_reason explains a SHORTFALL and a return has none — the
     // goods turned up in full and went back afterwards. Putting the shortfall
@@ -186,7 +221,14 @@ function recordReceipt(h, { poId, storeId, scope, actor, receipts, note, kind, r
             notes.get(id) ?? null, returns ? (returns.get(id) || 0) : 0);
     lines++;
   }
-  return { receiptId, lines };
+  // `lines` is what this DELIVERY holds, not what this call wrote — on an
+  // amend those differ, and the caller reports it to a screen asking "how big
+  // was the delivery", never "how big was the last save".
+  if (amended) {
+    lines = h.prepare('SELECT COUNT(*) AS n FROM po_receipt_lines WHERE receipt_id = ?')
+      .get(receiptId).n;
+  }
+  return { receiptId, lines, amended };
 }
 
 // The store a PO's already-applied stock is sitting at: the last receipt that
