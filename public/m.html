@@ -7813,8 +7813,22 @@ function loadKr(force){
      request with two of three lines made belongs on this screen twice over and
      in that list not at all. routes/restock.js kitchen-ready/lines reads the
      same clause the dot and the fire read, minus the two seen arms. */
+  /* UNWRAPPED ONCE, NOT TWICE — the shape every sibling loader in this file
+     reads (loadKq, loadPik, loadXfr) and this one did not. `api()` already
+     returns `j.data` when the envelope carries one, so what arrives here is
+     the ARRAY of lines; asking it for `.data` a second time is `undefined`,
+     and `|| []` turned that into an empty list on every single load. The
+     screen was therefore ALWAYS "Nothing finished yet" on this app — a blank
+     page over a shelf with forty jars on it, while /stock, which unwraps once,
+     listed all forty. Both read the same endpoint; only the phone lost them.
+     Nothing else was wrong: the row is there, the route resolves, the gate
+     passes, the fetch is a 200. Ash: *"this page doesnt show on mobile."*
+     It also cost the seen-stamp, which is the part that lasts longer than a
+     blank screen: krMarkSeen reads this list for the ids it has drawn, so with
+     nothing in it nothing was ever acknowledged, and the dot and Home's row
+     could only be put out from the other app. */
   api('/api/restock/kitchen-ready/lines').then(j=>{
-    k.list=(j&&j.data)||[];
+    k.list=Array.isArray(j)?j:((j&&j.data)||[]);
     k.err=''; render(); krMarkSeen();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
