@@ -5287,22 +5287,44 @@ function shopperOnLocalRun(){
 // out-of-city shopper (the server enforces the GZ same-day gate at checkout);
 // a strict sold-out item — or anything sold out for a same-city shopper — is a
 // hard SOLD OUT. Untracked stock (null) counts as in stock.
+//
+// ONE exception on the local run, and it is the same one slStock() below and
+// the mini-app PDP (miniapp/pages/product/product.js → reservable) already
+// make: a FRESH meal the server dated (`local_fresh_date` — the day the kitchen
+// makes the next batch). That same date drives the checkout gate and the
+// calendar floor, so offering it here cannot promise what the checkout will
+// refuse. A row without the field — every grocery row, and every row for a
+// tenant with no batch schedule — stays dead on the run exactly as before.
+//
+// This function had been left out when the exemption landed everywhere else,
+// which is what made the web storefront contradict itself: the list rendered
+// NEXT BATCH off slToRows(), and the tap through to the PDP — the only route to
+// the basket, since a NEXT BATCH row renders no + button — read the row back
+// through here and disabled the button as SOLD OUT.
+//
+// `localFresh` separates the two kinds of pre-order for the PDP's note, which
+// names shipping ("orderable outside Guangzhou") — true for the out-of-city
+// reservation, wrong for a shopper on the run being offered the next batch.
 function stockState(p){
   // Supplier-direct items carry no stock of ours — always available, never
   // SOLD OUT — unless the operator paused them (supplier is out).
   if(p&&p.ship_from_supplier){
     return p.supplier_paused
-      ? {oos:true,soldOut:true,badge:state.lang==='cn'?'暂时缺货':'UNAVAILABLE'}
-      : {oos:false,soldOut:false,badge:''};
+      ? {oos:true,soldOut:true,localFresh:false,badge:state.lang==='cn'?'暂时缺货':'UNAVAILABLE'}
+      : {oos:false,soldOut:false,localFresh:false,badge:''};
   }
   const vs=Array.isArray(p.variants)?p.variants:null;
   const out = (vs&&vs.length>1)
     ? vs.every(v=>v.stock!=null&&Number(v.stock)<=0)
     : (p.stock!=null&&Number(p.stock)<=0);
-  if(!out) return {oos:false,soldOut:false,badge:''};
-  if(oosBackorder(p)&&!shopperOnLocalRun()) return {oos:true,soldOut:false,
+  if(!out) return {oos:false,soldOut:false,localFresh:false,badge:''};
+  // A collapsed variant hero follows its sizes, the way slToRows() does: one
+  // dated fresh size is enough to bring the product back for a local shopper.
+  const onRun=shopperOnLocalRun();
+  const fresh=(vs&&vs.length>1)?vs.some(v=>!!v.local_fresh_date):!!p.local_fresh_date;
+  if(oosBackorder(p)&&(!onRun||fresh)) return {oos:true,soldOut:false,localFresh:onRun&&fresh,
     badge:p.is_batch_made?(state.lang==='cn'?'下批现做':'NEXT BATCH'):(state.lang==='cn'?'现订现发':'SHIPS SOON')};
-  return {oos:true,soldOut:true,badge:state.lang==='cn'?'售罄':'SOLD OUT'};
+  return {oos:true,soldOut:true,localFresh:false,badge:state.lang==='cn'?'售罄':'SOLD OUT'};
 }
 function cardHtml(p){
   const src=thumb(p),now=nowPrice(p),was=wasPrice(p);
@@ -5394,7 +5416,7 @@ async function renderProduct(id){
           ${was>0?`<span class="price-was">${money(was)}</span><span class="flash-tag">${state.lang==='cn'?'限时':'Flash'}</span>`:''}
           ${ss.oos?`<span class="pd-oos-tag${ss.soldOut?' sold':' soon'}">${ss.badge}</span>`:''}
         </div>
-        ${ss.oos&&!ss.soldOut?`<div class="pd-oos-note">${state.lang==='cn'?'当前缺货，外地可预订，下批/补货后发出。':'Out of stock now — orderable outside Guangzhou; ships on the next batch / restock.'}</div>`:''}
+        ${ss.oos&&!ss.soldOut&&!ss.localFresh?`<div class="pd-oos-note">${state.lang==='cn'?'当前缺货，外地可预订，下批/补货后发出。':'Out of stock now — orderable outside Guangzhou; ships on the next batch / restock.'}</div>`:''}
         ${rc>0?`<div class="rating"><span class="stars">${'★'.repeat(Math.round(avg))}<span class="off">${'★'.repeat(5-Math.round(avg))}</span></span>${avg.toFixed(1)} · ${rc} ${state.lang==='cn'?'条评价':'reviews'}</div>`:''}
         <div class="pd-buy">
           ${ss.soldOut

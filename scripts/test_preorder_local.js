@@ -608,6 +608,61 @@ console.log('\nweb storefront — stockState / slStock');
     assert.strictEqual(verdict({ ship_from_supplier: 1, stock: 0 }).soldOut, false);
   });
 
+  // ── The dated fresh meal, on the PDP ──────────────────────────────────────
+  // stockState() drives the product page, which is the ONLY route to the basket
+  // for a sold-out row: a NEXT BATCH row renders no + button, so the tap goes to
+  // the PDP. It had been left out when the local_fresh_date exemption landed on
+  // slStock / slToRows, so the list offered NEXT BATCH and the page it opened
+  // disabled the button as SOLD OUT. These lock the two together.
+  const FRESH = { ...BACKORDER, is_batch_made: 1, local_fresh_date: '2026-09-09' };
+
+  it('same-city: a DATED fresh meal is offered, and the list agrees', () => {
+    signIn(true);
+    const v = verdict(FRESH);
+    assert.strictEqual(v.soldOut, false, 'the ADD button lives');
+    assert.strictEqual(v.badge, 'NEXT BATCH');
+    // The size row the picker renders reads it the same way.
+    assert.strictEqual(size(FRESH).soldOut, false);
+    assert.strictEqual(size(FRESH).pre, true);
+  });
+  it('same-city: an UNDATED batch meal is still dead — the date is the permission', () => {
+    signIn(true);
+    const v = verdict({ ...BACKORDER, is_batch_made: 1 });
+    assert.strictEqual(v.soldOut, true);
+    assert.strictEqual(v.badge, 'SOLD OUT');
+  });
+  it('same-city: a grocery row never carries a date, so it stays dead', () => {
+    signIn(true);
+    assert.strictEqual(verdict(BACKORDER).soldOut, true);
+  });
+  it('a collapsed variant hero follows its sizes, as slToRows does', () => {
+    signIn(true);
+    const dead = verdict({ ...BACKORDER, variants: [{ ...BACKORDER, id: 71 }, { ...BACKORDER, id: 72 }] });
+    assert.strictEqual(dead.soldOut, true);
+    // One dated fresh size is enough to bring the product back.
+    const alive = verdict({ ...FRESH, variants: [{ ...FRESH, id: 71 }, { ...BACKORDER, id: 72 }] });
+    assert.strictEqual(alive.soldOut, false);
+  });
+  // The PDP's out-of-stock note names SHIPPING ("orderable outside Guangzhou"),
+  // which is true of the out-of-city reservation and wrong for a shopper on the
+  // run being offered the next batch. `localFresh` is what suppresses it, so it
+  // must be set on exactly one of the two.
+  it('localFresh separates the two pre-orders, so the shipping note stays honest', () => {
+    signIn(true);
+    assert.strictEqual(verdict(FRESH).localFresh, true, 'note suppressed on the run');
+    signIn(false);
+    assert.strictEqual(verdict(FRESH).localFresh, false, 'out-of-city still reads the note');
+    assert.strictEqual(verdict(BACKORDER).localFresh, false);
+    sandbox.state.customer = null;
+    assert.strictEqual(verdict(FRESH).localFresh, false, 'signed out is not on the run');
+  });
+  it('the note is wired to it in shop.html', () => {
+    assert.ok(
+      /\$\{ss\.oos&&!ss\.soldOut&&!ss\.localFresh\?`<div class="pd-oos-note">/.test(html),
+      'the PDP note reads ss.localFresh',
+    );
+  });
+
   // ── The mobile list/grid (slToRows) ───────────────────────────────────────
   // The mini-app-mirror layouts the web serves under 768px. They build their own
   // row objects rather than going through stockState(), which is how they kept
