@@ -154,55 +154,64 @@ for (const file of files) {
     continue;
   }
 
-  // ── ONE SCAN, NOT ONE PER LINE ─────────────────────────────────────────────
-  // The only link from a ledger row back to the order that caused it is the free
-  // text in `note` (adjustStock is called here with its default ref_table /
-  // ref_id, so the indexed provenance columns are empty for these rows — see the
-  // PROVENANCE note in lib/inventory.js). `note LIKE '%ref%'` cannot use an
-  // index, so asking it once per order line is one full scan of the ledger per
-  // line: the first version of this script ran for ten minutes against the live
-  // database and was killed. Read the window ONCE, match the refs in JS.
   const PACK_COL = col('retail_order_items', 'pack_units') ? 'oi.pack_units' : '1 AS pack_units';
 
   const REASONS = ['eleme_order', 'eleme_cancel', 'eleme_uncancel',
                    'meituan_order', 'meituan_cancel', 'meituan_uncancel'];
-  const ledgerWindow = has('retail_stock_ledger') ? all(`
-    SELECT id, store_id, product_id, delta, reason, balance_after, created_at, note
-      FROM retail_stock_ledger
-     WHERE reason IN (${REASONS.map(() => '?').join(',')})
-       AND created_at >= datetime('now', ?)
-     ORDER BY id
-  `, ...REASONS, `-${DAYS} days`) : [];
-  step('ledger window', ledgerWindow.length);
 
-  // Same argument for the two sync logs: read the window once, match in JS.
+  // ── WHY THE LEDGER IS READ PER LINE AND NOT IN ONE WINDOW ──────────────────
+  // The only link from a ledger row back to the order that caused it is free
+  // text in `note` — adjustStock is called here with its default ref_table /
+  // ref_id, so the indexed provenance columns are empty for these rows (see the
+  // PROVENANCE note in lib/inventory.js) — and `note LIKE '%ref%'` can use no
+  // index at all.
   //
-  // NARROWED TO THE ORDER EVENTS, and that is not tidiness. These logs also carry
-  // the queue drain, which runs every 10 seconds per daemon — on the order of
-  // 10^5 rows over a fortnight, each with a JSON `detail` — and the unfiltered
-  // window meant marshalling all of them into JS and then running a substring
-  // scan over the lot once per order. `detail` is truncated for the same reason:
-  // this only ever reads the ref out of it, and every one of these events puts
-  // the ref in the first field it writes.
-  const LOG_EVENTS = [
+  // The obvious repair is to read one date-windowed slice of the ledger and
+  // match the refs in JS. It is the wrong one, and it cost two cancelled runs to
+  // learn: `reason` and `created_at` carry no index either, so that slice is a
+  // FULL SCAN of retail_stock_ledger, and one full scan is worse than the many
+  // small reads it replaced. What the table does have is
+  //     idx_retail_ledger_lookup ON (store_id, product_id, created_at)
+  // which is exactly the shape asked here — a line names its store and its
+  // product, and the order names the day. So the lookup stays per line, seeks
+  // the index, and `reason` and the ref are filtered in JS over the handful of
+  // rows that come back.
+  const ledgerStmt = has('retail_stock_ledger') ? `
+    SELECT id, delta, reason, balance_after, created_at, note
+      FROM retail_stock_ledger
+     WHERE store_id = ? AND product_id = ? AND created_at >= ?
+     ORDER BY id
+  ` : null;
+
+  // ── AND WHY THE SYNC LOGS ARE READ BY ROWID TAIL ───────────────────────────
+  // These two tables carry NO index whatsoever, and they also carry the stock
+  // push queue drain, which runs every ten seconds per daemon — on the order of
+  // 10^5 rows a fortnight, each with a JSON `detail`. Any WHERE over them is a
+  // full scan that has to touch every one of those blobs. The rowid is the one
+  // ordering SQLite can seek, so this reads the last LOG_TAIL rows and filters
+  // in JS: bounded work whatever the table has grown to, and the recent tail is
+  // all this survey is ever about. `detail` is truncated because the only thing
+  // read out of it is the ref, and every one of these events writes the ref into
+  // its first field.
+  const LOG_TAIL = parseInt(process.env.DEDUCT_DIAG_LOG_TAIL, 10) || 20000;
+  const LOG_EVENTS = new Set([
     'order_import', 'order_unsynced', 'order_born_void', 'order_oversold',
     'order_total_mismatch', 'order_settlement_mismatch', 'order_status_unmapped',
     'order_restocked', 'order_rededucted', 'order_void_restock', 'order_void_rededuct',
     'order_unparsed',
-  ];
+  ]);
   const logWindow = {};
   for (const ch of Object.keys(CH)) {
-    logWindow[ch] = has(CH[ch].log) ? all(`
+    const t = CH[ch].log;
+    logWindow[ch] = has(t) ? all(`
       SELECT store_code, event_type, status,
              substr(detail, 1, 400) AS detail, substr(error_msg, 1, 400) AS error_msg,
              created_at
-        FROM ${CH[ch].log}
-       WHERE event_type IN (${LOG_EVENTS.map(() => '?').join(',')})
-         AND created_at >= datetime('now', ?)
+        FROM ${t}
+       WHERE id > (SELECT COALESCE(MAX(id), 0) - ? FROM ${t})
        ORDER BY id DESC
-       LIMIT 2000
-    `, ...LOG_EVENTS, `-${DAYS} days`) : [];
-    step(`${ch} log window`, logWindow[ch].length);
+    `, LOG_TAIL).filter(r => LOG_EVENTS.has(r.event_type)) : [];
+    step(`${ch} log tail`, logWindow[ch].length);
   }
 
   // ── The headline: of the recent channel orders, how many took stock? ────────
@@ -237,11 +246,19 @@ for (const file of files) {
     // (reason *_cancel) reads as "not deducted" on the shelf while having a
     // perfectly good ingest row, and the two are only distinguishable together.
     const mine = new Set([c && c.reason, c && c.back, c && c.again].filter(Boolean));
+    // A day before the order was placed is early enough for any row the ingest
+    // or a later poll could have written for it, and it is what lets the seek
+    // use the third column of idx_retail_ledger_lookup.
+    const since = (() => {
+      const t = Date.parse(String(o.placed_at || o.created_at || '').replace(' ', 'T') + 'Z');
+      return Number.isFinite(t)
+        ? new Date(t - 86400000).toISOString().slice(0, 19).replace('T', ' ')
+        : '1970-01-01 00:00:00';
+    })();
     const ledgerFor = (productId) => {
-      if (!ref) return [];
-      return ledgerWindow.filter(r =>
-        mine.has(r.reason) && r.store_id === o.store_id && r.product_id === productId &&
-        String(r.note || '').includes(ref));
+      if (!ref || !ledgerStmt) return [];
+      return all(ledgerStmt, o.store_id, productId, since)
+        .filter(r => mine.has(r.reason) && String(r.note || '').includes(ref));
     };
 
     const lines = items.map(it => {
@@ -274,6 +291,7 @@ for (const file of files) {
       why = 'PARTIAL — some lines unresolved';
     }
     verdicts.push({ o, ref, why });
+    step(`order #${o.id} reads`);
 
     console.log(`\n#${o.id}  ${o.order_no}  [${o.channel}]  ${ref ? `ref ${ref}` : 'ref ?'}`);
     console.log(`   status=${o.status}  channel_status=${o.channel_status || '-'}  ` +
@@ -312,21 +330,28 @@ for (const file of files) {
   }
 
   // ── Is this a per-order miss or has the whole path stopped? ────────────────
-  console.log(`\nChannel stock ledger activity, last ${DAYS} days:`);
+  // Same rowid-tail trick as the sync logs, and for the same reason: `reason`
+  // carries no index, so counting by it over the whole table is a full scan.
+  // This is "what has the channel ingest been doing lately", which the last
+  // LEDGER_TAIL rows answer whatever the table has grown to.
+  const LEDGER_TAIL = parseInt(process.env.DEDUCT_DIAG_LEDGER_TAIL, 10) || 20000;
+  const ledgerTail = has('retail_stock_ledger') ? all(`
+    SELECT reason, created_at FROM retail_stock_ledger
+     WHERE id > (SELECT COALESCE(MAX(id), 0) - ? FROM retail_stock_ledger)
+     ORDER BY id
+  `, LEDGER_TAIL) : [];
+  step('ledger tail', ledgerTail.length);
+  console.log(`\nChannel stock ledger activity, in the last ${ledgerTail.length} ledger rows` +
+              (ledgerTail.length ? ` (back to ${ago(ledgerTail[0].created_at)})` : '') + ':');
   for (const reason of REASONS) {
-    const rows = ledgerWindow.filter(r => r.reason === reason);
+    const rows = ledgerTail.filter(r => r.reason === reason);
     const newest = rows.length ? rows[rows.length - 1].created_at : null;
     console.log(`  ${reason.padEnd(16)} ${String(rows.length).padStart(5)} rows, newest ${ago(newest)}`);
   }
-  console.log(`\nChannel orders mirrored, last ${DAYS} days:`);
-  for (const ch of ['eleme', 'meituan']) {
-    const r = one(`
-      SELECT COUNT(*) n, MAX(created_at) newest
-        FROM retail_orders
-       WHERE channel = ? AND created_at >= datetime('now', ?)
-    `, ch, `-${DAYS} days`);
-    console.log(`  ${ch.padEnd(16)} ${String(r ? r.n : 0).padStart(5)} orders, newest ${ago(r && r.newest)}`);
-  }
+  // ("is the mirror still running" is already answered, per channel and with a
+  // newest timestamp, by the census at the top — `channel` has no index either,
+  // so asking it again over a date window would be two more full scans of
+  // retail_orders for a fact already on screen.)
 
   // ── Import rows the daemon could not mirror at all ─────────────────────────
   for (const ch of ['eleme', 'meituan']) {
@@ -351,7 +376,7 @@ for (const file of files) {
       .filter(r => r.event_type === 'order_unsynced' || r.event_type === 'order_born_void')
       .slice(0, 12);
     if (rows.length) {
-      console.log(`\n${ch} unsynced/born-void warnings (last ${DAYS}d, newest first):`);
+      console.log(`\n${ch} unsynced/born-void warnings (recent log tail, newest first):`);
       for (const r of rows) console.log(`  ${String(r.store_code || '-').padEnd(10)} ${String(r.error_msg || '').slice(0, 130)}  (${ago(r.created_at)})`);
     }
   }
