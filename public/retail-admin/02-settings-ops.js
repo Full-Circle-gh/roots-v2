@@ -1614,7 +1614,7 @@ async function loadIntegrationsStatus() {
     if (typeof can !== 'function' || (can('till:use') && can('orders:edit'))) {
       items.push({ type: 'page', title: cuT('Counter till', '前台收银'),
                    crumb: '', tab: null, sub: null, anchor: null,
-                   openUrl: '/till',
+                   openUrl: '/till?from=dashboard',
                    kw: 'till counter pos cashier checkout register point of sale walk-in 收银 前台 收银台 收款 pos' });
     }
     // 2) External editor launchers in the Content group (open in a new tab)

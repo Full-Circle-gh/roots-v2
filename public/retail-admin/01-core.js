@@ -916,7 +916,7 @@ async function salesWireSetup() {
     // Configure — the same treatment gzgrocery gets. Configure opens the till
     // itself, because that IS the channel: there is nothing else to point an
     // operator at.
-    ps: { kind: 'pos',            open: () => window.open('/till', '_blank', 'noopener'), alwaysConfigure: true },
+    ps: { kind: 'pos',            open: () => window.open('/till?from=dashboard', '_blank', 'noopener'), alwaysConfigure: true },
     // jd / qy cards moved to the Delivery tab's card hub (2026-07-03).
   };
   const cardByKey = (key) => {
