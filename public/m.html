@@ -9806,9 +9806,23 @@ function screenSettings(){
         <div class="row" style="cursor:${r.cmd?'pointer':'default'}" ${r.cmd?`onclick="${r.cmd}"`:''}>
           <span style="width:32px;height:32px;border-radius:8px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex:none">${ic('settings',16)}</span>
           <span style="flex:1;min-width:0;display:flex;flex-direction:column">
-            <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.label}</span>
+            <!-- A LABEL WRAPS RATHER THAN CLIPS. It used to be nowrap+ellipsis,
+                 which on a 390px phone cut two of this screen's own sentences in
+                 half: "Alert me when Tacet is closed" needed 223px and had 209,
+                 "Add to home screen" needed 151 and had 124. Truncating DATA is
+                 fine — a customer name in a fixed cell has to stop somewhere —
+                 but these are the app's own words, and half a sentence is not a
+                 shorter sentence. The .row class is min-height, not height, so
+                 a second line simply makes the row taller. -->
+            <span style="font-size:15px;overflow-wrap:anywhere">${r.label}</span>
             ${r.note?`<span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${r.note}</span>`:''}</span>
-          ${(r.tgl||r.feat||r.printer||r.fapiao)?rt(r):`<span style="display:flex;align-items:center;gap:8px;flex:none">${r.value?`<span style="font-size:15px;color:var(--text-secondary);white-space:nowrap">${r.value}</span>`:''}${r.chev||r.value?`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`:''}</span>`}</div>`).join('')}</div></div>`).join('')}
+          ${/* A CHEVRON ON A ROW THAT GOES NOWHERE. It was drawn for a row's
+                value as well as its chev, so "Store profile · on desktop", "Routing ·
+                Nearest store" and "Add to home screen · browser menu" — none of
+                which are tappable — each pointed at a screen that does not
+                exist. It also cost 28px of the row, which is what squeezed "Add
+                to home screen" into a 124px box. It follows the tap now. */''}
+          ${(r.tgl||r.feat||r.printer||r.fapiao)?rt(r):`<span style="display:flex;align-items:center;gap:8px;flex:none">${r.value?`<span style="font-size:15px;color:var(--text-secondary);white-space:nowrap">${r.value}</span>`:''}${r.chev?`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`:''}</span>`}</div>`).join('')}</div></div>`).join('')}
     <button onclick="APP.cmd('signout')" style="width:100%;padding:15px;border:1px solid var(--border-default);border-radius:14px;background:var(--surface-card);color:var(--danger);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer">${T('Sign out','退出登录')}</button>
     <div style="text-align:center;font-size:12px;color:var(--text-secondary);padding:2px 0 6px">tacet · v1.0 · ${T('runs in silence','静默运行')}</div></div>`;
 }
