@@ -24510,6 +24510,23 @@ function buildOrderFilter(query) {
     filterSql += ' AND o.status = ?'; params.push(status);
   }
   if (store_id) { filterSql += ' AND o.store_id = ?'; params.push(parseInt(store_id, 10)); }
+  // Which DOOR the order came in by, within a shop — 'qr' or 'till' (§44's
+  // 2026-09-07 amendment named this column as the distinction, and channel is
+  // NOT it: splitting a shop's revenue across two channel lines is the thing
+  // §44 forbids, so narrowing by door has to happen here instead).
+  //
+  // The till's pending list is the caller. It asks for status=pending_payment,
+  // this shop's store_id and shop_entry_method=qr, which is exactly "orders
+  // somebody placed on their phone and has not paid for yet". Without the door
+  // the same query would also return a till sale abandoned mid-settle, and the
+  // cashier would be shown a row that is their own half-finished basket.
+  //
+  // Validated against the vocabulary rather than interpolated, so an unknown
+  // value narrows to nothing instead of widening to everything.
+  const shopEntry = String(query.shop_entry_method || '').toLowerCase();
+  if (SHOP_ENTRY_METHODS.includes(shopEntry)) {
+    filterSql += ' AND o.shop_entry_method = ?'; params.push(shopEntry);
+  }
   if (q) {
     filterSql += ' AND (o.order_no LIKE ? OR o.recipient_name LIKE ? OR o.recipient_phone LIKE ? OR c.nickname LIKE ?)';
     const s = `%${q}%`; params.push(s, s, s, s);
