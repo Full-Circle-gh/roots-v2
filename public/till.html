@@ -463,6 +463,20 @@ button{font:inherit;color:inherit;margin:0}
   gap:12px;font-variant-numeric:tabular-nums;
 }
 .pay[disabled]{background:var(--td-raised);border-color:var(--td-border);color:var(--td-text2)}
+/* Cancelling the customer's order. NOT a second .pay: the two outcomes are not
+   equals, and a destructive control the size and weight of the one beside it is
+   a mis-tap waiting to happen at a busy counter. Quiet until armed, and then
+   Brick — the token this admin already uses for the destructive end of things. */
+.cxo{
+  width:100%;height:44px;margin-top:8px;border:1px solid transparent;
+  background:transparent;color:var(--td-text2);border-radius:var(--r-control);
+  font-size:14px;font-weight:500;
+}
+.cxo[hidden]{display:none}
+.cxo:active{background:var(--td-raised)}
+.cxo.arm{
+  background:var(--td-brick-tint);border-color:var(--td-brick);color:var(--td-brick-ink);
+}
 
 /* ---- customer picker: the store picker's sheet, with a search in it ---- */
 .cust-sheet{max-width:460px;gap:10px}
@@ -766,6 +780,7 @@ button{font:inherit;color:inherit;margin:0}
         <div class="sums" id="sums"></div>
         <div class="tot"><span class="lb" id="tot-lb"></span><span class="amt" id="tot-amt">&yen;0.00</span></div>
         <button class="pay" id="pay" type="button" disabled></button>
+        <button class="cxo" id="cancel-order" type="button" data-cancel-order="1" hidden></button>
       </div>
     </div>
   </div>
@@ -857,6 +872,12 @@ button{font:inherit;color:inherit;margin:0}
     // GST/HST, so the merchant's own text wins — this is only the fallback, and
     // it is declared here because every Chinese string on this page is.
     taxLabel:     ['Tax', '税费'],                     // admin: 04-orders.js order subline
+    // Cancelling a QR order the customer no longer wants. Both halves are the
+    // mini app's own, from its order screen where a customer cancels exactly
+    // this — miniapp/pages/order/order.js:99 (en) and :275 (cn). The customer
+    // cancelling in the app and the cashier cancelling for them at the counter
+    // are doing the same thing to the same order, so it is the same words.
+    cancelOrder:  ['Cancel order', '取消订单'],        // miniapp: order.js:99,275
     // settle
     amount:       ['Amount', '金额'],                  // admin: refund payout dialog
     payMethod:    ['Pay method', '付款方式'],          // admin: retail-admin.html:2829
@@ -960,7 +981,7 @@ button{font:inherit;color:inherit;margin:0}
        "this counter has nothing waiting" on the strength of the last one's
        read — and a counter that says nothing is waiting when something is is
        the one wrong answer this list must never give. */
-    pend: null, pane: 'menu', pendTimer: null, pendES: null,
+    pend: null, pane: 'menu', pendTimer: null, pendES: null, cxArm: false,
     // Has the cashier picked a pane since the last sale ended? Their choice
     // outranks the default until reset() clears it.
     paneTouched: false,
@@ -1566,6 +1587,7 @@ button{font:inherit;color:inherit;margin:0}
       id: o.id, order_no: o.order_no, code: o.shop_order_code,
       name: o.recipient_name || '', total: Number(o.total) || 0, loading: true
     };
+    S.cxArm = false;
     S.wallet = null; S.moreOpen = false; S.err = '';
     // The sheet is where the rail lives on a phone, and it is closed by
     // default. Opening it is what makes "check the order" a thing that has
@@ -1595,6 +1617,7 @@ button{font:inherit;color:inherit;margin:0}
   // their mind — either way nothing has been charged, so this leaves no trace
   // and lands them back on the list they came from.
   function cancelRecall() {
+    S.cxArm = false;
     S.recall = null; S.lines = []; S.sel = null;
     S.wallet = null; S.moreOpen = false; S.err = '';
     S.view = 'till'; S.pane = 'pend'; S.paneTouched = true;
@@ -1640,7 +1663,11 @@ button{font:inherit;color:inherit;margin:0}
         + '<span class="who">' + esc(String(S.recall.code))
         + (S.recall.name ? ' · ' + esc(S.recall.name) : '')
         + '<div class="sub">' + esc(S.recall.order_no || '') + '</div></span>'
-        + '<button class="cbtn" type="button" data-recall-cancel="1">' + esc(T('cancel')) + '</button>';
+        // BACK, NOT CANCEL. This control closes the order without touching it,
+        // and it said "Cancel" until 2026-09-08 — beside a real Cancel-the-order
+        // action that is the same word for opposite outcomes, and the dangerous
+        // one is the one a cashier would reach for by habit.
+        + '<button class="cbtn" type="button" data-recall-cancel="1">' + esc(T('back')) + '</button>';
       return;
     }
     if (S.customer) {
@@ -1738,6 +1765,25 @@ button{font:inherit;color:inherit;margin:0}
     var b = $('pay');
     b.disabled = !ready;
     b.textContent = ready ? T('markPaid') + '  ' + money(due) : T('markPaid');
+
+    /* CANCELLING A RECALLED ORDER — Ash, 2026-09-08: "if a customer eventually
+       doesn't want the order there should be an option to cancel it from his
+       side or from the till."
+
+       It sits UNDER Mark paid rather than beside it, and it is a quiet control
+       rather than a matching button: the two outcomes are not equals, and a
+       destructive action the width of the one next to it is a mis-tap waiting
+       to happen at a busy counter. Two taps, and the second one says what it
+       will do.
+
+       Only for a recalled order. A basket the till is still building is
+       cleared, not cancelled — there is nothing on the server yet to cancel. */
+    var cx = $('cancel-order');
+    if (cx) {
+      cx.hidden = !S.recall || S.recall.loading;
+      cx.textContent = S.cxArm ? T('cancelOrder') + '?' : T('cancelOrder');
+      cx.className = 'cxo' + (S.cxArm ? ' arm' : '');
+    }
 
     // THE BAR IS THE ORDER, FOLDED. On a phone the sheet is closed by default,
     // so this is the only always-true statement of what the customer owes.
@@ -1977,6 +2023,43 @@ button{font:inherit;color:inherit;margin:0}
     });
   }
 
+  /* Cancelling the recalled order. TWO TAPS: the first arms the control and it
+     restates itself as a question, the second commits. No browser dialog —
+     this screen opens none, and the arming state is the confirmation.
+
+     ONE ENDPOINT, the admin's own status transition, which already releases the
+     order's reservation (§45) and is the path staff have always cancelled
+     through. Nothing new is written here for a state the rest of the system
+     already understands.
+
+     The list drops it locally the moment it lands, on the same reasoning the
+     paid path gives: a cashier who cancels 12 and still sees 12 will cancel it
+     twice, and the second attempt would meet an order that is no longer
+     cancellable. */
+  function cancelOrder() {
+    if (!S.recall || S.recall.loading || S.busy) return;
+    if (!S.cxArm) { S.cxArm = true; return render(); }
+    var r = S.recall;
+    S.busy = true; S.err = ''; render();
+    api('/api/retail-admin/orders/' + r.id + '/status', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'cancelled' })
+    }).then(function (j) {
+      S.busy = false; S.cxArm = false;
+      if (!j || !j.success) { S.err = T('didNotSave'); return render(); }
+      S.pend = (S.pend || []).filter(function (o) { return o.id !== r.id; });
+      S.recall = null; S.lines = []; S.sel = null;
+      S.view = 'till'; S.pane = 'pend'; S.paneTouched = true;
+      render();
+      loadPend();
+    }).catch(function (e) {
+      S.busy = false; S.cxArm = false;
+      S.err = e && e.auth ? cuT('Sign in on the backend, then reload this page.', '请先在后台登录,然后刷新此页面。')
+                          : T('didNotSave');
+      render();
+    });
+  }
+
   function reset() {
     S.lines = []; S.sel = null; S.customer = null;
     S.wallet = null; S.moreOpen = false; S.err = ''; S.done = null;
@@ -2118,7 +2201,7 @@ button{font:inherit;color:inherit;margin:0}
       // Tapping away from the leave question is staying, the same dismissal the
       // store picker takes — and the safe answer is the one a stray tap gives.
       if (S.leaveOpen && ev.target.id === 'leavepick') { S.leaveOpen = false; return render(); }
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel]');
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-cancel-order]');
       if (!t) return;
       // Choosing a pane. The flag is what stops the next poll from defaulting
       // the cashier back off the face they just asked for.
@@ -2127,6 +2210,7 @@ button{font:inherit;color:inherit;margin:0}
       }
       if (t.hasAttribute('data-recall')) return recall(Number(t.getAttribute('data-recall')));
       if (t.hasAttribute('data-recall-cancel')) return cancelRecall();
+      if (t.hasAttribute('data-cancel-order')) return cancelOrder();
       // THE WAY BACK. An empty till leaves on the tap; a basket with lines in it
       // is a sale in progress that nothing has saved yet, so it asks first — in
       // the page, the way every other decision on this screen is made.
