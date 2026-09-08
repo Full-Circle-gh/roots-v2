@@ -912,15 +912,41 @@ app.get('/full-circle', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'full-circle.html'));
 });
 
-// Kitchen station shell. PUBLIC route (no requireAuth) so Chrome can
-// validate the manifest's start_url during PWA install — otherwise it
-// silently fails when the route returns 302→/login. The page itself
-// self-authenticates against the `kitchen` permission via /api/auth/me
-// on load and bounces unauthenticated users to /login, so security is
-// unchanged.
+/* The kitchen station shell is GONE (§74). `public/kitchen.html` is deleted and
+   the two jobs it held live in Tacet Mobile: the restock queue is `/m`'s
+   `kitchenqueue` screen (§71) and logging a batch is its `logbatch` screen,
+   writing through routes/retail-production.js. What stays here is the door,
+   forwarding.
+
+   THE PAGE WAS UNREACHABLE BY THE PEOPLE IT WAS FOR, which is what made this
+   safe rather than merely tidy. It self-authenticated against the `kitchen`
+   PERMISSION on the `users` table — the old realm — and the people who actually
+   cook are Tacet `tenant_users` holding capabilities. routes/retail-production.js
+   records the consequence in its own header: production_batches has been empty
+   since it shipped, because its only two writers were this page and app.html's
+   Production Log and neither had a login the cooks could use.
+
+   THIS ROUTE OUTLIVES THE APP AND MUST NOT BE TIDIED AWAY, for the same reason
+   /stock's does (§48 step 4): it is the `start_url` of a manifest sitting on
+   kitchen tablets as an installed shortcut. Deleting it turns every one of those
+   into a 404 on somebody's shift.
+
+   302, NEVER 301. A permanent redirect is cached by the browser and by the
+   installed app's service worker essentially forever — so if `/kitchen` ever has
+   to mean something again, or this destination changes, a 301 would be
+   unrecallable from every tablet that ever followed it.
+
+   THE MANIFEST AND ICONS STAY, and the cost of that is named rather than
+   discovered: the manifest's `scope` is `/kitchen`, so an installed shortcut now
+   launches, follows this redirect, and lands on `/m` OUTSIDE its own scope —
+   which opens it in a browser tab instead of standalone. That is a downgrade in
+   feel and not a break, it is exactly what the retired /stock shortcut does
+   today, and it is preferred to editing the manifest of an app that is being
+   retired. Manifest and icons go together in their own small change once the
+   redirect has been live long enough that nobody is opening the shortcut. */
 app.get('/kitchen', (req, res) => {
-  res.set('Cache-Control', 'no-cache');
-  res.sendFile(path.join(__dirname, 'public', 'kitchen.html'));
+  res.set('Cache-Control', 'no-store');
+  res.redirect(302, '/m');
 });
 app.get('/kitchen-manifest.webmanifest', (req, res) => {
   res.type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'kitchen-manifest.webmanifest'));
@@ -935,7 +961,8 @@ app.get('/kitchen-manifest.webmanifest', (req, res) => {
 // The /restock station shell was removed on 2026-08-04 — the restock flow is
 // not used; warehouse staff do not raise restock orders anywhere. Gone with it:
 // its manifest and its four icons. The `/api/restock/*` API in routes/restock.js
-// stays — app.html and kitchen.html still drive restock orders through it.
+// stays — app.html still drives restock orders through it (kitchen.html did
+// too until §74 deleted it).
 
 /* Quick Stock is GONE (§48 step 4). `public/stock.html` is deleted and every
    job it held lives in Tacet Mobile; what stays here is the door, forwarding.

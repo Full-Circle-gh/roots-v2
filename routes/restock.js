@@ -122,9 +122,12 @@ function _broadcastRestock(orderId, kind, actorUserId) {
  * the goods were ready, gone, or counted. The pushes fired; nobody held the
  * permission they were addressed to.
  *
- * So the kitchen realm keeps exactly what it had — public/kitchen.html is still
- * a client of these endpoints — and the same event now also fans out by
+ * So the kitchen realm keeps exactly what it had — public/app.html is still a
+ * client of these endpoints — and the same event now also fans out by
  * capability to the tenant's operators.
+ *
+ * (This named public/kitchen.html until §74 deleted that page. The realm still
+ * has a client and the fan-out is unchanged; only the example moved.)
  *
  * THE AUDIENCE IS THE SIDE THAT MUST ACT NEXT, at the location the work is at.
  * from_store_id is where the goods come FROM and to_store_id where they go, in
@@ -700,12 +703,19 @@ function _applyReceipt(orderId, actorUser) {
  * owner bypass rather than inventing a second permission system beside it.
  *
  * THE KITCHEN REALM IS NARROWED, NOT REMOVED, AND THE DIFFERENCE MATTERS.
- * public/kitchen.html is a kitchen-realm client of five of these endpoints — it
- * IS the kitchen's inbox, the thing an "ask the kitchen" request is sent to.
- * Refusing that realm outright would have left every kitchen request landing
- * somewhere nobody can open, so the kitchen keeps exactly what its own app
- * needs: kitchen-direction orders, and nothing else. Store and warehouse work —
- * raising a request, picking, dispatching, receiving — is Tacet's alone.
+ * public/app.html is a kitchen-realm client of these endpoints and is still
+ * served at the root of food.* / app.* / the bare domain. Refusing that realm
+ * outright would break a surface this gate does not own, so the kitchen keeps
+ * exactly what it needs: kitchen-direction orders, and nothing else. Store and
+ * warehouse work — raising a request, picking, dispatching, receiving — is
+ * Tacet's alone.
+ *
+ * THE KITCHEN'S INBOX HAS MOVED, and the gate outliving it is deliberate. This
+ * used to name public/kitchen.html as the inbox an "ask the kitchen" request
+ * was sent to; §74 deleted that page, and the inbox is now /m's kitchenqueue
+ * screen — Tacet realm, gated on a capability, not on this. What survives here
+ * is the narrowing itself, which is load-bearing for as long as ANY kitchen-
+ * realm session can reach these routes. It retires with public/app.html.
  */
 function requireRestockAccess(req, res, next) {
   if (req.session && req.session.backendUserId) {
@@ -936,7 +946,8 @@ router.get('/api/restock', requireRestockAccess, (req, res) => {
   // Nothing probes it now — Tacet Mobile gates each row on a capability instead
   // — but the refusal itself is load-bearing on its own terms and stays: a
   // kitchen session reading the store's transfers is a door that opens
-  // onto a wall. public/kitchen.html always asks for to_role=kitchen.
+  // onto a wall. (public/kitchen.html always asked for to_role=kitchen; §74
+  // deleted it, and the refusal stands on its own terms without that example.)
   if (_kitchenScopedSession(req) && req.query.to_role !== 'kitchen') {
     return res.status(403).json({
       error: 'Transfers are managed in Tacet · 调拨请在 Tacet 中处理。',

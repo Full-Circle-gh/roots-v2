@@ -1,6 +1,6 @@
 // Roots v2 — minimal service worker.
 // Strategy:
-//   • HTML pages (/, /kitchen, /stock, /login):  NETWORK-FIRST. Always
+//   • HTML pages (/, /m, /login):  NETWORK-FIRST. Always
 //     try to get the freshest shell. Fall back to cache only when offline.
 //     This is what was missing in earlier versions — a stale cached
 //     shell could outlive a route fix and silently break PWA install.
@@ -59,7 +59,8 @@ self.addEventListener('activate', (e) => {
     await self.clients.claim();
     // Tell every connected page that a new shell is live so they reload
     // and pick up the latest HTML/JS without the user having to think
-    // about it. The page-side handler is in kitchen.html.
+    // about it. The page-side handlers are in app.html and m.html (kitchen.html
+    // carried a third until §74 deleted it).
     const clients = await self.clients.matchAll({ includeUncontrolled: true });
     for (const c of clients) {
       try { c.postMessage({ type: 'sw-updated' }); } catch {}

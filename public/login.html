@@ -238,33 +238,46 @@ function _lastAppRedirect(user) {
   let last = '';
   try { last = localStorage.getItem('last_app') || ''; } catch {}
   if (!last) return null;
-  // Validate same-origin and that the user actually has access.
-  const isAdmin = user.role === 'admin';
-  const p = user.permissions || {};
+  // Validate same-origin and that the user actually has access. Only ONE
+  // remembered value is still honoured, so there is no longer a permission to
+  // check against it — '/' is the app every holder of a `users` session can
+  // open. The `isAdmin` and `permissions` reads that used to gate the other
+  // branches went with them rather than being left computing nothing.
   if (last === '/'        ) return '/';
   // '/restock' is deliberately absent: the page was removed 2026-08-04 and the
   // route is gone, but restock.html had written last_app='/restock' into every
   // warehouse browser, so honouring a remembered value here would 404 them.
-  if (last === '/kitchen' && (isAdmin || p.kitchen))  return '/kitchen';
+  // '/kitchen' is deliberately absent, on the same reasoning as '/restock'
+  // above and with one addition. The page was deleted (§74) and the route now
+  // forwards to /m — but /m is TACET MOBILE, which authenticates on
+  // `backendUserId` (tenant_users). A session that arrived here holds
+  // `userId` (users), so honouring a remembered '/kitchen' would forward this
+  // user into an app their login cannot open and bounce them straight back to
+  // /backend/login. A dead end is worse than the dashboard.
   return null;
 }
+// THERE IS ONE PAGE LEFT IN THIS REALM, so this function has one answer.
+//
+// It used to fan a `users` session out across three shells by permission. Both
+// of the others are now gone: `/restock` lost its page on 2026-08-04, and
+// `/kitchen` lost its page to §74. Every branch that survived those two
+// removals returned '/' anyway, so the permission reads they were made of —
+// `role === 'admin'`, then `p.products || p.finance || p.sales` — were deciding
+// between one destination and the same destination.
+//
+// They are deleted rather than left standing, because branching that can only
+// reach one answer reads as routing and is not: the next person to look would
+// reasonably believe kitchen-only staff still land somewhere of their own.
+//
+// WHAT MUST NOT BE DONE HERE, recorded because it is the obvious repair: do not
+// route a `kitchen` holder to `/kitchen`'s replacement. That route now forwards
+// to `/m`, and Tacet Mobile authenticates on `backendUserId` (tenant_users)
+// while every session reaching this function holds `userId` (users) — so it
+// would forward them into an app their login cannot open and bounce them to
+// /backend/login. The `kitchen` and `restock` perms still gate the
+// /api/kitchen and /api/restock endpoints app.html calls; they simply have no
+// page of their own to open any more.
 function _smartRedirect(user) {
-  if (!user) return '/';
-  if (user.role === 'admin') return '/';
-  const p = user.permissions || {};
-  // `warehouse_inbox` used to short-circuit to /restock here. That page is gone
-  // (2026-08-04) and its holders now fall through to the routing below, which
-  // lands each of them on a tool they already have: the dashboard for anyone
-  // with a manager-level perm, /kitchen for kitchen-only staff.
-  // Manager-level perms = a multi-tool operator → dashboard. We
-  // intentionally exclude common warehouse / kitchen flags like
-  // dashboard / ingredients / purchases / alerts / suppliers because
-  // those are part of the warehouse role's default kit.
-  if (p.products || p.finance || p.sales) return '/';
-  // Otherwise route by single-app perm. The `restock` perm no longer routes
-  // anywhere of its own — it still gates the /api/restock endpoints that
-  // app.html and kitchen.html use, but it has no page to open any more.
-  if (p.kitchen) return '/kitchen';
   return '/';
 }
 async function login() {

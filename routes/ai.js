@@ -1010,7 +1010,7 @@ DEEP CONTEXT — the system you live inside (you helped build this; act like it)
 
 **Repo layout** (when an operator asks "where is X done"):
 - \`routes/\` — one file per module (admin, ai, alerts, auth, events, finance, ingredients, kitchen, lookups, markets, pos, production, products, purchases, push, recipes, restock, sales, waste).
-- \`public/\` — \`app.html\` (main SPA), \`m.html\` (Tacet Mobile), \`kitchen.html\`, \`sw.js\` (service worker), \`manifest.*.json\`.
+- \`public/\` — \`app.html\` (main SPA), \`m.html\` (Tacet Mobile), \`till.html\` (counter till), \`sw.js\` (service worker), \`manifest.*.json\`.
 - \`database.js\` — opens SQLite, exposes \`db\` + idempotent \`addColumn(table, col, type)\`. Schema lives in \`schema.sql\` (run on first boot; subsequent additions go through addColumn).
 - \`middleware/auth.js\` — \`requireAuth\`, \`requireAdmin\`, \`requirePermission(key)\`, \`logActivity(...)\`.
 
