@@ -564,6 +564,12 @@ const state = {
   prodQ:'', prodStatus:'all', prodCat:'all', catalogueTried:false, catalogueLoading:false,
   // How many products the SERVER says there are, and the read in flight.
   prodTotal:null, cataloguePromise:null,
+  /* Whether DB.products is the WHOLE shelf or a prefix of it. A property of the
+     array as it stands, not of the read that is running: it is set by whatever
+     last wrote the array, so a refresh that has not published anything yet
+     leaves the previous complete catalogue describing itself correctly. Every
+     count derived by walking the array is drawn only while this is true. */
+  catalogueComplete:false,
   workOpen:false, workEvents:null, workLoading:false, workErr:null, vchSeg:'on',
   affiliate:null, affiliateTried:false, affRows:null, affSeg:'', affErr:null, invSeg:'all', invLoaded:false,
   geo:null, geoTried:false, chan:null, chanTried:false, sales:null, salesSummary:null, dlvBusy:false, dlvErr:null,
@@ -1276,6 +1282,11 @@ function reKindProduct(p){
 }
 reg('vchSeg', v=>{ state.vchSeg=v; render(); });
 reg('prodClearQ', ()=>{ state.prodQ=''; state.prodStatus='all'; state.prodCat='all'; render(); });
+/* The catalogue walk again, from the top. FORCED, because an unforced call is
+   the render loop asking whether the read has happened and `catalogueTried` is
+   already set — the button would do nothing at all. Offered only where the walk
+   stopped short, beside the line saying how short. */
+reg('catRetry', ()=>{ loadCatalogue(true); });
 /* The Recap says what happened while you were away; "Show the work" is the
    promise that it is not withholding the rest. Same feed the desktop's fold
    reads, same rows, opened in place instead of over a pinned card height —
@@ -6359,7 +6370,15 @@ const SUBS={
   products:{title:['Products','产品'],render:()=>{
     loadCatalogue();
     const L=state.liveProductsLoaded, P=DB.products;
-    const n=k=>L?P.filter(x=>x.kind===k).length:null;
+    /* WHOLE, not merely loaded. Two different permissions live in these two
+       flags and the four chips below need the stronger one: `L` says a real
+       read has landed, `C` says the array it landed in is the entire shelf.
+       A count got by walking the array is a fact about the shop only while C
+       holds; the moment the phone is carrying a prefix it is a fact about the
+       prefix, which is the whole shape of the defect this screen was fixed for
+       once already at fifty rows and again at five hundred. */
+    const C=state.catalogueComplete;
+    const n=k=>(L&&C)?P.filter(x=>x.kind===k).length:null;
     /* NO COUNT UNTIL THERE IS ONE. These five carried 118 / 96 / 0 / 14 / 8 as
        their before-load values — the last of the mockup's invented numbers,
        left behind when DB's sample rows were removed for exactly this reason.
@@ -6370,11 +6389,14 @@ const SUBS={
     /* The All count is the SERVER's total, not P.length. The array is what
        this phone happens to be holding and the count is a fact about the shop;
        tying the second to the first is what let a fifty-row page announce
-       itself as a catalogue of fifty. They agree at every size this endpoint
-       serves whole — it caps at 500 rows, and past that the four counts below
-       describe the 500 the phone holds while this one keeps telling the truth
-       about the shelf. Paging the phone past that cap is a separate change. */
-    const cd=[{key:'all',en:'All',zh:'全部',count:L?(state.prodTotal!=null?state.prodTotal:P.length):null},
+       itself as a catalogue of fifty.
+
+       This one alone survives an incomplete catalogue, because it never came
+       from the array. The fallback to P.length is kept for an envelope with no
+       `total` in it, and is itself gated on C — falling back to the length of a
+       PREFIX is the exact substitution the chip is written to avoid, and doing
+       it in the failure branch would be doing it where nobody is watching. */
+    const cd=[{key:'all',en:'All',zh:'全部',count:L?(state.prodTotal!=null?state.prodTotal:(C?P.length:null)):null},
       {key:'live',en:'Live',zh:'在售',count:n('on')},
       {key:'draft',en:'Draft',zh:'草稿',count:n('draft')},
       {key:'low',en:'Low',zh:'库存低',count:n('restock')},
@@ -6382,6 +6404,26 @@ const SUBS={
     const cats=prodCategories();
     const rows=prodFiltered();
     const narrowed=!(state.prodStatus==='all'&&state.prodCat==='all'&&!state.prodQ);
+    /* "THIS IS NOT ALL OF IT", and the alternative is what this screen used to
+       do: show a prefix and let four counts, a search, the category chips and
+       every variant family describe it as the catalogue. The walk stopped short
+       — a page failed, or the runaway guard tripped — so what is on the screen
+       is the first `P.length` of a shop that has `state.prodTotal`, the search
+       box cannot reach the rest, and the four chips beside All are drawing no
+       counts because of it.
+
+       DRAWN ONLY WHERE THE TWO FIGURES DISAGREE. If the server sent no `total`
+       the loader falls back to the length of what it holds, and a bar reading
+       "the first 500 of 500" would invent a shortfall it cannot actually see;
+       silence plus four missing counts is the honest state there. */
+    const short=L&&!C&&!state.catalogueLoading&&state.prodTotal!=null&&state.prodTotal>P.length;
+    const partialBar=short?`<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px;background:var(--amber-tint);color:var(--amber-ink)">
+        <span style="flex:none;display:flex">${ic('triangle-alert',18)}</span>
+        <span style="flex:1;min-width:0;font-size:12.5px;line-height:1.5">${T(
+          'Showing the first '+P.length+' of '+state.prodTotal+' products.',
+          '仅显示前 '+P.length+' 条，共 '+state.prodTotal+' 件。')}</span>
+        <button class="btn2" style="width:auto;padding:8px 14px;flex:none" onclick="APP.cmd('catRetry')">${T('Try again','重试')}</button>
+      </div>`:'';
     return `<div>
       <div style="padding:12px 16px 4px">
         <input id="mProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.prodQ)}"
@@ -6395,11 +6437,19 @@ const SUBS={
         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
         <span style="font-size:14px;color:var(--brick-ink)">${state.prodErr}</span></div>`:''}
       ${state.catalogueLoading&&!rows.length?`<div style="padding:32px 0;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading the catalogue…','正在加载目录…')}</div>`:''}
+        ${partialBar}
         ${!state.catalogueLoading&&!rows.length&&narrowed?`<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:40px 24px;text-align:center">
           <div style="font-size:18px;font-weight:500">${T('No products match','没有匹配的产品')}</div>
           <button class="btn2" onclick="APP.cmd('prodClearQ')">${T('Clear the filters','清除筛选')}</button></div>`:''}
         ${prodUnits(rows).map(productCard).join('')}
         ${L&&rows.length&&rows.length!==P.length?`<div style="text-align:center;padding:4px 0 0"><span class="num" style="font-size:13px;color:var(--text-secondary)">${T(rows.length+' of '+P.length, P.length+' 件中的 '+rows.length)}</span></div>`:''}
+        ${/* THE WALK IS STILL WALKING, and the cards above are what has arrived
+              so far. The same line the empty screen shows, moved under the
+              shelf once there is a shelf: the count of cards climbing with a
+              line saying more is coming is what "this is not all of it yet"
+              looks like while it is still true, and it is why the four chips
+              beside All are blank rather than counting a prefix. */
+          state.catalogueLoading&&rows.length?`<div style="padding:12px 0 0;text-align:center;font-size:13px;color:var(--text-secondary)">${T('Loading the catalogue…','正在加载目录…')}</div>`:''}
       </div></div>`;
   }},
   categories:{title:['Categories','分类'],status:()=>statusCategories(),render:()=>screenCategories()},
@@ -11589,7 +11639,31 @@ function sheetCustomer(){
 
    Both of those callers now come through here. `force` is how a refresh asks
    for the read again — the latch exists to stop the render loop re-fetching on
-   every paint, not to make the catalogue read-once-per-load. */
+   every paint, not to make the catalogue read-once-per-load.
+
+   AND IT READS THE CATALOGUE TO ITS END, not the first page of it. The fix
+   above left one half open and said so: the endpoint caps at 500 rows, so a
+   shop with more than that had the same defect one order of magnitude up — the
+   four derived chips counting 500 of 900, a search that could not reach the
+   last four hundred, a variant family cut in half at the boundary, and an
+   order line's SKU chip refusing to open a product past the cap. §64 rules
+   that the phone pages until it holds the whole shelf rather than filtering on
+   the server, because `DB.products` is not this screen's list — it is the
+   phone's product lookup, read from the Orders screen by `openProduct` and by
+   the SKU chip, and a server-filtered array would stop answering them the
+   moment a filter was set here. Variant families and the category chips are
+   both derived by walking the array, and both need it whole.
+
+   WHAT MAKES THE WALK SAFE is on the other side, in routes/retail.js: `offset`,
+   and `id` as the last ORDER BY key so tied rows cannot shuffle between two
+   requests and hand the same product to both pages or to neither. */
+const CAT_PAGE=500;       // the endpoint's own row ceiling — asking for more is capped there anyway
+/* A RUNAWAY GUARD, not a product limit. The loop's real exits are a short page
+   and reaching the server's `total`; this only catches the case where neither
+   ever arrives — rows being deleted underneath a walk, or a server that keeps
+   answering full pages. At ten thousand products it is far past any tenant, and
+   a phone that hits it says what it is holding rather than pretending. */
+const CAT_MAX_PAGES=20;
 let _catSeq=0;
 function loadCatalogue(force){
   /* An UNFORCED call is the render loop asking whether the catalogue is here
@@ -11603,32 +11677,89 @@ function loadCatalogue(force){
   }
   state.catalogueTried=true; state.catalogueLoading=true;
   const seq=++_catSeq;
-  /* apiRaw, not api: the envelope carries `total` — how many products the shop
-     ACTUALLY HAS, counted by the server over the same filters — and api()
-     unwraps to `data` and throws it away. The count chip reads that figure
-     rather than the length of whatever array is in hand, which is the coupling
-     this whole bug was made of. The server caps the read at 500 rows however
-     many are asked for (routes/retail.js), so on a catalogue past that the
-     length of what arrived is not the shop's size and never was. */
-  state.cataloguePromise=apiRaw('/products?limit=500').then(j=>{
-    /* Last request wins, never last response. Two reads can be in flight at
-       once now, and the older one landing second would put the older catalogue
-       back — which is the bug this file is being edited for, arrived at from
-       the other direction. A superseded read also leaves `catalogueLoading`
-       alone: the read that superseded it is still running. */
+  state.cataloguePromise=(async()=>{
+    const mapped=[]; const seenIds=new Set();
+    let off=0, total=null, complete=false;
+    /* PUBLISHING IS SEPARATE FROM ACCUMULATING, and that separation is the
+       whole of the refresh safety. Pages land in `mapped`; the array the rest
+       of the app reads is replaced only here.
+
+       Mid-walk it publishes ONLY WHEN THE NEW PREFIX IS AT LEAST AS LONG AS
+       WHAT IS ALREADY HELD. On a first load that is every page, so the shelf
+       fills in front of the operator. On a refresh of a catalogue already
+       whole it is none of them until the walk has caught up — otherwise page
+       one would shrink a complete 900 to 500 for the length of a round trip,
+       and every lookup for a product past the cap would fail during it, which
+       is the defect this loader exists to prevent, reintroduced as a flicker.
+       The final publish is unconditional, so a catalogue that genuinely got
+       SMALLER (products deleted between two reads) still lands. */
+    const publish=(isComplete)=>{
+      DB.products=mapped.slice();
+      state.prodTotal=(total!=null)?total:mapped.length;
+      state.liveProductsLoaded=true;
+      state.catalogueComplete=isComplete;
+      render();
+    };
+    try{
+      for(let page=0;page<CAT_MAX_PAGES;page++){
+        /* apiRaw, not api: the envelope carries `total` — how many products the
+           shop ACTUALLY HAS, counted by the server over the same filters — and
+           api() unwraps to `data` and throws it away. The count chip reads that
+           figure rather than the length of whatever array is in hand, which is
+           the coupling this whole bug was made of. */
+        const j=await apiRaw('/products?limit='+CAT_PAGE+'&offset='+off);
+        /* Last request wins, never last response. Two walks can be in flight at
+           once, and the older one landing second would put the older catalogue
+           back — the bug this file was edited for, arrived at from the other
+           direction. A superseded walk also leaves `catalogueLoading` alone and
+           publishes nothing: the walk that superseded it is still running. */
+        if(seq!==_catSeq) return;
+        const rows=(j&&j.data!==undefined)?j.data:j;
+        // `Array.isArray`, not `rows.length` — a shop with no products yet must
+        // see no products, not the mock's six. A non-array is a broken answer:
+        // stop, and let what is already held stand as incomplete.
+        if(!Array.isArray(rows)) break;
+        const t=j?Number(j.total):NaN;
+        if(Number.isFinite(t)) total=t;
+        /* Deduplicated by id, because a walk is not an instant. A product
+           created or deleted between two requests shifts every row after it by
+           one, which can hand the same product to two pages. The offset still
+           advances by what the SERVER sent, never by what survived this filter,
+           or a dropped duplicate would make the next page re-read the row it
+           was dropped for and the walk would stall on the spot. */
+        for(const r of rows){
+          const id=r&&r.id;
+          if(id!=null){ if(seenIds.has(id)) continue; seenIds.add(id); }
+          mapped.push(mapProduct(r));
+        }
+        off+=rows.length;
+        // A short page is the end of the shelf. So is reaching the server's own
+        // count. Either one means what is held is the whole catalogue.
+        if(rows.length<CAT_PAGE){ complete=true; break; }
+        if(total!=null&&off>=total){ complete=true; break; }
+        if(mapped.length>=(DB.products||[]).length) publish(false);
+      }
+    }catch(e){
+      /* A page that failed leaves the pages before it in hand. They are
+         published as INCOMPLETE rather than thrown away — half a catalogue an
+         operator can see, marked as half, beats an empty screen — and the
+         screen offers the read again. `complete` stays false, which is what
+         takes the four derived counts away. */
+      if(seq!==_catSeq) return;
+    }
     if(seq!==_catSeq) return;
     state.catalogueLoading=false;
-    const rows=(j&&j.data!==undefined)?j.data:j;
-    // `Array.isArray`, not `rows.length` — a shop with no products yet must
-    // see no products, not the mock's six.
-    if(Array.isArray(rows)){
-      DB.products=rows.map(mapProduct);
-      const t=j?Number(j.total):NaN;
-      state.prodTotal=Number.isFinite(t)?t:rows.length;
-      state.liveProductsLoaded=true;
-    }
-    render();
-  }).catch(()=>{ if(seq!==_catSeq) return; state.catalogueLoading=false; render(); });
+    /* NOTHING USABLE ARRIVED — the first page failed, or answered with
+       something that was not an array. Publish nothing: an empty catalogue
+       would overwrite one that had loaded, and on a first load it would set
+       the flag that lets the All chip announce a shop of zero products to a
+       shop whose phone simply could not reach the server. `complete` is the
+       discriminator and not `mapped.length`, because a shop that genuinely has
+       no products reaches here with an empty array and complete=true, and it
+       must be told it has none. */
+    if(!mapped.length&&!complete){ render(); return; }
+    publish(complete);
+  })();
   return state.cataloguePromise;
 }
 /* Chip keys are the INDEX, never the category name: chipRow writes the key into
