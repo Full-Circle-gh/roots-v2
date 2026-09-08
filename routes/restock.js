@@ -1031,9 +1031,14 @@ router.get('/api/restock', requireRestockAccess, (req, res) => {
  * 404 for a row whose id is 'kitchen-ready'.
  */
 // MOVED TO lib/kitchen-ready.js, not copied there. The dashboard's Needs-you
-// row now counts the same requests this endpoint does, and two surfaces reading
+// row now counts the same lines this endpoint does, and two surfaces reading
 // one clause cannot drift apart the way two clauses eventually do.
-const { KITCHEN_READY_WHERE } = _kready;
+//
+// THE GRAIN IS THE LINE (§69). It counted REQUESTS until 2026-09-08, which was
+// §61 half-carried: one product made out of three never moved the request's
+// own status, so this answered zero about a jar already on the shelf. The
+// clause's own header carries the full reasoning.
+const { KITCHEN_READY_FROM, KITCHEN_READY_MADE_WHERE, KITCHEN_READY_WHERE, KITCHEN_READY_MADE_AT } = _kready;
 
 router.get('/api/restock/kitchen-ready', requireRestockAccess, tacetOnly, (req, res) => {
   /* THE MAKER IS NOT THE AUDIENCE. A fulfil-only operator is the person who
@@ -1043,10 +1048,45 @@ router.get('/api/restock/kitchen-ready', requireRestockAccess, tacetOnly, (req, 
      the login screen out of a pocket. */
   if (_kitchenScopedSession(req)) return res.json({ success: true, data: { count: 0, latest: null } });
   const row = tdb().prepare(`
-    SELECT COUNT(*) AS n, MAX(prepared_at) AS latest
-      FROM restock_orders
+    SELECT COUNT(*) AS n, MAX(${KITCHEN_READY_MADE_AT}) AS latest
+      FROM ${KITCHEN_READY_FROM}
      WHERE ${KITCHEN_READY_WHERE}`).get();
   res.json({ success: true, data: { count: row.n || 0, latest: row.latest || null } });
+});
+
+/* ── What the kitchen has finished, line by line ────────────────────────────
+ *
+ * THE LIST BEHIND THE FIRE, and it is a list of PRODUCTS rather than of request
+ * numbers (§69). Ash: *"why not to mention the specific product kitchen made
+ * directly on the dashboard this way the user wont need to open the order —
+ * too many clicks."* A request number is the one fact about a finished jar that
+ * nobody in the warehouse can act on; the name is the whole of what they came
+ * to find out, and it was two taps down.
+ *
+ * IT SHOWS SEEN LINES TOO, and only the COUNT above is unseen-only. The screen
+ * answers "what has the kitchen made", which has to still answer the day after
+ * somebody glanced at it; the dot answers "is there anything I have not been
+ * told about". Two questions, one clause plus one arm — which is why
+ * KITCHEN_READY_WHERE is literally KITCHEN_READY_MADE_WHERE with the two seen
+ * arms appended, rather than a second clause that could drift.
+ *
+ * DECLARED BEFORE /:id, with the two above, because /:id would otherwise match
+ * the word and answer 404 for a row whose id is 'kitchen-ready'.
+ */
+router.get('/api/restock/kitchen-ready/lines', requireRestockAccess, tacetOnly, (req, res) => {
+  if (_kitchenScopedSession(req)) return res.json({ success: true, data: [] });
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 60, 1), 200);
+  const rows = tdb().prepare(`
+    SELECT i.id, i.restock_id, i.product_name, i.product_cn, i.sku,
+           i.qty_requested, i.unit,
+           ${KITCHEN_READY_MADE_AT} AS made_at,
+           COALESCE(i.seen_at, r.seen_at) AS seen_at,
+           r.rs_number, r.purpose
+      FROM ${KITCHEN_READY_FROM}
+     WHERE ${KITCHEN_READY_MADE_WHERE}
+     ORDER BY made_at DESC, i.id DESC
+     LIMIT ?`).all(limit);
+  res.json({ success: true, data: rows });
 });
 
 /* ── "We have read it" ──────────────────────────────────────────────────────
@@ -1069,12 +1109,37 @@ router.get('/api/restock/kitchen-ready', requireRestockAccess, tacetOnly, (req, 
 router.post('/api/restock/kitchen-ready/seen', requireRestockAccess, tacetOnly, (req, res) => {
   // The maker's own screen has no business stamping the asker's dot.
   if (_kitchenScopedSession(req)) return res.json({ success: true, data: { seen: 0 } });
-  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Number.isInteger) : [];
-  if (!ids.length) return res.json({ success: true, data: { seen: 0 } });
-  const marks = ids.map(() => '?').join(',');
+  const clean = (v) => (Array.isArray(v) ? v.map(Number).filter(Number.isInteger) : []);
+  const itemIds  = clean(req.body?.item_ids);
+  // BOTH SHAPES, AND THE OLD ONE IS NOT DEPRECATION DEBT. `ids` meant request
+  // ids before §69 and still does — a page cached on a phone before this
+  // deploy goes on sending them, and the sentence it is making ("I have read
+  // this request") is exactly as true per line as it was per request. It is
+  // resolved to the request's own unseen finished lines below rather than
+  // stamping the order, so a stale client and a fresh one leave the same
+  // marks. Reading it as item ids instead would have silently acknowledged
+  // whichever unrelated lines happened to carry those numbers.
+  const orderIds = clean(req.body?.ids);
+  if (!itemIds.length && !orderIds.length) return res.json({ success: true, data: { seen: 0 } });
+
+  // Resolved to line ids FIRST, in one read, so the UPDATE below has a single
+  // shape and the clause is applied exactly once. A line already seen — by
+  // either stamp — falls out here, which is what keeps re-opening the screen
+  // free and keeps `seen_at` the moment the warehouse FIRST knew.
+  const marks = (a) => a.map(() => '?').join(',');
+  const where = [];
+  const args = [];
+  if (itemIds.length)  { where.push(`i.id IN (${marks(itemIds)})`);          args.push(...itemIds); }
+  if (orderIds.length) { where.push(`i.restock_id IN (${marks(orderIds)})`); args.push(...orderIds); }
+  const targets = tdb().prepare(`
+    SELECT i.id FROM ${KITCHEN_READY_FROM}
+     WHERE (${where.join(' OR ')}) AND ${KITCHEN_READY_WHERE}`).all(...args);
+  if (!targets.length) return res.json({ success: true, data: { seen: 0 } });
+
+  const ids = targets.map((t) => t.id);
   const r = tdb().prepare(
-    `UPDATE restock_orders SET seen_at = ?
-      WHERE id IN (${marks}) AND ${KITCHEN_READY_WHERE}`
+    `UPDATE restock_items SET seen_at = ?
+      WHERE id IN (${marks(ids)}) AND seen_at IS NULL`
   ).run(new Date().toISOString(), ...ids);
   res.json({ success: true, data: { seen: r.changes || 0 } });
 });

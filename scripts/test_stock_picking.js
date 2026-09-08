@@ -309,6 +309,11 @@ function main() {
     const OK = [/^\/api\/retail-admin\/quick-stock\/context$/, /^\/api\/retail-admin\/stores\/\d+\/stock$/,
       /^\/api\/restock$/, /^\/api\/restock\/\d+$/, /^\/api\/restock\/\d+\/item\/\d+$/,
       /^\/api\/restock\/\d+\/status$/, /^\/api\/restock\/\d+\/receive$/,
+      // The kitchen-ready tile's count, since §69: finished PRODUCTS rather
+      // than requests. It reached this list as a bare /api/restock before,
+      // because a recorded call is stripped of its query string and the old
+      // loader carried its whole filter in one.
+      /^\/api\/restock\/kitchen-ready\/lines$/,
       /^\/api\/backend\/push\/pref$/, /^\/api\/push\/pref$/];
     for (const u of calls) {
       if (!OK.some((re) => re.test(u))) failures.push([name, `called ${u} — not one of #242's endpoints`]);

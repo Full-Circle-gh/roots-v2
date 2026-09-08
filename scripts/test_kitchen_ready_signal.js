@@ -213,6 +213,78 @@ async function askTheKitchen(name) {
   CAPS = new Set(['restock:request', 'restock:pick']);
   eq(await readyCount(), 1, 'the side that asked is still the side that is told');
 
+  section('One product of three (§69)');
+
+  /* THE DEFECT THIS SECTION EXISTS FOR. Ash, from the kitchen queue showing one
+     product made of three: "if only 1 product marked as made, it wont show it
+     on dashboard, thats a problem." §61 split the WORK to the line and left
+     restock_orders.status a rollup that catches up only when every line is
+     done — so a request like this one sits at 'sent' and the dot, reading the
+     order, answered zero about a jar already on the shelf. */
+  CAPS = null;
+  const seenBefore = await readyCount();
+  const split = (await call('POST', '/api/restock', {
+    to_role: 'kitchen', purpose: 'shelf', status: 'sent',
+    items: [
+      { product_id: null, product_name: 'Maple Almond', sku: 'P-A', qty_requested: 1 },
+      { product_id: null, product_name: 'Peanut Butter', sku: 'P-B', qty_requested: 1 },
+      { product_id: null, product_name: 'BioCurcumin+',  sku: 'P-C', qty_requested: 1 },
+    ],
+  })).body.id;
+  const lineIds = (await call('GET', `/api/restock/${split}`)).body.data.items.map(i => i.id);
+  eq(lineIds.length, 3, 'three products on one request');
+
+  await call('PUT', `/api/restock/${split}/item/${lineIds[0]}/status`, { status: 'received' });
+  const one = await call('PUT', `/api/restock/${split}/item/${lineIds[0]}/status`, { status: 'prepared' });
+  eq(one.status, 200, 'the kitchen finishes the first of the three');
+  eq(one.body.order_status, 'sent', 'and the REQUEST has not moved — it never does until the last line');
+  eq(await readyCount(), seenBefore + 1, 'yet the warehouse is told, because a finished product is news');
+
+  /* AND THE NEWS SAYS WHICH ONE. A request number is the one fact about a
+     finished jar the warehouse cannot act on; the name is the whole of what
+     they came to find out, and it used to be two taps down. */
+  const lines = (await call('GET', '/api/restock/kitchen-ready/lines')).body.data;
+  ok(lines.some(l => l.product_name === 'Maple Almond' && l.restock_id === split),
+     'the list names the product, and carries the request to open it at');
+  ok(!lines.some(l => l.product_name === 'Peanut Butter'),
+     'and says nothing about the two still being made');
+
+  section('   …and reading one does not silence the next');
+
+  const oneSeen = await call('POST', '/api/restock/kitchen-ready/seen',
+    { item_ids: [lines.find(l => l.product_name === 'Maple Almond').id] });
+  eq(oneSeen.body.data.seen, 1, 'the warehouse reads the first');
+  eq(await readyCount(), seenBefore, 'and that product goes quiet');
+
+  await call('PUT', `/api/restock/${split}/item/${lineIds[1]}/status`, { status: 'received' });
+  await call('PUT', `/api/restock/${split}/item/${lineIds[1]}/status`, { status: 'prepared' });
+  eq(await readyCount(), seenBefore + 1,
+     'the SECOND product is its own news — the stamp on the first cannot cover it');
+
+  /* THE LIST IS STILL A RECORD. Only the count is unseen-only: "what did the
+     kitchen make today" has to answer the day after somebody glanced at it. */
+  const both = (await call('GET', '/api/restock/kitchen-ready/lines')).body.data;
+  ok(both.some(l => l.product_name === 'Maple Almond' && l.seen_at),
+     'the one already read stays on the list, marked read');
+  ok(both.some(l => l.product_name === 'Peanut Butter' && !l.seen_at),
+     'beside the one that has not been');
+
+  section('   …and the last line still closes the request');
+
+  // §61's rollup is untouched by any of this: dispatch, the push fan-out and
+  // the kitchen slip are all keyed on the ORDER's status and must still fire
+  // exactly once, at the moment the whole request is actually done.
+  await call('PUT', `/api/restock/${split}/item/${lineIds[2]}/status`, { status: 'received' });
+  const last = await call('PUT', `/api/restock/${split}/item/${lineIds[2]}/status`, { status: 'prepared' });
+  eq(last.body.order_status, 'prepared', 'the last line catches the request up');
+
+  section('   …and the maker still is not the audience');
+
+  CAPS = new Set(['restock:fulfil', 'quickstock:add']);
+  eq(((await call('GET', '/api/restock/kitchen-ready/lines')).body.data || []).length, 0,
+     'the kitchen is not shown its own output on the new list either');
+  CAPS = null;
+
   section('The route is reachable at all');
 
   // /api/restock/:id sits directly below this one and would happily match the

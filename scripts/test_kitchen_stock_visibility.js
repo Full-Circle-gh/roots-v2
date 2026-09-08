@@ -417,7 +417,12 @@ function main() {
       /^\/api\/push\/pref$/, /^\/api\/backend\/push\/pref$/,
       // The launcher probe every open makes, ?go=add included: it is what
       // decides whether there is a home to offer a way back to.
-      /^\/api\/restock$/, /^\/api\/restock\/\d+$/];
+      /^\/api\/restock$/, /^\/api\/restock\/\d+$/,
+      // What the kitchen-ready tile's count is read from since §69 — finished
+      // PRODUCTS rather than requests. It reached this list as a bare
+      // /api/restock before, because the query string is stripped from a
+      // recorded call and the old loader carried its whole filter in one.
+      /^\/api\/restock\/kitchen-ready\/lines$/];
     const calls = JSON.parse(dec((out.match(/data-calls="([^"]*)"/) || [])[1] || '[]'));
     for (const u of calls) if (!OK.some((re) => re.test(u))) fail(name, `called ${u}`);
     if (!calls.some((u) => /\/stock\/added-today$/.test(u))) {
