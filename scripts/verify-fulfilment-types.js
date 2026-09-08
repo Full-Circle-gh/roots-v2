@@ -2227,6 +2227,38 @@ check('the default never overrides a cashier mid-sale',
 // beats the UA's [hidden] — without the override the pane that is down renders
 // on top of the one that is up.
 check('the hidden pane is actually hidden', /\.pane\[hidden\]\{display:none\}/.test(POS_TILL_SRC), true);
+// CHECKING THE ORDER BEFORE TAKING THE MONEY. Reported from the counter,
+// 2026-09-08: tapping a pending row went straight to a total with nothing
+// behind it, so the cashier was confirming a number they could not check and
+// had nothing on screen when a customer said "that's not what I ordered". A
+// recalled order now lands in the rail — the same place a basket they built
+// would — and Mark paid is the same button in the same place.
+check('a recalled order loads its lines from the detail endpoint',
+  /function recall[\s\S]{0,1400}api\('\/api\/retail-admin\/orders\/' \+ o\.id\)/.test(POS_TILL_SRC), true);
+check('...and lands in the rail rather than on the settle screen',
+  !/function recall[\s\S]{0,900}S\.view = 'settle'/.test(POS_TILL_SRC), true);
+// The order belongs to the customer, and the settle path PATCHes status only —
+// so an edit made here would change the screen, charge the original total and
+// print the original ticket. The controls are absent rather than ignored.
+check('a recalled line carries no stepper and cannot be selected',
+  /var ro = !!S\.recall;[\s\S]{0,600}if \(ro\) return;/.test(POS_TILL_SRC), true);
+check('adding a product to somebody else\'s order is refused',
+  /function addLine\(id\) \{[\s\S]{0,400}if \(S\.recall\) return;/.test(POS_TILL_SRC), true);
+check('changing a quantity on somebody else\'s order is refused',
+  /function bumpQty\([\s\S]{0,120}if \(S\.recall\) return;/.test(POS_TILL_SRC), true);
+// The one moment a cashier could confirm a total with nothing behind it is
+// while the lines are still in flight. Both pay buttons read the same rule.
+check('a recall cannot be settled while its lines are still loading',
+  /S\.recall \? !S\.recall\.loading : S\.lines\.length > 0/.test(POS_TILL_SRC), true);
+check('backing out of a recall is offered, and costs nothing',
+  /function cancelRecall[\s\S]{0,200}S\.recall = null/.test(POS_TILL_SRC), true);
+// #bar-pay rendered and enabled itself correctly but had NO listener until
+// 2026-09-08 — on a phone with the sheet closed, the button the thumb goes for
+// did nothing. Both buttons now share one handler.
+check('both pay buttons are wired, the phone bar included',
+  [/\$\('pay'\)\.addEventListener\('click', goSettle\)/.test(POS_TILL_SRC),
+   /\$\('bar-pay'\)\.addEventListener\('click', goSettle\)/.test(POS_TILL_SRC)], [true, true]);
+
 // Locked pairs, both of them. `pending` is the admin's own label for these very
 // rows (pending_payment), and the walk-in half reuses this screen's own title.
 check('the pending tab uses the admin\'s locked status pair',

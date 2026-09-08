@@ -23293,7 +23293,24 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   // hits and shouldn't pull the whole catalogue per keystroke). Defaults to
   // the full grid limit of 500.
   const lim = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 500));
-  sql += ' ORDER BY is_published DESC, sort_order ASC, name_en ASC LIMIT ' + lim;
+  // ── AND WHERE TO START, so a caller past the cap can ask for the rest ──────
+  // The cap above is a payload ceiling, not a statement about how big a
+  // catalogue may be, but with no offset it was BOTH: a shop with nine hundred
+  // products had four hundred of them unreachable from any client of this
+  // route. The phone (public/m.html, loadCatalogue) now walks the catalogue a
+  // page at a time through this parameter — see §64 — and every existing caller
+  // sends none, so they read page one exactly as they always have.
+  const off = Math.max(0, parseInt(req.query.offset, 10) || 0);
+  // `id` LAST, AND IT IS WHAT MAKES PAGING SAFE. The three keys above are not
+  // unique between them — two unpublished products with the same sort_order and
+  // the same name_en tie — and SQLite is free to order tied rows differently
+  // between two statements. Across LIMIT/OFFSET that is not a cosmetic wobble:
+  // a row can land on both pages or on neither, so a catalogue read in two
+  // requests would silently gain a duplicate or lose a product. A unique final
+  // key makes the sequence total, so page 2 begins exactly where page 1 ended.
+  // Adding it changes nothing for a single-page read but the order of exact
+  // ties, which had no defined order to change.
+  sql += ' ORDER BY is_published DESC, sort_order ASC, name_en ASC, id ASC LIMIT ' + lim + ' OFFSET ' + off;
   const rows = tdb().prepare(sql).all(...params).map(r => {
     // Replace the (omitted) base64 image with a tiny URL the browser lazy-loads
     // and caches; ?v=updated_at busts it when the photo changes. Products with
@@ -23418,9 +23435,20 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   // that matters most. Stripped after applyBundleCost has run: a bundle's
   // cost is derived on the way out, and deriving it into a field nobody may
   // read would just be work.
-  // `total` is what the filters match; `data` is at most `limit` of them. The
-  // grid needs both to tell the truth about how much of the catalogue it holds.
-  res.json({ success: true, data: stripProductCosts(req, rows), total, limit: lim, truncated: total > rows.length });
+  // `total` is what the filters match; `data` is at most `limit` of them,
+  // starting at `offset`. The grid needs both to tell the truth about how much
+  // of the catalogue it holds, and the phone needs `offset` back to know which
+  // slice it was handed.
+  //
+  // `truncated` is "there is more than what you are holding", and it is
+  // measured from the END of this page rather than from its length — at offset
+  // 0 that is the same arithmetic it always was (`0 + rows.length < total`),
+  // so no existing caller sees a different answer, and on the last page of a
+  // paged read it correctly goes false instead of staying true forever.
+  res.json({
+    success: true, data: stripProductCosts(req, rows),
+    total, limit: lim, offset: off, truncated: off + rows.length < total,
+  });
 });
 
 // GET /api/retail-admin/products/:id/image — stream a product's primary photo

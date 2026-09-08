@@ -1501,10 +1501,23 @@ button{font:inherit;color:inherit;margin:0}
     el.innerHTML = h + '</div>';
   }
 
-  // Opening one. A recalled order REPLACES the basket rather than joining it:
-  // this screen settles one thing, and a till that could ring up a walk-in and
-  // a QR order under a single tender would record one payment against two
-  // orders and reconcile against neither.
+  // Opening one. IT LANDS IN THE RAIL, NOT ON THE SETTLE SCREEN, and that is
+  // the point: the cashier is about to take money for a basket somebody else
+  // filled in, on a phone, out of sight. Going straight to a total would ask
+  // them to confirm a number with nothing behind it — and when the customer
+  // says "that's not what I ordered" there would be nothing on screen to check
+  // it against. So a recalled order arrives exactly where a basket they built
+  // themselves would, and Mark paid is the same button in the same place.
+  //
+  // IT REPLACES THE BASKET rather than joining it: this screen settles one
+  // thing, and a till that could ring up a walk-in and a QR order under a
+  // single tender would record one payment against two orders and reconcile
+  // against neither.
+  //
+  // The list row carries no items — the orders LIST is order-level — so the
+  // lines come from the detail endpoint. Read-only once here (see renderLines):
+  // the customer's order is not the counter's to edit, and the settle path only
+  // marks it paid, so a line changed here would be a change nothing saves.
   function recall(id) {
     var o = null, i;
     for (i = 0; i < (S.pend || []).length; i++) if (S.pend[i].id === id) o = S.pend[i];
@@ -1512,10 +1525,40 @@ button{font:inherit;color:inherit;margin:0}
     S.lines = []; S.sel = null; S.customer = null;
     S.recall = {
       id: o.id, order_no: o.order_no, code: o.shop_order_code,
-      name: o.recipient_name || '', total: Number(o.total) || 0
+      name: o.recipient_name || '', total: Number(o.total) || 0, loading: true
     };
     S.wallet = null; S.moreOpen = false; S.err = '';
-    S.view = 'settle';
+    // The sheet is where the rail lives on a phone, and it is closed by
+    // default. Opening it is what makes "check the order" a thing that has
+    // happened rather than a thing the cashier could have done.
+    S.sheetOpen = true;
+    render();
+    api('/api/retail-admin/orders/' + o.id).then(function (j) {
+      if (!S.recall || S.recall.id !== o.id) return;   // they moved on
+      if (!j || !j.success || !j.data) { S.recall.loading = false; return render(); }
+      S.lines = (j.data.items || []).map(function (it) {
+        return {
+          id: it.product_id,
+          name: cuT(it.name_en || it.name_cn || '', it.name_cn || it.name_en || ''),
+          sku: it.sku || '',
+          price: Number(it.unit_price) || 0,
+          qty: Number(it.qty) || 0
+        };
+      });
+      S.recall.loading = false;
+      render();
+    }).catch(function () {
+      if (S.recall && S.recall.id === o.id) { S.recall.loading = false; render(); }
+    });
+  }
+
+  // Backing out. The cashier opened the wrong number, or the customer changed
+  // their mind — either way nothing has been charged, so this leaves no trace
+  // and lands them back on the list they came from.
+  function cancelRecall() {
+    S.recall = null; S.lines = []; S.sel = null;
+    S.wallet = null; S.moreOpen = false; S.err = '';
+    S.view = 'till'; S.pane = 'pend'; S.paneTouched = true;
     render();
   }
 
@@ -1544,6 +1587,23 @@ button{font:inherit;color:inherit;margin:0}
     // source. This comment tripped that rule on its first push.
     var head = '<span class="sheet-ttl">'
       + (S.lines.length ? '<span class="ct">' + itemCount() + '</span>' : '') + '</span>';
+    // A RECALLED ORDER OWNS THIS ROW. It names the number the customer is
+    // holding up and the name they gave, so the check the cashier is making —
+    // "is this the right order?" — has both halves on screen above the lines
+    // they are checking. The customer control is not offered: this order
+    // already belongs to somebody, the settle path does not write customer_id,
+    // and a + Customer button here would be a control that silently does
+    // nothing. Cancel is the way out, and costs nothing because nothing has
+    // been charged yet.
+    if (S.recall) {
+      el.className = 'cust on';
+      el.innerHTML = head
+        + '<span class="who">' + esc(String(S.recall.code))
+        + (S.recall.name ? ' · ' + esc(S.recall.name) : '')
+        + '<div class="sub">' + esc(S.recall.order_no || '') + '</div></span>'
+        + '<button class="cbtn" type="button" data-recall-cancel="1">' + esc(T('cancel')) + '</button>';
+      return;
+    }
     if (S.customer) {
       el.className = 'cust on';
       el.innerHTML = head + '<span class="who">' + esc(S.customer.nickname || ('#' + S.customer.id))
@@ -1566,12 +1626,21 @@ button{font:inherit;color:inherit;margin:0}
     }
     var h = '';
     S.lines.forEach(function (l, i) {
-      var sel = S.sel === i;
-      h += '<button class="ln' + (sel ? ' sel' : '') + '" type="button" data-line="' + i + '">'
+      // A RECALLED ORDER IS READ-ONLY. The customer filled this basket on their
+      // own phone; the counter's job here is to check it and take the money, not
+      // to rewrite it. And it could not rewrite it if it tried — the settle path
+      // for a recall PATCHes the status and nothing else, so an edit made here
+      // would change the screen, charge the original total, and print the
+      // original ticket. Better that the controls are not there at all.
+      var ro = !!S.recall;
+      var sel = !ro && S.sel === i;
+      h += '<button class="ln' + (sel ? ' sel' : '') + '" type="button"'
+         + (ro ? ' disabled' : ' data-line="' + i + '"') + '>'
          + '<span class="nm">' + (l.qty > 1 ? '<span class="q">×' + l.qty + '</span>' : '') + esc(l.name)
          + '<div class="sb">' + (l.sku ? '<span class="sku">' + esc(l.sku) + '</span>' : '')
          + '<span>' + money(l.price) + '</span></div></span>'
          + '<span class="tt">' + money(l.qty * l.price) + '</span></button>';
+      if (ro) return;
       // ALWAYS EMITTED, never conditional. On a tablet CSS shows this only for
       // the selected line, which is exactly the old behaviour; on a phone the
       // sheet is opened on purpose and has the room, so every line carries its
@@ -1599,7 +1668,12 @@ button{font:inherit;color:inherit;margin:0}
 
   function renderFoot() {
     var sub = subtotal();
-    var due = dueNow(sub);
+    // A recalled order states the SERVER's total, not one re-derived from the
+    // lines just fetched. They should agree, and if they ever do not, the
+    // number the customer was shown on their own phone is the one the counter
+    // must ask for — settleDue() is that number, and it is the one the settle
+    // screen and this button both read so they cannot disagree.
+    var due = settleDue();
     // NO summary row. On a counter sale the subtotal IS the total — nothing
     // ships, nothing is boxed, nothing is discounted — so a subtotal line would
     // print the same figure twice, one line apart. That is noise, not a
@@ -1608,24 +1682,31 @@ button{font:inherit;color:inherit;margin:0}
     // till has a subtotal and a total that are two numbers, and the cashier has
     // to be able to read both to the customer. An inclusive shop shows the tax
     // as what it is, a share of the one figure, and still prints no subtotal.
-    $('sums').innerHTML = !S.tax || !S.lines.length ? ''
+    // Suppressed for a recalled order: its tax was computed and stored when the
+    // customer placed it, and re-deriving a split here from the lines would put
+    // a second arithmetic on screen that nothing guarantees matches the first.
+    $('sums').innerHTML = !S.tax || !S.lines.length || S.recall ? ''
       : (S.tax.mode === 'exclusive'
           ? '<div><span>' + esc(T('subtotal')) + '</span><span>' + money(sub) + '</span></div>'
             + '<div><span>' + esc(S.tax.label) + '</span><span>' + money(taxOn(sub)) + '</span></div>'
           : '<div><span>' + esc(S.tax.label) + '</span><span>' + money(taxOn(sub)) + '</span></div>');
     $('tot-lb').textContent = T('total');
     $('tot-amt').textContent = money(due);
+    // A recall is payable as soon as its lines are on screen — never while they
+    // are still in flight, which is the one moment the cashier could confirm a
+    // total without having seen what is behind it.
+    var ready = S.recall ? !S.recall.loading : S.lines.length > 0;
     var b = $('pay');
-    b.disabled = !S.lines.length;
-    b.textContent = S.lines.length ? T('markPaid') + '  ' + money(due) : T('markPaid');
+    b.disabled = !ready;
+    b.textContent = ready ? T('markPaid') + '  ' + money(due) : T('markPaid');
 
     // THE BAR IS THE ORDER, FOLDED. On a phone the sheet is closed by default,
     // so this is the only always-true statement of what the customer owes.
     // A BARE NUMBER for the count, deliberately: "4 items" would be an English
     // string with no locked Chinese half, and a pill beside a total needs no
     // unit to be read. The product tiles already count the same way.
-    var any = S.lines.length > 0;
-    $('bar-ct').textContent = any ? String(itemCount()) : '';
+    var any = ready;
+    $('bar-ct').textContent = S.lines.length ? String(itemCount()) : '';
     // WHAT THE CUSTOMER OWES, tax included — the same figure as the button in
     // the sheet above. The bar is the only always-true statement of the amount
     // on a phone, so it must not be the pre-tax one.
@@ -1724,6 +1805,11 @@ button{font:inherit;color:inherit;margin:0}
 
   /* ---- actions --------------------------------------------------------- */
   function addLine(id) {
+    // Belt to renderLines' braces. The product grid is behind the other pane
+    // while a recall is open, but a stray tap must not be able to put a walk-in
+    // item into somebody else's order — the settle path would charge the
+    // original total and the extra line would vanish on the next render.
+    if (S.recall) return;
     var p = S.products.filter(function (x) { return x.id === id; })[0];
     if (!p) return;
     var st = stockOf(id);
@@ -1735,6 +1821,7 @@ button{font:inherit;color:inherit;margin:0}
     render();
   }
   function bumpQty(d, idx) {
+    if (S.recall) return;                 // read-only; see addLine
     var i = (idx == null || idx === '') ? S.sel : Number(idx);
     var l = S.lines[i]; if (!l) return;
     var drop = function () {
@@ -1992,7 +2079,7 @@ button{font:inherit;color:inherit;margin:0}
       // Tapping away from the leave question is staying, the same dismissal the
       // store picker takes — and the safe answer is the one a stray tap gives.
       if (S.leaveOpen && ev.target.id === 'leavepick') { S.leaveOpen = false; return render(); }
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall]');
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel]');
       if (!t) return;
       // Choosing a pane. The flag is what stops the next poll from defaulting
       // the cashier back off the face they just asked for.
@@ -2000,6 +2087,7 @@ button{font:inherit;color:inherit;margin:0}
         S.pane = t.getAttribute('data-pane'); S.paneTouched = true; return render();
       }
       if (t.hasAttribute('data-recall')) return recall(Number(t.getAttribute('data-recall')));
+      if (t.hasAttribute('data-recall-cancel')) return cancelRecall();
       // THE WAY BACK. An empty till leaves on the tap; a basket with lines in it
       // is a sale in progress that nothing has saved yet, so it asks first — in
       // the page, the way every other decision on this screen is made.
@@ -2041,10 +2129,24 @@ button{font:inherit;color:inherit;margin:0}
         S.view = 'till'; S.err = ''; return render();
       }
     });
-    $('pay').addEventListener('click', function () {
-      if (!S.lines.length) return;
+    /* BOTH pay buttons, through one handler.
+       #pay is the rail's, #bar-pay is the phone bar's — and #bar-pay had no
+       listener at all until 2026-09-08. It rendered, it enabled and disabled
+       itself correctly in renderFoot, and tapping it did nothing: on a phone
+       with the order sheet closed, the button the thumb goes for was inert and
+       the only working one was inside the sheet. Fixed here rather than filed
+       because the pending list leans on that layout — the cashier recalls an
+       order on a phone and the sheet is exactly what they are looking at.
+
+       The guard reads the same `ready` rule renderFoot uses for `disabled`,
+       so a recalled order whose lines are still in flight cannot be settled by
+       a tap that beat them. */
+    var goSettle = function () {
+      if (S.recall ? S.recall.loading : !S.lines.length) return;
       S.view = 'settle'; S.err = ''; S.sel = null; render();
-    });
+    };
+    $('pay').addEventListener('click', goSettle);
+    $('bar-pay').addEventListener('click', goSettle);
     $('hd-lang').addEventListener('click', function () { setLang(_lang === 'cn' ? 'en' : 'cn'); });
     $('q').addEventListener('input', function (e) { S.q = e.target.value || ''; $('q-clr').hidden = !S.q; renderGrid(); });
     $('q-clr').addEventListener('click', function () { S.q = ''; $('q').value = ''; $('q-clr').hidden = true; renderGrid(); });

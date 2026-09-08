@@ -984,7 +984,16 @@ router.get('/api/restock', requireRestockAccess, (req, res) => {
   // legacy default) so nothing breaks while UI catches up.
   if (to_role)   { q += " AND COALESCE(r.to_role,'warehouse') = ?";   params.push(to_role); }
   if (from_role) { q += " AND COALESCE(r.from_role,'store') = ?";     params.push(from_role); }
-  q += ' ORDER BY r.created_at DESC, r.id DESC';
+  /* URGENT FIRST, AND THAT IS THE WHOLE OF WHAT 'urgent' MEANS (§65). Newest
+     -first was this list's only sort, so a request raised at 09:00 and marked
+     urgent sat BELOW a routine one raised at 09:05 and the kitchen found it
+     only by reading every card. Marking one now moves it.
+     The key tests `purpose = 'urgent'` and nothing else, deliberately: this
+     endpoint also serves store→warehouse rows, whose purpose is NULL by
+     design, and the expression is identical for every one of them — their
+     order does not move. `created_at DESC` still orders inside each group, so
+     two urgent requests are still newest-first between themselves. */
+  q += " ORDER BY CASE WHEN r.purpose = 'urgent' THEN 0 ELSE 1 END, r.created_at DESC, r.id DESC";
   res.json({ success: true, data: tdb().prepare(q).all(...params) });
 });
 
@@ -1152,8 +1161,14 @@ router.post('/api/restock', requireRestockAccess, tacetOnly, (req, res) => {
 
   const dir = _inferDirection(req);
   // Warehouse → kitchen requests must declare WHY: 'order' (need it to
-  // ship a customer order) or 'shelf' (refill warehouse shelves).
-  const cleanPurpose = (dir.to_role === 'kitchen' && (purpose === 'order' || purpose === 'shelf'))
+  // ship a customer order), 'shelf' (refill warehouse shelves), or 'urgent'
+  // (an order that jumps the queue — see the sort in the list endpoint).
+  // §65: 'urgent' is a THIRD VALUE here rather than a flag beside the other
+  // two, so the column stays untyped TEXT and no row already written changes
+  // meaning. An unknown value still falls through to null and is refused
+  // below by name, which is what has always caught a stale client.
+  const KITCHEN_PURPOSES = ['order', 'shelf', 'urgent'];
+  const cleanPurpose = (dir.to_role === 'kitchen' && KITCHEN_PURPOSES.includes(purpose))
     ? purpose : null;
   if (dir.to_role === 'kitchen' && !cleanPurpose) {
     return res.status(400).json({ error: 'purpose required for kitchen requests · 必须选择请求原因' });
