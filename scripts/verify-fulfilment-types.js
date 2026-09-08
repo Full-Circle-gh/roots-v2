@@ -1611,9 +1611,21 @@ check('the till offers reprint as a secondary control, not a primary one',
 const tillCn = (TILL_SRC.match(/[一-鿿]+/g) || []);
 const stringsBlock = (/var STRINGS = \{[\s\S]*?\n  \};/.exec(TILL_SRC) || [''])[0];
 const walletsBlock = (/var WALLETS = \[[\s\S]*?\n  \];/.exec(TILL_SRC) || [''])[0];
+/* A THIRD DECLARED BLOCK, on the same terms as the two above: a named, greppable
+   table whose every CN string is COPIED and says from where. homeFromDoor names
+   the screen Back returns to when this page was opened from the store backend
+   rather than from /m, and its label is that screen's own name in its own
+   dictionary (public/retail-admin.html's EN_ONLY_MAP). It is not in STRINGS
+   because public/stock.html carries this function byte-identically — the copy is
+   what lets two pages that load no external script agree on where Back goes, and
+   scripts/test_app_home.js fails if the two ever differ. Routing it through the
+   till's own T() would make the two copies diverge and put that guard out.
+   The window is exactly this function, so a composed label anywhere else on the
+   page is still a failure. */
+const doorsBlock = (/\n  function homeFromDoor\(home\) \{[\s\S]*?\n  \}\n/.exec(TILL_SRC) || [''])[0];
 const authCn = (/请先在后台登录[^']*/g);
 const declared = new Set(
-  ((stringsBlock + walletsBlock).match(/[一-鿿]+/g) || [])
+  ((stringsBlock + walletsBlock + doorsBlock).match(/[一-鿿]+/g) || [])
 );
 // The one CN string outside those two blocks is the signed-out line, which is
 // reused verbatim in two places; it is listed here rather than left unexplained.

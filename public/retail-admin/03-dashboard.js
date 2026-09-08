@@ -1355,8 +1355,17 @@ function dashOpenProductFromFeed(productId) {
 // the operator is left tapping a row that does nothing. /stock reads ?go= itself
 // and refuses one the operator was not answered for, so this link can never open
 // a screen a capability does not.
+//
+// &from=dashboard IS WHAT MAKES THE WAY BACK TRUE. /stock is a separate
+// document with its own Back, and that Back is answered by lib/app-home.js —
+// which knows one way out, '/m?to=more', because until this row existed every
+// door into that app was a row in Tacet Mobile. Opening it from here in the
+// same tab therefore sent a person at a PC to the phone app when they hit
+// Back: a screen they were never on, and no way back to this board. The link
+// names the door it is, /stock reads it (homeFromDoor in public/stock.html)
+// and returns them to this dashboard by name.
 function dashOpenKitchenReady() {
-  window.location.href = '/stock?go=ready';
+  window.location.href = '/stock?go=ready&from=dashboard';
 }
 
 function dashOpenRestock() {
