@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.169
+# Tacet shared-core consolidation — decisions record, v4.170
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-08 · v4.170 — **§73 ADDED: THE DESKTOP GETS ITS OWN "READY FROM THE KITCHEN" LIST, AND §66's REJECTION IS SUPERSEDED — DECIDED by Ash.** Reported from a PC on the store back office, the dashboard row having taken the whole tab to `/stock?go=ready&from=dashboard` — a 390px phone app titled **Quick stock · 库存** with the back office gone from around it: *"why it change address and called 'quick stock' the whole quick stock indenended app is over. i need it to go away. i want all to be unified as one. tacet app."* **§48 ALREADY RULES THE RETIREMENT and is untouched** — *"there is no second app"*, migrate then delete, four steps — **but §48 is written entirely about the phone and says nothing about the desktop admin at any of its four steps; this section closes the half its step 4 leaves unanswered.** **STEP 2 OF §48 IS VERIFIED COMPLETE against the tree rather than assumed**: every flow §48 listed as living in `/stock` alone now has a screen and a row in `public/m.html` (`SUBS.pick`, `receivexfer`, `askkitchen`, `askstock`, `kitchenready`, `stockadd` with both modes per §46, `logbatch`, `whatmade`), and both departures §48 required to become screens did — the Kitchen queue is native and the Transfers row is deleted outright, *"the row goes with the last of them"*. What remains of §48 is step 3, the unlock, and step 4, the deletion. **§66's REASONING IS NOT OVERTURNED — ITS PREMISE IS.** §66 rejected a second ready list inside the admin because *"the Quick Stock app already renders it"*, true on the day; step 4 deletes that app, and the price §66 named and accepted — *"the sidebar goes, you return with Back"* — is what was reported above. **The drift argument inverts once the app is gone**: after step 4 there is exactly ONE other renderer and the desktop has none, so this builds the second of two — the pair Receiving, Waste, Purchasing and Delivery already are. **THE NAVIGATION STAYS LOAD-BEARING AND IT IS A REQUIREMENT, NOT A NOTE**: opening the list is the only acknowledgement this direction has (§48's server-side `seen_at`), so the desktop list must stamp it through the same endpoint or the fire it opens burns forever — a desktop list that merely renders is worse than the departure it replaces. **ONE CLAUSE, NOT THREE**: the four conditions stay in `lib/kitchen-ready.js`, now required by a third reader, on §66's unchanged rule that a fire disagreeing with the queue it opens means one of the two is lying. **Rejected: pointing the desktop at Tacet Mobile's version** — free to build, and the option that looks like unification without being it, a PC operator still handed a phone-shaped page wearing a different URL. **Rejected: leaving the row until step 4 forces the question**, §48's *what must not happen is a role with no app* having a desktop counterpart. **Rejected: a dashboard widget of its own**, already refused by §66 and not disturbed here — the row stays in *Needs you* off the same `dashboard/ops` key and only its destination changes. **THE COST IS NAMED: this is the one net-new screen in §48's retirement**, desktop code that has never existed — grepping `public/retail-admin/` for `kitchen-ready` returns the dashboard row and nothing else, the same zero §66 recorded. **NO CHINESE WAS COMPOSED**: *Ready from the kitchen · 厨房已完成* is live in `public/m.html` and `public/stock.html` and *View · 查看* is live in `public/m.html`, so no entry in `docs/tacet-delivery-vocabulary.md` is owed. **NOT DECIDED and deferred to the session that builds it**: whether the list is a tab, a drawer off the row, or a section inside an existing tab — a placement question inside the admin's own patterns. Docs only; no code, no schema, no migration.
 
 2026-09-08 · v4.169 — **AN ANSWER ON THE RECEIVE SCREEN CAN ALWAYS BE TAKEN BACK (§72).** Reported from the floor against a screenshot of RPO-0030 — three of sixteen lines checked, Red Lentils on its counter at the ordered 10, **Done** circled in red: *"this changed to somethnig i didnt confirm , i should have an option to undo an action for example if i click arrive i should be able to undo that"*. **THE UNDO EXISTED AND LASTED 1.2 SECONDS.** §70 took the Save button off this screen, so every answer schedules a write and `RECV_PAUSE` sends it; before that pause a line offered *Not checked yet* and the undo worked, and after it the control was WITHDRAWN and *Done* — which only folds the row — stood in its place. v4.166 put *Done* there deliberately and the reasoning was sound on the server as it then was: clearing `qty_received` back to null leaves the booked units on the shelf, because `applyReceivedToStock` skips a null line and so reverses nothing. **What it did not weigh is that the operator cannot see the timer**, so one screen offered two different sentences for one situation and the second read like agreement with an answer nobody had given. **THE THREE UNCONFIRMED LINES ARE THE SAME DEFECT FROM THE OTHER END**: `recvAllArrived` undid by SKIPPING every line the pause had already carried, so pressing *All 16 arrived* and pressing it again a moment later left behind whatever had been written in between, with nothing on screen to say why. **A NULL ARRIVED COUNT IS NOW AN UNDO AND THE ROUTE REVERSES IT** — the same assertion `/undo-receive` has always made about a whole order, through the same planner, `planPOReversal` now taking an optional set of lines, on the same terms. **REFUSES RATHER THAN CLAMPS AND WRITES NOTHING ON A REFUSAL**, counts included, which is the promise `undoBlocked` makes in so many words. **The button is still drawn on a line that cannot reverse**: a control that withholds itself teaches nobody why, and the refusal says so in words. **Undoing the last recorded line returns the order to Sent**, or a mis-tap leaves an order reading Delivered with no line claiming a delivery — out of To receive, and the operator hunting for the order in front of them. **THE PHONE ROLLS A REFUSED UNDO BACK** rather than leaving the line dirty for ever: the route refuses the whole payload over one such line, which would have taken the rest of the van down with it on every pause after. **NO CHINESE WAS COMPOSED**: *Undo · 撤销* is a live pair in `public/retail-admin/04-orders.js` and `public/cms-mobile-v2.html`, and the refusal is the LOCKED `undoBlocked` pair lifted verbatim from the desktop's `puShowUndoBlocked`. No entry in `docs/tacet-delivery-vocabulary.md` is owed. **CALLED OUT UNDER CLAUDE.md's SIDE-EFFECT RULE:** `scripts/test_receive_line_undo.js` is a NEW SUITE and `run-suites.js` discovers suites from disk, so the fast shard grows from 176 to 177 without anybody registering it. Its six cases were proven red with the reversal removed. `test_mobile_receiving.js` 171 → 176 assertions, 43 → 44 cases, its recorded-line case rewritten to the new contract rather than left passing on a string that no longer renders. `npm run test:fast` green at 177. Code, tests and docs; no schema, no migration, no new route.
 
@@ -7447,3 +7449,85 @@ with not one line claiming a delivery — out of To receive, and the operator hu
 2. **No new Chinese.** *Undo · 撤销* is a live pair (`public/retail-admin/04-orders.js`, `public/cms-mobile-v2.html`)
    and the refusal is the locked `undoBlocked` pair lifted whole. Nothing was composed, so
    `docs/tacet-delivery-vocabulary.md` is unchanged.
+
+## §73 — THE DESKTOP GETS ITS OWN "READY FROM THE KITCHEN" LIST, AND §66's REJECTION IS SUPERSEDED
+
+Decided by Ash, 2026-09-08, from a PC on the store back office. The dashboard's *Ready from the kitchen* row was
+tapped and the whole tab left for `/stock?go=ready&from=dashboard` — a 390px phone app, titled **Quick stock · 库存**,
+with the back office gone from around it:
+
+> *"why it change address and called 'quick stock' the whole quick stock indenended app is over. i need it to go away.
+> i want all to be unified as one. tacet app."*
+
+### This section decides the DESKTOP only, and §48 is untouched
+
+**§48 already rules the retirement itself** — *"there is no second app"* — and its four-step sequence, its inventory of
+homeless flows and its migrate-before-delete ordering are not reopened here. §48 is written entirely about the phone:
+it names Tacet Mobile as the destination for every flow and says nothing about the desktop admin at any of its four
+steps. **The desktop is the half its step 4 leaves unanswered**, and that is what this section closes.
+
+**Step 2 of §48 is complete as of this section's date, verified against the tree rather than assumed.** Every flow §48
+listed as living in `/stock` alone now has a screen and a row in `public/m.html`: `SUBS.pick`, `SUBS.receivexfer`,
+`SUBS.askkitchen`, `SUBS.askstock`, `SUBS.kitchenready`, `SUBS.stockadd` (both modes, per §46), `SUBS.logbatch` and
+`SUBS.whatmade`. Both departures §48 required to become screens did: the Kitchen queue is native, and the Transfers
+row is deleted outright — *"the row goes with the last of them"*, which it has. What remains of §48 is step 3, the
+unlock, and step 4, the deletion.
+
+### The ruling
+
+**The desktop admin gets its own Ready-from-the-kitchen list, and the dashboard row opens it in the shell rather than
+navigating away.** No address change, no separate document, no phone page on a PC.
+
+**§66's rejection of "building a second ready list inside the admin" is SUPERSEDED, and its reasoning is not
+overturned — its premise is.** §66 rejected the twin because *"the Quick Stock app already renders it and the phone
+already opens it"*, and on that day both halves were true. §48 step 4 deletes the app that made the first half true.
+**A rejection resting on a screen that is being deleted stops being a rejection when the screen goes**, and the price
+§66 explicitly named and accepted — *"the sidebar goes, you return with Back"* — is the cost that was reported from
+the floor above.
+
+**The drift argument inverts once the app is gone, and that is the whole of why this is safe.** §66 was right that two
+surfaces rendering one list is drift this codebase works to keep out. After step 4 there is exactly ONE other renderer
+— Tacet Mobile — and the desktop has none. Building it makes the second of two, which is what every comparable screen
+in this product already is: Receiving, Waste, Purchasing and Delivery each render on the phone and on the desktop from
+one server clause. This list becoming the fifth such pair is the house pattern, not an exception to it.
+
+**THE NAVIGATION STAYS LOAD-BEARING, and this is a requirement rather than a note.** Opening the list is the only
+acknowledgement this direction has: the read is a server-side `seen_at` (§48), stamped for the rows the screen draws,
+and one person looking puts the row out for the whole warehouse. §66 rejected *"a row that states the count with
+nowhere to go"* precisely because such a row can never clear. **The desktop list must therefore stamp `seen_at`
+through the same endpoint the phone posts to, or the dashboard fire it opens will burn forever.** A desktop list that
+merely renders is worse than the departure it replaces.
+
+**ONE CLAUSE, NOT THREE.** The four conditions behind the count stay in `lib/kitchen-ready.js` and are REQUIRED by the
+desktop renderer as they already are by both routes. §66's rule holds unchanged and now covers a third reader: a fire
+that disagrees with the queue it opens means one of the two is lying.
+
+### Rejected
+
+- **Pointing the desktop at Tacet Mobile's version of the list** (`/m?to=…` in place of `/stock?go=ready`). It costs
+  nothing to build and it is the option that looks like unification without being it: the separate app's name and
+  address go, and a PC operator is still handed a phone-shaped page with the back office gone from around it — the
+  exact thing reported above, wearing a different URL.
+- **Leaving the dashboard row where it is until step 4 forces the question.** §48's own rule — *what must not happen
+  at any point is a role with no app* — has a desktop counterpart, and shipping the deletion before this screen exists
+  would give the PC a fire with nowhere to go for however long the gap lasted.
+- **A widget of its own on the desktop dashboard.** Already rejected by §66 for reasons this section does not disturb:
+  a tenth polling path and a card empty most of the day. The row stays where §66 put it, in *Needs you*, off the same
+  `dashboard/ops` key; only its destination changes.
+
+### The cost, named
+
+**This is the one net-new screen in §48's retirement, and it is desktop code that has never existed.** §66 recorded
+the same zero when it looked — grepping `public/retail-admin/` for `kitchen-ready` returns the dashboard row and
+nothing else. Every other step of §48 moves or deletes; this one builds. That is accepted as the price of the ruling,
+and it is the reason the desktop was left out of §48 in the first place rather than an oversight in it.
+
+**NO CHINESE WAS COMPOSED.** Both strings this screen needs are already live and are lifted verbatim: *Ready from the
+kitchen · 厨房已完成* is the list's own name in `public/m.html` and `public/stock.html`, and *View · 查看* is live in
+`public/m.html`. No entry in `docs/tacet-delivery-vocabulary.md` is owed.
+
+**NOT DECIDED, and deferred to the session that builds it:** whether the desktop list is a tab, a drawer off the
+dashboard row, or a section inside an existing tab. It is a placement question inside the admin's own patterns
+(`docs/tacet-desktop-patterns.md`), it changes nothing this section rules, and it is not Ash's to spend a decision on.
+
+Docs only; no code, no schema, no migration.
