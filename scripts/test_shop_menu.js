@@ -1319,11 +1319,132 @@ const soldOut = (row) => /class="sold"/.test(row);
         db.prepare("UPDATE retail_orders SET status = 'pending_payment' WHERE id = ?").run(wxOrder.id);
       });
 
-      await checkAsync('an order that is no longer payable falls back rather than erroring', async () => {
+      await checkAsync('a cancelled order SAYS it is cancelled, and stops asking for money', async () => {
+        // Until 2026-09-08 this page told a cancelled order to pay at the
+        // counter, because "not payable here" and "cancelled" fell down the
+        // same branch. Now that a customer can cancel their own order, that is
+        // the one thing this screen must not say: they would walk to the till
+        // to pay for an order nobody is making.
         db.prepare("UPDATE retail_orders SET status = 'cancelled' WHERE id = ?").run(wxOrder.id);
         const r = await get(payUrl);
         assert.strictEqual(r.status, 200, 'a cancelled order threw instead of answering');
-        assert.ok(/请到收银台付款。/.test(r.body), 'a cancelled order left the customer with nothing');
+        // SCOPED TO THE RENDERED BLOCK, not the document. The basket script is
+        // built once at module load and inlined by shell() on every page — it
+        // is inert here (it returns the moment it cannot find the cart bar) but
+        // its SOURCE still contains '请到收银台付款。' as a string literal. The
+        // assertion this replaced matched the whole body and so was passing on
+        // that literal: it would have gone green for a page that rendered
+        // nothing at all.
+        const from = r.body.indexOf('<div class="done">');
+        assert.ok(from >= 0, 'the order block did not render');
+        const to = r.body.indexOf('<script', from);
+        const done = r.body.slice(from, to > from ? to : undefined);
+        assert.ok(/已取消/.test(done) && /Cancelled/.test(done),
+          'a cancelled order did not say so');
+        assert.ok(!/请到收银台付款。/.test(done),
+          'a cancelled order still sent the customer to the till to pay');
+        assert.ok(!/取消订单/.test(done), 'a cancelled order was offered a cancel button');
+      });
+
+      /* THE CUSTOMER CANCELS THEIR OWN ORDER — Ash, 2026-09-08. The token is
+         the only authority available on a page with no login and no session,
+         so what these hold is that it is enough, that it is REQUIRED, and that
+         cancelling puts the stock back. */
+      await checkAsync('a customer can cancel their own unpaid order', async () => {
+        await resetOrderLimit();
+        const placed = await post(`/s/${LIVE}/order`, {
+          name: 'Nia', items: [{ store_product_id: P_MADE_ON, qty: 1 }],
+        });
+        assert.strictEqual(placed.status, 201, JSON.stringify(placed.json));
+        // The order's own page is handed back on every path now, not just the
+        // WeChat one — it is what the menu remembers so a customer who closes
+        // the sheet can find their order again.
+        assert.ok(/^\/s\/[A-Za-z0-9_-]+\/pay\/[a-f0-9]{36}$/.test(placed.json.data.order_url || ''),
+          `order_url is not an order page: ${placed.json.data.order_url}`);
+
+        const row = db.prepare('SELECT id, pay_token FROM retail_orders WHERE order_no = ?')
+          .get(placed.json.data.order_no);
+        const r = await fetch(`http://127.0.0.1:${PORT}/s/${LIVE}/order/${row.pay_token}/cancel`,
+          { method: 'POST', redirect: 'manual' });
+        assert.strictEqual(r.status, 303, 'a cancel did not send the customer back to their order');
+        assert.strictEqual(r.headers.get('location'), `/s/${LIVE}/pay/${row.pay_token}`);
+
+        const after = db.prepare('SELECT status, cancelled_at, cancelled_reason FROM retail_orders WHERE id = ?').get(row.id);
+        assert.strictEqual(after.status, 'cancelled');
+        assert.ok(after.cancelled_at, 'cancelled_at was not stamped');
+        // The pending payment row goes with it, or the admin queue keeps a
+        // stale 'pending' beside a cancelled order.
+        const pay = db.prepare("SELECT status FROM retail_payments WHERE order_id = ?").get(row.id);
+        assert.ok(!pay || pay.status !== 'pending', 'the payment row was left pending');
+
+        // And it is now cancellable by nobody: a second attempt must not
+        // re-stamp it or fire the counter's doorbell again.
+        const twice = await fetch(`http://127.0.0.1:${PORT}/s/${LIVE}/order/${row.pay_token}/cancel`,
+          { method: 'POST', redirect: 'manual' });
+        assert.strictEqual(twice.status, 303, 'a second cancel errored instead of answering');
+        const still = db.prepare('SELECT status, cancelled_at FROM retail_orders WHERE id = ?').get(row.id);
+        assert.strictEqual(still.status, 'cancelled');
+        assert.strictEqual(still.cancelled_at, after.cancelled_at, 'a second cancel re-stamped the order');
+      });
+
+      await checkAsync('...and a PAID order is not cancellable from the phone', async () => {
+        await resetOrderLimit();
+        const placed = await post(`/s/${LIVE}/order`, {
+          name: 'Ola', items: [{ store_product_id: P_MADE_ON, qty: 1 }],
+        });
+        const row = db.prepare('SELECT id, pay_token FROM retail_orders WHERE order_no = ?')
+          .get(placed.json.data.order_no);
+        db.prepare("UPDATE retail_orders SET status = 'paid' WHERE id = ?").run(row.id);
+        await fetch(`http://127.0.0.1:${PORT}/s/${LIVE}/order/${row.pay_token}/cancel`,
+          { method: 'POST', redirect: 'manual' });
+        const after = db.prepare('SELECT status FROM retail_orders WHERE id = ?').get(row.id);
+        assert.strictEqual(after.status, 'paid', 'money had already moved and the order cancelled anyway');
+      });
+
+      await checkAsync('...and the token is REQUIRED, not decorative', async () => {
+        await resetOrderLimit();
+        const placed = await post(`/s/${LIVE}/order`, {
+          name: 'Rui', items: [{ store_product_id: P_MADE_ON, qty: 1 }],
+        });
+        const row = db.prepare('SELECT id, pay_token FROM retail_orders WHERE order_no = ?')
+          .get(placed.json.data.order_no);
+        // A wrong token, a malformed one, and the right token through the wrong
+        // shop's code: all 404, and none of them touch the order. This page has
+        // no login, so the token IS the authority — if any of these worked,
+        // anybody could cancel any order by guessing.
+        const bad = [
+          `/s/${LIVE}/order/${'b'.repeat(36)}/cancel`,
+          `/s/${LIVE}/order/nothex/cancel`,
+          // The RIGHT token, through another shop's code. The order is real and
+          // the token is real; only the door is wrong, and it must still 404 —
+          // the same answer the pay page gives, so neither route confirms which
+          // guesses hit something real.
+          `/s/${CODES[LOC_EMPTY]}/order/${row.pay_token}/cancel`,
+        ];
+        for (const u of bad) {
+          const r = await fetch(`http://127.0.0.1:${PORT}${u}`, { method: 'POST', redirect: 'manual' });
+          assert.strictEqual(r.status, 404, `${u} did not 404`);
+        }
+        const after = db.prepare('SELECT status FROM retail_orders WHERE id = ?').get(row.id);
+        assert.strictEqual(after.status, 'pending_payment', 'a refused cancel changed the order anyway');
+      });
+
+      await checkAsync('the order page offers the way out while it is still unpaid', async () => {
+        await resetOrderLimit();
+        const placed = await post(`/s/${LIVE}/order`, {
+          name: 'Tao', items: [{ store_product_id: P_MADE_ON, qty: 1 }],
+        });
+        const r = await get(placed.json.data.order_url);
+        assert.strictEqual(r.status, 200);
+        const from = r.body.indexOf('<div class="done">');
+        const to = r.body.indexOf('<script', from);
+        const done = r.body.slice(from, to > from ? to : undefined);
+        assert.ok(/取消订单/.test(done) && /Cancel order/.test(done),
+          'an unpaid order was not offered a cancel');
+        assert.ok(/取消此订单\?/.test(done), 'the cancel had no confirming step');
+        // The amount, because this page is where a customer comes back to find
+        // out what they owe — it showed a number and a name and never a price.
+        assert.ok(/class="done-amt"/.test(done), 'the order page does not say what it costs');
       });
 
       await checkAsync('and with the Official Account withdrawn, the page still answers', async () => {

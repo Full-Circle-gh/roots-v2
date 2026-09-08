@@ -2281,6 +2281,36 @@ check('a blip does not close the channel for good',
 check('switching shop re-points the channel at the new one',
   /function switchStore[\s\S]{0,900}openPendStream\(\)/.test(POS_TILL_SRC), true);
 
+// CANCELLING FROM THE TILL — Ash, 2026-09-08: "if a customer eventually doesn't
+// want the order there should be an option to cancel it from his side or from
+// the till." The customer's half lives in scripts/test_shop_menu.js.
+check('the till can cancel a recalled order',
+  /function cancelOrder[\s\S]{0,700}status: 'cancelled'/.test(POS_TILL_SRC), true);
+// The admin's own status transition, which already releases the reservation
+// (§45). Nothing new is written here for a state the system understands.
+check('...through the transition staff have always cancelled by',
+  /function cancelOrder[\s\S]{0,600}orders\/' \+ r\.id \+ '\/status'/.test(POS_TILL_SRC), true);
+// Two taps, and no browser dialog — this screen opens none, so the armed state
+// is the confirmation.
+check('cancelling takes two taps',
+  /if \(!S\.cxArm\) \{ S\.cxArm = true; return render\(\); \}/.test(POS_TILL_SRC), true);
+// (No dialog assertion here: 'the till opens no browser dialogs' below already
+// holds that for the whole screen, and it matches window.confirm specifically
+// rather than the till's OWN confirm() — the settle handler — which is what a
+// looser pattern catches by mistake.)
+// THE WORD COLLISION THIS CLOSED. The control that backs out of a recalled
+// order said "Cancel" beside a control that cancels the customer's order — the
+// same word for opposite outcomes, and the destructive one is the one a cashier
+// reaches for by habit. Backing out now says Back.
+check('backing out of a recall no longer says Cancel',
+  /data-recall-cancel="1">' \+ esc\(T\('back'\)\)/.test(POS_TILL_SRC), true);
+check('cancelling the order is labelled from the mini app\'s own locked pair',
+  /cancelOrder:\s*\['Cancel order', '取消订单'\]/.test(POS_TILL_SRC), true);
+// A basket the till is still building is CLEARED, not cancelled — there is
+// nothing on the server yet to cancel.
+check('only a recalled order can be cancelled',
+  /cx\.hidden = !S\.recall \|\| S\.recall\.loading;/.test(POS_TILL_SRC), true);
+
 // Locked pairs, both of them. `pending` is the admin's own label for these very
 // rows (pending_payment), and the walk-in half reuses this screen's own title.
 check('the pending tab uses the admin\'s locked status pair',
