@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.168
+# Tacet shared-core consolidation — decisions record, v4.169
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-08 · v4.169 — **AN ANSWER ON THE RECEIVE SCREEN CAN ALWAYS BE TAKEN BACK (§72).** Reported from the floor against a screenshot of RPO-0030 — three of sixteen lines checked, Red Lentils on its counter at the ordered 10, **Done** circled in red: *"this changed to somethnig i didnt confirm , i should have an option to undo an action for example if i click arrive i should be able to undo that"*. **THE UNDO EXISTED AND LASTED 1.2 SECONDS.** §70 took the Save button off this screen, so every answer schedules a write and `RECV_PAUSE` sends it; before that pause a line offered *Not checked yet* and the undo worked, and after it the control was WITHDRAWN and *Done* — which only folds the row — stood in its place. v4.166 put *Done* there deliberately and the reasoning was sound on the server as it then was: clearing `qty_received` back to null leaves the booked units on the shelf, because `applyReceivedToStock` skips a null line and so reverses nothing. **What it did not weigh is that the operator cannot see the timer**, so one screen offered two different sentences for one situation and the second read like agreement with an answer nobody had given. **THE THREE UNCONFIRMED LINES ARE THE SAME DEFECT FROM THE OTHER END**: `recvAllArrived` undid by SKIPPING every line the pause had already carried, so pressing *All 16 arrived* and pressing it again a moment later left behind whatever had been written in between, with nothing on screen to say why. **A NULL ARRIVED COUNT IS NOW AN UNDO AND THE ROUTE REVERSES IT** — the same assertion `/undo-receive` has always made about a whole order, through the same planner, `planPOReversal` now taking an optional set of lines, on the same terms. **REFUSES RATHER THAN CLAMPS AND WRITES NOTHING ON A REFUSAL**, counts included, which is the promise `undoBlocked` makes in so many words. **The button is still drawn on a line that cannot reverse**: a control that withholds itself teaches nobody why, and the refusal says so in words. **Undoing the last recorded line returns the order to Sent**, or a mis-tap leaves an order reading Delivered with no line claiming a delivery — out of To receive, and the operator hunting for the order in front of them. **THE PHONE ROLLS A REFUSED UNDO BACK** rather than leaving the line dirty for ever: the route refuses the whole payload over one such line, which would have taken the rest of the van down with it on every pause after. **NO CHINESE WAS COMPOSED**: *Undo · 撤销* is a live pair in `public/retail-admin/04-orders.js` and `public/cms-mobile-v2.html`, and the refusal is the LOCKED `undoBlocked` pair lifted verbatim from the desktop's `puShowUndoBlocked`. No entry in `docs/tacet-delivery-vocabulary.md` is owed. **CALLED OUT UNDER CLAUDE.md's SIDE-EFFECT RULE:** `scripts/test_receive_line_undo.js` is a NEW SUITE and `run-suites.js` discovers suites from disk, so the fast shard grows from 176 to 177 without anybody registering it. Its six cases were proven red with the reversal removed. `test_mobile_receiving.js` 171 → 176 assertions, 43 → 44 cases, its recorded-line case rewritten to the new contract rather than left passing on a string that no longer renders. `npm run test:fast` green at 177. Code, tests and docs; no schema, no migration, no new route.
 
 2026-09-08 · v4.168 — **THE QR MENU'S SHEET STOPS CALLING ITSELF THE BASKET OVER A PLACED ORDER. No new section: this is the `#sheetT` rule in `routes/shop-menu.js` being carried out by the one face that never did, and it decides nothing.** Found while adding the order's lines to that same screen (v4.160) and deliberately left out of it under CLAUDE.md's one-PR-per-change rule. **THE PANEL HAS FOUR FACES AND THREE OF THEM REPAINT THE HEADING.** `paintSheet()` sets it to `YOUR BASKET · 购物车`, `openOrders()` to `My orders · 我的订单`, and the markup beside `#sheetT` says why in as many words — *"NAMED, BECAUSE THE PANEL HAS MORE THAN ONE FACE ... the heading is repainted with the face rather than lying about one of them."* **`done()` never touched it**, so the placed order — the big pick-up number, the customer's name, *Order placed!*, the lines, the amount — was drawn under whichever word was last set, and by the only route that reaches it that word is always `YOUR BASKET`: a heading naming the basket over the order that had just emptied the basket. Confirmed in Chromium at 390px. **THE HEADING IS EMPTIED, NOT RENAMED, AND THAT IS THE WHOLE OF THE DECISION.** This face already states its own name one line down and larger than the header would — `.done-h` is *Order placed! · 下单成功！* in a bordered lime badge against a plain 16px `.sheet-t` — so a header could only repeat it or reach for a noun that is false here. **`L_MINE` was the cheap answer and is the wrong one**: *My orders* is plural and is the name of the LIST face, which this is not, and naming the wrong face is the exact failure the header comment exists to forbid. **`L_ORD` is already spoken by `.done-o`** at the foot of this same screen. **v4.160 ALREADY RULED ON THIS EXACT QUESTION one line lower** — it put no heading over the lines because *"`YOUR BASKET · 购物车` is false on a placed order and anything else would have had to be minted"* — and this is that ruling applied to the panel header above them. **AN EMPTY `.sheet-t` IS A STATE THIS PANEL ALREADY HAS**: the detail sheet clears its own title for a product with no name, and `.sheet-t` keeps `flex:1`, so the × stays exactly where the customer last saw it. **THE REFUSAL FACE WAS CHECKED AND NEEDS NOTHING.** `fail()` writes into `#cErr`, a strip inside the basket, and the sold-out path calls `paintSheet()` immediately before it — so the heading there says basket over the basket, which is true. **Recorded and deliberately NOT fixed here**: on that same path `closeIfEmpty()` runs before `fail()`, so an order in which EVERY line sold out closes the sheet and then reveals the message on a panel that is no longer on screen. That is a different defect on a different function and is left for its own change. **NO CHINESE WAS COMPOSED AND NONE WAS NEEDED** — the change removes a string and adds none. **No entry in `docs/tacet-delivery-vocabulary.md` is owed.** **`scripts/test_shop_menu_render.js` gains three assertions** to the check that already places a real order, and they were proven to fail with the fix reverted, reproducing the report verbatim: *the panel called itself the basket over a placed order: "YOUR BASKET"*. Two of the three are load-bearing together — that the heading is EMPTY is what proves it was deliberately cleared rather than never painted, and that `.done-h` still names the face is what stops an empty header being read as a face with no name at all. That file is in the browser shard, which is not run (CLAUDE.md), so it was run individually and green. Code and tests; one line of behaviour, no schema, no migration, no new route and no new string.
 
@@ -7388,3 +7390,60 @@ no text at all. **No entry in `docs/tacet-delivery-vocabulary.md` is owed for th
    because the rule is a fact about how the kitchen works and must not differ between two screens; the clock and the dot
    are screen furniture on a list Ash was not looking at.
 
+## §72 — AN ANSWER ON THE RECEIVE SCREEN CAN ALWAYS BE TAKEN BACK
+
+Decided by Ash, 2026-09-08, from the floor, against a screenshot of `RPO-0030` open on the receive screen — three of
+sixteen lines checked, Red Lentils sitting on its counter at the ordered 10, and the word **Done** circled in red
+underneath it:
+
+> *"this changed to somethnig i didnt confirm , i should have an option to undo an action for example if i click arrive
+> i should be able to undo that"*
+
+### What was actually on that screen
+
+§70 took the Save button off this screen: every answer schedules a write and a 1.2-second pause sends it
+(`RECV_PAUSE`). That pause is also, until this section, the entire window in which an answer could be taken back.
+Before it fired a line offered *"Not checked yet"* and the undo worked. After it fired the control was **withdrawn** and
+*"Done"* — which only folds the row — stood in its place, because clearing a count the server already held would not
+have taken the units off the shelf: `applyReceivedToStock` skips a null line and so reverses nothing.
+
+So the screen offered an undo for one and a bit seconds, then quietly replaced it with a button that reads like
+agreement. That is what Ash was looking at.
+
+The three lines checked without a confirmation are the same defect from the other end. `recvAllArrived` undid by
+**skipping every line the pause had already carried**, so pressing *"All 16 arrived"* and pressing it again a moment
+later left behind whatever had been written in between — with nothing on screen to say why those three stayed.
+
+### The decision
+
+**A null arrived count on the receive payload is an UNDO, and the route reverses it.** It asserts this product never
+came — the same assertion `/undo-receive` has always made about a whole order — and it goes through the same planner
+(`planPOReversal`, now taking an optional set of lines) on the same terms.
+
+**Every answered line carries the undo, recorded or not, under one word: *Undo*.** It used to carry two different
+sentences depending on a fact the operator cannot see — whether a 1.2-second timer had fired. One operation gets one
+name. *"Done"* stays beside it on a line that can fold, meaning what it always did: fold this correction away without
+making one.
+
+**A reversal that cannot complete in full is REFUSED, and writes nothing at all — counts included.** Goods sold since
+they were booked cannot be given back, and the same `undoBlocked` pair the desktop shows is lifted verbatim onto the
+phone (`docs/tacet-delivery-vocabulary.md`, LOCKED 2026-08-27). The button is still drawn on such a line: a control
+that withholds itself teaches nobody why.
+
+**Undoing the last recorded line returns the order to Sent.** Otherwise a mis-tap leaves an order that says Delivered
+with not one line claiming a delivery — out of To receive, and the operator hunting for the order in front of them.
+
+- **Rejected: a longer pause with a more prominent undo.** It moves the cliff without removing it. Ten seconds later
+  the operator is in exactly the position this section exists to answer, and it costs the delivery journal a slower
+  write for nothing.
+- **Rejected: an "undo this delivery" control for the whole order.** One mis-tap would cost the whole van's counting.
+- **Rejected: leaving the correction-to-zero path as the only way back.** A zero says *nothing arrived* — a short line,
+  owing a reason, written into the journal as a delivery of none. That is a different fact from *nobody has said yet*,
+  and asking an operator to state the wrong one to undo a mis-tap is how a screen teaches people to lie to it.
+
+### What is NOT in this
+
+1. **The desktop receive screen is untouched.** It has a Save button, so it has never had this cliff.
+2. **No new Chinese.** *Undo · 撤销* is a live pair (`public/retail-admin/04-orders.js`, `public/cms-mobile-v2.html`)
+   and the refusal is the locked `undoBlocked` pair lifted whole. Nothing was composed, so
+   `docs/tacet-delivery-vocabulary.md` is unchanged.

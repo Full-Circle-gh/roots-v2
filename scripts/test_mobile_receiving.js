@@ -201,16 +201,21 @@ const CASES = [
         && rcvSendable().length === 0)`],
   ]],
 
-  // ONCE IT IS RECORDED, THE UNDO BECOMES THE CORRECTOR. Clearing an answer the
-  // server has taken cannot un-book the stock — applyReceivedToStock skips a
-  // null line and so reverses nothing — so the press that used to un-answer
-  // opens the line to be corrected instead, and "Not 5" books the zero that
-  // does reverse it. Seeded as the flush leaves it: `was.recv` set to what the
-  // server was told.
+  // A RECORDED LINE CAN STILL BE TAKEN BACK. It could not, once: clearing an
+  // answer the server had taken would not un-book the stock, so the undo was
+  // withdrawn the moment the pause carried the answer and "Done" — which only
+  // folds the row — stood in its place. That gave an operator 1.2 seconds
+  // (RECV_PAUSE) to notice a mis-tap, and RPO-0030 is what it cost: a screen
+  // showing three lines checked that nobody had confirmed, under a button that
+  // looked like it agreed. A null arrived count now reverses the line on the
+  // server (routes/retail-purchasing.js, `clearing`), so the undo stands in
+  // both states — and it is the same word in both, because it is the same
+  // operation. Seeded as the flush leaves it: `was.recv` set to what the server
+  // was told.
   // A RECORDED LINE, REOPENED TO BE CORRECTED — and the row that got stuck.
   //
   // Reported from the floor on RPO-0030 within the hour of auto-save shipping:
-  // Goji Berries open on its counter, "Not checked yet" underneath, and *"cant
+  // Goji Berries open on its counter, the undo underneath, and *"cant
   // click now"*. The button was wired to recvArrived, which had a guard sending
   // an already-recorded line to recvOpenLine — the id it ALREADY held. Nothing
   // changed on screen, and the row had no other way to close, so the line was a
@@ -222,12 +227,11 @@ const CASES = [
     ['it is recorded, so nothing is owed', `rcvSendable().length === 0 && rcvBooked(state.recvPo.items[0]) === true`],
     ['the summary says recorded, not about to record',
       `txt('content').includes('Recorded') && !txt('content').includes('About to record')`],
-    // THE BUG, NAMED. "Not checked yet" is not on a recorded line at all — it
-    // is a sentence that stopped being available the moment the receipt was
-    // written, and leaving it on screen is what made it look clickable.
-    ['it does not offer to un-check what is already recorded',
-      `!txt('content').includes('Not checked yet')`],
-    ['it offers the way out instead', `txt('content').includes('Done')`],
+    // THE UNDO IS ON A RECORDED LINE TOO, and under the same name it carries
+    // everywhere else. Two names for one operation is what sent somebody
+    // looking for an undo that was never going to appear.
+    ['it offers the undo, recorded or not', `txt('content').includes('Undo')`],
+    ['and Done beside it, to fold without changing anything', `txt('content').includes('Done')`],
     // The press that used to do nothing. Asserted on the DOM, not the command:
     // the whole failure was a button whose handler ran and moved no pixels.
     ['and pressing it folds the row back',
@@ -247,8 +251,34 @@ const CASES = [
       `(APP.cmd('recvReason','11|not_sent'), rcvSendable().map(it=>it.id).join(',') === '11')`],
   ]],
 
+  // THE UNDO ON A RECORDED LINE, PRESSED. Its own case because the assertions
+  // in one share a screen: tapping it inside the case above would pull the row
+  // out from under the "Done" checks that follow.
+  //
+  // TAPPED, not commanded. The report was about a control that was not there to
+  // press — "this changed to something i didnt confirm" — so proving the
+  // command exists proves nothing about it.
+  ['the undo on a recorded line un-answers it, and the clear reaches the server',
+    OPEN + `APP.cmd('recvArrived','11');
+      state.recvVals[11].was={recv:5,dmg:0,reason:null}; state.recvSavedAt=Date.now();
+      APP.cmd('recvOpenLine','11'); render();`, [
+    ['it starts out recorded', `rcvBooked(state.recvPo.items[0]) === true && rcvSendable().length === 0`],
+    ['tapping the undo un-answers it',
+      `(function(){ var b=[...document.querySelectorAll('button')].find(x=>x.innerText.trim()==='Undo');
+         if(!b) return false; b.click();
+         return state.recvVals[11].on === false; })()`],
+    // A cleared line that never goes on the wire is an undo on the glass only:
+    // the stock would stay booked behind it. rcvDirty has to call it dirty.
+    ['and the clear is owed to the server', `rcvSendable().map(it=>it.id).join(',') === '11'`],
+    // NULL, NOT ZERO. Zero says nothing came and is a short line owing a
+    // reason; null says nobody has said, and is the only one that reverses.
+    ['it is not the same as answering "nothing arrived"',
+      `rcvNo(state.recvPo.items[0]) === false && rcvMissingReasons().length === 0`],
+    ['and the line offers its ordered quantity again', `txt('content').includes('5 kg arrived')`],
+  ]],
+
   // THE OTHER HALF OF THE SAME CONTROL, and a bug that predated auto-save:
-  // "Not checked yet" borrowed recvArrived's toggle, whose first test is
+  // The undo borrowed recvArrived's toggle, whose first test is
   // `on && recv > 0`. On a line answered "nothing arrived" that is false, so
   // the press fell through to the else branch and marked the line FULLY
   // ARRIVED — the one control for "I have not checked this" asserting the whole
@@ -256,12 +286,12 @@ const CASES = [
   ['un-checking a line answered "nothing arrived" un-checks it, and does not claim it came',
     OPEN + `APP.cmd('recvNotArrived','11');`, [
     ['it is answered at nothing', `state.recvVals[11].on === true && state.recvVals[11].recv === 0`],
-    ['nothing is recorded, so the undo is offered', `txt('content').includes('Not checked yet')`],
+    ['the undo is offered', `txt('content').includes('Undo')`],
     // TAPPED, not commanded — the defect was in what the BUTTON was wired to,
     // so calling the right command directly would prove nothing about it.
     ['and tapping it un-answers rather than marking it arrived',
       `(function(){ var b=[...document.querySelectorAll('button')]
-         .find(x=>x.innerText.trim()==='Not checked yet');
+         .find(x=>x.innerText.trim()==='Undo');
          if(!b) return false; b.click();
          return state.recvVals[11].on === false && state.recvVals[11].recv === 0; })()`],
     ['so nothing goes on the wire for it', `rcvSendable().length === 0`],

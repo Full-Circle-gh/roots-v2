@@ -384,13 +384,24 @@ function applyReceivedToStock(poId, req, storeId) {
 // those are the same value, so this changes nothing about how any current PO
 // reverses; it only stops a receipt taken in at another store being clawed back
 // off the wrong shelf.
-function planPOReversal(po, storeId) {
+// `lineIds` — the lines to reverse, or null for the whole order. The
+// whole-order undo passes null and behaves exactly as it always has; the
+// receive route passes the handful of lines one operator has just taken back
+// to unanswered. The test is the same either way, and deliberately so: a
+// per-line undo that reversed on easier terms than the whole-order one would
+// be a second, quieter set of rules for the same shelf.
+function planPOReversal(po, storeId, lineIds = null) {
+  const ids = lineIds ? [...new Set(lineIds.map(Number).filter(Boolean))] : null;
+  // An explicit empty selection reverses nothing. Left to the SQL below it
+  // would build `IN ()`, which SQLite rejects outright.
+  if (ids && !ids.length) return { lines: [], products: [], blocking: [] };
   const lines = tdb().prepare(`
     SELECT id, store_product_id, name_en, name_cn, stock_applied_qty
       FROM po_line_items
      WHERE po_id = ? AND store_product_id IS NOT NULL
        AND COALESCE(stock_applied_qty, 0) <> 0
-  `).all(po.id);
+       ${ids ? `AND id IN (${ids.map(() => '?').join(', ')})` : ''}
+  `).all(po.id, ...(ids || []));
   // AGGREGATED BY PRODUCT, NOT BY LINE. Nothing on the server stops two lines
   // of one PO carrying the same store_product_id — lineConflict() only rejects
   // product AND material on a single line, and the wizard's de-dupe is
@@ -424,12 +435,12 @@ function planPOReversal(po, storeId) {
 // reversed_units, reversed_lines } having reversed every line in full.
 // reversed_units counts UNITS ACTUALLY RETURNED TO THE SHELF, not lines
 // attempted — the old count reported the latter and called it success.
-function reversePOStock(po, req, storeId) {
+function reversePOStock(po, req, storeId, lineIds = null) {
   let outcome = { blocked: null, reversed_units: 0, reversed_lines: 0 };
   const tx = tdb().transaction(() => {
     // Planned INSIDE the transaction: the reads and the writes must not be
     // separable by a concurrent sale.
-    const plan = planPOReversal(po, storeId);
+    const plan = planPOReversal(po, storeId, lineIds);
     if (plan.blocking.length) { outcome = { blocked: plan.blocking, reversed_units: 0, reversed_lines: 0 }; return; }
     if (!plan.products.length) return;
     let units = 0;
@@ -2661,6 +2672,36 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
     if (blocking.length) return returnBlockedResponse(res, blocking);
   }
 
+  // ── Taking one line back to unanswered ────────────────────────────────────
+  // A NULL arrived count is an UNDO. It asserts this product never came — the
+  // same assertion /undo-receive makes about a whole order — and it has to
+  // reverse the same way, because clearing the count on its own would leave the
+  // units standing on the shelf: applyReceivedToStock skips a null line and so
+  // reverses nothing. That gap is why the phone had no way back from a recorded
+  // answer at all, and why the only undo it could offer expired 1.2 seconds
+  // after the tap that needed it.
+  //
+  // REFUSES RATHER THAN CLAMPS, before the transaction opens. Goods that have
+  // been sold since cannot be given back, and a reversal that cannot complete
+  // in full writes NOTHING — counts included. That is the promise `undoBlocked`
+  // makes in so many words (docs/tacet-delivery-vocabulary.md, LOCKED
+  // 2026-08-27) and it is kept here on the same terms as on the whole-order
+  // path, through the same planner.
+  //
+  // A line carrying a RETURN needs no guard of its own: planReturns above
+  // already refuses `return_exceeds_received` for a payload that blanks the
+  // arrived count under a return somebody recorded, which is the contradiction
+  // an undo would otherwise write.
+  const clearing = receipts
+    .filter(r => r.qty_received === null || r.qty_received === '')
+    .map(r => parseInt(r.line_id, 10))
+    .filter(Boolean);
+  // Lines with nothing booked against them fall out inside planPOReversal, so
+  // undoing an answer the pause never carried costs a query and moves no stock.
+  const rev = clearing.length ? reversePOStock(po, req, storeId, clearing)
+                              : { blocked: null, reversed_units: 0, reversed_lines: 0 };
+  if (rev.blocked) return blockedResponse(res, rev.blocked);
+
   let missing_lines = 0, damaged_lines = 0, any_qty = false, receipt = null;
   let returned_lines = 0, returned_units = 0, returnReceipt = null;
   const returnMoves = new Map();
@@ -2806,7 +2847,28 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
     logActivity(req.user.id, req.user.username, 'status_change', 'purchase_order', po.id,
                 { from: po.status, to: 'Delivered', scope: 'retail', via: 'receive' }, req.ip);
   }
-  if (any_qty || anyReturnChange) postRetailPOExpensesWithSource(po.id);
+  // ── And back again, when the last answer is taken back ────────────────────
+  // Undoing every recorded line leaves an order that says Delivered with not
+  // one line claiming a delivery, which is the state /undo-receive exists to
+  // prevent for exactly this reason: Delivered is what puts the order out of To
+  // receive, so an operator who undid a mis-tap would have to go looking for
+  // the order they were standing in front of. Read back from the LINES rather
+  // than counted in JS — the payload knows what it cleared, not what the other
+  // eighteen lines still hold.
+  //
+  // Only from Delivered, and only to Ordered: a Cancelled order is not revived
+  // by an undo any more than it is by a receipt.
+  const undelivered = clearing.length && !any_qty && po.status === 'Delivered'
+    && !tdb().prepare('SELECT 1 FROM po_line_items WHERE po_id = ? AND qty_received IS NOT NULL LIMIT 1').get(po.id);
+  if (undelivered) {
+    tdb().prepare("UPDATE purchase_orders SET status = 'Ordered', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(po.id);
+    logActivity(req.user.id, req.user.username, 'status_change', 'purchase_order', po.id,
+                { from: po.status, to: 'Ordered', scope: 'retail', via: 'receive', undo_lines: clearing.length }, req.ip);
+  }
+  // A cleared line re-posts at the ORDERED quantity — postRetailPOExpenses sums
+  // COALESCE(qty_received, qty) — which is what a placed-but-undelivered line
+  // should carry, and the same figure it held before anything was received.
+  if (any_qty || anyReturnChange || clearing.length) postRetailPOExpensesWithSource(po.id);
   logActivity(req.user.id, req.user.username, 'receive', 'purchase_order', po.id,
               { lines: receipts.length, missing_lines, damaged_lines, scope: 'retail',
                 store_id: storeId, receipt_id: receipt?.receiptId ?? null,
@@ -2820,7 +2882,8 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
              receipt_id: receipt?.receiptId ?? null, receipt_lines: receipt?.lines ?? 0,
              returned_lines, returned_units,
              return_receipt_id: returnReceipt?.receiptId ?? null,
-             status: delivered ? 'Delivered' : po.status });
+             undone_lines: rev.reversed_lines, undone_units: rev.reversed_units,
+             status: delivered ? 'Delivered' : undelivered ? 'Ordered' : po.status });
 });
 
 module.exports = router;
