@@ -647,5 +647,70 @@ it('reading the list clears the Home row too, not a minute later', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════
+section('6 · The list that row opens, on the phone');
+
+/* THE ROW WORKED AND THE SCREEN BEHIND IT WAS EMPTY. Every assertion in
+   section 5 passed while the list this app opens showed "Nothing finished yet"
+   over a shelf with forty jars on it: `api()` unwraps the envelope, and
+   `loadKr` unwrapped it a second time, so `k.list` was `[]` on every load.
+   Nothing in the source LOOKED wrong — `(j&&j.data)||[]` is the right shape
+   for this file's other helper — so nothing short of running the two halves
+   together could have caught it. This runs them together: the real envelope
+   the route answers with, through the shipped `api()` return, into the shipped
+   assignment. Ash: *"this page doesnt show on mobile."* */
+
+/** The one expression a shipped function ends on, evaluated later against a
+ *  stub. Anchored on the function, so a rename fails loudly. */
+function lastReturnExpr(src, anchor) {
+  const block = sliceBlock(src, anchor);
+  const returns = [...block.matchAll(/return\s+([^;]+);/g)];
+  assert.ok(returns.length, `no return in ${anchor}`);
+  return returns[returns.length - 1][1];
+}
+
+it('api() hands the loader the rows, not the envelope', () => {
+  const expr = lastReturnExpr(M_HTML, 'async function api(path)');
+  const rows = [{ id: 7, restock_id: 3, qty_requested: 2 }];
+  // What routes/restock.js kitchen-ready/lines actually answers with.
+  const out = vm.runInNewContext(`(function(j){ return ${expr}; })`)(
+    { success: true, data: rows });
+  assert.deepStrictEqual(out, rows,
+    'api() no longer unwraps `data` — every loader below reads a different shape now');
+});
+
+it('and the loader keeps them — the list is not unwrapped twice', () => {
+  const block = lockedLoadKr();
+  const m = /k\.list\s*=\s*([^;]+);/.exec(block);
+  assert.ok(m, 'loadKr no longer assigns k.list');
+  const apiExpr = lastReturnExpr(M_HTML, 'async function api(path)');
+  const rows = [{ id: 7 }, { id: 8 }];
+  const j = vm.runInNewContext(`(function(j){ return ${apiExpr}; })`)(
+    { success: true, data: rows });
+  const list = vm.runInNewContext(`(function(j){ return ${m[1]}; })`)(j);
+  assert.deepStrictEqual(list, rows,
+    'the phone drew an empty list over a full shelf — the screen said "Nothing finished yet"');
+});
+
+it('an envelope that is not an array still degrades to a list', () => {
+  // A tenant whose table is missing answers `{success:true}` with no data, and
+  // a screen is a worse place to throw than to say nothing.
+  const m = /k\.list\s*=\s*([^;]+);/.exec(lockedLoadKr());
+  const list = vm.runInNewContext(`(function(j){ return ${m[1]}; })`)(undefined);
+  // Array.isArray rather than deepStrictEqual: the empty array is minted inside
+  // the sandbox, so it carries that realm's prototype and a strict deep compare
+  // against this realm's `[]` fails on the prototype alone.
+  assert.ok(Array.isArray(list) && list.length === 0,
+    'k.list must be an empty array or the render throws');
+});
+
+it('it reads the LINES route, the one the fire counts', () => {
+  assert.ok(/api\('\/api\/restock\/kitchen-ready\/lines'\)/.test(lockedLoadKr()),
+    'the list must read the same clause the row counts, or one of the two is lying');
+});
+
+/** loadKr's body, anchored so a rename fails loudly rather than passing. */
+function lockedLoadKr() { return sliceBlock(M_HTML, 'function loadKr(force)'); }
+
+// ══════════════════════════════════════════════════════════════════════════
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
