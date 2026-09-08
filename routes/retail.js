@@ -10842,8 +10842,10 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       localRun: true,
     })
     : null;
-  const orderLocalFreshFloor = (orderLocalFresh && orderLocalFresh.applies
-    && orderLocalFresh.reason === 'rolled_stock') ? orderLocalFresh.make_date : null;
+  const orderLocalFreshFloorSpec = localFreshFloorFor(orderLocalFresh);
+  const orderLocalFreshFloor = orderLocalFreshFloorSpec ? orderLocalFreshFloorSpec.date : null;
+  const orderLocalFreshNotBefore = orderLocalFreshFloorSpec
+    ? orderLocalFreshFloorSpec.notBeforeHour : null;
 
   // Pickup carries the customer-chosen pickup window in the same scheduled_for
   // + delivery_slot_label columns; no zone slot resolution and no surcharge.
@@ -10858,6 +10860,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     // kitchen cannot reach.
     const slotResolved = resolveDeliverySlot(zone, deliverySlotId, orderNow, {
       batch: batchDecision, localFreshFloor: orderLocalFreshFloor,
+      localFreshNotBeforeHour: orderLocalFreshNotBefore,
     });
     if (slotResolved.error) {
       return res.status(400).json({ success: false, error: slotResolved.error });
@@ -31724,11 +31727,25 @@ function batchScheduleCfg() {
       const f = parseInt(cfgValue('fresh.rescheduleCutoffHour', 20), 10);
       return (Number.isFinite(f) && f >= 0 && f <= 23) ? f : 20;
     })();
+  // The hour today's batch reaches the shelf (§74). OPTIONAL, and its absence is
+  // the off switch: null means every caller behaves exactly as it did before
+  // §74, for every tenant, with no migration and no backfill. Set, it is the one
+  // fact that lets a zero shelf on a batch morning still mean "today" — see
+  // earliestBatchMakeDate, which forgives the stock roll-forward and nothing
+  // else. A value later than cutoff_hour is operator error and the cutoff wins,
+  // which is the safe direction; it is not clamped here because the two answer
+  // different questions and silently moving one to satisfy the other would hide
+  // the mistake rather than fix it.
+  const rawReady = parseInt(c.ready_hour, 10);
+  const readyHour = (Number.isFinite(rawReady) && rawReady >= 0 && rawReady <= 23)
+    ? rawReady
+    : null;
   return {
     anchor_date: c.anchor_date,
     interval_days: interval,
     skip_dates: skip,
     cutoff_hour: cutoffHour,
+    ready_hour: readyHour,
     // Optional operator-authored popup copy. The body placeholders {ship_date}
     // and {delivery_date} are filled with the resolved YYYY-MM-DD dates. Title
     // and kicker are plain text. Any blank field falls back to a built-in
@@ -31843,6 +31860,10 @@ function batchItemsInCart(productIds) {
 //   'next_cadence'          — today simply isn't a batch day; nothing blocked
 //   'rolled_cutoff'         — today WAS a batch day, but we're past the cutoff
 //   'rolled_stock'          — today WAS a batch day, but a fresh line is at zero
+//   'today_batch_pending'   — §74: today IS a batch day, a fresh line is at zero,
+//                             and the batch has not been made yet (ready_hour is
+//                             set and has not arrived). make_date is TODAY. The
+//                             one reason meaning "today, and not yet".
 //   'rolled_store_unknown'  — no fulfilling store to check stock at; see below
 //
 // On an unresolvable store (no out-of-city pin configured, or every candidate
@@ -31897,10 +31918,39 @@ function earliestBatchMakeDate({ zone, productIds, storeId, now, channel = 'wech
   }
   const pastCutoff = nowD.getHours() >= cfg.cutoff_hour;
 
+  // §74 — TODAY'S BATCH IS STILL COMING, so an empty shelf is not proof that
+  // today is unreachable. On a day the kitchen is scheduled to cook, before the
+  // hour it finishes, the forty wraps a shopper wants for lunch do not exist yet
+  // and will before lunch. Without this the sentence below rules today out on
+  // the one morning of the cadence when it is most obviously reachable, and
+  // names tomorrow to a customer whose meal is being made now.
+  //
+  // Null ready_hour ⇒ false ⇒ every line below behaves exactly as it did before
+  // §74, which is what keeps this off for a tenant that has not set the hour.
+  // `!pastCutoff` is load-bearing and was missing from the first version, which
+  // scripts/test_fresh_today_batch.js caught: with a cutoff EARLIER than the
+  // ready hour (operator error, but expressible) the roll-forward below still
+  // correctly moved the date to tomorrow while the reason still said
+  // 'today_batch_pending' — and localFreshFloorFor would then have floored a
+  // FUTURE day while carrying an hour that only ever means today, withdrawing a
+  // morning on the wrong date. The reason and the date must not be able to
+  // disagree, so the condition carries every term the roll-forward carries.
+  const todayBatchPending = cfg.ready_hour != null
+        && nowD.getHours() < cfg.ready_hour
+        && !pastCutoff
+        && nextBatchShipDate(nowD, cfg) === todayIso;
+
   // ONE roll-forward. Whatever ruled today out, the effect is identical: start
   // the cadence search at tomorrow instead of today. On a non-batch day this
   // changes nothing (the next batch is still the next batch).
-  const blockedToday = stockBlocked || storeUnknown || pastCutoff;
+  //
+  // §74 unpicks EXACTLY ONE STRAND of it and leaves the other two whole. An
+  // unresolvable store still rolls the day — we cannot promise today's batch
+  // onto a shelf we cannot identify, and "today unproven" is this function's
+  // own standing answer to that. The cutoff still rolls it, because a day whose
+  // ordering window has shut is gone whether or not a batch is coming; that
+  // also settles a ready_hour set later than cutoff_hour, where the cutoff wins.
+  const blockedToday = (stockBlocked && !todayBatchPending) || storeUnknown || pastCutoff;
   const searchFrom = blockedToday
     ? new Date(nowD.getTime() + 86400000)
     : nowD;
@@ -31908,9 +31958,14 @@ function earliestBatchMakeDate({ zone, productIds, storeId, now, channel = 'wech
   if (!makeDate) return none('no_schedule');
 
   // Name the binding constraint. Stock first: it is the one an operator can act
-  // on, and it outranks a cutoff we would have hit anyway.
+  // on, and it outranks a cutoff we would have hit anyway. The §74 case is named
+  // separately from 'reachable_today' — both mean today, but only this one means
+  // "today, and not yet": the calendar has to withdraw the morning's slots for
+  // it, and computeLocalFreshNotice has to stay silent on it (there is no live
+  // Chinese pair for a batch that lands today, §30).
   let reason;
-  if (stockBlocked)          reason = 'rolled_stock';
+  if (stockBlocked && todayBatchPending) reason = 'today_batch_pending';
+  else if (stockBlocked)     reason = 'rolled_stock';
   else if (storeUnknown)     reason = 'rolled_store_unknown';
   else if (pastCutoff)       reason = 'rolled_cutoff';
   else if (makeDate === todayIso) reason = 'reachable_today';
@@ -31927,10 +31982,56 @@ function earliestBatchMakeDate({ zone, productIds, storeId, now, channel = 'wech
 // same arithmetic on the same config, and the pill and the checkout name one day.
 // Null when no schedule is set, which is what keeps the pill off for a tenant
 // that has never configured one.
+// The delivery floor a local-run cart's fresh shortage imposes, read from ONE
+// earliestBatchMakeDate answer. The quote path draws the calendar and the order
+// path validates the slot that comes back against it, and they were deriving
+// this from the same reason string in two places — fine until §74 gave the
+// answer a second field, at which point two copies is one copy too many. Both
+// spread the result into computeDeliverySlots' opts, so the calendar the shopper
+// sees and the calendar the order is checked against cannot disagree.
+//
+//   'rolled_stock'        → a FUTURE batch day. The whole day is the floor and
+//                           today is withdrawn — unchanged, and the case the
+//                           floor was built for.
+//   'today_batch_pending' → §74. TODAY is the floor, so the day-level rules read
+//                           it as no constraint and today's chips survive; the
+//                           hour is what withdraws the morning.
+//   anything else         → no floor. 'reachable_today' and 'next_cadence' mean
+//                           there IS stock, and 'rolled_store_unknown' means we
+//                           could not check — a reason to stay quiet, not to
+//                           raise a floor we have not established.
+function localFreshFloorFor(decision) {
+  if (!decision || !decision.applies) return null;
+  if (decision.reason === 'rolled_stock') {
+    return { date: decision.make_date, notBeforeHour: null };
+  }
+  if (decision.reason === 'today_batch_pending') {
+    return { date: decision.make_date, notBeforeHour: decision.cfg.ready_hour };
+  }
+  return null;
+}
+
+// §74 TAKES THE SAME EXEMPTION HERE, and it is not optional: the paragraph above
+// commits this function to the same arithmetic on the same config as
+// earliestBatchMakeDate, so if that one now answers TODAY on a batch morning and
+// this one still answers tomorrow, the grid offers a meal for a day the calendar
+// refuses — the exact contradiction PR #400 removed from the web product page.
+// Same three conditions, asked of the same cfg: an hour is configured, it has
+// not arrived, and today is on the cadence.
 function nextFreshBatchDate(now) {
   const cfg = batchScheduleCfg();
   if (!cfg) return null;
   const nowD = now || new Date();
+  const todayIso = toYmdLocal(new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), 12, 0, 0, 0));
+  // Every term earliestBatchMakeDate's own todayBatchPending carries, including
+  // the day's cutoff — this function has no cart and no store, but it has the
+  // clock and the config, so the two conditions it CAN ask must match exactly or
+  // the pill names today while the checkout has already rolled past it.
+  if (cfg.ready_hour != null && nowD.getHours() < cfg.ready_hour
+      && nowD.getHours() < cfg.cutoff_hour
+      && nextBatchShipDate(nowD, cfg) === todayIso) {
+    return todayIso;
+  }
   return nextBatchShipDate(new Date(nowD.getTime() + 86400000), cfg) || null;
 }
 
@@ -32348,6 +32449,16 @@ function computeDeliverySlots(zone, now, opts = {}) {
   // The two are mutually exclusive — a cart is on the run or it ships — so one
   // floor drives every rule below and they can never both apply.
   const localFreshFloor = opts.localFreshFloor || null;
+  // §74 — the floor is TODAY and the batch has not been made yet. The date alone
+  // cannot say that: a floor equal to today reads as "no constraint" to every
+  // rule below, which is right for a shelf that has stock and wrong for one
+  // waiting on this morning's batch. This hour is the missing half, and it is
+  // carried beside the date rather than folded into it so a floor on a FUTURE
+  // day (the ordinary 'rolled_stock' case) keeps its exact previous meaning.
+  // Null whenever §74 does not apply, which is every tenant with no ready_hour.
+  const localFreshNotBeforeHour = (opts.localFreshNotBeforeHour != null)
+    ? Number(opts.localFreshNotBeforeHour)
+    : null;
   const floorIso = batchFloorIso || localFreshFloor || null;
   const cfg = {
     same_day_allowed:      1,
@@ -32430,7 +32541,13 @@ function computeDeliverySlots(zone, now, opts = {}) {
 
   // "Right away" only applies in time-slot mode. Day-only zones express
   // the same-day option as a "Today (+¥X)" day-chip instead.
+  // §74 withdraws "right away" outright rather than moving it. It is the one
+  // option that names no time and promises the soonest possible, and the soonest
+  // possible is after the kitchen finishes — there is no hour to floor it to, so
+  // the only honest answer while the batch is still coming is not to offer it.
+  // The customer keeps every afternoon window.
   const rightAwayAvailable = !floorBlocksToday &&
+        localFreshNotBeforeHour == null &&
         !isDayOnly &&
         cfg.same_day_allowed === 1 &&
         kitchenOpenNow &&
@@ -32496,7 +32613,19 @@ function computeDeliverySlots(zone, now, opts = {}) {
       const slotEndM = slotEndCursor % 60;
       if (filterElapsed) {
         const slotStartsAt = new Date(startOfTargetDay.getTime() + hourCursor * 60000);
-        if (slotStartsAt.getTime() <= tzNow.getTime()) { hourCursor += slotMins; continue; }
+        // §74: on a batch morning the shelf is empty and the batch is still
+        // coming, so a window that starts before the kitchen finishes cannot be
+        // honoured however early the customer orders. Raising the "already
+        // elapsed" mark to that hour withdraws exactly those windows and leaves
+        // the afternoon intact — the same mechanism one value later, rather than
+        // a second filter beside it that could disagree with this one. Today
+        // only: the hour is about THIS morning's batch and says nothing about
+        // any other day. Null ⇒ mark is tzNow ⇒ unchanged.
+        const notBefore = (isoDate === todayIso && localFreshNotBeforeHour != null)
+          ? startOfTargetDay.getTime() + localFreshNotBeforeHour * 3600000
+          : 0;
+        const mark = Math.max(tzNow.getTime(), notBefore);
+        if (slotStartsAt.getTime() <= mark) { hourCursor += slotMins; continue; }
       }
       const requiresSurcharge = (isoDate === todayIso) && cfg.same_day_surcharge > 0;
       out.push({
@@ -33730,8 +33859,10 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
       localRun: true,
     })
     : null;
-  const quoteLocalFreshFloor = (quoteLocalFresh && quoteLocalFresh.applies
-    && quoteLocalFresh.reason === 'rolled_stock') ? quoteLocalFresh.make_date : null;
+  const quoteLocalFreshFloorSpec = localFreshFloorFor(quoteLocalFresh);
+  const quoteLocalFreshFloor = quoteLocalFreshFloorSpec ? quoteLocalFreshFloorSpec.date : null;
+  const quoteLocalFreshNotBefore = quoteLocalFreshFloorSpec
+    ? quoteLocalFreshFloorSpec.notBeforeHour : null;
   const quoteBatchDecision = earliestBatchMakeDate({
     zone,
     productIds: (items || []).map((i) => i.product_id),
@@ -33794,6 +33925,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
       },
       scheduling: computeDeliverySlots(zone, quoteNow, {
         batch: quoteBatchDecision, localFreshFloor: quoteLocalFreshFloor,
+        localFreshNotBeforeHour: quoteLocalFreshNotBefore,
       }),
       batch_notice: computeBatchNotice(
         zone, (items || []).map((i) => i.product_id), quoteNow, body.delivery_slot_id, body.slot_kind,
@@ -36065,6 +36197,9 @@ module.exports.earliestBatchMakeDate = earliestBatchMakeDate;
 module.exports.computeBatchNotice    = computeBatchNotice;
 module.exports.computeLocalFreshNotice = computeLocalFreshNotice;
 module.exports.nextFreshBatchDate    = nextFreshBatchDate;
+// §74's one decision, exported so scripts/test_fresh_today_batch.js asserts the
+// floor the quote and the order path actually share rather than a copy of it.
+module.exports.localFreshFloorFor    = localFreshFloorFor;
 module.exports.computeDeliverySlots  = computeDeliverySlots;
 module.exports.resolveDeliverySlot   = resolveDeliverySlot;
 module.exports.fulfillingStoreFor    = fulfillingStoreFor;

@@ -251,6 +251,11 @@ async function loadDeliveryZones() {
     if ($('#batch-interval')) $('#batch-interval').value = batch.interval_days || 2;
     // Order-by hour. Blank in config = follow the reschedule cutoff (20:00).
     if ($('#batch-cutoff')) $('#batch-cutoff').value = (batch.cutoff_hour != null ? batch.cutoff_hour : 20);
+    // §74 ready hour. BLANK, not 20: an empty box is the off switch here, so it
+    // must round-trip as empty rather than picking up a default the way the
+    // cutoff does. A tenant that has never set one sees the placeholder and the
+    // save below sends nothing.
+    if ($('#batch-ready')) $('#batch-ready').value = (batch.ready_hour != null ? batch.ready_hour : '');
     if ($('#batch-skip'))     $('#batch-skip').value     = (Array.isArray(batch.skip_dates) ? batch.skip_dates : []).join('\n');
     if ($('#batch-kicker-en')) $('#batch-kicker-en').value = batch.kicker_en || '';
     if ($('#batch-kicker-cn')) $('#batch-kicker-cn').value = batch.kicker_cn || '';
@@ -380,6 +385,18 @@ async function saveBatchSchedule() {
     toast('Order-by hour must be 0–23 · 当日截单请输入 0–23 的小时', 'err'); return;
   }
   const cutoffHour = Number.isFinite(rawCut) ? rawCut : 20;
+  // §74. Blank ⇒ null ⇒ the server's batchScheduleCfg leaves ready_hour unset and
+  // every fresh rule behaves as it did before §74. A typed value is validated the
+  // way the cutoff is — refused rather than silently coerced, so an operator who
+  // means 11 and types 25 is told, not given midnight.
+  const rawReady = ($('#batch-ready') && $('#batch-ready').value || '').trim();
+  if (enabled && rawReady !== '') {
+    const r = parseInt(rawReady, 10);
+    if (!Number.isFinite(r) || r < 0 || r > 23) {
+      toast('Order-by hour must be 0–23 · 当日截单请输入 0–23 的小时', 'err'); return;
+    }
+  }
+  const readyHour = rawReady === '' ? null : parseInt(rawReady, 10);
   const skip = ($('#batch-skip').value || '')
     .split(/[\s,]+/).map(s => s.trim()).filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s));
   const val = (sel) => (($(sel) && $(sel).value) || '').trim();
@@ -387,6 +404,7 @@ async function saveBatchSchedule() {
     'batch.schedule': {
       enabled, anchor_date: anchor, interval_days: interval, skip_dates: skip,
       cutoff_hour: cutoffHour,
+      ready_hour: readyHour,
       kicker_en: val('#batch-kicker-en'),
       kicker_cn: val('#batch-kicker-cn'),
       title_en:  val('#batch-title-en'),

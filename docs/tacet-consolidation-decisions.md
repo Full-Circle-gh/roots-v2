@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.173
+# Tacet shared-core consolidation — decisions record, v4.174
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-08 · v4.174 — **§74 ADDED AND BUILT: A SOLD-OUT FRESH MEAL IS ORDERABLE FOR TODAY WHILE TODAY'S BATCH IS STILL COMING.** Reported by Ash as the shape of the loss rather than a bug in a screen: the shelf empties at 17:00, a customer opens the app at 08:00 the next morning wanting lunch, the kitchen puts the batch out at 11:00, and *"he has no way to order it at 8am… the customer already ordered from a different place."* **EVERY AVAILABILITY DECISION RESOLVES TO `inventory.getAvailable`, WHICH IS A STATEMENT ABOUT NOW** — true and useless on a batch morning: it knows the shelf is empty and cannot know the kitchen is three hours from filling it, so the app said sold out and named the NEXT cooking day. **THE RULING: on a day the kitchen is scheduled to cook, before the hour the batch reaches the shelf, zero stock stops being proof that today is unreachable.** `batch.schedule` gains `ready_hour` (0–23, optional) and **its absence is the off switch** — unset, every function behaves exactly as before, for every tenant, no migration and no backfill. **ONLY THE STOCK STRAND IS UNPICKED.** `earliestBatchMakeDate` folds stock, an unresolvable store and the day's cutoff into ONE roll-forward; an unresolvable store still rolls (we cannot promise a shelf we cannot name) and the cutoff still rolls, which is also what makes a `ready_hour` set later than `cutoff_hour` harmless. New reason `today_batch_pending` — the one reason meaning *today, and not yet*. **THE PILL AND THE CHECKOUT STILL NAME ONE DAY**: `nextFreshBatchDate` takes the same exemption, its header having always committed it to the same arithmetic on the same config, or the grid would offer a meal the calendar refuses — the contradiction PR #400 had just removed from the web PDP. **THE CALENDAR IS WHERE THE PROMISE IS KEPT**: the floor is TODAY, which every day-level rule reads as no constraint, so a `notBeforeHour` rides beside it and raises `emitTimeSlots`' already-elapsed mark — the same mechanism one value later rather than a second filter that could disagree — withdrawing the morning and leaving the afternoon; **"right away" is withdrawn outright**, being the one option that names no time it could be floored to. Both the quote and the order path now read ONE `localFreshFloorFor` answer instead of deriving it twice. **NO CHINESE WAS COMPOSED (§30)**: no live pair says *made this morning, ready from 11*, so the control ships without the sentence — `computeLocalFreshNotice` still fires on `rolled_stock` ALONE and stays silent here, and the two admin labels are lifts (*Order-by hour · 当日截单* from this card's own live refusal toast, *Ready from the kitchen · 厨房已完成* verbatim from `public/m.html`). **THE BACK HALF WAS ALREADY LIVE AND IS REUSED WHOLE**: a Guangzhou same-day order that is short reaches `analyzeShortage`'s five-option modal, whose `wait_for_restock` branch parks it as `awaiting_restock` holding no stock, takes payment, and is promoted to `paid` by `checkAwaitingRestockForRestock` the moment a cook records the batch — reserving only when the FULL quantity is there. **A LIVE DEFECT FOUND WHILE WIRING THE FIELD AND FIXED HERE**: `#batch-cutoff` was read by `saveBatchSchedule` and **had never existed in `public/retail-admin.html`**, and since the save REFUSES a non-numeric cutoff, the entire Fresh batches card could not be saved while the switch was on. Restored as the input rather than by relaxing the validation, which was the half that worked. **WHAT THIS DOES NOT DO, named so it is not read as done: it does not cap the sell against the batch size.** Nothing knows forty wraps are coming — `production_batches` records what WAS made, `kitchen_orders` is an ingredient requisition — so a morning can take more orders than the batch covers. It does not oversell *silently* (the surplus parks and waits for a quantity that covers it) but a customer can be told today and get tomorrow; **until a forward production plan exists, `ready_hour` should be set only where the batch reliably covers a morning.** **PROVED**: `scripts/test_fresh_today_batch.js` is new — 27 cases, and what it protects is the NARROWNESS (the off switch, the non-cooking day, the skipped holiday, after the ready hour, the unknown store, the cutoff, the unfloored control proving the withdrawn morning is §74 talking and not the hour of day). **It caught a real defect in the first version**: without `!pastCutoff` in the condition, the date rolled to tomorrow while the reason still said `today_batch_pending`, and the floor would then have carried a morning-withdrawing hour on a future date; red-proofed by removing the term and watching the case fail. `npm run test:fast` 182 passed, 0 failed; `test_batch_timing`, `test_local_fresh_notice`, `test_preorder_local`, `test_preorder_park` and `test_fresh_stock_deferral` green; eslint 0 errors. Code, tests and docs; no schema, no migration, no new route, no new strings, and no change to `.gitignore` or CI.
 
 2026-09-08 · v4.173 — **§48 STEP 4 DONE: THE STANDALONE STOCK APP IS DELETED.** `public/stock.html` is gone, `/stock` answers **302 to `/m`**, `/stock-login` goes with the page it served, and nothing in the product points at the app: the two Settings cards became ONE naming Tacet, the staff link hands out `/m`, `routes/restock.js` sends `/m?to=<screen>` where it sent `/stock?go=<go>`, and Tacet Mobile's dead external fallback is gone with the `stockAppInApp()` fork that drove it — **whose false branch, once the row's href was removed, would have pushed a route no `SUBS` entry answers.** **302, NEVER 301, AND THE ROUTE OUTLIVES THE APP**: it is the `start_url` of a manifest installed on staff phones and it is in push notifications already sent, and a permanent redirect is cached by the browser and the installed service worker essentially forever. **THE MANIFEST AND ICONS STAY, against the letter of step 4 and with its own prose** — the sequence lists them among what to delete; the paragraph above it says *"the manifest goes when the redirect has been in place long enough that nobody is opening the shortcut"*, which is the more careful sentence and wins: the shortcut is installed NOW and resolves its manifest on launch. **THE FILE KEEPS ITS NAME — decided by Ash, asked directly.** `lib/stock-app-only.js` survives step 4 and so now points at an app that does not exist; it was not renamed because `stock_app_only` is also a **database column** (a migration) and a **field on the team API** the back office posts (a contract), so a file-only rename would leave somebody grepping the flag finding the gate, the column and the API and missing the module holding the rules. One consistent dated name beats two words each telling half the story; the moment to rename is when the column migrates. **WHAT IT COSTS, recorded rather than absorbed**: four browser suites went with the page they rendered (`test_stock_screens`, `test_stock_home`, `test_stock_picking`, `test_stock_receiving`), and `test_kitchen_stock_visibility` lost its screen section and kept its server half. **Nothing running in CI was lost** — all four are slow-shard browser suites, which `CLAUDE.md` records as not run at all. **What IS lost is local coverage of `pick` and `receivexfer` in `public/m.html`**, which have no behavioural suite of their own; §46's shelf-total rule is NOT among the losses, `test_mobile_addstock` asserting it on the surface that now carries it. Those two screens are owed suites and the gap is named rather than left to be discovered. **THE STRINGS**: the merged card locks FOUR composed pairs, declared in `docs/tacet-delivery-vocabulary.md` v1.36 with six verbatim lifts and six deletions beside them — the composed half is only the join, every sentence of substance being lifted from the two cards it replaces. **`Add stock · 加库存` is NOT deleted as a pair**: it is live in `public/m.html` as the row and screen a cook taps, which is the one place it was a job rather than a product name. **TWO STALE RATIONALES CORRECTED IN PASSING RATHER THAN ACTED ON**: `QUICK_STOCK_ENABLED` says it goes when the app does, and on its own reasoning it would go here — but the sentence beside it, that Tacet Mobile never reads `enabled`, has stopped being true (`public/m.html` tests `qs.ctx.enabled===false`), so dropping the field would leave a dead branch testing something nobody sends; both halves retire together, in their own change. `scripts/diagnose_deployed_tree.js` still lists the deleted file and is deliberately NOT hand-edited — it is a generated snapshot that declares the commit it came from, and editing it by hand would make it lie. **PROVED**: `npm run test:fast` 178 passed, 0 failed; `test_restock_notifications` moved to the new deep links with its assertions rewritten rather than relaxed; `test_app_home` (21) lost its byte-comparison of two copies of `homeFromDoor` — there is one page left and a comparison with one operand is not a comparison — with each superseded case rewritten in place and the old destination recorded above the new one. Code, tests and docs; no schema, no migration, no new route, and no change to `.gitignore` or CI.
 
@@ -7579,3 +7581,95 @@ doing (§1.7 forbids filling the slot with a secondary).
    where almost every line was made this morning.
 
 Docs only; no code, no schema, no migration.
+
+---
+
+## §74 — A SOLD-OUT FRESH MEAL IS ORDERABLE FOR TODAY WHILE TODAY'S BATCH IS STILL COMING
+
+**Reported by Ash, 2026-09-08, as the shape of the loss rather than as a bug in a screen:**
+
+> *"fresh meals and wraps ready at 11am. lets say day before, wraps and meals are out of stock at 5pm. we put out of
+> stock 5pm. next day customer at 8am in guangzhou goes to the app, want to order lunch but the app say out of stock.
+> we open at 10 am. he want the meal for lunch. he has no way to order it at 8am. kitchen staff add the fresh meals at
+> 11am and update the stock, too late, the customer already ordered from a different place."*
+
+**THE CATALOGUE ANSWERS FROM THE SHELF, AND THE SHELF IS A STATEMENT ABOUT NOW.** Every availability decision for a
+Guangzhou shopper resolves to `inventory.getAvailable` — physical, less the safety buffer, less active reservations —
+and that figure is true and useless at 08:00 on a batch morning. It knows what is on the shelf; it does not know that
+the kitchen is three hours from putting forty wraps on it. Between the evening the shelf empties and the moment a cook
+records the batch, the app tells the truth and the customer hears something false: not *"we have none"* but
+*"you cannot have one"*, when the meal he wants for lunch will exist before lunch.
+
+**THIS IS NOT THE PRE-ORDER §-RULE, AND THE DISTINCTION IS THE WHOLE SECTION.** `localPreorderLine` refuses a sold-out
+`backorder_gz` line to a shopper on the same-day local run, and its reasoning is sound and unchanged: their order is
+served off the shelf that run loads from, so there is nothing behind the line. The fresh exemption already carved out
+of it (`freshPreorderOk` / `local_fresh_date`) moved the DELIVERY DAY onto the next batch, which made the promise
+keepable by moving the customer. **That is the right answer for every day except a batch day, and on a batch day it is
+the expensive one** — it names tomorrow to a customer whose meal is being made this morning, and he buys lunch
+somewhere else.
+
+### The ruling
+
+**On a day the kitchen is scheduled to cook, before the hour the batch reaches the shelf, zero stock stops being proof
+that today is unreachable.** `earliestBatchMakeDate` returns TODAY with a new reason, `today_batch_pending`, and the
+delivery calendar keeps today — with every slot that starts before that hour withdrawn.
+
+**THE HOUR IS CONFIGURATION AND ITS ABSENCE IS THE OFF SWITCH.** `batch.schedule` gains `ready_hour` (0–23,
+optional). Unset, every function below behaves exactly as it does today, for every tenant, with no migration and no
+backfill. A tenant opts in by naming the hour its kitchen finishes.
+
+**ONLY THE STOCK REASON IS FORGIVEN.** `earliestBatchMakeDate` folds stock, an unresolvable store and the day's cutoff
+into ONE roll-forward, and that is deliberate. This unpicks exactly one strand: a shortage on a batch morning. An
+unresolvable store still rolls the day — we cannot prove today's batch reaches a shelf we cannot identify — and
+`cutoff_hour` still rolls it, because a day whose ordering window has closed is genuinely gone. A `ready_hour` later
+than `cutoff_hour` is operator error and the cutoff wins, which is the safe direction.
+
+**THE BROWSE PILL AND THE CHECKOUT MUST NAME ONE DAY, and that is a standing requirement rather than a nicety.**
+`nextFreshBatchDate` exists only because the browse surfaces have no cart, address or store to reason about, and its
+header already commits it to the same arithmetic on the same config. It takes the same exemption here, or the grid
+offers a meal for today and the calendar refuses it — the exact contradiction PR #400 has just finished removing from
+the web product page.
+
+### What the customer meets, and why no string is composed
+
+**NOTHING NEW IS SAID TO HIM, AND THAT IS DELIBERATE.** §30 locks Chinese to live sources; no live pair says *"made
+this morning, ready from 11"*. So this ships the CONTROL without the sentence: the calendar simply does not offer a
+window the batch cannot reach, and the customer picks an afternoon slot the way he would on any other day.
+
+**The machine behind it already exists and is already live.** A Guangzhou same-day order that is short reaches
+`analyzeShortage`'s five-option modal, whose `wait_for_restock` branch parks the order as `awaiting_restock` holding no
+stock, takes payment, and is promoted to `paid` by `checkAwaitingRestockForRestock` the moment a cook records the
+batch — reserving and deducting only when the FULL quantity is there. **So the back half of this problem was solved
+before it was asked**, and every word the customer reads on that path is copy that already ships.
+
+**Wanted, and blocked on Ash rather than invented:** a local-fresh notice for this case, the sibling of
+`computeLocalFreshNotice`'s *下一批现做*, saying the batch is today rather than a future day. `computeLocalFreshNotice`
+therefore still fires on `rolled_stock` ALONE and stays silent on `today_batch_pending`, which is the honest state
+until the pair exists.
+
+### What this does NOT do, named so it is not read as done
+
+**IT DOES NOT CAP THE SELL AGAINST THE BATCH SIZE.** Nothing in the system knows forty wraps are coming:
+`production_batches` records what WAS made, after the fact, and `kitchen_orders` is an ingredient requisition. So a
+morning can take more orders than the batch will cover. **It does not oversell silently** — the excess parks in
+`awaiting_restock` and `checkAwaitingRestockForRestock` promotes an order only when its full quantity is free, so the
+surplus waits for the next batch rather than being confirmed against stock that never arrives — **but it does mean a
+customer can be told "today" and get tomorrow.** The cap needs a forward production plan (a row per date, product,
+planned quantity and ready hour, entered the evening before), which is its own section and its own build. **Until it
+exists, `ready_hour` should be set only where the batch reliably covers a morning's orders.**
+
+### Rejected
+
+**A nightly job that resets fresh stock to a planned figure at dawn.** Cheapest possible, needs no code path at all —
+and it writes stock the kitchen has not made, so an under-run oversells against a number nobody entered, with no
+`awaiting_restock` queue to catch it. It moves the lie from the calendar into the ledger.
+
+**Letting `requiresStockGate` fall through on a batch morning.** It would open today by removing the stock gate
+entirely, which also removes the shortage modal — the customer would be given an ordinary same-day order against an
+empty shelf and no `wait_for_restock` park behind it. The gate is what makes this safe; the calendar is what needed to
+change.
+
+**A per-product ready hour.** One kitchen, one morning, one finish time; a column per product buys nothing today and
+would have to be reconciled with the schedule's single cadence.
+
+Code, tests and docs; no schema, no migration, no new route, no new strings, and no change to `.gitignore` or CI.
