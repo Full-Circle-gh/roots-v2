@@ -270,19 +270,34 @@ for (const file of files) {
         .filter(r => mine.has(r.reason) && String(r.note || '').includes(ref));
     };
 
-    const lines = items.map(it => {
-      const led = it.product_id ? ledgerFor(it.product_id) : [];
+    // PER PRODUCT, NOT PER LINE, and the difference is not cosmetic. An order can
+    // carry the same product on two lines (MT20260831376090 has Whole-Wheat
+    // Crisp Crackers twice), and the ledger rows are keyed by product, so asking
+    // per line hands BOTH rows to BOTH lines. The first version of this script
+    // did exactly that and printed "net −2 on the shelf, ingest expected −1"
+    // twice over a perfectly correct order — a fabricated discrepancy, which is
+    // worse than a missed one. Ledger rows are fetched once per product and the
+    // arithmetic is checked once per product, against what ALL its lines wanted.
+    const byProduct = new Map();
+    for (const it of items) {
+      if (!it.product_id) continue;
+      if (!byProduct.has(it.product_id)) {
+        byProduct.set(it.product_id, { led: ledgerFor(it.product_id), want: 0, shown: false });
+      }
+      byProduct.get(it.product_id).want +=
+        (parseInt(it.qty, 10) || 0) * (parseInt(it.pack_units, 10) || 1);
+    }
+    for (const p of byProduct.values()) {
       // `took` is the NET effect on the shelf; `ingested` is whether the ingest
-      // itself ever ran for this line. A cancel that gave the units back leaves
-      // took = 0 with ingested true, which is a different fault from never
-      // having deducted at all.
-      const took = led.reduce((a, r) => a + (r.delta || 0), 0);
-      const ingested = led.some(r => r.reason === c.reason);
-      return { it, led, took, ingested };
-    });
+      // itself ever ran. A cancel that gave the units back leaves took = 0 with
+      // ingested true, which is a different fault from never having deducted.
+      p.took = p.led.reduce((a, r) => a + (r.delta || 0), 0);
+      p.ingested = p.led.some(r => r.reason === c.reason);
+    }
+    const lines = items.map(it => ({ it, p: it.product_id ? byProduct.get(it.product_id) : null }));
 
-    const anyDeduct = lines.some(l => l.ingested);
-    const handedBack = lines.some(l => l.led.some(r => r.reason === c.back));
+    const anyDeduct = [...byProduct.values()].some(p => p.ingested);
+    const handedBack = [...byProduct.values()].some(p => p.led.some(r => r.reason === c.back));
     const allMatched = items.length > 0 && items.every(i => i.product_id);
     if (!anyDeduct) noDeduct++;
 
@@ -308,16 +323,20 @@ for (const file of files) {
     console.log(`   placed ${o.placed_at || '-'} (${ago(o.placed_at)})` +
                 (impRow ? `  import=${impRow.status}` : '  import=(none)'));
     console.log(`   → ${why}`);
-    for (const { it, led, took, ingested } of lines) {
+    for (const { it, p } of lines) {
       const name = it.name_en || it.name_cn || '(unnamed)';
       const pid  = it.product_id ? `product ${it.product_id}${it.prod_active === 0 ? ' (INACTIVE)' : ''}` : 'UNRESOLVED';
-      const want = (parseInt(it.qty, 10) || 0) * (parseInt(it.pack_units, 10) || 1);
       console.log(`     · ${String(name).slice(0, 40).padEnd(40)} x${it.qty}` +
                   ` pack=${it.pack_units}  ${pid}`);
-      if (it.product_id) {
-        if (!led.length) console.log(`         NO LEDGER ROW (expected −${want})`);
-        else for (const r of led) console.log(`         ledger #${r.id} ${r.reason} Δ${r.delta} → ${r.balance_after}  ${ago(r.created_at)}`);
-        if (ingested && took !== -want) console.log(`         ⚠ net ${took} on the shelf, ingest expected −${want}`);
+      if (!p) continue;
+      // The ledger belongs to the product, so it is printed under the product's
+      // FIRST line and a repeat says so rather than showing the same rows again.
+      if (p.shown) { console.log('         (same product as a line above — its ledger is printed there)'); continue; }
+      p.shown = true;
+      if (!p.led.length) console.log(`         NO LEDGER ROW (expected −${p.want})`);
+      else for (const r of p.led) console.log(`         ledger #${r.id} ${r.reason} Δ${r.delta} → ${r.balance_after}  ${ago(r.created_at)}`);
+      if (p.ingested && p.took !== -p.want) {
+        console.log(`         ⚠ net ${p.took} on the shelf, this order's lines wanted −${p.want}`);
       }
     }
 
