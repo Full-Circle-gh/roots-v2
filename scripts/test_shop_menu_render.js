@@ -1327,6 +1327,8 @@ function boxOf(text) {
         bar: document.getElementById('cbar').hidden,
         barL: document.getElementById('cbarL').innerText.replace(/\s+/g, ' ').trim(),
         barN: document.getElementById('cbarN').textContent.trim(),
+        title: document.getElementById('sheetT').innerText.replace(/\s+/g, ' ').trim(),
+        doneH: document.querySelector('.done-h').innerText.replace(/\s+/g, ' ').trim(),
       }));
       assert.ok(/^\d+$/.test(shown.code), `the number is not a plain number: ${shown.code}`);
       assert.strictEqual(shown.name, 'Mei', 'the name the customer will be called by is not shown');
@@ -1345,6 +1347,23 @@ function boxOf(text) {
       assert.ok(/Order/.test(shown.barL) && !/BASKET/i.test(shown.barL),
         `the basket survived the order that emptied it: ${shown.barL}`);
       assert.strictEqual(shown.barN, shown.code, 'the bar carries a number that is not the order\'s');
+      // AND THE PANEL DOES NOT CALL ITSELF THE BASKET EITHER. The same defect
+      // as the bar's, one element up and found later: every other face of this
+      // sheet repaints #sheetT and done() did not, so the placed order was
+      // drawn under whichever word was last set — always YOUR BASKET, over the
+      // order that had just emptied the basket.
+      //
+      // TWO ASSERTIONS, BECAUSE THE FIRST ALONE PASSES ON A HEADING THAT NEVER
+      // GOT PAINTED. Nothing is the answer here on purpose — .done-h names
+      // this face — so the check that it is EMPTY is the check that it was
+      // deliberately cleared, and the check that .done-h is not is what stops
+      // an empty header from being read as a face with no name at all.
+      assert.ok(!/BASKET|购物车/i.test(shown.title),
+        `the panel called itself the basket over a placed order: ${JSON.stringify(shown.title)}`);
+      assert.strictEqual(shown.title, '',
+        `the placed order's heading is neither cleared nor its own: ${JSON.stringify(shown.title)}`);
+      assert.ok(/Order placed|下单成功/.test(shown.doneH),
+        `the face that lost its header does not name itself in its body: ${JSON.stringify(shown.doneH)}`);
       // The half a screenshot cannot show: the order exists.
       const row = db.prepare(
         `SELECT recipient_name, status, channel, source, shop_entry_method,

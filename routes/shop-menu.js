@@ -1555,7 +1555,29 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `fail(bi(${JSON.stringify('Please try again.')},${JSON.stringify('请重试。')}))})},false);` +
   // THE PLACED ORDER. The number fills the screen because the entire next step
   // is somebody calling it across a room, and the customer's job is to hear it.
-  `var done=function(d){cart={};foot.hidden=true;` +
+  // AND THE HEADING GOES, BECAUSE THIS FACE ALREADY HAS ONE. Every other face
+  // repaints it — paintSheet() says basket, openOrders() says my orders — and
+  // this one did not, so the panel drawing a placed order kept whichever word
+  // was last set and stood there saying YOUR BASKET over the order that had
+  // just emptied the basket. Exactly the lie the header comment on #sheetT
+  // exists to forbid.
+  //
+  // EMPTIED RATHER THAN RENAMED, and that is the whole of the decision. The
+  // face already states its own name below the number, and states it louder
+  // than this header can: .done-h is "Order placed! · 下单成功！" set in a
+  // bordered lime badge, against a plain 16px .sheet-t. A header above it
+  // could only repeat that, or reach for a noun that is not true here —
+  // L_MINE is "My orders", plural, and the name of the LIST face, which this
+  // is not; L_ORD is already spoken by .done-o at the foot of this same
+  // screen. v4.160 ruled on this exact question one line lower, when it put
+  // no heading over the order's lines: YOUR BASKET is false on a placed order
+  // and anything else would have had to be minted.
+  //
+  // Nothing is composed: an empty .sheet-t is a state this panel already has
+  // (the detail sheet clears its own title for a product with no name), it
+  // keeps flex:1 so the × stays where the customer last saw it, and no
+  // vocabulary entry is owed for a word that is not said.
+  `var done=function(d){cart={};foot.hidden=true;ttl.innerHTML='';` +
   // REMEMBERED BEFORE IT IS DRAWN, so the one thing that must survive this
   // screen is written before anything can go wrong drawing it.
   // NEWEST FIRST, AND THE ONE BEFORE IT IS KEPT. Deduplicated on the address
@@ -1998,7 +2020,11 @@ router.get('/s/:shopCode', (req, res) => {
           // NAMED, BECAUSE THE PANEL HAS MORE THAN ONE FACE. It is the basket,
           // and it is also the list of orders this phone has placed — the
           // heading is repainted with the face rather than lying about one of
-          // them.
+          // them. THAT INCLUDES BEING REPAINTED EMPTY: the placed order names
+          // itself in its own body and clears this, which is a face setting
+          // the heading, not a face forgetting to. A face that leaves it alone
+          // is a face wearing the last one's word; done() carried YOUR BASKET
+          // over a placed order for exactly that reason.
           `<div class="sheet-t" id="sheetT">${bi('YOUR BASKET', '购物车')}</div>` +
           // AN ATTRIBUTE TAKES TEXT, NOT MARKUP. bi() returns two <span>s, and
           // putting that in aria-label closed the attribute at its first quote
