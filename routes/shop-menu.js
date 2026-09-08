@@ -762,6 +762,28 @@ img{display:block;max-width:100%}
 .qty span{min-width:26px;text-align:center;line-height:1;font-variant-numeric:tabular-nums;
   font-size:14px}
 
+/* ── the orders this phone has already placed ──
+   One row per order: the number staff will call, the amount, and a chevron
+   into that order's own page. The number wears the bar's own chip — same
+   square, same ink ground, same 24px — because it is the same number, and a
+   customer who has seen it in the bar should not have to work out that the one
+   in this list is the same thing.
+   A LINK, NOT A BUTTON, so it works with no script and reads as somewhere to
+   go. It is placed at the FOOT of the basket, below every stepper, on purpose:
+   the basket is memory only (§44) and a tap that navigates away loses it, so
+   this must not sit anywhere a thumb reaching for a + or a − can find it. */
+.mo-h{font-family:var(--f-bear);font-size:12px;line-height:1.2;letter-spacing:.04em;
+  color:var(--olive);text-transform:uppercase;margin-top:18px;padding-bottom:2px}
+.mo{display:flex;align-items:center;gap:10px;padding:12px 0;color:var(--ink);
+  text-decoration:none;border-bottom:1px solid rgba(0,0,0,.08);
+  -webkit-tap-highlight-color:transparent}
+.mo-n{flex:none;min-width:24px;height:24px;display:flex;align-items:center;
+  justify-content:center;background:var(--ink);color:var(--oat);
+  font-family:var(--f-bear);font-size:13px;line-height:1}
+.mo-l{flex:1;min-width:0;font-size:14px}
+.mo-v{flex:none;font-variant-numeric:tabular-nums;font-size:14px}
+.mo-c{flex:none;color:var(--olive);line-height:1}
+
 .tot{display:flex;justify-content:space-between;align-items:center;gap:12px;
   font-family:var(--f-bear);font-size:17px;margin-bottom:10px}
 .tot span:last-child{font-variant-numeric:tabular-nums}
@@ -866,6 +888,20 @@ img{display:block;max-width:100%}
   cursor:pointer;-webkit-tap-highlight-color:transparent}
 .done-o{font-size:12px;color:var(--olive);margin-top:14px;
   font-variant-numeric:tabular-nums}
+
+/* THE WAY OFF THIS PAGE, and it is a box rather than a second underlined line.
+   Reported 2026-09-08 from a phone: the order page had no exit at all, and
+   inside a WeChat web view the only control on screen is the one that closes
+   the whole thing. The cancel below it is an underlined olive link, and a
+   BACK that looked the same would put "leave this page" and "destroy this
+   order" in one visual register a thumb cannot tell apart — so this one is
+   bordered, ink on oat, and sits ABOVE the cancel: the safe way out first, the
+   destructive one last and still behind its own disclosure. */
+.bk{display:inline-block;margin-top:20px;border:2px solid var(--ink);
+  background:var(--oat);color:var(--ink);text-decoration:none;
+  padding:11px 22px;font-family:var(--f-bear);font-size:15px;
+  -webkit-tap-highlight-color:transparent}
+.bk .cv{color:var(--olive);margin-right:6px}
 
 /* Tapping a rail category jumps to its section, and the bar is sticky over the
    top of wherever that lands — so without this the heading the customer just
@@ -1098,6 +1134,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `(function(){` +
   `var bar=document.getElementById('cbar');if(!bar)return;` +
   `var sheet=document.getElementById('sheet'),body=document.getElementById('sheetB'),` +
+  `ttl=document.getElementById('sheetT'),` +
   `foot=document.getElementById('sheetF'),nEl=document.getElementById('cbarN'),` +
   `vEl=document.getElementById('cbarV'),tEl=document.getElementById('cTot'),` +
   `errEl=document.getElementById('cErr'),nameEl=document.getElementById('cName'),` +
@@ -1123,9 +1160,22 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      WeChat webview and in private mode. A phone that cannot remember simply
      gets the behaviour that shipped. */
   `var OKEY='tacet-shop-order:'+location.pathname.replace(/\\/+$/,'').split('/').pop();` +
-  `var mine=null;` +
-  `try{var _r=localStorage.getItem(OKEY);if(_r)mine=JSON.parse(_r)}catch(e){mine=null}` +
-  `if(mine&&!(mine.u&&mine.n!=null))mine=null;` +
+  /* SEVERAL ORDERS, NOT ONE. It held a single order and the second one
+     overwrote it — a customer who ordered a coffee and came back for a cake
+     could no longer reach the coffee, or cancel it. Newest first, five deep:
+     more than anybody orders at one counter in one day, and small enough that
+     the list is read rather than scrolled.
+     THE CAP IS A CAP ON WHAT IS REMEMBERED, NOT ON WHAT EXISTS. A sixth order
+     is placed, printed and paid for exactly as it always was; the phone simply
+     stops carrying the oldest address, which the counter still has. */
+  `var MAXO=5;` +
+  `var mine=[];` +
+  `try{var _r=localStorage.getItem(OKEY);if(_r)mine=JSON.parse(_r)}catch(e){mine=[]}` +
+  /* A RECEIPT WRITTEN BEFORE THIS COULD HOLD MORE THAN ONE IS A LIST OF ONE.
+     The single-object shape shipped this morning, and a customer holding one in
+     the middle of a trading day must not be handed an empty bar because the
+     shape changed underneath them. */
+  `if(!Array.isArray(mine))mine=(mine&&typeof mine==='object')?[mine]:[];` +
   /* AND IT FORGETS. Twelve hours, which is longer than any counter's day and
      shorter than the gap to the next one — so a customer who comes back
      tomorrow is not shown yesterday's number, and one who steps out for an
@@ -1136,8 +1186,24 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      first paint of a page whose whole point is that it renders in one
      response — a status fetch before the bar can be trusted would put a
      round trip in front of it. The order page states the truth when tapped. */
-  `if(mine&&(!mine.ts||(Date.now()-mine.ts)>43200000)){mine=null;` +
-  `try{localStorage.removeItem(OKEY)}catch(e){/* storage refused; mine is already null in memory, which is the state this was clearing to */}}` +
+  /* Each entry carries its own stamp and is judged on it, so a morning order
+     drops off while the one placed ten minutes ago stays. An entry missing its
+     number, its stamp or its address is dropped as well — and the address is
+     checked for SHAPE, not merely for presence: it is read back out of storage
+     and put straight into an href, and the only thing this page ever writes
+     there is one of its own order pages. */
+  `var _keep=[],_now=Date.now();` +
+  `for(var _i=0;_i<mine.length;_i++){var _o=mine[_i];` +
+  `if(!_o||_o.n==null||!_o.ts)continue;` +
+  `if(typeof _o.u!=='string'||_o.u.indexOf('/s/')!==0)continue;` +
+  `if((_now-_o.ts)>43200000)continue;` +
+  `if(_keep.length<MAXO)_keep.push(_o)}` +
+  // Written back only when something actually went, so an ordinary visit does
+  // not rewrite storage on every page load.
+  `if(_keep.length!==mine.length){mine=_keep;` +
+  `try{if(mine.length)localStorage.setItem(OKEY,JSON.stringify(mine));` +
+  `else localStorage.removeItem(OKEY)}catch(e){/* storage refused; mine is already the pruned list in memory, which is the state this was writing */}}` +
+  `else{mine=_keep}` +
   // { pid: {qty, price, en, cn} } — insertion order is the order the customer
   // chose, which is the order the basket lists and the order the kitchen reads.
   `var cart={},sending=false;` +
@@ -1145,6 +1211,14 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})};` +
   `var bi=function(en,cn){return '<span class="l-en">'+esc(en)+'</span>'+` +
   `'<span class="l-cn">'+esc(cn)+'</span>'};` +
+  // THE THREE LABELS THIS SCRIPT REPAINTS, built once at module load. Two are
+  // already on this page; the third, My orders · 我的订单, is the web
+  // storefront's own heading for this exact list (public/shop.html:3065, 3076,
+  // 3443) — the customer reading their orders on the website and the one
+  // reading them at the counter are the same person (§30). Nothing composed.
+  `var L_ORD=${JSON.stringify(bi('Order', '订单号'))},` +
+  `L_MINE=${JSON.stringify(bi('My orders', '我的订单'))},` +
+  `L_BASKET=${JSON.stringify(bi('YOUR BASKET', '购物车'))};` +
   // THE TENANT'S CURRENCY, ALL THREE PARTS OF IT, read off the bar's own data
   // attributes rather than baked in here: this script is built once at module
   // load and the currency is resolved per request (§0 — no currency literal in
@@ -1161,6 +1235,24 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var count=function(){var n=0,k=ids();for(var i=0;i<k.length;i++)n+=cart[k[i]].qty;return n};` +
   `var total=function(){var t=0,k=ids();for(var i=0;i<k.length;i++)t+=cart[k[i]].qty*cart[k[i]].price;` +
   `return Math.round(t*100)/100};` +
+  // ONE ROW PER ORDER THIS PHONE HAS PLACED, newest first — the number staff
+  // call, what it cost, and the way into that order's own page, where the
+  // status and the cancel live. Both languages in every row, like everything
+  // else this script draws.
+  `var ordRows=function(){var h='';` +
+  `for(var i=0;i<mine.length;i++){var o=mine[i];` +
+  `h+='<a class="mo" href="'+esc(o.u)+'">'+` +
+  `'<span class="mo-n">'+esc(String(o.n))+'</span>'+` +
+  `'<span class="mo-l">'+L_ORD+'</span>'+` +
+  `'<span class="mo-v">'+esc(money(o.t))+'</span>'+` +
+  `'<span class="mo-c">\\u203a</span></a>'}` +
+  `return h};` +
+  // THE SHEET'S FOURTH FACE. The panel is the basket, the placed order and the
+  // refusal — and now the list, which is the same furniture with the footer put
+  // away and the header renamed. A second panel would have been a second thing
+  // over the menu both of them exist to serve.
+  `var openOrders=function(){errEl.hidden=true;foot.hidden=true;` +
+  `ttl.innerHTML=L_MINE;body.innerHTML=ordRows();shOpen(sheet)};` +
   // ONE BAR, TWO STATES. With something in the basket it is the basket. With
   // the basket empty and an order already placed from this phone, it is the way
   // back to that order — the number, what it cost, and a tap that opens the
@@ -1170,17 +1262,23 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // The label is the live pair the done screen already uses for this noun; the
   // number and the amount need no other word beside them.
   `var paintBar=function(){var n=count();` +
-  `var back=(n===0&&mine&&mine.u);` +
+  `var back=(n===0&&mine.length>0);` +
   `bar.hidden=(n===0&&!back);` +
   // The floor under the menu follows the bar's real height rather than a guess,
   // the same measured-not-written-down rule the header uses.
   `document.documentElement.style.setProperty('--cbarh',(bar.hidden?0:bar.offsetHeight)+'px');` +
-  `if(back){nEl.textContent=String(mine.n);` +
-  `lEl.innerHTML=${JSON.stringify(bi('Order', '订单号'))};` +
-  `vEl.textContent=money(mine.t);return}` +
-  `lEl.innerHTML=${JSON.stringify(bi('YOUR BASKET', '购物车'))};` +
+  // THE NEWEST ORDER IS THE ONE ON THE BAR. It is the number being called
+  // next, and a bar that named the oldest would be a bar naming the order that
+  // has already been collected. The rest are one tap away, in the sheet.
+  `if(back){var m=mine[0];nEl.textContent=String(m.n);` +
+  `lEl.innerHTML=L_ORD;` +
+  `vEl.textContent=money(m.t);return}` +
+  `lEl.innerHTML=L_BASKET;` +
   `nEl.textContent=String(n);vEl.textContent=money(total())};` +
-  `var paintSheet=function(){var k=ids(),h='';` +
+  // The heading is set HERE rather than by whoever opened the panel, so the
+  // face and the word above it are painted by one function and cannot drift
+  // apart: anything that draws the basket says basket.
+  `var paintSheet=function(){var k=ids(),h='';ttl.innerHTML=L_BASKET;` +
   `for(var i=0;i<k.length;i++){var it=cart[k[i]];` +
   `h+='<div class="ln"><div class="ln-t">'+bi(it.en,it.cn)+'</div>'+` +
   `'<div class="ln-r"><div class="qty">'+` +
@@ -1188,6 +1286,12 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `'<span>'+it.qty+'</span>'+` +
   `'<button type="button" data-i="'+esc(k[i])+'" aria-label="+">+</button></div>'+` +
   `'<div class="ln-p">'+money(it.qty*it.price)+'</div></div></div>'}` +
+  // AND UNDER THE BASKET, WHAT IS ALREADY ORDERED. With something in the
+  // basket the bar is the basket, so this is the only place the earlier orders
+  // are reachable while a second round is being built — the state where they
+  // used to disappear. Below every stepper on purpose (see .mo in the CSS): a
+  // tap here leaves the page and the basket is memory only.
+  `if(mine.length)h+='<div class="mo-h">'+L_MINE+'</div>'+ordRows();` +
   `body.innerHTML=h;tEl.textContent=money(total())};` +
   `var closeIfEmpty=function(){if(count()===0){shClose(sheet)}};` +
   `var add=function(b){var id=b.getAttribute('data-add');` +
@@ -1238,8 +1342,14 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `},false);` +
   // The bar's two states answer the tap differently: a basket opens the sheet,
   // a placed order goes to that order's own page.
+  //
+  // ONE ORDER GOES STRAIGHT THERE; SEVERAL OPEN THE LIST. The single order is
+  // the case at almost every counter, and putting a list in front of it would
+  // charge every customer a tap to be shown one row they then have to tap
+  // again.
   `document.getElementById('cbarOpen').addEventListener('click',function(){` +
-  `if(count()===0&&mine&&mine.u){location.href=mine.u;return}` +
+  `if(count()===0&&mine.length){if(mine.length===1){location.href=mine[0].u;return}` +
+  `openOrders();return}` +
   `errEl.hidden=true;foot.hidden=false;paintSheet();shOpen(sheet)},false);` +
   `var close=function(){shClose(sheet)};` +
   `document.getElementById('sheetX').addEventListener('click',close,false);` +
@@ -1298,7 +1408,13 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var done=function(d){cart={};foot.hidden=true;` +
   // REMEMBERED BEFORE IT IS DRAWN, so the one thing that must survive this
   // screen is written before anything can go wrong drawing it.
-  `if(d.order_url){mine={n:d.order_code,t:d.total,u:d.order_url,ts:Date.now()};` +
+  // NEWEST FIRST, AND THE ONE BEFORE IT IS KEPT. Deduplicated on the address
+  // rather than the number, because the number restarts at 1 each trading day
+  // and the address never repeats — and a done screen redrawn for an order
+  // already in the list must move it to the front, not enter it twice.
+  `if(d.order_url){var e0={n:d.order_code,t:d.total,u:d.order_url,ts:Date.now()};` +
+  `var nx=[e0];for(var i=0;i<mine.length&&nx.length<MAXO;i++){` +
+  `if(mine[i].u!==e0.u)nx.push(mine[i])}mine=nx;` +
   `try{localStorage.setItem(OKEY,JSON.stringify(mine))}catch(e){/* a phone that cannot remember still shows the bar for this visit; mine is set in memory above */}}` +
   `paintBar();` +
   `body.innerHTML='<div class="done"><div class="done-n">'+esc(String(d.order_code))+'</div>'+` +
@@ -1319,6 +1435,19 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // locked pair for the noun is 订单号 ("order number"), which reads as a
   // heading and not as somewhere to go.
   `'</div>';shOpen(sheet)};` +
+  /* AND THE BAR IS PAINTED ONCE, HERE, BEFORE ANYBODY TOUCHES ANYTHING.
+
+     THIS IS THE HALF OF THE REPORT THAT WAS STILL BROKEN. The receipt was read
+     at startup and the bar was only ever repainted by add(), by the steppers
+     and by done() — so closing the sheet showed the order (done() had just
+     painted it) and RELOADING THE PAGE showed nothing at all. A second scan of
+     the QR code is a fresh load, and a fresh load never painted: the customer
+     who left the screen and came back was told, correctly and uselessly, that
+     the shop had a menu.
+
+     Nothing else changes for an empty phone: with no basket and no remembered
+     order this call hides the bar, which is what it already was. */
+  `paintBar();` +
   `})();`;
 
 // ─── What a product's detail sheet knows ────────────────────────────────
@@ -1695,7 +1824,11 @@ router.get('/s/:shopCode', (req, res) => {
       `<div class="sheet-bg" id="sheetBg"></div>` +
       `<div class="sheet-p" role="dialog" aria-modal="true">` +
         `<div class="sheet-h">` +
-          `<div class="sheet-t">${bi('YOUR BASKET', '购物车')}</div>` +
+          // NAMED, BECAUSE THE PANEL HAS MORE THAN ONE FACE. It is the basket,
+          // and it is also the list of orders this phone has placed — the
+          // heading is repainted with the face rather than lying about one of
+          // them.
+          `<div class="sheet-t" id="sheetT">${bi('YOUR BASKET', '购物车')}</div>` +
           // AN ATTRIBUTE TAKES TEXT, NOT MARKUP. bi() returns two <span>s, and
           // putting that in aria-label closed the attribute at its first quote
           // and spilled the rest into the header as visible text — a stray
@@ -2155,6 +2288,38 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
 //
 // `extra` is the cancel control, and is passed only where cancelling is
 // actually possible — see the route.
+/* THE WAY BACK TO THE MENU — reported 2026-09-08 from a phone: "customer can't
+   go back from this page. dead end."
+
+   And it was one. Every screen in this family — order placed, payment
+   received, cancelled — ended at the order and offered nothing but the browser
+   chrome, which inside a WeChat web view is a single X that closes the whole
+   thing. The customer who wanted a second coffee had to find the QR code again
+   to get back to a menu they were on ninety seconds ago.
+
+   It matters most on the screen that reads CANCELLED, which says "You can
+   place a new one anytime." and, until this, gave no way to.
+
+   A PLAIN LINK, like the cancel form beside it: this page is where a customer
+   lands when something has gone wrong, and nothing on it should need a working
+   script. Back · 返回 is a live pair in six places (public/till.html:885,
+   public/m.html:3217, public/retail-admin/28-shops.js:203 among them) — the
+   admin's own word for this, reused rather than composed. */
+function backLink(req) {
+  const code = String(req.params.shopCode || '');
+  // THE LANGUAGE IS CARRIED ONLY WHERE THE CUSTOMER'S OWN ADDRESS CARRIED ONE,
+  // and that is not tidiness. langScript's order is: this session's toggle
+  // first, then an explicit ?lang=, then the phone's own language — and the
+  // third step is switched OFF by the presence of the second. Appending a lang
+  // nobody asked for would therefore force English on a Chinese phone that had
+  // simply never touched the toggle. Where they did ask, it is carried, so the
+  // choice survives the link even on a phone whose sessionStorage throws.
+  const q = (req.query.lang === 'cn' || req.query.lang === 'en')
+    ? `?lang=${req.query.lang}` : '';
+  return `<a class="bk" href="/s/${encodeURIComponent(code)}${q}">` +
+    `<span class="cv">‹</span>${bi('Back', '返回')}</a>`;
+}
+
 function payScreen(req, res, { status, order, main, extra }) {
   const { vars, fonts } = themeBits();
   const lang = req.query.lang === 'cn' ? 'cn' : 'en';
@@ -2173,6 +2338,9 @@ function payScreen(req, res, { status, order, main, extra }) {
         // figure they find when they come back to it.
         `<div class="done-amt">${esc(money(order.total, cur))}</div>` +
         `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
+        // The safe way out comes BEFORE the destructive one, and the cancel
+        // stays last and behind its own disclosure.
+        backLink(req) +
         (extra || '') +
       `</div>`,
   }));
@@ -2435,6 +2603,12 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
     `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
     PAID_MAIN +
     `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
+    // BOTH FACES OF THIS PAGE GET THE WAY BACK, not only the one that renders
+    // first. They are two blocks in one document with CSS choosing between
+    // them, so a link on the waiting screen alone would vanish at the moment
+    // the payment lands — which is exactly when a customer is finished here
+    // and looking for the menu.
+    backLink(req) +
     `</div>`;
 
   const script =
@@ -2467,6 +2641,7 @@ router.get('/s/:shopCode/pay/:token', async (req, res) => {
         `<div class="done-nm">${esc(String(order.recipient_name || ''))}</div>` +
         COUNTER_MAIN +
         `<div class="done-o">${bi('Order', '订单号')} ${esc(String(order.order_no || ''))}</div>` +
+        backLink(req) +
       `</div>` + paid +
       `<script>${script}</script>`,
   }));

@@ -1447,6 +1447,60 @@ const soldOut = (row) => /class="sold"/.test(row);
         assert.ok(/class="done-amt"/.test(done), 'the order page does not say what it costs');
       });
 
+      await checkAsync('EVERY FACE OF THE ORDER PAGE HAS A WAY BACK TO THE MENU', async () => {
+        // Reported 2026-09-08 from a phone: "customer can't go back from this
+        // page. dead end." It was — and inside a WeChat web view the only
+        // control on screen is the X that closes the whole thing, so a customer
+        // who wanted a second coffee had to find the QR code again.
+        //
+        // ALL THREE STATES, because the one that matters most is the one this
+        // page reaches LAST: cancelled says "You can place a new one anytime."
+        // and, until this, offered no way to.
+        await resetOrderLimit();
+        const placed = await post(`/s/${LIVE}/order`, {
+          name: 'Lin', items: [{ store_product_id: P_MADE_ON, qty: 1 }],
+        });
+        const oid = placed.json.data.id || db.prepare(
+          'SELECT id FROM retail_orders WHERE order_no = ?').get(placed.json.data.order_no).id;
+        const url = placed.json.data.order_url;
+
+        // Scoped to the rendered block for the reason the cancelled check
+        // above states: shell() inlines the basket script on every page, and
+        // an assertion over the whole body can pass on a string literal inside
+        // it while the page renders nothing.
+        const backOf = async (u) => {
+          const r = await get(u);
+          assert.strictEqual(r.status, 200, `${u} did not answer`);
+          const from = r.body.indexOf('<div class="done">');
+          assert.ok(from >= 0, 'the order block did not render');
+          const to = r.body.indexOf('<script', from);
+          return r.body.slice(from, to > from ? to : undefined);
+        };
+
+        for (const [status, label] of [
+          ['pending_payment', 'an unpaid order'],
+          ['paid', 'a paid order'],
+          ['cancelled', 'a cancelled order'],
+        ]) {
+          db.prepare('UPDATE retail_orders SET status = ? WHERE id = ?').run(status, oid);
+          const done = await backOf(url);
+          assert.ok(/Back/.test(done) && /返回/.test(done), `${label} was not offered a way back`);
+          assert.ok(new RegExp(`href="/s/${LIVE}"`).test(done),
+            `${label}'s way back does not lead to this shop's menu`);
+        }
+
+        // AND THE LANGUAGE IS CARRIED ONLY WHERE THE CUSTOMER'S OWN ADDRESS
+        // CARRIED IT. langScript takes an explicit ?lang= over the phone's own
+        // language, so a lang appended to every link would force English on a
+        // Chinese phone that had simply never touched the toggle — the page
+        // would be right and the menu it sends them to would not.
+        db.prepare("UPDATE retail_orders SET status = 'pending_payment' WHERE id = ?").run(oid);
+        assert.ok(new RegExp(`href="/s/${LIVE}\\?lang=cn"`).test(await backOf(`${url}?lang=cn`)),
+          'an explicit Chinese page sent the customer back to an unspecified one');
+        assert.ok(!/\?lang=/.test(await backOf(url)),
+          'a page the customer opened with no language choice invented one for them');
+      });
+
       await checkAsync('and with the Official Account withdrawn, the page still answers', async () => {
         db.prepare("UPDATE retail_orders SET status = 'pending_payment' WHERE id = ?").run(wxOrder.id);
         oaOff();

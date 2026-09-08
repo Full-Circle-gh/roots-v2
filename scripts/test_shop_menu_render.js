@@ -1325,10 +1325,26 @@ function boxOf(text) {
         code: document.querySelector('.done-n').textContent.trim(),
         name: document.querySelector('.done-nm').textContent.trim(),
         bar: document.getElementById('cbar').hidden,
+        barL: document.getElementById('cbarL').innerText.replace(/\s+/g, ' ').trim(),
+        barN: document.getElementById('cbarN').textContent.trim(),
       }));
       assert.ok(/^\d+$/.test(shown.code), `the number is not a plain number: ${shown.code}`);
       assert.strictEqual(shown.name, 'Mei', 'the name the customer will be called by is not shown');
-      assert.strictEqual(shown.bar, true, 'the basket survived the order that emptied it');
+      // THIS ASSERTION WAS INVERTED ON 2026-09-08 AND IS CORRECTED, NOT
+      // RELAXED. It read `bar.hidden === true` — a hidden bar was how this
+      // suite proved the basket had been emptied by the order. Since the order
+      // placed from this phone is remembered, an empty basket is exactly when
+      // the bar is SHOWN, carrying the order instead of the basket, so the old
+      // assertion asserted the defect. It went red the day that shipped and
+      // nothing said so: this file is in the browser shard, which is not run.
+      //
+      // The replacement proves more than the original did. A bar that still
+      // said YOUR BASKET would mean the basket had survived; a bar naming the
+      // order means it was emptied AND the order took its place.
+      assert.strictEqual(shown.bar, false, 'the placed order left no way back to itself');
+      assert.ok(/Order/.test(shown.barL) && !/BASKET/i.test(shown.barL),
+        `the basket survived the order that emptied it: ${shown.barL}`);
+      assert.strictEqual(shown.barN, shown.code, 'the bar carries a number that is not the order\'s');
       // The half a screenshot cannot show: the order exists.
       const row = db.prepare(
         `SELECT recipient_name, status, channel, source, shop_entry_method,
@@ -1348,6 +1364,150 @@ function boxOf(text) {
       assert.strictEqual(row.fulfillment_type, 'counter');
       assert.strictEqual(String(row.shop_order_code), shown.code,
         'the number on the phone is not the number in the database');
+    });
+
+    /* ── THE ORDER THIS PHONE HAS ALREADY PLACED ───────────────────────────
+       Two reports from the counter, 2026-09-08, and they are the same defect
+       seen from both ends: "he has no way to see his order, order number or
+       anything its all dissaper", and then "customer cant go back from this
+       page. dead end."
+
+       WHY THESE ARE BROWSER CHECKS AND NOT STRING ONES. Every line of this
+       behaviour is drawn by script from localStorage — the bar's second state,
+       the list, and the receipt that outlives the tab. A served-bytes suite can
+       prove the script was SENT and nothing else; the one assertion that
+       matters is that a customer who closes the screen, or walks off and scans
+       the code again, still finds the number they are waiting to be called by.
+       That can only be observed in a browser that has really placed the order. */
+
+    await check('CLOSING THE DONE SHEET DOES NOT LOSE THE ORDER — the bar carries it', async () => {
+      const KEY = 'tacet-shop-order:' + CODE;
+      await page.click('#sheetX');
+      const m = await page.evaluate(async (key) => {
+        await new Promise(r => setTimeout(r, 260));
+        return {
+          hidden: document.getElementById('cbar').hidden,
+          n:      document.getElementById('cbarN').textContent.trim(),
+          label:  document.getElementById('cbarL').innerText.replace(/\s+/g, ' ').trim(),
+          v:      document.getElementById('cbarV').textContent.trim(),
+          kept:   JSON.parse(localStorage.getItem(key) || 'null'),
+        };
+      }, KEY);
+      assert.strictEqual(m.hidden, false, 'the order went with the sheet that carried it');
+      assert.ok(/^\d+$/.test(m.n), `the bar does not carry the number: ${m.n}`);
+      assert.ok(/Order/.test(m.label), `the bar still calls itself the basket: ${m.label}`);
+      assert.ok(/\d/.test(m.v), `the bar does not say what the order cost: ${m.v}`);
+      assert.ok(Array.isArray(m.kept) && m.kept.length === 1,
+        `the receipt is not a list of one: ${JSON.stringify(m.kept)}`);
+      assert.strictEqual(String(m.kept[0].n), m.n, 'the bar and the receipt name different orders');
+    });
+
+    await check('A SECOND ORDER DOES NOT ERASE THE FIRST', async () => {
+      // It did until 2026-09-08: one order was remembered, so a customer who
+      // came back for a cake could no longer reach the coffee — or cancel it.
+      const KEY = 'tacet-shop-order:' + CODE;
+      await page.click('.it:not(.out) .add');
+      await page.click('#cbarOpen');
+      await page.fill('#cName', 'Yu');
+      await page.click('#cPlace');
+      await page.waitForSelector('.done-n', { timeout: 8000 });
+      const second = await page.evaluate(() => document.querySelector('.done-n').textContent.trim());
+      await page.click('#sheetX');
+      const m = await page.evaluate(async (key) => {
+        await new Promise(r => setTimeout(r, 260));
+        return {
+          n: document.getElementById('cbarN').textContent.trim(),
+          kept: JSON.parse(localStorage.getItem(key) || 'null'),
+        };
+      }, KEY);
+      assert.strictEqual(m.kept.length, 2, `the second order overwrote the first: ${JSON.stringify(m.kept)}`);
+      // NEWEST FIRST, and the bar names it: it is the number about to be
+      // called, and a bar naming the oldest would name the one already
+      // collected.
+      assert.strictEqual(String(m.kept[0].n), second, 'the list is not newest first');
+      assert.strictEqual(m.n, second, 'the bar names an order that is not the newest');
+      assert.notStrictEqual(m.kept[1].u, m.kept[0].u, 'the same order was remembered twice');
+    });
+
+    await check('AND SCANNING THE CODE AGAIN FINDS THEM — which is what a reload is', async () => {
+      // The whole of the report: "even if he goes out from the screen
+      // completly, scan the qr code again, should have his order there."
+      const before = await page.evaluate(() => document.getElementById('cbarN').textContent.trim());
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      const m = await page.evaluate(() => ({
+        hidden: document.getElementById('cbar').hidden,
+        n: document.getElementById('cbarN').textContent.trim(),
+      }));
+      assert.strictEqual(m.hidden, false, 'a fresh scan of the code shows no order at all');
+      assert.strictEqual(m.n, before, 'a fresh scan names a different order');
+    });
+
+    await check('...and the bar then opens the list, one real row per order', async () => {
+      await page.click('#cbarOpen');
+      const m = await page.evaluate(async () => {
+        await new Promise(r => setTimeout(r, 260));
+        return {
+          title: document.getElementById('sheetT').innerText.replace(/\s+/g, ' ').trim(),
+          foot:  document.getElementById('sheetF').hidden,
+          rows: Array.from(document.querySelectorAll('#sheetB .mo')).map((a) => {
+            const r = a.getBoundingClientRect();
+            return { href: a.getAttribute('href'), w: r.width, h: r.height,
+                     text: a.innerText.replace(/\s+/g, ' ').trim() };
+          }),
+        };
+      });
+      assert.strictEqual(m.rows.length, 2, `the list does not hold both orders: ${JSON.stringify(m.rows)}`);
+      assert.ok(m.rows.every(r => r.w > 0 && r.h > 0),
+        `a row with no box on screen: ${JSON.stringify(m.rows)}`);
+      assert.ok(m.rows.every(r => /^\/s\/[A-Z0-9]+\/pay\/[a-f0-9]+$/i.test(r.href)),
+        `a row does not lead to an order page: ${JSON.stringify(m.rows.map(r => r.href))}`);
+      // The panel says which of its faces this is, or it is a basket with no
+      // basket in it.
+      assert.ok(/My orders/.test(m.title), `the list still calls itself the basket: ${m.title}`);
+      assert.strictEqual(m.foot, true, 'the orders list still offers Place order');
+    });
+
+    await check('AND THEY SURVIVE A NEW BASKET BEING BUILT ON TOP OF THEM', async () => {
+      // The state where they used to disappear: with something in the basket
+      // the bar IS the basket, so the foot of the basket is the only place the
+      // earlier orders can be reached from. Below every stepper, deliberately —
+      // the basket is memory only and a tap that leaves the page loses it.
+      await page.click('#sheetX');
+      await page.evaluate(() => new Promise(r => setTimeout(r, 260)));
+      await page.click('.it:not(.out) .add');
+      await page.click('#cbarOpen');
+      const m = await page.evaluate(async () => {
+        await new Promise(r => setTimeout(r, 260));
+        const bottom = (sel) => {
+          const els = Array.from(document.querySelectorAll(sel));
+          return els.length ? Math.max(...els.map(e => e.getBoundingClientRect().bottom)) : null;
+        };
+        const top = (sel) => {
+          const els = Array.from(document.querySelectorAll(sel));
+          return els.length ? Math.min(...els.map(e => e.getBoundingClientRect().top)) : null;
+        };
+        return {
+          title: document.getElementById('sheetT').innerText.replace(/\s+/g, ' ').trim(),
+          foot:  document.getElementById('sheetF').hidden,
+          lines: document.querySelectorAll('#sheetB .ln').length,
+          rows:  document.querySelectorAll('#sheetB .mo').length,
+          head:  (document.querySelector('#sheetB .mo-h') || {}).innerText,
+          lastLine: bottom('#sheetB .ln'),
+          firstRow: top('#sheetB .mo'),
+        };
+      });
+      assert.strictEqual(m.lines, 1, 'the basket lost its own line');
+      assert.strictEqual(m.rows, 2, 'the orders already placed vanished behind a new basket');
+      // Case-insensitively: .mo-h is uppercased by CSS, and innerText reports
+      // what the customer actually reads rather than what the script wrote.
+      assert.ok(/My orders/i.test(String(m.head).replace(/\s+/g, ' ')),
+        `the orders under the basket are unlabelled: ${JSON.stringify(m.head)}`);
+      assert.ok(/YOUR BASKET/i.test(m.title), `a basket that does not call itself one: ${m.title}`);
+      assert.strictEqual(m.foot, false, 'a basket with no way to place it');
+      assert.ok(m.firstRow >= m.lastLine,
+        `the orders sit among the steppers rather than below them: ${m.lastLine} / ${m.firstRow}`);
+      // Hand the next check a clean page, as the checks above this one do.
+      await page.reload({ waitUntil: 'domcontentloaded' });
     });
 
     await check('both languages are in the basket, so the toggle still works on it', async () => {
