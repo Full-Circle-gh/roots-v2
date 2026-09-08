@@ -219,8 +219,8 @@ section('3 · and for nothing else — every edge that must still roll the day')
     const d = decide(MORNING_OF_BATCH_DAY);
     assert.notStrictEqual(d.reason, 'today_batch_pending');
     assert.notStrictEqual(d.make_date, BATCH_DAY, 'the closed day must not come back');
-    assert.strictEqual(retail.localFreshFloorFor(d).notBeforeHour, null,
-      'and no morning-withdrawing hour rides along on a future date');
+    assert.strictEqual(retail.localFreshFloorFor(d), d.make_date,
+      'and the floor is that later day, not the closed one');
     // The pill has no cart and no store but it has the clock, so it must reach
     // the same verdict from the terms it CAN ask. Its first version did not read
     // the cutoff at all and named today here while the checkout had rolled past.
@@ -235,13 +235,11 @@ section('4 · the floor both the quote and the order path read');
 {
   schedule(READY_HOUR);
   setStock(P_FRESH, 0);
-  it('the §74 case floors on TODAY and carries the hour', () => {
-    const f = retail.localFreshFloorFor(decide(MORNING_OF_BATCH_DAY));
-    assert.deepStrictEqual(f, { date: BATCH_DAY, notBeforeHour: READY_HOUR });
+  it('the §74 case floors on TODAY, which reads as no constraint downstream', () => {
+    assert.strictEqual(retail.localFreshFloorFor(decide(MORNING_OF_BATCH_DAY)), BATCH_DAY);
   });
-  it('an ordinary shortage floors on a future day and carries no hour', () => {
-    const f = retail.localFreshFloorFor(decide(AFTERNOON_OF_BATCH_DAY));
-    assert.deepStrictEqual(f, { date: NEXT_BATCH, notBeforeHour: null });
+  it('an ordinary shortage floors on a future day, which withdraws today', () => {
+    assert.strictEqual(retail.localFreshFloorFor(decide(AFTERNOON_OF_BATCH_DAY)), NEXT_BATCH);
   });
   it('every other reason raises no floor at all', () => {
     setStock(P_FRESH, 5);
@@ -256,41 +254,85 @@ section('4 · the floor both the quote and the order path read');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-section('5 · the calendar withdraws the morning and keeps the afternoon');
-// This is where the promise is actually kept. Today stays bookable — that is the
-// whole point — but a window that starts before the kitchen finishes cannot be
-// honoured however early the order is placed.
+section('5 · the calendar is left alone — every window today survives');
+// DECIDED BY ASH, against a first version that withdrew today's windows starting
+// before ready_hour and withdrew "right away" with them. Redundant twice over.
+//
+// A window is a WINDOW: 10:00–12:00 is honoured by a batch that lands at 11:00,
+// so withdrawing it refused an order the kitchen could serve. And the honesty it
+// reached for is enforced a layer down, and better — a sold-out same-day
+// Guangzhou cart meets analyzeShortage's modal, whose wait_for_restock branch
+// CLEARS scheduled_for, refunds the same-day surcharge and relabels the order
+// "Ships when restocked", so a parked order carries no time promise whatever was
+// picked, 'right_away' included.
 {
   schedule(READY_HOUR);
   setStock(P_FRESH, 0);
   const floor = retail.localFreshFloorFor(decide(MORNING_OF_BATCH_DAY));
-  const sched = retail.computeDeliverySlots(ZONE_GZ, MORNING_OF_BATCH_DAY, {
-    localFreshFloor: floor.date, localFreshNotBeforeHour: floor.notBeforeHour,
-  });
+  const sched = retail.computeDeliverySlots(ZONE_GZ, MORNING_OF_BATCH_DAY,
+    { localFreshFloor: floor });
   const todaySlots = sched.slots.filter((s) => s.is_same_day);
 
-  it('today is still on offer — the customer is not pushed to tomorrow', () => {
+  it('the floor is a plain date — no hour rides along with it', () => {
+    assert.strictEqual(floor, BATCH_DAY);
+  });
+  it('today is on offer — the customer is not pushed to tomorrow', () => {
     assert.ok(todaySlots.length > 0, 'expected same-day windows, got none');
   });
-  it('no window starts before the kitchen finishes', () => {
-    const early = todaySlots.filter((s) => s.start_hour < READY_HOUR);
-    assert.strictEqual(early.length, 0,
-      `these start before ${READY_HOUR}:00 — ${early.map((s) => s.slot_id).join(', ')}`);
+  it('the 10:00–12:00 window is still bookable, batch or no batch', () => {
+    assert.ok(todaySlots.some((s) => s.start_hour === 10),
+      `expected the 10:00 window; got ${todaySlots.map((s) => s.slot_id).join(', ')}`);
   });
-  it('the afternoon survives intact', () => {
-    assert.ok(todaySlots.some((s) => s.start_hour >= 12),
-      'expected an afternoon window to remain bookable');
+  it('the afternoon is there too', () => {
+    assert.ok(todaySlots.some((s) => s.start_hour >= 12));
   });
-  it('"right away" is withdrawn — it names no hour it could be floored to', () => {
-    assert.strictEqual(sched.right_away_available, false);
-  });
-
-  // Same clock, same zone, no §74 floor: the morning windows are there. Without
-  // this the case above passes on a calendar that had already elapsed them.
-  it('…and all of that is the floor talking, not the hour of day', () => {
+  it('"right away" is untouched — wait_for_restock is what makes it honest', () => {
     const open = retail.computeDeliverySlots(ZONE_GZ, MORNING_OF_BATCH_DAY, {});
-    assert.ok(open.slots.some((s) => s.is_same_day && s.start_hour < READY_HOUR),
-      'unfloored, the 10:00 window is offered at 08:00 — so its absence above is §74');
+    assert.strictEqual(sched.right_away_available, open.right_away_available);
+  });
+  it('the floored calendar is identical to the unfloored one on this day', () => {
+    const open = retail.computeDeliverySlots(ZONE_GZ, MORNING_OF_BATCH_DAY, {});
+    assert.deepStrictEqual(sched.slots.map((s) => s.slot_id), open.slots.map((s) => s.slot_id),
+      'a floor of TODAY must read as no constraint anywhere');
+  });
+  // And the ordinary shortage still withdraws today, which is the case the floor
+  // was built for and must not be lost in removing the hour.
+  it('a shortage on a NON-cooking morning still takes today away', () => {
+    const later = retail.localFreshFloorFor(decide(MORNING_OF_NON_BATCH_DAY));
+    assert.strictEqual(later, NEXT_BATCH);
+    const s2 = retail.computeDeliverySlots(ZONE_GZ, MORNING_OF_NON_BATCH_DAY,
+      { localFreshFloor: later });
+    assert.strictEqual(s2.slots.filter((x) => x.is_same_day).length, 0,
+      'today must be withdrawn when the batch really is on a later day');
+    assert.strictEqual(s2.right_away_available, false);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+section('5b · the order the customer actually places carries no time promise');
+// The mechanism Ash's ruling leans on, asserted against the source rather than
+// assumed: whatever window is picked, the wait branch clears it.
+{
+  const fs = require('fs');
+  const src = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+  it('wait_for_restock clears scheduled_for, the surcharge and the label', () => {
+    // Anchored on the slot-clearing branch itself, NOT on `indexOf('if
+    // (isWaitFlow) {')` — the routing branch three hundred lines earlier reads
+    // `} else if (isWaitFlow) {`, which contains that substring, so a bare
+    // indexOf lands there and asserts nothing about this. The same trap
+    // test_confined_role_home.js recorded against itself (v4.171).
+    const at = src.indexOf("slotLabel         = 'Ships when restocked';");
+    assert.ok(at > -1, 'the slot-clearing branch exists');
+    const body = src.slice(Math.max(0, at - 260), at + 60);
+    assert.ok(/scheduledFor\s*=\s*null/.test(body), 'the picked window is dropped');
+    assert.ok(/sameDaySurcharge\s*=\s*0/.test(body), 'the same-day surcharge is refunded');
+    assert.ok(/slotLabel\s*=\s*'Ships when restocked'/.test(body), 'and it is relabelled');
+  });
+  it('the shortage modal is what a sold-out same-day Guangzhou cart meets', () => {
+    const inv = fs.readFileSync(path.join(ROOT, 'lib/inventory.js'), 'utf8');
+    assert.ok(/if \(!requiresStockGate\(\{ address, deliverySlotId \}\)\)/.test(inv),
+      'analyzeShortage gates on GZ + same-day');
+    assert.ok(/gate = 'options_5'/.test(inv), 'and offers the five-option flow');
   });
 }
 
