@@ -297,7 +297,8 @@ function fallbackUnits(storeId, productId) {
 
 // Resolve one Eleme line item to a store_product. Order, most reliable first:
 //   0. a claimed option (the only path that knows the line's pack size)
-//   1. 货号 / extendCode → store_products.sku
+//   1. 货号 / extendCode → store_products.sku, or the "N-N" code the merchant
+//      wrote into the listing title when Eleme sent no 货号 at all
 //   2. eleme_product_map by Eleme listing name (per store)
 //   3. unique active name match (CJK then English)
 //
@@ -328,10 +329,34 @@ function matchProductForLine(item, storeId) {
   const claim = claimForLine(item, storeId);
   if (claim) { apply(claim, 'claim'); out.units = packUnits(claim.units_per_pack); return out; }
 
-  if (item.sku) {
-    const p = db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE sku = ? AND is_active = 1').get(item.sku)
-           || db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE sku = ?').get(item.sku);
-    if (p) { apply(p, 'sku'); return withFallbackUnits(out, storeId); }
+  // 1. The SKU token. Eleme's own 货号 when it sent one, and otherwise the
+  // "N-N" code the merchant types into the listing title — the same recovery
+  // routes/meituan-internal.js has always done, and the step this copy was
+  // missing.
+  //
+  // WHAT IT COSTS TO BE WITHOUT IT, measured on the live rows 2026-09-08
+  // (scripts/diagnose_eleme_unmatched_lines.js):
+  //   "Coconut Yogurt 纯素椰子酸奶-中230g 1-130"        → 1-130 → product #260, uniquely
+  //   "Peach Yogurt 纯素椰子酸奶-桃子味-230g 大 (1-190)" → 1-190 → product #265, uniquely
+  // Both lines went unresolved instead, so neither took stock: the first was a
+  // whole order that deducted nothing (EL20260907878862), the second half of one
+  // (EL20260902387751). The name path could not save either — "Coconut Yogurt"
+  // matches six active products and "Peach Yogurt" matches none — which is the
+  // whole reason a code exists in the title.
+  //
+  // A TOKEN THAT MATCHES NOTHING COSTS NOTHING. It only resolves when a
+  // store_products row actually holds that SKU, so a gram range or a date in a
+  // title falls through to the map and name branches exactly as it does today;
+  // `sku_unknown` records that it was tried. 240 products here carry an N-N sku,
+  // so the shape is the house convention rather than a guess about two rows.
+  const skuToken = item.sku || (String(item.name || '').match(/\d+-\d+/) || [])[0] || null;
+  if (skuToken) {
+    const p = db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE sku = ? AND is_active = 1').get(skuToken)
+           || db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE sku = ?').get(skuToken);
+    // The token the line was actually resolved ON, kept on the row: an Eleme
+    // line that carried no 货号 of its own had `sku` NULL in retail_order_items,
+    // and the code that identified it lived only inside the title.
+    if (p) { apply(p, 'sku'); out.sku = skuToken; return withFallbackUnits(out, storeId); }
     out.matchBy = 'sku_unknown';
   }
 
