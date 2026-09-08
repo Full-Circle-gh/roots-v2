@@ -485,7 +485,17 @@ let CAPS = null;                                    // null = unknown ⇒ all al
 function can(key)     { return CAPS === null ? true : CAPS.has(key); }
 function canAny(keys) { return CAPS === null ? true : keys.some(k => CAPS.has(k)); }
 function _capAllows(v){ return Array.isArray(v) ? canAny(v) : can(v); }
-function setCaps(list){ CAPS = Array.isArray(list) ? new Set(list) : null; try { applyCapGates(); } catch (e) {} }
+function setCaps(list){ CAPS = Array.isArray(list) ? new Set(list) : null;
+  try { applyCapGates(); } catch (e) {}
+  // Second, and only ever once: the gate above can have just taken away the
+  // row that leads back to the section the shell booted showing.
+  try { landOnSomethingReachable(); } catch (e) {
+    /* Landing is a courtesy, and it must never be what stops an operator's caps
+       from being applied: applyCapGates has already run above, so a throw here
+       (an unbuilt rail, a section this shell doesn't carry) leaves the gates in
+       place and the operator on the dashboard — the state that shipped for a
+       year — rather than on a page with nothing painted. */
+  } }
 
 // Nav section (data-tab / mobile data-go) → the capability that reveals it. An
 // array means "any of these". Untracked tabs stay visible. Settings (config) is
@@ -512,7 +522,49 @@ const TAB_CAP = {
   activity: 'activity:view', purchasing: 'purchasing:view', materials: 'materials:view',
   recipes: 'recipes:view', waste: 'waste:view', finance: 'finance:view',
   config: ['settings:shop', 'settings:push', 'settings:payments', 'stores:view', 'shipping:config'],
+  // ── The two rows the rail left ungated while the phone gated both ──
+  // Found from a Stockroom account whose rail showed Sales and Manage team and
+  // hid Dashboard and Reports: the mirror image of what its own role is for.
+  //
+  // TEAM is `team:view` — the key m.html's ROUTE_CAP.team has always named. The
+  // row moved here from the avatar menu (2026-07-14) and arrived without a gate,
+  // so every operator on every tenant could open the roster: names, roles, and
+  // each person's permissions, from a role built to count stock.
+  //
+  // SALES is any-of, and its list is longer than the phone's for a reason the
+  // phone does not have. ROUTE_CAP.sales is `dashboard:view` alone because the
+  // phone offers no channel admin at all; on the desktop this page is the ONLY
+  // door to the Meituan / Eleme / Guanyi screens, which lost their own rail rows
+  // in the Sales redesign (see salesGo). Gated on `dashboard:view` alone it would
+  // shut the channel screens away from the very role that holds `meituan:sync` —
+  // the role whose own dashboard tells it to go and restart a stalled channel.
+  // So the DOOR opens for anyone with a reason to walk through it, and the MONEY
+  // on the far side carries its own gate: #sales-summary and every
+  // .sales-ch-metrics are tagged data-cap="dashboard:view" in the markup, so a
+  // stock role gets the channel cards and their Configure buttons with the
+  // revenue, order counts and AOV gone.
+  sales: ['dashboard:view', 'meituan:view', 'guanyi:view', 'eleme:view', 'integrations:view'],
+  team: 'team:view',
+  // `setup` (#setup-nav) is deliberately NOT in this table, though the phone
+  // gates it. Its display is OWNED by suRefreshChrome, which writes the same
+  // style.display this table's pass does — so the two would fight, and
+  // applyCapGates (called from a dozen render paths, every time a screen paints
+  // its [data-cap] buttons) would put "Open your store" back in the rail after
+  // setup had finished. The row is already absent for everyone once the store is
+  // open, which is the case that matters. A narrowed operator on an unfinished
+  // tenant still sees it; recorded here rather than closed with a gate that
+  // flickers.
 };
+
+// Can this operator open this section AT ALL — asked of the table, not of the
+// rail. A tab with no rail row of its own (a channel admin, the Product Page
+// Editor) is still gated, and a row hidden by the pass below can never disagree
+// with the answer given here, because both read TAB_CAP.
+function canTab(tab) {
+  const cap = TAB_CAP[tab];
+  return cap === undefined ? true : _capAllows(cap);
+}
+window.canTab = canTab;
 // Rail folders, recounted after the gates (§2.5 of the drill-down amendment).
 // The count is taken AFTER all three gates — capability, feature flag, data
 // precondition — so a feat-off child drops out of it: Affiliate and Social proof
@@ -571,6 +623,61 @@ function applyCapGates() {
   railSyncGroups();
 }
 window.can = can; window.canAny = canAny; window.applyCapGates = applyCapGates; window.setCaps = setCaps;
+
+// ── The backend opens on the dashboard, and the dashboard is a board of revenue ──
+//
+// `dashboard:view` is an ordinary capability an owner unticks in the roles
+// matrix, and applyCapGates duly takes the Dashboard row out of the rail when
+// they do. Nothing ever moved the operator OFF the section — #tab-dashboard is
+// class="active" in the markup, so it is what the shell boots showing. A
+// narrowed role therefore landed on the one screen its role exists to exclude
+// and then, the moment it picked any other row, had no row left to come back by:
+// the dashboard became reachable only by reloading the page. Reported from a
+// Stockroom account as "it has the dashboard but the moment i click anything on
+// the left menu i cant go back to dashboard", which is exactly what it looks
+// like from the desk.
+//
+// Tacet Mobile has answered this since its tab bar was capability-filtered — the
+// same rule, in m.html, under the same name, so the two read against each other.
+// The phone's note is the argument in full.
+//
+// RUNS ONCE, on the first gate after caps arrive. applyCapGates itself is called
+// from a dozen render paths — every screen that paints a [data-cap] button
+// re-runs it — and re-homing on any of those would yank an operator off the page
+// they are working on mid-task.
+let _landed = false;
+function landOnSomethingReachable() {
+  if (_landed) return;
+  if (CAPS === null) return;            // fail-open: caps unknown, nothing is hidden
+  _landed = true;
+  const active = document.querySelector('main section.active');
+  const id = active ? active.id : '';
+  if (id.indexOf('tab-') !== 0) return;
+  const row = document.querySelector('.tabs [data-tab="' + id.slice(4) + '"]');
+  if (row && !_railRowHidden(row)) return;   // there is a way back; leave them where they are
+  const next = _railLandingRow();
+  // Nothing visible at all — leave the operator on the section they were given
+  // rather than on an empty shell. A rail with no rows is its own bug and this
+  // is not the place to report it.
+  if (next) next.click();
+}
+// The row a stranded operator is put on: the top of their OWN menu, read in the
+// order the rail actually draws it — CSS `order` first, DOM order as the
+// tie-break, which is the pair flexbox itself resolves by. Root rows only; a
+// folder's children are the fallback, because landing inside a folder opens a
+// level the operator never asked for and hides their other tools behind a back
+// arrow. (The phone makes the same choice: it lands on a primary tab, or on the
+// tool list, never inside a tool.)
+function _railLandingRow() {
+  const rank = (b) => Number(getComputedStyle(b).order || 0);
+  const pick = (list) => list.filter(b => !_railRowHidden(b)).sort((a, b) => rank(a) - rank(b))[0] || null;
+  const root = pick(Array.prototype.slice.call(document.querySelectorAll('.tabs > [data-tab]')));
+  if (root) return root;
+  const inFolders = Array.prototype.slice.call(document.querySelectorAll('.tabs .tabs-group [data-tab]'))
+    .filter(b => { const g = b.closest('.tabs-group'); return g && !_railRowHidden(g); });
+  return pick(inFolders);
+}
+window.landOnSomethingReachable = landOnSomethingReachable;
 
 // ── Payment-brand badge — small MONOCHROME chip with a WeChat / Alipay
 // mark + a single-language label. Used in the order drawer Payment tile and
@@ -675,6 +782,16 @@ function salesGo(channel) { goTab(channel); }
 // it this way is never left stuck on a stale/empty placeholder — the failure
 // mode this fallback silently had until TAB_INIT existed.
 function goTab(tab) {
+  // HIDING A ROW IS NOT THE SAME AS REFUSING IT, and this is the door every
+  // other route into a section comes through: the dashboard's own "The full
+  // numbers live in Reports" foot link, the Sales cards, the command palette,
+  // the /?product= deep link. A rail row hidden by applyCapGates is still in the
+  // DOM and still answers .click(), so before this guard every one of those
+  // could open a section the operator's role exists to exclude — the foot link
+  // did exactly that on a role holding neither dashboard:view nor reports:view.
+  // The phone has refused the same way since its tab bar was gated (m.html
+  // push() / reg('tab')); this is that refusal, on the same table.
+  if (!canTab(tab)) return;
   const btn = document.querySelector('.tabs [data-tab="' + tab + '"]');
   if (btn) { btn.click(); return; }
   $$('.side-drawer.open').forEach(d => closeDrawer(d));

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.156
+# Tacet shared-core consolidation — decisions record, v4.157
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,7 +23,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-08 · v4.156 — **§67 ADDED: A VARIANT FAMILY IS EDITED FROM THE SHEET ITS CARD OPENS, AND SAVE WRITES THE FAMILY.** Reported by Ash from the phone with the sheet open on `Raspberry Mango Sorbet · SKU (3-210) X5`: *"on mobile, if product have variants - cant change"*. **The catalogue collapses a family into one card — correctly — and then opened only its representative**, `members.find(m => m._id === p.gid) || members[0]`, whichever size happens to own the group. The other sizes were printed along the card's second line as TEXT, and were reachable from nowhere on the phone: not the card, not the sheet, not search, which matches the same collapsed units. A price or a count on any size but one could only be changed from a desktop. **The sheet carries the family now** — a chip row under the quick-edit note, one chip per size, the marked one being the size on screen. **Switching writes nothing, and THEREFORE Save writes the family**: once the sheet moves between sizes freely, a Save that took only what was in front of the operator would drop the rest silently, so pending edits are held per product id and Save walks every size and writes the ones that changed. Save-on-switch and warn-on-switch are both recorded as rejected, as is turning the card's size line into three ~40px targets. **A failure part-way through a family no longer claims nothing changed** — the count of writes that landed picks the message, and the partial one says the rest can be pressed again; one composed pair, declared in `docs/tacet-delivery-vocabulary.md` v1.34. **And one bug it uncovered, fixed in the same pass because it is the same box:** `render()` rebuilds the price `<input>` on every paint, so a price typed and then followed by a tap on a stock stepper was painted back to the stored figure — no variants required, and shipping for as long as the sheet has had both controls.
+2026-09-08 · v4.157 — **§68 ADDED: A VARIANT FAMILY IS EDITED FROM THE SHEET ITS CARD OPENS, AND SAVE WRITES THE FAMILY.** Reported by Ash from the phone with the sheet open on `Raspberry Mango Sorbet · SKU (3-210) X5`: *"on mobile, if product have variants - cant change"*. **The catalogue collapses a family into one card — correctly — and then opened only its representative**, `members.find(m => m._id === p.gid) || members[0]`, whichever size happens to own the group. The other sizes were printed along the card's second line as TEXT, and were reachable from nowhere on the phone: not the card, not the sheet, not search, which matches the same collapsed units. A price or a count on any size but one could only be changed from a desktop. **The sheet carries the family now** — a chip row under the quick-edit note, one chip per size, the marked one being the size on screen. **Switching writes nothing, and THEREFORE Save writes the family**: once the sheet moves between sizes freely, a Save that took only what was in front of the operator would drop the rest silently, so pending edits are held per product id and Save walks every size and writes the ones that changed. Save-on-switch and warn-on-switch are both recorded as rejected, as is turning the card's size line into three ~40px targets. **A failure part-way through a family no longer claims nothing changed** — the count of writes that landed picks the message, and the partial one says the rest can be pressed again; one composed pair, declared in `docs/tacet-delivery-vocabulary.md` v1.34. **And one bug it uncovered, fixed in the same pass because it is the same box:** `render()` rebuilds the price `<input>` on every paint, so a price typed and then followed by a tap on a stock stepper was painted back to the stored figure — no variants required, and shipping for as long as the sheet has had both controls.
+
+2026-09-08 · v4.156 — **THE RAIL OBEYS THE SAME CAPABILITY RULES AS THE PHONE — §67 records it.** Reported from the Stockroom account: *"it has the dashboard but the moment i click anything on the left menu i cant go back to dashboard"*, then, of the same account, *"there is no syncing between what the warehouse account sees on mobile compared to what it sees on pc with the same permission. one thing obvious is the dashbaord differences."* **BOTH SENTENCES ARE ONE DEFECT WITH THREE HALVES, and the phone had already answered all three when its tab bar was capability-filtered; the desktop, built first, had answered none.** (1) **A ROLE WAS LANDED WHERE IT COULD NOT COME BACK TO.** `#tab-dashboard` is `class="active"` in the shell — it is what the backend boots showing — and `applyCapGates` takes its rail row away for a role without `dashboard:view` **without moving the operator off the section**. One click on any other row and the dashboard was reachable only by reloading the page. `landOnSomethingReachable()` is the phone's rule, under the phone's name, for the rail: it runs ONCE, on the first gate after the caps arrive, and only moves an operator whose current section has no row leading back to it. (2) **HIDING A ROW IS NOT REFUSING IT.** A hidden rail button is still in the DOM and still answers `.click()`, which is exactly what `goTab()` does — so the dashboard's own *"The full numbers live in Reports"* foot link opened Reports for a role holding neither key. `canTab()` now refuses, before the lookup, and the foot link and the command palette read the same table. (3) **TWO ROWS CARRIED NO GATE AT ALL.** *Manage team* — the roster, every teammate's role and permissions — has been open to every operator on every tenant since it moved out of the avatar menu in 2026-07; it is `team:view`, the key `ROUTE_CAP.team` has always named. *Sales* — today's takings, per channel — is any-of, and **deliberately wider than the phone's `dashboard:view` alone**, because on the desktop that page is the ONLY door to the Meituan / Eleme / Guanyi admins (they lost their own rail rows in the Sales redesign). Gated on `dashboard:view` it would shut the channel screens away from the very role that holds `meituan:sync` — the role whose own dashboard tells it to go and restart a stalled channel. **So the door opens for anyone with a reason to walk through it and the money on the far side carries its own gate**: `#sales-summary` and all seven `.sales-ch-metrics` are `data-cap="dashboard:view"`, so a stock role gets the channel cards and their Configure buttons with the revenue, orders and AOV gone. **`setup` is the one deliberate divergence** and its reason is written where the table is: `#setup-nav`'s display is OWNED by `suRefreshChrome`, and a second writer would put *"Open your store"* back in the rail every time a screen painted a `[data-cap]` button. **WHAT THIS DOES NOT DECIDE, and is Ash's:** whether the Stockroom role should HOLD `dashboard:view`. It does not today on the reporting tenant — which is why that account has no Dashboard row and no Reports row — and §66, decided the same day, puts the kitchen-ready fire *on the dashboard it already reads*. If that account is meant to read it, the fix is one tick in Settings → Team → Roles, not code. **Verified in Chromium against the real rail markup**, both ways: the reporting account's cap set lands on Orders with Sales and Manage team gone, and a role holding `dashboard:view` keeps its dashboard and its row. `scripts/test_backend_nav_parity.js` (fast shard) holds all three halves closed and every assertion was checked to fail with its fix reverted. No Chinese was composed — no string was added. Code, tests and docs; no schema, no migration, no preset or grant changed.
 
 2026-09-08 · v4.155 — **§61's LEFTOVER HANDLER IS DELETED RATHER THAN WIRED, AND THE ENOBUFS TRIPWIRE v4.153 CALLED "FIXED AT THE HARNESS" IS CLOSED AT THE SEVEN SITES THAT NEVER WENT THROUGH THE HARNESS.** No new section: the first half is §61 carried out, and the second is v4.152's fix finished. **THE FAILURE WAS NOT A LINT NIT.** `scripts/test_mobile_screens.js` failed on main with `reg('kqAdvance') is registered but nothing can reach it`, and that check is STATIC and runs BEFORE the render pass, which the suite exits on — so the broadest coverage the mobile app has, 134 screens across warm, cold and Chinese, had been rendering NOTHING while reporting a one-line complaint that reads like tidiness. **WIRE IT OR DELETE IT WAS ANSWERED BY THE HISTORY, not by taste:** `73b263f`, the §61 split made on Ash's "they can split what they start making, what was made. its all one batch. need to fix that", removed the whole-order button `APP.cmd('kqAdvance',…)` and replaced it with the per-line `kqItemAdvance`, leaving handler and function behind. Wiring it back would have rebuilt the exact control §61 was asked to remove, so it is deleted. **What the deletion does NOT touch is recorded in the code**: `kqNote` still serves the two per-line callers, `hdResolve` on a whole order is still reached from the awaiting-batch path, and `hdStart`'s `item` parameter stays optional — no live caller omits it any more, but the shape is not dead, only that entrance to it. **THE SECOND HALF IS THE CITATION RULE BITING ITS AUTHOR.** Unblocking the render pass ran it for the first time and 167 of 402 screens failed on the same 1 MiB `--dump-dom` ENOBUFS cap v4.152 fixed in `scripts/lib/m-probe.js`. That fix closed one call site; **seven suites carry their own inlined copy of the spawn and never go through the helper** — `test_mobile_screens`, `test_kitchen_stock_visibility`, `test_stock_home`, `test_stock_screens`, `test_stock_receiving`, `test_stock_picking`, `test_mobile_geometry`. CLAUDE.md says it exactly: *a finding filed as `file:line` is where it was found, not the extent of the problem; grep for the pattern before declaring any finding closed.* v4.152 grepped for USERS OF THE HELPER and called it done. **64 MiB is this repository's existing convention rather than a number invented here** — `test_mobile_customer_record`, `test_mobile_order_from_record` and `test_till_back` already set it. Each suite keeps its own timeout, which is what still bounds a genuinely runaway render. **v4.153's remark that two sessions hit one tripwire in an afternoon understated it: three did, and the third only because the first two had left the render pass dark enough to hide the other seven.** **RECORDED AND NOT FIXED HERE:** `scripts/test_mobile_geometry.js` exits 1 on three clipped-text findings and one header-rule finding, verified byte-identical on a clean `44def44` before and after this change. It is a UI defect, it is now VISIBLE rather than masked, and it is owed its own change.
 
@@ -6793,7 +6795,101 @@ existing bilingual age helpers. **No entry in `docs/tacet-delivery-vocabulary.md
 2. **THE DESKTOP HAS NO READY LIST OF ITS OWN**, by the ruling above. If that is ever revisited, the thing to preserve
    is that `seen_at` is stamped by whatever screen actually shows the rows — not by the dashboard row being clicked.
 
-## §67 — A VARIANT FAMILY IS EDITED FROM THE SHEET IT COLLAPSES INTO, AND SAVE WRITES THE FAMILY
+## §67 — THE RAIL OBEYS THE SAME CAPABILITY RULES AS THE PHONE, AND A ROLE IS NEVER LANDED WHERE IT CANNOT COME BACK TO
+
+Reported by Ash, 2026-09-08, from the Stockroom account — two messages, one defect:
+
+> *"this is the warehouse account, it has the dashboard but the moment i click anything on the left menu i cant go back
+> to dashboard"*
+
+> *"basically there is no syncing between what the warehouse account sees on mobile compared to what it sees on pc with
+> the same permission. one thing obvious is the dashboard differences."*
+
+### What was actually happening
+
+The account holds neither `dashboard:view` nor `reports:view` — its rail showed Orders, Sales, Counter till, Products,
+Waste, Customers and Manage team, and hid Dashboard and Reports. **That is not a bug in the gate; it is the gate
+working.** The bug is everything the shell does around it.
+
+`#tab-dashboard` carries `class="active"` in `public/retail-admin.html`: it is the section the backend boots showing,
+before any capability is known. `applyCapGates` then hides the Dashboard rail row and **leaves the operator standing on
+the section**. So the account was handed a screen its role excludes, and the instant it picked any other row that screen
+became reachable only by reloading the page. From the desk that reads exactly as it was reported.
+
+The phone has answered this since its tab bar was capability-filtered — `landOnSomethingReachable()` in `public/m.html`,
+whose own comment says it plainly: *"THE APP OPENS ON HOME, and Home is a board of revenue. An operator without
+`dashboard:view` was therefore shown, for the length of one render, the one screen their role exists to exclude — and
+then had no way to leave it."* **The desktop was built first and never got the rule.** That is the whole of the
+"no syncing" report: not two tables disagreeing, but one surface having been taught something the other had not.
+
+### The ruling — three halves, all of them the phone's rules applied to the rail
+
+**1 · A role is landed somewhere it can come back from.** `landOnSomethingReachable()` joins `01-core.js` under the
+phone's name, so the two read against each other. It runs ONCE, from `setCaps()`, the moment the operator's real
+capabilities arrive — not from `applyCapGates`, which a dozen render paths call and which would otherwise yank an
+operator off the page they are working on. It moves nobody whose current section still has a rail row leading back to
+it, and nobody at all when caps are null (fail-open, as everywhere else). The row it lands on is **the top of that
+operator's own menu**, read in the order the rail draws it — CSS `order` first, DOM order as the tie-break, the pair
+flexbox itself resolves by — and a root row rather than a folder's child, because landing inside a folder opens a level
+nobody asked for and hides the other tools behind a back arrow. The phone makes the same choice for the same reason.
+
+**2 · Hiding a row is not refusing it.** A hidden rail button is still in the DOM and still answers `.click()`, which is
+what `goTab()` does — so every in-page route into a section was ungated: the dashboard's own *"The full numbers live in
+Reports"* foot link opened Reports for a role holding neither key. `canTab()` asks `TAB_CAP` (so a tab with no rail row
+of its own — a channel admin, the Product Page Editor — is gated too) and `goTab()` refuses **before** it looks the
+button up. The foot link carries `data-cap="reports:view"` so it is not a control that visibly does nothing, and the
+command palette indexes only pages the operator can open — `gatedOff()` read the feature gate alone.
+
+**3 · Every screen the phone gates, the rail gates.** Two rows carried no capability at all:
+
+- **Manage team is `team:view`** — the key `ROUTE_CAP.team` has always named. The row moved to the rail from the avatar
+  menu on 2026-07-14 and arrived without a gate, so since then every operator on every tenant could open the roster:
+  names, roles, and each person's permissions, from a role built to count stock.
+- **Sales is any-of, and deliberately wider than the phone's.** `ROUTE_CAP.sales` is `dashboard:view` alone because the
+  phone offers no channel admin at all. On the desktop this page is the **only** door to the Meituan / Eleme / Guanyi
+  screens — they lost their own rail rows in the Sales redesign, and `salesGo()` is a thin alias for `goTab`. Gated on
+  `dashboard:view` alone it would shut those screens away from the very role that holds `meituan:sync`, the role whose
+  own dashboard tells it to go and restart a stalled channel. So it admits `dashboard:view` **or** any of the three
+  channel view keys **or** `integrations:view`.
+
+**And the money on the far side of that wider door carries its own gate**, or the widening would have handed a stock
+role exactly the revenue it was widened to avoid: `#sales-summary` and all seven `.sales-ch-metrics` blocks are
+`data-cap="dashboard:view"`, so a stock role gets the channel cards and their Configure buttons with the revenue, order
+counts and AOV gone.
+
+**Rejected: gating Sales on `dashboard:view` and giving the channel admins a rail row of their own.** It is the tidier
+answer and it is a new row in the rail — a fourth destination for a job that has one door already, added to fix a gate.
+If the channel screens are ever wanted outside Sales, that is its own decision.
+
+**`setup` is the one deliberate divergence from the phone**, and its reason is written where the table is:
+`#setup-nav`'s display is OWNED by `suRefreshChrome`, which writes the same `style.display` the gate pass does. A second
+writer would fight it — `applyCapGates` runs on a dozen render paths, so *"Open your store"* would return to the rail
+every time an operator painted a `[data-cap]` button after setup had finished. The row is already absent for everyone
+once the store is open, which is the case that matters; a narrowed operator on an unfinished tenant still sees it.
+
+### What this does NOT decide, and is Ash's
+
+**Whether the Stockroom role should hold `dashboard:view`.** On the reporting tenant it does not — which is why that
+account has no Dashboard row and no Reports row, and why the shipped `warehouse` preset (which *does* carry
+`dashboard:view`) is not what that account resolves to: roles are tenant data now, edited in the matrix.
+
+This matters beyond the rail, because **§66 was decided the same day and puts the kitchen-ready fire *on the dashboard
+the warehouse already reads*.** A Stockroom role without `dashboard:view` never sees that row on either surface. If the
+account is meant to read its dashboard — and §66's own quote, *"if i look on mobile or pc"*, says it is — **the fix is
+one tick in Settings → Team → Roles, not code.** Ticking it makes the Dashboard row appear, which is the reported
+complaint answered directly; leaving it unticked now lands the account on Orders instead of stranding it. The change
+above is correct under either answer, which is why it did not wait on one.
+
+### Recorded, and deliberately NOT fixed here
+
+1. **Cards INSIDE a section are still indexed by the palette on the feature gate alone.** Only the top-level tab loop
+   consults `canTab`. Closing the card level means teaching `gatedOff` to read an inline `display:none`, which would
+   also drop every legitimately-collapsed-but-reachable panel out of the index — a silent shrinking of search, traded
+   for a leak nobody has reported. Named so the next reader knows the level was chosen, not missed.
+2. **`opsFires()` and `dashCardWants()` still gate the dashboard's fires differently on the two surfaces** — §66's own
+   "deliberately NOT fixed" list already carries this, and nothing here touched it.
+
+## §68 — A VARIANT FAMILY IS EDITED FROM THE SHEET IT COLLAPSES INTO, AND SAVE WRITES THE FAMILY
 
 Reported by Ash, 2026-09-08, from the phone, with a screenshot of the product sheet open on
 `Raspberry Mango Sorbet · SKU (3-210) X5`: *"on mobile, if product have variants - cant change"*.
