@@ -151,6 +151,42 @@ const printStatus = (id) =>
   ok(slip.includes('For the 2pm run'), 'the requester note survives to paper');
   ok(!slip.includes('￥'), 'NOTHING on a production ticket is priced');
 
+  /* THE ITEM BLOCK IS THE ORDER RECEIPT'S — itemLines() in lib/feie.js, the
+     shape a slip like TC000578 already prints. Name at normal size with a
+     language to a line, then quantity and SKU enlarged on the line beneath.
+
+     What it replaced. The quantity used to be the right-hand column of a row()
+     sharing a line with the name, and the SKU a small sub-line under it. On
+     PR-260908-003 that printed "花生酱          1 pcs", the English spilling
+     onto the next line, and "4-670" in body text below — the smallest string
+     on the slip, and the one someone standing at a shelf is matching against. */
+  ok(slip.includes('<B>x20 kg SKU P-900</B>'),
+     'quantity and SKU ride one enlarged line — the receipt\'s own shape, and the SKU is now the big text');
+  ok(!/^ +P-90\d/m.test(slip), 'and neither is a small sub-line under the name any more');
+  ok(/<BOLD>鹰嘴豆泥 \/ Hummus<\/BOLD>/.test(slip),
+     'a name that fits stays on one line, exactly as it does on the receipt — the split is a fallback, not a format');
+
+  /* §1.20 — AN ENLARGED LINE HOLDS 16 DISPLAY COLUMNS, NOT 31. <B> and <CB>
+     double on a head that wraps at 32; the head does not truncate, it breaks,
+     and it breaks by column arithmetic wherever that lands.
+
+     This is the assertion the photographed slip needed. `<B>For the shelf
+     货架补货</B>` is 22 columns, so the head broke it — and it broke INSIDE
+     货架补货, printing "For the shelf 货" over "架补货". 架补货 is not a word.
+     Every purpose was over the line (21, 22, 18 and 20), so this measures all
+     of them rather than the one that was noticed: the next line to overrun
+     will be a different one. */
+  const cols = (s) => [...String(s)].reduce((n, ch) => n + (ch.charCodeAt(0) > 0xff ? 2 : 1), 0);
+  const enlarged = (s) => s.split('\n')
+    .map(l => (l.match(/^<(C?B)>(.*)<\/\1>$/) || [])[2])
+    .filter(v => v != null);
+  const over = ['order', 'shelf', 'urgent'].flatMap(purpose =>
+    enlarged(feie.renderKitchenRequest(
+      { rs_number: 'PR-2609-0007', purpose, sent_at: '2026-09-06 01:20:00' }, KITCHEN_ITEMS, 'Roots'))
+      .filter(v => cols(v) > 16)
+      .map(v => `${purpose}: "${v}" = ${cols(v)}`));
+  eq(over.join(' | '), '', 'no enlarged line of any purpose overruns 16 columns — the head never gets to pick a break');
+
   /* §65's third purpose, and the one reason the slip cares which it is. The
      paper is the one place a cook reads a request with no screen to sort it for
      them, so an urgent slip has to carry the priority in ink — CENTRED AND
@@ -160,8 +196,18 @@ const printStatus = (id) =>
   const rush = feie.renderKitchenRequest(
     { id: 6, rs_number: 'PR-2609-0008', purpose: 'urgent', store_name: 'Warehouse',
       sent_at: '2026-09-08 09:00:00' }, KITCHEN_ITEMS, 'Roots');
-  ok(rush.includes('<CB>加急 — 请优先制作</CB>'), 'an urgent request prints LOUDER — the header weight, not the body weight');
-  ok(rush.includes('URGENT — make first'), 'and in English too, on the line below, like every other pair on this slip');
+  /* Split at the dash that was already between the two clauses, for the §1.20
+     reason above — glued, 加急 — 请优先制作 is 18 columns and URGENT — make
+     first is 20, so both were being broken by the head anyway. Each fragment
+     is a live token in its own right (加急 · 优先制作 stand apart on the kitchen
+     board, public/kitchen.html:1173) and each reads correctly alone, which is
+     §1.21's test: 加急 is "rush", 请优先制作 is "please make it first". Neither
+     half is a different, plausible instruction — the failure mode that rule
+     exists for. */
+  ok(rush.includes('<CB>加急</CB>') && rush.includes('<CB>请优先制作</CB>'),
+     'an urgent request prints LOUDER — the header weight, not the body weight');
+  ok(rush.includes('<B>URGENT</B>') && rush.includes('<B>make first</B>'),
+     'and in English too, on the lines below, like every other pair on this slip');
   ok(!rush.includes('用于发货') && !rush.includes('货架补货'),
      'it prints INSTEAD of the other two, not beside them — purpose is one value, and two would say the request is both');
 
@@ -170,12 +216,25 @@ const printStatus = (id) =>
   const noPurpose = feie.renderKitchenRequest({ rs_number: 'PR-OLD' }, KITCHEN_ITEMS, 'Roots');
   ok(!/用于发货|货架补货|加急/.test(noPurpose), 'a request from before the field existed still claims no reason at all');
 
-  // A cook reads the quantity off the right-hand column. A bilingual name long
-  // enough to fill the width must not push it onto its own line.
+  // A cook reads the quantity off a line of its own, so no name can crowd it —
+  // which is the point of moving it off the name's line. The bilingual split is
+  // still the receipt's: one language per line once the glued pair overruns.
   const longName = feie.renderKitchenRequest({ rs_number: 'PR-1' }, [
-    { product_cn: '素食牛肉丸', product_name: 'Plant-based beef balls', qty_requested: 6, unit: 'box' },
+    { product_cn: '素食牛肉丸', product_name: 'Plant-based beef balls', sku: 'P-77', qty_requested: 6, unit: 'box' },
   ], 'Roots');
-  ok(/素食牛肉丸\s+6 box/.test(longName), 'a long bilingual name splits between languages, keeping the qty on line one');
+  ok(longName.includes('<BOLD>素食牛肉丸</BOLD>'), 'a long bilingual name splits between languages');
+  ok(longName.includes('<BOLD>Plant-based beef balls</BOLD>'), 'and the English is a line of its own, not a wrap of the Chinese');
+  ok(longName.includes('<B>x6 box SKU P-77</B>'), 'with the quantity below it, where nothing can squeeze it');
+
+  /* When the pair itself cannot fit 16, WE split it rather than let the head:
+     quantity first, because that is the half a cook is reading for. A kitchen
+     quantity carries a unit, so this is a real case and not a theoretical one —
+     "x240 ltr SKU ALT-0042" is 21. */
+  const wide = feie.renderKitchenRequest({ rs_number: 'PR-3' }, [
+    { product_name: 'Oat milk', sku: 'ALT-0042', qty_requested: 240, unit: 'ltr' },
+  ], 'Roots');
+  ok(wide.includes('<B>x240 ltr</B>') && wide.includes('<B>SKU ALT-0042</B>'),
+     'a pair too wide for one enlarged line becomes two deliberate ones');
 
   // Feieyun rejects a whole print over ~5000 bytes, every retry included. A
   // runaway free-text note is the realistic way a slip gets there.
