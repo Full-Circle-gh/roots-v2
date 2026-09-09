@@ -3786,6 +3786,11 @@
         #cu-drawer .drawer-back svg { width: 22px; height: 22px; }
         #cu-drawer .drawer-back:active { background: var(--bg-elev-1); }
         #cu-drawer #cu-drawer-actions { padding-right: 0 !important; padding-top: 40px; }
+        /* The header chevron above IS back on phones, so the in-row twin is
+           redundant here — and a fourth button wraps the pinned row onto a
+           second line, which costs the body real estate on the narrowest
+           windows. Desktop has no chevron, so there it stays. */
+        #cu-drawer .cu-back-order { display: none; }
         /* Top items is a slim 3-col table (Item/Qty/Spend) — let it fit the phone
            width instead of inheriting the global 560px min-width, which pushed the
            Spend column off-screen and cropped the row. */
@@ -13108,16 +13113,19 @@
 <!-- Focus scrim. Reuses Orders' OWN .ord-scrim class rather than copying
      its values, so the two can never drift apart: dim + blur are defined
      once, in one rule. The list stays VISIBLE behind it — that is what
-     makes this a drawer and not a modal — but reads as inactive. -->
-<div id="cu-scrim" class="ord-scrim" aria-hidden="true" onclick="closeDrawer('#cu-drawer')"></div>
+     makes this a drawer and not a modal — but reads as inactive.
+     A click dismisses via cuDrawerBack() — stepping back to the order if the
+     customer was opened from one, otherwise a plain close (parity with Esc). -->
+<div id="cu-scrim" class="ord-scrim" aria-hidden="true" onclick="cuDrawerBack()"></div>
 <aside role="dialog" aria-modal="true" id="cu-drawer" class="side-drawer dw-dismiss" aria-hidden="true">
   <button type="button" class="drawer-close" onclick="closeDrawer('#cu-drawer')" title="Close · 关闭 (Esc)" aria-label="Close drawer">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
   </button>
   <!-- Phone-only back affordance — left-side chevron replacing the floating ×
        (which doesn't fit the mobile header), matching the order drawer. Hidden
-       on desktop via CSS; same close action as the ×. -->
-  <button type="button" class="drawer-back" onclick="closeDrawer('#cu-drawer')" title="Back · 返回" aria-label="Back">
+       on desktop via CSS. Steps back to the order when the customer was opened
+       from one (cuDrawerBack), otherwise the same close action as the ×. -->
+  <button type="button" class="drawer-back" onclick="cuDrawerBack()" title="Back · 返回" aria-label="Back">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
   </button>
   <!-- PINNED action row. It is a SIBLING of .drawer-body, not a child: the
