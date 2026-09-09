@@ -215,6 +215,16 @@ function buildCases(src) {
     'sheet:po': "state.posTried=true;state.poList=[];APP.cmd('push','purchasing');state.poId=4;state.poDetail={id:4,po_number:'RPO-0004',supplier:'Fresh Co.',store_name_en:'Tianhe',date:'2026-08-14',delivery_date:'2026-08-16',status:'Ordered',total_cost:3240,notes:'Back door before 9.',items:[{id:1,name_en:'Oat milk 1L',sku:'OM-1L',qty:48,unit:'btl',total_cost:1440,current_stock:12},{id:2,name_en:'Carrots',sku:'CR-01',qty:20,unit:'kg',total_cost:1800,qty_received:18,damaged_qty:2}]};render()",
     'sheet:po-loading': "state.posTried=true;state.poList=[];APP.cmd('push','purchasing');state.poId=4;render()",
     'sheet:po-receive-ask': "state.posTried=true;state.poList=[];APP.cmd('push','purchasing');state.poId=4;state.poDetail={id:4,po_number:'RPO-0004',supplier:'F',status:'Ordered',total_cost:1,items:[]};render();APP.cmd('poStatus','Delivered')",
+    // THE KITCHEN QUEUE WITH A REQUEST OPEN. `push:kitchenqueue`, which this
+    // sweep generates from SUBS, only ever renders the LIST — the detail branch
+    // (k.orderId set) carries the request number, the item rows with their per
+    // line buttons, and the Reprint chip, and nothing visited it. Pushed first,
+    // because entering the route clears k.order/k.orderId by design.
+    'sheet:kq-request': "APP.cmd('push','kitchenqueue');state.kq.orderId=3;state.kq.order={id:3,rs_number:'PR-260909-003',status:'sent',purpose:'shelf',sent_at:'2026-09-09 19:24:00',items:[{id:11,product_name:'Parmesnuts (Parmesan)',product_cn:'帕玛森',sku:'PN-01',qty_requested:3,status:'sent'},{id:12,product_name:'Flaxseed',product_cn:'亚麻籽',sku:'FS-01',qty_requested:3,status:'prepared',recorded_at:'2026-09-09 19:40:00'}]};render()",
+    // The reprint mid-flight: the chip reads "Printing…" and is disabled, and
+    // the lines around it stay live — that separation is the point of its own
+    // busy flag, so a pass that never renders it would not notice it going.
+    'sheet:kq-printing': "APP.cmd('push','kitchenqueue');state.kq.orderId=3;state.kq.printing=true;state.kq.order={id:3,rs_number:'PR-260909-003',status:'sent',purpose:'shelf',sent_at:'2026-09-09 19:24:00',items:[{id:11,product_name:'Parmesnuts (Parmesan)',product_cn:'帕玛森',sku:'PN-01',qty_requested:3,status:'sent'}]};render()",
     'sheet:account': "APP.cmd('overflow')",
     'sheet:cust-points': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{nickname:'A',tier_key:'tree',points_balance:120,balance:8},stats:{orders:{}}};render();APP.cmd('adjustPoints')",
     'sheet:cust-block': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{nickname:'A',tier_key:'tree',is_blocked:1},stats:{orders:{}}};render();APP.cmd('toggleBlock')",

@@ -702,6 +702,7 @@ const state = {
      have to be carried to the screen that adds them or the shelf stays short. */
   kq:{list:null,tried:false,tab:'active',order:null,orderId:null,busy:false,err:'',
       note:'',    // why a closed request did not reach the record screen
+      printing:false,  // the reprint's own flag — see kqReprint
       /* THE DOT ON "To make" (§71). `seen` is the ids of the requests this
          phone has actually had in front of it on that tab; `fresh` is how many
          active requests are not among them — the dot, never a count. Both are
@@ -912,7 +913,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
     if(pikStores().length>1) k.at=null; }
   /* The queue is re-read on entry for the same reason the kitchen-ready list
      is: what is waiting to be made is a fact about this minute. */
-  if(route==='kitchenqueue'){ const k=state.kq; k.tried=false; k.list=null; k.order=null; k.orderId=null; k.err=''; k.note='';
+  if(route==='kitchenqueue'){ const k=state.kq; k.tried=false; k.list=null; k.order=null; k.orderId=null; k.err=''; k.note=''; k.printing=false;
     /* §84 — the owed block is re-asked on the same entry and for a stronger
        reason than the queue is: it is what somebody opened this screen to find
        out at the start of a shift, and a figure carried over from the last time
@@ -981,9 +982,15 @@ document.addEventListener('touchstart', _scrimDownTrack, true);
 window.APP.scrimClose = (name) => { if(_scrimDownHit && CMD[name]) CMD[name](); };
 
 /* Quick Stock is a separate PWA; reaching it is a navigation, not a push. */
-reg('qsSearch', v=>{ const el=document.getElementById('mQsQ');
-  // The caret rides the re-render, as it does on every other search field here.
-  state.qs.q=String(v||''); state.focus={id:'mQsQ',pos:el?el.selectionStart:null}; render(); });
+/* TYPING REPAINTS THE LIST AND NOTHING ELSE — see rqSearch for the defect this
+   removes. The armed state.focus goes with the render it existed to survive:
+   nothing takes focus away when the field is never rebuilt. */
+reg('qsSearch', v=>{
+  state.qs.q=String(v||'');
+  const host=document.getElementById('mQsBody');
+  if(host) host.innerHTML=qsBodyHtml();
+  else render();
+});
 reg('qsRetry', ()=>{ state.qs.itemsErr=null; loadQsItems(true); render(); });
 reg('qsBump', (id,d)=>qsBump(Number(id),Number(d)));
 reg('qsFix', id=>qsAskCount(Number(id)));
@@ -994,12 +1001,21 @@ reg('qsTyped', (id,v)=>qsTyped(Number(id),v));
 reg('qsTypeCommit', id=>qsTypeCommit(Number(id)));
 /* Patches this card only, never renders — see qsTypeBlur. */
 reg('qsTypeBlur', id=>qsTypeBlur(Number(id)));
-reg('rqSearch', v=>{ const el=document.getElementById('mRqQ');
-  const at=el?el.selectionStart:null; state.rq.q=String(v||''); render();
-  // Same caret rescue the stock search does: a re-render moves focus, and a
-  // search box that loses the caret mid-word is one nobody can type in.
-  const el2=document.getElementById('mRqQ');
-  if(el2){ el2.focus(); if(at!=null){ try{ el2.setSelectionRange(at,at); }catch(e){} } } });
+/* TYPING REPAINTS THE LIST AND NOTHING ELSE. This used to call render(), which
+   replaces the whole app in one innerHTML and so destroyed the very input the
+   keystroke came from. The caret rescue that stood here put the cursor back;
+   nothing could put the SOFT KEYBOARD back, and a rebuilt field opens a fresh
+   one on its letter page — so typing a SKU gave one digit, then the alphabet,
+   then one digit. Reported from the kitchen on the Ask to buy screen; this is
+   the same defect on Ask for stock and Ask the kitchen.
+   The foot is left alone deliberately: its tally counts CHOSEN products, which
+   a search cannot change. */
+reg('rqSearch', v=>{
+  state.rq.q=String(v||'');
+  const host=document.getElementById('mRqBody');
+  if(host) host.innerHTML=rqBodyHtml();
+  else render();
+});
 reg('rqBump', (id,d)=>rqBump(Number(id),Number(d)));
 reg('rqPurpose', k=>{ state.rq.purpose=String(k); render(); });
 reg('rqTo', id=>{ state.rq.to=Number(id);
@@ -1062,6 +1078,7 @@ reg('kqList', ()=>{ const k=state.kq; k.order=null; k.orderId=null; k.err='';
 reg('kqTab', t=>{ const k=state.kq; if(k.tab===String(t)) return; k.tab=String(t); k.list=null; k.tried=false; render(); });
 reg('kqItemAdvance', (id,to)=>kqItemAdvance(Number(id),to));
 reg('kqItemRecord', id=>kqItemRecord(Number(id)));
+reg('kqReprint', ()=>kqReprint());
 reg('hdBump', (i,d)=>hdBump(Number(i),Number(d)));
 /* The chip sets the reason and closes the row's picker in one tap — there is
    no second confirm, because the answer IS the confirmation. */
@@ -1077,10 +1094,16 @@ reg('hdRetryShelf', ()=>{
   else loadQsItems(true);
   render();
 });
-reg('batSearch', v=>{ const el=document.getElementById('mBatQ');
-  const at=el?el.selectionStart:null; state.bat.q=String(v||''); render();
-  const el2=document.getElementById('mBatQ');
-  if(el2){ el2.focus(); if(at!=null){ try{ el2.setSelectionRange(at,at); }catch(e){} } } });
+/* TYPING REPAINTS THE LIST AND NOTHING ELSE — see rqSearch. Two targets here
+   because this screen's header line sits above the search box; both are patched
+   and the input between them is left alone. */
+reg('batSearch', v=>{
+  state.bat.q=String(v||'');
+  const top=document.getElementById('mBatTop');
+  const body=document.getElementById('mBatBody');
+  if(top&&body){ top.innerHTML=batTopHtml(); body.innerHTML=batBodyHtml(); }
+  else render();
+});
 reg('batBump', (id,d)=>batBump(Number(id),Number(d)));
 reg('batNext', ()=>batContinue());
 reg('xfrAsk', id=>{
@@ -1374,8 +1397,14 @@ reg('custSortPick', ()=>{
   render();
 });
 reg('custMore', ()=>{ if(!state.custLoading) loadCustomers(true); });
-reg('custSearch', v=>{ const el=document.getElementById('mCustQ');
-  state.custQ=String(v||''); state.focus={id:'mCustQ',pos:el?el.selectionStart:null}; render(); });
+/* TYPING HERE REPAINTS NOTHING, AND NOTHING IS WHAT IT SHOULD EVER HAVE
+   REPAINTED. This list is fetched with the query attached, and the fetch only
+   happens on Enter or blur (custSearchGo) — so between keystrokes there is
+   nothing on this screen that the query changes except the input's own value,
+   which the browser is already showing. The render() that stood here rebuilt the
+   whole app to redraw a field with the character the user had just typed into
+   it, and destroyed that field's soft keyboard doing so. */
+reg('custSearch', v=>{ state.custQ=String(v||''); });
 reg('custSearchGo', ()=>loadCustomers());
 reg('custClear', ()=>{ state.custSeg='all'; state.custTier='all'; state.custChan='all'; state.custQ=''; loadCustomers(); });
 /* From an order to the person who placed it — the desktop's "› #id" link.
@@ -1405,8 +1434,16 @@ reg('prodCat', v=>{ state.prodCat=v; render(); });
 /* The whole app re-renders into one innerHTML, so an input loses focus on
    every keystroke unless the caret is put back. Nothing is trimmed here —
    trimming mid-word would eat the space the operator just typed. */
-reg('prodSearch', v=>{ const el=document.getElementById('mProdQ');
-  state.prodQ=String(v||''); state.focus={id:'mProdQ',pos:el?el.selectionStart:null}; render(); });
+/* TYPING REPAINTS THE LIST AND NOTHING ELSE — see rqSearch. The catalogue is
+   held in memory and filtered here, so this never waited on the server; what it
+   waited on was a full re-render, which rebuilt the field the keystroke came
+   from and dropped its soft keyboard back to letters. */
+reg('prodSearch', v=>{
+  state.prodQ=String(v||'');
+  const host=document.getElementById('mProdBody');
+  if(host) host.innerHTML=prodBodyHtml();
+  else render();
+});
 /* On the shop, or not. The desktop puts this switch on every card because it is
    the one product decision that is urgent — something is wrong with a line and
    it has to stop selling NOW — and that is a phone job if anything is. It flips
@@ -1709,13 +1746,22 @@ reg('rcvRetry', ()=>{ state.rcvErr=null; render(); loadDeliveries(true); });
    mechanism Products and Customers search use. The fetch is debounced so a
    fast typist makes one request, not nine. */
 let rcvQTimer=null;
-reg('rcvQuery', v=>{ const el=document.getElementById('mRcvQ');
-  state.rcvQ=String(v||''); state.focus={id:'mRcvQ',pos:el?el.selectionStart:null};
-  state.rcvOpen=null; state.rcvDetail=null; render();
+/* BOTH ENDS, because this is the screen where the search really does go to the
+   server. The keystroke repaints the list in place; the answer that lands 320ms
+   later repaints it again through the same call. Fixing only the keystroke would
+   have left the field rebuilt by every response — and the soft keyboard dropped
+   back to letters a third of a second after each word, which is worse than
+   dropping it immediately because it happens while the operator is still typing
+   the next one. */
+reg('rcvQuery', v=>{
+  state.rcvQ=String(v||'');
+  state.rcvOpen=null; state.rcvDetail=null;
+  rcvPatch();
   clearTimeout(rcvQTimer); rcvQTimer=setTimeout(()=>loadDeliveries(true),320); });
 let rcvToTimer=null;
-reg('rcvToQuery', v=>{ const el=document.getElementById('mRcvToQ');
-  state.rcvToQ=String(v||''); state.focus={id:'mRcvToQ',pos:el?el.selectionStart:null}; render();
+reg('rcvToQuery', v=>{
+  state.rcvToQ=String(v||'');
+  rcvPatch();
   clearTimeout(rcvToTimer); rcvToTimer=setTimeout(()=>loadToReceive(true),320); });
 reg('rcvToRetry', ()=>{ state.rcvToErr=null; render(); loadToReceive(true); });
 reg('rcvOpen', id=>{ const n=Number(id);
@@ -6104,9 +6150,9 @@ function loadDeliveries(force){
   state.rcvTried=true; state.rcvLoading=true;
   const qs='?q='+encodeURIComponent(state.rcvQ||'')+'&flag='+encodeURIComponent(state.rcvFlag||'all');
   api('/receiving/deliveries'+qs).then(rows=>{
-    state.rcvDeliv=Array.isArray(rows)?rows:[]; state.rcvErr=null; state.rcvLoading=false; render();
+    state.rcvDeliv=Array.isArray(rows)?rows:[]; state.rcvErr=null; state.rcvLoading=false; rcvPatch();
   }).catch(e=>{ if(String(e.message)==='auth') return;
-    state.rcvLoading=false; state.rcvErr=E('Could not load deliveries.','无法加载收货记录。'); render(); });
+    state.rcvLoading=false; state.rcvErr=E('Could not load deliveries.','无法加载收货记录。'); rcvPatch(); });
 }
 /* Orders still waiting on their goods. The search goes to the server because
    the thing worth searching — the product names on the lines — is not in the
@@ -6118,9 +6164,9 @@ function loadToReceive(force){
   state.rcvToTried=true;
   const q=(state.rcvToQ||'').trim();
   api('/purchases'+(q?'?search='+encodeURIComponent(q):'')).then(rows=>{
-    state.rcvTo=Array.isArray(rows)?rows:[]; state.rcvToErr=null; render();
+    state.rcvTo=Array.isArray(rows)?rows:[]; state.rcvToErr=null; rcvPatch();
   }).catch(e=>{ if(String(e.message)==='auth') return;
-    state.rcvToErr=E('Could not load orders.','无法加载采购单。'); render(); });
+    state.rcvToErr=E('Could not load orders.','无法加载采购单。'); rcvPatch(); });
 }
 function loadDelivery(id){
   state.rcvDetail=null; state.rcvDetailErr=null;
@@ -6738,29 +6784,58 @@ function statusReceiving(){
   if(d) bits.push(LANG==='en'?(d.length+' taken in'):(d.length+' 次收货'));
   return bits.join(' · ');
 }
-function screenReceiving(){
-  loadToReceive(); loadDeliveries();
+/* The segment strip, on its own because its COUNTS move: "To receive 4" becomes
+   "To receive 2" the moment a filtered answer lands, and it sits above a search
+   box that must not be rebuilt to say so. */
+function rcvSegsHtml(){
   const seg=(k,label,n)=>`<button onclick="APP.cmd('rcvSeg','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
     background:${state.rcvSeg===k?'var(--surface-card)':'transparent'};color:${state.rcvSeg===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${state.rcvSeg===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label}${n==null?'':` <span class="num" style="color:var(--text-secondary)">${n}</span>`}</button>`;
   const segs=`<div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px;margin:14px 16px 12px">
     ${seg('toreceive',T('To receive','待收货'),rcvToReceive().length)}${seg('received',T('Received','已收货'),state.rcvDeliv?state.rcvDeliv.length:null)}</div>`;
+  return segs;
+}
+function screenReceiving(){
+  loadToReceive(); loadDeliveries();
+  /* THREE PATCHABLE BOXES, and the search boxes deliberately between them.
+     The segment strip carries COUNTS that a server answer changes, and it sits
+     above the search box; the list sits below it. Neither can share a container
+     with a field that must survive a keystroke, so each gets its own and
+     rcvPatch() repaints whichever the screen currently has.
+     This screen is the one where the search really does go to the server, so
+     BOTH ends had to stop calling render(): the keystroke, and the answer that
+     lands 320ms later. Either one alone would still rebuild the field. */
   if(state.rcvSeg==='toreceive'){
-    const rows=rcvToReceive();
     const toSearch=`<div style="padding:0 16px 12px;position:relative">
       <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',17)}</span>
       <input id="mRcvToQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.rcvToQ)}" style="padding-left:42px"
         placeholder="${T('Product, SKU, order or supplier','商品、SKU、单号或供应商')}" oninput="APP.cmd('rcvToQuery',this.value)"></div>`;
-    if(state.rcvToErr) return segs+toSearch+`<div style="padding:14px 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+    return `<div id="mRcvSegs">${rcvSegsHtml()}</div>`+toSearch+`<div id="mRcvToBody">${rcvToBodyHtml()}</div>`;
+  }
+  const chips=`<div class="hscroll" style="display:flex;gap:8px;padding:0 16px 2px">${
+    RCV_FLAGS.map(f=>`<button class="chip${state.rcvFlag===f.key?' on':''}" onclick="APP.cmd('rcvFlag','${f.key}')">${T(f.en,f.zh)}</button>`).join('')}</div>`;
+  const search=`<div style="padding:0 16px 12px;position:relative">
+    <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',17)}</span>
+    <input id="mRcvQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.rcvQ)}" style="padding-left:42px"
+      placeholder="${T('Product, SKU, supplier or person','商品、SKU、供应商或收货人')}" oninput="APP.cmd('rcvQuery',this.value)"></div>`;
+  return `<div id="mRcvSegs">${rcvSegsHtml()}</div>`+search+chips+`<div id="mRcvBody">${rcvBodyHtml()}</div>`;
+}
+/* The two lists, split out of screenReceiving so a keystroke — and the answer it
+   provokes — can repaint one without rebuilding the search box above it. */
+function rcvToBodyHtml(){
+
+    const rows=rcvToReceive();
+
+    if(state.rcvToErr) return `<div style="padding:14px 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
       <span style="font-size:14px;color:var(--brick-ink)">${state.rcvToErr}</span></div>
       <button class="btn2" style="width:auto;padding:11px 26px;margin:12px auto 0;display:flex" onclick="APP.cmd('rcvToRetry')">${T('Try again','重试')}</button></div>`;
-    if(!state.rcvTo) return segs+toSearch+`<div style="padding:44px 24px;text-align:center"><span style="font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span></div>`;
-    if(!rows.length) return segs+toSearch+(state.rcvToQ.trim()
+    if(!state.rcvTo) return `<div style="padding:44px 24px;text-align:center"><span style="font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span></div>`;
+    if(!rows.length) return (state.rcvToQ.trim()
       ?`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No order on its way has that.','没有待收货的采购单包含该商品。')}</div>`
       :nothingYet(T('Nothing on its way','没有待收货的订单'),
         T('Orders you have placed appear here until the goods arrive. Open one at the door to tick it in.',
           '已下单但尚未到货的采购单会显示在这里。到货时打开即可收货。')));
-    return segs+toSearch+`<div style="padding:0 16px 28px"><div class="list">${rows.map((p,i)=>`${i?'<div class="sep"></div>':''}
+    return `<div style="padding:0 16px 28px"><div class="list">${rows.map((p,i)=>`${i?'<div class="sep"></div>':''}
       <button class="row" onclick="APP.cmd('recvOpen',${p.id})" style="min-height:74px;align-items:flex-start;padding-top:14px;padding-bottom:14px">
         <span class="rowico">${ic('shopping-cart',18)}</span>
         <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
@@ -6780,29 +6855,41 @@ function screenReceiving(){
           <span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">${
             rcvPartial(p)?pill('restock',T('Part arrived','部分到货')):poPill(p)}</span></span>
         <span style="color:var(--text-secondary);display:flex;padding-top:4px">${ic('chevron-right',18)}</span></button>`).join('')}</div></div>`;
-  }
-  const chips=`<div class="hscroll" style="display:flex;gap:8px;padding:0 16px 2px">${
-    RCV_FLAGS.map(f=>`<button class="chip${state.rcvFlag===f.key?' on':''}" onclick="APP.cmd('rcvFlag','${f.key}')">${T(f.en,f.zh)}</button>`).join('')}</div>`;
-  const search=`<div style="padding:0 16px 12px;position:relative">
-    <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',17)}</span>
-    <input id="mRcvQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.rcvQ)}" style="padding-left:42px"
-      placeholder="${T('Product, SKU, supplier or person','商品、SKU、供应商或收货人')}" oninput="APP.cmd('rcvQuery',this.value)"></div>`;
-  if(state.rcvErr) return segs+search+chips+`<div style="padding:14px 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+  
+}
+function rcvBodyHtml(){
+
+
+  if(state.rcvErr) return `<div style="padding:14px 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
     <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
     <span style="font-size:14px;color:var(--brick-ink)">${state.rcvErr}</span></div>
     <button class="btn2" style="width:auto;padding:11px 26px;margin:12px auto 0;display:flex" onclick="APP.cmd('rcvRetry')">${T('Try again','重试')}</button></div>`;
   const rows=state.rcvDeliv;
-  if(!rows) return segs+search+chips+`<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!rows) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   if(!rows.length){
     const narrowed=state.rcvQ||state.rcvFlag!=='all';
-    return segs+search+chips+(narrowed
+    return (narrowed
       ?`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Nothing here — try another filter.','这里没有内容 — 换个筛选试试。')}</div>`
       :nothingYet(T('No deliveries yet','还没有收货记录'),
         T('Every delivery you tick in is kept here — what arrived, who took it in, and where it went.',
           '每次收货都会记录在这里：到了什么、谁收的、入到哪个门店。')));
   }
-  return segs+search+chips+`<div style="padding:12px 16px 28px"><div class="list">${rows.map(rcvDeliveryRow).join('')}</div></div>`;
+  return `<div style="padding:12px 16px 28px"><div class="list">${rows.map(rcvDeliveryRow).join('')}</div></div>`;
 }
+/* Repaint whatever this screen currently has on it, and nothing else. Called by
+   both search handlers and by both loaders' answers. Falls back to render()
+   when the screen is not the one showing — a delivery list can land while the
+   operator has moved on. */
+function rcvPatch(){
+  const segsEl=document.getElementById('mRcvSegs');
+  const to=document.getElementById('mRcvToBody');
+  const rcv=document.getElementById('mRcvBody');
+  if(!segsEl||(!to&&!rcv)) return render();
+  segsEl.innerHTML=rcvSegsHtml();
+  if(to)  to.innerHTML=rcvToBodyHtml();
+  if(rcv) rcv.innerHTML=rcvBodyHtml();
+}
+
 /* The deliveries taken against one order — the other half of the link. Drawn
    inside the PO sheet so the order and its arrivals are one tap apart, which
    is the cost this navigation choice had to pay for. */
@@ -6831,18 +6918,27 @@ let sheetStep={};
    figure and the typing was gone. Keyed by product id, so one size's pending
    price is not another's. */
 let sheetPrice={};
-const SUBS={
-  setup:{title:['Open your store','开店引导'],render:()=>screenSetup()},
-  /* Pushed from the Orders header and from More, so Back names whichever of the
-     two the operator came through — the same reason Receive carries a backLabel
-     of its own. The CTA appears only once there is something to lose. */
-  neworder:{title:['New order','新建订单'],
-    backLabel:()=>flatNav()?escAttr(homeTitle()):(state.tab==='orders'?T('Orders','订单'):T('More','更多')),
-    cta:()=>onwHasWork()
-      ? `<button class="btn2" style="width:auto;padding:0 16px;flex:none" onclick="APP.cmd('onwClear')">${T('Clear','清空')}</button>` : '',
-    render:()=>screenNewOrder()},
-  products:{title:['Products','产品'],render:()=>{
+
+/* THE CATALOGUE SUB-VIEW, lifted out of the SUBS table it was written inline in.
+   A pure move — not one character of the markup changes — done so that the list
+   can be split from the search box above it and repainted on its own. An inline
+   arrow cannot be called from a search handler, and that is the only reason this
+   is a named function now. */
+function screenProductCatalogue(){
     loadCatalogue();
+    return `<div>
+      <div style="padding:12px 16px 4px">
+        <input id="mProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.prodQ)}"
+          placeholder="${T('Search name or SKU','搜索名称或 SKU')}" style="width:100%"
+          oninput="APP.cmd('prodSearch',this.value)"></div>
+      <div id="mProdBody">${prodBodyHtml()}</div>
+    </div>`;
+}
+/* Everything below the catalogue's search box. Split out so typing can repaint
+   it alone: render() rebuilds the whole app, and with it the field the keystroke
+   came from, which drops the soft keyboard back to its letter page. The chips
+   ride inside because their counts are derived from the same filtered walk. */
+function prodBodyHtml(){
     const L=state.liveProductsLoaded, P=DB.products;
     /* WHOLE, not merely loaded. Two different permissions live in these two
        flags and the four chips below need the stronger one: `L` says a real
@@ -6898,12 +6994,7 @@ const SUBS={
           '仅显示前 '+P.length+' 条，共 '+state.prodTotal+' 件。')}</span>
         <button class="btn2" style="width:auto;padding:8px 14px;flex:none" onclick="APP.cmd('catRetry')">${T('Try again','重试')}</button>
       </div>`:'';
-    return `<div>
-      <div style="padding:12px 16px 4px">
-        <input id="mProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.prodQ)}"
-          placeholder="${T('Search name or SKU','搜索名称或 SKU')}" style="width:100%"
-          oninput="APP.cmd('prodSearch',this.value)"></div>
-      <div style="padding:8px 0 4px">${chipRow(cd,state.prodStatus,'prodStatus')}</div>
+    return `      <div style="padding:8px 0 4px">${chipRow(cd,state.prodStatus,'prodStatus')}</div>
       ${cats.length>1?`<div style="padding:0 0 4px">${chipRow(cats,state.prodCat,'prodCat')}</div>`:''}
       <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:10px">
         ${noteBar(T('Quick edits here · full authoring on desktop','这里可快速编辑 · 完整编辑请用电脑端'))}
@@ -6924,8 +7015,21 @@ const SUBS={
               looks like while it is still true, and it is why the four chips
               beside All are blank rather than counting a prefix. */
           state.catalogueLoading&&rows.length?`<div style="padding:12px 0 0;text-align:center;font-size:13px;color:var(--text-secondary)">${T('Loading the catalogue…','正在加载目录…')}</div>`:''}
-      </div></div>`;
-  }},
+      </div>`;
+}
+
+
+const SUBS={
+  setup:{title:['Open your store','开店引导'],render:()=>screenSetup()},
+  /* Pushed from the Orders header and from More, so Back names whichever of the
+     two the operator came through — the same reason Receive carries a backLabel
+     of its own. The CTA appears only once there is something to lose. */
+  neworder:{title:['New order','新建订单'],
+    backLabel:()=>flatNav()?escAttr(homeTitle()):(state.tab==='orders'?T('Orders','订单'):T('More','更多')),
+    cta:()=>onwHasWork()
+      ? `<button class="btn2" style="width:auto;padding:0 16px;flex:none" onclick="APP.cmd('onwClear')">${T('Clear','清空')}</button>` : '',
+    render:()=>screenNewOrder()},
+  products:{title:['Products','产品'],render:()=>screenProductCatalogue()},
   categories:{title:['Categories','分类'],status:()=>statusCategories(),render:()=>screenCategories()},
   purchasing:{title:['Purchasing','采购'],status:()=>statusPurchasing(),render:()=>screenPurchasing()},
   activity:{title:['Stock activity','库存流水'],render:()=>screenActivity()},
@@ -7831,6 +7935,41 @@ function kqItemAdvance(itemId,to){
     k.busy=false;
     k.err=e.code==='norealm'?T('This account cannot work the kitchen queue.','此账号无法处理厨房队列。')
                             :(e.message||T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。'));
+    render();
+  });
+}
+
+/* A SECOND COPY OF THE SLIP, asked for by somebody standing at the printer.
+   Reported by Ash: "there should be a reprint button for the kitchen in case
+   need a new copy of the order." The slip prints once, by itself, when the
+   request lands; paper runs out, a roll gets thrown away with the rubbish, two
+   people need the same job in two places. None of that is a reason to work the
+   queue off a screen.
+
+   ITS OWN BUSY FLAG, not k.busy. That one disables every line's "Mark as made"
+   and relabels it "Saving…" — and asking for a second copy of the paper is not
+   a reason the kitchen cannot carry on closing lines while it prints.
+
+   THE SERVER FORCES IT (routes/restock.js /reprint), so this prints even for a
+   tenant whose automatic slips are switched off; what it cannot do is conjure a
+   printer that was never set up, which is the first of the two failures below.
+   Both messages are the retail printer's own, verbatim — the same printer, and
+   the same two things that are ever wrong with it. A failure renders into k.err,
+   which sits above the request and stays until the operator acts on it; only the
+   success is a toast, because a toast confirms and never reports a failure. */
+function kqReprint(){
+  const k=state.kq;
+  if(k.printing||!k.order) return;
+  k.printing=true; k.err=''; render();
+  apiWrite('/api/restock/'+k.order.id+'/reprint',{}).then(()=>{
+    k.printing=false; render();
+    showToast(T('Sent to the printer','已发送到打印机'));
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    k.printing=false;
+    k.err=(e.code==='no_kitchen_printer'||e.code==='not_configured')
+      ? T('No printer is set up. Add one in Settings on desktop.','尚未配置打印机。请在电脑端设置中添加。')
+      : T('The printer did not take it. Check that it is on and has paper.','打印机没有接收。请检查是否开机、有纸。');
     render();
   });
 }
@@ -9036,14 +9175,27 @@ function screenStockAdd(){
     <input id="mQsQ" inputmode="search" enterkeyhint="search" value="${escAttr(qs.q)}" style="padding-left:42px"
       placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('qsSearch',this.value)"></div>`;
 
-  if(qs.itemsErr) return search+`<div style="padding:0 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+  /* EVERYTHING BELOW THE SEARCH BOX, IN ONE PATCHABLE BOX. qsSearch repaints
+     this and nothing else, so the input element survives a whole search. It
+     used to call render(), which replaces the whole app in one innerHTML and so
+     destroyed the very field the keystroke came from — and a rebuilt field opens
+     a fresh soft keyboard on its letter page, which is why typing a SKU here
+     gave one digit and then the alphabet. */
+  return search+`<div id="mQsBody">${qsBodyHtml()}</div>`;
+}
+/* The whole of the Add Stock list, apart from the search box above it. Split out
+   of screenStockAdd so that typing can repaint it alone; the split is mechanical
+   and the markup is unchanged. */
+function qsBodyHtml(){
+  const qs=state.qs;
+  if(qs.itemsErr) return `<div style="padding:0 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
     <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
     <span style="font-size:14px;color:var(--brick-ink)">${qs.itemsErr}</span></div>
     <button class="btn2" style="width:auto;padding:11px 26px;margin:12px auto 0;display:flex" onclick="APP.cmd('qsRetry')">${T('Try again','重试')}</button></div>`;
-  if(!qs.items) return search+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!qs.items) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
 
   const rows=qsRows();
-  if(!rows.length) return search+(qs.q.trim()
+  if(!rows.length) return (qs.q.trim()
     ? `<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No products match','没有匹配的商品')}</div>`
     : nothingYet(T('Nothing to count here yet','这里还没有商品'),
         T('Products published to this store appear here.','已上架到本店的商品会出现在这里。')));
@@ -9098,7 +9250,8 @@ function screenStockAdd(){
         <button class="btn2" style="min-height:36px;padding:0 14px;font-size:13px" onclick="APP.cmd('${recount?'qsFix':'qsFlush'}',${id})">${T('Retry','重试')}</button></div>`:''}
     </div>`;
   };
-  return search+`<div style="padding:0 16px 32px;display:flex;flex-direction:column;gap:8px">${rows.map(card).join('')}</div>`;
+  return `<div style="padding:0 16px 32px;display:flex;flex-direction:column;gap:8px">${rows.map(card).join('')}</div>`;
+
 }
 /* `titleOf` rather than a dynamic `title`, because push() copies `title` into
    the stack and the header spreads it as T(...sub.title) — a function there
@@ -9112,19 +9265,27 @@ function screenStockAdd(){
 function rqPicker(){
   const r=state.rq;
   if(!r.products) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  const rows=rqLines();
   const search=`<div style="padding:4px 16px 12px;position:relative">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
     <input id="mRqQ" inputmode="search" enterkeyhint="search" value="${escAttr(r.q)}" style="padding-left:42px"
       placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('rqSearch',this.value)"></div>`;
-  // Said plainly rather than silently: a shorter list is a different list, and
-  // an operator who cannot find a product needs to know why before they conclude
-  // the shop does not sell it.
+  /* EVERYTHING THE QUERY CHANGES, IN ONE PATCHABLE BOX, and the search input
+     deliberately outside it. rqSearch repaints this box and nothing else, so the
+     input element survives a whole search — a re-render would rebuild it, and a
+     rebuilt field opens a fresh soft keyboard on its letter page. */
+  return search+`<div id="mRqBody">${rqBodyHtml()}</div>`;
+}
+/* What rqSearch repaints: the note plus the rows, exactly what the query can
+   change. Kept beside rqPicker so the two cannot drift on what a filtered list
+   looks like. */
+function rqBodyHtml(){
+  const r=state.rq;
   const note=r.fromShelf?`<div style="padding:0 16px 10px;font-size:13px;color:var(--text-secondary)">${
     T('Showing what this shelf holds — the full catalogue could not be read.','显示本店货架商品 — 无法读取完整商品目录。')}</div>`:'';
-  if(!rows.length) return search+note+`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+  const rows=rqLines();
+  if(!rows.length) return note+`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
     T('No products match','没有匹配的商品')}</div>`;
-  const row=p=>{
+  return note+`<div>${rows.map(p=>{
     const n=r.qty[p.id]||0;
     return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
       <span style="flex:1;min-width:0">
@@ -9137,8 +9298,7 @@ function rqPicker(){
       <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('rqBump',${p.id},1)"
         aria-label="${T('More','增加')}">${ic('plus',18)}</button>
     </div>`;
-  };
-  return search+note+`<div>${rows.map(row).join('')}</div>`;
+  }).join('')}</div>`;
 }
 /* The bar that sends. It carries the tally because the list above it scrolls —
    an operator who has picked eleven things cannot see all eleven, and "11 items
@@ -9580,7 +9740,22 @@ function screenKitchenQueue(){
     return `<div style="padding:4px 16px 12px">
         <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('kqList')">${T('Kitchen queue','厨房制作队列')}</button></div>
       ${err}
-      <div style="padding:0 16px 4px;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
+      <!-- The reprint rides the request NUMBER, not the row above it: that row
+           is the way out of here, and an action on this job belongs beside the
+           name of the job. Drawn as the secondary chip the retail receipt's own
+           reprint uses — same act, same weight, and it must not compete with the
+           "Mark as made" buttons that are what this screen is for. -->
+      <div style="display:flex;align-items:center;gap:12px;padding:0 16px 4px">
+        <div style="flex:1;min-width:0;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
+        <!-- No aria-label: this chip always carries its own words, and a fixed
+             label would have gone on saying "Reprint" to a screen reader over
+             the top of the "Printing…" the eye can see. -->
+        <button onclick="APP.cmd('kqReprint')"${k.printing?' disabled':''}
+          style="flex:none;display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);
+                 background:var(--surface-raised);border:1px solid var(--border-default);border-radius:8px;
+                 cursor:pointer;padding:5px 9px;font-family:inherit">${ic('printer',15)} ${
+          k.printing?T('Printing…','打印中…'):T('Reprint','重打')}</button>
+      </div>
       <div style="padding:0 16px 14px;font-size:13px;color:var(--text-secondary)">${kqWhen(o)}${items.length} ${T('items','项')}${p?' · '+escAttr(p):''}</div>
       <div>${rows}</div>`;
   }
@@ -9746,19 +9921,34 @@ function screenWhatMade(){
 }
 function screenLogBatch(){
   loadQsCtx();
-  const rows=batLines();
   const search=`<div style="padding:12px 16px;position:relative">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
     <input id="mBatQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.bat.q)}" style="padding-left:42px"
       placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('batSearch',this.value)"></div>`;
-  if(!state.qs.items) return search+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  if(!rows.length) return search+`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+  /* TWO PATCH TARGETS, NOT ONE, and the reason is the header line: it sits ABOVE
+     the search box and is drawn only when the list has rows, so a search that
+     empties the list has to remove it — and it cannot share a container with
+     the list that sits below the box. batSearch repaints both and leaves the
+     input between them alone; a render() would rebuild that input and take the
+     soft keyboard's number page with it. */
+  return `<div id="mBatTop">${batTopHtml()}</div>`+search+`<div id="mBatBody">${batBodyHtml()}</div>`;
+}
+/* The line above the search box: shown only when there is a list under it, which
+   is the behaviour this screen already had. */
+function batTopHtml(){
+  if(!state.qs.items||!batLines().length) return '';
+  return `<div style="margin-top:12px;padding:0 16px 10px;font-size:14px;color:var(--text-secondary)">${
+      T('What you made, with nobody asking','主动制作,无对应申请')}</div>`;
+}
+/* Everything below the search box. Split out of screenLogBatch so typing can
+   repaint it alone; the split is mechanical and the markup is unchanged. */
+function batBodyHtml(){
+  const rows=batLines();
+  if(!state.qs.items) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!rows.length) return `<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
     T('Nothing on this store\u2019s list matches.','本店商品目录中没有匹配项。')}</div>`;
   const chosen=batChosen();
-  return `<div style="margin-top:12px;padding:0 16px 10px;font-size:14px;color:var(--text-secondary)">${
-      T('What you made, with nobody asking','主动制作,无对应申请')}</div>
-    ${search}
-    <div>${rows.map(p=>{
+  return `    <div>${rows.map(p=>{
       const id=batId(p), n=state.bat.qty[id]||0;
       return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
         <span style="flex:1;min-width:0">
@@ -9780,6 +9970,7 @@ function screenLogBatch(){
       <button class="btn2" style="width:auto;padding:11px 26px"${chosen.length?'':' disabled'}
         onclick="APP.cmd('batNext')">${T('Next','下一步')}</button>
     </div>`;
+
 }
 SUBS.kitchenqueue={title:['Kitchen queue','厨房制作队列'],render:()=>screenKitchenQueue()};
 SUBS.whatmade={title:['What you made','登记制作'],render:()=>screenWhatMade()};
