@@ -282,6 +282,63 @@ CREATE TABLE IF NOT EXISTS expense_entries (
   FOREIGN KEY (created_by) REFERENCES users(id)
 );
 
+-- ── Staff expense claims (§87) ────────────────────────────────────
+-- WHAT AN EMPLOYEE SPENT, WAITING TO BE APPROVED. It is NOT an expense yet and
+-- must not be read as one: nothing here reaches `expense_entries` until
+-- somebody with the authority approves it, at which point ONE row is posted
+-- carrying this claim's id — the same projection shape a purchase order already
+-- uses. §87 part one records why a status column on the ledger was rejected:
+-- every reader of `expense_entries` would have to remember to exclude the
+-- unapproved ones, and the day one forgets, money nobody approved is in the
+-- books with nothing on screen to say so.
+--
+-- SO NOTHING IN THIS TABLE IS SUMMED BY ANY FINANCE SURFACE. If a future reader
+-- wants a figure from here, it is "what is waiting" or "what we owe our staff",
+-- never "what we spent".
+CREATE TABLE IF NOT EXISTS staff_expenses (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  date          DATE NOT NULL,          -- when the money was spent, not when it was typed
+  amount        REAL NOT NULL,
+  category      TEXT,                   -- snapped to categories(kind='accounting') on write
+  note          TEXT,
+  -- WHO PAID, and it is the field that decides whether the business owes
+  -- somebody money. 'company' — the shop's own account, nothing is owed.
+  -- 'employee' — out of a pocket, and a debt until it is settled.
+  paid_by       TEXT NOT NULL DEFAULT 'employee',
+  payment_method TEXT,                  -- the tenant's own list, as expense_entries
+  -- §87 part three. NULL means the cost belongs to the business rather than to
+  -- any one place, which is §36's meaning and is what an unset field must go on
+  -- meaning here.
+  store_id      INTEGER,
+  receipt_data  TEXT,                   -- base64 data URI, nullable — a photo is optional
+  -- submitted → approved | rejected. There is no 'draft': a claim exists
+  -- because somebody pressed Submit.
+  status        TEXT NOT NULL DEFAULT 'submitted',
+  -- SETTLEMENT IS NOT AN EXPENSE AND POSTS NOTHING. Paying the driver back
+  -- moves money between the business and a person; the ¥38 was already recorded
+  -- once, at approval. A system that wrote a row for the repayment would report
+  -- ¥76 of taxis. Only meaningful where paid_by = 'employee'.
+  settled       INTEGER NOT NULL DEFAULT 0,
+  settled_at    DATETIME,
+  submitted_by  INTEGER,
+  submitted_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  decided_by    INTEGER,
+  decided_at    DATETIME,
+  decided_note  TEXT,
+  -- The `expense_entries` row this claim posted, once approved. NULL until
+  -- then, and the only link between the two tables.
+  expense_id    INTEGER,
+  -- NO FOREIGN KEY ON `store_id`, deliberately. `retail_stores` is created in
+  -- database.js and this file runs FIRST, so the constraint would name a table
+  -- that does not exist yet — the same ordering hazard the po_line_items note
+  -- above records, and the reason `production_batches.store_id` carries no key
+  -- either. `expense_id` does carry one: `expense_entries` is declared in this
+  -- file, thirty lines up.
+  FOREIGN KEY (expense_id) REFERENCES expense_entries(id)
+);
+CREATE INDEX IF NOT EXISTS idx_staff_expenses_status ON staff_expenses(status, date);
+CREATE INDEX IF NOT EXISTS idx_staff_expenses_by     ON staff_expenses(submitted_by, date);
+
 -- ── Sales ─────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS sales_entries (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,

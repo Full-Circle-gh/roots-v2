@@ -336,6 +336,11 @@ try {
   // — nobody can have declined a key that did not exist yesterday.
   const asks = roles.migrateKitchenRequestCap();
   if (asks) console.log('[backend-auth] granted production:request to ' + asks + ' kitchen role(s)');
+  // §87's key, on the same shape and for the same reason — a capability that
+  // did not exist yesterday needs no untouched-role guard, and every role gets
+  // it because saying what you spent is not a power over anything.
+  const claims = roles.migrateExpenseSubmitCap();
+  if (claims) console.log('[backend-auth] granted expenses:submit to ' + claims + ' role(s)');
 } catch (e) {
   // Seeding is best-effort by design. An unseeded tenant resolves from
   // presetCapsFor exactly as it did before roles became data.

@@ -1,0 +1,510 @@
+#!/usr/bin/env node
+/**
+ * Offline self-test for the staff expense claim (§87 steps two and three).
+ *
+ *   node scripts/test_staff_expenses.js
+ *
+ * Five sections:
+ *
+ *   1 · THE VALIDATOR, run for real. `readBody` is exported from the shipped
+ *       route and called here with a real in-memory database, the same
+ *       technique scripts/test_tax.js uses on the finance summary — the rules
+ *       it holds are arithmetic and a closed set, and both are the kind of
+ *       thing a grep can be made to pass while the code is wrong.
+ *
+ *   2 · THE READS, over a fixture: what one person sees, and what the shop
+ *       owes them, which is NOT the sum of what they have sent.
+ *
+ *   3 · THE DECISIONS, in the shipped source — the ones a later edit could
+ *       quietly undo: that nothing here writes the ledger, that a submitter
+ *       cannot submit an already-approved claim, that a receipt is not carried
+ *       in a list, and that the key is not `finance:record`.
+ *
+ *   4 · THE SCREEN, in public/m.html.
+ *
+ *   5 · APPROVAL AND THE ROW IT POSTS. `lib/expense-posting.js` is run against a
+ *       fixture ledger — it is the one place a claim reaches the books, and the
+ *       properties that matter (one row, re-postable, removed on reject) are
+ *       behaviour rather than text.
+ */
+'use strict';
+
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const Database = require('better-sqlite3');
+
+let pass = 0, fail = 0;
+function it(name, fn) {
+  try { fn(); console.log(`  ✓ ${name}`); pass++; }
+  catch (e) { console.log(`  ✗ ${name}\n      ${e.message}`); fail++; }
+}
+
+const ROOT = path.join(__dirname, '..');
+const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
+const ROUTE = read('routes', 'staff-expenses.js');
+const SCHEMA = read('schema.sql');
+const CAPS = read('lib', 'capabilities.js');
+const CAPROUTES = read('lib', 'cap-routes.js');
+const ROLES = read('lib', 'roles.js');
+const SERVER = read('server.js');
+const PHONE = read('public', 'm.html');
+
+function codeOnly(src) {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/^[ \t]*\/\/.*$/gm, ' ')
+    .replace(/([^:'"`\\])\/\/.*$/gm, '$1');
+}
+const ROUTE_CODE = codeOnly(ROUTE);
+const PHONE_CODE = codeOnly(PHONE);
+
+console.log('\n1 · the validator, run for real');
+
+// The shipped rules, required directly. NOT through the route: requiring that
+// boots the express app and the dev database behind it, which this suite did
+// once and left a neighbouring suite red — the reason lib/expense-claim.js is a
+// file at all. What runs below is what ships, with nothing restated.
+const { readBody } = require(path.join(ROOT, 'lib', 'expense-claim.js'));
+const CLAIM = read('lib', 'expense-claim.js');
+
+const vdb = new Database(':memory:');
+vdb.exec(`CREATE TABLE categories (id INTEGER PRIMARY KEY, kind TEXT, name TEXT, sort_order INTEGER,
+          is_operating INTEGER DEFAULT 1, is_active INTEGER DEFAULT 1);`);
+vdb.prepare("INSERT INTO categories VALUES (1,'accounting','Transport 交通',1,1,1)").run();
+
+const OK = { date: '2026-09-09', amount: 38, paid_by: 'employee' };
+
+it('a claim needs a date, an amount above zero, and an answer to who paid', () => {
+  assert.ok(readBody({ ...OK, date: '' }, vdb).error, 'no date');
+  assert.ok(readBody({ ...OK, date: '9 Sep' }, vdb).error, 'not a date');
+  assert.ok(readBody({ ...OK, amount: 0 }, vdb).error, 'zero');
+  assert.ok(readBody({ ...OK, amount: -5 }, vdb).error, 'negative');
+  assert.ok(readBody({ ...OK, amount: 'taxi' }, vdb).error, 'not a number');
+  assert.ok(!readBody(OK, vdb).error, 'a complete claim is accepted');
+});
+
+it('who paid is a CLOSED set — a third spelling is a debt nobody can query for', () => {
+  assert.ok(!readBody({ ...OK, paid_by: 'company' }, vdb).error);
+  assert.ok(!readBody({ ...OK, paid_by: 'employee' }, vdb).error);
+  for (const bad of ['', 'mine', 'Employee', 'cash', null, undefined]) {
+    assert.ok(readBody({ ...OK, paid_by: bad }, vdb).error, `must refuse ${JSON.stringify(bad)}`);
+  }
+});
+
+it('the amount is rounded to the fen BEFORE it is stored, not after it is read', () => {
+  // lib/finance-window.js's header records the residue this prevents
+  // (1257.6799999999998) and the wrong penny Math.round produces on 1.005. A
+  // claim is destined to become a ledger row, so a residue saved here is
+  // inherited by every later reader.
+  assert.strictEqual(readBody({ ...OK, amount: 1.005 }, vdb).amount, 1.01);
+  assert.strictEqual(readBody({ ...OK, amount: '38.005' }, vdb).amount, 38.01);
+  assert.strictEqual(readBody({ ...OK, amount: 0.1 + 0.2 }, vdb).amount, 0.3);
+});
+
+it('the category is snapped onto the shop\'s own list, spelling and all', () => {
+  // The same normaliser Finance uses. A claim typed as "transport  交通" must
+  // not become a second category one space away from the listed one.
+  assert.strictEqual(readBody({ ...OK, category: 'transport  交通' }, vdb).category, 'Transport 交通');
+  // And a category the shop never listed still STORES — the list is what the
+  // form offers, never a vocabulary the writer enforces.
+  assert.strictEqual(readBody({ ...OK, category: 'Parking' }, vdb).category, 'Parking');
+  assert.strictEqual(readBody({ ...OK, category: '' }, vdb).category, null);
+});
+
+it('a receipt must be an image, and a big one is refused rather than stored', () => {
+  const jpeg = 'data:image/jpeg;base64,' + 'A'.repeat(64);
+  assert.ok(!readBody({ ...OK, receipt_data: jpeg }, vdb).error, 'a small jpeg is fine');
+  assert.ok(readBody({ ...OK, receipt_data: 'data:text/html;base64,AAAA' }, vdb).error, 'not an image');
+  assert.ok(readBody({ ...OK, receipt_data: 'https://example.com/x.jpg' }, vdb).error, 'not a data URI');
+  // Refused, never truncated: half a photograph stored is a receipt nobody can
+  // read on a claim that looks like it has one.
+  assert.ok(!/slice\(0, RECEIPT_MAX\)/.test(CLAIM), 'the ceiling refuses rather than trims');
+  const huge = 'data:image/jpeg;base64,' + 'A'.repeat(3 * 1024 * 1024);
+  assert.ok(readBody({ ...OK, receipt_data: huge }, vdb).error, 'a raw camera frame is refused');
+});
+
+it('a note is bounded, and an absent one is NULL rather than empty string', () => {
+  assert.strictEqual(readBody({ ...OK, note: '' }, vdb).note, null);
+  assert.strictEqual(readBody({ ...OK, note: 'x'.repeat(900) }, vdb).note.length, 500);
+});
+
+console.log('\n2 · the reads, over a fixture');
+
+const db = new Database(':memory:');
+// The real DDL, sliced out of schema.sql — never a hand-typed shape that could
+// drift from the table the route writes.
+const ddl = SCHEMA.match(/CREATE TABLE IF NOT EXISTS staff_expenses[\s\S]*?\n\);/);
+assert.ok(ddl, 'staff_expenses must be declared in schema.sql');
+// The ledger table is created too, empty, rather than the key being stripped out
+// of the DDL: better-sqlite3 enforces foreign keys, and a fixture that quietly
+// dropped the constraint would not be running the shape that ships.
+db.exec('CREATE TABLE expense_entries (id INTEGER PRIMARY KEY);');
+db.exec(ddl[0]);
+
+const ins = db.prepare(`INSERT INTO staff_expenses
+  (id, date, amount, category, paid_by, status, settled, submitted_by, receipt_data)
+  VALUES (?,?,?,?,?,?,?,?,?)`);
+//   mine, waiting                         mine, approved & owed
+ins.run(1, '2026-09-09', 38,  'Transport', 'employee', 'submitted', 0, 7, 'data:image/jpeg;base64,AA');
+ins.run(2, '2026-09-06', 52,  'Transport', 'employee', 'approved',  0, 7, null);
+//   mine, approved & already settled       mine, company money — owes nobody
+ins.run(3, '2026-09-02', 25,  'Transport', 'employee', 'approved',  1, 7, null);
+ins.run(4, '2026-09-01', 120, 'Supplies',  'company',  'approved',  0, 7, null);
+//   mine, rejected                         somebody ELSE's
+ins.run(5, '2026-08-30', 90,  'Meals',     'employee', 'rejected',  0, 7, null);
+ins.run(6, '2026-09-08', 400, 'Transport', 'employee', 'approved',  0, 9, null);
+
+const mine = db.prepare(`
+  SELECT id, amount, paid_by, status, settled,
+         CASE WHEN receipt_data IS NULL THEN 0 ELSE 1 END AS has_receipt
+    FROM staff_expenses WHERE submitted_by IS ? ORDER BY date DESC, id DESC`).all(7);
+
+it('a claim is personal — one person sees their own and nobody else\'s', () => {
+  assert.strictEqual(mine.length, 5);
+  assert.ok(!mine.some(r => r.id === 6), "another employee's claim must not be in this list");
+});
+
+it('what the shop owes is NOT the sum of what was sent', () => {
+  // Approved + own money + unsettled. A submitted claim might be rejected; a
+  // company-account claim owes nobody; a settled one is finished.
+  const owed = mine.filter(r => r.paid_by === 'employee' && r.status === 'approved' && !r.settled)
+                   .reduce((t, r) => t + r.amount, 0);
+  assert.strictEqual(owed, 52, 'only the approved, unsettled, own-money claim');
+  const naive = mine.reduce((t, r) => t + r.amount, 0);
+  assert.strictEqual(naive, 325, 'the sum of everything is a different, wrong number');
+});
+
+it('the list carries WHETHER there is a receipt, never the receipt', () => {
+  assert.strictEqual(mine.find(r => r.id === 1).has_receipt, 1);
+  assert.ok(!('receipt_data' in mine[0]),
+    'twenty claims would otherwise drag twenty photographs into a phone to render none');
+  assert.match(ROUTE_CODE, /CASE WHEN receipt_data IS NULL THEN 0 ELSE 1 END/);
+});
+
+it('the receipt route matches on the OWNER in the query, not after it', () => {
+  assert.match(ROUTE_CODE, /FROM staff_expenses WHERE id = \? AND submitted_by IS \?/,
+    'a fetch-then-compare is one early return away from serving anybody\'s receipt');
+});
+
+console.log('\n3 · the decisions, in the shipped source');
+
+it('the validator is a pure module — a suite can run it without booting the app', () => {
+  assert.match(ROUTE_CODE, /require\('\.\.\/lib\/expense-claim'\)/);
+  assert.ok(!/require\('express'\)|tenant-db/.test(CLAIM),
+    'lib/expense-claim.js must stay free of the app it serves');
+});
+
+it('nothing in this route writes the ledger', () => {
+  assert.ok(!/expense_entries/.test(ROUTE_CODE),
+    '§87 part one: a claim reaches the books through APPROVAL, and only there');
+  assert.ok(!/INSERT INTO (?!staff_expenses)/.test(ROUTE_CODE), 'one table, and it is the claim table');
+});
+
+it('a submitter cannot submit an already-approved claim', () => {
+  const insert = ROUTE_CODE.match(/INSERT INTO staff_expenses[\s\S]*?VALUES/);
+  assert.ok(insert, 'the insert must be readable');
+  assert.ok(!/status/.test(insert[0]),
+    'status is the column default, written by the table rather than by the caller');
+  assert.ok(!/decided_by|expense_id|settled/.test(insert[0]),
+    'nothing a decision writes may be set by the person raising the claim');
+});
+
+it('the submitting route cannot decide anything', () => {
+  // The verbs exist now (steps three and four) and are separate routes behind a
+  // separate key. What must stay true is that the SUBMIT path reaches none of
+  // them: a claim arrives waiting, whatever its sender puts in the body.
+  const post = ROUTE_CODE.slice(ROUTE_CODE.indexOf("router.post('/api/retail-admin/staff-expenses'"),
+                                ROUTE_CODE.indexOf('staff-expenses/mine'));
+  // `res.status(…)` is an HTTP helper, not the claim's column — stripped first,
+  // because an assertion that matches the wrong `status` proves nothing about
+  // this handler and would go green on a version that did write the real one.
+  const noHttp = post.replace(/res\.status\(/g, 'res.httpCode(');
+  assert.ok(!/status|settled|decided_by|expense_id|postClaim/.test(noHttp),
+    'the submit handler must not touch a single field a decision writes');
+});
+
+it('the capability is NOT finance:record, and carries no money mark', () => {
+  const row = CAPS.match(/\{ key: 'expenses:submit'.*/);
+  assert.ok(row, 'expenses:submit must be registered');
+  assert.ok(!/money:/.test(row[0]),
+    'submitting writes nothing to any total — the shape is waste:record');
+  assert.match(CAPROUTES, /staff-expenses'\)\) return 'expenses:submit'/);
+  // The floor presets hold it; none of them holds finance.
+  for (const preset of ['staff', 'store_manager', 'kitchen', 'store_stock']) {
+    const block = CAPS.match(new RegExp(`${preset}:\\s*\\[[\\s\\S]*?\\]`));
+    assert.ok(block && /expenses:submit/.test(block[0]), `${preset} must hold it`);
+    assert.ok(!/'finance:record'/.test(block[0]), `${preset} must NOT hold finance:record`);
+  }
+});
+
+it('the grant reaches roles that already exist, edited or not', () => {
+  // The lesson lib/roles.js records at length: the untouched-role guard protects
+  // a DECISION an admin made by unticking something, and nobody can have
+  // unticked a key that did not exist yesterday. On the live box that guard
+  // skipped every role there was.
+  assert.match(ROLES, /function migrateExpenseSubmitCap/);
+  assert.match(ROLES, /SELECT id, tenant_id, role_key, caps_json FROM tenant_roles'\)/,
+    'every role, not only one role_key');
+  assert.match(ROLES, /EXPENSE_SUBMIT_MIGRATION\)\) return 0;/, 'once-only through the ledger');
+  const fn = ROLES.slice(ROLES.indexOf('function migrateExpenseSubmitCap'));
+  assert.ok(!/WAS\.every|list\.length === /.test(fn.slice(0, 2000)),
+    'no untouched-role guard: it would skip exactly the roles a real business has edited');
+});
+
+it('the route is mounted', () => {
+  assert.match(SERVER, /require\('\.\/routes\/staff-expenses'\)/);
+});
+
+console.log('\n4 · the screen');
+
+it('the phone route exists and is gated on the key its own Submit is gated on', () => {
+  assert.match(PHONE_CODE, /SUBS\.expense=\{title:\['Expense','费用申请'\]/);
+  assert.match(PHONE_CODE, /expense:'expenses:submit'/);
+  assert.match(PHONE_CODE, /\['expense','banknote','Expense','费用申请'\]/);
+});
+
+it('the form opens empty every time — a reopened screen is not a second claim', () => {
+  const reset = PHONE_CODE.match(/if\(route==='expense'\)\{[\s\S]*?\}/);
+  assert.ok(reset, 'entering the screen must reset it');
+  for (const f of ['amount', 'photo', 'sent', 'note']) {
+    assert.ok(new RegExp(`x\\.${f}=`).test(reset[0]), `${f} must be cleared on entry`);
+  }
+  assert.ok(!/x\.cats=/.test(reset[0]),
+    'the categories are the shop\'s vocabulary, not something this person typed');
+});
+
+it('the screen says the money is not in the accounts yet', () => {
+  // §87 part one is a decision about where a claim lives; this is what it means
+  // to the person pressing the button.
+  assert.ok(PHONE.includes('审批通过后才会记入账目。'),
+    'the line under the button, in both languages');
+  assert.ok(PHONE.includes('This is not recorded in the accounts until it is approved.'));
+});
+
+it('who paid says what it does to the person tapping it', () => {
+  assert.ok(PHONE.includes('审批通过后本店应付给你。'));
+  assert.ok(PHONE.includes('Nothing is owed to you.'));
+});
+
+it('the photo is downscaled on the phone before it is sent', () => {
+  assert.match(PHONE_CODE, /toDataURL\('image\/jpeg',0\.7\)/);
+  assert.match(PHONE_CODE, /const max=1280;/);
+});
+
+it('typing the amount does not repaint the screen', () => {
+  // The rule every typed field in this app follows: a field rebuilt by its own
+  // typing drops the soft keyboard on a real phone.
+  const cmd = PHONE_CODE.match(/reg\('expAmt',[\s\S]*?\}\);/);
+  assert.ok(cmd, 'the amount command must exist');
+  assert.ok(!/render\(\)/.test(cmd[0]), 'no repaint while a field is open');
+});
+
+it('an unreadable amount is refused with the reason, never stripped to its digits', () => {
+  assert.match(PHONE_CODE, /if\(!\(n>0\)\)\{ x\.err=E\(/);
+  assert.ok(PHONE.includes('请输入大于零的金额。'));
+});
+
+it('the shop with no categories is told, and is not given a free-text box', () => {
+  // §36: an empty list cannot offer a wrong option — and the answer to an empty
+  // one is not a field where every driver invents their own spelling.
+  assert.ok(PHONE.includes('本店尚未设置支出分类。'));
+  const screen = PHONE.slice(PHONE.indexOf('function screenExpense()'), PHONE.indexOf('function screenExpense()') + 9000);
+  assert.ok(!/id="mExpCat"/.test(screen), 'no category text field');
+});
+
+console.log('\n5 · approval, and the row it posts (step three)');
+
+const POST = require(path.join(ROOT, 'lib', 'expense-posting.js'));
+const POSTING = read('lib', 'expense-posting.js');
+const FINTX = read('routes', 'finance-transactions.js');
+const FINTX_CODE = codeOnly(FINTX);
+const CLIENT = read('public', 'retail-admin', '22-finance.js');
+
+const pdb = new Database(':memory:');
+pdb.exec(`
+  CREATE TABLE expense_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, date DATE, amount REAL, category TEXT,
+    description TEXT, po_id INTEGER, payment_method TEXT, store_id INTEGER,
+    claim_id INTEGER, created_by INTEGER
+  );`);
+const claim = {
+  id: 41, date: '2026-09-09', amount: 38, category: 'Transport 交通',
+  note: 'airport run', submitted_name: 'Wei', status: 'approved',
+  paid_by: 'employee', store_id: 3, payment_method: null, decided_by: 2,
+};
+
+it('approving writes exactly ONE ledger row, carrying the claim id', () => {
+  const id = POST.postClaim(pdb, claim);
+  const rows = pdb.prepare('SELECT * FROM expense_entries WHERE claim_id = 41').all();
+  assert.strictEqual(rows.length, 1);
+  assert.strictEqual(rows[0].id, id);
+  assert.strictEqual(rows[0].amount, 38);
+  assert.strictEqual(rows[0].category, 'Transport 交通');
+  assert.strictEqual(rows[0].store_id, 3, '§87 part three: the claim carries the shop to the ledger');
+});
+
+it('the row says who spent it — a line with no supplier and no PO behind it', () => {
+  const row = POST.postedRow(pdb, 41);
+  const full = pdb.prepare('SELECT description, created_by FROM expense_entries WHERE claim_id = 41').get();
+  assert.ok(row);
+  assert.match(full.description, /Wei/, 'the name is what makes the line answerable months later');
+  assert.match(full.description, /airport run/);
+  // `created_by` on this table has always meant "who put this in the books".
+  assert.strictEqual(full.created_by, 2, 'the approver, not the person who spent it');
+});
+
+it('approving twice re-posts rather than double-posting', () => {
+  POST.postClaim(pdb, claim);
+  POST.postClaim(pdb, claim);
+  assert.strictEqual(pdb.prepare('SELECT COUNT(*) n FROM expense_entries WHERE claim_id = 41').get().n, 1,
+    'the PO shape: delete every row carrying this id, then re-insert from the document');
+});
+
+it('rejecting after approving REMOVES the row rather than writing a negative one', () => {
+  const gone = POST.postClaim(pdb, { ...claim, status: 'rejected' });
+  assert.strictEqual(gone, null);
+  assert.strictEqual(pdb.prepare('SELECT COUNT(*) n FROM expense_entries WHERE claim_id = 41').get().n, 0);
+  // §36 decided a hand-typed row is freely deletable because mistakes here are
+  // typos; an offsetting entry turns a two-row ledger into four nobody can read.
+  assert.ok(!/-\s*amount|amount \* -1/.test(codeOnly(POSTING)), 'no reversal row');
+});
+
+it('a claim-posted row is NOT hand-typed, and the predicate says so', () => {
+  // The trap §87 named when the claim table was designed: a claim-posted row
+  // satisfies `po_id IS NULL`, so before `claim_id` was named here it arrived on
+  // the Transactions screen looking freely editable — and the edit would have
+  // been undone by the next decision.
+  assert.match(FINTX_CODE, /WHERE po_id IS NULL AND claim_id IS NULL/);
+  assert.match(FINTX_CODE, /row\.claim_id != null/, 'edit and delete refuse it too');
+  assert.match(FINTX_CODE, /claimEdit|claimDelete/);
+});
+
+it('the screen refuses it visibly rather than merely enforcing it', () => {
+  const code = codeOnly(CLIENT);
+  assert.match(code, /const claim = r\.source === 'claim';/);
+  assert.match(code, /row\.source === 'manual'/,
+    "`!== 'po'` reads the same with one projection and is the bug with two");
+  assert.ok(CLIENT.includes('费用申请 · 个人支付'), 'whose money it was is on the mark');
+});
+
+it('the approving key exists now, moves money, and is in no floor preset', () => {
+  const row = CAPS.match(/\{ key: 'expenses:approve'.*/);
+  assert.ok(row, 'expenses:approve must be registered');
+  assert.match(row[0], /money: 'moves'/, 'this is the tap that writes the ledger');
+  for (const preset of ['staff', 'store_manager', 'kitchen', 'store_stock', 'warehouse']) {
+    const block = CAPS.match(new RegExp(`${preset}:\\s*\\[[\\s\\S]*?\\]`));
+    assert.ok(block && !/expenses:approve/.test(block[0]), `${preset} must NOT approve by default`);
+  }
+});
+
+it('the decide route is gated ABOVE the submit route, and the order is the guard', () => {
+  const i = CAPROUTES.indexOf("return 'expenses:approve'");
+  const j = CAPROUTES.indexOf("return 'expenses:submit'");
+  assert.ok(i > -1 && j > -1 && i < j,
+    'below the general rule, every submitter would be an approver');
+  // And the route does not rely on that alone: rbac_enforce is off by default,
+  // so a money route that fell open would let anyone approve on every tenant.
+  assert.match(ROUTE_CODE, /function requireApprover/);
+  assert.match(ROUTE_CODE, /requireRetailAdmin, requireApprover/);
+});
+
+it('a settled claim can no longer be un-approved', () => {
+  // Money has changed hands outside this system. Taking the expense back out
+  // would leave the payment made and the cost unrecorded.
+  assert.match(ROUTE_CODE, /if \(claim\.settled\) return res\.status\(409\)/);
+});
+
+it('the claim status and the ledger row move together or not at all', () => {
+  assert.match(ROUTE_CODE, /withTransaction\(db, \(tx\) => \{[\s\S]*?postClaim\(tx, fresh\)/,
+    'a claim that says approved with no row behind it is a discrepancy nobody would find');
+  assert.match(ROUTE_CODE, /const fresh = tx\.prepare/,
+    'posted from the row as it now stands, not the one read before the update');
+});
+
+it('the approval list is a different route from the personal one', () => {
+  assert.match(ROUTE_CODE, /staff-expenses\/pending/);
+  assert.match(ROUTE_CODE, /staff-expenses\/mine/);
+  // A flag on one endpoint is one typo away from handing every submitter the
+  // whole shop's spending.
+  assert.ok(!/req\.query\.(all|everyone|scope)/.test(ROUTE_CODE));
+});
+
+it('whose claim it is, is decided by the server', () => {
+  assert.match(ROUTE_CODE, /mine: r\.submitted_by != null && r\.submitted_by === \(req\.user\?\.id \|\| null\)/);
+  assert.match(PHONE_CODE, /const mine=!!r\.mine;/);
+  // The phone has no operator id to compare against — this is why.
+  assert.ok(!/state\.me&&state\.me\.id/.test(PHONE_CODE));
+});
+
+it('self-approval is allowed, and marked', () => {
+  assert.ok(PHONE.includes('本人提交'), '§87 part five: the guard is the record, not the refusal');
+  assert.ok(!/cannot approve your own|不能审批自己/.test(PHONE), 'no refusal of self-approval');
+  assert.match(ROUTE_CODE, /self: claim\.submitted_by === decidedBy/, 'and it is logged as such');
+});
+
+it('the phone screen says what approving does', () => {
+  assert.ok(PHONE.includes('审批通过后即记入本月账目。'),
+    'the mirror of the line under Submit on the other screen');
+});
+
+console.log('\n6 · settlement — the step that posts nothing (step four)');
+
+it('settling writes ONE column and touches the ledger in no way at all', () => {
+  const settle = ROUTE_CODE.slice(ROUTE_CODE.indexOf("staff-expenses/:id/settle"));
+  const body = settle.slice(0, settle.indexOf('module.exports'));
+  assert.match(body, /UPDATE staff_expenses SET settled = \?/);
+  assert.ok(!/expense_entries|postClaim/.test(body),
+    'the ¥38 was recorded once, at approval — a second row would report ¥76 of taxis');
+});
+
+it('only a debt can be settled, and the refusal says which it is not', () => {
+  const settle = ROUTE_CODE.slice(ROUTE_CODE.indexOf("staff-expenses/:id/settle"));
+  assert.match(settle, /claim\.status !== 'approved'[\s\S]*?ERR\.notApproved/);
+  assert.match(settle, /claim\.paid_by !== 'employee'[\s\S]*?ERR\.notOwed/);
+  // "cannot settle" on its own sends somebody looking for a permission problem.
+  assert.ok(ROUTE.includes('该笔由公司账户支付'));
+});
+
+it('un-settling exists, because the un-approve refusal depends on it', () => {
+  // A claim marked paid by mistake can no longer be un-approved (409), so if it
+  // could not be un-marked either it would be stuck for good.
+  assert.match(ROUTE_CODE, /req\.body\.settled === false \? 0 : 1/);
+  assert.match(ROUTE_CODE, /settled \? 'settle' : 'unsettle'/, 'and both are logged');
+});
+
+it('what is owed is counted over EVERY claim, not the queue page', () => {
+  const q = ROUTE_CODE.slice(ROUTE_CODE.indexOf('let owed'));
+  assert.match(q, /WHERE status = 'approved' AND paid_by = 'employee' AND COALESCE\(settled, 0\) = 0/);
+  assert.match(q, /GROUP BY submitted_by/, 'grouped by person, because that is how it is paid');
+  assert.ok(!/LIMIT/.test(q.slice(0, q.indexOf('res.json'))),
+    'a debt does not stop existing because it fell off the end of a list');
+});
+
+it('the owed totals carry the rows behind them', () => {
+  assert.match(ROUTE_CODE, /GROUP_CONCAT\(id\) AS ids/);
+  assert.match(PHONE_CODE, /aprSettle/);
+  assert.match(PHONE_CODE, /for\(const id of list\) await apiWrite/,
+    'sequential: four writes racing on a shop wifi is how two of them land');
+});
+
+it('a name is resolved for everyone the payload mentions, queue or not', () => {
+  assert.match(ROUTE_CODE, /SELECT DISTINCT submitted_by FROM staff_expenses WHERE status = 'approved'/,
+    'an owed person outside the 200-row queue would otherwise have a total and no name');
+});
+
+it('the phone says marking paid changes nothing in the accounts', () => {
+  assert.ok(PHONE.includes('标记已付不会改动账目 — 该费用在审批通过时已记入。'));
+  assert.ok(PHONE.includes('Marking paid does not change the accounts'));
+  // And it asks first, naming the person and the figure: this asserts money has
+  // already changed hands somewhere this app cannot see.
+  assert.match(PHONE_CODE, /askConfirm\(\{[\s\S]*?Mark paid/);
+});
+
+it('the owed block is absent when nothing is owed', () => {
+  assert.match(PHONE_CODE, /const owed=\(a\.owed\|\|\[\]\)\.filter\(o=>o\.total>0\);/);
+  assert.match(PHONE_CODE, /owed\.length \? `<div/, '§1.12: a zero here is a row that only says nothing happened');
+});
+
+console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
+process.exit(fail ? 1 : 0);

@@ -82,6 +82,11 @@ const { sqlDayShiftForShop } = require('../lib/business-date');
 // this file must not invent a second copy of.
 const tax = require('../lib/tax');
 const money = require('../lib/money');
+// The one rule for when two category strings are the same category (§87 part
+// two). Referenced, never re-implemented — a second almost-identical comparison
+// is how the writer and the reader come to disagree about which category a row
+// is in.
+const { spacingKey } = require('../lib/category-text');
 
 // ── GET /api/retail-admin/finance/summary?from=&to= ────────────────────────
 router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) => {
@@ -109,27 +114,84 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
     // which cannot answer an arbitrary range at all — a 30-day window crossing
     // a month boundary has no month to ask for. It is left alone (§36 blocks
     // and retires that file); this is the range sum Finance needs.
-    const exp = db.prepare(`
-      SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS rows
-        FROM expense_entries
-       WHERE ${LEDGER_DATE} BETWEEN ? AND ?`).get(from, to);
-
-    // The breakdown behind the disclosure on the expenses row. Ordered by
-    // weight, because the operator opening it is asking where the money went.
+    //
+    // **IT IS NO LONGER EVERY ROW IN THE WINDOW, and that is §87 part two.**
+    // A tenant may now mark one of its own expense categories as NOT an
+    // operating expense — the case being an owner's private transfer, which is
+    // real money leaving the account and is not a cost of running the shop.
+    // Summed with rent it takes ¥5,000 off the month's Net and nothing on the
+    // screen looks wrong.
+    //
+    // Both figures are therefore folded out of the ONE grouped read below,
+    // rather than each getting a sum of its own. Two queries over one set is two
+    // places for the split to be applied, and the day they disagree the screen
+    // shows a total its own breakdown does not add up to.
+    //
+    // The breakdown is also what sits behind the disclosure on the expenses row.
+    // Ordered by weight, because the operator opening it is asking where the
+    // money went.
     //
     // An uncategorised row keeps its own line and is NOT folded into a bucket
     // with a made-up name: §36 records that Finance stores category text raw
     // and un-normalised, so inventing a label here would put a second wrong
     // name on top of a known-dirty column. The client renders the null.
-    const breakdown = db.prepare(`
+    const grouped = db.prepare(`
       SELECT category, COALESCE(SUM(amount), 0) AS amount, COUNT(*) AS n
         FROM expense_entries
        WHERE ${LEDGER_DATE} BETWEEN ? AND ?
        GROUP BY category
        ORDER BY amount DESC`).all(from, to);
 
+    // ── Which categories the tenant has marked non-operating ──
+    // **RESOLVED ON `spacingKey`, WHICH IS THE KEY `storeCategory` SNAPS ON, and
+    // not on a SQL join.** The expense row holds the category as free text and
+    // the flag lives on the `categories` record, so the two are matched by name
+    // — and the one rule in this product for when two category strings are the
+    // same category is `lib/category-text.js`. A `=` join would count
+    // `Private expense` and `private expense` as two different things and quietly
+    // put one of them back into operating expenses, which is the exact failure
+    // the flag exists to prevent. One rule, referenced, not a second one here.
+    //
+    // A category with no entry on the list — free text, or a row typed before the
+    // list existed — is OPERATING. That is the safe default in both directions:
+    // an unlisted cost is a real cost until somebody says otherwise, and nothing
+    // leaves the operating total without a tenant having deliberately marked it.
+    const flags = new Map();
+    for (const c of db.prepare(
+      "SELECT name, COALESCE(is_operating, 1) AS is_operating FROM categories WHERE kind = 'accounting'"
+    ).all()) {
+      const key = spacingKey(c.name);
+      if (key !== null) flags.set(key, c.is_operating ? 1 : 0);
+    }
+    const operatingFlag = (category) => {
+      const key = spacingKey(category);
+      if (key === null || !flags.has(key)) return 1;
+      return flags.get(key);
+    };
+
+    // Summed in MINOR UNITS and converted once, never by adding REALs and
+    // rounding at the end — the residue lib/finance-window.js's header records
+    // (1257.6799999999998) is exactly what a running total of REAL yuan
+    // accumulates, and here it would accumulate into two figures that must add
+    // up to a third.
+    let opMinor = 0, nonOpMinor = 0, opRows = 0, nonOpRows = 0;
+    const breakdown = grouped.map((r) => {
+      const isOperating = operatingFlag(r.category);
+      const minor = money.toMinor(r.amount) || 0;
+      if (isOperating) { opMinor += minor; opRows += r.n; }
+      else { nonOpMinor += minor; nonOpRows += r.n; }
+      return { category: r.category || null, amount: fen(r.amount), entries: r.n, is_operating: isOperating };
+    });
+
     const revenue = fen(rev.revenue);
-    const expenses = fen(exp.total);
+    const expenses = money.fromMinor(opMinor);
+    // **SHOWN ON ITS OWN LINE, NEVER DROPPED.** §87: a number that disappears
+    // from a total without saying so is the same defect the flag exists to
+    // prevent, wearing different clothes. ZERO rather than null when nothing is
+    // flagged, which is every tenant on the day this ships: the tenant has
+    // marked nothing, so the excluded amount really is nothing — this is not the
+    // §1.12 seventh state, where a figure was never captured.
+    const nonOperating = money.fromMinor(nonOpMinor);
 
     // ── Tax collected, and tax handed back (audit I-03) ──
     // NOT the merchant's money. On a shop that charges tax exclusively it is
@@ -198,17 +260,25 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
         cost_of_goods: null,
         gross_profit: null,
         operating_expenses: expenses,
+        // §87: the money that left the account and is not a cost of running the
+        // shop. It is NOT subtracted from net — a drawing is not a business
+        // expense, and taking it off net would put it back in the profit line by
+        // another road. The screen states it beneath the staircase so the yuan
+        // is visible without being counted.
+        non_operating_expenses: nonOperating,
+        non_operating_entries: nonOpRows,
         net: fen(revenue - expenses),
         // NULL for a shop that charges no tax — see the block above. The screen
         // renders the row only when there is one, so nothing changes for a shop
         // that has never turned tax on.
         tax: taxBlock,
-        expense_breakdown: breakdown.map(r => ({
-          category: r.category || null,
-          amount: fen(r.amount),
-          entries: r.n,
-        })),
-        expense_entries: exp.rows || 0,
+        // Every row, both kinds, each carrying its own flag — the disclosure
+        // shows where the money went and the client separates the two. A
+        // breakdown that listed only the operating half would be a second place
+        // the split is applied, and the excluded line above would have nothing
+        // to open.
+        expense_breakdown: breakdown,
+        expense_entries: opRows,
       },
     });
   } catch (e) {

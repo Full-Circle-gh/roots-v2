@@ -1158,6 +1158,46 @@ addColumn('expense_entries', 'payment_method', 'TEXT');
 // edit lands in activity_log, not here.
 addColumn('income_entries',  'updated_at', 'DATETIME');
 addColumn('expense_entries', 'updated_at', 'DATETIME');
+// ── The tenant's expense-category list gains two facts (§87) ───────────────
+// Both are for kind='accounting'. Every other kind ('product', 'recipe',
+// 'item_kind', 'payment_method', 'income') carries them at the default and
+// reads them nowhere, which is why they are columns on the shared table rather
+// than a table of their own.
+//
+// is_operating — DOES A COST FILED HERE COUNT AS A COST OF RUNNING THE SHOP.
+// The case is an owner's private transfer: ¥5,000 leaving the account is real
+// money and belongs in the record, and it is not an operating expense. Summed
+// with rent it takes ¥5,000 off the month's Net and NOTHING ON THE SCREEN LOOKS
+// WRONG. **DEFAULT 1, so every category that exists today is an operating
+// expense and the Summary is unchanged until a tenant says otherwise.**
+//
+// is_active — A CATEGORY THAT EXPENSE ROWS ALREADY NAME IS DEACTIVATED, NEVER
+// DELETED. The expense row stores its category as TEXT and the flag above lives
+// here, so the two are joined by name: delete the row and every expense that
+// named it becomes an operating expense again, silently. Deactivating keeps the
+// flag readable and takes the name off the form, which is the whole of what
+// deleting it was for.
+addColumn('categories', 'is_operating', 'INTEGER DEFAULT 1');
+addColumn('categories', 'is_active',    'INTEGER DEFAULT 1');
+// ── The ledger learns two things (§87 step three) ─────────────────────────
+//
+// claim_id — THE ROW WAS POSTED BY AN APPROVED STAFF CLAIM, and it is the exact
+// counterpart of `po_id`. Both mark a PROJECTION: a row the product re-writes
+// from a document that owns it, so no human-authored value may accumulate on
+// one and the Transactions screen must refuse to edit it. The hand-typed read
+// in routes/finance-transactions.js therefore asks for BOTH to be null; a
+// predicate that only knew about `po_id` would render a claim-posted row as
+// freely editable and the next re-post would silently undo the edit.
+//
+// store_id — §87 part three closes §36's own open column. NULLABLE, and NULL
+// keeps §36's meaning exactly: the cost belongs to the business rather than to
+// any one place. **NOTHING IS BACKFILLED** — every existing row is NULL, which
+// is what those rows always meant — and no reader is required to use it yet.
+// The Summary's store filter is §36's to build and is not built here; what this
+// column does is make it possible at all, which is the one thing that has
+// blocked it since 2026-09-02.
+addColumn('expense_entries', 'claim_id', 'INTEGER');
+addColumn('expense_entries', 'store_id', 'INTEGER');
 // Suppliers — primary communication channel for the buyer to reach
 // this vendor. Type drives the UI (link vs QR vs plain text). Replaces
 // the loose "WeChat ID / phone" stuff with a structured field that

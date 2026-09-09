@@ -282,13 +282,19 @@ router.get('/api/retail-admin/materials/meta/categories', requireRetailAdmin, (r
   res.json({ success: true, data, byKind });
 });
 
-// The finance-category master list — same `categories` rows the kitchen app's
-// Finance page maintains (kind='accounting'). storeCategory() already snaps a
-// typed value onto one of these; this just lets the field offer them instead
-// of asking the operator to retype one from memory.
+// The finance-category master list — the same `categories` rows Finance's own
+// Categories sub-view maintains (kind='accounting', §87 part two).
+// storeCategory() already snaps a typed value onto one of these; this just lets
+// the field offer them instead of asking the operator to retype one from memory.
+//
+// ACTIVE ONLY, and the filter belongs here rather than on the Finance screen
+// alone: hiding a category means it stops being OFFERED, and a list that went on
+// offering it from the materials form would put new rows under a name the tenant
+// has retired. Nothing is hidden from what already exists — a material that
+// carries a retired category keeps it.
 router.get('/api/retail-admin/materials/meta/accounting-categories', requireRetailAdmin, (req, res) => {
   const rows = tdb().prepare(
-    "SELECT name FROM categories WHERE kind = 'accounting' ORDER BY sort_order, name"
+    "SELECT name FROM categories WHERE kind = 'accounting' AND COALESCE(is_active, 1) = 1 ORDER BY sort_order, name"
   ).all();
   res.json({ success: true, data: rows.map(r => r.name) });
 });
