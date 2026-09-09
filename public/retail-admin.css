@@ -13317,6 +13317,28 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes .rcp-warnic { color: var(--td-amber-ink); display: inline-flex; }
   #tab-recipes .rcp-warnic svg { width: 15px; height: 15px; display: block; }
 
+  /* ── the row's duplicate action ──────────────────────────────────────────
+     ALWAYS VISIBLE, never hover-revealed. This back office is worked on a
+     phone as well as a desk, and a control that only exists under a mouse
+     pointer does not exist there at all.
+     Quiet by default and inked on hover/focus, so a column of them down the
+     side of the table reads as one faint edge rather than as a second thing
+     to look at in every row. The cell is width:1% so the table gives it
+     exactly the button and no more, leaving the data columns their space. */
+  #tab-recipes .rcp-tbl th.rcp-actcol,
+  #tab-recipes .rcp-tbl td.rcp-actcell { width: 1%; white-space: nowrap; padding-left: 0; padding-right: 12px; }
+  #tab-recipes .rcp-rowact {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; padding: 0;
+    border: 1px solid transparent; border-radius: 8px;
+    background: none; color: var(--td-text2); cursor: pointer;
+    transition: color .18s ease, background .18s ease, border-color .18s ease; }
+  #tab-recipes .rcp-rowact svg { width: 15px; height: 15px; display: block; }
+  #tab-recipes .rcp-rowact:hover {
+    color: var(--td-text); background: var(--td-paper); border-color: var(--td-border); }
+  #tab-recipes .rcp-rowact:focus-visible {
+    outline: none; color: var(--td-text); border-color: var(--td-text2); }
+
   /* ── empty / loading ── */
   #tab-recipes .rcp-loading { color: var(--td-text2); padding: 40px 0; text-align: center; }
   #tab-recipes .rcp-emptyline, #tab-recipes-record .rcp-emptyline {

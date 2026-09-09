@@ -200,6 +200,10 @@
     back:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m14 18-6-6 6-6"/></svg>',
     search:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>',
     plus:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>',
+    // The two-rectangles copy glyph, the same one the popup manager's own
+    // duplicate action uses (05-marketing.js) — one word and one shape for
+    // this act across the back office.
+    copy:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
     book:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v18"/><path d="M6.5 22H20v-4H6.5A2.5 2.5 0 0 0 4 20.5v0A2.5 2.5 0 0 0 6.5 22Z"/></svg>',
     warn:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>',
     x:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
@@ -390,6 +394,30 @@
     return _rows.filter(r => (r.recipe_type || 'made') === _type);
   }
 
+  // ── The row's one action ─────────────────────────────────────────────────
+  //
+  // Most new recipes on this screen are variants of one already here — the
+  // seasonal version, the half batch, the one with the other flour — and until
+  // now starting one meant retyping every ingredient line by hand off the
+  // recipe open in the next tab.
+  //
+  // event.stopPropagation() is load-bearing, not defensive. The whole row is a
+  // click target (rcpRecordOpen), so without it one click would open the source
+  // AND start a copy of it, and the copy would arrive underneath the record it
+  // was made from.
+  //
+  // Duplicate · 复制 is copied verbatim from the popup manager's own row action
+  // (05-marketing.js) — the same word and the same glyph for the same act, in
+  // the back office these operators already use. Nothing here is composed.
+  //
+  // Gated on recipes:edit like New recipe beside it: a duplicate is a create.
+  function dupButton(rcp) {
+    const lbl = esc(T('Duplicate', '复制'));
+    return `<button type="button" class="rcp-rowact" data-cap="recipes:edit"`
+      + ` title="${lbl}" aria-label="${lbl}"`
+      + ` onclick="event.stopPropagation(); rcpDuplicate(${rcp.id})">${I.copy}</button>`;
+  }
+
   function tableHtml() {
     const view = rowsInView();
     if (!view.length) {
@@ -455,6 +483,7 @@
           <td class="right rcp-num">${dash(rcp.servings)}</td>
           <td class="right rcp-num">${costCell}</td>
           <td>${matBadge}</td>
+          <td class="rcp-actcell">${dupButton(rcp)}</td>
         </tr>`;
     }).join('');
     return `
@@ -468,6 +497,10 @@
               <th class="right">${esc(T('Servings', '份数'))}</th>
               <th class="right">${esc(T('Cost', '成本'))}</th>
               <th>${esc(T('Backs', '产出'))}</th>
+              ${/* The action column carries no visible heading — a word above a
+                    single icon button reads as another data column. The name is
+                    there for a screen reader, and on the button itself. */''}
+              <th class="rcp-actcol"><span class="sr-only">${esc(T('Duplicate', '复制'))}</span></th>
             </tr></thead>
             <tbody>${rows}</tbody>
           </table>
@@ -520,6 +553,100 @@
       backsMaterial: null, materialBlock: null,
     });
     openTakeover();
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  DUPLICATE — what a copy carries, and what it deliberately does not
+  // ═══════════════════════════════════════════════════════════════════════
+  //
+  // The copy carries the WORK: every ingredient line with its quantity, unit
+  // and yield flag, the steps in order, the batch size and servings (and
+  // whether each of those is derived rather than typed), the shelf life, the
+  // storage note, the category, the type, and the cost inputs. That is the part
+  // nobody wants to retype, and it is the whole reason this button exists.
+  //
+  // It carries NONE of the source's identity, and none of the rows the server
+  // minted for the source alone:
+  //
+  //   * `id` — null is precisely what makes writeRecord() POST rather than PUT.
+  //     Every child row's own `id` and `recipe_id` go with it: they name rows
+  //     belonging to the source, and while the create route ignores them, a
+  //     stale recipe_id sitting on a line in this draft is a lie in memory that
+  //     the next reader of this code has to disprove.
+  //   * `sku` — UNIQUE in the recipes table. Copying it does not produce a
+  //     second recipe with that SKU, it produces a 400 (skuClash) on the first
+  //     save — which autosave would then repeat every few seconds against a
+  //     record the operator cannot see is doomed. Blank, for him to fill.
+  //   * `backsMaterial` / `materialBlock` / `products` — the source's links
+  //     into the materials masterlist and the storefront. The copy gets its own
+  //     materials row when the server creates it (ensureMaterialized); until
+  //     then it must not claim the source's, or the header would offer to
+  //     unlink a material this recipe has nothing to do with.
+  //   * `cost` — the server's computed figures FOR THE SOURCE. The screen
+  //     recomputes from the lines it now holds; carrying the old numbers would
+  //     print the source's cost over the copy's ingredients.
+  //
+  // ARCHIVED SOURCE, LIVE COPY. `is_active` is forced to 1: duplicating an
+  // archived recipe is a normal way to restart an idea without disturbing what
+  // was filed, and a copy that arrived already archived would be invisible in
+  // the list it lands back in — created, and apparently gone.
+  //
+  // THE NAME IS SUFFIXED PER LANGUAGE, NOT PER THE UI'S LANGUAGE. Both
+  // suffixes are copied verbatim from the popup manager's duplicate
+  // (05-marketing.js): ' (copy)' onto the English name, '(副本)' onto the
+  // Chinese. These are STORED DATA, read afterwards by operators in both
+  // languages and by the kitchen door — so they are not run through T().
+  // Choosing the suffix by whichever language the person happened to be
+  // viewing in is how an English word ends up inside a Chinese recipe name.
+  const COPY_SUFFIX_EN = ' (copy)';
+  const COPY_SUFFIX_CN = '(副本)';
+
+  function duplicateOf(src) {
+    // Detached from the source row AND from its keys — `delete` on a copy, so
+    // nothing here reaches back into the object the fetch returned.
+    const strip = (row) => {
+      const c = { ...row };
+      delete c.id;
+      delete c.recipe_id;
+      return c;
+    };
+    return {
+      ...src,
+      id: null,
+      sku: '',
+      name_en: (src.name_en || '') + COPY_SUFFIX_EN,
+      name_cn: src.name_cn ? src.name_cn + COPY_SUFFIX_CN : '',
+      is_active: 1,
+      ingredients: (src.ingredients || []).map(strip),
+      steps: (src.steps || []).map(strip),
+      costData: src.costData ? strip(src.costData) : null,
+      cost: null,
+      backsMaterial: null,
+      materialBlock: null,
+      products: [],
+    };
+  }
+
+  // Read the source fresh rather than copying the list row: the list carries a
+  // summary (no ingredient lines, no steps, no cost inputs), and a duplicate
+  // built from it would be an empty recipe wearing the right name.
+  window.rcpDuplicate = async function (id) {
+    let src;
+    try {
+      const j = await api('/api/retail-admin/recipes/' + id);
+      src = j.data;
+    } catch (e) {
+      toast(T('Could not open that recipe', '无法打开该食谱') + ': ' + (e.message || ''), 'err');
+      return;
+    }
+    setRecord(duplicateOf(src));
+    openTakeover();
+    // NOTHING IS ON THE SERVER YET, and the toast says so in the half after the
+    // dot. The copy is a new record exactly like the one New recipe opens, so
+    // it is written by the first autosave after the first edit, or by Save —
+    // and the save bar in the header is what reports which. Verbatim from
+    // 05-marketing.js, where the same sentence follows the same act.
+    toast(T('Duplicated · edit the copy', '已复制 · 编辑副本'));
   };
 
   // `keepTab` is for a re-read of the SAME record — a save, a restore, a
