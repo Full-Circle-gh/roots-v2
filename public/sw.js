@@ -74,10 +74,10 @@ self.addEventListener('activate', (e) => {
 });
 
 // ─── The off switch ──────────────────────────────────────────────
-// A device can carry a kitchen login (push_subscriptions), a backend operator
-// login (tenant_operator_push_subs), or both — unrelated sessions sharing one
-// service worker and therefore one push endpoint. This code cannot know which,
-// so it tells both realms. The one that isn't signed in answers 401 and no-ops.
+// A device carries a backend operator login (tenant_operator_push_subs). It
+// used to be able to carry a kitchen login (push_subscriptions) as well, or
+// both — unrelated sessions sharing one service worker and therefore one push
+// endpoint — which is why this told both realms. §81 retired the kitchen one.
 const MUTE_ACTION = 'roots-mute';
 
 function _postJSON(path, body) {
@@ -95,12 +95,16 @@ async function muteThisDevice() {
   let sub = null;
   try { sub = await self.registration.pushManager.getSubscription(); } catch (e) { sub = null; }
   const endpoint = sub ? sub.endpoint : null;
-  // The endpoint goes up BEFORE the unsubscribe below — the backend realm uses
-  // it to find the kitchen subscription that shares this browser.
-  await Promise.all([
-    _postJSON('/api/push/pref', { enabled: false }),
-    _postJSON('/api/backend/push/pref', { enabled: false, endpoint }),
-  ]);
+  // ONE REALM TO TELL (§81). This told BOTH: /api/push/pref for a kitchen
+  // login and /api/backend/push/pref for a backend operator, because one
+  // browser could carry either or both and this code cannot know which. The
+  // kitchen realm is retired and its endpoint deleted, so the first call could
+  // only 404 — and a 404 inside Promise.all is a silent no-op that looks like
+  // it did something.
+  //
+  // The endpoint still goes up with the request: the backend realm uses it to
+  // find the subscription that shares this browser.
+  await _postJSON('/api/backend/push/pref', { enabled: false, endpoint });
   // The belt, and the reason the button can be trusted: an unsubscribed
   // endpoint cannot be pushed to whatever the server still believes. Any row
   // still pointing at it is pruned on the next send's 410 (routes/push.js).
