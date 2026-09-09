@@ -444,9 +444,16 @@ function serveFrom(rows, opts) {
   // ── §6 · a count off the array is drawn only while the array is the shelf ─
   section('§6 · the screen says which fraction it is holding');
 
-  const prodScreen = M.slice(M.indexOf("products:{title:['Products','产品']"),
-                             M.indexOf("categories:{title:['Categories','分类']"));
-  yes(prodScreen.length > 400, 'the Products sub-view is where it is expected');
+  /* THE SUB-VIEW HAS A NAME NOW, and this slice follows it there. It used to be
+     written inline in the SUBS table and was sliced out between two entries;
+     it was lifted into `screenProductCatalogue` (and its list into
+     `prodBodyHtml`) so that typing in its search box could repaint the list
+     without rebuilding the field — an inline arrow cannot be called from a
+     search handler. Every assertion below is unchanged: what moved is where the
+     markup lives, not what it says. */
+  const prodFnAt = M.indexOf('function screenProductCatalogue(){');
+  const prodScreen = M.slice(prodFnAt, M.indexOf('\nfunction ', M.indexOf('function prodBodyHtml(){')));
+  yes(prodFnAt > 0 && prodScreen.length > 400, 'the Products sub-view is where it is expected');
 
   yes(/const n=k=>\(L&&C\)\?P\.filter/.test(prodScreen),
     'Live / Draft / Low / Out are drawn only while the array is the whole shelf');
