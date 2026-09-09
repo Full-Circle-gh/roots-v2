@@ -45,6 +45,12 @@ const Database = require(path.join(HOME, 'node_modules', 'better-sqlite3'));
 const DATABASE_JS = path.join(HOME, 'database.js');
 const STORE_HOURS_JS = path.join(HOME, 'lib', 'store-hours.js');
 const DB_SEAM_JS = path.join(HOME, 'lib', 'db-seam.js');
+// store-hours reads through tdb() (audit D-02, site 3) rather than holding
+// `require('../database')` itself, so tenant-db sits BETWEEN the module and the
+// handle this probe hands it. It must be evicted with the others or it keeps the
+// mainDb it captured on ITS first load — the real database.js, not the stub —
+// and the probe records no read at all while store-hours works perfectly.
+const TENANT_DB_JS = path.join(HOME, 'lib', 'tenant-db.js');
 
 // All three must exist on disk. database.js is never executed — it is replaced in
 // the module cache below — but Node resolves `require('../database')` to a real
@@ -116,13 +122,14 @@ function probeHandle(real) {
 }
 
 // ── Load the real store-hours module against a chosen seam ──────────────────
-// The module cache is primed so that store-hours' own `require('../database')`
-// and `require('./db-seam')` resolve to what we hand it, and cleared afterwards
-// so the two runs cannot share the module's ten-minute cache.
+// The module cache is primed so that store-hours' own `require('./tenant-db')`
+// — and, through it, `require('../database')` — plus `require('./db-seam')`
+// resolve to what we hand it, and cleared afterwards so the two runs cannot
+// share the module's ten-minute cache.
 function loadStoreHours({ identitySeam }) {
   const { handle, log } = probeHandle(db);
 
-  for (const id of [DATABASE_JS, STORE_HOURS_JS, DB_SEAM_JS]) delete require.cache[id];
+  for (const id of [DATABASE_JS, STORE_HOURS_JS, DB_SEAM_JS, TENANT_DB_JS]) delete require.cache[id];
 
   require.cache[DATABASE_JS] = {
     id: DATABASE_JS, filename: DATABASE_JS, loaded: true, children: [], paths: [], exports: handle,
@@ -145,7 +152,7 @@ function loadStoreHours({ identitySeam }) {
     threw = e;
   }
 
-  for (const id of [DATABASE_JS, STORE_HOURS_JS, DB_SEAM_JS]) delete require.cache[id];
+  for (const id of [DATABASE_JS, STORE_HOURS_JS, DB_SEAM_JS, TENANT_DB_JS]) delete require.cache[id];
   return { mod, log, threw };
 }
 
