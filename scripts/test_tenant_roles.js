@@ -489,6 +489,65 @@ function versionOf(tid) {
   roles.invalidate(tT);
   falsy(heldTill('staff'), 'and a tenant’s decision to take the till away survives the restart');
 
+  section('19 · §86’s kitchen grant reaches an EDITED role');
+  // THE CASE THE FIRST ATTEMPT MISSED, reproduced. `production:request` shipped
+  // with a database.js migration copied from its two siblings: grant only to a
+  // kitchen role still holding exactly the preset's previous three keys. Roots'
+  // kitchen role had gained purchasing:receive, quickstock:recount and
+  // restock:receive at some point, so it read as edited, was skipped, and the
+  // screen reached nobody — found on production, not in a test, which is why
+  // this case exists now.
+  const tK = mkTenant('Kitchen request grant test');
+  mkUser(tK, 'k_owner', 'owner');
+  mkUser(tK, 'k_kitchen', 'kitchen');
+  roles.seedTenant(tK);
+  const kRewind = db.prepare('UPDATE tenant_roles SET caps_json = ? WHERE id = ?');
+  const kRow = db.prepare("SELECT id, caps_json FROM tenant_roles WHERE tenant_id = ? AND role_key = 'kitchen'").get(tK);
+  // Rewind to the live shape exactly: the key absent, and the role carrying
+  // three capabilities beyond the preset it was seeded from.
+  kRewind.run(JSON.stringify(JSON.parse(kRow.caps_json)
+    .filter(k => k !== 'production:request')
+    .concat(['purchasing:receive', 'quickstock:recount', 'restock:receive']).sort()), kRow.id);
+  db.prepare('DELETE FROM _migrations WHERE name = ?').run(roles.KITCHEN_REQUEST_CAP_MIGRATION);
+  roles.invalidate(tK);
+  const heldAsk = () => (roles.recordFor(tK, 'kitchen') || { caps: [] }).caps.includes('production:request');
+  falsy(heldAsk(), 'before the migration, an edited kitchen role has no Ask to buy — the live defect, reproduced');
+
+  // Snapshot every OTHER role before the migration runs. Asserting on the key's
+  // presence afterwards would be wrong and was: `admin` and `manager` are built
+  // from broad key lists and so gained `production:request` from their own
+  // presets the moment it entered the registry. What this migration must not do
+  // is WRITE to them, and that is what a before/after comparison actually says.
+  const otherBefore = db.prepare(
+    "SELECT id, caps_json FROM tenant_roles WHERE role_key != 'kitchen' ORDER BY id").all()
+    .map(r => r.id + '=' + r.caps_json).join('\n');
+
+  const askN = roles.migrateKitchenRequestCap();
+  roles.invalidate(tK);
+  truthy(askN > 0, 'the boot migration grants');
+  truthy(heldAsk(), 'and the EDITED role gets it — which is the whole point of the second pass');
+  // Purely additive: the edit that made it "edited" is still there.
+  const after = (roles.recordFor(tK, 'kitchen') || { caps: [] }).caps;
+  truthy(after.includes('purchasing:receive') && after.includes('quickstock:recount')
+      && after.includes('restock:receive'), 'and keeps every capability the edit had added');
+  is(db.prepare("SELECT COUNT(*) n FROM tenant_roles WHERE role_key = 'kitchen'"
+     + " AND caps_json NOT LIKE '%production:request%'").get().n, 0,
+    'across every tenant, no kitchen role was left without it');
+  // NO OTHER ROLE IS WRITTEN. Asking the company to spend with a supplier is the
+  // kitchen's door; a backfill that reached across the role table would be a
+  // widening rather than the correction this is.
+  is(db.prepare("SELECT id, caps_json FROM tenant_roles WHERE role_key != 'kitchen' ORDER BY id").all()
+       .map(r => r.id + '=' + r.caps_json).join('\n'), otherBefore,
+    'and not one non-kitchen role row was touched');
+
+  // ONCE-ONLY FROM HERE. The guard this migration drops is the one that could
+  // not apply yet; from tomorrow an untick is a decision and must survive.
+  kRewind.run(JSON.stringify(after.filter(k => k !== 'production:request')), kRow.id);
+  roles.invalidate(tK);
+  is(roles.migrateKitchenRequestCap(), 0, 'a second boot grants nothing — the ledger says done');
+  roles.invalidate(tK);
+  falsy(heldAsk(), 'so a tenant’s decision to take it away survives the restart');
+
   // ─────────────────────────────────────────────────────────────────────
   server.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');

@@ -329,6 +329,13 @@ try {
   // restock screens moved to Tacet. Runs after the seed for the same reason.
   const moves = roles.migrateRestockCaps();
   if (moves) console.log('[backend-auth] granted the transfer capabilities to ' + moves + ' stock role(s)');
+  // §86's key, and the second pass at it. The first (in database.js) only
+  // touched an untouched kitchen role and therefore reached nobody: Roots' had
+  // been edited, so the screen shipped to an empty audience. See the note above
+  // migrateKitchenRequestCap for why a brand-new capability needs no such guard
+  // — nobody can have declined a key that did not exist yesterday.
+  const asks = roles.migrateKitchenRequestCap();
+  if (asks) console.log('[backend-auth] granted production:request to ' + asks + ' kitchen role(s)');
 } catch (e) {
   // Seeding is best-effort by design. An unseeded tenant resolves from
   // presetCapsFor exactly as it did before roles became data.
