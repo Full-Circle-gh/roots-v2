@@ -497,6 +497,11 @@ check('the struck figure is display only — the CSS strikes it, nothing recompu
   // computing it inline, so both functions have to be sliced out together —
   // extracting lineRow alone leaves lineCostText undefined in the sandbox.
   const LINE_COST_TEXT_FN = extractFunction(RECIPES_JS, 'function lineCostText(l)');
+  // linePerText() is the other half of the same arrangement and arrived for
+  // the same reason (2026-09-09): the material's own rate is repainted in
+  // place when the server's figure moves under an open record, so it too is a
+  // named function the row calls rather than a sentence built inside it.
+  const LINE_PER_TEXT_FN = extractFunction(RECIPES_JS, 'function linePerText(l)');
   // Since the batch size learned to derive itself (§ recipe yield, 2026-09-04)
   // the row also carries the in-yield checkbox, so lineInYield() and the title
   // it hangs on come out with it. Sliced from the shipped file for the same
@@ -520,7 +525,7 @@ check('the struck figure is display only — the CSS strikes it, nothing recompu
       Number, String,
     };
     vm.createContext(sb);
-    vm.runInContext([YIELD_TITLE_FN, LINE_IN_YIELD_FN, LINE_COST_TEXT_FN, LINE_ROW_FN,
+    vm.runInContext([YIELD_TITLE_FN, LINE_IN_YIELD_FN, LINE_COST_TEXT_FN, LINE_PER_TEXT_FN, LINE_ROW_FN,
       'this.__row = lineRow;'].join('\n'), sb, { filename: '19-recipes.js#lineRow' });
     return sb.__row(l, idx);
   }

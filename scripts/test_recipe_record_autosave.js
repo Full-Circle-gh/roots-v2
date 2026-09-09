@@ -259,9 +259,140 @@ section('3. A background save never rebuilds the fields');
 
 check('saveNow repaints from the server only for a MANUAL save', () => {
   const saveNow = extractFunction(RECIPES_JS, 'async function saveNow(');
-  assert.match(saveNow, /source === 'auto'\s*\)\s*mergeServerFacts\(/,
+  assert.match(saveNow, /source === 'auto'\s*\)\s*\{[\s\S]*?mergeServerFacts\(/,
     'a background save must go through mergeServerFacts, not paintRecord');
   assert.ok(!/paintRecord\(/.test(saveNow), 'saveNow must not call paintRecord at all');
+});
+
+// A RATE IS NOT A DRAFT. The guard above and the one below keep a background
+// save off everything the operator is typing; this one keeps it ON the one
+// class of field he is not. master_cost/master_unit/master_free are the
+// material's own figures and they move while a record sits open — another
+// recipe's save re-costing a made material, a purchase price write-back, an
+// edit on the Materials screen. Left alone they made a screen state two
+// different rates for one material at once (2026-09-09, Garlic Dill Sour
+// Cream at ¥0.0218/g on the line and ¥0.0417/g in the header).
+check('a background save refreshes the lines RATES, which nobody types', () => {
+  const saveNow = extractFunction(RECIPES_JS, 'async function saveNow(');
+  assert.match(saveNow, /refreshLineRates\(out\.fresh\)/,
+    'a background save leaves the line rates at whatever they were when the record opened');
+  const refresh = extractFunction(RECIPES_JS, 'function refreshLineRates(fresh)');
+  for (const field of ['master_cost', 'master_unit', 'master_free']) {
+    assert.ok(refresh.includes(field), `refreshLineRates does not carry ${field} across`);
+  }
+  // The same discipline mergeServerFacts is held to, for the same reason: the
+  // draft fields and the DOM are the operator's.
+  for (const forbidden of ['qty', 'notes', 'in_yield', 'innerHTML', 'paintRecord', 'markDirty']) {
+    assert.ok(!refresh.includes(forbidden), `refreshLineRates must not touch ${forbidden}`);
+  }
+  // Matched by ingredient id, never by position: a line the server has never
+  // seen (just picked) and one whose material was deleted must both survive
+  // untouched, and an index would hand them somebody else's rate.
+  assert.ok(refresh.includes('ingredient_id'), 'refreshLineRates must match lines by ingredient id');
+});
+
+// What a moved rate is allowed to repaint. rcpRecompute() is the wrong tool —
+// it calls markDirty(), so a save that changed nothing the operator typed
+// would leave the record dirty and schedule another save behind it.
+check('a refreshed rate repaints in place, and does not re-dirty the record', () => {
+  const repaint = extractFunction(RECIPES_JS, 'function repaintRates()');
+  assert.ok(!repaint.includes('markDirty'), 'repainting a rate must not mark the record dirty');
+  assert.ok(!repaint.includes('rcpRecompute'), 'repaintRates must not go through rcpRecompute');
+  for (const painter of ['paintLineMoney()', 'paintSummary()']) {
+    assert.ok(repaint.includes(painter), `repaintRates does not call ${painter}`);
+  }
+});
+
+// ── AND THE FUNCTION ITSELF, RUN ─────────────────────────────────────────
+// The guards above prove refreshLineRates is wired in and touches nothing it
+// should not. This one proves it does the job: the checks are grep-shaped and
+// the bug was arithmetic on screen, so the function is LIFTED OUT and run
+// against a `_lines` array, exactly as scheduleAutosave and canEdit are.
+{
+  function runRefresh(lines, fresh) {
+    const sb = { Map, Array, __lines: lines };
+    vm.createContext(sb);
+    vm.runInContext([
+      'let _lines = this.__lines;',
+      extractFunction(RECIPES_JS, 'function refreshLineRates(fresh)'),
+      'this.__run = refreshLineRates;',
+    ].join('\n'), sb, { filename: '19-recipes.js#refreshLineRates' });
+    return { moved: sb.__run(fresh), lines };
+  }
+  // The live case, with the live numbers: material 645 was re-costed from
+  // ¥0.0218/g to ¥0.0417/g while this record sat open on a 70 g line.
+  const freshOf = (cost) => ({ ingredients: [
+    { ingredient_id: 645, qty: 70, unit: 'g', master_cost: cost, master_unit: 'g', master_free: 0 },
+  ] });
+
+  check('a rate that moved on the server reaches the open line', () => {
+    const lines = [{ ingredient_id: 645, qty: 70, unit: 'g', notes: 'spread',
+                     master_cost: 0.021857, master_unit: 'g', master_free: 0 }];
+    const out = runRefresh(lines, freshOf(0.041705));
+    assert.strictEqual(out.moved, true, 'a changed rate was not reported as moved');
+    assert.strictEqual(lines[0].master_cost, 0.041705, 'the line kept the stale rate');
+    assert.strictEqual(70 * lines[0].master_cost, 2.919350000000000, 'the 70 g line still prices wrong');
+  });
+
+  check('nothing the operator typed is touched', () => {
+    const lines = [{ ingredient_id: 645, qty: 70, unit: 'ml', notes: 'spread', in_yield: 0,
+                     master_cost: 0.021857, master_unit: 'g', master_free: 0 }];
+    runRefresh(lines, freshOf(0.041705));
+    assert.strictEqual(lines[0].qty, 70, 'the quantity was overwritten');
+    assert.strictEqual(lines[0].unit, 'ml', "the line's own unit was overwritten");
+    assert.strictEqual(lines[0].notes, 'spread', 'the note was overwritten');
+    assert.strictEqual(lines[0].in_yield, 0, 'the in-yield flag was overwritten');
+  });
+
+  check('a line the server has never seen is left exactly as it is', () => {
+    // Just picked, not yet saved: the server's answer has no row for it, and
+    // taking a rate from position rather than id would hand it another
+    // material's price.
+    const lines = [
+      { ingredient_id: 999, qty: 0, master_cost: 0.5, master_unit: 'g', master_free: 0 },
+      { ingredient_id: null, qty: 12, master_cost: 0, master_unit: 'g', master_free: 0 },
+    ];
+    const out = runRefresh(lines, freshOf(0.041705));
+    assert.strictEqual(out.moved, false, 'an unmatched line was reported as moved');
+    assert.strictEqual(lines[0].master_cost, 0.5, 'an unsaved line was given a rate that is not its own');
+    assert.strictEqual(lines[1].master_cost, 0, 'a deleted-material line was given a rate');
+  });
+
+  check('a save that changed no rate repaints nothing', () => {
+    const lines = [{ ingredient_id: 645, qty: 70, master_cost: 0.041705, master_unit: 'g', master_free: 0 }];
+    assert.strictEqual(runRefresh(lines, freshOf(0.041705)).moved, false,
+      'an unchanged rate was reported as moved, which repaints on every autosave');
+  });
+
+  check('a material that became free, or stopped being, carries across too', () => {
+    const lines = [{ ingredient_id: 645, qty: 70, master_cost: 0.041705, master_unit: 'g', master_free: 0 }];
+    const out = runRefresh(lines, { ingredients: [
+      { ingredient_id: 645, master_cost: 0, master_unit: 'kg', master_free: 1 },
+    ] });
+    assert.strictEqual(out.moved, true);
+    assert.strictEqual(lines[0].master_free, 1, 'free_by_design did not reach the line');
+    assert.strictEqual(lines[0].master_unit, 'kg', 'the stocking unit did not reach the line');
+  });
+
+  check('an answer with no ingredients at all is survived, not thrown on', () => {
+    const lines = [{ ingredient_id: 645, qty: 70, master_cost: 0.021857, master_unit: 'g', master_free: 0 }];
+    assert.strictEqual(runRefresh(lines, {}).moved, false);
+    assert.strictEqual(runRefresh(lines, null).moved, false);
+    assert.strictEqual(lines[0].master_cost, 0.021857, 'a missing answer wiped a good rate');
+  });
+}
+
+// The rate has to be repaintable at all — it used to be baked into the row's
+// sub-line, where the only way to change it was rebuilding the row under the
+// operator's caret.
+check('the material rate is its own span, painted in place like the cost cell', () => {
+  const row = extractFunction(RECIPES_JS, 'function lineRow(l, idx)');
+  assert.match(row, /class="rcp-line-per" data-line=/,
+    'the rate is not in a span the in-place painter can find');
+  const paint = extractFunction(RECIPES_JS, 'function paintLineMoney()');
+  assert.ok(paint.includes('.rcp-line-per'), 'paintLineMoney does not refresh the rate');
+  assert.ok(paint.includes('.rcp-line-cost'), 'paintLineMoney no longer refreshes the cost cell');
+  assert.ok(!/innerHTML/.test(paint), 'the in-place painter rebuilds markup');
 });
 
 check('mergeServerFacts touches no draft and no input', () => {
