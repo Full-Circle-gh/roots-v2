@@ -303,9 +303,18 @@ function versionOf(tid) {
   // is worth. That will need revisiting the day a short batch also writes a
   // costed waste row, because the loss then has a price on it — see the note in
   // routes/retail-production.js about what is deliberately not wired yet.
+  // 113 is `production:request` (2026-09-09, §84) — the kitchen asking the buyer
+  // to BUY a material. NO money marker, and that is the interesting one on this
+  // list, because a purchase order plainly does move money. It carries none
+  // because THIS KEY DOES NOT REACH ONE: the request lands as demand, and a
+  // buyer holding `purchasing:edit` is who turns it into an order and places it.
+  // Marking it would put a lock icon on a cook's screen for a spend they cannot
+  // make, and would blur the split the whole section rests on — the kitchen
+  // asks, the buyer spends. It needs revisiting only if the send is ever allowed
+  // to create an order directly, which §84 part one refuses.
   is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 21, '21 capabilities move money');
   is(caps.CAPABILITIES.filter(c => c.money === 'shows').length, 16, '16 show it');
-  is(caps.CAPABILITIES.length, 112, 'across all 112');
+  is(caps.CAPABILITIES.length, 113, 'across all 113');
   // Seeing the waste ledger and reading what it cost are two permissions
   // (Ash, 2026-09-02). They were one, and `waste:view` carried the money
   // marker — so the two floor presets, whose job is recording what spoiled,
