@@ -13754,6 +13754,13 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes-record .rcp-pick { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 5;
     background: var(--td-surface, #fff); border: 1px solid var(--td-border); border-radius: 12px;
     box-shadow: 0 8px 28px rgba(0,0,0,.16); max-height: 260px; overflow: auto; }
+  /* Set by renderPick() (19-recipes.js) when the box sits too close to the
+     bottom of .rcp-scroll's clipped viewport for the list to open downward
+     and stay reachable — an absolutely positioned box doesn't extend that
+     ancestor's own scroll height, so anything below its edge was unscrollable
+     dead space. Flips the list above the search box instead; max-height is
+     set inline per-open to whatever room that side actually has. */
+  #tab-recipes-record .rcp-pick.up { top: auto; bottom: calc(100% + 4px); }
   #tab-recipes-record .rcp-pick-item { display: flex; align-items: baseline; justify-content: space-between;
     gap: 10px; padding: 9px 14px; cursor: pointer; font-size: 13.5px; }
   #tab-recipes-record .rcp-pick-item:hover { background: var(--td-raised); }

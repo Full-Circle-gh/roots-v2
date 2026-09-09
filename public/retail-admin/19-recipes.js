@@ -1856,10 +1856,25 @@
         <span>${esc(m.name_en || '')}${m.name_cn ? ' · ' + esc(m.name_cn) : ''}</span>
         <span class="s">${m.cost_per_unit > 0 ? moneyU(m.cost_per_unit) + '/' + esc(m.unit || '') : esc(T('no cost', '无成本'))}</span>
       </div>`).join('') + `</div>`;
-    // The list opens below the box, which on a full page can be the bottom of
-    // the scrollport. 'nearest' scrolls the minimum that makes it visible and
-    // no-ops once it already is, so it does not jump on every keystroke.
     const list = host.querySelector('.rcp-pick');
+    // The list is position:absolute, so opening it near the bottom of
+    // .rcp-scroll's clipped viewport used to run the box past that edge with
+    // no way to scroll the rest into view — it's out of flow, so it never
+    // extended the container's own scrollable height. Flip it above the
+    // search box when there isn't room below, and cap max-height to whichever
+    // side it opens on, so the full (up to 8-item) list is always reachable.
+    const wrap = host.closest('.rcp-pickwrap');
+    if (list && wrap) {
+      const r = wrap.getBoundingClientRect();
+      const margin = 12;
+      const spaceBelow = window.innerHeight - r.bottom - margin;
+      const spaceAbove = r.top - margin;
+      const openUp = spaceBelow < 120 && spaceAbove > spaceBelow;
+      list.classList.toggle('up', openUp);
+      list.style.maxHeight = Math.max(120, Math.min(260, openUp ? spaceAbove : spaceBelow)) + 'px';
+    }
+    // 'nearest' scrolls the minimum that makes the box visible and no-ops
+    // once it already is, so it does not jump on every keystroke.
     if (list && list.scrollIntoView) list.scrollIntoView({ block: 'nearest' });
   }
   window.rcpPickAdd = function (id) {
