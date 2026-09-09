@@ -486,6 +486,70 @@ CREATE TABLE IF NOT EXISTS kitchen_order_items (
   FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)
 );
 
+
+-- ── Material Requests (the kitchen asks the buyer to BUY) ─────────
+-- docs/tacet-consolidation-decisions.md §84.
+--
+-- NOT restock_orders/restock_items, which are product-shaped and whose every
+-- surface (pick, dispatch, goods_state, Ready from the kitchen) assumes a
+-- subject with a stock table behind it. Materials have none, deliberately
+-- (§32 addendum, §39), so a material on that rail would need an "unless" in
+-- each of those places.
+--
+-- NOT kitchen_orders/kitchen_order_items above either, though they are the old
+-- app's ingredient requisition and now have no reader: created_by there FKs
+-- users(id), the realm §81 retired, which is the defect restock_orders' own
+-- header records as having broken restock for every non-Roots tenant. They are
+-- left where they are; they retire with the rest of the legacy schema.
+CREATE TABLE IF NOT EXISTS material_requests (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  mr_number     TEXT UNIQUE NOT NULL,      -- MR-0001, MAX over the series (never COUNT)
+  date          DATE NOT NULL,
+  -- draft: still being typed. sent: waiting on the buyer. sourced: every line
+  -- has reached a purchase order. The row is the ROLLUP — the line is what is
+  -- actually sourced (§84 part two), the same grain §61 gave the kitchen queue.
+  status        TEXT NOT NULL DEFAULT 'draft',
+  notes         TEXT,
+  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  sent_at       DATETIME,
+  sourced_at    DATETIME,
+  archived_at   DATETIME,
+  -- A PLAIN AUDIT INTEGER, AND NEVER A FOREIGN KEY. Identical to
+  -- restock_orders.created_by above and for that column's reason: this table is
+  -- cloned into tenant databases, `users` and `tenant_users` are control-plane
+  -- and are not, so an FK here fails every insert on a tenant file.
+  created_by    INTEGER,
+  created_by_name TEXT
+);
+
+CREATE TABLE IF NOT EXISTS material_request_items (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  request_id    INTEGER NOT NULL,
+  ingredient_id INTEGER,
+  name_en       TEXT NOT NULL,             -- snapshot, so a renamed material reads as asked
+  name_cn       TEXT,
+  sku           TEXT,
+  qty           REAL NOT NULL,
+  -- ingredients.buy_unit AS IT STOOD WHEN ASKED (§84 part four). The buying PO's
+  -- material line already defaults to buy_unit, because firePriceAlertsForPO
+  -- only writes a price back when the line's unit matches it — so carrying
+  -- buy_unit here makes the conversion into a PO the identity, with no unit
+  -- arithmetic anywhere on this path.
+  unit          TEXT,
+  notes         TEXT,
+  -- The purchase order this line was turned into, and the refusal that stops a
+  -- second buyer raising the same flour twice. DELIBERATELY NOT A FOREIGN KEY:
+  -- a buyer must stay able to delete a draft PO, and an FK would either refuse
+  -- that delete or leave this pointing at nothing. routes/retail-purchasing.js
+  -- clears the link when a PO is deleted, which returns the line to the
+  -- outstanding list — the correct behaviour rather than a consolation.
+  sourced_po_id INTEGER,
+  sourced_at    DATETIME,
+  sort_order    INTEGER DEFAULT 0,
+  FOREIGN KEY (request_id)    REFERENCES material_requests(id) ON DELETE CASCADE,
+  FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)
+);
+
 -- ── Packaging Types ───────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS packaging_types (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,

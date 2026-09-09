@@ -4539,6 +4539,50 @@ try {
   }
 } catch (e) { console.error('[migration kitchen_role_can_log_production_v1]', e); }
 
+/* The same grant, one capability later again: the kitchen may ask the buyer to
+ * BUY a material (docs/tacet-consolidation-decisions.md §84).
+ *
+ * THE THIRD APPLICATION OF #262's LESSON, and it is a migration for that lesson's
+ * reason verbatim: tenant_roles is seeded INSERT OR IGNORE, so editing
+ * PRESETS.kitchen reaches new tenants and nobody else. Without this, Roots' own
+ * kitchen role would hold `production:request` in the code and not in the
+ * database, and the screen would be invisible to exactly the people it is for.
+ *
+ * ONLY AN UNEDITED ROLE IS TOUCHED, and "unedited" means the shape the preset
+ * shipped with LAST time — the three keys kitchen_role_can_log_production_v1
+ * left behind. A caps list somebody has shaped by hand is their decision;
+ * anything edited, unreadable, or already granted is left alone and counted as
+ * kept.
+ */
+try {
+  const ran = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('kitchen_role_can_request_materials_v1');
+  if (!ran) {
+    let done = 0, kept = 0;
+    try {
+      const rows = db.prepare("SELECT rowid AS rid, tenant_id, caps_json FROM tenant_roles WHERE role_key = 'kitchen'").all();
+      const put = db.prepare('UPDATE tenant_roles SET caps_json = ? WHERE rowid = ?');
+      const bump = db.prepare('UPDATE tenants SET roles_version = COALESCE(roles_version, 0) + 1 WHERE id = ?');
+      const WAS = ['quickstock:add', 'restock:fulfil', 'production:log'];
+      const tx = db.transaction(() => {
+        for (const r of rows) {
+          let list = null;
+          try { const p = JSON.parse(r.caps_json || 'null'); if (Array.isArray(p)) list = p; } catch (e) { list = null; }
+          if (!list) { kept++; continue; }
+          if (list.indexOf('production:request') >= 0) { kept++; continue; }
+          const same = list.length === WAS.length && WAS.every(k => list.indexOf(k) >= 0);
+          if (!same) { kept++; continue; }
+          put.run(JSON.stringify(WAS.concat(['production:request'])), r.rid);
+          bump.run(r.tenant_id);
+          done++;
+        }
+      });
+      tx();
+    } catch (e) { console.error('[migration kitchen_role_can_request_materials_v1] scan', e); }
+    console.log(`[migration] kitchen_role_can_request_materials_v1: granted production:request to ${done} kitchen role(s), left ${kept} edited or already-granted`);
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('kitchen_role_can_request_materials_v1');
+  }
+} catch (e) { console.error('[migration kitchen_role_can_request_materials_v1]', e); }
+
 // Seed default reservation TTL config — minutes before an unpaid order's
 // stock reservations expire and stock returns to the available pool.
 try {
@@ -6946,6 +6990,63 @@ try {
     db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('restock_item_status_backfill_v1');
   }
 } catch (e) { console.error('[migration restock_item_status_backfill_v1]', e); }
+
+// ─────────────────────────────────────────────────────────────────────────
+// MATERIAL REQUESTS — docs/tacet-consolidation-decisions.md §84 (2026-09-09).
+// The kitchen asks the buyer to BUY a material; the buyer converts the ask
+// into a DRAFT purchase order. schema.sql declares both tables for a fresh
+// database and carries the full reasoning; this block reaches an existing one.
+//
+// ADDITIVE ONLY. No existing column changes, no backfill, nothing repointed.
+// Tenant databases receive both tables and their indexes through
+// lib/tenant-db.js initTenantSchema, which copies every data-plane CREATE.
+//
+// created_by IS A PLAIN INTEGER WITH NO FK, which is the one thing here that
+// must not be "tidied" later: restock_orders and production_batches both had
+// that FK to `users(id)` removed by drop_created_by_user_fk_v1 above, because
+// `users` is control-plane and is never cloned into a tenant file — with
+// foreign_keys = ON every insert failed there with "no such table: main.users".
+//
+// sourced_po_id ALSO HAS NO FK, for a different reason: the buyer must stay
+// able to delete a draft purchase order, and an FK would either refuse that
+// delete or strand this column. routes/retail-purchasing.js clears the link on
+// delete instead, which puts the line back on the outstanding list.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS material_requests (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    mr_number       TEXT UNIQUE NOT NULL,
+    date            DATE NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'draft',   -- draft | sent | sourced
+    notes           TEXT,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    sent_at         DATETIME,
+    sourced_at      DATETIME,
+    archived_at     DATETIME,
+    created_by      INTEGER,
+    created_by_name TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS material_request_items (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_id    INTEGER NOT NULL,
+    ingredient_id INTEGER,
+    name_en       TEXT NOT NULL,
+    name_cn       TEXT,
+    sku           TEXT,
+    qty           REAL NOT NULL,
+    unit          TEXT,
+    notes         TEXT,
+    sourced_po_id INTEGER,
+    sourced_at    DATETIME,
+    sort_order    INTEGER DEFAULT 0,
+    FOREIGN KEY (request_id)    REFERENCES material_requests(id) ON DELETE CASCADE,
+    FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_material_requests_status  ON material_requests(status, archived_at);
+  CREATE INDEX IF NOT EXISTS idx_material_request_items_req ON material_request_items(request_id);
+  CREATE INDEX IF NOT EXISTS idx_material_request_items_src ON material_request_items(sourced_po_id);
+`);
 
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;

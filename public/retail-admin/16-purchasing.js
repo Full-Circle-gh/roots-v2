@@ -143,6 +143,19 @@
   let _kStore = null;        // retail store the copies are filed under
   let _kSearch = '';
   let _kBusy = false;        // a copy is in flight — keep the button from double-firing
+  // "From the kitchen" (§84) — the LIVE source, where copy-from-kitchen above is
+  // the dead one: the app that produced PO-#### orders was deleted (§78), and
+  // what reaches the buyer now is a material request raised on the phone.
+  //
+  // THE GRAIN DIFFERS AND THAT IS THE POINT. The kitchen bridge ticks whole
+  // purchase orders; this one ticks LINES, so a morning's flour and oil can go
+  // to two suppliers without the buyer deleting rows out of a draft.
+  let _mrLines = [];         // outstanding material-request lines, newest request first
+  let _mrPick = new Set();   // material_request_items.id ticked
+  let _mrStore = null;       // retail store the draft is filed under
+  let _mrSupplier = '';      // optional supplier for the whole draft
+  let _mrSearch = '';
+  let _mrBusy = false;
   let _supSeg = 'active';    // suppliers segment: active | disabled
   let _edit = null;          // draft PO in the wizard
   let _wstep = 1;            // wizard step 1..3
@@ -216,12 +229,12 @@
     if (_init) { refresh(); return; }
     _init = true;
     root().innerHTML = `<div class="pu2-loading">${esc(T('Loading…', '加载中…'))}</div>`;
-    await Promise.all([loadStores(), loadSuppliers(), loadPOs()]);
+    await Promise.all([loadStores(), loadSuppliers(), loadPOs(), loadMaterialRequests()]);
     _screen = 'orders';
     paint();
   };
   async function refresh() {
-    try { await Promise.all([loadSuppliers(), loadPOs()]); } catch (_) {}
+    try { await Promise.all([loadSuppliers(), loadPOs(), loadMaterialRequests()]); } catch (_) {}
     if (_screen === 'orders' || _screen === 'suppliers') paint();
   }
 
@@ -246,6 +259,18 @@
       const r = await api('/api/retail-admin/purchases');
       _pos = r.data || [];
     } catch (e) { _pos = []; }
+  }
+  /* What the kitchen is waiting on (§84). Loaded with the orders rather than
+     only when the modal opens, because the COUNT is the whole point: a buyer who
+     has to open a picker to discover it is empty will stop opening it, and the
+     kitchen's ask would sit unseen. Swallows its own failure for the same reason
+     every loader here does — a purchasing screen that will not paint because one
+     secondary list 404'd is worse than a button that is briefly absent. */
+  async function loadMaterialRequests() {
+    try {
+      const r = await api('/api/retail-admin/material-requests/pending-lines');
+      _mrLines = r.data || [];
+    } catch (e) { _mrLines = []; }
   }
   async function products(storeId) {
     if (!_prodCache[storeId]) {
@@ -383,6 +408,12 @@
           <span class="pu2-ic">${I.search}</span>
           <input id="pu2-q" type="text" placeholder="${esc(T('Find an order, supplier or product', '搜索采购单、供应商或商品'))}" oninput="puFilter()" autocomplete="off">
         </span>
+        ${/* THE KITCHEN'S ASK, WHERE THE BUYER ALREADY IS (§84). Drawn only when
+             something is actually waiting: a permanent button that is usually
+             empty teaches the buyer to ignore it, and the count is the reason to
+             press it. `data-feat="production"` matches the Materials and Recipes
+             rail rows — a tenant that makes nothing never sees it. */
+          _mrLines.length ? `<button class="pu2-btn" data-cap="purchasing:edit" data-feat="production" onclick="puMrOpen()"><span class="pu2-ic">${I.box}</span>${esc(T('From the kitchen', '厨房申请'))} <span class="n pu2-num">${_mrLines.length}</span></button>` : ''}
         <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puNewOrder()"><span class="pu2-ic">${I.plus}</span>${esc(T('New order', '新建采购单'))}</button>
       </div>
 
@@ -644,6 +675,178 @@
       <button class="pu2-btn primary" ${n && _kStore && !_kBusy ? '' : 'disabled'} onclick="puKitchenCopy()">${esc(_kBusy
         ? T('Copying…', '复制中…')
         : (n ? T(`Copy ${n} order${n === 1 ? '' : 's'}`, `复制 ${n} 张采购单`) : T('Copy', '复制')))}</button>`;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  FROM THE KITCHEN — turning material-request lines into a draft order (§84)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // The live twin of the kitchen bridge above. A cook on the phone raises a
+  // request for materials; the lines wait here until a buyer ticks them.
+  //
+  // WHAT LANDS IS A DRAFT, ALWAYS, and the note above the button says so on the
+  // screen rather than only in a route comment. A purchase order posts to the
+  // books the moment it reaches Ordered and writes each material's price back on
+  // the same transition — so placing it is the buyer's act, after the buyer has
+  // chosen a supplier and a price. The kitchen asks; it does not spend.
+  //
+  // QUANTITY AND UNIT ARE THE KITCHEN'S AND ARE NOT EDITED HERE. The unit is the
+  // material's own buy_unit, carried from the request untouched, because
+  // firePriceAlertsForPO refuses to write a price back when a line's unit does
+  // not match it. The draft is fully editable once it exists, which is where a
+  // buyer changes a number.
+  function mrRows() {
+    const q = _mrSearch.toLowerCase().trim();
+    if (!q) return _mrLines;
+    return _mrLines.filter(l => `${l.name_en || ''} ${l.name_cn || ''} ${l.sku || ''} ${l.mr_number || ''} ${l.created_by_name || ''}`
+      .toLowerCase().includes(q));
+  }
+  window.puMrOpen = async function () {
+    _mrPick = new Set(); _mrSearch = ''; _mrBusy = false; _mrSupplier = '';
+    _mrStore = _stores[0]?.id || null;
+    renderMrModal(true);
+    await loadMaterialRequests();
+    if (document.getElementById('pu2-mrmodal')) renderMrModal(false);
+  };
+  window.puMrClose = function () {
+    _mrPick = new Set(); _mrSearch = ''; _mrBusy = false;
+    const h = document.getElementById('pu2-modal-host');
+    if (h) h.innerHTML = '';
+  };
+  window.puMrToggle = function (id) {
+    if (_mrPick.has(id)) _mrPick.delete(id); else _mrPick.add(id);
+    renderMrBody();
+  };
+  // Ticks what the CURRENT search shows and nothing behind it — the same rule,
+  // for the same reason, as the kitchen picker's Select all.
+  window.puMrAll = function () {
+    const rows = mrRows();
+    const allOn = rows.length > 0 && rows.every(l => _mrPick.has(l.id));
+    rows.forEach(l => { if (allOn) _mrPick.delete(l.id); else _mrPick.add(l.id); });
+    renderMrBody();
+  };
+  window.puMrSearch = function (v) { _mrSearch = v || ''; renderMrBody(); };
+  window.puMrStore = function (v) { _mrStore = parseInt(v, 10) || null; renderMrFoot(); };
+  window.puMrSupplier = function (v) { _mrSupplier = v || ''; };
+
+  window.puMrMake = async function () {
+    if (_mrBusy || !_mrPick.size) return;
+    if (!_mrStore) { toast(T('Pick a store first.', '请先选择门店。'), 'err'); return; }
+    _mrBusy = true; renderMrFoot();
+    try {
+      const r = await api('/api/retail-admin/purchases/from-material-requests', {
+        method: 'POST', body: { line_ids: [..._mrPick], store_id: _mrStore, supplier: _mrSupplier || null },
+      });
+      const d = r.data || {};
+      puMrClose();
+      await Promise.all([loadPOs(), loadMaterialRequests()]);
+      // Straight into the draft: the buyer's next act is choosing a supplier and
+      // a price, and a toast that names the order but leaves them on the list
+      // makes them find it again.
+      if (d.id) { await puOpenPO(d.id); }
+      else { _seg = 'open'; paint(); }
+      toast(T(`${d.po_number} drafted from ${d.line_count} line${d.line_count === 1 ? '' : 's'} ✓`,
+              `已生成草稿 ${d.po_number}，共 ${d.line_count} 行 ✓`), 'ok', 4000);
+    } catch (e) {
+      _mrBusy = false;
+      // The server names the lines it refused. Repeat them: "already ordered" is
+      // information the buyer acts on, where a bare code is one they re-press.
+      const dup = e && e.code === 'already_sourced' ? (e.data && e.data.lines) : null;
+      if (dup && dup.length) {
+        toast(T('Already ordered: ', '已下单:') + dup.map(d => `${d.name_en || ''} → ${d.po_number || ''}`).join(', '), 'err', 6000);
+        await loadMaterialRequests();
+        renderMrBody();
+      } else {
+        toast(e.message, 'err');
+      }
+      renderMrFoot();
+    }
+  };
+
+  function renderMrModal(loading) {
+    billHost().innerHTML = `
+      <div class="pu2-scrim" onclick="puMrClose()"></div>
+      <div class="pu2-modal" id="pu2-mrmodal">
+        <div class="pu2-modal-head">
+          <div><h2>${esc(T('From the kitchen', '厨房申请'))}</h2>
+               <div class="sub">${esc(T('Materials the kitchen has asked for. Ticked lines become one draft order you can price and place.', '厨房申请的物料。勾选的行会生成一张采购单草稿，可在此定价并下单。'))}</div></div>
+          <button class="pu2-btn ghost sm" style="margin-left:auto" onclick="puMrClose()">✕</button>
+        </div>
+        <div class="pu2-modal-body">
+          <div class="pu2-toolbar" style="margin:0 0 10px">
+            <span class="pu2-search">
+              <span class="pu2-ic">${I.search}</span>
+              <input id="pu2-mrq" type="text" placeholder="${esc(T('Find a material or request', '搜索物料或申请单'))}" value="${esc(_mrSearch)}" oninput="puMrSearch(this.value)" autocomplete="off">
+            </span>
+            <button class="pu2-btn sm" onclick="puMrAll()">${esc(T('Select all shown', '全选当前'))}</button>
+          </div>
+          <div id="pu2-mrbody">${loading ? `<div class="pu2-loading">${esc(T('Loading…', '加载中…'))}</div>` : ''}</div>
+        </div>
+        <div class="pu2-modal-foot" id="pu2-mrfoot"></div>
+      </div>`;
+    if (!loading) renderMrBody(); else renderMrFoot();
+  }
+
+  function renderMrBody() {
+    const host = document.getElementById('pu2-mrbody');
+    if (!host) return;
+    const rows = mrRows();
+    if (!rows.length) {
+      host.innerHTML = `<div class="pu2-emptyline">${esc(_mrLines.length
+        ? T('Nothing matches that search.', '没有匹配的申请。')
+        : T('The kitchen has not asked for anything.', '厨房暂无物料申请。'))}</div>`;
+      renderMrFoot();
+      return;
+    }
+    host.innerHTML = `
+      <table class="pu2-tbl">
+        <thead><tr>
+          <th style="width:34px"></th>
+          <th>${esc(T('Material', '物料'))}</th>
+          <th class="right">${esc(T('Quantity', '数量'))}</th>
+          <th>${esc(T('Asked by', '申请人'))}</th>
+        </tr></thead>
+        <tbody>${rows.map(l => {
+          const on = _mrPick.has(l.id);
+          const name = [l.name_en, l.name_cn].filter(Boolean).join(' · ');
+          return `<tr onclick="puMrToggle(${l.id})" style="cursor:pointer">
+            <td><span class="pu2-chk${on ? ' on' : ''}">${on ? I.check : ''}</span></td>
+            <td><div>${esc(name)}</div>
+                ${l.sku ? `<div class="sub pu2-mono">${esc(l.sku)}</div>` : ''}
+                ${l.notes ? `<div class="sub">${esc(l.notes)}</div>` : ''}</td>
+            <td class="right pu2-num">${esc(String(l.qty))} <span class="sub">${esc(l.unit || '')}</span></td>
+            <td><div class="pu2-mono">${esc(l.mr_number)}</div>
+                <div class="sub">${esc(l.created_by_name || '')}${l.date ? ` · ${esc(l.date)}` : ''}</div></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
+    renderMrFoot();
+  }
+
+  function renderMrFoot() {
+    const foot = document.getElementById('pu2-mrfoot');
+    if (!foot) return;
+    const n = _mrPick.size;
+    const storeOpts = _stores.map(st =>
+      `<option value="${st.id}"${_mrStore === st.id ? ' selected' : ''}>${esc([st.name_en, st.name_cn].filter(Boolean).join(' · '))}</option>`).join('');
+    foot.innerHTML = `
+      <label class="pu2-f" style="margin:0">
+        <span class="lbl">${esc(T('File under store', '归属门店'))}</span>
+        <select class="pu2-input" onchange="puMrStore(this.value)">${_stores.length ? storeOpts : `<option value="">${esc(T('No stores', '暂无门店'))}</option>`}</select>
+      </label>
+      <label class="pu2-f" style="margin:0">
+        <span class="lbl">${esc(T('Supplier', '供应商'))}</span>
+        <input class="pu2-input" type="text" value="${esc(_mrSupplier)}" oninput="puMrSupplier(this.value)"
+               placeholder="${esc(T('Optional — set it later', '可稍后填写'))}" autocomplete="off">
+      </label>
+      <span class="pu2-mut" style="max-width:340px;line-height:1.4">${esc(n
+        ? T('This makes a DRAFT. Nothing is ordered and nothing reaches the books until you mark it Ordered.',
+            '这里只生成草稿。标记「已下单」后才会正式下单并记入账目。')
+        : T('Tick the lines you are buying.', '勾选要采购的物料。'))}</span>
+      <span class="spacer"></span>
+      <button class="pu2-btn ghost" onclick="puMrClose()">${esc(T('Cancel', '取消'))}</button>
+      <button class="pu2-btn primary" ${n && _mrStore && !_mrBusy ? '' : 'disabled'} onclick="puMrMake()">${esc(_mrBusy
+        ? T('Working…', '处理中…')
+        : (n ? T(`Draft ${n} line${n === 1 ? '' : 's'}`, `生成草稿 (${n} 行)`) : T('Make draft', '生成草稿')))}</button>`;
   }
 
   window.puOpenPO = async function (id) {
