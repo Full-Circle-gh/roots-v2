@@ -57,6 +57,7 @@ const { claimWindow, clearWindow } = require('../lib/alert-latch');
 // §85 — the pre-order window. gzgrocery is in scope for it by Ash's decision, so
 // pickup inference has to know when a shelf is deliberately being sold past.
 const cadence = require('../lib/batch-cadence');
+const channelPublish = require('../lib/channel-publish');
 // §85 — the pre-order window's two edges, checked on the main loop.
 const preorderFlip = require('../lib/preorder-flip');
 const guanyiSync = require('../lib/guanyi-sync');
@@ -678,11 +679,17 @@ function enqueueCurrentStock(storeCode, retailStoreId, productId) {
     `SELECT 1 FROM guanyi_sync_queue WHERE retail_store_id=? AND product_id=? AND status IN ('pending','processing')`
   ).get(retailStoreId, productId);
   if (pending) return false;
-  const row = db.prepare(
-    `SELECT COALESCE(physical_qty, 0) AS q FROM retail_store_stock WHERE store_id=? AND product_id=?`
-  ).get(retailStoreId, productId);
+  /* §85 — WHAT WE PUBLISH, NOT THE RAW SHELF. This healer read physical_qty
+     straight out of the table, which is right for everything it was written for
+     and wrong the moment a pre-order window exists: every heal and every resync
+     re-published the bare shelf and quietly closed the window, on gzgrocery,
+     within minutes. Caught on the first live morning — the channel had been
+     carrying shelf + allowance at 07:05 and was back to the shelf by 07:23.
+     The sweeps in lib/*-drift-sweep.js were taught this; this one was missed
+     because it is the only enqueue that lives inside a daemon. */
+  const qty = channelPublish.publishableAt(db, retailStoreId, productId, { channel: 'gzgrocery' });
   db.prepare(`INSERT INTO guanyi_sync_queue (retail_store_id, product_id, store_code, new_qty, status)
-              VALUES (?, ?, ?, ?, 'pending')`).run(retailStoreId, productId, storeCode, row ? row.q : 0);
+              VALUES (?, ?, ?, ?, 'pending')`).run(retailStoreId, productId, storeCode, qty);
   return true;
 }
 

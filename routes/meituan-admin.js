@@ -17,6 +17,8 @@ const { tdb } = require('../lib/tenant-db');
 const { requireRetailAdmin } = require('./retail');
 const bundleLib = require('../lib/meituan-bundles');
 const bundleStock = require('../lib/bundle-stock');
+// §85 — the number a channel should be holding right now, allowance included.
+const channelPublish = require('../lib/channel-publish');
 // The mapping-name gate and its audit payload. Lives in lib/ so the whole
 // behaviour can be driven headless against a fixture; this route adds no rule
 // of its own beyond turning the result into a response.
@@ -576,7 +578,10 @@ router.post('/api/retail-admin/meituan/push-all', requireRetailAdmin, (req, res)
       SELECT m.product_id, m.retail_store_id, m.store_code
         FROM meituan_product_map m
        WHERE m.sync_enabled = 1
-    `).all().map(m => ({ ...m, qty: bundleStock.sellableAt(db, m.retail_store_id, m.product_id) }));
+    // §85 — publishableAt, not sellableAt: during a pre-order window the number
+    // a channel should hold is the shelf PLUS the morning's allowance, and a
+    // "push all now" that sent the bare shelf would close the window by hand.
+    `).all().map(m => ({ ...m, qty: channelPublish.publishableAt(db, m.retail_store_id, m.product_id, { channel: 'meituan' }) }));
 
     const insert = db.prepare(`
       INSERT INTO meituan_sync_queue (retail_store_id, product_id, store_code, new_qty, status)

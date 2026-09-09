@@ -10,6 +10,8 @@
 'use strict';
 
 const express = require('express');
+// §85 — the published figure, allowance included during a pre-order window.
+const channelPublish = require('../lib/channel-publish');
 const router  = express.Router();
 const { tdb } = require('../lib/tenant-db');
 const { requireRetailAdmin } = require('./retail');
@@ -248,13 +250,17 @@ router.post('/api/retail-admin/guanyi/push-all', requireRetailAdmin, (req, res) 
   const db = tdb();
   try {
     const mapped = db.prepare(`
-      SELECT m.product_id, m.retail_store_id, m.store_code,
-             COALESCE(s.physical_qty, 0) AS qty
+      SELECT m.product_id, m.retail_store_id, m.store_code
         FROM guanyi_product_map m
-        LEFT JOIN retail_store_stock s
-               ON s.product_id = m.product_id AND s.store_id = m.retail_store_id
        WHERE m.sync_enabled = 1
-    `).all();
+    `).all().map(m => ({
+      // §85 — an operator's "push all" must publish what the channel should be
+      // holding right now, allowance included, or the click itself closes an
+      // open pre-order window. Resolved per row rather than joined, because the
+      // window and a bundle's component floor are not expressible in SQL.
+      ...m,
+      qty: channelPublish.publishableAt(db, m.retail_store_id, m.product_id, { channel: 'gzgrocery' }),
+    }));
     const insert = db.prepare(`
       INSERT INTO guanyi_sync_queue (retail_store_id, product_id, store_code, new_qty, status)
       VALUES (?, ?, ?, ?, 'pending')
