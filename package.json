@@ -61,6 +61,7 @@
     "test:address": "node scripts/test_address_pin.js && node scripts/test_address_clients.js",
     "test:batch-timing": "node scripts/test_batch_timing.js",
     "test:customer-search": "node scripts/test_customer_search.js",
+    "test:drawer-back": "node scripts/test_drawer_back_nav.js",
     "test:eleme-orders": "node scripts/test_eleme_order_parse.js",
     "test:eleme-order-fees": "node scripts/test_eleme_order_fees.js",
     "test:eleme-fee-backfill": "node scripts/test_eleme_fee_backfill.js",

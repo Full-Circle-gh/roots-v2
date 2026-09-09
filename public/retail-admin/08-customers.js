@@ -882,7 +882,21 @@ async function _cuLoad(opts) {
 }
 
 
+// When a customer is opened from an order's Customer tile, remember that
+// order's id so the customer drawer can offer a "back to order" button — the
+// mirror of _ORDER_BACK_CUSTOMER, which does the same in the other direction.
+// Null when the customer was opened any other way (roster row, search, a
+// marketing surface): then the drawer is a top-level view and back means close.
+let _CUSTOMER_BACK_ORDER = null;
+// Scroll position of the order drawer body at the moment we jumped to the
+// customer, so "Back to order" lands on the same facts row it was left on.
+let _CUSTOMER_BACK_ORDER_SCROLL = 0;
+
 async function cuOpenDetail(id, restore = null) {
+  // Every open is a fresh arrival until proven otherwise — orderGotoCustomer()
+  // sets the crumb back immediately after calling us (see there), which works
+  // because everything above the first await runs synchronously.
+  _CUSTOMER_BACK_ORDER = null;
   const drawer = document.getElementById('cu-drawer');
   const body = document.querySelector('#cu-drawer .drawer-body');
   // Switching customers in an already-open drawer → cross-fade, mirroring the
@@ -974,11 +988,43 @@ function orderDrawerBack() {
   closeDrawer('#order-drawer');
 }
 
-// Jump from an order's Customer tile straight to that customer's detail.
+// Jump from an order's Customer tile straight to that customer's detail, and
+// leave a crumb so the customer drawer can step back to the order — without it
+// the only way back was to close the drawer and re-open the order from the list.
 function orderGotoCustomer(id) {
   if (!id) return;
+  // We arrived at this order FROM this same customer, so the tile is a return,
+  // not a descent: hand off to cuBackToCustomer(), which brings the Recent
+  // orders fold and the scroll position back with it. Minting a back-to-order
+  // crumb here instead would leave the two drawers pointing at each other.
+  if (_ORDER_BACK_CUSTOMER && Number(_ORDER_BACK_CUSTOMER) === Number(id)) { cuBackToCustomer(); return; }
+  const backId = _OPEN_ORDER ? _OPEN_ORDER.id : null;
+  const mount = document.getElementById('order-detail-mount');
+  _CUSTOMER_BACK_ORDER_SCROLL = mount ? mount.scrollTop : 0;
   closeDrawer('#order-drawer');
   cuOpenDetail(Number(id));
+  // cuOpenDetail() clears _CUSTOMER_BACK_ORDER synchronously at its start; set
+  // it back afterwards so the customer drawer shows its "back to order" button.
+  _CUSTOMER_BACK_ORDER = backId;
+}
+
+// Return from a customer opened via an order's Customer tile back to that
+// order, landing on the scroll position it was left at. The exact mirror of
+// cuBackToCustomer().
+function cuBackToOrder() {
+  const backId = _CUSTOMER_BACK_ORDER;
+  if (!backId) return;
+  const scrollTop = _CUSTOMER_BACK_ORDER_SCROLL;
+  closeDrawer('#cu-drawer');
+  openOrder(Number(backId), { scrollTop });
+}
+
+// Customer-drawer back affordance — the phone chevron, Esc and a scrim click.
+// When we arrived here from an order, back means that order's detail rather
+// than closing out to the roster underneath; otherwise it's a plain close.
+function cuDrawerBack() {
+  if (_CUSTOMER_BACK_ORDER) { cuBackToOrder(); return; }
+  closeDrawer('#cu-drawer');
 }
 
 // Close the drawer and clear state once the slide-out finishes.
@@ -1397,10 +1443,23 @@ function cuRenderDetail() {
     : `<button class="cux-mi danger" onclick="cuMoreClose(); cuToggleBlock(event)">
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>
          Block customer · 封禁顾客</button>`;
+  // "Back to order" leads the row when we got here from an order's Customer
+  // tile. It sits in the PINNED row rather than in the scrolling body (where
+  // the order drawer keeps its mirror) so it survives a scroll down the
+  // ledgers — this drawer is long. The chevron is an SVG, not a "←" inside the
+  // label, because the label collapses to its Chinese half under a zh UI and
+  // an arrow drawn in the EN half would vanish with it. Hidden on phones,
+  // where the header chevron already carries this (see the 720px block).
+  const backToOrder = _CUSTOMER_BACK_ORDER
+    ? `<button class="btn cu-back-order" onclick="cuBackToOrder()" title="Back to order · 返回订单">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+         Back to order · 返回订单</button>`
+    : '';
   // Plain-text buttons, no icons, and NO spacer before More — Message, Edit
   // profile and More sit together immediately after one another; the only thing
   // on the right is the floating ✕.
   $('#cu-drawer-actions').innerHTML = `
+    ${backToOrder}
     <button class="btn" onclick="cuMessageCustomer()">Message · 发消息</button>
     <button class="btn" onclick="cuOpenEdit()">Edit profile · 编辑资料</button>
     <div class="cux-more-wrap">
