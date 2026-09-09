@@ -245,7 +245,7 @@ async function loadDeliveryZones() {
       const on = !!batch.enabled;
       $('#batch-enabled').checked = on;
       const blbl = $('#batch-status-label');
-      if (blbl) blbl.textContent = on ? 'ON · 开启' : 'OFF · 关闭';
+      if (blbl) blbl.textContent = on ? 'On · 开启' : 'Off · 关闭';
     }
     if ($('#batch-anchor'))   $('#batch-anchor').value   = batch.anchor_date || '';
     if ($('#batch-interval')) $('#batch-interval').value = batch.interval_days || 2;
@@ -278,14 +278,18 @@ async function loadDeliveryZones() {
       bcb._wired = true;
       bcb.addEventListener('change', () => {
         const blbl = $('#batch-status-label');
-        if (blbl) blbl.textContent = bcb.checked ? 'ON · 开启' : 'OFF · 关闭';
+        if (blbl) blbl.textContent = bcb.checked ? 'On · 开启' : 'Off · 关闭';
+        fbSync();
       });
     }
-    // Fresh-order reschedule cutoff hour (evening-before lock for batch-made orders)
+    // Fresh-order reschedule cutoff hour (evening-before lock for batch-made orders).
+    // Now a row inside the Batch schedule card, saved by the same Save.
     const fresh = (cfg?.data && cfg.data.fresh) || {};
     if ($('#fresh-resched-cutoff')) {
       $('#fresh-resched-cutoff').value = (fresh.rescheduleCutoffHour != null ? fresh.rescheduleCutoffHour : 20);
     }
+    // Everything the Fresh batches console derives from the fields above.
+    fbWire(); fbRenderSkip(); fbSync();
     // Default zone — rest of China
     const dz = dlv.defaultZone || {};
     if ($('#dlv-default-enabled')) {
@@ -400,7 +404,14 @@ async function saveBatchSchedule() {
   const skip = ($('#batch-skip').value || '')
     .split(/[\s,]+/).map(s => s.trim()).filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s));
   const val = (sel) => (($(sel) && $(sel).value) || '').trim();
+  // The evening-before lock is a row in this card now, so it rides the same
+  // PUT. Validated like the hours above — refused, never silently coerced.
+  const rawResched = parseInt(($('#fresh-resched-cutoff') && $('#fresh-resched-cutoff').value) || '', 10);
+  if (!Number.isFinite(rawResched) || rawResched < 0 || rawResched > 23) {
+    toast('Enter an hour 0–23 · 请输入 0–23 的小时', 'err'); return;
+  }
   const body = {
+    'fresh.rescheduleCutoffHour': rawResched,
     'batch.schedule': {
       enabled, anchor_date: anchor, interval_days: interval, skip_dates: skip,
       cutoff_hour: cutoffHour,
@@ -429,16 +440,9 @@ async function saveBatchSchedule() {
   } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
 }
 
-async function saveRescheduleSettings() {
-  const h = parseInt(($('#fresh-resched-cutoff') && $('#fresh-resched-cutoff').value) || '', 10);
-  if (!Number.isFinite(h) || h < 0 || h > 23) {
-    toast('Enter an hour 0–23 · 请输入 0–23 的小时', 'err'); return;
-  }
-  try {
-    await api('/api/retail-admin/config', { method: 'PUT', body: { 'fresh.rescheduleCutoffHour': h } });
-    toast('Saved · 已保存');
-  } catch (e) { toast('Save failed · 保存失败: ' + e.message, 'err'); }
-}
+// saveRescheduleSettings() is gone: the hour it saved is a row in the Batch
+// schedule card and rides saveBatchSchedule()'s PUT. It had exactly one caller,
+// the Save button on the card that row replaced.
 
 async function saveDefaultZone() {
   const num = (sel, fb) => { const v = parseFloat($(sel).value); return Number.isFinite(v) ? v : fb; };
@@ -1519,3 +1523,215 @@ function _dlvReveal(el) {
 }
 window._dlvReveal = _dlvReveal;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// FRESH BATCHES — the A4 Console behaviours
+// ═══════════════════════════════════════════════════════════════════════════
+// The card is markup-driven: every input keeps the id loadDeliverySettings()
+// and saveBatchSchedule() already use. Nothing below writes config — it renders
+// the master card's consequence line, the skip-date chips and the checkout
+// preview from what is already on screen.
+
+let _fbTab = 'out';
+
+// Which popup is being written. Both are saved by the one Save; the tabs only
+// choose which set of fields (and which preview) is on screen.
+function fbTab(which) {
+  _fbTab = (which === 'gz') ? 'gz' : 'out';
+  document.querySelectorAll('#fb-message [data-fbtab]').forEach((b) => {
+    b.setAttribute('aria-selected', b.getAttribute('data-fbtab') === _fbTab ? 'true' : 'false');
+  });
+  document.querySelectorAll('#fb-message [data-fbpane]').forEach((p) => {
+    p.hidden = p.getAttribute('data-fbpane') !== _fbTab;
+  });
+  fbRenderPreview();
+}
+
+// The smallest batch day on or after `from`, skipping skip_dates by rolling
+// forward a whole interval.
+//
+// 🔴 THIS MIRRORS nextBatchShipDate() IN routes/retail.js — that function is
+// the authority and this one is a HINT. It is here so the preview can show a
+// date at all; it deliberately does NOT reproduce earliestBatchMakeDate, which
+// also forgives a sold-out shelf. The date a customer is actually promised can
+// therefore be LATER than this, which is why every caller of this function
+// labels its answer as the schedule's answer and never as the promise (§1.17).
+// If the cadence rule changes, it changes there first.
+function fbNextBatchDate(fromDate) {
+  const anchorStr = ($('#batch-anchor') && $('#batch-anchor').value || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(anchorStr)) return null;
+  const p = anchorStr.split('-').map(Number);
+  const anchor = new Date(p[0], p[1] - 1, p[2], 12, 0, 0, 0);
+  if (isNaN(anchor.getTime())) return null;
+  const interval = Math.max(1, parseInt(($('#batch-interval') && $('#batch-interval').value) || '', 10) || 2);
+  const skip = new Set(fbSkipDates());
+  const DAY = 86400000;
+  const from = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate(), 12, 0, 0, 0);
+  const diff = Math.round((from.getTime() - anchor.getTime()) / DAY);
+  const rem = ((diff % interval) + interval) % interval;
+  const offset = rem === 0 ? diff : diff + (interval - rem);
+  let cand = new Date(anchor.getTime() + offset * DAY);
+  const ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+    + '-' + String(d.getDate()).padStart(2, '0');
+  let guard = 0;
+  while (skip.has(ymd(cand)) && guard < 365) {
+    cand = new Date(cand.getTime() + interval * DAY);
+    guard++;
+  }
+  return ymd(cand);
+}
+
+// The ship date the schedule points at right now: today's batch has already
+// gone once the order-by hour has passed, so from tomorrow in that case.
+function fbShipDateHint() {
+  const now = new Date();
+  const cut = parseInt(($('#batch-cutoff') && $('#batch-cutoff').value) || '', 10);
+  const from = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (Number.isFinite(cut) && now.getHours() >= cut) from.setDate(from.getDate() + 1);
+  return fbNextBatchDate(from);
+}
+
+// ── Skip dates ────────────────────────────────────────────────────────────
+// #batch-skip stays the single source: it keeps its id, its type and its
+// newline-joined YYYY-MM-DD value, so the load and the save never learn the
+// chips exist. Same split the save uses, so what is shown is what is stored.
+function fbSkipDates() {
+  const raw = ($('#batch-skip') && $('#batch-skip').value) || '';
+  return raw.split(/[\s,]+/).map((s) => s.trim()).filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(s));
+}
+
+function fbWriteSkip(list) {
+  const el = $('#batch-skip');
+  if (!el) return;
+  el.value = [...new Set(list)].sort().join('\n');
+  fbRenderSkip();
+  fbSync();
+}
+
+function fbRenderSkip() {
+  const wrap = $('#fb-skip-chips');
+  if (!wrap) return;
+  const list = fbSkipDates();
+  if (!list.length) {
+    wrap.innerHTML = '<span class="fb-chips-none">' + cuT('None', '无') + '</span>';
+    return;
+  }
+  wrap.innerHTML = list.map((d) =>
+    '<span class="fb-chip">' + escapeHtml(d)
+    + '<button type="button" data-fbskip="' + escapeHtml(d) + '" aria-label="'
+    + escapeHtml(cuT('Remove ' + d, '移除 ' + d)) + '">×</button></span>'
+  ).join('');
+}
+
+// ── The master card's consequence line, and the disabled state ────────────
+function fbSync() {
+  const view = $('#dlv-fresh');
+  if (!view) return;
+  const on = !!($('#batch-enabled') && $('#batch-enabled').checked);
+  view.classList.toggle('fb-off', !on);
+
+  const n = Math.max(1, parseInt(($('#batch-interval') && $('#batch-interval').value) || '', 10) || 2);
+  const rawCut = parseInt(($('#batch-cutoff') && $('#batch-cutoff').value) || '', 10);
+  const cut = (Number.isFinite(rawCut) && rawCut >= 0 && rawCut <= 23) ? rawCut : 20;
+
+  const say = $('#fb-consequence');
+  if (say) {
+    // The Chinese half of the ON sentence is the delivery hub's own live status
+    // chip, word for word — see _dlvStat('dlv-st-fresh', …) above.
+    say.textContent = on
+      ? cuT('On. A batch is made every ' + n + ' day' + (n === 1 ? '' : 's') + ', and orders close at ' + cut + ':00.',
+            '开启。每 ' + n + ' 天制作一批,' + cut + ':00 截单。')
+      : cuT('Off. Nothing waits for a batch.', '关闭。没有订单需要等待制作。');
+  }
+
+  const hint = $('#fb-next-hint');
+  if (hint) {
+    const d = on ? fbShipDateHint() : null;
+    hint.textContent = d
+      ? cuT('On this schedule the next batch is ' + d + '.', '按此排期,下一批为 ' + d + '。')
+      : '';
+  }
+  fbRenderPreview();
+}
+
+// ── The checkout preview ──────────────────────────────────────────────────
+// Renders the popup from what is typed, falling back to each input's own
+// placeholder — those placeholders ARE the built-in wording the server uses
+// when a field is blank, so a blank field previews what will actually ship.
+function fbRenderPreview() {
+  const kick = $('#fb-pv-kick');
+  if (!kick) return;
+  const gz = _fbTab === 'gz';
+  const pick = (sel) => {
+    const el = $(sel);
+    if (!el) return { text: '', fell: false };
+    const v = (el.value || '').trim();
+    return { text: v || el.placeholder || '', fell: !v };
+  };
+  const k = pick(gz ? '#batch-local-kicker-en' : '#batch-kicker-en');
+  const kc = pick(gz ? '#batch-local-kicker-cn' : '#batch-kicker-cn');
+  const t = pick(gz ? '#batch-local-title-en' : '#batch-title-en');
+  const tc = pick(gz ? '#batch-local-title-cn' : '#batch-title-cn');
+  const b = pick(gz ? '#batch-local-msg-en' : '#batch-msg-en');
+  const bc = pick(gz ? '#batch-local-msg-cn' : '#batch-msg-cn');
+  const tip = gz ? { text: '', fell: false } : pick('#batch-tip-en');
+  const tipc = gz ? { text: '', fell: false } : pick('#batch-tip-cn');
+
+  const ship = fbShipDateHint();
+  // {ship_date} and {make_date} are the same day and the page can derive it.
+  // {delivery_date} is resolved at checkout against the courier, so it is shown
+  // as the token it still is rather than guessed at (§1.17).
+  const fill = (s) => escapeHtml(s)
+    .replace(/\{ship_date\}|\{make_date\}/g,
+      ship ? '<span class="fb-res">' + ship + '</span>' : '<span class="fb-tok">{' + (gz ? 'make_date' : 'ship_date') + '}</span>')
+    .replace(/\{delivery_date\}/g, '<span class="fb-tok">{delivery_date}</span>');
+
+  kick.innerHTML = fill(cuT(k.text, kc.text));
+  $('#fb-pv-ttl').innerHTML = fill(cuT(t.text, tc.text));
+  $('#fb-pv-body').innerHTML = fill(cuT(b.text, bc.text));
+  const tipEl = $('#fb-pv-tip');
+  const tipTxt = cuT(tip.text, tipc.text);
+  tipEl.innerHTML = fill(tipTxt);
+  tipEl.hidden = !tipTxt;
+
+  const fellCount = [k, t, b].concat(gz ? [] : [tip]).filter((x) => x.fell).length;
+  const fb = $('#fb-pv-fallback');
+  if (fb) {
+    fb.textContent = fellCount
+      ? cuT(fellCount + ' of these lines use the built-in wording.',
+            '其中 ' + fellCount + ' 行使用默认文案。')
+      : '';
+  }
+  const note = $('#fb-pv-note');
+  if (note) {
+    note.textContent = ship
+      ? cuT('Dates follow the schedule above. A customer can be given a later batch when the shelf is already empty.',
+            '日期按上面的排期计算。若库存已售罄,顾客可能被安排到更后的一批。')
+      : cuT('Pick a batch day above to see the dates.', '请先在上面选择一个制作日以显示日期。');
+  }
+}
+
+// One delegated listener for the whole card — the inputs are markup, so
+// nothing here has to be re-wired when the language flips or the view reopens.
+function fbWire() {
+  const view = $('#dlv-fresh');
+  if (!view || view._fbWired) return;
+  view._fbWired = true;
+  view.addEventListener('input', (ev) => {
+    if (ev.target && ev.target.id === 'fb-skip-add') return;
+    fbSync();
+  });
+  view.addEventListener('change', (ev) => {
+    const add = ev.target && ev.target.id === 'fb-skip-add' ? ev.target : null;
+    if (!add) { fbSync(); return; }
+    const d = (add.value || '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) fbWriteSkip(fbSkipDates().concat([d]));
+    add.value = '';
+  });
+  view.addEventListener('click', (ev) => {
+    const btn = ev.target && ev.target.closest ? ev.target.closest('[data-fbskip]') : null;
+    if (!btn) return;
+    const d = btn.getAttribute('data-fbskip');
+    fbWriteSkip(fbSkipDates().filter((x) => x !== d));
+  });
+  if (window.onLangChange) onLangChange(() => { fbRenderSkip(); fbSync(); });
+}
