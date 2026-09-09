@@ -979,10 +979,21 @@ reg('rqTo', id=>{ state.rq.to=Number(id);
 reg('rqFrom', id=>{ state.rq.from=Number(id); render(); });
 /* The purchase-request basket (§86). Its own commands for its own state; the
    caret rescue is the same one every search box on this page needs. */
-reg('mbSearch', v=>{ const el=document.getElementById('mMbQ');
-  const at=el?el.selectionStart:null; state.mb.q=String(v||''); render();
-  const el2=document.getElementById('mMbQ');
-  if(el2){ el2.focus(); if(at!=null){ try{ el2.setSelectionRange(at,at); }catch(e){} } } });
+/* TYPING REPAINTS THE LIST AND NOTHING ELSE. render() replaces the whole app in
+   one innerHTML, so calling it here would destroy the input this keystroke came
+   from and build a new one — and a new element gets a fresh soft keyboard, which
+   Gboard opens on letters. Typing a SKU like `h-545` gave one digit, then the
+   alphabet, then one digit, then the alphabet. Reported from the kitchen.
+   No focus or caret rescue any more, and none is needed: the rescue existed to
+   undo render()'s damage, and there is no damage to undo when the element
+   survives. The foot is left alone deliberately — its tally counts CHOSEN items,
+   which a search cannot change. */
+reg('mbSearch', v=>{
+  state.mb.q=String(v||'');
+  const host=document.getElementById('mMbBody');
+  if(host) host.innerHTML=mbBodyHtml();
+  else render();   // not on this screen (or not painted yet) — fall back
+});
 reg('mbBump', (id,d)=>mbBump(Number(id),Number(d)));
 reg('mbSend', ()=>mbSend());
 reg('rqSendKitchen', ()=>rqSendKitchen());
@@ -7290,10 +7301,19 @@ function mbLines(){
     .toLowerCase().indexOf(q)!==-1);
 }
 function mbChosen(){ return (state.mb.materials||[]).filter(p=>(state.mb.qty[p.id]||0)>0); }
+/* SAME REASON AS mbSearch, one step further: a + or − tapped while the search
+   box still has focus would, through render(), destroy that box and take the
+   keyboard down with it — so a cook searching for one material and stepping it
+   up had to tap back into the search to look for the next one. Only the two
+   things that actually changed are repainted: the row's own number, and the
+   tally in the foot. */
 function mbBump(id,d){
   const n=(state.mb.qty[id]||0)+d;
   state.mb.qty[id]=n>0?n:0;
-  render();
+  const body=document.getElementById('mMbBody');
+  const foot=document.getElementById('mMbFoot');
+  if(body&&foot){ body.innerHTML=mbBodyHtml(); foot.innerHTML=mbFootHtml(); }
+  else render();
 }
 /* THE UNIT TRAVELS WITH THE LINE AND IS NEVER CONVERTED. It is the material's
    own `buy_unit`, read from the server with the material and sent back
@@ -7326,6 +7346,59 @@ function mbSend(){
     render();
   });
 }
+/* THE LIST, ON ITS OWN, so that typing in the search box can repaint it WITHOUT
+   repainting the search box.
+ *
+ * THIS IS NOT A TIDINESS SPLIT — IT IS THE FIX FOR A KEYBOARD THAT WOULD NOT
+ * STAY ON ITS NUMBER PAGE. render() replaces the whole app in one innerHTML (its
+ * own header says so), which destroys the <input> and builds a new one on every
+ * keystroke. The caret rescue every search box in this file performs is the
+ * acknowledgement of that: it puts the cursor back. What it cannot put back is
+ * the SOFT KEYBOARD's state — a new element gets a fresh IME, and Gboard opens a
+ * fresh IME on letters. So a cook typing a SKU like `h-545` got one digit, then
+ * the alphabet, then one digit, then the alphabet.
+ *
+ * Patching only this container leaves the input element untouched for the whole
+ * of a search, which is also why mbSearch no longer needs the focus-and-caret
+ * rescue: nothing takes them away. */
+function mbBodyHtml(){
+  const m=state.mb;
+  const rows=mbLines();
+  /* A LIST THAT COULD NOT BE READ IS NOT AN EMPTY LIST. Saying "no materials
+     match" after the fetch failed tells a cook the company stocks nothing,
+     which is the wrong thing to be told and the wrong thing to act on. The
+     search-miss wording is kept for an actual search miss. */
+  if(!rows.length) return `<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+    (m.materials&&m.materials.length ? T('No materials match','没有匹配的物料')
+                                     : (m.err || T('No materials yet','还没有物料')))}</div>`;
+  /* THE UNIT SITS ON THE ROW, BESIDE THE NUMBER, because it is what the number
+     MEANS and it differs per material — two bags and two bottles are the same
+     digit. The product screens can leave it off; this one cannot. */
+  return `<div>${rows.map(p=>{
+    const n=m.qty[p.id]||0;
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rqName(p))}</span>
+        <span style="display:block;font-size:12.5px;color:var(--text-secondary)">${p.sku?`<span class="num">${escAttr(p.sku)}</span> · `:''}${escAttr(p.buy_unit||'')}</span>
+      </span>
+      <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('mbBump',${p.id},-1)"${n<=0?' disabled':''}
+        aria-label="${T('Less','减少')}">${ic('minus',18)}</button>
+      <span class="num" style="width:44px;text-align:center;font-size:18px;font-weight:500">${n}</span>
+      <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('mbBump',${p.id},1)"
+        aria-label="${T('More','增加')}">${ic('plus',18)}</button>
+    </div>`;
+  }).join('')}</div>`;
+}
+/* THE TALLY COUNTS ITEMS AND NOT UNITS, which is where this foot parts company
+   with rqFoot. Adding two bags to three bottles gives five of nothing; the
+   product screens can sum their pieces because every piece is a piece. */
+function mbFootHtml(){
+  const m=state.mb, n=mbChosen().length;
+  return `<span style="flex:1;min-width:0;font-size:13px;color:var(--text-secondary)">
+      <b class="num" style="color:var(--text-primary)">${n}</b> ${T('items','项')}</span>
+    <button class="btn2" style="width:auto;padding:11px 26px"${(n&&!m.busy)?'':' disabled'}
+      onclick="APP.cmd('mbSend')">${m.busy?T('Sending…','发送中…'):T('Send','发送')}</button>`;
+}
 function screenAskBuy(){
   loadMbMaterials();
   const m=state.mb;
@@ -7345,45 +7418,20 @@ function screenAskBuy(){
       placeholder="${T('Search materials','搜索物料')}" oninput="APP.cmd('mbSearch',this.value)"></div>`;
   const intro=`<div style="margin-top:12px;padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
       T('The buyer orders it — nothing is ordered until they place it.','由采购下单 — 下单后才会生成采购单。')}</div>`;
-  /* A LIST THAT COULD NOT BE READ IS NOT AN EMPTY LIST. Saying "no materials
-     match" after the fetch failed tells a cook the company stocks nothing,
-     which is the wrong thing to be told and the wrong thing to act on. The
-     search-miss wording is kept for an actual search miss. */
-  const body = !rows.length
-    ? `<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
-        (m.materials.length ? T('No materials match','没有匹配的物料')
-                            : (m.err || T('No materials yet','还没有物料')))}</div>`
-    /* THE UNIT SITS ON THE ROW, BESIDE THE NUMBER, because it is what the number
-       MEANS and it differs per material — two bags and two bottles are the same
-       digit. The product screens can leave it off; this one cannot. */
-    : `<div>${rows.map(p=>{
-        const n=m.qty[p.id]||0;
-        return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
-          <span style="flex:1;min-width:0">
-            <span style="display:block;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rqName(p))}</span>
-            <span style="display:block;font-size:12.5px;color:var(--text-secondary)">${p.sku?`<span class="num">${escAttr(p.sku)}</span> · `:''}${escAttr(p.buy_unit||'')}</span>
-          </span>
-          <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('mbBump',${p.id},-1)"${n<=0?' disabled':''}
-            aria-label="${T('Less','减少')}">${ic('minus',18)}</button>
-          <span class="num" style="width:44px;text-align:center;font-size:18px;font-weight:500">${n}</span>
-          <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('mbBump',${p.id},1)"
-            aria-label="${T('More','增加')}">${ic('plus',18)}</button>
-        </div>`;
-      }).join('')}</div>`;
+  const body = `<div id="mMbBody">${mbBodyHtml()}</div>`;
   /* THE TALLY COUNTS ITEMS AND NOT UNITS, which is where this foot parts company
      with rqFoot. Adding two bags to three bottles gives five of nothing; the
      product screens can sum their pieces because every piece is a piece. */
   /* The error is drawn ONCE. With no materials the body is already showing it —
      a load failure and a send failure share `err`, and printing it in both
      places reads as two things having gone wrong. */
+  /* The sticky bar keeps its own id and its CONTENT is what gets patched, not
+     the bar itself — replacing the element would drop the sticky positioning
+     mid-scroll. The error line stays outside it: it belongs to a send, not to
+     the tally, and it is not redrawn when a quantity changes. */
   const foot=`${(m.err&&m.materials.length)?`<div style="padding:0 16px 10px;font-size:14px;color:var(--brick-ink)">${escAttr(m.err)}</div>`:''}
-    <div style="position:sticky;bottom:0;background:var(--surface-card);border-top:1px solid var(--border-default);
-      padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;align-items:center;gap:12px">
-      <span style="flex:1;min-width:0;font-size:13px;color:var(--text-secondary)">
-        <b class="num" style="color:var(--text-primary)">${mbChosen().length}</b> ${T('items','项')}</span>
-      <button class="btn2" style="width:auto;padding:11px 26px"${(mbChosen().length&&!m.busy)?'':' disabled'}
-        onclick="APP.cmd('mbSend')">${m.busy?T('Sending…','发送中…'):T('Send','发送')}</button>
-    </div>`;
+    <div id="mMbFoot" style="position:sticky;bottom:0;background:var(--surface-card);border-top:1px solid var(--border-default);
+      padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;align-items:center;gap:12px">${mbFootHtml()}</div>`;
   return intro+search+body+foot;
 }
 
