@@ -1213,8 +1213,17 @@
     const note = skuNoteEl();
     const field = skuFieldEl();
     if (!note || !field || !_rec) return;
-    // An existing material keeps the code it has. Nothing to suggest, and the
-    // mismatch flag below still applies if the operator edits it.
+    // An existing material keeps the code it has — nothing is suggested for
+    // one, so this clears the rule and lets matSkuTyped() paint the note.
+    //
+    // Clearing _skuRule also stands the mismatch flag down: matSkuTyped() has
+    // no pattern left to test against and so says nothing, whatever is typed
+    // into the field afterwards. That is the behaviour this has always had;
+    // the comment that used to sit here claimed the opposite ("the mismatch
+    // flag below still applies if the operator edits it") and was simply
+    // wrong about its own code. Making the flag work on an existing material
+    // means fetching the rule for it, which is a change to what the screen
+    // does rather than a fix, and is deliberately not made here.
     if (_rec.row.id) { _skuRule = null; matSkuTyped(); return; }
     if (String(field.value || '').trim()) { matSkuTyped(); return; }
 
@@ -1257,7 +1266,32 @@
     const field = skuFieldEl();
     if (!note || !field) return;
     const typed = String(field.value || '').trim();
-    if (!typed) { note.textContent = ''; note.className = 'mat-skunote'; matSkuPreview(); return; }
+    // BLANK MEANS "BACK TO THE SUGGESTION" — BUT ONLY A NEW MATERIAL HAS ONE.
+    //
+    // This line used to call the preview unconditionally, and on an EXISTING
+    // material that closed a loop with no exit: matSkuPreview() hands an
+    // existing record straight back here (it has nothing to suggest for one),
+    // and this handed the blank field straight back to it. Both branches are
+    // above their function's first await, so the two called each other
+    // synchronously until the stack ran out — measured at ~12,500 frames deep,
+    // ending in a RangeError that `try { matSkuPreview(); } catch (_) {}` in
+    // paintRecord() cannot catch, because an async function reports a throw as
+    // a rejected promise rather than throwing.
+    //
+    // It fired on every paint of such a record — opening it, changing its kind
+    // or category, tabbing out of its name — not only on a typed edit. A
+    // material with no code is ordinary: `sku` is nullable (schema.sql), and
+    // numbering only ever runs on CREATE (routes/retail-materials.js), so
+    // anything saved before automatic SKUs existed still has a blank one.
+    //
+    // An existing material is left saying nothing, which is what the design
+    // above asks for: nothing is suggested for one, so a blank field on one is
+    // simply blank.
+    if (!typed) {
+      note.textContent = ''; note.className = 'mat-skunote';
+      if (_rec && !_rec.row.id) matSkuPreview();
+      return;
+    }
     if (!_skuRule || !_skuRule.match_re) { note.textContent = ''; note.className = 'mat-skunote'; return; }
     let fits = true;
     try { fits = new RegExp(_skuRule.match_re).test(typed.toUpperCase()); } catch (_) { return; }
