@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.179
+# Tacet shared-core consolidation — decisions record, v4.180
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-09 · v4.180 — **§80 ADDED AND BUILT: NOTHING IS SHORT FROM THE CUSTOMER'S SIDE WHILE THE BATCH IS ON ITS WAY — DECIDED by Ash, against §74 as shipped.** Walked through §74's own Guangzhou scenario, Ash stopped at the checkout step: *"why tell him its short? he doesnt need to wait. there is a new batch made and ready at 11, we deliver on time according to his request. am i wrong?"* **He was not, and the shipped behaviour was WORSE than the walkthrough that prompted the question.** §74 made the meal orderable and stopped there: `requiresStockGate` still read Guangzhou + same-day + an empty shelf, `analyzeShortage` still returned `options_5`, the customer still met a five-option out-of-stock modal — and the only way through it, `wait_for_restock`, **CLEARS `scheduled_for`, refunds the same-day surcharge and relabels the order *Ships when restocked*.** He asked for 12:00–14:00 and got an order with no delivery time at all. **THE RULING: while today's batch is still coming and it lands before the customer's own window CLOSES, that line is not short — no modal, and the window he picked survives.** **THE END OF THE WINDOW, NEVER ITS START, and Ash said so in one line when the design was put back to him: *"it can also be 10-12."* A batch landing at 11:00 serves a 10:00–12:00 delivery, so keying on the start hour would have refused exactly the slot he named; keying on the end also keeps the rule honest for a late ready hour, where a window CLOSING before the batch lands is correctly not covered. `'right_away'` is never covered — it names no window to close by. **WHERE THE RULE LIVES IS ITSELF A DECISION**: `lib/inventory.js` knows shelves and is NOT taught a production cadence; `routes/retail.js` resolves the covered ids beside the schedule that defines them and hands them down as `coveredProductIds`, and a suite asserts `inventory.js` never learns the words. **THE ORDER PARKS WITHOUT RESERVING, AND KEEPS ITS WINDOW.** The automatic parking path that already existed for stock-gate-OFF orders gains one arm rather than a twin — every other guard (no bundle, no stock-backed add-on, backorder lines only) applies unchanged, and with the gate ON *every* short line must be covered or the order does not park silently. The new `isBatchPark` shares `isWaitFlow`'s reservation skip (there is nothing on the shelf to hold) and deliberately does NOT share its slot-clearing: that clearing is right when nobody knows when stock lands and wrong when the schedule names the hour. `checkAwaitingRestockForRestock` promotes the order the moment a cook records the batch, as before. **THREE COPIES BECAME ONE**: `todaysBatchStillComing()` now holds the four conditions that were written out in `earliestBatchMakeDate`, `nextFreshBatchDate` and the new gate — for a rule whose whole job is that the pill, the checkout and the order agree, three copies was two too many. **A DEFECT CAUGHT IN BUILD THAT LINT CANNOT SEE**: the first wiring read `quoteNow` above its own `const`, a temporal-dead-zone `ReferenceError` on **every customer's checkout quote**, with eslint reporting 0 errors. The clock is now declared once at the top of the handler and a case asserts the declaration precedes its first read. **WHAT IS STILL NOT DONE, and it is now the only thing left**: nothing caps the sell against the batch size, so a busy morning can promise more windows than the batch covers — the surplus parks rather than overselling silently, but a customer can be told a time and get the next batch. Ash chose this shape knowing that (*"i choose option a"*); the cap needs the forward production plan and is its own section. **PROVED**: `scripts/test_fresh_today_batch.js` grows to 46 cases — the 10:00–12:00 window covered, a window closing before the batch not covered, `right_away` never, the day chip yes, non-cooking day no, after the hour no, no ready hour no, a grocery line no, `slotWindowEnd` reading the zone's own duration rather than assuming two hours, and source assertions that the gate closes, that `inventory.js` stays a stock question, that the reservation is skipped, and that a batch park never reaches the slot-clearing branch. Red-proofed both ways: keying on the window's start turns the 10–12 case red, and removing the reservation skip turns its case red. `npm run test:fast` 181 passed, 0 failed; eslint 0 errors; doc-numbering PASS. Code, tests and docs; no schema, no migration, no new route, no new strings, and no change to `.gitignore` or CI.
 
 2026-09-09 · v4.179 — **THE CUSTOMER DRAWER GETS ITS WAY BACK TO THE ORDER. No new section: the drawers already had this symmetry in one direction, and this is the other half of it being built — it decides nothing.** Reported from the back office with the drawer open over customer #1703: *"im in an order drawer, clicking on a customet, drawer open, there is no arrow back to the order detail. i have to close the drawe rand open the order again."* **ONE DIRECTION HAD BEEN COMPLETE SINCE IT WAS BUILT AND THE OTHER HAD NOTHING.** `cuGotoOrder()` — a customer's Recent-orders row — leaves `_ORDER_BACK_CUSTOMER` and its scroll behind, and the order drawer honours it four ways: an in-card `← Back to customer`, the phone chevron through `orderDrawerBack()`, Esc and an outside click through `dismissTopDrawer()`. `orderGotoCustomer()` — the order's Customer tile — was `closeDrawer('#order-drawer'); cuOpenDetail(id)` and nothing else, so the operator's only way back was the one they reported: close the drawer, find the order in the list again. **THE MIRROR, BUILT THE SAME SHAPE AS THE ORIGINAL**: `_CUSTOMER_BACK_ORDER` + `_CUSTOMER_BACK_ORDER_SCROLL`, cleared at the head of `cuOpenDetail()` exactly as `openOrder()` clears its twin, so every OTHER route into the drawer (a roster row, a search hit, a marketing surface) leaves no crumb without having to know the crumb exists. `cuBackToOrder()` and `cuDrawerBack()` mirror `cuBackToCustomer()` and `orderDrawerBack()` statement for statement. **THE BUTTON SITS IN THE PINNED ROW, NOT THE SCROLLING BODY** — where the order drawer keeps its own — because this drawer runs long (stats, ledgers, addresses, a chart) and a back button that scrolls away is the same complaint again for anyone who read to the bottom; on phones the header chevron already IS this control, so the in-row twin is hidden at the 720px breakpoint rather than wrapping that row onto a second line. **THE ARROW IS DRAWN, NOT TYPED.** The label collapses to ONE language at render, so a `←` inside the English half vanishes under a Chinese UI — which is a small live defect in the sibling button, left as it is and not widened into here. **TWO CASES WHERE BACK IS NOT BACK, and both are the kind that reads correct and behaves wrong.** A customer opened from the roster has no order behind it and the chevron has to be a plain close — a crumb left over from an earlier visit would send the operator to an order they never opened, worse than no button. And customer → order → the order's Customer tile is the operator WALKING BACK, not descending: it hands off to `cuBackToCustomer()` rather than minting a second crumb, or the two drawers point at each other and back oscillates between them for ever. A tile naming a DIFFERENT customer is a descent again and does get a crumb. **THE RETURN LANDS WHERE IT LEFT**: `openOrder()` gains one opt-gated `opts.scrollTop`, applied after a frame so the mount has its scroll height first — every existing caller behaves exactly as before. **NO CHINESE WAS COMPOSED.** `返回订单` is a LIVE PAIR lifted from `public/shop.html`, where it is the storefront's own way back to an order; preference 1 of `CLAUDE.md`'s amended rule, so no entry in `docs/tacet-delivery-vocabulary.md` is owed. **NOTHING TESTED EITHER HALF, which is how a symmetry could ship one-sided.** New suite `scripts/test_drawer_back_nav.js`, 44 assertions, aliased `npm run test:drawer-back` — §2 drives the six real navigation functions lifted whole into a `vm` context, one context per case (module state shared across two files is exactly the shape where a case inherits the last one's crumb and passes for the wrong reason); the stubbed `cuOpenDetail` reproduces the ONE thing this depends on and §0 holds the real function to that contract rather than trusting the stub. It asserts the order drawer's own four doors too, so a later change cannot tidy one side back to a bare close. **MUTATION-PROVED RATHER THAN TRUSTED FOR PASSING**: seven deliberate breaks — the bug as reported, the chevron re-pointed at `closeDrawer`, the `cuOpenDetail` clear removed, the return read as a descent, the button moved out of the pinned row, `opts.scrollTop` dropped, the Esc/scrim parity dropped — each turned red exactly the assertions that state that rule and nothing else. **PROVED**: `npm run test:fast` 182 passed, 0 failed; eslint 0 errors. **CALLED OUT BECAUSE IT CHANGES WHAT A SHARD RUNS**: `package.json` gains one `test:` alias and the fast shard gains one suite (181 → 182). No `.gitignore` change, no CI change. Client only — **no schema, no migration, no route change and no new gate.**
 
@@ -7858,3 +7860,77 @@ assertions that state that rule red. **Two assertions passed for the wrong
 reason and were tightened before any of that**: one was a tautology, and one an
 alternation that would have matched any `dlvGo('hub')` anywhere in the file.
 `npm run test:fast`: 181 passed, 0 failed. eslint: 0 errors.
+
+---
+
+## §80 — NOTHING IS SHORT FROM THE CUSTOMER'S SIDE WHILE THE BATCH IS ON ITS WAY
+
+**§74 made the meal orderable and stopped one step short.** Walked through its own Guangzhou scenario, Ash stopped at
+the checkout step:
+
+> *"why tell him its short? he doesnt need to wait. there is a new batch made and ready at 11, we deliver on time
+> according to his request. am i wrong?"*
+
+**He was not, and what shipped was worse than the walkthrough describing it.** §74 opened the catalogue and left the
+checkout untouched: `requiresStockGate` still read Guangzhou + same-day + an empty shelf, `analyzeShortage` still
+returned `options_5`, and the customer still met a five-option out-of-stock modal. Worse, the only way through it —
+`wait_for_restock` — **clears `scheduled_for`, refunds the same-day surcharge and relabels the order *Ships when
+restocked***. He asked for 12:00–14:00 and got an order with no delivery time.
+
+That clearing is not a bug. Its comment says why: the kitchen must not see *"Today 18:00–20:00"* on an order whose
+restock might land at 19:00. **It is right whenever nobody knows when stock lands, and wrong here, because the
+schedule names the hour.**
+
+### The ruling
+
+**While today's batch is still coming, and it lands before the customer's own window CLOSES, that line is not short.**
+No modal, no interruption, and the window he picked survives onto the order.
+
+**THE END OF THE WINDOW, NEVER ITS START.** Ash settled it in one line when the design was put back to him: *"it can
+also be 10-12."* A batch landing at 11:00 serves a delivery window closing at 12:00, so keying on the start hour would
+have refused exactly the slot he named. Keying on the end is also what keeps the rule honest in the other direction: a
+window that closes BEFORE the batch lands is correctly not covered, which is what a late `ready_hour` needs.
+`'right_away'` is never covered — it names no window to close by, and promising "soonest possible" against a batch
+that does not exist is the over-promise the whole area exists to avoid.
+
+### Where the rule lives is itself a decision
+
+`lib/inventory.js` knows shelves. **It is not taught a production cadence.** `routes/retail.js` resolves which lines
+today's batch covers, beside the schedule that defines them, and hands the ids down as `coveredProductIds`; a covered
+line then counts as OK and the gate never opens. A case asserts `inventory.js` never learns the words, so the next
+person to need this cannot answer it in the wrong file.
+
+### The order parks, and keeps its window
+
+The automatic parking path that already existed for stock-gate-OFF orders **gains one arm rather than a twin.** Every
+other guard is unchanged and still applies to both — no bundle, no stock-backed add-on, backorder lines only — and
+with the gate ON, *every* short line must be covered or the order does not park silently: one uncovered line means the
+order genuinely is short, `analyzeShortage` said so, and the customer met the modal.
+
+`isBatchPark` shares `isWaitFlow`'s reservation skip, because there is nothing on the shelf to hold, and deliberately
+does not share its slot-clearing. `checkAwaitingRestockForRestock` promotes the order the moment a cook records the
+batch, reserving and deducting only when the full quantity is there — unchanged, and the reason the back half of this
+needed no new machinery at all.
+
+### Three copies became one
+
+`todaysBatchStillComing()` holds the four conditions — an hour is configured, it has not arrived, the cutoff has not
+passed, today is on the cadence — that were written out separately in `earliestBatchMakeDate`, in `nextFreshBatchDate`
+and again in this gate. For a rule whose whole job is that the pill, the checkout and the order name one day, three
+copies was two too many.
+
+### What is still not done
+
+**Nothing caps the sell against the batch size.** A busy morning can promise more windows than the batch covers. The
+surplus parks rather than overselling silently, but a customer can be told a time and get the next batch instead.
+**Ash chose this shape knowing that** — offered the capped alternative, he answered *"i choose option a."* The cap
+needs the forward production plan (a row per date, product, planned quantity and ready hour) and is its own section.
+
+### Rejected
+
+**Leaving the modal and only preserving the window.** Half the complaint. He is still told his lunch is out of stock
+when it is being made, and still has to answer a question that should not have been asked.
+
+**Widening `requiresStockGate` itself.** It is read in several places and means "this order needs a stock decision
+today", which is still true here — the decision is just satisfied. Loosening it would have turned the shortage
+machinery off for this order rather than answering it, taking the `awaiting_restock` park with it.
