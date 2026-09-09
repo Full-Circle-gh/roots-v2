@@ -768,7 +768,12 @@ const state = {
      being avoided between its own two screens.
      `unit` is not stored here: it belongs to the material, is read with it, and
      is sent back untouched — see mbItems. */
-  mb:{materials:null,tried:false,q:'',qty:{},busy:false,err:'',sent:null},
+  mb:{materials:null,tried:false,q:'',qty:{},busy:false,err:'',sent:null,
+      /* TYPING A QUANTITY (§46's keypad, on this screen). `typing` holds what is
+         in an OPEN field, as a string and nothing more — never a number, because
+         "1." and "" are things somebody is in the middle of writing and a number
+         cannot hold either. A row is absent from it when its field is shut. */
+      typing:{},typeErr:{}},
   /* WRITING A BROADCAST (§63). Four steps, one decision each: what it says, who
      gets it, when it goes, and a last look before it does. `count` is the
      server's own audience preview — never derived here, because the phone does
@@ -878,7 +883,8 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      not reappear on its own receipt. The MATERIAL LIST is deliberately kept —
      it is the catalogue, not the basket, and re-reading it on every entry is a
      wait for nothing. Exactly the split the `rq` screens make. */
-  if(route==='askbuy'){ const m=state.mb; m.qty={}; m.q=''; m.err=''; m.sent=null; m.busy=false; }
+  if(route==='askbuy'){ const m=state.mb; m.qty={}; m.q=''; m.err=''; m.sent=null; m.busy=false;
+    m.typing={}; m.typeErr={}; }
   /* The list is re-read on every entry and the seen-stamp re-armed: it is a
      record of what the kitchen finished, and one taken at boot would be stale
      by the time somebody opened it. */
@@ -995,6 +1001,12 @@ reg('mbSearch', v=>{
   else render();   // not on this screen (or not painted yet) — fall back
 });
 reg('mbBump', (id,d)=>mbBump(Number(id),Number(d)));
+reg('mbType', id=>mbTypeOpen(Number(id)));
+/* STORES WHAT WAS TYPED AND NOTHING ELSE — no repaint, no focus to restore. The
+   field must not be rebuilt by its own typing; that is what drops the soft
+   keyboard on a real phone. */
+reg('mbTyped', (id,v)=>{ state.mb.typing[Number(id)]=String(v==null?'':v); });
+reg('mbTypeCommit', id=>mbTypeCommit(Number(id)));
 reg('mbSend', ()=>mbSend());
 reg('rqSendKitchen', ()=>rqSendKitchen());
 reg('rqSendStock', ()=>rqSendStock());
@@ -7307,13 +7319,92 @@ function mbChosen(){ return (state.mb.materials||[]).filter(p=>(state.mb.qty[p.i
    up had to tap back into the search to look for the next one. Only the two
    things that actually changed are repainted: the row's own number, and the
    tally in the foot. */
-function mbBump(id,d){
-  const n=(state.mb.qty[id]||0)+d;
-  state.mb.qty[id]=n>0?n:0;
+/* ── TYPING THE QUANTITY, BECAUSE A HUNDRED TAPS IS NOT AN INPUT METHOD ─────
+ *
+ * Ash, from the kitchen: "can't input number manually, must be the button — if
+ * not what happens if need 100pc of something." Steppers alone are fine for two
+ * bags and absurd for a hundred cups, and a packaging list is mostly hundreds.
+ *
+ * This is §46's keypad, which the Add Stock card already has, copied rather than
+ * reinvented — tap the number, type it, done. Its rules are that screen's rules
+ * and they are followed here for its reasons:
+ *
+ *   • TYPING STORES AND NOTHING ELSE (mbTyped). No repaint, so the field is
+ *     never rebuilt under a thumb — which is the same defect that made this
+ *     screen's search box drop the keyboard back to letters, and the quick-stock
+ *     comments record it being learned on the waste picker before either.
+ *   • A NON-NUMBER KEEPS THE FIELD OPEN AND SAYS WHY, rather than being stripped
+ *     to the digits inside it: "13o" silently becoming 13 writes a quantity
+ *     nobody entered.
+ *   • AN EMPTY FIELD IS ZERO, which is how a line is taken off the list.
+ *
+ * WHERE IT PARTS FROM QUICK STOCK: DECIMALS ARE ALLOWED. That screen counts
+ * jars, so whole numbers are the only sane input. This one counts the material's
+ * OWN buy unit, and a material bought by the kilo or the litre can honestly be
+ * asked for as 2.5 — material_request_items.qty is REAL and the server takes any
+ * finite number above zero. Refusing a decimal here would be this screen
+ * inventing a rule neither the column nor the route has. */
+function mbCountCell(p){
+  const id=p.id, m=state.mb;
+  if(m.typing[id]!=null)
+    return `<input id="mbnum-${id}" class="num" inputmode="decimal" enterkeyhint="done"
+      style="width:64px;text-align:center;font-size:18px;font-weight:500;padding:6px 4px"
+      value="${escAttr(m.typing[id])}" aria-label="${escAttr(T('How many?','数量'))}"
+      oninput="APP.cmd('mbTyped',${id},this.value)"
+      onblur="APP.cmd('mbTypeCommit',${id})"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`;
+  return `<button class="num" style="width:44px;text-align:center;font-size:18px;font-weight:500;
+    background:none;border:0;padding:0;font-family:inherit;color:var(--text-primary)"
+    onclick="APP.cmd('mbType',${id})"
+    aria-label="${escAttr(T('How many?','数量'))}">${m.qty[id]||0}</button>`;
+}
+/* Opening the field seeds it with what is already on the row — the field IS the
+   amount, so a row at 12 opens showing 12 and can be corrected rather than
+   retyped. A row at zero opens EMPTY rather than showing "0", which would have
+   to be cleared before a digit could be typed. */
+function mbTypeOpen(id){
+  const m=state.mb, n=m.qty[id]||0;
+  m.typing[id]=n>0?String(n):'';
+  delete m.typeErr[id];
+  mbPatch();
+  // Focused here rather than through the shared state.focus mechanism, because
+  // that one is spent by a render() and this screen deliberately does not call
+  // one. Same reason the caret rescue is gone from mbSearch.
+  const inp=document.getElementById('mbnum-'+id);
+  if(inp){ inp.focus(); try{ inp.setSelectionRange(inp.value.length,inp.value.length); }catch(e){} }
+}
+/* Committing. Called by blur AND by Enter (which blurs first), so it must be
+   safe to reach twice — an already-shut field returns at the first line. */
+function mbTypeCommit(id){
+  const m=state.mb;
+  if(m.typing[id]==null) return;
+  const raw=String(m.typing[id]).trim();
+  if(raw!==''&&!/^\d+(\.\d+)?$/.test(raw)){
+    m.typeErr[id]=T('Enter a number, 0 or more.','请输入数量，0 或以上。');
+    mbPatch();
+    const inp=document.getElementById('mbnum-'+id);
+    if(inp){ inp.focus(); try{ inp.setSelectionRange(raw.length,raw.length); }catch(e){} }
+    return;
+  }
+  delete m.typing[id]; delete m.typeErr[id];
+  const n=raw===''?0:parseFloat(raw);
+  m.qty[id]=(Number.isFinite(n)&&n>0)?n:0;
+  mbPatch();
+}
+/* Repaint the list and the tally, never the whole app — see mbSearch. */
+function mbPatch(){
   const body=document.getElementById('mMbBody');
   const foot=document.getElementById('mMbFoot');
   if(body&&foot){ body.innerHTML=mbBodyHtml(); foot.innerHTML=mbFootHtml(); }
   else render();
+}
+function mbBump(id,d){
+  // A STEP ON A ROW BEING TYPED INTO TAKES WHAT WAS TYPED FIRST. Otherwise the
+  // patch below rebuilds the row and the half-typed figure goes with it.
+  if(state.mb.typing[id]!=null) mbTypeCommit(id);
+  const n=(state.mb.qty[id]||0)+d;
+  state.mb.qty[id]=n>0?n:0;
+  mbPatch();
 }
 /* THE UNIT TRAVELS WITH THE LINE AND IS NEVER CONVERTED. It is the material's
    own `buy_unit`, read from the server with the material and sent back
@@ -7326,6 +7417,11 @@ function mbItems(){
 }
 function mbSend(){
   const m=state.mb;
+  /* A FIGURE STILL IN AN OPEN FIELD IS PART OF THE REQUEST. Tapping Send blurs
+     the field first on every browser this runs on, so this is belt and braces —
+     but the failure it guards against is silent and expensive: a hundred cups
+     typed and then dropped, with the request sending without them. */
+  for(const k of Object.keys(m.typing)) mbTypeCommit(Number(k));
   if(m.busy||!mbChosen().length) return;
   m.busy=true; m.err=''; render();
   const lines=mbChosen().length;
@@ -7383,10 +7479,10 @@ function mbBodyHtml(){
       </span>
       <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('mbBump',${p.id},-1)"${n<=0?' disabled':''}
         aria-label="${T('Less','减少')}">${ic('minus',18)}</button>
-      <span class="num" style="width:44px;text-align:center;font-size:18px;font-weight:500">${n}</span>
+      ${mbCountCell(p)}
       <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('mbBump',${p.id},1)"
         aria-label="${T('More','增加')}">${ic('plus',18)}</button>
-    </div>`;
+    </div>${m.typeErr[p.id]?`<div style="padding:0 16px 10px;font-size:13px;color:var(--brick-ink)">${escAttr(m.typeErr[p.id])}</div>`:''}`;
   }).join('')}</div>`;
 }
 /* THE TALLY COUNTS ITEMS AND NOT UNITS, which is where this foot parts company

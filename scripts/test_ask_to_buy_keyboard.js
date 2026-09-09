@@ -107,7 +107,8 @@ const sandbox = {
   console, Number, String, Array, Object, JSON,
 };
 vm.createContext(sandbox);
-for (const fn of ['mbLines', 'mbChosen', 'mbBodyHtml', 'mbFootHtml', 'mbBump']) {
+for (const fn of ['mbLines', 'mbChosen', 'mbCountCell', 'mbBodyHtml', 'mbFootHtml',
+                  'mbPatch', 'mbTypeOpen', 'mbTypeCommit', 'mbBump']) {
   vm.runInContext(sliceFn(fn), sandbox, { filename: `m.html#${fn}` });
 }
 // The handler body, wrapped so it can be called with the typed value.
@@ -120,9 +121,14 @@ const MATS = [
   { id: 13, name_en: 'Sea Salt',  name_cn: '海盐',   sku: 'S-9',    buy_unit: 'box' },
 ];
 const reset = () => {
-  sandbox.state.mb = { materials: MATS.slice(), tried: true, q: '', qty: {}, busy: false, err: '', sent: null };
+  sandbox.state.mb = { materials: MATS.slice(), tried: true, q: '', qty: {}, busy: false, err: '', sent: null,
+                       typing: {}, typeErr: {} };
   renderCalls = 0; missingNode = false; nodes.clear();
 };
+// The typed-value handler is one line inside reg(); mirrored here rather than
+// sliced, because slicing a one-line arrow body is more fragile than the line
+// it would slice. Case 9 asserts the shipped source still matches this shape.
+const type = (id, v) => { sandbox.state.mb.typing[id] = String(v == null ? '' : v); };
 
 console.log('\n══ 1 · the screen gives the list and the foot their own patch targets ══');
 // Read off the shipped source: without these ids there is nothing to patch and
@@ -198,6 +204,74 @@ ok(sandbox.mbBodyHtml().includes('No materials yet'), 'a genuinely empty catalog
 sandbox.state.mb.materials = MATS.slice();
 sandbox.state.mb.q = 'zzz';
 ok(sandbox.mbBodyHtml().includes('No materials match'), 'and a search miss keeps its own wording');
+
+console.log('\n══ 8 · a quantity can be TYPED, because a hundred taps is not an input method ══');
+// Ash: "what happens if need 100pc of something." This is the answer, and it is
+// the property that matters — 100 reaches the basket in one go.
+reset();
+sandbox.mbTypeOpen(11);
+ok(node('mMbBody').innerHTML.includes('id="mbnum-11"'), 'tapping the number opens a field');
+ok(node('mMbBody').innerHTML.includes('inputmode="decimal"'), 'and asks for the number pad');
+eq(renderCalls, 0, 'without re-rendering the app');
+type(11, '100');
+sandbox.mbTypeCommit(11);
+eq(sandbox.state.mb.qty[11], 100, 'a hundred lands in one go');
+eq(renderCalls, 0, 'still no re-render');
+ok(!node('mMbBody').innerHTML.includes('id="mbnum-11"'), 'and the field closes behind it');
+ok(node('mMbFoot').innerHTML.includes('>1</b> items'), 'the tally counts the line');
+
+console.log('\n══ 9 · typing itself never repaints — the keyboard rule ══');
+// The defect this whole file exists for, in its second form: a field rebuilt by
+// its own oninput drops the keyboard exactly as the search box did.
+ok(/reg\('mbTyped',\s*\(id,v\)=>\{\s*state\.mb\.typing\[Number\(id\)\]=String\(v==null\?''\:v\);\s*\}\);/
+     .test(SRC.replace(/\s+/g, m => m.includes('\n') ? '\n' : ' ').replace(/\n/g, ' ')),
+   'the shipped mbTyped handler stores and does nothing else — no render, no patch');
+reset();
+const bodyWrites = node('mMbBody').writes;
+sandbox.mbTypeOpen(12);
+const afterOpen = node('mMbBody').writes;
+for (const s of ['1', '10', '100', '100.']) type(12, s);
+eq(node('mMbBody').writes, afterOpen, 'four keystrokes patched the list zero times');
+eq(renderCalls, 0, 'and re-rendered zero times');
+ok(afterOpen > bodyWrites, 'only OPENING the field repainted, once');
+
+console.log('\n══ 10 · decimals are allowed, because a material can be bought by the kilo ══');
+// material_request_items.qty is REAL and the route takes any finite number above
+// zero. Refusing 2.5 here would be the screen inventing a rule the column and
+// the route do not have.
+reset();
+sandbox.mbTypeOpen(11); type(11, '2.5'); sandbox.mbTypeCommit(11);
+eq(sandbox.state.mb.qty[11], 2.5, 'two and a half kilos is a quantity');
+
+console.log('\n══ 11 · a non-number keeps the field open and says why ══');
+// "13o" silently becoming 13 would write a quantity nobody entered.
+reset();
+sandbox.mbTypeOpen(11); type(11, '13o'); sandbox.mbTypeCommit(11);
+ok(sandbox.state.mb.typing[11] != null, 'the field stays open');
+ok(!!sandbox.state.mb.typeErr[11], 'an error is recorded against that row');
+ok(node('mMbBody').innerHTML.includes('Enter a number'), 'and shown on it');
+ok(sandbox.state.mb.qty[11] === undefined || sandbox.state.mb.qty[11] === 0,
+   'and nothing was written into the basket');
+
+console.log('\n══ 12 · an empty field is zero, which is how a line comes off ══');
+reset();
+sandbox.state.mb.qty[11] = 40;
+sandbox.mbTypeOpen(11);
+eq(sandbox.state.mb.typing[11], '40', 'the field opens showing what the row already holds');
+type(11, ''); sandbox.mbTypeCommit(11);
+eq(sandbox.state.mb.qty[11], 0, 'clearing it takes the line off');
+ok(node('mMbFoot').innerHTML.includes('>0</b> items'), 'and the tally follows');
+
+console.log('\n══ 13 · committing twice is safe, and a step takes what was typed ══');
+// Enter blurs and then commits, so commit must survive being reached twice.
+reset();
+sandbox.mbTypeOpen(11); type(11, '7');
+sandbox.mbTypeCommit(11); sandbox.mbTypeCommit(11);
+eq(sandbox.state.mb.qty[11], 7, 'the second call is a no-op, not a reset');
+// A + tapped on a row mid-type must not throw the typed figure away.
+sandbox.mbTypeOpen(12); type(12, '99');
+sandbox.mbBump(12, 1);
+eq(sandbox.state.mb.qty[12], 100, 'stepping a row being typed into keeps the figure and adds to it');
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
