@@ -534,7 +534,7 @@
         <!-- Group 1 — the rhythm. Stable id for the ⌘K palette. -->
         <div class="card group" id="set-batch-rhythm">
           <h4>The rhythm</h4>
-          <p class="sub">Orders inside Guangzhou are unaffected by any of this.</p>
+          <p class="sub">Inside Guangzhou it applies only when a fresh item is sold out — then the order waits for the next batch, delivered on our own run the day it is made.</p>
           <div class="rows">
             <div class="row">
               <div class="lab">
@@ -737,7 +737,7 @@
 
         <div class="card group" id="set-batch-rhythm-b">
           <h4>The rhythm</h4>
-          <p class="sub">Orders inside Guangzhou are unaffected by any of this.</p>
+          <p class="sub">Inside Guangzhou it applies only when a fresh item is sold out — then the order waits for the next batch, delivered on our own run the day it is made.</p>
           <div class="rows">
             <div class="row">
               <div class="lab">
@@ -989,6 +989,19 @@
         Grepped file-wide: two more of the same shape sit in the cutoff card just above
         (10244, 10274), and nowhere else in the product — every other unspaced middot is a
         separator inside an already-translated <code>cuT()</code>, which is correct.</p>
+    </div>
+
+    <div class="find">
+      <h4>The card says Guangzhou is unaffected. It is not. <span class="pill amber"><span class="dot"></span>Corrected 2026-09-09</span></h4>
+      <p>The line under "Batch schedule" read <em>"In-Guangzhou orders are unaffected"</em>, and
+        these mockups repeated it before Ash caught it. <code>earliestBatchMakeDate</code> runs for
+        the local run too (<code>localRun: true</code>) and <code>localFreshFloorFor</code> floors a
+        Guangzhou order onto the batch date on <code>'rolled_stock'</code> — which is the whole
+        reason this card has a second set of Guangzhou copy fields. What is true is narrower, and
+        <code>routes/retail.js</code> states it: while there is stock the cadence "is none of their
+        business"; it becomes their business the moment that stock reaches zero.</p>
+      <p class="rule">§1.17 · corrected on the card and in these frames; a test now fails if the
+        claim comes back.</p>
     </div>
 
     <div class="find">
