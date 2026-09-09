@@ -956,9 +956,15 @@ document.addEventListener('touchstart', _scrimDownTrack, true);
 window.APP.scrimClose = (name) => { if(_scrimDownHit && CMD[name]) CMD[name](); };
 
 /* Quick Stock is a separate PWA; reaching it is a navigation, not a push. */
-reg('qsSearch', v=>{ const el=document.getElementById('mQsQ');
-  // The caret rides the re-render, as it does on every other search field here.
-  state.qs.q=String(v||''); state.focus={id:'mQsQ',pos:el?el.selectionStart:null}; render(); });
+/* TYPING REPAINTS THE LIST AND NOTHING ELSE — see rqSearch for the defect this
+   removes. The armed state.focus goes with the render it existed to survive:
+   nothing takes focus away when the field is never rebuilt. */
+reg('qsSearch', v=>{
+  state.qs.q=String(v||'');
+  const host=document.getElementById('mQsBody');
+  if(host) host.innerHTML=qsBodyHtml();
+  else render();
+});
 reg('qsRetry', ()=>{ state.qs.itemsErr=null; loadQsItems(true); render(); });
 reg('qsBump', (id,d)=>qsBump(Number(id),Number(d)));
 reg('qsFix', id=>qsAskCount(Number(id)));
@@ -969,12 +975,21 @@ reg('qsTyped', (id,v)=>qsTyped(Number(id),v));
 reg('qsTypeCommit', id=>qsTypeCommit(Number(id)));
 /* Patches this card only, never renders — see qsTypeBlur. */
 reg('qsTypeBlur', id=>qsTypeBlur(Number(id)));
-reg('rqSearch', v=>{ const el=document.getElementById('mRqQ');
-  const at=el?el.selectionStart:null; state.rq.q=String(v||''); render();
-  // Same caret rescue the stock search does: a re-render moves focus, and a
-  // search box that loses the caret mid-word is one nobody can type in.
-  const el2=document.getElementById('mRqQ');
-  if(el2){ el2.focus(); if(at!=null){ try{ el2.setSelectionRange(at,at); }catch(e){} } } });
+/* TYPING REPAINTS THE LIST AND NOTHING ELSE. This used to call render(), which
+   replaces the whole app in one innerHTML and so destroyed the very input the
+   keystroke came from. The caret rescue that stood here put the cursor back;
+   nothing could put the SOFT KEYBOARD back, and a rebuilt field opens a fresh
+   one on its letter page — so typing a SKU gave one digit, then the alphabet,
+   then one digit. Reported from the kitchen on the Ask to buy screen; this is
+   the same defect on Ask for stock and Ask the kitchen.
+   The foot is left alone deliberately: its tally counts CHOSEN products, which
+   a search cannot change. */
+reg('rqSearch', v=>{
+  state.rq.q=String(v||'');
+  const host=document.getElementById('mRqBody');
+  if(host) host.innerHTML=rqBodyHtml();
+  else render();
+});
 reg('rqBump', (id,d)=>rqBump(Number(id),Number(d)));
 reg('rqPurpose', k=>{ state.rq.purpose=String(k); render(); });
 reg('rqTo', id=>{ state.rq.to=Number(id);
@@ -1052,10 +1067,16 @@ reg('hdRetryShelf', ()=>{
   else loadQsItems(true);
   render();
 });
-reg('batSearch', v=>{ const el=document.getElementById('mBatQ');
-  const at=el?el.selectionStart:null; state.bat.q=String(v||''); render();
-  const el2=document.getElementById('mBatQ');
-  if(el2){ el2.focus(); if(at!=null){ try{ el2.setSelectionRange(at,at); }catch(e){} } } });
+/* TYPING REPAINTS THE LIST AND NOTHING ELSE — see rqSearch. Two targets here
+   because this screen's header line sits above the search box; both are patched
+   and the input between them is left alone. */
+reg('batSearch', v=>{
+  state.bat.q=String(v||'');
+  const top=document.getElementById('mBatTop');
+  const body=document.getElementById('mBatBody');
+  if(top&&body){ top.innerHTML=batTopHtml(); body.innerHTML=batBodyHtml(); }
+  else render();
+});
 reg('batBump', (id,d)=>batBump(Number(id),Number(d)));
 reg('batNext', ()=>batContinue());
 reg('xfrAsk', id=>{
@@ -9006,14 +9027,27 @@ function screenStockAdd(){
     <input id="mQsQ" inputmode="search" enterkeyhint="search" value="${escAttr(qs.q)}" style="padding-left:42px"
       placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('qsSearch',this.value)"></div>`;
 
-  if(qs.itemsErr) return search+`<div style="padding:0 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+  /* EVERYTHING BELOW THE SEARCH BOX, IN ONE PATCHABLE BOX. qsSearch repaints
+     this and nothing else, so the input element survives a whole search. It
+     used to call render(), which replaces the whole app in one innerHTML and so
+     destroyed the very field the keystroke came from — and a rebuilt field opens
+     a fresh soft keyboard on its letter page, which is why typing a SKU here
+     gave one digit and then the alphabet. */
+  return search+`<div id="mQsBody">${qsBodyHtml()}</div>`;
+}
+/* The whole of the Add Stock list, apart from the search box above it. Split out
+   of screenStockAdd so that typing can repaint it alone; the split is mechanical
+   and the markup is unchanged. */
+function qsBodyHtml(){
+  const qs=state.qs;
+  if(qs.itemsErr) return `<div style="padding:0 16px 24px"><div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
     <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
     <span style="font-size:14px;color:var(--brick-ink)">${qs.itemsErr}</span></div>
     <button class="btn2" style="width:auto;padding:11px 26px;margin:12px auto 0;display:flex" onclick="APP.cmd('qsRetry')">${T('Try again','重试')}</button></div>`;
-  if(!qs.items) return search+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!qs.items) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
 
   const rows=qsRows();
-  if(!rows.length) return search+(qs.q.trim()
+  if(!rows.length) return (qs.q.trim()
     ? `<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No products match','没有匹配的商品')}</div>`
     : nothingYet(T('Nothing to count here yet','这里还没有商品'),
         T('Products published to this store appear here.','已上架到本店的商品会出现在这里。')));
@@ -9068,7 +9102,8 @@ function screenStockAdd(){
         <button class="btn2" style="min-height:36px;padding:0 14px;font-size:13px" onclick="APP.cmd('${recount?'qsFix':'qsFlush'}',${id})">${T('Retry','重试')}</button></div>`:''}
     </div>`;
   };
-  return search+`<div style="padding:0 16px 32px;display:flex;flex-direction:column;gap:8px">${rows.map(card).join('')}</div>`;
+  return `<div style="padding:0 16px 32px;display:flex;flex-direction:column;gap:8px">${rows.map(card).join('')}</div>`;
+
 }
 /* `titleOf` rather than a dynamic `title`, because push() copies `title` into
    the stack and the header spreads it as T(...sub.title) — a function there
@@ -9082,19 +9117,27 @@ function screenStockAdd(){
 function rqPicker(){
   const r=state.rq;
   if(!r.products) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  const rows=rqLines();
   const search=`<div style="padding:4px 16px 12px;position:relative">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
     <input id="mRqQ" inputmode="search" enterkeyhint="search" value="${escAttr(r.q)}" style="padding-left:42px"
       placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('rqSearch',this.value)"></div>`;
-  // Said plainly rather than silently: a shorter list is a different list, and
-  // an operator who cannot find a product needs to know why before they conclude
-  // the shop does not sell it.
+  /* EVERYTHING THE QUERY CHANGES, IN ONE PATCHABLE BOX, and the search input
+     deliberately outside it. rqSearch repaints this box and nothing else, so the
+     input element survives a whole search — a re-render would rebuild it, and a
+     rebuilt field opens a fresh soft keyboard on its letter page. */
+  return search+`<div id="mRqBody">${rqBodyHtml()}</div>`;
+}
+/* What rqSearch repaints: the note plus the rows, exactly what the query can
+   change. Kept beside rqPicker so the two cannot drift on what a filtered list
+   looks like. */
+function rqBodyHtml(){
+  const r=state.rq;
   const note=r.fromShelf?`<div style="padding:0 16px 10px;font-size:13px;color:var(--text-secondary)">${
     T('Showing what this shelf holds — the full catalogue could not be read.','显示本店货架商品 — 无法读取完整商品目录。')}</div>`:'';
-  if(!rows.length) return search+note+`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+  const rows=rqLines();
+  if(!rows.length) return note+`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
     T('No products match','没有匹配的商品')}</div>`;
-  const row=p=>{
+  return note+`<div>${rows.map(p=>{
     const n=r.qty[p.id]||0;
     return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
       <span style="flex:1;min-width:0">
@@ -9107,8 +9150,7 @@ function rqPicker(){
       <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('rqBump',${p.id},1)"
         aria-label="${T('More','增加')}">${ic('plus',18)}</button>
     </div>`;
-  };
-  return search+note+`<div>${rows.map(row).join('')}</div>`;
+  }).join('')}</div>`;
 }
 /* The bar that sends. It carries the tally because the list above it scrolls —
    an operator who has picked eleven things cannot see all eleven, and "11 items
@@ -9716,19 +9758,34 @@ function screenWhatMade(){
 }
 function screenLogBatch(){
   loadQsCtx();
-  const rows=batLines();
   const search=`<div style="padding:12px 16px;position:relative">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
     <input id="mBatQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.bat.q)}" style="padding-left:42px"
       placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('batSearch',this.value)"></div>`;
-  if(!state.qs.items) return search+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  if(!rows.length) return search+`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+  /* TWO PATCH TARGETS, NOT ONE, and the reason is the header line: it sits ABOVE
+     the search box and is drawn only when the list has rows, so a search that
+     empties the list has to remove it — and it cannot share a container with
+     the list that sits below the box. batSearch repaints both and leaves the
+     input between them alone; a render() would rebuild that input and take the
+     soft keyboard's number page with it. */
+  return `<div id="mBatTop">${batTopHtml()}</div>`+search+`<div id="mBatBody">${batBodyHtml()}</div>`;
+}
+/* The line above the search box: shown only when there is a list under it, which
+   is the behaviour this screen already had. */
+function batTopHtml(){
+  if(!state.qs.items||!batLines().length) return '';
+  return `<div style="margin-top:12px;padding:0 16px 10px;font-size:14px;color:var(--text-secondary)">${
+      T('What you made, with nobody asking','主动制作,无对应申请')}</div>`;
+}
+/* Everything below the search box. Split out of screenLogBatch so typing can
+   repaint it alone; the split is mechanical and the markup is unchanged. */
+function batBodyHtml(){
+  const rows=batLines();
+  if(!state.qs.items) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!rows.length) return `<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
     T('Nothing on this store\u2019s list matches.','本店商品目录中没有匹配项。')}</div>`;
   const chosen=batChosen();
-  return `<div style="margin-top:12px;padding:0 16px 10px;font-size:14px;color:var(--text-secondary)">${
-      T('What you made, with nobody asking','主动制作,无对应申请')}</div>
-    ${search}
-    <div>${rows.map(p=>{
+  return `    <div>${rows.map(p=>{
       const id=batId(p), n=state.bat.qty[id]||0;
       return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
         <span style="flex:1;min-width:0">
@@ -9750,6 +9807,7 @@ function screenLogBatch(){
       <button class="btn2" style="width:auto;padding:11px 26px"${chosen.length?'':' disabled'}
         onclick="APP.cmd('batNext')">${T('Next','下一步')}</button>
     </div>`;
+
 }
 SUBS.kitchenqueue={title:['Kitchen queue','厨房制作队列'],render:()=>screenKitchenQueue()};
 SUBS.whatmade={title:['What you made','登记制作'],render:()=>screenWhatMade()};
