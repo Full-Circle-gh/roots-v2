@@ -130,10 +130,19 @@ jobs:
 
       - name: Run the ${{ matrix.shard }} suites
         env:
-          # Production runs UTC+8 with no DST and a good deal of the date logic
-          # is local-time, so a UTC runner reads 18:26 Guangzhou as 10:26 and
-          # whole cutoff scenarios evaporate. Pinned for the same reason
-          # test_batch_timing.js pins it in-process.
-          TZ: Asia/Shanghai
+          # UTC ON PURPOSE (decisions §82). This pinned Asia/Shanghai because the
+          # slot and cutoff maths read the HOST clock, so a UTC runner read 18:26
+          # Guangzhou as 10:26 and whole cutoff scenarios evaporated. That maths
+          # now resolves in the TENANT's zone (lib/business-date.js), and the six
+          # suites that pinned the zone in-process for the same reason no longer
+          # do.
+          #
+          # The value is not neutral and is not "whatever the runner had". Running
+          # UTC is what keeps any code that goes BACK to reading the host clock
+          # visibly wrong here rather than silently correct for one tenant — the
+          # same reason §82 pins production to UTC. Do not set this to
+          # Asia/Shanghai to make a red suite green; a suite that needs the host
+          # on Guangzhou time is reporting a defect.
+          TZ: UTC
           REQUIRE_BROWSER: ${{ matrix.shard == 'slow' && '1' || '0' }}
         run: node scripts/run-suites.js --shard ${{ matrix.shard }}

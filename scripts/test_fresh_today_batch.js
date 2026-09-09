@@ -25,15 +25,22 @@
  */
 'use strict';
 
-// Production runs UTC+8 with no DST and every hour comparison here is local
-// time. Pin it BEFORE anything loads, or a UTC host reads 08:00 Guangzhou as
-// 00:00 and "before the ready hour" stops meaning what it says.
-process.env.TZ = 'Asia/Shanghai';
+// NO process.env.TZ PIN. It used to sit here, pinning the HOST clock to
+// Asia/Shanghai, because the slot and cutoff maths read the host — a UTC
+// runner read 18:26 Guangzhou as 10:26 and the scenario evaporated. §82
+// moved that maths onto the TENANT's zone (lib/business-date.js), so the
+// host's offset no longer reaches it and the pin has nothing left to
+// protect. Its ABSENCE is now the assertion: if this suite starts failing
+// under a UTC host, something has gone back to reading the host clock.
 
 const path = require('path');
 const assert = require('assert');
 
 const ROOT = path.join(__dirname, '..');
+// Zone-aware date maths, so the fixtures below express a time in the SHOP's
+// zone rather than on whatever clock the runner happens to have (§82).
+const businessDate = require(path.join(__dirname, '..', 'lib', 'business-date.js'));
+const SHOP_TZ = 'Asia/Shanghai';
 require(path.join(ROOT, 'database.js'));
 const { tdb } = require(path.join(ROOT, 'lib', 'tenant-db.js'));
 const retail = require(path.join(ROOT, 'routes', 'retail.js'));
@@ -67,12 +74,12 @@ const NEXT_BATCH    = '2026-09-10';
 
 // 08:00 on a cooking morning — the reported moment, three hours before the
 // kitchen finishes.
-const MORNING_OF_BATCH_DAY = new Date(2026, 8, 8, 8, 0, 0);
+const MORNING_OF_BATCH_DAY = businessDate.dateInZone(SHOP_TZ, '2026-09-08', 8, 0);
 // 14:00 the same day: the batch has been made, and a zero shelf now means the
 // batch sold out rather than that it has not happened.
-const AFTERNOON_OF_BATCH_DAY = new Date(2026, 8, 8, 14, 0, 0);
+const AFTERNOON_OF_BATCH_DAY = businessDate.dateInZone(SHOP_TZ, '2026-09-08', 14, 0);
 // 08:00 on a day the kitchen does not cook.
-const MORNING_OF_NON_BATCH_DAY = new Date(2026, 8, 9, 8, 0, 0);
+const MORNING_OF_NON_BATCH_DAY = businessDate.dateInZone(SHOP_TZ, '2026-09-09', 8, 0);
 
 const ZONE_GZ = {
   id: 9312, zone_type: 'gz_district', name_en: 'Tianhe', name_cn: '天河区',
@@ -526,8 +533,12 @@ section('8 · §80 — nothing is short from the customer\'s side');
   it('slotWindowEnd reads the zone rather than assuming two hours', () => {
     const end = retail.slotWindowEnd({ ...ZONE_GZ, slot_duration_minutes: 90 },
       BATCH_DAY + 'T10:00', MORNING_OF_BATCH_DAY);
-    assert.strictEqual(end.getHours(), 11);
-    assert.strictEqual(end.getMinutes(), 30);
+    // Read in the SHOP's zone. `end.getHours()` reads the runner's clock, which
+    // is the very thing §82 took out of the engine — asserting with it would
+    // have this suite pass only on a host pinned to Guangzhou.
+    const endParts = businessDate.zoneParts(SHOP_TZ, end);
+    assert.strictEqual(endParts.hour, 11);
+    assert.strictEqual(endParts.minute, 30);
     assert.strictEqual(retail.slotWindowEnd(ZONE_GZ, 'right_away', MORNING_OF_BATCH_DAY), null);
     assert.strictEqual(retail.slotWindowEnd(ZONE_GZ, null, MORNING_OF_BATCH_DAY), null);
   });

@@ -24,15 +24,21 @@
  */
 'use strict';
 
-// Production runs UTC+8 with no DST and all the slot maths is local-time. Pin the
-// zone BEFORE anything loads or a UTC host reads 18:26 GZ as 10:26 and the whole
-// cutoff scenario evaporates.
-process.env.TZ = 'Asia/Shanghai';
+// NO process.env.TZ PIN. It used to sit here, pinning the HOST clock to
+// Asia/Shanghai, because the slot and cutoff maths read the host — a UTC
+// runner read 18:26 Guangzhou as 10:26 and the scenario evaporated. §82
+// moved that maths onto the TENANT's zone (lib/business-date.js), so the
+// host's offset no longer reaches it and the pin has nothing left to
+// protect. Its ABSENCE is now the assertion: if this suite starts failing
+// under a UTC host, something has gone back to reading the host clock.
 
 const path = require('path');
 const assert = require('assert');
 
 const ROOT = path.join(__dirname, '..');
+// Zone-aware date maths, so the fixtures below express a time in the SHOP's
+// zone rather than on whatever clock the runner happens to have (§82).
+const businessDate = require(path.join(__dirname, '..', 'lib', 'business-date.js'));
 const BASELINE = process.argv.includes('--baseline');
 const RETAIL = BASELINE
   ? path.join(ROOT, 'routes', '_baseline_retail.js')
@@ -51,9 +57,17 @@ const STORE_NEAR      = 9102;      // a nearer store the proximity router prefer
 const P_FRESH         = 9201;      // batch-made: the Pesto 'Chicken' Wrap, SKU 1-440
 const P_PANTRY        = 9202;      // not batch-made
 
-// 2026-08-17 18:26 local — TC000306's placement moment: past 11:58 (when stock
-// hit zero) and before the 20:00 cutoff.
-const NOW = new Date(2026, 7, 17, 18, 26, 0);
+// 2026-08-17 18:26 IN THE SHOP'S ZONE — TC000306's placement moment: past 11:26
+// (when stock hit zero) and before the 20:00 cutoff.
+//
+// BUILT IN THE ZONE, NOT ON THE RUNNER'S CLOCK. `new Date(2026, 7, 17, 18, 26)`
+// means "18:26 wherever this process happens to be", which is 18:26 Guangzhou on
+// a pinned runner and 02:26 the NEXT DAY on a UTC one — a different calendar day,
+// so the cadence lands two days out and every date below shifts. That fixture is
+// the same host-clock mistake §82 removed from the engine, and it is why this
+// suite needed `process.env.TZ` pinned to pass at all.
+const SHOP_TZ = 'Asia/Shanghai';
+const NOW = businessDate.dateInZone(SHOP_TZ, '2026-08-17', 18, 26);
 
 // anchor 2026-06-16 + every 2 days ⇒ 2026-08-17 IS a batch day (62 days on).
 // Taken from the only stored schedule in the repo, public/shop/_gallery.fixtures.js.
@@ -274,6 +288,37 @@ if (BASELINE) {
     try { fn(); console.log(`   ✓ ${name}`); pass++; }
     catch (e) { console.log(`   ✗ ${name}\n       ${e.message}`); fail++; }
   };
+
+  it('§82 — no delivery function reads the HOST clock', () => {
+    // The durable half of §82. Every assertion above could pass while one
+    // function quietly went back to `nowD.getHours()`, and it would only show up
+    // as a wrong cutoff for a tenant nobody has onboarded yet. This reads the
+    // source instead.
+    //
+    // Comments are stripped first: several of these functions explain the host
+    // form they replaced, right where it used to sit, and a guard a comment can
+    // trip is one people learn to edit rather than read.
+    const src = require('fs')
+      .readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8')
+      .replace(/^\s*\/\/.*$/gm, '');
+    const NAMES = ['parseYmdLocal', 'toYmdLocal', 'nextBatchShipDate',
+      'todaysBatchStillComing', 'earliestBatchMakeDate', 'nextFreshBatchDate',
+      'computeBatchNotice', 'computeDeliverySlots', 'expressEarliestIso',
+      'slotWindowEnd', 'freshLinesCoveredToday', 'resolveDeliverySlot',
+      'rescheduleEligibility'];
+    const HOST = /\.(getHours|getMinutes|getFullYear|getMonth|getDate)\(\)/;
+    const offenders = [];
+    for (const name of NAMES) {
+      const start = src.indexOf(`function ${name}(`);
+      assert.notStrictEqual(start, -1, `${name} not found — rename or deletion?`);
+      const end = src.indexOf('\n}', start);
+      const body = src.slice(start, end === -1 ? undefined : end);
+      const hit = HOST.exec(body);
+      if (hit) offenders.push(`${name} → ${hit[0]}`);
+    }
+    assert.deepStrictEqual(offenders, [],
+      'these read the host clock instead of the tenant zone: ' + offenders.join(', '));
+  });
 
   it('TC000306 no longer promises today', () => {
     assert.notStrictEqual(results.tc000306.promised_ship_date, '2026-08-17');
