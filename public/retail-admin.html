@@ -11676,6 +11676,11 @@
     <nav class="fin-subviews" id="fin-subviews" role="tablist">
       <button type="button" data-sub="summary" class="on" onclick="finShow('summary')">Summary · 汇总</button>
       <button type="button" data-sub="transactions" onclick="finShow('transactions')">Transactions · 交易记录</button>
+      <!-- §87 part two. The tenant's own expense-category list, and it sits here
+           rather than in Settings because it is the vocabulary of THIS screen:
+           the list the transaction form offers and the list the Summary's
+           breakdown is drawn in. -->
+      <button type="button" data-sub="categories" onclick="finShow('categories')">Categories · 分类</button>
     </nav>
 
     <!-- Range bar (mockup `.rangebar`). Finance's own controls, not Reports'.
@@ -11725,6 +11730,32 @@
                 title="Download this window as a spreadsheet · 下载该时间段表格">Export CSV · 导出</button>
       </div>
       <div id="fin-tx-list"></div>
+    </div>
+
+    <!-- CATEGORIES — the tenant's own expense-category list (§87 part two).
+
+         THE LIST SHIPS EMPTY AND NOTHING SEEDS IT. §36: "an empty list cannot
+         offer a wrong option", written after four inherited kitchen categories
+         produced the ¥152,309 mis-filing. A later session must not add a
+         starter set here or in the boot seed.
+
+         THE CHECKBOX IS THE POINT OF THE SCREEN. An owner's private transfer is
+         real money leaving the account and is NOT a cost of running the shop;
+         unticked, it stays in the record and drops out of the operating-expense
+         total, which is the only way that ¥5,000 can be both visible and not
+         counted as profit lost.
+
+         NO DATE CONTROLS. The range bar above hides on this sub-view — a
+         vocabulary has no window, and a control that changes nothing on the
+         screen under it is worse than no control. -->
+    <div id="fin-cats" hidden>
+      <p class="fin-cats-intro">Your own list. Expenses are filed against these, and only these are offered when someone records one. · 本店自己的分类列表。记录支出时只会显示这些分类。</p>
+      <div class="fin-cats-add">
+        <input class="fin-field" id="fin-cats-new" type="text" onkeydown="finCatAddKey(event)"
+               aria-label="New category name" placeholder="Rent · 租金">
+        <button class="fin-cta" type="button" onclick="finCatAdd()" data-cap="finance:record">Add · 添加</button>
+      </div>
+      <div id="fin-cats-list"></div>
     </div>
 
     <!-- The typed-row form (§1.13 modal: bounded, fixed height, one commit —

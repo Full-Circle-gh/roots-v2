@@ -1,0 +1,567 @@
+<title>Recording an expense on the phone</title>
+<!--
+  §87 step two — three ways the phone could take an employee's expense.
+  Presentation mockup for a decision, NOT a spec: the frames below are drawn
+  with Tacet's own tokens (m.html :root) so the choice is made against what the
+  app actually looks like, but no markup here is meant to be lifted.
+
+  THE CHINESE IN THE FRAMES IS LIVE VOCABULARY ONLY — 金额, 分类, 备注, 照片,
+  拍照, 公司, 现金, 提交, 已提交, 门店, 日期, 审批 — every one of them already
+  shipping somewhere in this product. Anything the chosen option needs beyond
+  that is composed and declared at BUILD time under Rule 4, not here; a mockup
+  that mints Chinese would be exactly the undeclared string the rule is about.
+  Where a frame needs a phrase that has no pair yet, it says so in English and
+  carries a mark.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+  /* ── The page's own palette: COOL, so the warm phone screens read as objects
+     lying on a surface rather than as more page. Tacet's Dusk is the one accent
+     and it is spent on the frames' controls, barely at all out here. ────── */
+  :root {
+    --ground:      #E9EBEF;
+    --surface:     #FFFFFF;
+    --surface-2:   #F3F4F7;
+    --edge:        #D3D7DE;
+    --edge-soft:   #E2E5EA;
+    --ink:         #171B22;
+    --ink-2:       #5A6270;
+    --ink-3:       #858C99;
+    --accent:      #6E67AF;
+    --good:        #5F7357;
+    --cost:        #8A6425;
+
+    /* ── Tacet's phone tokens, verbatim from public/m.html :root ──────────
+       These do NOT follow the page theme. A frame is a depiction of the app's
+       light theme and stays that way on either ground, the way a photograph of
+       a screen would. */
+    --app-paper:   #FBF9F4;
+    --app-ink:     #111A2B;
+    --app-graphite:#58606E;
+    --app-dusk:    #6E67AF;
+    --app-card:    #FFFFFF;
+    --app-raised:  #F6F3EC;
+    --app-border:  #E4E0D5;
+    --app-edge:    #948B76;
+    --app-dusk-tint:#EEEDF6;
+    --app-sage-tint:#EDF1EC;
+    --app-sage-ink:#5F7357;
+    --app-amber-tint:#F7EEDE;
+    --app-amber-ink:#8A6425;
+    --app-brick-tint:#F6E7E3;
+    --app-brick-ink:#B4533E;
+
+    --f-head: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+    --f-body: 'Inter', -apple-system, system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:    #0F1319;
+      --surface:   #171C24;
+      --surface-2: #1D232C;
+      --edge:      #2B323C;
+      --edge-soft: #232932;
+      --ink:       #E7E9ED;
+      --ink-2:     #A2AAB7;
+      --ink-3:     #79818E;
+      --accent:    #A9A2E0;
+      --good:      #A3B49F;
+      --cost:      #D9A55E;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:    #0F1319;
+    --surface:   #171C24;
+    --surface-2: #1D232C;
+    --edge:      #2B323C;
+    --edge-soft: #232932;
+    --ink:       #E7E9ED;
+    --ink-2:     #A2AAB7;
+    --ink-3:     #79818E;
+    --accent:    #A9A2E0;
+    --good:      #A3B49F;
+    --cost:      #D9A55E;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font: 400 16px/1.6 var(--f-body);
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 40px 20px 96px; }
+
+  /* ── Masthead ─────────────────────────────────────────────────────────── */
+  .eyebrow {
+    font: 600 11px/1 var(--f-head); letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  h1 {
+    font: 700 clamp(30px, 5vw, 46px)/1.08 var(--f-head);
+    letter-spacing: -.02em; margin: 14px 0 0; text-wrap: balance; max-width: 18ch;
+  }
+  .standfirst {
+    margin: 16px 0 0; max-width: 64ch; color: var(--ink-2); font-size: 17px;
+  }
+  .masthead { padding-bottom: 32px; border-bottom: 1px solid var(--edge); }
+
+  /* ── The shared strip ─────────────────────────────────────────────────── */
+  .shared { margin: 32px 0 0; display: grid; gap: 20px; grid-template-columns: 1fr; }
+  @media (min-width: 760px) { .shared { grid-template-columns: 1.1fr 1fr; } }
+  .shared h2 { font: 600 20px/1.3 var(--f-head); margin: 0 0 10px; letter-spacing: -.01em; }
+  .shared p { margin: 0 0 12px; color: var(--ink-2); max-width: 60ch; }
+  .fields { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+  .fields li {
+    display: grid; grid-template-columns: 122px 1fr; gap: 14px; align-items: baseline;
+    padding: 9px 0; border-bottom: 1px solid var(--edge-soft);
+  }
+  .fields li:last-child { border-bottom: 0; }
+  .fields dfn {
+    font: 600 12px/1.5 var(--f-head); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ink); font-style: normal;
+  }
+  .fields span { color: var(--ink-2); font-size: 14.5px; }
+
+  /* ── Options ──────────────────────────────────────────────────────────── */
+  .options {
+    margin: 56px 0 0; display: grid; gap: 44px; grid-template-columns: 1fr;
+  }
+  @media (min-width: 1000px) { .options { grid-template-columns: repeat(3, 1fr); gap: 28px; } }
+  .opt { display: flex; flex-direction: column; gap: 18px; }
+  .opt-head { display: flex; flex-direction: column; gap: 8px; }
+  .opt-tag {
+    display: inline-flex; align-items: center; gap: 8px;
+    font: 600 11px/1 var(--f-head); letter-spacing: .14em; text-transform: uppercase;
+    color: var(--accent);
+  }
+  .opt h3 { font: 700 25px/1.15 var(--f-head); letter-spacing: -.015em; margin: 0; }
+  .opt .thesis { margin: 0; color: var(--ink-2); font-size: 15.5px; max-width: 42ch; }
+  .frames { display: flex; gap: 16px; overflow-x: auto; padding: 2px 2px 8px; }
+  .verdict { display: grid; gap: 12px; }
+  .verdict div {
+    display: grid; grid-template-columns: 64px 1fr; gap: 12px; align-items: baseline;
+    font-size: 14.5px; color: var(--ink-2);
+  }
+  .verdict b {
+    font: 600 10.5px/1.7 var(--f-head); letter-spacing: .1em; text-transform: uppercase;
+  }
+  .verdict .g b { color: var(--good); }
+  .verdict .c b { color: var(--cost); }
+
+  /* ── The phone ────────────────────────────────────────────────────────────
+     390 × 720, the shell m.html targets. Fixed width so the app's own type
+     scale reads at its real size; the rail scrolls rather than the phone
+     shrinking, because a resized mockup lies about how big a control is. */
+  .phone {
+    flex: none; width: 300px; height: 620px; border-radius: 26px; overflow: hidden;
+    background: var(--app-paper); color: var(--app-ink);
+    border: 1px solid var(--app-border);
+    box-shadow: 0 1px 2px rgba(17,26,43,.06), 0 14px 34px rgba(17,26,43,.10);
+    font: 400 14px/1.5 var(--f-body); display: flex; flex-direction: column;
+    position: relative;
+  }
+  .phone .cap {
+    font: 500 10.5px/1 var(--f-head); letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-3); padding: 0 0 8px;
+  }
+  .frame-wrap { display: flex; flex-direction: column; }
+  .bar {
+    height: 46px; flex: none; display: flex; align-items: center; gap: 10px;
+    padding: 0 14px; border-bottom: 1px solid var(--app-border); background: var(--app-paper);
+    font-size: 15px; font-weight: 500;
+  }
+  .bar .x { color: var(--app-graphite); font-size: 19px; line-height: 1; }
+  .body { flex: 1; overflow: hidden; padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+  .lab {
+    font: 500 11px/1 var(--f-head); letter-spacing: .09em; text-transform: uppercase;
+    color: var(--app-graphite);
+  }
+  .card {
+    background: var(--app-card); border: 1px solid var(--app-border); border-radius: 14px;
+    padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .amount {
+    display: flex; align-items: baseline; gap: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  .amount .y { font-size: 21px; color: var(--app-graphite); }
+  .amount .n { font-size: 38px; font-weight: 600; letter-spacing: -.02em; }
+  .amount.big .n { font-size: 56px; }
+  .amount .caret {
+    display: inline-block; width: 2px; height: 34px; background: var(--app-dusk);
+    margin-left: 2px; transform: translateY(4px);
+  }
+  .field {
+    border: 1.5px solid var(--app-edge); border-radius: 8px; background: var(--app-card);
+    padding: 10px 12px; font-size: 15px; color: var(--app-graphite);
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .chip {
+    border: 1.5px solid var(--app-edge); border-radius: 999px; padding: 7px 13px;
+    font-size: 12.5px; color: var(--app-graphite); background: var(--app-card); white-space: nowrap;
+  }
+  .chip.on { background: var(--app-ink); color: var(--app-paper); border-color: var(--app-ink); }
+  .cta {
+    background: var(--app-dusk); color: #fff; border-radius: 8px; padding: 13px;
+    text-align: center; font-size: 15px; font-weight: 500;
+  }
+  .cta.ghost {
+    background: transparent; color: var(--app-ink); border: 1.5px solid var(--app-edge);
+  }
+  .rowitem {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 11px 0; border-bottom: 1px solid var(--app-border);
+  }
+  .rowitem:last-child { border-bottom: 0; }
+  .rowitem .l { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .rowitem .t { font-size: 14.5px; }
+  .rowitem .s { font-size: 11.5px; color: var(--app-graphite); font-variant-numeric: tabular-nums; }
+  .rowitem .v { font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; flex: none; }
+  .pill {
+    font-size: 11px; padding: 3px 9px; border-radius: 999px; white-space: nowrap; flex: none;
+  }
+  .pill.wait { background: var(--app-amber-tint); color: var(--app-amber-ink); }
+  .pill.ok   { background: var(--app-sage-tint);  color: var(--app-sage-ink); }
+  .pill.owed { background: var(--app-dusk-tint);  color: #524C8F; }
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  .tile {
+    border: 1.5px solid var(--app-edge); border-radius: 12px; background: var(--app-card);
+    padding: 15px 12px; display: flex; flex-direction: column; gap: 3px; min-height: 76px;
+    justify-content: flex-end;
+  }
+  .tile .en { font-size: 14px; font-weight: 500; }
+  .tile .cn { font-size: 12px; color: var(--app-graphite); }
+  .tile.on { border-color: var(--app-dusk); background: var(--app-dusk-tint); }
+  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .key {
+    background: var(--app-card); border: 1px solid var(--app-border); border-radius: 10px;
+    padding: 13px 0; text-align: center; font-size: 21px; font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  .key.dim { color: var(--app-graphite); font-size: 17px; }
+  .note { font-size: 11.5px; color: var(--app-graphite); }
+  .mark {
+    display: inline-block; font-size: 9.5px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--app-amber-ink); background: var(--app-amber-tint);
+    padding: 2px 6px; border-radius: 4px; vertical-align: 2px; margin-left: 6px;
+    font-family: var(--f-head); font-weight: 600;
+  }
+  .receipt {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; text-align: center; padding: 0 18px;
+  }
+  .tick {
+    width: 46px; height: 46px; border-radius: 50%; background: var(--app-sage-tint);
+    color: var(--app-sage-ink); display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+  }
+
+  /* ── Closing ──────────────────────────────────────────────────────────── */
+  .close { margin: 64px 0 0; padding: 28px; background: var(--surface); border: 1px solid var(--edge); border-radius: 16px; }
+  .close h2 { font: 700 24px/1.2 var(--f-head); margin: 0 0 6px; letter-spacing: -.015em; }
+  .close > p { margin: 0 0 22px; color: var(--ink-2); max-width: 62ch; }
+  .asks { display: grid; gap: 18px; grid-template-columns: 1fr; }
+  @media (min-width: 800px) { .asks { grid-template-columns: repeat(3, 1fr); } }
+  .ask { border-top: 2px solid var(--ink); padding-top: 12px; }
+  .ask h4 { font: 600 15px/1.35 var(--f-head); margin: 0 0 6px; }
+  .ask p { margin: 0; font-size: 14.5px; color: var(--ink-2); }
+  .ask .rec { color: var(--accent); font-weight: 500; }
+  footer {
+    margin: 40px 0 0; padding-top: 18px; border-top: 1px solid var(--edge);
+    font-size: 13px; color: var(--ink-3);
+  }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .92em;
+    background: var(--surface-2); padding: 1px 5px; border-radius: 4px;
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">§87 step two · a decision, not a spec</div>
+    <h1>Recording an expense on the phone</h1>
+    <p class="standfirst">
+      A driver has paid ¥38 for a taxi on a work run. Three ways the phone could
+      take that, drawn in Tacet's own type and colour so the choice is made
+      against what the app really looks like. Every option submits the same
+      claim and reaches the same approval list — what differs is the order the
+      questions come in, and how much of the screen the first one gets.
+    </p>
+  </header>
+
+  <section class="shared">
+    <div>
+      <h2>The same in all three</h2>
+      <p>
+        None of this is what you are choosing between. It is what a claim
+        carries whichever screen takes it, so the options differ only where they
+        actually differ.
+      </p>
+      <ul class="fields">
+        <li><dfn>Amount</dfn><span>¥, to the fen. Typed, never stepped — nobody taps + thirty-eight times.</span></li>
+        <li><dfn>Category</dfn><span>The tenant's own list, from step one. Hidden ones are not offered.</span></li>
+        <li><dfn>Who paid</dfn><span>The company account, or the employee's own money. This is the field that decides whether the business owes somebody ¥38.</span></li>
+        <li><dfn>Receipt</dfn><span>A photo, optional. Reading it automatically comes later.</span></li>
+        <li><dfn>Note</dfn><span>Free text, optional. &ldquo;Airport run for the Tianhe order.&rdquo;</span></li>
+        <li><dfn>Date &amp; shop</dfn><span>Today and the submitter's own shop, both changeable, neither asked about.</span></li>
+      </ul>
+    </div>
+    <div>
+      <h2>And what happens after</h2>
+      <p>
+        Also identical: the claim is not in the books. It waits in a list the
+        manager works through, and only approval writes the ¥38 into the month's
+        expenses.
+      </p>
+      <div class="frames">
+        <div class="frame-wrap">
+          <div class="cap">Submitted</div>
+          <div class="phone">
+            <div class="bar"><span class="x">‹</span><span>My expenses</span></div>
+            <div class="receipt">
+              <div class="tick">✓</div>
+              <div style="font-size:17px;font-weight:500">Sent to your manager<span class="mark">pair to compose</span></div>
+              <div class="note">已提交 · 待审批后才会记入账目</div>
+            </div>
+            <div class="body" style="flex:none;border-top:1px solid var(--app-border)">
+              <div class="lab">This month · 本月</div>
+              <div>
+                <div class="rowitem">
+                  <span class="l"><span class="t">Transport 交通</span><span class="s">9 Sep · ¥38 · own money</span></span>
+                  <span class="pill wait">待审批</span>
+                </div>
+                <div class="rowitem">
+                  <span class="l"><span class="t">Transport 交通</span><span class="s">6 Sep · ¥52 · own money</span></span>
+                  <span class="pill owed">Owed ¥52</span>
+                </div>
+                <div class="rowitem">
+                  <span class="l"><span class="t">Supplies 用品</span><span class="s">2 Sep · ¥120 · 公司</span></span>
+                  <span class="pill ok">已通过</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="options">
+
+    <!-- ── A ────────────────────────────────────────────────────────────── -->
+    <article class="opt">
+      <div class="opt-head">
+        <span class="opt-tag">Option A</span>
+        <h3>One card</h3>
+        <p class="thesis">
+          Every field on one screen, in the order the questions get asked. Fill
+          it top to bottom and press Submit. Nothing opens, nothing advances.
+        </p>
+      </div>
+      <div class="frames">
+        <div class="frame-wrap">
+          <div class="cap">The whole screen</div>
+          <div class="phone">
+            <div class="bar"><span class="x">‹</span><span>New expense</span></div>
+            <div class="body">
+              <div class="card">
+                <span class="lab">Amount · 金额</span>
+                <span class="amount"><span class="y">¥</span><span class="n">38</span><span class="caret"></span></span>
+              </div>
+              <div>
+                <span class="lab">Category · 分类</span>
+                <div class="chips" style="margin-top:8px">
+                  <span class="chip on">Transport 交通</span>
+                  <span class="chip">Supplies 用品</span>
+                  <span class="chip">Rent 租金</span>
+                </div>
+              </div>
+              <div>
+                <span class="lab">Who paid</span>
+                <div class="chips" style="margin-top:8px">
+                  <span class="chip">Company 公司</span>
+                  <span class="chip on">My own money<span class="mark">pair</span></span>
+                </div>
+              </div>
+              <div class="cta ghost">📷 Add a receipt · 拍照</div>
+              <div class="field">Note · 备注</div>
+              <div style="flex:1"></div>
+              <div class="cta">Submit · 提交</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="verdict">
+        <div class="g"><b>Good at</b><span>Someone entering three or four at the end of a shift. Every answer is visible and changeable at once, and a correction costs no navigation.</span></div>
+        <div class="c"><b>Costs</b><span>The densest of the three. The amount — the thing the driver actually has in their head — shares the screen with five other controls, and on a small phone the note and Submit sit below the keyboard.</span></div>
+      </div>
+    </article>
+
+    <!-- ── B ────────────────────────────────────────────────────────────── -->
+    <article class="opt">
+      <div class="opt-head">
+        <span class="opt-tag">Option B</span>
+        <h3>Amount first</h3>
+        <p class="thesis">
+          The screen opens as a number pad and asks nothing else. Type 38, press
+          Next, and answer the rest on a second, short screen.
+        </p>
+      </div>
+      <div class="frames">
+        <div class="frame-wrap">
+          <div class="cap">1 · the number</div>
+          <div class="phone">
+            <div class="bar"><span class="x">✕</span><span>New expense</span></div>
+            <div class="body">
+              <div style="padding:18px 0 6px;text-align:center">
+                <span class="amount big" style="justify-content:center"><span class="y">¥</span><span class="n">38</span></span>
+              </div>
+              <div style="flex:1"></div>
+              <div class="pad">
+                <span class="key">1</span><span class="key">2</span><span class="key">3</span>
+                <span class="key">4</span><span class="key">5</span><span class="key">6</span>
+                <span class="key">7</span><span class="key">8</span><span class="key">9</span>
+                <span class="key dim">.</span><span class="key">0</span><span class="key dim">⌫</span>
+              </div>
+              <div class="cta">Next</div>
+            </div>
+          </div>
+        </div>
+        <div class="frame-wrap">
+          <div class="cap">2 · the rest</div>
+          <div class="phone">
+            <div class="bar"><span class="x">‹</span><span>¥38</span></div>
+            <div class="body">
+              <div>
+                <span class="lab">Category · 分类</span>
+                <div class="chips" style="margin-top:8px">
+                  <span class="chip on">Transport 交通</span>
+                  <span class="chip">Supplies 用品</span>
+                  <span class="chip">Rent 租金</span>
+                </div>
+              </div>
+              <div>
+                <span class="lab">Who paid</span>
+                <div class="chips" style="margin-top:8px">
+                  <span class="chip">Company 公司</span>
+                  <span class="chip on">My own money<span class="mark">pair</span></span>
+                </div>
+              </div>
+              <div class="cta ghost">📷 Add a receipt · 拍照</div>
+              <div class="field">Note · 备注</div>
+              <div style="flex:1"></div>
+              <div class="cta">Submit · 提交</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="verdict">
+        <div class="g"><b>Good at</b><span>A driver standing in the street with one hand free. The first screen has one question on it, in 56px figures, and the pad is the app's own rather than the system keyboard.</span></div>
+        <div class="c"><b>Costs</b><span>Two screens for every claim, and a wrong amount means going back. Someone entering four in a row does twice the navigation of Option A.</span></div>
+      </div>
+    </article>
+
+    <!-- ── C ────────────────────────────────────────────────────────────── -->
+    <article class="opt">
+      <div class="opt-head">
+        <span class="opt-tag">Option C</span>
+        <h3>Category first</h3>
+        <p class="thesis">
+          The tenant's categories as tiles, filling the screen. Tap Transport
+          and the pad opens under it with the category already answered.
+        </p>
+      </div>
+      <div class="frames">
+        <div class="frame-wrap">
+          <div class="cap">1 · what was it for</div>
+          <div class="phone">
+            <div class="bar"><span class="x">✕</span><span>New expense</span></div>
+            <div class="body">
+              <div class="tiles">
+                <span class="tile on"><span class="en">Transport</span><span class="cn">交通</span></span>
+                <span class="tile"><span class="en">Supplies</span><span class="cn">用品</span></span>
+                <span class="tile"><span class="en">Meals</span><span class="cn">餐费</span></span>
+                <span class="tile"><span class="en">Rent</span><span class="cn">租金</span></span>
+                <span class="tile"><span class="en">Repairs</span><span class="cn">维修</span></span>
+                <span class="tile"><span class="en">Private</span><span class="cn">私人费用</span></span>
+              </div>
+              <div class="note">Your shop's own list. Nothing else is offered.</div>
+            </div>
+          </div>
+        </div>
+        <div class="frame-wrap">
+          <div class="cap">2 · how much</div>
+          <div class="phone">
+            <div class="bar"><span class="x">‹</span><span>Transport 交通</span></div>
+            <div class="body">
+              <div style="padding:14px 0 2px;text-align:center">
+                <span class="amount big" style="justify-content:center"><span class="y">¥</span><span class="n">38</span></span>
+              </div>
+              <div class="chips" style="justify-content:center">
+                <span class="chip">Company 公司</span>
+                <span class="chip on">My own money<span class="mark">pair</span></span>
+              </div>
+              <div class="pad">
+                <span class="key">1</span><span class="key">2</span><span class="key">3</span>
+                <span class="key">4</span><span class="key">5</span><span class="key">6</span>
+                <span class="key">7</span><span class="key">8</span><span class="key">9</span>
+                <span class="key dim">📷</span><span class="key">0</span><span class="key dim">⌫</span>
+              </div>
+              <div class="cta">Submit · 提交</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="verdict">
+        <div class="g"><b>Good at</b><span>Getting the category right, which is the field the monthly accounts actually depend on. A tile learned by position beats a chip read from a row, and the second screen submits — there is no third.</span></div>
+        <div class="c"><b>Costs</b><span>It leans on step one: a shop that has not set up categories opens on an empty grid. A long list scrolls, and the note field has to move behind a control.</span></div>
+      </div>
+    </article>
+
+  </section>
+
+  <section class="close">
+    <h2>What I need from you</h2>
+    <p>
+      One answer starts the build; the other two I can take a default on and you
+      can change your mind when you see it running.
+    </p>
+    <div class="asks">
+      <div class="ask">
+        <h4>1 · Which screen?</h4>
+        <p>
+          <span class="rec">C is my recommendation.</span> It puts the decision
+          that matters for your accounts on the biggest, most learnable control,
+          and it is the only one where the whole claim is two taps and a number.
+        </p>
+      </div>
+      <div class="ask">
+        <h4>2 · Is the receipt photo required?</h4>
+        <p>
+          Default: optional. Required means a driver with a dead phone camera
+          cannot record a real expense, and the ones that need proof are the
+          large ones, not the ¥38 ones.
+        </p>
+      </div>
+      <div class="ask">
+        <h4>3 · Does &ldquo;who paid&rdquo; default?</h4>
+        <p>
+          Default: to <em>my own money</em>, since that is why an employee is
+          recording it at all. A manager on the company account changes it once
+          per claim.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Drawn against <code>public/m.html</code>'s own tokens. Chinese shown here is
+    live vocabulary only; anything marked <span class="mark" style="margin-left:0">pair</span>
+    is composed and declared in <code>docs/tacet-delivery-vocabulary.md</code>
+    when the chosen screen is built, never before.
+  </footer>
+
+</div>
