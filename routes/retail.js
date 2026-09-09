@@ -10483,8 +10483,12 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // changes: this is the same host-local reading it always was (see §80, which
   // rules on that separately and is not actioned here).
   const orderNow = new Date();
+  // §82 — the tenant's zone, resolved ONCE beside the one clock and handed to
+  // every date decision below, so the calendar the customer was offered, the
+  // slot that is validated and the dates that are stamped all read one zone.
+  const orderTz  = deliveryTz();
   const inGz = inventory.isGuangzhouAddress(address);
-  const pickedSameDay = inventory.isSameDayDelivery(deliverySlotId, orderNow);
+  const pickedSameDay = inventory.isSameDayDelivery(deliverySlotId, orderNow, orderTz);
   const scheduledShipDistrict =
         inGz &&
         inventory.isOptInSameDayDistrict(address) &&
@@ -10577,7 +10581,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // Pickup always gates stock at the chosen store — the customer expects it
   // ready to collect, so we hard-reserve now rather than relax like a
   // scheduled-for-later delivery.
-  const stockGate = isPickup ? true : inventory.requiresStockGate({ address, deliverySlotId });
+  const stockGate = isPickup ? true : inventory.requiresStockGate({ address, deliverySlotId, now: orderNow, tz: orderTz });
 
   // routed_by_distance: 1 = store chosen by real GPS distance, 0 = coarse
   // fallback (no address coords), null = N/A (pickup / out-of-city pin / etc.).
@@ -10853,6 +10857,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     deliverySlotId,
     productIds: mutatedItems.map((r) => r.product && r.product.id).filter(Boolean),
     now: orderNow,
+    tz: orderTz,
   });
   /* THE GUARD GAINS ONE ARM AND KEEPS THE REST. It parked only orders with the
      stock gate OFF (out-of-city, or a Guangzhou day in the future) — the kitchen
@@ -11948,7 +11953,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
 //       – otherwise locked once we pass the cutoff (default 20:00) the EVENING
 //         BEFORE the currently-scheduled day. Config fresh.rescheduleCutoffHour.
 // `kind` is 'pickup' | 'delivery' so the client picks the right slot UI.
-function rescheduleEligibility(o, productIds, now = new Date()) {
+function rescheduleEligibility(o, productIds, now = new Date(), tz = deliveryTz()) {
   // `kind` is what the client renders a slot picker for, so it must not claim
   // 'delivery' on a walk-in. A counter sale gets its own kind AND is blocked
   // outright below — there is no future moment to move it to.
@@ -11985,10 +11990,15 @@ function rescheduleEligibility(o, productIds, now = new Date()) {
       const sched = new Date(o.scheduled_for);
       if (!isNaN(sched.getTime())) {
         const cutoffHour = Number(cfgValue('fresh.rescheduleCutoffHour', 20)) || 20;
-        const cutoff = new Date(
-          sched.getFullYear(), sched.getMonth(), sched.getDate() - 1, cutoffHour, 0, 0
-        );
-        if (now.getTime() >= cutoff.getTime()) {
+        // 20:00 the evening BEFORE the scheduled day, on the TENANT's clock.
+        // Built from the scheduled day's own calendar date rather than from host
+        // getters, which read a different day either side of midnight for any
+        // tenant off the host's offset.
+        const schedYmd = toYmdLocal(sched, tz);
+        const dayBefore = toYmdLocal(
+          new Date(parseYmdLocal(schedYmd, tz).getTime() - 86400000), tz);
+        const cutoff = businessDate.dateInZone(tz, dayBefore, cutoffHour, 0);
+        if (cutoff && now.getTime() >= cutoff.getTime()) {
           return { allowed: false, reason: 'fresh_cutoff', fresh: true, kind, cutoff_at: cutoff.toISOString() };
         }
       }
@@ -20781,6 +20791,7 @@ router.post('/api/retail/orders/:id/reschedule', requireRetailAuth, express.json
 
   const body = req.body || {};
   const now = new Date();
+  const rsTz = deliveryTz();
   let scheduledFor, slotLabel, slotKind;
 
   if (eligibility.kind === 'pickup') {
@@ -20828,7 +20839,7 @@ router.post('/api/retail/orders/:id/reschedule', requireRetailAuth, express.json
       let address = {};
       try { address = o.address_json ? JSON.parse(o.address_json) : {}; } catch (_) {}
       address = normalizeChinaAddress(address);
-      if (inventory.requiresStockGate({ address, deliverySlotId: slotId })) {
+      if (inventory.requiresStockGate({ address, deliverySlotId: slotId, now, tz: rsTz })) {
         return res.status(409).json({ success: false, error: 'fresh_no_sameday' });
       }
     }
@@ -31916,31 +31927,73 @@ function batchScheduleCfg() {
   };
 }
 
-// Local-midday Date for a YYYY-MM-DD string (midday dodges any DST edge; the
-// host runs UTC+8 with no DST anyway). Returns null on a malformed string.
-function parseYmdLocal(s) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
-  if (!m) return null;
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0);
+// ─── §82 · THE TENANT'S CLOCK, NOT THE HOST'S ─────────────────────────────
+// Every date and time decision below resolves in the timezone of the tenant
+// that owns the order, read from a tenant setting. `new Date().getHours()`,
+// `.getFullYear()`, `.getDate()` and their siblings read the HOST's clock and
+// are forbidden anywhere a cutoff, a date or a slot is computed: the host
+// offset is an accident of deployment, not a business fact.
+//
+// The zone is resolved through lib/business-date.js's shopTimezone(), which is
+// the same answer the admin screen renders every timestamp in, so the calendar
+// a customer is offered and the clock an operator reads cannot disagree.
+//
+// MEMOISED, and the TTL is why this is not a per-call database read: these
+// helpers are called dozens of times inside one checkout, and shopTimezone()
+// costs a query or two each time. Keyed by tenant, so one merchant's cached
+// zone can never answer for another — the mistake lib/store-hours.js's unkeyed
+// cache made with opening hours (audit D-02).
+//
+// NULL IS A LEGITIMATE ANSWER and is passed straight through: business-date's
+// helpers treat it as SYSTEM_DEFAULT_TZ ('Asia/Shanghai'), which is exactly
+// what this code did when it read a host pinned to UTC+8. A tenant that has
+// never set a zone therefore behaves as it did before this change rather than
+// losing its calendar. (§82 also asks that such a tenant fail LOUDLY at
+// startup; that is a boot-time check, not this read, and is not in this change.)
+const _tzCache = new Map();          // tenantId -> { tz, at }
+const DELIVERY_TZ_TTL_MS = 60_000;
+function deliveryTz() {
+  let tid;
+  try { tid = currentTenantId(); } catch (_) { tid = 0; }
+  const now = Date.now();
+  const hit = _tzCache.get(tid);
+  if (hit && now - hit.at < DELIVERY_TZ_TTL_MS) return hit.tz;
+  let tz = null;
+  try { tz = businessDate.shopTimezone(tdb()); } catch (_) { tz = null; }
+  _tzCache.set(tid, { tz, at: now });
+  return tz;
 }
-function toYmdLocal(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+
+// Midday-in-the-tenant's-zone Date for a YYYY-MM-DD string. Midday dodges any
+// DST edge — which now matters, because the zone is no longer guaranteed to be
+// one without DST. Returns null on a malformed string.
+function parseYmdLocal(s, tz = deliveryTz()) {
+  return businessDate.dateInZone(tz, s, 12, 0);
+}
+function toYmdLocal(d, tz = deliveryTz()) {
+  return businessDate.businessDate(tz, d);
+}
+// The tenant's calendar date, hour and minute for an instant — the replacement
+// for reading `.getFullYear()` / `.getHours()` off a Date.
+function tzNowParts(now, tz = deliveryTz()) {
+  return businessDate.zoneParts(tz, now || new Date());
 }
 
 // Smallest batch day (YYYY-MM-DD) on or after `fromDate`, skipping any
 // skip_dates by rolling forward another whole interval. null when disabled.
-function nextBatchShipDate(fromDate, cfg) {
+function nextBatchShipDate(fromDate, cfg, tz = deliveryTz()) {
   cfg = cfg || batchScheduleCfg();
   if (!cfg) return null;
-  const anchor = parseYmdLocal(cfg.anchor_date);
+  const anchor = parseYmdLocal(cfg.anchor_date, tz);
   if (!anchor) return null;
   const DAY = 86400000;
   const interval = cfg.interval_days;
   const skip = new Set(cfg.skip_dates);
-  const from = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate(), 12, 0, 0, 0);
+  // The tenant-zone calendar day `fromDate` falls on, re-anchored to midday in
+  // that zone. Was `new Date(fromDate.getFullYear(), …)`, which took the HOST's
+  // calendar day and rebuilt it against the HOST's zone — two host reads in one
+  // line. Midday keeps the whole-day arithmetic below DST-safe.
+  const from = parseYmdLocal(toYmdLocal(fromDate, tz), tz);
   const diff = Math.round((from.getTime() - anchor.getTime()) / DAY);
   const rem = ((diff % interval) + interval) % interval;       // 0..interval-1
   const offset = rem === 0 ? diff : diff + (interval - rem);   // first on-cadence day >= diff
@@ -32028,7 +32081,7 @@ function batchItemsInCart(productIds) {
 // It becomes their business only when that stock reaches ZERO — then the next
 // batch is the whole answer. computeLocalFreshNotice therefore acts on the
 // 'rolled_stock' reason ALONE, which is exactly that condition and no other.
-function earliestBatchMakeDate({ zone, productIds, storeId, now, channel = 'wechat', ignoreOrderIds = null, localRun = false }) {
+function earliestBatchMakeDate({ zone, productIds, storeId, now, channel = 'wechat', ignoreOrderIds = null, localRun = false, tz = deliveryTz() }) {
   const none = (reason) => ({ applies: false, reason, make_date: null, items: [], cfg: null });
   if (!localRun) {
     if (!zone) return none('out_of_scope');
@@ -32043,7 +32096,11 @@ function earliestBatchMakeDate({ zone, productIds, storeId, now, channel = 'wech
   if (!items.length) return none('no_fresh_items');
 
   const nowD = now || new Date();
-  const todayIso = toYmdLocal(new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), 12, 0, 0, 0));
+  // ONE reading of the tenant's clock, shared by the date and the hour below.
+  // Two calls could straddle a tick and disagree about which day the cutoff is
+  // being tested against — the same reason the order path hoists `orderNow`.
+  const nowParts = tzNowParts(nowD, tz);
+  const todayIso = nowParts.ymd;
 
   // No store to ask → we cannot prove today's batch exists, so we don't promise it.
   const storeUnknown = storeId == null;
@@ -32058,7 +32115,7 @@ function earliestBatchMakeDate({ zone, productIds, storeId, now, channel = 'wech
       if (!(Number(av.available) > 0)) { stockBlocked = true; break; }
     }
   }
-  const pastCutoff = nowD.getHours() >= cfg.cutoff_hour;
+  const pastCutoff = nowParts.hour >= cfg.cutoff_hour;
 
   // §74 — TODAY'S BATCH IS STILL COMING, so an empty shelf is not proof that
   // today is unreachable. On a day the kitchen is scheduled to cook, before the
@@ -32093,7 +32150,7 @@ function earliestBatchMakeDate({ zone, productIds, storeId, now, channel = 'wech
   const searchFrom = blockedToday
     ? new Date(nowD.getTime() + 86400000)
     : nowD;
-  const makeDate = nextBatchShipDate(searchFrom, cfg);
+  const makeDate = nextBatchShipDate(searchFrom, cfg, tz);
   if (!makeDate) return none('no_schedule');
 
   // Name the binding constraint. Stock first: it is the one an operator can act
@@ -32165,15 +32222,15 @@ function localFreshFloorFor(decision) {
 // refuses — the exact contradiction PR #400 removed from the web product page.
 // Same three conditions, asked of the same cfg: an hour is configured, it has
 // not arrived, and today is on the cadence.
-function nextFreshBatchDate(now) {
+function nextFreshBatchDate(now, tz = deliveryTz()) {
   const cfg = batchScheduleCfg();
   if (!cfg) return null;
   const nowD = now || new Date();
   // The same three conditions the checkout asks, asked once and shared, so the
   // pill cannot name a day the checkout has already closed.
-  const pending = todaysBatchStillComing(nowD);
+  const pending = todaysBatchStillComing(nowD, tz);
   if (pending) return pending.dateIso;
-  return nextBatchShipDate(new Date(nowD.getTime() + 86400000), cfg) || null;
+  return nextBatchShipDate(new Date(nowD.getTime() + 86400000), cfg, tz) || null;
 }
 
 // §80 — IS TODAY'S BATCH STILL COMING? Config and clock only; no cart, no store,
@@ -32189,22 +32246,23 @@ function nextFreshBatchDate(now) {
 //
 // Returns { readyHour, dateIso } or null. Never asks about stock: whether a
 // given SHELF is empty is a different question, asked by whoever holds a store.
-function todaysBatchStillComing(now) {
+function todaysBatchStillComing(now, tz = deliveryTz()) {
   const cfg = batchScheduleCfg();
   if (!cfg || cfg.ready_hour == null) return null;
   const nowD = now || new Date();
-  if (nowD.getHours() >= cfg.ready_hour) return null;
-  if (nowD.getHours() >= cfg.cutoff_hour) return null;
-  const todayIso = toYmdLocal(new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), 12, 0, 0, 0));
-  if (nextBatchShipDate(nowD, cfg) !== todayIso) return null;
-  return { readyHour: cfg.ready_hour, dateIso: todayIso };
+  // One reading of the tenant's clock for both hour tests and the date.
+  const p = tzNowParts(nowD, tz);
+  if (p.hour >= cfg.ready_hour) return null;
+  if (p.hour >= cfg.cutoff_hour) return null;
+  if (nextBatchShipDate(nowD, cfg, tz) !== p.ymd) return null;
+  return { readyHour: cfg.ready_hour, dateIso: p.ymd };
 }
 
 // When does the customer's chosen window CLOSE? A Date, or null for a pick that
 // names no window it could close by — 'right_away' above all, which promises the
 // soonest possible and cannot be answered by a batch that has not been made. A
 // day-only chip closes when the kitchen does.
-function slotWindowEnd(zone, slotId, now) {
+function slotWindowEnd(zone, slotId, now, tz = deliveryTz()) {
   if (!slotId || slotId === 'right_away') return null;
   const mTime = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(slotId));
   const mDay  = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(slotId));
@@ -32212,12 +32270,15 @@ function slotWindowEnd(zone, slotId, now) {
     ? Number(zone.slot_duration_minutes) : 120;
   const endHour = Number(zone && zone.slot_end_hour) > 0 ? Number(zone.slot_end_hour) : 20;
   if (mTime) {
-    const start = new Date(Number(mTime[1]), Number(mTime[2]) - 1, Number(mTime[3]),
-      Number(mTime[4]), Number(mTime[5]), 0, 0);
-    return new Date(start.getTime() + dur * 60000);
+    // The instant the tenant's wall clock reads this slot's start — was built
+    // against the HOST's zone, which put the window an offset's worth out for
+    // any tenant not on the host's clock.
+    const start = businessDate.dateInZone(tz, `${mTime[1]}-${mTime[2]}-${mTime[3]}`,
+      Number(mTime[4]), Number(mTime[5]));
+    return start ? new Date(start.getTime() + dur * 60000) : null;
   }
   if (mDay) {
-    return new Date(Number(mDay[1]), Number(mDay[2]) - 1, Number(mDay[3]), endHour, 0, 0, 0);
+    return businessDate.dateInZone(tz, `${mDay[1]}-${mDay[2]}-${mDay[3]}`, endHour, 0);
   }
   return null;
 }
@@ -32234,16 +32295,17 @@ function slotWindowEnd(zone, slotId, now) {
 // Empty whenever §74 is off, today is not a cooking day, the batch has landed,
 // or the pick names no window. An empty set restores every previous behaviour
 // exactly, which is what makes this safe to consult unconditionally.
-function freshLinesCoveredToday({ zone, deliverySlotId, productIds, now }) {
+function freshLinesCoveredToday({ zone, deliverySlotId, productIds, now, tz = deliveryTz() }) {
   const out = new Set();
-  const pending = todaysBatchStillComing(now);
+  const pending = todaysBatchStillComing(now, tz);
   if (!pending) return out;
-  const end = slotWindowEnd(zone, deliverySlotId, now);
+  const end = slotWindowEnd(zone, deliverySlotId, now, tz);
   if (!end) return out;
-  const nowD = now || new Date();
-  const readyAt = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(),
-    pending.readyHour, 0, 0, 0);
-  if (end.getTime() < readyAt.getTime()) return out;
+  // The instant the kitchen finishes, on the TENANT's clock. `pending.dateIso`
+  // is already that day in that zone, so it is used directly rather than
+  // rebuilding the date from host getters.
+  const readyAt = businessDate.dateInZone(tz, pending.dateIso, pending.readyHour, 0);
+  if (!readyAt || end.getTime() < readyAt.getTime()) return out;
   for (const it of batchItemsInCart(productIds || [])) out.add(it.id);
   return out;
 }
@@ -32277,6 +32339,7 @@ function freshLinesCoveredToday({ zone, deliverySlotId, productIds, now }) {
 // no fulfilling store to check stock at, which earliestBatchMakeDate treats as
 // "today unproven" rather than "today fine".
 function computeBatchNotice(zone, productIds, now, slotId, slotKind, opts = {}) {
+  const tz = opts.tz || deliveryTz();
   const isShipDistrict = !!zone && zone.zone_type === 'gz_district' &&
         (Number(zone.day_only) === 1 || Number(zone.same_day_surcharge) > 0);
   const decision = opts.decision || earliestBatchMakeDate({
@@ -32290,13 +32353,13 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind, opts = {}) 
   const batchItems = decision.items;
 
   const nowD = now || new Date();
-  const todayIso = toYmdLocal(new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), 12, 0, 0, 0));
+  const todayIso = tzNowParts(nowD, tz).ymd;
 
   // Soonest we can make+ship a fresh batch, and when that would arrive. The
   // cadence, the day's cutoff, skip_dates AND the zero-stock roll-forward all
   // live in earliestBatchMakeDate now — this is simply its answer.
   const soonestShip = decision.make_date;
-  const soonestDelivery = toYmdLocal(new Date(parseYmdLocal(soonestShip).getTime() + 86400000));
+  const soonestDelivery = toYmdLocal(new Date(parseYmdLocal(soonestShip, tz).getTime() + 86400000), tz);
 
   // A schedule-for-later pick carries a real chosen delivery date; express
   // also carries a future date (the schedule window's earliest day), so we
@@ -32311,14 +32374,14 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind, opts = {}) 
     // ships on (chosenDate − 1) or later. ship_date = that batch, delivery_date
     // = ship_date + 1 — always one transit-day apart, never an older held batch.
     selectedDate = dateM[1];
-    const earliestShip = toYmdLocal(new Date(parseYmdLocal(selectedDate).getTime() - 86400000));
-    shipDate = nextBatchShipDate(parseYmdLocal(earliestShip), cfg) || soonestShip;
+    const earliestShip = toYmdLocal(new Date(parseYmdLocal(selectedDate, tz).getTime() - 86400000), tz);
+    shipDate = nextBatchShipDate(parseYmdLocal(earliestShip, tz), cfg, tz) || soonestShip;
     // Never promise a batch earlier than the soonest one we can still make —
     // soonestShip already has the day's cutoff AND the zero-stock roll-forward
     // applied, so a customer who booked a near date can't be handed a batch we
     // have already established cannot be produced.
     if (shipDate < soonestShip) shipDate = soonestShip;
-    deliveryDate = toYmdLocal(new Date(parseYmdLocal(shipDate).getTime() + 86400000));
+    deliveryDate = toYmdLocal(new Date(parseYmdLocal(shipDate, tz).getTime() + 86400000), tz);
     kind = 'scheduled';
   } else {
     // "Get it today" / "Right away" are same-day picks: the customer is NOT
@@ -32623,17 +32686,17 @@ async function computeStoreMoveNotice(address, resolvedStoreCode, channel) {
 // can RE-anchor an express order to its PAY date: the express date is a relative
 // promise, so an order placed Sunday but left unpaid until Monday must earliest
 // from Monday (the kitchen only starts once it's paid).
-function expressEarliestIso(zone, now) {
+function expressEarliestIso(zone, now, tz = deliveryTz()) {
   let lead = zone && zone.min_lead_days != null ? Number(zone.min_lead_days) : 0;
   if (!(lead >= 0)) lead = 0;
   const days = Math.max(1, lead);
   const t = now || new Date();
-  const startOfDay = new Date(t.getFullYear(), t.getMonth(), t.getDate());
-  const d = new Date(startOfDay.getTime() + days * 86400000);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  // Today in the TENANT's zone, at midday, then whole days added. The old form
+  // built `new Date(t.getFullYear(), t.getMonth(), t.getDate())` — the host's
+  // calendar day rebuilt at the host's midnight — and read the result back with
+  // three more host getters. Midday is what keeps the addition DST-safe.
+  const base = parseYmdLocal(toYmdLocal(t, tz), tz);
+  return toYmdLocal(new Date(base.getTime() + days * 86400000), tz);
 }
 
 // `opts.batch` is earliestBatchMakeDate's answer. When the cart holds a
@@ -32644,12 +32707,14 @@ function expressEarliestIso(zone, now) {
 // The caller passes the decision; this function never re-derives the cart or the
 // store (it is handed neither, deliberately — one decision, computed once).
 function computeDeliverySlots(zone, now, opts = {}) {
+  // §82 — every hour, date and boundary below is read in the TENANT's zone.
+  const tz = opts.tz || deliveryTz();
   // Earliest day a batch order can ARRIVE = make date + the same one-day transit
   // the promise uses (computeBatchNotice's soonestDelivery). Null when no fresh
   // item is involved, which leaves every date rule below exactly as it was.
   const batchDecision = opts.batch || null;
   const batchFloorIso = (batchDecision && batchDecision.applies && batchDecision.make_date)
-    ? toYmdLocal(new Date(parseYmdLocal(batchDecision.make_date).getTime() + 86400000))
+    ? toYmdLocal(new Date(parseYmdLocal(batchDecision.make_date, tz).getTime() + 86400000), tz)
     : null;
   // The local run's own floor, and the two differ in the two ways the run does.
   // No transit day is added — the batch goes out on the day's run — so the floor
@@ -32694,6 +32759,9 @@ function computeDeliverySlots(zone, now, opts = {}) {
   if (cfg.max_lead_days < cfg.min_lead_days)    cfg.max_lead_days = cfg.min_lead_days + 7;
 
   const tzNow      = now || new Date();
+  // ONE reading of the tenant's clock. Every hour test, every minute test and
+  // every calendar date below comes off this object rather than off the host.
+  const nowParts   = tzNowParts(tzNow, tz);
   // Same-day is not merely floored but WITHDRAWN when the batch is a later day:
   // "right away" and today's chips are separate channels that no min_date
   // touches, so without this a shopper could reserve a wrap the kitchen has not
@@ -32710,15 +32778,14 @@ function computeDeliverySlots(zone, now, opts = {}) {
   // Computed off tzNow rather than the `todayIso` further down, which this sits
   // above — the two are the same day by construction (both read tzNow's
   // calendar date), and midday dodges any DST edge as earliestBatchMakeDate does.
-  const floorBlocksToday = !!localFreshFloor && localFreshFloor >
-    toYmdLocal(new Date(tzNow.getFullYear(), tzNow.getMonth(), tzNow.getDate(), 12, 0, 0, 0));
+  const floorBlocksToday = !!localFreshFloor && localFreshFloor > nowParts.ymd;
   const startHour  = cfg.slot_start_hour;
   const endHour    = cfg.slot_end_hour;
   const slotMins   = cfg.slot_duration_minutes;
   const isDayOnly  = cfg.day_only === 1;
   const kitchenOpenNow =
-        tzNow.getHours() >= startHour &&
-        tzNow.getHours() <  endHour;
+        nowParts.hour >= startHour &&
+        nowParts.hour <  endHour;
 
   // Same-day cutoff buffer — how many minutes BEFORE kitchen close we stop
   // taking same-day / right-away delivery. A Guangzhou store closing at 20:00
@@ -32732,7 +32799,7 @@ function computeDeliverySlots(zone, now, opts = {}) {
   if (!(sameDayCutoffMinutes >= 0)) sameDayCutoffMinutes = 0;
   const openSpanMinutes = (endHour - startHour) * 60;
   if (sameDayCutoffMinutes > openSpanMinutes) sameDayCutoffMinutes = openSpanMinutes;
-  const nowMinutes   = tzNow.getHours() * 60 + tzNow.getMinutes();
+  const nowMinutes   = nowParts.hour * 60 + nowParts.minute;
   const closeMinutes = endHour * 60;
   // True only while the kitchen is still technically open but we're inside the
   // last `sameDayCutoffMinutes` before close — a distinct "too late for today"
@@ -32766,12 +32833,7 @@ function computeDeliverySlots(zone, now, opts = {}) {
   // backward-compat with anything still reading scheduling.slots; new
   // callers should prefer `today_slots` + `schedule`.
   const SCHEDULE_MIN_LEAD = 3;
-  const fmtDateIso = (d) => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  };
+  const fmtDateIso = (d) => toYmdLocal(d, tz);
   const fmtHour = (h) => {
     const mer = h < 12 ? 'AM' : 'PM';
     const dispH = h % 12 === 0 ? 12 : h % 12;
@@ -32779,10 +32841,18 @@ function computeDeliverySlots(zone, now, opts = {}) {
   };
   const hhmm = (h, m) => `${h}:${String(m).padStart(2, '0')}`;
 
-  const startOfDay = new Date(tzNow.getFullYear(), tzNow.getMonth(), tzNow.getDate());
-  const todayIso     = fmtDateIso(startOfDay);
-  const tomorrowDate = new Date(startOfDay.getTime() + 86400000);
-  const tomorrowIso  = fmtDateIso(tomorrowDate);
+  // TWO ANCHORS, AND THE SPLIT IS LOAD-BEARING. `startOfDay` is the instant the
+  // tenant's wall clock reads 00:00 today, and it exists so emitTimeSlots can
+  // build a slot's start as `startOfDay + minutes`. `middayToday` is the anchor
+  // for whole-DAY arithmetic. One variable used to do both, which is safe only
+  // in a zone without DST: adding 86400000 to a midnight instant lands at 23:00
+  // or 01:00 on a transition day, and reading the calendar date back off that
+  // gives the wrong day. Midday has twelve hours of slack either side.
+  const todayIso     = nowParts.ymd;
+  const startOfDay   = businessDate.dateInZone(tz, todayIso, 0, 0);
+  const middayToday  = parseYmdLocal(todayIso, tz);
+  const tomorrowIso  = toYmdLocal(new Date(middayToday.getTime() + 86400000), tz);
+  const tomorrowDate = businessDate.dateInZone(tz, tomorrowIso, 0, 0);
   const todaySlots = [];
   let   todayDayChip = null;
   // Which day we ended up populating chips for: 'today' when kitchen is
@@ -32844,7 +32914,7 @@ function computeDeliverySlots(zone, now, opts = {}) {
       // Day-only zones don't have per-slot times, so we need an explicit
       // "is today still fulfillable" check — kitchen must not be past
       // close. Ordering after kitchen close → no Today chip.
-      const todayStillFulfillable = tzNow.getHours() < endHour;
+      const todayStillFulfillable = nowParts.hour < endHour;
       if (todayStillFulfillable) {
         const requiresSurcharge = cfg.same_day_surcharge > 0;
         todayDayChip = {
@@ -32899,8 +32969,8 @@ function computeDeliverySlots(zone, now, opts = {}) {
   const scheduleEndDays   = cfg.max_lead_days;
   let schedule = null;
   if (scheduleEndDays >= scheduleStartDays) {
-    const startDate = new Date(startOfDay.getTime() + scheduleStartDays * 86400000);
-    const endDate   = new Date(startOfDay.getTime() + scheduleEndDays   * 86400000);
+    const startDate = new Date(middayToday.getTime() + scheduleStartDays * 86400000);
+    const endDate   = new Date(middayToday.getTime() + scheduleEndDays   * 86400000);
     let minIso = fmtDateIso(startDate);
     const maxIso = fmtDateIso(endDate);
     if (floorIso && floorIso > minIso) minIso = floorIso;
@@ -32925,7 +32995,7 @@ function computeDeliverySlots(zone, now, opts = {}) {
   // leave Express as an open door onto an unreachable day. Apply the same batch
   // floor here. It can only push the date later, so non-fresh carts are
   // untouched.
-  let expressDateIso = expressEarliestIso(zone, tzNow);
+  let expressDateIso = expressEarliestIso(zone, tzNow, tz);
   if (floorIso && floorIso > expressDateIso) expressDateIso = floorIso;
 
   // Explicit Express ("ship ASAP") slot for day-only zones — the zone's true
@@ -32984,7 +33054,7 @@ function computeDeliverySlots(zone, now, opts = {}) {
     same_day_cutoff_message: sameDayCutoffMessage,
     // When closed, distinguishes "before today's opening" (reopens today) from
     // "after close" (reopens tomorrow) so the UI doesn't always say "tomorrow".
-    kitchen_reopens_today: !kitchenOpenNow && tzNow.getHours() < startHour,
+    kitchen_reopens_today: !kitchenOpenNow && nowParts.hour < startHour,
     kitchen_hours:        { start: startHour, end: endHour },
     slot_duration_minutes: slotMins,
     holiday_mode:         holidayMode,
@@ -33115,6 +33185,7 @@ function logSlotKindMismatch(orderId, submitted, derived, where) {
 }
 
 function resolveDeliverySlot(zone, slotId, now, opts = {}) {
+  const tz = opts.tz || deliveryTz();
   if (!slotId) return { scheduled_for: null, slot: null, surcharge: 0, kind: null };
   if (slotId === 'right_away') {
     const enumed = computeDeliverySlots(zone, now, opts);
@@ -33140,7 +33211,9 @@ function resolveDeliverySlot(zone, slotId, now, opts = {}) {
     // emitTimeSlots stamps that on the chip, and matchScheduledTimeSlot's
     // synthesized windows are calendar days and always carry false.
     kind = found.is_same_day ? 'today' : 'schedule';
-    dt = new Date(Number(mTime[1]), Number(mTime[2]) - 1, Number(mTime[3]), Number(mTime[4]), Number(mTime[5]));
+    // scheduled_for is persisted from this, so it must be the instant the
+    // TENANT's clock reads that slot, not the host's.
+    dt = businessDate.dateInZone(tz, `${mTime[1]}-${mTime[2]}-${mTime[3]}`, Number(mTime[4]), Number(mTime[5]));
   } else if (mDay) {
     // Same-day day-only chip first (Panyu).
     found = enumed.slots.find(s => s.slot_id === slotId);
@@ -33170,7 +33243,7 @@ function resolveDeliverySlot(zone, slotId, now, opts = {}) {
         label_cn: slotId,
       };
     }
-    dt = new Date(Number(mDay[1]), Number(mDay[2]) - 1, Number(mDay[3]), 0, 0);
+    dt = businessDate.dateInZone(tz, `${mDay[1]}-${mDay[2]}-${mDay[3]}`, 0, 0);
   } else {
     return { error: 'slot_invalid' };
   }

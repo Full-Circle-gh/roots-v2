@@ -31,9 +31,13 @@
  */
 'use strict';
 
-// All the slot maths is local-time and production runs UTC+8 with no DST. Pin
-// the zone BEFORE anything loads, or a UTC host reads the promised days wrong.
-process.env.TZ = 'Asia/Shanghai';
+// NO process.env.TZ PIN. It used to sit here, pinning the HOST clock to
+// Asia/Shanghai, because the slot and cutoff maths read the host — a UTC
+// runner read 18:26 Guangzhou as 10:26 and the scenario evaporated. §82
+// moved that maths onto the TENANT's zone (lib/business-date.js), so the
+// host's offset no longer reaches it and the pin has nothing left to
+// protect. Its ABSENCE is now the assertion: if this suite starts failing
+// under a UTC host, something has gone back to reading the host clock.
 
 const assert  = require('assert');
 const path    = require('path');

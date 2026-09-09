@@ -261,7 +261,11 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
     //
     // Re-aimed at the rule that now holds rather than deleted: the verdict comes
     // from the slot id the server is about to validate.
-    assert.ok(/const pickedSameDay = inventory\.isSameDayDelivery\(deliverySlotId, orderNow\);/.test(retailSrc),
+    // Anchored on the SOURCE of the verdict, not on the argument list. It was
+    // pinned to the exact two-arg call and went red when §82 threaded the
+    // tenant's timezone through as a third — a guard that breaks on an unrelated
+    // change teaches people to edit the guard rather than read it.
+    assert.ok(/const pickedSameDay = inventory\.isSameDayDelivery\(deliverySlotId\b/.test(retailSrc),
       'the same-day extra is DERIVED from the slot id, not read from the request body');
     // And the ABSENCE, because the risk outlives the line: no routing decision
     // anywhere in this file may take that verdict off the request body again.
