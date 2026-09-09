@@ -1239,6 +1239,180 @@
   .dlv-back:hover { color: var(--text-1); }
   .dlv-back svg { width: 13px; height: 13px; }
 
+  /* ═══════════════════════════════════════════════════════════════════
+     FRESH BATCHES — the A4 Console shape (tacet-desktop-patterns.md §2 A4).
+     Scoped to #dlv-fresh on purpose. This is the FIRST Console built to the
+     archetype, and the shared row primitive + the stable-setting-id
+     convention A4 asks for are Ash's to decide (§4 gives that job to
+     Settings). Naming these .fb-* keeps this page from silently minting a
+     product-wide convention; when the convention lands, these fold into it.
+
+     No uppercase anywhere in here (§1.6) — the page's own label.stacked /
+     .fc-sec uses are gone rather than restyled, which is how §1.6 says a
+     page removes its own. No Dusk (A4: config is the merchant acting, never
+     the AI), so both saves are secondary buttons and the master switch
+     takes the sage --accent every other switch in the admin already uses.
+     ═══════════════════════════════════════════════════════════════════ */
+
+  /* The page title. text-transform must be reset explicitly: the global h2
+     (css:973) is the retired uppercase eyebrow style, and .mt-pagehead h2 /
+     .el-pagehead h2 already carry this same reset for the same reason (§1.6).
+     Scoped to this view — the other delivery views get theirs when they are
+     rebuilt, which is how §1.6 says a page removes its own uppercase. */
+  #dlv-fresh > h2 {
+    font: 500 24px/1.3 var(--f-sans); letter-spacing: -.01em;
+    text-transform: none; color: var(--td-text); margin: 0 0 var(--s4);
+  }
+
+  /* A pane is switched with the hidden attribute, and .fb-fields sets
+     display:flex — which BEATS the attribute's default display:none unless
+     this exists. Without it both language panes render at once. */
+  #dlv-fresh .fb-fields[hidden] { display: none; }
+
+  /* Master switch card — first, own card, consequence in words. */
+  #dlv-fresh .fb-master { display: flex; align-items: flex-start; gap: 24px; }
+  #dlv-fresh .fb-master .fb-state {
+    flex: 1; min-width: 0; margin: 0;
+    font-size: 14px; line-height: 1.6; color: var(--td-text2);
+    max-width: 64ch;
+  }
+  #dlv-fresh .fb-master .fb-state b { color: var(--td-text); font-weight: 500; }
+  #dlv-fresh .fb-master .fc-switch { flex: none; padding-top: 1px; }
+
+  /* Master off → the groups below stay visible and go quiet (A4). Never
+     hidden: an operator has to be able to read what is configured while it
+     is switched off. */
+  #dlv-fresh .fb-group { transition: opacity .35s cubic-bezier(.16, 1, .3, 1); }
+  #dlv-fresh.fb-off .fb-group { opacity: .55; }
+  #dlv-fresh.fb-off .fb-group input,
+  #dlv-fresh.fb-off .fb-group textarea,
+  #dlv-fresh.fb-off .fb-group button { pointer-events: none; }
+
+  #dlv-fresh .fb-h {
+    font-size: 16px; font-weight: 500; letter-spacing: -.005em;
+    color: var(--td-text); margin: 0;
+  }
+  #dlv-fresh .fb-sub {
+    font-size: 13px; color: var(--td-text2); margin-top: 4px; line-height: 1.6;
+  }
+
+  /* A row is: label + one-line description on the left, ONE control on the
+     right. Never two controls on a line (A4). */
+  #dlv-fresh .fb-rows { margin-top: 18px; border-top: 1px solid var(--td-border); }
+  #dlv-fresh .fb-row {
+    display: flex; align-items: flex-start; gap: 32px;
+    padding: 16px 0; border-bottom: 1px solid var(--td-border);
+  }
+  #dlv-fresh .fb-lab { flex: 1; min-width: 0; }
+  #dlv-fresh .fb-name { font-size: 14px; font-weight: 500; color: var(--td-text); }
+  #dlv-fresh .fb-desc {
+    font-size: 13px; color: var(--td-text2); margin-top: 3px;
+    line-height: 1.6; max-width: 58ch;
+  }
+  #dlv-fresh .fb-ctl {
+    flex: none; display: flex; align-items: center; gap: 8px; padding-top: 1px;
+  }
+  #dlv-fresh .fb-ctl .fb-unit { font-size: 13px; color: var(--td-text2); }
+  #dlv-fresh .fb-ctl input[type="number"] { width: 68px; text-align: right; }
+  #dlv-fresh .fb-ctl input[type="date"] { width: 170px; }
+  #dlv-fresh .fb-ctl input,
+  #dlv-fresh .fb-pair input,
+  #dlv-fresh .fb-pair textarea { font-variant-numeric: tabular-nums; }
+
+  /* Skip dates — chips over a hidden textarea. #batch-skip keeps its id, its
+     type and its newline-joined value, so loadDeliverySettings and
+     saveBatchSchedule are untouched by this control existing. */
+  #dlv-fresh #batch-skip { display: none; }
+  #dlv-fresh .fb-chips {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    justify-content: flex-end; max-width: 340px;
+  }
+  #dlv-fresh .fb-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 13px; font-variant-numeric: tabular-nums;
+    background: var(--td-raised); border: 1px solid var(--td-border);
+    border-radius: 999px; padding: 4px 6px 4px 11px; color: var(--td-text);
+  }
+  #dlv-fresh .fb-chip button {
+    background: none; border: 0; cursor: pointer; padding: 0 3px;
+    color: var(--td-text2); font-size: 15px; line-height: 1;
+  }
+  #dlv-fresh .fb-chip button:hover { color: var(--td-brick-ink); }
+  #dlv-fresh .fb-chips-none { font-size: 13px; color: var(--td-text2); }
+
+  /* The customer's message — fields left, the popup as the customer sees it
+     right. Both languages are edited here: this is customer-facing CONTENT,
+     not interface chrome, so §1.11's one-language rule does not reach it. */
+  #dlv-fresh .fb-msg {
+    display: grid; grid-template-columns: minmax(0, 1fr) 330px;
+    gap: 32px; margin-top: 18px;
+  }
+  #dlv-fresh .fb-fields { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  #dlv-fresh .fb-field > .fb-name { margin-bottom: 7px; }
+  #dlv-fresh .fb-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #dlv-fresh .fb-pair.one { grid-template-columns: 1fr; }
+  #dlv-fresh .fb-pair label {
+    display: block; font-size: 12px; color: var(--td-text2); margin-bottom: 4px;
+  }
+  #dlv-fresh .fb-pair input,
+  #dlv-fresh .fb-pair textarea { width: 100%; }
+  #dlv-fresh .fb-pair textarea { resize: vertical; line-height: 1.6; }
+
+  #dlv-fresh .fb-preview { position: sticky; top: 88px; align-self: start; }
+  #dlv-fresh .fb-preview .fb-plab {
+    font-size: 12px; font-weight: 500; color: var(--td-text2); margin-bottom: 9px;
+  }
+  #dlv-fresh .fb-phone {
+    background: var(--td-raised); border: 1px solid var(--td-border);
+    border-radius: 14px; padding: 18px;
+  }
+  #dlv-fresh .fb-pop {
+    background: var(--td-surface); border: 1px solid var(--td-border);
+    border-radius: 14px; padding: 18px;
+  }
+  #dlv-fresh .fb-pop .fb-pop-kick { font-size: 12px; font-weight: 500; color: var(--td-sage-ink); }
+  #dlv-fresh .fb-pop .fb-pop-ttl {
+    font-size: 16px; font-weight: 500; color: var(--td-text); margin-top: 5px; line-height: 1.4;
+  }
+  #dlv-fresh .fb-pop .fb-pop-body {
+    font-size: 13px; color: var(--td-text2); margin-top: 10px; line-height: 1.6;
+  }
+  #dlv-fresh .fb-pop .fb-pop-tip {
+    font-size: 12.5px; color: var(--td-text2); margin-top: 13px;
+    padding-top: 11px; border-top: 1px solid var(--td-border); line-height: 1.6;
+  }
+  /* A placeholder the settings page cannot honestly resolve is shown AS a
+     placeholder (§1.17). {ship_date} is derived from the rhythm above and
+     rendered as a date; {delivery_date} is only known at checkout. */
+  #dlv-fresh .fb-tok {
+    background: var(--td-dusk-tint); color: var(--td-dusk);
+    border-radius: 4px; padding: 0 4px; font-size: .95em;
+  }
+  #dlv-fresh .fb-res { color: var(--td-text); font-weight: 500; font-variant-numeric: tabular-nums; }
+  #dlv-fresh .fb-fallback {
+    font-size: 12px; color: var(--td-text2); margin-top: 10px; line-height: 1.6;
+  }
+  #dlv-fresh .fb-pnote {
+    font-size: 12px; color: var(--td-text2); margin-top: 12px; line-height: 1.6;
+  }
+
+  #dlv-fresh .fb-save { margin-top: 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  #dlv-fresh .fb-save .fb-hint { font-size: 13px; color: var(--td-text2); }
+
+  @media (max-width: 980px) {
+    #dlv-fresh .fb-msg { grid-template-columns: 1fr; }
+    #dlv-fresh .fb-preview { position: static; }
+  }
+  @media (max-width: 720px) {
+    #dlv-fresh .fb-row { flex-direction: column; gap: 10px; }
+    #dlv-fresh .fb-ctl { padding-top: 0; }
+    #dlv-fresh .fb-chips { justify-content: flex-start; max-width: none; }
+    #dlv-fresh .fb-pair { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #dlv-fresh .fb-group { transition: none; }
+  }
+
   /* New-store setup strip (hidden once a zone or the default fallback exists). */
   .dlv-setup {
     display: flex; align-items: center; flex-wrap: wrap; gap: 10px 0;

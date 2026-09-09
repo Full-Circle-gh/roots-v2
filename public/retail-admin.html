@@ -10286,146 +10286,211 @@
 
           <!-- ══ FRESH BATCHES VIEW ══ (batch schedule + the reschedule cutoff — two
                cards about the same made-fresh products, now one page) -->
-          <div class="dlv-view" data-dlv="fresh" hidden>
+          <!-- ══ FRESH BATCHES VIEW ══ Rebuilt to the A4 Console shape
+               (tacet-desktop-patterns.md §2 A4): master switch first in its
+               own card with the consequence in words, then group cards of
+               label+description rows with ONE control each, then the customer
+               copy with the popup previewed beside it. The Reschedule cutoff
+               card folded in as a row — it was a second card and a second save
+               for one hour about the same products.
+
+               Every element id below is unchanged. loadDeliverySettings() and
+               saveBatchSchedule() read this markup by id and the save PUTs
+               batch.schedule WHOLESALE, so a field that loses its id is a
+               field the next save deletes. -->
+          <div class="dlv-view" id="dlv-fresh" data-dlv="fresh" hidden>
             <button type="button" class="dlv-back" onclick="dlvGo('hub')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Delivery · 配送</button>
             <h2>Fresh batches · 新鲜现做</h2>
-            <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4);">
-              For products flagged "Made fresh in batches". Only affects outside-Guangzhou orders containing one — they wait for the next batch day, then ship same-day so they arrive fresh. · 用于标记为「分批新鲜现做」的商品。仅影响含此类商品的广州以外订单 — 等到下一制作日当天发货,保证新鲜。
+
+            <!-- §1.7: title alone. The purpose line that sat here ("For products
+                 flagged…") read the same every day, which is the test it fails.
+                 What the page is doing right now is the master card's job. -->
+
+            <div class="card fb-master" id="fb-master" style="margin-bottom: var(--s4);">
+              <p class="fb-state" id="fb-consequence"></p>
+              <label class="fc-switch">
+                <input type="checkbox" id="batch-enabled">
+                <span class="fc-switch-track"></span>
+                <span id="batch-status-label" style="font-size: 13px;">Off · 关闭</span>
+              </label>
             </div>
 
-            <div class="card" style="margin-bottom: var(--s4);">
-              <h3 class="fc-sec" style="margin-bottom: 4px;">
-                Batch schedule · 制作排期
-              </h3>
-              <div class="muted" style="font-size: 11px; margin-bottom: 12px;">In-Guangzhou orders are unaffected. · 广州市内订单不受影响。</div>
-              <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
-                <div class="field" style="margin: 0;">
-                  <label class="stacked">Status · 状态</label>
-                  <label class="fc-switch">
-                    <input type="checkbox" id="batch-enabled">
-                    <span class="fc-switch-track"></span>
-                    <span id="batch-status-label" style="font-size: 12px;">OFF · 关闭</span>
-                  </label>
-                </div>
-                <div class="field" style="margin: 0;">
-                  <label for="batch-anchor" class="stacked">A batch day · 某个制作日</label>
-                  <input type="date" id="batch-anchor" style="width: 170px;">
-                </div>
-                <div class="field" style="margin: 0;">
-                  <label class="stacked">Make every · 每隔</label>
-                  <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="batch-interval" aria-label="Make every N days · 每隔几天制作" min="1" step="1" value="2" style="width: 70px;"> <span style="font-size:12px;">days · 天</span></span>
-                </div>
-                <!-- The order-by hour. saveBatchSchedule() has read #batch-cutoff and
-                     REFUSED THE SAVE on a non-numeric value since it was written, and
-                     the input it reads was never added to this card — so the whole
-                     Fresh batches card could not be saved while the switch was on.
-                     Restored here rather than by relaxing the validation, which is the
-                     half that was working. -->
-                <div class="field" style="margin: 0;">
-                  <label class="stacked" for="batch-cutoff">Order-by hour · 当日截单</label>
-                  <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="batch-cutoff" aria-label="Order-by hour · 当日截单" min="0" max="23" step="1" value="20" style="width: 70px;"> <span style="font-size:12px;">:00</span></span>
-                </div>
-                <!-- §74. The hour today's batch reaches the shelf. BLANK IS THE OFF
-                     SWITCH and the default: left empty, a sold-out fresh meal is
-                     offered for the NEXT batch day exactly as before. Filled, it is
-                     offered for TODAY until this hour, and the calendar withdraws
-                     every window that starts before it. -->
-                <div class="field" style="margin: 0;">
-                  <label class="stacked" for="batch-ready">Ready from the kitchen · 厨房已完成</label>
-                  <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="batch-ready" aria-label="Ready from the kitchen · 厨房已完成" min="0" max="23" step="1" placeholder="—" style="width: 70px;"> <span style="font-size:12px;">:00</span></span>
-                </div>
-                <div class="field" style="margin: 0; flex: 1; min-width: 240px;">
-                  <label for="batch-skip" class="stacked">Skip these dates (vacations) · 跳过这些日期(假期)</label>
-                  <textarea id="batch-skip" rows="3" style="width: 100%; font-family: monospace; font-size: 12px;" placeholder="2026-07-14&#10;2026-07-16"></textarea>
-                </div>
-                <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-                  <div class="muted" style="font-size: 11px; margin-bottom: 8px;">The checkout popup the customer sees. Leave any field blank to use the default wording. · 顾客在结账页看到的弹窗。任意字段留空则使用默认文案。</div>
-                </div>
-                <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-                  <label for="batch-kicker-en" class="stacked">Popup eyebrow — English · 弹窗小标题(英文)</label>
-                  <input id="batch-kicker-en" type="text" maxlength="40" style="width: 100%;" placeholder="Freshly made">
-                </div>
-                <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-                  <label for="batch-kicker-cn" class="stacked">弹窗小标题(中文)· Popup eyebrow — Chinese</label>
-                  <input id="batch-kicker-cn" type="text" maxlength="40" style="width: 100%;" placeholder="新鲜现做">
-                </div>
-                <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-                  <label for="batch-title-en" class="stacked">Popup title — English · 弹窗标题(英文)</label>
-                  <input id="batch-title-en" type="text" maxlength="60" style="width: 100%;" placeholder="Made fresh for you">
-                </div>
-                <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-                  <label for="batch-title-cn" class="stacked">弹窗标题(中文)· Popup title — Chinese</label>
-                  <input id="batch-title-cn" type="text" maxlength="60" style="width: 100%;" placeholder="为您新鲜现做">
-                </div>
-                <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-                  <label for="batch-msg-en" class="stacked">Checkout notice — English · 结账提示(英文)</label>
-                  <textarea id="batch-msg-en" rows="2" style="width: 100%;" placeholder="Your order includes freshly-made items. We make the next batch on {ship_date} and ship it the same day, so it arrives fresh on {delivery_date}."></textarea>
-                </div>
-                <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-                  <label for="batch-msg-cn" class="stacked">结账提示(中文)· Checkout notice — Chinese</label>
-                  <textarea id="batch-msg-cn" rows="2" style="width: 100%;" placeholder="您的订单包含新鲜现做的商品。我们将于 {ship_date} 制作下一批并当天发货,预计 {delivery_date} 新鲜送达。"></textarea>
-                </div>
-                <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-                  <label for="batch-tip-en" class="stacked">Freshness tip — English · 新鲜提示(英文)</label>
-                  <textarea id="batch-tip-en" rows="2" style="width: 100%;" placeholder="We recommend enjoying these freshly-made items within 48 hours of arrival for the best taste and freshness."></textarea>
-                </div>
-                <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-                  <label for="batch-tip-cn" class="stacked">新鲜提示(中文)· Freshness tip — Chinese</label>
-                  <textarea id="batch-tip-cn" rows="2" style="width: 100%;" placeholder="我们建议在收到后 48 小时内享用这些新鲜现做的商品,以获得最佳口感与新鲜度。"></textarea>
-                </div>
-                <div class="field" style="margin: 0; flex: 1 1 100%;">
-                  <label class="stacked" style="opacity: .75;">
-                    Guangzhou copy — the same shortage inside the city · 广州文案 — 市内同款缺货提示
-                  </label>
-                  <div class="hint" style="margin-top: 2px;">
-                    A Guangzhou order goes out on our own run the day the batch is made, so it
-                    names ONE date that is both — no courier day to add. Leave blank to use the
-                    built-in wording. The one placeholder is <code>{make_date}</code>.
-                    广州订单由我们自己配送,制作当天即送达,因此只显示一个日期。留空则使用默认文案。
+            <div class="card fb-group" id="fb-rhythm" style="margin-bottom: var(--s4);">
+              <h3 class="fb-h">Batch schedule · 制作排期</h3>
+              <div class="fb-sub">Orders inside Guangzhou are unaffected by any of this. · 广州市内订单不受影响。</div>
+
+              <div class="fb-rows">
+                <div class="fb-row">
+                  <div class="fb-lab">
+                    <label class="fb-name" for="batch-interval">Make every · 每隔</label>
+                    <div class="fb-desc">How often the kitchen makes a batch. · 厨房每隔多久制作一批。</div>
+                  </div>
+                  <div class="fb-ctl">
+                    <input type="number" id="batch-interval" min="1" step="1" value="2">
+                    <span class="fb-unit">days · 天</span>
                   </div>
                 </div>
-                <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-                  <label for="batch-local-kicker-en" class="stacked">GZ popup eyebrow — English · 广州弹窗小标题(英文)</label>
-                  <input id="batch-local-kicker-en" type="text" maxlength="40" style="width: 100%;" placeholder="Next fresh batch">
+
+                <div class="fb-row">
+                  <div class="fb-lab">
+                    <label class="fb-name" for="batch-anchor">A batch day · 某个制作日</label>
+                    <div class="fb-desc">Any past batch day. Every batch since is counted from it. · 任意一个过去的制作日,之后每一批都由它计算。</div>
+                  </div>
+                  <div class="fb-ctl">
+                    <input type="date" id="batch-anchor">
+                  </div>
                 </div>
-                <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-                  <label for="batch-local-kicker-cn" class="stacked">广州弹窗小标题(中文)· GZ popup eyebrow — Chinese</label>
-                  <input id="batch-local-kicker-cn" type="text" maxlength="40" style="width: 100%;" placeholder="下一批现做">
+
+                <!-- The order-by hour. saveBatchSchedule() has read #batch-cutoff and
+                     REFUSED THE SAVE on a non-numeric value since it was written, and
+                     the input it reads was once missing from this card entirely — so
+                     the whole card could not be saved while the switch was on. Keep
+                     the id. -->
+                <div class="fb-row">
+                  <div class="fb-lab">
+                    <label class="fb-name" for="batch-cutoff">Order-by hour · 当日截单</label>
+                    <div class="fb-desc">Past this hour, an order waits for the batch after next. · 过了这个时间下单,就要等再下一批。</div>
+                  </div>
+                  <div class="fb-ctl">
+                    <input type="number" id="batch-cutoff" min="0" max="23" step="1" value="20">
+                    <span class="fb-unit">:00</span>
+                  </div>
                 </div>
-                <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-                  <label for="batch-local-title-en" class="stacked">GZ popup title — English · 广州弹窗标题(英文)</label>
-                  <input id="batch-local-title-en" type="text" maxlength="60" style="width: 100%;" placeholder="Made fresh on {make_date}">
+
+                <!-- §74. The hour today's batch reaches the shelf. BLANK IS THE OFF
+                     SWITCH and the default — which is why it is said in the row's
+                     description now instead of only in this comment. -->
+                <div class="fb-row">
+                  <div class="fb-lab">
+                    <label class="fb-name" for="batch-ready">Ready from the kitchen · 厨房已完成</label>
+                    <div class="fb-desc">Blank offers a sold-out fresh item for the next batch day. Set an hour and it is offered for today, until then. · 留空:售罄的现做商品按下一个制作日发售。填写后:当天此时间之前仍按今天发售。</div>
+                  </div>
+                  <div class="fb-ctl">
+                    <input type="number" id="batch-ready" min="0" max="23" step="1" placeholder="—">
+                    <span class="fb-unit">:00</span>
+                  </div>
                 </div>
-                <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-                  <label for="batch-local-title-cn" class="stacked">广州弹窗标题(中文)· GZ popup title — Chinese</label>
-                  <input id="batch-local-title-cn" type="text" maxlength="60" style="width: 100%;" placeholder="{make_date} 新鲜现做">
+
+                <div class="fb-row">
+                  <div class="fb-lab">
+                    <span class="fb-name">Skip these dates (vacations) · 跳过这些日期(假期)</span>
+                    <div class="fb-desc">Holidays. The rhythm steps over them and lands on the next batch day. · 假期。排期会跳过这些日期,改在下一个制作日。</div>
+                  </div>
+                  <div class="fb-ctl">
+                    <!-- Chips write the newline-joined ISO list straight back into
+                         #batch-skip, which keeps its id, its type and its value shape
+                         so the load and the save never learn this control exists. -->
+                    <textarea id="batch-skip" rows="3"></textarea>
+                    <div class="fb-chips" id="fb-skip-chips"></div>
+                    <input type="date" id="fb-skip-add" aria-label="Add a date to skip · 添加要跳过的日期">
+                  </div>
                 </div>
-                <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-                  <label for="batch-local-msg-en" class="stacked">GZ checkout notice — English · 广州结账提示(英文)</label>
-                  <textarea id="batch-local-msg-en" rows="2" style="width: 100%;" placeholder="Some freshly-made items in your order are sold out right now. Our kitchen makes the next batch on {make_date} — we'll deliver your order as soon as it's ready."></textarea>
+
+                <div class="fb-row">
+                  <div class="fb-lab">
+                    <label class="fb-name" for="fresh-resched-cutoff">Lock at hour, evening before · 前一晚锁定时间</label>
+                    <div class="fb-desc">Only affects orders containing a batch-made product. A same-day slot can never be chosen for a fresh order. · 仅影响含「分批现做」商品的订单。新鲜订单不可改为当日时段。</div>
+                  </div>
+                  <div class="fb-ctl">
+                    <input type="number" id="fresh-resched-cutoff" min="0" max="23" step="1" value="20">
+                    <span class="fb-unit">:00</span>
+                  </div>
                 </div>
-                <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-                  <label for="batch-local-msg-cn" class="stacked">广州结账提示(中文)· GZ checkout notice — Chinese</label>
-                  <textarea id="batch-local-msg-cn" rows="2" style="width: 100%;" placeholder="您订单中的部分新鲜现做商品目前已售罄。我们的厨房将于 {make_date} 制作下一批 — 制作完成后会尽快为您配送。"></textarea>
-                </div>
-                <button class="btn btn-primary" onclick="saveBatchSchedule()" style="align-self: flex-end;">Save · 保存</button>
+              </div>
+
+              <div class="fb-save">
+                <button class="btn" onclick="saveBatchSchedule()">Save · 保存</button>
+                <span class="fb-hint" id="fb-next-hint"></span>
               </div>
             </div>
 
-            <div class="card" style="margin-bottom: var(--s4);">
-              <h3 class="fc-sec" style="margin-bottom: 4px;">
-                Reschedule cutoff · 改期截止
-              </h3>
-              <div class="muted" style="font-size: 11px; margin-bottom: 12px;">Only affects orders containing a batch-made product. A same-day slot can never be chosen for a fresh order. · 仅影响含「分批现做」商品的订单。新鲜订单不可改为当日时段。</div>
-              <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
-                <div class="field" style="margin: 0;">
-                  <label class="stacked">Lock at hour, evening before · 前一晚锁定时间</label>
-                  <span style="display:inline-flex;align-items:center;gap:6px;">
-                    <input type="number" id="fresh-resched-cutoff" aria-label="Hour the evening before that locks the slot · 前一晚锁定时段的时间" min="0" max="23" step="1" value="20" style="width: 80px;">
-                    <span style="font-size:12px;">:00 &nbsp;(0–23)</span>
-                  </span>
+            <div class="card fb-group" id="fb-message" style="margin-bottom: var(--s4);">
+              <h3 class="fb-h">Checkout popup · 结账弹窗</h3>
+              <div class="fb-sub">Leave any field blank to use the default wording. · 任意字段留空则使用默认文案。</div>
+
+              <div class="fb-tabs" role="tablist" style="display:flex;gap:6px;margin-top:14px;">
+                <button type="button" class="btn btn-sm" role="tab" aria-selected="true" data-fbtab="out" onclick="fbTab('out')">Outside Guangzhou · 广州以外</button>
+                <button type="button" class="btn btn-sm" role="tab" aria-selected="false" data-fbtab="gz" onclick="fbTab('gz')">Inside Guangzhou · 广州市内</button>
+              </div>
+
+              <div class="fb-msg">
+                <div class="fb-fields" data-fbpane="out">
+                  <div class="fb-field">
+                    <span class="fb-name">Popup eyebrow · 弹窗小标题</span>
+                    <div class="fb-pair">
+                      <div><label for="batch-kicker-en">English</label><input id="batch-kicker-en" type="text" maxlength="40" placeholder="Freshly made"></div>
+                      <div><label for="batch-kicker-cn">中文</label><input id="batch-kicker-cn" type="text" maxlength="40" placeholder="新鲜现做"></div>
+                    </div>
+                  </div>
+                  <div class="fb-field">
+                    <span class="fb-name">Popup title · 弹窗标题</span>
+                    <div class="fb-pair">
+                      <div><label for="batch-title-en">English</label><input id="batch-title-en" type="text" maxlength="60" placeholder="Made fresh for you"></div>
+                      <div><label for="batch-title-cn">中文</label><input id="batch-title-cn" type="text" maxlength="60" placeholder="为您新鲜现做"></div>
+                    </div>
+                  </div>
+                  <div class="fb-field">
+                    <span class="fb-name">Checkout notice · 结账提示</span>
+                    <div class="fb-pair">
+                      <div><label for="batch-msg-en">English</label><textarea id="batch-msg-en" rows="3" placeholder="Your order includes freshly-made items. We make the next batch on {ship_date} and ship it the same day, so it arrives fresh on {delivery_date}."></textarea></div>
+                      <div><label for="batch-msg-cn">中文</label><textarea id="batch-msg-cn" rows="3" placeholder="您的订单包含新鲜现做的商品。我们将于 {ship_date} 制作下一批并当天发货,预计 {delivery_date} 新鲜送达。"></textarea></div>
+                    </div>
+                  </div>
+                  <div class="fb-field">
+                    <span class="fb-name">Freshness tip · 新鲜提示</span>
+                    <div class="fb-pair">
+                      <div><label for="batch-tip-en">English</label><textarea id="batch-tip-en" rows="2" placeholder="We recommend enjoying these freshly-made items within 48 hours of arrival for the best taste and freshness."></textarea></div>
+                      <div><label for="batch-tip-cn">中文</label><textarea id="batch-tip-cn" rows="2" placeholder="我们建议在收到后 48 小时内享用这些新鲜现做的商品,以获得最佳口感与新鲜度。"></textarea></div>
+                    </div>
+                  </div>
                 </div>
-                <button class="btn btn-primary" onclick="saveRescheduleSettings()" style="align-self: flex-end;">Save · 保存</button>
+
+                <div class="fb-fields" data-fbpane="gz" hidden>
+                  <!-- One clean text node: the README's Conventions gotcha is that inline
+                       markup between the EN and CN halves fragments the node, the " · "
+                       stops separating full-EN from full-CN, and BOTH languages leak.
+                       The <code> that wrapped {make_date} did exactly that. -->
+                  <div class="fb-sub" style="margin-top:0">A Guangzhou order goes out on our own run the day the batch is made, so it names one date that is both. The only placeholder is {make_date}. · 广州订单由我们自己配送,制作当天即送达,因此只显示一个日期。留空则使用默认文案。</div>
+                  <div class="fb-field">
+                    <span class="fb-name">Popup eyebrow · 弹窗小标题</span>
+                    <div class="fb-pair">
+                      <div><label for="batch-local-kicker-en">English</label><input id="batch-local-kicker-en" type="text" maxlength="40" placeholder="Next fresh batch"></div>
+                      <div><label for="batch-local-kicker-cn">中文</label><input id="batch-local-kicker-cn" type="text" maxlength="40" placeholder="下一批现做"></div>
+                    </div>
+                  </div>
+                  <div class="fb-field">
+                    <span class="fb-name">Popup title · 弹窗标题</span>
+                    <div class="fb-pair">
+                      <div><label for="batch-local-title-en">English</label><input id="batch-local-title-en" type="text" maxlength="60" placeholder="Made fresh on {make_date}"></div>
+                      <div><label for="batch-local-title-cn">中文</label><input id="batch-local-title-cn" type="text" maxlength="60" placeholder="{make_date} 新鲜现做"></div>
+                    </div>
+                  </div>
+                  <div class="fb-field">
+                    <span class="fb-name">Checkout notice · 结账提示</span>
+                    <div class="fb-pair">
+                      <div><label for="batch-local-msg-en">English</label><textarea id="batch-local-msg-en" rows="4" placeholder="Some freshly-made items in your order are sold out right now. Our kitchen makes the next batch on {make_date} — we'll deliver your order as soon as it's ready."></textarea></div>
+                      <div><label for="batch-local-msg-cn">中文</label><textarea id="batch-local-msg-cn" rows="4" placeholder="您订单中的部分新鲜现做商品目前已售罄。我们的厨房将于 {make_date} 制作下一批 — 制作完成后会尽快为您配送。"></textarea></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="fb-preview">
+                  <div class="fb-plab">At checkout · 结账时</div>
+                  <div class="fb-phone">
+                    <div class="fb-pop">
+                      <div class="fb-pop-kick" id="fb-pv-kick"></div>
+                      <div class="fb-pop-ttl" id="fb-pv-ttl"></div>
+                      <p class="fb-pop-body" id="fb-pv-body"></p>
+                      <p class="fb-pop-tip" id="fb-pv-tip"></p>
+                    </div>
+                  </div>
+                  <div class="fb-fallback" id="fb-pv-fallback"></div>
+                  <div class="fb-pnote" id="fb-pv-note"></div>
+                </div>
+              </div>
+
+              <div class="fb-save">
+                <button class="btn" onclick="saveBatchSchedule()">Save · 保存</button>
               </div>
             </div>
           </div>
