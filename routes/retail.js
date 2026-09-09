@@ -197,7 +197,7 @@ function requireRetailAdmin(req, res, next) {
       }
     } catch (e) { /* tables not ready — fall through to the kitchen path */ }
   }
-  /* (2) THE LEGACY KITCHEN PATH IS GONE (§80). This gate used to fall through
+  /* (2) THE LEGACY KITCHEN PATH IS GONE (§81). This gate used to fall through
      to requireAuth + the `retail` permission, granting a `users`-realm session
      the full cap set on Roots' tenant. That realm is retired: its login page
      and its /api/auth routes are deleted, so no such session can be created,
@@ -10743,23 +10743,6 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   //     all; the hard out-of-stock gate refused it far above.)
   // Anything failing a guard is left exactly as it was: paid, and decremented
   // at payment as before.
-  const hasStockedAddon = mutatedItems.some(r => (r.options || []).some(o => o.stock_product_id));
-  if (!isPickup && !isWaitFlow && !stockGate && fulfillingStore
-      && !cartHasBundle && !hasStockedAddon && !awaitingRestockPids) {
-    const need = new Map();
-    const productById = new Map();
-    for (const r of mutatedItems) {
-      if (!r.product) continue;
-      need.set(r.product.id, (need.get(r.product.id) || 0) + r.qty);
-      productById.set(r.product.id, r.product);
-    }
-    const shortHere = [...need.entries()]
-      .filter(([pid, qty]) => inventory.getAvailable(fulfillingStore.id, pid, 'wechat').available < qty)
-      .map(([pid]) => pid);
-    const parkable = shortHere.length
-      && shortHere.every(pid => effectiveOosPolicy(productById.get(pid)) === 'backorder_gz');
-    if (parkable) awaitingRestockPids = shortHere;
-  }
 
   resolved.length = 0; for (const r of mutatedItems) resolved.push(r); // keep `resolved` as the source of truth downstream
 
@@ -10820,6 +10803,58 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // `orderNow` is shared for the same reason: two `new Date()` calls either side
   // of a cutoff hour could otherwise disagree about what day it is.
   const orderNow = new Date();
+
+  /* MOVED DOWN FROM ABOVE `resolved` FOR §80, and the move is the point: this
+     block now needs `zone` and `orderNow`, both declared below where it used to
+     sit, and it needs the zone matched against the NORMALIZED address rather
+     than the raw one. Nothing between its old home and here reads
+     awaitingRestockPids — the next reader is the INSERT — so the block runs at
+     the same moment in the order's life, with two more facts in hand. */
+  const hasStockedAddon = mutatedItems.some(r => (r.options || []).some(o => o.stock_product_id));
+  /* §80 — the fresh lines today's batch reaches before the customer's window
+     closes. Empty on every other day, hour, cart and slot, which is what keeps
+     the guard below reading exactly as it did for every order that is not this
+     one. */
+  const batchCoveredIds = isPickup ? new Set() : freshLinesCoveredToday({
+    zone,
+    deliverySlotId,
+    productIds: mutatedItems.map((r) => r.product && r.product.id).filter(Boolean),
+    now: orderNow,
+  });
+  /* THE GUARD GAINS ONE ARM AND KEEPS THE REST. It parked only orders with the
+     stock gate OFF (out-of-city, or a Guangzhou day in the future) — the kitchen
+     restocks before the fulfilment date, so a shortage now is not a shortage
+     then. §80 adds the same-day Guangzhou morning where the shortage is not a
+     shortage EITHER, for the same reason one step smaller: the batch lands
+     before the customer's window. Every other guard is unchanged and still
+     applies to both — no bundle, no stock-backed add-on, backorder lines only. */
+  if (!isPickup && !isWaitFlow && fulfillingStore && (!stockGate || batchCoveredIds.size)
+      && !cartHasBundle && !hasStockedAddon && !awaitingRestockPids) {
+    const need = new Map();
+    const productById = new Map();
+    for (const r of mutatedItems) {
+      if (!r.product) continue;
+      need.set(r.product.id, (need.get(r.product.id) || 0) + r.qty);
+      productById.set(r.product.id, r.product);
+    }
+    const shortHere = [...need.entries()]
+      .filter(([pid, qty]) => inventory.getAvailable(fulfillingStore.id, pid, 'wechat').available < qty)
+      .map(([pid]) => pid);
+    const parkable = shortHere.length
+      && shortHere.every(pid => effectiveOosPolicy(productById.get(pid)) === 'backorder_gz')
+      // With the gate ON, EVERY short line must be one today's batch covers.
+      // One uncovered line and we do not park silently: that order genuinely is
+      // short, analyzeShortage said so, and the customer met the modal.
+      && (!stockGate || shortHere.every(pid => batchCoveredIds.has(pid)));
+    if (parkable) awaitingRestockPids = shortHere;
+  }
+  /* Parked because a batch is coming, not because the customer asked to wait.
+     The difference the order actually feels is the delivery window: isWaitFlow
+     CLEARS it ("Ships when restocked" — right, when nobody knows when stock
+     lands), and this must not, because the whole point is that the batch lands
+     before the window the customer chose. It shares the other half — no
+     reservation, since there is nothing on the shelf to hold. */
+  const isBatchPark = !isWaitFlow && stockGate && !!awaitingRestockPids;
   const batchDecision = earliestBatchMakeDate({
     zone,
     productIds: resolved.map((r) => r.product.id),
@@ -11284,7 +11319,11 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     const strictItems = stockGate
       ? []
       : expandStockLines(resolved.filter(r => effectiveOosPolicy(r.product) === 'strict'));
-    if (!isWaitFlow && (stockGate || strictItems.length)) {
+    // §80: isBatchPark skips it for the same reason isWaitFlow does — the order
+    // is parked holding NOTHING, and there is nothing on the shelf to hold. The
+    // batch is reserved and deducted by checkAwaitingRestockForRestock when the
+    // cook records it, which is the one moment the stock actually exists.
+    if (!isWaitFlow && !isBatchPark && (stockGate || strictItems.length)) {
       inventory.reserveForOrder({
         storeId: fulfillingStore.id,
         orderId,
@@ -31938,10 +31977,7 @@ function earliestBatchMakeDate({ zone, productIds, storeId, now, channel = 'wech
   // FUTURE day while carrying an hour that only ever means today, withdrawing a
   // morning on the wrong date. The reason and the date must not be able to
   // disagree, so the condition carries every term the roll-forward carries.
-  const todayBatchPending = cfg.ready_hour != null
-        && nowD.getHours() < cfg.ready_hour
-        && !pastCutoff
-        && nextBatchShipDate(nowD, cfg) === todayIso;
+  const todayBatchPending = !!todaysBatchStillComing(nowD);
 
   // ONE roll-forward. Whatever ruled today out, the effect is identical: start
   // the cadence search at tomorrow instead of today. On a non-batch day this
@@ -32033,17 +32069,83 @@ function nextFreshBatchDate(now) {
   const cfg = batchScheduleCfg();
   if (!cfg) return null;
   const nowD = now || new Date();
-  const todayIso = toYmdLocal(new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), 12, 0, 0, 0));
-  // Every term earliestBatchMakeDate's own todayBatchPending carries, including
-  // the day's cutoff — this function has no cart and no store, but it has the
-  // clock and the config, so the two conditions it CAN ask must match exactly or
-  // the pill names today while the checkout has already rolled past it.
-  if (cfg.ready_hour != null && nowD.getHours() < cfg.ready_hour
-      && nowD.getHours() < cfg.cutoff_hour
-      && nextBatchShipDate(nowD, cfg) === todayIso) {
-    return todayIso;
-  }
+  // The same three conditions the checkout asks, asked once and shared, so the
+  // pill cannot name a day the checkout has already closed.
+  const pending = todaysBatchStillComing(nowD);
+  if (pending) return pending.dateIso;
   return nextBatchShipDate(new Date(nowD.getTime() + 86400000), cfg) || null;
+}
+
+// §80 — IS TODAY'S BATCH STILL COMING? Config and clock only; no cart, no store,
+// no stock. Three conditions, and they were written out three times before this
+// existed (earliestBatchMakeDate's todayBatchPending, nextFreshBatchDate's early
+// return, and the shortage gate) — two copies too many for a rule whose whole
+// job is that the pill, the checkout and the order agree.
+//
+//   • an hour is configured                (unset ⇒ null ⇒ §74 is off entirely)
+//   • it has not arrived yet
+//   • the day's ordering cutoff has not passed
+//   • today is on the cadence, skip_dates and all
+//
+// Returns { readyHour, dateIso } or null. Never asks about stock: whether a
+// given SHELF is empty is a different question, asked by whoever holds a store.
+function todaysBatchStillComing(now) {
+  const cfg = batchScheduleCfg();
+  if (!cfg || cfg.ready_hour == null) return null;
+  const nowD = now || new Date();
+  if (nowD.getHours() >= cfg.ready_hour) return null;
+  if (nowD.getHours() >= cfg.cutoff_hour) return null;
+  const todayIso = toYmdLocal(new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), 12, 0, 0, 0));
+  if (nextBatchShipDate(nowD, cfg) !== todayIso) return null;
+  return { readyHour: cfg.ready_hour, dateIso: todayIso };
+}
+
+// When does the customer's chosen window CLOSE? A Date, or null for a pick that
+// names no window it could close by — 'right_away' above all, which promises the
+// soonest possible and cannot be answered by a batch that has not been made. A
+// day-only chip closes when the kitchen does.
+function slotWindowEnd(zone, slotId, now) {
+  if (!slotId || slotId === 'right_away') return null;
+  const mTime = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(slotId));
+  const mDay  = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(slotId));
+  const dur = Number(zone && zone.slot_duration_minutes) > 0
+    ? Number(zone.slot_duration_minutes) : 120;
+  const endHour = Number(zone && zone.slot_end_hour) > 0 ? Number(zone.slot_end_hour) : 20;
+  if (mTime) {
+    const start = new Date(Number(mTime[1]), Number(mTime[2]) - 1, Number(mTime[3]),
+      Number(mTime[4]), Number(mTime[5]), 0, 0);
+    return new Date(start.getTime() + dur * 60000);
+  }
+  if (mDay) {
+    return new Date(Number(mDay[1]), Number(mDay[2]) - 1, Number(mDay[3]), endHour, 0, 0, 0);
+  }
+  return null;
+}
+
+// §80 — the FRESH lines today's batch will cover before the customer's own
+// window closes, as a Set of product ids.
+//
+// THE RULE IS THE WINDOW'S END, NOT ITS START, and that is Ash's ruling stated
+// as arithmetic: a batch landing at 11:00 serves a 10:00–12:00 delivery, so
+// keying on the start would refuse exactly the slot he named. A window closing
+// BEFORE the batch lands is not covered, which is what keeps the rule honest if
+// an operator sets a late ready hour.
+//
+// Empty whenever §74 is off, today is not a cooking day, the batch has landed,
+// or the pick names no window. An empty set restores every previous behaviour
+// exactly, which is what makes this safe to consult unconditionally.
+function freshLinesCoveredToday({ zone, deliverySlotId, productIds, now }) {
+  const out = new Set();
+  const pending = todaysBatchStillComing(now);
+  if (!pending) return out;
+  const end = slotWindowEnd(zone, deliverySlotId, now);
+  if (!end) return out;
+  const nowD = now || new Date();
+  const readyAt = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(),
+    pending.readyHour, 0, 0, 0);
+  if (end.getTime() < readyAt.getTime()) return out;
+  for (const it of batchItemsInCart(productIds || [])) out.add(it.id);
+  return out;
 }
 
 // The customer-facing "made fresh for you" notice for an order holding a
@@ -33682,6 +33784,11 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   // `resolvedStoreCode`, which stays the proximity answer because that is what
   // the store-move notice below is a counterfactual about. Null when routing
   // couldn't settle; earliestBatchMakeDate reads that as "today unproven" and rolls forward.
+  // ONE CLOCK for the whole quote. It used to be declared halfway down, which
+  // was fine until §80's covered-lines call needed it above that point — a
+  // const read before its declaration is a ReferenceError, and this endpoint
+  // is every customer's checkout. Declared once, at the top, read everywhere.
+  const quoteNow = new Date();
   let quoteStore = null;
   // The shelves this order would actually be served off — set on EVERY branch
   // below, unlike `quoteStore`, which only lands on the no-shortage path and
@@ -33721,11 +33828,20 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
       "SELECT id FROM retail_orders WHERE customer_id = ? AND status = 'pending_payment'"
     ).all(req.customer.id).map(r => r.id);
     quoteShelfPendingIds = quotePendingOrderIds;
+    // §80. Nothing is short from the customer's side when today's batch reaches
+    // him before his own window closes, so the five-option modal must not fire
+    // and tell him it is. Empty set on every other day, hour and cart.
     const analysis = await inventory.analyzeShortage({
       address, items: cleanItems,
       deliverySlotId: body.delivery_slot_id || null,
       channel: 'wechat',
       ignoreOrderIds: quotePendingOrderIds,
+      coveredProductIds: freshLinesCoveredToday({
+        zone: matchDeliveryZone(address),
+        deliverySlotId: body.delivery_slot_id || null,
+        productIds: cleanItems.map((i) => i.product_id),
+        now: quoteNow,
+      }),
     });
     quoteShelfStore = (analysis.resolved && !analysis.resolved.error && analysis.resolved.store)
       || (analysis.nearest && analysis.nearest.store) || null;
@@ -33819,7 +33935,6 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   // calendar and the banner below — the same discipline the order path uses, so
   // the dates a customer is offered and the dates they are promised come from
   // one answer rather than two independent readings of the cadence.
-  const quoteNow = new Date();
   // Is this order served off the shelves the same-day run loads from? The same
   // expression computeLocalFreshNotice gates on, resolved once here so the
   // calendar, the notice and the checkout gate cannot disagree about who is on
@@ -36179,6 +36294,11 @@ module.exports.nextFreshBatchDate    = nextFreshBatchDate;
 // §74's one decision, exported so scripts/test_fresh_today_batch.js asserts the
 // floor the quote and the order path actually share rather than a copy of it.
 module.exports.localFreshFloorFor    = localFreshFloorFor;
+// §80's three, exported so the suite asserts the rules the checkout actually
+// runs rather than a copy of them.
+module.exports.todaysBatchStillComing = todaysBatchStillComing;
+module.exports.slotWindowEnd          = slotWindowEnd;
+module.exports.freshLinesCoveredToday = freshLinesCoveredToday;
 module.exports.computeDeliverySlots  = computeDeliverySlots;
 module.exports.resolveDeliverySlot   = resolveDeliverySlot;
 module.exports.fulfillingStoreFor    = fulfillingStoreFor;

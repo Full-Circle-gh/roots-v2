@@ -31,7 +31,7 @@ const router = express.Router();
 const subs = new Set();
 let _sid = 0;
 
-// THE /api/events STREAM STOOD HERE (§80). It was the kitchen app's
+// THE /api/events STREAM STOOD HERE (§81). It was the kitchen app's
 // EventSource — an SSE feed on the `users` realm, keyed on id, role and perms.
 // public/app.html was its only subscriber; both it and the realm are gone.
 //
@@ -71,7 +71,7 @@ function broadcast(kind, payload, target) {
   }
 }
 
-// A who-is-listening DIAGNOSTIC ALSO STOOD HERE (§80): an admin route that
+// A who-is-listening DIAGNOSTIC ALSO STOOD HERE (§81): an admin route that
 // answered which subscribers a given store or permission would reach. It was
 // requireAuth + requireAdmin on the retired realm, and it reported on the
 // subscriber set the deleted stream above was the only filler of.

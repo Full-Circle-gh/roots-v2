@@ -65,10 +65,10 @@ const { requireRetailAdmin } = require('./retail');
 const { listWindow, windowMeta } = require('../lib/list-window');
 
 // Read-only access to inventory data. A Mini App Backend operator passes the
-// ONE REALM (§80). This was a dual-realm gate: a kitchen session passed as an
+// ONE REALM (§81). This was a dual-realm gate: a kitchen session passed as an
 // admin, as a holder of the `retail` permission, or on an assigned
 // `retail_store_id` — store staff browsing the cross-store grid in app.html.
-// That page is deleted (§78) and the realm retired (§80), so the second half
+// That page is deleted (§78) and the realm retired (§81), so the second half
 // could only ever have refused and is removed rather than left reading a table
 // nobody can authenticate against.
 function requireInventoryRead(req, res, next) {
@@ -656,7 +656,7 @@ router.get('/api/retail-admin/stores/:id/ledger', requireRetailAdmin, (req, res)
   res.json({ success: true, data: rows });
 });
 
-/* A STORE-ASSIGNMENT ENDPOINT STOOD HERE (§80).
+/* A STORE-ASSIGNMENT ENDPOINT STOOD HERE (§81).
    PUT /api/admin/users/:userId/retail-store assigned or cleared a kitchen
    user's `retail_store_id`. It was requireAuth + an admin check on the retired
    realm, it wrote to the `users` table, and public/app.html was its only

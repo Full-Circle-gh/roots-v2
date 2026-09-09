@@ -637,7 +637,7 @@
      panel. Sprout calls the design_check tool, reads block colours +
      findings, and proposes brand-token swaps. Result renders inline so
      the author never leaves the editor. */
-  /* THE SPROUT / APPLY-CARD STYLES STOOD HERE (§80) — the Dusk-filled
+  /* THE SPROUT / APPLY-CARD STYLES STOOD HERE (§81) — the Dusk-filled
      "Ask Sprout" CTA, its loading and result states, and the Apply cards
      that committed a proposed brand-token swap. The control they dressed is
      gone with the agent behind it. The deterministic findings keep their own
@@ -5701,7 +5701,7 @@ function uid() { return 'b' + Math.random().toString(36).slice(2, 9); }
 // Backend's Editor tab (iframe): navigating THIS iframe to /login would load the
 // login page *inside* the editor pane (chrome stacked under the real backend).
 // Bounce the TOP window instead so the parent re-auths once.
-// Signed out → the TACET login (§80). This sent people to '/login', the
+// Signed out → the TACET login (§81). This sent people to '/login', the
 // kitchen realm's page, which is the realm this editor no longer uses.
 function cmsAuthBail() {
   try {
@@ -5748,7 +5748,7 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
   loadFocusMode();
   initCanvasLayout();   // opt-in canvas-first re-housing (no-op unless enabled)
   try {
-    /* THE CMS AUTHENTICATES ON TACET (§80), not on the kitchen realm.
+    /* THE CMS AUTHENTICATES ON TACET (§81), not on the kitchen realm.
        This read `/api/auth/me` — `session.userId` on the `users` table — which
        made this page the LAST reason that realm existed after §78 deleted the
        app it belonged to. It never needed it: every working call this editor
@@ -7459,7 +7459,7 @@ async function buildDesignCheckPicker() {
     return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   }
 
-  // THE SPROUT RENDER BLOCK STOOD HERE (§80): sproutState, its section HTML,
+  // THE SPROUT RENDER BLOCK STOOD HERE (§81): sproutState, its section HTML,
   // the Apply-card list and a small markdown renderer for the reply prose.
   //
   // The DETERMINISTIC design check is untouched and is what this panel is now:
@@ -7556,7 +7556,7 @@ async function buildDesignCheckPicker() {
       });
     });
   }
-  // THE SPROUT HANDLERS STOOD HERE (§80). wireSproutHandlers, applySwap,
+  // THE SPROUT HANDLERS STOOD HERE (§81). wireSproutHandlers, applySwap,
   // applyAllSwaps and askSprout wired the "Ask Sprout" CTA, its re-ask, and
   // the Apply cards that committed a proposed brand-token swap to the draft.
   // §78 deleted the agent they called; Ash scrapped Sprout with the kitchen

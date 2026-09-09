@@ -617,13 +617,13 @@ function postPOExpenses(poId) {
 // One PO, kitchen scope only. The LIST has filtered on scope since retail
 // purchasing landed in the same table; every by-id route did not, so a kitchen
 // user holding `purchases` could read and mutate a retail PO through the
-// THIS FILE IS NOW A LIBRARY, NOT A ROUTER (§80).
+// THIS FILE IS NOW A LIBRARY, NOT A ROUTER (§81).
 //
 // Everything between here and the backfill below was the kitchen app's
 // purchasing API: 22 endpoints under /api/purchases and /api/lots, plus
 // getKitchenPO and clearPOExpenses which served only them. public/app.html
 // was their only caller and §78 deleted it; every one was gated on requireAuth,
-// the realm §80 retires, so they could not be reached even by accident.
+// the realm §81 retires, so they could not be reached even by accident.
 //
 // WHAT IT KEEPS IS WHY IT SURVIVES, and §77 named this before it was true:
 // routes/retail-purchasing.js requires SIX functions out of this file at load

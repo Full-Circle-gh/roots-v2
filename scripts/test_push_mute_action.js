@@ -126,7 +126,7 @@ await it('every rendered push offers the off switch', async () => {
   assert.ok(actions[0].title && /关闭/.test(actions[0].title), 'the button needs a label');
 });
 
-// WAS 'the switch tells BOTH realms' (§80). A device could hold a kitchen
+// WAS 'the switch tells BOTH realms' (§81). A device could hold a kitchen
 // login, a backend operator login, or both, and this code cannot know which —
 // so the switch told both. The kitchen realm is retired and /api/push/pref is
 // deleted, so that call could only 404, and a 404 inside Promise.all is a

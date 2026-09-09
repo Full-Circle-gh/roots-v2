@@ -114,7 +114,7 @@ yes(/\.run\('Roots', 'Roots', 'active'\)/.test(strip(read('routes/backend-auth.j
 yes(/name: `Roots \$\{norm\(order\.order_no\)\}`/.test(read('lib/qingyun-payload.js')),
   'the rider dispatch still names Roots — out of scope by the brief, see the note here');
 
-/* THE DEBUG PUSH IS GONE (§80). /api/push/test was requireAuth and sent to the
+/* THE DEBUG PUSH IS GONE (§81). /api/push/test was requireAuth and sent to the
    caller's own device, which is why this audit could wave it through: nobody
    else ever saw it, so it could not carry Roots' name to another tenant.
 

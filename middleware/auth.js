@@ -4,12 +4,12 @@
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 
-/* THE FOUR REALM GATES STOOD HERE AND ARE GONE (§80): requireAuth,
+/* THE FOUR REALM GATES STOOD HERE AND ARE GONE (§81): requireAuth,
    requireAdmin, requirePermission and requireDelete.
    
    Every one of them read `req.session.userId` against the `users` table and
    its `permissions` row — the kitchen realm. §78 deleted the app that realm
-   existed for; §80 deleted its login page and its /api/auth routes, so no such
+   existed for; §81 deleted its login page and its /api/auth routes, so no such
    session can be created, and a gate that can only refuse is not a gate.
    
    WHAT REPLACED THEM, so nothing here reads as merely removed: Tacet's

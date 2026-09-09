@@ -77,7 +77,7 @@ self.addEventListener('activate', (e) => {
 // A device carries a backend operator login (tenant_operator_push_subs). It
 // used to be able to carry a kitchen login (push_subscriptions) as well, or
 // both — unrelated sessions sharing one service worker and therefore one push
-// endpoint — which is why this told both realms. §80 retired the kitchen one.
+// endpoint — which is why this told both realms. §81 retired the kitchen one.
 const MUTE_ACTION = 'roots-mute';
 
 function _postJSON(path, body) {
@@ -95,7 +95,7 @@ async function muteThisDevice() {
   let sub = null;
   try { sub = await self.registration.pushManager.getSubscription(); } catch (e) { sub = null; }
   const endpoint = sub ? sub.endpoint : null;
-  // ONE REALM TO TELL (§80). This told BOTH: /api/push/pref for a kitchen
+  // ONE REALM TO TELL (§81). This told BOTH: /api/push/pref for a kitchen
   // login and /api/backend/push/pref for a backend operator, because one
   // browser could carry either or both and this code cannot know which. The
   // kitchen realm is retired and its endpoint deleted, so the first call could

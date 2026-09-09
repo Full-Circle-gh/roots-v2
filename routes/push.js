@@ -125,12 +125,12 @@ if (ENABLED) {
   console.warn('[push] VAPID keys not set in .env — Web Push disabled.');
 }
 
-// THE KITCHEN PUSH ENDPOINTS STOOD HERE AND ARE GONE (§80).
+// THE KITCHEN PUSH ENDPOINTS STOOD HERE AND ARE GONE (§81).
 //
 // Six routes: /api/push/vapid-key, subscribe, unsubscribe, pref (GET+POST)
 // and test. All but vapid-key were gated on requireAuth — the `users` realm —
 // and public/app.html and public/kitchen.html were their only callers. Both
-// pages are deleted (§76, §78) and the realm is retired (§80), so no browser
+// pages are deleted (§76, §78) and the realm is retired (§81), so no browser
 // can reach them and no session could pass them.
 //
 // THE OPERATOR HALF IS ELSEWHERE AND IS UNTOUCHED: /api/backend/push/* lives

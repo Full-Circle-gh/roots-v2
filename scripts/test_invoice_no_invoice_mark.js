@@ -203,7 +203,7 @@ const { setNoInvoiceMark, setLineInvoiceStatus } = require('../lib/invoice-mark'
   ok(legacyReboot() === 0, 'so the old boot rule has nothing to put back', lineOf(1));
   ok(lineOf(1).mark === 0, 'and the line is still awaiting its 发票 after a restart', lineOf(1));
 
-  // SECTION 4 DROVE THE KITCHEN API AND IS GONE (§80). It drove the kitchen picker's invoice_status and 恢复.
+  // SECTION 4 DROVE THE KITCHEN API AND IS GONE (§81). It drove the kitchen picker's invoice_status and 恢复.
   // routes/purchases.js kept its exported helpers and lost its 22 HTTP
   // endpoints — public/app.html was their only caller and it is deleted (§78).
   //
@@ -222,7 +222,7 @@ const { setNoInvoiceMark, setLineInvoiceStatus } = require('../lib/invoice-mark'
   ok(lineOf(1).mark === 1 && lineOf(1).invoice_status === 'no_invoice',
      'a payload with no invoice_status hands the stored pair back untouched', lineOf(1));
   ok(lineOf(2).invoice_status === 'received', 'and does not re-default the other line either', lineOf(2));
-  // A KITCHEN HALF OF SECTION 5 STOOD HERE (§80): the same order-edit case run
+  // A KITCHEN HALF OF SECTION 5 STOOD HERE (§81): the same order-edit case run
   // against PUT /api/purchases/200. That endpoint is deleted; the retail half
   // above asserts the identical rule on the surface that survives.
 
@@ -323,7 +323,7 @@ const { setNoInvoiceMark, setLineInvoiceStatus } = require('../lib/invoice-mark'
      'and the line toggle — the one the drill now shows on that row — lifts it in one press',
      lineRestore.json);
 
-  // SECTION 9 DROVE THE KITCHEN API AND IS GONE (§80). It repeated section 8's whole-order 恢复 on a kitchen PO.
+  // SECTION 9 DROVE THE KITCHEN API AND IS GONE (§81). It repeated section 8's whole-order 恢复 on a kitchen PO.
   // routes/purchases.js kept its exported helpers and lost its 22 HTTP
   // endpoints — public/app.html was their only caller and it is deleted (§78).
   //

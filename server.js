@@ -464,7 +464,7 @@ app.use('/api/internal/eleme', require('./routes/eleme-internal')); // daemon-on
 app.use(require('./routes/eleme-admin')); // retail-admin Eleme sync config + OAuth callback
 app.use(require('./routes/integrations-admin')); // retail-admin Channels & Delivery hub
 
-/* THE KITCHEN LOGIN IS GONE (§80). `/login` served public/login.html, the
+/* THE KITCHEN LOGIN IS GONE (§81). `/login` served public/login.html, the
    sign-in for the `users` realm, and both are deleted with routes/auth.js.
 
    NO REDIRECT IS LEFT BEHIND, and that is the difference between this and
@@ -594,8 +594,8 @@ app.get('/backend/brand-studio', (req, res) => {
 });
 
 /* SaaS-admin console — platform owner only.
-   RE-GATED ONTO THE PLATFORM REALM (§80). This tested `users.role === 'admin'`
-   — a kitchen session — which §80 retires, and the console would have become
+   RE-GATED ONTO THE PLATFORM REALM (§81). This tested `users.role === 'admin'`
+   — a kitchen session — which §81 retires, and the console would have become
    unreachable with it. `platform_admins` is the realm built for exactly this
    and is seeded at boot (lib/platform-admin.js), so the owner already has the
    login; it is the same principal store-admin.* uses. Signed out goes to that

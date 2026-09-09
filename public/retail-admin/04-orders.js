@@ -5553,6 +5553,10 @@ async function openOrder(id, opts = {}) {
     } else {
       renderOpenOrder(o);
     }
+    // Returning from a customer opened via this order's Customer tile: land on
+    // the row the operator left from, not the top of the order. rAF so the
+    // freshly-rendered mount has its scroll height before we set the offset.
+    if (opts.scrollTop) requestAnimationFrame(() => { mount.scrollTop = opts.scrollTop; });
     // Live rider map — mounts only when the drawer rendered a courier-map
     // container (an on-the-way same-city order). Self-tears-down any prior map.
     try { mountCourierMap(o); } catch (e) { /* map is best-effort */ }
@@ -5730,6 +5734,10 @@ function topmostOpenDrawer(open) {
 function dismissTopDrawer(top) {
   if (!top) return;
   if (top.id === 'order-drawer' && _ORDER_BACK_CUSTOMER) { orderDrawerBack(); return; }
+  // Same courtesy the other way round: a customer opened from an order's
+  // Customer tile steps back to that order rather than closing out to the
+  // roster, so Esc, the scrim and the ← button all agree.
+  if (top.id === 'cu-drawer' && _CUSTOMER_BACK_ORDER) { cuDrawerBack(); return; }
   closeDrawer(top);
 }
 document.addEventListener('keydown', (e) => {

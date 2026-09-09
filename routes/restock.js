@@ -722,7 +722,7 @@ function requireRestockAccess(req, res, next) {
     req.restockRealm = 'tacet';
     return requireRetailAdmin(req, res, next);
   }
-  /* THE KITCHEN BRANCH IS GONE (§80). It ran requireAuth and then accepted an
+  /* THE KITCHEN BRANCH IS GONE (§81). It ran requireAuth and then accepted an
      admin, or a holder of restock / warehouse_inbox / kitchen_inbox, as
      req.restockRealm = 'kitchen'. That realm is retired — its login and its
      /api/auth routes are deleted — so the branch could only ever have refused.
@@ -1863,7 +1863,7 @@ router.post('/api/restock/archive-bulk', requireRestockAccess, tacetOnly, (req, 
   res.json({ success: true, count: result.changes });
 });
 
-/* A DELETE ENDPOINT STOOD HERE (§80). `DELETE /api/restock/:id` removed a
+/* A DELETE ENDPOINT STOOD HERE (§81). `DELETE /api/restock/:id` removed a
    DRAFT restock order and was gated on requireAuth + requireDelete +
    requirePermission('restock') — three gates, all on the retired realm, and
    public/app.html was its only caller. Tacet Mobile has never had a delete on
