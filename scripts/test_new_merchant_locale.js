@@ -74,10 +74,25 @@ console.log('\nThe yuan numbers do not follow the merchant abroad');
 it('a merchant in yuan keeps every default they had — nothing moves for them', () => {
   const c = cfgFor('CN');
   assert.strictEqual(c['fees.freeShippingThreshold'], 399);
-  assert.strictEqual(c['fees.standardShipping'], 12);
-  assert.strictEqual(c['fees.sameDayDelivery'], 18);
+  assert.strictEqual(c['fees.minOrder'], 0);
   assert.strictEqual(c['points.redeemRate'], 1);
   assert.strictEqual(c['points.earnSpend'], 100);
+});
+
+it('the two DEAD fee keys are seeded for nobody, yuan included', () => {
+  // fees.standardShipping and fees.sameDayDelivery have no server-side reader:
+  // the delivery fee comes from the matched zone's base_fee (or its weight
+  // rule), and §83 removed the last one — the no-zone fallback that charged
+  // ¥12/¥18 for an address belonging to no zone. This assertion is the
+  // COMPLEMENT of the one above and not a weaker version of it: seeding a value
+  // nobody reads is worse than seeding none, because a merchant who opens
+  // Settings, sees ¥12 and changes it to ¥20 has been told a lie about what
+  // their shop charges.
+  for (const cc of ['CN', 'GB', 'US', 'JP', 'DE', 'ZZ']) {
+    const c = cfgFor(cc);
+    assert.ok(!('fees.standardShipping' in c), `${cc} should not be given fees.standardShipping`);
+    assert.ok(!('fees.sameDayDelivery'  in c), `${cc} should not be given fees.sameDayDelivery`);
+  }
 });
 
 it('a merchant anywhere else starts with the money UNSET, not converted', () => {

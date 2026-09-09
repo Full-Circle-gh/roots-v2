@@ -1980,15 +1980,9 @@ function applySortPreview() {
 // ── Live fee previews: write ¥ values into the mini-phone overlays ──
 function applyFeePreviews() {
   const free = Number($('#cfg-fees-freeShippingThreshold')?.value) || 0;
-  const std  = Number($('#cfg-fees-standardShipping')?.value) || 0;
-  const sd   = Number($('#cfg-fees-sameDayDelivery')?.value) || 0;
   const min  = Number($('#cfg-fees-minOrder')?.value) || 0;
   const elFree = document.getElementById('pv-free-rem');
   if (elFree) elFree.textContent = String(Math.max(0, free - Math.round(free * 0.78))) || '0';
-  const elStd = document.getElementById('pv-std-fee');
-  if (elStd) elStd.textContent = String(std);
-  const elSd = document.getElementById('pv-sameday-fee');
-  if (elSd) elSd.textContent = String(sd);
   const elMin = document.getElementById('pv-min-order');
   if (elMin) elMin.textContent = String(min);
 }
