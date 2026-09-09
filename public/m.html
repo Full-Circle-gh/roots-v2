@@ -2630,8 +2630,13 @@ function quickKeys(){
   if(state.quick) return state.quick;
   let saved=null;
   try{ const raw=localStorage.getItem(M_QUICK_KEY); if(raw) saved=JSON.parse(raw); }catch(e){}
+  /* NOT CAPPED HERE, and that is the point. What is stored is KEYS, and a key
+     whose screen this operator cannot currently reach is kept rather than
+     erased (see quickRows()), so the list can legitimately hold more entries
+     than Home has room to draw. Slicing at this depth deletes a live shortcut
+     to keep a dead one. The cap belongs where the rows are resolved. */
   state.quick = Array.isArray(saved)
-    ? saved.filter(k=>typeof k==='string').slice(0,QUICK_MAX)
+    ? saved.filter(k=>typeof k==='string')
     : QUICK_DEFAULT.slice();
   return state.quick;
 }
@@ -2642,24 +2647,42 @@ function quickSave(){ try{ localStorage.setItem(M_QUICK_KEY,JSON.stringify(state
    because nothing erased it. */
 function quickRows(){
   const by={}; quickCatalogue().forEach(c=>{ by[c.key]=c; });
-  return quickKeys().map(k=>by[k]).filter(Boolean);
+  /* THE CAP IS COUNTED HERE, over the rows that resolve — the six Home draws.
+     It used to be counted over the stored keys, which are not the same list the
+     moment one of them stops resolving: an operator whose kitchenpending row
+     was folded into the Ready screen's tabs kept the key, lost the row, and was
+     told six was the most that fits while looking at four. The keys eating the
+     other two slots were invisible, so there was nothing to remove and no way
+     back but the reset button.
+     A key beyond the sixth LIVE one is not erased either. It sits in storage
+     and draws again as soon as a slot ahead of it frees up. */
+  return quickKeys().map(k=>by[k]).filter(Boolean).slice(0,QUICK_MAX);
 }
 reg('quickEdit', ()=>{ state.quickSheet=true; state.quickMounted=false; render(); state.quickMounted=true; });
 reg('quickClose', ()=>{ state.quickSheet=false; render(); });
 reg('quickToggle', key=>{
   const k=String(key), list=quickKeys().slice(), i=list.indexOf(k);
   if(i>=0) list.splice(i,1);
-  else if(list.length>=QUICK_MAX){
+  else if(quickRows().length>=QUICK_MAX){
     // The cap is the phone's, not a rule: past six the list is a second screen
     // to scroll, which is the thing a shortcut exists to avoid.
     showToast(T('Six shortcuts is the most that fits','最多只能放 6 个快捷方式')); return;
   } else list.push(k);
   state.quick=list; quickSave(); render();
 });
+/* A MOVE IS COUNTED IN DRAWN ROWS, not in stored keys. Stepping over a key that
+   resolves to nothing repainted Home identically — the key moved one place in
+   storage and the operator saw a button that did nothing. So the neighbour is
+   found in the list Home draws, and the two are SWAPPED where they sit in
+   storage, which leaves every unresolvable key on its own index: if its screen
+   comes back, it comes back where it was put. */
 reg('quickMove', (key,dir)=>{
-  const list=quickKeys().slice(), i=list.indexOf(String(key)), j=i+Number(dir);
-  if(i<0||j<0||j>=list.length) return;
-  list.splice(j,0,list.splice(i,1)[0]);
+  const k=String(key), list=quickKeys().slice(), live=quickRows().map(r=>r.key);
+  const vi=live.indexOf(k), vj=vi+Number(dir);
+  if(vi<0||vj<0||vj>=live.length) return;
+  const i=list.indexOf(k), j=list.indexOf(live[vj]);
+  if(i<0||j<0) return;
+  list[i]=live[vj]; list[j]=k;
   state.quick=list; quickSave(); render();
 });
 reg('quickReset', ()=>{ state.quick=QUICK_DEFAULT.slice(); quickSave(); render(); });

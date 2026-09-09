@@ -148,6 +148,51 @@ CASES.push(['six is the ceiling', `APP.cmd('tab','home');
   ['and it says why',         `!!state.toast`],
   ['the six still render',    `txt('content').includes('Invoices') && txt('content').includes('Delivery')`],
 ]]);
+// A KEY THAT NO LONGER RESOLVES MUST NOT HOLD A SLOT ON HOME. The stored list
+// is KEYS, and one whose screen has been retired (kitchenpending, folded into
+// the Ready screen's tabs) or whose capability the role has lost is kept rather
+// than erased, so the row returns if the screen does. It is not DRAWN, though —
+// and the cap used to count the stored keys while the picker drew the live
+// ones. An operator with four rows on Home was told six was the most that fits
+// and given nothing to remove: the two eating the slots were invisible, and
+// "Back to the suggested three" was the only way out.
+CASES.push(['a retired shortcut does not hold a slot on Home', `APP.cmd('tab','home');
+  state.quick=['waste','receiving','tab:products','inbox','kitchenpending','gone:nowhere'];
+  render(); APP.cmd('quickToggle','coupons');`, [
+  ['only the live rows are drawn', `quickRows().length===5`],
+  ['the new one among them',       `txt('content').includes('Coupons')`],
+  ['nothing said it was full',     `!state.toast`],
+  ['and the retired key is still stored', `state.quick.indexOf('kitchenpending')>=0`],
+]]);
+// The cap still bites — it is counted over what Home draws, so dead ballast
+// neither fills it nor lifts it.
+CASES.push(['six drawn rows is still the ceiling', `APP.cmd('tab','home');
+  state.quick=['inbox','kitchenpending','purchasing','tab:products','waste','delivery','invoices'];
+  render(); APP.cmd('quickToggle','coupons');`, [
+  ['the seventh is refused',  `quickRows().length===6 && state.quick.indexOf('coupons')<0`],
+  ['and it says why',         `!!state.toast`],
+  ['the six still render',    `txt('content').includes('Invoices') && txt('content').includes('Delivery')`],
+]]);
+// Whatever is in storage, Home draws at most six. A list that grew past the cap
+// on another build is trimmed at the point the rows are resolved, not by
+// deleting keys off the phone.
+CASES.push(['Home draws no more than six however many are stored', `APP.cmd('tab','home');
+  state.quick=['inbox','purchasing','tab:products','waste','delivery','invoices','coupons'];
+  render();`, [
+  ['six rows',                `quickRows().length===6`],
+  ['the seventh is not drawn', `!txt('content').includes('Coupons')`],
+  ['and it is not erased',    `state.quick.indexOf('coupons')>=0`],
+]]);
+// Move works on the rows the operator can SEE. Stepping a row over a stored key
+// that draws nothing used to look like a dead button: the key moved one place
+// in storage and Home repainted identically.
+CASES.push(['a move steps over what is not drawn', `APP.cmd('tab','home');
+  state.quick=['inbox','kitchenpending','waste']; render(); APP.cmd('quickMove','waste',-1);`, [
+  ['the row actually moves',
+   `txt('content').indexOf('Waste') < txt('content').indexOf('Answer the inbox')`],
+  ['and the key that draws nothing is still stored',
+   `state.quick.indexOf('kitchenpending')>=0`],
+]]);
 CASES.push(['an emptied list stays empty', `APP.cmd('tab','home'); state.quick=[]; render();`, [
   ['no rows',                 `!txt('content').includes('Answer the inbox')`],
   ['it offers to fill itself', `txt('content').includes('Choose your shortcuts')`],
