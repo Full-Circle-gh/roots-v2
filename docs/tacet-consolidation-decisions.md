@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.182
+# Tacet shared-core consolidation — decisions record, v4.183
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-09 · v4.183 — **§83 ADDENDUM: THE REFUSAL IS THE CUSTOMER'S; STAFF ARE NOT BLOCKED — DECIDED by Ash**, who asked for the question to be settled rather than left open. §83 says an address matching no zone is refused by "every path that can create an order"; read literally that includes the operator keying one in by hand, and it should not. **THE TWO RULES ONLY APPEAR TO CONFLICT.** §83's reason is in its own text — *a guessed fee is worse than a refusal, because a refusal is visible and a wrong fee is not* — and the harm it names is a fee NOBODY CHOSE being charged silently. **On the staff path there is no such fee**: `POST /api/retail-admin/orders` never matched a zone in the first place, the operator types the shipping fee, and `manualOrderFees` is a QUOTE that prefills two fields which the create route never consults. §83's harm cannot occur there, and refusing would cost something real — a shop on the phone to a customer in an unconfigured district would have to turn the order away. **`manualOrderFees` ALREADY CARRIED THAT RULE before §83 was written** (*"it must never refuse STAFF: the shop still takes the order and someone works the zone out later"*); **that rule stands and §83 does not override it.** **WHAT §83 DOES CHANGE ON THAT PATH**: the operator is told WHICH place has no zone — `unmatched` travels beside `no_zone_match`, naming the province/city/district to add instead of handing back a bare code. **PINNED BY A TEST, NOT BY THE PARAGRAPH**: `scripts/test_manual_order_fees.js` asserts the non-refusal directly (zero fees, no refusal flag, the order still keyable), so a later reading of §83 that tries to block staff turns that assertion red before it reaches production. **REVERSIBLE AND SAID SO**: if the intent is that staff should be blocked too, it is a one-line change and the pinning test is the one to invert. Docs only; the behaviour it describes shipped in PR #415. No code, no schema, no migration, and no change to `.gitignore` or CI.
 
 2026-09-09 · v4.182 — **§82 AND §83 ADDED: TIME IS A TENANT PROPERTY, NEVER A HOST PROPERTY; AND EVERY DISTRICT MUST BE COVERED, AN UNMATCHED ADDRESS IS REFUSED — BOTH DECIDED by Ash**, on the delivery-logic survey (`docs/surveys/delivery-logic-survey.md`). **§82 SETTLES THE QUESTION THE SURVEY COULD NOT (its Q1)**: every date and time decision — cutoffs, batch dates, slot generation, business-date rollover, "today", "tomorrow", pre-order gates — resolves in the **tenant's** timezone, read from a tenant setting, and **no business decision may read the host clock's local time** (`new Date().getHours()`, `.getFullYear()`, `.getDate()`, `.toDateString()` are forbidden wherever a cutoff, date or slot is computed). **THE HOST IS PINNED TO UTC ON PURPOSE, AND THE DEPLOY CONFIG MUST SET IT EXPLICITLY** — not for neutrality but so that un-migrated code is **visibly wrong rather than silently correct for one tenant**; a tenant offset matching the host is a coincidence, never a fallback. **A TENANT WITH NO TIMEZONE FAILS LOUDLY AT STARTUP and does not default**, a default being the host fallback in different clothes. **CI RUNS IN UTC**, so the logic cannot pass by inheriting a convenient offset — `.github/workflows/tests.yml` currently pins `TZ: Asia/Shanghai` on the belief that production runs UTC+8, and that pin is precisely what kept survey finding F2 invisible to the suite. Roots is `Asia/Shanghai`; other tenants will be elsewhere. **§83 SETTLES F1/F23**: a tenant's zone table must cover every district it serves — **coverage is a data obligation on the tenant, enforced by the platform** — and **an address matching no zone is a configuration error, not a delivery option**, refused by every order-creation path with an explicit error, identically. **NO LEGACY FEE FALLBACK, NO DEFAULT FEE, NO DEFAULT SLOT SET**, because **a guessed fee is worse than a refusal: a refusal is visible and a wrong fee is not.** The rule `/checkout/quote` already applies is the correct one and **the other paths conform to it rather than it being relaxed to match them** — which is the direction the code had drifted. **NEITHER RULING IS BUILT HERE, AND THAT IS DELIBERATE.** §82's call sites (`routes/retail.js` — `parseYmdLocal`/`toYmdLocal`, `earliestBatchMakeDate`, `nextFreshBatchDate`, `computeDeliverySlots`, `expressEarliestIso`, `rescheduleEligibility`) are unmigrated, with `lib/business-date.js` already the shape to copy; §83's refusal is **gated on a zone-coverage report first**, since a district that has taken real orders and is missing from `retail_delivery_zones` would begin rejecting them the day the refusal ships. **The survey is amended, not rewritten** — its dated findings stand as written and gain cross-references to §82/§83, and its Q1 is marked answered. Docs only; no code, no schema, no migration, no test change, and no change to `.gitignore` or CI.
 
@@ -8043,3 +8045,39 @@ lands. The zone-coverage report is the gate on that work, and the survey's F23
 records why an unmatched Guangzhou district reaches this path at all
 (`matchDeliveryZone` returns null rather than falling through once any
 `gz_district` row exists).
+
+### §83 addendum — the refusal is the CUSTOMER's; staff are not blocked (2026-09-09)
+
+§83 above says an address matching no zone is refused by "every path that can create an
+order". Read literally that includes the operator keying an order in by hand, and it
+should not.
+
+**The two rules only appear to conflict.** §83's reason is stated in its own text: *a
+guessed fee is worse than a refusal, because a refusal is visible and a wrong fee is not.*
+The harm it names is a fee **nobody chose** being charged silently. On the staff path
+there is no such fee — `POST /api/retail-admin/orders` never matched a zone in the first
+place; the operator types the shipping fee. `manualOrderFees` is a *quote* that prefills
+two fields, and the create route never consults it. So §83's harm cannot occur there, and
+refusing would cost something real: a shop on the phone to a customer in a district
+nobody has configured yet would have to turn the order away.
+
+`lib/…`/`routes/retail.js`'s `manualOrderFees` already carried that rule before §83 was
+written — *"An address in a district nobody has configured refuses the CUSTOMER (they
+can't be charged a fee that doesn't exist), but it must never refuse STAFF: the shop still
+takes the order and someone works the zone out later."* **That rule stands. §83 does not
+override it, and did not intend to.**
+
+**What §83 DOES change on the staff path:** the operator is told *which* place has no
+zone. `manualOrderFees` returns `unmatched` beside its `no_zone_match`, so the error names
+the province/city/district to add rather than handing back a bare code and leaving the
+reader to work it out.
+
+**Pinned by a test, not by this paragraph.** `scripts/test_manual_order_fees.js` asserts
+the non-refusal directly — the quote comes back with zero fees, no refusal flag, and the
+order stays keyable — so a later reading of §83 that tries to make the staff path refuse
+turns that assertion red before it reaches production.
+
+**Not delegated, and reversible.** Ash asked for the question to be settled rather than
+left open; this is the answer, with the reasoning above rather than an appeal to the older
+comment. If the intent is that staff should also be blocked, that is a one-line change and
+the test that pins the current behaviour is the one to invert.
