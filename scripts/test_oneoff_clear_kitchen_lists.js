@@ -4,7 +4,7 @@
  *
  *   node scripts/test_clear_kitchen_lists.js
  *
- * scripts/clear_kitchen_lists.js empties the three kitchen-request lists by
+ * scripts/oneoff_clear_kitchen_lists.js empties the three kitchen-request lists by
  * stamping `archived_at` on the kitchen-bound orders. That one UPDATE is the
  * whole script, and it ships to the production box on every deploy (scripts/ is
  * in the deploy allowlist), so what it reaches is worth pinning down.
@@ -46,7 +46,7 @@ const kitchenReady = require('../lib/kitchen-ready');
 
 const { ok, eq, section, done } = F.counters();
 const REPO = path.join(__dirname, '..');
-const SRC = fs.readFileSync(path.join(REPO, 'scripts', 'clear_kitchen_lists.js'), 'utf8');
+const SRC = fs.readFileSync(path.join(REPO, 'scripts', 'oneoff_clear_kitchen_lists.js'), 'utf8');
 
 console.log(`(driver: ${M.driver})`);
 
@@ -61,9 +61,13 @@ ok(!/i\.seen_at IS NULL/.test(SRC),
 
 section('The guards a destructive script ships with (decisions §24)');
 
-ok(/--confirm/.test(SRC) && /REFUSED/.test(SRC),
-   '--apply refuses without a token from a preview of the same database');
-ok(/copyFileSync/.test(SRC), 'the database is backed up before anything is written');
+ok(/const WRITE = process\.argv\.includes\('--apply'\)/.test(SRC),
+   'dry run is the default — it writes only on --apply, as oneoff.yml requires');
+ok(/process\.env\.ROOTS_DB/.test(SRC),
+   'it opens the live database through ROOTS_DB, the way the workflow points it');
+ok(!/copyFileSync/.test(SRC),
+   'it takes no byte-copy backup of its own — roots.db carries a live WAL, and '
+   + 'oneoff.yml takes a verified online one first');
 ok(!/DELETE\s+FROM/i.test(SRC), 'nothing is deleted — this is a soft archive only');
 
 // The one promise made to Ash in the request that prompted this: don't touch
