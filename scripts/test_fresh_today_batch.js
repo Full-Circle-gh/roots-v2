@@ -388,6 +388,87 @@ section('7 · the operator can actually set the hour');
   it('the save carries ready_hour, or the next save would delete it', () => {
     assert.ok(/ready_hour: readyHour/.test(js));
   });
+  // ── The A4 Console rebuild (2026-09-09) ────────────────────────────────
+  const freshBlock = () => {
+    const a = html.indexOf('id="dlv-fresh"');
+    const b = html.indexOf('PACKAGE TRACKING VIEW');
+    assert.ok(a > 0 && b > a, 'the fresh batches view is still findable');
+    return html.slice(a, b);
+  };
+
+  it('one card is one save — the evening-before lock rides batch.schedule', () => {
+    assert.ok(/'fresh\.rescheduleCutoffHour': rawResched/.test(js));
+    assert.ok(!/async function saveRescheduleSettings/.test(js),
+      'the function is gone, and so is the card that was its only caller');
+    assert.ok(/id="fresh-resched-cutoff"/.test(html), 'the input it saved is still on the page');
+  });
+
+  it('no label on the card is glued — the walker needs space-middot-space', () => {
+    // The runtime splitter only CONSIDERS a text node containing ' · '. Seven
+    // labels here used to write '(中文)· English' with no leading space, so they
+    // were never split and rendered both languages at once in both settings.
+    const bad = [...freshBlock().matchAll(/>([^<>]*·[^<>]*)</g)]
+      .map((m) => m[1].trim())
+      .filter((t) => !t.includes(' · '));
+    assert.deepStrictEqual(bad, [], 'a middot with no space either side never splits');
+  });
+
+  it('every pair on the card is English-first, or the walker bails', () => {
+    // Second gate: the left half must be Chinese-free and the right half must
+    // have Chinese, or `if (!hasChinese(cn) || hasChinese(en)) return;` returns.
+    const cjk = /[\u4e00-\u9fff]/;
+    const bad = [...freshBlock().matchAll(/>([^<>]* · [^<>]*)</g)]
+      .map((m) => m[1].trim())
+      .filter((t) => cjk.test(t.split(' · ')[0]));
+    assert.deepStrictEqual(bad, [], 'Chinese on the left of the middot kills the split');
+  });
+
+  it('no pair is fragmented by inline markup — README Conventions gotcha', () => {
+    // The " · " split runs PER TEXT NODE. A <code>/<b>/<span> sitting between
+    // the English and the Chinese leaves the pair's own node holding only a
+    // scrap of English, so the prose before it survives into the other
+    // language and BOTH leak. An element carrying no text (the back button's
+    // svg icon) is not markup between the halves and does not count.
+    const blk = freshBlock();
+    const bad = [];
+    // Element opens, then TEXT with words, then more markup, then the pair.
+    const re = /<(div|span|label|h3|p|button)\b[^>]*>([^<>]*[A-Za-z]{3}[^<>]*)<[a-z][^>]*>[\s\S]{0,200}?·/g;
+    let m;
+    while ((m = re.exec(blk))) {
+      const between = blk.slice(m.index, re.lastIndex);
+      // svg-only icons carry no text; anything with letters inside the tag does
+      if (/<(code|b|strong|em|i|span)\b[^>]*>[^<>]*[A-Za-z0-9{]/.test(between)) bad.push(m[2].trim().slice(0, 70));
+    }
+    assert.deepStrictEqual(bad, [], 'a pair split across text nodes leaks both languages');
+  });
+
+  it('the card does not claim Guangzhou is unaffected — it is not (§1.17)', () => {
+    // earliestBatchMakeDate takes localRun:true and localFreshFloorFor floors a
+    // Guangzhou order onto the batch date on 'rolled_stock', which is what the
+    // Guangzhou copy fields on this very card are for. The card claimed the
+    // opposite from the day it shipped until 2026-09-09.
+    const blk = freshBlock();
+    assert.ok(!/Orders inside Guangzhou are unaffected/.test(blk));
+    assert.ok(!/广州市内订单不受影响/.test(blk));
+    assert.ok(/sold out/.test(blk), 'it names the condition that does reach the city');
+    // The code this sentence describes, so a refactor that drops the local run
+    // takes this test with it rather than leaving the card quietly wrong.
+    const rt = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+    assert.ok(/localRun: true/.test(rt), 'the local run still asks the cadence');
+    assert.ok(/reason === 'rolled_stock'/.test(rt), 'and still acts on a zero shelf');
+  });
+
+  it('the card carries no uppercase eyebrow classes (§1.6)', () => {
+    const blk = freshBlock();
+    assert.ok(!/class="[^"]*\bstacked\b/.test(blk), 'label.stacked is uppercase 600');
+    assert.ok(!/class="[^"]*\bfc-sec\b/.test(blk), '.fc-sec is mono-caps 700');
+  });
+
+  it('a hidden language pane actually hides — display:flex beats [hidden]', () => {
+    const css = fs.readFileSync(path.join(ROOT, 'public/retail-admin.css'), 'utf8');
+    assert.ok(/#dlv-fresh \.fb-fields\[hidden\] \{ display: none; \}/.test(css));
+  });
+
   it('blank round-trips as blank — the off switch must not pick up a default', () => {
     assert.ok(/batch\.ready_hour != null \? batch\.ready_hour : ''/.test(js));
     assert.ok(/rawReady === '' \? null : parseInt\(rawReady, 10\)/.test(js));
