@@ -100,7 +100,8 @@
   let _source = 'bought';
   let _srcCounts = { bought: 0, made: 0 };
   let _kinds = [];        // categories WHERE kind='item_kind'
-  let _cats = [];         // distinct ingredients.category
+  let _cats = [];         // distinct ingredients.category — every subcategory there is
+  let _catsByKind = {};   // item_kind → the subcategories filed under it (see catsFor)
   let _finCats = [];      // categories WHERE kind='accounting' — the finance-category master list
   let _suppliers = [];
   let _kind = '';         // '' = all
@@ -155,6 +156,7 @@
       ]);
       _kinds = k.data || [];
       _cats = c.data || [];
+      _catsByKind = c.byKind || {};
       _finCats = f.data || [];
       _suppliers = s.data || [];
     } catch (e) { /* pickers are optional; the list is not */ }
@@ -261,9 +263,38 @@
     ).join('');
   }
 
+  // THE SUBCATEGORY PICKER FOLLOWS THE KIND.
+  //
+  // A material is filed twice: item_kind is the kind (类别 — food, packaging,
+  // supplies) and `category` is the subcategory under it (分类). Both pickers
+  // used to offer the WHOLE subcategory list whatever kind was chosen, so
+  // picking 食品 still left "Office supplies 办公用品" and "Pest Control
+  // 除虫防虫" sitting in the list under it — 40-odd names to read past, and
+  // nothing stopping a food material being filed under a cleaning subcategory.
+  //
+  // The server sends the pairing it can see (byKind — which kinds each
+  // subcategory is actually used with; see routes/retail-materials.js), and
+  // this narrows to it.
+  //
+  // TWO FALLBACKS, both there so nothing becomes unreachable:
+  //   • NO KIND CHOSEN ('' — the All chip) offers everything, because that is
+  //     what the list is showing.
+  //   • A KIND WITH NOTHING FILED UNDER IT YET offers everything too. A kind
+  //     added in Settings this morning has no materials, so it has no
+  //     subcategories of its own; narrowing to nothing would leave the
+  //     operator with only "None" and no way to file the first one.
+  function catsFor(kind) {
+    const own = kind ? _catsByKind[kind] : null;
+    return own && own.length ? own : _cats;
+  }
+
+  function catFilterOpts() {
+    return ['<option value="">' + esc(T('All categories', '全部分类')) + '</option>']
+      .concat(catsFor(_kind).map(c => `<option value="${esc(c)}"${_cat === c ? ' selected' : ''}>${esc(c)}</option>`)).join('');
+  }
+
   function filterBar() {
-    const catOpts = ['<option value="">' + esc(T('All categories', '全部分类')) + '</option>']
-      .concat(_cats.map(c => `<option value="${esc(c)}"${_cat === c ? ' selected' : ''}>${esc(c)}</option>`)).join('');
+    const catOpts = catFilterOpts();
     const supOpts = ['<option value="">' + esc(T('All suppliers', '全部供应商')) + '</option>']
       .concat(_suppliers.map(s => `<option value="${esc(s.name)}"${_sup === s.name ? ' selected' : ''}>${esc(s.name)}</option>`)).join('');
     return `
@@ -362,7 +393,21 @@
     const cat = document.getElementById('mat-cat');
     const sup = document.getElementById('mat-sup');
     const arch = document.getElementById('mat-arch');
-    if (cat && cat.value !== _cat) cat.value = _cat;
+    // The kind chips change which subcategories this offers, and the filter
+    // bar is painted once — so the options are rewritten here, then the value
+    // put back. #mat-q is still never touched; this is a <select> nobody can
+    // be mid-word in.
+    //
+    // ONLY WHEN THE SET ACTUALLY CHANGED, which is the kind chips and nothing
+    // else. Every settled keystroke in the search box comes through here too,
+    // and rewriting a <select>'s options closes its popup — so an operator who
+    // has this dropdown open would have had it shut under them by a search
+    // finishing behind it.
+    if (cat) {
+      const opts = catFilterOpts();
+      if (cat.innerHTML !== opts) cat.innerHTML = opts;
+      if (cat.value !== _cat) cat.value = _cat;
+    }
     if (sup && sup.value !== _sup) sup.value = _sup;
     if (arch) arch.checked = _archived;
   }
@@ -447,7 +492,14 @@
   }
 
   window.matSetSource = function (v) { _source = v; load(); };
-  window.matSetKind = function (k) { _kind = k; load(); };
+  // A subcategory that does not belong to the newly picked kind is dropped
+  // rather than carried — kept, it filters to zero rows and reads as an empty
+  // catalogue rather than as two filters that cannot both be true.
+  window.matSetKind = function (k) {
+    _kind = k;
+    if (_cat && catsFor(_kind).indexOf(_cat) < 0) _cat = '';
+    load();
+  };
   window.matSetCat  = function (c) { _cat = c; load(); };
   window.matSetSup  = function (s) { _sup = s; load(); };
   window.matSetArchived = function (on) { _archived = !!on; load(); };
@@ -919,7 +971,15 @@
     const isNew = !m.id;
     const kindOpts = (_kinds.length ? _kinds : ['food', 'packaging', 'equipment', 'retail', 'other'])
       .map(k => [k, kindLabel(k)]);
-    const catOpts = [['', T('None', '无')]].concat(_cats.map(c => [c, c]));
+    // Narrowed to the kind above it (see catsFor). The record's OWN value is
+    // always offered even when it is not one of them — a material filed under
+    // a subcategory its kind no longer uses must not have that value silently
+    // rewritten to blank by the next save, which is what a <select> that does
+    // not contain its own value would do.
+    const kindNow = m.item_kind || 'food';
+    const catsNow = catsFor(kindNow).slice();
+    if (m.category && catsNow.indexOf(m.category) < 0) catsNow.push(m.category);
+    const catOpts = [['', T('None', '无')]].concat(catsNow.map(c => [c, c]));
 
     // The takeover header is static markup (so the section exists before any
     // paint) but its labels are baked here — the section is data-no-i18n, so the
@@ -1108,9 +1168,16 @@
   };
   // Allergens are a food question. Changing the kind repaints so the block
   // appears or leaves rather than sitting there empty and meaningless.
+  //
+  // Changing the kind re-cuts the subcategory list under it, so a subcategory
+  // belonging to the kind just left is cleared rather than carried across. It
+  // is cleared HERE, on the deliberate act of changing the kind, and never in
+  // paintRecord() — a repaint must not quietly rewrite a stored value.
   window.matKindChanged = function () {
     if (!_rec) return;
     Object.assign(_rec.row, readForm());
+    const cat = _rec.row.category;
+    if (cat && catsFor(_rec.row.item_kind || 'food').indexOf(cat) < 0) _rec.row.category = '';
     paintRecord();
   };
 

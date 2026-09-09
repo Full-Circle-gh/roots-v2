@@ -250,11 +250,36 @@ router.get('/api/retail-admin/materials/meta/kinds', requireRetailAdmin, (req, r
   res.json({ success: true, data: rows.map(r => r.name) });
 });
 
+// The subcategory list, AND which kind each subcategory belongs under.
+//
+// A material carries two levels: item_kind is the kind (food, packaging,
+// supplies...) and `category` is the subcategory beneath it — the same pair
+// lib/sku-rules.js already numbers by (see the create route, which passes
+// item_kind as `category` and category as `subcategory`). Nothing in the
+// schema records the parent, so the pairing is READ OFF THE CATALOGUE: a
+// subcategory belongs to whatever kinds materials are actually filed under
+// it with. That is what makes "Office supplies 办公用品" a supplies
+// subcategory without anybody having to declare it.
+//
+// `data` stays the flat list of every subcategory name, unchanged, because
+// it is what the screen falls back to when a kind has no materials yet — a
+// kind added in Settings this morning must not have an empty picker. The
+// pairing rides alongside in `byKind`.
 router.get('/api/retail-admin/materials/meta/categories', requireRetailAdmin, (req, res) => {
   const rows = tdb().prepare(
-    "SELECT DISTINCT category FROM ingredients WHERE category IS NOT NULL AND TRIM(category) != '' ORDER BY category COLLATE NOCASE"
+    `SELECT DISTINCT COALESCE(item_kind, 'food') AS kind, category
+       FROM ingredients
+      WHERE category IS NOT NULL AND TRIM(category) != ''
+      ORDER BY category COLLATE NOCASE`
   ).all();
-  res.json({ success: true, data: rows.map(r => r.category) });
+  const seen = new Set();
+  const data = [];
+  const byKind = {};
+  for (const r of rows) {
+    if (!seen.has(r.category)) { seen.add(r.category); data.push(r.category); }
+    (byKind[r.kind] || (byKind[r.kind] = [])).push(r.category);
+  }
+  res.json({ success: true, data, byKind });
 });
 
 // The finance-category master list — same `categories` rows the kitchen app's
