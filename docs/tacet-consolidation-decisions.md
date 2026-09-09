@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.186
+# Tacet shared-core consolidation — decisions record, v4.187
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-09 · v4.187 — **§87 ADDED: WHAT AN EMPLOYEE SPENDS IS A CLAIM UNTIL SOMEONE APPROVES IT; ONLY THEN IS IT AN EXPENSE — DECIDED by Ash**, who was given two readings of where a submitted expense lives and chose **B**: a claim table of its own, with **nothing in the books until approval**, rather than a status column on `expense_entries`. Three further answers settle the rest: **a shop column on the expense**, **an operating / non-operating flag on the tenant's expense categories**, and **an approver may approve their own claim**. The cases that opened it are his: an owner taking a private transfer, a driver paying a taxi on a work run, and small irregular staff spending that today reaches the month only if somebody remembers to type it. **MOST OF THIS ALREADY EXISTS AND IS NOT BUILT HERE**: the ledger (`expense_entries`, `schema.sql:272` on this date, `payment_method` and `updated_at` added by migration at `database.js:1152`/`:1160`), the window sum and category breakdown (`routes/finance-summary.js`), the typed write surface and bookkeeper's CSV (`routes/finance-transactions.js`), the category normaliser (`storeCategory`, `lib/category-text.js:153`), the staff phone app whose `screenWaste()` is the precedent for recording something small and attributable in seconds, and receipt reading (`lib/alipay-ocr.js`). **WHAT WAS MISSING IS FOUR THINGS**: no door (every finance write is `requireRetailAdmin` and there is no finance screen on `/m` at all); **no tenant-managed category list, the thing asked for by name** — the admin category CRUD in `routes/retail.js` serves `kind='product'` only, nothing seeds or writes `kind='accounting'`, and the expense form derives its suggestions from the categories already on rows on screen, **so the list is the accumulated history of what people typed and the first typo is a permanent option**; no way to say the business OWES an employee (`created_by` is who typed the row, not who was out of pocket); and no location. **WHY B**: under a status column the ¥38 taxi submitted on Monday sits in the ledger while unapproved, and the Summary's operating sum, its breakdown, the Transactions list and the CSV must each remember to exclude it — **miss one and unapproved money is in the accounts, silently** — while rejected claims stay as rows every future query steps around. Under B it is not in the ledger and cannot appear; on approval ONE row posts carrying `claim_id`, **on the `po_id` projection pattern the purchase orders already use**, and the posted row refuses edit in the ledger for the reason a PO row does. **ONE INTEGRATION TRAP IS NAMED NOW**: `readTransactions` selects hand-typed money out with `WHERE po_id IS NULL`, which a claim-posted row satisfies — it would render as freely editable and the edit would be undone by the next re-post, so the predicate becomes "no `po_id` AND no `claim_id`", an edit to a shipped file. **THE CATEGORY LIST STILL SHIPS EMPTY** — §36's no-defaults rule is unchanged, an empty list cannot offer a wrong option — but each category now carries ONE FLAG, does this count as an operating expense: the owner's ¥5,000 private transfer is real money that belongs in the record and is not a cost of running the shop, and summed with rent it takes ¥5,000 off Net **with nothing on the screen looking wrong**. **A REFERENCED CATEGORY IS DEACTIVATED, NEVER DELETED** — rows store the category as TEXT and the flag lives on the record, so deleting it turns every row that named it back into an operating expense with no event to see. **The Summary must therefore SPLIT**, showing the excluded amount on its own line rather than dropping it. **§36'S OPEN COLUMN IS CLOSED**: its *An expense may carry a location* (2026-09-01) left placement and shape undecided; it is `store_id INTEGER`, nullable, on `expense_entries` and on the claim, referencing `retail_stores(id)`, defaulted from the submitter's `scopeStores`. **NULL keeps §36's meaning and nothing is backfilled** — every existing row is business-wide, which is what it always meant. **This unblocks the Summary's store filter and its CONTRIBUTION row, which stays §36's to build.** **WHO PAID reuses `payment_method`**, already a column and already a tenant-editable list (`categories` `kind='payment_method'`, seeded `database.js:898`), plus one entry it lacks: the employee's own money. **WHAT IS OWED is a settlement state on the CLAIM, not the ledger row, and paying it back POSTS NOTHING** — the ¥38 is one cost recorded once, and a system writing a row for the repayment would report ¥76 of taxis. **TWO NEW CAPABILITIES, submit and approve, and NOT `finance:record`** — that grant is money-marked and opens the whole ledger, and the staff floor presets carry no finance capability at all and withhold even `waste:costs` from the people who record waste. **SELF-APPROVAL IS ALLOWED**: in a one-manager shop the spender and the approver are the same person, and forbidding it produces an unusable screen and spending recorded outside the system rather than a second approver — **the guard is the record, not the refusal**, the approver being stored, shown, and already logged. **NOT DECIDED HERE**: where the receipt bytes live (`supplier_documents.data`'s base64-in-the-database is the precedent and receipts arrive at a different volume), OCR prefill (later, fail-soft, and a human confirms every figure), recurring expenses, per-role spending limits, and multi-step approval. **BUILD ORDER, one PR per step**: categories in Settings with the flag and the Summary split → the claim table and the phone submit screen → the approval list, the posting step, the `claim_id` predicate fix and the `store_id` column → settlement → OCR. **No Chinese is minted here**; the build composes under vocabulary Rule 4 as amended 2026-09-06. Docs only: no code, no schema, no migration, no test change, and no change to `.gitignore` or CI.
 
 2026-09-09 · v4.186 — **§86 ADDED: THE KITCHEN RAISES A PURCHASE REQUEST; THE BUYER TURNS IT INTO A DRAFT PO, AND THE MONEY STAYS THE BUYER'S — DECIDED by Ash**, who was given two readings of "the kitchen order fills the PO automatically" and chose **B**: the send does NOT create a purchase order, it lands as demand in Purchasing and the buyer converts it in one action. **MOST OF THIS ALREADY EXISTED AND IS NOT BUILT HERE.** §77 recorded that the buying end already takes material lines in ordinary use (`RPO-0031`, eleven of them, ¥2,750), and the copy-from-kitchen bridge (`purchases/kitchen-source` + `copy-from-kitchen`, its picker, its `copied_from_po_id` link and its all-or-nothing batch) is a working machine whose source died with the app §78 deleted. **What was missing was the door**: the cooks are `tenant_users` on `/m` with no screen to say they are out of flour and no table to hold it. **WHY B RATHER THAN A**: a PO posts to `expense_entries` and writes the material's price back the moment it reaches Ordered — Ash raised this himself and was right, verified on this date against `postRetailPOExpenses` (postable set `['Ordered','Delivered']`) and the `firePriceAlertsForPO` call on the status route — so a send that created one would let a cook's tap reach the books, with no supplier, price or store chosen. **"Automatic" is about the typing, not the authority.** **THE LINE, NOT THE REQUEST, IS THE UNIT OF SOURCING** (§61's grain change, for §61's reason): `sourced_po_id` on the item is both the record and the refusal, so two buyers cannot raise the same flour twice, and a morning's flour and oil can split across two suppliers. **A NEW TABLE PAIR — NOT `restock_items`, NOT `kitchen_orders`.** The restock rail is product-shaped and every surface on it assumes a stock table that materials do not have (§32 addendum, §39); `kitchen_orders`/`kitchen_order_items` are the old app's requisition, already carry `ingredient_id`, have no reader left and look free, **but `created_by` FKs `users(id)`** — the realm §81 retired, and the exact defect `restock_orders`'s header records as having broken restock for every non-Roots tenant. The old pair is recorded as dead, NOT deleted here. **QUANTITY IN `ingredients.buy_unit`, WHICH IS NOT A CHOICE MADE HERE**: Ash's *"the unit setup of that material"* describes what the system already does — a material PO line already defaults to `buy_unit` because the price write-back only fires when the two match, so the conversion into the PO is the identity and no unit arithmetic exists on this path. **A NEW CAPABILITY IN THE `production` SECTION, HELD BY THE `kitchen` PRESET**, gated on the `production` feature switch (Ash: *"part of production module"* — the same switch as Materials and Recipes). Not folded into `materials:view` (that is the masterlist with every buy price on it) and not into `restock:request` (that moves Roots' own goods between locations and spends nothing). **REJECTED**: a low-stock trigger in the shape of `/api/retail-admin/reorder` — materials have neither a stock count nor a buffer column, so there is nothing to compare and auto-raising demand needs material stock, declined twice; appending to an open draft PO instead of making a new one, which needs its own rule for a target whose supplier or status has moved on; and showing prices on the kitchen's screen, which is `materials:costs` and was deliberately withheld from that role.
 
@@ -8455,3 +8457,193 @@ for it.
 and no push, no dot and no Ready-style acknowledgement is built. §66 and §69 are the
 precedent for adding one later if the morning turns out to need it; inventing it in advance
 would be inventing the workflow rather than serving it.
+
+## §87 — WHAT AN EMPLOYEE SPENDS IS A CLAIM UNTIL SOMEONE APPROVES IT; ONLY THEN IS IT AN EXPENSE
+
+Ruling (Ash, 2026-09-09), on four questions put to him after a read-only survey of what
+Finance already holds. **B**, of the two readings put to him for where a submitted expense
+lives — **a claim table of its own, with nothing in the books until approval**, rather than
+a status column on `expense_entries`. And **yes** three times: **a shop column on the
+expense**, **an operating / non-operating flag on the tenant's expense categories**, and
+**an approver may approve their own claim**.
+
+The case that opened it, in Ash's own examples: an owner taking a private transfer, a
+driver paying for a taxi on a work run, and the general class of small irregular spending
+by staff that today reaches the monthly accounts only if somebody remembers to type it in.
+
+### What already exists, and is not built here
+
+**THE LEDGER, THE ROLLUP AND THE NORMALISER ARE DONE.** `expense_entries` (`schema.sql:272`
+on this date — date, amount, category, description, `po_id`, `created_at`, `created_by`,
+plus `payment_method` and `updated_at` added by migration at `database.js:1152` and
+`:1160`). `routes/finance-transactions.js` is the typed write surface and the CSV the
+bookkeeper works from; `routes/finance-summary.js` sums the ledger over any window with a
+category breakdown ordered by weight; `storeCategory()` (`lib/category-text.js:153`) snaps
+a typed category onto an existing one so three people typing rent do not produce three
+lines. **An approved claim needs no new accounting surface — it needs to land here.**
+
+**THE PROJECTION PATTERN IS DONE TOO, and this section copies it rather than inventing one
+beside it.** A purchase order is a document with a life of its own that posts rows into
+`expense_entries` carrying `po_id`, and those rows refuse edit and delete in the ledger
+(`ERR.poEdit` / `ERR.poDelete` in `routes/finance-transactions.js`). A claim is the same
+shape of thing: a document that becomes money when someone with authority says so.
+
+**THE PHONE IS DONE.** Staff are `tenant_users` on `public/m.html`, and `screenWaste()` is
+the exact precedent — an employee records something small, irregular and attributable, in
+seconds, on a phone they already have installed.
+
+**RECEIPT READING IS DONE.** `lib/alipay-ocr.js` reads a payment screenshot with a vision
+model and is fail-soft by construction. Photographing a taxi receipt needs no new
+infrastructure.
+
+**WHAT WAS ACTUALLY MISSING IS FOUR THINGS.**
+
+1. **No door.** Every finance write is `requireRetailAdmin`, and there is no finance screen
+   on `/m` at all. A driver who paid ¥38 has no way to tell the system, on any device.
+2. **No tenant-managed category list — the thing Ash asked for by name.** `categories`
+   has a `kind='accounting'`, but the admin CRUD in `routes/retail.js` serves
+   `kind='product'` only, nothing seeds it and nothing writes to it. The expense form's
+   suggestions are instead derived from the categories already on rows on screen
+   (`public/retail-admin/22-finance.js`). **So the category list is the accumulated history
+   of what people typed, and the first typo is a permanent option.**
+3. **No way to say the business owes an employee money.** `created_by` records who typed
+   the row, not who was out of pocket. A taxi on the company account and a taxi from
+   somebody's own wallet are the same row today.
+4. **No location** — §36's own open column, below.
+
+### PART ONE — B: THE CLAIM IS ITS OWN TABLE, AND NOTHING REACHES THE BOOKS UNTIL APPROVAL
+
+**The case that separates the two readings.** Monday 09:00 a driver submits a ¥38 taxi.
+Nobody has approved it. Tuesday 08:00 the owner opens the month.
+
+*Reading A — a status column on `expense_entries`.* The ¥38 is in the ledger from the
+moment of submission, and **every reader has to remember to exclude it**: the Summary's
+operating-expense sum, its category breakdown, the Transactions list, the CSV export. Miss
+one and money nobody approved is in the accounts — **and the miss is silent**, which is the
+same defect §36 names when it says a filter that returns a wrong answer is worse than no
+filter. Rejected claims then stay in the ledger for good as rows every future query must
+step around.
+
+*Reading B — a claim table.* The ¥38 is not in the ledger, so it cannot appear anywhere. On
+approval **one row is written into `expense_entries` carrying `claim_id`**, on the `po_id`
+pattern. A rejected claim never touches the books at all.
+
+**B IS THE RULING, and the reason is that the invariant holds by construction rather than
+by everyone remembering.** No existing finance screen learns a new condition.
+
+**THE POSTED ROW IS A PROJECTION AND IS REFUSED FOR EDIT IN THE LEDGER, exactly as a PO row
+is** — the claim is the record, and a value typed onto its projection would be lost on the
+next re-post.
+
+**ONE INTEGRATION TRAP, NAMED NOW SO IT IS NOT DISCOVERED LATER.** The hand-typed read in
+`readTransactions` selects money out with `WHERE po_id IS NULL`. A claim-posted row satisfies
+that predicate, so it would arrive on the Transactions screen looking hand-typed and freely
+editable, and an edit there would be silently undone by the next re-post. **The predicate
+becomes "no `po_id` AND no `claim_id`", and that is an edit to a shipped file, not new code
+beside it.**
+
+**WHAT B COSTS, STATED PLAINLY:** one extra table, one posting step, and a
+delete-and-re-post when an approved claim is edited. Roughly a day, once.
+
+### PART TWO — THE TENANT'S EXPENSE CATEGORIES BECOME A MANAGED LIST, AND EACH CARRIES ONE FLAG
+
+`kind='accounting'` gets create / rename / reorder / deactivate in Settings, on the shape
+`routes/retail.js` already serves for product categories. **THE LIST SHIPS EMPTY.** §36's
+rule stands unchanged — no defaults and no seed, because an empty list cannot offer a wrong
+option, and the four the kitchen app defaulted to are what produced the ¥152,309 mis-filing
+that rule was written for.
+
+**EACH CATEGORY CARRIES ONE FLAG: does this count as an operating expense.** The case is
+the owner's private transfer. ¥5,000 leaving the account is real money and belongs in the
+record; it is **not** a cost of running the shop. Summed with rent and wages it takes ¥5,000
+off the month's Net, **and nothing on the screen looks wrong** — the same failure the
+category normaliser exists to prevent, one level up.
+
+**A CATEGORY THAT ROWS REFERENCE IS DEACTIVATED, NEVER DELETED.** An expense row stores its
+category as TEXT and the flag lives on the category record, so the two are joined by name.
+Delete the private-expenses category and every row that named it silently becomes an
+operating expense again — **five thousand yuan re-entering the month's costs with no event
+to see.** Deactivation hides it from the form and keeps the flag readable, which is the
+rule §18 already applies to archiving elsewhere.
+
+**THE SUMMARY MUST THEREFORE SPLIT, and that is a change to a shipped screen rather than a
+new one.** `routes/finance-summary.js` sums every row in the window today. Once a category
+can be non-operating, the operating line excludes it **and the excluded amount is shown on
+its own line rather than dropped** — a number that disappears from a total without saying
+so is the same defect wearing different clothes.
+
+### PART THREE — THE LOCATION COLUMN LANDS ON `expense_entries`, AND §36'S OPEN QUESTION IS CLOSED
+
+§36's *An expense may carry a location, and blank means the whole business* (DECIDED
+2026-09-01) settled the dimension and left "where the column goes, and its shape"
+explicitly undecided. **It is decided here: `store_id INTEGER`, nullable, on
+`expense_entries`, referencing `retail_stores(id)`** — the shape the rest of the schema
+already uses — **and the same column on the claim**, defaulted from the submitter's store
+scope, which the RBAC layer already computes as `scopeStores`.
+
+**NULL KEEPS §36's MEANING EXACTLY**: the cost belongs to the business, not to any one
+place. **Nothing is backfilled.** Every existing row is NULL, which reads as business-wide,
+which is what those rows always meant — there is no migration to get wrong.
+
+**THIS UNBLOCKS THE SUMMARY'S STORE FILTER AND ITS CONTRIBUTION ROW**, refused since
+2026-09-02 for the one reason that revenue could be store-scoped and expenses could not.
+**Building that filter is NOT this section's work** and remains §36's, including its rule
+that the filtered view says Contribution and never Net. What this section owes it is the
+column.
+
+### PART FOUR — WHO PAID, AND WHAT IS OWED, ARE TWO DIFFERENT FACTS
+
+**Who paid** reuses `payment_method` — already a column on `expense_entries`, already a
+tenant-editable list (`categories` `kind='payment_method'`, seeded at `database.js:898`
+with the three account types) — with one addition that list does not have today: **the
+employee's own money.**
+
+**What is owed** is a settlement state **on the claim, not on the ledger row**. A claim paid
+from the company account owes nobody and is finished at approval. A claim paid from a
+pocket is a debt to a named person until it is settled.
+
+**THE REIMBURSEMENT IS NOT A SECOND EXPENSE.** The ¥38 is one cost, recorded once, at
+approval. Paying the driver back moves money between the business and a person and **posts
+nothing to the ledger** — a system that wrote a row for it would report ¥76 of taxis.
+
+### PART FIVE — WHO MAY SUBMIT, WHO MAY APPROVE, AND SELF-APPROVAL IS ALLOWED
+
+**Two new capabilities — submit and approve — and NOT `finance:record`.** That grant is
+money-marked and opens the whole ledger; the staff floor presets carry no finance
+capability at all and deliberately withhold even `waste:costs` from the people who record
+waste (`lib/capabilities.js`). **A ¥38 taxi must not be the reason a driver can read the
+books.**
+
+**AN APPROVER MAY APPROVE THEIR OWN CLAIM — Ash — and it is the right answer for the
+business rather than a relaxation.** In a shop with one manager, the person who spends and
+the person who approves are the same person. A rule forbidding it does not produce a second
+approver; it produces an unusable screen and spending recorded somewhere outside the
+system. **The guard is the record, not the refusal**: the approver is stored on the claim,
+shown on the row, and both events already reach the activity log. **A self-approval is
+visible; blocked spending is invisible.**
+
+### What is NOT decided here, named so it is not read as done
+
+- **How the receipt image is stored.** The precedent is `supplier_documents.data` — a
+  base64 data URI in the tenant database — and receipts arrive at a volume suppliers'
+  licences never did. The claim carries a receipt; where the bytes live is a build decision
+  with its own argument.
+- **OCR prefill.** `lib/alipay-ocr.js` can read amount and date off a photograph, and it is
+  fail-soft by design. It is a later slice, and **a human confirms every figure** — an OCR
+  that quietly sets an amount is a wrong number nobody typed.
+- **Recurring or scheduled expenses**, spending limits per role, and any approval chain
+  beyond one approver. None of them are needed by the cases that opened this section.
+- **Strings.** No Chinese is minted here. The build composes under `docs/tacet-delivery-vocabulary.md`
+  Rule 4 as amended 2026-09-06, preferring the pairs Finance already ships.
+
+### Build order — one PR per step
+
+1. **Expense categories in Settings**, with the operating flag, and the Summary split that
+   flag requires. This is the foundation; nothing below is worth much without it.
+2. **The claim table and the phone submit screen** — category, amount, who paid, optional
+   photo, submit.
+3. **The approval list and the posting step**, including the `claim_id` predicate fix in
+   `readTransactions` and the `store_id` column.
+4. **Settlement** — what is owed to whom, and marking it paid.
+5. **OCR prefill**, last, because it is the only part that is a convenience rather than a
+   capability.
