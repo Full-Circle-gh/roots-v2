@@ -594,7 +594,12 @@ const RECIPES_ROUTE_JS = read('routes', 'retail-recipes.js');
 // is lifted out with the two helpers it calls and run against stubs — every
 // assertion reads the HTML the shipped function returned.
 {
-  const LIST_FNS = ['function tableHtml()', 'function primaryCost(row)', 'function rowsInView()']
+  // dupButton is in this list because tableHtml CALLS it — the row's last cell
+  // is the Duplicate action. Lifting tableHtml without it does not test a row
+  // without a button, it throws; and every assertion below is about the same
+  // row that carries one.
+  const LIST_FNS = ['function tableHtml()', 'function primaryCost(row)', 'function rowsInView()',
+                    'function dupButton(rcp)']
     .map(d => extractFunction(RECIPES_JS, d)).join('\n');
   const esc = s2 => String(s2 == null ? '' : s2)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -605,7 +610,7 @@ const RECIPES_ROUTE_JS = read('routes', 'retail-recipes.js');
       esc, T: (en) => en, dash: v => (v == null || v === '' ? '—' : v),
       money: n => '¥' + (Number(n) || 0).toFixed(2),
       moneyU: n => '¥' + (Number(n) || 0).toFixed(4),
-      I: { warn: '<svg id="the-triangle"></svg>', book: '' },
+      I: { warn: '<svg id="the-triangle"></svg>', book: '', copy: '<svg id="the-copy"></svg>' },
       blockReasonText: () => '', Number, String,
     };
     vm.createContext(sb2);
