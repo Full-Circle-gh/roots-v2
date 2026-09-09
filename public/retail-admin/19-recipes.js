@@ -1853,7 +1853,10 @@
     if (!_pickResults.length) { host.innerHTML = ''; return; }
     host.innerHTML = `<div class="rcp-pick">` + _pickResults.slice(0, 8).map(m => `
       <div class="rcp-pick-item" onclick="rcpPickAdd(${m.id})">
-        <span>${esc(m.name_en || '')}${m.name_cn ? ' · ' + esc(m.name_cn) : ''}</span>
+        <span class="rcp-pick-main">
+          <span>${esc(m.name_en || '')}${m.name_cn ? ' · ' + esc(m.name_cn) : ''}</span>
+          ${m.sku ? `<span class="rcp-pick-sku">${esc(m.sku)}</span>` : ''}
+        </span>
         <span class="s">${m.cost_per_unit > 0 ? moneyU(m.cost_per_unit) + '/' + esc(m.unit || '') : esc(T('no cost', '无成本'))}</span>
       </div>`).join('') + `</div>`;
     const list = host.querySelector('.rcp-pick');

@@ -13761,10 +13761,13 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
      dead space. Flips the list above the search box instead; max-height is
      set inline per-open to whatever room that side actually has. */
   #tab-recipes-record .rcp-pick.up { top: auto; bottom: calc(100% + 4px); }
-  #tab-recipes-record .rcp-pick-item { display: flex; align-items: baseline; justify-content: space-between;
+  #tab-recipes-record .rcp-pick-item { display: flex; align-items: center; justify-content: space-between;
     gap: 10px; padding: 9px 14px; cursor: pointer; font-size: 13.5px; }
   #tab-recipes-record .rcp-pick-item:hover { background: var(--td-raised); }
-  #tab-recipes-record .rcp-pick-item .s { color: var(--td-text2); font-size: 12px; }
+  #tab-recipes-record .rcp-pick-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  #tab-recipes-record .rcp-pick-sku { color: var(--td-text2); font-size: 11px;
+    font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  #tab-recipes-record .rcp-pick-item .s { color: var(--td-text2); font-size: 12px; flex: none; }
 
   /* Steps ── numbered cards, a short name plus a longer instructions block. */
   #tab-recipes-record .rcp-step { display: flex; gap: 12px; padding: 16px 0; border-bottom: 1px solid var(--td-border); }
