@@ -14639,6 +14639,54 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   font: 400 15px/1.6 var(--f-sans);
 }
 
+/* ── what is recorded and not counted (§87) ──────────────────────────────────
+   BELOW the card, not inside it, and carrying no minus sign: the staircase's
+   signs are arithmetic and nothing here is subtracted from anything. It reads as
+   a note about money that left the account rather than as a sixth step. */
+#tab-finance .fin-excl { margin-top: 16px; }
+#tab-finance .fin-excl .fin-exp { border-top: 0; }
+#tab-finance .fin-excl-note {
+  margin: 4px 0 0; font: 400 13px/1.6 var(--f-sans); color: var(--td-text2);
+}
+
+/* ── the expense-category list (§87 part two) ─────────────────────────────── */
+#tab-finance .fin-cats-intro {
+  margin: 16px 0 0; max-width: 62ch; font: 400 15px/1.6 var(--f-sans); color: var(--td-text2);
+}
+#tab-finance .fin-cats-add { margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap; }
+#tab-finance .fin-cats-add .fin-field { flex: 1 1 240px; max-width: 360px; }
+#tab-finance #fin-cats-list { margin-top: 16px; }
+#tab-finance .fin-cat-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 10px 0; border-bottom: 1px solid var(--td-border);
+}
+#tab-finance .fin-cat-name {
+  flex: 1 1 200px; min-width: 160px;
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text); background: var(--td-surface);
+  border: 1px solid var(--td-border); border-radius: 8px; padding: 6px 12px;
+}
+#tab-finance .fin-cat-flag {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 400 14px/1.6 var(--f-sans); color: var(--td-text2); cursor: pointer;
+}
+#tab-finance .fin-cat-use {
+  min-width: 84px; font: 400 13px/1.6 var(--f-sans); color: var(--td-text2);
+}
+#tab-finance .fin-cat-del {
+  border: 0; background: none; cursor: pointer; padding: 0 4px;
+  font: 400 18px/1 var(--f-sans); color: var(--td-text2);
+}
+#tab-finance .fin-cat-del:hover { color: var(--td-text); }
+/* A hidden row stays legible rather than being greyed to the edge of unreadable:
+   it is still in the list because its setting still governs rows in the books. */
+#tab-finance .fin-cat-row.is-off .fin-cat-name { color: var(--td-text2); }
+#tab-finance .fin-cat-off { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); }
+#tab-finance .fin-cats-empty {
+  margin: 16px 0 0; padding: 48px 24px; text-align: center; max-width: none;
+  background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px;
+  font: 400 15px/1.6 var(--f-sans); color: var(--td-text2);
+}
+
 /* ── the typed-row form (§1.13 modal — bounded, fixed height, one commit) ─── */
 #tab-finance .fin-modal {
   position: fixed; inset: 0; z-index: 60; background: rgba(17, 26, 43, .32);

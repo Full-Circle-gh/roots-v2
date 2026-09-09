@@ -229,6 +229,19 @@ function finNotRecorded() {
   ))}</p>`;
 }
 
+/* The two halves of the breakdown (§87 part two).
+
+   `is_operating` arrives on every row. A row from a server that predates the
+   flag has none, and `!== 0` reads that as operating — the same direction the
+   server defaults in, so a stale payload cannot silently move money OUT of the
+   operating total on the way to the screen. */
+function finOperating(rows) {
+  return (rows || []).filter(r => r.is_operating !== 0);
+}
+function finNonOperating(rows) {
+  return (rows || []).filter(r => r.is_operating === 0);
+}
+
 /** The operating-expense disclosure. Open by default. */
 function finBreakdown(rows) {
   if (!rows || !rows.length) return '';
@@ -258,7 +271,11 @@ function finRender() {
   const d = FIN_DATA;
 
   const expLabel = cuT('Operating expenses', '营业费用');
-  const breakdown = finBreakdown(d.expense_breakdown);
+  // The disclosure shows the OPERATING half only, because it is the disclosure
+  // ON the operating-expenses row: a line inside it that the figure above did
+  // not include would be a breakdown that does not add up to its own total.
+  const breakdown = finBreakdown(finOperating(d.expense_breakdown));
+  const excluded = finNonOperating(d.expense_breakdown);
 
   host.innerHTML = '<div class="fin-card"><div class="fin-body">'
     // Line 1 — Revenue. Every channel the order record carries, gzgrocery
@@ -308,7 +325,37 @@ function finRender() {
     + `<span class="fin-lbl">${escapeHtml(cuT('Net', '净额'))}</span>`
     + '<span class="fin-sign"></span>'
     + `<span class="fin-fig">${escapeHtml(finMoney(d.net))}</span>`
-    + '</div></div></div>';
+    + '</div></div></div>'
+    // ── What left the account and is not a cost of running the shop (§87) ──
+    // BELOW the card, never inside the staircase, and with NO minus sign. The
+    // staircase's signs are arithmetic and this subtracts from nothing: an
+    // owner's drawing is not a business expense, so it is not taken off net —
+    // showing it as a step would put it back into the profit line by another
+    // road, which is the thing the flag exists to stop.
+    //
+    // **AND IT IS SHOWN RATHER THAN DROPPED**, which is the other half of the
+    // same rule. Money that vanishes out of a total with nothing on screen to
+    // say so is the defect this whole feature is about, wearing the opposite
+    // clothes.
+    //
+    // ABSENT AT ZERO, which is every tenant until one marks a category. There is
+    // nothing excluded, so a row reading ¥0.00 would assert a fact about money
+    // that does not exist — and §1.12 keeps a screen free of rows that only ever
+    // say nothing happened.
+    + (d.non_operating_expenses > 0
+      ? '<div class="fin-excl">'
+        + (excluded.length
+          ? '<details class="fin-exp"><summary>'
+            + `<span class="fin-lbl"><span class="fin-chev">&#9656;</span>${escapeHtml(cuT('Not an operating expense', '不计入营业费用'))}</span>`
+            + '<span class="fin-sign"></span>'
+            + `<span class="fin-fig">${escapeHtml(finMoney(d.non_operating_expenses))}</span>`
+            + `</summary>${finBreakdown(excluded)}</details>`
+          : finRow(cuT('Not an operating expense', '不计入营业费用'), finMoney(d.non_operating_expenses)))
+        + `<p class="fin-excl-note">${escapeHtml(cuT(
+            'Recorded, and not counted in the figures above.',
+            '已记录，未计入上方数字。'))}</p>`
+        + '</div>'
+      : '');
 }
 
 // ── Load ───────────────────────────────────────────────────────────────────
@@ -406,12 +453,25 @@ let FIN_TX_CATLABEL = null;
    never silently re-scopes what the operator was reading. */
 window.finShow = function finShow(which) {
   const isTx = which === 'transactions';
+  // THREE PANES SINCE §87, and the flags are written positively rather than as
+  // `!isTx`: with two panes a negation was the same thing as naming the other
+  // one, and with three it is the bug where opening Categories leaves Summary
+  // on screen underneath it.
+  const isCats = which === 'categories';
   document.querySelectorAll('#fin-subviews button')
     .forEach(b => b.classList.toggle('on', b.dataset.sub === which));
   const stair = document.getElementById('fin-stair');
   const tx = document.getElementById('fin-tx');
-  if (stair) stair.hidden = isTx;
+  const cats = document.getElementById('fin-cats');
+  if (stair) stair.hidden = isTx || isCats;
   if (tx) tx.hidden = !isTx;
+  if (cats) cats.hidden = !isCats;
+  // The range bar belongs to the two views that read a window. The category
+  // list is the tenant's own vocabulary and has no date about it — leaving the
+  // bar up would offer a control that changes nothing on the screen under it.
+  const bar = document.querySelector('.fin-rangebar');
+  if (bar) bar.hidden = isCats;
+  if (isCats && !FIN_CATS_SEEN) { FIN_CATS_SEEN = true; finCatsLoad(); }
   // The CTA belongs to Transactions, not to the surface: Summary types nothing.
   // Its capability gate is `data-cap`, applied by applyCapGates as a display
   // rule, so the two compose — hidden here by sub-view, display:none there by
@@ -732,10 +792,19 @@ function finTxKeepsCat() {
    category — without it the expense box would suggest income categories, and
    `storeCategory` would then snap the typed value onto the wrong master list. */
 function finTxCatOptions() {
-  return FIN_TX_KIND === 'in'
-    ? finIncomeCats()
-    : [...new Set(((FIN_TX && FIN_TX.rows) || [])
-        .filter(r => r.kind === 'out' && r.category).map(r => r.category))].sort();
+  if (FIN_TX_KIND === 'in') return finIncomeCats();
+  // §87 part two: the tenant's own list, when they have one. It is the list the
+  // Categories sub-view maintains, ACTIVE ENTRIES ONLY — a category the tenant
+  // hid must stop being offered, which is the whole of what hiding does.
+  const own = (FIN_TX && FIN_TX.expense_categories) || [];
+  if (own.length) return own.slice();
+  // AND THE OLD DERIVATION WHILE THAT LIST IS EMPTY, which is every tenant on
+  // the day this ships. §36's empty-list rule is about not offering a WRONG
+  // option; a category read off this tenant's own ledger rows is not one, and
+  // taking it away would leave a business with three years of expenses typing
+  // every category from memory.
+  return [...new Set(((FIN_TX && FIN_TX.rows) || [])
+    .filter(r => r.kind === 'out' && r.category).map(r => r.category))].sort();
 }
 
 function finTxCatList() {
@@ -902,4 +971,184 @@ window.finTxEdit = function finTxEdit(kind, id) {
   if (!FIN_TX) return;
   const row = FIN_TX.rows.find(r => r.kind === kind && String(r.id) === String(id));
   if (row && row.source !== 'po') finTxForm(null, row);
+};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   CATEGORIES — the tenant's own expense-category list (§87 part two).
+
+   This is the list a person picks from when they record money out. Until this
+   screen existed the list was `finTxCatOptions()` — the distinct categories
+   already on rows in the window, which is the accumulated history of what
+   people had typed, so the first typo was a permanent option and there was no
+   way to remove one.
+
+   THE LIST SHIPS EMPTY AND NOTHING SEEDS IT. §36: "an empty list cannot offer a
+   wrong option." The empty state here says what to do, not that something is
+   missing (§1.12) — a tenant with no categories has not lost anything.
+
+   Server: routes/finance-categories.js.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+let FIN_CATS = null;         // the last payload
+let FIN_CATS_SEEN = false;   // has this sub-view ever been pulled
+
+async function finCatsLoad() {
+  const host = document.getElementById('fin-cats-list');
+  if (!host) return;
+  if (!FIN_CATS) host.innerHTML = '<div class="fin-skel"></div>';
+  try {
+    const j = await api('/api/retail-admin/finance/categories');
+    FIN_CATS = j.data || [];
+    finCatsRender();
+  } catch (e) {
+    // Same rule as the staircase: a failed read renders where the operator is
+    // looking and never becomes a toast.
+    host.innerHTML = `<div class="fin-error">${escapeHtml(cuT('Could not load the categories.', '分类加载失败。'))} <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
+  }
+}
+
+/* One row. The name is editable in place, the operating flag is a checkbox, and
+   the last control is either Delete or Restore depending on the row's state.
+
+   THE USAGE COUNT IS SHOWN ON EVERY ROW, not only on the ones that cannot be
+   deleted, because it is also the answer to "is this category actually used" —
+   which is the question somebody tidying a list is really asking. */
+function finCatsRender() {
+  const host = document.getElementById('fin-cats-list');
+  if (!host) return;
+  const rows = FIN_CATS || [];
+  if (!rows.length) {
+    host.innerHTML = `<p class="fin-cats-empty">${escapeHtml(cuT(
+      'No categories yet. Add the ones this business spends money on — rent, wages.',
+      '还没有分类。请新增本店的支出分类 — 租金、工资。'))}</p>`;
+    return;
+  }
+  host.innerHTML = rows.map((c) => {
+    const off = c.is_active === 0;
+    return `<div class="fin-cat-row${off ? ' is-off' : ''}" data-id="${c.id}">`
+      + `<input class="fin-cat-name" type="text" value="${escapeAttr(c.name)}"`
+      + ` data-original="${escapeAttr(c.name)}" onblur="finCatRename(${c.id}, this)"`
+      + ` onkeydown="finCatNameKey(event, this)" aria-label="${escapeAttr(cuT('Category', '分类'))}">`
+      + '<label class="fin-cat-flag">'
+      + `<input type="checkbox" ${c.is_operating ? 'checked' : ''} onchange="finCatFlag(${c.id}, this.checked)">`
+      + `<span>${escapeHtml(cuT('Operating expense', '营业费用'))}</span>`
+      + '</label>'
+      + `<span class="fin-cat-use">${escapeHtml(finCatsUsage(c.usage_count))}</span>`
+      + (off
+        ? `<button type="button" class="fin-btn-sec" onclick="finCatActive(${c.id}, true)">${escapeHtml(cuT('Restore', '启用'))}</button>`
+        : `<button type="button" class="fin-btn-sec" onclick="finCatHide(${c.id})">${escapeHtml(cuT('Hide', '停用'))}</button>`)
+      + `<button type="button" class="fin-cat-del" onclick="finCatDelete(${c.id})"`
+      + ` title="${escapeAttr(cuT('Delete', '删除'))}" aria-label="${escapeAttr(cuT('Delete', '删除'))}">×</button>`
+      + (off ? `<span class="fin-cat-off">${escapeHtml(cuT('Hidden', '已停用'))}</span>` : '')
+      + '</div>';
+  }).join('');
+}
+
+/* "Used by N expenses". The count is a NUMBER and needs no translation of its
+   own; the sentence around it is the pair. Zero says so in words rather than
+   rendering "0 expenses", because "not used" is the fact the operator wants. */
+function finCatsUsage(n) {
+  const count = Number(n) || 0;
+  return count === 0
+    ? cuT('Not used', '未使用')
+    : cuT(`Used by ${count}`, `${count} 条使用`);
+}
+
+window.finCatNameKey = function finCatNameKey(ev, input) {
+  if (ev.key === 'Enter') input.blur();
+  if (ev.key === 'Escape') { input.value = input.dataset.original; input.blur(); }
+};
+
+/* Every write goes through here: it reloads rather than patching the row in
+   place, because a rename moves the expense rows with it and the usage counts
+   on OTHER rows can change with it. Repainting one row would leave the rest of
+   the list describing the state before the write. */
+async function finCatsWrite(run) {
+  try {
+    await run();
+    FIN_CATS = null;
+    await finCatsLoad();
+    return true;
+  } catch (e) {
+    if (window.toast) toast(e.message, 'err');
+    await finCatsLoad();
+    return false;
+  }
+}
+
+window.finCatRename = function finCatRename(id, input) {
+  const name = (input.value || '').trim();
+  const was = input.dataset.original;
+  if (!name || name === was) { input.value = was; return; }
+  return finCatsWrite(() => api('/api/retail-admin/finance/categories/' + id,
+    { method: 'PATCH', body: { name } }));
+};
+
+window.finCatFlag = function finCatFlag(id, checked) {
+  return finCatsWrite(() => api('/api/retail-admin/finance/categories/' + id,
+    { method: 'PATCH', body: { is_operating: !!checked } }));
+};
+
+window.finCatActive = function finCatActive(id, active) {
+  return finCatsWrite(() => api('/api/retail-admin/finance/categories/' + id,
+    { method: 'PATCH', body: { is_active: !!active } }));
+};
+
+/* HIDING IS THE ORDINARY WAY TO RETIRE A CATEGORY, and the confirm says what it
+   does rather than asking whether the operator is sure. The rows keep the name
+   and keep their flag; only the form stops offering it. */
+window.finCatHide = async function finCatHide(id) {
+  if (typeof askConfirm !== 'function') return;
+  if (!(await askConfirm({
+    title: cuT('Hide this category?', '停用该分类？'),
+    body: cuT('It stops being offered when recording an expense. Expenses already filed under it keep it, and keep its setting.',
+              '记录支出时不再显示该分类。已使用该分类的支出保持不变，其设置也保留。'),
+    confirmLabel: cuT('Hide', '停用'),
+  }))) return;
+  return finCatActive(id, false);
+};
+
+/* DELETE IS FOR A CATEGORY NOTHING HAS USED. The server refuses the rest with a
+   409, and the refusal is not a technicality: an expense row stores its category
+   as text and the operating flag lives on this record, so deleting a used one
+   would turn every row that named it back into an operating expense with nothing
+   on any screen to say it had. The client says so BEFORE the request, from the
+   count it already has, so the operator reads the reason rather than an error. */
+window.finCatDelete = async function finCatDelete(id) {
+  const row = (FIN_CATS || []).find(c => String(c.id) === String(id));
+  if (!row) return;
+  if (row.usage_count > 0) {
+    if (window.toast) {
+      toast(cuT(
+        `"${row.name}" is used by ${row.usage_count} expenses. Hide it instead — hiding keeps those records exactly as they are.`,
+        `“${row.name}”已被 ${row.usage_count} 条支出使用。请改为停用 — 停用不会改动这些记录。`), 'err');
+    }
+    return;
+  }
+  if (typeof askConfirm !== 'function') return;
+  if (!(await askConfirm({
+    title: cuT('Delete this category?', '删除该分类？'),
+    body: cuT('Nothing has been filed under it. This cannot be undone.',
+              '尚无支出使用该分类。此操作无法撤销。'),
+    confirmLabel: cuT('Delete', '删除'),
+    danger: true,
+  }))) return;
+  return finCatsWrite(() => api('/api/retail-admin/finance/categories/' + id, { method: 'DELETE' }));
+};
+
+window.finCatAdd = async function finCatAdd() {
+  const input = document.getElementById('fin-cats-new');
+  if (!input) return;
+  const name = (input.value || '').trim();
+  if (!name) { input.focus(); return; }
+  const ok = await finCatsWrite(() => api('/api/retail-admin/finance/categories',
+    { method: 'POST', body: { name } }));
+  // CLEARED ONLY ON SUCCESS. A duplicate or a rejected name leaves what was
+  // typed in the box to be corrected — clearing it would make the operator
+  // retype the thing the message is about.
+  if (ok) { input.value = ''; input.focus(); }
+};
+
+window.finCatAddKey = function finCatAddKey(ev) {
+  if (ev.key === 'Enter') { ev.preventDefault(); finCatAdd(); }
 };

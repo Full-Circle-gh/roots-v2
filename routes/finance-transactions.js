@@ -341,6 +341,25 @@ function readTransactions(query, opts = {}) {
     "SELECT name FROM categories WHERE kind = 'income' ORDER BY sort_order, name"
   ).all().map(r => r.name);
 
+  // ── The expense category list (§87 part two) ──
+  // The money-OUT half of the same mechanism, and it did not exist until §87:
+  // `kind='accounting'` was a list nothing wrote to, so the form's suggestions
+  // were the distinct categories already on rows on screen — the accumulated
+  // history of what people had typed.
+  //
+  // **ACTIVE ONLY.** A deactivated category is one the tenant has retired: its
+  // rows keep it and the Summary still reads its flag, but it must not be
+  // offered again. That is the whole of what Hide does, and doing it here rather
+  // than on the client is what makes it true of every reader of this payload.
+  //
+  // The client falls back to its old derivation while this is EMPTY, which is
+  // every tenant on the day this ships — an empty list is §36's decision for a
+  // vocabulary nobody has written yet, and it must not take away the only
+  // suggestions a tenant with three years of ledger rows already has.
+  const expenseCategories = db.prepare(
+    "SELECT name FROM categories WHERE kind = 'accounting' AND COALESCE(is_active, 1) = 1 ORDER BY sort_order, name"
+  ).all().map(r => r.name);
+
   // ── One list, both directions ──
   // Sorted by date, newest first, the way the mockup draws it. `id` breaks a
   // tie so the order is stable across reloads rather than left to the engine.
@@ -395,6 +414,7 @@ function readTransactions(query, opts = {}) {
   return {
     window: { from, to, span_days: win.span_days },
     income_categories: incomeCategories,
+    expense_categories: expenseCategories,
     totals: { in: sum('in'), out: sum('out') },
     counts: {
       all: rows.length,

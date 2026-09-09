@@ -657,7 +657,13 @@ async function place(taxCfg, body) {
     // is added from its own source — the real DDL either way, never a hand-typed
     // shape that could drift from the one the report reads.
     const db = openTablesDb(DB_SRC, ['retail_orders', 'retail_stores']);
-    addTables(db, SCHEMA_SRC, DB_SRC, ['expense_entries']);
+    // `categories` rides along with `expense_entries` because the report reads
+    // both: §87 gave the tenant an expense-category list carrying an
+    // operating / non-operating flag, and the summary resolves every expense
+    // row against it. Added from the real DDL for the same reason the ledger
+    // table is — a hand-typed shape here would drift from the one the report
+    // reads, and the first thing that would break is not tax.
+    addTables(db, SCHEMA_SRC, DB_SRC, ['expense_entries', 'categories']);
     const ins = db.prepare(
       `INSERT INTO retail_orders (order_no, status, total, tax_amount, tax_rate_micro, tax_mode,
                                   points_amount, balance_used, refund_amount_paid, placed_at, paid_at)
