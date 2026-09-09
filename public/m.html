@@ -730,14 +730,16 @@ const state = {
   /* WHAT THE KITCHEN HAS FINISHED (§48). The count already lived here — the
      dot polls /api/restock/kitchen-ready — but the LIST behind it was the last
      thing on /stock's launcher that this app could only point at. */
-  kr:{list:null,tried:false,order:null,orderId:null,seen:false,busy:false,err:''},
-  /* WHAT THE KITCHEN HAS NOT YET TOUCHED. `kr` above only ever holds what is
-     already 'prepared'/'delivered' — a request still sitting in the kitchen's
-     inbox has no screen of its own, so the person who raised it has no way to
-     confirm it was even received. Same shape as `kr`, no per-line drill-down:
-     the requester does not need to know which line is cooking, only that the
-     request itself is still waiting. */
-  kp:{list:null,tried:false,err:''},
+  /* TWO TABS, ONE SCREEN (§in this session). 'ready' is the original list —
+     lines the kitchen has already made — and 'pending' is what it has not
+     yet touched, so a request the requester just sent is never invisible
+     between raising it and the kitchen acting on it. Different grains
+     (`list` is per-LINE, from kitchen-ready/lines; `pending` is per-ORDER,
+     from the same /api/restock the desktop Fulfill tab reads for this
+     direction) so they get separate cache fields, same as kqTab's screen
+     keeps one `list` per tab because the shapes never mix. */
+  kr:{tab:'ready',list:null,tried:false,pending:null,pendingTried:false,
+      order:null,orderId:null,seen:false,busy:false,err:''},
   /* RAISING A REQUEST (§48). Two screens — Ask the kitchen and Ask for stock —
      and one basket, because they are never open at once and a basket that
      survived the switch would send one screen's list from the other. Entering
@@ -856,10 +858,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   /* The list is re-read on every entry and the seen-stamp re-armed: it is a
      record of what the kitchen finished, and one taken at boot would be stale
      by the time somebody opened it. */
-  if(route==='kitchenready'){ const k=state.kr; k.tried=false; k.seen=false; k.order=null; k.orderId=null; k.err=''; }
-  /* Waiting on the kitchen is a fact about right now — re-read on every entry
-     for the same reason the Ready list is. */
-  if(route==='kitchenpending'){ const k=state.kp; k.tried=false; k.err=''; state.kr.order=null; state.kr.orderId=null; state.kr.err=''; }
+  if(route==='kitchenready'){ const k=state.kr; k.tried=false; k.pendingTried=false; k.seen=false; k.order=null; k.orderId=null; k.err=''; }
   if(route==='receivexfer'){ const x=state.xfr; x.tried=false; x.order=null; x.orderId=null; x.step='list'; x.held=null; x.err=''; }
   if(route==='pick'){ const k=state.pik; k.tried=false; k.list=null; k.step='list'; k.result=null; k.err=''; k.dest='all';
     // The freezer is re-asked on every entry where there is a choice: which one
@@ -951,8 +950,7 @@ reg('rqSendKitchen', ()=>rqSendKitchen());
 reg('rqSendStock', ()=>rqSendStock());
 reg('krOpen', id=>krOpen(id));
 reg('krList', ()=>{ state.kr.order=null; state.kr.orderId=null; state.kr.err=''; render(); });
-reg('kpOpen', id=>krOpen(id,'kp'));
-reg('kpList', ()=>{ state.kr.order=null; state.kr.orderId=null; state.kr.err=''; render(); });
+reg('krTab', t=>{ const k=state.kr; if(k.tab===String(t)) return; k.tab=String(t); k.order=null; k.orderId=null; k.err=''; render(); });
 reg('xfrOpen', id=>xfrOpen(id));
 reg('xfrList', ()=>{ const x=state.xfr; x.order=null; x.orderId=null; x.step='list'; x.held=null; x.err=''; render(); });
 reg('xfrCount', ()=>{ state.xfr.step='count'; state.xfr.err=''; render(); });
@@ -3214,7 +3212,6 @@ const MORE_GROUPS=[
        emptied, and the Transfers row that reached it went with the last of
        them. The app itself is deleted (§48 step 4). */
     ['askkitchen','chef-hat','Ask the kitchen','向厨房下单'],['askstock','package','Ask for stock','申请补货'],
-    ['kitchenpending','clock','Waiting on the kitchen','待厨房处理'],
     ['kitchenready','circle-check','Ready from the kitchen','厨房已完成'],
     ['receivexfer','truck','Receive delivery','收货'],['pick','route','Pick','拣货'],
     /* LOG A BATCH IS THE ONLY ROW OF THE THREE PRODUCTION SCREENS. `whatmade`
@@ -8075,9 +8072,8 @@ function krMarkSeen(){
     render();
   }).catch(()=>{ k.seen=false; });
 }
-function krOpen(id,backTo){
+function krOpen(id){
   const k=state.kr;
-  k.backTo=backTo||'kr';
   k.busy=true; k.err=''; k.order=null; k.orderId=Number(id); render();
   api('/api/restock/'+Number(id)).then(j=>{
     k.order=(j&&j.data)||j; k.busy=false; render();
@@ -8790,15 +8786,15 @@ function screenAskStock(){
     ${r.to!=null?rqPicker():''}
     ${r.to!=null?rqFoot('rqSendStock', !!r.from && rqChosen().length>0):''}`;
 }
-/* THE SAME DETAIL EITHER LIST OPENS. A request tapped from "Ready from the
-   kitchen" and one tapped from "Waiting on the kitchen" are the same row at
-   two different moments — krOpen/kpOpen both land here, and `backTo` alone
-   decides which list the Back button returns to. */
+/* THE SAME DETAIL EITHER TAB OPENS. A request tapped from the Ready tab and
+   one tapped from the Waiting tab are the same row at two different moments
+   — krOpen lands here from either, and `k.tab` alone decides what the Back
+   button's label reads (the tab itself never changes on opening a detail). */
 function krDetailHtml(){
-  const k=state.kr, backCmd=k.backTo==='kp'?'kpList':'krList';
+  const k=state.kr;
   if(k.busy) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   if(k.err) return `<div style="padding:24px 16px"><div style="font-size:14px;color:var(--brick-ink)">${escAttr(k.err)}</div>
-    <button class="btn2" style="width:auto;padding:11px 26px;margin-top:16px" onclick="APP.cmd('${backCmd}')">${T('Back','返回')}</button></div>`;
+    <button class="btn2" style="width:auto;padding:11px 26px;margin-top:16px" onclick="APP.cmd('krList')">${T('Back','返回')}</button></div>`;
   const o=k.order||{};
   const items=(o.items||[]).filter(it=>Number(it.qty_requested||0)>0);
   const made=items.filter(it=>krLineMade(it,o));
@@ -8808,7 +8804,7 @@ function krDetailHtml(){
      for the half that is still cooking. */
   const tally=made.length+'/'+items.length+' '+T('made','完成');
   return `<div style="padding:4px 16px 12px">
-      <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('${backCmd}')">${k.backTo==='kp'?T('Waiting','待处理'):T('Ready','已完成')}</button>
+      <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('krList')">${k.tab==='pending'?T('Waiting','待处理'):T('Ready','已完成')}</button>
     </div>
     <div style="padding:0 16px 4px;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
     <div style="padding:0 16px 14px;font-size:13px;color:var(--text-secondary)">${escAttr(tally)}${p?' · '+escAttr(p):''}</div>
@@ -8824,19 +8820,61 @@ function krDetailHtml(){
           T('The kitchen has already put this on the shelf. Nothing to collect.','厨房已将其上架，无需领取。')}</div>`
       : ''}`;
 }
-function screenKitchenReady(){
-  loadKr();
+/* WHAT THE WAREHOUSE ASKED FOR AND THE KITCHEN HAS NOT YET TOUCHED — the
+   'pending' tab. The same endpoint the desktop Fulfill tab reads for this
+   direction (`to_role=kitchen&tab=active`), which already excludes anything
+   'prepared'/'delivered' for a kitchen-bound row (routes/restock.js) — so
+   nothing here can ever also be on the 'ready' tab. A shared inbox, not a
+   per-requester one: everybody who can raise a request can see everybody's,
+   same as the ready list, so a request is never invisible to the person who
+   placed it because somebody else's session happened to load first. */
+function loadKrPending(force){
   const k=state.kr;
+  if(k.pendingTried&&!force) return;
+  k.pendingTried=true;
+  api('/api/restock?to_role=kitchen&tab=active').then(j=>{
+    k.pending=Array.isArray(j)?j:((j&&j.data)||[]);
+    k.err=''; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    k.pending=[]; k.err=''; render();
+  });
+}
+function screenKitchenReady(){
+  const k=state.kr;
+  if(k.tab==='pending') loadKrPending(); else loadKr();
   if(k.orderId!=null) return krDetailHtml();
-  if(!k.list) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  if(!k.list.length) return nothingYet(T('Nothing finished yet','暂无已完成'),
+  /* SAME SEGMENTED-TAB MARKUP kqTab USES, for the same screen family. */
+  const seg=(key,label)=>`<button class="row" style="min-height:40px;padding:7px 16px;border-radius:999px;width:auto;display:inline-flex;gap:7px;
+    border:1px solid ${k.tab===key?'var(--text-primary)':'var(--border-default)'};background:${k.tab===key?'var(--text-primary)':'var(--surface-card)'};
+    color:${k.tab===key?'var(--surface-card)':'var(--text-primary)'};font-size:14px" onclick="APP.cmd('krTab','${key}')">${label}</button>`;
+  const tabs=`<div style="display:flex;gap:8px;padding:12px 16px">${seg('ready',T('Ready','已完成'))}${seg('pending',T('Waiting','待处理'))}</div>`;
+  if(k.tab==='pending'){
+    const kp=k.pending;
+    if(!kp) return tabs+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    if(!kp.length) return tabs+nothingYet(T('Nothing waiting','暂无待处理'),
+      T('A request you send to the kitchen shows up here until it is made.','向厨房下的申请在完成前会显示在这里。'));
+    return tabs+`<div>${kp.map(o=>{
+      const p=krPurpose(o);
+      return `<button class="row" style="width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px"
+        onclick="APP.cmd('krOpen',${Number(o.id)})">
+        <span style="flex:1;min-width:0">
+          <span style="display:block;font-size:15px;font-weight:500">${escAttr(o.rs_number||('#'+o.id))}</span>
+          <span style="display:block;font-size:13px;color:var(--text-secondary)">${escAttr(fmtDay(o.created_at)||'')}${p?' · '+escAttr(p):''}</span>
+        </span>
+        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>
+      </button>`;
+    }).join('')}</div>`;
+  }
+  if(!k.list) return tabs+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!k.list.length) return tabs+nothingYet(T('Nothing finished yet','暂无已完成'),
     T('What the kitchen makes for you shows up here.','厨房为你制作完成的申请会显示在这里。'));
   /* THE PRODUCT LEADS AND THE REQUEST FOLLOWS IT — the same inversion the fire
      that opens this screen makes, and for the same reason: the name is what the
      warehouse came to find out and the number is how to go and check. The
      quantity sits where the queue screen puts it, so a row here and a row there
      read the same way round. Tapping still opens the whole request. */
-  return `<div style="padding:0 16px 12px;font-size:14px;color:var(--text-secondary)">${
+  return tabs+`<div style="padding:0 16px 12px;font-size:14px;color:var(--text-secondary)">${
       T(k.list.length+' made · already on the shelf',k.list.length+' 项已完成 · 已上架')}</div>
     <div>${k.list.map(it=>{
       const p=krPurpose(it);
@@ -8848,48 +8886,6 @@ function screenKitchenReady(){
           <span style="display:block;font-size:13px;color:var(--text-secondary)">${escAttr(it.rs_number||('#'+it.restock_id))}${p?' · '+escAttr(p):''}</span>
         </span>
         ${!it.seen_at?`<span style="width:8px;height:8px;border-radius:99px;background:var(--sage-ink);flex:none"></span>`:''}
-        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>
-      </button>`;
-    }).join('')}</div>`;
-}
-/* WHAT THE WAREHOUSE ASKED FOR AND THE KITCHEN HAS NOT YET TOUCHED. The same
-   endpoint the desktop Fulfill tab reads for this direction (`to_role=kitchen
-   &tab=active`), which already excludes anything 'prepared'/'delivered' for a
-   kitchen-bound row (routes/restock.js) — so nothing here can ever also be on
-   the Ready list. A shared inbox, not a per-requester one: everybody who can
-   raise a request can see everybody's, same as the Ready list, so a request
-   is never invisible to the person who placed it because somebody else's
-   session happened to load first. */
-function loadKp(force){
-  const k=state.kp;
-  if(k.tried&&!force) return;
-  k.tried=true;
-  api('/api/restock?to_role=kitchen&tab=active').then(j=>{
-    k.list=Array.isArray(j)?j:((j&&j.data)||[]);
-    k.err=''; render();
-  }).catch(e=>{
-    if(String(e.message)==='auth') return;
-    k.list=[]; k.err=''; render();
-  });
-}
-function screenKitchenPending(){
-  loadKp();
-  const k=state.kr;
-  if(k.orderId!=null) return krDetailHtml();
-  const kp=state.kp;
-  if(!kp.list) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  if(!kp.list.length) return nothingYet(T('Nothing waiting','暂无待处理'),
-    T('A request you send to the kitchen shows up here until it is made.','向厨房下的申请在完成前会显示在这里。'));
-  return `<div style="padding:0 16px 12px;font-size:14px;color:var(--text-secondary)">${
-      T(kp.list.length+' waiting on the kitchen',kp.list.length+' 项待厨房处理')}</div>
-    <div>${kp.list.map(o=>{
-      const p=krPurpose(o);
-      return `<button class="row" style="width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px"
-        onclick="APP.cmd('kpOpen',${Number(o.id)})">
-        <span style="flex:1;min-width:0">
-          <span style="display:block;font-size:15px;font-weight:500">${escAttr(o.rs_number||('#'+o.id))}</span>
-          <span style="display:block;font-size:13px;color:var(--text-secondary)">${escAttr(fmtDay(o.created_at)||'')}${p?' · '+escAttr(p):''}</span>
-        </span>
         <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>
       </button>`;
     }).join('')}</div>`;
@@ -9327,7 +9323,6 @@ SUBS.logbatch={title:['Log a batch','登记批次'],render:()=>screenLogBatch()}
 SUBS.pick={title:['Pick','拣货'],render:()=>screenPick()};
 SUBS.receivexfer={title:['Receive delivery','收货'],render:()=>screenReceiveTransfer()};
 SUBS.kitchenready={title:['Ready from the kitchen','厨房已完成'],render:()=>screenKitchenReady()};
-SUBS.kitchenpending={title:['Waiting on the kitchen','待厨房处理'],render:()=>screenKitchenPending()};
 SUBS.askkitchen={title:['Ask the kitchen','向厨房下单'],render:()=>screenAskKitchen()};
 SUBS.askstock={title:['Ask for stock','申请补货'],render:()=>screenAskStock()};
 SUBS.stockadd={title:['Add stock','加库存'],titleOf:()=>T(...stockAppLabel()),
@@ -12660,10 +12655,6 @@ const ROUTE_CAP={
      two screens that 403 after the list has been built. Asking the kitchen
      rides with the same key: it is a request, it just goes to a pot. */
   askkitchen:'restock:request', askstock:'restock:request',
-  /* The requester's own pending list — same key askkitchen's Send is gated on,
-     since this is the other half of that same screen's job: showing what it
-     already sent. */
-  kitchenpending:'restock:request',
   /* The same pair the count is gated on, and the same pair routes/restock.js
      addresses the 'prepared' push to — the people who RAISE these requests. A
      fulfil-only kitchen operator is the one who made it, and telling them
