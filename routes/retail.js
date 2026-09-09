@@ -69,6 +69,10 @@ const { channelSyncStale } = require('../lib/channel-sync-stale');
 // routes/restock.js's own kitchen-ready endpoint counts — one clause, required
 // by both, for the reason REVIEW_WAITING_SQL is shared with the Reviews fire.
 const kitchenReady = require('../lib/kitchen-ready');
+// §84 — "what today's batch owes". Beside kitchenReady because it is the same
+// kind of thing: one definition, read by the dashboard row and by the phone's
+// kitchen queue, so the two cannot drift apart.
+const batchOwed = require('../lib/batch-owed');
 // Web Push — optional; wrapped so a missing module never breaks order flow.
 let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
@@ -15835,6 +15839,9 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   // queues above — NOT store-scoped: a kitchen request is a job the kitchen did,
   // not a shelf, so the header's store picker deliberately leaves it alone.
   let kitchen_ready = { count: 0, items: [] };
+  // §84 — units already ordered and not on the shelf. Same never-null shape as
+  // every other fire here, so a client can read it without a guard.
+  let batch_owed = { count: 0, items: [] };
 
   // Optional per-store scope (mirrors the dashboard's store picker). When a
   // store_id is supplied we count that store's own shelf (its retail_store_stock
@@ -16661,6 +16668,47 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
       }
     } catch (e) { console.warn('[dashboard/ops kitchen_ready]', e.message); }
 
+    /* ── What today's batch owes (§84) ────────────────────────────────────
+       The units customers have already paid for that are not on the shelf —
+       the number the kitchen adds to the batch it is about to make. Its own
+       try/catch for the same reason kitchen_ready has one: a failure here must
+       cost this row and nothing else on a card that fires eleven of them.
+
+       COUNTS UNITS, NOT PRODUCTS, and that is the whole of what makes it
+       actionable. "30 to make" is a morning's work; "2 products" is not a
+       quantity of anything. Every other fire on this card counts rows because
+       every other fire opens onto a list of rows; this one opens onto a list of
+       NUMBERS, and the number is the point.
+
+       THE NAMES TRAVEL WITH IT, both languages, exactly as §69 sends them for
+       kitchen_ready and for the same reason — the dashboard repaints from the
+       payload it holds without re-fetching, so a single-language payload would
+       strand the row in the wrong one until the next poll.
+
+       GATED ON THE SAME PAIR as kitchen_ready. A fire must never promise work
+       behind a door this operator cannot open, and these are the same people:
+       whoever may see what the kitchen finished may see what it still owes. */
+    try {
+      if (!kitchenReady.kitchenScopedSession(req) && kitchenReady.canSeeKitchenReady(req)) {
+        // `storeId` is the trimmed query STRING every other fire binds as-is.
+        // This one is coerced, because batch-owed compares it to an INTEGER
+        // column directly rather than through a named bind, and a route should
+        // not lean on SQLite's affinity rules to convert it.
+        const owedStore = storeId ? parseInt(storeId, 10) : NaN;
+        const owedRows = batchOwed.owedAt(tdb(), Number.isFinite(owedStore) ? owedStore : null);
+        batch_owed = {
+          count: owedRows.reduce((n, r) => n + r.owed, 0),
+          items: owedRows.slice(0, previewLimit).map((r) => ({
+            product_id: r.product_id,
+            store_id:   r.store_id,
+            name_en:    r.name_en,
+            name_cn:    r.name_cn,
+            owed:       r.owed,
+          })),
+        };
+      }
+    } catch (e) { console.warn('[dashboard/ops batch_owed]', e.message); }
+
     // ── Channel stock-sync stall ─────────────────────────────────────────
     // channelSyncStale() already isolates one channel's failure from the
     // others (a bad table drops just that entry), so no extra try/catch here.
@@ -16670,7 +16718,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, kitchen_ready, channel_sync_stale, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, kitchen_ready, batch_owed, channel_sync_stale, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.

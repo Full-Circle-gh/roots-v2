@@ -39,6 +39,9 @@ const _kprint = require('../lib/kitchen-print');
 // which reads the same clause for the dashboard's Needs-you row. See the header
 // of that file for why it is one definition and not two.
 const _kready = require('../lib/kitchen-ready');
+// "What today's batch owes" (§84). Beside _kready for the same reason: the
+// arithmetic lives in one module because two surfaces ask for it.
+const _owed = require('../lib/batch-owed');
 function _broadcastRestock(orderId, kind, actorUserId) {
   if (!_events || !_events.broadcast) return;
   try {
@@ -1073,6 +1076,71 @@ router.get('/api/restock/kitchen-ready', requireRestockAccess, tacetOnly, (req, 
       FROM ${KITCHEN_READY_FROM}
      WHERE ${KITCHEN_READY_WHERE}`).get();
   res.json({ success: true, data: { count: row.n || 0, latest: row.latest || null } });
+});
+
+/* ── What today's batch owes ────────────────────────────────────────────────
+ *
+ * §84. The number the kitchen adds to the batch it is about to make, and until
+ * this endpoint existed there was no way to ask for it. Ash described the
+ * routine it serves — "in the morning when kitchen come to work they already
+ * see how many fresh meals and wraps need to be prepared and they will add
+ * those extra to the batch they are about to do" — and the screen that routine
+ * happens on renders REQUESTS somebody typed, never the orders themselves.
+ *
+ * THE ARITHMETIC IS NOT HERE. lib/batch-owed.js holds it, for the reason
+ * lib/kitchen-ready.js holds the finished-line clause: the queue screen and the
+ * phone's Home row both ask this question, and two surfaces reading one
+ * definition cannot drift apart the way two definitions eventually do.
+ *
+ * NOT SCOPED TO A STORE, and the rows carry their own. These routes have no
+ * per-store session scope (a Tacet operator sees the tenant), and a kitchen
+ * cooking for two shops needs both numbers rather than one of them silently.
+ *
+ * A FULFIL-ONLY SESSION GETS AN HONEST EMPTY LIST rather than a 403, exactly as
+ * the kitchen-ready dot above does and for the same reason: this is fetched in
+ * the background behind a screen, and a refusal there bounces somebody to a
+ * login out of their pocket.
+ */
+router.get('/api/restock/batch-owed', requireRestockAccess, tacetOnly, (req, res) => {
+  if (_kitchenScopedSession(req)) return res.json({ success: true, data: { rows: [], total: 0 } });
+  /* NOT NAMED `db`, and the shadow it would have cast is why. In this file `db`
+     is the SHARED global handle — always Roots, control-plane tables only, per
+     the header at the top — so a local binding it to tdb() would read as that
+     handle to everyone after it while silently being a different connection.
+     scripts/test_restock_tenant_handle.js polices exactly this and caught it. */
+  const tdbc = tdb();
+  const rows = _owed.owedAt(tdbc);
+  // The store's name is resolved HERE and not in the lib: batch-owed answers a
+  // stock question and has no business knowing how a shop is labelled. One
+  // query for the handful of stores in the result, not one per row.
+  let named = rows;
+  if (rows.length) {
+    const ids = [...new Set(rows.map((r) => r.store_id))];
+    const ph = ids.map(() => '?').join(',');
+    const stores = new Map(
+      tdbc.prepare(`SELECT id, name_en, name_cn FROM retail_stores WHERE id IN (${ph})`)
+        .all(...ids)
+        .map((s) => [s.id, s])
+    );
+    named = rows.map((r) => ({
+      ...r,
+      store_en: stores.get(r.store_id)?.name_en || null,
+      store_cn: stores.get(r.store_id)?.name_cn || null,
+    }));
+  }
+  res.json({
+    success: true,
+    data: {
+      rows: named,
+      // Summed from the same rows rather than by a second query, so the Home
+      // row and the list it opens can never disagree about whether there is
+      // anything to make.
+      total: named.reduce((n, r) => n + r.owed, 0),
+      // More than one shop in the answer means the client has to say WHICH,
+      // and deciding that here keeps the rule off three call sites.
+      multi_store: new Set(named.map((r) => r.store_id)).size > 1,
+    },
+  });
 });
 
 /* ── What the kitchen has finished, line by line ────────────────────────────

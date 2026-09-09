@@ -630,13 +630,20 @@ router.post('/ingest-order', (req, res) => {
       const oldQ = cur ? cur.physical_qty : 0;
       // One six-pack is one line of one, and six off the shelf.
       const took = packDeduct(it.qty, it.units);
-      // The clamp below keeps a channel oversell from driving us negative. That
-      // is deliberate (§39's per-channel debt), but it also means the shortfall
-      // vanishes into a Δ0 row unless it is recorded here.
+      // §84: THE CLAMP IS GONE, and the sentence that stood here is why. It read
+      // "the shortfall vanishes into a Δ0 row unless it is recorded here" — the
+      // debt was real, known, and written only to a log column nothing watches.
+      // §39's per-channel debt is paid on this line: the shelf now carries the
+      // shortfall as a negative, which is the number the kitchen cooks against.
+      // A delta rather than an absolute, so the figure written is computed from
+      // a read inside adjustStock's own transaction and not from `oldQ` above.
+      //
+      // The oversell flag stays. "Did this order exceed the shelf" is still worth
+      // saying out loud even now that the shelf says it too.
       if (oldQ < took) oversold.push({ name: it.name, nameEn: it.nameEn, sku: it.sku, have: oldQ, want: took });
       inventory.adjustStock({
         storeId, productId: it.productId,
-        newPhysicalQty: Math.max(0, oldQ - took),
+        deltaQty: -took,
         actorLabel: 'Eleme order',
         reason: 'eleme_order',
         note: `Eleme ${ref}${order.daySeq != null ? ` #${order.daySeq}` : ''} — ${it.nameEn} x${it.qty}` +
@@ -938,7 +945,8 @@ router.post('/update-order-status', (req, res) => {
         for (const it of orderLines()) {
           inventory.adjustStock({
             storeId: prev.store_id, productId: it.product_id,
-            newPhysicalQty: Math.max(0, stockOf(it.product_id) - packDeduct(it.qty, it.pack_units)),
+            // §84: unclamped, as on the arrival path, and for the same debt.
+            deltaQty: -packDeduct(it.qty, it.pack_units),
             actorLabel: 'Eleme uncancel',
             reason: 'eleme_uncancel',
             note: `Eleme ${String(elemeOrderId)} back to ${desc} — re-deducted ${it.name_en} x${it.qty}`,
