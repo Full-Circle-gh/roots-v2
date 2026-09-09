@@ -302,6 +302,32 @@ section('7 · every channel reads the one publish function (source assertions)')
         `${f} pushes what channel-publish says`);
     }
   });
+  it('EVERY enqueue publishes through channel-publish — no site reads the raw shelf', () => {
+    /* THE ONE THIS CATCHES, found on the first live morning: guanyi-daemon's own
+       healer read physical_qty straight out of the table and re-queued the bare
+       shelf, so gzgrocery carried the allowance at 07:05 and was back to the
+       shelf by 07:23 — the window closed by the thing meant to keep it honest.
+       The sweeps had been taught; the enqueues that live outside lib/*-sync.js
+       had not. Each of these is a place a number reaches a platform. */
+    const SITES = [
+      ['scripts/guanyi-daemon.js',  'gzgrocery'],   // the healer / resync
+      ['routes/guanyi-admin.js',    'gzgrocery'],   // "push all"
+      ['routes/meituan-admin.js',   'meituan'],     // "push all now"
+      ['lib/store-close.js',        'meituan'],     // the close sweep
+    ];
+    for (const [f, ch] of SITES) {
+      const src = read(f);
+      assert.ok(new RegExp(`publishableAt\\([^)]*channel: '${ch}'`, 's').test(src),
+        `${f} must publish through channel-publish`);
+    }
+  });
+  it('…and none of them queues a bare physical_qty any more', () => {
+    const gy = read('scripts/guanyi-daemon.js');
+    const at = gy.indexOf('function enqueueCurrentStock');
+    const body = gy.slice(at, gy.indexOf('\n}', at));
+    assert.ok(!/COALESCE\(physical_qty/.test(body),
+      'the healer reads the published figure, not the shelf column');
+  });
   it('the drift sweeps compare against the SAME figure, or they undo the window', () => {
     // A sweep comparing against the bare shelf reports every batch-made listing
     // as drifted while the window is open, and re-enqueues it at the shelf —
