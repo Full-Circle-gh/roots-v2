@@ -7329,8 +7329,14 @@ function screenAskBuy(){
       placeholder="${T('Search materials','搜索物料')}" oninput="APP.cmd('mbSearch',this.value)"></div>`;
   const intro=`<div style="margin-top:12px;padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
       T('The buyer orders it — nothing is ordered until they place it.','由采购下单 — 下单后才会生成采购单。')}</div>`;
+  /* A LIST THAT COULD NOT BE READ IS NOT AN EMPTY LIST. Saying "no materials
+     match" after the fetch failed tells a cook the company stocks nothing,
+     which is the wrong thing to be told and the wrong thing to act on. The
+     search-miss wording is kept for an actual search miss. */
   const body = !rows.length
-    ? `<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No materials match','没有匹配的物料')}</div>`
+    ? `<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+        (m.materials.length ? T('No materials match','没有匹配的物料')
+                            : (m.err || T('No materials yet','还没有物料')))}</div>`
     /* THE UNIT SITS ON THE ROW, BESIDE THE NUMBER, because it is what the number
        MEANS and it differs per material — two bags and two bottles are the same
        digit. The product screens can leave it off; this one cannot. */
@@ -7351,7 +7357,10 @@ function screenAskBuy(){
   /* THE TALLY COUNTS ITEMS AND NOT UNITS, which is where this foot parts company
      with rqFoot. Adding two bags to three bottles gives five of nothing; the
      product screens can sum their pieces because every piece is a piece. */
-  const foot=`${m.err?`<div style="padding:0 16px 10px;font-size:14px;color:var(--brick-ink)">${escAttr(m.err)}</div>`:''}
+  /* The error is drawn ONCE. With no materials the body is already showing it —
+     a load failure and a send failure share `err`, and printing it in both
+     places reads as two things having gone wrong. */
+  const foot=`${(m.err&&m.materials.length)?`<div style="padding:0 16px 10px;font-size:14px;color:var(--brick-ink)">${escAttr(m.err)}</div>`:''}
     <div style="position:sticky;bottom:0;background:var(--surface-card);border-top:1px solid var(--border-default);
       padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;align-items:center;gap:12px">
       <span style="flex:1;min-width:0;font-size:13px;color:var(--text-secondary)">
