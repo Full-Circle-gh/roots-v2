@@ -403,7 +403,6 @@ app.use((req, res, next) => {
 // failure it prevents (a request that never responds) is silent. The cost is
 // this note. Do NOT add per-route asyncHandler(...) calls; they are redundant
 // and the guard already skips anything it has wrapped.
-app.use(require('./routes/auth'));
 app.use(require('./routes/backend-auth'));   // Mini App Backend operator realm (separate from kitchen auth)
 app.use(require('./routes/backend-team'));   // Mini App Backend team management (operators within a tenant)
 app.use(require('./routes/backend-notices')); // Merchant-facing platform notices (broadcasts + impersonation banner)
@@ -412,7 +411,6 @@ app.use(require('./routes/billing-pay'));    // Mini App Backend billing payment
 app.use(require('./routes/backend-signup')); // Mini App Backend tenant signup / provisioning (gated in Phase 2)
 app.use(require('./routes/saas-admin'));     // Platform owner console — tenants / subscriptions / branding (kitchen-admin gated)
 app.use(require('./routes/store-admin'));    // Platform account-manager console — store-admin.* (platform_admins realm + audit)
-app.use(require('./routes/products'));
 app.use(require('./routes/purchases'));
 app.use(require('./routes/restock'));
 app.use(require('./routes/ai'));
@@ -466,12 +464,24 @@ app.use('/api/internal/eleme', require('./routes/eleme-internal')); // daemon-on
 app.use(require('./routes/eleme-admin')); // retail-admin Eleme sync config + OAuth callback
 app.use(require('./routes/integrations-admin')); // retail-admin Channels & Delivery hub
 
-// Login page
-app.get('/login', (req, res) => {
-  if (req.session?.userId) return res.redirect('/');
-  res.set('Cache-Control', 'no-cache');
-  res.sendFile(path.join(__dirname, 'public', 'login.html'));
-});
+/* THE KITCHEN LOGIN IS GONE (§81). `/login` served public/login.html, the
+   sign-in for the `users` realm, and both are deleted with routes/auth.js.
+
+   NO REDIRECT IS LEFT BEHIND, and that is the difference between this and
+   /stock, /kitchen and / — those three are `start_url`s of PWAs installed on
+   staff devices, so a door had to stay or an installed icon would 404 on
+   somebody's shift. /login was never installed and never a start_url: it was
+   a page the deleted app bounced people to. Nothing that still exists links
+   here — the CMS now sends a signed-out editor to /backend/login, and
+   /saas-admin to the platform console.
+
+   WHAT IT ACTUALLY DOES, checked rather than assumed: /login is not a 404. It
+   falls through to the catch-all like any unknown path, which answers 302 to
+   '/', which forwards to the Tacet backend. So an old bookmark lands on the
+   app its owner now works in. That is a better answer than the 404 this
+   comment first claimed, and it is recorded because it is INHERITED from the
+   catch-all rather than chosen here — anybody changing that fallback should
+   know this path rides on it. */
 
 // Does the session point to a still-valid backend operator? The gate pages
 // below only redirect INTO the backend when this is true. Crucially, a session
@@ -583,11 +593,17 @@ app.get('/backend/brand-studio', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'brand-studio.html'));
 });
 
-// SaaS-admin console — platform owner only (a kitchen `admin` session).
+/* SaaS-admin console — platform owner only.
+   RE-GATED ONTO THE PLATFORM REALM (§81). This tested `users.role === 'admin'`
+   — a kitchen session — which §81 retires, and the console would have become
+   unreachable with it. `platform_admins` is the realm built for exactly this
+   and is seeded at boot (lib/platform-admin.js), so the owner already has the
+   login; it is the same principal store-admin.* uses. Signed out goes to that
+   console's own login rather than to /login, which no longer exists. */
 app.get('/saas-admin', (req, res) => {
-  const dbx = require('./database');
-  const u = req.session?.userId && dbx.prepare('SELECT role FROM users WHERE id = ? AND is_active = 1').get(req.session.userId);
-  if (!u || u.role !== 'admin') return res.redirect('/login');
+  if (!req.session?.platformAdminId) {
+    return res.redirect('https://' + STORE_ADMIN_HOST + '/');
+  }
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'public', 'saas-admin.html'));
 });

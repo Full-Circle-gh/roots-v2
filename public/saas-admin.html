@@ -156,7 +156,7 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const money = (c, cur) => (cur === 'CNY' || !cur ? '¥' : cur + ' ') + (Number(c||0)/100).toLocaleString(undefined,{maximumFractionDigits:2});
   const fdate = s => { if (!s) return '—'; const d = new Date(String(s).replace(' ','T')+'Z'); return isNaN(d)?esc(s):d.toISOString().slice(0,10); };
-  const api = (url, opts) => fetch(url, Object.assign({ credentials:'same-origin' }, opts)).then(r => r.status===401||r.status===403 ? (location.href='/login', Promise.reject()) : r.json());
+  const api = (url, opts) => fetch(url, Object.assign({ credentials:'same-origin' }, opts)).then(r => r.status===401||r.status===403 ? (location.href='https://system.rootskitchenchina.com/', Promise.reject()) : r.json());
   function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
   function openModal(title){ $('#mTitle').textContent=title; $('#mMsg').className='msg'; $('#modal').classList.add('show'); }
   function closeModal(){ $('#modal').classList.remove('show'); }

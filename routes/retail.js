@@ -57,7 +57,7 @@ const { isCounter, shipsNothing, isTerminalOnPaid, isMirroredChannel } = require
 // fresh `delivery_slot_display` from scheduled_for at read time; the column is
 // never touched. See lib/slot-label.js.
 const { attachSlotDisplay, deliverySlotDisplay } = require('../lib/slot-label');
-const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
+const { logActivity } = require('../middleware/auth');
 const { getTenantDb, rawTenantDb, rawTdb, ROOTS_TENANT_ID, tenantAls, tdb, currentTenantId, DATA_ISOLATION_READY } = require('../lib/tenant-db');
 // The transaction helper (decisions §24, Path A step 3). Takes the handle as an
 // argument and hands it to the body, so every statement inside runs on the
@@ -132,7 +132,6 @@ router.use((req, res, next) => {
 // old behaviour, so Roots staff access is unchanged.
 // Declared as a function (hoisted) so later sections can reference it before
 // this point — same reason the previous const needed a comment.
-const _retailKitchenPermission = requirePermission('retail');
 function requireRetailAdmin(req, res, next) {
   // (1) Mini App Backend operator. Guarded so a not-yet-created tenant_users
   // table can never 500 the kitchen path — on any error we just fall through.
@@ -198,19 +197,27 @@ function requireRetailAdmin(req, res, next) {
       }
     } catch (e) { /* tables not ready — fall through to the kitchen path */ }
   }
-  // (2) legacy kitchen path: must be authed AND hold the `retail` permission.
-  requireAuth(req, res, (err) => {
-    if (err) return next(err);
-    _retailKitchenPermission(req, res, (err2) => {
-      if (err2) return next(err2);
-      req.tenantDb = getTenantDb(ROOTS_TENANT_ID);   // kitchen staff operate on Roots
-      // Legacy kitchen operators hold full retail access today — give them the
-      // full cap set so the (dark) RBAC layer never narrows their view.
-      try { req.caps = new Set(require('../lib/capabilities').ALL_KEYS); req.scopeStores = null; }
-      catch (e) { req.caps = null; req.scopeStores = null; }
-      tenantAls.run(rawTenantDb(ROOTS_TENANT_ID), () => next());
-    });
-  });
+  /* (2) THE LEGACY KITCHEN PATH IS GONE (§81). This gate used to fall through
+     to requireAuth + the `retail` permission, granting a `users`-realm session
+     the full cap set on Roots' tenant. That realm is retired: its login page
+     and its /api/auth routes are deleted, so no such session can be created,
+     and the fallback could only ever have refused.
+
+     REMOVING IT NARROWS THIS GATE TO ONE REALM, which is the point — a second
+     way into every /api/retail-admin endpoint is exactly the kind of thing that
+     outlives the app it was built for and is found later by someone else.
+
+     The refusal below is requireAuth's own shape, deliberately: this gate is
+     mounted on API paths and JSON is what every caller here parses. Nothing
+     redirects to /login any more, because there is no /login.
+
+     ONE STATUS FOR EVERY REFUSAL, and 401 rather than 403 EVEN WHEN A SESSION
+     EXISTS — a suspended tenant, or an operator whose row went inactive. Those
+     reached the kitchen path before and were answered 401 by requireAuth, so
+     401 is what every caller of this gate has always seen and what
+     test_point_search asserts. Splitting it into a 403 here would be a
+     behaviour change smuggled in as a cleanup. */
+  return res.status(401).json({ error: 'Not authenticated' });
 }
 
 // ── Catalog ownership lock (server-side enforcement) ──────────────────────

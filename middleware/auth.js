@@ -4,41 +4,24 @@
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 
-function requireAuth(req, res, next) {
-  if (!req.session?.userId) {
-    if (req.path.startsWith('/api/')) return res.status(401).json({ error: 'Not authenticated' });
-    return res.redirect('/login');
-  }
-  const user = db.prepare('SELECT * FROM users WHERE id = ? AND is_active = 1').get(req.session.userId);
-  if (!user) { req.session.destroy(); return res.redirect('/login'); }
-  req.user = user;
-  req.permissions = db.prepare('SELECT * FROM permissions WHERE user_id = ?').get(user.id) || {};
-  next();
-}
-
-function requireAdmin(req, res, next) {
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
-  next();
-}
-
-function requirePermission(...modules) {
-  return (req, res, next) => {
-    if (req.user?.role === 'admin') return next();
-    if (modules.some(m => req.permissions?.[m])) return next();
-    return res.status(403).json({ error: `No access to ${modules.join('/')}` });
-  };
-}
-
-// Gate destructive actions behind a separate flag (`can_delete` on the
-// permissions row). Admin always passes. Managers / warehouse / kitchen
-// only pass when the admin has explicitly toggled can_delete on for them.
-// Apply this BEFORE / ALONGSIDE the per-module requirePermission so the
-// 403 is specific: "you can read this module, but not delete from it".
-function requireDelete(req, res, next) {
-  if (req.user?.role === 'admin') return next();
-  if (req.permissions?.can_delete) return next();
-  return res.status(403).json({ error: 'Delete not allowed for this user · 此用户无删除权限' });
-}
+/* THE FOUR REALM GATES STOOD HERE AND ARE GONE (§81): requireAuth,
+   requireAdmin, requirePermission and requireDelete.
+   
+   Every one of them read `req.session.userId` against the `users` table and
+   its `permissions` row — the kitchen realm. §78 deleted the app that realm
+   existed for; §81 deleted its login page and its /api/auth routes, so no such
+   session can be created, and a gate that can only refuse is not a gate.
+   
+   WHAT REPLACED THEM, so nothing here reads as merely removed: Tacet's
+   requireRetailAdmin (routes/retail.js) on the tenant realm, and
+   requirePlatformAdmin (lib/platform-admin.js) for the platform console. Both
+   already existed; this file's gates were the second way in.
+   
+   logActivity STAYS and is why this module does. It is realm-agnostic — 139
+   call sites across both surfaces write the shared activity_log through it —
+   and its FK note below is now history rather than a live branch: with no
+   `users` rows being created, every id it is handed is a tenant operator's,
+   which is exactly the case that comment says to store as NULL. */
 
 function logActivity(userId, username, action, entityType, entityId, details, ip) {
   try {
@@ -68,4 +51,4 @@ function logActivity(userId, username, action, entityType, entityId, details, ip
   } catch(e) { console.error('Log error:', e.message); }
 }
 
-module.exports = { requireAuth, requireAdmin, requirePermission, requireDelete, logActivity };
+module.exports = { logActivity };
