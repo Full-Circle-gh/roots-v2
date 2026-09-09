@@ -613,10 +613,14 @@ window.addEventListener('message', (e) => {
   try { M.lang = (localStorage.getItem(LANG_KEY) === 'cn') ? 'cn' : 'en'; } catch (e) {}
   applyLang();
   try {
-    const me = await fetch('/api/auth/me', { credentials: 'same-origin' }).then(r => r.json());
+    // Tacet realm, not the kitchen one (§80) — the desktop twin's own note in
+    // public/cms.html carries the reasoning. `caps` fails OPEN (null) exactly as
+    // it does there: this is a view gate, and requireRetailAdmin is the real one.
+    const me = await fetch('/api/backend/me', { credentials: 'same-origin' }).then(r => r.json());
     if (!me || !me.user) { gateLogin(); return; }
     const u = me.user;
-    if (u.role !== 'admin' && !((u.permissions || {}).retail)) { gateNoPerm(); return; }
+    const caps = Array.isArray(u.caps) ? u.caps : null;
+    if (caps && !caps.includes('content:edit')) { gateNoPerm(); return; }
   } catch (e) { gateError(e); return; }
 
   // Auth OK — show the editor, mount the real preview.
@@ -633,7 +637,7 @@ function gateLogin() {
   $('#gate-spin').hidden = true;
   $('#gate-title').textContent = cuT('Please sign in', '请先登录');
   $('#gate-msg').innerHTML = cuT('Your session has expired. ', '登录已过期。') +
-    '<a href="/login">' + cuT('Sign in', '登录') + '</a>';
+    '<a href="/backend/login">' + cuT('Sign in', '登录') + '</a>';
 }
 function gateNoPerm() {
   $('#gate-spin').hidden = true;

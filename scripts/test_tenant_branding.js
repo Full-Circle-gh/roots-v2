@@ -114,10 +114,20 @@ yes(/\.run\('Roots', 'Roots', 'active'\)/.test(strip(read('routes/backend-auth.j
 yes(/name: `Roots \$\{norm\(order\.order_no\)\}`/.test(read('lib/qingyun-payload.js')),
   'the rider dispatch still names Roots — out of scope by the brief, see the note here');
 
-/* THE DEBUG PUSH. /api/push/test is requireAuth and sends to the caller's own
-   device. Nobody else ever sees it. */
-yes(/router\.post\('\/api\/push\/test', requireAuth/.test(read('routes/push.js')),
-  "the test push is the caller's own device only");
+/* THE DEBUG PUSH IS GONE (§80). /api/push/test was requireAuth and sent to the
+   caller's own device, which is why this audit could wave it through: nobody
+   else ever saw it, so it could not carry Roots' name to another tenant.
+
+   It went with the rest of routes/push.js's kitchen HTTP surface. The
+   assertion is INVERTED rather than deleted, because the audit's concern —
+   that a push endpoint reachable here might send un-branded copy to somebody
+   else's customers — is a live concern about any future one. An absence is the
+   strongest form of the guarantee it was checking.
+
+   The tenant realm's own /api/backend/push/test lives in routes/backend-auth.js
+   and is audited where that file is. */
+yes(!/router\.post\('\/api\/push\/test'/.test(read('routes/push.js')),
+  'the kitchen debug push is gone — nothing here can send at all');
 
 // ─────────────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);

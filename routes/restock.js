@@ -13,7 +13,7 @@ const inventory = require('../lib/inventory');
 // is a behavioural no-op today; it closes the cross-tenant split before data
 // isolation is switched on.
 const { tdb, currentTenantId } = require('../lib/tenant-db');
-const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
+const { logActivity } = require('../middleware/auth');
 // Lazily, and deliberately: routes/retail.js requires this file's siblings, so
 // a top-level require here would close a cycle at load time.
 const requireRetailAdmin = (req, res, next) => require('./retail').requireRetailAdmin(req, res, next);
@@ -722,15 +722,13 @@ function requireRestockAccess(req, res, next) {
     req.restockRealm = 'tacet';
     return requireRetailAdmin(req, res, next);
   }
-  return requireAuth(req, res, (err) => {
-    if (err) return next(err);
-    const p = req.permissions || {};
-    if (req.user?.role !== 'admin' && !p.restock && !p.warehouse_inbox && !p.kitchen_inbox) {
-      return res.status(403).json({ error: 'forbidden' });
-    }
-    req.restockRealm = 'kitchen';
-    next();
-  });
+  /* THE KITCHEN BRANCH IS GONE (§80). It ran requireAuth and then accepted an
+     admin, or a holder of restock / warehouse_inbox / kitchen_inbox, as
+     req.restockRealm = 'kitchen'. That realm is retired — its login and its
+     /api/auth routes are deleted — so the branch could only ever have refused.
+     ONE REALM REACHES THESE ROUTES NOW, which is what the header above said
+     this narrowing was waiting for. */
+  return res.status(401).json({ error: 'Not authenticated' });
 }
 
 /* KITCHEN-ONLY OPERATORS ARE CONFINED TO KITCHEN REQUESTS, and the confinement
@@ -1865,17 +1863,11 @@ router.post('/api/restock/archive-bulk', requireRestockAccess, tacetOnly, (req, 
   res.json({ success: true, count: result.changes });
 });
 
-// ── Delete (drafts only) ───────────────────────────────────────────────────
-router.delete('/api/restock/:id', requireAuth, requireDelete, requirePermission('restock'), (req, res) => {
-  const conn = tdb();
-  const order = conn.prepare('SELECT status FROM restock_orders WHERE id = ?').get(req.params.id);
-  if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
-  if (order.status !== 'draft') return res.status(400).json({ error: 'Only drafts can be deleted · 仅草稿可删除' });
-  conn.prepare('DELETE FROM restock_items WHERE restock_id = ?').run(req.params.id);
-  conn.prepare('DELETE FROM restock_orders WHERE id = ?').run(req.params.id);
-  logActivity(req.user.id, req.user.username, 'delete', 'restock', req.params.id, null, req.ip);
-  res.json({ success: true });
-});
+/* A DELETE ENDPOINT STOOD HERE (§80). `DELETE /api/restock/:id` removed a
+   DRAFT restock order and was gated on requireAuth + requireDelete +
+   requirePermission('restock') — three gates, all on the retired realm, and
+   public/app.html was its only caller. Tacet Mobile has never had a delete on
+   this screen. Nothing replaces it: a draft nobody can reach is not a job. */
 
 module.exports = router;
 // Exported for scripts/test_warehouse_store_pin.js — the tier order in

@@ -126,16 +126,26 @@ await it('every rendered push offers the off switch', async () => {
   assert.ok(actions[0].title && /关闭/.test(actions[0].title), 'the button needs a label');
 });
 
-await it('the switch tells BOTH realms, because a device can hold either login', async () => {
+// WAS 'the switch tells BOTH realms' (§80). A device could hold a kitchen
+// login, a backend operator login, or both, and this code cannot know which —
+// so the switch told both. The kitchen realm is retired and /api/push/pref is
+// deleted, so that call could only 404, and a 404 inside Promise.all is a
+// silent no-op that looks like it worked.
+//
+// The assertion is NARROWED, not dropped, and it now also holds the ABSENCE:
+// nothing may go to the dead realm, because a call that 404s while appearing
+// to mute is worse than no call.
+await it('the switch tells the one realm that is left, and only it', async () => {
   const { listeners, rec } = loadSW();
   await dispatch(listeners, 'notificationclick', clickEvent('roots-mute'));
-  const kitchen = bodyOf(rec, '/api/push/pref');
   const backend = bodyOf(rec, '/api/backend/push/pref');
-  assert.strictEqual(kitchen.body.enabled, false);
   assert.strictEqual(backend.body.enabled, false);
   // Cookies, or the mute lands on nobody.
-  assert.strictEqual(kitchen.init.credentials, 'include');
   assert.strictEqual(backend.init.credentials, 'include');
+  // Asserted against the raw fetch record, not through bodyOf() — that helper
+  // asserts the call EXISTS, which is the opposite of what is wanted here.
+  assert.ok(!rec.fetch.some(f => f.url === '/api/push/pref'),
+    'the retired kitchen realm must not be called — a 404 here mutes nobody');
 });
 
 await it('the endpoint goes up while it is still alive', async () => {
@@ -170,7 +180,7 @@ await it('and when the network is gone entirely', async () => {
 await it('a device with no subscription left still records the intent', async () => {
   const { listeners, rec } = loadSW({ subscribed: false });
   await dispatch(listeners, 'notificationclick', clickEvent('roots-mute'));
-  assert.strictEqual(bodyOf(rec, '/api/push/pref').body.enabled, false);
+  assert.strictEqual(bodyOf(rec, '/api/backend/push/pref').body.enabled, false);
   assert.strictEqual(bodyOf(rec, '/api/backend/push/pref').body.endpoint, null);
   assert.strictEqual(rec.unsubscribed, 0);
 });

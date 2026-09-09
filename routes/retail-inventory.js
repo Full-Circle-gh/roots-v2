@@ -23,7 +23,7 @@ const addressPin = require('../lib/address-pin');
 // The daemons' own 'HH:MM' parser — so a sync-start time this route accepts is,
 // by construction, one lib/store-hours can read back.
 const { parseHm } = require('../lib/store-hours');
-const { requireAuth, logActivity } = require('../middleware/auth');
+const { logActivity } = require('../middleware/auth');
 // The store's own day boundary. A kitchen shift that runs past midnight is
 // still the same working day to the people in it, and `businessDate` is the
 // one place this system decides where that line falls.
@@ -65,19 +65,15 @@ const { requireRetailAdmin } = require('./retail');
 const { listWindow, windowMeta } = require('../lib/list-window');
 
 // Read-only access to inventory data. A Mini App Backend operator passes the
-// same dual-realm gate as everywhere else; a kitchen session is allowed for
-// admins, the `retail` permission, OR an assigned `retail_store_id` (store
-// staff browsing the cross-store grid in app.html). Edits stay gated below.
+// ONE REALM (§80). This was a dual-realm gate: a kitchen session passed as an
+// admin, as a holder of the `retail` permission, or on an assigned
+// `retail_store_id` — store staff browsing the cross-store grid in app.html.
+// That page is deleted (§78) and the realm retired (§80), so the second half
+// could only ever have refused and is removed rather than left reading a table
+// nobody can authenticate against.
 function requireInventoryRead(req, res, next) {
   if (req.session?.backendUserId) return requireRetailAdmin(req, res, next);
-  requireAuth(req, res, (err) => {
-    if (err) return next(err);
-    if (req.user?.role === 'admin') return next();
-    if (req.permissions?.retail) return next();
-    const u = db.prepare('SELECT retail_store_id FROM users WHERE id = ?').get(req.user.id);
-    if (u?.retail_store_id) return next();
-    return res.status(403).json({ error: 'no_inventory_access' });
-  });
+  return res.status(401).json({ error: 'Not authenticated' });
 }
 
 // §46's grant predicate, in its own module so it can be tested without booting
@@ -660,21 +656,12 @@ router.get('/api/retail-admin/stores/:id/ledger', requireRetailAdmin, (req, res)
   res.json({ success: true, data: rows });
 });
 
-// PUT /api/admin/users/:userId/retail-store — assign / unassign a store.
-// Admin-only. NULL clears the assignment (user is then "no store" — can
-// view per-store stock but can't edit any).
-router.put('/api/admin/users/:userId/retail-store', requireAuth, (req, res, next) => {
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'admin_only' });
-  next();
-}, express.json(), (req, res) => {
-  const userId  = parseInt(req.params.userId, 10);
-  const storeId = req.body?.retail_store_id ? parseInt(req.body.retail_store_id, 10) : null;
-  if (!userId) return res.status(400).json({ error: 'invalid_user_id' });
-  if (storeId && !inventory.getStore(storeId)) return res.status(400).json({ error: 'store_not_found' });
-  db.prepare('UPDATE users SET retail_store_id = ? WHERE id = ?').run(storeId || null, userId);
-  logActivity(req.user.id, req.user.username, 'assign_retail_store', 'user', userId, { retail_store_id: storeId }, req.ip);
-  res.json({ success: true });
-});
+/* A STORE-ASSIGNMENT ENDPOINT STOOD HERE (§80).
+   PUT /api/admin/users/:userId/retail-store assigned or cleared a kitchen
+   user's `retail_store_id`. It was requireAuth + an admin check on the retired
+   realm, it wrote to the `users` table, and public/app.html was its only
+   caller. Tacet assigns an operator's store on tenant_users through the team
+   API instead, which is where that job lives now. */
 
 // GET /api/retail-admin/inventory/geocode-status
 // Lightweight read for the Admin → Integrations panel. Reports whether

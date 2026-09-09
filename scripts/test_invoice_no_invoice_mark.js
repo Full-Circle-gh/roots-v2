@@ -203,18 +203,13 @@ const { setNoInvoiceMark, setLineInvoiceStatus } = require('../lib/invoice-mark'
   ok(legacyReboot() === 0, 'so the old boot rule has nothing to put back', lineOf(1));
   ok(lineOf(1).mark === 0, 'and the line is still awaiting its 发票 after a restart', lineOf(1));
 
-  console.log('\n4. the kitchen report writes the same fact, not half of it');
-  const kStatus = await send('PUT', '/api/purchases/200/line/3/invoice', { invoice_status: 'no_invoice' });
-  ok(kStatus.status === 200, 'the kitchen picker answers', kStatus.status);
-  ok(lineOf(3).mark === 1,
-     'setting 不开发票 there raises the mark, so the Invoices tab stops chasing it', lineOf(3));
-  const kRestore = await send('PUT', '/api/purchases/200/line/3/no-invoice', { no_invoice_expected: false });
-  ok(kRestore.status === 200, 'the kitchen 恢复 answers', kRestore.status);
-  ok(lineOf(3).mark === 0 && lineOf(3).invoice_status === 'not_received',
-     'and clearing the mark there clears the note with it', lineOf(3));
-  ok(legacyReboot() === 0 && rebootReconcile() === 0, 'nothing for a restart to reverse on either screen');
-  const bad = await send('PUT', '/api/purchases/200/line/3/invoice', { invoice_status: 'whatever' });
-  ok(bad.status === 400, 'an invalid status is still refused', bad.status);
+  // SECTION 4 DROVE THE KITCHEN API AND IS GONE (§80). It drove the kitchen picker's invoice_status and 恢复.
+  // routes/purchases.js kept its exported helpers and lost its 22 HTTP
+  // endpoints — public/app.html was their only caller and it is deleted (§78).
+  //
+  // THE RULE IS UNCHANGED AND STILL COVERED: the two columns, the writers that
+  // must move them together and the boot reconciliation are all exercised
+  // above through the Tacet endpoints, which are the ones that still exist.
 
   console.log('\n5. an order edit that says nothing about invoicing changes nothing');
   await send('PUT', '/api/retail-admin/purchasing/po/100/line/1/no-invoice', { no_invoice_expected: true });
@@ -227,18 +222,9 @@ const { setNoInvoiceMark, setLineInvoiceStatus } = require('../lib/invoice-mark'
   ok(lineOf(1).mark === 1 && lineOf(1).invoice_status === 'no_invoice',
      'a payload with no invoice_status hands the stored pair back untouched', lineOf(1));
   ok(lineOf(2).invoice_status === 'received', 'and does not re-default the other line either', lineOf(2));
-  const kEdit = await send('PUT', '/api/purchases/200', {
-    date: '2026-08-24', status: 'Ordered', supplier: 'Shaanxi Huiyang 汇阳',
-    items: [{ id: 3, name_en: 'Organic Onion Powder 有机洋葱粉', qty: 1, unit: 'bag', cost_per_unit: 38.4 }],
-  });
-  ok(kEdit.status === 200, 'the kitchen order edit answers', kEdit.status);
-  await send('PUT', '/api/purchases/200/line/3/no-invoice', { no_invoice_expected: true });
-  await send('PUT', '/api/purchases/200', {
-    date: '2026-08-24', status: 'Ordered', supplier: 'Shaanxi Huiyang 汇阳',
-    items: [{ id: 3, name_en: 'Organic Onion Powder 有机洋葱粉', qty: 1, unit: 'bag', cost_per_unit: 38.4 }],
-  });
-  ok(lineOf(3).mark === 1 && lineOf(3).invoice_status === 'no_invoice',
-     'the kitchen edit preserves the pair the same way', lineOf(3));
+  // A KITCHEN HALF OF SECTION 5 STOOD HERE (§80): the same order-edit case run
+  // against PUT /api/purchases/200. That endpoint is deleted; the retail half
+  // above asserts the identical rule on the surface that survives.
 
   console.log('\n6. Confirm delivery on a tab left open cannot undo a mark set elsewhere');
   const stale = await send('PUT', '/api/retail-admin/purchases/100/receive', {
@@ -337,16 +323,13 @@ const { setNoInvoiceMark, setLineInvoiceStatus } = require('../lib/invoice-mark'
      'and the line toggle — the one the drill now shows on that row — lifts it in one press',
      lineRestore.json);
 
-  console.log('\n9. the same on the kitchen side, and no button that cannot do its job');
-  await send('PUT', '/api/purchases/200/line/3/no-invoice', { no_invoice_expected: true });
-  await send('PUT', '/api/purchases/200/no-invoice', { no_invoice_expected: true });
-  const kPoRestore = await send('PUT', '/api/purchases/200/no-invoice', { no_invoice_expected: false });
-  ok(kPoRestore.status === 200 && poOf(200).mark === 0 && lineOf(3).mark === 1,
-     'the kitchen order 恢复 lifts the order and leaves the line\'s own mark standing too',
-     [poOf(200), lineOf(3)]);
-  ok(kPoRestore.json.lines_still_marked === 1, 'and reports the lines that kept it', kPoRestore.json);
-  const missing = await send('PUT', '/api/purchases/9999/no-invoice', { no_invoice_expected: false });
-  ok(missing.status === 404, 'an order that does not exist is still a 404, not a silent success', missing.status);
+  // SECTION 9 DROVE THE KITCHEN API AND IS GONE (§80). It repeated section 8's whole-order 恢复 on a kitchen PO.
+  // routes/purchases.js kept its exported helpers and lost its 22 HTTP
+  // endpoints — public/app.html was their only caller and it is deleted (§78).
+  //
+  // THE RULE IS UNCHANGED AND STILL COVERED: the two columns, the writers that
+  // must move them together and the boot reconciliation are all exercised
+  // above through the Tacet endpoints, which are the ones that still exist.
   // TWO SCREEN ASSERTIONS STOOD HERE AND ARE GONE (§78). They read
   // public/app.html to prove the kitchen Invoices tab asked WHERE the mark
   // was before offering to lift it, and that a row marked by its ORDER

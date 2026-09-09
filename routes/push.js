@@ -22,7 +22,7 @@ const webPush = require('web-push');
 // covered side of the boundary. Proven by scripts/diagnose_seam_statements.js.
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
-const { requireAuth, logActivity } = require('../middleware/auth');
+const { logActivity } = require('../middleware/auth');
 const router = express.Router();
 
 // ─── Mute list ──────────────────────────────────────────
@@ -125,80 +125,28 @@ if (ENABLED) {
   console.warn('[push] VAPID keys not set in .env — Web Push disabled.');
 }
 
-// GET /api/push/vapid-key — public key for the client to subscribe.
-// No auth: any user about to subscribe needs this. Returns empty when
-// push isn't configured so the client can fall back gracefully.
-router.get('/api/push/vapid-key', (req, res) => {
-  res.json({ enabled: ENABLED, publicKey: VAPID_PUBLIC });
-});
-
-// POST /api/push/subscribe — client sends its PushSubscription JSON.
-// We store endpoint + keys keyed by user. If the same endpoint shows
-// up again (page reload), we just refresh last_seen_at.
-router.post('/api/push/subscribe', requireAuth, (req, res) => {
-  if (!ENABLED) return res.status(503).json({ error: 'push not configured' });
-  const { endpoint, keys } = req.body || {};
-  if (!endpoint || !keys?.p256dh || !keys?.auth) {
-    return res.status(400).json({ error: 'invalid subscription' });
-  }
-  const ua = (req.headers['user-agent'] || '').slice(0, 200);
-  try {
-    db.prepare(`INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, user_agent)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(endpoint) DO UPDATE SET
-                  user_id = excluded.user_id,
-                  p256dh  = excluded.p256dh,
-                  auth    = excluded.auth,
-                  user_agent = excluded.user_agent,
-                  last_seen_at = CURRENT_TIMESTAMP`)
-      .run(req.user.id, endpoint, keys.p256dh, keys.auth, ua);
-    res.json({ success: true });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// POST /api/push/unsubscribe — client tells us its endpoint went away.
-router.post('/api/push/unsubscribe', requireAuth, (req, res) => {
-  const { endpoint } = req.body || {};
-  if (!endpoint) return res.status(400).json({ error: 'endpoint required' });
-  db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ? AND user_id = ?').run(endpoint, req.user.id);
-  res.json({ success: true });
-});
-
-// GET /api/push/pref — does this signed-in user want push at all? The
-// client checks this BEFORE silently re-enrolling a device. Without it,
-// browser permission staying 'granted' after a switch-off was enough for
-// the next page load to mint a fresh subscription and bring the pushes back.
-router.get('/api/push/pref', requireAuth, (req, res) => {
-  res.json({ enabled: !isMuted('user', req.user.id) });
-});
-
-// POST /api/push/pref — record the intent. Only ever called from an explicit
-// user action. Sign-out uses /unsubscribe, which must NOT mute, or signing
-// out would silently disable notifications for good.
-router.post('/api/push/pref', requireAuth, (req, res) => {
-  const enabled = !(req.body && req.body.enabled === false);
-  try {
-    setMuted('user', req.user.id, !enabled);
-    if (!enabled) db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(req.user.id);
-    res.json({ success: true, enabled });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// POST /api/push/test — debug endpoint: send a test push to the
-// current user's subscriptions. Useful while validating the setup.
-router.post('/api/push/test', requireAuth, async (req, res) => {
-  if (!ENABLED) return res.status(503).json({ error: 'push not configured' });
-  const result = await sendPushToUser(req.user.id, {
-    title: '🌿 Roots test · 测试推送',
-    body: 'If you see this, push is working. · 收到这条说明推送已生效',
-    url: '/',
-  });
-  res.json({ success: true, ...result });
-});
+// THE KITCHEN PUSH ENDPOINTS STOOD HERE AND ARE GONE (§80).
+//
+// Six routes: /api/push/vapid-key, subscribe, unsubscribe, pref (GET+POST)
+// and test. All but vapid-key were gated on requireAuth — the `users` realm —
+// and public/app.html and public/kitchen.html were their only callers. Both
+// pages are deleted (§76, §78) and the realm is retired (§80), so no browser
+// can reach them and no session could pass them.
+//
+// THE OPERATOR HALF IS ELSEWHERE AND IS UNTOUCHED: /api/backend/push/* lives
+// in routes/backend-auth.js, on the tenant realm, and is what Tacet Mobile and
+// the service worker actually talk to.
+//
+// THE FILE STAYS, and not narrowly: seven modules require its senders —
+// backend-auth, purchases, retail, backend-signup, restock,
+// lib/delivery-reminders and lib/low-stock-digest. What went is this file's
+// own HTTP surface, not its library.
+//
+// STILL OWED, named rather than absorbed: sendPushToUser / sendPushToUsers /
+// sendPushToAll / sendPushByPermission below all target the `users` table and
+// can therefore never reach anybody now. They are NOT removed here because
+// their call sites need reading first, and widening this change into those
+// callers is how a retirement turns into a refactor nobody can review.
 
 // ─── Helpers (exported) ────────────────────────────────────────────
 async function _send(sub, payload) {
