@@ -6900,7 +6900,8 @@ function screenProductCatalogue(){
       <div style="padding:12px 16px 4px">
         <input id="mProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.prodQ)}"
           placeholder="${T('Search name or SKU','搜索名称或 SKU')}" style="width:100%"
-          oninput="APP.cmd('prodSearch',this.value)"></div>
+          oninput="APP.cmd('prodSearch',this.value)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></div>
       <div id="mProdBody">${prodBodyHtml()}</div>
     </div>`;
 }
