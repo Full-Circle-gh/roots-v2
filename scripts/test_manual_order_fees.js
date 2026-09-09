@@ -99,6 +99,11 @@ const LIFTED = [
   'normalizeAreaName', 'isGuangzhou', 'provinceForCity', 'cfgValue',
   'defaultDeliveryZone', 'matchDeliveryZone', 'weightDeliveryFee',
   'computeDeliveryAndPacking', 'parseWeightToGrams', 'normalizeChinaAddress',
+  // §83's shared refusal shape. manualOrderFees calls it for the `unmatched`
+  // string, so it has to come across too — a lifted function whose callee is
+  // missing fails in the sandbox with a bare ReferenceError that says nothing
+  // about which list is short.
+  'noZoneMatchPayload',
   'manualOrderFees',
 ];
 let SRC = ['CN_PROVINCES', 'CN_PROVINCE_STEMS'].map(grabConst).concat(LIFTED.map(grab)).join('\n\n');
@@ -250,6 +255,26 @@ it('no matching zone returns an error, not a free delivery', () => {
   const f = fees({ address: NOWHERE });
   assert.strictEqual(f.error, 'no_zone_match');
 });
+it('§83 — the refusal NAMES the place, so the operator knows which zone to add', () => {
+  const f = fees({ address: NOWHERE });
+  // A bare code told an operator that something was wrong and nothing about
+  // what to do. `unmatched` is the string to search for in Settings → Delivery.
+  assert.ok(f.unmatched, 'the error carries an `unmatched` string');
+  for (const part of [NOWHERE.province, NOWHERE.city, NOWHERE.district].filter(Boolean)) {
+    assert.ok(f.unmatched.includes(part), `names ${part}`);
+  }
+});
+it('§83 does NOT refuse staff — the fee is an error, the order is still keyable', () => {
+  // The ruling refuses the CUSTOMER an unmatched address. This path is the
+  // operator's, and manualOrderFees is a QUOTE: it returns `error` as "no
+  // opinion" for the wizard to prefill around, and the create route never
+  // consults it. Asserted so a later reading of §83 cannot quietly turn this
+  // into a block without the assertion going red first.
+  const f = fees({ address: NOWHERE });
+  assert.strictEqual(f.shippingFee, 0, 'quotes nothing rather than refusing');
+  assert.strictEqual(f.packingFee, 0);
+  assert.ok(!('refused' in f) && !('blocked' in f), 'carries no refusal flag');
+});
 it('the error still carries zeros, so a careless read cannot charge a stray fee', () => {
   const f = fees({ address: NOWHERE });
   assert.deepStrictEqual([f.shippingFee, f.packingFee], [0, 0]);
@@ -274,6 +299,30 @@ it('the packing fields are no longer hidden from Guangzhou zones', () => {
   const HTML = read('public/retail-admin.html');
   const field = HTML.slice(HTML.indexOf('id="dz-city-pack"') - 300, HTML.indexOf('id="dz-city-pack"'));
   assert.ok(!/dz-only-city/.test(field), 'the packing field is still marked city-only');
+});
+
+console.log('\n§83 — the customer checkout refuses an unmatched address');
+it('the order route returns the refusal instead of pricing the order', () => {
+  assert.ok(/} else if \(!zone\) \{[\s\S]{0,1800}?return res\.status\(400\)\.json\(noZoneMatchPayload\(address\)\);/.test(RETAIL_SRC),
+    'POST /orders no longer refuses an address that matches no zone');
+});
+it('the legacy ¥12 / ¥18 fallback is GONE, not merely bypassed', () => {
+  // Matched against code with line comments stripped: the handler explains the
+  // old branch in prose exactly where it used to sit, and an absence guard a
+  // comment can trip is one nobody can keep green honestly.
+  const code = RETAIL_SRC.replace(/^\s*\/\/.*$/gm, '');
+  assert.ok(!/cfgValue\('fees\.standardShipping'/.test(code),
+    "fees.standardShipping is still read — the guessed fee can still be charged");
+  assert.ok(!/cfgValue\('fees\.sameDayDelivery'/.test(code),
+    'fees.sameDayDelivery is still read');
+});
+it('the refusal names the place on the customer path too', () => {
+  const fn = RETAIL_SRC.slice(RETAIL_SRC.indexOf('function noZoneMatchPayload('));
+  const body = fn.slice(0, fn.indexOf('\n}'));
+  for (const k of ['province', 'city', 'district', 'unmatched']) {
+    assert.ok(new RegExp(`\\b${k}:`).test(body), `the payload carries ${k}`);
+  }
+  assert.ok(/error: 'no_zone_match'/.test(body), 'and the code every client already maps');
 });
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
