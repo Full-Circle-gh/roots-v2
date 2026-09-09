@@ -10446,7 +10446,11 @@
                 </div>
 
                 <div class="fb-fields" data-fbpane="gz" hidden>
-                  <div class="fb-sub" style="margin-top:0">A Guangzhou order goes out on our own run the day the batch is made, so it names one date that is both. The only placeholder is <code>{make_date}</code>. · 广州订单由我们自己配送,制作当天即送达,因此只显示一个日期。</div>
+                  <!-- One clean text node: the README's Conventions gotcha is that inline
+                       markup between the EN and CN halves fragments the node, the " · "
+                       stops separating full-EN from full-CN, and BOTH languages leak.
+                       The <code> that wrapped {make_date} did exactly that. -->
+                  <div class="fb-sub" style="margin-top:0">A Guangzhou order goes out on our own run the day the batch is made, so it names one date that is both. The only placeholder is {make_date}. · 广州订单由我们自己配送,制作当天即送达,因此只显示一个日期。留空则使用默认文案。</div>
                   <div class="fb-field">
                     <span class="fb-name">Popup eyebrow · 弹窗小标题</span>
                     <div class="fb-pair">

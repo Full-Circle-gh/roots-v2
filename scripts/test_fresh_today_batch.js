@@ -423,6 +423,25 @@ section('7 · the operator can actually set the hour');
     assert.deepStrictEqual(bad, [], 'Chinese on the left of the middot kills the split');
   });
 
+  it('no pair is fragmented by inline markup — README Conventions gotcha', () => {
+    // The " · " split runs PER TEXT NODE. A <code>/<b>/<span> sitting between
+    // the English and the Chinese leaves the pair's own node holding only a
+    // scrap of English, so the prose before it survives into the other
+    // language and BOTH leak. An element carrying no text (the back button's
+    // svg icon) is not markup between the halves and does not count.
+    const blk = freshBlock();
+    const bad = [];
+    // Element opens, then TEXT with words, then more markup, then the pair.
+    const re = /<(div|span|label|h3|p|button)\b[^>]*>([^<>]*[A-Za-z]{3}[^<>]*)<[a-z][^>]*>[\s\S]{0,200}?·/g;
+    let m;
+    while ((m = re.exec(blk))) {
+      const between = blk.slice(m.index, re.lastIndex);
+      // svg-only icons carry no text; anything with letters inside the tag does
+      if (/<(code|b|strong|em|i|span)\b[^>]*>[^<>]*[A-Za-z0-9{]/.test(between)) bad.push(m[2].trim().slice(0, 70));
+    }
+    assert.deepStrictEqual(bad, [], 'a pair split across text nodes leaks both languages');
+  });
+
   it('the card carries no uppercase eyebrow classes (§1.6)', () => {
     const blk = freshBlock();
     assert.ok(!/class="[^"]*\bstacked\b/.test(blk), 'label.stacked is uppercase 600');
