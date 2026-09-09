@@ -59,7 +59,14 @@ function _stockState(p, onLocalRun) {
   const out = p.ship_from_supplier ? !!p.supplier_paused : (stock != null && stock <= 0);
   const preorder = out && !p.ship_from_supplier && !!p.oos_preorder
         && (!onLocalRun || !!p.local_fresh_date);
-  return { out, preorder, soldOut: out && !preorder, stock };
+  /* §80 follow-up — is the batch behind this row TODAY'S? Returned BESIDE
+     `preorder` and never folded into it: `preorder` is what keeps the card
+     ALIVE (soldOut is its inverse), so turning it off to silence a band would
+     kill the row instead of quieting it. What today changes is only whether
+     the band says anything — see preText where the rows are built.
+     The server decides "today" (§82); a handset clock does not. */
+  const today = preorder && !!onLocalRun && !!p.local_fresh_today;
+  return { out, preorder, today, soldOut: out && !preorder, stock };
 }
 
 const DIETARY_FILTERS = [
@@ -547,7 +554,7 @@ Page({
       const eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
       const isFlash = !members && !!p.is_on_flash && eff < regular;
 
-      let price, priceWas = '', pricePrefix = '', outOfStock, preorder, soldUnits, subline;
+      let price, priceWas = '', pricePrefix = '', outOfStock, preorder, preToday, soldUnits, subline;
       if (members) {
         // Collapsed variant card. `price` is just the lowest amount (e.g.
         // "¥89") so it stays in League Gothic at the cards' big price size;
@@ -569,12 +576,16 @@ Page({
         const states = members.map(m => _stockState(m, onLocalRun));
         outOfStock = states.every(s => s.soldOut);
         preorder = !outOfStock && states.every(s => s.out) && states.some(s => s.preorder);
+        // Silent only when EVERY size still orderable is made today. One size
+        // waiting on a later batch is a promise the card still has to name.
+        preToday = preorder && states.filter(s => s.preorder).every(s => s.today);
         soldUnits = members.reduce((s, m) => s + (Number(m.units_sold) || 0), 0);
         subline = '';
       } else {
         const st = _stockState(p, onLocalRun);
         outOfStock = st.soldOut;
         preorder = st.preorder;
+        preToday = st.today;
         // All-time units sold (server min-gates this to 0 below the badge
         // threshold), shown as a small "X SOLD" popularity caption on the card.
         soldUnits = Number(p.units_sold) || 0;
@@ -598,9 +609,14 @@ Page({
         // Band text for a reservable (out-but-orderable) row. The website
         // names the promise instead of the mechanism — a meal we cook in runs
         // says NEXT BATCH, anything else SHIPS SOON — so say the same here.
-        preText: p.is_batch_made
-          ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
-          : (L === 'cn' ? '现订现发' : 'SHIPS SOON'),
+        // …and NOTHING at all when that batch is today's: the row is orderable
+        // now, the kitchen serves it inside the customer's own window, and a
+        // band promising a future batch would be describing a wait that is not
+        // happening (§80).
+        preText: preToday ? ''
+          : p.is_batch_made
+            ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
+            : (L === 'cn' ? '现订现发' : 'SHIPS SOON'),
         // image_data may now be a streamed-image URL (/api/retail/products/:id/
         // image) since the list omits inline base64 — absUrl() resolves it
         // against the API host. data: URIs and absolute URLs pass through.
