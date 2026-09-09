@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.183
+# Tacet shared-core consolidation — decisions record, v4.184
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-09 · v4.184 — **§84 ADDED: THE SHELF TELLS THE TRUTH, AND WHAT IT OWES IS WHAT THE KITCHEN MAKES — DECIDED by Ash**, on the question of how §74/§80's pre-order rule reaches Meituan, Eleme and gzgrocery. **IT CANNOT, AND THE REASON IS NOT THE PUSH.** Ash described the routine the rule depends on — *"in the morning when kitchen come to work they already see how many fresh meals and wraps need to be prepared and they will add those extra to the batch they are about to do"* — and the path back from the platform to the kitchen found the system does not do it. **THREE FINDINGS, ONE CAUSE**: the kitchen's morning list never reads customer orders at all (`retail_order_items` appears in none of `routes/restock.js`, `routes/retail-production.js`, `lib/kitchen-ready.js` — 厨房制作队列 renders REQUESTS somebody typed, so a night of orders with no request raised opens an EMPTY queue); the waiting-orders card counts orders rather than units and excludes all three platforms by SQL as "read-only channel mirrors"; and a platform order on an empty shelf leaves no trace of what it owes, the ingest clamping at zero and writing the shortfall to a JSON log column in a table the same file calls having "no index, no screen and nothing watching it". **So the number the kitchen would add to its batch exists NOWHERE — not as a total, not per product, not for any channel, the mini app included.** **THE RULING: the morning number is DERIVED, never typed** — Ash chose automatic when the fork was put to him, with the manual request path kept for what the orders do not cover. **AND THE NUMBER IS NOT A NEW CONCEPT: §39 ALREADY DEFINED IT.** `adjustStock` stopped flooring at zero in words this section only points at — *"Negative one is ugly but true: it says stock was sold that was never held, which really happened"* — and a platform order taken at 08:00 against an empty shelf IS that. **owed = how far the shelf has fallen below zero, plus the units on `awaiting_restock` orders**, which hold no stock by design and never dent the shelf. No new table, no forecast, no batch declared in advance, nothing parsed from a log. **THIS PAYS OFF DEBT `adjustStock` RECORDED BY NAME** — the four channel-ingest paths still computing their own `Math.max(0, …)`, called "recorded debt, per-channel work"; three of them are unclamped here. **THE TRUTH GOES NEGATIVE; THE NUMBER WE PUBLISH DOES NOT** — `rawStockAt` returns the raw column and `sellableAt` passes it through, so the floor moves to the PUBLISH boundary, a platform being told 0 because a platform cannot hold a debt, and clamping at the ingest putting the floor on the wrong side of the fact. **HOW IT RETURNS TO A TRUE NUMBER, asked by Ash directly** (*"after it's minus eighteen, how it will go back to the right stock?"*): it corrects itself through the door the kitchen already uses — 加库存 and Log a batch both pass `deltaQty`, so −18 plus a batch of 40 is 22, no reset and nothing to clean up, and *做好一批,马上加库存* is already that door. **THE RECOUNT DOOR IS THE ONE THAT WOULD ERASE IT**: "set the new total" writes an absolute, and §46 deliberately asks nothing of an upward correction, so somebody typing 0 at a shelf of −18 wipes eighteen owed units in silence — a recount RAISING a count across zero must now acknowledge what it clears, §46's asymmetry not holding once a negative can mean a debt. **WHERE IT IS SHOWN**: above the request list in 厨房制作队列 and rendering on an EMPTY queue, which is the case it exists for; plus one row on the phone Home beside 厨房已完成. Not on 加库存 (the batch is already cooked), not on 登记批次 (that records what was made), not in the desktop back office (§81 is the long record of the kitchen having no login for it). **WHAT IS NOT DECIDED HERE, named so it is not read as done: the pre-order window on the three channels is the NEXT section's.** Ash has settled two of its parameters — a lock hour defaulting to 11:00 **and adjustable**, and all three channels in scope, gzgrocery included over this session's caution (*"I have no problem with gzgrocery sync it works great"*) — but publishing a forward quantity is a separate change with its own guard rails and is unsafe until the number above is visible to the kitchen. **This section makes the demand legible; it does not yet make it sellable.**
 
 2026-09-09 · v4.183 — **§83 ADDENDUM: THE REFUSAL IS THE CUSTOMER'S; STAFF ARE NOT BLOCKED — DECIDED by Ash**, who asked for the question to be settled rather than left open. §83 says an address matching no zone is refused by "every path that can create an order"; read literally that includes the operator keying one in by hand, and it should not. **THE TWO RULES ONLY APPEAR TO CONFLICT.** §83's reason is in its own text — *a guessed fee is worse than a refusal, because a refusal is visible and a wrong fee is not* — and the harm it names is a fee NOBODY CHOSE being charged silently. **On the staff path there is no such fee**: `POST /api/retail-admin/orders` never matched a zone in the first place, the operator types the shipping fee, and `manualOrderFees` is a QUOTE that prefills two fields which the create route never consults. §83's harm cannot occur there, and refusing would cost something real — a shop on the phone to a customer in an unconfigured district would have to turn the order away. **`manualOrderFees` ALREADY CARRIED THAT RULE before §83 was written** (*"it must never refuse STAFF: the shop still takes the order and someone works the zone out later"*); **that rule stands and §83 does not override it.** **WHAT §83 DOES CHANGE ON THAT PATH**: the operator is told WHICH place has no zone — `unmatched` travels beside `no_zone_match`, naming the province/city/district to add instead of handing back a bare code. **PINNED BY A TEST, NOT BY THE PARAGRAPH**: `scripts/test_manual_order_fees.js` asserts the non-refusal directly (zero fees, no refusal flag, the order still keyable), so a later reading of §83 that tries to block staff turns that assertion red before it reaches production. **REVERSIBLE AND SAID SO**: if the intent is that staff should be blocked too, it is a one-line change and the pinning test is the one to invert. Docs only; the behaviour it describes shipped in PR #415. No code, no schema, no migration, and no change to `.gitignore` or CI.
 
@@ -8081,3 +8083,110 @@ turns that assertion red before it reaches production.
 left open; this is the answer, with the reasoning above rather than an appeal to the older
 comment. If the intent is that staff should also be blocked, that is a one-line change and
 the test that pins the current behaviour is the one to invert.
+
+## §84 — THE SHELF TELLS THE TRUTH, AND WHAT IT OWES IS WHAT THE KITCHEN MAKES
+
+**Decided by Ash, 2026-09-09**, in the session that asked how the §74/§80 pre-order rule reaches
+Meituan, Eleme and gzgrocery. It does not reach them yet, and this section is the half that has to
+exist before it can. **The pre-order window on the channels is NOT decided here** — it is named at
+the end as the work this unblocks, so that a later reader does not mistake the prerequisite for the
+feature.
+
+### THE QUESTION THAT EXPOSED THE GAP
+
+§80 made a sold-out fresh meal orderable in the mini app while today's batch is still coming. Ash
+asked for the same on the three platforms. Walking the path back from the platform to the kitchen
+found the rule cannot work there, and the reason is not the push:
+
+> *"in the morning when kitchen come to work they already see how many fresh meals and wraps need to
+> be prepared and they will add those extra to the batch they are about to do"*
+
+**That is the right design and it is not what the system does.** Three findings, one cause:
+
+1. **The kitchen's morning list never reads customer orders.** `retail_order_items` appears nowhere
+   in `routes/restock.js`, `routes/retail-production.js` or `lib/kitchen-ready.js`. 厨房制作队列
+   renders REQUESTS somebody typed. A night of orders with no request raised leaves the kitchen
+   opening an empty queue.
+2. **The waiting-orders card counts orders, not units, and excludes every platform** —
+   `COALESCE(o.channel,'') NOT IN ('meituan','eleme','gzgrocery')`, as "read-only channel mirrors".
+3. **A platform order on an empty shelf leaves no trace of what it owes.** The ingest clamps at zero
+   and writes the shortfall to a JSON log column, in a table the same file describes as having "no
+   index, no screen and nothing watching it".
+
+**So the number the kitchen would add to its batch exists nowhere.** Not as a total, not per product,
+not for any channel — the mini app included.
+
+### THE RULING: THE NUMBER IS DERIVED, NEVER TYPED
+
+**Ash chose automatic** when the fork was put to him: the morning number is computed from the orders
+themselves, not raised as a request by a person reading a screen. The manual request path stays for
+everything the orders do not cover; it is no longer the only way the kitchen learns what to make.
+
+**AND THE NUMBER IS NOT A NEW CONCEPT — §39 ALREADY DEFINED IT.** `adjustStock` stopped flooring at
+zero for exactly this reason, in words this section only has to point at:
+
+> *"Negative one is ugly but true: it says stock was sold that was never held, which really
+> happened."*
+
+A platform order taken at 08:00 against an empty shelf **is** stock sold that was never held. The
+shelf going to −18 is not a fault to be suppressed; it is the sentence "eighteen are owed", already
+in the vocabulary this codebase decided on. So:
+
+> **owed(store, product) = the distance the shelf has fallen below zero, plus the units on
+> `awaiting_restock` orders — which hold no stock by design and so never dent the shelf at all.**
+
+No new table, no forecast, no batch plan declared in advance, and nothing parsed out of a log.
+
+### WHAT THIS MAKES TRUE, AND IT IS THE POINT
+
+`adjustStock`'s own comment names the four channel-ingest paths that still compute
+`Math.max(0, …)` and pass an absolute figure as **"recorded debt, per-channel work."** This section
+is where three of them are paid off. Unclamped, the shelf carries the debt, the kitchen reads it,
+and the oversell alarm stops being the only record of it.
+
+**THE TRUTH GOES NEGATIVE; THE NUMBER WE PUBLISH DOES NOT.** `bundle-stock.rawStockAt` returns the
+raw column and `sellableAt` passes it straight through for a non-bundle, so an unclamped shelf would
+push a NEGATIVE quantity to Meituan, Eleme and Guanyi. The floor belongs at the publish boundary and
+nowhere else: our ledger is allowed to say −18 because it is true, and a platform is told 0 because
+a platform cannot hold a debt. Clamping at the ingest — where it sits today — puts the floor on the
+wrong side of the fact and is what destroys it.
+
+### HOW IT RETURNS TO A TRUE NUMBER, AND THE DOOR THAT WOULD ERASE IT
+
+Asked directly by Ash: *"after it's minus eighteen, how it will go back to the right stock?"*
+
+**It corrects itself through the door the kitchen already uses.** 加库存 and Log a batch both pass
+`deltaQty` — an increment, not a total (`routes/retail-inventory.js`, `routes/retail-production.js`).
+−18 plus a batch of 40 is 22: the eighteen go to the people waiting and twenty-two stay on the shelf,
+with no reset step and nothing to clean up. Ash's standing instruction to the kitchen — *做好一批,
+马上加库存* — is already exactly this door.
+
+**THE RECOUNT DOOR IS THE ONE THAT WOULD ERASE IT.** "Set the new total" writes an absolute
+`newPhysicalQty`. Somebody standing at −18, seeing an empty shelf and typing 0, wipes the record that
+eighteen are owed — and §46 deliberately asks nothing of an UPWARD correction, so it would happen in
+silence. **A recount that raises the count across zero from a negative shelf must therefore
+acknowledge what it is clearing**, on the model of the reason §46 already demands when lowering one.
+The asymmetry §46 relies on — that raising a count is overwhelmingly a miscount being fixed — does
+not hold once a negative can mean a debt.
+
+### WHERE THE NUMBER IS SHOWN
+
+**厨房制作队列 (`kitchenqueue`), above the request list, and it renders on an EMPTY queue** — that is
+the case it exists for. One line per product, a name and a number, no buttons and no status: it is a
+total, not a task with a state. The request list underneath is unchanged.
+
+**Plus one row on the phone Home**, beside 厨房已完成, so it is seen before anything is opened. The
+kitchen is not shown which channel a unit came from; they are shown how many to make.
+
+Deliberately NOT on 加库存 (the wrong moment — the batch is already cooked), NOT on 登记批次 (that
+records what was made), and NOT in the desktop back office, which §81's realm retirement is the long
+record of the kitchen having no login for.
+
+### WHAT IS NOT DECIDED HERE
+
+**The pre-order window on Meituan, Eleme and gzgrocery is the next section's, not this one's.** Ash
+has settled two of its parameters already — a lock hour defaulting to 11:00 **and adjustable**, and
+all three channels in scope, gzgrocery included over this session's caution (*"I have no problem with
+gzgrocery sync it works great"*) — but publishing a forward quantity to a platform is a separate
+change with its own guard rails, and it is unsafe until the number above is visible to the kitchen.
+This section makes the demand legible. It does not yet make it sellable.
