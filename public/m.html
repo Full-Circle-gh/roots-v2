@@ -702,6 +702,7 @@ const state = {
      have to be carried to the screen that adds them or the shelf stays short. */
   kq:{list:null,tried:false,tab:'active',order:null,orderId:null,busy:false,err:'',
       note:'',    // why a closed request did not reach the record screen
+      printing:false,  // the reprint's own flag — see kqReprint
       /* THE DOT ON "To make" (§71). `seen` is the ids of the requests this
          phone has actually had in front of it on that tab; `fresh` is how many
          active requests are not among them — the dot, never a count. Both are
@@ -896,7 +897,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
     if(pikStores().length>1) k.at=null; }
   /* The queue is re-read on entry for the same reason the kitchen-ready list
      is: what is waiting to be made is a fact about this minute. */
-  if(route==='kitchenqueue'){ const k=state.kq; k.tried=false; k.list=null; k.order=null; k.orderId=null; k.err=''; k.note='';
+  if(route==='kitchenqueue'){ const k=state.kq; k.tried=false; k.list=null; k.order=null; k.orderId=null; k.err=''; k.note=''; k.printing=false;
     /* §84 — the owed block is re-asked on the same entry and for a stronger
        reason than the queue is: it is what somebody opened this screen to find
        out at the start of a shift, and a figure carried over from the last time
@@ -1037,6 +1038,7 @@ reg('kqList', ()=>{ const k=state.kq; k.order=null; k.orderId=null; k.err='';
 reg('kqTab', t=>{ const k=state.kq; if(k.tab===String(t)) return; k.tab=String(t); k.list=null; k.tried=false; render(); });
 reg('kqItemAdvance', (id,to)=>kqItemAdvance(Number(id),to));
 reg('kqItemRecord', id=>kqItemRecord(Number(id)));
+reg('kqReprint', ()=>kqReprint());
 reg('hdBump', (i,d)=>hdBump(Number(i),Number(d)));
 /* The chip sets the reason and closes the row's picker in one tap — there is
    no second confirm, because the answer IS the confirmation. */
@@ -7805,6 +7807,41 @@ function kqItemAdvance(itemId,to){
   });
 }
 
+/* A SECOND COPY OF THE SLIP, asked for by somebody standing at the printer.
+   Reported by Ash: "there should be a reprint button for the kitchen in case
+   need a new copy of the order." The slip prints once, by itself, when the
+   request lands; paper runs out, a roll gets thrown away with the rubbish, two
+   people need the same job in two places. None of that is a reason to work the
+   queue off a screen.
+
+   ITS OWN BUSY FLAG, not k.busy. That one disables every line's "Mark as made"
+   and relabels it "Saving…" — and asking for a second copy of the paper is not
+   a reason the kitchen cannot carry on closing lines while it prints.
+
+   THE SERVER FORCES IT (routes/restock.js /reprint), so this prints even for a
+   tenant whose automatic slips are switched off; what it cannot do is conjure a
+   printer that was never set up, which is the first of the two failures below.
+   Both messages are the retail printer's own, verbatim — the same printer, and
+   the same two things that are ever wrong with it. A failure renders into k.err,
+   which sits above the request and stays until the operator acts on it; only the
+   success is a toast, because a toast confirms and never reports a failure. */
+function kqReprint(){
+  const k=state.kq;
+  if(k.printing||!k.order) return;
+  k.printing=true; k.err=''; render();
+  apiWrite('/api/restock/'+k.order.id+'/reprint',{}).then(()=>{
+    k.printing=false; render();
+    showToast(T('Sent to the printer','已发送到打印机'));
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    k.printing=false;
+    k.err=(e.code==='no_kitchen_printer'||e.code==='not_configured')
+      ? T('No printer is set up. Add one in Settings on desktop.','尚未配置打印机。请在电脑端设置中添加。')
+      : T('The printer did not take it. Check that it is on and has paper.','打印机没有接收。请检查是否开机、有纸。');
+    render();
+  });
+}
+
 /* THE WAY BACK TO THE RECORD SCREEN, for a line that was marked made and left
    unrecorded. Reported by Ash against the first build of §61's per-item
    hand-over: "if I'm on this page and going back I can't come back to this
@@ -9550,7 +9587,22 @@ function screenKitchenQueue(){
     return `<div style="padding:4px 16px 12px">
         <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('kqList')">${T('Kitchen queue','厨房制作队列')}</button></div>
       ${err}
-      <div style="padding:0 16px 4px;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
+      <!-- The reprint rides the request NUMBER, not the row above it: that row
+           is the way out of here, and an action on this job belongs beside the
+           name of the job. Drawn as the secondary chip the retail receipt's own
+           reprint uses — same act, same weight, and it must not compete with the
+           "Mark as made" buttons that are what this screen is for. -->
+      <div style="display:flex;align-items:center;gap:12px;padding:0 16px 4px">
+        <div style="flex:1;min-width:0;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
+        <!-- No aria-label: this chip always carries its own words, and a fixed
+             label would have gone on saying "Reprint" to a screen reader over
+             the top of the "Printing…" the eye can see. -->
+        <button onclick="APP.cmd('kqReprint')"${k.printing?' disabled':''}
+          style="flex:none;display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);
+                 background:var(--surface-raised);border:1px solid var(--border-default);border-radius:8px;
+                 cursor:pointer;padding:5px 9px;font-family:inherit">${ic('printer',15)} ${
+          k.printing?T('Printing…','打印中…'):T('Reprint','重打')}</button>
+      </div>
       <div style="padding:0 16px 14px;font-size:13px;color:var(--text-secondary)">${kqWhen(o)}${items.length} ${T('items','项')}${p?' · '+escAttr(p):''}</div>
       <div>${rows}</div>`;
   }
