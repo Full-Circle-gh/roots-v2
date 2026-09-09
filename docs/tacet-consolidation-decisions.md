@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.178
+# Tacet shared-core consolidation — decisions record, v4.179
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-09 · v4.179 — **§80 AND §81 ADDED: TIME IS A TENANT PROPERTY, NEVER A HOST PROPERTY; AND EVERY DISTRICT MUST BE COVERED, AN UNMATCHED ADDRESS IS REFUSED — BOTH DECIDED by Ash**, on the delivery-logic survey (`docs/surveys/delivery-logic-survey.md`). **§80 SETTLES THE QUESTION THE SURVEY COULD NOT (its Q1)**: every date and time decision — cutoffs, batch dates, slot generation, business-date rollover, "today", "tomorrow", pre-order gates — resolves in the **tenant's** timezone, read from a tenant setting, and **no business decision may read the host clock's local time** (`new Date().getHours()`, `.getFullYear()`, `.getDate()`, `.toDateString()` are forbidden wherever a cutoff, date or slot is computed). **THE HOST IS PINNED TO UTC ON PURPOSE, AND THE DEPLOY CONFIG MUST SET IT EXPLICITLY** — not for neutrality but so that un-migrated code is **visibly wrong rather than silently correct for one tenant**; a tenant offset matching the host is a coincidence, never a fallback. **A TENANT WITH NO TIMEZONE FAILS LOUDLY AT STARTUP and does not default**, a default being the host fallback in different clothes. **CI RUNS IN UTC**, so the logic cannot pass by inheriting a convenient offset — `.github/workflows/tests.yml` currently pins `TZ: Asia/Shanghai` on the belief that production runs UTC+8, and that pin is precisely what kept survey finding F2 invisible to the suite. Roots is `Asia/Shanghai`; other tenants will be elsewhere. **§81 SETTLES F1/F23**: a tenant's zone table must cover every district it serves — **coverage is a data obligation on the tenant, enforced by the platform** — and **an address matching no zone is a configuration error, not a delivery option**, refused by every order-creation path with an explicit error, identically. **NO LEGACY FEE FALLBACK, NO DEFAULT FEE, NO DEFAULT SLOT SET**, because **a guessed fee is worse than a refusal: a refusal is visible and a wrong fee is not.** The rule `/checkout/quote` already applies is the correct one and **the other paths conform to it rather than it being relaxed to match them** — which is the direction the code had drifted. **NEITHER RULING IS BUILT HERE, AND THAT IS DELIBERATE.** §80's call sites (`routes/retail.js` — `parseYmdLocal`/`toYmdLocal`, `earliestBatchMakeDate`, `nextFreshBatchDate`, `computeDeliverySlots`, `expressEarliestIso`, `rescheduleEligibility`) are unmigrated, with `lib/business-date.js` already the shape to copy; §81's refusal is **gated on a zone-coverage report first**, since a district that has taken real orders and is missing from `retail_delivery_zones` would begin rejecting them the day the refusal ships. **The survey is amended, not rewritten** — its dated findings stand as written and gain cross-references to §80/§81, and its Q1 is marked answered. Docs only; no code, no schema, no migration, no test change, and no change to `.gitignore` or CI.
 
 2026-09-09 · v4.178 — **§79 ADDED AND BUILT: DELIVERY IS A SETTINGS PANEL, NOT A RAIL DESTINATION — DECIDED by Ash**, *"move the delivery section inside setting"*. The `Delivery · 配送` rail row at `order:6` is **gone**; the page is now the eighth panel of Settings, between Customer service and Operations. **TWO READINGS WERE PUT TO ASH RATHER THAN GUESSED BETWEEN** — a Settings-sidebar LINK that opens the page as it stands (~20 lines, the Brand/Billing pattern) or a real Settings PANEL — and **he chose the panel**, which is also the better answer: a link leaves the Settings screen the moment it is clicked, taking the sidebar that just said "you are in Settings" with it. **A MOVE, NOT A REWRITE**: ~1,090 lines relocated verbatim and re-indented from `<section id="tab-delivery">` into `.settings-body` as `<div class="sub-panel" id="sub-delivery">` — same input ids, same save functions, same `dlvGo()` switching, same wizard. **A `<div>` AND NOT A `<section>`, WHICH IS LOAD-BEARING**: `goTab()` clears `.active` off every `main section` on each tab switch, so a section here is a panel any rail click switches dark. **THE GATE MOVED WITH THE PAGE, which is the half that could have shipped ungated**: `TAB_CAP.delivery` is deleted with the row it keyed off and the capability is now `data-cap="delivery:view"` on the nav button — and **`delivery:view` JOINS `TAB_CAP.config`'s any-of list**, without which a role holding it and nothing else in Settings would have watched its one screen move behind a door it cannot open. **THREE CALLERS WENT THROUGH A TAB THAT NO LONGER EXISTS** (the setup guide's delivery step, integrations' "Review zones", and `salesGo('delivery')` from the JD card) and would have failed **silently** — `goTab` finds no row, falls through to its manual path and lights a section id that is not there; all three call `dlvOpen()` now. **THE SEARCHES BOTH GAIN AND ONE NEEDED A FIX**: the command palette picks the panel up through the `#settings-nav` walk instead of the rail walk (deep card entries survive via `indexCards('#sub-delivery')`), Settings' own card search covers delivery cards for the first time — and because most of those cards sit inside a `[hidden]` `.dlv-view`, **both would have scrolled to an invisible element**, so `_dlvReveal()` switches to the card's own sub-view first and both callers use it. **PROVED IN A REAL BROWSER, not only by string match**: Chromium against the shipped page over a local static server — no rail row, panel is a `DIV` inside `.settings-body`, all eleven `.dlv-view`s present, `dlvOpen()` lights Settings + the panel with the sidebar still up, the hub visible, zones hidden, the shared Save bar off, `#dz-kpis` hidden on the hub and shown on zones (which is the CSS rename working), and `_dlvReveal()` opening the fees view for a card on it while no-opping on `#sub-shop`. **NEW SUITE `scripts/test_delivery_in_settings.js` — 33 assertions, MUTATION-PROVED RATHER THAN TRUSTED FOR PASSING**: five deliberate breaks (section-not-div, the missing `data-cap`, `delivery:view` dropped from `config`, a CSS rule left on `#tab-delivery`, the palette's reveal removed) each turned exactly the assertions that state the rule red, and **two assertions that passed for the wrong reason were tightened first** — one was a tautology, one an alternation that matched any `dlvGo('hub')` anywhere. **PROVED**: `npm run test:fast` 181 passed, 0 failed; eslint 0 errors. **NOT DONE HERE**: the delivery side-drawers stay siblings in `<main>` (fixed-position overlays belonging to no panel), the phone's own `delivery` row is untouched, and delivery cards get no `data-sees="customer"` marks — that list is a §G-03 judgement and its own pass. Code, one new test and docs; **no schema, no migration, no route change, and no change to `.gitignore` or CI.**
 
@@ -7856,3 +7858,82 @@ assertions that state that rule red. **Two assertions passed for the wrong
 reason and were tightened before any of that**: one was a tautology, and one an
 alternation that would have matched any `dlvGo('hub')` anywhere in the file.
 `npm run test:fast`: 181 passed, 0 failed. eslint: 0 errors.
+
+## §80 — TIME IS A TENANT PROPERTY, NEVER A HOST PROPERTY
+
+Ruling (Ash, 2026-09-09), following the delivery-logic survey
+(`docs/surveys/delivery-logic-survey.md`, finding F2), which found the entire
+delivery calendar computing in host-local time while the repository asserted
+the production offset three times and contradicted itself once.
+
+**EVERY DATE AND TIME DECISION IS EVALUATED IN THE TENANT'S TIMEZONE.** Delivery
+cutoffs, batch dates, slot generation, business-date rollover, "today",
+"tomorrow", pre-order gates — all of it resolves in the timezone of the tenant
+that owns the order, read from a tenant setting.
+
+**NO BUSINESS DECISION MAY READ THE HOST CLOCK'S LOCAL TIME.**
+`new Date().getHours()`, `.getFullYear()`, `.getDate()`, `.toDateString()` and
+their equivalents are **forbidden anywhere a cutoff, a date or a slot is
+computed.** The host offset is an accident of deployment. It is not a business
+fact and may not be read as one.
+
+**THE PRODUCTION HOST IS PINNED TO UTC, DELIBERATELY, AND THE DEPLOY CONFIG MUST
+SET IT EXPLICITLY.** This is not neutrality for its own sake: it is so that any
+code still reading host-local time is **visibly wrong rather than silently
+correct for one tenant.** A host that happened to run UTC+8 would make every
+un-migrated call site produce right answers for Roots and wrong ones for
+everybody else, which is the failure that hides. **A tenant timezone that
+happens to match the host is a coincidence, not a fallback.**
+
+**ROOTS IS `Asia/Shanghai` (UTC+8). OTHER TENANTS WILL BE ELSEWHERE.** The
+offset is per tenant, not per platform.
+
+**A TENANT WITH NO TIMEZONE SET IS A CONFIGURATION ERROR AND MUST FAIL LOUDLY AT
+STARTUP.** It does not default. A default here is the same mistake as a host
+fallback wearing different clothes — it produces a working system that is
+quietly wrong for whoever was not thought about.
+
+**CI RUNS WITH THE HOST IN UTC**, so timezone-dependent logic cannot pass tests
+by inheriting a convenient offset. `.github/workflows/tests.yml` currently pins
+`TZ: Asia/Shanghai` for the opposite reason — its comment says production runs
+UTC+8 — and that pin is what made F2 invisible to the suite. It goes.
+
+**WHAT THIS RULING DOES NOT DO.** It does not migrate the call sites. The survey
+lists them (`routes/retail.js` — `parseYmdLocal` / `toYmdLocal`,
+`earliestBatchMakeDate`, `nextFreshBatchDate`, `computeDeliverySlots`,
+`expressEarliestIso`, `rescheduleEligibility`); `lib/business-date.js` already
+does the right thing per location and is the shape to copy. That work is its own
+change and is not started.
+
+## §81 — EVERY DISTRICT MUST BE COVERED; AN UNMATCHED ADDRESS IS REFUSED
+
+Ruling (Ash, 2026-09-09), following the delivery-logic survey
+(`docs/surveys/delivery-logic-survey.md`, findings F1 and F23), which found
+`/checkout/quote` refusing an unmatched address while `POST /orders` accepted it
+and priced it on a legacy flat fee.
+
+**A TENANT'S DELIVERY ZONE TABLE MUST COVER EVERY DISTRICT IT SERVES.** Coverage
+is a **data obligation on the tenant**, enforced by the platform. It is not
+something the code works around.
+
+**AN ADDRESS MATCHING NO ZONE IS A CONFIGURATION ERROR, NOT A DELIVERY OPTION.**
+Every path that can create an order refuses it, with an explicit error, and
+**identically** — the refusal does not vary by entry point.
+
+**THERE IS NO LEGACY FEE FALLBACK, NO DEFAULT FEE, AND NO DEFAULT SLOT SET FOR AN
+UNMATCHED ADDRESS.** A guessed fee is worse than a refusal, because **a refusal
+is visible and a wrong fee is not.** The order is created, the customer is
+charged a number nobody configured, and nothing anywhere reports it.
+
+**THE RULE `/checkout/quote` ALREADY APPLIES IS THE CORRECT ONE.** All other
+order-creation paths conform to it. It is **not** relaxed to match them — which
+is the direction the code drifted, and the direction that looks like
+compatibility while being a silent loss of control.
+
+**WHAT THIS RULING DOES NOT DO.** It does not ship the refusal. Filling the
+coverage gap comes first: a district that has taken real orders and is missing
+from `retail_delivery_zones` would start rejecting them the day the refusal
+lands. The zone-coverage report is the gate on that work, and the survey's F23
+records why an unmatched Guangzhou district reaches this path at all
+(`matchDeliveryZone` returns null rather than falling through once any
+`gz_district` row exists).
