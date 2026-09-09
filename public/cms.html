@@ -637,154 +637,11 @@
      panel. Sprout calls the design_check tool, reads block colours +
      findings, and proposes brand-token swaps. Result renders inline so
      the author never leaves the editor. */
-  /* Ask Sprout — the one Dusk-filled control in this panel. Dusk means
-     "Tacet did this for you", so it belongs to the AI and to nothing else.
-     Flat fill, no gradient: gradients are not part of this system. */
-  .design-check-menu .dc-sprout-cta {
-    display: flex; align-items: center; gap: 8px;
-    width: 100%; margin-top: 10px;
-    padding: 10px 12px;
-    background: var(--tacet-dusk);
-    border: 1px solid var(--tacet-dusk);
-    border-radius: var(--r-md);
-    color: #FFFFFF;
-    font-size: 12px; font-weight: 500;
-    cursor: pointer;
-    text-align: left;
-    transition: background var(--t-fast) var(--ease-out);
-  }
-  .design-check-menu .dc-sprout-cta:hover { background: #5F58A0; border-color: #5F58A0; }
-  .design-check-menu .dc-sprout-cta:disabled { opacity: 0.6; cursor: progress; }
-  /* The mark is a breathing Dusk dot on white, not an emoji. */
-  .design-check-menu .dc-sprout-cta .em {
-    width: 8px; height: 8px; border-radius: 50%; background: #FFFFFF;
-    font-size: 0; flex-shrink: 0;
-    animation: dc-sprout-flash 2.4s var(--ease-out) infinite;
-  }
-  .design-check-menu .dc-sprout-cta .sub { font-size: 10.5px; color: rgba(255,255,255,.72); font-weight: 400; margin-left: auto; }
-  .design-check-menu .dc-sprout-result {
-    margin-top: 10px;
-    padding: 10px 11px;
-    background: var(--bg-elev-1);
-    border: 1px solid var(--line-soft);
-    border-radius: 8px;
-    font-size: 12px; color: var(--text-1); line-height: 1.55;
-    word-break: break-word;
-  }
-  .design-check-menu .dc-sprout-result .dc-sprout-prose { white-space: pre-wrap; }
-  /* Clickable Apply cards — one per propose_design_swap tool call. Sit
-     below Sprout's prose. Show the colour change as a swatch pair so
-     the owner sees what they're about to commit before clicking. */
-  .design-check-menu .dc-apply-list {
-    margin-top: 12px;
-    padding-top: 10px;
-    border-top: 1px solid var(--line-soft);
-    display: flex; flex-direction: column; gap: 7px;
-  }
-  .design-check-menu .dc-apply-list .dc-apply-header {
-    font-size: 10.5px; color: var(--text-3);
-    text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
-    display: flex; align-items: center; gap: 6px;
-    margin-bottom: 2px;
-  }
-  .design-check-menu .dc-apply-list .dc-apply-all {
-    margin-left: auto;
-    background: none; border: 1px solid var(--line);
-    padding: 2px 8px; border-radius: 6px;
-    color: var(--text-2); font-size: 10.5px; font-weight: 600;
-    cursor: pointer;
-  }
-  .design-check-menu .dc-apply-list .dc-apply-all:hover { color: var(--text-1); border-color: var(--line-strong); }
-  .design-check-menu .dc-apply-card {
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    gap: 9px;
-    align-items: center;
-    padding: 9px 10px;
-    background: var(--bg-elev-2);
-    border: 1px solid var(--line);
-    border-radius: 7px;
-    transition: border-color var(--t-fast) ease, background var(--t-fast) ease;
-  }
-  .design-check-menu .dc-apply-card:hover { border-color: var(--text-2); }
-  .design-check-menu .dc-apply-card.applied {
-    background: var(--tacet-sage-tint);
-    border-color: transparent;
-  }
-  .design-check-menu .dc-apply-card .swap-swatches {
-    display: inline-flex; align-items: center; gap: 4px;
-  }
-  .design-check-menu .dc-apply-card .swap-swatches i {
-    width: 14px; height: 14px; border-radius: 4px;
-    box-shadow: inset 0 0 0 1px rgba(17,26,43,.14);
-  }
-  .design-check-menu .dc-apply-card .swap-swatches .arr {
-    color: var(--text-3); font-size: 10px;
-  }
-  .design-check-menu .dc-apply-card .swap-meta {
-    min-width: 0; line-height: 1.35;
-  }
-  .design-check-menu .dc-apply-card .swap-title {
-    font-size: 11.5px; font-weight: 600; color: var(--text-1);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  .design-check-menu .dc-apply-card .swap-sub {
-    font-size: 10.5px; color: var(--text-3);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  }
-  /* Apply is an ordinary operator control, so it is Secondary: transparent,
-     1px border, Ink text. Dusk is spent on the Ask CTA above — never here. */
-  .design-check-menu .dc-apply-card .swap-btn {
-    background: var(--bg-elev-1); color: var(--text-1);
-    border: 1px solid var(--line); padding: 5px 11px; border-radius: var(--r-sm);
-    font-size: 11px; font-weight: 500; cursor: pointer;
-    transition: border-color var(--t-fast) var(--ease-out);
-  }
-  .design-check-menu .dc-apply-card .swap-btn:hover { border-color: var(--text-2); }
-  .design-check-menu .dc-apply-card .swap-btn:disabled {
-    background: var(--bg-elev-1); color: var(--text-3); cursor: progress;
-  }
-  .design-check-menu .dc-apply-card.applied .swap-btn {
-    background: transparent; border-color: transparent;
-    color: var(--tacet-sage-ink); cursor: default;
-  }
-  .design-check-menu .dc-sprout-result strong { color: var(--text-1); font-weight: 500; }
-  .design-check-menu .dc-sprout-result code {
-    background: var(--bg-elev-2); padding: 1px 5px; border-radius: 3px;
-    font-size: 11px; color: var(--text-2);
-  }
-  .design-check-menu .dc-sprout-result .dc-sprout-header {
-    display: flex; align-items: center; gap: 6px;
-    margin-bottom: 6px;
-    font-size: 10.5px; color: var(--text-3);
-    text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600;
-  }
-  .design-check-menu .dc-sprout-result .dc-sprout-rerun {
-    margin-left: auto;
-    background: none; border: none; padding: 0; cursor: pointer;
-    color: var(--text-2); font-size: 10.5px; font-weight: 500;
-  }
-  .design-check-menu .dc-sprout-result .dc-sprout-rerun:hover { color: var(--text-1); }
-  .design-check-menu .dc-sprout-result .dc-sprout-err { color: var(--tacet-brick); }
-  /* Thinking — the Dusk tint room with a breathing Dusk dot. No spinner. */
-  .design-check-menu .dc-sprout-loading {
-    margin-top: 10px;
-    padding: 11px 12px;
-    background: var(--tacet-dusk-tint);
-    border: 1px solid transparent;
-    border-radius: var(--r-md);
-    font-size: 11.5px; color: var(--tacet-dusk);
-    display: flex; align-items: center; gap: 8px;
-  }
-  .design-check-menu .dc-sprout-loading .dot-flash {
-    width: 8px; height: 8px; background: var(--tacet-dusk); border-radius: 50%;
-    animation: dc-sprout-flash 2.4s var(--ease-out) infinite;
-  }
-  /* The signature: live automation breathes, 1 → 0.45 → 1 over 2.4s. */
-  @keyframes dc-sprout-flash {
-    0%, 100% { opacity: 1;    transform: scale(1); }
-    50%      { opacity: 0.45; transform: scale(0.8); }
-  }
+  /* THE SPROUT / APPLY-CARD STYLES STOOD HERE (§81) — the Dusk-filled
+     "Ask Sprout" CTA, its loading and result states, and the Apply cards
+     that committed a proposed brand-token swap. The control they dressed is
+     gone with the agent behind it. The deterministic findings keep their own
+     styles above and below this point. */
   .tabbar-menu .row-themes {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
   }
@@ -5844,11 +5701,13 @@ function uid() { return 'b' + Math.random().toString(36).slice(2, 9); }
 // Backend's Editor tab (iframe): navigating THIS iframe to /login would load the
 // login page *inside* the editor pane (chrome stacked under the real backend).
 // Bounce the TOP window instead so the parent re-auths once.
+// Signed out → the TACET login (§81). This sent people to '/login', the
+// kitchen realm's page, which is the realm this editor no longer uses.
 function cmsAuthBail() {
   try {
-    if (window.self !== window.top) { window.top.location.href = '/login'; return; }
+    if (window.self !== window.top) { window.top.location.href = '/backend/login'; return; }
   } catch (e) { /* cross-origin top (same origin in practice) — fall through */ }
-  location.href = '/login';
+  location.href = '/backend/login';
 }
 async function api(path, opts = {}) {
   const headers = { ...(opts.headers || {}) };
@@ -5889,11 +5748,28 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
   loadFocusMode();
   initCanvasLayout();   // opt-in canvas-first re-housing (no-op unless enabled)
   try {
-    const me = await fetch('/api/auth/me', { credentials: 'same-origin' }).then(r => r.json());
+    /* THE CMS AUTHENTICATES ON TACET (§81), not on the kitchen realm.
+       This read `/api/auth/me` — `session.userId` on the `users` table — which
+       made this page the LAST reason that realm existed after §78 deleted the
+       app it belonged to. It never needed it: every working call this editor
+       makes is already `/api/retail-admin/*`, and `requireRetailAdmin` has
+       always accepted a tenant operator. Only the sign-in check was old. */
+    const me = await fetch('/api/backend/me', { credentials: 'same-origin' }).then(r => r.json());
     if (!me?.user) { cmsAuthBail(); return; }
     const u = me.user;
-    $('#who').textContent = (u.displayName || u.display_name || u.username) + ' · ' + (u.role || '');
-    if (u.role !== 'admin' && !(u.permissions || {}).retail) {
+    $('#who').textContent = (u.displayName || u.username) + ' · ' + (u.roleName || u.role || '');
+    /* THE PERMISSION GATE MOVES FROM A FLAG TO A CAPABILITY, and it FAILS OPEN
+       on purpose. It used to be `role !== 'admin' && !permissions.retail` —
+       columns that live on the deleted realm's table. `content:edit` is this
+       editor's own capability in lib/capabilities.js.
+
+       `caps` is null when the server could not resolve them (its own read
+       fails open, routes/backend-auth.js), so a null must not lock an operator
+       out of the tool they use all day. This is a VIEW gate, not the security
+       boundary: every write below goes through requireRetailAdmin, which is
+       where a refusal actually belongs. */
+    const caps = Array.isArray(u.caps) ? u.caps : null;
+    if (caps && !caps.includes('content:edit')) {
       document.body.innerHTML = '<main style="padding:60px;text-align:center;color:#aeaba2"><h2 style="font-weight:500;margin-bottom:12px">No retail permission</h2><p>Ask an admin to grant you the <code>retail</code> permission.</p></main>';
       return;
     }
@@ -7583,101 +7459,12 @@ async function buildDesignCheckPicker() {
     return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   }
 
-  // Renders the Sprout AI section (button → loading → result). Kept
-  // separate so a re-render of the deterministic findings doesn't blow
-  // away an in-flight or already-loaded Sprout reply.
-  // `suggestions` holds the propose_design_swap tool calls; each becomes
-  // an Apply card under the prose. `applied` indexes which suggestions
-  // have already been committed to the draft so the button shows ✓.
-  let sproutState = { state: 'idle', reply: '', error: '', suggestions: [], applied: new Set() };
-  function sproutSectionHtml() {
-    if (sproutState.state === 'loading') {
-      return `
-        <div class="dc-sprout-loading">
-          <span class="dot-flash"></span>
-          ${B('Sprout is reviewing this page…', 'Sprout 正在分析本页…')}
-        </div>`;
-    }
-    if (sproutState.state === 'ok') {
-      return `
-        <div class="dc-sprout-result">
-          <div class="dc-sprout-header">
-            ${B('Sprout says', 'Sprout · 苗 说')}
-            <button type="button" class="dc-sprout-rerun" data-dc-sprout-rerun>↻ ${B('Re-ask', '重新询问')}</button>
-          </div>
-          <div class="dc-sprout-prose">${renderSproutMarkdown(sproutState.reply)}</div>
-          ${renderApplyList()}
-        </div>`;
-    }
-    if (sproutState.state === 'err') {
-      return `
-        <div class="dc-sprout-result">
-          <div class="dc-sprout-header">
-            ${B('Sprout', 'Sprout · 苗')}
-            <button type="button" class="dc-sprout-rerun" data-dc-sprout-rerun>↻ ${B('Retry', '重试')}</button>
-          </div>
-          <div class="dc-sprout-err">${escapeHtml(sproutState.error || 'Request failed.')}</div>
-        </div>`;
-    }
-    return `
-      <button type="button" class="dc-sprout-cta" data-dc-sprout>
-        <span class="em">✨</span>
-        ${B('Ask Sprout for fixes', '让 Sprout 提建议')}
-        <span class="sub">${B('AI · uses brand tokens', 'AI · 使用品牌色板')}</span>
-      </button>`;
-  }
-
-  // Builds the Apply-card list from successful propose_design_swap calls.
-  // Each card shows a from→to swatch pair, the block name + field, and
-  // an Apply button. There's also an "Apply all" CTA when there's >1.
-  function renderApplyList() {
-    const items = (sproutState.suggestions || []).filter(s => s && s.ok);
-    if (!items.length) return '';
-    const cards = items.map((s, idx) => {
-      const isApplied = sproutState.applied.has(idx);
-      const fromHex = s.from_hex || '#F2E7DF';
-      const toHex   = s.to_hex   || '#F2E7DF';
-      return `
-        <div class="dc-apply-card ${isApplied ? 'applied' : ''}" data-apply-idx="${idx}">
-          <span class="swap-swatches" title="${escapeHtml(s.from_token_label_en + ' → ' + s.to_token_label_en)}">
-            <i style="background:${escapeHtml(fromHex)}"></i>
-            <span class="arr">→</span>
-            <i style="background:${escapeHtml(toHex)}"></i>
-          </span>
-          <div class="swap-meta">
-            <div class="swap-title">${escapeHtml(s.block_label_en)} → ${escapeHtml(s.to_token_label_en)}</div>
-            <div class="swap-sub">${escapeHtml(s.field_label_en)} · ${B('was', '原为')} ${escapeHtml(s.from_token_label_en)}</div>
-          </div>
-          <button type="button" class="swap-btn" data-apply-idx="${idx}" ${isApplied ? 'disabled' : ''}>
-            ${isApplied ? B('✓ Applied', '✓ 已应用') : B('Apply', '应用')}
-          </button>
-        </div>
-      `;
-    }).join('');
-    const allApplied = items.every((_, i) => sproutState.applied.has(i));
-    const allCta = items.length > 1 && !allApplied
-      ? `<button type="button" class="dc-apply-all" data-apply-all>${B('Apply all', '全部应用')}</button>`
-      : '';
-    return `
-      <div class="dc-apply-list">
-        <div class="dc-apply-header">
-          ${B(`${items.length} suggested fix${items.length === 1 ? '' : 'es'} · click to apply`, `${items.length} 处建议 · 点击应用`)}
-          ${allCta}
-        </div>
-        ${cards}
-      </div>`;
-  }
-
-  // Minimal markdown: bold (**...**), inline code (`...`), newlines.
-  // Don't pull in a full markdown lib — Sprout outputs short, mostly
-  // unstructured copy here and we want to escape everything else for
-  // XSS safety.
-  function renderSproutMarkdown(s) {
-    let html = escapeHtml(s || '');
-    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
-    return html;
-  }
+  // THE SPROUT RENDER BLOCK STOOD HERE (§81): sproutState, its section HTML,
+  // the Apply-card list and a small markdown renderer for the reply prose.
+  //
+  // The DETERMINISTIC design check is untouched and is what this panel is now:
+  // dcRunChecks() and its findings, which need no model and never did. What
+  // went is the half that asked one.
 
   function render() {
     const findings = dcRunChecks();
@@ -7690,12 +7477,10 @@ async function buildDesignCheckPicker() {
           ${B('Looks unified', '看起来很统一')}
           <div style="margin-top:6px;font-size:11px">${B('No contrast issues, clean palette, balanced layout.', '未发现对比度或配色问题。')}</div>
         </div>
-        ${sproutSectionHtml()}
         <div class="dc-footnote">
           ${B('Checks: text contrast (WCAG), stacked-colour clash, accent count, tab-bar palette.', '检查项:文字对比度、相邻色块、主色数量、导航栏配色。')}
         </div>
       `;
-      wireSproutHandlers();
       return;
     }
 
@@ -7730,13 +7515,11 @@ async function buildDesignCheckPicker() {
     menu.innerHTML = `
       <div class="dc-summary">${pills.join('')}<span style="margin-left:auto">${B('on this page', '本页')}</span></div>
       ${rows}
-      ${sproutSectionHtml()}
       <div class="dc-footnote">
         ${B('Rules-based checks above + Sprout for palette suggestions. Fix on the right pane, re-open to refresh.', '上方为规则检查,可让 Sprout 提具体的配色建议。')}
       </div>
     `;
 
-    wireSproutHandlers();
 
     menu.querySelectorAll('.locate').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -7773,159 +7556,15 @@ async function buildDesignCheckPicker() {
       });
     });
   }
-
-  // Wires up the Sprout CTA + re-ask + Apply buttons after each render.
-  // Idempotent: re-binds on every render() so newly-injected nodes always
-  // get listeners.
-  function wireSproutHandlers() {
-    const cta = menu.querySelector('[data-dc-sprout]');
-    if (cta) cta.addEventListener('click', e => { e.stopPropagation(); askSprout(); });
-    const re = menu.querySelector('[data-dc-sprout-rerun]');
-    if (re) re.addEventListener('click', e => { e.stopPropagation(); askSprout(); });
-    menu.querySelectorAll('.swap-btn[data-apply-idx]').forEach(btn => {
-      btn.addEventListener('click', e => {
-        e.stopPropagation();
-        const idx = parseInt(btn.dataset.applyIdx, 10);
-        if (Number.isFinite(idx)) applySwap(idx);
-      });
-    });
-    const all = menu.querySelector('[data-apply-all]');
-    if (all) all.addEventListener('click', e => {
-      e.stopPropagation();
-      applyAllSwaps();
-    });
-  }
-
-  // Applies a single propose_design_swap suggestion to state.draft.
-  // Validates the block + field still exist (in case the user edited
-  // between Sprout's reply and clicking Apply), mutates in place,
-  // schedules the save, re-renders the canvas, and pulses the block so
-  // the change is visible. Idempotent: already-applied swaps short-circuit.
-  function applySwap(idx) {
-    if (sproutState.applied.has(idx)) return;
-    const s = (sproutState.suggestions || [])[idx];
-    if (!s || !s.ok) return;
-    const block = (state.draft || []).find(b => b && b.id === s.block_id);
-    if (!block) {
-      toast(T('That block is no longer on the page', '该模块已不在当前页面'), 'err');
-      return;
-    }
-    const prevVal = block[s.field];
-    block[s.field] = s.to_token;
-    sproutState.applied.add(idx);
-    try {
-      scheduleSave();
-      renderPreview();
-    } catch (e) {
-      // Roll back on error so the UI matches what's actually persisted.
-      block[s.field] = prevVal;
-      sproutState.applied.delete(idx);
-      toast('Apply failed: ' + (e.message || 'unknown'), 'err');
-      return;
-    }
-    toast(`Applied: ${s.block_label_en} → ${s.to_token_label_en}`);
-    // Re-render the Sprout section so the button flips to "✓ Applied".
-    render();
-    // Pulse the changed block on the canvas so the eye lands on it.
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const el = document.querySelector(`#phone-content .block-wrap[data-id="${CSS.escape(s.block_id)}"]`);
-      if (!el) return;
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.classList.remove('dc-located');
-      void el.offsetWidth;
-      el.classList.add('dc-located');
-      setTimeout(() => el.classList.remove('dc-located'), 1500);
-    }));
-  }
-
-  function applyAllSwaps() {
-    const items = sproutState.suggestions || [];
-    for (let i = 0; i < items.length; i++) {
-      if (!sproutState.applied.has(i)) applySwap(i);
-    }
-  }
-
-  // One-shot call to /api/ai/chat with a tightly-scoped prompt telling
-  // Sprout to use the design_check tool and propose brand-token swaps
-  // for the page the author is currently editing. Reply is rendered
-  // inline inside the dropdown. We re-render just the Sprout section
-  // rather than the whole menu so the loading state animates cleanly.
-  async function askSprout() {
-    const page = (typeof state !== 'undefined' && state.page) || 'home';
-    sproutState = { state: 'loading', reply: '', error: '', suggestions: [], applied: new Set() };
-    // Re-render with the deterministic content kept, but Sprout slot now
-    // showing the loading state. Cheapest path: just re-run render().
-    render();
-
-    const findingsSummary = dcRunChecks().slice(0, 8).map(f => `[${f.sev}] ${f.title}: ${f.en}`).join('\n');
-    const userMsg =
-      `I'm the store owner, NOT a designer. I'm editing the **${page}** page of my WeChat mini-app in /cms. Walk me through fixes from the TOP of the page to the BOTTOM.\n\n` +
-      `**Workflow** (this matters — otherwise the Apply buttons won't appear):\n` +
-      `1. Call \`design_check\` first to see the page.\n` +
-      `2. For EACH fix you recommend, call \`propose_design_swap\` BEFORE writing its prose. The tool call is what gives me a clickable Apply button — your prose alone does nothing on click. One tool call → one prose paragraph.\n` +
-      `3. Walk top-down by \`position\` (1 = topmost). Fix at position 2 must come before fix at position 7.\n\n` +
-      `**Writing rules:**\n` +
-      `• Use the friendly block names from the tool output ("Hero banner", "Featured product") — never raw types like \`hero_banner\`, never block IDs.\n` +
-      `• Use the friendly field names ("background colour", "text colour", "highlight colour") — never raw fields like \`bg_color\` or \`panel_fg_color\`.\n` +
-      `• When you name a brand colour, say its friendly name first then the token in backticks: "**Forest** (\`forest-kale\`)" — not just "\`forest-kale\`".\n` +
-      `• Plain language for reasons. No designer jargon ("visual rhythm", "brand-forward", "undifferentiated"). Say it like you'd say it to a friend.\n` +
-      `• If a fix resolves a finding from the rules engine, end the line with ✅.\n` +
-      `• Total prose under ~12 lines. English first, then ONE short 中文 paragraph summarising — don't translate line-by-line.\n` +
-      `• If everything already looks unified, say so in one line. Don't call \`propose_design_swap\` just to look helpful — every call becomes a button I see.\n\n` +
-      `Rules-engine findings already surfaced in the panel:\n${findingsSummary || '(none — page passes the deterministic checks)'}`;
-
-    try {
-      const r = await fetch('/api/ai/chat', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          messages: [{ role: 'user', content: userMsg }],
-          context: `Module: mini-app editor (/cms) · Page: ${page}`,
-          lang: 'auto',
-        }),
-      });
-      const j = await r.json();
-      if (!r.ok || !j.success) {
-        throw new Error(j.error || `HTTP ${r.status}`);
-      }
-      // Extract propose_design_swap tool calls — each successful one
-      // becomes an Apply card. Failed proposals (validation errors) are
-      // dropped silently; Sprout was told not to write prose for them.
-      const suggestions = (j.tool_calls || [])
-        .filter(tc => tc && tc.name === 'propose_design_swap' && tc.output && tc.output.ok)
-        .map(tc => tc.output);
-      sproutState = {
-        state: 'ok',
-        reply: j.reply || '(empty reply)',
-        error: '',
-        suggestions,
-        applied: new Set(),
-      };
-    } catch (err) {
-      console.error('Ask Sprout failed:', err);
-      sproutState = {
-        state: 'err',
-        reply: '',
-        error: (err && err.message) ? err.message : 'Request failed. Check that the AI provider is reachable from this server.',
-        suggestions: [],
-        applied: new Set(),
-      };
-    }
-    render();
-  }
+  // THE SPROUT HANDLERS STOOD HERE (§81). wireSproutHandlers, applySwap,
+  // applyAllSwaps and askSprout wired the "Ask Sprout" CTA, its re-ask, and
+  // the Apply cards that committed a proposed brand-token swap to the draft.
+  // §78 deleted the agent they called; Ash scrapped Sprout with the kitchen
+  // app and this button with it, asked directly.
 
   picker.addEventListener('click', e => {
     if (e.target.closest('.locate')) return;
     if (e.target.closest('.dc-finding')) return;
-    if (e.target.closest('[data-dc-sprout]')) return;
-    if (e.target.closest('[data-dc-sprout-rerun]')) return;
-    if (e.target.closest('.dc-sprout-result')) return;
-    if (e.target.closest('.dc-sprout-loading')) return;
-    if (e.target.closest('.dc-apply-list')) return;
-    if (e.target.closest('.dc-apply-card')) return;
-    if (e.target.closest('.swap-btn')) return;
-    if (e.target.closest('[data-apply-all]')) return;
     const willOpen = !menu.classList.contains('open');
     if (willOpen) {
       try { render(); }
