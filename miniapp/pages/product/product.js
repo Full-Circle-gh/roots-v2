@@ -443,6 +443,29 @@ Page({
     // in pages/shop/shop.js for why the run stopped being a reason to refuse.
     const reservable = m => !!(m && m.oos_preorder)
       && (!this._onLocalRun || !!(m && m.local_fresh_date));
+    /* §80 FOLLOW-UP — TODAY'S BATCH IS NOT A PRE-ORDER, and this is the line
+       that was missing. `reservable` opened the local run to a dated fresh meal
+       and the labels below were left as the out-of-city ones, so a Guangzhou
+       shopper at 07:00 on a cooking morning was invited to PRE-ORDER a salad
+       the kitchen puts out at 11:00 — in time for the lunch window they were
+       about to pick. §80's ruling is that nothing is short from the customer's
+       side while the batch is on its way; a badge saying otherwise is the same
+       claim in a smaller font.
+
+       THREE STATES, NOT TWO, and only the middle one is new:
+         made today   → orderable and SILENT. No badge, ordinary ADD TO BASKET.
+         made later   → orderable, and the word is NEXT BATCH · 下批现做 — which
+                        is what the shop grid has always called this row, so the
+                        list and the page stop disagreeing.
+         shipped      → PRE-ORDER · 可预订, untouched. It is the right word for a
+                        parcel that leaves after the next batch.
+
+       `local_fresh_today` IS THE SERVER'S ANSWER AND NOT A COMPARISON MADE
+       HERE (§82). Whether a date is "today" is a business decision about a
+       cutoff, and a handset's clock — wrong, or simply in another zone — is
+       not entitled to make it. */
+    const madeToday = m => !!(m && m.local_fresh_today);
+    const nextBatchRow = m => this._onLocalRun && reservable(m) && !madeToday(m);
     let soldOut = false, preorder = false, stockTag = '', stockTagKind = '';
     if (p.ship_from_supplier) {
       // Supplier-direct: no stock of ours. Always available unless the operator
@@ -461,9 +484,19 @@ Page({
     } else if (p.stock != null) {
       if (Number(p.stock) <= 0) {
         if (reservable(p)) {
-          preorder = true;
-          stockTag = L === 'cn' ? '可预订' : 'PRE-ORDER';
-          stockTagKind = 'pre';
+          // Orderable either way. What changes is whether we say anything, and
+          // which word — see the three states above.
+          preorder = !this._onLocalRun;
+          if (madeToday(p)) {
+            stockTag = '';
+            stockTagKind = '';
+          } else if (nextBatchRow(p)) {
+            stockTag = L === 'cn' ? '下批现做' : 'NEXT BATCH';
+            stockTagKind = 'pre';
+          } else {
+            stockTag = L === 'cn' ? '可预订' : 'PRE-ORDER';
+            stockTagKind = 'pre';
+          }
         } else {
           soldOut = true;
           stockTag = L === 'cn' ? '已售罄' : 'SOLD OUT';
@@ -999,9 +1032,19 @@ Page({
       // Out but pre-orderable (out-of-city) → keep it tappable with a Pre-order
       // badge; only a hard-out size shows the dead SOLD OUT pill. A same-city
       // shopper is never offered the reservation (see recomputeDisplay).
-      const preorder = out && !m.ship_from_supplier && !!m.oos_preorder
+      const orderable = out && !m.ship_from_supplier && !!m.oos_preorder
         && (!this._onLocalRun || !!m.local_fresh_date);
-      const soldOut = out && !preorder;
+      /* §80 follow-up, per SIZE — the same three states the hero badge above
+         resolves. A size made TODAY carries no badge at all: it is orderable
+         now, and a picker row shouting PRE-ORDER over a lunch the kitchen
+         serves at 11 is the defect this fixes. The row keeps its own word
+         because one shared `preLabel` cannot say two things at once. */
+      const rowToday = this._onLocalRun && orderable && !!m.local_fresh_today;
+      const preorder = orderable && !rowToday;
+      const preTxt = !preorder ? ''
+        : (this._onLocalRun ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
+                            : (L === 'cn' ? '可预订' : 'PRE-ORDER'));
+      const soldOut = out && !orderable;
       return {
         id: m.id,
         // Link to this size's own product page — unless it's the one we're
@@ -1015,6 +1058,7 @@ Page({
         isFlash,
         soldOut,
         preorder,
+        preTxt,
         low: (!out && stock != null && stock <= 5)
           ? (L === 'cn' ? `仅剩 ${stock}` : `Only ${stock} left`)
           : '',

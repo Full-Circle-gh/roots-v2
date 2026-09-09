@@ -4761,7 +4761,15 @@ function slStock(m){
   const stock=m.stock==null?null:Number(m.stock);
   const out=m.ship_from_supplier?!!m.supplier_paused:(stock!=null&&stock<=0);
   const pre=out&&!m.ship_from_supplier&&(m.oos_preorder!=null?!!m.oos_preorder:oosBackorder(m))&&(!shopperOnLocalRun()||!!m.local_fresh_date);
-  return {out,pre,soldOut:out&&!pre,stock};
+  /* §80 follow-up — `pre` is what keeps this row ALIVE (soldOut is its
+     inverse), so a row whose batch is TODAY'S must keep it and lose only the
+     WORD. Returned beside, never folded in: flipping `pre` off to silence a
+     pill would mark the row sold out, which is the opposite of true. */
+  const preToday=pre&&shopperOnLocalRun()&&!!m.local_fresh_today;
+  const preTxt=!pre||preToday?'':(shopperOnLocalRun()
+    ?(state.lang==='cn'?'下批现做':'NEXT BATCH')
+    :(state.lang==='cn'?'可预订':'PRE-ORDER'));
+  return {out,pre,preToday,preTxt,soldOut:out&&!pre,stock};
 }
 // Card image. The slim list puts the streamed-image URL in image_data (not
 // image_url) and only substitutes the literal 'data:' sentinel when the row's
@@ -4809,7 +4817,7 @@ function slToRows(products){
     const regular=Number(p.price??p.sell_price)||0;
     const eff=slEff(p);
     const isFlash=!members&&!!p.is_on_flash&&eff<regular;
-    let price,priceWas='',pricePrefix='',outOfStock=false,nextBatch=false,soldUnits=0,subline='';
+    let price,priceWas='',pricePrefix='',outOfStock=false,nextBatch=false,batchToday=false,soldUnits=0,subline='';
     if(members){
       const prices=members.map(slEff).filter(v=>v>0);
       const minP=prices.length?Math.min(...prices):0;
@@ -4822,11 +4830,16 @@ function slToRows(products){
       // desktop card above applies, and the mini app's _stockState.
       const anyFresh=members.some(m=>!!m.local_fresh_date);
       nextBatch=allOut&&anyBack&&(!onLocalRun||anyFresh);outOfStock=allOut&&!nextBatch;
+      // §80 follow-up — silent only when every size still orderable is made
+      // TODAY. One size waiting on a later batch is a promise the card must name.
+      batchToday=nextBatch&&onLocalRun&&members.filter(m=>!!m.local_fresh_date).length>0
+        &&members.filter(m=>!!m.local_fresh_date).every(m=>!!m.local_fresh_today);
       soldUnits=members.reduce((s,m)=>s+(Number(m.units_sold)||0),0);
     }else{
       const sn=p.stock==null?null:Number(p.stock);
       const out=sn!=null&&sn<=0;
       nextBatch=out&&oosBackorder(p)&&(!onLocalRun||!!p.local_fresh_date);outOfStock=out&&!nextBatch;
+      batchToday=nextBatch&&onLocalRun&&!!p.local_fresh_today;
       soldUnits=Number(p.units_sold||p.sold_count||0);
       price=eff>0?slMoney(eff):'—';
       const cmp=Number(p.compare_at_price)||0;
@@ -4837,7 +4850,7 @@ function slToRows(products){
     const batchTxt=p.is_batch_made?(L==='cn'?'下批现做':'NEXT BATCH'):(L==='cn'?'现订现发':'SHIPS SOON');
     return {id:p.id,name:pick(p.name_en,p.name_cn),subline,badge:slPickBadge(p.tags),
       soldCaption:soldUnits>0?(L==='cn'?'已售 '+soldUnits:soldUnits+' SOLD'):'',
-      outOfStock,nextBatch,batchTxt,oosLabel:state.lang==='cn'?'售罄':'SOLD OUT',
+      outOfStock,nextBatch,batchToday,batchTxt,oosLabel:state.lang==='cn'?'售罄':'SOLD OUT',
       image:slImg(p),price,priceWas,pricePrefix,isFlash,
       hasVariants:!!members,variantHint:members?(L==='cn'?members.length+' 规格':members.length+' sizes'):''};
   });
@@ -5011,7 +5024,7 @@ function slRowHtml(it,compact){
   if(it.isFlash)flags.push(`<span class="sl-flash">${state.lang==='cn'?'秒杀':'FLASH'}</span>`);
   if(it.badge)flags.push(`<span class="sl-bd">${it.badge}</span>`);
   const oos=it.outOfStock?`<span class="sl-oos">${it.oosLabel}</span>`
-    :it.nextBatch?`<span class="sl-oos batch">${it.batchTxt}</span>`:'';
+    :(it.nextBatch&&!it.batchToday)?`<span class="sl-oos batch">${it.batchTxt}</span>`:'';
   return `<div class="sl-row ${compact?'compact':''}" data-id="${it.id}">
     ${compact?'':`<div class="sl-img">${it.image?`<img src="${escAttr(it.image)}" alt="" loading="lazy">`:''}</div>`}
     <div class="sl-rb">
@@ -5028,7 +5041,7 @@ function slRowHtml(it,compact){
         ${it.pricePrefix?`<span class="sl-pre">${it.pricePrefix}</span>`:''}
         <span class="sl-pr ${it.isFlash?'flash':''}">${it.price}</span>
       </div>
-      ${(!it.outOfStock&&!it.nextBatch)?`<div class="sl-plus" data-add="${it.id}"></div>`:''}
+      ${(!it.outOfStock&&(!it.nextBatch||it.batchToday))?`<div class="sl-plus" data-add="${it.id}"></div>`:''}
     </div>
   </div>`;
 }
@@ -5036,7 +5049,7 @@ function slRowHtml(it,compact){
 // One product card (grid-2col / grid-3col).
 function slCardHtml(it){
   const veil=it.outOfStock?`<span class="sl-coos">${it.oosLabel}</span>`
-    :it.nextBatch?`<span class="sl-coos batch">${it.batchTxt}</span>`:'';
+    :(it.nextBatch&&!it.batchToday)?`<span class="sl-coos batch">${it.batchTxt}</span>`:'';
   return `<div class="sl-card" data-id="${it.id}">
     <div class="sl-ci">
       ${it.image?`<img src="${escAttr(it.image)}" alt="" loading="lazy">`:''}
@@ -5051,7 +5064,7 @@ function slCardHtml(it){
         ${it.pricePrefix?`<span class="sl-pre">${it.pricePrefix}</span>`:''}
         <span class="sl-pr ${it.isFlash?'flash':''}">${it.price}</span>
       </div>
-      ${(!it.outOfStock&&!it.nextBatch)?`<div class="sl-plus" data-add="${it.id}"></div>`:''}
+      ${(!it.outOfStock&&(!it.nextBatch||it.batchToday))?`<div class="sl-plus" data-add="${it.id}"></div>`:''}
     </div>
   </div>`;
 }
@@ -5241,7 +5254,7 @@ function slOpenVp(repId,members){
       ${rep?`<div class="sl-vp-n">${esc(pick(rep.name_en,rep.name_cn))}</div>`:''}
     </div><div class="sl-vp-x" id="slVpX">×</div></div>
     ${opts.map(o=>`<div class="sl-vp-o ${o.soldOut?'sold':''}" data-id="${o.id}">
-      <div><span class="sl-vp-lb">${esc(o.label)}</span>${o.weight?`<span class="sl-vp-wt">${esc(o.weight)}</span>`:''}${o.low?`<span class="sl-vp-low">${esc(o.low)}</span>`:''}${o.soldOut?`<span class="sl-vp-wt">${L==='cn'?'售罄':'Sold out'}</span>`:''}${o.pre?`<span class="sl-vp-pre">${L==='cn'?'可预订':'PRE-ORDER'}</span>`:''}</div>
+      <div><span class="sl-vp-lb">${esc(o.label)}</span>${o.weight?`<span class="sl-vp-wt">${esc(o.weight)}</span>`:''}${o.low?`<span class="sl-vp-low">${esc(o.low)}</span>`:''}${o.soldOut?`<span class="sl-vp-wt">${L==='cn'?'售罄':'Sold out'}</span>`:''}${o.pre&&o.preTxt?`<span class="sl-vp-pre">${esc(o.preTxt)}</span>`:''}</div>
       <div class="sl-vp-ps">${o.priceWas?`<span class="sl-vp-was">${o.priceWas}</span>`:''}<span class="sl-vp-pr">${o.price}</span></div>
     </div>`).join('')}
   </div>`;
@@ -5322,6 +5335,14 @@ function stockState(p){
   // dated fresh size is enough to bring the product back for a local shopper.
   const onRun=shopperOnLocalRun();
   const fresh=(vs&&vs.length>1)?vs.some(v=>!!v.local_fresh_date):!!p.local_fresh_date;
+  /* §80 follow-up — TODAY'S BATCH IS NOT A PROMISE ABOUT ANOTHER DAY. When the
+     dated batch is today's, this row is orderable NOW and the kitchen serves it
+     inside the window the customer is about to pick, so the badge says nothing
+     at all: `oos` false, no word, an ordinary product page. A future batch keeps
+     NEXT BATCH, and an out-of-city shopper keeps SHIPS SOON.
+     The server answers "is it today" (§82) — never this browser's clock. */
+  const freshToday=(vs&&vs.length>1)?vs.some(v=>!!v.local_fresh_today):!!p.local_fresh_today;
+  if(oosBackorder(p)&&onRun&&fresh&&freshToday) return {oos:false,soldOut:false,localFresh:false,badge:''};
   if(oosBackorder(p)&&(!onRun||fresh)) return {oos:true,soldOut:false,localFresh:onRun&&fresh,
     badge:p.is_batch_made?(state.lang==='cn'?'下批现做':'NEXT BATCH'):(state.lang==='cn'?'现订现发':'SHIPS SOON')};
   return {oos:true,soldOut:true,localFresh:false,badge:state.lang==='cn'?'售罄':'SOLD OUT'};
@@ -5573,7 +5594,7 @@ async function renderProduct(id){
           <div class="sl-vp-n">${esc(pick(p.name_en,p.name_cn))}</div>
         </div><div class="sl-vp-x" data-x>×</div></div>
         ${opts.map(o=>`<div class="sl-vp-o ${o.soldOut?'sold':''}" data-id="${o.id}">
-          <div><span class="sl-vp-lb">${esc(o.label)}</span>${o.weight?`<span class="sl-vp-wt">${esc(o.weight)}</span>`:''}${o.low?`<span class="sl-vp-low">${esc(o.low)}</span>`:''}${o.soldOut?`<span class="sl-vp-wt">${L==='cn'?'售罄':'Sold out'}</span>`:''}${o.pre?`<span class="sl-vp-pre">${L==='cn'?'可预订':'PRE-ORDER'}</span>`:''}</div>
+          <div><span class="sl-vp-lb">${esc(o.label)}</span>${o.weight?`<span class="sl-vp-wt">${esc(o.weight)}</span>`:''}${o.low?`<span class="sl-vp-low">${esc(o.low)}</span>`:''}${o.soldOut?`<span class="sl-vp-wt">${L==='cn'?'售罄':'Sold out'}</span>`:''}${o.pre&&o.preTxt?`<span class="sl-vp-pre">${esc(o.preTxt)}</span>`:''}</div>
           <div class="sl-vp-ps">${o.priceWas?`<span class="sl-vp-was">${o.priceWas}</span>`:''}<span class="sl-vp-pr">${o.price}</span></div>
         </div>`).join('')}
       </div>`;
@@ -5587,7 +5608,7 @@ async function renderProduct(id){
           name:pick(m.name_en,m.name_cn),price:slEff(m),
           image:slImg(m)||thumb(p),size:m.size||m.variant_label||'',optLabel:'',
           ship_from_supplier:!!m.ship_from_supplier});
-        toast(slStock(m).pre
+        toast(slStock(m).pre&&!slStock(m).preToday
           ? (state.lang==='cn'?'已预订，加入购物车 🌱':'Added — pre-order 🌱')
           : (state.lang==='cn'?'已加入购物车 🌱':'Added to cart 🌱'));
       });

@@ -1949,7 +1949,22 @@ router.get('/api/retail/products', (req, res) => {
   // A grocery row never carries it, so it stays dead there, correctly.
   {
     const d = nextFreshBatchDate();
-    for (const r of rows) r.local_fresh_date = (d && r.is_batch_made) ? d : null;
+  // §80 FOLLOW-UP — IS THAT DAY TODAY? A dated fresh row is orderable on the
+  // Guangzhou local run, and the clients label that PRE-ORDER. On a batch
+  // MORNING the date is today: the meal is made at the ready hour and reaches
+  // the customer's own window, so "pre-order" is not merely the wrong word, it
+  // invites a reservation for food they can eat at lunch. The label has to be
+  // able to tell the two apart, and only this boolean lets it.
+  //
+  // COMPUTED HERE AND NEVER ON THE CLIENT (§82). "Is this date today" is a
+  // business decision about a cutoff, and the only clock entitled to answer it
+  // is the tenant's. A handset in another zone — or one with a wrong clock —
+  // must not be the thing that decides whether a customer is told to pre-order.
+    const isToday = !!d && d === toYmdLocal(new Date());
+    for (const r of rows) {
+      r.local_fresh_date  = (d && r.is_batch_made) ? d : null;
+      r.local_fresh_today = !!(r.local_fresh_date && isToday);
+    }
   }
   attachSoldCounts(rows);
   resolveAutoBadges(rows);
@@ -2779,9 +2794,23 @@ router.get('/api/retail/products/:id', (req, res) => {
   // …and the same fresh-batch day the grid ships, for the same reason.
   {
     const d = nextFreshBatchDate();
-    product.local_fresh_date = (d && product.is_batch_made) ? d : null;
+  // §80 FOLLOW-UP — IS THAT DAY TODAY? A dated fresh row is orderable on the
+  // Guangzhou local run, and the clients label that PRE-ORDER. On a batch
+  // MORNING the date is today: the meal is made at the ready hour and reaches
+  // the customer's own window, so "pre-order" is not merely the wrong word, it
+  // invites a reservation for food they can eat at lunch. The label has to be
+  // able to tell the two apart, and only this boolean lets it.
+  //
+  // COMPUTED HERE AND NEVER ON THE CLIENT (§82). "Is this date today" is a
+  // business decision about a cutoff, and the only clock entitled to answer it
+  // is the tenant's. A handset in another zone — or one with a wrong clock —
+  // must not be the thing that decides whether a customer is told to pre-order.
+    const isToday = !!d && d === toYmdLocal(new Date());
+    product.local_fresh_date  = (d && product.is_batch_made) ? d : null;
+    product.local_fresh_today = !!(product.local_fresh_date && isToday);
     for (const v of (product.variants || [])) {
-      v.local_fresh_date = (d && v.is_batch_made) ? d : null;
+      v.local_fresh_date  = (d && v.is_batch_made) ? d : null;
+      v.local_fresh_today = !!(v.local_fresh_date && isToday);
     }
   }
 
