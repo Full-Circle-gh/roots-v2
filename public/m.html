@@ -796,7 +796,7 @@ const state = {
      deliberately cannot see. Keeping them apart here is the client half of the
      server's own split; one state object with a flag on it would be one typo
      away from showing a submitter the shop's whole ledger of claims. */
-  apr:{rows:null,tried:false,err:'',busy:0,waiting:0,shot:null,shotFor:null},
+  apr:{rows:null,tried:false,err:'',busy:0,waiting:0,shot:null,shotFor:null,owed:[]},
   /* WRITING A BROADCAST (§63). Four steps, one decision each: what it says, who
      gets it, when it goes, and a last look before it does. `count` is the
      server's own audience preview — never derived here, because the phone does
@@ -10039,7 +10039,7 @@ function aprLoad(){
   const a=state.apr;
   if(a.tried) return; a.tried=true;
   api('/staff-expenses/pending').then(d=>{
-    a.rows=(d&&d.rows)||[]; a.waiting=(d&&d.waiting)||0; a.err=''; render();
+    a.rows=(d&&d.rows)||[]; a.waiting=(d&&d.waiting)||0; a.owed=(d&&d.owed)||[]; a.err=''; render();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
     a.rows=[]; a.err=e.message||E('Could not load the queue.','无法加载列表。'); render();
@@ -10076,6 +10076,42 @@ reg('aprDecide', (id,decision)=>{
     a.err=e.message||E('Could not do that.','操作失败。');
     render();
   });
+});
+
+/* MARKING A DEBT PAID (§87 step four). **IT POSTS NOTHING TO THE BOOKS** — the
+   ¥38 was recorded once, when the claim was approved, and a second row for the
+   repayment would report ¥76 of taxis. What it changes is the answer to "who are
+   we still out of pocket to", which the ledger cannot give.
+
+   ONE PERSON AT A TIME, EVERY CLAIM AT ONCE, because that is how it is actually
+   paid: one transfer to Wei, not four taps. The confirm names the person and the
+   figure, since this is an assertion that money has already changed hands
+   somewhere this app cannot see. */
+reg('aprSettle', async (who,total,ids)=>{
+  const a=state.apr;
+  if(a.busy) return;
+  const list=String(ids||'').split(',').map(Number).filter(Boolean);
+  if(!list.length) return;
+  if(typeof askConfirm==='function'){
+    if(!(await askConfirm({
+      title:T('Paid ¥'+total+' back?','已付款 ¥'+total+'？'),
+      body:T('This records that '+(who||'they')+' has been paid back. It does not change the accounts — the expense was recorded when it was approved.',
+             '记录已向'+(who||'该员工')+'付款。不会改动账目 — 该费用在审批通过时已记入。'),
+      confirmLabel:T('Mark paid','标记已付'),
+    }))) return;
+  }
+  a.busy=-1; render();
+  try{
+    // Sequential rather than parallel: four writes racing on one connection is
+    // how a phone on a shop's wifi ends with two of them applied.
+    for(const id of list) await apiWrite('/staff-expenses/'+id+'/settle',{settled:true});
+    a.busy=0; a.tried=false; aprLoad();
+    if(window.toast) toast(T('Marked paid','已标记付款'));
+  }catch(e){
+    a.busy=0;
+    if(String(e.message)==='auth') return;
+    a.err=e.message||E('Could not do that.','操作失败。'); render();
+  }
 });
 
 function aprRow(r){
@@ -10145,7 +10181,39 @@ function screenApprovals(){
   const block=(rows)=>`<div class="list">${rows.map((r,i)=>
     `${i?'<div class="sep" style="margin-left:14px"></div>':''}${aprRow(r)}`).join('')}</div>`;
 
+  /* WHAT THE SHOP STILL OWES ITS OWN PEOPLE, above the queue.
+
+     IT IS A DIFFERENT KIND OF THING FROM EVERYTHING BELOW IT — those are
+     decisions waiting to be made; this is money already spent and not yet
+     handed back — so it is a block of its own with its own verb, and it is
+     ABSENT when nothing is owed rather than rendering a zero (§1.12).
+
+     THE ROW IS A PERSON, NOT A CLAIM, because that is how it gets paid. */
+  const owed=(a.owed||[]).filter(o=>o.total>0);
+  const owedBlock = owed.length ? `<div style="display:flex;flex-direction:column;gap:8px">
+      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Owed to your team','应付团队')}</span>
+      <div class="list">${owed.map((o,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px">
+          <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
+            <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(o.who||T('Someone','未知'))}</span>
+            <span class="num" style="font-size:12px;color:var(--text-secondary)">${o.claims} ${o.claims===1?T('claim','笔'):T('claims','笔')}</span>
+          </span>
+          <span style="display:flex;align-items:center;gap:10px;flex:none">
+            <span class="num" style="font-size:16px;font-weight:600">¥${escAttr(String(o.total))}</span>
+            <button class="btn2" style="padding:0 12px;height:38px;font-size:13px" ${a.busy?'disabled':''}
+              onclick="APP.cmd('aprSettle',${JSON.stringify(o.who||'').replace(/"/g,'&quot;')},'${escAttr(String(o.total))}','${escAttr(String(o.ids||''))}')">${T('Mark paid','标记已付')}</button>
+          </span>
+        </div>`).join('')}</div>
+      ${/* THE SENTENCE THAT KEEPS THE BUTTON HONEST, and it is the third of the
+           set: nothing is in the books until approval; approving records it;
+           and paying it back changes nothing, because it was already recorded. */''}
+      <span style="font-size:12px;color:var(--text-secondary)">${T(
+        'Marking paid does not change the accounts — the expense was recorded when it was approved.',
+        '标记已付不会改动账目 — 该费用在审批通过时已记入。')}</span>
+    </div>` : '';
+
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${owedBlock}
     ${waiting.length?`<div style="display:flex;flex-direction:column;gap:8px">
       <span style="font-size:12.5px;color:var(--text-secondary)">${T('Waiting','待审批')} · ${waiting.length}</span>
       ${block(waiting)}

@@ -210,11 +210,18 @@ it('a submitter cannot submit an already-approved claim', () => {
     'nothing a decision writes may be set by the person raising the claim');
 });
 
-it('there is no approve, reject or settle verb yet — those are step three', () => {
-  for (const verb of ['approve', 'reject', 'settle']) {
-    assert.ok(!new RegExp(`router\\.(post|put|patch)\\([^)]*${verb}`).test(ROUTE_CODE),
-      `${verb} belongs with the screen that works it`);
-  }
+it('the submitting route cannot decide anything', () => {
+  // The verbs exist now (steps three and four) and are separate routes behind a
+  // separate key. What must stay true is that the SUBMIT path reaches none of
+  // them: a claim arrives waiting, whatever its sender puts in the body.
+  const post = ROUTE_CODE.slice(ROUTE_CODE.indexOf("router.post('/api/retail-admin/staff-expenses'"),
+                                ROUTE_CODE.indexOf('staff-expenses/mine'));
+  // `res.status(…)` is an HTTP helper, not the claim's column — stripped first,
+  // because an assertion that matches the wrong `status` proves nothing about
+  // this handler and would go green on a version that did write the real one.
+  const noHttp = post.replace(/res\.status\(/g, 'res.httpCode(');
+  assert.ok(!/status|settled|decided_by|expense_id|postClaim/.test(noHttp),
+    'the submit handler must not touch a single field a decision writes');
 });
 
 it('the capability is NOT finance:record, and carries no money mark', () => {
@@ -439,6 +446,64 @@ it('self-approval is allowed, and marked', () => {
 it('the phone screen says what approving does', () => {
   assert.ok(PHONE.includes('审批通过后即记入本月账目。'),
     'the mirror of the line under Submit on the other screen');
+});
+
+console.log('\n6 · settlement — the step that posts nothing (step four)');
+
+it('settling writes ONE column and touches the ledger in no way at all', () => {
+  const settle = ROUTE_CODE.slice(ROUTE_CODE.indexOf("staff-expenses/:id/settle"));
+  const body = settle.slice(0, settle.indexOf('module.exports'));
+  assert.match(body, /UPDATE staff_expenses SET settled = \?/);
+  assert.ok(!/expense_entries|postClaim/.test(body),
+    'the ¥38 was recorded once, at approval — a second row would report ¥76 of taxis');
+});
+
+it('only a debt can be settled, and the refusal says which it is not', () => {
+  const settle = ROUTE_CODE.slice(ROUTE_CODE.indexOf("staff-expenses/:id/settle"));
+  assert.match(settle, /claim\.status !== 'approved'[\s\S]*?ERR\.notApproved/);
+  assert.match(settle, /claim\.paid_by !== 'employee'[\s\S]*?ERR\.notOwed/);
+  // "cannot settle" on its own sends somebody looking for a permission problem.
+  assert.ok(ROUTE.includes('该笔由公司账户支付'));
+});
+
+it('un-settling exists, because the un-approve refusal depends on it', () => {
+  // A claim marked paid by mistake can no longer be un-approved (409), so if it
+  // could not be un-marked either it would be stuck for good.
+  assert.match(ROUTE_CODE, /req\.body\.settled === false \? 0 : 1/);
+  assert.match(ROUTE_CODE, /settled \? 'settle' : 'unsettle'/, 'and both are logged');
+});
+
+it('what is owed is counted over EVERY claim, not the queue page', () => {
+  const q = ROUTE_CODE.slice(ROUTE_CODE.indexOf('let owed'));
+  assert.match(q, /WHERE status = 'approved' AND paid_by = 'employee' AND COALESCE\(settled, 0\) = 0/);
+  assert.match(q, /GROUP BY submitted_by/, 'grouped by person, because that is how it is paid');
+  assert.ok(!/LIMIT/.test(q.slice(0, q.indexOf('res.json'))),
+    'a debt does not stop existing because it fell off the end of a list');
+});
+
+it('the owed totals carry the rows behind them', () => {
+  assert.match(ROUTE_CODE, /GROUP_CONCAT\(id\) AS ids/);
+  assert.match(PHONE_CODE, /aprSettle/);
+  assert.match(PHONE_CODE, /for\(const id of list\) await apiWrite/,
+    'sequential: four writes racing on a shop wifi is how two of them land');
+});
+
+it('a name is resolved for everyone the payload mentions, queue or not', () => {
+  assert.match(ROUTE_CODE, /SELECT DISTINCT submitted_by FROM staff_expenses WHERE status = 'approved'/,
+    'an owed person outside the 200-row queue would otherwise have a total and no name');
+});
+
+it('the phone says marking paid changes nothing in the accounts', () => {
+  assert.ok(PHONE.includes('标记已付不会改动账目 — 该费用在审批通过时已记入。'));
+  assert.ok(PHONE.includes('Marking paid does not change the accounts'));
+  // And it asks first, naming the person and the figure: this asserts money has
+  // already changed hands somewhere this app cannot see.
+  assert.match(PHONE_CODE, /askConfirm\(\{[\s\S]*?Mark paid/);
+});
+
+it('the owed block is absent when nothing is owed', () => {
+  assert.match(PHONE_CODE, /const owed=\(a\.owed\|\|\[\]\)\.filter\(o=>o\.total>0\);/);
+  assert.match(PHONE_CODE, /owed\.length \? `<div/, '§1.12: a zero here is a row that only says nothing happened');
 });
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);

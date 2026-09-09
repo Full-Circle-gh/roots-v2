@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.190
+# Tacet shared-core consolidation — decisions record, v4.191
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-09 · v4.191 — **§87 STEP FOUR BUILT: SETTLEMENT, AND THE SECTION IS COMPLETE END TO END.** `POST /staff-expenses/:id/settle` writes ONE column and **posts nothing** — the ¥38 was recorded once, at approval, and a second row for the repayment would report ¥76 of taxis; the suite asserts the handler touches `expense_entries` in no way at all. **WHAT IT IS FOR is a question the ledger cannot answer**: the books know the shop spent ¥38 on transport, not that the ¥38 is still in a driver's pocket. **THE ROW IS A PERSON, NOT A CLAIM**, because that is how it is paid — one transfer, not four taps — so the owed total carries the claim ids behind it and the phone settles them SEQUENTIALLY, four writes racing on a shop's wifi being how two of them land. **THE OWED FIGURE IS COUNTED OVER EVERY CLAIM AND NOT THE QUEUE'S 200-ROW PAGE**: a debt does not stop existing because it fell off the end of a list, so it has its own uncapped query, and the name lookup covers everybody either half of the payload mentions — otherwise an owed person outside the queue shows a total with no name against it. **GATED ON `expenses:approve` RATHER THAN A KEY OF ITS OWN**: a third capability would gate a single toggle, be granted to the same people, and add a row to a matrix somebody has to understand — and saying "we have paid Wei back" is an assertion about money by the person who already decides money on this screen. If it ever belongs to a bookkeeper who is not an approver, that is when the key earns its place. **ONLY A DEBT CAN BE SETTLED, WITH TWO SEPARATE REFUSALS**: an unapproved claim might still be rejected, and a company-account one owes nobody; a shared message would send an operator hunting a permission problem that is not there. **UN-SETTLING EXISTS BECAUSE THE UN-APPROVE REFUSAL DEPENDS ON IT** — step three refuses to un-approve a settled claim, so one marked paid by mistake would be stuck for good otherwise. Both directions are logged. Nine composed pairs in `docs/tacet-delivery-vocabulary.md` v1.48, completing a SET OF THREE lines meant to be read together — not in the accounts yet / approving records it / paying it back changes nothing — the third being the least obvious and therefore the one that had to exist. **`报销` REJECTED A SECOND TIME**, on the very button v1.46 reserved it for: `标记已付` says what the control does, while `报销` would suggest this app pays the money out. `npm run test:fast` 193/193; the suite reaches 47 assertions. **§87 is now built end to end — a category list, a claim, an approval that posts, and a debt that clears** — with OCR prefill, recurring expenses, per-role limits and multi-step approval deliberately unbuilt and named as such. No change to `.gitignore` or CI.
 
 2026-09-09 · v4.190 — **§87 STEP THREE BUILT: THE APPROVAL LIST, THE POSTING STEP, AND THE MONEY REACHES THE BOOKS.** `lib/expense-posting.js` posts; the queue and the decide route are in `routes/staff-expenses.js`; the screen is **Approvals** on `/m`. **IT IS ON THE PHONE RATHER THAN IN THE BACK OFFICE, and that is a choice**: the person approving a ¥38 taxi is a manager standing in a shop, and §81 is the long record of what happens when the people who do a job have no login for the screen that does it — the back office still reads the money, because the posted rows appear on Transactions the moment they are approved. **POSTING IS `postRetailPOExpenses`'s SHAPE**: delete every `expense_entries` row carrying the claim's id, insert from the document as it now stands. So approving twice RE-POSTS rather than double-posting, and rejecting after approving REMOVES the row — §36 decided a hand-typed row is freely deletable because mistakes here are typos, and an accidental approval is that kind of mistake; an offsetting entry turns a two-row ledger into four nobody can read. **THE STATUS AND THE ROW MOVE IN ONE TRANSACTION**, and the post reads the claim AFTER the update rather than the copy loaded before it: a claim that says approved with nothing behind it is a discrepancy nobody finds until the month does not add up. **`created_by` ON THE POSTED ROW IS THE APPROVER, NOT THE SPENDER** — that column has always meant who put this in the books — and WHO SPENT IT IS IN THE DESCRIPTION, because a ¥38 line with no supplier, no invoice and no purchase order behind it is answerable months later only if it says whose taxi it was. **THE TRAP §87 NAMED IN ADVANCE IS CLOSED**: `readTransactions` selected hand-typed money out with `po_id IS NULL`, which a claim-posted row satisfies — it would have rendered as freely editable and the edit would have been undone by the next decision. The predicate is now `po_id IS NULL AND claim_id IS NULL`; `loadTyped` refuses a claim row with its own wording (the PO pair with one noun swapped, because it is the same refusal for the same reason); the screen tints it, marks it **Staff claim** with `· own money` where that is what it was, and drops the Edit link. The client's `row.source !== 'po'` became `=== 'manual'`: with one projection those read alike, with two the negation is the bug. **`store_id` LANDS ON `expense_entries`, NOTHING IS BACKFILLED, and §36's open column is closed** — every existing row is NULL, which is what those rows always meant. **The Summary's store filter is NOT built here**; it stays §36's, Contribution rule included. What this step owed it was the column. **ONE EXCEPTION TO THE FAIL-OPEN CONTRACT, and it is the only one in the feature**: cap-routes gates mutations only where `rbac_enforce` is on, which is off by default, so on this route falling open would mean anybody who can raise a claim may approve their own on every tenant. `requireApprover` refuses in the route as well — including when the capability set cannot be resolved, because a money route does not fall open on an unanswered question — and the `/decide` rule sits ABOVE the general one, since below it every submitter would be an approver. **`expenses:approve` IS REGISTERED NOW THAT IT GATES SOMETHING**, carries `money: 'moves'` where its submitting sibling carries no marker, and is in NO floor preset: owner, admin and manager hold it because those presets are the whole registry, and every other role is ticked on by an owner who has decided that this manager approves spending. **SELF-APPROVAL IS ALLOWED AND MARKED** — the row says `本人提交` rather than the button refusing, and the activity log records whether a decision was on the approver's own claim. **A SETTLED CLAIM CAN NO LONGER BE UN-APPROVED** (409): money has changed hands outside this system, and reversing the expense would leave the payment made and the cost unrecorded. Twenty-three composed pairs are declared in `docs/tacet-delivery-vocabulary.md` v1.47, the key one being the MIRROR of v1.46's: `审批通过后才会记入账目。` under Submit, `审批通过后即记入本月账目。` under the queue — one word carrying the difference between *not yet* and *now*. `批准` rejected for the button in favour of `通过`, which is what this product already says about an approved payment. `npm run test:fast` 193/193 green; the suite grows to 39 assertions, fourteen of them new, and `test_tenant_roles.js` moves 114 → 115 capabilities and 21 → 22 money-moving ones with the reasoning beside the rest. **Still to come: settlement, which POSTS NOTHING when it lands** — the ¥38 was recorded once, at approval. No change to `.gitignore` or CI.
 
@@ -8825,3 +8827,52 @@ approver's own claim.
 Still to come: **settlement** — marking what the shop owes an employee as paid
 back. It POSTS NOTHING when it lands, and the suite already asserts the shape it
 must not take.
+
+### BUILT 2026-09-09 — step four, and §87 is complete
+
+Settlement. `POST /staff-expenses/:id/settle` writes one column; the **Owed to
+your team** block sits above the approvals queue and marks a person's claims paid
+together.
+
+**IT POSTS NOTHING, WHICH IS THE WHOLE OF IT.** The ¥38 was recorded once, at
+approval. Paying the driver back moves money between the business and a person,
+and a system that wrote a second row for it would report ¥76 of taxis. The suite
+asserts the handler touches `expense_entries` in no way at all.
+
+**WHAT IT IS FOR is a question the ledger cannot answer**: the books know the shop
+spent ¥38 on transport; they do not know the ¥38 is still in a driver's pocket.
+
+**THE ROW IS A PERSON, NOT A CLAIM**, because that is how it is paid — one
+transfer to Wei, not four. The total carries the ids behind it and the phone
+settles them in sequence rather than in parallel: four writes racing on a shop's
+wifi is how two of them land.
+
+**THE OWED FIGURE IS COUNTED OVER EVERY CLAIM, NOT THE QUEUE'S PAGE.** The queue
+is capped at 200 rows for the screen's sake; a debt does not stop existing
+because it fell off the end of a list, so it has its own uncapped query. The
+names read for the payload cover everybody either half of it mentions, or an
+owed person whose last claim fell outside the queue would show a total with no
+name against it.
+
+**GATED ON `expenses:approve` RATHER THAN A KEY OF ITS OWN.** A third capability
+would gate a single toggle, be granted to the same people, and add one more row
+to a matrix somebody has to understand. Saying "we have paid Wei back" is an
+assertion about money by the person who already decides money on this screen. If
+it ever needs to belong to a bookkeeper who is not an approver, that is when the
+key earns its place.
+
+**ONLY A DEBT CAN BE SETTLED, and the two refusals are separate**: a claim that
+is not approved yet might still be rejected, and one paid on the company account
+owes nobody. A shared "cannot mark this paid" would send an operator looking for
+a permission problem that is not there.
+
+**UN-SETTLING EXISTS BECAUSE THE UN-APPROVE REFUSAL DEPENDS ON IT.** Step three
+refuses to un-approve a settled claim — money has changed hands outside this
+system — so a claim marked paid by mistake would be stuck for good if it could
+not be un-marked. Both directions are logged.
+
+§87 is built end to end: a category list, a claim, an approval that posts, and a
+debt that clears. **What is deliberately still not built** is named in the section
+above — OCR prefill on the receipt, recurring expenses, per-role spending limits,
+and any approval chain beyond one approver. None of them is needed by the cases
+that opened this section.

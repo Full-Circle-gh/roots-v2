@@ -11,10 +11,15 @@
 // SO THIS FILE WRITES TO EXACTLY ONE TABLE, and a later edit that makes it touch
 // `expense_entries` has undone the decision rather than extended it.
 //
-// ── WHAT IS NOT HERE, AND IS NOT MISSING ───────────────────────────────────
-// SETTLEMENT — paying the employee back. It is step four, and it POSTS NOTHING
-// when it lands: the ¥38 was recorded once, at approval, and a system that wrote
-// a row for the repayment would report ¥76 of taxis.
+// ── SETTLEMENT POSTS NOTHING, AND THAT IS THE WHOLE OF IT ──────────────────
+// Paying the employee back moves money between the business and a person. The
+// ¥38 was recorded once, at approval; a system that wrote a second row for the
+// repayment would report ¥76 of taxis. So `/settle` writes one column on the
+// claim and touches `expense_entries` in no way at all — the suite asserts it.
+//
+// WHAT IT IS FOR is the question "who are we still out of pocket to", which the
+// ledger cannot answer: the ledger knows the shop spent ¥38 on transport, not
+// that the ¥38 is still in a driver's pocket.
 //
 // EDITING A SUBMITTED CLAIM. Not built, deliberately: the manager sees what was
 // sent, and a claim that changed under them after they read it is the defect the
@@ -41,6 +46,8 @@ const ERR = {
   notFound: 'Not found · 未找到',
   decision: 'approve or reject · 请选择通过或拒绝',
   settled:  'this claim has already been paid back · 该申请已完成付款',
+  notApproved: 'only an approved claim can be paid back · 仅审批通过的申请可标记付款',
+  notOwed:  'this one was paid from the company account · 该笔由公司账户支付',
   forbidden:'this account cannot approve expense claims · 此账号无法审批费用申请',
 };
 
@@ -254,7 +261,12 @@ router.get('/api/retail-admin/staff-expenses/pending', requireRetailAdmin, requi
     // the id, so a join is not available and would be wrong if it were.
     const names = new Map();
     try {
-      const ids = [...new Set(rows.map(r => r.submitted_by).filter(Boolean))];
+      // Every id either half of this payload will name. An owed person whose
+      // last claim fell outside the 200-row queue would otherwise have a total
+      // and no name against it.
+      const ids = [...new Set(rows.map(r => r.submitted_by)
+        .concat(db.prepare("SELECT DISTINCT submitted_by FROM staff_expenses WHERE status = 'approved' AND paid_by = 'employee' AND COALESCE(settled, 0) = 0").all().map(r => r.submitted_by))
+        .filter(Boolean))];
       if (ids.length) {
         const q = require('../database').prepare(
           `SELECT id, display_name, username FROM tenant_users WHERE id IN (${ids.map(() => '?').join(',')})`);
@@ -262,9 +274,38 @@ router.get('/api/retail-admin/staff-expenses/pending', requireRetailAdmin, requi
       }
     } catch (e) { /* a name is a nicety; a claim without one still decides */ }
 
+    // ── WHAT THE SHOP STILL OWES, BY PERSON (§87 step four) ──
+    // ITS OWN QUERY, over every claim rather than the 200 above. A debt does not
+    // stop existing because it fell off the end of a list, and a queue capped for
+    // the screen's sake would quietly under-report what is owed — which is the
+    // one number on this screen that is about money already spent.
+    //
+    // GROUPED BY PERSON, because that is how it is paid: one transfer to Wei,
+    // not four. The rows behind each total travel with it so the screen can mark
+    // them settled together.
+    let owed = [];
+    try {
+      owed = db.prepare(`
+        SELECT submitted_by, COALESCE(SUM(amount), 0) AS total, COUNT(*) AS n,
+               GROUP_CONCAT(id) AS ids
+          FROM staff_expenses
+         WHERE status = 'approved' AND paid_by = 'employee' AND COALESCE(settled, 0) = 0
+         GROUP BY submitted_by
+         ORDER BY total DESC`).all();
+    } catch (e) { owed = []; }
+
     res.json({
       success: true,
       data: {
+        owed: owed.map(o => ({
+          submitted_by: o.submitted_by,
+          who: names.get(o.submitted_by) || null,
+          total: fen(o.total),
+          claims: o.n,
+          // The rows behind the total, so the screen can settle them together —
+          // one transfer to Wei, not four taps.
+          ids: String(o.ids || ''),
+        })),
         // WHOSE CLAIM IT IS, decided HERE rather than on the phone. §87 part
         // five allows an approver to approve their own claim and makes the
         // record the guard — so the row has to say so, and the server is the
@@ -338,6 +379,49 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
     res.json({ success: true, data: after });
   } catch (e) {
     console.error('[staff-expenses decide]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── POST /api/retail-admin/staff-expenses/:id/settle ───────────────────────
+// Marks an approved own-money claim as paid back — or un-marks one.
+//
+// **IT WRITES ONE COLUMN AND POSTS NOTHING.** See the header.
+//
+// GATED ON `expenses:approve` RATHER THAN A KEY OF ITS OWN, and that is a
+// decision rather than a shortcut: a third capability would gate a single toggle
+// and would have to be granted to the same people, one more row in a matrix
+// somebody has to understand. Saying "we have paid Wei back" is an assertion
+// about money by the person who already decides money on this screen. If it ever
+// needs to belong to a bookkeeper who is not an approver, that is when the key
+// earns its place.
+router.post('/api/retail-admin/staff-expenses/:id/settle', requireRetailAdmin, requireApprover, express.json(), (req, res) => {
+  try {
+    const db = tdb();
+    if (!/^\d+$/.test(String(req.params.id))) return res.status(404).json({ error: ERR.notFound });
+    const claim = db.prepare('SELECT * FROM staff_expenses WHERE id = ?').get(req.params.id);
+    if (!claim) return res.status(404).json({ error: ERR.notFound });
+
+    // ONLY A DEBT CAN BE SETTLED. An approved claim paid on the company account
+    // owes nobody; a claim still waiting might be rejected. Marking either as
+    // paid back would put a number in the "we owe" column that was never owed —
+    // and the refusal names which of the two it is, because "cannot settle" on
+    // its own sends somebody looking for a permission problem.
+    if (claim.status !== 'approved') return res.status(409).json({ error: ERR.notApproved });
+    if (claim.paid_by !== 'employee') return res.status(409).json({ error: ERR.notOwed });
+
+    // The default is TRUE so a bare call settles; the phone sends the flag
+    // explicitly either way.
+    const settled = req.body && req.body.settled === false ? 0 : 1;
+    db.prepare("UPDATE staff_expenses SET settled = ?, settled_at = CASE WHEN ? = 1 THEN datetime('now') ELSE NULL END WHERE id = ?")
+      .run(settled, settled, claim.id);
+
+    logActivity(req.user?.id || null, req.user?.username || null,
+      settled ? 'settle' : 'unsettle', 'staff_expense', claim.id,
+      { amount: fen(claim.amount), owed_to: claim.submitted_by }, req.ip);
+    res.json({ success: true, data: { id: claim.id, settled } });
+  } catch (e) {
+    console.error('[staff-expenses settle]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
