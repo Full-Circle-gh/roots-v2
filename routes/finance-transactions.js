@@ -94,6 +94,11 @@ const ERR = {
   notFound: 'Not found · 未找到',
   poEdit:   'PO-linked expenses cannot be edited directly · 关联采购单的支出不能直接编辑',
   poDelete: 'PO-linked expenses cannot be deleted directly · 关联采购单的支出不能直接删除',
+  // §87 step three. THE SAME REFUSAL FOR THE SAME REASON, said about the other
+  // kind of projection: a claim re-posts on every decision, so a value typed
+  // onto its ledger row is lost the next time somebody changes their mind.
+  claimEdit:   'expenses from a staff claim cannot be edited directly · 费用申请产生的支出不能直接编辑',
+  claimDelete: 'expenses from a staff claim cannot be deleted directly · 费用申请产生的支出不能直接删除',
 };
 
 /** Validate and normalise a submitted row. Returns { error } or the clean values. */
@@ -157,6 +162,13 @@ function loadTyped(db, kind, id, refusal) {
   // the screen already shows — this path does not weaken it, and a typed row can
   // never acquire a `po_id` because nothing below ever writes one.
   if (kind === 'out' && row.po_id != null) return { error: refusal, status: 400 };
+  // §87 step three: `claim_id` is `po_id`'s counterpart and carries the same
+  // refusal. The caller passes the PO wording; this substitutes the claim's,
+  // because a person looking at a ¥38 taxi told it belongs to a purchase order
+  // would go looking for a purchase order.
+  if (kind === 'out' && row.claim_id != null) {
+    return { error: refusal === ERR.poEdit ? ERR.claimEdit : ERR.claimDelete, status: 400 };
+  }
   return { row };
 }
 
@@ -262,13 +274,33 @@ function readTransactions(query, opts = {}) {
      ORDER BY date DESC, id DESC`).all(from, to);
 
   // ── Money out · hand-entered ──
-  // Everything with no `po_id`. These are editable in principle — the write
-  // half is unbuilt — so they carry `source: 'manual'`.
+  // **NEITHER KIND OF PROJECTION, and the second half of that predicate is
+  // §87 step three.** A claim-posted row satisfies `po_id IS NULL` — so before
+  // `claim_id` was named here it arrived on this screen looking hand-typed and
+  // freely editable, and an edit would have been silently undone the next time
+  // the claim behind it was decided. §87 named this trap when the claim table
+  // was designed rather than after somebody found it.
   const manual = db.prepare(`
     SELECT id, ${LEDGER_DATE} AS date, amount, category, description
       FROM expense_entries
-     WHERE po_id IS NULL AND ${LEDGER_DATE} BETWEEN ? AND ?
+     WHERE po_id IS NULL AND claim_id IS NULL AND ${LEDGER_DATE} BETWEEN ? AND ?
      ORDER BY date DESC, id DESC`).all(from, to);
+
+  // ── Money out · posted by an approved staff claim (§87 step three) ──
+  // NOT COLLAPSED, unlike the PO rows below: a purchase order posts one row per
+  // expense category and is one purchase, so several rows are one fact; a claim
+  // posts exactly one row and is one fact already. Collapsing here would be a
+  // mechanism with nothing to collapse.
+  //
+  // It carries the claim id so the screen can say where the row came from, and
+  // it is NOT editable there for the reason the PO rows are not.
+  const claims = db.prepare(`
+    SELECT e.id, e.${LEDGER_DATE} AS date, e.amount, e.category,
+           e.description, e.claim_id, c.paid_by
+      FROM expense_entries e
+      LEFT JOIN staff_expenses c ON c.id = e.claim_id
+     WHERE e.claim_id IS NOT NULL AND e.${LEDGER_DATE} BETWEEN ? AND ?
+     ORDER BY e.date DESC, e.id DESC`).all(from, to);
 
   // ── Money out · posted by Purchasing ──
   // COLLAPSED TO ONE ROW PER PURCHASE ORDER, per §36: "PO-derived expenses DO
@@ -378,6 +410,18 @@ function readTransactions(query, opts = {}) {
       amount: fen(r.amount),
       source: 'manual', po_id: null, po_number: null, categories: null,
     })),
+    ...claims.map(r => ({
+      kind: 'out', id: r.id, date: r.date,
+      subject: r.description || r.category || null,
+      category: r.category || null,
+      amount: fen(r.amount),
+      source: 'claim', po_id: null, po_number: null, categories: null,
+      claim_id: r.claim_id,
+      // Whether the shop paid it or a person did. It is the difference between
+      // a cost that is finished and one that is also a debt, and the bookkeeper
+      // reading this row is the person who needs to know.
+      paid_by: r.paid_by || null,
+    })),
     ...posted.map(r => ({
       kind: 'out', id: `po-${r.po_id}`, date: r.date,
       subject: r.po_number || `PO-${r.po_id}`,
@@ -467,7 +511,9 @@ router.get('/api/retail-admin/finance/transactions/export.csv', requireRetailAdm
         r.category || (r.categories > 1 ? `${r.categories} categories` : ''),
         r.amount,
         r.kind === 'in' ? r.amount : fen(-r.amount),
-        r.source === 'po' ? 'Purchasing' : 'Entered by hand',
+        r.source === 'po' ? 'Purchasing'
+          : r.source === 'claim' ? (r.paid_by === 'employee' ? 'Staff claim (own money)' : 'Staff claim')
+          : 'Entered by hand',
         r.po_number || '',
       ].map(cell).join(','));
     }

@@ -513,6 +513,18 @@ function finTxSubject(r) {
 
 function finTxRow(r) {
   const po = r.source === 'po';
+  /* §87 step three. THE SECOND KIND OF PROJECTION, and it gets the SAME
+     treatment as the first for the same reason: a claim re-posts its ledger row
+     on every decision, so an edit made here would be silently undone the next
+     time somebody changed their mind about the claim. Tinted, marked, and no
+     Edit — §36's "the row explains its own constraint instead of merely
+     enforcing it", applied to the other document that owns rows in this table.
+
+     NO LINK OUT, unlike a PO row. A claim is worked on the phone by whoever
+     approves it, and this admin has no claim screen to open — a link that
+     switched to a tab that does not exist is the exact failure §36 names when
+     it refuses to offer a PO link the opener cannot serve. */
+  const claim = r.source === 'claim';
   // §36: the note vanishes ENTIRELY at one category. "It does not read '1
   // category'" — at one nothing was collapsed, so a note would assert a
   // breakdown that does not exist and send the operator looking for it.
@@ -523,10 +535,19 @@ function finTxRow(r) {
     : '';
   const mark = po
     ? `<span class="fin-tx-mark">${escapeHtml(cuT('Posted by Purchasing', '采购单自动记入'))}</span>`
+    : claim
+    /* WHOSE MONEY IT WAS is on the mark, not in a column of its own. It is the
+       difference between a cost that is finished and one the shop still owes
+       somebody, and the bookkeeper reading this row is exactly who needs it —
+       but it applies to one row in a hundred, and a column that is empty on the
+       other ninety-nine is what §1.12 refuses. */
+    ? `<span class="fin-tx-mark">${escapeHtml(r.paid_by === 'employee'
+        ? cuT('Staff claim · own money', '费用申请 · 个人支付')
+        : cuT('Staff claim', '费用申请'))}</span>`
     : '';
   // The date is the PO's own, never `created_at` — the route never selects
   // created_at, so there is nothing here that could drift onto a row.
-  return `<tr class="${po ? 'fin-tx-posted' : ''}">`
+  return `<tr class="${po || claim ? 'fin-tx-posted' : ''}">`
     + `<td class="fin-tx-date">${escapeHtml(finTxDay(r.date))}</td>`
     + `<td><span class="fin-tx-subj">${escapeHtml(finTxSubject(r))}</span>`
     + (mark || hint ? `<span class="fin-tx-meta">${mark}${mark && hint ? ' · ' : ''}${hint}</span>` : '')
@@ -546,6 +567,7 @@ function finTxRow(r) {
     + '<td>' + (po
       ? (r.po_open === false ? ''
         : `<a class="fin-tx-act" href="#" onclick="finTxOpenPO(${Number(r.po_id)});return false">${escapeHtml(cuT('Open purchase order', '查看采购单'))}</a>`)
+      : claim ? ''
       : (typeof can === 'function' && !can('finance:record')) ? ''
       : `<a class="fin-tx-act" href="#" onclick="finTxEdit('${escapeHtml(String(r.kind))}',${Number(r.id)});return false">${escapeHtml(cuT('Edit', '编辑'))}</a>`)
     + '</td>'
@@ -970,7 +992,10 @@ window.finTxDelete = async function finTxDelete() {
 window.finTxEdit = function finTxEdit(kind, id) {
   if (!FIN_TX) return;
   const row = FIN_TX.rows.find(r => r.kind === kind && String(r.id) === String(id));
-  if (row && row.source !== 'po') finTxForm(null, row);
+  // `=== 'manual'`, not `!== 'po'`. With one kind of projection those two read
+  // the same; with two, the negation is the bug that lets a claim-posted row
+  // into the edit form (§87 step three).
+  if (row && row.source === 'manual') finTxForm(null, row);
 };
 
 /* ══════════════════════════════════════════════════════════════════════════

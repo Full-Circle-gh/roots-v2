@@ -319,9 +319,15 @@ function versionOf(tid) {
   // screen and changes nothing the business owes. The APPROVING key will carry
   // a marker, and it is not registered yet — it lands with the screen that
   // gives it something to gate.
-  is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 21, '21 capabilities move money');
+  // 115 is `expenses:approve` (2026-09-09, §87 step three) — and it is the
+  // twenty-second money-MOVING key, where its submitting sibling four lines up
+  // carries no marker at all. The pair is the clearest illustration of what the
+  // marker is for: raising a claim writes to a table nothing sums, and approving
+  // one writes a row into `expense_entries` that the month's accounts count.
+  // Same feature, same section, opposite answers.
+  is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 22, '22 capabilities move money');
   is(caps.CAPABILITIES.filter(c => c.money === 'shows').length, 16, '16 show it');
-  is(caps.CAPABILITIES.length, 114, 'across all 114');
+  is(caps.CAPABILITIES.length, 115, 'across all 115');
   // Seeing the waste ledger and reading what it cost are two permissions
   // (Ash, 2026-09-02). They were one, and `waste:view` carried the money
   // marker — so the two floor presets, whose job is recording what spoiled,

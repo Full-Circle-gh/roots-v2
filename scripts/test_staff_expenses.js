@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Offline self-test for the staff expense claim (§87 step two).
+ * Offline self-test for the staff expense claim (§87 steps two and three).
  *
  *   node scripts/test_staff_expenses.js
  *
- * Four halves:
+ * Five sections:
  *
  *   1 · THE VALIDATOR, run for real. `readBody` is exported from the shipped
  *       route and called here with a real in-memory database, the same
@@ -21,6 +21,11 @@
  *       in a list, and that the key is not `finance:record`.
  *
  *   4 · THE SCREEN, in public/m.html.
+ *
+ *   5 · APPROVAL AND THE ROW IT POSTS. `lib/expense-posting.js` is run against a
+ *       fixture ledger — it is the one place a claim reaches the books, and the
+ *       properties that matter (one row, re-postable, removed on reject) are
+ *       behaviour rather than text.
  */
 'use strict';
 
@@ -226,11 +231,6 @@ it('the capability is NOT finance:record, and carries no money mark', () => {
   }
 });
 
-it('the approving key is not registered until it gates something', () => {
-  assert.ok(!/expenses:approve/.test(CAPS),
-    'a key in the matrix that grants nothing is a permission an owner ticks and sees no effect from');
-});
-
 it('the grant reaches roles that already exist, edited or not', () => {
   // The lesson lib/roles.js records at length: the untouched-role guard protects
   // a DECISION an admin made by unticking something, and nobody can have
@@ -304,6 +304,141 @@ it('the shop with no categories is told, and is not given a free-text box', () =
   assert.ok(PHONE.includes('本店尚未设置支出分类。'));
   const screen = PHONE.slice(PHONE.indexOf('function screenExpense()'), PHONE.indexOf('function screenExpense()') + 9000);
   assert.ok(!/id="mExpCat"/.test(screen), 'no category text field');
+});
+
+console.log('\n5 · approval, and the row it posts (step three)');
+
+const POST = require(path.join(ROOT, 'lib', 'expense-posting.js'));
+const POSTING = read('lib', 'expense-posting.js');
+const FINTX = read('routes', 'finance-transactions.js');
+const FINTX_CODE = codeOnly(FINTX);
+const CLIENT = read('public', 'retail-admin', '22-finance.js');
+
+const pdb = new Database(':memory:');
+pdb.exec(`
+  CREATE TABLE expense_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, date DATE, amount REAL, category TEXT,
+    description TEXT, po_id INTEGER, payment_method TEXT, store_id INTEGER,
+    claim_id INTEGER, created_by INTEGER
+  );`);
+const claim = {
+  id: 41, date: '2026-09-09', amount: 38, category: 'Transport 交通',
+  note: 'airport run', submitted_name: 'Wei', status: 'approved',
+  paid_by: 'employee', store_id: 3, payment_method: null, decided_by: 2,
+};
+
+it('approving writes exactly ONE ledger row, carrying the claim id', () => {
+  const id = POST.postClaim(pdb, claim);
+  const rows = pdb.prepare('SELECT * FROM expense_entries WHERE claim_id = 41').all();
+  assert.strictEqual(rows.length, 1);
+  assert.strictEqual(rows[0].id, id);
+  assert.strictEqual(rows[0].amount, 38);
+  assert.strictEqual(rows[0].category, 'Transport 交通');
+  assert.strictEqual(rows[0].store_id, 3, '§87 part three: the claim carries the shop to the ledger');
+});
+
+it('the row says who spent it — a line with no supplier and no PO behind it', () => {
+  const row = POST.postedRow(pdb, 41);
+  const full = pdb.prepare('SELECT description, created_by FROM expense_entries WHERE claim_id = 41').get();
+  assert.ok(row);
+  assert.match(full.description, /Wei/, 'the name is what makes the line answerable months later');
+  assert.match(full.description, /airport run/);
+  // `created_by` on this table has always meant "who put this in the books".
+  assert.strictEqual(full.created_by, 2, 'the approver, not the person who spent it');
+});
+
+it('approving twice re-posts rather than double-posting', () => {
+  POST.postClaim(pdb, claim);
+  POST.postClaim(pdb, claim);
+  assert.strictEqual(pdb.prepare('SELECT COUNT(*) n FROM expense_entries WHERE claim_id = 41').get().n, 1,
+    'the PO shape: delete every row carrying this id, then re-insert from the document');
+});
+
+it('rejecting after approving REMOVES the row rather than writing a negative one', () => {
+  const gone = POST.postClaim(pdb, { ...claim, status: 'rejected' });
+  assert.strictEqual(gone, null);
+  assert.strictEqual(pdb.prepare('SELECT COUNT(*) n FROM expense_entries WHERE claim_id = 41').get().n, 0);
+  // §36 decided a hand-typed row is freely deletable because mistakes here are
+  // typos; an offsetting entry turns a two-row ledger into four nobody can read.
+  assert.ok(!/-\s*amount|amount \* -1/.test(codeOnly(POSTING)), 'no reversal row');
+});
+
+it('a claim-posted row is NOT hand-typed, and the predicate says so', () => {
+  // The trap §87 named when the claim table was designed: a claim-posted row
+  // satisfies `po_id IS NULL`, so before `claim_id` was named here it arrived on
+  // the Transactions screen looking freely editable — and the edit would have
+  // been undone by the next decision.
+  assert.match(FINTX_CODE, /WHERE po_id IS NULL AND claim_id IS NULL/);
+  assert.match(FINTX_CODE, /row\.claim_id != null/, 'edit and delete refuse it too');
+  assert.match(FINTX_CODE, /claimEdit|claimDelete/);
+});
+
+it('the screen refuses it visibly rather than merely enforcing it', () => {
+  const code = codeOnly(CLIENT);
+  assert.match(code, /const claim = r\.source === 'claim';/);
+  assert.match(code, /row\.source === 'manual'/,
+    "`!== 'po'` reads the same with one projection and is the bug with two");
+  assert.ok(CLIENT.includes('费用申请 · 个人支付'), 'whose money it was is on the mark');
+});
+
+it('the approving key exists now, moves money, and is in no floor preset', () => {
+  const row = CAPS.match(/\{ key: 'expenses:approve'.*/);
+  assert.ok(row, 'expenses:approve must be registered');
+  assert.match(row[0], /money: 'moves'/, 'this is the tap that writes the ledger');
+  for (const preset of ['staff', 'store_manager', 'kitchen', 'store_stock', 'warehouse']) {
+    const block = CAPS.match(new RegExp(`${preset}:\\s*\\[[\\s\\S]*?\\]`));
+    assert.ok(block && !/expenses:approve/.test(block[0]), `${preset} must NOT approve by default`);
+  }
+});
+
+it('the decide route is gated ABOVE the submit route, and the order is the guard', () => {
+  const i = CAPROUTES.indexOf("return 'expenses:approve'");
+  const j = CAPROUTES.indexOf("return 'expenses:submit'");
+  assert.ok(i > -1 && j > -1 && i < j,
+    'below the general rule, every submitter would be an approver');
+  // And the route does not rely on that alone: rbac_enforce is off by default,
+  // so a money route that fell open would let anyone approve on every tenant.
+  assert.match(ROUTE_CODE, /function requireApprover/);
+  assert.match(ROUTE_CODE, /requireRetailAdmin, requireApprover/);
+});
+
+it('a settled claim can no longer be un-approved', () => {
+  // Money has changed hands outside this system. Taking the expense back out
+  // would leave the payment made and the cost unrecorded.
+  assert.match(ROUTE_CODE, /if \(claim\.settled\) return res\.status\(409\)/);
+});
+
+it('the claim status and the ledger row move together or not at all', () => {
+  assert.match(ROUTE_CODE, /withTransaction\(db, \(tx\) => \{[\s\S]*?postClaim\(tx, fresh\)/,
+    'a claim that says approved with no row behind it is a discrepancy nobody would find');
+  assert.match(ROUTE_CODE, /const fresh = tx\.prepare/,
+    'posted from the row as it now stands, not the one read before the update');
+});
+
+it('the approval list is a different route from the personal one', () => {
+  assert.match(ROUTE_CODE, /staff-expenses\/pending/);
+  assert.match(ROUTE_CODE, /staff-expenses\/mine/);
+  // A flag on one endpoint is one typo away from handing every submitter the
+  // whole shop's spending.
+  assert.ok(!/req\.query\.(all|everyone|scope)/.test(ROUTE_CODE));
+});
+
+it('whose claim it is, is decided by the server', () => {
+  assert.match(ROUTE_CODE, /mine: r\.submitted_by != null && r\.submitted_by === \(req\.user\?\.id \|\| null\)/);
+  assert.match(PHONE_CODE, /const mine=!!r\.mine;/);
+  // The phone has no operator id to compare against — this is why.
+  assert.ok(!/state\.me&&state\.me\.id/.test(PHONE_CODE));
+});
+
+it('self-approval is allowed, and marked', () => {
+  assert.ok(PHONE.includes('本人提交'), '§87 part five: the guard is the record, not the refusal');
+  assert.ok(!/cannot approve your own|不能审批自己/.test(PHONE), 'no refusal of self-approval');
+  assert.match(ROUTE_CODE, /self: claim\.submitted_by === decidedBy/, 'and it is logged as such');
+});
+
+it('the phone screen says what approving does', () => {
+  assert.ok(PHONE.includes('审批通过后即记入本月账目。'),
+    'the mirror of the line under Submit on the other screen');
 });
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);

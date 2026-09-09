@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.189
+# Tacet shared-core consolidation — decisions record, v4.190
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-09 · v4.190 — **§87 STEP THREE BUILT: THE APPROVAL LIST, THE POSTING STEP, AND THE MONEY REACHES THE BOOKS.** `lib/expense-posting.js` posts; the queue and the decide route are in `routes/staff-expenses.js`; the screen is **Approvals** on `/m`. **IT IS ON THE PHONE RATHER THAN IN THE BACK OFFICE, and that is a choice**: the person approving a ¥38 taxi is a manager standing in a shop, and §81 is the long record of what happens when the people who do a job have no login for the screen that does it — the back office still reads the money, because the posted rows appear on Transactions the moment they are approved. **POSTING IS `postRetailPOExpenses`'s SHAPE**: delete every `expense_entries` row carrying the claim's id, insert from the document as it now stands. So approving twice RE-POSTS rather than double-posting, and rejecting after approving REMOVES the row — §36 decided a hand-typed row is freely deletable because mistakes here are typos, and an accidental approval is that kind of mistake; an offsetting entry turns a two-row ledger into four nobody can read. **THE STATUS AND THE ROW MOVE IN ONE TRANSACTION**, and the post reads the claim AFTER the update rather than the copy loaded before it: a claim that says approved with nothing behind it is a discrepancy nobody finds until the month does not add up. **`created_by` ON THE POSTED ROW IS THE APPROVER, NOT THE SPENDER** — that column has always meant who put this in the books — and WHO SPENT IT IS IN THE DESCRIPTION, because a ¥38 line with no supplier, no invoice and no purchase order behind it is answerable months later only if it says whose taxi it was. **THE TRAP §87 NAMED IN ADVANCE IS CLOSED**: `readTransactions` selected hand-typed money out with `po_id IS NULL`, which a claim-posted row satisfies — it would have rendered as freely editable and the edit would have been undone by the next decision. The predicate is now `po_id IS NULL AND claim_id IS NULL`; `loadTyped` refuses a claim row with its own wording (the PO pair with one noun swapped, because it is the same refusal for the same reason); the screen tints it, marks it **Staff claim** with `· own money` where that is what it was, and drops the Edit link. The client's `row.source !== 'po'` became `=== 'manual'`: with one projection those read alike, with two the negation is the bug. **`store_id` LANDS ON `expense_entries`, NOTHING IS BACKFILLED, and §36's open column is closed** — every existing row is NULL, which is what those rows always meant. **The Summary's store filter is NOT built here**; it stays §36's, Contribution rule included. What this step owed it was the column. **ONE EXCEPTION TO THE FAIL-OPEN CONTRACT, and it is the only one in the feature**: cap-routes gates mutations only where `rbac_enforce` is on, which is off by default, so on this route falling open would mean anybody who can raise a claim may approve their own on every tenant. `requireApprover` refuses in the route as well — including when the capability set cannot be resolved, because a money route does not fall open on an unanswered question — and the `/decide` rule sits ABOVE the general one, since below it every submitter would be an approver. **`expenses:approve` IS REGISTERED NOW THAT IT GATES SOMETHING**, carries `money: 'moves'` where its submitting sibling carries no marker, and is in NO floor preset: owner, admin and manager hold it because those presets are the whole registry, and every other role is ticked on by an owner who has decided that this manager approves spending. **SELF-APPROVAL IS ALLOWED AND MARKED** — the row says `本人提交` rather than the button refusing, and the activity log records whether a decision was on the approver's own claim. **A SETTLED CLAIM CAN NO LONGER BE UN-APPROVED** (409): money has changed hands outside this system, and reversing the expense would leave the payment made and the cost unrecorded. Twenty-three composed pairs are declared in `docs/tacet-delivery-vocabulary.md` v1.47, the key one being the MIRROR of v1.46's: `审批通过后才会记入账目。` under Submit, `审批通过后即记入本月账目。` under the queue — one word carrying the difference between *not yet* and *now*. `批准` rejected for the button in favour of `通过`, which is what this product already says about an approved payment. `npm run test:fast` 193/193 green; the suite grows to 39 assertions, fourteen of them new, and `test_tenant_roles.js` moves 114 → 115 capabilities and 21 → 22 money-moving ones with the reasoning beside the rest. **Still to come: settlement, which POSTS NOTHING when it lands** — the ¥38 was recorded once, at approval. No change to `.gitignore` or CI.
 
 2026-09-09 · v4.189 — **§87 STEP TWO BUILT: THE CLAIM TABLE AND THE PHONE'S SUBMIT SCREEN, AND THE SCREEN IS OPTION A — ONE CARD, EVERY FIELD VISIBLE.** Three were drawn against Tacet's own tokens in `reference/expense-capture-mockup.html` and put to Ash — one card, an amount-first number pad, a grid of category tiles — and he chose the first. **THE OTHER TWO ARE NOT KEPT AS OPTIONS**: a trial switch offering all three was proposed and dropped the moment he answered, because three ways to record one thing is a product with no answer to "how do I record an expense", and the mockup file is the record of the alternatives. `schema.sql` gains `staff_expenses` — date, amount, category, note, `paid_by`, `payment_method`, `store_id`, `receipt_data`, `status`, `settled`, and the `expense_id` it will post to — and **NOTHING IN THIS STEP TOUCHES `expense_entries`**, which is part one's decision made structural: the route writes exactly one table and the suite asserts it. **FIELD ORDER IS THE ORDER SOMEBODY BESIDE A TAXI ASKS**: how much, what for, whose money; photo, note, date and shop follow, each optional. **THE SENTENCE UNDER THE BUTTON IS THE SCREEN'S JOB** — *this is not recorded in the accounts until it is approved* — in the words the phone already uses for money reaching the books (`记入账目`, lifted from its own receiving copy). **THE VALIDATOR IS A PURE MODULE (`lib/expense-claim.js`), AND THAT WAS LEARNED THE EXPENSIVE WAY**: it began inside the route, and a suite that wanted to RUN its rules had to `require` the route — which boots express and the database — leaving the dev database in a state that turned `test_restock_urgent.js` red. Pure rules belong in a pure file, the shape `lib/category-text.js` already had. **WHO PAID IS A CLOSED SET** (`company` | `employee`): a third spelling of "my own money" is a debt nobody can query for. **THE AMOUNT IS `fen()`-ed BEFORE STORAGE**, because this row is destined to become a ledger row and a residue saved once is inherited by every later reader. **THE CATEGORY SNAPS ONTO THE TENANT'S OWN LIST** through `storeCategory`, and an unlisted one still stores — the list is what the form offers, never a vocabulary the writer enforces. **THE PHOTO IS DOWNSCALED ON THE PHONE (1280px, q0.7) AND BOUNDED ON THE SERVER AT 2 MB, REFUSED RATHER THAN TRUNCATED** — half a photograph stored is a receipt nobody can read on a claim that looks like it has one. **A CLAIM IS PERSONAL AND THE OWNERSHIP TEST IS IN THE QUERY** (`WHERE submitted_by IS ?`; the receipt route matches owner and id together), because a fetch-then-compare is one early return away from serving anybody's spending. **WHAT THE SHOP OWES IS NOT THE SUM OF WHAT WAS SENT** — approved, own money, unsettled — computed in the route so the rule has one home. **STATUS IS THE COLUMN'S DEFAULT, NEVER TAKEN FROM THE BODY**, so no client can submit a claim that arrives already approved; there is no approve, reject or settle verb yet, and the suite asserts their absence. **THE CAPABILITY IS `expenses:submit`, NOT `finance:record`** — which opens the ledger, the window and the export — and it carries no money marker, on the `waste:record` shape: submitting writes nothing to any total. **THE APPROVING KEY IS DELIBERATELY NOT REGISTERED**; a key that gates nothing is a permission an owner ticks and sees no effect from. `lib/roles.js migrateExpenseSubmitCap` backfills it onto EVERY existing role with no untouched-role guard, on the argument its sibling proved on production three commits earlier. **ONE TEST GUARD WAS WIDENED DELIBERATELY RATHER THAN STEPPED OVER**: `test_kitchen_queue_reachable.js` admits `expenses:submit` by name because that role already holds `production:request`, which asks the company to place a purchase order — saying "I spent ¥38 of my own money" is strictly less than that — and the argument is written into the assertion so `expenses:approve` still turns it red. The capability count in `test_tenant_roles.js` moves 113 → 114 with its reasoning beside the other 113. Twenty-five composed pairs are declared in `docs/tacet-delivery-vocabulary.md` v1.46, with `报销` REJECTED and left unspent for the settlement step: it names the repayment, and half these claims are paid on the company account and are never reimbursed. `npm run test:fast` 191/192 green, the one red being `test_restock_urgent.js`, **which fails identically on pristine `origin/main` in a clean worktree and is not this branch's** — reported, not adopted. No change to `.gitignore` or CI.
 
@@ -8756,3 +8758,70 @@ role already holds `production:request` — which asks the company to place a
 purchase order with a supplier — and saying "I spent ¥38 of my own money" is
 strictly less than that. The argument is written into the assertion, and
 `expenses:approve` must still turn it red.
+
+### BUILT 2026-09-09 — step three, and the money reaches the books
+
+The approval list, the posting step, the `claim_id` predicate fix and the
+`store_id` column. `lib/expense-posting.js` is the posting; the decide route and
+the queue are in `routes/staff-expenses.js`; the screen is **Approvals** on `/m`,
+gated on `expenses:approve`.
+
+**THE APPROVAL SCREEN IS ON THE PHONE, NOT IN THE BACK OFFICE**, and that is a
+choice rather than an omission. The person who approves a ¥38 taxi is a manager
+or an owner standing in a shop, and §81 is the long record of what happens when
+the people who do a job have no login for the screen that does it. The back
+office is not left out of it: the posted rows appear on the Transactions ledger
+the moment they are approved, which is where the money is read.
+
+**POSTING IS `postRetailPOExpenses`'s SHAPE, DELIBERATELY.** Delete every
+`expense_entries` row carrying this claim's id, then insert from the document as
+it now stands. So approving twice re-posts rather than double-posting, and
+rejecting after approving REMOVES the row — §36 decided a hand-typed row is
+freely deletable because "mistakes here are typos", and an approval given by
+accident is the same kind of mistake. An offsetting entry would turn a two-row
+ledger into four rows nobody can read.
+
+**THE CLAIM'S STATUS AND ITS LEDGER ROW MOVE IN ONE TRANSACTION**, and the post
+reads the row AFTER the update rather than the one loaded before it: a claim that
+says approved with nothing behind it, or a row with no claim, is a discrepancy
+nobody would find until the month did not add up.
+
+**`created_by` ON THE POSTED ROW IS THE APPROVER, NOT THE SPENDER.** That column
+has always meant *who put this in the books*, and the approver is who did. Who
+spent the money is in the description — the name, then the note — because a ¥38
+line with no supplier, no invoice and no purchase order behind it is answerable
+three months later only if it says whose taxi it was.
+
+**THE TRAP §87 NAMED IN ADVANCE IS CLOSED.** `readTransactions` selected
+hand-typed money out with `po_id IS NULL`, which a claim-posted row satisfies —
+it would have arrived on the Transactions screen looking freely editable, and the
+edit would have been undone by the next decision. The predicate is now
+`po_id IS NULL AND claim_id IS NULL`, `loadTyped` refuses a claim row with its own
+wording, and the screen tints it and drops the Edit link. The client's
+`row.source !== 'po'` became `=== 'manual'` for the same reason: with one kind of
+projection those read alike, and with two the negation is the bug.
+
+**`store_id` LANDS ON `expense_entries` AND NOTHING IS BACKFILLED.** §36's open
+column is closed; every existing row is NULL, which is what those rows always
+meant. **The Summary's store filter is NOT built here** — it is §36's, including
+its rule that a filtered view says Contribution and never Net. What this step
+owed it was the column.
+
+**ONE EXCEPTION TO THE FAIL-OPEN CONTRACT, and it is the only one.**
+`lib/cap-routes.js` gates mutations only where a tenant has switched
+`rbac_enforce` on, which is off by default and right for a screen somebody is
+mid-shift on. On this route it would mean that on every tenant, anybody who can
+raise a claim can approve their own. `requireApprover` therefore refuses in the
+route as well — including when the capability set cannot be resolved, because a
+money route does not fall open on an unanswered question. The cap-routes rule for
+`/decide` also sits ABOVE the general one; below it, every submitter would be an
+approver.
+
+**SELF-APPROVAL IS ALLOWED AND MARKED.** Part five's decision, made visible: the
+row says `本人提交` rather than the button refusing. The approver is stored, shown
+and logged, and the activity row records whether the decision was on the
+approver's own claim.
+
+Still to come: **settlement** — marking what the shop owes an employee as paid
+back. It POSTS NOTHING when it lands, and the suite already asserts the shape it
+must not take.

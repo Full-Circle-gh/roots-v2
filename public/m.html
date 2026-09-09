@@ -791,6 +791,12 @@ const state = {
        amount:'',cat:'',paid:'employee',note:'',storeId:null,date:null,photo:null,
        busy:false,err:'',sent:null,
        mine:null,mineTried:false,owed:0,waiting:0},
+  /* THE APPROVAL QUEUE (§87 step three). A DIFFERENT SCREEN WITH A DIFFERENT
+     KEY, reading a different endpoint — everybody's spending, which `exp` above
+     deliberately cannot see. Keeping them apart here is the client half of the
+     server's own split; one state object with a flag on it would be one typo
+     away from showing a submitter the shop's whole ledger of claims. */
+  apr:{rows:null,tried:false,err:'',busy:0,waiting:0,shot:null,shotFor:null},
   /* WRITING A BROADCAST (§63). Four steps, one decision each: what it says, who
      gets it, when it goes, and a last look before it does. `count` is the
      server's own audience preview — never derived here, because the phone does
@@ -930,6 +936,12 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      the shop's vocabulary rather than anything this person typed, and re-reading
      them on every entry is a wait for nothing. `mine` is dropped, because what
      has become of a claim is a fact about now. */
+  /* THE QUEUE IS RE-READ ON EVERY ENTRY, for the reason the kitchen-ready list
+     is: what is waiting for a decision is a fact about this minute, and a list
+     carried over from the last time the app was opened may already have been
+     worked by somebody else. */
+  if(route==='approvals'){ const a=state.apr;
+    a.rows=null; a.tried=false; a.err=''; a.busy=0; a.shot=null; a.shotFor=null; }
   if(route==='expense'){ const x=state.exp;
     x.amount=''; x.cat=''; x.paid='employee'; x.note=''; x.photo=null; x.date=null;
     x.err=''; x.busy=false; x.sent=null; x.mine=null; x.mineTried=false; }
@@ -3367,7 +3379,12 @@ const MORE_GROUPS=[
        Operations beside Waste on purpose: both are a person recording something
        small that happened to them during a shift, which somebody else's key
        later turns into money. */
-    ['expense','banknote','Expense','费用申请'],['till','calculator','Counter till','前台收银','/till'],['kitchenqueue','chef-hat','Kitchen queue','厨房制作队列'],['stockapp','package-plus','Add stock','加库存'],
+    ['expense','banknote','Expense','费用申请'],
+    /* The other end of the same feature, and a SEPARATE ROW because it is a
+       separate job held by separate people: most of the operators who see the
+       row above will never see this one. Gated on `expenses:approve`, which no
+       floor preset holds. */
+    ['approvals','check-check','Approvals','审批'],['till','calculator','Counter till','前台收银','/till'],['kitchenqueue','chef-hat','Kitchen queue','厨房制作队列'],['stockapp','package-plus','Add stock','加库存'],
     /* THE TWO REQUEST SCREENS, IN THIS APP (§48). They had no rows of their
        own and lived on /stock's launcher; they have rows here now, the launcher
        emptied, and the Transfers row that reached it went with the last of
@@ -10002,6 +10019,151 @@ SUBS.askbuy={title:['Ask to buy','采购申请'],render:()=>screenAskBuy()};
    ══════════════════════════════════════════════════════════════════════════ */
 SUBS.expense={title:['Expense','费用申请'],render:()=>screenExpense()};
 
+/* ══════════════════════════════════════════════════════════════════════════
+   APPROVALS (§87 step three) — the tap that puts money in the books.
+
+   Approving posts one row into `expense_entries` carrying the claim's id;
+   rejecting takes it back out. Both happen server-side inside one transaction
+   with the claim's own status, so a claim that says approved with no row behind
+   it cannot exist.
+
+   **SELF-APPROVAL IS ALLOWED AND IS MARKED.** Ash's decision (§87 part five): in
+   a shop with one manager the person who spends and the person who approves are
+   the same person, and a rule forbidding it produces an unusable screen rather
+   than a second approver. The guard is the record — so the row SAYS it is your
+   own claim rather than quietly letting it through looking like anybody's.
+   ══════════════════════════════════════════════════════════════════════════ */
+SUBS.approvals={title:['Approvals','审批'],render:()=>screenApprovals()};
+
+function aprLoad(){
+  const a=state.apr;
+  if(a.tried) return; a.tried=true;
+  api('/staff-expenses/pending').then(d=>{
+    a.rows=(d&&d.rows)||[]; a.waiting=(d&&d.waiting)||0; a.err=''; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    a.rows=[]; a.err=e.message||E('Could not load the queue.','无法加载列表。'); render();
+  });
+}
+
+/* The photograph, fetched only when somebody asks to see one. The list carries
+   `has_receipt` and not the bytes — twenty claims would otherwise drag twenty
+   photographs into a phone over a shop's wifi to render none of them. */
+reg('aprShot', id=>{
+  const a=state.apr;
+  if(a.shotFor===Number(id)){ a.shot=null; a.shotFor=null; render(); return; }
+  a.shotFor=Number(id); a.shot=null; render();
+  api('/staff-expenses/'+Number(id)+'/receipt').then(d=>{
+    if(a.shotFor!==Number(id)) return;          // a later tap already won
+    a.shot=(d&&d.receipt_data)||null; render();
+  }).catch(()=>{ if(a.shotFor===Number(id)){ a.shot=null; a.shotFor=null; render(); } });
+});
+
+/* Deciding. THE ROW IS BUSY, NOT THE SCREEN: a manager working down a queue of
+   six taps the next one while the last is still in flight, and a spinner over
+   the whole list would make that impossible for no benefit. */
+reg('aprDecide', (id,decision)=>{
+  const a=state.apr;
+  if(a.busy) return;
+  a.busy=Number(id); a.err=''; render();
+  apiWrite('/staff-expenses/'+Number(id)+'/decide',{decision:decision}).then(()=>{
+    a.busy=0; a.tried=false; a.shot=null; a.shotFor=null;
+    aprLoad();
+    if(window.toast) toast(decision==='approve'?T('Approved','已通过'):T('Not approved','已拒绝'));
+  }).catch(e=>{
+    a.busy=0;
+    if(String(e.message)==='auth') return;
+    a.err=e.message||E('Could not do that.','操作失败。');
+    render();
+  });
+});
+
+function aprRow(r){
+  const a=state.apr;
+  const waiting=r.status==='submitted';
+  const own=r.paid_by==='employee';
+  // The SERVER says whose claim this is. The phone holds no operator id — this
+  // read it off `state.me`, which carries a name and a role and nothing else, so
+  // the marker silently never appeared.
+  const mine=!!r.mine;
+  const bits=[fmtDateOnly(r.date)];
+  if(r.category) bits.push(r.category);
+  bits.push(own?T('own money','个人支付'):T('company','公司'));
+  const busy=a.busy===r.id;
+  return `<div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+      <span style="display:flex;flex-direction:column;gap:3px;min-width:0">
+        <span style="display:flex;align-items:center;gap:8px;min-width:0">
+          <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(r.who||T('Someone','未知'))}</span>
+          ${mine?`<span class="pill" style="background:var(--surface-raised);color:var(--text-secondary)">${T('Your own claim','本人提交')}</span>`:''}
+        </span>
+        <span class="num" style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(bits.join(' · '))}</span>
+        ${r.note?`<span style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(r.note)}</span>`:''}
+      </span>
+      <span style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex:none">
+        <span class="num" style="font-size:16px;font-weight:600">¥${escAttr(String(r.amount))}</span>
+        ${waiting?'':expStatusPill(r)}
+      </span>
+    </div>
+    ${r.has_receipt?`<button class="btn2" style="align-self:flex-start;padding:0 12px;height:36px;font-size:13px"
+        onclick="APP.cmd('aprShot',${r.id})">${a.shotFor===r.id?T('Hide photo','收起照片'):T('View photo','查看照片')}</button>`:''}
+    ${a.shotFor===r.id?(a.shot
+      ? `<img src="${a.shot}" alt="" style="width:100%;max-height:280px;object-fit:contain;border-radius:10px;border:1px solid var(--border-default);background:var(--surface-raised)">`
+      : `<div style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`):''}
+    ${waiting?`<div style="display:flex;gap:8px">
+      ${/* APPROVE IS THE CTA AND REJECT IS NOT, because the queue exists to be
+           cleared and most claims in it are real. Reject is a plain control
+           beside it rather than a danger-red one: refusing a ¥38 taxi is an
+           ordinary decision, and colouring it as an alarm would make an
+           approver hesitate over the one they are meant to make. */''}
+      <button class="cta" style="flex:1" ${busy?'disabled style="opacity:.55"':''}
+        onclick="APP.cmd('aprDecide',${r.id},'approve')">${busy?T('Working…','处理中…'):T('Approve','通过')}</button>
+      <button class="btn2" style="padding:0 18px" ${busy?'disabled':''}
+        onclick="APP.cmd('aprDecide',${r.id},'reject')">${T('Reject','拒绝')}</button>
+    </div>`:''}
+  </div>`;
+}
+
+function screenApprovals(){
+  aprLoad();
+  const a=state.apr;
+  if(a.err) return `<div style="padding:12px 16px 24px">
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${a.err}</span></div>
+    <button class="btn2" style="width:auto;padding:11px 26px;margin:12px auto 0;display:flex" onclick="APP.cmd('aprRetry')">${T('Try again','重试')}</button></div>`;
+  if(!a.rows) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+
+  const waiting=a.rows.filter(r=>r.status==='submitted');
+  const done=a.rows.filter(r=>r.status!=='submitted');
+
+  /* §1.12 — an empty queue is a COMPLIMENT, not a gap. There is nothing to
+     retry and nothing to configure; everything that was sent has been decided. */
+  if(!waiting.length&&!done.length) return nothingYet(T('Nothing waiting','暂无待审批'),
+    T('Expenses your team records will arrive here for you to approve.','团队登记的费用会出现在这里等待审批。'));
+
+  const block=(rows)=>`<div class="list">${rows.map((r,i)=>
+    `${i?'<div class="sep" style="margin-left:14px"></div>':''}${aprRow(r)}`).join('')}</div>`;
+
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${waiting.length?`<div style="display:flex;flex-direction:column;gap:8px">
+      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Waiting','待审批')} · ${waiting.length}</span>
+      ${block(waiting)}
+      ${/* THE SENTENCE THAT MAKES THE BUTTON HONEST. It is the mirror of the one
+           under Submit on the other screen: there, nothing is in the accounts
+           yet; here, approving is what puts it there. */''}
+      <span style="font-size:12px;color:var(--text-secondary)">${T(
+        'Approving records the expense in this month\u2019s accounts.','审批通过后即记入本月账目。')}</span>
+    </div>`:nothingYet(T('Nothing waiting','暂无待审批'),
+        T('Everything your team has sent has been decided.','团队提交的记录都已处理。'))}
+    ${done.length?`<div style="display:flex;flex-direction:column;gap:8px">
+      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Already decided','已处理')}</span>
+      ${block(done)}
+    </div>`:''}
+  </div>`;
+}
+reg('aprRetry', ()=>{ const a=state.apr; a.tried=false; a.err=''; a.rows=null; render(); aprLoad(); });
+
 /* The claim's own day. Defaults to the phone's today and is changeable — a
    receipt found in a coat pocket on Thursday was still spent on Tuesday, and a
    date nobody can correct is how it gets filed in the wrong month. */
@@ -13643,6 +13805,10 @@ const ROUTE_CAP={
      which opens the ledger, the window and the export. A ¥38 taxi must not be
      the reason a driver can read what the shop earned. */
   expense:'expenses:submit',
+  /* THE TAP ON THIS SCREEN PUTS MONEY IN THE BOOKS, so it is gated on the key
+     its own Approve is gated on server-side — and that key is in no floor
+     preset. An owner ticks it on for the person who approves spending. */
+  approvals:'expenses:approve',
   /* The same pair the count is gated on, and the same pair routes/restock.js
      addresses the 'prepared' push to — the people who RAISE these requests. A
      fulfil-only kitchen operator is the one who made it, and telling them

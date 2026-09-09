@@ -1179,6 +1179,25 @@ addColumn('expense_entries', 'updated_at', 'DATETIME');
 // deleting it was for.
 addColumn('categories', 'is_operating', 'INTEGER DEFAULT 1');
 addColumn('categories', 'is_active',    'INTEGER DEFAULT 1');
+// ── The ledger learns two things (§87 step three) ─────────────────────────
+//
+// claim_id — THE ROW WAS POSTED BY AN APPROVED STAFF CLAIM, and it is the exact
+// counterpart of `po_id`. Both mark a PROJECTION: a row the product re-writes
+// from a document that owns it, so no human-authored value may accumulate on
+// one and the Transactions screen must refuse to edit it. The hand-typed read
+// in routes/finance-transactions.js therefore asks for BOTH to be null; a
+// predicate that only knew about `po_id` would render a claim-posted row as
+// freely editable and the next re-post would silently undo the edit.
+//
+// store_id — §87 part three closes §36's own open column. NULLABLE, and NULL
+// keeps §36's meaning exactly: the cost belongs to the business rather than to
+// any one place. **NOTHING IS BACKFILLED** — every existing row is NULL, which
+// is what those rows always meant — and no reader is required to use it yet.
+// The Summary's store filter is §36's to build and is not built here; what this
+// column does is make it possible at all, which is the one thing that has
+// blocked it since 2026-09-02.
+addColumn('expense_entries', 'claim_id', 'INTEGER');
+addColumn('expense_entries', 'store_id', 'INTEGER');
 // Suppliers — primary communication channel for the buyer to reach
 // this vendor. Type drives the UI (link vs QR vs plain text). Replaces
 // the loose "WeChat ID / phone" stuff with a structured field that
