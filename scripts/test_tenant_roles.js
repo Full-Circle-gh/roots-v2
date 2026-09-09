@@ -312,9 +312,16 @@ function versionOf(tid) {
   // make, and would blur the split the whole section rests on — the kitchen
   // asks, the buyer spends. It needs revisiting only if the send is ever allowed
   // to create an order directly, which §86 part one refuses.
+  // 114 is `expenses:submit` (2026-09-09, §87) — an employee saying what they
+  // spent on the shop's behalf. NO money marker, and the reason is the one the
+  // key itself is built on: a claim is written to its own table and reaches no
+  // total until somebody approves it, so submitting one puts no figure on any
+  // screen and changes nothing the business owes. The APPROVING key will carry
+  // a marker, and it is not registered yet — it lands with the screen that
+  // gives it something to gate.
   is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 21, '21 capabilities move money');
   is(caps.CAPABILITIES.filter(c => c.money === 'shows').length, 16, '16 show it');
-  is(caps.CAPABILITIES.length, 113, 'across all 113');
+  is(caps.CAPABILITIES.length, 114, 'across all 114');
   // Seeing the waste ledger and reading what it cost are two permissions
   // (Ash, 2026-09-02). They were one, and `waste:view` carried the money
   // marker — so the two floor presets, whose job is recording what spoiled,

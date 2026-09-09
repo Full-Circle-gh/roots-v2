@@ -774,6 +774,22 @@ const state = {
          "1." and "" are things somebody is in the middle of writing and a number
          cannot hold either. A row is absent from it when its field is shut. */
       typing:{},typeErr:{}},
+  /* AN EXPENSE CLAIM (§87 step two). What one employee spent on the shop's
+     behalf, before anybody has approved it — so nothing on this screen is money
+     in the books, and the copy says so rather than leaving it to be assumed.
+
+     `amount` and `note` are held as STRINGS and written on input without a
+     repaint, which is the rule every typed field on this app follows and the
+     reason it does: a field rebuilt by its own typing drops the soft keyboard on
+     a real phone. A chip tap DOES repaint, and the fields survive it because
+     what was typed lives here rather than in the DOM.
+
+     `photo` is a data URI already downscaled by the phone. The full-size frame a
+     camera hands over is 4–8 MB and never leaves this device. */
+  exp:{cats:null,stores:null,tried:false,metaErr:'',
+       amount:'',cat:'',paid:'employee',note:'',storeId:null,date:null,photo:null,
+       busy:false,err:'',sent:null,
+       mine:null,mineTried:false,owed:0,waiting:0},
   /* WRITING A BROADCAST (§63). Four steps, one decision each: what it says, who
      gets it, when it goes, and a last look before it does. `count` is the
      server's own audience preview — never derived here, because the phone does
@@ -907,6 +923,15 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   /* Log a batch opens with nothing counted. A basket left over from a batch
      that was already recorded would add it a second time. */
   if(route==='logbatch'){ state.bat.qty={}; state.bat.q=''; }
+  /* A CLAIM IS WRITTEN FROM AN EMPTY FORM EVERY TIME, and a screen reopened
+     after a send does not reappear on its own receipt — the rule the three
+     request screens above already follow. THE LISTS ARE KEPT: the categories are
+     the shop's vocabulary rather than anything this person typed, and re-reading
+     them on every entry is a wait for nothing. `mine` is dropped, because what
+     has become of a claim is a fact about now. */
+  if(route==='expense'){ const x=state.exp;
+    x.amount=''; x.cat=''; x.paid='employee'; x.note=''; x.photo=null; x.date=null;
+    x.err=''; x.busy=false; x.sent=null; x.mine=null; x.mineTried=false; }
   /* A broadcast is written from an empty screen every time. What was left in
      the form after one was sent is the LAST one sent, and re-opening on it is
      how the same announcement goes out twice. */
@@ -3291,7 +3316,12 @@ const MORE_GROUPS=[
      this file keeps out. The rows stay put on a quiet day for the reason the
      launcher's tiles did: "Nothing to pick" is what tells somebody the tool is
      there before the morning they need it. */
-  {h:['Operations','运营'],rows:[['neworder','file-plus','New order','新建订单'],['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],['till','calculator','Counter till','前台收银','/till'],['kitchenqueue','chef-hat','Kitchen queue','厨房制作队列'],['stockapp','package-plus','Add stock','加库存'],
+  {h:['Operations','运营'],rows:[['neworder','file-plus','New order','新建订单'],['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],
+    /* §87 — what somebody spent out of their own pocket for work. It sits in
+       Operations beside Waste on purpose: both are a person recording something
+       small that happened to them during a shift, which somebody else's key
+       later turns into money. */
+    ['expense','banknote','Expense','费用申请'],['till','calculator','Counter till','前台收银','/till'],['kitchenqueue','chef-hat','Kitchen queue','厨房制作队列'],['stockapp','package-plus','Add stock','加库存'],
     /* THE TWO REQUEST SCREENS, IN THIS APP (§48). They had no rows of their
        own and lived on /stock's launcher; they have rows here now, the launcher
        emptied, and the Transfers row that reached it went with the last of
@@ -9760,6 +9790,302 @@ SUBS.kitchenready={title:['Ready from the kitchen','厨房已完成'],render:()=
 SUBS.askkitchen={title:['Ask the kitchen','向厨房下单'],render:()=>screenAskKitchen()};
 SUBS.askstock={title:['Ask for stock','申请补货'],render:()=>screenAskStock()};
 SUBS.askbuy={title:['Ask to buy','采购申请'],render:()=>screenAskBuy()};
+
+/* ══════════════════════════════════════════════════════════════════════════
+   AN EXPENSE CLAIM (§87 step two) — Ash chose ONE CARD, every field visible.
+
+   The screen is the shape §1.13 calls a sheet and this one is a screen: it is
+   reached from a row, it has a list under it, and it is abandonable. What it
+   keeps from the sheet rule is the part that matters — EVERY FIELD VISIBLE ON
+   OPEN, nothing that grows the height by the operator's own actions, and one
+   commit at the bottom.
+
+   FIELD ORDER IS THE ORDER SOMEBODY STANDING BESIDE A TAXI ACTUALLY ASKS: how
+   much, what for, whose money. The photo, the note and the shop follow, because
+   each of them is optional and none is what the person came to type.
+
+   **NOTHING HERE IS MONEY IN THE BOOKS, AND THE SCREEN SAYS SO** rather than
+   leaving it to be discovered when the month does not add up. §87 part one puts
+   a claim in its own table for exactly this reason; the line under the button is
+   that decision made visible to the person it affects.
+   ══════════════════════════════════════════════════════════════════════════ */
+SUBS.expense={title:['Expense','费用申请'],render:()=>screenExpense()};
+
+/* The claim's own day. Defaults to the phone's today and is changeable — a
+   receipt found in a coat pocket on Thursday was still spent on Tuesday, and a
+   date nobody can correct is how it gets filed in the wrong month. */
+function expDate(){ return state.exp.date || shopToday(); }
+
+function expLoadMeta(){
+  const x=state.exp;
+  if(x.tried) return; x.tried=true;
+  api('/staff-expenses/meta').then(d=>{
+    x.cats=(d&&d.categories)||[]; x.stores=(d&&d.stores)||[];
+    /* ONE STORE IS NOT A CHOICE (§1.9), so the field never renders — but the
+       claim still carries it, because the column is what makes a per-shop
+       expense figure possible at all (§87 part three). */
+    if(x.stores.length===1) x.storeId=x.stores[0].id;
+    render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    x.cats=[]; x.stores=[]; x.metaErr=E('Could not load your shop\u2019s categories.','无法加载本店分类。'); render();
+  });
+}
+
+function expLoadMine(){
+  const x=state.exp;
+  if(x.mineTried) return; x.mineTried=true;
+  api('/staff-expenses/mine').then(d=>{
+    x.mine=(d&&d.rows)||[]; x.owed=(d&&d.owed)||0; x.waiting=(d&&d.waiting)||0; render();
+  }).catch(e=>{ if(String(e.message)!=='auth'){ x.mine=[]; render(); } });
+}
+
+/* WHAT A CLAIM IS WORTH, read from the string the person is typing rather than
+   from a number kept beside it. "12." and "" are things somebody is in the
+   middle of writing and a number cannot hold either — the rule the quick-stock
+   keypad and the purchase-request field both follow. */
+function expAmount(){
+  const raw=String(state.exp.amount||'').trim();
+  if(!/^\d*(\.\d{0,2})?$/.test(raw)) return NaN;
+  const n=parseFloat(raw);
+  return Number.isFinite(n)?n:NaN;
+}
+function expReady(){ const n=expAmount(); return n>0 && !state.exp.busy; }
+
+function expStatusPill(r){
+  if(r.status==='approved'){
+    /* AN APPROVED CLAIM PAID OUT OF SOMEBODY'S POCKET IS STILL OPEN TO THEM
+       until it is settled, and the pill says which of the two it is. Approved
+       and already paid back reads as finished; approved and unpaid is what the
+       shop owes, and putting both under one word is how a debt gets forgotten. */
+    if(r.paid_by==='employee'&&!r.settled)
+      return `<span class="pill" style="background:var(--dusk-tint);color:var(--dusk-ink)">${T('Owed','应付您')}</span>`;
+    return `<span class="pill" style="background:var(--sage-tint);color:var(--sage-ink)">${T('Approved','已通过')}</span>`;
+  }
+  if(r.status==='rejected')
+    return `<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${T('Not approved','已拒绝')}</span>`;
+  return `<span class="pill" style="background:var(--amber-tint);color:var(--amber-ink)">${T('Waiting','待审批')}</span>`;
+}
+
+function expMineRow(r){
+  const bits=[fmtDateOnly(r.date)];
+  if(r.category) bits.push(r.category);
+  bits.push(r.paid_by==='employee'?T('Own money','个人支付'):T('Company','公司'));
+  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px">
+    <span style="display:flex;flex-direction:column;min-width:0;gap:2px">
+      <span class="num" style="font-size:15px;font-weight:500">¥${escAttr(String(r.amount))}</span>
+      <span class="num" style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(bits.join(' · '))}</span>
+    </span>${expStatusPill(r)}</div>`;
+}
+
+function screenExpense(){
+  expLoadMeta(); expLoadMine();
+  const x=state.exp;
+
+  /* THE RECEIPT AFTER A SEND, and it replaces the form rather than sitting above
+     it. A form still on screen under a confirmation is an invitation to send the
+     same claim twice, which is the defect the three request screens record. */
+  if(x.sent) return `<div style="padding:24px 16px 32px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center">
+      <span style="width:52px;height:52px;border-radius:50%;background:var(--sage-tint);color:var(--sage-ink);display:flex;align-items:center;justify-content:center">${ic('check',26)}</span>
+      <div style="font-size:19px;font-weight:500">${T('Sent for approval','已提交，等待审批')}</div>
+      <div class="num" style="font-size:15px;color:var(--text-secondary)">¥${escAttr(String(x.sent.amount))}${x.sent.cat?' · '+escAttr(x.sent.cat):''}</div>
+      <div style="font-size:14px;color:var(--text-secondary);max-width:270px;line-height:1.55">${T('It is not in the accounts yet. Nothing is recorded until it is approved.','尚未记入账目。审批通过后才会记录。')}</div>
+      <button class="btn2" style="margin-top:4px" onclick="APP.cmd('expAgain')">${T('Record another','再记一笔')}</button>
+    </div>`;
+
+  const cats=x.cats||[];
+  const catField = cats.length
+    ? `<div style="display:flex;flex-direction:column;gap:8px">
+         <span style="font-size:12.5px;color:var(--text-secondary)">${T('Category','分类')}</span>
+         <div style="display:flex;flex-wrap:wrap;gap:8px">${cats.map(c=>
+           `<button class="chip ${x.cat===c?'on':''}" onclick="APP.cmd('expCat',${JSON.stringify(c).replace(/"/g,'&quot;')})">${escAttr(c)}</button>`).join('')}</div>
+       </div>`
+    /* NO CHIPS AND NO FREE-TEXT BOX WHEN THE SHOP HAS NO LIST. §36's rule is
+       that an empty list cannot offer a wrong option, and the answer to an empty
+       one is not a text field where every driver invents their own spelling —
+       that is precisely the mess the category list was built to end. The claim
+       goes uncategorised and the line says who fixes it. */
+    : `<div style="font-size:13px;color:var(--text-secondary);line-height:1.55">${T(
+        'Your shop has no expense categories yet. This will be filed without one — whoever keeps the books can add categories in Finance.',
+        '本店尚未设置支出分类。这笔将不带分类提交 — 可请记账人在“财务”中新增分类。')}</div>`;
+
+  const stores=x.stores||[];
+  const storeField = stores.length>1
+    ? `<div style="display:flex;flex-direction:column;gap:8px">
+         <span style="font-size:12.5px;color:var(--text-secondary)">${T('Shop','门店')}</span>
+         <div style="display:flex;flex-wrap:wrap;gap:8px">${stores.map(st=>
+           `<button class="chip ${String(x.storeId)===String(st.id)?'on':''}" onclick="APP.cmd('expStore','${st.id}')">${escAttr(st.name_cn||st.name_en||('#'+st.id))}</button>`).join('')}</div>
+       </div>`
+    : '';
+
+  const mine=x.mine||[];
+  const list = mine.length
+    ? `<div style="padding:0 16px 24px;display:flex;flex-direction:column;gap:10px">
+         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+           <span style="font-size:12.5px;color:var(--text-secondary)">${T('What you have sent','你提交的记录')}</span>
+           ${x.owed>0?`<span class="num" style="font-size:12.5px;color:var(--dusk-ink)">${T('Owed to you','应付您')} ¥${escAttr(String(x.owed))}</span>`:''}
+         </div>
+         <div class="list">${mine.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${expMineRow(r)}`).join('')}</div>
+       </div>`
+    : '';
+
+  return `<div style="padding:14px 16px 8px;display:flex;flex-direction:column;gap:16px">
+
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Amount','金额')}</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:26px;color:var(--text-secondary)">¥</span>
+        ${/* THE FIELD IS THE FIRST THING ON THE SCREEN AND THE LARGEST THING ON
+             IT, because the number is what the person came here holding.
+             inputmode=decimal opens the phone straight on digits; storing on
+             input without a repaint is what keeps that keyboard open. */''}
+        <input id="mExpAmt" class="num" inputmode="decimal" enterkeyhint="done"
+          style="flex:1;font-size:32px;font-weight:600;padding:8px 12px;letter-spacing:-.01em"
+          value="${escAttr(x.amount)}" placeholder="0.00"
+          aria-label="${escAttr(T('Amount','金额'))}"
+          oninput="APP.cmd('expAmt',this.value)"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+      </div>
+    </div>
+
+    ${catField}
+
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Who paid','由谁付款')}</span>
+      <div style="display:flex;gap:8px">
+        <button class="chip ${x.paid==='employee'?'on':''}" onclick="APP.cmd('expPaid','employee')">${T('My own money','个人支付')}</button>
+        <button class="chip ${x.paid==='company'?'on':''}" onclick="APP.cmd('expPaid','company')">${T('Company','公司')}</button>
+      </div>
+      ${/* WHY THE ANSWER MATTERS, said once, beside the control that decides it.
+           It is the field that turns a cost into a debt, and nobody tapping it
+           can be expected to know that from two words. */''}
+      <span style="font-size:12px;color:var(--text-secondary)">${x.paid==='employee'
+        ? T('The shop owes you this once it is approved.','审批通过后本店应付给你。')
+        : T('Paid from the shop\u2019s own account. Nothing is owed to you.','由本店账户支付，无需付给你。')}</span>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Receipt','照片')} · ${T('optional','可选')}</span>
+      ${x.photo
+        ? `<div style="display:flex;align-items:center;gap:12px">
+             <img src="${x.photo}" alt="" style="width:56px;height:56px;object-fit:cover;border-radius:10px;border:1px solid var(--border-default)">
+             <button class="btn2" style="padding:0 14px" onclick="APP.cmd('expPhotoClear')">${T('Remove','移除')}</button>
+           </div>`
+        : `<label class="btn2" style="width:auto;align-self:flex-start;padding:0 16px;cursor:pointer">
+             ${ic('camera',18)}<span>${T('Add a photo','拍照')}</span>
+             <input type="file" accept="image/*" capture="environment" style="display:none"
+               onchange="APP.cmd('expPhoto',this)">
+           </label>`}
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Note','备注')} · ${T('optional','可选')}</span>
+      ${/* NO PLACEHOLDER. The example that wanted to go here — an airport run for
+           a Tianhe order — needed two Chinese words this product does not ship,
+           and Rule 4 prefers restructuring a label over minting a pair. The row
+           above already says Note and says it is optional, which is the whole of
+           what a placeholder would have added. */''}
+      <input id="mExpNote" value="${escAttr(x.note)}" maxlength="200"
+        aria-label="${escAttr(T('Note','备注'))}"
+        oninput="APP.cmd('expNote',this.value)">
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Date','日期')}</span>
+      <input type="date" id="mExpDate" value="${escAttr(expDate())}" style="width:auto"
+        onchange="APP.cmd('expDate',this.value)">
+    </div>
+
+    ${storeField}
+    ${x.metaErr?`<div style="font-size:13px;color:var(--brick-ink)">${x.metaErr}</div>`:''}
+    ${x.err?`<div style="display:flex;align-items:flex-start;gap:10px;padding:11px 14px;border-radius:12px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',16)}</span>
+      <span style="font-size:13.5px;color:var(--brick-ink)">${x.err}</span></div>`:''}
+
+    <button class="cta" ${expReady()?'':'disabled style="opacity:.55"'} onclick="APP.cmd('expSend')">
+      ${x.busy?T('Sending…','提交中…'):T('Submit','提交')}</button>
+    ${/* THE ONE SENTENCE THAT KEEPS THIS SCREEN HONEST. §87 part one is a
+         decision about where a claim lives; this is what it means to the person
+         pressing the button, and it is under the button rather than in a help
+         page for the same reason the draft note is on the purchase request. */''}
+    <span style="font-size:12px;color:var(--text-secondary);text-align:center">${T(
+      'This is not recorded in the accounts until it is approved.','审批通过后才会记入账目。')}</span>
+  </div>${list}`;
+}
+
+/* ── The commands ───────────────────────────────────────────────────────── */
+/* TYPING STORES AND NOTHING ELSE — no repaint, so the field is never rebuilt
+   under a thumb. Same rule as mbTyped, learned on the waste picker before it. */
+reg('expAmt', v=>{ state.exp.amount=String(v==null?'':v); if(state.exp.err) { state.exp.err=''; } });
+reg('expNote', v=>{ state.exp.note=String(v==null?'':v); });
+reg('expCat', c=>{ const x=state.exp; x.cat=(x.cat===c)?'':String(c); render(); });
+reg('expPaid', p=>{ state.exp.paid=(p==='company')?'company':'employee'; render(); });
+reg('expStore', id=>{ state.exp.storeId=Number(id)||null; render(); });
+reg('expDate', d=>{ state.exp.date=String(d||'')||null; });
+reg('expPhotoClear', ()=>{ state.exp.photo=null; render(); });
+reg('expAgain', ()=>{ const x=state.exp;
+  /* WHAT A SECOND CLAIM KEEPS AND WHAT IT DROPS. The amount, the note and the
+     photo are about ONE thing that was bought and must never carry over — that
+     is how the same taxi gets claimed twice. Who paid and which shop are facts
+     about the person, and asking again for every claim in a row is friction for
+     nothing. */
+  x.sent=null; x.amount=''; x.note=''; x.photo=null; x.err=''; x.cat='';
+  x.mineTried=false; render(); });
+
+/* THE PHOTO IS DOWNSCALED ON THE PHONE, and this is the whole of why: a modern
+   camera hands over 4–8 MB, the claim carries it as base64 (a third bigger
+   again), and a shop's year of receipts at that size is a tenant database nobody
+   can copy. 1280px on the long edge is a receipt somebody can read; the server
+   refuses anything over 2 MB, so a client that skipped this would be told rather
+   than quietly storing it. */
+reg('expPhoto', el=>{
+  const f=el&&el.files&&el.files[0]; if(!f) return;
+  const x=state.exp;
+  const img=new Image();
+  const rd=new FileReader();
+  rd.onload=()=>{ img.onload=()=>{
+      const max=1280;
+      const scale=Math.min(1, max/Math.max(img.width||1, img.height||1));
+      const w=Math.max(1,Math.round((img.width||1)*scale)), h=Math.max(1,Math.round((img.height||1)*scale));
+      try{
+        const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        x.photo=cv.toDataURL('image/jpeg',0.7);
+      }catch(e){ x.photo=null; x.err=E('Could not read that photo.','无法读取该照片。'); }
+      render();
+    };
+    img.onerror=()=>{ x.err=E('Could not read that photo.','无法读取该照片。'); render(); };
+    img.src=String(rd.result||'');
+  };
+  rd.onerror=()=>{ x.err=E('Could not read that photo.','无法读取该照片。'); render(); };
+  rd.readAsDataURL(f);
+});
+
+reg('expSend', ()=>{
+  const x=state.exp;
+  if(x.busy) return;
+  const n=expAmount();
+  /* THE FIELD IS THE AMOUNT, and a figure still being typed is part of the
+     claim — there is no separate commit for it, so Submit reads the string. A
+     non-number is refused with the reason rather than stripped to the digits
+     inside it: "3o" silently becoming 3 writes an amount nobody entered. */
+  if(!(n>0)){ x.err=E('Enter an amount above zero.','请输入大于零的金额。'); render(); return; }
+  x.busy=true; x.err=''; render();
+  apiWrite('/staff-expenses',{
+    date:expDate(), amount:n, category:x.cat||null, note:x.note||null,
+    paid_by:x.paid, store_id:x.storeId||null, receipt_data:x.photo||null,
+  }).then(()=>{
+    x.busy=false;
+    x.sent={amount:n,cat:x.cat||''};
+    x.mineTried=false;            // the list is re-read: it has one more row now
+    render();
+  }).catch(e=>{
+    x.busy=false;
+    if(String(e.message)==='auth') return;
+    x.err=e.message||E('Could not send that.','提交失败。');
+    render();
+  });
+});
 SUBS.stockadd={title:['Add stock','加库存'],titleOf:()=>T(...stockAppLabel()),
   status:()=>escAttr(qsStoreName()),render:()=>screenStockAdd()};
 SUBS.receiving={title:['Receiving','收货'],status:()=>statusReceiving(),render:()=>screenReceiving()};
@@ -13120,6 +13446,12 @@ const ROUTE_CAP={
      asks the company to spend with a supplier, and the server gates it the same
      way (lib/cap-routes.js). */
   askbuy:'production:request',
+  /* SAYING WHAT YOU SPENT IS NOT READING THE BOOKS (§87 part five). The screen
+     is gated on the key its own Submit is gated on server-side
+     (lib/cap-routes.js), and that key is deliberately NOT `finance:record` —
+     which opens the ledger, the window and the export. A ¥38 taxi must not be
+     the reason a driver can read what the shop earned. */
+  expense:'expenses:submit',
   /* The same pair the count is gated on, and the same pair routes/restock.js
      addresses the 'prepared' push to — the people who RAISE these requests. A
      fulfil-only kitchen operator is the one who made it, and telling them

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.188
+# Tacet shared-core consolidation — decisions record, v4.189
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-09 · v4.189 — **§87 STEP TWO BUILT: THE CLAIM TABLE AND THE PHONE'S SUBMIT SCREEN, AND THE SCREEN IS OPTION A — ONE CARD, EVERY FIELD VISIBLE.** Three were drawn against Tacet's own tokens in `reference/expense-capture-mockup.html` and put to Ash — one card, an amount-first number pad, a grid of category tiles — and he chose the first. **THE OTHER TWO ARE NOT KEPT AS OPTIONS**: a trial switch offering all three was proposed and dropped the moment he answered, because three ways to record one thing is a product with no answer to "how do I record an expense", and the mockup file is the record of the alternatives. `schema.sql` gains `staff_expenses` — date, amount, category, note, `paid_by`, `payment_method`, `store_id`, `receipt_data`, `status`, `settled`, and the `expense_id` it will post to — and **NOTHING IN THIS STEP TOUCHES `expense_entries`**, which is part one's decision made structural: the route writes exactly one table and the suite asserts it. **FIELD ORDER IS THE ORDER SOMEBODY BESIDE A TAXI ASKS**: how much, what for, whose money; photo, note, date and shop follow, each optional. **THE SENTENCE UNDER THE BUTTON IS THE SCREEN'S JOB** — *this is not recorded in the accounts until it is approved* — in the words the phone already uses for money reaching the books (`记入账目`, lifted from its own receiving copy). **THE VALIDATOR IS A PURE MODULE (`lib/expense-claim.js`), AND THAT WAS LEARNED THE EXPENSIVE WAY**: it began inside the route, and a suite that wanted to RUN its rules had to `require` the route — which boots express and the database — leaving the dev database in a state that turned `test_restock_urgent.js` red. Pure rules belong in a pure file, the shape `lib/category-text.js` already had. **WHO PAID IS A CLOSED SET** (`company` | `employee`): a third spelling of "my own money" is a debt nobody can query for. **THE AMOUNT IS `fen()`-ed BEFORE STORAGE**, because this row is destined to become a ledger row and a residue saved once is inherited by every later reader. **THE CATEGORY SNAPS ONTO THE TENANT'S OWN LIST** through `storeCategory`, and an unlisted one still stores — the list is what the form offers, never a vocabulary the writer enforces. **THE PHOTO IS DOWNSCALED ON THE PHONE (1280px, q0.7) AND BOUNDED ON THE SERVER AT 2 MB, REFUSED RATHER THAN TRUNCATED** — half a photograph stored is a receipt nobody can read on a claim that looks like it has one. **A CLAIM IS PERSONAL AND THE OWNERSHIP TEST IS IN THE QUERY** (`WHERE submitted_by IS ?`; the receipt route matches owner and id together), because a fetch-then-compare is one early return away from serving anybody's spending. **WHAT THE SHOP OWES IS NOT THE SUM OF WHAT WAS SENT** — approved, own money, unsettled — computed in the route so the rule has one home. **STATUS IS THE COLUMN'S DEFAULT, NEVER TAKEN FROM THE BODY**, so no client can submit a claim that arrives already approved; there is no approve, reject or settle verb yet, and the suite asserts their absence. **THE CAPABILITY IS `expenses:submit`, NOT `finance:record`** — which opens the ledger, the window and the export — and it carries no money marker, on the `waste:record` shape: submitting writes nothing to any total. **THE APPROVING KEY IS DELIBERATELY NOT REGISTERED**; a key that gates nothing is a permission an owner ticks and sees no effect from. `lib/roles.js migrateExpenseSubmitCap` backfills it onto EVERY existing role with no untouched-role guard, on the argument its sibling proved on production three commits earlier. **ONE TEST GUARD WAS WIDENED DELIBERATELY RATHER THAN STEPPED OVER**: `test_kitchen_queue_reachable.js` admits `expenses:submit` by name because that role already holds `production:request`, which asks the company to place a purchase order — saying "I spent ¥38 of my own money" is strictly less than that — and the argument is written into the assertion so `expenses:approve` still turns it red. The capability count in `test_tenant_roles.js` moves 113 → 114 with its reasoning beside the other 113. Twenty-five composed pairs are declared in `docs/tacet-delivery-vocabulary.md` v1.46, with `报销` REJECTED and left unspent for the settlement step: it names the repayment, and half these claims are paid on the company account and are never reimbursed. `npm run test:fast` 191/192 green, the one red being `test_restock_urgent.js`, **which fails identically on pristine `origin/main` in a clean worktree and is not this branch's** — reported, not adopted. No change to `.gitignore` or CI.
 
 2026-09-09 · v4.188 — **§87 STEP ONE BUILT: THE TENANT'S OWN EXPENSE CATEGORIES, THE OPERATING FLAG, AND THE SUMMARY SPLIT.** `categories` gains `is_operating` and `is_active` (`addColumn`, both `DEFAULT 1`, so **every category that exists today is an operating expense and the Summary is unchanged until a tenant marks one** — no migration, no backfill, nothing to undo); `routes/finance-categories.js` is the CRUD; `routes/finance-summary.js` splits the operating total from the excluded one; the screen is a third sub-view on Finance with the range bar hidden on it, because a vocabulary has no window. **THE FLAG IS RESOLVED ON `spacingKey`, NOT ON A SQL JOIN**: the expense row holds its category as free text and the flag lives on the `categories` record, so the two are matched by name, and `lib/category-text.js` is this product's ONE rule for when two category strings are one category — **a `=` join would read `Private expense` and `private expense ` as two things and put one of them back into operating expenses, silently, which is the exact failure the flag exists to prevent.** Pinned by a fixture row whose spelling drifted from the list's. **THE TOTALS AND THE BREAKDOWN NOW COME FROM ONE READ** (the separate `SUM` is gone, and the suite asserts `FROM expense_entries` appears exactly once): two queries over one set is two places for the split to be applied, and the day they disagree the screen shows a total its own breakdown does not add up to. Summed in MINOR UNITS, because two figures that must add up to a third cannot each carry REAL residue. **THE EXCLUDED MONEY IS SHOWN BENEATH THE STAIRCASE, WITH NO MINUS SIGN AND ABSENT AT ZERO** — the staircase's signs are arithmetic and a drawing is subtracted from nothing; `net` is still `revenue − operating`, and taking the drawing off would put it back in the profit line by another road. **A USED CATEGORY CANNOT BE DELETED (409) AND IS HIDDEN INSTEAD**, and a RENAME CARRIES THE LEDGER ROWS WITH IT in one transaction — both because the join is by name, so either would otherwise re-file rows as operating expenses with no event to see. Purchasing's copy of the same vocabulary (`po_line_items.expense_category`, `ingredients.accounting_category`) is deliberately NOT carried by the rename. **TWO QUESTIONS §87 DID NOT ANSWER, SETTLED IN THE BUILD**: the transaction form FALLS BACK to its old derivation (the categories on rows on screen) while the tenant's list is empty — §36's empty-list rule is about not offering a WRONG option and a category read off this tenant's own rows is not one, so ripping the suggestions out on day one would cost a business with three years of ledger rows everything and buy nothing; and HIDING REACHES THE MATERIALS FORM, `materials/meta/accounting-categories` now filtering to active entries, because a second surface going on offering a retired name would file new rows under it. **THE LIST STILL SHIPS EMPTY AND NOTHING SEEDS IT**, asserted directly by the suite over every `INSERT INTO categories` in `database.js`, because the failure mode here is a later session adding a helpful starter set. Twenty composed pairs are declared in `docs/tacet-delivery-vocabulary.md` v1.45 — **every Chinese word already live, only the arrangements new** — including `不计入营业费用` built as the negative of the Summary's own `营业费用`, `停用`/`启用`/`已停用` reused verbatim from the team screen because hiding a category is the same act as deactivating a teammate, and `租金` rather than `房租` (both are in `22-finance.js`; only `租金` is a shipped string, `房租` living in a comment about two spellings of one category colliding). `npm run test:fast` 191/191 green, including a new 27-assertion suite. No change to `.gitignore` or CI.
 
@@ -8685,3 +8687,72 @@ list when it has anything in it, the derived set when it does not.
 entries. Hiding a category means it stops being OFFERED; a second surface going
 on offering it would file new rows under a name the tenant has retired. Nothing
 existing is touched — a material already carrying a retired category keeps it.
+
+### BUILT 2026-09-09 — step two, and the screen Ash chose
+
+The claim table and the phone's submit screen. `schema.sql` gains
+`staff_expenses`; `lib/expense-claim.js` is the validator; `routes/staff-expenses.js`
+is the submit, the person's own list and the receipt fetch; `public/m.html` gains
+an **Expense** row in Operations and the screen behind it.
+`scripts/test_staff_expenses.js` is the suite.
+
+**THE SCREEN IS OPTION A — ONE CARD, EVERY FIELD VISIBLE.** Three were drawn
+against Tacet's own tokens in `reference/expense-capture-mockup.html` and put to
+Ash: one card, an amount-first number pad, and a grid of category tiles. He chose
+the first. **The other two are not kept as options.** A trial switch offering all
+three was proposed and dropped the moment he answered: three ways to record one
+thing is a product with no answer to "how do I record an expense", and the
+mockup file is the record of the alternatives, which is what a mockup is for.
+
+**FIELD ORDER IS THE ORDER SOMEBODY BESIDE A TAXI ACTUALLY ASKS**: how much, what
+for, whose money. The photo, the note, the date and the shop follow, because each
+is optional and none is what the person opened the screen to type.
+
+**THE ONE SENTENCE THE SCREEN CANNOT DO WITHOUT** sits under the button: *this is
+not recorded in the accounts until it is approved*. Part one is a decision about
+which table a claim lives in; that line is the same decision told to the person
+it affects, in the words the phone already uses for money reaching the books.
+
+Four things the build had to settle:
+
+**THE VALIDATOR IS A PURE MODULE, AND THAT WAS LEARNED THE EXPENSIVE WAY.** It
+began inside the route, and the suite that wanted to RUN its rules — a closed
+set, a rounding, two size limits, all of them things a grep can be made to pass
+while the code is wrong — had to `require` the route, which boots express and the
+database behind it. It did, and left the dev database in a state that turned
+`test_restock_urgent.js` red. `lib/expense-claim.js` is the answer, on the shape
+`lib/category-text.js` already had.
+
+**THE PHOTO IS DOWNSCALED ON THE PHONE AND BOUNDED ON THE SERVER.** A camera
+hands over 4–8 MB, base64 adds a third again, and a year of those is a tenant
+database nobody can copy. 1280px on the long edge at quality 0.7 is a receipt a
+person can read; the server refuses anything over 2 MB rather than truncating,
+because half a photograph stored is a receipt nobody can read on a claim that
+looks like it has one.
+
+**A CLAIM IS PERSONAL, AND THE OWNERSHIP TEST IS IN THE QUERY.** The list reads
+`WHERE submitted_by IS ?` and the receipt route matches owner and id together —
+a fetch-then-compare is one early return away from serving anybody's photograph
+of anybody's spending.
+
+**WHAT THE SHOP OWES IS NOT THE SUM OF WHAT WAS SENT**: approved, own money, not
+yet settled. A submitted claim might be rejected and a company-account one owes
+nobody, so the figure is computed in the route rather than on the phone — the day
+a second surface wants it, the rule is in one place.
+
+**THE CAPABILITY IS `expenses:submit`, AND THE APPROVING KEY IS NOT REGISTERED.**
+A key in the matrix that gates nothing is a permission an owner ticks and sees no
+effect from. `lib/roles.js migrateExpenseSubmitCap` backfills the new key onto
+EVERY existing role, with no untouched-role guard, on the argument its sibling
+proved on production three commits earlier: that guard protects a decision an
+admin made by unticking something, and nobody can have unticked a key that did
+not exist yesterday. Every role, because saying what you spent is not a power
+over anything — the narrowing that matters is on approval.
+
+**One test guard was widened deliberately rather than stepped over.**
+`test_kitchen_queue_reachable.js` asserts the kitchen role gains nothing outside
+its own work; `expenses:submit` is admitted by name, on the grounds that the same
+role already holds `production:request` — which asks the company to place a
+purchase order with a supplier — and saying "I spent ¥38 of my own money" is
+strictly less than that. The argument is written into the assertion, and
+`expenses:approve` must still turn it red.

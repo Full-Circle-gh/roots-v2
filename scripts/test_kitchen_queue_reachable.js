@@ -106,8 +106,29 @@ check('it still logs what it made', () => {
    kitchen's own toolkit growing, which the header says is allowed and expected,
    and which is the only thing that has ever turned it red. */
 check('and gains nothing outside the kitchen’s own work', () => {
+  /* `expenses` JOINS THE KITCHEN'S OWN SECTIONS (2026-09-09, §87), and it is
+     the guard being widened deliberately rather than a red line being stepped
+     over — which is the only way this assertion is allowed to move.
+
+     The ceiling above is about POWER: orders, money, products, customers,
+     settings, purchasing are sideways, and one key from any of them fails this.
+     `expenses:submit` is not a power over any of them. It reads nothing, it
+     carries no money marker, and §87 part one puts what it writes in its own
+     table so that submitting a claim changes no total anywhere until somebody
+     else approves it.
+
+     THE DECIDING COMPARISON IS WITH A KEY THIS ROLE ALREADY HOLDS.
+     `production:request` lets a cook ask the company to place a purchase order
+     with a supplier. Saying "I spent ¥38 of my own money on a taxi" is strictly
+     less than that. A ceiling that admits the second and refuses the first would
+     not be measuring power.
+
+     The APPROVING key is what belongs outside this list, and it is not
+     registered yet. If a later change puts `expenses:approve` in the kitchen
+     preset, this assertion must go red — so it names the SECTION for submit and
+     must not be widened again without the same argument. */
   const OWN_SECTIONS = ['quickstock', 'production'];
-  const OWN_KEYS = ['restock:fulfil'];
+  const OWN_KEYS = ['restock:fulfil', 'expenses:submit'];
   const sectionOf = k => (caps.CAPABILITIES.find(c => c.key === k) || {}).section || null;
   const extra = kitchenCaps.filter(k =>
     OWN_KEYS.indexOf(k) < 0 && OWN_SECTIONS.indexOf(sectionOf(k)) < 0);
