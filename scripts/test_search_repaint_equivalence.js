@@ -8,9 +8,23 @@
  * so a search box whose `oninput` called it was destroyed and rebuilt on every
  * keystroke — and a rebuilt <input> opens a fresh soft keyboard on its letter
  * page. Ash reported it from the kitchen: typing a SKU gave one digit, then the
- * alphabet, then one digit. Ask to buy was fixed first (#437); this covers the
- * same fix applied to Ask for stock / Ask the kitchen (rqPicker), Add stock
- * (screenStockAdd) and Log a batch (screenLogBatch).
+ * alphabet, then one digit.
+ *
+ * Ask to buy was fixed first (#437). This covers the rest of them:
+ *
+ *   rqPicker              Ask for stock, Ask the kitchen
+ *   screenStockAdd        Add stock
+ *   screenLogBatch        Log a batch
+ *   screenProductCatalogue  Products
+ *   screenReceiving       Receiving — both tabs
+ *
+ * Customers is fixed too and has no entry above, because it needed no split at
+ * all: its list is fetched on Enter, so between keystrokes the query changes
+ * nothing on screen and the handler now repaints nothing.
+ *
+ * RECEIVING IS THE ONE WHERE THE SEARCH REALLY GOES TO THE SERVER, and it needed
+ * both ends: the keystroke, and the answer that lands 320ms later. Either alone
+ * would still rebuild the field.
  *
  * WHY THIS FILE IS AN EQUIVALENCE TEST RATHER THAN A FEATURE TEST. Nothing about
  * what those screens SHOW was meant to change. Each was split so that the part
@@ -27,7 +41,7 @@
  * things are the whole of what was allowed to change. Everything else — every
  * tag, attribute, style and string — must match character for character.
  *
- * Cases, for each of the three functions and across every branch each has:
+ * Cases, for each function and across every branch each has:
  *   1. the same markup comes out
  *   2. the container the repaint needs is actually in the new output
  */
@@ -44,28 +58,34 @@ const NEW_SRC = fs.readFileSync(path.join(ROOT, 'public', 'm.html'), 'utf8');
 
 /* TWO HALVES, AND ONLY ONE OF THEM IS A REGRESSION TEST.
  *
- * The HANDLER half — no search handler calls render(), each patches its own
+ * The HANDLER half — no search handler re-renders the app, each patches its own
  * container, none needs a focus rescue — is a permanent rule and runs always. It
  * is the thing that must not come back.
  *
- * The EQUIVALENCE half is a MIGRATION PROOF and runs only when pointed at a
- * baseline: it re-renders the screens as they were BEFORE the split and compares.
- * It is deliberately NOT run by default, and the reason is this file's own honesty
- * rather than convenience. Comparing against `HEAD` would compare the new code
- * with itself the moment this lands — a test that cannot fail. Pinning the SHA
- * instead would make every later, legitimate edit to these screens turn it red
- * for a change nobody got wrong, which is precisely how scripts/run-suites.js's
- * header describes a suite becoming noise people learn to ignore.
- *
- * So it is on demand, and the baseline that proved this particular split is
- * recorded here rather than in a commit message somebody would have to find:
- *
- *   BASELINE=106d764d node scripts/test_search_repaint_equivalence.js
+ * The EQUIVALENCE half is a MIGRATION PROOF and runs only under EQUIV=1. It is
+ * deliberately off by default, and the reason is this file's own honesty rather
+ * than convenience. Comparing against HEAD would compare the new code with
+ * itself the moment a change lands — a test that cannot fail. Running the pinned
+ * comparison on every CI pass would instead turn red on the next legitimate edit
+ * to any of these screens, for a change nobody got wrong, which is precisely how
+ * scripts/run-suites.js's header describes a suite becoming noise people learn
+ * to ignore.
  */
-const BASELINE = process.env.BASELINE || '';
-const OLD_SRC = BASELINE
-  ? execFileSync('git', ['show', `${BASELINE}:public/m.html`], { cwd: ROOT, maxBuffer: 64 * 1024 * 1024 }).toString()
-  : null;
+/* TWO ROUNDS, TWO BEFORE-PICTURES. The first three screens were split in one
+   change and the second three in the next, so a single baseline would compare
+   half of them with themselves and quietly pass. Each group is therefore pinned
+   to the commit it was actually split from.
+
+   Set EQUIV=1 to run the comparison; without it only the handler rules run. */
+const EQUIV = !!process.env.EQUIV;
+const BASE_A = process.env.BASE_A || '106d764d';   // before rqPicker / screenStockAdd / screenLogBatch
+const BASE_B = process.env.BASE_B || '8a6d336b';   // before the Products catalogue / Receiving
+const at = (ref) => execFileSync('git', ['show', `${ref}:public/m.html`],
+  { cwd: ROOT, maxBuffer: 64 * 1024 * 1024 }).toString();
+const SRC_A = EQUIV ? at(BASE_A) : null;
+const SRC_B = EQUIV ? at(BASE_B) : null;
+// What each group compares against. OLD_SRC is reassigned per group below.
+let OLD_SRC = null;
 
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) { pass++; console.log('  ✓ ' + msg); }
@@ -121,7 +141,7 @@ function load(sb, src, names) {
 
 const norm = (s) => String(s).replace(/\s+/g, ' ').trim();
 const strip = (s) => String(s)
-  .replace(/<div id="(mRqBody|mQsBody|mBatBody|mBatTop)">/g, '')
+  .replace(/<div id="(mRqBody|mQsBody|mBatBody|mBatTop|mProdBody|mRcvSegs|mRcvToBody|mRcvBody)">/g, '')
   // the closing tags those four wrappers added; every other </div> is original
   .replace(/<\/div>/g, '</div>');
 
@@ -160,6 +180,7 @@ const PRODUCTS = [
   { id: 2, product_id: 2, name_en: 'Rye Loaf',  name_cn: '黑麦面包', sku: 'P-2', shelf: 0 },
 ];
 
+OLD_SRC = SRC_A;
 // ── rqPicker — Ask for stock and Ask the kitchen ──────────────────────────
 console.log('\n══ rqPicker · Ask for stock / Ask the kitchen ══');
 {
@@ -255,12 +276,132 @@ console.log('\n══ screenLogBatch · Log a batch ══');
   ok(out.indexOf('id="mBatQ"') < out.indexOf('id="mBatBody"'), 'and the list still below it');
 }
 
+OLD_SRC = SRC_B;
+// ── screenProductCatalogue — the Products catalogue ───────────────────────
+// Baseline for this one and the two below: 8a6d336b (they were split a round
+// later than the three above, so they have their own before-picture).
+console.log('\n══ screenProductCatalogue · Products ══');
+{
+  const PRODS = [
+    { id: 1, name_en: 'Oat Milk', name_cn: '燕麦奶', sku: 'P-1', kind: 'simple', is_active: 1 },
+    { id: 2, name_en: 'Rye Loaf', name_cn: '黑麦面包', sku: 'P-2', kind: 'simple', is_active: 1 },
+  ];
+  const mk = (over) => Object.assign({
+    prodQ: '', prodStatus: 'all', prodCat: 'all', prodErr: null,
+    liveProductsLoaded: true, catalogueComplete: true, catalogueLoading: false, prodTotal: 2,
+  }, over);
+  const extra = {
+    DB: { products: PRODS.slice() },
+    loadCatalogue: () => {},
+    prodCategories: () => [],
+    prodFiltered: () => PRODS.slice(),
+    prodUnits: (r) => r,
+    productCard: (p) => `[card:${p.id}]`,
+    chipRow: (a, sel, key) => `[chips:${key}:${sel}]`,
+    noteBar: (t) => `[note:${t}]`,
+  };
+  const build = (over) => {
+    const sb = makeSandbox(mk(over));
+    Object.assign(sb, extra, { prodFiltered: () => (over && over._rows) || PRODS.slice() });
+    return sb;
+  };
+  for (const [label, over] of [
+    ['the whole catalogue',        {}],
+    ['a query narrowing it',       { prodQ: 'oat', _rows: [PRODS[0]] }],
+    ['a query matching nothing',   { prodQ: 'zzz', _rows: [] }],
+    ['the catalogue still walking', { catalogueLoading: true, catalogueComplete: false }],
+    ['only part of it held',       { catalogueComplete: false, prodTotal: 900 }],
+    ['an error on the catalogue',  { prodErr: 'Could not load.' }],
+  ]) {
+    if (!OLD_SRC) continue;
+    const o = build(over), n = build(over);
+    // The old screen was an inline arrow in SUBS; it is sliced by locating that
+    // entry rather than by name, because it did not have one.
+    const arrowAt = OLD_SRC.indexOf("products:{title:['Products','产品'],render:()=>{");
+    let d = 0, s0 = OLD_SRC.indexOf('{', arrowAt + "products:{title:['Products','产品'],render:()=>".length), e0 = -1;
+    for (let j = s0; j < OLD_SRC.length; j++) {
+      const c = OLD_SRC[j];
+      if (c === '{') d++; else if (c === '}') { d--; if (d === 0) { e0 = j; break; } }
+    }
+    vm.runInContext(`function screenProductCatalogue()${OLD_SRC.slice(s0, e0 + 1)}`, o, { filename: 'old#catalogue' });
+    load(n, NEW_SRC, ['screenProductCatalogue', 'prodBodyHtml']);
+    compare(label, o, n, sb => sb.screenProductCatalogue());
+  }
+  const n = build({});
+  load(n, NEW_SRC, ['screenProductCatalogue', 'prodBodyHtml']);
+  ok(n.screenProductCatalogue().includes('id="mProdBody"'), 'and the new output carries the container the repaint needs');
+  ok(n.screenProductCatalogue().indexOf('id="mProdQ"') < n.screenProductCatalogue().indexOf('id="mProdBody"'),
+     'with the search box still above the list');
+}
+
+// ── screenReceiving — both tabs ───────────────────────────────────────────
+console.log('\n══ screenReceiving · Receiving ══');
+{
+  const DELIV = [{ id: 1, po_number: 'RPO-1' }, { id: 2, po_number: 'RPO-2' }];
+  const TO = [{ id: 7, po_number: 'RPO-7' }];
+  const mk = (over) => Object.assign({
+    rcvSeg: 'received', rcvQ: '', rcvToQ: '', rcvFlag: 'all',
+    rcvDeliv: DELIV.slice(), rcvTo: TO.slice(), rcvErr: null, rcvToErr: null,
+    rcvLoading: false, rcvTried: true, rcvToTried: true,
+  }, over);
+  const extra = {
+    loadToReceive: () => {}, loadDeliveries: () => {},
+    rcvToReceive: () => TO.slice(),
+    rcvDeliveryRow: (d) => `[deliv:${d.id}]`,
+    rcvPartial: () => false,
+    poPill: () => '[popill]',
+    pill: (k, l) => `[pill:${k}:${l}]`,
+    RCV_FLAGS: [{ key: 'all', en: 'All', zh: '全部' }],
+    poStore: (p) => `[store:${p.id}]`,
+    tdWhen: (d) => `[when:${d}]`,
+    money: (n) => `[money:${n}]`,
+    rcvMatched: (p) => `[matched:${p.id}]`,
+    fmtDateOnly: (d) => `[date:${d}]`,
+  };
+  const build = (over) => { const sb = makeSandbox(mk(over)); Object.assign(sb, extra); return sb; };
+  for (const [label, over] of [
+    ['received · deliveries listed',   {}],
+    ['received · a query set',         { rcvQ: 'mint' }],
+    ['received · nothing matches',     { rcvDeliv: [], rcvQ: 'zzz' }],
+    ['received · nothing at all yet',  { rcvDeliv: [] }],
+    ['received · still loading',       { rcvDeliv: null }],
+    ['received · an error',            { rcvErr: 'Could not load deliveries.' }],
+    ['to receive · orders listed',     { rcvSeg: 'toreceive' }],
+    ['to receive · a query set',       { rcvSeg: 'toreceive', rcvToQ: 'mint' }],
+    ['to receive · still loading',     { rcvSeg: 'toreceive', rcvTo: null }],
+    ['to receive · an error',          { rcvSeg: 'toreceive', rcvToErr: 'Could not load orders.' }],
+  ]) {
+    if (!OLD_SRC) continue;
+    const o = build(over), n = build(over);
+    if (over.rcvTo === null) { o.rcvToReceive = () => []; n.rcvToReceive = () => []; }
+    if (Array.isArray(over.rcvDeliv) && !over.rcvDeliv.length) { /* empty list stays empty */ }
+    load(o, OLD_SRC, ['screenReceiving']);
+    load(n, NEW_SRC, ['screenReceiving', 'rcvSegsHtml', 'rcvToBodyHtml', 'rcvBodyHtml']);
+    compare(label, o, n, sb => sb.screenReceiving());
+  }
+  const n = build({});
+  load(n, NEW_SRC, ['screenReceiving', 'rcvSegsHtml', 'rcvToBodyHtml', 'rcvBodyHtml']);
+  const out = n.screenReceiving();
+  ok(out.includes('id="mRcvSegs"') && out.includes('id="mRcvBody"'), 'the received tab carries both containers');
+  ok(out.indexOf('id="mRcvSegs"') < out.indexOf('id="mRcvQ"'), 'with the counts above the search box');
+  ok(out.indexOf('id="mRcvQ"') < out.indexOf('id="mRcvBody"'), 'and the list below it');
+  const n2 = build({ rcvSeg: 'toreceive' });
+  load(n2, NEW_SRC, ['screenReceiving', 'rcvSegsHtml', 'rcvToBodyHtml', 'rcvBodyHtml']);
+  ok(n2.screenReceiving().includes('id="mRcvToBody"'), 'and the to-receive tab carries its own');
+}
+
 // ── the handlers themselves ───────────────────────────────────────────────
-console.log('\n══ none of the four handlers calls render() any more ══');
-for (const [name, ids] of [['rqSearch', ['mRqBody']], ['qsSearch', ['mQsBody']],
-                           ['batSearch', ['mBatTop', 'mBatBody']], ['mbSearch', ['mMbBody']]]) {
+const handlerBody = (name) => {
   const at = NEW_SRC.indexOf(`reg('${name}'`);
-  const body = NEW_SRC.slice(at, NEW_SRC.indexOf('\nreg(', at + 1));
+  if (at < 0) throw new Error(`handler ${name} not found`);
+  return NEW_SRC.slice(at, NEW_SRC.indexOf('\nreg(', at + 1));
+};
+
+console.log('\n══ no search handler rebuilds its own field ══');
+for (const [name, ids] of [['rqSearch', ['mRqBody']], ['qsSearch', ['mQsBody']],
+                           ['batSearch', ['mBatTop', 'mBatBody']], ['mbSearch', ['mMbBody']],
+                           ['prodSearch', ['mProdBody']]]) {
+  const body = handlerBody(name);
   // A render() survives ONLY as the fallback for a screen that is not painted.
   const renders = (body.match(/render\(\)/g) || []).length;
   ok(renders === 1 && /else\s+render\(\)/.test(body),
@@ -270,6 +411,38 @@ for (const [name, ids] of [['rqSearch', ['mRqBody']], ['qsSearch', ['mQsBody']],
      `${name} needs no focus rescue — the input is never destroyed`);
 }
 
-if (!OLD_SRC) console.log('\n(equivalence against the pre-split markup not run — set BASELINE=<git ref> to run it)');
+/* The two that do not fit the shape above, each for its own reason. */
+console.log('\n══ the two exceptions, and why each is one ══');
+{
+  // Customers fetches on Enter, so between keystrokes the query changes nothing
+  // that is on the screen. The right amount of repainting is none.
+  const cust = handlerBody('custSearch');
+  ok(!/render\(\)/.test(cust) && !/innerHTML/.test(cust),
+     'custSearch repaints nothing at all — its list is not filtered until Enter');
+  ok(!/state\.focus\s*=/.test(cust), 'and arms no focus rescue');
+
+  // Receiving goes to the server on a debounce, so BOTH the keystroke and the
+  // answer have to stop re-rendering. Either alone still rebuilds the field.
+  for (const name of ['rcvQuery', 'rcvToQuery']) {
+    const body = handlerBody(name);
+    ok(/rcvPatch\(\)/.test(body) && !/[^v]render\(\)/.test(body),
+       `${name} patches through rcvPatch and never re-renders`);
+    ok(!/state\.focus\s*=/.test(body), `${name} arms no focus rescue`);
+  }
+  // The answers, 320ms later. This is the half that is easy to miss.
+  for (const fn of ['loadDeliveries', 'loadToReceive']) {
+    const at = NEW_SRC.indexOf(`function ${fn}(`);
+    const body = NEW_SRC.slice(at, NEW_SRC.indexOf('\nfunction ', at + 1));
+    ok(!/[^v]render\(\)/.test(body) && /rcvPatch\(\)/.test(body),
+       `${fn}'s answer patches too — fixing only the keystroke would still rebuild the field`);
+  }
+  // And the fallback, which is what makes patching safe when the operator has
+  // moved on before the answer lands.
+  const patch = NEW_SRC.slice(NEW_SRC.indexOf('function rcvPatch()'));
+  ok(/return render\(\)/.test(patch.slice(0, 500)),
+     'rcvPatch falls back to render() when the receiving screen is not the one showing');
+}
+
+if (!EQUIV) console.log('\n(equivalence against the pre-split markup not run — set EQUIV=1 to run it)');
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
