@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.181
+# Tacet shared-core consolidation — decisions record, v4.182
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-09 · v4.182 — **§82 AND §83 ADDED: TIME IS A TENANT PROPERTY, NEVER A HOST PROPERTY; AND EVERY DISTRICT MUST BE COVERED, AN UNMATCHED ADDRESS IS REFUSED — BOTH DECIDED by Ash**, on the delivery-logic survey (`docs/surveys/delivery-logic-survey.md`). **§82 SETTLES THE QUESTION THE SURVEY COULD NOT (its Q1)**: every date and time decision — cutoffs, batch dates, slot generation, business-date rollover, "today", "tomorrow", pre-order gates — resolves in the **tenant's** timezone, read from a tenant setting, and **no business decision may read the host clock's local time** (`new Date().getHours()`, `.getFullYear()`, `.getDate()`, `.toDateString()` are forbidden wherever a cutoff, date or slot is computed). **THE HOST IS PINNED TO UTC ON PURPOSE, AND THE DEPLOY CONFIG MUST SET IT EXPLICITLY** — not for neutrality but so that un-migrated code is **visibly wrong rather than silently correct for one tenant**; a tenant offset matching the host is a coincidence, never a fallback. **A TENANT WITH NO TIMEZONE FAILS LOUDLY AT STARTUP and does not default**, a default being the host fallback in different clothes. **CI RUNS IN UTC**, so the logic cannot pass by inheriting a convenient offset — `.github/workflows/tests.yml` currently pins `TZ: Asia/Shanghai` on the belief that production runs UTC+8, and that pin is precisely what kept survey finding F2 invisible to the suite. Roots is `Asia/Shanghai`; other tenants will be elsewhere. **§83 SETTLES F1/F23**: a tenant's zone table must cover every district it serves — **coverage is a data obligation on the tenant, enforced by the platform** — and **an address matching no zone is a configuration error, not a delivery option**, refused by every order-creation path with an explicit error, identically. **NO LEGACY FEE FALLBACK, NO DEFAULT FEE, NO DEFAULT SLOT SET**, because **a guessed fee is worse than a refusal: a refusal is visible and a wrong fee is not.** The rule `/checkout/quote` already applies is the correct one and **the other paths conform to it rather than it being relaxed to match them** — which is the direction the code had drifted. **NEITHER RULING IS BUILT HERE, AND THAT IS DELIBERATE.** §82's call sites (`routes/retail.js` — `parseYmdLocal`/`toYmdLocal`, `earliestBatchMakeDate`, `nextFreshBatchDate`, `computeDeliverySlots`, `expressEarliestIso`, `rescheduleEligibility`) are unmigrated, with `lib/business-date.js` already the shape to copy; §83's refusal is **gated on a zone-coverage report first**, since a district that has taken real orders and is missing from `retail_delivery_zones` would begin rejecting them the day the refusal ships. **The survey is amended, not rewritten** — its dated findings stand as written and gain cross-references to §82/§83, and its Q1 is marked answered. Docs only; no code, no schema, no migration, no test change, and no change to `.gitignore` or CI.
 
 2026-09-09 · v4.181 — **§81 ADDED: THE KITCHEN REALM IS RETIRED — DECIDED by Ash** ("let's do all three and done with it"). §78 deleted the kitchen app; this deletes the REALM it authenticated against — `session.userId`, the `users` table and its `permissions` row. **THE CMS WAS THE LAST REASON THAT REALM EXISTED AND NEVER NEEDED IT**: every call `public/cms.html` and `cms-mobile.html` make was already `/api/retail-admin/*`, and `requireRetailAdmin` has always accepted a tenant operator — only the sign-in check was old. Both now read `/api/backend/me` and bail to `/backend/login`, and the permission gate moves from `permissions.retail` to the `content:edit` CAPABILITY, **failing OPEN on a null `caps`** because it is a view gate and requireRetailAdmin is the boundary. **A DEFECT SHIPPED IN §78 IS FIXED HERE**: that change deleted Sprout's backend on Ash's instruction *including the CMS's "Ask Sprout" button* — but removed only the endpoint, **leaving the button, its panel, its Apply cards and ~150 lines of CSS live in production calling a 404**. All gone; the deterministic design check is untouched. **`requireRetailAdmin` IS NARROWED TO ONE REALM** — its second branch handed a kitchen session the FULL capability set on Roots' tenant — and it answers **401 for every refusal including a suspended tenant**, because that is what the kitchen path returned before; the first attempt split it into a 403 and **`test_point_search` caught the behaviour change**. **THE PLATFORM CONSOLE WOULD HAVE BEEN LOCKED OUT AND WAS FOUND FIRST**: `/saas-admin` was gated on a kitchen `admin`, and `lib/platform-admin.js`'s `currentActor` accepted the same as a platform `super` — a back door from a kitchen login to every tenant's billing and credentials. Re-gated onto `platform_admins` (seeded at boot, already serving store-admin) and the back door closed; historic `activity_log` rows keep `actor_kind: 'kitchen'` and are NOT rewritten. **WHAT WENT**: `public/login.html`, `routes/auth.js`, the `/login` route, `routes/products.js` (**dead — §78 kept it by mistake**, its "caller" being `20-waste.js`'s comment *"Never call /api/products here"*), `purchases.js`'s 22 endpoints (leaving a library), `push.js`'s six kitchen endpoints, `events.js`'s SSE stream and diagnostic, `restock.js`'s kitchen branch and drafts-delete, `retail-inventory.js`'s kitchen read branch and store-assignment endpoint, and the four gates in `middleware/auth.js`. **`logActivity` STAYS** — realm-agnostic, 139 call sites, and its FK note is now history rather than a live branch. **THE SERVICE WORKER told both realms and now tells one**: the dead call would 404, and **a 404 inside `Promise.all` is a silent no-op that looks like it worked**. **FOUR SUITES BROKE, ALL REPAIRED, NONE BY LOWERING A BAR**: `test_point_search` caught a real defect; `test_push_mute_action` now asserts the ABSENCE too, against the raw fetch record because `bodyOf()` asserts a call exists; `test_tenant_branding` **inverted** its `/api/push/test` case, an absence being the strongest form of the guarantee it checked; `test_invoice_no_invoice_mark` lost three kitchen-API sections and kept every rule on the Tacet endpoints. **STILL OWED, NAMED**: `push.js`'s four `users`-targeting senders (their call sites need reading first), and the `users`/`permissions` TABLES, which keep their rows — dropping them is a migration and a separate decision. **NOT BUNDLED**: renaming the kitchen-era files is cosmetic and touches load order `retail-purchasing.js` calls out explicitly. **PROVED**: `npm run test:fast` 181 passed, 0 failed; eslint 0 errors; booted — `/api/auth/me`, `/api/purchases`, `/api/events`, `/api/push/pref`, `/api/lots/all` all 404, `/cms` `/m` `/backend/login` 200, `/api/retail-admin/*` and `/api/restock` 401, `/saas-admin` → the platform console. Code, tests and docs; **no schema, no migration, and no change to `.gitignore` or CI.**
 
@@ -7962,3 +7964,82 @@ Ruling (Ash, 2026-09-08): finish it. §78 deleted the kitchen app; this deletes 
 **STILL OWED, named rather than absorbed.** `routes/push.js` keeps `sendPushToUser`, `sendPushToUsers`, `sendPushToAll` and `sendPushByPermission`, which target the `users` table and can now reach nobody. They are **not** removed here because their call sites need reading first, and widening this change into those callers is how a retirement becomes a refactor nobody can review. The `users` and `permissions` TABLES are untouched and keep their rows; dropping them is a migration, and a separate decision.
 
 **AND THE NAMES.** `routes/purchases.js` is now a library sitting in the routes folder, and `restock`, `push` and `ai` still carry kitchen-era names. Renaming is cosmetic, touches load order that `routes/retail-purchasing.js`'s header calls out explicitly, and is deliberately NOT bundled into a diff this size.
+
+## §82 — TIME IS A TENANT PROPERTY, NEVER A HOST PROPERTY
+
+Ruling (Ash, 2026-09-09), following the delivery-logic survey
+(`docs/surveys/delivery-logic-survey.md`, finding F2), which found the entire
+delivery calendar computing in host-local time while the repository asserted
+the production offset three times and contradicted itself once.
+
+**EVERY DATE AND TIME DECISION IS EVALUATED IN THE TENANT'S TIMEZONE.** Delivery
+cutoffs, batch dates, slot generation, business-date rollover, "today",
+"tomorrow", pre-order gates — all of it resolves in the timezone of the tenant
+that owns the order, read from a tenant setting.
+
+**NO BUSINESS DECISION MAY READ THE HOST CLOCK'S LOCAL TIME.**
+`new Date().getHours()`, `.getFullYear()`, `.getDate()`, `.toDateString()` and
+their equivalents are **forbidden anywhere a cutoff, a date or a slot is
+computed.** The host offset is an accident of deployment. It is not a business
+fact and may not be read as one.
+
+**THE PRODUCTION HOST IS PINNED TO UTC, DELIBERATELY, AND THE DEPLOY CONFIG MUST
+SET IT EXPLICITLY.** This is not neutrality for its own sake: it is so that any
+code still reading host-local time is **visibly wrong rather than silently
+correct for one tenant.** A host that happened to run UTC+8 would make every
+un-migrated call site produce right answers for Roots and wrong ones for
+everybody else, which is the failure that hides. **A tenant timezone that
+happens to match the host is a coincidence, not a fallback.**
+
+**ROOTS IS `Asia/Shanghai` (UTC+8). OTHER TENANTS WILL BE ELSEWHERE.** The
+offset is per tenant, not per platform.
+
+**A TENANT WITH NO TIMEZONE SET IS A CONFIGURATION ERROR AND MUST FAIL LOUDLY AT
+STARTUP.** It does not default. A default here is the same mistake as a host
+fallback wearing different clothes — it produces a working system that is
+quietly wrong for whoever was not thought about.
+
+**CI RUNS WITH THE HOST IN UTC**, so timezone-dependent logic cannot pass tests
+by inheriting a convenient offset. `.github/workflows/tests.yml` currently pins
+`TZ: Asia/Shanghai` for the opposite reason — its comment says production runs
+UTC+8 — and that pin is what made F2 invisible to the suite. It goes.
+
+**WHAT THIS RULING DOES NOT DO.** It does not migrate the call sites. The survey
+lists them (`routes/retail.js` — `parseYmdLocal` / `toYmdLocal`,
+`earliestBatchMakeDate`, `nextFreshBatchDate`, `computeDeliverySlots`,
+`expressEarliestIso`, `rescheduleEligibility`); `lib/business-date.js` already
+does the right thing per location and is the shape to copy. That work is its own
+change and is not started.
+
+## §83 — EVERY DISTRICT MUST BE COVERED; AN UNMATCHED ADDRESS IS REFUSED
+
+Ruling (Ash, 2026-09-09), following the delivery-logic survey
+(`docs/surveys/delivery-logic-survey.md`, findings F1 and F23), which found
+`/checkout/quote` refusing an unmatched address while `POST /orders` accepted it
+and priced it on a legacy flat fee.
+
+**A TENANT'S DELIVERY ZONE TABLE MUST COVER EVERY DISTRICT IT SERVES.** Coverage
+is a **data obligation on the tenant**, enforced by the platform. It is not
+something the code works around.
+
+**AN ADDRESS MATCHING NO ZONE IS A CONFIGURATION ERROR, NOT A DELIVERY OPTION.**
+Every path that can create an order refuses it, with an explicit error, and
+**identically** — the refusal does not vary by entry point.
+
+**THERE IS NO LEGACY FEE FALLBACK, NO DEFAULT FEE, AND NO DEFAULT SLOT SET FOR AN
+UNMATCHED ADDRESS.** A guessed fee is worse than a refusal, because **a refusal
+is visible and a wrong fee is not.** The order is created, the customer is
+charged a number nobody configured, and nothing anywhere reports it.
+
+**THE RULE `/checkout/quote` ALREADY APPLIES IS THE CORRECT ONE.** All other
+order-creation paths conform to it. It is **not** relaxed to match them — which
+is the direction the code drifted, and the direction that looks like
+compatibility while being a silent loss of control.
+
+**WHAT THIS RULING DOES NOT DO.** It does not ship the refusal. Filling the
+coverage gap comes first: a district that has taken real orders and is missing
+from `retail_delivery_zones` would start rejecting them the day the refusal
+lands. The zone-coverage report is the gate on that work, and the survey's F23
+records why an unmatched Guangzhou district reaches this path at all
+(`matchDeliveryZone` returns null rather than falling through once any
+`gz_district` row exists).

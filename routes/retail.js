@@ -10456,14 +10456,35 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // cadence exactly like an out-of-city one. Inner districts are unaffected
   // (isOptInSameDayDistrict is false for always-same-day zones).
   //
-  // Same-day in a ship-district is the explicit "Today" pick (slot_kind
-  // 'today', the surcharge slot). The Express default ('express') and a future
-  // 'schedule' date are NOT same-day — they ship by courier from the
-  // out-of-city store. isSameDayDelivery(slotId) can't tell these apart
-  // (Express's slot date is often today at midnight, which it reads as
-  // same-day), so gate on the slot_kind the mini-app sends instead.
+  // Same-day in a ship-district is the explicit "Today" pick (the surcharge
+  // slot). The Express default and a future calendar date are NOT same-day —
+  // they ship by courier from the out-of-city store.
+  //
+  // THIS IS DERIVED FROM THE SLOT ID, NOT FROM THE REQUEST BODY, and that is the
+  // point of the change. It used to read `body.delivery_slot_kind === 'today'`,
+  // an unvalidated client string, while deciding the out-of-city warehouse pin
+  // below and the local pre-order gate under it — so a client sending 'today'
+  // beside the FREE Express slot was routed to the nearest Guangzhou shop and
+  // dispatched to a rider without paying the same-day surcharge.
+  //
+  // THE OLD COMMENT HERE SAID isSameDayDelivery COULD NOT TELL EXPRESS APART
+  // because "Express's slot date is often today at midnight". That is no longer
+  // true of the slot ID, and is why the client value was trusted in the first
+  // place: expressEarliestIso() floors its date at `Math.max(1, lead)` days, so
+  // an Express slot_id is ALWAYS tomorrow or later and never reads as today.
+  // The only ids that carry today's date are the day-only Today chip and a
+  // time-slot window on today, which are exactly the same-day picks. (A
+  // ship-district is day_only and/or surcharged, so right_away is refused there
+  // by resolveDeliverySlot regardless of how it reads here.)
+  //
+  // `orderNow` is hoisted to here from further down so this and the slot
+  // validation share one clock — two `new Date()` calls either side of a cutoff
+  // hour could otherwise disagree about what day it is. No timezone behaviour
+  // changes: this is the same host-local reading it always was (see §80, which
+  // rules on that separately and is not actioned here).
+  const orderNow = new Date();
   const inGz = inventory.isGuangzhouAddress(address);
-  const pickedSameDay = body.delivery_slot_kind === 'today';
+  const pickedSameDay = inventory.isSameDayDelivery(deliverySlotId, orderNow);
   const scheduledShipDistrict =
         inGz &&
         inventory.isOptInSameDayDistrict(address) &&
@@ -10659,7 +10680,11 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   {
     const pinned = fulfillingStoreFor({
       address, channel: orderChannel, isPickup,
-      slotKind: body.delivery_slot_kind,
+      // Derived, not the request body — the same `pickedSameDay` the gate above
+      // and the ship-district test already run on, so the pin and those two
+      // cannot disagree about whether this is a same-day order. fulfillingStoreFor
+      // only ever asks `slotKind !== 'today'`.
+      slotKind: pickedSameDay ? 'today' : null,
       baseStoreId: fulfillingStore ? fulfillingStore.id : null,
     });
     if (pinned) {
@@ -10801,8 +10826,10 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // the cadence — which is how an order could be accepted for a day the promise
   // then contradicted. One call, one answer, both consumers.
   // `orderNow` is shared for the same reason: two `new Date()` calls either side
-  // of a cutoff hour could otherwise disagree about what day it is.
-  const orderNow = new Date();
+  // of a cutoff hour could otherwise disagree about what day it is. It is now
+  // declared further up, at the same-day derivation, so the routing decision
+  // reads the same clock these do rather than a second one taken later — §80's
+  // block just below is one of its readers and is unaffected by the move.
 
   /* MOVED DOWN FROM ABOVE `resolved` FOR §80, and the move is the point: this
      block now needs `zone` and `orderNow`, both declared below where it used to
@@ -10889,6 +10916,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // Pickup carries the customer-chosen pickup window in the same scheduled_for
   // + delivery_slot_label columns; no zone slot resolution and no surcharge.
   let scheduledFor, sameDaySurcharge = 0, slotLabel;
+  // The server's own verdict on what kind of pick this is, set by
+  // resolveDeliverySlot below — the only place that knows which branch matched.
+  let resolvedSlotKind = null;
   if (isPickup) {
     scheduledFor = pickupScheduledFor;
     slotLabel    = pickupSlotLabel;
@@ -10905,6 +10935,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     }
     scheduledFor     = slotResolved.scheduled_for;          // ISO string or null
     sameDaySurcharge = Number(slotResolved.surcharge) || 0; // 0 unless same-day + zone-charged
+    resolvedSlotKind = slotResolved.kind || null;
     slotLabel        = body.delivery_slot_label
                         || slotResolved.slot?.label_en
                         || (deliverySlotId === 'right_away' ? 'Right away' : null);
@@ -10923,11 +10954,21 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   }
   // Persisted so the Mini App Backend can tell an Express "as soon as possible"
   // order (out-of-GZ default, no specific date wanted) apart from a deliberate
-  // scheduled calendar date. Trust the mini-app's explicit kind; leave NULL for
-  // older clients that don't send one (the backend infers those at render time).
+  // scheduled calendar date.
+  //
+  // TAKEN FROM THE SERVER'S RESOLVED SLOT, NOT THE REQUEST BODY. This column is
+  // not decoration: planShipments reads it to choose a same-city rider drop over
+  // a courier waybill, and isQingyunSameCityToday reads it to decide whether the
+  // order enters the rider queue at all — and the drain re-reads it on every
+  // poll. Storing an unvalidated client string here let a caller pick the free
+  // Express slot and be dispatched as same-day.
+  //
+  // `pickup` and `restock` still come from this handler, because they are
+  // order-level states rather than slot shapes and resolveDeliverySlot has no
+  // way to know them. Everything else is its answer.
   const slotKind = isPickup ? 'pickup'
     : isWaitFlow ? 'restock'
-    : (body.delivery_slot_kind || (deliverySlotId === 'right_away' ? 'right_away' : null));
+    : resolvedSlotKind;
 
   // Same-day surcharge is added to the shipping line so totals reconcile
   // without a new fee column on retail_orders.
@@ -11426,6 +11467,13 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     return res.status(500).json({ success: false, error: 'order_create_failed' });
   }
 
+  // The client still SENDS delivery_slot_kind and the server no longer reads it.
+  // Say so once per order when the two disagree, with both values, because the
+  // two causes look identical from here and only the log can separate them: a
+  // stale client that has not caught up with a rule, or somebody trying the
+  // free-Express/paid-same-day trick this change closes.
+  logSlotKindMismatch(orderId, body.delivery_slot_kind, slotKind, 'checkout');
+
   // Batch-made fresh items shipping outside GZ: stamp the promised production
   // + arrival dates and drop the customer a heads-up that we'll make the next
   // batch before it ships. Best-effort — never fails the placed order.
@@ -11434,7 +11482,10 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     // reading of the cadence — so the accepted date and the promised date are
     // one decision, not two that happen to agree.
     const notice = computeBatchNotice(
-      zone, resolved.map((r) => r.product.id), orderNow, deliverySlotId, body.delivery_slot_kind,
+      // `slotKind`, not the request body: this notice picks its scheduled-vs-asap
+      // branch off the kind, and it must describe the order that was actually
+      // written rather than the one the client claimed to be placing.
+      zone, resolved.map((r) => r.product.id), orderNow, deliverySlotId, slotKind,
       { decision: batchDecision },
     );
     if (notice) {
@@ -11467,7 +11518,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       // (replace_missing), and the pre-mutation cart still lists it — which
       // would promise a batch for an item the customer just removed. This is
       // the cart the order was actually written from.
-      address, mutatedItems.map((r) => r.product.id), orderNow, body.delivery_slot_kind,
+      address, mutatedItems.map((r) => r.product.id), orderNow, slotKind,
       // Ignore THIS order's own hold as well as the customer's other unpaid
       // ones. It runs after the order committed, so without `orderId` here the
       // shopper who just bought the last wrap would read as sold out and be
@@ -20780,8 +20831,14 @@ router.post('/api/retail/orders/:id/reschedule', requireRetailAuth, express.json
     slotLabel    = body.delivery_slot_label
                     || resolved.slot?.label_en
                     || (slotId === 'right_away' ? 'Right away' : null);
-    slotKind     = body.delivery_slot_kind
-                    || (slotId === 'right_away' ? 'right_away' : null);
+    // The server's resolved kind, not the request body — same rule as checkout,
+    // and it matters more here because this runs AFTER payment. The
+    // price-neutrality guard above compares only the SURCHARGE, which a bare
+    // date pick leaves at 0, so a paid ship-district order could be rescheduled
+    // with kind 'today' and walk into the rider queue: the Qingyun drain
+    // re-reads isQingyunSameCityToday off this column on every poll.
+    slotKind     = resolved.kind || null;
+    logSlotKindMismatch(id, body.delivery_slot_kind, slotKind, 'reschedule');
   }
 
   // Apply. seen_at = NULL re-flags the order in the admin queue so staff
@@ -32961,18 +33018,65 @@ function matchScheduledTimeSlot(enumed, mTime) {
 
 // Resolve a slot_id back into a Date + validated metadata. Used by the
 // orders POST to confirm the customer's pick before persisting.
-// Returns { scheduled_for: ISO string, slot, surcharge } or { error }.
+// Returns { scheduled_for: ISO string, slot, surcharge, kind } or { error }.
 // `opts` is forwarded to computeDeliverySlots — in practice { batch } carrying
 // earliestBatchMakeDate's decision, so the window this validates against is the SAME window the
 // customer was offered. A stale picker holding a date below the batch floor now
 // falls outside min_date and is refused with the existing slot_unavailable, with
 // no new failure shape for clients to learn.
+//
+// `kind` IS THE SERVER'S OWN VERDICT ON WHAT KIND OF PICK THIS IS, and it is
+// returned here rather than derived by the caller because this function is the
+// only place that knows WHICH BRANCH matched. The same date string can be a
+// day-only Today chip, an Express earliest-day, or a calendar pick, and telling
+// them apart is exactly the branching below — a caller re-deriving it from the
+// date alone would have to guess at the one distinction (express vs schedule)
+// that no date comparison can make.
+//
+// It exists because `delivery_slot_kind` used to be taken from the request body
+// and stored unchecked, while deciding the out-of-city warehouse pin, the local
+// pre-order gate, courier-vs-rider parcels (planShipments) and the Qingyun rider
+// queue (isQingyunSameCityToday). A client could send 'today' beside the FREE
+// Express slot and be routed and dispatched as same-day without the surcharge
+// resolveDeliverySlot had just computed as zero. The value the server resolved
+// is now the value the server stores.
+//
+//   'right_away' — the no-date ASAP pick (time-slot zones, kitchen open)
+//   'today'      — a slot whose date IS today (the day-only Today chip, or a
+//                  time-slot window on today)
+//   'express'    — the day-only zone's earliest fulfillable day, no surcharge
+//   'schedule'   — anything else: a deliberate future calendar day or window
+//
+// 'pickup' and 'restock' are order-level states rather than slot shapes and are
+// applied by the caller, which is the only side that knows them.
+// One line when a submitted delivery_slot_kind disagrees with the one the server
+// resolved. DERIVE AND DISCARD, NEVER VALIDATE-AND-REJECT: a mismatch is not a
+// reason to refuse an otherwise valid order — the slot itself has already been
+// validated, and the kind is now computed rather than accepted, so there is
+// nothing left to protect by failing. This exists only so the disagreement is
+// visible.
+//
+// Silent when they agree, when nothing was sent (older clients, and the mini
+// app's own '' for a time-slot zone), and when the order has no kind at all.
+// Never throws: this runs after the order has committed and must not be able to
+// turn a placed order into a 500.
+function logSlotKindMismatch(orderId, submitted, derived, where) {
+  try {
+    const sent = submitted == null ? '' : String(submitted).trim();
+    if (!sent) return;
+    if (sent === String(derived || '')) return;
+    console.warn(
+      `[slot-kind mismatch] ${where} order=${orderId} submitted=${JSON.stringify(sent)} derived=${JSON.stringify(derived)}`
+    );
+  } catch (_) { /* a log line must never cost a placed order */ }
+}
+
 function resolveDeliverySlot(zone, slotId, now, opts = {}) {
-  if (!slotId) return { scheduled_for: null, slot: null, surcharge: 0 };
+  if (!slotId) return { scheduled_for: null, slot: null, surcharge: 0, kind: null };
   if (slotId === 'right_away') {
     const enumed = computeDeliverySlots(zone, now, opts);
     if (!enumed.right_away_available) return { error: 'right_away_unavailable' };
-    return { scheduled_for: null, slot: { slot_id: 'right_away' }, surcharge: 0 };
+    return { scheduled_for: null, slot: { slot_id: 'right_away' }, surcharge: 0, kind: 'right_away' };
   }
   const enumed = computeDeliverySlots(zone, now, opts);
   // Two slot-id shapes: 'YYYY-MM-DDTHH:MM' (today's time-slot pick) or
@@ -32980,7 +33084,7 @@ function resolveDeliverySlot(zone, slotId, now, opts = {}) {
   // pick). For the latter, the day need not be in `slots` (the calendar
   // covers an open range) — we just validate it falls inside the
   // schedule window or matches the today_day_chip.
-  let dt, found;
+  let dt, found, kind;
   const mTime = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(slotId);
   const mDay  = /^(\d{4})-(\d{2})-(\d{2})$/.exec(slotId);
   if (mTime) {
@@ -32989,15 +33093,21 @@ function resolveDeliverySlot(zone, slotId, now, opts = {}) {
     // (time-slot zones offer hour windows across the whole calendar).
     if (!found) found = matchScheduledTimeSlot(enumed, mTime);
     if (!found) return { error: 'slot_unavailable' };
+    // A time-slot window is same-day only when its own date is today —
+    // emitTimeSlots stamps that on the chip, and matchScheduledTimeSlot's
+    // synthesized windows are calendar days and always carry false.
+    kind = found.is_same_day ? 'today' : 'schedule';
     dt = new Date(Number(mTime[1]), Number(mTime[2]) - 1, Number(mTime[3]), Number(mTime[4]), Number(mTime[5]));
   } else if (mDay) {
     // Same-day day-only chip first (Panyu).
     found = enumed.slots.find(s => s.slot_id === slotId);
+    if (found) kind = found.is_same_day ? 'today' : 'express';
     // Express ("ship ASAP") day — its date is the zone's true earliest and can
     // sit EARLIER than the schedule-for-later window's +3-day floor, so it
     // wouldn't pass the window check below. Match it explicitly (no surcharge).
     if (!found && enumed.express_slot && enumed.express_slot.slot_id === slotId) {
       found = enumed.express_slot;
+      kind  = 'express';
     }
     if (!found) {
       // Otherwise it must fall inside the schedule-for-later window.
@@ -33005,6 +33115,7 @@ function resolveDeliverySlot(zone, slotId, now, opts = {}) {
       if (!sch || slotId < sch.min_date || slotId > sch.max_date) {
         return { error: 'slot_unavailable' };
       }
+      kind = 'schedule';
       found = {
         slot_id: slotId,
         date_iso: slotId,
@@ -33024,6 +33135,7 @@ function resolveDeliverySlot(zone, slotId, now, opts = {}) {
     scheduled_for: dt.toISOString(),
     slot: found,
     surcharge: found.requires_surcharge ? Number(found.surcharge) || 0 : 0,
+    kind,
   };
 }
 
