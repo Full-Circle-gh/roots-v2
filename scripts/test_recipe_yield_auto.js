@@ -515,6 +515,104 @@ check('a serving bigger than the batch is called out, not printed as zero', () =
   assert.ok(/bigger than the whole batch/.test(h), h);
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 7b. THREE NUMBERS ABOUT ONE POT — the hints now say when they disagree
+// ═══════════════════════════════════════════════════════════════════════════
+// The case these exist for, with its own numbers (2026-09-09): recipe 9 said
+// 5000 g a batch against lines adding to 2616 g, and 12 servings of 220 g. The
+// true total was already on screen as the OFFER, in the ordinary grey, reading
+// as one way to fill the field rather than as a disagreement with what was in
+// it. Cost per gram divided by 5000, the material was priced at ¥0.0218/g
+// instead of ¥0.0417/g, and the recipe consuming it charged ¥1.53 for 70 g
+// that cost ¥2.92. Nothing on any screen said a word.
+const GDSC = [{ qty: 2500, unit: 'g' }, { qty: 63, unit: 'g' }, { qty: 53, unit: 'g' }];
+
+check('a typed batch far above the ingredient total is marked, with both numbers', () => {
+  const h = hint('batch', { batch_size_auto: 0, batch_size: 5000 }, GDSC);
+  assert.ok(/class="warn"/.test(h), 'the disagreement reads as ordinary prose: ' + h);
+  assert.ok(/5000 g/.test(h) && /2616 g/.test(h), 'both numbers must be named: ' + h);
+  assert.ok(/Cost per gram divides by 5000 g/.test(h),
+    'the note does not say what the division actually uses: ' + h);
+});
+
+check('and the one-click fix is still offered beside it', () => {
+  const h = hint('batch', { batch_size_auto: 0, batch_size: 5000 }, GDSC);
+  assert.ok(/Use the ingredient total \(2616 g\)/.test(h), h);
+  assert.ok(/rcpYieldAuto\('batch',1\)/.test(h), h);
+});
+
+check('a typed batch BELOW its lines stays silent — that is a reduction, and it errs safe', () => {
+  // A sauce that reduces on the stove. The same cost over fewer grams makes
+  // cost per gram too HIGH, which overcharges downstream and shows as a margin
+  // that looks too good — visible, unlike the other direction.
+  const h = hint('batch', { batch_size_auto: 0, batch_size: 1800 }, GDSC);
+  assert.ok(!/class="warn"/.test(h), 'a reduction was marked as a fault: ' + h);
+  assert.ok(/Total grams the whole batch makes/.test(h), h);
+});
+
+check('a rounded typed batch stays silent — a note that fires on rounding gets read past', () => {
+  const h = hint('batch', { batch_size_auto: 0, batch_size: 2700 }, GDSC);   // 3.2% over
+  assert.ok(!/class="warn"/.test(h), h);
+});
+
+check('just past five per cent it speaks', () => {
+  const quiet = hint('batch', { batch_size_auto: 0, batch_size: 2740 }, GDSC);  // 4.7%
+  const loud  = hint('batch', { batch_size_auto: 0, batch_size: 2760 }, GDSC);  // 5.5%
+  assert.ok(!/class="warn"/.test(quiet), 'fired under the threshold: ' + quiet);
+  assert.ok(/class="warn"/.test(loud), 'silent over the threshold: ' + loud);
+});
+
+check('typed servings that do not span the batch are marked, and the arithmetic IS the sentence', () => {
+  const h = hint('servings', { batch_size_auto: 0, batch_size: 5000, servings_auto: 0,
+                               servings: 12, serving_size: 220 }, GDSC);
+  assert.ok(/class="warn"/.test(h), h);
+  assert.ok(/12 × 220 g = 2640 g/.test(h), 'the multiplication is not shown: ' + h);
+  assert.ok(/the batch is 5000 g/.test(h), 'the batch it disagrees with is not named: ' + h);
+});
+
+check('the same three numbers, once the batch size is right, say nothing', () => {
+  // 12 × 220 = 2640 against a real batch of 2616 — 0.9% out, which is the
+  // flooring remainder, not a fault.
+  const h = hint('servings', { batch_size_auto: 1, servings_auto: 0,
+                               servings: 12, serving_size: 220 }, GDSC);
+  assert.ok(!/class="warn"/.test(h), h);
+  assert.ok(/Needed to work out cost per serving/.test(h), h);
+});
+
+check('an ordinary tail left in the pot is not a fault either', () => {
+  // 11 × 220 = 2420 against 2616: 7.5% short, which is exactly the leftover the
+  // auto path names as leftover rather than as a problem.
+  const h = hint('servings', { batch_size_auto: 1, servings_auto: 0,
+                               servings: 11, serving_size: 220 }, GDSC);
+  assert.ok(!/class="warn"/.test(h), h);
+});
+
+check('both new notes carry a real Chinese half', () => {
+  // The harness's T() returns the English, so the Chinese is asserted on the
+  // shipped source — the same way test_recipe_unit_mismatch_warnings.js does.
+  assert.ok(/大于原料合计 \$\{gramTxt\(sum\.grams\)\} 克/.test(RECIPES_JS),
+    'the batch note has no Chinese half');
+  assert.ok(/每克成本按 \$\{gramTxt\(typed\)\} 克折算/.test(RECIPES_JS),
+    'the Chinese half drops the consequence the English states');
+  // The whole shape, not just the tail: "整批 ${gramTxt(batch)} 克" alone is
+  // also inside the older serving-bigger-than-the-batch warning two branches
+  // up, so an assertion on that fragment passes even when this note's Chinese
+  // has been deleted outright. Caught by mutation-testing this very check.
+  assert.ok(/份 × \$\{gramTxt\(size\)\} 克 = \$\{gramTxt\(claimed\)\} 克 —— 整批 \$\{gramTxt\(batch\)\} 克。/.test(RECIPES_JS),
+    'the servings note has no Chinese half');
+  // Every Chinese word in both is already live in this file — that is the
+  // claim docs/tacet-delivery-vocabulary.md records, and this is what would
+  // catch someone quietly introducing a new one.
+  for (const term of ['手动填写', '大于', '原料合计', '每克成本', '折算', '整批', '份']) {
+    assert.ok(RECIPES_JS.includes(term), `${term} is no longer live in this file`);
+  }
+});
+
+check('the thresholds are named, not buried in the branch', () => {
+  assert.ok(/const BATCH_OVER_LINES = 0\.05;/.test(RECIPES_JS));
+  assert.ok(/const SERVINGS_SPAN_BATCH = 0\.10;/.test(RECIPES_JS));
+});
+
 check('the editor sends both flags and every line\'s in_yield', () => {
   assert.ok(/in_yield: lineInYield\(l\) \? 1 : 0/.test(RECIPES_JS), 'lines must carry in_yield');
   assert.ok(/batch_size_auto: autoBatch\(\) \? 1 : 0/.test(RECIPES_JS));

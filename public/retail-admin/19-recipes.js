@@ -1224,6 +1224,14 @@
     return `<button type="button" class="rcp-ylink" onclick="rcpYieldAuto('${which}',${on ? 1 : 0})">${esc(label)}</button>`;
   }
 
+  // How far a TYPED batch size may sit above what the ingredient lines add up
+  // to before the hint says so, and how far servings × serving size may sit
+  // from the batch size. Named rather than inline because each is a judgement
+  // about noise, not a fact — see the blocks that use them for why one is
+  // one-directional and the other is not, and why they differ.
+  const BATCH_OVER_LINES = 0.05;
+  const SERVINGS_SPAN_BATCH = 0.10;
+
   // ── What the two hints say ───────────────────────────────────────────────
   // Every branch says THREE things: where the number came from, what it was
   // worked out from, and how to take it over. A field that fills itself in and
@@ -1269,8 +1277,47 @@
       ? esc(sep) + yieldSwitch('batch', 1, T(`Use the ingredient total (${gramTxt(sum.grams)} g)`,
                                              `按原料合计填写(${gramTxt(sum.grams)} 克)`))
       : '';
-    return `<span>${esc(T('Total grams the whole batch makes. Needed to work out cost per gram.',
-                          '整批的总克数,用于折算每克成本。'))}</span>` + offer;
+    // ── A TYPED BATCH BIGGER THAN THE LINES, AND ONLY THAT DIRECTION ────────
+    //
+    // The sum was already on this line — as the OFFER, in the ordinary grey,
+    // reading as one way of filling the field rather than as a disagreement
+    // with what is in it. That is what it was on 2026-09-09 when this recipe
+    // said 5000 g against lines adding to 2616 g: the true number was on
+    // screen, one click away, and nothing said the typed one was nearly double
+    // it or that every downstream cost was dividing by it. The material was
+    // priced at ¥0.0218/g instead of ¥0.0417/g, and the recipe consuming it
+    // charged ¥1.53 for 70 g that cost ¥2.92.
+    //
+    // ONE DIRECTION ONLY, DELIBERATELY. A batch SMALLER than its lines is
+    // ordinary and correct — a sauce reduces on the stove, a paste is filled
+    // to a pack weight — and it errs safe: the same cost over fewer grams
+    // makes cost per gram too HIGH, which overcharges the recipes downstream
+    // and shows up as a margin that looks too good rather than one that
+    // silently is not. A batch BIGGER than its lines is the other case: it
+    // spreads the same cost over grams that were never bought, so every
+    // consumer of the material is undercharged, which is the direction nobody
+    // notices. Water poured in and not written down is the honest version of
+    // it, and this still fires — the note states the two numbers and what the
+    // division uses, and does not call it an error, because it cannot know.
+    //
+    // FIVE PER CENT, because a typed batch is a rounded number by nature
+    // (2600 for 2616) and a note that fires on rounding is a note that gets
+    // read past. 5000 against 2616 is 91% over.
+    const typed = y ? y.batchSize : 0;
+    const oversize = !!(sum && sum.ok && sum.grams > 0 && typed > sum.grams * (1 + BATCH_OVER_LINES));
+    // The warning REPLACES the neutral sentence rather than joining it: that
+    // sentence says what the field is for, and once the field is disputed the
+    // dispute is the thing to read. The offer stays either way — it is the fix,
+    // in one click.
+    const said = oversize
+      ? `<span class="warn">${esc(T(
+          `Typed ${gramTxt(typed)} g — bigger than the ingredient total (${gramTxt(sum.grams)} g). `
+            + `Cost per gram divides by ${gramTxt(typed)} g.`,
+          `手动填写 ${gramTxt(typed)} 克,大于原料合计 ${gramTxt(sum.grams)} 克。`
+            + `每克成本按 ${gramTxt(typed)} 克折算。`))}</span>`
+      : `<span>${esc(T('Total grams the whole batch makes. Needed to work out cost per gram.',
+                       '整批的总克数,用于折算每克成本。'))}</span>`;
+    return said + offer;
   }
 
   function servHint(y) {
@@ -1304,7 +1351,37 @@
       ? esc(sep) + yieldSwitch('servings', 1, T(`Work it out (${Math.floor(Number((batch / size).toFixed(6)))})`,
                                                 `自动算出(${Math.floor(Number((batch / size).toFixed(6)))})`))
       : '';
-    return `<span>${esc(T('Needed to work out cost per serving.', '用于折算每份成本。'))}</span>` + offer;
+    // ── THREE NUMBERS ABOUT ONE POT, AND THEY HAVE TO AGREE ────────────────
+    //
+    // Batch size, servings and serving size all describe the same batch, so
+    // servings × serving size ought to land on the batch size. Nothing checked
+    // that, and with both flags off nothing could: each is a typed number
+    // answerable to nothing. On 2026-09-09 one recipe said 5000 g a batch, 12
+    // servings and 220 g a serving at the same time — 12 × 220 is 2640, not
+    // 5000 — and every screen printed all three without comment.
+    //
+    // BOTH DIRECTIONS HERE, unlike the batch note above, because neither one
+    // is the safe one. Portions adding to MORE than the batch means cost per
+    // serving is spread over servings the pot cannot yield; adding to LESS
+    // means the batch size is carrying grams the portions never account for,
+    // which is the shape the 5000 g took. A tail left in the pot is the
+    // honest version of the second, which is why the threshold is wide.
+    //
+    // TEN PER CENT, wider than the batch note's five: flooring alone leaves a
+    // real remainder (2616 g at 220 g is eleven servings and 196 g, 7.5%), and
+    // the auto path already names that tail as leftover rather than as a
+    // fault. What is left is a gap too big to be a remainder.
+    const claimed = (y && y.servings > 0 && size > 0) ? y.servings * size : 0;
+    const adrift = claimed > 0 && batch > 0
+      && Math.abs(claimed - batch) / batch > SERVINGS_SPAN_BATCH;
+    // Numerals carry it — the arithmetic IS the sentence, and the only words
+    // are the two this screen already uses for the things being multiplied.
+    const said = adrift
+      ? `<span class="warn">${esc(T(
+          `${y.servings} × ${gramTxt(size)} g = ${gramTxt(claimed)} g — the batch is ${gramTxt(batch)} g.`,
+          `${y.servings} 份 × ${gramTxt(size)} 克 = ${gramTxt(claimed)} 克 —— 整批 ${gramTxt(batch)} 克。`))}</span>`
+      : `<span>${esc(T('Needed to work out cost per serving.', '用于折算每份成本。'))}</span>`;
+    return said + offer;
   }
 
   // Written in place, never by repainting the tab — the operator may be typing
