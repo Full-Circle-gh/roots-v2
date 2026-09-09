@@ -54,6 +54,12 @@ const { alertPlatform, alertMerchant, alertBoth } = require('../lib/ops-alert');
 const { ROOTS_TENANT_ID: ACCOUNT } = require('../lib/tenant-db');
 
 const { claimWindow, clearWindow } = require('../lib/alert-latch');
+// §85 — the pre-order window. gzgrocery is in scope for it by Ash's decision, so
+// pickup inference has to know when a shelf is deliberately being sold past.
+const cadence = require('../lib/batch-cadence');
+// §85 — the pre-order window's two edges, checked on the main loop.
+const preorderFlip = require('../lib/preorder-flip');
+const guanyiSync = require('../lib/guanyi-sync');
 
 // Defensive: ensure the pickup-inference tables exist even if the deployed
 // database.js predates them (the box is deployed by scp, not a migration run).
@@ -541,6 +547,10 @@ async function processPickupReconcile() {
 // Reconcile one product against its baseline. Returns true if a pickup drop was
 // logged this cycle. NEVER changes Tianhe in 'shadow' mode.
 function reconcileOne(storeCode, m, cur) {
+  // §85 — read per product rather than per sweep, because this function is
+  // called from several places and threading it through all of them would buy
+  // one config read. It is a single indexed row and a date comparison.
+  const preorderWindow = cadence.preorderWindow(db, { channel: 'gzgrocery' });
   const observed = cur.currentQty;
   const name = cur.guanyiName || m.guanyi_name || '';
   const b = db.prepare(`SELECT * FROM guanyi_pickup_baseline WHERE store_code=? AND product_id=?`).get(storeCode, m.product_id);
@@ -592,7 +602,27 @@ function reconcileOne(storeCode, m, cur) {
   let detected = false;
   if (drift < 0) {
     const pickup = -drift;
-    const capped = pickup > PICKUP_CAP || pickup > m.tianhe_qty;
+    /* §85 — THE SECOND HALF OF THIS GUARD HAD TO LEARN THE PRE-ORDER WINDOW.
+       It means "do not infer a pickup larger than the stock we believe we have",
+       which was unarguable while a shelf could not be sold past. It can now: the
+       window deliberately offers `shelf + allowance` on gzgrocery, so a REAL
+       pickup can legitimately exceed `tianhe_qty` and every one of them would
+       have landed in `capped` — gzgrocery sales silently ceasing to deduct and
+       piling up as review rows for exactly the morning the window is open.
+
+       max(0, …) on the shelf term changes nothing that was working: a negative
+       tianhe_qty already made this test true for any pickup at all, and zero
+       makes it true for the same set. What is added is the allowance, and only
+       while the window is open.
+
+       THE SETTLE PROTOCOL ABOVE NEEDS NO SUCH CHANGE, which was checked rather
+       than assumed: our own pushes — the window opening at 08:00 and closing at
+       the lock hour — set `settle_pending` with the pushed figure as the target
+       and re-baseline when the ERP reaches it, so neither edge is ever read as a
+       pickup. That was the hazard worth looking for here and it is already
+       handled. */
+    const capAllowance = preorderWindow.open ? preorderWindow.qty : 0;
+    const capped = pickup > PICKUP_CAP || pickup > (Math.max(0, m.tianhe_qty) + capAllowance);
     if (capped) {
       logRow('capped', drift, pickup, `drop ${pickup} > cap ${PICKUP_CAP} or Tianhe ${m.tianhe_qty} — NOT applied, review`);
     } else if (PICKUP_MODE === 'live') {
@@ -886,6 +916,22 @@ async function main() {
     // Health first: it owns the login alert and the heal, and a dead session makes
     // everything below it a no-op anyway.
     try { await processSessionHealth(); } catch (e) { console.error('[guanyi-daemon] health:', e.message); }
+    /* §85 — THE PRE-ORDER WINDOW'S TWO EDGES. Nothing about a clock reaching
+       the lock hour is a stock change, so the edge-triggered queue would never
+       hear about it and the platform would keep showing the morning's allowance
+       into the afternoon. Checked on this loop rather than left to the drift
+       sweep because that sweep runs every thirty minutes, and half an hour past
+       a lock the operator set makes the setting a lie.
+       A config read and a string compare on the common path; it queries and
+       enqueues nothing at all unless the answer actually changed. */
+    try {
+      preorderFlip.flipTick(db, {
+        channel: 'gzgrocery', mapTable: 'guanyi_product_map',
+        enqueue: guanyiSync.enqueueProductStock,
+        log: (m) => console.log(`[guanyi-daemon] ${m}`),
+      });
+    } catch (e) { console.error('[guanyi-daemon] preorder flip:', e.message); }
+
     try { await processStockQueue(); } catch (e) { console.error('[guanyi-daemon] queue:', e.message); }
     try { await processPickupReconcile(); } catch (e) { console.error('[guanyi-daemon] reconcile:', e.message); }
     try { await processListingJobs(); } catch (e) { console.error('[guanyi-daemon] jobs:', e.message); }

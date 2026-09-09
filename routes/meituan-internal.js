@@ -19,6 +19,9 @@ const { productUnitCostYuan } = require('../lib/product-cost');
 // our own stock, worded the same whichever platform sent it — and the copies had
 // already drifted on exactly that (see the module's header).
 const { notifyStockGaps } = require('../lib/channel-line-report');
+// §85 — the pre-order window, and whether a shortfall it explains should page.
+const channelPublish = require('../lib/channel-publish');
+const cadence = require('../lib/batch-cadence');
 
 const INTERNAL_SECRET = process.env.MEITUAN_INTERNAL_SECRET || 'meituan-daemon-internal';
 
@@ -528,6 +531,10 @@ router.post('/ingest-order', (req, res) => {
     const unresolved = [];
     const oversold = [];
     let deducted = 0;
+    // §85 — read ONCE for the order, not per line: every line of one order is
+    // taken at the same instant, and a window that flipped mid-loop would
+    // explain one line of a basket and page about the next.
+    const preorderWindow = cadence.preorderWindow(db, { channel: 'meituan' });
     for (const it of bornVoid ? [] : items) {
       if (!it.productId) { unresolved.push({ name: it.name, nameEn: it.nameEn, sku: it.sku, qty: it.qty, reason: it.matchBy }); continue; }
       const cur  = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?').get(storeId, it.productId);
@@ -551,7 +558,17 @@ router.post('/ingest-order', (req, res) => {
       // carrying the debt is not a reason to stop saying so.
       // One six-pack is one line of one, and six off the shelf.
       const took = packDeduct(it.qty, it.units);
-      if (oldQ < took) oversold.push({ name: it.nameEn, sku: it.sku, have: oldQ, want: took });
+      /* §85 — A PRE-ORDER IS NOT AN OVERSELL, and the alarm has to know the
+         difference or it drowns. This alert exists because 54 undeducted lines
+         accumulated unseen from June to September; one that fires on every
+         pre-order taken during the window buries exactly the case it was built
+         for. Suppressed only where the window explains it — this channel is in
+         the window and the resulting debt is inside the allowance — so a
+         shortfall LARGER than the allowance still pages, being a real oversell
+         wearing a pre-order's clothes. */
+      if (oldQ < took && !channelPublish.oversellExpected({ have: oldQ, want: took, window: preorderWindow })) {
+        oversold.push({ name: it.nameEn, sku: it.sku, have: oldQ, want: took });
+      }
       inventory.adjustStock({
         storeId, productId: it.productId,
         deltaQty: -took,

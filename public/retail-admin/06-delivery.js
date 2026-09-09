@@ -256,6 +256,18 @@ async function loadDeliveryZones() {
     // cutoff does. A tenant that has never set one sees the placeholder and the
     // save below sends nothing.
     if ($('#batch-ready')) $('#batch-ready').value = (batch.ready_hour != null ? batch.ready_hour : '');
+    /* §85 — blank rather than the server's fallback. The lock hour DEFAULTS to
+       the ready hour when unset, and pre-filling it with that value would make
+       the two look independently chosen: an operator changing the ready hour
+       would then leave a lock hour frozen at the old one without having asked
+       for it. Blank means "follow the row above", and the row's own description
+       says so. */
+    if ($('#batch-lock')) $('#batch-lock').value = (batch.lock_hour != null ? batch.lock_hour : '');
+    if ($('#batch-preorder-qty')) $('#batch-preorder-qty').value = (batch.preorder_qty ? batch.preorder_qty : '');
+    for (const c of ['meituan', 'eleme', 'gzgrocery']) {
+      const el = $('#batch-pre-' + c);
+      if (el) el.checked = Array.isArray(batch.preorder_channels) && batch.preorder_channels.includes(c);
+    }
     if ($('#batch-skip'))     $('#batch-skip').value     = (Array.isArray(batch.skip_dates) ? batch.skip_dates : []).join('\n');
     if ($('#batch-kicker-en')) $('#batch-kicker-en').value = batch.kicker_en || '';
     if ($('#batch-kicker-cn')) $('#batch-kicker-cn').value = batch.kicker_cn || '';
@@ -401,6 +413,31 @@ async function saveBatchSchedule() {
     }
   }
   const readyHour = rawReady === '' ? null : parseInt(rawReady, 10);
+  /* §85 — the pre-order window. Three fields, each of which is an off switch on
+     its own, and all three validated the way the hours above are: refused rather
+     than silently coerced, so an operator who means 11 and types 25 is told.
+     BLANK LOCK HOUR IS NOT AN ERROR. It falls back to the kitchen-ready hour on
+     the server, which is the case Ash's own shop is in — the batch reaches the
+     shelf at 11:00 and pre-orders stop at 11:00. Nobody should have to type one
+     number twice to say that. */
+  const rawLock = ($('#batch-lock') && $('#batch-lock').value || '').trim();
+  if (enabled && rawLock !== '') {
+    const l = parseInt(rawLock, 10);
+    if (!Number.isFinite(l) || l < 0 || l > 23) {
+      toast('Order-by hour must be 0–23 · 当日截单请输入 0–23 的小时', 'err'); return;
+    }
+  }
+  const lockHour = rawLock === '' ? null : parseInt(rawLock, 10);
+  const rawPreQty = ($('#batch-preorder-qty') && $('#batch-preorder-qty').value || '').trim();
+  if (enabled && rawPreQty !== '') {
+    const q = parseInt(rawPreQty, 10);
+    if (!Number.isFinite(q) || q < 0) {
+      toast('Enter a whole number, 0 or more · 请输入 0 或以上的整数', 'err'); return;
+    }
+  }
+  const preorderQty = rawPreQty === '' ? 0 : parseInt(rawPreQty, 10);
+  const preorderChannels = ['meituan', 'eleme', 'gzgrocery']
+    .filter(c => $('#batch-pre-' + c) && $('#batch-pre-' + c).checked);
   const skip = ($('#batch-skip').value || '')
     .split(/[\s,]+/).map(s => s.trim()).filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s));
   const val = (sel) => (($(sel) && $(sel).value) || '').trim();
@@ -416,6 +453,11 @@ async function saveBatchSchedule() {
       enabled, anchor_date: anchor, interval_days: interval, skip_dates: skip,
       cutoff_hour: cutoffHour,
       ready_hour: readyHour,
+      // §85. Omitting any of these three would DELETE it — this PUT replaces
+      // batch.schedule wholesale — so they ride here with everything else.
+      lock_hour: lockHour,
+      preorder_qty: preorderQty,
+      preorder_channels: preorderChannels,
       kicker_en: val('#batch-kicker-en'),
       kicker_cn: val('#batch-kicker-cn'),
       title_en:  val('#batch-title-en'),

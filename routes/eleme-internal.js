@@ -32,6 +32,9 @@ const { settlementGap, describeSettlementGap } = require('../lib/channel-settlem
 // about our own stock, worded the same whichever platform sent it — and the
 // copies had already drifted on exactly that (see the module's header).
 const { notifyStockGaps } = require('../lib/channel-line-report');
+// §85 — the pre-order window, and whether a shortfall it explains should page.
+const channelPublish = require('../lib/channel-publish');
+const cadence = require('../lib/batch-cadence');
 
 const INTERNAL_SECRET = process.env.ELEME_INTERNAL_SECRET || 'eleme-daemon-internal';
 
@@ -624,6 +627,9 @@ router.post('/ingest-order', (req, res) => {
     // ledger row and nothing else — six of them on the live database by
     // 2026-09-08, indistinguishable from a no-op.
     const oversold = [];
+    // §85 — one window read for the whole order. See the note in the Meituan
+    // ingest, which this mirrors deliberately rather than deriving its own.
+    const preorderWindow = cadence.preorderWindow(db, { channel: 'eleme' });
     for (const it of bornVoid ? [] : items) {
       if (!it.productId) { unresolved.push({ name: it.name, nameEn: it.nameEn, sku: it.sku, qty: it.qty, reason: it.matchBy }); continue; }
       const cur  = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?').get(storeId, it.productId);
@@ -640,7 +646,11 @@ router.post('/ingest-order', (req, res) => {
       //
       // The oversell flag stays. "Did this order exceed the shelf" is still worth
       // saying out loud even now that the shelf says it too.
-      if (oldQ < took) oversold.push({ name: it.name, nameEn: it.nameEn, sku: it.sku, have: oldQ, want: took });
+      // §85 — a pre-order inside the window's allowance is expected and does not
+      // page; a shortfall beyond it still does. See lib/channel-publish.js.
+      if (oldQ < took && !channelPublish.oversellExpected({ have: oldQ, want: took, window: preorderWindow })) {
+        oversold.push({ name: it.name, nameEn: it.nameEn, sku: it.sku, have: oldQ, want: took });
+      }
       inventory.adjustStock({
         storeId, productId: it.productId,
         deltaQty: -took,

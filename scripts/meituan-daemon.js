@@ -44,6 +44,9 @@ try {
 // covered side of the boundary. Proven by scripts/diagnose_seam_statements.js.
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
+// §85 — the pre-order window's two edges, checked on the main loop.
+const preorderFlip = require('../lib/preorder-flip');
+const mtBundles = require('../lib/meituan-bundles');
 const { getBrowser, closeAll } = require('../lib/meituan-browser');
 const { sweepStockDrift } = require('../lib/meituan-drift-sweep');
 const { stallTick } = require('../lib/meituan-queue-stall');
@@ -1540,6 +1543,22 @@ async function main() {
       lastQueueStallCheck = now;
       try { queueStallTick(stores); } catch (e) { console.error('[meituan-daemon] queueStallTick:', e.message); }
     }
+
+    /* §85 — THE PRE-ORDER WINDOW'S TWO EDGES. Nothing about a clock reaching
+       the lock hour is a stock change, so the edge-triggered queue would never
+       hear about it and the platform would keep showing the morning's allowance
+       into the afternoon. Checked on this loop rather than left to the drift
+       sweep because that sweep runs every thirty minutes, and half an hour past
+       a lock the operator set makes the setting a lie.
+       A config read and a string compare on the common path; it queries and
+       enqueues nothing at all unless the answer actually changed. */
+    try {
+      preorderFlip.flipTick(db, {
+        channel: 'meituan', mapTable: 'meituan_product_map',
+        enqueue: mtBundles.enqueueProductStock,
+        log: (m) => log('*', m),
+      });
+    } catch (e) { console.error('[meituan-daemon] preorder flip:', e.message); }
 
     // Always process stock queue
     await processStockQueue(stores);

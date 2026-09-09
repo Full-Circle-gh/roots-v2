@@ -73,6 +73,9 @@ const kitchenReady = require('../lib/kitchen-ready');
 // kind of thing: one definition, read by the dashboard row and by the phone's
 // kitchen queue, so the two cannot drift apart.
 const batchOwed = require('../lib/batch-owed');
+// §85 — the batch cadence arithmetic, moved out of this file so a stock daemon
+// can read it without requiring this router. See nextBatchShipDate below.
+const batchCadence = require('../lib/batch-cadence');
 // Web Push — optional; wrapped so a missing module never breaks order flow.
 let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
@@ -32029,29 +32032,24 @@ function tzNowParts(now, tz = deliveryTz()) {
 
 // Smallest batch day (YYYY-MM-DD) on or after `fromDate`, skipping any
 // skip_dates by rolling forward another whole interval. null when disabled.
+// §85 — THE BODY OF THIS FUNCTION MOVED TO lib/batch-cadence.js, and what is
+// left is the call. Nothing about the arithmetic changed: same midday anchoring
+// for DST safety, same modulo, same skip_dates roll-forward, same 365-step
+// guard, and it still takes THIS file's own normalised cfg object.
+//
+// WHY IT MOVED. A stock daemon deciding what number to push to Meituan, Eleme
+// and gzgrocery has to know whether today is a batch day, and it cannot require
+// this file to find out — a 36,000-line express router is not a dependency a
+// daemon should carry to answer a date question. The alternative was a second
+// copy of the cadence living beside the push, which is exactly what §80 spent a
+// section removing: three copies became one so that "the pill, the checkout and
+// the order agree", and a fourth would have disagreed where nobody looks — the
+// platform quietly naming a different batch day from the app.
+//
+// The wrapper stays because this file's callers pass no tz and no cfg and
+// should not have to; `deliveryTz()` and `batchScheduleCfg()` are its own.
 function nextBatchShipDate(fromDate, cfg, tz = deliveryTz()) {
-  cfg = cfg || batchScheduleCfg();
-  if (!cfg) return null;
-  const anchor = parseYmdLocal(cfg.anchor_date, tz);
-  if (!anchor) return null;
-  const DAY = 86400000;
-  const interval = cfg.interval_days;
-  const skip = new Set(cfg.skip_dates);
-  // The tenant-zone calendar day `fromDate` falls on, re-anchored to midday in
-  // that zone. Was `new Date(fromDate.getFullYear(), …)`, which took the HOST's
-  // calendar day and rebuilt it against the HOST's zone — two host reads in one
-  // line. Midday keeps the whole-day arithmetic below DST-safe.
-  const from = parseYmdLocal(toYmdLocal(fromDate, tz), tz);
-  const diff = Math.round((from.getTime() - anchor.getTime()) / DAY);
-  const rem = ((diff % interval) + interval) % interval;       // 0..interval-1
-  const offset = rem === 0 ? diff : diff + (interval - rem);   // first on-cadence day >= diff
-  let cand = new Date(anchor.getTime() + offset * DAY);
-  let guard = 0;
-  while (skip.has(toYmdLocal(cand)) && guard < 365) {
-    cand = new Date(cand.getTime() + interval * DAY);
-    guard++;
-  }
-  return toYmdLocal(cand);
+  return batchCadence.nextBatchDate(fromDate, cfg || batchScheduleCfg(), tz);
 }
 
 // The batch-made (is_batch_made) products among the given ids, as
