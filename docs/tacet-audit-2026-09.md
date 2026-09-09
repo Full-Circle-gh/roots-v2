@@ -52,10 +52,12 @@ evidence rather than a finding and carries no severity.)
 1. **D-01 — Purchasing, Recipes and Materials write into the first merchant's database.**
    102 statements with no merchant filter, 36 of them writes. Latent today because
    per-merchant separation is switched off; live the day it is switched on. *Critical.*
-2. **D-02 — Per-tenant settings are read from one fixed database file** (three sites; see
-   the extent note under D-02, added 2026-09-09), so a second merchant's
-   alert setting is never consulted and their alerts can land in the first merchant's chat
-   group. *Critical.*
+2. **D-02 — Per-tenant settings were read from one fixed database file**, so a second
+   merchant's setting was never consulted and their alerts or notifications could land in
+   the first merchant's chat group. **CLOSED 2026-09-09** — three sites, all fixed;
+   `lib/ops-alert.js` had already been fixed by PR #352 and the finding was stale on it.
+   See the extent note under D-02. *Critical (latent — never realised: the databases
+   under `data/tenants/` are test data).*
 3. **A-02 — A mistyped stock count silently sets the shelf to zero.** Blank field, stray
    letter, unreadable paste: all become 0, with a green tick and no confirmation. Every
    merchant, every day. *High.*
@@ -2455,7 +2457,31 @@ the module header names the setting as `system_alerts.enabled` +
 
 **Suggested direction:** resolve the webhook per merchant, the way credentials already are.
 
-#### D-02 extent · added 2026-09-09 — the full set, so the fix covers it
+#### D-02 · CLOSED 2026-09-09 — three sites, all three now fixed
+
+> **STATUS CORRECTION, and the correction is the more useful half of this note.**
+> The finding above, and the first version of the extent note below, both read
+> `lib/ops-alert.js` as an OPEN defect. **It is not, and had not been for some time.**
+> PR #352 gave that module full per-account resolution — `tenantDbFile(tenantId)`
+> (`:342`), `tenantWebhookUrl(tenantId)` (`:352`), `sendTenantAlert(tenantId, text)`
+> (`:385`), plus `alertPlatform` / `alertMerchant` / `alertBoth` encoding which
+> audience an alert belongs to. **84 call sites use the tenant-aware senders**; the
+> 13 that still call `sendOpsAlert` directly are platform-scope by nature (the
+> storefront being down, an uncaught exception, a route 500, the health watchdog),
+> and `scripts/check-alert-audience.js` + `scripts/test_alert_audience.js` already
+> guard that split.
+>
+> **The `DB_FILE` constant at `:29` is not the defect** — it is account 1's path,
+> used deliberately as both the platform's database and tenant 1's, which is what
+> `tenantDbFile` returns for `id === 1`. Reading the constant without reading the
+> API is how this was mis-scoped, first by the original entry and then again by the
+> sweep that was supposed to correct it. **Read the exports, not the header.**
+>
+> With ops-alert already fixed, `lib/store-hours.js` fixed the same day, and
+> `lib/gzgrocery-order-notify.js` fixed alongside this correction, **D-02 has no
+> open site left.** The sweep below is kept in full, because the method and the
+> cleared list are what make that claim checkable — and because the next reader
+> deserves the boundary as well as the answer.
 
 `lib/ops-alert.js` is where this was found, not how far it goes. The delivery-logic
 survey turned up a second site by accident, which is the signal to sweep for the rest
@@ -2470,14 +2496,19 @@ defect only when the table being read is per-tenant — `storefront_config`, `re
 because outside a request context `tdb()` returns `mainDb` and the read silently becomes
 merchant 1's.
 
-**Site 2 — `lib/gzgrocery-order-notify.js:17`, `:24`, `:26`. NEW, and the same shape
-exactly.** `const DB_FILE = path.join(__dirname, '..', 'data', 'roots.db')`, opened
+**Site 2 — `lib/gzgrocery-order-notify.js`. FIXED 2026-09-09.** As found, and the same
+shape as site 1 was originally reported to be: `const DB_FILE = path.join(__dirname, '..', 'data', 'roots.db')`, opened
 `{ readonly: true }`, then `SELECT value_json FROM storefront_config WHERE key = ?` for
 `gzgrocery_orders.wecom_webhook` and `gzgrocery_orders.enabled`. Merchant 1's settings row
 decides where every merchant's gzgrocery order feed goes. Same table, same consequence,
-same remedy as `ops-alert.js` — and it is undeclared, so a reader has no way to know.
+same consequence. Undeclared, so a reader had no way to know. **Now reads through
+`tdb()`**, which is the same connection for Roots and outside any request scope — no
+behaviour changes today, and it becomes correct on its own once the gzgrocery daemon is
+given a tenant scope. It takes the routed handle rather than copying ops-alert's
+path-resolution machinery, because it has none of ops-alert's constraints: its only
+caller already requires `../database`.
 
-**Site 3 — `lib/store-hours.js:28`, `:72`, `:74`.** Holds `seam(require('../database'))`
+**Site 3 — `lib/store-hours.js`. FIXED 2026-09-09 (PR #416).** As found: Holds `seam(require('../database'))`
 and reads `SELECT code, open_time, close_time, sync_start_time FROM retail_stores` —
 per-tenant — with **no tenant routing anywhere in the file**. Every merchant's opening
 hours resolve to merchant 1's. It compounds: `let cache = null` (`:42`) is a module-level
@@ -2524,10 +2555,15 @@ would make the count wrong in both places. If D-05's scope does not in fact reac
 daemons — its own text is about the channel FILTER list — then that is a gap in D-05 and
 belongs there, not here.
 
-**What this means for the fix.** D-02's PR covers `lib/ops-alert.js`,
-`lib/gzgrocery-order-notify.js` and `lib/store-hours.js` — three modules, one change of
-shape — and must also drop or key `store-hours`'s module-level cache, which is a second
-bug hiding behind the first.
+**What is left.** Nothing, for D-02 as scoped. `ops-alert` was already done (PR #352),
+`store-hours` and `gzgrocery-order-notify` are done here. The finding's own severity —
+Critical (latent) — was never realised in production: the six databases under
+`data/tenants/` are test data, so no live merchant was ever served another's settings.
+
+**The one thing this does NOT close** is the daemons' declared single-account scope,
+which is D-05's and is unchanged. A merchant other than the first still gets no channel
+sync and no rider dispatch; that is a known, owned limitation rather than a stray read,
+and it is the piece of work that actually makes a second merchant viable.
 
 ### D-03 · The merchant's currency setting exists and 15 of 23 screens ignore it
 **Severity:** High
