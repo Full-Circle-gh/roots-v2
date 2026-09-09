@@ -10317,7 +10317,15 @@
 
             <div class="card fb-group" id="fb-rhythm" style="margin-bottom: var(--s4);">
               <h3 class="fb-h">Batch schedule · 制作排期</h3>
-              <div class="fb-sub">Orders inside Guangzhou are unaffected by any of this. · 广州市内订单不受影响。</div>
+              <!-- NOT "Guangzhou is unaffected", which this card claimed for as long
+                   as it has existed and which is false. earliestBatchMakeDate runs for
+                   the local run too (localRun: true) and localFreshFloorFor floors a
+                   Guangzhou order onto the batch date on 'rolled_stock' — that is the
+                   whole reason the Guangzhou copy fields below exist. What is true is
+                   the narrower thing routes/retail.js states: while there is stock the
+                   cadence "is none of their business"; it becomes their business when
+                   that stock reaches zero. -->
+              <div class="fb-sub">Inside Guangzhou it applies only when a fresh item is sold out — then the order waits for the next batch, delivered on our own run the day it is made. · 广州市内订单仅在现做商品售罄时受影响 — 等下一批,由我们自己配送,制作当天即送达。</div>
 
               <div class="fb-rows">
                 <div class="fb-row">
