@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // The kitchen asks the buyer to BUY; the buyer turns the ask into a DRAFT
-// purchase order. docs/tacet-consolidation-decisions.md §84.
+// purchase order. docs/tacet-consolidation-decisions.md §86.
 //
 //   POST /api/retail-admin/material-requests
 //   GET  /api/retail-admin/material-requests/materials
@@ -186,7 +186,7 @@ async function main() {
   eq(made.po_number, 'RPO-0001', 'takes the next retail number');
   eq(made.line_count, 1, 'holds the one ticked line');
   const po = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(made.id);
-  // THE WHOLE OF PART ONE OF §84 IS THIS ASSERTION. Ordered is what posts the
+  // THE WHOLE OF PART ONE OF §86 IS THIS ASSERTION. Ordered is what posts the
   // expense and writes the price back; a request that arrived already Ordered
   // would mean a cook had reached the books.
   eq(po.status, 'Requested', 'it lands as a Draft — nothing has posted to Finance');

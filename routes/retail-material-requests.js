@@ -1,7 +1,7 @@
 // Material requests — the kitchen asks the buyer to BUY, in the realm the
 // kitchen is actually in.
 //
-// docs/tacet-consolidation-decisions.md §84.
+// docs/tacet-consolidation-decisions.md §86.
 //
 // ── WHAT THIS IS NOT ────────────────────────────────────────────────────────
 //
@@ -45,7 +45,7 @@
 //
 // ── THE LINE IS THE UNIT OF SOURCING, NOT THE REQUEST ───────────────────────
 //
-// §84 part two, which is §61's grain change applied here for §61's reason. A
+// §86 part two, which is §61's grain change applied here for §61's reason. A
 // buyer splits a morning's flour and oil across two suppliers as a matter of
 // course. `material_request_items.sourced_po_id` is both the record and the
 // refusal — a line already carrying one cannot be converted again — and the

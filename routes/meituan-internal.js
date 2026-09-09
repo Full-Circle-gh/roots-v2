@@ -19,6 +19,9 @@ const { productUnitCostYuan } = require('../lib/product-cost');
 // our own stock, worded the same whichever platform sent it — and the copies had
 // already drifted on exactly that (see the module's header).
 const { notifyStockGaps } = require('../lib/channel-line-report');
+// §85 — the pre-order window, and whether a shortfall it explains should page.
+const channelPublish = require('../lib/channel-publish');
+const cadence = require('../lib/batch-cadence');
 
 const INTERNAL_SECRET = process.env.MEITUAN_INTERNAL_SECRET || 'meituan-daemon-internal';
 
@@ -528,19 +531,47 @@ router.post('/ingest-order', (req, res) => {
     const unresolved = [];
     const oversold = [];
     let deducted = 0;
+    // §85 — read ONCE for the order, not per line: every line of one order is
+    // taken at the same instant, and a window that flipped mid-loop would
+    // explain one line of a basket and page about the next.
+    const preorderWindow = cadence.preorderWindow(db, { channel: 'meituan' });
     for (const it of bornVoid ? [] : items) {
       if (!it.productId) { unresolved.push({ name: it.name, nameEn: it.nameEn, sku: it.sku, qty: it.qty, reason: it.matchBy }); continue; }
       const cur  = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?').get(storeId, it.productId);
       const oldQ = cur ? cur.physical_qty : 0;
-      // On-hand can't cover the line (oversell, or an already-negative row). We
-      // still clamp at 0 so a channel oversell can't drive us negative, but flag
-      // the shortfall (below) instead of letting it vanish into the clamp.
+      // On-hand can't cover the line (oversell, or an already-negative row).
+      // §84: WE NO LONGER CLAMP. This used to pass Math.max(0, oldQ − took) and
+      // so never reached adjustStock's own no-floor rule (§39), which is exactly
+      // the "recorded debt, per-channel work" that function's comment names. The
+      // clamp did not merely permit a wrong number, it DESTROYED a right one: a
+      // Meituan order taken against an empty shelf is stock sold that was never
+      // held, and the only record that those units are owed was a JSON line in a
+      // log table with no index and no screen. Unclamped, the shelf itself says
+      // −18, which is what the kitchen reads in the morning and cooks against.
+      //
+      // A DELTA, NOT AN ABSOLUTE, and that is part of the fix: adjustStock
+      // re-reads on-hand inside its own transaction, so the figure written can
+      // no longer be computed from a read that happened before it.
+      //
+      // The oversell flag below is UNCHANGED and still fires. It answers a
+      // different question — "did this order exceed the shelf" — and the shelf
+      // carrying the debt is not a reason to stop saying so.
       // One six-pack is one line of one, and six off the shelf.
       const took = packDeduct(it.qty, it.units);
-      if (oldQ < took) oversold.push({ name: it.nameEn, sku: it.sku, have: oldQ, want: took });
+      /* §85 — A PRE-ORDER IS NOT AN OVERSELL, and the alarm has to know the
+         difference or it drowns. This alert exists because 54 undeducted lines
+         accumulated unseen from June to September; one that fires on every
+         pre-order taken during the window buries exactly the case it was built
+         for. Suppressed only where the window explains it — this channel is in
+         the window and the resulting debt is inside the allowance — so a
+         shortfall LARGER than the allowance still pages, being a real oversell
+         wearing a pre-order's clothes. */
+      if (oldQ < took && !channelPublish.oversellExpected({ have: oldQ, want: took, window: preorderWindow })) {
+        oversold.push({ name: it.nameEn, sku: it.sku, have: oldQ, want: took });
+      }
       inventory.adjustStock({
         storeId, productId: it.productId,
-        newPhysicalQty: Math.max(0, oldQ - took),
+        deltaQty: -took,
         actorLabel: 'Meituan order',
         reason: 'meituan_order',
         note: `Meituan ${ref}${order.daySeq != null ? ` #${order.daySeq}` : ''} — ${it.nameEn} x${it.qty}` +
@@ -866,7 +897,11 @@ router.post('/update-order-status', (req, res) => {
         for (const it of orderLines()) {
           inventory.adjustStock({
             storeId: prev.store_id, productId: it.product_id,
-            newPhysicalQty: Math.max(0, stockOf(it.product_id) - packDeduct(it.qty, it.pack_units)),
+            // §84: unclamped for the same reason as the arrival path above, and
+            // it is the same debt. An order coming back to life re-takes units
+            // we may no longer have; clamping that at zero loses the shortfall
+            // just as completely as losing it on the way in did.
+            deltaQty: -packDeduct(it.qty, it.pack_units),
             actorLabel: 'Meituan uncancel',
             reason: 'meituan_uncancel',
             note: `Meituan ${String(meituanOrderNo)} back to ${desc} — re-deducted ${it.name_en} x${it.qty}`,

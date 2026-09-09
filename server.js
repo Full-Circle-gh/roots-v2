@@ -449,7 +449,7 @@ app.use(require('./routes/shop-menu'));
 // dimension. The file's own header carries the full reasoning.
 app.use(require('./routes/shop-events'));
 app.use(require('./routes/retail-production')); // Production (生产) — what the kitchen MADE, in the realm the kitchen is actually in. production_batches has been empty since it shipped because its only two screens are kitchen-realm and the cooks are Tacet operators. NOT routes/production.js, which is those screens' API
-app.use(require('./routes/retail-material-requests')); // Material requests (§84) — the kitchen asks the buyer to BUY a material; the buyer converts the ask into a DRAFT purchase order (POST /purchases/from-material-requests, in routes/retail-purchasing.js). The send never creates an order: a PO posts to the books the moment it is Ordered
+app.use(require('./routes/retail-material-requests')); // Material requests (§86) — the kitchen asks the buyer to BUY a material; the buyer converts the ask into a DRAFT purchase order (POST /purchases/from-material-requests, in routes/retail-purchasing.js). The send never creates an order: a PO posts to the books the moment it is Ordered
 app.use(require('./routes/retail-product-build')); // Product build lines — Step 2 of docs/tacet-product-build-lines-design.md; table + write path only, no screen yet
 app.use(require('./routes/recycle'));     // Recently deleted (audit E-07) — what was removed, and putting it back
 app.use(require('./routes/saved-views')); // Saved views (audit E-08) — a named set of filters, pinned to the screen it belongs to

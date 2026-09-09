@@ -69,6 +69,13 @@ const { channelSyncStale } = require('../lib/channel-sync-stale');
 // routes/restock.js's own kitchen-ready endpoint counts — one clause, required
 // by both, for the reason REVIEW_WAITING_SQL is shared with the Reviews fire.
 const kitchenReady = require('../lib/kitchen-ready');
+// §84 — "what today's batch owes". Beside kitchenReady because it is the same
+// kind of thing: one definition, read by the dashboard row and by the phone's
+// kitchen queue, so the two cannot drift apart.
+const batchOwed = require('../lib/batch-owed');
+// §85 — the batch cadence arithmetic, moved out of this file so a stock daemon
+// can read it without requiring this router. See nextBatchShipDate below.
+const batchCadence = require('../lib/batch-cadence');
 // Web Push — optional; wrapped so a missing module never breaks order flow.
 let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
@@ -15835,6 +15842,9 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   // queues above — NOT store-scoped: a kitchen request is a job the kitchen did,
   // not a shelf, so the header's store picker deliberately leaves it alone.
   let kitchen_ready = { count: 0, items: [] };
+  // §84 — units already ordered and not on the shelf. Same never-null shape as
+  // every other fire here, so a client can read it without a guard.
+  let batch_owed = { count: 0, items: [] };
 
   // Optional per-store scope (mirrors the dashboard's store picker). When a
   // store_id is supplied we count that store's own shelf (its retail_store_stock
@@ -16661,6 +16671,47 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
       }
     } catch (e) { console.warn('[dashboard/ops kitchen_ready]', e.message); }
 
+    /* ── What today's batch owes (§84) ────────────────────────────────────
+       The units customers have already paid for that are not on the shelf —
+       the number the kitchen adds to the batch it is about to make. Its own
+       try/catch for the same reason kitchen_ready has one: a failure here must
+       cost this row and nothing else on a card that fires eleven of them.
+
+       COUNTS UNITS, NOT PRODUCTS, and that is the whole of what makes it
+       actionable. "30 to make" is a morning's work; "2 products" is not a
+       quantity of anything. Every other fire on this card counts rows because
+       every other fire opens onto a list of rows; this one opens onto a list of
+       NUMBERS, and the number is the point.
+
+       THE NAMES TRAVEL WITH IT, both languages, exactly as §69 sends them for
+       kitchen_ready and for the same reason — the dashboard repaints from the
+       payload it holds without re-fetching, so a single-language payload would
+       strand the row in the wrong one until the next poll.
+
+       GATED ON THE SAME PAIR as kitchen_ready. A fire must never promise work
+       behind a door this operator cannot open, and these are the same people:
+       whoever may see what the kitchen finished may see what it still owes. */
+    try {
+      if (!kitchenReady.kitchenScopedSession(req) && kitchenReady.canSeeKitchenReady(req)) {
+        // `storeId` is the trimmed query STRING every other fire binds as-is.
+        // This one is coerced, because batch-owed compares it to an INTEGER
+        // column directly rather than through a named bind, and a route should
+        // not lean on SQLite's affinity rules to convert it.
+        const owedStore = storeId ? parseInt(storeId, 10) : NaN;
+        const owedRows = batchOwed.owedAt(tdb(), Number.isFinite(owedStore) ? owedStore : null);
+        batch_owed = {
+          count: owedRows.reduce((n, r) => n + r.owed, 0),
+          items: owedRows.slice(0, previewLimit).map((r) => ({
+            product_id: r.product_id,
+            store_id:   r.store_id,
+            name_en:    r.name_en,
+            name_cn:    r.name_cn,
+            owed:       r.owed,
+          })),
+        };
+      }
+    } catch (e) { console.warn('[dashboard/ops batch_owed]', e.message); }
+
     // ── Channel stock-sync stall ─────────────────────────────────────────
     // channelSyncStale() already isolates one channel's failure from the
     // others (a bad table drops just that entry), so no extra try/catch here.
@@ -16670,7 +16721,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, kitchen_ready, channel_sync_stale, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, kitchen_ready, batch_owed, channel_sync_stale, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.
@@ -31981,29 +32032,24 @@ function tzNowParts(now, tz = deliveryTz()) {
 
 // Smallest batch day (YYYY-MM-DD) on or after `fromDate`, skipping any
 // skip_dates by rolling forward another whole interval. null when disabled.
+// §85 — THE BODY OF THIS FUNCTION MOVED TO lib/batch-cadence.js, and what is
+// left is the call. Nothing about the arithmetic changed: same midday anchoring
+// for DST safety, same modulo, same skip_dates roll-forward, same 365-step
+// guard, and it still takes THIS file's own normalised cfg object.
+//
+// WHY IT MOVED. A stock daemon deciding what number to push to Meituan, Eleme
+// and gzgrocery has to know whether today is a batch day, and it cannot require
+// this file to find out — a 36,000-line express router is not a dependency a
+// daemon should carry to answer a date question. The alternative was a second
+// copy of the cadence living beside the push, which is exactly what §80 spent a
+// section removing: three copies became one so that "the pill, the checkout and
+// the order agree", and a fourth would have disagreed where nobody looks — the
+// platform quietly naming a different batch day from the app.
+//
+// The wrapper stays because this file's callers pass no tz and no cfg and
+// should not have to; `deliveryTz()` and `batchScheduleCfg()` are its own.
 function nextBatchShipDate(fromDate, cfg, tz = deliveryTz()) {
-  cfg = cfg || batchScheduleCfg();
-  if (!cfg) return null;
-  const anchor = parseYmdLocal(cfg.anchor_date, tz);
-  if (!anchor) return null;
-  const DAY = 86400000;
-  const interval = cfg.interval_days;
-  const skip = new Set(cfg.skip_dates);
-  // The tenant-zone calendar day `fromDate` falls on, re-anchored to midday in
-  // that zone. Was `new Date(fromDate.getFullYear(), …)`, which took the HOST's
-  // calendar day and rebuilt it against the HOST's zone — two host reads in one
-  // line. Midday keeps the whole-day arithmetic below DST-safe.
-  const from = parseYmdLocal(toYmdLocal(fromDate, tz), tz);
-  const diff = Math.round((from.getTime() - anchor.getTime()) / DAY);
-  const rem = ((diff % interval) + interval) % interval;       // 0..interval-1
-  const offset = rem === 0 ? diff : diff + (interval - rem);   // first on-cadence day >= diff
-  let cand = new Date(anchor.getTime() + offset * DAY);
-  let guard = 0;
-  while (skip.has(toYmdLocal(cand)) && guard < 365) {
-    cand = new Date(cand.getTime() + interval * DAY);
-    guard++;
-  }
-  return toYmdLocal(cand);
+  return batchCadence.nextBatchDate(fromDate, cfg || batchScheduleCfg(), tz);
 }
 
 // The batch-made (is_batch_made) products among the given ids, as

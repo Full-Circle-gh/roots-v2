@@ -10341,6 +10341,49 @@
                   </div>
                 </div>
 
+                <!-- §85 — THE PRE-ORDER WINDOW ON THE PLATFORMS. Three rows, and
+                     every one of them is an off switch on its own: a blank hour, a
+                     blank quantity or no channel ticked all mean the platforms are
+                     told the shelf count and nothing changes anywhere.
+                     Each input MUST keep its id — saveBatchSchedule() PUTs
+                     batch.schedule whole, so a field it cannot read is a field
+                     deleted from the saved object on the next save. That is not a
+                     hypothetical: #batch-cutoff was read by the save and had never
+                     existed in this file, and the whole card could not be saved
+                     while the switch was on. -->
+                <div class="fb-row">
+                  <div class="fb-lab">
+                    <label class="fb-name" for="batch-lock">Pre-order cut-off · 预订截单</label>
+                    <div class="fb-desc">Until this hour a platform can take orders for a batch that is still being made. Blank uses the kitchen-ready hour above. · 在此时间之前,平台可以为尚未完成的这一批接单。留空则用上面的厨房已完成时间。</div>
+                  </div>
+                  <div class="fb-ctl">
+                    <input type="number" id="batch-lock" min="0" max="23" step="1" placeholder="—">
+                    <span class="fb-unit">:00</span>
+                  </div>
+                </div>
+
+                <div class="fb-row">
+                  <div class="fb-lab">
+                    <label class="fb-name" for="batch-preorder-qty">How many to offer · 预订可售数量</label>
+                    <div class="fb-desc">Per fresh item, on top of what is on the shelf. Each pre-order uses one up. Blank or 0 switches pre-orders off. · 每款现做商品,在货架数量之外可再接的数量。每接一单减一。留空或填 0 即关闭预订。</div>
+                  </div>
+                  <div class="fb-ctl">
+                    <input type="number" id="batch-preorder-qty" min="0" step="1" placeholder="—">
+                  </div>
+                </div>
+
+                <div class="fb-row">
+                  <div class="fb-lab">
+                    <span class="fb-name">Channels · 渠道</span>
+                    <div class="fb-desc">Which platforms may take pre-orders. None ticked keeps every platform on the shelf count. · 哪些平台可以接预订。都不勾选则各平台仍按货架数量显示。</div>
+                  </div>
+                  <div class="fb-ctl" style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
+                    <label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="batch-pre-meituan"> Meituan · 美团</label>
+                    <label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="batch-pre-eleme"> Eleme · 饿了么</label>
+                    <label style="display:inline-flex;align-items:center;gap:6px"><input type="checkbox" id="batch-pre-gzgrocery"> gzgrocery · 管易</label>
+                  </div>
+                </div>
+
                 <div class="fb-row">
                   <div class="fb-lab">
                     <span class="fb-name">Skip these dates (vacations) · 跳过这些日期(假期)</span>

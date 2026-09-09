@@ -488,7 +488,7 @@ CREATE TABLE IF NOT EXISTS kitchen_order_items (
 
 
 -- ── Material Requests (the kitchen asks the buyer to BUY) ─────────
--- docs/tacet-consolidation-decisions.md §84.
+-- docs/tacet-consolidation-decisions.md §86.
 --
 -- NOT restock_orders/restock_items, which are product-shaped and whose every
 -- surface (pick, dispatch, goods_state, Ready from the kitchen) assumes a
@@ -507,7 +507,7 @@ CREATE TABLE IF NOT EXISTS material_requests (
   date          DATE NOT NULL,
   -- draft: still being typed. sent: waiting on the buyer. sourced: every line
   -- has reached a purchase order. The row is the ROLLUP — the line is what is
-  -- actually sourced (§84 part two), the same grain §61 gave the kitchen queue.
+  -- actually sourced (§86 part two), the same grain §61 gave the kitchen queue.
   status        TEXT NOT NULL DEFAULT 'draft',
   notes         TEXT,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -530,7 +530,7 @@ CREATE TABLE IF NOT EXISTS material_request_items (
   name_cn       TEXT,
   sku           TEXT,
   qty           REAL NOT NULL,
-  -- ingredients.buy_unit AS IT STOOD WHEN ASKED (§84 part four). The buying PO's
+  -- ingredients.buy_unit AS IT STOOD WHEN ASKED (§86 part four). The buying PO's
   -- material line already defaults to buy_unit, because firePriceAlertsForPO
   -- only writes a price back when the line's unit matches it — so carrying
   -- buy_unit here makes the conversion into a PO the identity, with no unit

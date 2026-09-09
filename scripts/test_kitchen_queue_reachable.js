@@ -88,7 +88,7 @@ check('it still logs what it made', () => {
    allowed and expected; growing sideways is not. */
 /* THE FOURTH TIME, AND THE LIST IS NOW GONE. The comment above already said the
    right thing — "the property is the ceiling, not the list" — and then asserted
-   a literal list anyway, so `production:request` (§84, the kitchen asking the
+   a literal list anyway, so `production:request` (§86, the kitchen asking the
    buyer to buy a material) turned it red exactly as `production:log` had. A
    test whose own header explains why it should not be a change-detector, and is
    one, is worse than either alone: the next reader trusts the header.

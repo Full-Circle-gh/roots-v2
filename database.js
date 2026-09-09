@@ -4540,7 +4540,7 @@ try {
 } catch (e) { console.error('[migration kitchen_role_can_log_production_v1]', e); }
 
 /* The same grant, one capability later again: the kitchen may ask the buyer to
- * BUY a material (docs/tacet-consolidation-decisions.md §84).
+ * BUY a material (docs/tacet-consolidation-decisions.md §86).
  *
  * THE THIRD APPLICATION OF #262's LESSON, and it is a migration for that lesson's
  * reason verbatim: tenant_roles is seeded INSERT OR IGNORE, so editing
@@ -6992,7 +6992,7 @@ try {
 } catch (e) { console.error('[migration restock_item_status_backfill_v1]', e); }
 
 // ─────────────────────────────────────────────────────────────────────────
-// MATERIAL REQUESTS — docs/tacet-consolidation-decisions.md §84 (2026-09-09).
+// MATERIAL REQUESTS — docs/tacet-consolidation-decisions.md §86 (2026-09-09).
 // The kitchen asks the buyer to BUY a material; the buyer converts the ask
 // into a DRAFT purchase order. schema.sql declares both tables for a fresh
 // database and carries the full reasoning; this block reaches an existing one.

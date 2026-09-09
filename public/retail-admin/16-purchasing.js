@@ -143,7 +143,7 @@
   let _kStore = null;        // retail store the copies are filed under
   let _kSearch = '';
   let _kBusy = false;        // a copy is in flight — keep the button from double-firing
-  // "From the kitchen" (§84) — the LIVE source, where copy-from-kitchen above is
+  // "From the kitchen" (§86) — the LIVE source, where copy-from-kitchen above is
   // the dead one: the app that produced PO-#### orders was deleted (§78), and
   // what reaches the buyer now is a material request raised on the phone.
   //
@@ -260,7 +260,7 @@
       _pos = r.data || [];
     } catch (e) { _pos = []; }
   }
-  /* What the kitchen is waiting on (§84). Loaded with the orders rather than
+  /* What the kitchen is waiting on (§86). Loaded with the orders rather than
      only when the modal opens, because the COUNT is the whole point: a buyer who
      has to open a picker to discover it is empty will stop opening it, and the
      kitchen's ask would sit unseen. Swallows its own failure for the same reason
@@ -408,7 +408,7 @@
           <span class="pu2-ic">${I.search}</span>
           <input id="pu2-q" type="text" placeholder="${esc(T('Find an order, supplier or product', '搜索采购单、供应商或商品'))}" oninput="puFilter()" autocomplete="off">
         </span>
-        ${/* THE KITCHEN'S ASK, WHERE THE BUYER ALREADY IS (§84). Drawn only when
+        ${/* THE KITCHEN'S ASK, WHERE THE BUYER ALREADY IS (§86). Drawn only when
              something is actually waiting: a permanent button that is usually
              empty teaches the buyer to ignore it, and the count is the reason to
              press it. `data-feat="production"` matches the Materials and Recipes
@@ -678,7 +678,7 @@
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  //  FROM THE KITCHEN — turning material-request lines into a draft order (§84)
+  //  FROM THE KITCHEN — turning material-request lines into a draft order (§86)
   // ═══════════════════════════════════════════════════════════════════════════
   // The live twin of the kitchen bridge above. A cook on the phone raises a
   // request for materials; the lines wait here until a buyer ticks them.

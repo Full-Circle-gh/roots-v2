@@ -79,7 +79,7 @@ function requireInventoryRead(req, res, next) {
 // §46's grant predicate, in its own module so it can be tested without booting
 // the server — three routes here read it and they must agree. See the module
 // for why the decision moved from the job title onto the capability.
-const { quickStockMode, mayRecount, mayLogProduction, addOnlyOperator, RECOUNT_MISCOUNT } = require('../lib/quick-stock-grant');
+const { quickStockMode, mayRecount, mayLogProduction, addOnlyOperator, RECOUNT_MISCOUNT, RECOUNT_CLEARS_DEBT } = require('../lib/quick-stock-grant');
 
 // The shelf figure as it stands right now. Read outside adjustStock's
 // transaction on purpose — it decides only whether a QUESTION is required, and
@@ -559,7 +559,45 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
        An UPWARD correction asks nothing (§46): raising a count is
        overwhelmingly a miscount being fixed, and a question asked every time is
        one that stops being read. */
-    if (addMode && newQty < currentPhysicalQty(storeId, productId)) {
+    /* §84 — RAISING A COUNT ACROSS ZERO CLEARS A DEBT, AND IS ASKED ABOUT.
+       This runs BEFORE the §46 fork below and is a different question, so it is
+       a separate guard rather than another arm of that one. Since §84 a shelf
+       may sit below zero deliberately: the channel ingests no longer clamp, and
+       −18 is the system's way of saying eighteen units were sold that were never
+       held. That negative is the ONLY record those units are owed — the kitchen
+       reads it in the morning and cooks against it.
+
+       An operator standing at that shelf sees an empty box and types 0, which is
+       a true statement about the room and wipes the debt. §46 lets that through
+       without a word, because its asymmetry assumes a raised count is a miscount
+       being fixed; that assumption predates a negative meaning something.
+
+       NOT the same as the fork below and deliberately not folded into it: this
+       is neither a miscount nor a loss. Nothing was counted wrong and nothing
+       was destroyed — units were promised and are still owed. The acknowledgement
+       is its own word for that reason.
+
+       NOT gated on addMode. A warehouse operator with `recount` erases the debt
+       exactly as completely as a kitchen one, and the harm does not depend on
+       who typed the number.
+
+       The BATCH still clears it silently, and that is correct: 加库存 passes a
+       delta (−18 + 40 = 22), never reaches this branch, and is the door this
+       whole mechanism is built around. */
+    const curQty = currentPhysicalQty(storeId, productId);
+    if (curQty < 0 && newQty > curQty) {
+      if (String(b.recount_reason || '').trim() !== RECOUNT_CLEARS_DEBT) {
+        return res.status(400).json({
+          success: false, error: 'recount_clears_debt',
+          message: `This shelf is at ${curQty} because ${Math.abs(curQty)} unit(s) were sold that we never had. `
+                 + 'That number is what tells the kitchen to make them. Setting a count here clears it — '
+                 + 'record the batch instead if you are adding stock.',
+          owed: Math.abs(curQty),
+          accepts: [RECOUNT_CLEARS_DEBT],
+        });
+      }
+    }
+    if (addMode && newQty < curQty) {
       if (String(b.recount_reason || '').trim() !== RECOUNT_MISCOUNT) {
         return res.status(400).json({
           success: false, error: 'recount_reason_required',

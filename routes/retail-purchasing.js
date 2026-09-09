@@ -1271,13 +1271,13 @@ router.post('/api/retail-admin/purchases/copy-from-kitchen', requireRetailAdmin,
   }
 });
 
-/* ── The kitchen's ask becomes a draft order (§84) ──────────────────────────
+/* ── The kitchen's ask becomes a draft order (§86) ──────────────────────────
  *
  * The live twin of copy-from-kitchen above, and deliberately built to its shape:
  * the buyer ticks, presses once, and gets a DRAFT they own. What differs is the
  * grain — that bridge copies whole purchase orders, this one takes LINES, so a
  * morning's flour and oil can go to two suppliers without the buyer deleting
- * rows out of a draft they did not want (§84 part two).
+ * rows out of a draft they did not want (§86 part two).
  *
  * WHY A DRAFT AND NOT AN ORDER. `postRetailPOExpenses` posts on Ordered, and the
  * status route writes material prices back on the same transition. Placing the
@@ -2576,7 +2576,7 @@ router.delete('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) 
   recycle.capture(tdb(), 'purchase_order', po.id, req.user && req.user.username);
   tdb().prepare('DELETE FROM po_line_items WHERE po_id = ?').run(po.id);
   tdb().prepare('DELETE FROM purchase_orders WHERE id = ?').run(po.id);
-  /* THE KITCHEN'S ASK COMES BACK (§84). Any material-request line this draft was
+  /* THE KITCHEN'S ASK COMES BACK (§86). Any material-request line this draft was
      raised from is released, which returns it to the buyer's outstanding list.
      That is why material_request_items.sourced_po_id is deliberately NOT a
      foreign key: an FK would either refuse this delete or leave the line

@@ -79,6 +79,9 @@ try {
 // covered side of the boundary. Proven by scripts/diagnose_seam_statements.js.
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
+// §85 — the pre-order window's two edges, checked on the main loop.
+const preorderFlip = require('../lib/preorder-flip');
+const elemeSync = require('../lib/eleme-sync');
 const { getBrowser } = require('../lib/eleme-browser');
 const { alertPlatform, alertMerchant, alertBoth } = require('../lib/ops-alert');
 // ── Whose problem is it? (audit P-01) ─────────────────────────────────────
@@ -885,6 +888,22 @@ async function main() {
       lastDeliverSweep = Date.now();
       await autoDeliverPastEta();
     }
+
+    /* §85 — THE PRE-ORDER WINDOW'S TWO EDGES. Nothing about a clock reaching
+       the lock hour is a stock change, so the edge-triggered queue would never
+       hear about it and the platform would keep showing the morning's allowance
+       into the afternoon. Checked on this loop rather than left to the drift
+       sweep because that sweep runs every thirty minutes, and half an hour past
+       a lock the operator set makes the setting a lie.
+       A config read and a string compare on the common path; it queries and
+       enqueues nothing at all unless the answer actually changed. */
+    try {
+      preorderFlip.flipTick(db, {
+        channel: 'eleme', mapTable: 'eleme_product_map',
+        enqueue: elemeSync.enqueueProductStock,
+        log: (m) => log('*', m),
+      });
+    } catch (e) { console.error('[eleme-daemon] preorder flip:', e.message); }
 
     await processStockQueue(configs);
     await sleep(jitter(QUEUE_CHECK_MS));
