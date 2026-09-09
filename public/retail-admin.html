@@ -10097,45 +10097,7 @@
               </div>
             </div>
 
-            <!-- STANDARD SHIPPING FEE -->
-            <div class="group-card">
-              <div class="group-card-head">
-                <h3>Standard shipping fee · 标准运费</h3>
-                <div class="muted">What customers pay for the default delivery method (1–3 day SF Express). Shown next to the "Standard delivery" radio on the Checkout page. Free when subtotal hits the threshold above. · 顾客选择默认配送(1–3 天顺丰)时支付的运费;显示在结算页"标准配送"旁。小计达到上方门槛即免。</div>
-              </div>
-              <div class="illus-row">
-                <div class="ctrl" style="flex: 1;">
-                  <div class="field" style="margin: 0;">
-                    <label class="stacked">Standard fee · 标准费</label>
-                    <span class="yen-input"><input type="number" id="cfg-fees-standardShipping" aria-label="Standard delivery fee · 标准运费"></span>
-                  </div>
-                  <div class="helper" style="margin-top: 10px;">
-                    Charged on every standard-delivery order unless the subtotal hits the free-shipping threshold. · 每笔标准配送订单都会收取,除非小计达到包邮门槛。
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- SAME-DAY FEE -->
-            <div class="group-card">
-              <div class="group-card-head">
-                <h3>Same-day delivery fee · 当日达运费</h3>
-                <div class="muted">Premium rush option for the GZ delivery radius. Always charges the full amount — does NOT qualify for the free-shipping threshold even if the order is large. · 广州配送范围内的当日达加急;无论订单多大都按全额收取,不享受包邮门槛。</div>
-              </div>
-              <div class="illus-row">
-                <div class="ctrl" style="flex: 1;">
-                  <div class="field" style="margin: 0;">
-                    <label class="stacked">Same-day fee · 当日达费用</label>
-                    <span class="yen-input"><input type="number" id="cfg-fees-sameDayDelivery" aria-label="Same-day delivery fee · 当日达费用"></span>
-                  </div>
-                  <div class="helper" style="margin-top: 10px;">
-                    Charged on every same-day order regardless of cart size. Customers see this fee next to the radio at checkout. · 每笔当日达订单都会收取,与购物车大小无关。顾客会在结算页选项旁看到此费用。
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- MINIMUM ORDER — saves with the fee keys via saveDeliveryFees → fees.minOrder. -->
+<!-- MINIMUM ORDER — saves with the fee keys via saveDeliveryFees → fees.minOrder. -->
             <div class="group-card">
               <div class="group-card-head">
                 <h3>Minimum order · 起送金额</h3>

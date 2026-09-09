@@ -1169,8 +1169,6 @@ async function saveDeliveryDefaults() {
 async function saveDeliveryFees() {
   const body = {
     'fees.freeShippingThreshold':  Number($('#cfg-fees-freeShippingThreshold').value) || 0,
-    'fees.standardShipping':       Number($('#cfg-fees-standardShipping').value) || 0,
-    'fees.sameDayDelivery':        Number($('#cfg-fees-sameDayDelivery').value) || 0,
     'fees.pickupPackingFee':       Number($('#cfg-fees-pickupPackingFee').value) || 0,
     // Minimum-order checkout gate — moved here from Settings → Checkout & fees so
     // it saves alongside the other cart money rules (2026-06-08).
@@ -1258,15 +1256,20 @@ function dlvHubRender() {
   if (strip) strip.hidden = zonesReady;
 
   // Fees & minimum — read the live inputs (loadConfig fills them).
-  const std = val('#cfg-fees-standardShipping'), free = val('#cfg-fees-freeShippingThreshold'), min = Number(val('#cfg-fees-minOrder')) || 0;
-  if (std === '' && free === '') {
+  // NO STANDARD FEE HERE ANY MORE. It used to lead this line, off
+  // fees.standardShipping, which nothing on the server reads: the delivery fee
+  // comes from the matched zone's base_fee (or its weight rule). Reporting a
+  // dead setting as this shop's standard fee was the strip stating a number no
+  // customer is ever charged.
+  const free = val('#cfg-fees-freeShippingThreshold'), min = Number(val('#cfg-fees-minOrder')) || 0;
+  if (free === '') {
     _dlvStat('dlv-st-fees', 'off', cuT('Using defaults', '使用默认值'));
   } else {
     const freeEn = Number(free) > 0 ? ' · free over ' + acWrap(free) : ' · always free over ' + acWrap(0);
     const freeCn = Number(free) > 0 ? ' · 满 ' + acWrap(free) + ' 免运' : ' · 始终包邮';
     _dlvStat('dlv-st-fees', 'ok',
-      cuT('Standard ' + acWrap(std || 0) + freeEn + (min > 0 ? ' · min ' + acWrap(min) : ''),
-          '标准 ' + acWrap(std || 0) + freeCn + (min > 0 ? ' · 起送 ' + acWrap(min) : '')));
+      cuT(freeEn.replace(/^ · /, '') + (min > 0 ? ' · min ' + acWrap(min) : ''),
+          freeCn.replace(/^ · /, '') + (min > 0 ? ' · 起送 ' + acWrap(min) : '')));
   }
 
   // Store pickup — global window + packing fee.

@@ -1590,8 +1590,6 @@ async function loadConfig() {
     // Brand & theme (accent / notification colour / language / mascots) moved to
     // the Mini App Editor (/cms) 2026-06-09 — saved there directly to config.
     $('#cfg-fees-freeShippingThreshold').value = c.fees?.freeShippingThreshold ?? 399;
-    $('#cfg-fees-standardShipping').value      = c.fees?.standardShipping ?? 12;
-    $('#cfg-fees-sameDayDelivery').value       = c.fees?.sameDayDelivery ?? 18;
     $('#cfg-fees-minOrder').value              = c.fees?.minOrder ?? 0;
     $('#cfg-fees-pickupPackingFee').value      = c.fees?.pickupPackingFee ?? 0;
     $('#cfg-pickup-open').value                = c.pickup?.window?.open  || '10:00';
