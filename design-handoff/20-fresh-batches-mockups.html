@@ -1,0 +1,1122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>*{box-sizing:border-box}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Fresh batches, three ways</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300&family=Inter:wght@400;500&display=swap">
+</head>
+<body>
+
+<style>
+  /* ══════════════════════════════════════════════════════════════════
+     Tokens — taken verbatim from the live --td-* block
+     (public/retail-admin.css:8917–8986). Light at :root per artifact
+     rules; the live admin defaults to dark, so both sets are here.
+     ══════════════════════════════════════════════════════════════════ */
+  :root {
+    --paper:      #FBF9F4;
+    --ink:        #111A2B;
+    --graphite:   #58606E;
+    --border:     #E4E0D5;
+    --surface:    #FFFFFF;
+    --raised:     #F6F3EC;
+    --dusk:       #6E67AF;
+    --dusk-tint:  #EEEDF6;
+    --sage:       #A3B49F;
+    --sage-tint:  #EDF1EC;
+    --sage-ink:   #4A6249;
+    --amber:      #C9954A;
+    --amber-tint: #F7EEDE;
+    --amber-ink:  #8A6425;
+    --brick-tint: #F6E7E3;
+    --brick-ink:  #B4533E;
+    /* The mockup's own ground — deeper than Paper so the cropped frames
+       lift without a shadow. Not a product token. */
+    --ground:     #EBE7DC;
+    --ease:       cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #111A2B;
+      --ink:        #FBF9F4;
+      --graphite:   #9AA3B2;
+      --border:     #2A3550;
+      --surface:    #18233A;
+      --raised:     #1E2A44;
+      --dusk-tint:  #262A4A;
+      --sage-tint:  #1E2C26;
+      --sage-ink:   #A3B49F;
+      --amber-tint: #33290F;
+      --amber-ink:  #C9954A;
+      --brick-tint: #351B14;
+      --brick-ink:  #D07A66;
+      --ground:     #080D18;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:      #111A2B;
+    --ink:        #FBF9F4;
+    --graphite:   #9AA3B2;
+    --border:     #2A3550;
+    --surface:    #18233A;
+    --raised:     #1E2A44;
+    --dusk-tint:  #262A4A;
+    --sage-tint:  #1E2C26;
+    --sage-ink:   #A3B49F;
+    --amber-tint: #33290F;
+    --amber-ink:  #C9954A;
+    --brick-tint: #351B14;
+    --brick-ink:  #D07A66;
+    --ground:     #080D18;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: 'Inter', 'IBM Plex Sans SC', 'PingFang SC', system-ui, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    padding-bottom: 96px;
+  }
+  h1, h2, h3, h4, p, ul, ol, figure { margin: 0; }
+
+  /* ── The mockup document's own chrome. Not product UI. ─────────────── */
+  .doc { max-width: 1200px; margin: 0 auto; padding: 56px 40px 0; }
+  .doc h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 300;
+    font-size: 44px;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+  .doc .lede {
+    color: var(--graphite);
+    margin-top: 14px;
+    max-width: 68ch;
+  }
+  .doc .crop {
+    margin-top: 20px;
+    padding: 12px 16px;
+    border-left: 2px solid var(--border);
+    color: var(--graphite);
+    font-size: 13.5px;
+    max-width: 68ch;
+  }
+
+  .tabs {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--ground);
+    padding: 24px 40px 16px;
+    margin: 24px auto 0;
+    max-width: 1200px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .tab {
+    font: 500 13.5px 'Inter', system-ui, sans-serif;
+    color: var(--graphite);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: color .2s var(--ease), border-color .2s var(--ease), background .2s var(--ease);
+  }
+  .tab:hover { color: var(--ink); border-color: var(--graphite); }
+  .tab[aria-selected="true"] {
+    color: var(--paper);
+    background: var(--ink);
+    border-color: var(--ink);
+  }
+  .tab:focus-visible, .sw:focus-visible, .pv-tab:focus-visible, .btn:focus-visible {
+    outline: 2px solid var(--dusk);
+    outline-offset: 2px;
+  }
+
+  .opt { display: none; max-width: 1200px; margin: 0 auto; padding: 0 40px; }
+  .opt.on { display: block; }
+
+  .cap { margin-bottom: 18px; max-width: 74ch; }
+  .cap h2 { font-size: 19px; font-weight: 500; letter-spacing: -0.01em; }
+  .cap p { color: var(--graphite); font-size: 14px; margin-top: 6px; }
+
+  .tradeoff {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    margin: 16px 0 22px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .tradeoff div { flex: 1 1 260px; padding: 14px 18px; min-width: 0; }
+  .tradeoff div + div { border-left: 1px solid var(--border); }
+  .tradeoff dt {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--graphite);
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+  .tradeoff dd { margin: 0; font-size: 14px; }
+
+  /* ══════════════════════════════════════════════════════════════════
+     THE FRAME — the cropped content area only. 1120px column,
+     32px 48px 96px padding (§1.1). No rail, no topbar: chrome is
+     quoted, never drawn (§0).
+     ══════════════════════════════════════════════════════════════════ */
+  .frame {
+    background: var(--paper);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 32px 48px 56px;
+    overflow: hidden;
+  }
+  .col { max-width: 1120px; margin: 0 auto; }
+
+  /* Page header — §1.7. Title alone; no status line, no Dusk CTA. */
+  .pghead h3 { font-size: 24px; font-weight: 500; letter-spacing: -0.01em; }
+  .pghead { margin-bottom: 28px; }
+  .back {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 14px;
+    color: var(--graphite);
+    background: none;
+    border: 0;
+    padding: 0;
+    margin-bottom: 14px;
+    cursor: pointer;
+  }
+  .back:hover { color: var(--ink); }
+  .back svg { width: 15px; height: 15px; }
+
+  /* Cards — white on Paper, 1px border, 14px radius, 24px padding. */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+  }
+  .stack { display: flex; flex-direction: column; gap: 24px; }
+  .card > h4 {
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: -0.005em;
+  }
+  .card > .sub { color: var(--graphite); font-size: 14px; margin-top: 4px; }
+
+  /* Master switch card — first, own card, consequence in words (A4). */
+  .master { display: flex; align-items: flex-start; gap: 24px; }
+  .master .txt { flex: 1; min-width: 0; }
+  .master .state { color: var(--graphite); font-size: 15px; max-width: 62ch; }
+  .master .state b { color: var(--ink); font-weight: 500; }
+
+  .sw {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+    font: 500 14px 'Inter', system-ui, sans-serif;
+    color: var(--ink);
+    flex: none;
+  }
+  .track {
+    width: 44px; height: 24px;
+    border-radius: 999px;
+    background: var(--raised);
+    border: 1px solid var(--border);
+    position: relative;
+    transition: background .2s var(--ease), border-color .2s var(--ease);
+  }
+  .knob {
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: var(--graphite);
+    transition: transform .2s var(--ease), background .2s var(--ease);
+  }
+  [data-master="on"] .track { background: var(--ink); border-color: var(--ink); }
+  [data-master="on"] .knob { transform: translateX(20px); background: var(--paper); }
+
+  /* Master off → groups visible but disabled at 55%, never hidden (A4). */
+  .group { transition: opacity .35s var(--ease); }
+  [data-master="off"] .group { opacity: .55; pointer-events: none; }
+
+  /* Setting rows — label + one-line description left, control right (A4). */
+  .rows { margin-top: 20px; border-top: 1px solid var(--border); }
+  .row {
+    display: flex;
+    align-items: flex-start;
+    gap: 32px;
+    padding: 18px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .row .lab { flex: 1; min-width: 0; }
+  .row .lab .name { font-size: 15px; font-weight: 500; }
+  .row .lab .desc { color: var(--graphite); font-size: 13.5px; margin-top: 3px; max-width: 56ch; }
+  .row .ctl { flex: none; display: flex; align-items: center; gap: 8px; padding-top: 2px; }
+
+  /* Inputs — white surface, 1px border, 8px radius; focus turns Dusk. */
+  .in {
+    font: 400 15px 'Inter', system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 11px;
+    transition: border-color .2s var(--ease);
+  }
+  .in:focus { outline: none; border-color: var(--dusk); }
+  .in.num { width: 62px; text-align: right; }
+  .in.date { width: 168px; }
+  .in.wide { width: 100%; }
+  .unit { color: var(--graphite); font-size: 14px; }
+  textarea.in { width: 100%; resize: vertical; line-height: 1.6; }
+
+  .btn {
+    font: 500 14px 'Inter', system-ui, sans-serif;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 18px;
+    cursor: pointer;
+    transition: border-color .2s var(--ease), background .2s var(--ease);
+  }
+  .btn:hover { border-color: var(--graphite); background: var(--raised); }
+  .btn.ghost { border-color: transparent; color: var(--graphite); padding-left: 0; }
+  .btn.ghost:hover { color: var(--ink); background: none; }
+  .save { margin-top: 20px; display: flex; align-items: center; gap: 14px; }
+  .save .hint { color: var(--graphite); font-size: 13.5px; }
+
+  /* Date chips — replaces the monospace ISO textarea. */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; max-width: 320px; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13.5px;
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 5px 8px 5px 12px;
+  }
+  .chip button {
+    background: none; border: 0; cursor: pointer;
+    color: var(--graphite); font-size: 15px; line-height: 1;
+    padding: 0 2px;
+  }
+  .chip button:hover { color: var(--brick-ink); }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 13px; border-radius: 999px; padding: 3px 11px;
+  }
+  .pill.sage { background: var(--sage-tint); color: var(--sage-ink); }
+  .pill.amber { background: var(--amber-tint); color: var(--amber-ink); }
+  .pill.quiet { background: var(--raised); color: var(--graphite); }
+  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* ── The customer-message group ─────────────────────────────────── */
+  .msg { display: grid; grid-template-columns: 1fr 380px; gap: 32px; margin-top: 20px; }
+  @media (max-width: 900px) { .msg { grid-template-columns: 1fr; } }
+  .fields { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  .field label { display: block; font-size: 13.5px; font-weight: 500; margin-bottom: 6px; }
+  .field .fnote { color: var(--graphite); font-size: 13px; margin-top: 5px; }
+
+  .pv-tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+  .pv-tab {
+    font: 500 13.5px 'Inter', system-ui, sans-serif;
+    color: var(--graphite);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 14px;
+    cursor: pointer;
+  }
+  .pv-tab[aria-selected="true"] { color: var(--ink); background: var(--raised); border-color: var(--graphite); }
+
+  /* The preview — the customer's phone popup, drawn at rest. */
+  .preview { position: sticky; top: 96px; align-self: start; }
+  .preview .plab { font-size: 13px; font-weight: 500; color: var(--graphite); margin-bottom: 10px; }
+  .phone {
+    background: var(--raised);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px;
+  }
+  .pop {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px;
+  }
+  .pop .eyebrow { font-size: 13px; font-weight: 500; color: var(--sage-ink); }
+  .pop .ttl { font-size: 19px; font-weight: 500; margin-top: 6px; letter-spacing: -0.005em; }
+  .pop .body { font-size: 14px; color: var(--graphite); margin-top: 12px; }
+  .pop .tip {
+    font-size: 13.5px;
+    color: var(--graphite);
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .pop .cta {
+    margin-top: 18px;
+    display: block; width: 100%;
+    font: 500 14px 'Inter', system-ui, sans-serif;
+    background: var(--ink); color: var(--paper);
+    border: 0; border-radius: 8px; padding: 11px;
+  }
+  .tok {
+    background: var(--dusk-tint);
+    color: var(--dusk);
+    border-radius: 4px;
+    padding: 0 4px;
+    font-variant-numeric: tabular-nums;
+  }
+  .resolved { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .pnote { font-size: 13px; color: var(--graphite); margin-top: 14px; max-width: 44ch; }
+
+  /* ── Option B: the drawer ──────────────────────────────────────── */
+  .drawerwrap { position: relative; margin-top: 24px; }
+  .scrim {
+    position: absolute; inset: 0;
+    background: rgba(17, 26, 43, .28);
+    border-radius: 14px;
+  }
+  .drawer {
+    position: absolute; top: 0; right: 0; bottom: 0;
+    width: 560px; max-width: 92%;
+    background: var(--surface);
+    border-left: 1px solid var(--border);
+    border-radius: 0 14px 14px 0;
+    padding: 24px;
+    overflow: auto;
+  }
+  .drawer .dhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .drawer .dhead h4 { font-size: 18px; font-weight: 500; }
+  .drawer .dhead .esc { font-size: 13px; color: var(--graphite); }
+
+  /* ── Option C: the composer ────────────────────────────────────── */
+  .composer { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  @media (max-width: 900px) { .composer { grid-template-columns: 1fr; } }
+  .editable {
+    border-radius: 6px;
+    padding: 1px 3px;
+    margin: 0 -3px;
+    cursor: text;
+    transition: background .2s var(--ease), box-shadow .2s var(--ease);
+  }
+  .editable:hover { background: var(--dusk-tint); box-shadow: 0 0 0 1px var(--border); }
+  .strip {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 28px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 24px;
+  }
+  .strip .item { display: flex; flex-direction: column; gap: 2px; }
+  .strip .k { font-size: 13px; color: var(--graphite); }
+  .strip .v { font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .strip .spacer { flex: 1; }
+
+  /* ── The findings sheet ────────────────────────────────────────── */
+  .sheet {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 32px;
+  }
+  .find { padding: 22px 0; border-bottom: 1px solid var(--border); }
+  .find:last-child { border-bottom: 0; padding-bottom: 0; }
+  .find:first-of-type { padding-top: 0; }
+  .find h4 { font-size: 16px; font-weight: 500; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .find p { color: var(--graphite); font-size: 14px; margin-top: 8px; max-width: 76ch; }
+  .find code {
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 12.5px;
+    background: var(--raised);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  .find .rule { font-size: 13px; color: var(--graphite); }
+  .scroll { overflow-x: auto; }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+  @media (max-width: 700px) {
+    .doc, .tabs, .opt { padding-left: 20px; padding-right: 20px; }
+    .frame { padding: 24px 20px 40px; }
+    .doc h1 { font-size: 34px; }
+    .row { flex-direction: column; gap: 10px; }
+    .row .ctl { padding-top: 0; }
+    .chips { justify-content: flex-start; max-width: none; }
+  }
+</style>
+
+<header class="doc">
+  <h1>Fresh batches</h1>
+  <p class="lede">Three ways to lay out the same twenty settings, drawn against the Tacet
+    rules. Every option is a whole page, not a panel of states. Pick one and it gets built;
+    the findings at the end are fixed either way.</p>
+  <p class="crop">Cropped to the content area. The rail and topbar are the live shell and are
+    deliberately not drawn — chrome is quoted, never drawn. Rendered in English only, as
+    mockups are. The switch in each frame works: turn it off to see the disabled state.</p>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Mockup options">
+  <button class="tab" role="tab" aria-selected="true"  aria-controls="opt-a" id="tab-a">Option A · One console</button>
+  <button class="tab" role="tab" aria-selected="false" aria-controls="opt-b" id="tab-b">Option B · Console + drawer</button>
+  <button class="tab" role="tab" aria-selected="false" aria-controls="opt-c" id="tab-c">Option C · Preview leads</button>
+  <button class="tab" role="tab" aria-selected="false" aria-controls="opt-f" id="tab-f">What changes either way</button>
+</nav>
+
+<!-- ══════════════════════ OPTION A ══════════════════════ -->
+<section class="opt on" id="opt-a" role="tabpanel" aria-labelledby="tab-a">
+  <div class="cap">
+    <h2>One console, three groups</h2>
+    <p>The literal A4 Console shape. Master switch first in its own card, then the rhythm,
+      then the customer's message with the popup previewed beside the fields. Everything
+      stays on one page.</p>
+  </div>
+  <dl class="tradeoff">
+    <div><dt>Costs</dt><dd>Least to build — it is the current markup regrouped, plus the preview.</dd></div>
+    <div><dt>Gains</dt><dd>Nothing is hidden. One page, one subject, no navigation to learn.</dd></div>
+    <div><dt>Pays for it with</dt><dd>Still about two screens of scroll. The weekly job sits above the set-once copy.</dd></div>
+  </dl>
+
+  <div class="frame" data-master="on">
+    <div class="col">
+      <div class="pghead">
+        <button class="back" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Delivery
+        </button>
+        <h3>Fresh batches</h3>
+      </div>
+
+      <div class="stack">
+
+        <!-- Master switch — own card, first, consequence in words. -->
+        <div class="card master">
+          <div class="txt">
+            <p class="state" data-state>
+              <b>On.</b> The next batch is made <b>Thursday 10 September</b>. An order placed
+              from outside Guangzhou after 20:00 tonight waits for the batch after that.
+            </p>
+          </div>
+          <button class="sw" type="button" data-sw aria-pressed="true">
+            <span class="track"><span class="knob"></span></span>
+            <span data-swlab>On</span>
+          </button>
+        </div>
+
+        <!-- Group 1 — the rhythm. Stable id for the ⌘K palette. -->
+        <div class="card group" id="set-batch-rhythm">
+          <h4>The rhythm</h4>
+          <p class="sub">Orders inside Guangzhou are unaffected by any of this.</p>
+          <div class="rows">
+            <div class="row">
+              <div class="lab">
+                <div class="name">Make a batch every</div>
+                <div class="desc">Counted forward from a day you know was a batch day.</div>
+              </div>
+              <div class="ctl">
+                <input class="in num" value="2" aria-label="Make a batch every N days">
+                <span class="unit">days</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="lab">
+                <div class="name">Counting from</div>
+                <div class="desc">Any past batch day. Every batch since is derived from it.</div>
+              </div>
+              <div class="ctl">
+                <input class="in date" value="16 June 2026" aria-label="Counting from">
+              </div>
+            </div>
+            <div class="row">
+              <div class="lab">
+                <div class="name">Orders close at</div>
+                <div class="desc">An order placed after this hour waits for the batch after next.</div>
+              </div>
+              <div class="ctl">
+                <input class="in num" value="20" aria-label="Orders close at hour">
+                <span class="unit">:00</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="lab">
+                <div class="name">The kitchen finishes at</div>
+                <div class="desc">Leave this blank and a sold-out fresh item is offered for the
+                  next batch day. Set an hour and it is offered for today, until then.</div>
+              </div>
+              <div class="ctl">
+                <input class="in num" placeholder="—" aria-label="Kitchen finishes at hour">
+                <span class="unit">:00</span>
+                <span class="pill quiet">Not set</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="lab">
+                <div class="name">Skip these days</div>
+                <div class="desc">Holidays. The rhythm steps over them and lands on the next one.</div>
+              </div>
+              <div class="ctl">
+                <div class="chips">
+                  <span class="chip">14 July 2026 <button type="button" aria-label="Remove 14 July 2026">×</button></span>
+                  <span class="chip">16 July 2026 <button type="button" aria-label="Remove 16 July 2026">×</button></span>
+                  <button class="btn ghost" type="button">Add a date</button>
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <div class="lab">
+                <div class="name">Slots lock the evening before at</div>
+                <div class="desc">A fresh order can never be moved to a same-day slot.</div>
+              </div>
+              <div class="ctl">
+                <input class="in num" value="20" aria-label="Slots lock at hour">
+                <span class="unit">:00</span>
+              </div>
+            </div>
+          </div>
+          <div class="save">
+            <button class="btn" type="button">Save the rhythm</button>
+            <span class="hint">Next four batches: 10, 12, 14 and 16 September.</span>
+          </div>
+        </div>
+
+        <!-- Group 2 — the customer's message, with the popup previewed. -->
+        <div class="card group" id="set-batch-message">
+          <h4>What the customer reads</h4>
+          <p class="sub">Shown at checkout when the basket holds a fresh item. Leave a field
+            blank to use the built-in wording.</p>
+
+          <div class="pv-tabs" role="tablist" aria-label="Which popup">
+            <button class="pv-tab" role="tab" aria-selected="true"  data-pv="out">Outside Guangzhou</button>
+            <button class="pv-tab" role="tab" aria-selected="false" data-pv="gz">Inside Guangzhou</button>
+          </div>
+
+          <div class="msg">
+            <div class="fields" data-pane="out">
+              <div class="field">
+                <label for="f-eyebrow">Eyebrow</label>
+                <input class="in wide" id="f-eyebrow" value="Freshly made">
+              </div>
+              <div class="field">
+                <label for="f-title">Title</label>
+                <input class="in wide" id="f-title" value="Made fresh for you">
+              </div>
+              <div class="field">
+                <label for="f-body">Checkout notice</label>
+                <textarea class="in" id="f-body" rows="3">Your order includes freshly-made items. We make the next batch on {ship_date} and ship it the same day, so it arrives fresh on {delivery_date}.</textarea>
+                <div class="fnote">{ship_date} resolves from the rhythm above. {delivery_date} is
+                  resolved at checkout against the courier's estimate, so it shows here as a token.</div>
+              </div>
+              <div class="field">
+                <label for="f-tip">Freshness tip</label>
+                <textarea class="in" id="f-tip" rows="2">Freshly crafted. For the best experience, please enjoy within 24 hours of delivery.</textarea>
+              </div>
+            </div>
+
+            <div class="fields" data-pane="gz" hidden>
+              <div class="field">
+                <label for="g-eyebrow">Eyebrow</label>
+                <input class="in wide" id="g-eyebrow" placeholder="Next fresh batch">
+                <div class="fnote">Blank — the built-in wording is used.</div>
+              </div>
+              <div class="field">
+                <label for="g-title">Title</label>
+                <input class="in wide" id="g-title" placeholder="Made fresh on {make_date}">
+                <div class="fnote">Blank — the built-in wording is used.</div>
+              </div>
+              <div class="field">
+                <label for="g-body">Checkout notice</label>
+                <textarea class="in" id="g-body" rows="4" placeholder="Some freshly-made items in your order are sold out right now. Our kitchen makes the next batch on {make_date} — we'll deliver your order as soon as it's ready."></textarea>
+                <div class="fnote">A Guangzhou order goes out on our own run the day the batch is
+                  made, so it names one date that is both. {make_date} is the only token here.</div>
+              </div>
+            </div>
+
+            <div class="preview">
+              <div class="plab">At checkout</div>
+              <div class="phone">
+                <div class="pop" data-pop="out">
+                  <div class="eyebrow">Freshly made</div>
+                  <div class="ttl">Made fresh for you</div>
+                  <p class="body">Your order includes freshly-made items. We make the next batch on
+                    <span class="resolved">Thursday 10 September</span> and ship it the same day, so
+                    it arrives fresh on <span class="tok">{delivery_date}</span>.</p>
+                  <p class="tip">Freshly crafted. For the best experience, please enjoy within
+                    24 hours of delivery.</p>
+                  <button class="cta" type="button">Got it</button>
+                </div>
+                <div class="pop" data-pop="gz" hidden>
+                  <div class="eyebrow">Next fresh batch</div>
+                  <div class="ttl">Made fresh on <span class="resolved">Thursday 10 September</span></div>
+                  <p class="body">Some freshly-made items in your order are sold out right now. Our
+                    kitchen makes the next batch on <span class="resolved">Thursday 10 September</span>
+                    — we'll deliver your order as soon as it's ready.</p>
+                  <button class="cta" type="button">Got it</button>
+                </div>
+              </div>
+              <p class="pnote" data-pnote>Dates come from the rhythm above, so a change to the
+                schedule is visible here before it is saved.</p>
+            </div>
+          </div>
+
+          <div class="save">
+            <button class="btn" type="button">Save the message</button>
+            <span class="hint">Four of seven fields use the built-in wording.</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ OPTION B ══════════════════════ -->
+<section class="opt" id="opt-b" role="tabpanel" aria-labelledby="tab-b" hidden>
+  <div class="cap">
+    <h2>Console, with the copy behind a drawer</h2>
+    <p>The page carries only what changes — the rhythm. The fourteen copy fields move into a
+      drawer that opens over it, preview first. The drawer is drawn open here; the page behind
+      it is what you land on.</p>
+  </div>
+  <dl class="tradeoff">
+    <div><dt>Costs</dt><dd>A drawer build, plus the summary row that has to count real fields.</dd></div>
+    <div><dt>Gains</dt><dd>The page you open weekly is one screen. Copy stops competing with the schedule.</dd></div>
+    <div><dt>Pays for it with</dt><dd>The wording is one click away, not in front of you. Worse if the copy is edited often.</dd></div>
+  </dl>
+
+  <div class="frame" data-master="on">
+    <div class="col">
+      <div class="pghead">
+        <button class="back" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Delivery
+        </button>
+        <h3>Fresh batches</h3>
+      </div>
+
+      <div class="stack">
+        <div class="card master">
+          <div class="txt">
+            <p class="state" data-state>
+              <b>On.</b> The next batch is made <b>Thursday 10 September</b>. An order placed
+              from outside Guangzhou after 20:00 tonight waits for the batch after that.
+            </p>
+          </div>
+          <button class="sw" type="button" data-sw aria-pressed="true">
+            <span class="track"><span class="knob"></span></span>
+            <span data-swlab>On</span>
+          </button>
+        </div>
+
+        <div class="card group" id="set-batch-rhythm-b">
+          <h4>The rhythm</h4>
+          <p class="sub">Orders inside Guangzhou are unaffected by any of this.</p>
+          <div class="rows">
+            <div class="row">
+              <div class="lab">
+                <div class="name">Make a batch every</div>
+                <div class="desc">Counted forward from a day you know was a batch day.</div>
+              </div>
+              <div class="ctl"><input class="in num" value="2" aria-label="Make a batch every N days"><span class="unit">days</span></div>
+            </div>
+            <div class="row">
+              <div class="lab">
+                <div class="name">Counting from</div>
+                <div class="desc">Any past batch day. Every batch since is derived from it.</div>
+              </div>
+              <div class="ctl"><input class="in date" value="16 June 2026" aria-label="Counting from"></div>
+            </div>
+            <div class="row">
+              <div class="lab">
+                <div class="name">Orders close at</div>
+                <div class="desc">An order placed after this hour waits for the batch after next.</div>
+              </div>
+              <div class="ctl"><input class="in num" value="20" aria-label="Orders close at hour"><span class="unit">:00</span></div>
+            </div>
+            <div class="row">
+              <div class="lab">
+                <div class="name">The kitchen finishes at</div>
+                <div class="desc">Blank offers a sold-out fresh item for the next batch day. Set an
+                  hour and it is offered for today, until then.</div>
+              </div>
+              <div class="ctl">
+                <input class="in num" placeholder="—" aria-label="Kitchen finishes at hour">
+                <span class="unit">:00</span>
+                <span class="pill quiet">Not set</span>
+              </div>
+            </div>
+            <div class="row">
+              <div class="lab">
+                <div class="name">Skip these days</div>
+                <div class="desc">Holidays. The rhythm steps over them and lands on the next one.</div>
+              </div>
+              <div class="ctl">
+                <div class="chips">
+                  <span class="chip">14 July 2026 <button type="button" aria-label="Remove 14 July 2026">×</button></span>
+                  <span class="chip">16 July 2026 <button type="button" aria-label="Remove 16 July 2026">×</button></span>
+                  <button class="btn ghost" type="button">Add a date</button>
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <div class="lab">
+                <div class="name">Slots lock the evening before at</div>
+                <div class="desc">A fresh order can never be moved to a same-day slot.</div>
+              </div>
+              <div class="ctl"><input class="in num" value="20" aria-label="Slots lock at hour"><span class="unit">:00</span></div>
+            </div>
+            <div class="row">
+              <div class="lab">
+                <div class="name">What the customer reads</div>
+                <div class="desc">Three of seven fields carry your own wording. The rest use the
+                  built-in text.</div>
+              </div>
+              <div class="ctl"><button class="btn" type="button">Edit the message</button></div>
+            </div>
+          </div>
+          <div class="save">
+            <button class="btn" type="button">Save the rhythm</button>
+            <span class="hint">Next four batches: 10, 12, 14 and 16 September.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- The drawer, drawn open over the page. §1.13: one record, Esc closes. -->
+      <div class="drawerwrap" style="height: 560px;">
+        <div class="scrim"></div>
+        <div class="drawer">
+          <div class="dhead">
+            <div>
+              <h4>What the customer reads</h4>
+              <p class="sub">Outside Guangzhou</p>
+            </div>
+            <span class="esc">Esc to close</span>
+          </div>
+
+          <div class="pv-tabs" role="tablist" aria-label="Which popup" style="margin-top:18px">
+            <button class="pv-tab" role="tab" aria-selected="true">Outside Guangzhou</button>
+            <button class="pv-tab" role="tab" aria-selected="false">Inside Guangzhou</button>
+          </div>
+
+          <div class="phone" style="margin-bottom:22px">
+            <div class="pop">
+              <div class="eyebrow">Freshly made</div>
+              <div class="ttl">Made fresh for you</div>
+              <p class="body">Your order includes freshly-made items. We make the next batch on
+                <span class="resolved">Thursday 10 September</span> and ship it the same day, so it
+                arrives fresh on <span class="tok">{delivery_date}</span>.</p>
+              <p class="tip">Freshly crafted. For the best experience, please enjoy within 24 hours
+                of delivery.</p>
+            </div>
+          </div>
+
+          <div class="fields">
+            <div class="field">
+              <label for="b-eyebrow">Eyebrow</label>
+              <input class="in wide" id="b-eyebrow" value="Freshly made">
+            </div>
+            <div class="field">
+              <label for="b-title">Title</label>
+              <input class="in wide" id="b-title" value="Made fresh for you">
+            </div>
+            <div class="field">
+              <label for="b-body">Checkout notice</label>
+              <textarea class="in" id="b-body" rows="3">Your order includes freshly-made items. We make the next batch on {ship_date} and ship it the same day, so it arrives fresh on {delivery_date}.</textarea>
+            </div>
+            <div class="field">
+              <label for="b-tip">Freshness tip</label>
+              <textarea class="in" id="b-tip" rows="2">Freshly crafted. For the best experience, please enjoy within 24 hours of delivery.</textarea>
+            </div>
+          </div>
+
+          <div class="save">
+            <button class="btn" type="button">Save the message</button>
+            <button class="btn ghost" type="button">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ OPTION C ══════════════════════ -->
+<section class="opt" id="opt-c" role="tabpanel" aria-labelledby="tab-c" hidden>
+  <div class="cap">
+    <h2>The preview leads</h2>
+    <p>Both popups are the page. You edit the wording by clicking the line you want to change,
+      in the thing the customer actually sees. The rhythm compresses into a strip above them,
+      opening only when you change it.</p>
+  </div>
+  <dl class="tradeoff">
+    <div><dt>Costs</dt><dd>Most to build — in-place editing, two live popups, a strip that expands.</dd></div>
+    <div><dt>Gains</dt><dd>The wording is never edited blind, and both popups are compared side by side.</dd></div>
+    <div><dt>Pays for it with</dt><dd>It leads with what changes rarely. The schedule — the weekly job — is demoted to a strip.</dd></div>
+  </dl>
+
+  <div class="frame" data-master="on">
+    <div class="col">
+      <div class="pghead">
+        <button class="back" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          Delivery
+        </button>
+        <h3>Fresh batches</h3>
+      </div>
+
+      <div class="stack">
+        <div class="card master">
+          <div class="txt">
+            <p class="state" data-state>
+              <b>On.</b> The next batch is made <b>Thursday 10 September</b>. An order placed
+              from outside Guangzhou after 20:00 tonight waits for the batch after that.
+            </p>
+          </div>
+          <button class="sw" type="button" data-sw aria-pressed="true">
+            <span class="track"><span class="knob"></span></span>
+            <span data-swlab>On</span>
+          </button>
+        </div>
+
+        <div class="group" style="display:flex;flex-direction:column;gap:24px">
+          <div class="strip" id="set-batch-rhythm-c">
+            <div class="item"><span class="k">Every</span><span class="v">2 days</span></div>
+            <div class="item"><span class="k">Orders close</span><span class="v">20:00</span></div>
+            <div class="item"><span class="k">Kitchen finishes</span><span class="v">Not set</span></div>
+            <div class="item"><span class="k">Skipping</span><span class="v">2 days</span></div>
+            <div class="item"><span class="k">Slots lock</span><span class="v">20:00</span></div>
+            <div class="spacer"></div>
+            <button class="btn" type="button">Change the rhythm</button>
+          </div>
+
+          <div class="composer">
+            <div class="card">
+              <h4>Outside Guangzhou</h4>
+              <p class="sub">The batch is made, then shipped the same day. Two dates.</p>
+              <div class="phone" style="margin-top:18px">
+                <div class="pop">
+                  <div class="eyebrow"><span class="editable">Freshly made</span></div>
+                  <div class="ttl"><span class="editable">Made fresh for you</span></div>
+                  <p class="body"><span class="editable">Your order includes freshly-made items. We
+                    make the next batch on <span class="resolved">Thursday 10 September</span> and
+                    ship it the same day, so it arrives fresh on
+                    <span class="tok">{delivery_date}</span>.</span></p>
+                  <p class="tip"><span class="editable">Freshly crafted. For the best experience,
+                    please enjoy within 24 hours of delivery.</span></p>
+                  <button class="cta" type="button">Got it</button>
+                </div>
+              </div>
+              <p class="pnote">Click any line to edit it. Four lines, all of them yours.</p>
+            </div>
+
+            <div class="card">
+              <h4>Inside Guangzhou</h4>
+              <p class="sub">We deliver on our own run the day it is made. One date.</p>
+              <div class="phone" style="margin-top:18px">
+                <div class="pop">
+                  <div class="eyebrow"><span class="editable">Next fresh batch</span></div>
+                  <div class="ttl"><span class="editable">Made fresh on
+                    <span class="resolved">Thursday 10 September</span></span></div>
+                  <p class="body"><span class="editable">Some freshly-made items in your order are
+                    sold out right now. Our kitchen makes the next batch on
+                    <span class="resolved">Thursday 10 September</span> — we'll deliver your order as
+                    soon as it's ready.</span></p>
+                  <button class="cta" type="button">Got it</button>
+                </div>
+              </div>
+              <p class="pnote">Three lines, all still the built-in wording. Editing one makes it yours.</p>
+            </div>
+          </div>
+
+          <div class="save">
+            <button class="btn" type="button">Save the message</button>
+            <span class="hint">Nothing changed yet.</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ FINDINGS ══════════════════════ -->
+<section class="opt" id="opt-f" role="tabpanel" aria-labelledby="tab-f" hidden>
+  <div class="cap">
+    <h2>What changes either way</h2>
+    <p>Eight things are wrong with the page as it ships today, independent of which layout
+      wins. The first one is a live bug, not a style note — it is visible in the screenshot.</p>
+  </div>
+
+  <div class="sheet">
+
+    <div class="find">
+      <h4>A missing space glues seven labels <span class="pill amber"><span class="dot"></span>Live bug</span></h4>
+      <p>The runtime splitter considers a text node only when it contains <em>space, middot,
+        space</em>. Seven labels on this page write the middot with no space in front of it —
+        <code>弹窗小标题(中文)· Popup eyebrow — Chinese</code> — because the Chinese half ends in
+        a bracket. The node is never considered a pair, never split, and both languages render at
+        once in <em>both</em> language settings. The English-first labels beside them are spaced
+        correctly and do split, which is exactly what the screenshot shows: one label style
+        showing one language, the next showing two. They are also written Chinese-first, which
+        would fail the second gate even with the space restored — so the fix is both: a real
+        <code> · </code> and English on the left.</p>
+      <p class="rule">§1.11 · retail-admin.html:10344, 10352, 10360, 10368, 10387, 10395, 10403.
+        Grepped file-wide: two more of the same shape sit in the cutoff card just above
+        (10244, 10274), and nowhere else in the product — every other unspaced middot is a
+        separator inside an already-translated <code>cuT()</code>, which is correct.</p>
+    </div>
+
+    <div class="find">
+      <h4>Every label on the page is uppercase</h4>
+      <p><code>label.stacked</code> is <code>text-transform: uppercase; font-weight: 600</code>, and
+        the card titles use <code>.fc-sec</code> at mono 700 caps. Two rules broken at once:
+        uppercase is banned outright, and Inter above 500 reads as shouting. The replacement is
+        13px Inter 500, sentence case, Graphite.</p>
+      <p class="rule">§1.6 · retail-admin.css:5471, 1051 — 95 uppercase rules remain in the file; this
+        page's rebuild removes its own.</p>
+    </div>
+
+    <div class="find">
+      <h4>There is no master switch card</h4>
+      <p>The on/off control is the first of eight fields in a wrapped flex row, indistinguishable
+        from the interval box beside it. A Console leads with the master switch in its own card
+        and states the consequence in words. Nothing dims when it is off, either — the twenty
+        fields below stay fully lit and fully editable while the feature does nothing.</p>
+      <p class="rule">A4 · master switch first, own card; master off → groups at 55%, never hidden.</p>
+    </div>
+
+    <div class="find">
+      <h4>Twenty fields, one wrapped row, no descriptions</h4>
+      <p>Every field is a label stacked on a control inside one <code>.row</code> with
+        <code>flex-wrap</code>, so the layout is decided by the window width rather than by
+        meaning. A Console row is a label and a one-line description on the left with a single
+        control on the right. That one change is most of the redesign.</p>
+      <p class="rule">A4 · one control per row.</p>
+    </div>
+
+    <div class="find">
+      <h4>The lede under the title is a purpose line</h4>
+      <p>"For products flagged 'Made fresh in batches'…" would read identically tomorrow, which
+        is the test. Either it becomes a real status line, or the title stands alone. Both
+        options here take the title alone: the master switch card already reports the state, so a
+        status line would only duplicate it.</p>
+      <p class="rule">§1.7 · purpose lines were cut 2026-07-17 and stay cut.</p>
+    </div>
+
+    <div class="find">
+      <h4>Two Dusk save buttons on a page that should have none</h4>
+      <p>Both saves are <code>btn btn-primary</code>. Dusk means one thing — Tacet did this for
+        you — and configuration is the merchant acting. A Console has no Dusk CTA at all; its
+        saves are secondary, pinned to the group they save.</p>
+      <p class="rule">The Dusk rule, §1.8, A4.</p>
+    </div>
+
+    <div class="find">
+      <h4>Blank means off, and only a code comment says so</h4>
+      <p>"Ready from the kitchen" left empty is the off switch and the default — it changes
+        whether a sold-out fresh item is offered for today or for the next batch day. On screen
+        it is a bare <code>—</code> placeholder. The rule belongs in the row's description, where
+        the merchant is.</p>
+      <p class="rule">Recorded at retail-admin.html:10327 (§74) and nowhere the merchant can see.</p>
+    </div>
+
+    <div class="find">
+      <h4>Two cards and two saves for one subject</h4>
+      <p>"Reschedule cutoff" is a second card holding a single hour, about the same products as
+        the card above it. It folds into the rhythm as one more row. The cards that remain need
+        stable ids — the command palette jumps to individual setting cards, and there is no
+        convention yet.</p>
+      <p class="rule">A4 · every group needs a stable id. Decide the convention before eight Consoles exist.</p>
+    </div>
+
+  </div>
+
+  <div class="cap" style="margin-top:32px">
+    <h2>Open, and not decided here</h2>
+    <p>The Chinese for any new or restructured label is not in these frames — mockups render one
+      language, so nothing has been composed yet. Whichever option is picked, its strings land in
+      <code>docs/tacet-delivery-vocabulary.md</code> in the same commit as the code, marked
+      composed, with the live candidates that were rejected.</p>
+  </div>
+</section>
+
+<script>
+  // Option tabs.
+  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () {
+      tabs.forEach(function (o) {
+        var panel = document.getElementById(o.getAttribute('aria-controls'));
+        var on = (o === t);
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+        panel.classList.toggle('on', on);
+        panel.hidden = !on;
+      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  });
+
+  // Master switches — each frame carries its own.
+  document.querySelectorAll('[data-sw]').forEach(function (sw) {
+    sw.addEventListener('click', function () {
+      var frame = sw.closest('.frame');
+      var on = frame.getAttribute('data-master') !== 'on';
+      frame.setAttribute('data-master', on ? 'on' : 'off');
+      sw.setAttribute('aria-pressed', on ? 'true' : 'false');
+      sw.querySelector('[data-swlab]').textContent = on ? 'On' : 'Off';
+      frame.querySelector('[data-state]').innerHTML = on
+        ? '<b>On.</b> The next batch is made <b>Thursday 10 September</b>. An order placed from ' +
+          'outside Guangzhou after 20:00 tonight waits for the batch after that.'
+        : '<b>Off.</b> Nothing waits for a batch. Fresh items ship on the same schedule as ' +
+          'everything else in the order.';
+    });
+  });
+
+  // Option A — which popup is being written.
+  document.querySelectorAll('.pv-tab[data-pv]').forEach(function (t) {
+    t.addEventListener('click', function () {
+      var card = t.closest('.card');
+      var which = t.getAttribute('data-pv');
+      card.querySelectorAll('.pv-tab[data-pv]').forEach(function (o) {
+        o.setAttribute('aria-selected', o === t ? 'true' : 'false');
+      });
+      card.querySelectorAll('[data-pane]').forEach(function (p) {
+        p.hidden = p.getAttribute('data-pane') !== which;
+      });
+      card.querySelectorAll('[data-pop]').forEach(function (p) {
+        p.hidden = p.getAttribute('data-pop') !== which;
+      });
+      card.querySelector('[data-pnote]').textContent = which === 'gz'
+        ? 'One date, not two — a Guangzhou order is delivered on our own run the day it is made.'
+        : 'Dates come from the rhythm above, so a change to the schedule is visible here before it is saved.';
+    });
+  });
+</script>
+
+</body>
+</html>
