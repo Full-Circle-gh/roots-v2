@@ -10780,9 +10780,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // carts, so the default behaviour is unchanged.
   const couponableSubtotal = resolved.reduce((s, r) => s + (r.noCoupon ? 0 : r.lineTotal), 0);
 
-  // Zone-driven fee model. If no zone matches the address, we currently
-  // refuse the order — the office must configure the district/city in
-  // /retail-admin → Delivery before this customer can check out.
+  // Zone-driven fee model. An address matching no zone is REFUSED (§83) — the
+  // office must configure the district/city in Settings → Delivery before this
+  // customer can check out.
   // Pickup is free and zone-less — the customer collects from the store, so
   // no shipping/packing fee and no zone match.
   // Re-normalize the saved row before matching so rows saved before the
@@ -10795,7 +10795,21 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     // No zone/shipping, but a flat per-order packing fee still applies so the
     // store is paid for boxing the items. delivery_mode='pickup' marks it in admin.
     packingFee = Number(cfgValue('fees.pickupPackingFee', 0)) || 0;
-  } else if (zone) {
+  } else if (!zone) {
+    // ── §83 · THE REFUSAL ────────────────────────────────────────────────
+    // The comment above this block used to say the order was refused here. It
+    // was not: control fell to a legacy `fees.standardShipping` / `.sameDayDelivery`
+    // branch that priced the order at ¥12 or ¥18 — numbers belonging to no zone —
+    // and resolveDeliverySlot(null, …) then validated the customer's slot against
+    // computeDeliverySlots' HARDCODED defaults (10:00–20:00, same-day on, zero
+    // lead, a 14-day calendar) rather than against anything this shop configured.
+    // /checkout/quote refused the same address, so the two disagreed and the
+    // answer depended on which one ran.
+    //
+    // §83 settles it in the quote's favour: a guessed fee is worse than a
+    // refusal, because a refusal is visible and a wrong fee is not.
+    return res.status(400).json(noZoneMatchPayload(address));
+  } else {
     // Total cart weight (grams) for weight-priced zones. Products carry a
     // freeform weight string in `size`; unparseable ones (counts/volumes)
     // contribute 0 so the fee degrades to the zone's flat base_fee.
@@ -10808,14 +10822,6 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     shippingFee    = fees.deliveryFee;
     packingFee     = fees.packingFee;
     deliveryZoneId = zone.is_default ? null : zone.id;
-  } else {
-    // Backwards-compatible fallback while zones are still being configured:
-    // legacy 'fees.standardShipping' / 'fees.sameDayDelivery' kick in.
-    const freeShipThreshold = Number(cfgValue('fees.freeShippingThreshold', db.FREE_SHIPPING_THRESHOLD_DEFAULT));
-    const standardShipping  = Number(cfgValue('fees.standardShipping', 12));
-    const sameDayDelivery   = Number(cfgValue('fees.sameDayDelivery', 18));
-    if (deliveryMode === 'sameday') shippingFee = sameDayDelivery;
-    else                            shippingFee = subtotal >= freeShipThreshold ? 0 : standardShipping;
   }
 
   // ── The fresh-batch decision, computed ONCE ──────────────────────────────
@@ -23870,7 +23876,16 @@ function manualOrderFees({ fulfillmentType, address, subtotal, totalQty, lines, 
   if (fulfillmentType !== 'delivery') return none;
 
   const zone = matchDeliveryZone(normalizeChinaAddress(address || {}));
-  if (!zone) return { ...none, error: 'no_zone_match' };
+  // §83 refuses the CUSTOMER an unmatched address. It deliberately does NOT
+  // refuse staff — see the paragraph above, which predates the ruling and is
+  // not overridden by it: a hand-keyed order is where a waived fee or a
+  // negotiated rate legitimately happens, and the shop still takes the order.
+  // What the ruling does change is that the operator is told WHICH place has no
+  // zone, instead of being handed a bare code and left to work it out.
+  if (!zone) {
+    const named = noZoneMatchPayload(normalizeChinaAddress(address || {}));
+    return { ...none, error: 'no_zone_match', unmatched: named.unmatched };
+  }
 
   // Weight only matters to a weight-priced zone; an unparseable size contributes
   // 0 and the fee degrades to the zone's flat base_fee, exactly as at checkout.
@@ -31730,6 +31745,34 @@ function matchDeliveryZone(address) {
   return defaultDeliveryZone();
 }
 
+// The one answer an unmatched address gets, in ONE shape, from every path that
+// can create or price an order (§83). Zone coverage is a data obligation on the
+// tenant; an address matching no zone is a configuration error, not a delivery
+// option, and no path guesses a fee for it.
+//
+// IT NAMES THE PLACE. A bare `no_zone_match` told an operator that something was
+// wrong and nothing about what to do — they had to open the order, read the
+// address and work out which of province / city / district the matcher had
+// failed on. `unmatched` is the string to search for in Settings → Delivery,
+// assembled here rather than left to each reader to reassemble.
+//
+// The three parts travel separately as well as joined, because a Guangzhou
+// address fails on the DISTRICT (matchDeliveryZone refuses inside the Guangzhou
+// branch once any gz_district row exists) while an out-of-city one fails on the
+// CITY — and the fix is a different row in each case.
+function noZoneMatchPayload(address) {
+  const a = address || {};
+  const parts = [a.province, a.city, a.district].filter(Boolean);
+  return {
+    success: false,
+    error: 'no_zone_match',
+    province: a.province || null,
+    city:     a.city     || null,
+    district: a.district || null,
+    unmatched: parts.join(' ') || null,
+  };
+}
+
 // ─── Out-of-city fulfilment pin (shared) ───────────────────────────────────
 // Orders shipping OUTSIDE Guangzhou all leave the single out-of-city warehouse
 // (printer.out_of_city_store_id), whatever the proximity router says — see the
@@ -33807,9 +33850,15 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   const zone = matchDeliveryZone(address);
   const fees = computeDeliveryAndPacking(zone, priced.subtotal, deliveryMode, priced.totalQty, priced.totalGrams);
   if (fees.error) {
+    // §83 — the quote already refused an unmatched address; it now NAMES the
+    // place, the same way the order route does, so the two answers are one
+    // shape. `data` keeps its existing keys: the mini app and shop.html both
+    // read `kitchen_address` off it to offer collection instead.
+    const named = fees.error === 'no_zone_match' ? noZoneMatchPayload(address) : {};
     return res.json({
       success: false,
       error: fees.error,
+      ...named,
       data: {
         subtotal: priced.subtotal,
         zone: null,
