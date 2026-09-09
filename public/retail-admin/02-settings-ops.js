@@ -94,6 +94,11 @@ function cfgSearchGo(i) {
   if (!h) return;
   const btn = document.querySelector('#settings-nav button[data-sub="' + h.sub + '"]');
   if (btn) btn.click();
+  // Delivery's panel is a hub plus nine sub-views, only one of them shown at a
+  // time (§79), so a hit on a card inside a hidden view has to switch to that
+  // view or the scroll below lands on nothing. Every other panel shows all of
+  // its cards at once and _dlvReveal answers false for them.
+  if (typeof _dlvReveal === 'function') _dlvReveal(h.card);
   // Same landing as the command palette's: switch, scroll, then flash, so the
   // card says "here" rather than leaving somebody to find it again by eye.
   setTimeout(() => {
@@ -1833,6 +1838,10 @@ async function loadIntegrationsStatus() {
       const subBtn = document.querySelector('#settings-nav button[data-sub="' + it.sub + '"]');
       if (subBtn) subBtn.click();
     }
+    // Delivery hop (§79) — same reason as cfgSearchGo's: its cards live on
+    // sub-views that are [hidden] until dlvGo() shows them, so scrolling to one
+    // without this reveals nothing. No-op for every other panel.
+    if (it.anchor && typeof _dlvReveal === 'function') _dlvReveal(it.anchor);
     const anchor = it.anchor;
     if (anchor) {
       setTimeout(() => {

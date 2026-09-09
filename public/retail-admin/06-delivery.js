@@ -1201,7 +1201,7 @@ async function saveDeliveryFees() {
 // loadShippingIntegrations), window._qyConnected (stashed by loadQingyunStores).
 
 function dlvGo(view) {
-  const sec = document.getElementById('tab-delivery');
+  const sec = document.getElementById('sub-delivery');
   if (!sec) return;
   sec.setAttribute('data-dlv', view);
   sec.querySelectorAll(':scope > .dlv-view').forEach(v => { v.hidden = v.getAttribute('data-dlv') !== view; });
@@ -1487,11 +1487,35 @@ async function dlvHubHolidayToggle(el) {
   try { await saveHolidayMode(); } finally { dlvHubRender(); }
 }
 
-// Clicking the Delivery nav item always lands on the hub with fresh statuses.
-// (The EN/CN repaint hook registers lazily inside dlvHubRender — onLangChange
-// isn't defined yet when this part loads.)
-(function () {
-  const btn = document.querySelector('.tabs [data-tab="delivery"]');
-  if (btn) btn.addEventListener('click', () => dlvGo('hub'));
-})();
+// Open Delivery from anywhere: Settings, then its panel. §79 moved the page out
+// of the rail and into Settings (#sub-delivery), so `goTab('delivery')` — which
+// three callers used — now names a tab that does not exist. This is the same
+// two-step the setup guide already used to reach Settings → Operations.
+//
+// LANDING ON THE HUB IS PART OF THE CONTRACT, not a nicety: dlvHubRender()
+// repaints every card's status line, so a caller arriving after a zone or a
+// carrier changed sees the change rather than whatever the last visit left. The
+// nav button's own click handler (01-core.js) calls dlvGo('hub') for the same
+// reason, which covers the operator who clicks Delivery in the sidebar.
+function dlvOpen() {
+  if (typeof goTab === 'function') goTab('config');
+  const btn = document.querySelector('#settings-nav button[data-sub="delivery"]');
+  if (btn) btn.click();
+}
+window.dlvOpen = dlvOpen;
+
+// Reveal the sub-view an element lives on. Both searches — the command palette
+// and Settings' own card search — can now land on a delivery card, and all but
+// the hub's own cards sit inside a `.dlv-view` that dlvGo() keeps [hidden].
+// Without this they scroll to an invisible element and the flash lands on
+// nothing. Returns true when it moved, so a caller can wait for the switch.
+function _dlvReveal(el) {
+  const view = el && el.closest && el.closest('#sub-delivery .dlv-view');
+  if (!view) return false;
+  const name = view.getAttribute('data-dlv');
+  if (!name) return false;
+  dlvGo(name);
+  return true;
+}
+window._dlvReveal = _dlvReveal;
 

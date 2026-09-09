@@ -842,8 +842,10 @@ async function suSavePickupLead() {
 }
 function suStartDelivery() {
   suReturnHint('Finish the delivery questions, then this step ticks itself off.', '完成配送设置后，此步骤会自动完成。');
-  goTab('delivery');
-  // The Delivery tab shows its own new-user wizard when unconfigured (part 06).
+  // §79 — Delivery is a Settings panel, so this opens Settings → Delivery
+  // rather than a rail tab that no longer exists.
+  if (typeof dlvOpen === 'function') dlvOpen();
+  // The Delivery panel shows its own new-user wizard when unconfigured (part 06).
   setTimeout(() => { if (typeof dlvWizOpen === 'function') try { dlvWizOpen(1); } catch (_) {} }, 300);
 }
 async function suConfirmPickup() {

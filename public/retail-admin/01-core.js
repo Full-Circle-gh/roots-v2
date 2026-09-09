@@ -517,11 +517,20 @@ const TAB_CAP = {
   topup: 'topup:edit', leaderboard: 'leaderboard:edit', voting: 'voting:edit',
   snippets: 'content:view', about: 'content:view', legal: 'content:view', faq: 'content:view',
   media: 'media:view', reviews: 'reviews:view', feedback: 'feedback:view',
-  delivery: 'delivery:view', meituan: 'meituan:view', guanyi: 'guanyi:view',
+  meituan: 'meituan:view', guanyi: 'guanyi:view',
   integrations: 'integrations:view', eleme: 'eleme:view',
   activity: 'activity:view', purchasing: 'purchasing:view', materials: 'materials:view',
   recipes: 'recipes:view', waste: 'waste:view', finance: 'finance:view',
-  config: ['settings:shop', 'settings:push', 'settings:payments', 'stores:view', 'shipping:config'],
+  // `delivery:view` joins this list because §79 moved the Delivery page into
+  // Settings. This table is keyed by data-tab and Delivery no longer has one —
+  // its gate is now data-cap="delivery:view" on the #settings-nav button, which
+  // applyCapGates enforces. But a gate on the panel is worth nothing if the DOOR
+  // refuses: a role holding delivery:view and none of the five settings caps
+  // below would have watched its one screen move behind a Settings tab it could
+  // not open. The rule §67 states for the rail — a row you can reach is a row you
+  // can use — applies to a panel the same way.
+  config: ['settings:shop', 'settings:push', 'settings:payments', 'stores:view',
+           'shipping:config', 'delivery:view'],
   // ── The two rows the rail left ungated while the phone gated both ──
   // Found from a Stockroom account whose rail showed Sales and Manage team and
   // hid Dashboard and Reports: the mirror image of what its own role is for.
@@ -2251,9 +2260,18 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
   // Change history is on that list too, and more absolutely: it is read-only.
   // A "Save settings" button over a record of what people did would be an
   // offer to edit the audit trail.
-  if (_saveBar) _saveBar.style.display = (sub === 'ops' || sub === 'sku' || sub === 'history' || sub === 'sent') ? 'none' : '';
+  // Delivery is on that list for the first reason: every sub-view on it saves
+  // itself (saveDeliveryZones, saveHolidayMode, the carrier forms), so a shared
+  // "Save settings" over them would either do nothing or claim to have saved
+  // something it never touched.
+  if (_saveBar) _saveBar.style.display =
+    (sub === 'ops' || sub === 'sku' || sub === 'history' || sub === 'sent' || sub === 'delivery') ? 'none' : '';
   // Lazy-load the Operations panel's live data each time it is opened.
   if (sub === 'ops') loadOpsPanel();
+  // Delivery opens on its hub with fresh status lines, never on whichever
+  // sub-view the last visit left behind (§79). This is what the rail button's
+  // own click handler did before the page moved into Settings.
+  if (sub === 'delivery' && typeof dlvGo === 'function') dlvGo('hub');
   // Same, for the SKU rules — the category lists it offers are read from the
   // live catalogue, so a stale copy would hide a category added since boot.
   if (sub === 'sku' && typeof skuLoad === 'function') skuLoad();

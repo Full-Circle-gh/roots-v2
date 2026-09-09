@@ -53,8 +53,11 @@
     if (kind === 'wechat_miniapp') { igMiniappConfig(); return; }
     if (kind === 'web') { igWebConfig(); return; }
     if (kind === 'eleme') { igElemeWizard(); return; }                                       // guided connect → shops → products → verify
-    if (kind === 'jd') {                                                                    // JD keys + Save & test — Delivery tab's JD page
-      if (typeof salesGo === 'function') salesGo('delivery');
+    if (kind === 'jd') {                                                                    // JD keys + Save & test — Delivery's JD sub-view
+      // §79: Delivery is a Settings panel now, so this is dlvOpen() rather than
+      // salesGo('delivery') — that named a tab that no longer exists. dlvOpen()
+      // lands on the hub, so the dlvGo('jd') below still has to follow it.
+      if (typeof dlvOpen === 'function') dlvOpen();
       if (typeof dlvGo === 'function') dlvGo('jd');
       return;
     }
@@ -328,7 +331,7 @@
       <button class="btn btn-sm" onclick="goTab('products')">${cuT('Open products · 打开产品', '打开产品')}</button></div>`);
     rows.push(`<div class="ig-linkrow"><div class="grow"><b>${cuT('Delivery zones · 配送区域', '配送区域')}</b><br>
       <span class="muted" style="font-size:12px">${cuT('Zones are city-wide and already cover the new store · 配送区域按城市划分,已覆盖新门店', '配送区域按城市划分,已覆盖新门店')}</span></div>
-      <button class="btn btn-sm" onclick="goTab('delivery')">${cuT('Review zones · 查看区域', '查看区域')}</button></div>`);
+      <button class="btn btn-sm" onclick="dlvOpen()">${cuT('Review zones · 查看区域', '查看区域')}</button></div>`);
     box.innerHTML = `<div class="ig-wiz">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <strong>✓ ${cuT(`${name} saved — wire it into your channels`, `${name} 已保存 — 接入渠道`)}</strong>
