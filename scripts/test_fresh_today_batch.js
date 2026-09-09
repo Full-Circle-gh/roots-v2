@@ -442,6 +442,22 @@ section('7 · the operator can actually set the hour');
     assert.deepStrictEqual(bad, [], 'a pair split across text nodes leaks both languages');
   });
 
+  it('the card does not claim Guangzhou is unaffected — it is not (§1.17)', () => {
+    // earliestBatchMakeDate takes localRun:true and localFreshFloorFor floors a
+    // Guangzhou order onto the batch date on 'rolled_stock', which is what the
+    // Guangzhou copy fields on this very card are for. The card claimed the
+    // opposite from the day it shipped until 2026-09-09.
+    const blk = freshBlock();
+    assert.ok(!/Orders inside Guangzhou are unaffected/.test(blk));
+    assert.ok(!/广州市内订单不受影响/.test(blk));
+    assert.ok(/sold out/.test(blk), 'it names the condition that does reach the city');
+    // The code this sentence describes, so a refactor that drops the local run
+    // takes this test with it rather than leaving the card quietly wrong.
+    const rt = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+    assert.ok(/localRun: true/.test(rt), 'the local run still asks the cadence');
+    assert.ok(/reason === 'rolled_stock'/.test(rt), 'and still acts on a zero shelf');
+  });
+
   it('the card carries no uppercase eyebrow classes (§1.6)', () => {
     const blk = freshBlock();
     assert.ok(!/class="[^"]*\bstacked\b/.test(blk), 'label.stacked is uppercase 600');
