@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.177
+# Tacet shared-core consolidation — decisions record, v4.178
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-09 · v4.178 — **§79 ADDED AND BUILT: DELIVERY IS A SETTINGS PANEL, NOT A RAIL DESTINATION — DECIDED by Ash**, *"move the delivery section inside setting"*. The `Delivery · 配送` rail row at `order:6` is **gone**; the page is now the eighth panel of Settings, between Customer service and Operations. **TWO READINGS WERE PUT TO ASH RATHER THAN GUESSED BETWEEN** — a Settings-sidebar LINK that opens the page as it stands (~20 lines, the Brand/Billing pattern) or a real Settings PANEL — and **he chose the panel**, which is also the better answer: a link leaves the Settings screen the moment it is clicked, taking the sidebar that just said "you are in Settings" with it. **A MOVE, NOT A REWRITE**: ~1,090 lines relocated verbatim and re-indented from `<section id="tab-delivery">` into `.settings-body` as `<div class="sub-panel" id="sub-delivery">` — same input ids, same save functions, same `dlvGo()` switching, same wizard. **A `<div>` AND NOT A `<section>`, WHICH IS LOAD-BEARING**: `goTab()` clears `.active` off every `main section` on each tab switch, so a section here is a panel any rail click switches dark. **THE GATE MOVED WITH THE PAGE, which is the half that could have shipped ungated**: `TAB_CAP.delivery` is deleted with the row it keyed off and the capability is now `data-cap="delivery:view"` on the nav button — and **`delivery:view` JOINS `TAB_CAP.config`'s any-of list**, without which a role holding it and nothing else in Settings would have watched its one screen move behind a door it cannot open. **THREE CALLERS WENT THROUGH A TAB THAT NO LONGER EXISTS** (the setup guide's delivery step, integrations' "Review zones", and `salesGo('delivery')` from the JD card) and would have failed **silently** — `goTab` finds no row, falls through to its manual path and lights a section id that is not there; all three call `dlvOpen()` now. **THE SEARCHES BOTH GAIN AND ONE NEEDED A FIX**: the command palette picks the panel up through the `#settings-nav` walk instead of the rail walk (deep card entries survive via `indexCards('#sub-delivery')`), Settings' own card search covers delivery cards for the first time — and because most of those cards sit inside a `[hidden]` `.dlv-view`, **both would have scrolled to an invisible element**, so `_dlvReveal()` switches to the card's own sub-view first and both callers use it. **PROVED IN A REAL BROWSER, not only by string match**: Chromium against the shipped page over a local static server — no rail row, panel is a `DIV` inside `.settings-body`, all eleven `.dlv-view`s present, `dlvOpen()` lights Settings + the panel with the sidebar still up, the hub visible, zones hidden, the shared Save bar off, `#dz-kpis` hidden on the hub and shown on zones (which is the CSS rename working), and `_dlvReveal()` opening the fees view for a card on it while no-opping on `#sub-shop`. **NEW SUITE `scripts/test_delivery_in_settings.js` — 33 assertions, MUTATION-PROVED RATHER THAN TRUSTED FOR PASSING**: five deliberate breaks (section-not-div, the missing `data-cap`, `delivery:view` dropped from `config`, a CSS rule left on `#tab-delivery`, the palette's reveal removed) each turned exactly the assertions that state the rule red, and **two assertions that passed for the wrong reason were tightened first** — one was a tautology, one an alternation that matched any `dlvGo('hub')` anywhere. **PROVED**: `npm run test:fast` 181 passed, 0 failed; eslint 0 errors. **NOT DONE HERE**: the delivery side-drawers stay siblings in `<main>` (fixed-position overlays belonging to no panel), the phone's own `delivery` row is untouched, and delivery cards get no `data-sees="customer"` marks — that list is a §G-03 judgement and its own pass. Code, one new test and docs; **no schema, no migration, no route change, and no change to `.gitignore` or CI.**
 
 2026-09-08 · v4.177 — **§78 ADDED: THE KITCHEN APP IS DELETED, AND SPROUT WITH IT — DECIDED by Ash**, who asked *"why keeping anything in the kitchen app? we are not using it."* **`public/app.html` (28,639 lines) and `public/app.html.bak` (24,704 — a stale copy the `/assets` handler served to anyone who guessed the name, a standing audit finding closed here as a side effect) ARE GONE**, with **THIRTEEN route modules whose only client was that page**: `ingredients`, `recipes`, `admin`, `finance`, `alerts`, `waste`, `kitchen`, `sales`, `lookups`, `production`, `pos`, `markets`, `feedback`. **THE EARLIER ANSWER WAS SLOPPY AND IS CORRECTED**: nothing is kept *because it is the kitchen app*; five files sit in kitchen-named paths and have live TACET callers — `purchases.js` (§77's six required functions), `restock.js` (Tacet Mobile's queue + the desktop dashboard), `push.js` (the service worker), `ai.js` (the composer), `auth.js` (login + the CMS). **TWO MODULES SURVIVED THE PRE-DELETION CHECK AND WOULD OTHERWISE HAVE GONE**: `routes/events.js`, required by `purchases`/`restock`/`auth`/`feedback` — deleting it takes out Tacet Mobile's kitchen queue — and `routes/products.js`, called live by `public/retail-admin/20-waste.js`. Neither has a screen in the old app any more. **SPROUT IS SCRAPPED**: `routes/ai.js` falls 3,459 → ~730 lines, losing the chat endpoint, the ~25-tool agent loop, memory, app-help, `/api/ai/status` and `/api/ai/sales-analyze`. **The CMS's own "Ask Sprout" design check was surfaced to Ash rather than deleted quietly** — he killed that too. **ONE ROUTE SURVIVES and is why the file does**: `/api/retail-admin/ai/compose-blocks`, which the store product editor and retail-admin's products screen call; its kitchen-realm twin goes, the live editors having always used the backend mount. **`/` IS NOW A 302 to `store.rootskitchenchina.com`** — the THIRD installed PWA `start_url` this retirement has had to respect, so **302 never 301**, manifest and icons staying, and `requireAuth` going with the page it gated. **THE LOGIN PAGE LANDS ON `/cms`**, the one surface left reading the `users` realm, and a remembered `last_app` of `'/'` is deliberately not honoured. **THE `users` REALM OUTLIVES THE APP because `public/cms.html` self-auths against `/api/auth/me`** — and `routes/admin.js` is deleted anyway, so **managing a CMS account is now a one-off script**, the path this repo already uses for database repair; flagged to Ash before the deletion, not after. **ELEVEN SUITES BROKE. THREE were deleted with the code they tested; EIGHT were repaired and NONE by lowering a bar to green**: `test_price_writeback`'s alerts-feed section was **re-aimed at `ingredient_cost_skips` rather than deleted**, one layer closer to the writer; `test_compose_prompt`'s Sprout guard was **inverted to assert the absence**, since the risk outlives the code, matching a DECLARATION rather than any mention so this file's own historical notes cannot trip it; `test_po_supersede` lost its second reader and says so; `test_recipe_yield_auto`'s "both doors" checks became one-door checks with its statement floor dropped to the **5 one door actually prepares, not a number that would pass on an empty match**; `test_restock_tenant2_split` lost Case E (re-pointing it at `retail-production.js` refused as a rewrite wearing a repoint's name); `test_invoice_no_invoice_mark` lost two screen assertions and kept its server half; `test_po_cost_unit_guard` lost Part 3, four cases guarding a CALLER of the shared derivation rather than the rule. **ONE ORPHANED `package.json` ALIAS was caught by the runner PR #401 added for exactly this** — that guard is four days old and has now paid for itself twice. **NOT DONE HERE**: the five shared files keep their kitchen-named paths, the CMS still logs in through the old realm, `routes/purchases.js` still cannot be deleted (§77), and **`public/app.html` stays on the box until removed by hand** — the installer only adds files — so it remains fetchable at `/assets/app.html` until someone deletes it there. **PROVED**: `npm run test:fast` 180 passed, 0 failed; eslint 0 errors; booted, with `/` → 302 store host, `/login` `/cms` `/m` 200, `/kitchen` and `/stock` → `/m`, every deleted API 404 and every surviving one still mounted (`/api/retail-admin/ai/compose-blocks` 401 on POST, not 404). Code, tests and docs; **no schema, no migration, and no change to `.gitignore` or CI.**
 
@@ -7769,3 +7771,88 @@ Ruling (Ash, 2026-09-08), given as a question that was really an instruction: *"
 **ONE ORPHANED `package.json` ALIAS was caught by the runner PR #401 added for exactly this**, and removed. That guard is four days old and has now paid for itself twice.
 
 **WHAT IS NOT DONE HERE, so it is not mistaken for finished.** The five shared files keep their kitchen-named paths; moving them to `lib/` is its own change. The CMS still logs in through the old realm. `routes/purchases.js` still cannot be deleted (§77). And `public/app.html` **stays on the production box until removed by hand** — the deploy installer only adds files — so it remains fetchable at `/assets/app.html` until someone deletes it there. That is the same standing condition §76 recorded for `kitchen.html`, and it now covers the larger file and its backup.
+
+## §79 — DELIVERY IS A SETTINGS PANEL, NOT A RAIL DESTINATION
+
+Ruling (Ash, 2026-09-09): *"move the delivery section inside setting"*. The
+`Delivery · 配送` row leaves the left rail and becomes the eighth panel of
+Settings, between Customer service and Operations.
+
+**WHY IT WAS ALWAYS A SETTINGS SCREEN.** Nine cards live on that page — zones,
+fees and free-shipping bar, store pickup, holiday mode, same-day cutoff, fresh
+batches, Kuaidi100 tracking, JD Logistics, Qingyun riders — and **every one of
+them is a rule the shop configures once and then forgets.** Nothing on the page
+is a thing an operator DOES during a shift: the orders being delivered are on
+Orders, the riders in flight are on the Dashboard, and the zone editor is a
+form. A rail row is a place you go to work; this was a place you went to change
+your mind. It sat at `order:6`, above Sales, and cost a top-level slot for a
+screen most tenants open twice a year.
+
+**WHAT WAS ASKED AND WHAT WAS OFFERED.** Two readings of the instruction were
+put to Ash rather than guessed between, because they are different jobs: a
+Delivery LINK in the Settings sidebar that opens the page as it stands (the
+pattern Brand and Billing already use, ~20 lines), or Delivery as a real
+Settings PANEL. **He chose the panel**, and it is the better answer for the
+reason the link version is cheap: a link leaves the Settings screen the moment
+it is clicked, so the sidebar that just said "you are in Settings" disappears.
+The panel keeps it beside the cards.
+
+**IT IS A MOVE, NOT A REWRITE.** The ~1,090 lines of markup are relocated
+verbatim from `<section id="tab-delivery">` into `.settings-body` as
+`<div class="sub-panel" id="sub-delivery">`, re-indented and otherwise
+untouched: same input ids, same save functions, same `dlvGo()` hub/sub-view
+switching, same wizard. **A `<div>` and not a `<section>`, and that is
+load-bearing** — `goTab()` clears `active` off every `main section` on each tab
+switch, so a `<section>` here would have the panel switched dark by any rail
+click.
+
+**THE CAPABILITY GATE MOVED WITH THE PAGE, WHICH IS THE HALF THAT COULD HAVE
+SHIPPED UNGATED.** `TAB_CAP.delivery = 'delivery:view'` is deleted with the
+row it keyed off, and the same capability is now `data-cap="delivery:view"` on
+the Settings nav button, where `applyCapGates`'s generic hook enforces it.
+**`delivery:view` is also added to `TAB_CAP.config`'s any-of list**, without
+which a role holding delivery and nothing else in Settings would have watched
+its one screen disappear behind a Settings door it is not allowed to open.
+
+**THREE CALLERS WENT THROUGH `goTab('delivery')` AND WOULD HAVE BROKEN
+SILENTLY** — the setup guide's "set up delivery" step, the integrations
+screen's "Review zones" button, and `salesGo('delivery')` from the shipping
+card. All three now call `dlvOpen()`, which does the same
+`goTab('config')` + nav-button click the setup guide already used to reach
+Settings → Operations.
+
+**THE SEARCHES BOTH GAIN AND ONE OF THEM NEEDED A FIX.** The command palette
+indexed Delivery through its rail button; it now picks the panel up through the
+`#settings-nav button[data-sub]` walk instead, and `indexCards('#sub-delivery')`
+still finds every `.group-card-head h3` on it, so the deep "jump to this card"
+entries survive. Settings' own card search (§G-03) now covers delivery cards
+for the first time. **But most of those cards sit inside a hidden `.dlv-view`**,
+so both searches would have scrolled to an invisible element — `_dlvReveal()`
+switches to the card's own sub-view first, and both callers use it.
+
+**WHAT IS NOT DONE HERE.** The delivery side-drawers (`#dz-edit-bg` and the
+carrier drawers) stay where they are as siblings in `<main>` — they are
+fixed-position overlays and belong to no panel. The phone (`public/m.html`)
+keeps its own `delivery` row; it was never the desktop rail and is not touched.
+Delivery cards are NOT given `data-sees="customer"` marks in this change even
+though several qualify — that list is a judgement per §G-03 and belongs in its
+own pass.
+
+**HOW IT WAS PROVED, because a thousand-line DOM move that still passes a string
+match has proved very little.** The shipped page was driven in Chromium over a
+local static server with `/api/backend/me` stubbed, and the panel exercised the
+way an operator reaches it: `dlvOpen()` lights Settings and the panel, the
+sidebar stays up beside it, the hub shows and the zones view does not, the
+shared Save bar is off, `#dz-kpis` is hidden on the hub and shown on zones —
+which is the CSS rename proving itself rather than being asserted — and
+`_dlvReveal()` opens the fees view for a card on it while leaving a `#sub-shop`
+card alone. `scripts/test_delivery_in_settings.js` is the committed guard: 33
+assertions across the four files, in the fast shard, needing no browser.
+**It was mutation-proved rather than trusted for passing.** Five deliberate
+breaks — the panel back to a `<section>`, the nav button's `data-cap` removed,
+`delivery:view` dropped from `TAB_CAP.config`, one CSS rule left on
+`#tab-delivery`, the palette's reveal deleted — each turned exactly the
+assertions that state that rule red. **Two assertions passed for the wrong
+reason and were tightened before any of that**: one was a tautology, and one an
+alternation that would have matched any `dlvGo('hub')` anywhere in the file.
+`npm run test:fast`: 181 passed, 0 failed. eslint: 0 errors.
