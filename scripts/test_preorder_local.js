@@ -252,8 +252,29 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
   it('the order path computes that flag from the zone and the slot kind', () => {
     assert.ok(/const scheduledShipDistrict =\s*\n\s*inGz &&\s*\n\s*inventory\.isOptInSameDayDistrict\(address\) &&\s*\n\s*!pickedSameDay;/.test(retailSrc),
       'Guangzhou AND an opt-in district AND they did not buy same-day');
-    assert.ok(/const pickedSameDay = body\.delivery_slot_kind === 'today';/.test(retailSrc),
-      'the same-day extra is the explicit "today" slot kind the client sends');
+    // THE SAME-DAY VERDICT IS DERIVED, NOT SENT. This assertion used to require
+    // `body.delivery_slot_kind === 'today'` — the client's own string, stored
+    // and acted on unchecked. It decided this gate, the out-of-city warehouse
+    // pin, courier-vs-rider parcels and the Qingyun queue, so a caller could
+    // send 'today' beside the FREE Express slot and be routed and dispatched as
+    // same-day without the surcharge the server had just priced at zero.
+    //
+    // Re-aimed at the rule that now holds rather than deleted: the verdict comes
+    // from the slot id the server is about to validate.
+    assert.ok(/const pickedSameDay = inventory\.isSameDayDelivery\(deliverySlotId, orderNow\);/.test(retailSrc),
+      'the same-day extra is DERIVED from the slot id, not read from the request body');
+    // And the ABSENCE, because the risk outlives the line: no routing decision
+    // anywhere in this file may take that verdict off the request body again.
+    // Matched against CODE, not comments — the handler explains the old form in
+    // prose right where it used to live, and an absence guard that a comment can
+    // trip is a guard nobody can keep green honestly.
+    const retailCode = retailSrc.replace(/^\s*\/\/.*$/gm, '');
+    assert.ok(!/body\.delivery_slot_kind\s*===\s*'today'/.test(retailCode),
+      'no routing decision may read delivery_slot_kind off the request body');
+    // The persisted column takes the server's resolved kind too — pickup and
+    // restock excepted, which are order-level states no slot can express.
+    assert.ok(/const slotKind = isPickup \? 'pickup'\s*\n\s*: isWaitFlow \? 'restock'\s*\n\s*: resolvedSlotKind;/.test(retailSrc),
+      'delivery_slot_kind is stored from resolveDeliverySlot, not from the body');
     assert.ok(/localPreorderLine\(mutatedItems, address, \{\s*\n\s*scheduledShipDistrict, freshPreorderOk: true,\s*\n\s*\}\)/.test(retailSrc),
       'and the gate is handed that one verdict');
     // The out-of-city store pin was the second consumer of that local flag. It
@@ -272,10 +293,12 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
       'stamping the routing reason off that same verdict');
     // The handler must hand the pin the slot kind, or it would silently answer
     // for every ship-district order as though same-day had never been bought.
+    // It hands over the DERIVED verdict, not the request body, so the pin, this
+    // gate and the ship-district test all read one answer computed once.
     const orderPath = retailSrc.slice(retailSrc.indexOf('router.post(\'/api/retail/orders\''));
-    assert.ok(/slotKind: body\.delivery_slot_kind,/.test(
+    assert.ok(/slotKind: pickedSameDay \? 'today' : null,/.test(
       orderPath.slice(0, orderPath.indexOf('\n  // Stock-shortage warning'))),
-    'the order path passes the slot kind through to the pin');
+    'the order path passes the DERIVED same-day verdict through to the pin');
   });
 
   it('a local shopper keeps buying what is in stock', () => {
