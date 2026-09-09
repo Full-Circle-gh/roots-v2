@@ -393,7 +393,8 @@ it('the range echo carries the class its own CSS targets', () => {
 it('the New transaction CTA can actually be hidden on Summary', () => {
   // It shipped visible on Summary because `[hidden]` loses to `.btn { display:
   // inline-flex }` — an author rule beats the UA default. The section carries
-  // the same !important override #tab-delivery already uses for this trap.
+  // the same !important override #sub-delivery already uses for this trap
+  // (that selector was #tab-delivery until §79 moved the page into Settings).
   assert.ok(/#tab-finance \[hidden\]\s*\{\s*display:\s*none\s*!important/.test(CSS),
     'hidden must be enforced against the .btn display rule');
   assert.ok(/cta\.hidden = !isTx/.test(fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '22-finance.js'), 'utf8')),

@@ -28,6 +28,7 @@
     "test:wizard-first-question": "node scripts/test_wizard_first_question.js",
     "test:print-documents": "node scripts/test_print_documents.js",
     "test:settings-findable": "node scripts/test_settings_findable.js",
+    "test:delivery-in-settings": "node scripts/test_delivery_in_settings.js",
     "test:recycle": "node scripts/test_recycle.js",
     "test:phone-order": "node scripts/test_phone_order.js",
     "test:tax": "node scripts/test_tax.js",

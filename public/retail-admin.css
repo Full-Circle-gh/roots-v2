@@ -1215,20 +1215,20 @@
   .sales-ch-foot .btn { display: inline-flex; align-items: center; gap: 6px; }
 
   /* ═══════════════════════════════════════════════════════════════════
-     DELIVERY HUB (#tab-delivery) — card hub + sub-views (2026-07-03)
+     DELIVERY HUB (#sub-delivery) — card hub + sub-views (2026-07-03)
      Reuses the Sales-page .sales-ch card language; dlvGo() in 06-delivery.js
      flips [hidden] on the .dlv-view wrappers.
      ═══════════════════════════════════════════════════════════════════ */
-  #tab-delivery .dlv-view[hidden] { display: none !important; }
+  #sub-delivery .dlv-view[hidden] { display: none !important; }
   /* The zones KPI strip is a DIRECT child of the section; it belongs to the
      zones view only, at every width. */
-  #tab-delivery:not([data-dlv="zones"]) > #dz-kpis { display: none; }
+  #sub-delivery:not([data-dlv="zones"]) > #dz-kpis { display: none; }
   /* Hub cards: equal heights, blurb fills, footer pinned with a soft rule. */
-  #tab-delivery .sales-ch { display: flex; flex-direction: column; }
-  #tab-delivery .sales-ch-blurb { font-size: 12.5px; color: var(--text-2); line-height: 1.5; padding: 8px 0 10px; flex: 1; }
-  #tab-delivery .sales-ch-foot { border-top: 1px solid var(--line-soft); padding-top: 11px; margin-top: auto; align-items: center; }
-  #tab-delivery .sales-ch-foot .meta { font-size: 11px; color: var(--text-4); margin-left: auto; text-align: right; }
-  #tab-delivery .sales-eyebrow { margin-top: var(--s5); }
+  #sub-delivery .sales-ch { display: flex; flex-direction: column; }
+  #sub-delivery .sales-ch-blurb { font-size: 12.5px; color: var(--text-2); line-height: 1.5; padding: 8px 0 10px; flex: 1; }
+  #sub-delivery .sales-ch-foot { border-top: 1px solid var(--line-soft); padding-top: 11px; margin-top: auto; align-items: center; }
+  #sub-delivery .sales-ch-foot .meta { font-size: 11px; color: var(--text-4); margin-left: auto; text-align: right; }
+  #sub-delivery .sales-eyebrow { margin-top: var(--s5); }
 
   /* Sub-view back link. */
   .dlv-back {
@@ -8274,9 +8274,9 @@
     font-size: 14px; font-weight: 600;
     margin: 0 0 4px;
   }
-  /* Delivery page: section heads adopt the mono-caps rhythm (#tab-delivery
+  /* Delivery page: section heads adopt the mono-caps rhythm (#sub-delivery
      scope wins over the shared .group-card-head h3 rule above). */
-  #tab-delivery .group-card-head h3 {
+  #sub-delivery .group-card-head h3 {
     font-family: var(--f-mono);
     font-size: 11px; font-weight: 700; letter-spacing: .08em;
     text-transform: uppercase; color: var(--text-2);
@@ -14151,7 +14151,7 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 #tab-finance .fin-cta:hover { background: var(--td-dusk-hi, #7E77BF); border-color: var(--td-dusk-hi, #7E77BF); }
 
 /* [hidden] LOSES TO ANY AUTHOR display RULE, which is how the CTA first shipped
-   onto Summary. Enforced for the section, as #tab-delivery does for the same
+   onto Summary. Enforced for the section, as #sub-delivery does for the same
    reason. */
 #tab-finance [hidden] { display: none !important; }
 
