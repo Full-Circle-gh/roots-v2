@@ -440,5 +440,103 @@ section('7 · the operator can actually set the hour');
   });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+section('8 · §80 — nothing is short from the customer\'s side');
+// Ash, on being walked through §74 as shipped: "why tell him its short? he
+// doesnt need to wait. there is a new batch made and ready at 11, we deliver on
+// time according to his request." He was right, and the shipped behaviour was
+// worse than the walkthrough said: the five-option modal fired, and choosing
+// "wait for restock" DELETED the window he had picked.
+{
+  schedule(READY_HOUR);
+  setStock(P_FRESH, 0);
+  const covered = (slotId, now = MORNING_OF_BATCH_DAY, ids = [P_FRESH]) =>
+    retail.freshLinesCoveredToday({ zone: ZONE_GZ, deliverySlotId: slotId, productIds: ids, now });
+
+  it('THE 10:00–12:00 WINDOW IS COVERED — the end is the rule, not the start', () => {
+    // The slot Ash named. A batch landing at 11:00 serves a window closing at
+    // 12:00, so keying on the start hour would have refused exactly this one.
+    assert.ok(covered(BATCH_DAY + 'T10:00').has(P_FRESH));
+  });
+  it('so is a window entirely after the batch', () => {
+    assert.ok(covered(BATCH_DAY + 'T12:00').has(P_FRESH));
+  });
+  it('a window that CLOSES before the batch lands is not covered', () => {
+    // ready 18:00 against a 10:00–12:00 window: the meal cannot make it.
+    schedule(18);
+    assert.strictEqual(covered(BATCH_DAY + 'T10:00').size, 0);
+    schedule(READY_HOUR);
+  });
+  it('"right away" is never covered — it names no window to close by', () => {
+    assert.strictEqual(covered('right_away').size, 0);
+  });
+  it('a day-only chip closes when the kitchen does, so it is covered', () => {
+    assert.ok(covered(BATCH_DAY).has(P_FRESH));
+  });
+  it('nothing is covered on a day the kitchen does not cook', () => {
+    assert.strictEqual(covered(NON_BATCH_DAY + 'T12:00', MORNING_OF_NON_BATCH_DAY).size, 0);
+  });
+  it('nothing is covered once the batch has landed', () => {
+    assert.strictEqual(covered(BATCH_DAY + 'T16:00', AFTERNOON_OF_BATCH_DAY).size, 0);
+  });
+  it('nothing is covered with no ready hour — §80 is off with §74', () => {
+    schedule(null);
+    assert.strictEqual(covered(BATCH_DAY + 'T10:00').size, 0);
+    schedule(READY_HOUR);
+  });
+  it('a grocery line is never covered — no batch is coming for it', () => {
+    assert.strictEqual(covered(BATCH_DAY + 'T12:00', MORNING_OF_BATCH_DAY, [P_PANTRY]).size, 0);
+  });
+
+  it('slotWindowEnd reads the zone rather than assuming two hours', () => {
+    const end = retail.slotWindowEnd({ ...ZONE_GZ, slot_duration_minutes: 90 },
+      BATCH_DAY + 'T10:00', MORNING_OF_BATCH_DAY);
+    assert.strictEqual(end.getHours(), 11);
+    assert.strictEqual(end.getMinutes(), 30);
+    assert.strictEqual(retail.slotWindowEnd(ZONE_GZ, 'right_away', MORNING_OF_BATCH_DAY), null);
+    assert.strictEqual(retail.slotWindowEnd(ZONE_GZ, null, MORNING_OF_BATCH_DAY), null);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+section('9 · the modal does not fire, and the window survives');
+{
+  const fs = require('fs');
+  const inv = fs.readFileSync(path.join(ROOT, 'lib/inventory.js'), 'utf8');
+  const src = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+
+  it('a covered line counts as OK, so the five-option gate never opens', () => {
+    assert.ok(/ok: isCovered \|\| \(av\.exists && av\.available >= it\.qty\)/.test(inv),
+      'analyzeShortage treats a covered line as satisfied');
+    assert.ok(/gate = 'options_5'/.test(inv) && /if \(nearest && !nearest\.ok\)/.test(inv),
+      'and the gate still keys on nearest.ok, so covering the line closes it');
+  });
+  it('the covered set is computed by retail.js, not re-derived in inventory.js', () => {
+    assert.ok(!/batchScheduleCfg|ready_hour/.test(inv),
+      'lib/inventory.js must stay a stock question and learn no production cadence');
+    assert.ok(/coveredProductIds: freshLinesCoveredToday\(/.test(src), 'the quote hands it down');
+  });
+  it('the order parks without reserving — there is nothing on the shelf to hold', () => {
+    assert.ok(/if \(!isWaitFlow && !isBatchPark && \(stockGate \|\| strictItems\.length\)\) \{/.test(src));
+  });
+  it('…and KEEPS the window, which is the whole of Ash\'s ruling', () => {
+    // isWaitFlow clears scheduled_for. isBatchPark must not appear in that
+    // branch at all, or the window the batch was going to fill is thrown away.
+    const at = src.indexOf("slotLabel         = 'Ships when restocked';");
+    assert.ok(at > -1);
+    const branch = src.slice(at - 300, at + 60);
+    assert.ok(/if \(isWaitFlow\) \{/.test(branch), 'the clearing branch is isWaitFlow only');
+    assert.ok(!/isBatchPark/.test(branch), 'a batch park must never reach the slot-clearing branch');
+  });
+  it('the quote reads one clock, declared before anything uses it', () => {
+    // The first wiring put the covered-lines call ABOVE `const quoteNow`, which
+    // is a ReferenceError on every checkout quote, not a lint error.
+    const h = src.indexOf("router.post('/api/retail/checkout/quote'");
+    const decl = src.indexOf('const quoteNow = new Date();', h);
+    const use  = src.indexOf('now: quoteNow', h);
+    assert.ok(decl > -1 && use > -1 && decl < use, 'quoteNow is declared before it is read');
+  });
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
