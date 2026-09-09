@@ -1271,6 +1271,129 @@ router.post('/api/retail-admin/purchases/copy-from-kitchen', requireRetailAdmin,
   }
 });
 
+/* ── The kitchen's ask becomes a draft order (§86) ──────────────────────────
+ *
+ * The live twin of copy-from-kitchen above, and deliberately built to its shape:
+ * the buyer ticks, presses once, and gets a DRAFT they own. What differs is the
+ * grain — that bridge copies whole purchase orders, this one takes LINES, so a
+ * morning's flour and oil can go to two suppliers without the buyer deleting
+ * rows out of a draft they did not want (§86 part two).
+ *
+ * WHY A DRAFT AND NOT AN ORDER. `postRetailPOExpenses` posts on Ordered, and the
+ * status route writes material prices back on the same transition. Placing the
+ * order is the buyer's act, on the buyer's capability, after the buyer has
+ * chosen a supplier and a price. The kitchen asks; it does not spend.
+ *
+ * THE UNIT AND THE PRICE COME FROM THE MATERIAL'S OWN RECORD, exactly as the
+ * desktop material picker fills them (`addOrSetMaterialLine`): buy_unit, the
+ * last buy_price as a prefill, and the master supplier. Unit is not cosmetic —
+ * firePriceAlertsForPO refuses to write a price back when the line's unit does
+ * not match `ingredients.buy_unit`, so the request storing buy_unit is what
+ * makes this conversion the identity rather than a silent conversion.
+ */
+router.post('/api/retail-admin/purchases/from-material-requests', requireRetailAdmin, express.json(), (req, res) => {
+  const { line_ids, store_id, supplier } = req.body || {};
+  const ids = [...new Set((Array.isArray(line_ids) ? line_ids : [])
+    .map(n => parseInt(n, 10)).filter(n => n > 0))];
+  if (!ids.length) return res.status(400).json({ success: false, error: 'line_ids_required' });
+  const storeId = parseInt(store_id, 10);
+  if (!storeId || !inventory.getStore(storeId)) {
+    return res.status(400).json({ success: false, error: 'store_required' });
+  }
+  const marks = ids.map(() => '?').join(',');
+  const lines = tdb().prepare(`
+    SELECT i.*, r.mr_number, r.status AS request_status, r.archived_at
+      FROM material_request_items i
+      JOIN material_requests r ON r.id = i.request_id
+     WHERE i.id IN (${marks})`).all(...ids);
+  // A ticked line that names nothing is reported, never skipped: silence would
+  // read as "ordered". Same refusal, same reason, as copy-from-kitchen's.
+  if (lines.length !== ids.length) {
+    const found = new Set(lines.map(l => l.id));
+    return res.status(404).json({ success: false, error: 'not_found', missing: ids.filter(id => !found.has(id)) });
+  }
+  const notSent = lines.filter(l => l.request_status === 'draft' || l.archived_at);
+  if (notSent.length) {
+    return res.status(409).json({ success: false, error: 'not_sent',
+      lines: notSent.map(l => ({ id: l.id, mr_number: l.mr_number })) });
+  }
+  // THE LINE-LEVEL REFUSAL THAT STOPS THE SAME FLOUR BEING BOUGHT TWICE. Two
+  // buyers on the same list, or one buyer on a stale screen, both reach here.
+  const already = lines.filter(l => l.sourced_po_id);
+  if (already.length) {
+    const poNum = tdb().prepare('SELECT po_number FROM purchase_orders WHERE id = ?');
+    return res.status(409).json({ success: false, error: 'already_sourced',
+      lines: already.map(l => ({ id: l.id, mr_number: l.mr_number, name_en: l.name_en,
+                                 po_number: (poNum.get(l.sourced_po_id) || {}).po_number || null })) });
+  }
+
+  const matStmt = tdb().prepare('SELECT buy_price, supplier, accounting_category FROM ingredients WHERE id = ?');
+  try {
+    const tx = tdb().transaction(() => {
+      const po_number = nextRetailPONumber();
+      const headerSupplier = supplier ? String(supplier).slice(0, 200) : null;
+      const poId = tdb().prepare(`
+        INSERT INTO purchase_orders
+          (po_number, date, status, supplier, notes, source, scope, store_id, created_by, tenant_id)
+        VALUES (?, DATE('now'), 'Requested', ?, ?, 'materialRequest', 'retail', ?, NULL, ?)
+      `).run(po_number, headerSupplier,
+             'From ' + [...new Set(lines.map(l => l.mr_number))].join(', '),
+             storeId, currentTenantId()).lastInsertRowid;
+      const items = [...lines].sort((a, b) => a.id - b.id).map(l => {
+        const m = matStmt.get(l.ingredient_id) || {};
+        return {
+          // store_product_id is left off entirely — a material line carrying
+          // both subjects is refused `line_conflict`, and a request only ever
+          // has the one.
+          ingredient_id: l.ingredient_id || null,
+          name_en: l.name_en, name_cn: l.name_cn, sku: l.sku,
+          qty: l.qty, unit: l.unit, cost_per_unit: m.buy_price || 0,
+          expense_category: m.accounting_category || '',
+          supplier_name: headerSupplier || m.supplier || '',
+          purchase_channel: '', note: l.notes || '',
+        };
+      });
+      insertLineItems(poId, items, headerSupplier);
+      const mark = tdb().prepare(
+        'UPDATE material_request_items SET sourced_po_id = ?, sourced_at = CURRENT_TIMESTAMP WHERE id = ?');
+      for (const l of lines) mark.run(poId, l.id);
+      for (const rid of new Set(lines.map(l => l.request_id))) rollUpMaterialRequest(rid);
+      return { id: poId, po_number, line_count: items.length,
+               requests: [...new Set(lines.map(l => l.mr_number))] };
+    });
+    const made = tx();
+    logActivity(req.user.id, req.user.username, 'create', 'purchase_order', made.id,
+                { po_number: made.po_number, scope: 'retail', source: 'materialRequest',
+                  material_requests: made.requests, line_count: made.line_count }, req.ip);
+    res.json({ success: true, data: made });
+  } catch (e) {
+    console.error('[retail-purchasing from-material-requests]', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+/* Give back every material-request line this purchase order was raised from.
+ *
+ * Called from the delete path below. Lazily required so this file's position in
+ * server.js's load order stays irrelevant — the material-requests module is
+ * mounted after this one, and a top-level require would make that ordering
+ * load-bearing for no gain. */
+function releaseMaterialRequestLines(poId) {
+  try {
+    const affected = tdb().prepare(
+      'SELECT DISTINCT request_id FROM material_request_items WHERE sourced_po_id = ?').all(poId);
+    if (!affected.length) return;
+    tdb().prepare(
+      'UPDATE material_request_items SET sourced_po_id = NULL, sourced_at = NULL WHERE sourced_po_id = ?').run(poId);
+    for (const a of affected) rollUpMaterialRequest(a.request_id);
+  } catch (e) {
+    console.error('[retail-purchasing releaseMaterialRequestLines] po=' + poId, e);
+  }
+}
+function rollUpMaterialRequest(requestId) {
+  require('./retail-material-requests').rollUpMaterialRequest(requestId);
+}
+
 router.get('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) => {
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
@@ -2453,6 +2576,13 @@ router.delete('/api/retail-admin/purchases/:id', requireRetailAdmin, (req, res) 
   recycle.capture(tdb(), 'purchase_order', po.id, req.user && req.user.username);
   tdb().prepare('DELETE FROM po_line_items WHERE po_id = ?').run(po.id);
   tdb().prepare('DELETE FROM purchase_orders WHERE id = ?').run(po.id);
+  /* THE KITCHEN'S ASK COMES BACK (§86). Any material-request line this draft was
+     raised from is released, which returns it to the buyer's outstanding list.
+     That is why material_request_items.sourced_po_id is deliberately NOT a
+     foreign key: an FK would either refuse this delete or leave the line
+     pointing at a purchase order that no longer exists, and both are worse than
+     the ask simply becoming outstanding again. */
+  releaseMaterialRequestLines(po.id);
   logActivity(req.user.id, req.user.username, 'delete', 'purchase_order', po.id, { po_number: po.po_number, scope: 'retail' }, req.ip);
   res.json({ success: true });
 });

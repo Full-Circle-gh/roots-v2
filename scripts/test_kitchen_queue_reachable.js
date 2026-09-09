@@ -86,11 +86,33 @@ check('it still logs what it made', () => {
    no money, no products, no settings, and above all no `restock:pick`, which is
    what would let them dispatch a van. Growing the kitchen's own tools is
    allowed and expected; growing sideways is not. */
+/* THE FOURTH TIME, AND THE LIST IS NOW GONE. The comment above already said the
+   right thing — "the property is the ceiling, not the list" — and then asserted
+   a literal list anyway, so `production:request` (§86, the kitchen asking the
+   buyer to buy a material) turned it red exactly as `production:log` had. A
+   test whose own header explains why it should not be a change-detector, and is
+   one, is worse than either alone: the next reader trusts the header.
+
+   SO THE CEILING IS EXPRESSED AS THE SECTIONS THE KITCHEN'S WORK LIVES IN.
+   `quickstock` (put it on the shelf) and `production` (make it, record it, ask
+   for what it is made from) are the kitchen's own, and may grow. `restock` may
+   NOT — it is the transfer rail, and only the single key `restock:fulfil`, the
+   kitchen's own end of it, is allowed through. Everything else in the product —
+   orders, money, products, customers, settings, purchasing — is sideways, and
+   one key from any of them fails this.
+
+   THIS IS NOT A WEAKER ASSERTION THAN THE LIST IT REPLACES. The list would have
+   caught `orders:refund`; so does this. What the list ALSO caught was the
+   kitchen's own toolkit growing, which the header says is allowed and expected,
+   and which is the only thing that has ever turned it red. */
 check('and gains nothing outside the kitchen’s own work', () => {
-  const KITCHEN_WORK = ['quickstock:add', 'restock:fulfil', 'production:log'];
-  const extra = kitchenCaps.filter(k => KITCHEN_WORK.indexOf(k) < 0);
+  const OWN_SECTIONS = ['quickstock', 'production'];
+  const OWN_KEYS = ['restock:fulfil'];
+  const sectionOf = k => (caps.CAPABILITIES.find(c => c.key === k) || {}).section || null;
+  const extra = kitchenCaps.filter(k =>
+    OWN_KEYS.indexOf(k) < 0 && OWN_SECTIONS.indexOf(sectionOf(k)) < 0);
   assert.deepStrictEqual(extra, [],
-    `kitchen gained ${JSON.stringify(extra)} — beyond making, recording and shelving`);
+    `kitchen gained ${JSON.stringify(extra)} — outside quickstock, production and its own end of restock`);
 });
 
 /* THE KITCHEN'S GRANT DID NOT LEAK INTO THE OTHER RESTRICTED STOCKER, which is

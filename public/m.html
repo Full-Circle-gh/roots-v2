@@ -759,6 +759,16 @@ const state = {
       from:null,             // ask-for-stock: the location being asked to supply
       to:null,               // ...and the one asking, where there is a choice
       qty:{},busy:false,err:'',sent:null},
+  /* ASKING THE BUYER TO BUY A MATERIAL (§86). Its own basket, NOT `rq` above,
+     and the reason is the subject rather than tidiness: `rq` holds PRODUCTS —
+     things the business sells, counted in pieces — and this holds MATERIALS,
+     which have no stock table at all and are counted in whatever unit each one
+     is BOUGHT in. Sharing the basket would mean one screen could send the
+     other's list, which is the exact defect the comment above `rq` records
+     being avoided between its own two screens.
+     `unit` is not stored here: it belongs to the material, is read with it, and
+     is sent back untouched — see mbItems. */
+  mb:{materials:null,tried:false,q:'',qty:{},busy:false,err:'',sent:null},
   /* WRITING A BROADCAST (§63). Four steps, one decision each: what it says, who
      gets it, when it goes, and a last look before it does. `count` is the
      server's own audience preview — never derived here, because the phone does
@@ -864,6 +874,11 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      are never open at once — so entering either clears what the other left,
      and a screen reopened after a send does not reappear on its receipt. */
   if(route==='askkitchen'||route==='askstock') rqReset();
+  /* Same rule, own basket (§86): a purchase request reopened after a send must
+     not reappear on its own receipt. The MATERIAL LIST is deliberately kept —
+     it is the catalogue, not the basket, and re-reading it on every entry is a
+     wait for nothing. Exactly the split the `rq` screens make. */
+  if(route==='askbuy'){ const m=state.mb; m.qty={}; m.q=''; m.err=''; m.sent=null; m.busy=false; }
   /* The list is re-read on every entry and the seen-stamp re-armed: it is a
      record of what the kitchen finished, and one taken at boot would be stale
      by the time somebody opened it. */
@@ -962,6 +977,14 @@ reg('rqTo', id=>{ state.rq.to=Number(id);
   if(state.rq.from===state.rq.to) state.rq.from=null;
   render(); });
 reg('rqFrom', id=>{ state.rq.from=Number(id); render(); });
+/* The purchase-request basket (§86). Its own commands for its own state; the
+   caret rescue is the same one every search box on this page needs. */
+reg('mbSearch', v=>{ const el=document.getElementById('mMbQ');
+  const at=el?el.selectionStart:null; state.mb.q=String(v||''); render();
+  const el2=document.getElementById('mMbQ');
+  if(el2){ el2.focus(); if(at!=null){ try{ el2.setSelectionRange(at,at); }catch(e){} } } });
+reg('mbBump', (id,d)=>mbBump(Number(id),Number(d)));
+reg('mbSend', ()=>mbSend());
 reg('rqSendKitchen', ()=>rqSendKitchen());
 reg('rqSendStock', ()=>rqSendStock());
 reg('krOpen', id=>krOpen(id));
@@ -3251,6 +3274,15 @@ const MORE_GROUPS=[
        emptied, and the Transfers row that reached it went with the last of
        them. The app itself is deleted (§48 step 4). */
     ['askkitchen','chef-hat','Ask the kitchen','向厨房下单'],['askstock','package','Ask for stock','申请补货'],
+    /* THE THIRD REQUEST SCREEN (§86), and the only one that spends: the kitchen
+       asks the buyer to BUY a material. Sixth element is a Features switch —
+       `production`, the one that already gates Materials and Recipes on the
+       desktop, because Ash placed this in the production module.
+       `logbatch` below is NOT given the same gate, deliberately: it ships today
+       with no feature check, and adding one here would hide a screen somebody is
+       already using. A new row can be born gated; an old one cannot be gated
+       retroactively inside an unrelated build. */
+    ['askbuy','shopping-cart','Ask to buy','采购申请',null,'production'],
     ['kitchenready','circle-check','Ready from the kitchen','厨房已完成'],
     ['receivexfer','truck','Receive delivery','收货'],['pick','route','Pick','拣货'],
     /* LOG A BATCH IS THE ONLY ROW OF THE THREE PRODUCTION SCREENS. `whatmade`
@@ -3268,7 +3300,13 @@ const MORE_GROUPS=[
    the search index — and they must agree, so none of them reads MORE_GROUPS
    directly any more. */
 function moreGroups(){
-  return MORE_GROUPS.map(g=>({h:g.h, rows:g.rows.filter(r=>canRoute(r[0])).map(moreRow)}))
+  /* Two gates, and they answer different questions. `canRoute` is "may THIS
+     OPERATOR", the capability; `r[5]` is "does this TENANT have the module at
+     all", the Features switch — the phone's half of the desktop rail's
+     `data-feat`. A row with no sixth element has no module gate, which is every
+     row that shipped before §86. */
+  return MORE_GROUPS.map(g=>({h:g.h,
+      rows:g.rows.filter(r=>canRoute(r[0]) && (!r[5] || featOn(r[5]))).map(moreRow)}))
                     .filter(g=>g.rows.length);
 }
 /* ONE CHEVRON FOR EVERY ROW. Quick Stock briefly wore the leaves-the-app mark,
@@ -7218,6 +7256,137 @@ function rqSend(body,cannot){
     render();
   });
 }
+/* ══ ASKING THE BUYER TO BUY (§86) ═════════════════════════════════════════
+   The kitchen's third request screen, and the only one that spends money —
+   which is exactly why the send does NOT create a purchase order. It raises a
+   REQUEST; a buyer converts it into a draft order and places it. The server's
+   header carries the full reasoning: a purchase order posts to the books the
+   moment it reaches Ordered, so a cook's tap must not be able to reach one.
+
+   NO PRICES ANYWHERE ON THIS SCREEN, and the absence is the server's rather
+   than this file's discretion: GET /material-requests/materials selects no cost
+   column at all. A material's buy price is `materials:costs`, which the kitchen
+   role does not hold. */
+function loadMbMaterials(){
+  const m=state.mb;
+  if(m.materials||m.tried) return;
+  m.tried=true;
+  api('/material-requests/materials').then(rows=>{
+    m.materials=Array.isArray(rows)?rows:[];
+    render();
+  }).catch(()=>{
+    /* NO SHELF TO FALL BACK ON, unlike the product screens: materials have no
+       stock table, so nothing else in this app holds a list of them. Saying so
+       beats an empty picker that reads as "there are no materials". */
+    m.materials=[]; m.err=T('The material list could not be read. Try again.','无法读取物料列表，请重试。');
+    render();
+  });
+}
+function mbLines(){
+  const all=state.mb.materials||[];
+  const q=state.mb.q.trim().toLowerCase();
+  if(!q) return all;
+  return all.filter(p=>(String(p.name_en||'')+' '+String(p.name_cn||'')+' '+String(p.sku||''))
+    .toLowerCase().indexOf(q)!==-1);
+}
+function mbChosen(){ return (state.mb.materials||[]).filter(p=>(state.mb.qty[p.id]||0)>0); }
+function mbBump(id,d){
+  const n=(state.mb.qty[id]||0)+d;
+  state.mb.qty[id]=n>0?n:0;
+  render();
+}
+/* THE UNIT TRAVELS WITH THE LINE AND IS NEVER CONVERTED. It is the material's
+   own `buy_unit`, read from the server with the material and sent back
+   untouched — Ash's "they order according to the unit setup of that material".
+   The buying order's material line defaults to the same column because
+   firePriceAlertsForPO refuses to write a price back when the two disagree, so
+   a gram figure invented here would end as a price silently not landing. */
+function mbItems(){
+  return mbChosen().map(p=>({ingredient_id:p.id, qty:state.mb.qty[p.id]}));
+}
+function mbSend(){
+  const m=state.mb;
+  if(m.busy||!mbChosen().length) return;
+  m.busy=true; m.err=''; render();
+  const lines=mbChosen().length;
+  apiWrite('/api/retail-admin/material-requests',{send:true, items:mbItems()}).then(j=>{
+    const d=(j&&j.data)||{};
+    m.busy=false;
+    m.sent={mr:d.mr_number||('#'+(d.id||'')), lines:lines};
+    render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    m.busy=false;
+    /* THE BASKET SURVIVES A FAILED SEND, for the reason rqSend states: losing a
+       list somebody just built is the one failure that stops people using a
+       screen. */
+    m.err = e.code==='norealm'
+      ? T('This account cannot raise purchase requests.','此账号无法发起采购申请。')
+      : (e.message||T('That did not send. Nothing has changed — try again.','未发送,数据未变 — 请重试。'));
+    render();
+  });
+}
+function screenAskBuy(){
+  loadMbMaterials();
+  const m=state.mb;
+  if(m.sent) return `<div style="padding:24px 16px">
+    <div style="font-size:18px;font-weight:500">${T('Sent to the buyer','已发送至采购')}</div>
+    <div class="num" style="font-size:13px;color:var(--text-secondary);margin-top:6px">${escAttr(m.sent.mr)}</div>
+    <div style="font-size:15px;margin-top:12px">${m.sent.lines} ${T('items','项')}</div>
+    <div style="font-size:14px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${
+      T('The buyer sees it now. Nothing is ordered until they place it.','采购已收到。下单后才会生成采购单。')}</div>
+    <button class="btn2" style="width:auto;padding:11px 26px;margin-top:20px" onclick="APP.cmd('back')">${T('Done','完成')}</button>
+  </div>`;
+  if(!m.materials) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const rows=mbLines();
+  const search=`<div style="padding:4px 16px 12px;position:relative">
+    <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
+    <input id="mMbQ" inputmode="search" enterkeyhint="search" value="${escAttr(m.q)}" style="padding-left:42px"
+      placeholder="${T('Search materials','搜索物料')}" oninput="APP.cmd('mbSearch',this.value)"></div>`;
+  const intro=`<div style="margin-top:12px;padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
+      T('The buyer orders it — nothing is ordered until they place it.','由采购下单 — 下单后才会生成采购单。')}</div>`;
+  /* A LIST THAT COULD NOT BE READ IS NOT AN EMPTY LIST. Saying "no materials
+     match" after the fetch failed tells a cook the company stocks nothing,
+     which is the wrong thing to be told and the wrong thing to act on. The
+     search-miss wording is kept for an actual search miss. */
+  const body = !rows.length
+    ? `<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+        (m.materials.length ? T('No materials match','没有匹配的物料')
+                            : (m.err || T('No materials yet','还没有物料')))}</div>`
+    /* THE UNIT SITS ON THE ROW, BESIDE THE NUMBER, because it is what the number
+       MEANS and it differs per material — two bags and two bottles are the same
+       digit. The product screens can leave it off; this one cannot. */
+    : `<div>${rows.map(p=>{
+        const n=m.qty[p.id]||0;
+        return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
+          <span style="flex:1;min-width:0">
+            <span style="display:block;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rqName(p))}</span>
+            <span style="display:block;font-size:12.5px;color:var(--text-secondary)">${p.sku?`<span class="num">${escAttr(p.sku)}</span> · `:''}${escAttr(p.buy_unit||'')}</span>
+          </span>
+          <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('mbBump',${p.id},-1)"${n<=0?' disabled':''}
+            aria-label="${T('Less','减少')}">${ic('minus',18)}</button>
+          <span class="num" style="width:44px;text-align:center;font-size:18px;font-weight:500">${n}</span>
+          <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('mbBump',${p.id},1)"
+            aria-label="${T('More','增加')}">${ic('plus',18)}</button>
+        </div>`;
+      }).join('')}</div>`;
+  /* THE TALLY COUNTS ITEMS AND NOT UNITS, which is where this foot parts company
+     with rqFoot. Adding two bags to three bottles gives five of nothing; the
+     product screens can sum their pieces because every piece is a piece. */
+  /* The error is drawn ONCE. With no materials the body is already showing it —
+     a load failure and a send failure share `err`, and printing it in both
+     places reads as two things having gone wrong. */
+  const foot=`${(m.err&&m.materials.length)?`<div style="padding:0 16px 10px;font-size:14px;color:var(--brick-ink)">${escAttr(m.err)}</div>`:''}
+    <div style="position:sticky;bottom:0;background:var(--surface-card);border-top:1px solid var(--border-default);
+      padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 12px);display:flex;align-items:center;gap:12px">
+      <span style="flex:1;min-width:0;font-size:13px;color:var(--text-secondary)">
+        <b class="num" style="color:var(--text-primary)">${mbChosen().length}</b> ${T('items','项')}</span>
+      <button class="btn2" style="width:auto;padding:11px 26px"${(mbChosen().length&&!m.busy)?'':' disabled'}
+        onclick="APP.cmd('mbSend')">${m.busy?T('Sending…','发送中…'):T('Send','发送')}</button>
+    </div>`;
+  return intro+search+body+foot;
+}
+
 function rqSendKitchen(){
   const r=state.rq;
   // The purpose is mandatory and the server refuses a request without it by
@@ -9446,6 +9615,7 @@ SUBS.receivexfer={title:['Receive delivery','收货'],render:()=>screenReceiveTr
 SUBS.kitchenready={title:['Ready from the kitchen','厨房已完成'],render:()=>screenKitchenReady()};
 SUBS.askkitchen={title:['Ask the kitchen','向厨房下单'],render:()=>screenAskKitchen()};
 SUBS.askstock={title:['Ask for stock','申请补货'],render:()=>screenAskStock()};
+SUBS.askbuy={title:['Ask to buy','采购申请'],render:()=>screenAskBuy()};
 SUBS.stockadd={title:['Add stock','加库存'],titleOf:()=>T(...stockAppLabel()),
   status:()=>escAttr(qsStoreName()),render:()=>screenStockAdd()};
 SUBS.receiving={title:['Receiving','收货'],status:()=>statusReceiving(),render:()=>screenReceiving()};
@@ -12801,6 +12971,11 @@ const ROUTE_CAP={
      two screens that 403 after the list has been built. Asking the kitchen
      rides with the same key: it is a request, it just goes to a pot. */
   askkitchen:'restock:request', askstock:'restock:request',
+  /* Asking the buyer to BUY is NOT `restock:request` (§86). That key moves goods
+     Roots already owns between Roots' own locations and spends nothing; this one
+     asks the company to spend with a supplier, and the server gates it the same
+     way (lib/cap-routes.js). */
+  askbuy:'production:request',
   /* The same pair the count is gated on, and the same pair routes/restock.js
      addresses the 'prepared' push to — the people who RAISE these requests. A
      fulfil-only kitchen operator is the one who made it, and telling them

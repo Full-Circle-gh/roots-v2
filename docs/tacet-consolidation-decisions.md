@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.185
+# Tacet shared-core consolidation — decisions record, v4.186
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-09 · v4.186 — **§86 ADDED: THE KITCHEN RAISES A PURCHASE REQUEST; THE BUYER TURNS IT INTO A DRAFT PO, AND THE MONEY STAYS THE BUYER'S — DECIDED by Ash**, who was given two readings of "the kitchen order fills the PO automatically" and chose **B**: the send does NOT create a purchase order, it lands as demand in Purchasing and the buyer converts it in one action. **MOST OF THIS ALREADY EXISTED AND IS NOT BUILT HERE.** §77 recorded that the buying end already takes material lines in ordinary use (`RPO-0031`, eleven of them, ¥2,750), and the copy-from-kitchen bridge (`purchases/kitchen-source` + `copy-from-kitchen`, its picker, its `copied_from_po_id` link and its all-or-nothing batch) is a working machine whose source died with the app §78 deleted. **What was missing was the door**: the cooks are `tenant_users` on `/m` with no screen to say they are out of flour and no table to hold it. **WHY B RATHER THAN A**: a PO posts to `expense_entries` and writes the material's price back the moment it reaches Ordered — Ash raised this himself and was right, verified on this date against `postRetailPOExpenses` (postable set `['Ordered','Delivered']`) and the `firePriceAlertsForPO` call on the status route — so a send that created one would let a cook's tap reach the books, with no supplier, price or store chosen. **"Automatic" is about the typing, not the authority.** **THE LINE, NOT THE REQUEST, IS THE UNIT OF SOURCING** (§61's grain change, for §61's reason): `sourced_po_id` on the item is both the record and the refusal, so two buyers cannot raise the same flour twice, and a morning's flour and oil can split across two suppliers. **A NEW TABLE PAIR — NOT `restock_items`, NOT `kitchen_orders`.** The restock rail is product-shaped and every surface on it assumes a stock table that materials do not have (§32 addendum, §39); `kitchen_orders`/`kitchen_order_items` are the old app's requisition, already carry `ingredient_id`, have no reader left and look free, **but `created_by` FKs `users(id)`** — the realm §81 retired, and the exact defect `restock_orders`'s header records as having broken restock for every non-Roots tenant. The old pair is recorded as dead, NOT deleted here. **QUANTITY IN `ingredients.buy_unit`, WHICH IS NOT A CHOICE MADE HERE**: Ash's *"the unit setup of that material"* describes what the system already does — a material PO line already defaults to `buy_unit` because the price write-back only fires when the two match, so the conversion into the PO is the identity and no unit arithmetic exists on this path. **A NEW CAPABILITY IN THE `production` SECTION, HELD BY THE `kitchen` PRESET**, gated on the `production` feature switch (Ash: *"part of production module"* — the same switch as Materials and Recipes). Not folded into `materials:view` (that is the masterlist with every buy price on it) and not into `restock:request` (that moves Roots' own goods between locations and spends nothing). **REJECTED**: a low-stock trigger in the shape of `/api/retail-admin/reorder` — materials have neither a stock count nor a buffer column, so there is nothing to compare and auto-raising demand needs material stock, declined twice; appending to an open draft PO instead of making a new one, which needs its own rule for a target whose supplier or status has moved on; and showing prices on the kitchen's screen, which is `materials:costs` and was deliberately withheld from that role.
 
 2026-09-09 · v4.185 — **§85 ADDED AND BUILT: THE PRE-ORDER WINDOW REACHES THE PLATFORMS — DECIDED by Ash**, and it is the half §84 deliberately did not build. §74/§80 made a sold-out fresh meal orderable in the mini app while today's batch is still coming, §84 made what is owed visible to the kitchen, and this carries the same morning to Meituan, Eleme and gzgrocery. **TWO PARAMETERS WERE ASH'S AND ARE NOT THIS SECTION'S TO CHOOSE**: a lock hour defaulting to **11:00 and adjustable** (*"let's say lock time is 11 am but it's need to be able to adjust"*), and **all three channels in scope**, gzgrocery included over this session's caution about its silent month of failed pushes (*"I have no problem with gzgrocery sync it works great"*). **THE MINI APP'S MECHANISM CANNOT BE COPIED**: there the rule works by DECLINING TO REFUSE and parking an order that holds no stock, because we own that checkout; on the platforms we own nothing but a number we push, and all three push the same one (`bundleStock.sellableAt`), so a shelf at zero is pushed as zero and the listing reads 售罄. There is no parking on a platform — an order it accepts is live, and one we cannot fill is a cancellation with a penalty. **THE RULE, IN ONE LINE: while the window is open `published = max(0, shelf + preorder_qty)`, otherwise `max(0, shelf)`, which is exactly today's behaviour.** Open means the schedule is enabled, today is a batch day, the hour is before `lock_hour`, `preorder_qty` is set and this channel is named — **any one of them missing is the off switch**, the same shape §74 chose for `ready_hour` and for the same reason: no migration, no backfill, nothing to undo. **IT CAPS ITSELF, WHICH IS WHY IT IS ONE TERM AND NOT A QUOTA MECHANISM**: each pre-order drives the shelf down by one (§84 having stopped the ingests clamping) so the published figure falls with it — 20, then 19, then 18, and at −20 it publishes 0 and the platform shows sold out. **The morning cannot sell more than the allowance and nothing has to remember how many it sold**, because the shelf already knows. **ONE NUMBER FOR EVERY PRODUCT, DELIBERATELY FOR NOW**: a per-product allowance is the better answer and is NOT built here, because the stock-layer fields it would join (`safety_buffer`, `wechat_quota`, `meituan_quota`, `restock_target`) are ALL API-only with no control anywhere in the back office, and shipping a per-product number nobody can set is worse than a blunt one they can — **recorded as the first thing to revisit**. §74's caution is restated with more force: **set `preorder_qty` only where the batch reliably covers it**, a surplus parking harmlessly in the mini app and being a cancellation on a platform. **WHERE THE CADENCE LIVES, WHICH §84 LEFT OPEN**: `nextBatchShipDate` MOVES to `lib/batch-cadence.js` and `routes/retail.js` calls it there — a move, not a copy, because §80 collapsed three copies of this rule into one so that the pill, the checkout and the order agree, and a fourth in a daemon would undo that; a daemon cannot require a 36,000-line express router to answer a date question. `lib/inventory.js` still learns nothing and §80's pinning suite is unchanged. **THE CLOSE IS EXACT, NOT SWEPT**: at `lock_hour` the figure must fall back to the shelf whether or not the batch was recorded, or a kitchen running forty minutes late leaves a platform selling food that does not exist — and the queue is edge-triggered with nothing happening at 11:00 to trigger it. The drift sweep is the backstop but runs every 30 minutes, and half an hour past a lock the operator set makes the setting a lie; **the daemons' own loops run every ten seconds**, so the flip is detected there on a config read and a comparison, with no browser, no network and no query when nothing changed. **THE OVERSELL ALARM LEARNS THE DIFFERENCE**: a pre-order against an empty shelf trips `order_oversold`, correct everywhere else and noise here, and an alert firing on every pre-order buries the one that matters — that alarm exists because 54 undeducted lines accumulated unseen from June to September. It is suppressed exactly where the window explains it (channel in the window, shortfall inside the allowance) and fires unchanged otherwise, INCLUDING for a shortfall exceeding the allowance, which is a real oversell in a pre-order's clothes. **The sync-log row is written in both cases** — suppressing the page is not forgetting, and the log is where the count is reconciled. **WHAT IS STILL NOT SOLVED, named so it is not read as done: the order that arrives one minute after the lock.** The batch is closed, the platform order is live, and it must be filled or cancelled; narrowing the window shrinks that gap and never closes it. That is the difference between a surface we own and one we do not, and the cost of being sellable there at all.
 
@@ -8300,3 +8302,156 @@ forgetting, and the log is where the count gets reconciled.
 order is live and must be filled or cancelled. Narrowing the window shrinks that gap and never
 closes it. §84's answer stands — this is the difference between a surface we own and one we do not,
 and it is the cost of being sellable there at all.
+
+## §86 — THE KITCHEN RAISES A PURCHASE REQUEST; THE BUYER TURNS IT INTO A DRAFT PO, AND THE MONEY STAYS THE BUYER'S
+
+Ruling (Ash, 2026-09-09), on being asked how far "automatically" reaches: *"B"*, of the
+two readings put to him — the request WAITS in Purchasing and the buyer converts it in one
+action, rather than the send creating a PO outright. Two further answers in the same
+message settle the unit and the holder: **the quantity is in the material's own configured
+buy unit**, and **the kitchen role holds the new grant**.
+
+### The finding this rests on, and it is most of the work
+
+**THE BUYING END ALREADY EXISTS AND NEEDS NOTHING.** §77 recorded that kitchen purchasing
+had already moved to Tacet in ordinary use — `RPO-0031`, eleven material lines, Ordered,
+¥2,750, against Tianhe — on the `ingredient_id` line subject §28 addendum point 4 gave a
+retail PO in Phase 1b. A material line already prices back into
+`ingredient_price_history`, already fires the ±5% alert, already posts its expense, and
+already refuses to touch `inventory.adjustStock`. **Nothing about the destination is
+built here.**
+
+**AND THE BRIDGE ALREADY EXISTS, POINTED AT A DEAD SOURCE.** `GET
+/api/retail-admin/purchases/kitchen-source` and `POST .../copy-from-kitchen` pull a
+`scope='kitchen'` PO into an editable retail draft, with a picker in
+`16-purchasing.js`, a `copied_from_po_id` link, a 409 on a second copy, and an
+all-or-nothing batch. §78 deleted the app that produced those kitchen POs, so **that
+machine works and has nothing left to draw from.** This section gives it a live source
+rather than inventing a second one beside it.
+
+**WHAT WAS ACTUALLY MISSING WAS THE DOOR.** The cooks are `tenant_users` on `/m` holding
+`quickstock:add`, `restock:fulfil` and `production:log`. They have no screen that says
+"we are out of flour", and no table that could hold the sentence if they did.
+
+### PART ONE — B: THE SEND DOES NOT CREATE A PURCHASE ORDER
+
+**A REQUEST IS NOT A PURCHASE, AND THE GAP BETWEEN THEM IS WHERE THE BUYER WORKS.** A PO
+posts to `expense_entries` the moment it reaches Ordered and writes the material's price
+back on the same transition — verified on this date against
+`postRetailPOExpenses`, whose postable set is `['Ordered','Delivered']`, and against the
+`firePriceAlertsForPO` call on the status route. **Ash raised this himself and was
+right.** So a send that created a PO would let a cook's tap reach the books, and would
+have to guess a supplier, a price and a store that nobody has chosen yet.
+
+**THE REQUEST THEREFORE LANDS AS DEMAND, and the buyer converts it.** The kitchen sends;
+Purchasing shows the outstanding lines; the buyer ticks what they want, presses once, and
+gets a **Draft** RPO with the lines already filled. Supplier, price and store are theirs,
+and Order is theirs. **Nothing is retyped, and nothing is posted by anyone but the buyer.**
+
+**"AUTOMATIC" IS THEREFORE ABOUT THE TYPING, NOT ABOUT THE AUTHORITY**, and that
+distinction is the whole of Part One.
+
+### PART TWO — THE LINE IS THE UNIT OF SOURCING, NOT THE REQUEST
+
+The copy-from-kitchen bridge marks a whole PO copied. **This one marks a LINE sourced**,
+and the request's status is the rollup — the same grain change §61 made to the kitchen
+queue, for the same reason it made it there. A buyer splits a morning's flour and oil
+across two suppliers as a matter of course; a request that could only be converted whole
+would force one PO per supplier per request, or force the buyer to delete lines out of a
+draft they did not want.
+
+**A LINE IS SOURCED ONCE.** `sourced_po_id` on the item is the record and the refusal:
+ticking a line that already carries one is refused, so two buyers working the same list
+cannot raise the same flour twice.
+
+### PART THREE — A NEW TABLE PAIR. NOT `restock_items`, AND NOT `kitchen_orders`
+
+**NOT `restock_items`, THOUGH IT IS THE OBVIOUS REUSE.** That rail is product-shaped —
+`product_id` FKs `products`, and every surface on it (pick, dispatch, `goods_state`,
+`stock_applied_at`, Ready from the kitchen, the print path) assumes a subject with a stock
+table behind it. **Materials have no stock table**, deliberately: §32's addendum deferred
+material stock and §39 declined to grant it. Carrying a material on that rail means an
+"unless this line is a material" branch in every one of those places, which is the shape
+that produces a screen quietly doing nothing.
+
+**NOT `kitchen_orders` / `kitchen_order_items` EITHER, and this is the trap worth naming.**
+They are in the schema, they already carry `ingredient_id`, `qty`, `unit` and a
+`ko_number`, they are the old app's ingredient requisition, and they have **no reader
+left** — `audit_made_materials.js` counts them and nothing else. They look free. But
+`kitchen_orders.created_by` FKs `users(id)`, the realm §81 retired, and that is precisely
+the defect `restock_orders`'s own header records as having broken restock for every
+non-Roots tenant with *"no such table: main.users"* once foreign keys were enforced.
+**Reviving a table also inherits the meaning of whatever rows it holds.** New tables,
+`created_by` a plain audit integer with no FK, exactly as `restock_orders` and
+`production_batches` were repaired to be.
+
+**THE OLD PAIR IS NOT DELETED HERE.** They retire on their own change, with the rest of
+the legacy schema; deleting them inside a feature build would widen this ruling into that
+cleanup. They are recorded as dead so the next reader does not mistake this section for
+having missed them.
+
+### PART FOUR — THE QUANTITY IS IN `ingredients.buy_unit`, AND THAT IS NOT A CHOICE MADE HERE
+
+Ash: *"they order according to the unit setup of that material, it's already part of the
+material setting."* **He is describing what the system already does.** The material record
+carries **Buy unit · 采购单位** (`ingredients.buy_unit`) beside its recipe unit, and a
+material line on a retail PO already defaults its unit to it — `16-purchasing.js`'s
+material picker, whose own comment states the reason: **the price write-back only fires
+when the line's unit matches `ingredients.buy_unit`.** A request that captured grams would
+either be converted on the way into the PO or would silently break the write-back.
+
+**SO THE REQUEST STORES `buy_unit` AND THE CONVERSION IS THE IDENTITY.** The cook counts
+bags because a bag is what the material says it is bought in, and the line reaches the PO
+unchanged. **No unit arithmetic exists anywhere on this path, and none should be added.**
+
+### PART FIVE — THE GRANT, AND WHERE THE SCREEN LIVES
+
+**A NEW CAPABILITY, HELD BY THE `kitchen` PRESET.** It is not folded into
+`materials:view`: that key is the back-office masterlist — view, costs, edit — and a cook
+who may ask for flour has no business being handed the buy prices of everything the
+company purchases. The request's own picker serves the list, exactly as `production:log`
+lets a cook choose a `store_product` without holding `products:view`.
+
+**IT IS NOT `restock:request` EITHER**, though the two read alike. That key opens *Ask for
+stock* and *Ask the kitchen*, which move existing goods between Roots' own locations and
+spend nothing. This one asks the company to spend money with a supplier. Granting it
+through the transfers key would mean every store operator who can request a delivery can
+also raise procurement demand.
+
+**SECTION `production`, GATED ON THE `production` FEATURE SWITCH** — Ash's *"it should be
+part of production module"*, taken literally: the same switch that already gates Materials
+and Recipes, so a tenant that makes nothing never sees the screen. Its capability sits in
+the `production` section beside `production:log`, which is now the two things the kitchen
+does.
+
+### Rejected
+
+**A LOW-STOCK TRIGGER, IN THE SHAPE OF `/api/retail-admin/reorder`.** That endpoint
+compares `retail_store_stock.physical_qty` against a safety buffer, and **materials have
+neither column** — there is nothing to compare. Auto-raising material demand needs
+material stock, which §39 has declined twice. Somebody looks at the shelf and types it, and
+that is the honest state rather than a gap.
+
+**APPENDING TO AN EXISTING DRAFT PO INSTEAD OF MAKING A NEW ONE.** Considered because a
+buyer working one supplier all morning would rather add to what is open. Refused for now
+on the copy-from-kitchen precedent, which also always makes a new draft: appending needs a
+rule for what happens when the target's supplier, store or status has moved on since it
+was chosen, and that rule is worth its own decision rather than being assumed inside this
+one.
+
+**LETTING THE KITCHEN SEE PRICES ON THE REQUEST SCREEN.** A material's buy price is
+`materials:costs`, a `money: 'shows'` grant. The request needs a name, a SKU, a unit and a
+number; it does not need what the last bag cost, and putting it there would hand the whole
+cost book to a role that was deliberately not given it.
+
+### What this does NOT decide
+
+**Whether the buyer can edit a requested quantity before converting.** The draft is
+editable after conversion by the ordinary PUT, which covers the need; a "change it in the
+request" path would need to say what the kitchen is told afterwards, and nothing yet asks
+for it.
+
+**What the kitchen is told when a line is sourced.** The status is visible on the request,
+and no push, no dot and no Ready-style acknowledgement is built. §66 and §69 are the
+precedent for adding one later if the morning turns out to need it; inventing it in advance
+would be inventing the workflow rather than serving it.
