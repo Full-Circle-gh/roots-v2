@@ -741,7 +741,12 @@
         // A background save refreshes only what the SERVER knows, never the
         // fields — see mergeServerFacts. A manual save repaints in full, and
         // does it in rcpSave where the operator is watching.
-        if (source === 'auto') mergeServerFacts(out.fresh);
+        if (source === 'auto') {
+          mergeServerFacts(out.fresh);
+          // AFTER the merge, and only on this path: a manual save repaints the
+          // whole record from the same answer (rcpSave), so it needs no help.
+          if (refreshLineRates(out.fresh)) repaintRates();
+        }
         // Only clear the dirty flag if nothing was typed while this was in
         // flight. If something was, the next timer picks it up.
         if (_editGen === gen) _dirty = false; else scheduleAutosave();
@@ -1036,6 +1041,63 @@
     paintSummary();
   }
 
+  // ── WHAT A LINE COSTS IS THE SERVER'S FACT, NOT THE OPERATOR'S ──────────
+  //
+  // mergeServerFacts() above refuses to touch `_lines` on purpose: qty, unit,
+  // note and the in-yield box are what somebody is typing, and the server's
+  // copy of them is by definition older. `master_cost`, `master_unit` and
+  // `master_free` are NOT in that category. Nobody types them. They are the
+  // material's own figures, they move while a record sits open — another
+  // recipe's save re-costing a made material, a purchase price write-back
+  // (routes/purchases.js), an edit on the Materials screen — and every money
+  // figure on this screen is derived from them: each line's cost, the batch
+  // cost, cost per serving, cost per gram, the margin.
+  //
+  // WHAT IT COST TO LEAVE THEM ALONE, 2026-09-09: the Garlic Dill Sour Cream
+  // recipe carried a batch size typed as 5000 g against ingredient lines
+  // adding to 2616 g, so its material was priced at ¥0.0218/g instead of
+  // ¥0.0417/g. Fixing the batch size re-costed the material within the
+  // second. The recipe consuming it was open, autosaving normally, and went
+  // on showing ¥0.0218/g and ¥1.53 for its 70 g line — beside a header that
+  // was already printing the corrected ¥0.0417/g, because THAT reads
+  // backsMaterial, which mergeServerFacts does refresh. One screen, two
+  // rates, and no sign which was live. The database was right the whole time.
+  //
+  // ONLY THE THREE FIELDS, AND ONLY BY ID. Nothing is added, removed or
+  // reordered — a line the server does not know about (just picked, not yet
+  // saved) and a line whose material was deleted (ingredient_id null) are
+  // both left exactly as they are. Returns whether anything actually moved,
+  // so a save that changed no rate repaints nothing.
+  function refreshLineRates(fresh) {
+    if (!fresh || !Array.isArray(fresh.ingredients) || !Array.isArray(_lines)) return false;
+    const byId = new Map();
+    fresh.ingredients.forEach((row) => {
+      if (row && row.ingredient_id != null) byId.set(row.ingredient_id, row);
+    });
+    let moved = false;
+    _lines.forEach((l) => {
+      if (!l || l.ingredient_id == null) return;
+      const row = byId.get(l.ingredient_id);
+      if (!row) return;
+      ['master_cost', 'master_unit', 'master_free'].forEach((k) => {
+        if (l[k] !== row[k]) { l[k] = row[k]; moved = true; }
+      });
+    });
+    return moved;
+  }
+
+  // The painters a moved rate needs, and no others. NOT rcpRecompute(): that
+  // one calls markDirty() — which would make a save that changed nothing the
+  // operator typed leave the record dirty, and schedule another save, and so
+  // on — and paintYieldFields(), which has no rate in it. Each of these
+  // repaints text in place; none rebuilds an input.
+  function repaintRates() {
+    paintLineMoney();
+    paintLineWarns();
+    paintSummary();
+    paintBreakdown();
+  }
+
   function paintRecord() {
     const host = recRoot();
     if (!host || !_rec) return;
@@ -1247,7 +1309,7 @@
 
   // Written in place, never by repainting the tab — the operator may be typing
   // in the serving-size box two fields away, and Details holds the name and the
-  // notes as well. Same in-place discipline as paintLineWarns/paintLineCosts.
+  // notes as well. Same in-place discipline as paintLineWarns/paintLineMoney.
   function paintYieldFields() {
     if (!_rec) return;
     const y = resolvedYield();
@@ -1350,7 +1412,7 @@
   // sort_order is derived from array position at save time (retail-recipes.js
   // already writes it that way), so reordering the array is the whole fix.
   let _lineDrag = null;
-  // Shared by lineRow() (initial paint) and paintLineCosts() (in-place
+  // Shared by lineRow() (initial paint) and paintLineMoney() (in-place
   // refresh on every keystroke) so the two can never drift apart.
   // Does this line end up in the finished batch? Read through the shared
   // module so the checkbox on the row and the sum in the field can never
@@ -1373,16 +1435,34 @@
     const hasCost = l.master_cost > 0 || isFree;
     return hasCost && !isFree ? money((Number(l.qty) || 0) * (l.master_cost || 0)) : (isFree ? esc(T('free', '免费')) : '—');
   }
+  // The MATERIAL's own rate, as opposed to what this line's quantity of it
+  // costs. Pulled out of lineRow() for the same reason lineCostText was: it is
+  // repainted in place when the server's figure moves (paintLineMoney below),
+  // and a second copy of the same sentence is how a row's rate and its cost
+  // come to disagree about the same material.
+  function linePerText(l) {
+    const isFree = !!l.master_free;
+    const hasCost = l.master_cost > 0 || isFree;
+    return isFree ? T('free', '免费')
+      : (hasCost ? `${moneyU(l.master_cost)}/${esc(l.master_unit || l.unit || '')}` : T('no cost', '无成本'));
+  }
   function lineRow(l, idx) {
     const isFree = !!l.master_free;
     const hasCost = l.master_cost > 0 || isFree;
-    const per = isFree ? T('free', '免费') : (hasCost ? `${moneyU(l.master_cost)}/${esc(l.master_unit || l.unit || '')}` : T('no cost', '无成本'));
+    const per = linePerText(l);
     return `
       <div class="rcp-line" draggable="false" ondragover="rcpLineDragOver(event,${idx})" ondragleave="rcpLineDragLeave(event)" ondrop="rcpLineDrop(event,${idx})" ondragend="rcpLineDragEnd()">
         <span class="rcp-line-drag" draggable="true" ondragstart="rcpLineDragStart(event,${idx})" title="${esc(T('Drag to reorder', '拖动排序'))}">⠿</span>
         <div class="rcp-line-name">
           <div class="n">${esc(l.name_en || l.master_name_en || '')}</div>
-          <div class="s${hasCost ? '' : ' warn'}">${esc(l.name_cn || '')}${l.name_cn ? ' · ' : ''}${esc(per)}${l.ingredient_id == null ? ' · ' + esc(T('material deleted', '物料已删除')) : ''}</div>
+          <!-- THE RATE IS ITS OWN SPAN so paintLineMoney() can refresh it
+               without rebuilding the row. It is the server's number, not the
+               operator's, and it moves under an open record whenever anything
+               re-costs the material — another recipe's save, a purchase price
+               write-back, an edit on the Materials screen. Painted as part of
+               the sentence it used to be baked into, so nothing moves on
+               screen; only the figure changes. -->
+          <div class="s${hasCost ? '' : ' warn'}">${esc(l.name_cn || '')}${l.name_cn ? ' · ' : ''}<span class="rcp-line-per" data-line="${idx}">${esc(per)}</span>${l.ingredient_id == null ? ' · ' + esc(T('material deleted', '物料已删除')) : ''}</div>
           <!-- The mark, on the line it is about. Painted here rather than only
                once per recipe because the summary pill names the CONDITION and
                this names the ROW — an operator who reads UNIT MISMATCH on the
@@ -1740,9 +1820,16 @@
   }
 
   // Same in-place idiom as paintLineWarns() just above: only the text of the
-  // one span each row already carries is touched, so a keystroke in the qty
-  // box never repaints the row it lives in.
-  function paintLineCosts() {
+  // spans each row already carries is touched, so a keystroke in the qty box
+  // never repaints the row it lives in.
+  //
+  // BOTH FIGURES, ONE PASS. A row states two: the material's rate (¥/g) and
+  // what this line's quantity of it costs. They are the same fact multiplied
+  // differently, and refreshing one without the other puts a row on screen
+  // whose own two numbers do not agree — which is what a stale rate looked
+  // like before refreshLineRates() existed: ¥0.0218/g beside a total computed
+  // from it, under a header already showing the material at ¥0.0417/g.
+  function paintLineMoney() {
     const host = document.getElementById('rcp-lines');
     if (!host) return;
     host.querySelectorAll('.rcp-line-cost').forEach((el) => {
@@ -1751,6 +1838,18 @@
       if (!l) return;
       const want = lineCostText(l);
       if (el.textContent !== want) el.textContent = want;
+    });
+    host.querySelectorAll('.rcp-line-per').forEach((el) => {
+      const idx = Number(el.getAttribute('data-line'));
+      const l = _lines[idx];
+      if (!l) return;
+      const want = linePerText(l);
+      if (el.textContent !== want) el.textContent = want;
+      // The sub-line turns amber when the material has no cost at all, and a
+      // refreshed rate moves it either way — a material that was ¥0 when this
+      // record opened and has been priced since, or the reverse.
+      const sub = el.parentNode;
+      if (sub && sub.classList) sub.classList.toggle('warn', !(l.master_cost > 0 || l.master_free));
     });
   }
 
@@ -1762,7 +1861,7 @@
     paintSummary();
     paintBreakdown();
     paintLineWarns();
-    paintLineCosts();
+    paintLineMoney();
   };
 
   function breakdownHtml(c) {
