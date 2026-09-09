@@ -52,7 +52,8 @@ evidence rather than a finding and carries no severity.)
 1. **D-01 — Purchasing, Recipes and Materials write into the first merchant's database.**
    102 statements with no merchant filter, 36 of them writes. Latent today because
    per-merchant separation is switched off; live the day it is switched on. *Critical.*
-2. **D-02 — System alerts are read from one fixed database file**, so a second merchant's
+2. **D-02 — Per-tenant settings are read from one fixed database file** (three sites; see
+   the extent note under D-02, added 2026-09-09), so a second merchant's
    alert setting is never consulted and their alerts can land in the first merchant's chat
    group. *Critical.*
 3. **A-02 — A mistyped stock count silently sets the shelf to zero.** Blank field, stray
@@ -2453,6 +2454,80 @@ the module header names the setting as `system_alerts.enabled` +
 (`:7-8`). The alert's own timestamp is fixed too: `Date.now() + 8 * 3600 * 1000` (`:208`).
 
 **Suggested direction:** resolve the webhook per merchant, the way credentials already are.
+
+#### D-02 extent · added 2026-09-09 — the full set, so the fix covers it
+
+`lib/ops-alert.js` is where this was found, not how far it goes. The delivery-logic
+survey turned up a second site by accident, which is the signal to sweep for the rest
+rather than file it separately. **The whole repository was searched; the results are
+below, including the sites that look like this defect and are not.**
+
+**The defect, stated so the sweep can be repeated.** Per-tenant data read through a
+handle that is not tenant-routed. `require('../database')` is the CONTROL-PLANE handle
+and using it is correct for `tenants`, `tenant_users`, `tenant_roles`, `tenant_domains`
+and `billing_*`, which are cross-tenant by design (`lib/tenant-db.js:8-10`). It is the
+defect only when the table being read is per-tenant — `storefront_config`, `retail_*` —
+because outside a request context `tdb()` returns `mainDb` and the read silently becomes
+merchant 1's.
+
+**Site 2 — `lib/gzgrocery-order-notify.js:17`, `:24`, `:26`. NEW, and the same shape
+exactly.** `const DB_FILE = path.join(__dirname, '..', 'data', 'roots.db')`, opened
+`{ readonly: true }`, then `SELECT value_json FROM storefront_config WHERE key = ?` for
+`gzgrocery_orders.wecom_webhook` and `gzgrocery_orders.enabled`. Merchant 1's settings row
+decides where every merchant's gzgrocery order feed goes. Same table, same consequence,
+same remedy as `ops-alert.js` — and it is undeclared, so a reader has no way to know.
+
+**Site 3 — `lib/store-hours.js:28`, `:72`, `:74`.** Holds `seam(require('../database'))`
+and reads `SELECT code, open_time, close_time, sync_start_time FROM retail_stores` —
+per-tenant — with **no tenant routing anywhere in the file**. Every merchant's opening
+hours resolve to merchant 1's. It compounds: `let cache = null` (`:42`) is a module-level
+cache with no tenant key and a 10-minute TTL, so even a routed read would be served
+another merchant's rows for up to ten minutes. Callers: `lib/channel-sync-stale.js:19`,
+`lib/store-trading.js`, `routes/meituan-admin.js`, `routes/eleme-admin.js`,
+`routes/retail-inventory.js`, and four daemons.
+
+**Only these three open per-tenant data off a non-tenant handle in runtime code.** The
+sweep that establishes it:
+
+```
+# open-by-filename, D-02's exact shape — 2 hits, both listed above
+grep -rnE "new Database\(" --include=*.js lib/ routes/ middleware/ server.js | grep -v tenant-db.js
+#   lib/gzgrocery-order-notify.js:24 · lib/ops-alert.js:68
+
+# the shared handle used for a PER-TENANT table — 1 further hit
+#   lib/store-hours.js:72,74 → retail_stores
+```
+
+**Checked and NOT this defect**, recorded so nobody re-files them: `lib/roles.js`,
+`lib/require-cap.js`, `lib/billing-lifecycle.js`, `lib/platform-admin.js`,
+`lib/tenant-creds.js`, `lib/provision-tenant.js`, `lib/integrations/registry.js`,
+`lib/integrations/session-relay.js`, `routes/backend-*.js`, `routes/billing*.js`,
+`routes/saas-admin.js`, `middleware/auth.js`, `middleware/public-tenant.js` and the
+`server.js` sites — every one reads a control-plane table, which is what that handle is
+for. `lib/shop-qr.js:39` reads `tenant_domains` keyed by `tenant_id`: correct.
+`lib/inventory.js:21` holds the raw handle but performs no reads through it; its
+per-store queries go via `tdb()`.
+
+**The channel daemons are the same defect DECLARED, and are D-05's, not this finding's.**
+`scripts/qingyun-daemon.js:39`, `scripts/meituan-daemon.js:46`,
+`scripts/eleme-daemon.js:81`, `scripts/shangou-daemon.js:40` and
+`scripts/guanyi-daemon.js:38` each hold `seam(require('../database'))` and read
+per-tenant tables — `qingyun-daemon` reaches `retail_delivery_zones` through
+`inventory.isQingyunSameCityToday` → `isOptInSameDayDistrict`, so no merchant but the
+first can have a rider dispatched. **Each says so in its own header** in the same words:
+*"ONE ACCOUNT, TODAY, AND SAID PLAINLY. This daemon opens `require('../database')` —
+account 1's database — so account 1 is the only account it can be about"*, and each
+points at **D-05** as the finding that owns per-account channel sync. They are listed
+here so D-02's fix knows where its boundary is, **not** as undeclared sites: a declared
+limitation with a named owner is a different thing from a silent one, and filing it twice
+would make the count wrong in both places. If D-05's scope does not in fact reach the
+daemons — its own text is about the channel FILTER list — then that is a gap in D-05 and
+belongs there, not here.
+
+**What this means for the fix.** D-02's PR covers `lib/ops-alert.js`,
+`lib/gzgrocery-order-notify.js` and `lib/store-hours.js` — three modules, one change of
+shape — and must also drop or key `store-hours`'s module-level cache, which is a second
+bug hiding behind the first.
 
 ### D-03 · The merchant's currency setting exists and 15 of 23 screens ignore it
 **Severity:** High
