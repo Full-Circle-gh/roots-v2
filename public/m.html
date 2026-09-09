@@ -712,6 +712,15 @@ const state = {
          answer of a session is a baseline and never lights the dot for a
          backlog that was already there. */
       seen:null, fresh:0},
+  /* WHAT TODAY'S BATCH OWES (§84) — kept BESIDE the queue rather than inside it
+     because it is not the same list and must not inherit its lifecycle. `kq` is
+     re-fetched per tab and stamped as read; this is neither. Its rows are
+     derived from orders, nobody marks them seen, and switching to the Done tab
+     does not make them stop being owed. `rows` stays null until the first
+     answer lands so the block can tell "not asked yet" from "nothing owed" —
+     the second draws nothing, and the first must not draw an empty state that
+     would flash on every entry. */
+  owed:{rows:null,tried:false,multi:false},
   hd:{lines:null,rs:null,rsId:null,reasons:null,busy:false,err:'',done:null,openReason:-1,
       awaiting:null,        // the request whose lines are waiting on the shelf to load
       awaitingItemId:null,  // set alongside `awaiting` when only ONE of its lines is owed (§61)
@@ -866,7 +875,14 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
     if(pikStores().length>1) k.at=null; }
   /* The queue is re-read on entry for the same reason the kitchen-ready list
      is: what is waiting to be made is a fact about this minute. */
-  if(route==='kitchenqueue'){ const k=state.kq; k.tried=false; k.list=null; k.order=null; k.orderId=null; k.err=''; k.note=''; }
+  if(route==='kitchenqueue'){ const k=state.kq; k.tried=false; k.list=null; k.order=null; k.orderId=null; k.err=''; k.note='';
+    /* §84 — the owed block is re-asked on the same entry and for a stronger
+       reason than the queue is: it is what somebody opened this screen to find
+       out at the start of a shift, and a figure carried over from the last time
+       the app was opened is a debt that may already have been cooked. `rows`
+       back to null, not [], so the block draws nothing rather than flashing an
+       answer it no longer stands behind. */
+    const w=state.owed; w.tried=false; w.rows=null; w.multi=false; }
   /* Log a batch opens with nothing counted. A basket left over from a batch
      that was already recorded would add it a second time. */
   if(route==='logbatch'){ state.bat.qty={}; state.bat.q=''; }
@@ -7249,6 +7265,76 @@ function loadKq(force){
     k.list=[]; k.err=''; render();
   });
 }
+/* WHAT TODAY'S BATCH OWES (§84) — units customers have already paid for that
+   are not on the shelf, per product, per shop.
+
+   A SECOND FETCH RATHER THAN A FIELD ON THE FIRST, deliberately. `/api/restock`
+   answers "which requests are open", which is a different question with a
+   different answer set and a different lifetime: it is re-read per tab and
+   stamped as read, and neither applies here. Folding this into that payload
+   would tie a number derived from ORDERS to the refresh rules of a list of
+   REQUESTS, and the two would drift the first time one of those rules changed.
+
+   NEVER STAMPS ANYTHING READ. There is no `seen_at` on a debt and no dot to put
+   out: it stops being shown when it stops being owed, which is when the kitchen
+   records the batch — 加库存 passes a delta, so −18 + 40 = 22 and the row simply
+   is not in the next answer. That is the whole of its lifecycle.
+
+   NOT POLLED, and that is a decision rather than an omission. pollKitchenQueue
+   is deliberately careful about repainting (render() rewrites the app in one
+   innerHTML), and a second 20-second fetch that redrew on every tick would spend
+   that care. Two things already keep this current: it is re-read on every entry
+   to the screen, which is when a shift actually starts, and Home's own row reads
+   the same figure from /dashboard/ops on the dashboard's poll. */
+function loadOwed(force){
+  const w=state.owed;
+  if(w.tried&&!force) return;
+  w.tried=true;
+  api('/api/restock/batch-owed').then(j=>{
+    const d=(j&&j.data)||{};
+    w.rows=Array.isArray(d.rows)?d.rows:[];
+    w.multi=!!d.multi_store;
+    render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    /* AN EMPTY LIST, NOT AN ERROR LINE. This block sits above a screen whose
+       own job is unaffected by it; a failed read here must cost the block and
+       never the queue underneath. The Home row reads the same figure from
+       /dashboard/ops, so a fault on this one endpoint does not silence the
+       fact everywhere at once. */
+    w.rows=[]; w.multi=false; render();
+  });
+}
+/* The block itself. Empty string when nothing is owed OR the answer has not
+   landed — a heading over no rows is worse than no heading, and this must not
+   flash on the way in. */
+function kqOwed(){
+  const w=state.owed;
+  if(!w.rows||!w.rows.length) return '';
+  /* THE HEADING NAMES WHO IS WAITING, not what day it is. `有客户订单等待` is
+     lifted verbatim from this file's own kitchen-request purpose picker, where
+     it already means exactly this (docs/tacet-delivery-vocabulary.md v1.41).
+     It deliberately does NOT say "today's batch": lib/batch-owed.js knows no
+     production cadence and cannot tell whether the kitchen is cooking today,
+     while the units are owed either way. */
+  const rows=w.rows.map(r=>{
+    const nm=(LANG==='en'?(r.name_en||r.name_cn):(r.name_cn||r.name_en))||'';
+    /* THE SHOP IS NAMED ONLY WHEN THERE IS MORE THAN ONE IN THE ANSWER. A
+       kitchen cooking for one shop does not need to be told which, and a label
+       on every row that never varies is a label nobody reads. */
+    const shop=w.multi?((LANG==='en'?(r.store_en||r.store_cn):(r.store_cn||r.store_en))||''):'';
+    return `<div style="display:flex;align-items:baseline;gap:12px;padding:9px 16px;border-top:1px solid var(--border-default)">
+      <span style="flex:1;min-width:0;font-size:15px">${escAttr(nm)}${
+        shop?`<span style="font-size:13px;color:var(--text-secondary)"> · ${escAttr(shop)}</span>`:''}</span>
+      <span style="flex:none;font-size:17px;font-weight:500;font-variant-numeric:tabular-nums">${escAttr(String(r.owed))}</span>
+    </div>`;
+  }).join('');
+  /* A NAME AND A NUMERAL, AND NO THIRD WORD. No unit noun, no verb, no status
+     chip — "青酱卷 18" is the whole of what the kitchen came to find out, and a
+     word repeated down every line only repeats the heading. */
+  return `<div style="padding:14px 16px 2px;font-size:13px;color:var(--text-secondary)">${
+    T('Customer orders waiting','有客户订单等待')}</div><div>${rows}</div>`;
+}
 /* WHAT THIS PHONE HAS ALREADY SEEN ON THE "To make" TAB, and the dot put out
    with it. Called wherever that list is what the operator is looking at. */
 function kqRead(){
@@ -9087,7 +9173,10 @@ function kqWhen(o){
   return escAttr(day===time||!time?day:day+' '+time)+' · ';
 }
 function screenKitchenQueue(){
-  loadQsCtx(); loadKq();
+  // loadOwed rides the same entry as the queue's own fetch. Its own call, not a
+  // branch inside loadKq: the two answer different questions of different
+  // endpoints, and one failing must not take the other with it (§84).
+  loadQsCtx(); loadKq(); loadOwed();
   const k=state.kq;
   const err=k.err?`<div style="padding:0 16px 12px;font-size:14px;color:var(--brick-ink)">${escAttr(k.err)}</div>`:'';
   /* WHAT HAPPENED TO THE REQUEST THAT JUST LEFT. It closed and the stock did not
@@ -9160,12 +9249,21 @@ function screenKitchenQueue(){
      rows themselves are the news, and pollKitchenQueue keeps them current. */
   const tabs=`<div style="display:flex;gap:8px;padding:12px 16px">${
     seg('active',T('To make','待制作'),k.tab!=='active'&&k.fresh>0)}${seg('history',T('Done','已完成'))}</div>`;
-  if(!k.list) return tabs+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  /* §84 — THE OWED BLOCK, ABOVE THE TABS AND ON EVERY ONE OF THE THREE RETURNS
+     BELOW, THE EMPTY ONE INCLUDED. That is the case it exists for and the whole
+     reason it was built: a night of orders with nobody raising a request left
+     the kitchen opening this screen to "Nothing to make" while eighteen wraps
+     were owed. A block that rendered only beside a populated list would have
+     been silent on exactly that morning.
+     ACTIVE TAB ONLY. `history` is a record of what was finished; a standing
+     to-do at the top of it is answering a question that tab is not asking. */
+  const owed=k.tab==='active'?kqOwed():'';
+  if(!k.list) return owed+tabs+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   // The note goes ABOVE the empty state, not after it: "Nothing to make" with
   // no explanation is precisely the screen this whole defect showed somebody.
-  if(!k.list.length) return tabs+note+nothingYet(T('Nothing to make','暂无待制作'),
+  if(!k.list.length) return owed+tabs+note+nothingYet(T('Nothing to make','暂无待制作'),
     T('Requests for the kitchen show up here.','向厨房下的订单会显示在这里。'));
-  return tabs+note+err+`<div>${k.list.map(o=>{
+  return owed+tabs+note+err+`<div>${k.list.map(o=>{
     const p=krPurpose(o);
     return `<button class="row" style="width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px"
       onclick="APP.cmd('kqOpen',${o.id})">
@@ -10336,6 +10434,31 @@ function opsFires(){
       c('kitchen_ready'),krIt,
       krNm.length?krNm.join(T(', ','，'))+(krRest>0?' +'+krRest+' '+T('more','更多'):''):'',
       "APP.cmd('push','kitchenready')");
+  }
+  /* WHAT TODAY'S BATCH OWES (§84). Units customers have already paid for that
+     are not on the shelf — the number the kitchen adds to the batch it is about
+     to make. It sits directly under "Ready from the kitchen" because the two are
+     the same operator's two halves: what the kitchen has finished, and what it
+     still owes.
+     THE PILL IS UNITS, NOT ROWS, which is the one way this fire differs from
+     every other on this screen. They all count rows because they all open onto
+     lists of rows; this opens onto a list of NUMBERS, and "30 to make" is a
+     morning's work where "2 products" is not a quantity of anything.
+     `age:false` via a non-empty meta, exactly as the row above: there is no
+     clock on this one worth spending the line on. A debt has no age that helps
+     — it is owed now — so the line is spent on the names instead.
+     Gated on the same route as the queue it opens. */
+  if(c('batch_owed')&&canRoute('kitchenqueue')){
+    const boIt=items('batch_owed');
+    const boNm=boIt.map(x=>{
+      const nm=(LANG==='en'?(x.name_en||x.name_cn):(x.name_cn||x.name_en))||'';
+      return nm?nm+' '+x.owed:'';
+    }).filter(Boolean).slice(0,2);
+    const boRest=Math.max(0,boIt.length-boNm.length);
+    add(true,'amber','chef-hat',T('Customer orders waiting','有客户订单等待'),
+      c('batch_owed'),boIt,
+      boNm.length?boNm.join(T(', ','，'))+(boRest>0?' +'+boRest+' '+T('more','更多'):''):'',
+      "APP.cmd('push','kitchenqueue')");
   }
   const oos=c('out_of_stock'), low=c('low_stock');
   if(oos+low){

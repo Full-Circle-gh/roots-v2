@@ -219,8 +219,18 @@ console.log('\nA · "…中230g 1-130" resolves on the code in its title, and de
   check('resolved to product 260 (sku 1-130)', l && l.product_id === 260, `got ${l && l.product_id}`);
   check('adjustStock was called for 260', deductions.length === 1 && deductions[0].productId === 260,
     JSON.stringify(deductions));
-  check('it took one unit off the shelf (40 → 39)',
-    deductions.length === 1 && deductions[0].newPhysicalQty === 39,
+  /* §84 — A DELTA, NOT A TOTAL, and the assertion follows the contract rather
+     than being relaxed to survive it. The ingest used to pass
+     `newPhysicalQty: Math.max(0, oldQ - took)`, an absolute computed from a read
+     taken before the write; it now passes `deltaQty: -took` so the shelf may go
+     NEGATIVE — which is the whole of §84, a Meituan or Eleme order against an
+     empty shelf being stock sold that was never held, and the negative the only
+     record the kitchen has that those units are owed.
+     THE CLAIM UNDER TEST IS UNCHANGED and this is if anything the stricter
+     form of it: "one unit came off the shelf" no longer has to be inferred
+     from a total that depends on what the fixture seeded. */
+  check('it took one unit off the shelf (−1)',
+    deductions.length === 1 && deductions[0].deltaQty === -1,
     JSON.stringify(deductions));
 }
 
@@ -233,8 +243,8 @@ console.log('\nB · the code the line matched on is recorded, not just used');
   // Without this the code that identified the line lives only inside the title,
   // and nothing on the order says how it was matched.
   check('retail_order_items.sku holds the token', l && l.sku === '1-190', `got ${l && l.sku}`);
-  check('quantity carried through (x2 → 38)',
-    deductions.length === 1 && deductions[0].newPhysicalQty === 38, JSON.stringify(deductions));
+  check('quantity carried through (x2 → −2)',
+    deductions.length === 1 && deductions[0].deltaQty === -2, JSON.stringify(deductions));
 }
 
 // ── C · precedence: an explicit 货号 still wins ───────────────────────────────
@@ -260,8 +270,8 @@ console.log('\nD · a claimed option still beats the token — branch 0 is still
   check('resolved on the claim, to product 261', l && l.product_id === 261, `got ${l && l.product_id}`);
   // The claim is the only branch that knows the pack size, which is exactly why
   // it is ahead of the code: 1-130 alone would have lost the "3 per pack".
-  check('the claim brought its pack size (3 off the shelf, 40 → 37)',
-    deductions.length === 1 && deductions[0].newPhysicalQty === 37, JSON.stringify(deductions));
+  check('the claim brought its pack size (3 off the shelf, −3)',
+    deductions.length === 1 && deductions[0].deltaQty === -3, JSON.stringify(deductions));
   db.exec(`DELETE FROM eleme_product_map WHERE retail_store_id = 7`);
 }
 
