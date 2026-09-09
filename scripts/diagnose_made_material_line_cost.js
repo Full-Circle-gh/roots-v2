@@ -190,3 +190,97 @@ if (mats.length) {
 }
 console.log('');
 console.log('done.');
+
+// ════════════════════════════════════════════════════════════════════════════
+// ROUND 2 — the first run said the stored rate is right (0.041705/g, no
+// duplicate row, no drift) and that the ONE live line consuming it is
+// "garlic dill toast" at 70 g, which the database prices at ¥2.92. The
+// reported ¥1.53 is 70 g × ¥0.021857/g — a rate this material does not
+// currently carry. So the question is which rate the screen was holding.
+// These sections look for it: the consuming recipe in full, and the version
+// history of the recipe that sets the rate, replayed.
+console.log('');
+console.log('══ 6 · every recipe that consumes it, in full ══');
+const consumerIds = mats.length
+  ? db.prepare(
+      `SELECT DISTINCT ri.recipe_id AS id FROM recipe_ingredients ri
+        WHERE ri.ingredient_id IN (${mats.map(() => '?').join(',')})`
+    ).all(...mats.map(m => m.id)).map(r => r.id)
+  : [];
+for (const rid of consumerIds) {
+  const r = db.prepare('SELECT * FROM recipes WHERE id = ?').get(rid);
+  if (!r) { console.log('  recipe ' + rid + ' missing'); continue; }
+  j('  recipe', {
+    id: r.id, name_en: r.name_en, sku: r.sku, is_active: r.is_active,
+    batch_size: r.batch_size, batch_size_auto: r.batch_size_auto,
+    servings: r.servings, servings_auto: r.servings_auto, updated_at: r.updated_at,
+  });
+  const c = computeRecipeCost(rid, db);
+  if (c) {
+    j('  computed', {
+      batchSize: c.batchSize, servings: c.servings, ingredientCost: c.ingredientCost,
+      batchCost: c.batchCost, costPerServing: c.costPerServing, costPerGram: c.costPerGram,
+    });
+    for (const l of c.lines) {
+      j('    line', {
+        ingredient_id: l.ingredient_id, name: l.name_en || l.master_name_en,
+        qty: l.qty, unit: l.unit, master_cost: l.master_cost, lineCost: l.lineCost,
+      });
+    }
+  }
+}
+console.log('');
+
+// ── 7 · replay the rate-setting recipe's own history ───────────────────────
+// A version is the state BEFORE a save (lib/recipe-versions.js), so replaying
+// them says what batch size — and therefore what per-gram rate — this material
+// carried at each point today. The snapshot holds recipe_ingredients columns
+// only, not the master costs of the day, so each line is re-priced at TODAY's
+// master rate: that isolates the batch-size half, which is the half that moves
+// when an operator edits a recipe.
+console.log('══ 7 · version replay of the recipes that set these rates ══');
+const rateRecipes = [...new Set(mats.map(m => m.source_recipe_id).filter(Boolean))];
+const cpuNow = new Map(db.prepare('SELECT id, cost_per_unit, free_by_design FROM ingredients').all()
+  .map(r => [r.id, r]));
+for (const rid of rateRecipes) {
+  const versions = db.prepare(
+    `SELECT id, source, actor, line_count, created_at, snapshot
+       FROM recipe_versions WHERE recipe_id = ? ORDER BY id`
+  ).all(rid);
+  console.log('  recipe ' + rid + ' — versions: ' + versions.length);
+  for (const v of versions) {
+    let snap;
+    try { snap = JSON.parse(v.snapshot); } catch (e) { console.log('    unparseable snapshot ' + v.id); continue; }
+    const lines = Array.isArray(snap.ingredients) ? snap.ingredients : [];
+    let grams = 0, cost = 0;
+    for (const l of lines) {
+      const q = Number(l.qty) || 0;
+      const inYield = !(l.in_yield === 0 || l.in_yield === false || l.in_yield === '0');
+      if (inYield) grams += q;
+      const m = cpuNow.get(l.ingredient_id);
+      cost += q * (m ? Number(m.cost_per_unit) || 0 : 0);
+    }
+    const stated = Number(snap.recipe && snap.recipe.batch_size) || 0;
+    const auto = !(snap.recipe && (snap.recipe.batch_size_auto === 0 || snap.recipe.batch_size_auto === false));
+    const batch = auto ? grams : (stated || grams);
+    const rate = batch > 0 ? cost / batch : null;
+    j('    version', {
+      id: v.id, at: v.created_at, source: v.source, lines: lines.length,
+      batch_size_stated: stated, batch_size_auto: auto, lines_grams: grams,
+      ingredient_cost_at_today_rates: +cost.toFixed(4),
+      implied_rate: rate === null ? null : +rate.toFixed(6),
+      cost_of_70g: rate === null ? null : +(70 * rate).toFixed(2),
+    });
+  }
+}
+console.log('');
+console.log('══ 8 · price history rows for the matched materials ══');
+for (const m of mats) {
+  const h = db.prepare(
+    'SELECT id, price, buy_unit, source, notes, recorded_at, recorded_by FROM ingredient_price_history WHERE ingredient_id = ? ORDER BY id'
+  ).all(m.id);
+  console.log('  ' + m.name_en + ' (id ' + m.id + '): ' + h.length + ' rows');
+  for (const row of h) j('    history', row);
+}
+console.log('');
+console.log('round 2 done.');
