@@ -13611,6 +13611,37 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes-record .rcp-blk-h { font-size: 15px; margin: 0 0 16px; }
   #tab-recipes-record .rcp-fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 22px; }
   #tab-recipes-record .rcp-fgrid + .rcp-fgrid { margin-top: 16px; }
+
+  /* ── The Details sheet ────────────────────────────────────────────────
+     Details alone is one card of banded rows rather than three stacked
+     cards: the section name sits in a filled margin and its fields run
+     three-up beside it. .rcp-blk / .rcp-blk-h above are UNCHANGED — the
+     Ingredients, Steps and Cost tabs are still built from them.
+
+     --td-raised behind the margin and --td-header on the rules are the
+     table header band's own pair, so the division reads at the same weight
+     as a column header and resolves in both themes without a new colour.
+
+     THE CORNERS ARE ROUNDED ON THE MARGIN, NOT CLIPPED ON THE CARD. The
+     record cards must not clip (see .rcp-card's rule above: clip-path takes
+     the whole subtree with it, which is what cut off the ingredient
+     picker's dropdown), so the first and last margins round their own outer
+     corners to sit inside the card's 14px edge. */
+  #tab-recipes-record .rcp-sheet { padding: 0; }
+  #tab-recipes-record .rcp-band { display: grid; grid-template-columns: 176px 1fr; }
+  #tab-recipes-record .rcp-band + .rcp-band { border-top: 1px solid var(--td-header); }
+  #tab-recipes-record .rcp-rail {
+    margin: 0; font-size: 15px; padding: 22px 22px 22px 24px;
+    background: var(--td-raised); border-right: 1px solid var(--td-header); }
+  #tab-recipes-record .rcp-band:first-child .rcp-rail { border-top-left-radius: 13px; }
+  #tab-recipes-record .rcp-band:last-child  .rcp-rail { border-bottom-left-radius: 13px; }
+  #tab-recipes-record .rcp-fields { padding: 22px 24px 22px 26px; min-width: 0; }
+  #tab-recipes-record .rcp-fgrid.c3 { grid-template-columns: repeat(3, 1fr); }
+  /* Storage is one short select; the notes it belongs with want the rest. */
+  #tab-recipes-record .rcp-fgrid.notes { grid-template-columns: 1fr 2fr; }
+  /* A number and its unit, not a sentence — the pair stops well short of the
+     track it sits in rather than stretching across a third of the sheet. */
+  #tab-recipes-record .rcp-fields .rcp-shelf-life { max-width: 300px; }
   #tab-recipes-record .rcp-f { display: flex; flex-direction: column; min-width: 0; }
   #tab-recipes-record .rcp-f.span2 { grid-column: 1 / -1; }
   #tab-recipes-record .rcp-f .lbl { font-weight: 500; color: var(--td-text); font-size: 13px; margin-bottom: 6px; }
@@ -13796,6 +13827,17 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 
   @media (max-width: 760px) {
     #tab-recipes-record .rcp-fgrid { grid-template-columns: 1fr; }
+    /* The margin has no width to be a margin in; it becomes the band's
+       header strip instead, and the fields take the full column under it. */
+    #tab-recipes-record .rcp-fgrid.c3,
+    #tab-recipes-record .rcp-fgrid.notes { grid-template-columns: 1fr; }
+    #tab-recipes-record .rcp-band { grid-template-columns: 1fr; }
+    #tab-recipes-record .rcp-rail { padding: 14px 16px; border-right: none;
+      border-bottom: 1px solid var(--td-header); border-radius: 0; }
+    #tab-recipes-record .rcp-band:first-child .rcp-rail {
+      border-top-left-radius: 13px; border-top-right-radius: 13px; }
+    #tab-recipes-record .rcp-band:last-child .rcp-rail { border-bottom-left-radius: 0; }
+    #tab-recipes-record .rcp-fields { padding: 18px 16px; }
     #tab-recipes-record .rcp-line { flex-wrap: wrap; }
     #tab-recipes-record .rcp-line-note { width: 100%; order: 10; }
     /* The note field drops to its own line here, so its column label would be
