@@ -210,11 +210,29 @@ for (const [key, marker, what] of [
   ['recap',     /function recapCard\(\)\{[\s\S]{0,200}?showDashCard\('recap'\)/,     'While you were away'],
   ['needs',     /\$\{showDashCard\('needs'\)&&fires\.length\?/,                        'Needs you'],
   ['orders',    /function todayBlock\(kpis\)\{[\s\S]{0,140}?showDashCard\('orders'\)/, 'Today'],
-  ['customers', /function vitalsBlock\(\)\{[\s\S]{0,240}?showDashCard\('customers'\)/, 'Also today'],
+  ['customers', /function vitalsBlock\(\)\{[\s\S]{0,240}?showDashCard\('customers'\)/, "Today's second card"],
 ]) {
   yes(CARD_KEYS.includes(key), `${key} is a real card in lib/roles DASH_CARDS`);
   yes(marker.test(PHONE), `${what} is gated on '${key}' — as its desktop twin is`);
 }
+
+/* THE HEADING OVER THOSE TWO CARDS BELONGS TO THE SECTION, NOT TO EITHER CARD.
+   The second one used to carry its own, "Also today", which named nothing that
+   was in it — and because the pair is gated INDEPENDENTLY, a role with `orders`
+   hidden and `customers` shown read "Also today" with no Today above it for it
+   to be also to. That combination is a real role, not a hypothetical: it is the
+   money gate doing its job. One heading now, drawn when either card survives. */
+yes(!/T\('Also today'/.test(PHONE),
+  'the second card is no longer headed "Also today" — a label naming its position, not its contents');
+const sectionFn = /function todaySection\(kpis\)\{[\s\S]*?\n\}/.exec(PHONE);
+yes(!!sectionFn && /\[todayBlock\(kpis\), vitalsBlock\(\)\]\.filter\(Boolean\)/.test(sectionFn[0]),
+  'one Today heading covers whichever of the two cards survive their own gates',
+  'without the filter, a hidden card leaves its gap under a heading that still claims it');
+yes(!!sectionFn && /if\(!cards\.length\) return '';/.test(sectionFn[0]),
+  'and no heading is drawn at all when both cards are gated away',
+  'a bare "Today" over nothing is exactly what the money gate exists to prevent');
+yes(/\$\{todaySection\(kpis\)\}/.test(PHONE) && !/\$\{vitalsBlock\(\)\}/.test(PHONE),
+  'and Home draws the section rather than the two cards side by side');
 
 /* THE MONEY HALF, which is worse than the card half and was found with it.
    Today's twin — the desktop's `orders` block — is hidden for the warehouse,

@@ -2856,13 +2856,14 @@ function showDashCard(key){
    in the desktop's order of precedence: an owner's card override cannot turn
    the money back ON for a board that hides it (over there the override CLEARS
    an inline style and the board's CSS rule still wins), so either one hiding
-   is enough. */
+   is enough.
+
+   THE HEADING OVER IT IS NOT ITS OWN — see todaySection() below, which draws
+   one "Today" for whichever of the two cards survives its gates. */
 function todayBlock(kpis){
   if(!showDashCard('orders')) return '';
   if(recapNoMoney()) return '';
-  return `<div class="rise" style="animation-delay:.12s">
-      <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Today','今日')}</div>
-      <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">${kpis
+  return `<div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">${kpis
         ? kpis.map(([l,v,d])=>
         `<div style="min-width:0">
            <span style="display:block;font-size:13px;color:var(--text-secondary)">${T(...l)}</span>
@@ -2871,7 +2872,7 @@ function todayBlock(kpis){
         : [T('Revenue (all channels)','营收（全渠道）'),T('Orders (storefront)','订单（自营）'),T('Avg. order','客单价'),T('New customers','新客')].map(l=>
         `<div style="min-width:0">
            <span style="display:block;font-size:13px;color:var(--text-secondary)">${l}</span>
-           <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4;color:var(--text-secondary);opacity:.55">—</span></div>`).join('')}</div></div>`;
+           <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4;color:var(--text-secondary);opacity:.55">—</span></div>`).join('')}</div>`;
 }
 function vitalsBlock(){
   const v=state.liveVitals; if(!v) return '';
@@ -2887,16 +2888,38 @@ function vitalsBlock(){
     : [(v.conv==null?'—':v.conv.toFixed(1)+'%'), T(v.orders+' orders ÷ '+v.sessions+' sessions', v.orders+' 单 ÷ '+v.sessions+' 次会话')];
   const ret = v.buyers ? [String(v.returning), T('of '+v.buyers+' who bought today','今日 '+v.buyers+' 位买家中')]
                        : ['—', T('nobody has bought yet','今日暂无买家')];
-  return `<div class="rise" style="animation-delay:.15s">
-    <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Also today','今日其他')}</div>
-    <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">
+  return `<div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">
       ${cell(T('Sessions','会话'), v.sessions?v.sessions.toLocaleString():'—','')}
       ${cell(T('Conversion','转化率'), conv[0], conv[1])}
       ${cell(T('Returning','回头客'), ret[0], ret[1])}
       ${cell(T('Refunded','已退款'), String(v.refunded),
         v.refunded?T((v.refundRate||0).toFixed(1)+'% of orders','占订单 '+(v.refundRate||0).toFixed(1)+'%')
                   :T('nothing sent back','无退款'))}
-    </div></div>`;
+    </div>`;
+}
+/* ONE HEADING OVER BOTH CARDS, and it belongs to the section rather than to
+   either card. The second card used to carry its own — "Also today ·
+   今日其他" — which named nothing that was in it. Sessions, Conversion,
+   Returning and Refunded are not "other today"; they are the SAME day the card
+   above counts, read a different way. It was a positional label: it meant "the
+   card after the other one", and it was the only heading on Home that did not
+   say what it sat over (Needs you, While you were away, Quick actions all do).
+
+   It could also contradict the screen. The two cards are gated independently,
+   on `orders` and on `customers`, so a role with the money card hidden and this
+   one shown read "Also today" with no Today above it for it to be ALSO to.
+
+   Neither card needs to name the day twice over: pageHead already carries the
+   date line under the greeting, and it says so in its own comment — it "names
+   the day every other number on the screen is counted over". One "Today" is the
+   whole of what is left to say. The 16px between the cards is the Home column's
+   own gap, kept by hand now that the two are inside one wrapper. */
+function todaySection(kpis){
+  const cards=[todayBlock(kpis), vitalsBlock()].filter(Boolean);
+  if(!cards.length) return '';
+  return `<div class="rise" style="animation-delay:.12s">
+    <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Today','今日')}</div>
+    ${cards.map((c,i)=>i?`<div style="margin-top:16px">${c}</div>`:c).join('')}</div>`;
 }
 
 /* ==========================================================================
@@ -3185,8 +3208,7 @@ function screenHome(){
           </span>
           <span class="num" style="min-width:24px;height:24px;padding:0 8px;border-radius:999px;background:var(--${a.sev}-tint);color:var(--${a.sev}-ink);font-size:13px;display:flex;align-items:center;justify-content:center;flex:none">${a.n}</span>
           <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>`:''}
-    ${todayBlock(kpis)}
-    ${vitalsBlock()}
+    ${todaySection(kpis)}
   </div>`;
 }
 
