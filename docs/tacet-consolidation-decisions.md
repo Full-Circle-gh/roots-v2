@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.194
+# Tacet shared-core consolidation — decisions record, v4.195
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-10 · v4.195 — **§87 FIXED: ONE LANGUAGE ON SCREEN, AND A RECEIPT THAT ALREADY EXISTS.** Two reports from Ash off the live screen. **THE ENGLISH SURFACE WAS RENDERING BOTH LANGUAGES** — `Logistics&Delivery 物流与配送费用` — because a category is DATA and not a locked pair: `T()` reaches every other string on that screen, while the category is a value the tenant typed, held as ONE free-text column with both halves glued in (§36). **The desktop solved this on 2026-09-02 and the phone never got it**, the claim screen having been written months later and reaching for the value directly. `finCatSplit`/`finCatLabel`/`finCatLabels` are PORTED, not re-derived, and the suite now **runs the phone's copy and the desktop's over the same values and asserts they agree**, so the two cannot drift. **FIVE RENDER SITES, NOT ONE** — CLAUDE.md's rule that a finding is where it was found rather than the extent of the problem, applied literally: the collapsed row, the picker, the receipt, the submitter's list and the approver's queue all drew the raw value. **THE SEARCH STILL READS THE STORED VALUE**, so `物流` and `logistics` both find the row; searching the rendered half would make half the vocabulary unreachable in each language, a worse bug than the one being fixed. **THE COLLISION RULE IS NOT HYPOTHETICAL HERE**: the live list holds `Marketing&Promotion 市场推广费用` beside `营销 Marketing`, and both render whole rather than as two rows nobody can tell apart. **A STORE NAME FOLLOWS THE LANGUAGE TOO** — the Shop chips shipped as `name_cn || name_en`, Chinese on an English screen for any store named in both, with the fallback ACROSS kept so a store named once shows its name rather than a number. **AND THE PHOTO CAN COME FROM THE GALLERY**: the file input carried `capture="environment"`, which makes Android open the camera and offer nothing else — so a receipt already photographed, screenshotted or sent by a supplier could not be attached at all, which is most of them. `accept="image/*"` is what keeps the chooser to pictures. `npm run test:fast` 195/195; the suite reaches 64 assertions. No new Chinese: every string here is a value the tenant already owns. No change to `.gitignore` or CI.
 
 2026-09-10 · v4.194 — **§87 AMENDED: THE CATEGORY CONTROL IS A SEARCHABLE PICKER, NOT A WALL OF CHIPS — DECIDED by Ash** from the live screen: thirty-one categories as chips, alphabetical, the amount field pushed off the top. Given three options in `reference/expense-category-picker-mockup.html`, he chose **B**, a collapsed field opening a picker with **this person's own recent categories on top**. **THE LAYOUT WAS THE SYMPTOM; THE CAUSE IS THAT THE PHONE WAS HANDED THE BOOKKEEPER'S LIST** — step two offered every active `kind='accounting'` category on the reasoning that the tenant's own list is the right list, which is true of Finance and false of a phone: rent, wages, social insurance, electricity and ingredients are real costs that **nobody raises out of their own pocket**. **WHY B RATHER THAN THIS SESSION'S OWN RECOMMENDATION (A, a per-category *offer on the phone* tick)**: A needs the shop to curate a second list and keep curating it, and a category added later is invisible on the phone until somebody remembers to tick it — a silent failure on the screen where silence means an expense filed under the wrong name or not at all. B maintains nothing and is correct at thirty-one categories or three hundred. **A is NOT withdrawn**: it narrows what the picker offers and can land later without undoing this. **WHAT B DOES NOT FIX, recorded so it is not read as fixed**: every category stays reachable, so a driver can still file a taxi under Salaries if they set out to — that is a curation problem and A is its answer. **RECENTS ARE THE PERSON'S OWN AND NEVER THE SHOP'S**: a driver and an office manager do not want the same six, and a shop-wide most-used would hand the driver whatever the office manager files most. **THE SEARCH BOX FOLLOWS THE RULE #437 AND ITS FOLLOW-UP ESTABLISHED** — `oninput` stores the query and repaints ONLY the results box, never the app, because `render()` rebuilds the `<input>` and a rebuilt field reopens the soft keyboard on its letter page; a new box calling `render()` would be the fifth instance of a defect four screens were just repaired for. **TWO DUPLICATE PAIRS RECORDED AND DELIBERATELY NOT ACTED ON**: the live list holds `Marketing&Promotion 市场推广费用` beside `营销 Marketing`, and the two spellings of `低值易耗品`. Each splits the monthly breakdown into two lines that read alike — §36's three-rent-payments defect arriving through the vocabulary rather than a typo — and hiding one of each is fifteen seconds on the Categories screen, but WHICH spelling survives is a decision about the shop's books and is the tenant's.
 
@@ -8939,3 +8941,47 @@ three-rent-payments defect, arriving through the vocabulary rather than through 
 typo. **Hiding one of each is the tenant's call and takes fifteen seconds on the
 Categories screen**; this session did not make it, because which spelling
 survives is a decision about the shop's books.
+
+### FIXED 2026-09-10 — one language on screen, and a receipt that already exists
+
+Two reports from Ash, both from the live screen.
+
+**THE ENGLISH SCREEN WAS SHOWING BOTH LANGUAGES**, because a category is DATA and
+not a locked pair. `T()` reaches every other string on that screen; the category
+is a value the tenant typed, held as ONE free-text column with both halves glued
+into it (§36), so `Logistics&Delivery 物流与配送费用` rendered whole. **The
+desktop solved this on 2026-09-02 and the phone never got it** — the claim screen
+was written months later and reached for the value directly.
+
+`public/retail-admin/22-finance.js`'s `finCatSplit` / `finCatLabel` /
+`finCatLabels` are **ported, not re-derived**: same regexes, same refusal to guess
+on interleaved text, same collision rule. The two copies exist because one file is
+a retail-admin bundle and the other a standalone document, and
+`scripts/test_staff_expenses.js` now **runs both over the same values and asserts
+they agree**, so the copy cannot drift.
+
+**FIVE RENDER SITES, NOT ONE.** CLAUDE.md's rule — a finding is where it was
+found, not the extent of the problem — applied literally: the collapsed row, the
+picker, the receipt after a send, the submitter's own list and the approver's
+queue all drew the raw value. All five go through the splitter now, and the suite
+asserts none of them is left reaching for `r.category` directly.
+
+**THE SEARCH STILL READS THE STORED VALUE, NEVER THE RENDERED HALF.** An English
+operator typing `物流` and a Chinese one typing `logistics` both find the row.
+Searching the half on screen would make half the vocabulary unreachable in each
+language, which is a worse bug than the one being fixed.
+
+**THE COLLISION RULE MATTERS HERE AND IS NOT HYPOTHETICAL.** The live list holds
+`Marketing&Promotion 市场推广费用` beside `营销 Marketing`, whose English halves
+read alike; both render WHOLE rather than drawing two rows nobody can tell apart.
+
+**A STORE NAME FOLLOWS THE LIVE LANGUAGE TOO.** The Shop chips shipped as
+`name_cn || name_en`, which put Chinese on an English screen for any store named
+in both. The fallback ACROSS is kept: a store named in one language only shows
+that name rather than a number.
+
+**AND THE PHOTO CAN COME FROM THE GALLERY.** The file input carried
+`capture="environment"`, which makes Android open the camera and offer nothing
+else — so a receipt already photographed, screenshotted, or sent by a supplier
+could not be attached at all, which is most of them. The attribute is gone;
+`accept="image/*"` is what keeps the chooser to pictures.
