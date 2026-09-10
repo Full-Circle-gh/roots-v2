@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.197
+# Tacet shared-core consolidation — decisions record, v4.198
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -27,7 +27,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 2026-09-10 · v4.196 — **§87 FIXED: THE LEDGER ROW NEVER SAID WHO SPENT IT, BECAUSE NOTHING EVER SET THE FIELD THAT SAYS SO.** Reported by Ash off the live Transactions screen: a ¥200 money-out row marked **Staff claim** with no person on it. **v4.190 DECIDED THIS AND THE CODE HAS DISAGREED WITH IT SINCE THE DAY IT SHIPPED** — "who spent it is in the description, because a ¥38 line with no supplier, no invoice and no purchase order behind it is answerable months later only if it says whose taxi it was." `claimDescription` in `lib/expense-posting.js` reads `claim.submitted_name`; a `staff_expenses` row carries the integer `submitted_by` and nothing else, and `/decide` handed `postClaim` that row untouched. **So the name branch was dead in production and every claim-posted row in the books says the note alone.** **THE PASSING TEST IS WHAT HID IT.** `scripts/test_staff_expenses.js` asserted the description carries the name — against a hand-built fixture that sets `submitted_name: 'Wei'` itself. The lib was covered, the wiring was not, and a green suite said the decision was honoured. The new assertion reads the ROUTE, and it fails against the pre-fix file — checked by reverting, not assumed. **NAMES ARE A CROSS-HANDLE READ AND A JOIN IS NOT AVAILABLE**: `tenant_users` is control-plane, `staff_expenses` is tenant. The approval queue already did this lookup inline; `submitterNames(ids)` is now the ONE place the route resolves a name, so the name on the approver's screen and the name in the books cannot drift apart — a second lookup shaped slightly differently is the whole mechanism by which they would. **RESOLVED BEFORE THE TRANSACTION OPENS**, because a second database's latency does not belong inside a lock the tenant handle is holding for a value the write cannot fail on; and a name is still a nicety — the lookup swallows its own failure and a claim with no name against it still decides and still posts its money. **EXISTING ROWS ARE NOT BACKFILLED, and that is Ash's decision rather than an omission**: the description is a snapshot taken at approval, one live row is affected, and posting is delete-and-reinsert — so re-deciding that claim re-posts it with the name. A migration rewriting descriptions on rows already in the books buys one row and writes over ledger text nobody asked it to touch. **THE OTHER TWO OPTIONS ARE RECORDED AS REJECTED, not unconsidered**: a backfill (above), and resolving the name at READ time in `routes/finance-transactions.js` so the mark reads `Staff claim · Asher`. The second is the more robust mechanism — it reaches every existing row and follows a later rename — but it contradicts v4.190's placement of the fact in the description, and with the post path fixed it would print the name twice. If the snapshot ever proves wrong, that is the change to make, and it is a decision rather than a fix. `npm run test:fast` 195/195 green, plus `test_finance_transactions.js` 50/50 and `test_finance_summary.js` 31/31; the claims suite grows 64 → 66 assertions. No schema, no migration, no new Chinese — the `·` join already exists and no string is minted. No change to `.gitignore` or CI.
 
-2026-09-10 · v4.195 — **§87 FIXED: ONE LANGUAGE ON SCREEN, AND A RECEIPT THAT ALREADY EXISTS.** Two reports from Ash off the live screen. **THE ENGLISH SURFACE WAS RENDERING BOTH LANGUAGES** — `Logistics&Delivery 物流与配送费用` — because a category is DATA and not a locked pair: `T()` reaches every other string on that screen, while the category is a value the tenant typed, held as ONE free-text column with both halves glued in (§36). **The desktop solved this on 2026-09-02 and the phone never got it**, the claim screen having been written months later and reaching for the value directly. `finCatSplit`/`finCatLabel`/`finCatLabels` are PORTED, not re-derived, and the suite now **runs the phone's copy and the desktop's over the same values and asserts they agree**, so the two cannot drift. **FIVE RENDER SITES, NOT ONE** — CLAUDE.md's rule that a finding is where it was found rather than the extent of the problem, applied literally: the collapsed row, the picker, the receipt, the submitter's list and the approver's queue all drew the raw value. **THE SEARCH STILL READS THE STORED VALUE**, so `物流` and `logistics` both find the row; searching the rendered half would make half the vocabulary unreachable in each language, a worse bug than the one being fixed. **THE COLLISION RULE IS NOT HYPOTHETICAL HERE**: the live list holds `Marketing&Promotion 市场推广费用` beside `营销 Marketing`, and both render whole rather than as two rows nobody can tell apart. **A STORE NAME FOLLOWS THE LANGUAGE TOO** — the Shop chips shipped as `name_cn || name_en`, Chinese on an English screen for any store named in both, with the fallback ACROSS kept so a store named once shows its name rather than a number. **AND THE PHOTO CAN COME FROM THE GALLERY**: the file input carried `capture="environment"`, which makes Android open the camera and offer nothing else — so a receipt already photographed, screenshotted or sent by a supplier could not be attached at all, which is most of them. `accept="image/*"` is what keeps the chooser to pictures. `npm run test:fast` 195/195; the suite reaches 64 assertions. No new Chinese: every string here is a value the tenant already owns. No change to `.gitignore` or CI.
+2026-09-10 · v4.198 — **§89 ADDED: MONEY IN IS LISTED FROM THE BEGINNING AND SUMMED FROM 1 AUGUST 2026 — DECIDED by Ash under an explicit in-session delegation, on measurements taken read-only against production.** **§55's open collision is closed, and the figure it names is corrected first**: it says ¥151,895.69 and two Mini App rows; the live ledger holds ELEVEN month-end per-channel rows totalling **¥224,591.68**, across Mini App, Meituan (Yuexiu and Tianhe), Eleme (Yuexiu and Tianhe), Gzgrocery and Manual Order — CLAUDE.md's finding-is-not-the-extent rule landing on a money figure. **BOTH SIMPLE ANSWERS WERE PROPOSED BEFORE THE MEASUREMENT AND BOTH WERE WRONG.** June: 169 orders / ¥38,767.35 against ¥118,140.07 of ledger (3.05×). July: 445 orders / ¥74,825.44 against ¥106,451.61 (1.42×), and for Meituan and Gzgrocery the ORDER RECORD NOW EXCEEDS THE LEDGER — correctly, an order total being gross where a payout is net. So excluding the rows discards ~¥79,000 of real June trading the order record never captured, and summing them double-counts most of July. **June and July are a migration in progress, overlapping by an amount no arithmetic recovers.** **THE RULING IS A FLOOR ON SUMMING AND ONLY ON SUMMING**: rows before 2026-08-01 contribute zero to any total, Net or AI figure; **the LIST stays unfloored and §36's *Finance is not floored at the cutover date* is untouched** — a floor on a summand and a floor on a list are different things, and §36's own reason argues for displaying these rows, not for adding them. The date is read off the data, not chosen: the ledger's last row is 31 July and the order record runs complete from 1 August. A floored total must SAY SO on screen; a silently reduced total is the failure the ruling exists to prevent. **REJECTED: backfilling `income_entries.channel`** (all 26 live rows are NULL) — a flag would encode a per-row judgement that June does not support at any granularity, making an unmeasurable thing look measured. **REJECTED: matching ledger rows to orders** — one month-end net figure against hundreds of gross rows, mostly absent in June, is a matcher inventing its answer. **§55's Eleme survey question is CLOSED and revenue is NOT short today**: Eleme is live in `retail_orders` from 2026-08-31, 12 orders, ¥1,520.38. **TWO NEW OPEN ITEMS ARE RECORDED WHERE THEY WERE FOUND**: the `shop` channel has produced 38 orders and ZERO revenue (6–8 September, all cancelled, ¥2,065.00) while every other channel converts; and Meituan fell 97% across the cutover (158 → 38 → 5 paid orders) while wechat and gzgrocery grew. Neither is ruled on. **No figure on any screen moves**: `routes/finance-summary.js` has never read `income_entries`. Docs only — no code, no schema, no routes. Two read-only diagnostics back it, `diagnose_income_ledger_overlap.js` and `diagnose_channel_order_presence.js`. Appended as §89 under the append-only convention; Related documents stays §38. **WRITTEN AS §88 AND RENUMBERED TO §89 ON MERGE, 2026-09-10 — the FIFTH collision of this kind recorded in this file**, after the two branches that each defined a §39, after §46/§47, and after the §52-54 → §55-57 move. It arose the way every one of them did: two branches open at once, each taking what was the next free number when it was written. PR #459's *a line of the breakdown opens onto the rows behind it* reached main first and keeps §88; nothing was renumbered to make room and no live section moved. The version moved with it, v4.197 having been taken by that same PR. **AND THE HEADER LINE MERGED WITHOUT A CONFLICT, which is exactly the failure `doc-numbering.yml` was written to catch**: both branches changed it to the same bytes — `v4.197` — and a three-way merge reads identical text as agreement. The section bodies conflicted and the version silently did not; only a check against the MERGE ref sees that, which is why that workflow runs on `pull_request` rather than against a branch head. The ruling is untouched in substance. 2026-09-10 · v4.195 — **§87 FIXED: ONE LANGUAGE ON SCREEN, AND A RECEIPT THAT ALREADY EXISTS.** Two reports from Ash off the live screen. **THE ENGLISH SURFACE WAS RENDERING BOTH LANGUAGES** — `Logistics&Delivery 物流与配送费用` — because a category is DATA and not a locked pair: `T()` reaches every other string on that screen, while the category is a value the tenant typed, held as ONE free-text column with both halves glued in (§36). **The desktop solved this on 2026-09-02 and the phone never got it**, the claim screen having been written months later and reaching for the value directly. `finCatSplit`/`finCatLabel`/`finCatLabels` are PORTED, not re-derived, and the suite now **runs the phone's copy and the desktop's over the same values and asserts they agree**, so the two cannot drift. **FIVE RENDER SITES, NOT ONE** — CLAUDE.md's rule that a finding is where it was found rather than the extent of the problem, applied literally: the collapsed row, the picker, the receipt, the submitter's list and the approver's queue all drew the raw value. **THE SEARCH STILL READS THE STORED VALUE**, so `物流` and `logistics` both find the row; searching the rendered half would make half the vocabulary unreachable in each language, a worse bug than the one being fixed. **THE COLLISION RULE IS NOT HYPOTHETICAL HERE**: the live list holds `Marketing&Promotion 市场推广费用` beside `营销 Marketing`, and both render whole rather than as two rows nobody can tell apart. **A STORE NAME FOLLOWS THE LANGUAGE TOO** — the Shop chips shipped as `name_cn || name_en`, Chinese on an English screen for any store named in both, with the fallback ACROSS kept so a store named once shows its name rather than a number. **AND THE PHOTO CAN COME FROM THE GALLERY**: the file input carried `capture="environment"`, which makes Android open the camera and offer nothing else — so a receipt already photographed, screenshotted or sent by a supplier could not be attached at all, which is most of them. `accept="image/*"` is what keeps the chooser to pictures. `npm run test:fast` 195/195; the suite reaches 64 assertions. No new Chinese: every string here is a value the tenant already owns. No change to `.gitignore` or CI.
 
 2026-09-10 · v4.194 — **§87 AMENDED: THE CATEGORY CONTROL IS A SEARCHABLE PICKER, NOT A WALL OF CHIPS — DECIDED by Ash** from the live screen: thirty-one categories as chips, alphabetical, the amount field pushed off the top. Given three options in `reference/expense-category-picker-mockup.html`, he chose **B**, a collapsed field opening a picker with **this person's own recent categories on top**. **THE LAYOUT WAS THE SYMPTOM; THE CAUSE IS THAT THE PHONE WAS HANDED THE BOOKKEEPER'S LIST** — step two offered every active `kind='accounting'` category on the reasoning that the tenant's own list is the right list, which is true of Finance and false of a phone: rent, wages, social insurance, electricity and ingredients are real costs that **nobody raises out of their own pocket**. **WHY B RATHER THAN THIS SESSION'S OWN RECOMMENDATION (A, a per-category *offer on the phone* tick)**: A needs the shop to curate a second list and keep curating it, and a category added later is invisible on the phone until somebody remembers to tick it — a silent failure on the screen where silence means an expense filed under the wrong name or not at all. B maintains nothing and is correct at thirty-one categories or three hundred. **A is NOT withdrawn**: it narrows what the picker offers and can land later without undoing this. **WHAT B DOES NOT FIX, recorded so it is not read as fixed**: every category stays reachable, so a driver can still file a taxi under Salaries if they set out to — that is a curation problem and A is its answer. **RECENTS ARE THE PERSON'S OWN AND NEVER THE SHOP'S**: a driver and an office manager do not want the same six, and a shop-wide most-used would hand the driver whatever the office manager files most. **THE SEARCH BOX FOLLOWS THE RULE #437 AND ITS FOLLOW-UP ESTABLISHED** — `oninput` stores the query and repaints ONLY the results box, never the app, because `render()` rebuilds the `<input>` and a rebuilt field reopens the soft keyboard on its letter page; a new box calling `render()` would be the fifth instance of a defect four screens were just repaired for. **TWO DUPLICATE PAIRS RECORDED AND DELIBERATELY NOT ACTED ON**: the live list holds `Marketing&Promotion 市场推广费用` beside `营销 Marketing`, and the two spellings of `低值易耗品`. Each splits the monthly breakdown into two lines that read alike — §36's three-rent-payments defect arriving through the vocabulary rather than a typo — and hiding one of each is fifteen seconds on the Categories screen, but WHICH spelling survives is a decision about the shop's books and is the tenant's.
 
@@ -5024,6 +5024,8 @@ A sale is counted at the moment the order exists. A platform payout is that same
 
 **COLLISION RECORDED 2026-09-07, NOT RESOLVED — §55 puts `income_entries` ON the staircase, and two settlement receipts are sitting in that table.** §55 gives hand-typed `income_entries` money-in **its own staircase row below the revenue line, feeding Net**. This subsection says settlement has **no place in the staircase**. On the live data those two rulings meet: consequence 3 above establishes that ¥76,105.69 (`6月`) and ¥75,790.00 (`7月`) are settlement summaries filed as Mini App income, **¥151,895.69 of the 26 rows in `income_entries`**, and *Finance is not floored at the cutover date* establishes that **no column distinguishes a settlement receipt from any other income row** — which is why those rows are drawn rather than filtered on the Transactions list, a filter having to match on description text and being refused for it. **A money-in staircase row summing that table would therefore carry ¥151,895.69 of settlement into Net, which is the double-count this subsection was written to prevent.** Transactions could hold the rows harmlessly because it is a list and not a summand; a staircase row is a summand, and the reasoning that made drawing them safe does not carry over.
 
+**RESOLVED 2026-09-10 BY §88, AND THE FIGURE ABOVE IS CORRECTED FORWARD RATHER THAN REWRITTEN.** The ¥151,895.69 in this paragraph is the two Mini App rows; the live table holds **eleven** month-end per-channel rows totalling **¥224,591.68** — Mini App, Meituan (Yuexiu and Tianhe), Eleme (Yuexiu and Tianhe), Gzgrocery and Manual Order. The body above is left as written per this file's convention. **§88 also overturns the premise both this subsection and §55 argued from**: measured against `retail_orders`, those rows are neither a clean duplicate of the order record nor the sole record of the period — June is 3.05× the orders captured and July 1.42×, with Meituan and Gzgrocery in July already EXCEEDING the ledger. The ruling is a floor on SUMMING at 2026-08-01 with the list left unfloored, so nothing here about drawing the rows changes.
+
 **This is NOT decided here and is NOT decided by §55, which does not reach it.** Neither ruling is bent to fit the other: §55 stands as written and this subsection stands as written. **What is owed is a ruling from Ash on which of three things happens** — the two rows are corrected at source so the ledger stops holding settlement as income, or the money-in row excludes settlement by some means that is not a description-text match, or §55's row is scoped to something narrower than the whole table. **It is recorded here, against the ruling it collides with, so that whoever builds the money-in row meets it before writing the sum rather than after.**
 
 ### Meituan settles daily, not monthly — DECIDED 2026-09-01
@@ -9089,3 +9091,146 @@ in `22-finance.js`, so a "reuse" that is really a mint fails the build.
 
 The delegation of `docs/tacet-delivery-vocabulary.md` Rule 4 (amended
 2026-09-06) is therefore not exercised, and nothing is owed to that document.
+
+## §89 — MONEY IN IS LISTED FROM THE BEGINNING AND SUMMED FROM 1 AUGUST 2026
+
+**DECIDED 2026-09-10 by Ash, under an explicit delegation given in session:
+*"do whatever you think its right"*, after the measurements below were put to
+them.** It is recorded that way rather than as a session's own ruling because
+this file's authority rule is not something a session may quietly assume; and it
+is recorded as a decision rather than a proposal because Ash was asked and
+answered. Anyone may overturn it — the numbers it rests on are all here.
+
+### What §55 left open, and why it could not be closed by reading the tree
+
+§55 records a collision it deliberately did not resolve. §36's *Settlement
+receipts are excluded from Finance entirely* gives a platform payout no place on
+the staircase; §55 puts `income_entries` on the staircase as a summand; and the
+live table holds month-end per-channel totals that answer to both descriptions.
+§55 ends: *a ruling from Ash is owed before the money-in row is summed.*
+
+**THE FIGURE §55 NAMES COUNTS TWO ROWS OF ELEVEN.** It says ¥151,895.69, which is
+the two Mini App rows. Reading the live ledger for 1 June – 31 July 2026 finds
+the same shape eleven times — description exactly `6月` or `7月`, category a
+channel, dated the last day of the month:
+
+| channel | 30 Jun | 31 Jul |
+|---|---|---|
+| Mini App 小程序 | 76,105.69 | 75,790.00 |
+| Meituan-Yuexiu 美团-越秀 | 16,026.67 | 13,596.89 |
+| Gzgrocery 进口超市 | 12,918.40 | 8,875.30 |
+| Meituan-Tianhe 美团-天河 | 9,407.25 | — |
+| Eleme-Yuexiu 饿了么-越秀 | 2,231.30 | 2,969.72 |
+| Eleme-Tianhe 饿了么-天河 | 1,450.76 | — |
+| Manual Order 人工订单 | — | 5,219.70 |
+
+**Eleven rows, ¥224,591.68.** The other nine were never counted. This is
+CLAUDE.md's rule — a finding filed as a coordinate is where it was found and not
+the extent of the problem — arriving on a money figure, and it is the reason the
+correction is recorded here rather than folded silently into the ruling.
+
+The whole table is 26 rows, ¥239,841.06, 13 June to 31 July 2026 and nothing
+after. Of the ¥15,249.38 that is not a month-end row, roughly ¥14,992 is
+individual channel or payment-method takings (`Alipay`, `WeChat- Office`,
+`美团团购`, `拼多多`, `Micromarrt`) and **about ¥257 is genuinely non-sale
+income** — cardboard recycling, a returned water-bottle deposit, a rider
+cancellation penalty. **This table was not "other income that picked up some
+settlement rows". It was the shop's monthly sales ledger before the order record
+took over.**
+
+### The measurement that decided it
+
+`scripts/diagnose_income_ledger_overlap.js`, run read-only against production on
+2026-09-10, compared the ledger against `retail_orders` using the Summary's own
+`PAID` filter and day expression:
+
+| month | order record | ledger month-end rows | ledger ÷ orders |
+|---|---|---|---|
+| 2026-06 | 169 orders, ¥38,767.35 | ¥118,140.07 | **3.05×** |
+| 2026-07 | 445 orders, ¥74,825.44 | ¥106,451.61 | **1.42×** |
+| 2026-08 | 584 orders, ¥123,384.02 | — (ledger stopped) | — |
+| 2026-09 | 176 orders, ¥35,615.68 | — | — |
+
+Per channel the shape is unmistakable. June: Gzgrocery ¥1,100.50 recorded against
+¥12,918.40 actual, Meituan ¥2,669.90 against ¥25,433.92, Mini App ¥34,996.95
+against ¥76,105.69. July: Meituan ¥17,662.40 against ¥13,596.89 and Gzgrocery
+¥9,422.30 against ¥8,875.30 — **the order record now exceeds the ledger, which is
+exactly right, because an order total is gross and a payout is net of
+commission.**
+
+**SO NEITHER SIMPLE ANSWER WAS TRUE, AND BOTH WERE PROPOSED BEFORE THE
+MEASUREMENT.** The rows are not a clean duplicate: excluding them discards
+roughly ¥79,000 of real June trading the order record never captured. They are
+not the only record either: summing them double-counts most of July, which the
+order record does hold. **June and July are a migration in progress, both sources
+partial, overlapping by an amount no arithmetic recovers.**
+
+### The ruling
+
+**A DATE FLOOR ON SUMMING, AND ON SUMMING ONLY.**
+
+1. **`income_entries` rows dated before 2026-08-01 contribute ZERO to any
+   staircase total, any Net, and any figure the AI is given.** Not because they
+   are wrong, but because for that period neither source is complete and the two
+   overlap unmeasurably. A total built on them would be confidently wrong, which
+   is worse than a total that declines to include them.
+
+2. **THE LIST IS NOT FLOORED, AND §36 IS NOT AMENDED.** *Finance is not floored
+   at the cutover date* governs what Transactions DISPLAYS, and it stands
+   untouched: widen the range over June or July and all 26 rows are there, as
+   they are today. **A floor on a summand and a floor on a list are different
+   things, and the reason §36 gives for refusing the second — that hiding
+   spending to keep a line uniform is less true than showing it — is an argument
+   for displaying them, not for adding them up.**
+
+3. **The date is not chosen; it is read off the data.** The ledger's last row is
+   31 July 2026 and the order record runs complete from 1 August. The handover
+   names its own date, which is also the date *Tacet's Finance begins on 1 August
+   2026* already records.
+
+4. **A floored total says so on screen.** A window reaching before the cutover
+   must say that money in is not summed for that part and why — the §1.12
+   discipline of showing what is known plus one sentence for what is not. **A
+   silently reduced total is the failure this ruling exists to prevent**, and it
+   would be indistinguishable from the bug it is fixing.
+
+**REJECTED: backfilling `income_entries.channel` to mark the settlement rows.**
+The column exists (`schema.sql:266`) and the write path never fills it — all 26
+live rows are NULL. Marking them would encode a per-row judgement about which
+part of a row's money the order record already holds, and for June that judgement
+is not available at any granularity: the overlap is partial within a single row.
+A flag would make an unmeasurable thing look measured.
+
+**REJECTED: deriving the overlap by matching ledger rows to orders.** The ledger
+row is one month-end figure per channel; the orders are hundreds of rows, gross
+where the ledger is net, and in June mostly absent. There is nothing to match on
+and a matcher would be inventing its own answer.
+
+### What this closes and what it does not
+
+**CLOSED: §55's Eleme survey question, and the answer is that revenue is not
+short today.** `scripts/diagnose_channel_order_presence.js`, run 2026-09-10,
+finds Eleme live in `retail_orders` from 2026-08-31 — 12 orders, ¥1,520.38, 11 of
+them in September. **The June/July absence that raised the alarm was a migration
+artefact and not a live gap**, which is precisely the distinction that script was
+written to make: a channel missing in June is history, the same channel missing
+last week is money.
+
+**OPEN, AND NEWLY RAISED BY THAT SAME RUN — the `shop` channel has produced 38
+orders and zero revenue.** First order 2026-09-06, last 2026-09-08, **all 38
+cancelled, ¥2,065.00 of cancelled value, not one paid.** Every other channel
+converts: `wechat` 712 paid against 138 cancelled, `gzgrocery` 418 of 419. A new
+channel at a 100% failure rate for three days and then silent is not a Finance
+question and is not ruled on here, but it is recorded here because this is where
+it was found.
+
+**OPEN — Meituan fell 97% across the cutover.** 158 paid orders in July, 38 in
+August, 5 in September, while `wechat` and `gzgrocery` both grew over the same
+period. That may be an ordinary commercial fact and it may be a sync that stopped
+working; nothing in this reading distinguishes them, and it is recorded rather
+than resolved.
+
+**UNCHANGED: no figure on any screen moves because of this section.**
+`routes/finance-summary.js` has never read `income_entries`, so nothing in
+production sums these rows today. This ruling binds the code that would have, and
+that code has not been written.
