@@ -383,9 +383,30 @@ const CUST_LIST_SELECT = (() => {
 
 it('the customer list still returns points_balance, not points', () => {
   assert.ok(/\bpoints_balance\b/.test(CUST_LIST_SELECT),
-            'the endpoint no longer selects points_balance — the till normaliser needs updating');
+            'the endpoint no longer selects points_balance — the normalisers need updating');
   assert.ok(!/\bAS points\b/.test(CUST_LIST_SELECT),
-            'the endpoint now aliases points — the normaliser and this test disagree');
+            'the endpoint now aliases points — the normalisers and this test disagree');
+});
+
+/* BOTH RENAMERS ARE PINNED HERE, not just the till's (§96). A sweep of every
+   client of this endpoint — prompted by §95 and recorded there — found exactly
+   two that rename its columns into a friendlier shape: the till's `custRow`
+   (§95) and the phone back office's own customer mapper. Everything else either
+   reads the raw column names (the desktop roster, the global search, the New
+   order picker, the importer, marketing) or is handed a shape the SERVER
+   mapped (store-admin's lookup, which camel-cases on its way out).
+
+   The phone's mapper was correct all along and had nothing holding it there.
+   That is the same standing this file's own subject had the morning it shipped
+   broken, so it is pinned rather than trusted: two clients renaming one
+   endpoint's field is two chances to drift, and the endpoint is the thing both
+   must follow. */
+it('the phone back office reads points_balance too', () => {
+  const M_SRC = read('public/m.html');
+  assert.ok(/points\s*:\s*Number\(r\.points_balance\s*\|\|\s*0\)/.test(M_SRC),
+            'the phone customer mapper no longer reads points_balance');
+  assert.ok(/wallet\s*:\s*Number\(r\.balance\s*\|\|\s*0\)/.test(M_SRC),
+            'the phone customer mapper no longer reads balance');
 });
 
 // The two till functions, lifted and run.
