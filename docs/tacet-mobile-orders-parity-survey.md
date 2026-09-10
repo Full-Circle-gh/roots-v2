@@ -22,9 +22,10 @@ rule most of what follows is not a gap; it is a decision.
 **Ash's instruction on 2026-09-10 is the opposite rule** — *"mobile version
 functionality should be the same as PC"*. This survey re-reads Orders under the
 new rule, so every `➖` in the old document is re-opened and re-counted as a gap
-rather than a design choice. **The rule change itself is Ash's and is not
-recorded here**; it belongs in `docs/tacet-consolidation-decisions.md` before
-the code that depends on it is written.
+rather than a design choice. **The rule change itself is Ash's and is recorded
+in `docs/tacet-consolidation-decisions.md` §97**, which retires the old rule
+rather than deleting it: every `➖` in the old document stays where it is, and
+what changes is that it now reads as an open gap rather than a settled one.
 
 What the old audit got right is not re-litigated: the list row carries the
 desktop's ten columns, the drawer carries its sections, the filters are
