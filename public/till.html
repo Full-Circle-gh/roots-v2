@@ -2493,7 +2493,7 @@ button{font:inherit;color:inherit;margin:0}
       api('/api/retail-admin/customers?pageSize=12&q=' + encodeURIComponent(term.trim()))
         .then(function (j) {
           if (mine !== _custToken) return;      // a newer search already answered
-          S.custRows = j.data || [];
+          S.custRows = (j.data || []).map(custRow);
           renderCustResults();
         })
         .catch(function () {
@@ -2502,6 +2502,30 @@ button{font:inherit;color:inherit;margin:0}
           renderCustResults();
         });
     }, 220);
+  }
+
+  /* ── ONE SHAPE FOR A CUSTOMER ROW (§95) ─────────────────────────────────
+     `/api/retail-admin/customers` returns the SELECT verbatim, so a row carries
+     `points_balance` — the column's name — while the wallet's column is just
+     `balance`. This screen read `c.points`, which no row has ever had.
+
+     THAT IS WHY EVERY CUSTOMER SHOWED "Points 0" WHILE THE WALLET WAS RIGHT:
+     one of the two happened to be spelled the way this file guessed. The
+     display had been wrong since the row was written, and it stopped being
+     cosmetic the day §93 gave the till something to SPEND: `creditOffer` reads
+     the same field, so the points control could never appear and pay-with-points
+     was dead on arrival.
+
+     Normalised HERE, at the one boundary rows come in through, rather than
+     patched at each of the four readers — a second reader added later would
+     have to know the same trick, and the reason this bug existed is that
+     knowing the trick was the requirement. Both spellings are accepted so the
+     shape does not depend on which endpoint a future caller uses, and both are
+     coerced to numbers so `Number()` at the call sites has nothing left to do. */
+  function custRow(c) {
+    c.points  = Math.max(0, Math.floor(Number(c.points_balance != null ? c.points_balance : c.points) || 0));
+    c.balance = Number(c.balance) || 0;
+    return c;
   }
 
   function attachCustomer(id) {

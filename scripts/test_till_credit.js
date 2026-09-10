@@ -361,6 +361,74 @@ it('both spends are ledgered where the refund path looks for them', () => {
             'the wallet spend is not tagged the way reverseOrderBalance reads it');
 });
 
+/* ── THE ROW SHAPE, WHICH IS WHAT THIS SUITE MISSED FIRST TIME (§95) ──────
+   Everything else in this file asserted the ARITHMETIC and the WIRING, and all
+   of it passed while pay-with-points was dead in production: the till read
+   `c.points` off a customer row that has only ever carried `points_balance`,
+   so `creditOffer` saw zero points for everybody and the control never drew.
+   The wallet worked purely because its column is spelled `balance`.
+
+   No assertion here knew what a real row looks like — they all built their own.
+   These three close that: the endpoint's own SELECT is read for the field name,
+   the normaliser is RUN against a row shaped like the endpoint's, and
+   creditOffer is RUN against the result. A test that invents its input cannot
+   catch an input it invented wrongly. */
+const CUST_LIST_SELECT = (() => {
+  const i = RETAIL_SRC.indexOf("router.get('/api/retail-admin/customers'");
+  assert.ok(i > 0, 'the customer list route was not found');
+  const sel = RETAIL_SRC.indexOf('SELECT id, nickname', i);
+  assert.ok(sel > i, 'the customer list SELECT was not found');
+  return RETAIL_SRC.slice(sel, RETAIL_SRC.indexOf('LIMIT ? OFFSET ?', sel));
+})();
+
+it('the customer list still returns points_balance, not points', () => {
+  assert.ok(/\bpoints_balance\b/.test(CUST_LIST_SELECT),
+            'the endpoint no longer selects points_balance — the till normaliser needs updating');
+  assert.ok(!/\bAS points\b/.test(CUST_LIST_SELECT),
+            'the endpoint now aliases points — the normaliser and this test disagree');
+});
+
+// The two till functions, lifted and run.
+const tillFn = (name) => {
+  const m = new RegExp(`^  function ${name}\\(`, 'm').exec(TILL_SRC);
+  assert.ok(m, `function ${name} not found in till.html`);
+  let i = TILL_SRC.indexOf('{', TILL_SRC.indexOf(')', m.index)), depth = 0;
+  for (; i < TILL_SRC.length; i++) {
+    const c = TILL_SRC[i];
+    if (c === '{') depth++;
+    else if (c === '}') { depth--; if (depth === 0) break; }
+  }
+  return TILL_SRC.slice(m.index, i + 1);
+};
+
+it('the normaliser turns an endpoint row into one the screen can read', () => {
+  const custRow = new Function(`${tillFn('custRow')}\nreturn custRow;`)();
+  // Exactly what /api/retail-admin/customers hands back: the column names.
+  const row = custRow({ id: 7, nickname: 'Ada', points_balance: 240, balance: 174.51 });
+  assert.strictEqual(row.points, 240, 'points_balance did not become points');
+  assert.strictEqual(row.balance, 174.51);
+  // A null balance is a real state for a customer who has never topped up.
+  assert.deepStrictEqual(
+    [custRow({ points_balance: null, balance: null }).points,
+     custRow({ points_balance: null, balance: null }).balance], [0, 0]);
+});
+
+it('a customer with points is offered them — the case that was dead in production', () => {
+  const custRow = new Function(`${tillFn('custRow')}\nreturn custRow;`)();
+  const offer = new Function('S', 'settleDue', `${tillFn('creditOffer')}\nreturn creditOffer;`);
+  const run = (customer, useP) => offer(
+    { recall: null, customer, pts: { rate: 1, coverShipping: false }, useP: !!useP, useB: false },
+    () => 100)();
+  const c = custRow({ id: 7, nickname: 'Ada', points_balance: 240, balance: 0 });
+  assert.strictEqual(run(c).pMax, 100, 'the points offer is not clamped to the bill');
+  assert.strictEqual(run(c, true).pAmt, 100, 'points switched on took nothing off');
+  // And the raw endpoint row, WITHOUT the normaliser, is the broken case — so
+  // this assertion fails the moment the boundary stops normalising.
+  assert.strictEqual(
+    run({ id: 7, points_balance: 240, balance: 0 }).pMax, 0,
+    'an un-normalised row now offers points — the fixture no longer proves the boundary matters');
+});
+
 // ── The till's half ───────────────────────────────────────────────────────
 it('the till sends the whole offer and lets the server clamp it', () => {
   assert.ok(/out\.points_to_use = cr\.pMax/.test(TILL_SRC),
