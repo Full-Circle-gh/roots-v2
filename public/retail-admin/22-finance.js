@@ -57,6 +57,35 @@ function finMoney(n) {
   return acWrap(Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }));
 }
 
+/* ── Money INSIDE a disclosure — the real amount, to the fen ────────────────
+   **THE WHOLE-YUAN RULE ABOVE STOPS AT THE STAIRCASE, AND THIS IS WHERE.**
+   `finMoney` is right for a period total: the fen on `¥37,942` is noise, and
+   §36 decided it. It is WRONG for a list somebody opened in order to check it,
+   and the way it is wrong was measured rather than supposed —
+
+     true line amounts : 52.80  47.60  145.60  13.40   →  259.40
+     shown whole       : 53     48     146     13      →  260
+     row shown whole   :                                   259
+
+   Same rows, two whole numbers a yuan apart, and nothing on screen to explain
+   it. Each line rounds by up to half a yuan and the errors accumulate: over a
+   random sweep of realistic orders the worst drift on a nine-line order was
+   ¥3. **Rendering whole yuan does not hide that drift, it CREATES it** — which
+   is the opposite of what §88's own note first recorded, corrected there.
+
+   01-core.js already states the rule this follows: "anywhere an operator might
+   reconcile the number against something — a list, a total, a dialog, an
+   export — uses acMoney and shows the real amount". A drill-down row is that
+   list, by construction: it exists so the figure above it can be checked.
+
+   THE STAIRCASE AND THE CATEGORY LINES ARE UNCHANGED. Revenue, the two cost
+   rows, operating expenses, net and every line of the breakdown stay whole —
+   those are §36's figures and its decision. Only what opens BELOW a breakdown
+   line renders exact. */
+function finExact(n) {
+  return acMoney(Number(n || 0));
+}
+
 // ── The range bar ──────────────────────────────────────────────────────────
 // The Reports bar's own behaviour, on Finance's own element ids. The GZ-local
 // computation is copied deliberately rather than shared: dashSetRange writes
@@ -331,7 +360,7 @@ function finCatRow(r) {
     + (name ? `<span class="fin-catname">${escapeHtml(name)}</span>` : '')
     + (mark ? `<span class="fin-catmark">${escapeHtml(mark)}</span>` : '')
     + '</span>'
-    + `<span class="fin-catfig">${escapeHtml(finMoney(r.amount))}</span>`;
+    + `<span class="fin-catfig">${escapeHtml(finExact(r.amount))}</span>`;
   if (!openable) return `<div class="fin-catrow">${body}</div>`;
   return `<button type="button" class="fin-catrow fin-pol${open ? ' on' : ''}" `
     + `aria-expanded="${open ? 'true' : 'false'}" onclick="finPoLines(${Number(r.id)})">`
@@ -374,7 +403,7 @@ function finPolRow(r) {
   return '<div class="fin-polrow">'
     + `<span class="fin-polname">${escapeHtml(name)}</span>`
     + `<span class="fin-polqty">${escapeHtml(each)}</span>`
-    + `<span class="fin-polfig">${escapeHtml(finMoney(r.amount))}</span>`
+    + `<span class="fin-polfig">${escapeHtml(finExact(r.amount))}</span>`
     + '</div>';
 }
 

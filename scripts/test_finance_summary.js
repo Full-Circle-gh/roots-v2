@@ -963,5 +963,89 @@ it('the third level composes NO new Chinese either', () => {
   }
 });
 
+/* ══════════════════════════════════════════════════════════════════════════
+   9 · THE PRECISION BOUNDARY — whole yuan on the staircase, fen below it.
+
+   Reported by Ash from the live card, and the reason is arithmetic rather than
+   taste. Rounding each line to whole yuan shifts it by up to half a yuan, and
+   the errors accumulate: four real lines totalling ¥259.40 draw as 53 + 48 +
+   146 + 13 = 260 under a row drawing 259. Two whole numbers a yuan apart, over
+   the same rows, with nothing on screen to explain it.
+
+   §88's own note first recorded the opposite — "the card renders whole yuan so
+   it does not surface" — which is backwards: whole yuan is what CREATES the
+   drift. Corrected in the decisions record; asserted here.
+   ══════════════════════════════════════════════════════════════════════════ */
+console.log('\n9 · the precision boundary');
+
+// Ash's four lines, at their real amounts.
+const REAL = [
+  { id: 1, name_en: 'Isolation Bag 4 #2mm', name_cn: null, qty: 60, unit: 'pcs', unit_cost: 0.88, amount: 52.80 },
+  { id: 2, name_en: 'Isolation Bag 5 #2mm', name_cn: null, qty: 70, unit: 'pcs', unit_cost: 0.68, amount: 47.60 },
+  { id: 3, name_en: 'Foam Box #3', name_cn: null, qty: 40, unit: 'pcs', unit_cost: 3.64, amount: 145.60 },
+  { id: 4, name_en: 'Carton Box #8', name_cn: null, qty: 20, unit: 'pcs', unit_cost: 0.67, amount: 13.40 },
+];
+const REAL_ROW = { id: 77, date: '2026-08-18', amount: 259.40, note: 'RPO-0017 · 4 lines',
+  source: 'po', po_id: 17, po_number: 'RPO-0017', claim_id: null, paid_by: null, lines: 4 };
+const CROWS_REAL = [{ category: 'Packaging Materials', amount: 3628, entries: 9, is_operating: 1 }];
+const drawnReal = (pol) => {
+  ctx.__finSet({ window: { from: '2026-08-01', to: '2026-08-31' }, expense_breakdown: CROWS_REAL },
+    { i: 0, rows: [REAL_ROW], err: '' }, pol);
+  return ctx.finBreakdown(CROWS_REAL, CROWS_REAL);
+};
+// Every ¥ figure the drill-down draws, in order.
+const figures = (html) => (html.match(/¥[\d,]+(?:\.\d+)?/g) || []);
+
+it('the items DISPLAYED sum to the row DISPLAYED — exactly', () => {
+  const html = drawnReal({ id: 77, rows: REAL, err: '' });
+  for (const want of ['¥52.80', '¥47.60', '¥145.60', '¥13.40', '¥259.40']) {
+    assert.ok(html.includes(want), `the card must draw ${want}`);
+  }
+  // The arithmetic a reader would do on screen, done on screen.
+  const shown = REAL.map(r => Number(('' + ctx.acMoney(r.amount)).replace(/[^\d.]/g, '')));
+  assert.strictEqual(shown.reduce((a, b) => a + b, 0).toFixed(2), '259.40');
+  // And what the old whole-yuan rendering would have drawn instead.
+  const whole = REAL.map(r => Math.round(r.amount)).reduce((a, b) => a + b, 0);
+  assert.strictEqual(whole, 260, 'the fixture must keep exercising the drift');
+  assert.ok(!html.includes('>¥260<'), 'that ¥260 is exactly what this change removes');
+});
+
+it('the staircase and the category lines are UNTOUCHED — still whole yuan', () => {
+  // §36 decided the magnitude of these, and the fen on ¥37,942 is noise. The
+  // change is confined to what opens BELOW a breakdown line.
+  const html = drawnReal(null);
+  assert.ok(/<span class="fin-fig">¥3,628<\/span>/.test(html),
+    'the category line keeps whole yuan');
+  assert.ok(!/fin-fig">¥3,628\.00/.test(html), 'and must not gain decimals');
+});
+
+it('finExact is used below the breakdown line, and finMoney at and above it', () => {
+  // Stated as code rather than as a convention somebody has to remember.
+  const cat = CLIENT_CODE.slice(CLIENT_CODE.indexOf('function finCatRow'));
+  assert.ok(/fin-catfig[^`]*finExact/.test(cat.slice(0, cat.indexOf('\n}'))),
+    'an expense row inside a category renders the real amount');
+  const pol = CLIENT_CODE.slice(CLIENT_CODE.indexOf('function finPolRow'));
+  assert.ok(/fin-polfig[^`]*finExact/.test(pol.slice(0, pol.indexOf('\n}'))),
+    'so does a purchase-order item');
+  const brk = CLIENT_CODE.slice(CLIENT_CODE.indexOf('function finBreakdown'));
+  assert.ok(/fin-fig[^`]*finMoney/.test(brk.slice(0, brk.indexOf('\n}'))),
+    'the breakdown line itself stays on the staircase’s own magnitude');
+  assert.ok(/function finExact/.test(CLIENT_CODE) && /acMoney\(/.test(CLIENT_CODE),
+    'and the exact form goes through acMoney, 01-core’s reconcilable-figure rule');
+});
+
+it('a wide exact figure cannot wrap out of its column', () => {
+  // `¥1,145,600.00` is thirteen characters in a column sized for `Not recorded`.
+  // Right-aligned figures that wrap stop lining up, which is the one thing the
+  // shared column exists to prevent.
+  for (const cls of ['fin-catfig', 'fin-polfig']) {
+    const at = CSS.indexOf(`#tab-finance .${cls} {`);
+    assert.notStrictEqual(at, -1, `${cls} has no rule`);
+    assert.ok(/white-space: nowrap/.test(CSS.slice(at, at + 220)), `${cls} must not wrap`);
+  }
+  assert.ok(figures(drawnReal({ id: 77, rows: REAL, err: '' })).length >= 5,
+    'the sweep above must actually have found figures to check');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
