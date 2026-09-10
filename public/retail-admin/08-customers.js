@@ -1267,33 +1267,81 @@ function cuTagList(tags) {
   return String(tags == null ? '' : tags).split(',').map(t => t.trim()).filter(Boolean);
 }
 
-function cuNotesCardHtml(c) {
-  const tags = cuTagList(c.tags);
-  const chips = tags.length
-    ? tags.map(t => `<span class="cu-tagchip" data-no-i18n>${escapeHtml(t)}`
+// One place builds a chip row, so the first paint and every repaint after it
+// cannot drift apart.
+function cuTagChipsHtml(list) {
+  return list.length
+    ? list.map(t => `<span class="cu-tagchip" data-no-i18n>${escapeHtml(t)}`
         + `<button type="button" class="x" title="${escapeAttr(cuT('Remove this tag', '移除该标签'))}"`
         + ` aria-label="${escapeAttr(cuT('Remove tag ' + t, '移除标签 ' + t))}" onclick="cuTagRemove('${escapeAttr(t)}')">×</button></span>`).join('')
     : `<span class="muted">${escapeHtml(cuT('No tags yet', '暂无标签'))}</span>`;
+}
+
+// What the team knows about this person — tags and the note — now sits in the
+// HEADER beside their name rather than in a card of its own. The card it
+// replaces was the drawer's tallest block at ~210px and was usually empty:
+// a tag row, an add field, a three-row textarea and a Save foot, all standing
+// by in case somebody typed. Here it costs a chip row and one line until
+// somebody asks for the editor.
+//
+// The editor keeps EVERY id the old card had — cu-tagrow, cu-tag-new, cu-note,
+// cu-note-foot — so cuTagAdd, cuTagRemove, cuNoteChanged, cuNotesReset and
+// cuNotesSave keep working with no change at all. Only where the block sits,
+// and whether the editor is showing, is new.
+//
+// With no note there is NO note line, just the Edit button. The alternative
+// was an empty-state string, and "暂无备注" is not a pair this product uses
+// anywhere — inventing one to label the absence of a note is more Chinese than
+// the situation needs.
+function cuKnowHtml(c) {
+  const tags = cuTagList(c.tags);
+  const note = String(c.note || '');
   return `
-    <div class="cux-card" id="cu-notes-card">
-      <div class="cux-kicker">Notes &amp; tags · 备注与标签</div>
-      <div class="cu-tagrow" id="cu-tagrow">${chips}</div>
-      <div class="cu-tagadd">
-        <input type="text" id="cu-tag-new" maxlength="40"
-               placeholder="${escapeAttr(cuT('Add a tag — e.g. wholesale', '添加标签,如 批发'))}"
-               aria-label="${escapeAttr(cuT('Add a tag', '添加标签'))}"
-               onkeydown="if(event.key==='Enter'){event.preventDefault();cuTagAdd();}">
-        <button type="button" class="btn btn-sm" onclick="cuTagAdd()">${escapeHtml(cuT('Add', '添加'))}</button>
+    <div class="cux-know${tags.length ? '' : ' no-tags'}" id="cu-know">
+      <div class="cu-tagrow" id="cu-tagrow">${cuTagChipsHtml(tags)}</div>
+      <div class="cux-knowline">
+        <div class="cu-noteline" id="cu-noteline"${note ? '' : ' hidden'}>
+          <span class="ic" aria-hidden="true">&#9998;</span>
+          <span class="tx" id="cu-noteline-tx" data-no-i18n>${escapeHtml(note)}</span>
+        </div>
+        <button type="button" class="cux-ghost btn btn-sm" id="cu-note-toggle"
+                onclick="cuNotesEdit()">${escapeHtml(cuT('Edit', '编辑'))}</button>
       </div>
-      <textarea id="cu-note" class="cu-note-in" rows="3" maxlength="2000"
-                aria-label="${escapeAttr(cuT('Note about this customer', '关于该顾客的备注'))}"
-                placeholder="${escapeAttr(cuT('Anything your team should know — allergies, delivery quirks, invoicing.', '团队需要知道的事 — 过敏、配送要求、开票方式等。'))}"
-                oninput="cuNoteChanged()">${escapeHtml(c.note || '')}</textarea>
-      <div class="cu-note-foot" id="cu-note-foot" hidden>
-        <button type="button" class="btn btn-sm" onclick="cuNotesReset()">${escapeHtml(cuT('Reset', '还原'))}</button>
-        <button type="button" class="btn btn-sm btn-primary" onclick="cuNotesSave(this)">${escapeHtml(cuT('Save', '保存'))}</button>
+      <div class="cu-noteedit" id="cu-noteedit" hidden>
+        <div class="cu-tagadd">
+          <input type="text" id="cu-tag-new" maxlength="40"
+                 placeholder="${escapeAttr(cuT('Add a tag — e.g. wholesale', '添加标签,如 批发'))}"
+                 aria-label="${escapeAttr(cuT('Add a tag', '添加标签'))}"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();cuTagAdd();}">
+          <button type="button" class="btn btn-sm" onclick="cuTagAdd()">${escapeHtml(cuT('Add', '添加'))}</button>
+        </div>
+        <textarea id="cu-note" class="cu-note-in" rows="3" maxlength="2000"
+                  aria-label="${escapeAttr(cuT('Note about this customer', '关于该顾客的备注'))}"
+                  placeholder="${escapeAttr(cuT('Anything your team should know — allergies, delivery quirks, invoicing.', '团队需要知道的事 — 过敏、配送要求、开票方式等。'))}"
+                  oninput="cuNoteChanged()">${escapeHtml(note)}</textarea>
+        <div class="cu-note-foot" id="cu-note-foot" hidden>
+          <button type="button" class="btn btn-sm" onclick="cuNotesReset()">${escapeHtml(cuT('Reset', '还原'))}</button>
+          <button type="button" class="btn btn-sm btn-primary" onclick="cuNotesSave(this)">${escapeHtml(cuT('Save', '保存'))}</button>
+        </div>
       </div>
     </div>`;
+}
+
+// The editor is collapsed until asked for. Called with no argument it toggles.
+function cuNotesEdit(on) {
+  const know = document.getElementById('cu-know');
+  const ed   = document.getElementById('cu-noteedit');
+  if (!know || !ed) return;
+  const open = (on === undefined) ? ed.hidden : !!on;
+  ed.hidden = !open;
+  know.classList.toggle('editing', open);
+  const line = document.getElementById('cu-noteline');
+  // The read-only line is redundant while the textarea is showing the same
+  // text, and it comes back only if there is a note to show.
+  if (line) line.hidden = open || !_cuSavedNote();
+  const btn = document.getElementById('cu-note-toggle');
+  if (btn) btn.textContent = open ? cuT('Close', '关闭') : cuT('Edit', '编辑');
+  if (open) { const ta = document.getElementById('cu-note'); if (ta) ta.focus(); }
 }
 
 // The tags being edited right now. Held apart from CU_CURRENT so Reset has
@@ -1331,18 +1379,25 @@ function cuTagRemove(tag) {
   cuNotesRepaint();
 }
 
-// Repaint only the chip row, not the card: rebuilding the card would blow away
-// whatever the operator has typed into the note beneath it.
+// Repaint only the chip row and the read-only note line, never the whole
+// block: rebuilding it would blow away whatever the operator has typed into
+// the textarea beneath.
 function cuNotesRepaint() {
+  const list = _cuDraftTags();
   const row = document.getElementById('cu-tagrow');
-  if (row) {
-    const list = _cuDraftTags();
-    row.innerHTML = list.length
-      ? list.map(t => `<span class="cu-tagchip" data-no-i18n>${escapeHtml(t)}`
-          + `<button type="button" class="x" title="${escapeAttr(cuT('Remove this tag', '移除该标签'))}"`
-          + ` aria-label="${escapeAttr(cuT('Remove tag ' + t, '移除标签 ' + t))}" onclick="cuTagRemove('${escapeAttr(t)}')">×</button></span>`).join('')
-      : `<span class="muted">${escapeHtml(cuT('No tags yet', '暂无标签'))}</span>`;
-  }
+  if (row) row.innerHTML = cuTagChipsHtml(list);
+  // no-tags drops the chip row out of the header entirely when it is empty —
+  // an empty row above someone's name is a gap with no explanation.
+  const know = document.getElementById('cu-know');
+  if (know) know.classList.toggle('no-tags', !list.length);
+  // The line follows the SAVED note, not the draft: it is what the header will
+  // show once the editor closes, and a half-typed sentence is not that yet.
+  const saved = _cuSavedNote();
+  const tx = document.getElementById('cu-noteline-tx');
+  if (tx) tx.textContent = saved;
+  const line = document.getElementById('cu-noteline');
+  const ed = document.getElementById('cu-noteedit');
+  if (line) line.hidden = !saved || !(ed && ed.hidden);
   cuNoteChanged();
 }
 
@@ -1387,6 +1442,7 @@ async function cuNotesSave(btn) {
   d.customer.note = (j.changed && 'note' in j.changed) ? j.changed.note : (note.trim() || null);
   d.customer.tags = (j.changed && 'tags' in j.changed) ? j.changed.tags : (tags.length ? tags.join(',') : null);
   CU_TAG_DRAFT = null;
+  cuNotesEdit(false);
   cuNotesRepaint();
   toast(cuT('Saved', '已保存'));
   // The roster row shows the tags, and the tag filter is built from what is in
@@ -1491,7 +1547,7 @@ function cuRenderDetail() {
     months.push({ key, n: row ? row.n : 0, revenue: row ? row.revenue : 0 });
   }
   const maxRevenue = Math.max(1, ...months.map(m => m.revenue));
-  const barMax = 78;   // fixed quiet height — the summary line carries the headline
+  const barMax = 44;   // fixed quiet height — the summary line carries the headline
   const monthBars = months.map(m => `
     <div class="cu-bar-col" data-m="${m.key}" data-n="${m.n}" data-rev="${escapeAttr(yuanBare(m.revenue))}" onmousemove="cuBarTip(event)" onmouseleave="cuBarTipHide()">
       <div class="cu-bar ${m.revenue === 0 ? 'empty' : (m.revenue === maxRevenue ? 'peak' : '')}" style="height: ${m.revenue === 0 ? 3 : Math.max(8, (m.revenue / maxRevenue) * barMax)}px;"></div>
@@ -1726,6 +1782,7 @@ function cuRenderDetail() {
           ${c.phone ? `${escapeHtml(c.phone)}<button class="cux-copy" onclick="cuCopyChip(this, '${escapeAttr(c.phone)}')">${escapeHtml(cuT('Copy', '复制'))}</button>` : ''}
           ${c.email ? `<span${c.phone ? ' class="muted"' : ''}>${escapeHtml(c.email)}</span>` : ''}
         </div>` : ''}
+        ${cuKnowHtml(c)}
       </div>
     </div>
 
@@ -1761,23 +1818,143 @@ function cuRenderDetail() {
       </div>
     </div>
 
-    <!-- Facts cards — what used to be the pill wall + tile zero-rows. -->
-    <div class="cux-cards">
-      <div class="cux-card">
+    <!-- ── Three panes ────────────────────────────────────────────────
+         The drawer used to be thirteen blocks in one column, six of them
+         identical white cards, which offered the eye no ranking at all.
+         Overview answers "who is this and what do they do"; History holds the
+         ledgers; Account holds the support material. Header and snapshot stay
+         above the tabs because they are true on every pane.
+
+         Sections inside a pane are a hairline and a kicker, NOT cards. Cards
+         were what made the old drawer read as a stack of boxes, and inside a
+         single column a border earns nothing — the folds below have always
+         separated themselves this way. -->
+    <div class="cux-tabs" role="tablist" aria-label="${escapeAttr(cuT('Customer sections', '顾客分区'))}">
+      <button type="button" role="tab" id="cu-tab-overview" class="on"
+              aria-controls="cu-pane-overview" aria-selected="true"
+              onclick="cuTab('overview')">Overview · 概览</button>
+      <button type="button" role="tab" id="cu-tab-history"
+              aria-controls="cu-pane-history" aria-selected="false"
+              onclick="cuTab('history')">History · 历史</button>
+      <button type="button" role="tab" id="cu-tab-account"
+              aria-controls="cu-pane-account" aria-selected="false"
+              onclick="cuTab('account')">Account · 账号</button>
+    </div>
+
+    <div class="cux-pane" id="cu-pane-overview" role="tabpanel" aria-labelledby="cu-tab-overview">
+      <!-- Activity as a line-up rather than label/value rows: three short
+           facts do not need a 118px label gutter each. -->
+      <div class="cux-sec">
         <div class="cux-kicker">Activity · 动态</div>
-        <div class="cux-frow"><div class="k">Last order · 最近订单</div><div class="v${lastOrd ? '' : ' none'}" data-no-i18n>${escapeHtml(lastOrderV)}</div></div>
-        <!-- Relative, via the same cuFmtSeen the roster's Last seen column uses,
-             so "3d ago" means the same thing on both surfaces. -->
-        <div class="cux-frow"><div class="k">Last login · 最近登录</div><div class="v quiet" data-no-i18n>${escapeHtml(c.last_login_at ? courierAgo(c.last_login_at) : cuT('never', '从未'))}</div></div>
-        <!-- Bare "46 / 48": the two numbers ARE the sentence. -->
-        <div class="cux-frow"><div class="k">Completed · 已完成</div><div class="v" data-no-i18n>${cuNum(ord.completed_count || 0)} / ${cuNum(ordersN)}</div></div>
-        ${(rev.count || 0) > 0 ? `<div class="cux-frow"><div class="k">Reviews · 评价</div><div class="v" data-no-i18n>${rev.count}${rev.avg_rating ? ' <span class="muted">· ' + Number(rev.avg_rating).toFixed(1) + '★</span>' : ''}</div></div>` : ''}
+        <div class="cux-strip">
+          <div><div class="k">Last order · 最近订单</div><div class="v${lastOrd ? '' : ' none'}" data-no-i18n>${escapeHtml(lastOrderV)}</div></div>
+          <!-- Relative, via the same cuFmtSeen the roster's Last seen column uses,
+               so "3d ago" means the same thing on both surfaces. -->
+          <div><div class="k">Last login · 最近登录</div><div class="v quiet" data-no-i18n>${escapeHtml(c.last_login_at ? courierAgo(c.last_login_at) : cuT('never', '从未'))}</div></div>
+          <!-- Bare "46 / 48": the two numbers ARE the sentence. -->
+          <div><div class="k">Completed · 已完成</div><div class="v" data-no-i18n>${cuNum(ord.completed_count || 0)} / ${cuNum(ordersN)}</div></div>
+          ${(rev.count || 0) > 0 ? `<div><div class="k">Reviews · 评价</div><div class="v" data-no-i18n>${rev.count}${rev.avg_rating ? ' <span class="muted">· ' + Number(rev.avg_rating).toFixed(1) + '★</span>' : ''}</div></div>` : ''}
+        </div>
       </div>
-      <div class="cux-card">
+
+      <!-- Addresses ahead of Top items: where a parcel goes is asked more often
+           than what was in the last one. -->
+      <div class="cux-sec">
+        <div class="cux-kicker">Addresses · 地址
+          <span class="side"><button class="btn btn-sm cux-ghost" onclick="cuOpenAddrModal(null)">+ Add · 添加</button></span>
+        </div>
+        ${addressesHtml}
+      </div>
+
+      <div class="cux-sec">
+        <div class="cux-kicker">Top items · 热销商品</div>
+        <table class="cux-titbl">
+          <thead><tr><th>Item · 商品</th><th class="numeric">Qty · 数量</th><th class="numeric">Spend · 消费</th></tr></thead>
+          <tbody>${topItemsRows}</tbody>
+        </table>
+      </div>
+
+      <!-- Below three orders the bars are HIDDEN and the section keeps its
+           title and summary: eleven empty stubs and one bar is not a chart,
+           it's a chart-shaped apology. The section itself stays so the pane's
+           shape doesn't change between customers.
+           Month labels are NUMERIC (08 09 10 …) — single letters give two "A"s
+           and two "M"s in one row. -->
+      <div class="cux-sec cux-chart">
+        <div class="cux-kicker">Orders by month · 月度订单
+          <span class="side" data-no-i18n>${chartSummary}</span>
+        </div>
+        ${ordersN >= 3 ? `<div class="cu-bar-host" style="position: relative;">
+          <div class="cu-bar-row">${monthBars}</div>
+          <!-- tooltip is a body-level singleton (cuBarTip) so the drawer can't crop it -->
+        </div>` : ''}
+      </div>
+    </div>
+
+    <div class="cux-pane" id="cu-pane-history" role="tabpanel" aria-labelledby="cu-tab-history" hidden>
+      <div class="cux-folds">
+        <details class="cux-fold">
+          <!-- The summary states the customer's TRUE order count, not how many
+               rows this fold happens to hold. recent_orders is LIMIT 10, so a
+               48-order customer used to read "10" here — a number that looked
+               like an answer and wasn't. stats.orders.orders_count is already
+               on the payload; the list below is still the last 10, and the
+               "View all N" link at its foot says so. -->
+          <summary>${chevron}<span class="t">Recent orders · 近期订单</span>
+            <span class="hint" data-no-i18n>${ordersN
+              ? escapeHtml(cuT(cuNum(ordersN) + (ordersN === 1 ? ' order' : ' orders'), cuNum(ordersN) + ' 单'))
+              : noneHint}</span></summary>
+          <div class="cux-fold-body">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Order # · 订单号</th><th>Status · 状态</th><th class="numeric">Total · 总额</th><th>When · 时间</th></tr></thead>
+                <tbody>${recentOrdersRows}</tbody>
+              </table>
+            </div>
+            ${recentOrdersViewAll}
+          </div>
+        </details>
+
+        <details class="cux-fold">
+          <!-- Was recent_points.length — capped at 20 by the query and labelled
+               "earned", so it was neither the row count nor the earned total.
+               stats.points.earned is the real lifetime figure and is already on
+               the payload. -->
+          <summary>${chevron}<span class="t">Points ledger · 积分明细</span>
+            <span class="hint" data-no-i18n>${(pts.earned || 0)
+              ? escapeHtml(cuT(cuNum(pts.earned) + ' earned', '累计获得 ' + cuNum(pts.earned)))
+              : escapeHtml(cuT('no activity', '暂无变动'))}</span></summary>
+          <div class="cux-fold-body">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Source · 来源</th><th class="numeric">Δ · 变动</th><th class="numeric">After · 之后</th><th>Note · 备注</th><th>When · 时间</th></tr></thead>
+                <tbody>${recentPtsRows}</tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+
+        <details class="cux-fold">
+          <summary>${chevron}<span class="t">Top-ups · 充值明细</span>
+            <span class="hint" data-no-i18n>${d.recent_topups.length || noneHint}</span></summary>
+          <div class="cux-fold-body">
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Method · 方式</th><th class="numeric">Amount · 金额</th><th class="numeric">Bonus · 赠送</th><th>Status · 状态</th><th>When · 时间</th></tr></thead>
+                <tbody>${recentTopupsRows}</tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+      </div>
+    </div>
+
+    <div class="cux-pane" id="cu-pane-account" role="tabpanel" aria-labelledby="cu-tab-account" hidden>
+      <div class="cux-sec">
         <div class="cux-kicker">Device &amp; account · 设备与账号</div>
         <div class="cux-frow"><div class="k">App build · 版本</div><div class="v${(buildV && buildV.app_version) ? ' quiet' : ' none'}" data-no-i18n>${escapeHtml(buildText)}</div></div>
         <!-- Number in Ink, "active" in Graphite — the same treatment every
-             other value in this card gets. It used to turn AMBER at 5+
+             other value in this pane gets. It used to turn AMBER at 5+
              sessions, but Amber is the attention colour and a session count
              is a FACT, not a warning: someone with eight devices signed in
              has not done anything wrong, and colouring it asks the operator
@@ -1786,130 +1963,53 @@ function cuRenderDetail() {
         <div class="cux-frow"><div class="k">Sessions · 会话</div><div class="v" data-no-i18n>${cuNum(sessions)} <span class="muted">${escapeHtml(cuT('active', '个活跃'))}</span></div></div>
         <div class="cux-frow"><div class="k">openid</div><div class="v mono${openid ? '' : ' none'}" data-no-i18n>${escapeHtml(openidShort)}${openid ? `<button class="cux-copy" onclick="cuCopyChip(this, '${escapeAttr(openid)}')">${escapeHtml(cuT('Copy', '复制'))}</button>` : ''}</div></div>
       </div>
-    </div>
 
-    <!-- Notes & tags — the first thing an operator wants when they open a
-         person, so it sits above the numbers (audit E-02). Read-write in place;
-         Save appears only once something has actually changed. -->
-    ${cuNotesCardHtml(c)}
+      <div class="cux-folds">
+        <!-- Three states, not two. "no errors in 7 days" is an ALL-CLEAR and is
+             only earned when the query actually ran and returned zero. When the
+             read failed (diagnostics.unavailable) the summary says so plainly —
+             a failure that reads as good news is worse than no news.
+             This fold auto-opens on errors, which is also why Account is a tab
+             and not a fold: a pane can be opened straight to a live problem. -->
+        <details class="cux-fold"${diagErrs > 0 ? ' open' : ''}>
+          <summary>${chevron}<span class="t">Diagnostics · 诊断</span>
+            <span class="hint${diagUnavail ? ' warn' : (diagErrs > 0 ? ' warn' : ' ok')}" data-no-i18n>${
+              diagUnavail ? escapeHtml(cuT("couldn't be read", '无法读取'))
+              : diagErrs > 0 ? escapeHtml(cuT(diagErrs + ' errors in 7 days', '近 7 天报错 ' + diagErrs))
+              : escapeHtml(cuT('no errors in 7 days', '近 7 天无报错'))}</span></summary>
+          <div class="cux-fold-body">${diagUnavail
+            ? `<div class="muted">${escapeHtml(cuT("Diagnostics couldn't be read for this customer. This is not an all-clear — the check itself failed.", '无法读取该顾客的诊断数据。这不代表一切正常 — 是检查本身失败了。'))}</div>`
+            : renderDiagnosticsBlock(d.diagnostics)}</div>
+        </details>
 
-    <!-- Orders by month — a card like the others: title left, summary right,
-         on the SAME line. Below three orders the bars are HIDDEN and the card
-         keeps its title and summary: eleven empty stubs and one bar is not a
-         chart, it's a chart-shaped apology. The card itself stays so the
-         drawer's shape doesn't change between customers.
-         Month labels are NUMERIC (08 09 10 …) — single letters give two "A"s
-         and two "M"s in one row. -->
-    <div class="cux-card cux-chart">
-      <div class="cux-kicker">Orders by month · 月度订单
-        <span class="side" data-no-i18n>${chartSummary}</span>
+        <details class="cux-fold">
+          <summary>${chevron}<span class="t">Affiliate · 推广</span>
+            <span class="hint" data-no-i18n>${affTotal ? escapeHtml(cuT(affTotal + ' invites', '邀请 ' + affTotal)) : escapeHtml(cuT('no invites', '暂无邀请'))}</span></summary>
+          <div class="cux-fold-body">${renderAffiliateBlock(d.affiliate)}</div>
+        </details>
       </div>
-      ${ordersN >= 3 ? `<div class="cu-bar-host" style="position: relative;">
-        <div class="cu-bar-row">${monthBars}</div>
-        <!-- tooltip is a body-level singleton (cuBarTip) so the drawer can't crop it -->
-      </div>` : ''}
-    </div>
-
-    <!-- Two white cards side by side. Each takes its NATURAL height and
-         top-aligns — neither stretches to match the other, so an uneven bottom
-         edge is correct, not a bug. They stack full-width when they can't sit
-         side by side; the panel never scrolls sideways. -->
-    <div class="cu-detail-pairs">
-      <div class="cux-card">
-        <div class="cux-kicker">Top items · 热销商品</div>
-        <table class="cux-titbl">
-          <thead><tr><th>Item · 商品</th><th class="numeric">Qty · 数量</th><th class="numeric">Spend · 消费</th></tr></thead>
-          <tbody>${topItemsRows}</tbody>
-        </table>
-      </div>
-      <div class="cux-card">
-        <div class="cux-kicker">Addresses · 地址
-          <span class="side"><button class="btn btn-sm cux-ghost" onclick="cuOpenAddrModal(null)">+ Add · 添加</button></span>
-        </div>
-        ${addressesHtml}
-      </div>
-    </div>
-
-    <!-- Ledger folds — flat rows with a hint of what's inside. Recent orders
-         first (most used); Diagnostics further down but still auto-opens when
-         the customer's app reported errors. -->
-    <div class="cux-folds">
-      <details class="cux-fold">
-        <!-- The summary states the customer's TRUE order count, not how many
-             rows this fold happens to hold. recent_orders is LIMIT 10, so a
-             48-order customer used to read "10" here — a number that looked
-             like an answer and wasn't. stats.orders.orders_count is already
-             on the payload; the list below is still the last 10, and the
-             "View all N" link at its foot says so. -->
-        <summary>${chevron}<span class="t">Recent orders · 近期订单</span>
-          <span class="hint" data-no-i18n>${ordersN
-            ? escapeHtml(cuT(cuNum(ordersN) + (ordersN === 1 ? ' order' : ' orders'), cuNum(ordersN) + ' 单'))
-            : noneHint}</span></summary>
-        <div class="cux-fold-body">
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Order # · 订单号</th><th>Status · 状态</th><th class="numeric">Total · 总额</th><th>When · 时间</th></tr></thead>
-              <tbody>${recentOrdersRows}</tbody>
-            </table>
-          </div>
-          ${recentOrdersViewAll}
-        </div>
-      </details>
-
-      <details class="cux-fold">
-        <!-- Was recent_points.length — capped at 20 by the query and labelled
-             "earned", so it was neither the row count nor the earned total.
-             stats.points.earned is the real lifetime figure and is already on
-             the payload. -->
-        <summary>${chevron}<span class="t">Points ledger · 积分明细</span>
-          <span class="hint" data-no-i18n>${(pts.earned || 0)
-            ? escapeHtml(cuT(cuNum(pts.earned) + ' earned', '累计获得 ' + cuNum(pts.earned)))
-            : escapeHtml(cuT('no activity', '暂无变动'))}</span></summary>
-        <div class="cux-fold-body">
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Source · 来源</th><th class="numeric">Δ · 变动</th><th class="numeric">After · 之后</th><th>Note · 备注</th><th>When · 时间</th></tr></thead>
-              <tbody>${recentPtsRows}</tbody>
-            </table>
-          </div>
-        </div>
-      </details>
-
-      <details class="cux-fold">
-        <summary>${chevron}<span class="t">Top-ups · 充值明细</span>
-          <span class="hint" data-no-i18n>${d.recent_topups.length || noneHint}</span></summary>
-        <div class="cux-fold-body">
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Method · 方式</th><th class="numeric">Amount · 金额</th><th class="numeric">Bonus · 赠送</th><th>Status · 状态</th><th>When · 时间</th></tr></thead>
-              <tbody>${recentTopupsRows}</tbody>
-            </table>
-          </div>
-        </div>
-      </details>
-
-      <!-- Three states, not two. "no errors in 7 days" is an ALL-CLEAR and is
-           only earned when the query actually ran and returned zero. When the
-           read failed (diagnostics.unavailable) the summary says so plainly —
-           a failure that reads as good news is worse than no news. -->
-      <details class="cux-fold"${diagErrs > 0 ? ' open' : ''}>
-        <summary>${chevron}<span class="t">Diagnostics · 诊断</span>
-          <span class="hint${diagUnavail ? ' warn' : (diagErrs > 0 ? ' warn' : ' ok')}" data-no-i18n>${
-            diagUnavail ? escapeHtml(cuT("couldn't be read", '无法读取'))
-            : diagErrs > 0 ? escapeHtml(cuT(diagErrs + ' errors in 7 days', '近 7 天报错 ' + diagErrs))
-            : escapeHtml(cuT('no errors in 7 days', '近 7 天无报错'))}</span></summary>
-        <div class="cux-fold-body">${diagUnavail
-          ? `<div class="muted">${escapeHtml(cuT("Diagnostics couldn't be read for this customer. This is not an all-clear — the check itself failed.", '无法读取该顾客的诊断数据。这不代表一切正常 — 是检查本身失败了。'))}</div>`
-          : renderDiagnosticsBlock(d.diagnostics)}</div>
-      </details>
-
-      <details class="cux-fold">
-        <summary>${chevron}<span class="t">Affiliate · 推广</span>
-          <span class="hint" data-no-i18n>${affTotal ? escapeHtml(cuT(affTotal + ' invites', '邀请 ' + affTotal)) : escapeHtml(cuT('no invites', '暂无邀请'))}</span></summary>
-        <div class="cux-fold-body">${renderAffiliateBlock(d.affiliate)}</div>
-      </details>
     </div>
   `;
+
+  // A drawer always opens on Overview. Carrying the last customer's tab over
+  // to the next one would answer a question this operator never asked.
+  cuTab('overview');
+}
+
+// Panes are hidden rather than unmounted: the ledger folds keep whatever the
+// operator opened while they move between tabs, and Diagnostics keeps the
+// open state it was rendered with.
+function cuTab(key) {
+  ['overview', 'history', 'account'].forEach(k => {
+    const pane = document.getElementById('cu-pane-' + k);
+    const tab  = document.getElementById('cu-tab-' + k);
+    const on   = (k === key);
+    if (pane) pane.hidden = !on;
+    if (tab) {
+      tab.classList.toggle('on', on);
+      tab.setAttribute('aria-selected', String(on));
+    }
+  });
 }
 
 // Affiliate block in the customer drawer — code, who referred them,

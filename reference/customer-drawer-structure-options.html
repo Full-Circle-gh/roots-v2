@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer drawer — three structures</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ── Tacet tokens — docs/tacet-design-system.md §1 ──
+     Inter 400/500 ONLY. Nothing heavier anywhere in this file: the spec
+     says bold reads as shouting, and the previous mockup slipped to 600. */
+  :root{
+    --ink:#111A2B; --paper:#FBF9F4; --pane:#FFFFFF; --graphite:#58606E;
+    --cream:#F6F3EC; --elev1:#F6F3EC;
+    --line-soft:#ECE8DE; --line:#E4E0D5; --line-strong:#D9D4C7;
+    --text-1:#111A2B; --text-2:#58606E; --text-3:#8A8B8E; --text-4:#B4B3AC;
+    --dusk:#6E67AF; --dusk-tint:#EEEDF6;
+    --sage:#A3B49F; --sage-tint:#EDF1EC; --sage-ink:#4A6249;
+    --amber:#C9954A; --amber-tint:#F7EEDE; --amber-ink:#8A6425;
+    --brick:#B4533E; --brick-tint:#F6E7E3;
+    --f:'Inter','IBM Plex Sans SC','PingFang SC','Hiragino Sans GB',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--text-1);
+    font-family:var(--f); font-size:15px; line-height:1.5; font-weight:400;
+    -webkit-font-smoothing:antialiased; padding:32px 24px 96px;
+    font-variant-numeric:tabular-nums;
+  }
+  .wrap{max-width:1880px; margin:0 auto;}
+
+  h1{font-size:20px; font-weight:500; margin:0 0 6px; letter-spacing:-.01em;}
+  .lede{margin:0; color:var(--text-2); font-size:13.5px; max-width:820px; line-height:1.6;}
+
+  /* ── Diagnosis strip ── */
+  .diag{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin:24px 0 36px;}
+  @media (max-width:1000px){ .diag{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  .diag > div{background:var(--pane); border:1px solid var(--line); border-radius:14px; padding:18px 20px;}
+  .diag .n{font-size:26px; font-weight:500; letter-spacing:-.01em; line-height:1.1;}
+  .diag .t{font-size:13px; font-weight:500; margin:7px 0 5px;}
+  .diag p{margin:0; font-size:12.5px; color:var(--text-2); line-height:1.55;}
+
+  /* ── Option scaffolding ── */
+  .opt{margin-bottom:56px;}
+  .opt > header{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap;
+    border-top:1px solid var(--line-strong); padding-top:18px; margin-bottom:6px;}
+  .opt > header h2{font-size:17px; font-weight:500; margin:0; letter-spacing:-.005em;}
+  .opt > header .tag{font-size:12px; font-weight:500; color:var(--text-2);
+    background:var(--elev1); border:1px solid var(--line); border-radius:999px; padding:2px 10px;}
+  .opt > header .h{margin-left:auto; font-size:12.5px; color:var(--text-2);}
+  .opt > header .h b{font-weight:500; color:var(--text-1);}
+  .opt > .why{margin:0 0 22px; font-size:13px; color:var(--text-2); max-width:900px; line-height:1.65;}
+  .opt > .why b{font-weight:500; color:var(--text-1);}
+
+  .row2{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:32px; align-items:start;}
+  @media (max-width:1240px){ .row2{grid-template-columns:minmax(0,1fr);} }
+
+  /* ══ Drawer shell ══ */
+  .drawer{background:var(--paper); border:1px solid var(--line); border-radius:18px;
+    padding:24px; box-shadow:0 4px 16px rgba(17,26,43,.04); max-width:640px;}
+  .drawer.wide{max-width:100%;}
+
+  /* ══ Header — the same in all three. Tags and the note live HERE now. ══ */
+  .hd{display:flex; gap:16px;}
+  .avatar{flex:none; width:52px; height:52px; border-radius:999px; background:var(--cream);
+    border:1px solid var(--line-soft);}
+  .eyebrow{font-size:13px; color:var(--text-2); margin:0 0 5px;}
+  .nm{font-size:24px; font-weight:500; letter-spacing:-.005em; line-height:1.2;
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .ph{font-size:14px; color:var(--text-2); margin-top:5px;}
+  .pill{display:inline-flex; align-items:center; font-size:13px; font-weight:500;
+    border-radius:999px; padding:2px 11px; background:var(--sage-tint); color:var(--sage-ink);}
+  .copy{font-size:11.5px; font-weight:500; color:var(--text-2); background:var(--elev1);
+    border:1px solid var(--line); border-radius:999px; padding:1px 8px; margin-left:7px;}
+
+  /* Tag chips + the note as ONE quiet line. This is the space the old
+     Notes & tags card was spending 210px on. */
+  .know{margin-top:11px; display:flex; flex-wrap:wrap; gap:6px; align-items:center;}
+  .chip{display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--text-1);
+    background:var(--elev1); border:1px solid var(--line); border-radius:999px; padding:2px 10px;}
+  .chip.add{color:var(--text-3); border-style:dashed; background:none;}
+  .noteline{margin-top:9px; display:flex; gap:9px; align-items:baseline;
+    font-size:13px; color:var(--text-2); line-height:1.55;}
+  .noteline .ic{flex:none; color:var(--text-4); font-size:11px; padding-top:2px;}
+  .noteline .tx{flex:1; min-width:0;}
+  .noteline .ed{flex:none; font-size:12.5px; color:var(--text-2);
+    text-decoration:underline; text-underline-offset:3px; text-decoration-color:var(--line-strong);}
+  .noteline.empty .tx{color:var(--text-3);}
+
+  /* ══ Snapshot band ══ */
+  .snap{display:grid; grid-template-columns:repeat(3,minmax(0,1fr));
+    margin:22px 0 0; padding-top:20px; border-top:1px solid var(--line);}
+  .snap > div{padding:0 18px;}
+  .snap > div:first-child{padding-left:0;}
+  .snap > div + div{border-left:1px solid var(--line-strong);}
+  /* A CJK label must never break mid-word — "积/分" on two lines is the
+     kind of small wrongness that makes a panel read as unfinished. The label
+     text is nowrap and the Adjust link wraps under it when the column is
+     tight, which is tidy rather than broken. */
+  .snap .lbl{font-size:13px; font-weight:500; color:var(--text-2); letter-spacing:.02em;
+    display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; row-gap:2px;}
+  .snap .lbl .t{white-space:nowrap;}
+  .snap .adj{margin-left:auto; font-size:13px; color:var(--text-2); font-weight:400;
+    white-space:nowrap;
+    text-decoration:underline; text-underline-offset:3px; text-decoration-color:var(--line-strong);}
+  /* At full drawer width the columns are wide enough that margin-left:auto
+     strands Adjust at the far edge, reading as unrelated to the figure it
+     adjusts. It sits beside its label instead. */
+  .drawer.wide .snap .adj{margin-left:14px;}
+  .snap .fig{font-size:30px; font-weight:500; letter-spacing:-.01em; margin-top:6px;}
+  .snap .fig.zero{color:var(--text-3);}
+  .snap .sub{font-size:13px; color:var(--text-2); margin-top:3px; line-height:1.45;}
+  .snap .sub .warn{color:var(--amber-ink);}
+
+  /* ══ Section — a rule and a kicker, NOT a card (options A and B) ══ */
+  .sec{border-top:1px solid var(--line); padding-top:18px; margin-top:24px;}
+  .kick{display:flex; align-items:baseline; gap:8px; font-size:13px; font-weight:500;
+    color:var(--text-1); margin-bottom:12px;}
+  .kick .side{margin-left:auto; font-weight:400; font-size:13px; color:var(--text-2);}
+  .kick .ghost{margin-left:auto; font-weight:400; font-size:13px; color:var(--text-2);}
+
+  /* ══ Card — kept only where a card earns it (option C) ══ */
+  .card{background:var(--pane); border:1px solid var(--line); border-radius:14px;
+    padding:20px; min-width:0; align-self:start;}
+  .card .kick{margin-bottom:10px;}
+
+  /* Facts rows */
+  .frow{display:grid; grid-template-columns:118px 1fr; gap:12px; padding:8px 0;
+    border-top:1px solid var(--line-soft); align-items:baseline;}
+  .kick + .frow{border-top:none; padding-top:0;}
+  .frow .k{font-size:13px; color:var(--text-2);}
+  .frow .v{font-size:14.5px; font-weight:500; text-align:right; overflow-wrap:anywhere;}
+  .frow .v .muted{color:var(--text-3); font-weight:400;}
+  .frow .v.quiet{font-weight:400; color:var(--text-2);}
+  .frow .v.mono{font-family:var(--mono); font-size:13px; font-weight:400; color:var(--text-2);}
+
+  /* Facts as an inline strip — Activity in one line-up, no 118px label gutter */
+  .strip{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px;}
+  .strip > div{min-width:0;}
+  .strip .k{font-size:12px; color:var(--text-2); margin-bottom:3px;}
+  .strip .v{font-size:14.5px; font-weight:500; overflow-wrap:anywhere;}
+  .strip .v.quiet{font-weight:400; color:var(--text-2);}
+
+  /* Tables */
+  table{width:100%; border-collapse:collapse;}
+  thead th{font-weight:500; font-size:11.5px; letter-spacing:.02em; color:var(--text-2);
+    text-align:left; padding:0 0 7px; border-bottom:1px solid var(--line);}
+  thead th.num, tbody td.num{text-align:right;}
+  tbody td{font-size:13.5px; padding:7px 0; border-bottom:1px solid var(--line-soft);}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody .sku{display:block; font-size:11.5px; color:var(--text-3); margin-top:2px;}
+
+  /* Addresses */
+  .addr{padding:8px 0; min-width:0;}
+  .addr + .addr{border-top:1px solid var(--line-soft);}
+  .addr:first-of-type{padding-top:0;}
+  .addr:last-child{padding-bottom:0;}
+  .addr .top{display:flex; align-items:baseline; gap:9px; flex-wrap:wrap;}
+  .addr .a-nm{font-weight:500; font-size:14px;}
+  .addr .a-ph{color:var(--text-2); font-size:13px;}
+  .addr .def{font-size:10px; font-weight:500; letter-spacing:.04em; color:var(--text-2);
+    background:var(--elev1); border:1px solid var(--line); border-radius:999px; padding:1px 7px;}
+  .addr .line2{color:var(--text-2); font-size:12px; margin-top:3px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+
+  /* Chart — half the old height. A 12-month shape does not need 96px. */
+  .bars{display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:6px;
+    height:52px; align-items:end;}
+  .bars i{display:block; background:var(--sage); border-radius:4px 4px 2px 2px;
+    max-width:28px; margin:0 auto; width:100%;}
+  .bars i.peak{background:var(--sage-ink);}
+  .bars i.empty{background:var(--line-strong); border-radius:2px; height:3px;}
+  .blab{display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:6px;
+    margin-top:6px; font-size:11px; color:var(--text-4); text-align:center;}
+
+  /* Folds */
+  .folds{margin-top:24px;}
+  .fold{border-top:1px solid var(--line); padding:12px 2px; display:flex;
+    align-items:center; gap:9px; font-size:14px;}
+  .fold .chev{color:var(--text-3); font-size:11px;}
+  .fold .hint{margin-left:auto; font-size:12.5px; color:var(--text-2);}
+  .fold .hint.ok{color:var(--sage-ink);}
+
+  /* Tabs (option B) — Ink underline, never Dusk. A tab is the operator
+     navigating, not an automation. */
+  .tabs{display:flex; gap:22px; border-bottom:1px solid var(--line); margin:24px 0 0;}
+  .tabs span{font-size:13.5px; color:var(--text-2); padding:0 0 10px; position:relative;}
+  .tabs span.on{color:var(--text-1); font-weight:500; box-shadow:inset 0 -2px 0 var(--ink);}
+  .tabpad{padding-top:22px;}
+
+  /* Two-column body (option C) */
+  .cols{display:grid; grid-template-columns:1.35fr 1fr; gap:16px; align-items:start; margin-top:24px;}
+  @media (max-width:900px){ .cols{grid-template-columns:minmax(0,1fr);} }
+  .cols .stackc{display:grid; gap:16px; align-items:start;}
+
+  .foot{margin-top:44px; border-top:1px solid var(--line); padding-top:18px;
+    color:var(--text-2); font-size:13px; line-height:1.7; max-width:960px;}
+  .foot b{font-weight:500; color:var(--text-1);}
+  .foot code{font-family:var(--mono); font-size:12px; color:var(--text-1);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Customer drawer — three structures</h1>
+<p class="lede">The drawer is not badly ordered so much as un-ranked: thirteen blocks,
+   six of them identical white cards, and the two you need least are the two that
+   take the most height. Each option below is a different answer to that. Same
+   data, same strings, same components throughout — only structure changes.</p>
+
+<div class="diag">
+  <div>
+    <div class="n">13</div>
+    <div class="t">blocks in the drawer</div>
+    <p>Header, snapshot, six cards, five folds. Nothing tells the eye which
+       of the six cards matters.</p>
+  </div>
+  <div>
+    <div class="n">~210px</div>
+    <div class="t">Notes &amp; tags, empty</div>
+    <p>Tag row, add field, textarea and a Save foot — the drawer's tallest
+       card, spent on a section that is usually blank.</p>
+  </div>
+  <div>
+    <div class="n">~170px</div>
+    <div class="t">Device &amp; account</div>
+    <p>Build string, sessions, openid. Support material, read when something
+       is wrong, sized like a headline.</p>
+  </div>
+  <div>
+    <div class="n">6×</div>
+    <div class="t">competing borders</div>
+    <p>Six 1px cards at 24px padding on Paper. The chrome costs more height
+       than several of the sections it wraps.</p>
+  </div>
+</div>
+
+<div class="row2">
+
+<!-- ══════════════════════════ OPTION A ══════════════════════════ -->
+<div class="opt">
+  <header>
+    <h2>A · Rules, not cards</h2>
+    <span class="tag">one column</span>
+    <span class="h">drawer height <b id="hA">—</b></span>
+  </header>
+  <p class="why">The card wall comes out. Sections are separated by a hairline and a
+     kicker, the way the folds below them already are, so the whole drawer reads as
+     one document instead of a stack of boxes. <b>Tags and the note move into the
+     header</b> — that is what you know about the person, so it belongs beside their
+     name, and it costs one line instead of a card. <b>Top items moves to third</b>,
+     right under Activity. <b>Device &amp; account becomes a fold</b> with the other
+     support material. Most Tacet of the three: when in doubt, remove something.</p>
+
+  <div class="drawer" id="drawerA">
+    <div class="hd">
+      <div class="avatar"></div>
+      <div style="flex:1; min-width:0;">
+        <div class="eyebrow">Customer #4182 · joined 12 Aug 2026</div>
+        <div class="nm">Linn Fogelberg <span class="pill">Sprout</span></div>
+        <div class="ph">15603361641 <span class="copy">Copy</span></div>
+        <div class="know">
+          <span class="chip">wholesale</span>
+          <span class="chip">no nuts</span>
+          <span class="chip add">+ tag · 标签</span>
+        </div>
+        <div class="noteline">
+          <span class="ic">✎</span>
+          <span class="tx">Prefers morning delivery. Buzzer broken — call on arrival.</span>
+          <span class="ed">Edit · 编辑</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="snap">
+      <div><div class="lbl"><span class="t">Orders · 订单</span></div><div class="fig">6</div>
+        <div class="sub">¥1,467 ordered · AOV ¥244.50</div></div>
+      <div><div class="lbl"><span class="t">Points · 积分</span> <span class="adj">Adjust · 调整</span></div><div class="fig">11</div>
+        <div class="sub">11 earned · <span class="warn">2 expiring soon</span></div></div>
+      <div><div class="lbl"><span class="t">Wallet · 钱包</span> <span class="adj">Adjust · 调整</span></div><div class="fig zero">¥0</div>
+        <div class="sub">never topped up</div></div>
+    </div>
+
+    <div class="sec">
+      <div class="kick">Activity · 动态</div>
+      <div class="strip">
+        <div><div class="k">Last order · 最近订单</div><div class="v">#TC000639 · Preparing</div></div>
+        <div><div class="k">Last login · 最近登录</div><div class="v quiet">12m ago</div></div>
+        <div><div class="k">Completed · 已完成</div><div class="v">6 / 6</div></div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="kick">Top items · 热销商品 <span class="side">3 of 11</span></div>
+      <table>
+        <thead><tr><th>Item · 商品</th><th class="num">Qty · 数量</th><th class="num">Spend · 消费</th></tr></thead>
+        <tbody>
+          <tr><td>Quinoa salad<span class="sku">SKU-QS-200</span></td><td class="num">7</td><td class="num">¥413</td></tr>
+          <tr><td>Sourdough loaf<span class="sku">SKU-SD-001</span></td><td class="num">5</td><td class="num">¥290</td></tr>
+          <tr><td>Cold brew 500ml<span class="sku">SKU-CB-500</span></td><td class="num">4</td><td class="num">¥176</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="sec">
+      <div class="kick">Addresses · 地址 <span class="ghost">+ Add · 添加</span></div>
+      <div class="addr">
+        <div class="top"><span class="a-nm">Linn Fogelberg</span><span class="a-ph">15603361641</span><span class="def">Default</span></div>
+        <div class="line2">广州市天河区珠江新城华夏路 8 号 22B</div>
+      </div>
+      <div class="addr">
+        <div class="top"><span class="a-nm">Office</span><span class="a-ph">15603361641</span></div>
+        <div class="line2">广州市越秀区东风中路 305 号 11 楼</div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="kick">Orders by month · 月度订单 <span class="side">6 orders · ¥1,467 in 12 months</span></div>
+      <div class="bars">
+        <i class="empty"></i><i class="empty"></i><i class="empty"></i><i class="empty"></i>
+        <i class="empty"></i><i class="empty"></i><i class="empty"></i><i class="empty"></i>
+        <i class="empty"></i><i class="empty"></i><i class="peak" style="height:48px"></i><i style="height:22px"></i>
+      </div>
+      <div class="blab"><span>10</span><span>11</span><span>12</span><span>01</span><span>02</span><span>03</span>
+        <span>04</span><span>05</span><span>06</span><span>07</span><span>08</span><span>09</span></div>
+    </div>
+
+    <div class="folds">
+      <div class="fold"><span class="chev">▸</span> Recent orders · 近期订单 <span class="hint">6 orders</span></div>
+      <div class="fold"><span class="chev">▸</span> Points ledger · 积分明细 <span class="hint">11 earned</span></div>
+      <div class="fold"><span class="chev">▸</span> Top-ups · 充值明细 <span class="hint">none</span></div>
+      <div class="fold"><span class="chev">▸</span> Device &amp; account · 设备与账号 <span class="hint">release 9.9 · 16 active</span></div>
+      <div class="fold"><span class="chev">▸</span> Diagnostics · 诊断 <span class="hint ok">no errors in 7 days</span></div>
+      <div class="fold"><span class="chev">▸</span> Affiliate · 推广 <span class="hint">no invites</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════ OPTION B ══════════════════════════ -->
+<div class="opt">
+  <header>
+    <h2>B · Three tabs</h2>
+    <span class="tag">shortest</span>
+    <span class="h">drawer height <b id="hB">—</b></span>
+  </header>
+  <p class="why">Header and snapshot always visible; everything else behind three tabs.
+     <b>Who they are</b> is what you land on: Activity, Top items, Addresses.
+     <b>History</b> holds the four ledgers. <b>Account</b> holds device, sessions,
+     openid, diagnostics, affiliate. Same header treatment for tags and the note.
+     Cuts the drawer to roughly a screen with no scrolling — the cost is that a
+     ledger is now two clicks away, and a tab hides whether anything is inside it
+     until you open it.</p>
+
+  <div class="drawer" id="drawerB">
+    <div class="hd">
+      <div class="avatar"></div>
+      <div style="flex:1; min-width:0;">
+        <div class="eyebrow">Customer #4182 · joined 12 Aug 2026</div>
+        <div class="nm">Linn Fogelberg <span class="pill">Sprout</span></div>
+        <div class="ph">15603361641 <span class="copy">Copy</span></div>
+        <div class="know">
+          <span class="chip">wholesale</span>
+          <span class="chip">no nuts</span>
+          <span class="chip add">+ tag · 标签</span>
+        </div>
+        <div class="noteline">
+          <span class="ic">✎</span>
+          <span class="tx">Prefers morning delivery. Buzzer broken — call on arrival.</span>
+          <span class="ed">Edit · 编辑</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="snap">
+      <div><div class="lbl"><span class="t">Orders · 订单</span></div><div class="fig">6</div>
+        <div class="sub">¥1,467 ordered · AOV ¥244.50</div></div>
+      <div><div class="lbl"><span class="t">Points · 积分</span> <span class="adj">Adjust · 调整</span></div><div class="fig">11</div>
+        <div class="sub">11 earned · <span class="warn">2 expiring soon</span></div></div>
+      <div><div class="lbl"><span class="t">Wallet · 钱包</span> <span class="adj">Adjust · 调整</span></div><div class="fig zero">¥0</div>
+        <div class="sub">never topped up</div></div>
+    </div>
+
+    <div class="tabs">
+      <span class="on">Who they are · 概览</span>
+      <span>History · 明细</span>
+      <span>Account · 账号</span>
+    </div>
+
+    <div class="tabpad">
+      <div class="kick">Activity · 动态</div>
+      <div class="strip">
+        <div><div class="k">Last order · 最近订单</div><div class="v">#TC000639 · Preparing</div></div>
+        <div><div class="k">Last login · 最近登录</div><div class="v quiet">12m ago</div></div>
+        <div><div class="k">Completed · 已完成</div><div class="v">6 / 6</div></div>
+      </div>
+
+      <div class="sec">
+        <div class="kick">Top items · 热销商品 <span class="side">3 of 11</span></div>
+        <table>
+          <thead><tr><th>Item · 商品</th><th class="num">Qty · 数量</th><th class="num">Spend · 消费</th></tr></thead>
+          <tbody>
+            <tr><td>Quinoa salad<span class="sku">SKU-QS-200</span></td><td class="num">7</td><td class="num">¥413</td></tr>
+            <tr><td>Sourdough loaf<span class="sku">SKU-SD-001</span></td><td class="num">5</td><td class="num">¥290</td></tr>
+            <tr><td>Cold brew 500ml<span class="sku">SKU-CB-500</span></td><td class="num">4</td><td class="num">¥176</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="sec">
+        <div class="kick">Addresses · 地址 <span class="ghost">+ Add · 添加</span></div>
+        <div class="addr">
+          <div class="top"><span class="a-nm">Linn Fogelberg</span><span class="a-ph">15603361641</span><span class="def">Default</span></div>
+          <div class="line2">广州市天河区珠江新城华夏路 8 号 22B</div>
+        </div>
+        <div class="addr">
+          <div class="top"><span class="a-nm">Office</span><span class="a-ph">15603361641</span></div>
+          <div class="line2">广州市越秀区东风中路 305 号 11 楼</div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="kick">Orders by month · 月度订单 <span class="side">6 orders · ¥1,467 in 12 months</span></div>
+        <div class="bars">
+          <i class="empty"></i><i class="empty"></i><i class="empty"></i><i class="empty"></i>
+          <i class="empty"></i><i class="empty"></i><i class="empty"></i><i class="empty"></i>
+          <i class="empty"></i><i class="empty"></i><i class="peak" style="height:48px"></i><i style="height:22px"></i>
+        </div>
+        <div class="blab"><span>10</span><span>11</span><span>12</span><span>01</span><span>02</span><span>03</span>
+          <span>04</span><span>05</span><span>06</span><span>07</span><span>08</span><span>09</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /row2 -->
+
+<!-- ══════════════════════════ OPTION C ══════════════════════════ -->
+<div class="opt">
+  <header>
+    <h2>C · Two columns</h2>
+    <span class="tag">nothing hidden</span>
+    <span class="h">drawer height <b id="hC">—</b></span>
+  </header>
+  <p class="why">The drawer widens and the body splits: <b>left is the person's trade</b>
+     — Activity, Top items, Orders by month — and <b>right is the file on them</b> —
+     Addresses, the compact note, Device &amp; account. Cards stay here, because with two
+     columns a border is what tells you which column a block belongs to; they drop to 20px
+     padding. Notes &amp; tags keeps a card but loses the permanent textarea: it shows the
+     note and opens to edit. Nothing is hidden behind a click and the height roughly halves.
+     The cost is width — this needs a wider drawer than ships today, and it collapses back
+     to one column on a narrow screen.</p>
+
+  <div class="drawer wide" id="drawerC">
+    <div class="hd">
+      <div class="avatar"></div>
+      <div style="flex:1; min-width:0;">
+        <div class="eyebrow">Customer #4182 · joined 12 Aug 2026</div>
+        <div class="nm">Linn Fogelberg <span class="pill">Sprout</span></div>
+        <div class="ph">15603361641 <span class="copy">Copy</span></div>
+      </div>
+    </div>
+
+    <div class="snap">
+      <div><div class="lbl"><span class="t">Orders · 订单</span></div><div class="fig">6</div>
+        <div class="sub">¥1,467 ordered · AOV ¥244.50</div></div>
+      <div><div class="lbl"><span class="t">Points · 积分</span> <span class="adj">Adjust · 调整</span></div><div class="fig">11</div>
+        <div class="sub">11 earned · <span class="warn">2 expiring soon</span></div></div>
+      <div><div class="lbl"><span class="t">Wallet · 钱包</span> <span class="adj">Adjust · 调整</span></div><div class="fig zero">¥0</div>
+        <div class="sub">never topped up</div></div>
+    </div>
+
+    <div class="cols">
+      <div class="stackc">
+        <div class="card">
+          <div class="kick">Activity · 动态</div>
+          <div class="strip">
+            <div><div class="k">Last order · 最近订单</div><div class="v">#TC000639 · Preparing</div></div>
+            <div><div class="k">Last login · 最近登录</div><div class="v quiet">12m ago</div></div>
+            <div><div class="k">Completed · 已完成</div><div class="v">6 / 6</div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="kick">Top items · 热销商品 <span class="side">3 of 11</span></div>
+          <table>
+            <thead><tr><th>Item · 商品</th><th class="num">Qty · 数量</th><th class="num">Spend · 消费</th></tr></thead>
+            <tbody>
+              <tr><td>Quinoa salad<span class="sku">SKU-QS-200</span></td><td class="num">7</td><td class="num">¥413</td></tr>
+              <tr><td>Sourdough loaf<span class="sku">SKU-SD-001</span></td><td class="num">5</td><td class="num">¥290</td></tr>
+              <tr><td>Cold brew 500ml<span class="sku">SKU-CB-500</span></td><td class="num">4</td><td class="num">¥176</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <div class="kick">Orders by month · 月度订单 <span class="side">6 orders · ¥1,467 in 12 months</span></div>
+          <div class="bars">
+            <i class="empty"></i><i class="empty"></i><i class="empty"></i><i class="empty"></i>
+            <i class="empty"></i><i class="empty"></i><i class="empty"></i><i class="empty"></i>
+            <i class="empty"></i><i class="empty"></i><i class="peak" style="height:48px"></i><i style="height:22px"></i>
+          </div>
+          <div class="blab"><span>10</span><span>11</span><span>12</span><span>01</span><span>02</span><span>03</span>
+            <span>04</span><span>05</span><span>06</span><span>07</span><span>08</span><span>09</span></div>
+        </div>
+      </div>
+
+      <div class="stackc">
+        <div class="card">
+          <div class="kick">Addresses · 地址 <span class="ghost">+ Add · 添加</span></div>
+          <div class="addr">
+            <div class="top"><span class="a-nm">Linn Fogelberg</span><span class="a-ph">15603361641</span><span class="def">Default</span></div>
+            <div class="line2">广州市天河区珠江新城华夏路 8 号 22B</div>
+          </div>
+          <div class="addr">
+            <div class="top"><span class="a-nm">Office</span><span class="a-ph">15603361641</span></div>
+            <div class="line2">广州市越秀区东风中路 305 号 11 楼</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="kick">Notes &amp; tags · 备注与标签 <span class="ghost">Edit · 编辑</span></div>
+          <div class="know" style="margin-top:2px;">
+            <span class="chip">wholesale</span>
+            <span class="chip">no nuts</span>
+            <span class="chip add">+ tag · 标签</span>
+          </div>
+          <div class="noteline" style="margin-top:11px;">
+            <span class="ic">✎</span>
+            <span class="tx">Prefers morning delivery. Buzzer broken — call on arrival.</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="kick">Device &amp; account · 设备与账号</div>
+          <div class="frow"><div class="k">App build · 版本</div><div class="v quiet">release 9.9 · iPhone 14 Pro</div></div>
+          <div class="frow"><div class="k">Sessions · 会话</div><div class="v">16 <span class="muted">active</span></div></div>
+          <div class="frow"><div class="k">openid</div><div class="v mono">oeqDi5EY…r5o5v8</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="folds">
+      <div class="fold"><span class="chev">▸</span> Recent orders · 近期订单 <span class="hint">6 orders</span></div>
+      <div class="fold"><span class="chev">▸</span> Points ledger · 积分明细 <span class="hint">11 earned</span></div>
+      <div class="fold"><span class="chev">▸</span> Top-ups · 充值明细 <span class="hint">none</span></div>
+      <div class="fold"><span class="chev">▸</span> Diagnostics · 诊断 <span class="hint ok">no errors in 7 days</span></div>
+      <div class="fold"><span class="chev">▸</span> Affiliate · 推广 <span class="hint">no invites</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="foot">
+  <p><b>Common to all three.</b> Tags and the note stop being a 210px card. Top items
+     moves above Addresses and the chart. The chart drops from 96px of bars to 52px —
+     twelve months of shape does not need a third of a screen. Device &amp; account is
+     demoted everywhere: to a fold in A and B, to the bottom of the quiet column in C.</p>
+  <p><b>The note's edit affordance is the thing to decide.</b> All three show the note as
+     a line and open an editor on Edit. That is the whole space saving. If the team types
+     into that field constantly, the saving is wrong and the textarea should stay —
+     worth checking how many customers actually carry a note before building it.</p>
+  <p><b>No new strings.</b> Every label and every Chinese pair here is lifted from the live
+     drawer in <code>public/retail-admin/08-customers.js</code>, except three that are
+     restructures of existing ones and are <i>proposals, not locked</i>: the tab labels
+     in B and the "+ tag" chip. Nothing has been written to
+     <code>docs/tacet-delivery-vocabulary.md</code> because nothing here is built yet;
+     if B is chosen, its three tab labels go in as composed strings in the same commit
+     as the code.</p>
+  <p><b>Zero Dusk in all three drawers</b>, as today. The active tab in B is an Ink
+     underline — an operator navigating is not an automation.</p>
+</div>
+
+</div>
+<script>
+  // Honest heights, measured rather than claimed.
+  addEventListener('load', () => {
+    const px = id => document.getElementById(id).getBoundingClientRect().height;
+    [['hA','drawerA'],['hB','drawerB'],['hC','drawerC']].forEach(([o,d]) => {
+      document.getElementById(o).textContent = Math.round(px(d)) + 'px';
+    });
+  });
+</script>
+</body>
+</html>
