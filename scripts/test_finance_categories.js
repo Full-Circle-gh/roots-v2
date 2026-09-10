@@ -233,9 +233,38 @@ it('the summary reports the excluded money instead of dropping it', () => {
 });
 
 it('the totals and the breakdown come from ONE read', () => {
-  const reads = (SUMMARY_CODE.match(/FROM expense_entries/g) || []).length;
+  /* SCOPED TO THE SUMMARY HANDLER, not to the file, since the file gained a
+     second route: `/summary/category`, which lists the rows behind one line of
+     the breakdown.
+
+     THE RULE HAS NOT MOVED — its mechanism has. What it forbids is the SUMMARY
+     answering with two reads over `expense_entries`, because the operating /
+     non-operating split would then be applied in two places and one day they
+     would disagree. The drill-down applies no split, feeds no figure on the
+     card, and is a different request; counting its query against the summary's
+     budget would forbid the file from ever holding a second route rather than
+     forbid the thing that is actually dangerous. Both handlers are held to one
+     read each, below and here, so nothing is relaxed. */
+  const at = SUMMARY_CODE.indexOf("router.get('/api/retail-admin/finance/summary'");
+  assert.notStrictEqual(at, -1, 'the summary route is not where this test reads it');
+  const handler = SUMMARY_CODE.slice(at, SUMMARY_CODE.indexOf('\nrouter.get(', at + 1));
+  const reads = (handler.match(/FROM expense_entries/g) || []).length;
   assert.strictEqual(reads, 1,
     'two queries over one set is two places for the split to be applied, and one day they disagree');
+});
+
+it('the drill-down reads the same table once, and applies no split of its own', () => {
+  const at = SUMMARY_CODE.indexOf("router.get('/api/retail-admin/finance/summary/category'");
+  assert.notStrictEqual(at, -1, 'the drill-down route is not mounted');
+  const handler = SUMMARY_CODE.slice(at);
+  assert.strictEqual((handler.match(/FROM expense_entries/g) || []).length, 1,
+    'one read here too — the list it returns must be the rows, added once');
+  // The flag lives on the summary's own grouped read. A second resolution here
+  // would be the second place §87 says the split must never be applied from, and
+  // this endpoint has no business deciding what is an operating expense: it is
+  // opening ONE line that has already been placed on one side or the other.
+  assert.ok(!/is_operating|operatingFlag/.test(handler),
+    'the drill-down must not re-decide which side of the split a category is on');
 });
 
 it('a category any expense names cannot be deleted', () => {

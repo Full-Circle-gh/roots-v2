@@ -258,13 +258,92 @@ function finNonOperating(rows) {
   return (rows || []).filter(r => r.is_operating === 0);
 }
 
-/** The operating-expense disclosure. Open by default. */
-function finBreakdown(rows) {
+/* ── The rows behind one category ──────────────────────────────────────────
+   The category currently opened, as an INDEX INTO `FIN_DATA.expense_breakdown`
+   — the whole array, both halves, not the filtered list a disclosure renders.
+   The index is the identity because a category is not one: it is free text and
+   may be null, and the null row has no name to key on.
+
+   Dropped on every load (`finLoad`), so a new window never leaves a list of
+   August rows hanging under a September figure. */
+let FIN_CAT = null;   // { i, rows, err } — rows null while the read is in flight
+
+/* One expense row inside an opened category.
+
+   EVERY STRING HERE IS ALREADY LIVE ON THE TRANSACTIONS TAB, and that is on
+   purpose rather than by luck: these are the same three kinds of row an
+   operator meets there — typed, claim-posted, PO-posted — and a second
+   vocabulary for them would suggest a second set of things. Nothing is composed
+   (`docs/tacet-delivery-vocabulary.md` Rule 4, as amended 2026-09-06: the
+   delegation is standing, and the cheapest exercise of it is not to use it).
+
+   A PO ROW IS NAMED BY ITS PURCHASE ORDER and shows the mark beside it, exactly
+   as `finTxRow` does. It appears once per row rather than once per order — the
+   same PO twice in one category is one purchase that bought that category on
+   two lines, and collapsing them here would be the very thing this list exists
+   to undo. NO LINK OUT: the row is inside a figure, not a ledger the operator
+   is working, and the Transactions tab is one click away with the link on it.
+
+   A row with no note and no mark renders its date and its figure and nothing
+   between them. That is the truth about a typed row somebody left blank, and
+   §1.12 prefers an empty cell to an invented one. */
+function finCatRow(r) {
+  const po = r.source === 'po';
+  const claim = r.source === 'claim';
+  const mark = po
+    ? cuT('Posted by Purchasing', '采购单自动记入')
+    : claim
+    ? (r.paid_by === 'employee'
+        ? cuT('Staff claim · own money', '费用申请 · 个人支付')
+        : cuT('Staff claim', '费用申请'))
+    : '';
+  // The PO's number leads, then whatever was typed on the line. Both, where
+  // both exist: the number says which purchase and the note says which part.
+  const name = [po ? (r.po_number || '') : '', r.note || ''].filter(Boolean).join(' · ');
+  return '<div class="fin-catrow">'
+    + `<span class="fin-catdate">${escapeHtml(finTxDay(r.date))}</span>`
+    + '<span class="fin-catwhat">'
+    + (name ? `<span class="fin-catname">${escapeHtml(name)}</span>` : '')
+    + (mark ? `<span class="fin-catmark">${escapeHtml(mark)}</span>` : '')
+    + '</span>'
+    + `<span class="fin-catfig">${escapeHtml(finMoney(r.amount))}</span>`
+    + '</div>';
+}
+
+/* What sits under an opened category row: the rows, or why they are not there.
+
+   NO TOTAL LINE. The figure this opened from is directly above it and is that
+   total — a second copy would be one more place for the two to disagree, and
+   the point of the endpoint behind this is that they cannot. */
+function finCatBody() {
+  if (FIN_CAT.err) {
+    return `<div class="fin-catnote-line">${escapeHtml(FIN_CAT.err)}</div>`;
+  }
+  if (FIN_CAT.rows === null) {
+    // Live on the Approvals sub-view of this same screen.
+    return `<div class="fin-catnote-line">${escapeHtml(cuT('Loading…', '加载中…'))}</div>`;
+  }
+  if (!FIN_CAT.rows.length) {
+    // Should not happen — a line with a figure has rows behind it. It says so
+    // rather than drawing an empty box, using the §1.12 EMPTY heading the
+    // Transactions tab already ships.
+    return `<div class="fin-catnote-line">${escapeHtml(cuT('Nothing recorded yet', '暂无记录'))}</div>`;
+  }
+  return FIN_CAT.rows.map(finCatRow).join('');
+}
+
+/** The operating-expense disclosure. Open by default.
+
+    EACH LINE IS NOW A CONTROL. `all` is the unfiltered breakdown array, so a row
+    can name itself by its index in the payload rather than by its category text
+    — which is free text, may be null, and is not an identity. */
+function finBreakdown(rows, all) {
   if (!rows || !rows.length) return '';
   // The set is passed whole so the collision rule can see it: two categories
   // that read alike in this language both render in full rather than drawing
   // two lines nobody can tell apart.
   const labels = finCatLabels(rows.map(r => r.category));
+  const list = all || rows;
   return '<div class="fin-breakdown">' + rows.map(r => {
     // A row whose category was never typed keeps its own line and gets the
     // §1.12 seventh-state word rather than an invented bucket name: §36 records
@@ -273,13 +352,64 @@ function finBreakdown(rows) {
     const label = r.category
       ? (labels.get(r.category) || finCatLabel(r.category))
       : cuT('Not recorded', '未记录');
-    return '<div class="fin-row">'
-      + `<span class="fin-lbl">${escapeHtml(label)}</span>`
+    const i = list.indexOf(r);
+    const open = !!FIN_CAT && FIN_CAT.i === i;
+    return `<button type="button" class="fin-row fin-cat${open ? ' on' : ''}" `
+      + `aria-expanded="${open ? 'true' : 'false'}" onclick="finCatOpen(${i})">`
+      + `<span class="fin-lbl"><span class="fin-chev">&#9656;</span>${escapeHtml(label)}</span>`
       + '<span class="fin-sign"></span>'
       + `<span class="fin-fig">${escapeHtml(finMoney(r.amount))}</span>`
-      + '</div>';
+      + '</button>'
+      + (open ? `<div class="fin-catrows">${finCatBody()}</div>` : '');
   }).join('') + '</div>';
 }
+
+/* ── Opening one ────────────────────────────────────────────────────────────
+   A SECOND READ, not a slice of the payload already here. The summary carries
+   one line per category and must keep doing so — putting every expense row of
+   the window inside it would grow the first screen an operator sees in order to
+   serve a click most of them never make.
+
+   THE WINDOW COMES FROM `FIN_DATA.window`, NEVER FROM THE DATE INPUTS. The
+   inputs can hold a range that has been typed and not applied; the figures on
+   screen belong to the window that was. Reading the inputs here would open a
+   ¥27,081 line onto rows from a different month, which is precisely the class of
+   quiet wrongness this feature exists to remove.
+
+   A CLICK ON THE OPEN ROW SHUTS IT. One control, two directions, the same
+   gesture the receipt viewer on Approvals uses.
+
+   The in-flight guard is that viewer's too: a second click on a second category
+   while the first is still loading must not have the first one's response paint
+   under it. The index is checked on arrival and a stale answer is dropped. */
+window.finCatOpen = function finCatOpen(i) {
+  const all = (FIN_DATA && FIN_DATA.expense_breakdown) || [];
+  const row = all[Number(i)];
+  if (!row) return;
+  if (FIN_CAT && FIN_CAT.i === Number(i)) { FIN_CAT = null; finRender(); return; }
+
+  FIN_CAT = { i: Number(i), rows: null, err: '' };
+  finRender();
+
+  const w = (FIN_DATA && FIN_DATA.window) || {};
+  // An EMPTY `category` addresses the uncategorised bucket, which is the row
+  // rendering as "Not recorded". The server reads an empty parameter as that
+  // bucket and does not trim it — see the endpoint's own note on why.
+  const q = `from=${encodeURIComponent(w.from || '')}&to=${encodeURIComponent(w.to || '')}`
+    + `&category=${encodeURIComponent(row.category || '')}`;
+  api('/api/retail-admin/finance/summary/category?' + q).then((j) => {
+    if (!FIN_CAT || FIN_CAT.i !== Number(i)) return;   // a later click already won
+    FIN_CAT.rows = (j.data && j.data.rows) || [];
+    finRender();
+  }).catch((e) => {
+    if (!FIN_CAT || FIN_CAT.i !== Number(i)) return;
+    // The screen's own failure sentence, reused rather than a second one minted
+    // for a smaller read. It says the true thing — a Finance read did not come
+    // back — and a category-specific variant would be a new pair saying it again.
+    FIN_CAT.err = cuT('Could not load Finance.', '财务数据加载失败。');
+    finRender();
+  });
+};
 
 function finRender() {
   const host = document.getElementById('fin-stair');
@@ -290,7 +420,7 @@ function finRender() {
   // The disclosure shows the OPERATING half only, because it is the disclosure
   // ON the operating-expenses row: a line inside it that the figure above did
   // not include would be a breakdown that does not add up to its own total.
-  const breakdown = finBreakdown(finOperating(d.expense_breakdown));
+  const breakdown = finBreakdown(finOperating(d.expense_breakdown), d.expense_breakdown);
   const excluded = finNonOperating(d.expense_breakdown);
 
   host.innerHTML = '<div class="fin-card"><div class="fin-body">'
@@ -365,7 +495,7 @@ function finRender() {
             + `<span class="fin-lbl"><span class="fin-chev">&#9656;</span>${escapeHtml(cuT('Not an operating expense', '不计入营业费用'))}</span>`
             + '<span class="fin-sign"></span>'
             + `<span class="fin-fig">${escapeHtml(finMoney(d.non_operating_expenses))}</span>`
-            + `</summary>${finBreakdown(excluded)}</details>`
+            + `</summary>${finBreakdown(excluded, d.expense_breakdown)}</details>`
           : finRow(cuT('Not an operating expense', '不计入营业费用'), finMoney(d.non_operating_expenses)))
         + `<p class="fin-excl-note">${escapeHtml(cuT(
             'Recorded, and not counted in the figures above.',
@@ -387,6 +517,13 @@ async function finLoad(opts) {
   // stays up — a poller or a re-read never puts a placeholder over data that is
   // already on screen.
   if (!FIN_DATA) host.innerHTML = '<div class="fin-skel"></div>';
+
+  // THE OPEN CATEGORY IS DROPPED BEFORE THE READ, not after it. It is an index
+  // into a breakdown that is about to be replaced: a window with fewer
+  // categories would leave the index pointing at a different one, and the rows
+  // already fetched belong to the window being left. Nothing here is worth
+  // preserving across a window change — the operator asked a new question.
+  FIN_CAT = null;
 
   try {
     const j = await api(`/api/retail-admin/finance/summary?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`);
