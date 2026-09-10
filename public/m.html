@@ -556,7 +556,7 @@ const state = {
      own) and wrote it onto <html> before the first paint. Read it back rather
      than defaulting to 'light' again here — that second default is what used to
      make the Settings row say "Light" on a page that was visibly dark. */
-  tab:'home', theme:(document.documentElement.getAttribute('data-theme')==='dark'?'dark':'light'), lang:'en', live:true, sound:true,
+  tab:'home', theme:(document.documentElement.getAttribute('data-theme')==='dark'?'dark':'light'), lang:'en', sound:true,
   stack:[], statusF:'all', channelF:'all', inboxSeg:'reviews',
   custSeg:'all', custTier:'all', custChan:'all', custQ:'', customers:null, custMeta:null, custLoaded:false,
   custTotal:null, custMore:false, custSort:'last_seen',
@@ -1184,17 +1184,21 @@ function mSaveLang(l){
 }
 reg('toggleLang', ()=>{ state.lang=state.lang==='en'?'zh':'en'; LANG=state.lang; document.documentElement.lang=state.lang;
   try{ localStorage.setItem(M_LANG_KEY,state.lang); }catch(e){} mSaveLang(state.lang); render(); });
-/* Both switches used to be decoration: they flipped a boolean nothing read and
-   forgot it at the next launch. They are wired now — Live updates runs the
-   new-order poll, Sound rings the chime it finds — and they are remembered for
-   the same reason the theme and the language are. An operator who silences the
-   phone at 11pm has silenced it, not silenced it until they reopen the app.
+/* Sound used to be decoration: it flipped a boolean nothing read and forgot it
+   at the next launch. It is wired now — it rings the chime it finds — and it is
+   remembered for the same reason the theme and the language are. An operator
+   who silences the phone at 11pm has silenced it, not silenced it until they
+   reopen the app.
+
+   It was a pair. Live updates sat beside it on its own key and gated the polls;
+   it is gone, along with the switch, because polling is not a preference — see
+   sheetOverflow. A phone that has been carrying 'tacet-m-live' since then keeps
+   the dead key until the browser is cleared; nothing reads it.
 
    Own keys, not the desktop's: 'tacet-orders-sound-on' belongs to the PC in
    front of the packing bench, and a phone in a pocket is a different room. */
-const M_SOUND_KEY='tacet-m-sound', M_LIVE_KEY='tacet-m-live';
-try{ if(localStorage.getItem(M_SOUND_KEY)==='0') state.sound=false;
-     if(localStorage.getItem(M_LIVE_KEY)==='0')  state.live=false; }catch(e){}
+const M_SOUND_KEY='tacet-m-sound';
+try{ if(localStorage.getItem(M_SOUND_KEY)==='0') state.sound=false; }catch(e){}
 reg('toggleSound', ()=>{ state.sound=!state.sound; render();
   try{ localStorage.setItem(M_SOUND_KEY,state.sound?'1':'0'); }catch(e){}
   /* Turning it on plays the ding once. It is the only way to answer "is this
@@ -1202,9 +1206,6 @@ reg('toggleSound', ()=>{ state.sound=!state.sound; render();
      turned it on is also the gesture iOS requires before any page may make a
      sound at all, so this is where the audio actually gets unlocked. */
   if(state.sound) playOrderChime(true); });
-reg('toggleLive', ()=>{ state.live=!state.live; render();
-  try{ localStorage.setItem(M_LIVE_KEY,state.live?'1':'0'); }catch(e){}
-  if(state.live){ pollUnseenOrders(); pollKitchenReady(); } });
 reg('openSearch', ()=>{ state.overflow=false; state.search=true; render(); });
 reg('closeSearch', ()=>{ state.search=false; render(); });
 /* Opening the inbox IS reading it — the desktop stamps last-seen the moment
@@ -7975,7 +7976,7 @@ function kqShowing(){
   return !!top&&top.route==='kitchenqueue';
 }
 function pollKitchenQueue(){
-  if(!kqShowing()||!state.live||_kqPollBusy) return;
+  if(!kqShowing()||_kqPollBusy) return;
   _kqPollBusy=true;
   return fetch('/api/restock?to_role=kitchen&tab=active',
                {credentials:'same-origin',headers:{accept:'application/json'}})
@@ -11306,7 +11307,6 @@ function PUSH_NOTE(){
 }
 function NOTIFICATION_ROWS(){
   const rows=[
-    {label:T('Live updates','实时更新'),tgl:'__live'},
     {label:T('Sound','提示音'),tgl:'__sound'},
     {label:T('Alert me when Tacet is closed','应用关闭时也提醒我'),tgl:'__push',note:PUSH_NOTE()},
   ];
@@ -11350,7 +11350,6 @@ function screenSettings(){
       ? (state.printer
           ? toggle(!!state.printer.auto_print,"APP.cmd('togglePrint')")
           : `<span style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`)
-      : r.tgl==='__live'?toggle(state.live,"APP.cmd('toggleLive')")
       : r.tgl==='__sound'?toggle(state.sound,"APP.cmd('toggleSound')")
       /* A switch is drawn only where flipping it can actually change
          something. Blocked or unsupported gets a word instead — an operator
@@ -13416,15 +13415,18 @@ function ROLE_WORD(me){
   return me.name || (r?T(...r):T('Signed in','已登录'));
 }
 function sheetOverflow(){
-  const row=(icn,label,right,cmd,sep)=>`<button class="row" style="min-height:52px;padding:12px 20px" onclick="${cmd}">
-    <span style="color:var(--text-secondary);display:flex;flex:none">${ic(icn)}</span><span style="flex:1;font-size:15px">${label}</span>${right||''}</button>${sep?'<div class="sep" style="margin-left:54px"></div>':''}`;
+  /* ONE ROW SHAPE FOR THE WHOLE SHEET. The tappable rows took .row's own 16px
+     gap while the switch rows below set 14px, so two kinds of row in one list
+     started their labels at 56px and 54px — and every hairline between them is
+     drawn at 54px, so the seam was visible against the labels above it. The
+     icon sits in a fixed 20px slot here, the way the switch rows already do it,
+     and everything lines up at 54. */
+  const row=(icn,label,right,cmd,sep)=>`<button class="row" style="gap:14px;min-height:52px;padding:12px 20px" onclick="${cmd}">
+    <span style="width:20px;display:flex;justify-content:center;flex:none;color:var(--text-secondary)">${ic(icn)}</span><span style="flex:1;font-size:15px">${label}</span>${right||''}</button>${sep?'<div class="sep" style="margin-left:54px"></div>':''}`;
   const val=t=>`<span style="font-size:14px;color:var(--text-secondary)">${t}</span>`;
   return `<div class="scrim" style="z-index:40;background:rgba(17,26,43,.30)" onclick="APP.scrimClose('closeOverflow')"></div>
    <div class="sheet" style="z-index:41;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 30px)"><div class="grabber"></div>
      <div style="padding:4px 20px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Menu','菜单')}</div>
-     ${row('search',T('Search','搜索'),`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,"APP.cmd('openSearch')",true)}
-     ${row('languages',T('Language','语言'),val(state.lang==='en'?'English':'中文'),"APP.cmd('toggleLang')",true)}
-     ${row('sun-moon',T('Theme','主题'),val(state.theme==='light'?T('Light','浅色'):T('Dark','深色')),"APP.cmd('toggleTheme')",true)}
      ${/* This row showed the STORE's name — not an account — behind a chevron
           wired to noop. It names whoever is signed in.
 
@@ -13432,32 +13434,58 @@ function sheetOverflow(){
           unconditionally, and Settings is capability-gated, so for an operator
           without it the chevron promised a screen push() then silently refused:
           a dead control, on the one row that names them. It states who is
-          signed in and nothing more for those operators. */''}
+          signed in and nothing more for those operators.
+
+          IT LEADS THE SHEET NOW. This list opens from the account button in the
+          header, so the row naming the account was the fourth thing in it, under
+          two preferences and a second door to the search that button sits beside.
+          Who you are signed in as, then the two things you might change about the
+          view, then the way out. */''}
      ${canRoute('settings')
         ? row('circle-user-round',T('Account','账户'),
             val(ROLE_WORD(state.me))+`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,
-            "APP.cmd('closeOverflow');APP.cmd('push','settings')",false)
-        : `<div class="row" style="min-height:52px;padding:12px 20px;cursor:default">
-            <span style="color:var(--text-secondary);display:flex;flex:none">${ic('circle-user-round')}</span>
-            <span style="flex:1;font-size:15px">${T('Account','账户')}</span>${val(ROLE_WORD(state.me))}</div>`}
+            "APP.cmd('closeOverflow');APP.cmd('push','settings')",true)
+        : `<div class="row" style="gap:14px;min-height:52px;padding:12px 20px;cursor:default">
+            <span style="width:20px;display:flex;justify-content:center;flex:none;color:var(--text-secondary)">${ic('circle-user-round')}</span>
+            <span style="flex:1;font-size:15px">${T('Account','账户')}</span>${val(ROLE_WORD(state.me))}</div>
+           <div class="sep" style="margin-left:54px"></div>`}
+     ${/* NO SEARCH ROW. The header this sheet opens from carries the magnifier
+          itself (headControls), so the row was a second door to the same screen,
+          one tap further away than the door beside the one you just opened. */''}
+     ${row('languages',T('Language','语言'),val(state.lang==='en'?'English':'中文'),"APP.cmd('toggleLang')",true)}
+     ${row('sun-moon',T('Theme','主题'),val(state.theme==='light'?T('Light','浅色'):T('Dark','深色')),"APP.cmd('toggleTheme')",true)}
      ${/* SIGN OUT LIVES HERE, not only inside Settings. It is the one action
           every operator needs and the only one that belongs to no capability —
           so putting it behind a capability-gated screen took it away from
           exactly the operators with the fewest other ways out. Duplicating an
           ACTION is cheap in a way duplicating a switch is not: there is no
           state to go stale between the two copies. */''}
-     <div class="sep" style="margin-left:54px"></div>
      ${row('log-out',T('Sign out','退出登录'),'',"APP.cmd('closeOverflow');APP.cmd('signout')",false)}
-     <div style="padding:16px 20px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Updates','更新')}</div>
-     ${/* Installed, this app has no reload button — the browser's is not there
-          to borrow. The pull-down gesture is the everyday way to refresh and
-          this row is the one you can find without knowing about it. */''}
-     ${row('refresh-cw',T('Refresh','刷新'),
-        state.refreshing?`<span style="font-size:14px;color:var(--text-secondary)">${T('Refreshing…','刷新中…')}</span>`:'',
-        "APP.cmd('closeOverflow');APP.cmd('refresh')",true)}
-     <div style="display:flex;align-items:center;gap:14px;min-height:48px;padding:8px 20px">
-       <span style="width:20px;display:flex;justify-content:center;flex:none">${state.live?'<span class="breathe" style="width:9px;height:9px;border-radius:50%;background:var(--accent)"></span>':'<span style="width:9px;height:9px;border-radius:50%;background:var(--border-strong)"></span>'}</span>
-       <span style="flex:1;font-size:15px">${T('Live updates','实时更新')}</span>${toggle(state.live,"APP.cmd('toggleLive')")}</div>
+     ${/* "Updates" named a group holding a refresh button, a poll switch and two
+          notification switches — four things with nothing in common but the word.
+          The first two are gone (see below) and what is left is the notifications
+          group Settings already calls 通知. Same words in both places. */''}
+     <div style="padding:16px 20px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Notifications','通知')}</div>
+     ${/* NO REFRESH ROW, AND NO LIVE UPDATES SWITCH.
+
+          Refresh: the pull-down gesture is the everyday way to do it and it is
+          still there, as is the Refresh now row in Settings → App for anyone who
+          wants a button. A row in the one-tap sheet for a thing the screen does
+          by itself every few seconds is a row that never earns its tap.
+
+          Live updates: the switch is gone and polling is simply on — which is
+          what the desktop has always done ("Live updates are always on — there
+          is no pause and no indicator", 04-orders.js). It was the only control
+          here that could quietly make the app WRONG: switched off, the orders
+          list, the unseen dot and the kitchen-ready count all stop moving and
+          nothing on the screen says so except a grey dot in a sheet nobody has
+          open. An operator who finds it off finds a shop that looks empty.
+
+          What still gates each poll is what always did, minus this one: the
+          capability that reveals the screen it feeds, and one request in flight
+          at a time. NOT document.hidden — startOrdersPoll says why, and that
+          reason is the same one this switch failed: the phone this rings is in
+          a pocket, and the ding is for the person carrying it. */''}
      <div style="display:flex;align-items:center;gap:14px;min-height:48px;padding:8px 20px">
        <span style="width:20px;display:flex;justify-content:center;flex:none;color:var(--text-secondary)">${ic('bell',18)}</span>
        <span style="flex:1;font-size:15px">${T('Sound','提示音')}</span>${toggle(state.sound,"APP.cmd('toggleSound')")}</div>
@@ -13467,19 +13495,35 @@ function sheetOverflow(){
           switch to Settings alone put it somewhere nobody had reason to look —
           the report was simply "I don't think there is that option".
 
-          Sound and Live updates were ALREADY drawn twice, here and in
-          Settings, and this makes a third row that lives in two places. That
-          is a real cost and the file names it elsewhere (see the Auto-print
-          note in screenSettings: one switch in three places, and flipping it
-          in one left the others stale). It is survivable for these three only
-          because all three read the one state object and every handler
-          re-renders, so the two copies cannot disagree. A switch that wrote
-          to the server would not get this exemption. */''}
+          Sound was ALREADY drawn twice, here and in Settings, and this makes a
+          second row that lives in two places. That is a real cost and the file
+          names it elsewhere (see the Auto-print note in screenSettings: one
+          switch in three places, and flipping it in one left the others stale).
+          It is survivable for these two only because both read the one state
+          object and every handler re-renders, so the two copies cannot
+          disagree. A switch that wrote to the server would not get this
+          exemption. */''}
+     <div class="sep" style="margin-left:54px"></div>
      <div style="display:flex;align-items:center;gap:14px;min-height:48px;padding:8px 20px">
        <span style="width:20px;display:flex;justify-content:center;flex:none;color:var(--text-secondary)">${ic('bell-ring',18)}</span>
        <span style="flex:1;min-width:0;display:flex;flex-direction:column">
          <span style="font-size:15px">${T('Alert me when Tacet is closed','应用关闭时也提醒我')}</span>
-         ${PUSH_NOTE()?`<span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px;line-height:1.35">${PUSH_NOTE()}</span>`:''}</span>
+         ${/* THE TEST RIDES THE SENTENCE THAT DESCRIBES WHAT IT TESTS. It had a
+              row of its own, at full label size, which made a diagnostic look
+              like the fifth setting in the list — and it appears and disappears
+              with the switch above it, so the list grew and shrank by a whole
+              row. Small letters at the end of the note: the same words, in the
+              one place they mean something, taking no room when they are off.
+
+              PADDING, NOT SIZE, MAKES THE TARGET. It is 12.5px text and the box
+              around it is ~17px tall, so 6px above and below buys a 29px target.
+              A button is inline-BLOCK, so unlike a span its padded box does
+              grow the line it sits in — measured, it pushed the note's two
+              lines 6px further apart — and the negative margin is what takes
+              that back: it cancels the padding in the line-box sum while the
+              hit area keeps it. */''}
+         ${PUSH_NOTE()?`<span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px;line-height:1.35">${PUSH_NOTE()}${
+            state.push==='on'?` <button onclick="APP.cmd('pushTest')" style="display:inline-block;vertical-align:baseline;background:none;border:none;margin:-6px 0;padding:6px 0;font-family:inherit;font-size:12.5px;font-weight:500;line-height:inherit;color:var(--text-primary);text-decoration:underline;text-underline-offset:2px;cursor:pointer">${T('Send a test alert','发送测试提醒')}</button>`:''}</span>`:''}</span>
        ${state.pushBusy
           ? `<span style="font-size:13px;color:var(--text-secondary);flex:none">${T('Working…','处理中…')}</span>`
           : (state.push==='on'||state.push==='off')
@@ -13487,9 +13531,7 @@ function sheetOverflow(){
             : `<button onclick="APP.cmd('togglePush')" style="flex:none;background:none;border:none;padding:0;font-family:inherit;font-size:13px;color:var(--text-secondary);cursor:pointer">${
                 state.push==='needs-install'?T('Add to home screen','添加到主屏幕')
                 :state.push==='blocked'?T('Blocked','已禁止')
-                :T('Unavailable','不可用')}</button>`}</div>
-     ${state.push==='on'?`<div class="sep" style="margin-left:54px"></div>`+row('bell',T('Send a test alert','发送测试提醒'),
-        `<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,"APP.cmd('pushTest')",false):''}</div>`;
+                :T('Unavailable','不可用')}</button>`}</div></div>`;
 }
 /* The jump list is built from the nav itself, so it can never drift from what
    the app actually has — the five destinations and every row of More. */
@@ -14482,7 +14524,7 @@ function pollUnseenOrders(){
      capability that reveals the Orders screen, and gated HERE so the request is
      never made rather than made and its answer discarded. */
   if(!canRoute('orders')) return;
-  if(!state.live||_ordersPollBusy) return;
+  if(_ordersPollBusy) return;
   /* One request in flight at a time. Coming back to the app fires focus AND
      visibilitychange together, and two answers racing to compare themselves
      against the same previous count is two dings for one order. */
@@ -14566,7 +14608,7 @@ function canSeeKitchenReady(){ return mCan(['restock:request','restock:pick']); 
    401 out of a heartbeat would navigate a phone sitting in a pocket to the
    login screen. On any failure it goes quiet and tries again in a minute. */
 function pollKitchenReady(){
-  if(!canSeeKitchenReady()||!state.live||_kitchenReadyBusy) return;
+  if(!canSeeKitchenReady()||_kitchenReadyBusy) return;
   _kitchenReadyBusy=true;
   return fetch('/api/restock/kitchen-ready',{credentials:'same-origin',headers:{accept:'application/json'}})
     .then(r=>r.ok?r.json():null)
