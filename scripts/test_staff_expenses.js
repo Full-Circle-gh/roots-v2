@@ -446,8 +446,19 @@ it('one name lookup serves both the queue and the books', () => {
   // Two reads of `tenant_users` shaped slightly differently are two things that
   // can drift, and the drift would show as a screen and a ledger naming the same
   // claim differently.
-  assert.strictEqual((ROUTE_CODE.match(/FROM tenant_users/g) || []).length, 1,
-    'submitterNames is the one place this route resolves a name');
+  //
+  // §92 MOVED THE LOOKUP OUT OF THIS ROUTE AND THE ASSERTION FOLLOWED IT, rather
+  // than being deleted for going red. Finance's ledger became a third reader in
+  // a SECOND route file, so §87's one function had to become one FILE — and the
+  // property this test defends is now stronger, not weaker: the route carries no
+  // copy of the query at all, and the one it calls is the one the ledger calls.
+  assert.strictEqual((ROUTE_CODE.match(/FROM tenant_users/g) || []).length, 0,
+    'the query lives in lib/user-names.js, never inline here');
+  assert.ok(/require\('\.\.\/lib\/user-names'\)/.test(ROUTE_CODE),
+    'and this route resolves names through it');
+  const LIB = fs.readFileSync(path.join(ROOT, 'lib', 'user-names.js'), 'utf8');
+  assert.strictEqual((LIB.match(/FROM tenant_users/g) || []).length, 1,
+    'exactly one place in the codebase turns an id into a name');
 });
 
 it('the approval list is a different route from the personal one', () => {

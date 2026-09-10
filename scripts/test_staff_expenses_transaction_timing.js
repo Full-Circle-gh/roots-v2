@@ -179,6 +179,67 @@ function call(method, url, body) {
       'the posted row must be gone, not left dangling on a rejected claim');
   });
 
+  console.log('\n4 · the ledger row names WHO PUT IT IN THE BOOKS (§92), over HTTP');
+
+  await it('an approved claim reaches the ledger carrying the approver\'s name', async () => {
+    // §87's LESSON, APPLIED: its own suite asserted the description carried a
+    // name against a fixture that set the name itself, so the lib was covered
+    // and the WIRING was dead in production for as long as it shipped. Every
+    // §92 assertion in test_finance_transactions.js reads SOURCE. This one runs
+    // the real route against the real schema and reads the payload — which is
+    // the only kind of test that would have caught §87.
+    const claimId = await submitClaim();
+    const dec = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`, { decision: 'approve' });
+    assert.strictEqual(dec.status, 200, JSON.stringify(dec.body));
+
+    const list = await call('GET', '/api/retail-admin/finance/transactions?from=2026-09-01&to=2026-09-30');
+    const row = list.body.data.rows.find(r => r.claim_id === claimId);
+    assert.ok(row, 'the posted row must be on the ledger');
+
+    // The approver is this suite's session user, and the name is whatever
+    // tenant_users holds for them — resolved across the control-plane handle.
+    const me = db.prepare('SELECT display_name, username FROM tenant_users WHERE id = ?').get(owner.id);
+    const expected = me.display_name || me.username;
+    assert.strictEqual(row.recorded_by, expected,
+      'the ledger row must name who approved it — a null here is §87 all over again');
+
+    // AND IT IS NOT THE SAME FACT AS THE SUBJECT. §87 puts the SPENDER in the
+    // description; this is who let the money into the accounts. A row where the
+    // new field merely echoed the description would look right and say nothing.
+    assert.ok(String(row.subject || '').includes('tx timing test'),
+      'the description still carries the claim, spender and note');
+    assert.notStrictEqual(row.subject, row.recorded_by, 'two facts, not one repeated');
+
+    // A PO row is deliberately unnamed — it collapses several ledger rows.
+    for (const po of list.body.data.rows.filter(r => r.source === 'po')) {
+      assert.ok(po.recorded_by == null, 'a Purchasing row names no single person');
+    }
+  });
+
+  await it('the CSV export carries the same name in its own column', async () => {
+    const claimId = await submitClaim();
+    await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`, { decision: 'approve' });
+
+    const csv = await call('GET', '/api/retail-admin/finance/transactions/export.csv?from=2026-09-01&to=2026-09-30');
+    assert.strictEqual(csv.status, 200);
+    // A CSV is not JSON, so `call` hands it back under `_raw` — the helper's own
+    // fallback for a body it could not parse.
+    const text = String((csv.body && csv.body._raw) || '');
+    const [head, ...body] = text.replace(/^\ufeff/, '').split(/\r?\n/);
+    const cols = head.split(',');
+    assert.strictEqual(cols[cols.length - 1], 'Recorded by', 'the column is appended, not folded in');
+    assert.deepStrictEqual(cols.slice(0, 8),
+      ['Date', 'Direction', 'Description', 'Category', 'Amount', 'Signed amount', 'Entered by', 'Purchase order'],
+      'and the columns a bookkeeper\'s spreadsheet already reads keep their positions');
+
+    const me = db.prepare('SELECT display_name, username FROM tenant_users WHERE id = ?').get(owner.id);
+    const expected = me.display_name || me.username;
+    const mine = body.filter(l => l.includes('tx timing test'));
+    assert.ok(mine.length, 'the claim row must be in the export');
+    assert.ok(mine.every(l => l.split(',').pop() === expected),
+      'every claim row in the file names its approver in the last column');
+  });
+
   // Best-effort cleanup — this runs against the shared dev database (tenant 1
   // maps to it directly), so leave it as it was found.
   for (const id of claimIds) {

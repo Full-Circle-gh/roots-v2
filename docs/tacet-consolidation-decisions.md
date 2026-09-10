@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.204
+# Tacet shared-core consolidation — decisions record, v4.205
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-10 · v4.205 — **§92 DECIDED: THE LEDGER ROW SAYS WHO PUT IT IN THE BOOKS — asked for by Ash** off the live Transactions screen, one line: *"why it doesn't show the user name that post this?"*, against the ¥200 `Asher · personal` claim row. **THE NAME HE WAS LOOKING AT WAS THE SPENDER'S, NOT THE POSTER'S, AND THAT IS THE WHOLE OF THE CONFUSION.** §87 (v4.196, merged that morning) put the spender in the DESCRIPTION — `Asher · personal` is who spent ¥200 and the note they typed — while `expense_entries.created_by` has meant *who put this row in the books* since the table existed, and on a claim row `postClaim` writes `decided_by` into it deliberately. **BOTH FACTS WERE ALREADY IN THE DATABASE ON EVERY ROW; ONE OF THEM HAD NEVER BEEN READ BY ANYTHING.** `routes/finance-transactions.js` selected `description` and not `created_by`, the row payload carried no such field, the screen had nowhere to draw it, and even the CSV's `Entered by` column named a MECHANISM (`Purchasing` / `Staff claim` / `Entered by hand`) rather than a person. **SO THIS IS NOT A NEW FACT BEING RECORDED — IT IS A RECORDED FACT REACHING A READER**, which is why there is no migration and no new column and why it is true of every row already in the books. **RESOLVED AT READ TIME, AND v4.196 REJECTED EXACTLY THAT FOR THE OTHER NAME** — recorded there as "the more robust mechanism… it reaches every existing row and follows a later rename", rejected only because v4.190 had placed the SPENDER in the description where the poster snapshots it, so resolving it again at read would print it twice. **NEITHER OBJECTION REACHES THIS NAME**: nothing snapshots the approver, so there is nothing to print twice; and read-time is what makes the answer true of the rows Ash was actually looking at rather than only of rows written from now on. The rejected alternative here is its mirror — a `created_by_name` snapshot column, the shape `material_requests` already uses — **rejected because it needs a migration to buy a worse answer**: it would name nobody on every row now in the books, which is every row in Ash's question. **TWO LABELS, NOT ONE, AND THE DISTINCTION IS THE POINT**: `Approved by · 审批人` on a claim row, `Entered by · 录入人` on a typed one. Approving somebody else's spending and typing a row are two different acts by two different people — one of them an exercise of authority §87 built a whole capability around — and a single label over both would flatten an approval into a piece of typing. **A PO ROW IS DELIBERATELY LEFT UNNAMED**: one PO row on this screen is a COLLAPSE of several `expense_entries` rows whose posters can differ, so naming it means picking one arbitrarily; it keeps `Posted by Purchasing`, which is the true answer for a row nobody typed, and the CSV cell is empty for the same reason. **A NAME THAT DOES NOT RESOLVE RENDERS NOTHING** — §1.12 prefers an empty cell to an invented one, and the live `Someone · 未知` belongs to the approvals queue where the name is the column's whole purpose. **THE LOOKUP BECAME A FILE, `lib/user-names.js`, AND THAT IS v4.196's OWN ARGUMENT APPLIED TWICE**: it held that ONE lookup is what stops the name on the approver's screen and the name in the books from drifting, "a second lookup shaped slightly differently is the whole mechanism by which they would". A third reader in a SECOND route file means one function is no longer enough; `routes/staff-expenses.js` now delegates to the lib and keeps `submitterNames` as its local name. **AND THE CROSS-HANDLE READ DID NOT WEAKEN A TEST TO GET THERE**: `scripts/test_finance_transactions.js` forbids `require('../database')` in that route, because `routes/finance.js` reads TENANT data off the global handle and is the pattern the assertion exists to keep out. `tenant_users` is CONTROL-PLANE and has nowhere else to come from — a real distinction, so it went into a lib that names it, with a new assertion that the route STILL never requires `../database` and that the lib never reads a tenant table. Relaxing the assertion to let the route reach the global handle would have been the same edit that makes the next real instance invisible. **ONE READ FOR THE WHOLE PAGE**, ids collected across all three lists before the list is built — a per-row lookup over a 2,000-row window is 2,000 cross-handle queries to print a handful of distinct names. Two composed pairs, declared under Rule 4 in `docs/tacet-delivery-vocabulary.md` v1.52; both are built from words already live on this feature (`审批` from `待审批`/`审批通过`, `录入` from `可录入交易`, the `人` suffix from the queue's own `申请人`). `npm run test:fast` green, `test_finance_transactions.js` 50 → 61 assertions, plus `test_staff_expenses.js` and `test_finance_approvals.js` green on the shared lookup. **No schema, no migration, and no change to `.gitignore` or CI.** The breakdown's third-level rows (`finCatRow`) are deliberately NOT given the name — that surface is a dense figure inside an opened category, not the ledger an operator works — and this is recorded so a later reader finds a decision rather than an omission. **WRITTEN AS §91 AND v4.204, RENUMBERED TO §92 AND v4.205 ON REBASE** — both numbers were taken on main while this branch sat open, by PR #477's *the approval queue is brought into line with the rulebook*. Per this file's numbering rule nothing was renumbered to make room: main's §91 is live and keeps its number, and this section took the next free one. The fifth collision of this kind recorded here, and it arose the way every one of them did — branches open at once, each taking what was the next free number when it was written.
 
 2026-09-10 · v4.197 — **§88 DECIDED: A LINE OF THE EXPENSE BREAKDOWN OPENS ONTO THE ROWS BEHIND IT — asked for by Ash** off the live Summary card: *"there should be an option to click on each category and see details payment break down."* **THE CHEAP BUILD WAS REJECTED BEFORE IT WAS STARTED, and the reason is the whole of this decision.** Sending the operator to the Transactions tab filtered to that category would have shown a SMALLER NUMBER than the line they tapped: `readTransactions` collapses PO-derived rows to one per purchase order — a purchase order buys several categories at once, so the collapsed row carries `category: null` and no category filter can match it — and it windows those rows on the PO's own date rather than the expense row's. Ingredients is precisely the category most likely to be mostly purchase orders, so ¥27,081 would have opened onto whatever happened to be hand-typed, with nothing on screen to say the rest was missing. §36 treats a figure whose own breakdown does not add up as the worst thing this card can do; borrowing a list reshaped for another purpose is how that happens. **SO THE DRILL-DOWN IS THE BREAKDOWN'S OWN QUERY WITH THE `GROUP BY` REMOVED** — same table, same window expression, same category match, listed instead of summed — and the detail equals the figure clicked BY CONSTRUCTION rather than by agreement. PO rows are listed individually; PO-0050 twice in one category is one purchase that bought it on two lines. **THE MATCH IS ON RAW TEXT AND DELIBERATELY NOT ON `spacingKey`**: the breakdown groups by the column as stored, so the two live spellings of the ingredients category are TWO lines on the card, and a detail read keyed on `spacingKey` would gather both under either line and overshoot. §87's flag resolution matches on `spacingKey` and this does not — the rule is *match what the `GROUP BY` grouped*, and the two are different questions. **ONE PRE-EXISTING DEFECT FIXED IN PASSING AND CALLED OUT**: SQLite groups `''` and `NULL` apart while the payload maps both to `null`, so a tenant holding one of each rendered TWO identical "Not recorded" lines with different figures. `NULLIF(category, '')` folds them; `TRIM` was rejected because it would merge ` Ingredients` onto `Ingredients` and decide a question about typography that `lib/category-text.js` refuses to. **NO ROW CEILING, and that is a decision**: a capped list is a list that does not add up, which is the one guarantee this endpoint makes. If the volume ever justifies one the fix is paging with the total stated, never a silent slice. **NO NEW CHINESE — nothing composed, so nothing is owed to the vocabulary**, and that is asserted by a test rather than claimed in a commit message: every pair the rows render (`采购单自动记入`, `费用申请 · 个人支付`, `加载中…`, `暂无记录`, `财务数据加载失败。`) already ships on the Transactions or Approvals sub-view of the same file for the same fact. **THE DRILL-DOWN IS READ-ONLY**, and deliberately: a concurrent session was deciding who may edit and cancel a transaction, and a second edit path into `expense_entries` opened while that was unsettled is how two rules about one table come to disagree. **ONE TEST WAS RE-SCOPED, NOT RELAXED**: `test_finance_categories.js` counted `FROM expense_entries` across the whole route FILE, which a second route in that file necessarily breaks; the rule it enforces is that the SUMMARY must not answer with two reads, so it now counts inside the summary handler, and a companion assertion holds the drill-down to one read and forbids it re-deciding the operating split. `npm run test:fast` 196/196 green; `test_finance_summary.js` grows 31 → 50, `test_finance_categories.js` 27 → 28, with `test_finance_transactions.js` 53/53 and `test_finance_presentation.js` 31/31 unchanged. Verified end to end over HTTP against a seeded ledger: every breakdown line reconciles to the fen, fractional amounts included. No schema, no migration. No change to `.gitignore` or CI.
 
@@ -9676,3 +9678,105 @@ band is Ink on `--td-header` and sentence case and pinned, Approve carries no
 `.fin-cta` and no `--td-dusk`, and the echo leaves with the bar. Every one of
 these is a thing a later edit could quietly undo, which is what that suite is
 for.
+
+## §92 — THE LEDGER ROW SAYS WHO PUT IT IN THE BOOKS
+
+**DECIDED 2026-09-10 by Ash**, off the live Transactions screen, against the
+¥200 `Asher · personal` row: *"why it doesn't show the user name that post
+this?"*
+
+### The confusion is real and it is between two different people
+
+§87 put the SPENDER in the description. `Asher · personal` is who spent the
+money and the note they typed, and v4.190's reasoning for putting it there
+stands: a ¥38 line with no supplier, no invoice and no purchase order behind it
+is answerable months later only if it says whose taxi it was.
+
+`created_by` is the other fact. It has meant *who put this row in the books*
+since `expense_entries` existed, and `lib/expense-posting.js` writes the
+approver's `decided_by` into it on purpose — "who spent it is in the description
+and on the claim".
+
+**On a claim row those are two different people doing two different things, and
+the screen showed one of them.** An operator reading a name beside `Staff claim`
+has no way to tell which one they are looking at.
+
+### Both facts were already stored; one had never been read
+
+Nothing was missing from the database. `routes/finance-transactions.js` selected
+`description` and not `created_by`, so the payload carried no such field and the
+screen had nowhere to draw one. The CSV's `Entered by` column named a MECHANISM
+— `Purchasing`, `Staff claim`, `Entered by hand` — and never a person.
+
+**So this is a recorded fact reaching a reader, not a new fact being recorded.**
+That is why there is no migration, no new column, and why the answer is true of
+every row already in the books.
+
+### Read-time, which v4.196 rejected for the other name
+
+v4.196 rejected resolving a name at read time in this exact file, and recorded
+why: v4.190 had placed the SPENDER in the description where the poster snapshots
+it, so resolving it again at read would print it twice. It also recorded that
+read-time is "the more robust mechanism — it reaches every existing row and
+follows a later rename".
+
+**Neither objection reaches the approver.** Nothing snapshots it, so there is
+nothing to print twice; and read-time is what makes the answer true of the rows
+Ash was looking at when he asked, rather than only of rows written afterwards.
+
+**REJECTED: a `created_by_name` snapshot column**, the shape `material_requests`
+already uses. It needs a migration to buy a worse answer — it would name nobody
+on every row currently in the books, which is every row in the question.
+
+### Two labels, because they are two acts
+
+| row | label |
+|---|---|
+| posted by an approved claim | `Approved by` · `审批人` |
+| typed by hand, either direction | `Entered by` · `录入人` |
+| posted by Purchasing | *unnamed — keeps `Posted by Purchasing`* |
+
+Approving somebody else's spending is an exercise of authority §87 built a
+capability around; typing a row is not. **One label over both would flatten an
+approval into a piece of typing.**
+
+**A PO ROW IS NOT NAMED, and that is not an oversight.** One PO row on this
+screen is a collapse of several `expense_entries` rows whose posters can differ,
+so naming it means picking one arbitrarily. `Posted by Purchasing` is the true
+answer for a row nobody typed, and the CSV cell is empty for the same reason.
+
+**A NAME THAT DOES NOT RESOLVE RENDERS NOTHING.** §1.12 prefers an empty cell to
+an invented one. The live `Someone · 未知` belongs to the approvals queue, where
+the name is the whole purpose of the column it sits in; on a ledger row it would
+be noise asserting an absence.
+
+### The lookup is one FILE now, which is v4.196's argument applied twice
+
+v4.196 made one function out of two lookups because "a second lookup shaped
+slightly differently is the whole mechanism by which they would" drift — the
+name on the approver's screen and the name in the books must agree. **A third
+reader in a second route file means one function is no longer enough.**
+`lib/user-names.js` is the one place a `tenant_users` id becomes a name;
+`routes/staff-expenses.js` delegates to it and keeps `submitterNames` as its
+local name.
+
+**THE CROSS-HANDLE READ DID NOT WEAKEN A TEST TO GET THERE.**
+`scripts/test_finance_transactions.js` forbids `require('../database')` in
+`routes/finance-transactions.js`, because `routes/finance.js` reads TENANT data
+off the global handle and is the pattern that assertion exists to keep out.
+`tenant_users` is control-plane and has nowhere else to come from — a real
+distinction — so the read went into a lib that names it, and the suite now also
+asserts that the route STILL never requires `../database` and that the lib never
+reads a tenant table. **Relaxing the assertion instead would have been the edit
+that makes the next real instance invisible.**
+
+**ONE READ FOR THE WHOLE PAGE.** The ids are collected across all three lists
+before the list is built. A per-row lookup over a 2,000-row window is 2,000
+cross-handle queries to print a handful of distinct names.
+
+### What is deliberately not done
+
+**The breakdown's third-level rows (`finCatRow`) are not given the name.** That
+surface is a dense figure inside an opened category, not the ledger an operator
+works, and the row there is already carrying a date, a name and a mark. Recorded
+so a later reader finds a decision rather than an omission.

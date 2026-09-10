@@ -108,6 +108,9 @@ const { readBody } = require('../lib/expense-claim');
 // runnable against a fixture without an app behind it.
 const { postClaim } = require('../lib/expense-posting');
 const { withTransaction } = require('../lib/db-transaction');
+// The one place a `tenant_users` id becomes a name — shared with Finance's
+// ledger so the two cannot name the same person differently (§92).
+const { userNames } = require('../lib/user-names');
 
 /* The rows one person can see: their own, whatever their capability.
    **A CLAIM IS PERSONAL UNTIL IT IS APPROVED**, and this is the read that says
@@ -131,25 +134,17 @@ function listMine(db, userId) {
 
 /* The names behind `submitted_by`, resolved in ONE read for however many ids.
 
-   IT IS A CROSS-HANDLE LOOKUP AND A JOIN IS NOT AVAILABLE. `tenant_users` lives
-   on the CONTROL-PLANE handle; `staff_expenses` lives on the tenant one and
-   carries the id alone. Two readers need this — the approval queue, which names
-   a screenful, and the decide route, which names exactly one on its way to the
-   ledger — so it is one function rather than two lookups that would drift.
+   THE LOOKUP ITSELF MOVED TO `lib/user-names.js` and this is now the local name
+   for it. §87 (v4.196) made the argument for one lookup — the name on the
+   approver's screen and the name in the books must not drift, and a second
+   lookup shaped slightly differently is the whole mechanism by which they
+   would. §92 gave it a third reader in `routes/finance-transactions.js`, which
+   is a different file, so the one lookup had to become one FILE. Nothing about
+   the behaviour changed: same query, same swallowed failure, same map.
 
    A MISSING NAME IS NOT A FAILURE. The map simply has no entry: a claim without
    a name still decides, and a ledger row without one still carries its money. */
-function submitterNames(ids) {
-  const names = new Map();
-  const want = [...new Set((ids || []).filter(Boolean))];
-  if (!want.length) return names;
-  try {
-    const q = require('../database').prepare(
-      `SELECT id, display_name, username FROM tenant_users WHERE id IN (${want.map(() => '?').join(',')})`);
-    for (const u of q.all(...want)) names.set(u.id, u.display_name || u.username);
-  } catch (e) { /* a name is a nicety; a claim without one still decides */ }
-  return names;
-}
+const submitterNames = userNames;
 
 // ── POST /api/retail-admin/staff-expenses ──────────────────────────────────
 router.post('/api/retail-admin/staff-expenses', requireRetailAdmin, express.json({ limit: '4mb' }), (req, res) => {
