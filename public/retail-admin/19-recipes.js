@@ -1261,45 +1261,59 @@
   }
 
   // ── Details ──────────────────────────────────────────────────────────────
+  //
+  // ONE SHEET, NOT THREE CARDS. Three full-width cards each split into two
+  // columns gave a two-digit Servings box 640px of line on a monitor, and put
+  // Storage three scroll-lengths under Identity. The sheet is one card of
+  // banded rows: the section name sits in a filled margin on the left — the
+  // same --td-raised/--td-header pair the tables put behind a header row — and
+  // its fields run three-up in the width that frees. Nothing about what the
+  // fields ARE changed; this is where they sit.
   function detailsTab(m) {
     const catOpts = [['', T('None', '无')]].concat(_cats.map(c => [c, c]));
     return `
-      <div class="rcp-card rcp-blk">
-        <h3 class="rcp-blk-h">${esc(T('Identity', '基本信息'))}</h3>
-        <div class="rcp-fgrid">
-          ${field(T('Name (English)', '名称(英文)'), input('name_en', m.name_en, 'maxlength="120"'))}
-          ${field(T('Name (中文)', '名称(中文)'), input('name_cn', m.name_cn, 'maxlength="120"'))}
-          ${field(T('Category', '分类'), select('category', m.category, catOpts))}
-          ${field(T('Type', '类型'), select('recipe_type', m.recipe_type || 'made', RECIPE_TYPES.map(([v, lbl]) => [v, lbl()])),
-                   T('Made here, or bulk bought in and repacked. Filing only — it changes nothing about cost.',
-                     '自制,或整批采购后分装。仅用于归类 —— 不影响成本。'))}
-          ${field(T('SKU', '货号'), input('sku', m.sku, 'maxlength="60"'),
-                   T('Kept forever, even after archiving.', '归档后仍永久保留。'))}
-        </div>
-      </div>
-      <div class="rcp-card rcp-blk">
-        <h3 class="rcp-blk-h">${esc(T('Batch', '批量'))}</h3>
-        <div class="rcp-fgrid">
-          ${yieldField(T('Batch size (g)', '批量大小(克)'), 'batch_size', m.batch_size,
-                       'type="number" min="0" step="any"', autoBatch(), 'rcp-yhint-batch')}
-          ${yieldField(T('Servings', '份数'), 'servings', m.servings,
-                       'type="number" min="1" step="1"', autoServings(), 'rcp-yhint-serv')}
-          ${field(T('Serving size (g)', '每份克数'), input('serving_size', m.serving_size, 'type="number" min="0" step="any"', 'rcpRecompute()'),
-                   T('How much one serving weighs. With this filled in, the serving count works itself out.',
-                     '每份的克数。填写后,份数会自动算出。'))}
-          ${field(T('Shelf life', '保质期'), shelfLifeField(m.shelf_life))}
-        </div>
-      </div>
-      <div class="rcp-card rcp-blk">
-        <h3 class="rcp-blk-h">${esc(T('Storage & notes', '储存与备注'))}</h3>
-        <div class="rcp-fgrid">
-          ${field(T('Storage', '储存方式'), select('storage', m.storage, [['', T('None', '无')]].concat(STORAGE_OPTIONS.map(([v, lbl]) => [v, lbl()]))))}
-        </div>
-        <div class="rcp-f" style="margin-top:16px">
-          <span class="lbl">${esc(T('Notes', '备注'))}</span>
-          <textarea class="rcp-input" id="rcp-f-notes" rows="3" oninput="rcpDirty()">${esc(m.notes || '')}</textarea>
-        </div>
+      <div class="rcp-card rcp-sheet">
+        ${band(T('Identity', '基本信息'), `
+          <div class="rcp-fgrid c3">
+            ${field(T('Name (English)', '名称(英文)'), input('name_en', m.name_en, 'maxlength="120"'))}
+            ${field(T('Name (中文)', '名称(中文)'), input('name_cn', m.name_cn, 'maxlength="120"'))}
+            ${field(T('SKU', '货号'), input('sku', m.sku, 'maxlength="60"'),
+                     T('Kept forever, even after archiving.', '归档后仍永久保留。'))}
+            ${field(T('Category', '分类'), select('category', m.category, catOpts))}
+            ${field(T('Type', '类型'), select('recipe_type', m.recipe_type || 'made', RECIPE_TYPES.map(([v, lbl]) => [v, lbl()])),
+                     T('Made here, or bulk bought in and repacked. Filing only — it changes nothing about cost.',
+                       '自制,或整批采购后分装。仅用于归类 —— 不影响成本。'))}
+          </div>`)}
+        ${band(T('Batch', '批量'), `
+          <div class="rcp-fgrid c3">
+            ${yieldField(T('Batch size (g)', '批量大小(克)'), 'batch_size', m.batch_size,
+                         'type="number" min="0" step="any"', autoBatch(), 'rcp-yhint-batch')}
+            ${yieldField(T('Servings', '份数'), 'servings', m.servings,
+                         'type="number" min="1" step="1"', autoServings(), 'rcp-yhint-serv')}
+            ${field(T('Serving size (g)', '每份克数'), input('serving_size', m.serving_size, 'type="number" min="0" step="any"', 'rcpRecompute()'),
+                     T('How much one serving weighs. With this filled in, the serving count works itself out.',
+                       '每份的克数。填写后,份数会自动算出。'))}
+            ${field(T('Shelf life', '保质期'), shelfLifeField(m.shelf_life))}
+          </div>`)}
+        ${band(T('Storage & notes', '储存与备注'), `
+          <div class="rcp-fgrid notes">
+            ${field(T('Storage', '储存方式'), select('storage', m.storage, [['', T('None', '无')]].concat(STORAGE_OPTIONS.map(([v, lbl]) => [v, lbl()]))))}
+            <div class="rcp-f">
+              <span class="lbl">${esc(T('Notes', '备注'))}</span>
+              <textarea class="rcp-input" id="rcp-f-notes" rows="3" oninput="rcpDirty()">${esc(m.notes || '')}</textarea>
+            </div>
+          </div>`)}
       </div>`;
+  }
+
+  // A banded row of the sheet: the section name in the margin, its fields
+  // beside it. The heading is still an <h3> — the name of a section is a
+  // heading wherever it is drawn, and a screen reader reads this page by them.
+  function band(title, inner) {
+    return `<section class="rcp-band">
+        <h3 class="rcp-rail">${esc(title)}</h3>
+        <div class="rcp-fields">${inner}</div>
+      </section>`;
   }
 
   // ── The batch size nobody should have to add up ──────────────────────────
