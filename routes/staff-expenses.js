@@ -397,7 +397,7 @@ router.get('/api/retail-admin/staff-expenses/pending', requireRetailAdmin, requi
 // same person, and a rule forbidding it produces an unusable screen rather than
 // a second approver. **The guard is the record, not the refusal** — the approver
 // is stored on the claim, shown on the row, and logged.
-router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, requireApprover, express.json(), (req, res) => {
+router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, requireApprover, express.json(), async (req, res) => {
   try {
     const db = tdb();
     if (!/^\d+$/.test(String(req.params.id))) return res.status(404).json({ error: ERR.notFound });
@@ -433,9 +433,27 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
     // not depend on.
     const submittedName = submitterNames([claim.submitted_by]).get(claim.submitted_by) || null;
 
-    withTransaction(db, (tx) => {
+    // AWAITED (§90's fix). This route was never `async` and never awaited this
+    // call, which looked harmless because better-sqlite3 is synchronous — but
+    // `withTransaction`'s outermost-transaction queue (lib/db-transaction.js
+    // `acquire`) always defers the body to a later microtask via `.then()`, even
+    // when nothing is queued ahead of it. Unawaited, `logActivity` and the
+    // `after` read below ran on the SAME tick as this call, before a single
+    // statement inside the transaction had executed — reporting the claim's
+    // PRE-decision state back to the caller — and a throw inside it (the FK
+    // ordering bug just above, on the reject-after-approve path) became an
+    // unhandled rejection outside this function's own try/catch, bypassing
+    // both the 500 response and the console.error below entirely.
+    await withTransaction(db, (tx) => {
+      // `expense_id` IS CLEARED HERE TOO (§90's fix, same root cause): rejecting
+      // a claim that was PREVIOUSLY approved has this row's `expense_id` still
+      // pointing at the `expense_entries` row postClaim is about to delete, and
+      // schema.sql's FK on that column (REFERENCES expense_entries(id)) refuses
+      // the delete while a live reference stands. Harmless on the ordinary path
+      // (first-time approve or reject, where expense_id is already NULL) and set
+      // back to the real value below when postClaim posts one.
       tx.prepare(`UPDATE staff_expenses
-                     SET status = ?, decided_by = ?, decided_at = datetime('now'), decided_note = ?
+                     SET status = ?, decided_by = ?, decided_at = datetime('now'), decided_note = ?, expense_id = NULL
                    WHERE id = ?`).run(status, decidedBy, note, claim.id);
       // Posted from the row AS IT NOW STANDS, not from the one read above: the
       // status this decision just wrote is what decides whether a row exists.
@@ -477,7 +495,7 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
 // the untouched approval record.
 //
 // GATED ON `expenses:cancel`, NOT `expenses:approve` — see requireCanceller.
-router.post('/api/retail-admin/staff-expenses/:id/void', requireRetailAdmin, requireCanceller, express.json(), (req, res) => {
+router.post('/api/retail-admin/staff-expenses/:id/void', requireRetailAdmin, requireCanceller, express.json(), async (req, res) => {
   try {
     const db = tdb();
     if (!/^\d+$/.test(String(req.params.id))) return res.status(404).json({ error: ERR.notFound });
@@ -498,17 +516,28 @@ router.post('/api/retail-admin/staff-expenses/:id/void', requireRetailAdmin, req
       ? String(req.body.note).slice(0, 500) : null;
     const voidedBy = req.user?.id || null;
 
-    withTransaction(db, (tx) => {
+    // AWAITED — see the identical note on `/decide` above. Without it, the
+    // response below reports the claim's PRE-void state (the exact bug Ash
+    // reported: the client is told "voided", the row is still on the ledger,
+    // and voiding it again is offered), and the FK error this route used to
+    // throw before the fix above became an unhandled rejection nobody caught.
+    await withTransaction(db, (tx) => {
+      // `expense_id` IS CLEARED IN THE SAME UPDATE, BEFORE postClaim RUNS —
+      // schema.sql's `FOREIGN KEY (expense_id) REFERENCES expense_entries(id)`
+      // means the row postClaim is about to DELETE is still referenced by this
+      // very column until it is nulled, and SQLite (foreign_keys=ON) refuses to
+      // delete a row a live foreign key still points at. Found by actually
+      // exercising this route end-to-end rather than trusting the unit-level
+      // fixture, which declares no such constraint and so never caught it.
       tx.prepare(`UPDATE staff_expenses
-                     SET status = 'voided', voided_by = ?, voided_at = datetime('now'), void_note = ?
+                     SET status = 'voided', voided_by = ?, voided_at = datetime('now'), void_note = ?, expense_id = NULL
                    WHERE id = ?`).run(voidedBy, note, claim.id);
       // Posted from the row AS IT NOW STANDS, exactly as /decide does: the
       // status this just wrote is what decides whether a row exists, and
       // 'voided' takes the same branch 'rejected' does in postClaim — it
-      // deletes the expense_entries row and returns null.
+      // deletes the expense_entries row (now unreferenced) and returns null.
       const fresh = tx.prepare('SELECT * FROM staff_expenses WHERE id = ?').get(claim.id);
-      const expenseId = postClaim(tx, fresh);
-      tx.prepare('UPDATE staff_expenses SET expense_id = ? WHERE id = ?').run(expenseId, claim.id);
+      postClaim(tx, fresh);
     });
 
     logActivity(req.user?.id || null, req.user?.username || null, 'void', 'staff_expense', claim.id,

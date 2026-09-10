@@ -1,0 +1,195 @@
+#!/usr/bin/env node
+/**
+ * §90 caught this the hard way: Ash voided a claim on the live screen and it
+ * stayed on the ledger, voidable again. scripts/test_staff_expenses.js never
+ * would have found it — it tests `postClaim` and `readBody` as pure functions
+ * against hand-built fixtures, never the real `/decide` and `/void` ROUTES
+ * over a real HTTP request with the real schema's constraints behind them.
+ *
+ * Two bugs, found by finally doing that:
+ *
+ *   1. `withTransaction(db, fn)` was called WITHOUT `await` in both routes.
+ *      Harmless-looking, because better-sqlite3 is synchronous — but
+ *      lib/db-transaction.js's outermost-transaction queue (`acquire`)
+ *      defers the body to a later microtask via `.then()` even when nothing
+ *      is queued ahead of it. Unawaited, the route's own post-transaction
+ *      read and its `res.json(...)` ran on the SAME tick as the call, before
+ *      a single statement inside the transaction had executed — reporting
+ *      the claim's PRE-decision state back to the caller, and turning any
+ *      throw inside the transaction into an unhandled rejection outside the
+ *      route's own try/catch.
+ *
+ *   2. `staff_expenses.expense_id` carries `FOREIGN KEY REFERENCES
+ *      expense_entries(id)` (schema.sql). Reversing an approval calls
+ *      `postClaim`, which DELETEs the posted `expense_entries` row — while
+ *      `expense_id` on this very row still points at it. SQLite
+ *      (foreign_keys=ON) refuses that delete. The unit-level fixture for
+ *      `postClaim` declares no such column and so never exercised the
+ *      constraint; only a real request against the real schema does.
+ *
+ * Together: void a claim on the live app, and the FK error thrown inside the
+ * unawaited transaction never reached the route's catch block — the response
+ * had already gone out reporting the OLD ('approved') state as success. This
+ * suite boots the real routers (routes/staff-expenses.js,
+ * routes/finance-transactions.js) behind a real HTTP server and a stubbed
+ * session, on tenant 1 (Roots), which is the one tenant id that maps to the
+ * shared `database.js` handle (lib/tenant-db.js `rawTenantDb`) rather than a
+ * separate per-tenant file — so this runs against the real schema and the
+ * real capability-resolution path, not a fixture standing in for either.
+ *
+ *   node scripts/test_staff_expenses_transaction_timing.js
+ */
+'use strict';
+
+const assert = require('assert');
+const express = require('express');
+const http = require('http');
+
+const db = require('../database');
+require('../routes/backend-auth'); // schema + seed
+const staffExpensesRouter = require('../routes/staff-expenses');
+const financeTxRouter = require('../routes/finance-transactions');
+
+let pass = 0, fail = 0;
+async function it(name, fn) {
+  try { await fn(); console.log(`  ✓ ${name}`); pass++; }
+  catch (e) { console.log(`  ✗ ${name}\n      ${e.stack || e.message}`); fail++; }
+}
+
+const app = express();
+let SESSION = {};
+app.use((req, _res, next) => { req.session = SESSION; next(); });
+app.use(staffExpensesRouter);
+app.use(financeTxRouter);
+const server = http.createServer(app);
+
+function call(method, url, body) {
+  return new Promise((resolve, reject) => {
+    const payload = body === undefined ? null : JSON.stringify(body);
+    const req = http.request({
+      host: '127.0.0.1', port: server.address().port, path: url, method,
+      headers: Object.assign({ 'Content-Type': 'application/json' },
+        payload ? { 'Content-Length': Buffer.byteLength(payload) } : {}),
+    }, (res) => {
+      let raw = '';
+      res.on('data', d => { raw += d; });
+      res.on('end', () => {
+        let json = null;
+        try { json = JSON.parse(raw); } catch (e) { json = { _raw: raw }; }
+        resolve({ status: res.statusCode, body: json });
+      });
+    });
+    req.on('error', reject);
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+(async function main() {
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+
+  // Tenant 1 (Roots) — see the header for why this id specifically.
+  const owner = db.prepare("SELECT id FROM tenant_users WHERE tenant_id = 1 AND role = 'owner'").get();
+  if (!owner) { console.log('  (skipped — no seeded owner on tenant 1)'); server.close(); return; }
+  SESSION = { backendUserId: owner.id };
+  // expense_entries.created_by -> users(id) (the legacy kitchen table). A dev
+  // database that has never run the kitchen app has it empty; production's
+  // does not. A row at this id is enough for the FK on a non-null created_by.
+  try { db.prepare('INSERT OR IGNORE INTO users (id, username, password) VALUES (?, ?, ?)').run(owner.id, 'tx_timing_test', 'x'); } catch (e) {}
+
+  const claimIds = [];
+  async function submitClaim(paidBy) {
+    const r = await call('POST', '/api/retail-admin/staff-expenses', {
+      date: '2026-09-10', amount: 200, category: 'Transport', note: 'tx timing test', paid_by: paidBy || 'company',
+    });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    claimIds.push(r.body.id);
+    return r.body.id;
+  }
+
+  console.log('\n1 · the response reports the POST-transaction state, not the pre-transaction one');
+
+  await it('approving reports status=approved and a real expense_id in the SAME response', async () => {
+    const claimId = await submitClaim();
+    const dec = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`, { decision: 'approve' });
+    assert.strictEqual(dec.status, 200, JSON.stringify(dec.body));
+    // Before the fix this read 'submitted' — the state before the (unawaited,
+    // still-pending) transaction had run a single statement.
+    assert.strictEqual(dec.body.data.status, 'approved');
+    assert.ok(dec.body.data.expense_id, 'a posted row must exist and be named');
+    // And the database must agree with what the response just claimed —
+    // the two diverging is exactly the bug.
+    const row = db.prepare('SELECT status, expense_id FROM staff_expenses WHERE id = ?').get(claimId);
+    assert.strictEqual(row.status, 'approved');
+    assert.strictEqual(row.expense_id, dec.body.data.expense_id);
+  });
+
+  console.log('\n2 · voiding an approved claim actually removes it — end to end, over HTTP');
+
+  await it('void reports status=voided, and the ledger no longer carries the row', async () => {
+    const claimId = await submitClaim();
+    const dec = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`, { decision: 'approve' });
+    assert.strictEqual(dec.status, 200);
+
+    const before = await call('GET', '/api/retail-admin/finance/transactions?from=2026-09-01&to=2026-09-30');
+    assert.ok(before.body.data.rows.some(r => r.claim_id === claimId), 'the posted row must be on the ledger before voiding');
+
+    const voided = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/void`, {});
+    // This is the exact failure Ash hit: before the fix, this either threw an
+    // unhandled rejection server-side (the process log would show it, the
+    // client got whatever partial response express managed to send) or
+    // reported success while the FK error meant nothing had actually voided.
+    assert.strictEqual(voided.status, 200, JSON.stringify(voided.body));
+    assert.strictEqual(voided.body.data.status, 'voided');
+    assert.strictEqual(voided.body.data.expense_id, null);
+
+    const after = await call('GET', '/api/retail-admin/finance/transactions?from=2026-09-01&to=2026-09-30');
+    assert.ok(!after.body.data.rows.some(r => r.claim_id === claimId),
+      'the row must be gone from the ledger — this is what "still here, and I can void it again" means when it fails');
+
+    const row = db.prepare('SELECT status, decided_by, voided_by FROM staff_expenses WHERE id = ?').get(claimId);
+    assert.strictEqual(row.status, 'voided');
+    assert.ok(row.decided_by, 'the original approver is still on record');
+    assert.ok(row.voided_by, 'and who voided it is recorded too');
+  });
+
+  await it('voiding again is refused — there is nothing left to reverse', async () => {
+    const claimId = await submitClaim();
+    await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`, { decision: 'approve' });
+    const first = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/void`, {});
+    assert.strictEqual(first.status, 200);
+    const second = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/void`, {});
+    assert.strictEqual(second.status, 409);
+  });
+
+  console.log('\n3 · the pre-existing reject-after-approve path has the same FK ordering fix');
+
+  await it('rejecting a PREVIOUSLY-approved claim also removes its posted row, over HTTP', async () => {
+    const claimId = await submitClaim();
+    await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`, { decision: 'approve' });
+    const posted = db.prepare('SELECT expense_id FROM staff_expenses WHERE id = ?').get(claimId);
+    assert.ok(posted.expense_id, 'must actually be posted first');
+
+    const rej = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`, { decision: 'reject' });
+    assert.strictEqual(rej.status, 200, JSON.stringify(rej.body));
+    assert.strictEqual(rej.body.data.status, 'rejected');
+    assert.strictEqual(rej.body.data.expense_id, null);
+    assert.strictEqual(
+      db.prepare('SELECT COUNT(*) n FROM expense_entries WHERE claim_id = ?').get(claimId).n, 0,
+      'the posted row must be gone, not left dangling on a rejected claim');
+  });
+
+  // Best-effort cleanup — this runs against the shared dev database (tenant 1
+  // maps to it directly), so leave it as it was found.
+  for (const id of claimIds) {
+    try {
+      const row = db.prepare('SELECT expense_id FROM staff_expenses WHERE id = ?').get(id);
+      if (row && row.expense_id) db.prepare('DELETE FROM expense_entries WHERE id = ?').run(row.expense_id);
+      db.prepare('DELETE FROM staff_expenses WHERE id = ?').run(id);
+    } catch (e) { /* best-effort */ }
+  }
+
+  server.close();
+  console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed`);
+  process.exit(fail ? 1 : 0);
+})().catch(e => { console.error(e); process.exit(1); });
