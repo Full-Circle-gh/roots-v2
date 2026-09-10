@@ -1,0 +1,415 @@
+<title>Thirty-one categories on a phone</title>
+<!--
+  §87 follow-up — the category control on the Expense screen, drawn against the
+  live list (31 entries, screenshot 2026-09-10). Presentation mockup for a
+  decision, NOT a spec.
+
+  Chinese here is live vocabulary only. Anything a chosen option needs beyond
+  that is composed and declared at BUILD time under Rule 4.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --ground:#E9EBEF; --surface:#FFFFFF; --surface-2:#F3F4F7;
+    --edge:#D3D7DE; --edge-soft:#E2E5EA;
+    --ink:#171B22; --ink-2:#5A6270; --ink-3:#858C99;
+    --accent:#6E67AF; --good:#5F7357; --cost:#8A6425; --bad:#B4533E;
+
+    /* public/m.html :root, verbatim. Fixed: a frame depicts the app's light
+       theme and stays that way on either ground. */
+    --app-paper:#FBF9F4; --app-ink:#111A2B; --app-graphite:#58606E;
+    --app-dusk:#6E67AF; --app-card:#FFFFFF; --app-raised:#F6F3EC;
+    --app-border:#E4E0D5; --app-edge:#948B76; --app-dusk-tint:#EEEDF6;
+    --app-sage-tint:#EDF1EC; --app-sage-ink:#5F7357;
+    --app-amber-tint:#F7EEDE; --app-amber-ink:#8A6425;
+    --app-brick-tint:#F6E7E3; --app-brick-ink:#B4533E;
+
+    --f-head:'Archivo','Helvetica Neue',Arial,sans-serif;
+    --f-body:'Inter',-apple-system,system-ui,sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:#0F1319; --surface:#171C24; --surface-2:#1D232C;
+      --edge:#2B323C; --edge-soft:#232932;
+      --ink:#E7E9ED; --ink-2:#A2AAB7; --ink-3:#79818E;
+      --accent:#A9A2E0; --good:#A3B49F; --cost:#D9A55E; --bad:#DE8B77;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#0F1319; --surface:#171C24; --surface-2:#1D232C;
+    --edge:#2B323C; --edge-soft:#232932;
+    --ink:#E7E9ED; --ink-2:#A2AAB7; --ink-3:#79818E;
+    --accent:#A9A2E0; --good:#A3B49F; --cost:#D9A55E; --bad:#DE8B77;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--ground); color:var(--ink); font:400 16px/1.6 var(--f-body); -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:1180px; margin:0 auto; padding:40px 20px 96px; }
+
+  .eyebrow { font:600 11px/1 var(--f-head); letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3); }
+  h1 { font:700 clamp(30px,5vw,44px)/1.08 var(--f-head); letter-spacing:-.02em; margin:14px 0 0; text-wrap:balance; max-width:20ch; }
+  .standfirst { margin:16px 0 0; max-width:66ch; color:var(--ink-2); font-size:17px; }
+  .masthead { padding-bottom:28px; border-bottom:1px solid var(--edge); }
+
+  /* ── The diagnosis ─────────────────────────────────────────────────── */
+  .why { margin:32px 0 0; display:grid; gap:22px; grid-template-columns:1fr; }
+  @media (min-width:820px) { .why { grid-template-columns:1fr 1fr; } }
+  .why h2 { font:600 20px/1.3 var(--f-head); margin:0 0 10px; letter-spacing:-.01em; }
+  .why p { margin:0 0 10px; color:var(--ink-2); max-width:58ch; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:0; border:1px solid var(--edge); border-radius:12px; overflow:hidden; background:var(--surface); }
+  .split > div { padding:14px 16px; }
+  .split > div + div { border-left:1px solid var(--edge); }
+  .split h4 { font:600 11px/1.6 var(--f-head); letter-spacing:.1em; text-transform:uppercase; margin:0 0 8px; }
+  .split.keep h4 { color:var(--good); } .split.drop h4 { color:var(--bad); }
+  .split ul { margin:0; padding:0; list-style:none; font-size:13.5px; color:var(--ink-2); }
+  .split li { padding:3px 0; }
+  .dupe { margin:14px 0 0; padding:12px 14px; border-left:3px solid var(--cost); background:var(--surface); font-size:14px; color:var(--ink-2); border-radius:0 8px 8px 0; }
+  .dupe b { color:var(--ink); font-weight:600; }
+
+  /* ── Options ───────────────────────────────────────────────────────── */
+  .options { margin:52px 0 0; display:grid; gap:44px; grid-template-columns:1fr; }
+  @media (min-width:1000px) { .options { grid-template-columns:repeat(3,1fr); gap:26px; } }
+  .opt { display:flex; flex-direction:column; gap:16px; }
+  .opt-tag { font:600 11px/1 var(--f-head); letter-spacing:.14em; text-transform:uppercase; color:var(--accent); }
+  .opt h3 { font:700 24px/1.15 var(--f-head); letter-spacing:-.015em; margin:6px 0 0; }
+  .opt .thesis { margin:0; color:var(--ink-2); font-size:15.5px; max-width:44ch; }
+  .frames { display:flex; gap:16px; overflow-x:auto; padding:2px 2px 8px; }
+  .verdict { display:grid; gap:11px; }
+  .verdict div { display:grid; grid-template-columns:60px 1fr; gap:12px; align-items:baseline; font-size:14.5px; color:var(--ink-2); }
+  .verdict b { font:600 10.5px/1.7 var(--f-head); letter-spacing:.1em; text-transform:uppercase; }
+  .verdict .g b { color:var(--good); } .verdict .c b { color:var(--cost); }
+
+  /* ── The phone ─────────────────────────────────────────────────────── */
+  .phone { flex:none; width:300px; height:600px; border-radius:26px; overflow:hidden;
+    background:var(--app-paper); color:var(--app-ink); border:1px solid var(--app-border);
+    box-shadow:0 1px 2px rgba(17,26,43,.06), 0 14px 34px rgba(17,26,43,.10);
+    font:400 14px/1.5 var(--f-body); display:flex; flex-direction:column; }
+  .frame-wrap { display:flex; flex-direction:column; }
+  .cap { font:500 10.5px/1 var(--f-head); letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); padding:0 0 8px; }
+  .bar { height:44px; flex:none; display:flex; align-items:center; gap:10px; padding:0 14px;
+    border-bottom:1px solid var(--app-border); font-size:15px; font-weight:500; }
+  .bar .x { color:var(--app-graphite); font-size:19px; line-height:1; }
+  .body { flex:1; overflow:hidden; padding:13px; display:flex; flex-direction:column; gap:12px; }
+  .lab { font:500 11px/1 var(--f-head); letter-spacing:.09em; text-transform:uppercase; color:var(--app-graphite); }
+  .amount { display:flex; align-items:baseline; gap:6px; font-variant-numeric:tabular-nums; }
+  .amount .y { font-size:20px; color:var(--app-graphite); }
+  .amount .n { font-size:34px; font-weight:600; letter-spacing:-.02em; }
+  .field { border:1.5px solid var(--app-edge); border-radius:8px; background:var(--app-card);
+    padding:10px 12px; font-size:14.5px; color:var(--app-graphite); display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .field.sel { color:var(--app-ink); border-color:var(--app-dusk); background:var(--app-dusk-tint); }
+  .chips { display:flex; flex-wrap:wrap; gap:7px; }
+  .chip { border:1.5px solid var(--app-edge); border-radius:999px; padding:7px 12px; font-size:12.5px;
+    color:var(--app-graphite); background:var(--app-card); white-space:nowrap; }
+  .chip.on { background:var(--app-ink); color:var(--app-paper); border-color:var(--app-ink); }
+  .chip.wide { white-space:normal; }
+  .cta { background:var(--app-dusk); color:#fff; border-radius:8px; padding:12px; text-align:center; font-size:15px; font-weight:500; }
+  .cta.ghost { background:transparent; color:var(--app-ink); border:1.5px solid var(--app-edge); }
+  .note { font-size:11.5px; color:var(--app-graphite); }
+  .search { border:1.5px solid var(--app-dusk); border-radius:8px; background:var(--app-card);
+    padding:10px 12px; font-size:14.5px; color:var(--app-ink); box-shadow:0 0 0 3px rgba(110,103,175,.16); }
+  .pick { padding:11px 4px; border-bottom:1px solid var(--app-border); font-size:14.5px; display:flex; justify-content:space-between; gap:10px; }
+  .pick:last-child { border-bottom:0; }
+  .pick .cn { color:var(--app-graphite); font-size:12.5px; }
+  .pick.on { color:var(--app-dusk); font-weight:500; }
+  .scrollfade { position:relative; flex:1; overflow:hidden; }
+  .scrollfade::after { content:''; position:absolute; left:0; right:0; bottom:0; height:44px;
+    background:linear-gradient(to bottom, rgba(251,249,244,0), var(--app-paper)); }
+  .crowd { display:flex; flex-wrap:wrap; gap:6px; opacity:.55; }
+  .crowd .chip { font-size:11.5px; padding:5px 9px; }
+
+  /* ── Closing ───────────────────────────────────────────────────────── */
+  .close { margin:60px 0 0; padding:26px; background:var(--surface); border:1px solid var(--edge); border-radius:16px; }
+  .close h2 { font:700 23px/1.2 var(--f-head); margin:0 0 6px; letter-spacing:-.015em; }
+  .close > p { margin:0 0 20px; color:var(--ink-2); max-width:62ch; }
+  .asks { display:grid; gap:18px; grid-template-columns:1fr; }
+  @media (min-width:800px) { .asks { grid-template-columns:repeat(3,1fr); } }
+  .ask { border-top:2px solid var(--ink); padding-top:12px; }
+  .ask h4 { font:600 15px/1.35 var(--f-head); margin:0 0 6px; }
+  .ask p { margin:0; font-size:14.5px; color:var(--ink-2); }
+  .ask .rec { color:var(--accent); font-weight:500; }
+  footer { margin:36px 0 0; padding-top:18px; border-top:1px solid var(--edge); font-size:13px; color:var(--ink-3); }
+  code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.92em; background:var(--surface-2); padding:1px 5px; border-radius:4px; }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">§87 follow-up · the category control</div>
+    <h1>Thirty-one categories on a phone</h1>
+    <p class="standfirst">
+      The Expense screen offers the shop's whole chart of accounts as chips —
+      thirty-one of them, alphabetical, so the amount field is pushed off the top
+      and a driver scrolls past <em>Employee Social Insurance</em> to find
+      <em>Logistics</em>. The layout is the symptom. The cause is that the phone
+      is being handed the bookkeeper's list.
+    </p>
+  </header>
+
+  <section class="why">
+    <div>
+      <h2>Two different lists wearing one name</h2>
+      <p>
+        Finance needs all thirty-one: rent, wages, social insurance and software
+        fees are real costs and they belong in the books. **An employee will
+        never raise one out of their own pocket.** Nobody pays the landlord from
+        their wallet and claims it back.
+      </p>
+      <div class="split keep">
+        <div>
+          <h4>A person could claim</h4>
+          <ul>
+            <li>Logistics &amp; delivery</li>
+            <li>In-house delivery</li>
+            <li>Office supplies</li>
+            <li>Post &amp; courier</li>
+            <li>Maintenance &amp; repairs</li>
+            <li>Tools</li>
+            <li>其他 Other</li>
+          </ul>
+        </div>
+        <div class="drop">
+          <h4>Nobody ever will</h4>
+          <ul>
+            <li>Rent + management fee</li>
+            <li>Salaries &amp; wages</li>
+            <li>Employee social insurance</li>
+            <li>Electricity · Water</li>
+            <li>Software service fee</li>
+            <li>Ingredients · Vegetables</li>
+            <li>Protein powder · Dates</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div>
+      <h2>And the screen found something else</h2>
+      <p>
+        Putting the list on a phone made it readable in one go for the first
+        time, and two pairs in it are the same category twice:
+      </p>
+      <div class="dupe">
+        <b>Marketing&amp;Promotion 市场推广费用</b> and <b>营销 Marketing</b><br>
+        <b>Kitchen low cost &amp; non-durable equipment 厨房低值易耗品</b> and
+        <b>low cost &amp; non-durable equipment 低值易耗品</b>
+      </div>
+      <p style="margin-top:14px">
+        Every expense filed under one of those splits your monthly breakdown into
+        two lines that read alike — the exact defect the category normaliser was
+        written for, arriving through the vocabulary instead of through a typo.
+        <strong>Finance → Categories can already fix it:</strong> hide the
+        duplicate, and rows keep their history.
+      </p>
+    </div>
+  </section>
+
+  <section class="options">
+
+    <!-- A ────────────────────────────────────────────────────────────── -->
+    <article class="opt">
+      <div>
+        <span class="opt-tag">Option A</span>
+        <h3>Mark which ones staff can claim</h3>
+      </div>
+      <p class="thesis">
+        One more tick in Finance → Categories: <em>offer on the phone</em>. The
+        books keep thirty-one; the claim screen gets the seven you ticked.
+      </p>
+      <div class="frames">
+        <div class="frame-wrap">
+          <div class="cap">Back office · once</div>
+          <div class="phone">
+            <div class="bar"><span>Finance · Categories</span></div>
+            <div class="body" style="gap:8px">
+              <span class="lab">Expense categories</span>
+              <div class="field" style="justify-content:flex-start;gap:10px"><span>☑</span><span style="font-size:13.5px">Logistics&amp;Delivery 物流</span></div>
+              <div class="field" style="justify-content:flex-start;gap:10px"><span>☑</span><span style="font-size:13.5px">Office Supplies 办公用品</span></div>
+              <div class="field" style="justify-content:flex-start;gap:10px;opacity:.5"><span>☐</span><span style="font-size:13.5px">Rent+Management Fee 房租</span></div>
+              <div class="field" style="justify-content:flex-start;gap:10px;opacity:.5"><span>☐</span><span style="font-size:13.5px">Salaries&amp;Wages 员工工资</span></div>
+              <div class="field" style="justify-content:flex-start;gap:10px;opacity:.5"><span>☐</span><span style="font-size:13.5px">Electricity 电费</span></div>
+              <div class="note" style="margin-top:6px">Ticked ones appear when staff record an expense. Everything stays in the books either way.</div>
+            </div>
+          </div>
+        </div>
+        <div class="frame-wrap">
+          <div class="cap">The phone · every time</div>
+          <div class="phone">
+            <div class="bar"><span class="x">‹</span><span>Expense</span></div>
+            <div class="body">
+              <span class="lab">Amount · 金额</span>
+              <span class="amount"><span class="y">¥</span><span class="n">38</span></span>
+              <span class="lab">Category · 分类</span>
+              <div class="chips">
+                <span class="chip on">Logistics 物流</span>
+                <span class="chip">In House Delivery 门店内部配送</span>
+                <span class="chip">Office Supplies 办公用品</span>
+                <span class="chip">Post 邮费</span>
+                <span class="chip">Maintenance 维修与保养</span>
+                <span class="chip">Tools 工具类</span>
+                <span class="chip">其他 Other</span>
+              </div>
+              <span class="lab">Who paid</span>
+              <div class="chips"><span class="chip on">My own money</span><span class="chip">Company 公司</span></div>
+              <div style="flex:1"></div>
+              <div class="cta">Submit · 提交</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="verdict">
+        <div class="g"><b>Good at</b><span>Fixes the cause, not the symptom. The claim screen goes back to one screen, and every option on it is one somebody could actually raise. Uses the screen you already have.</span></div>
+        <div class="c"><b>Costs</b><span>One setup pass by you — seven ticks — and a category added later is invisible on the phone until somebody ticks it.</span></div>
+      </div>
+    </article>
+
+    <!-- B ────────────────────────────────────────────────────────────── -->
+    <article class="opt">
+      <div>
+        <span class="opt-tag">Option B</span>
+        <h3>Search, with your recents on top</h3>
+      </div>
+      <p class="thesis">
+        The field collapses to one row. Tap it and a searchable sheet opens,
+        showing what this person picked last, then everything else.
+      </p>
+      <div class="frames">
+        <div class="frame-wrap">
+          <div class="cap">The form stays one screen</div>
+          <div class="phone">
+            <div class="bar"><span class="x">‹</span><span>Expense</span></div>
+            <div class="body">
+              <span class="lab">Amount · 金额</span>
+              <span class="amount"><span class="y">¥</span><span class="n">38</span></span>
+              <span class="lab">Category · 分类</span>
+              <div class="field sel"><span>Logistics&amp;Delivery 物流与配送费用</span><span>›</span></div>
+              <span class="lab">Who paid</span>
+              <div class="chips"><span class="chip on">My own money</span><span class="chip">Company 公司</span></div>
+              <div class="cta ghost">📷 Add a photo · 拍照</div>
+              <div class="field">Note · 备注</div>
+              <div style="flex:1"></div>
+              <div class="cta">Submit · 提交</div>
+            </div>
+          </div>
+        </div>
+        <div class="frame-wrap">
+          <div class="cap">The picker</div>
+          <div class="phone">
+            <div class="bar"><span class="x">✕</span><span>Category · 分类</span></div>
+            <div class="body" style="gap:10px">
+              <div class="search">物流|</div>
+              <span class="lab">You used recently</span>
+              <div class="pick on"><span>Logistics&amp;Delivery <span class="cn">物流与配送费用</span></span><span>✓</span></div>
+              <div class="pick"><span>In House Delivery <span class="cn">门店内部配送</span></span></div>
+              <span class="lab" style="margin-top:4px">All categories</span>
+              <div class="scrollfade">
+                <div class="pick"><span>JD Delivery <span class="cn">京东配送</span></span></div>
+                <div class="pick"><span>Meituan Delivery <span class="cn">美团配送</span></span></div>
+                <div class="pick"><span>Paotui Delivery <span class="cn">跑腿配送</span></span></div>
+                <div class="pick"><span>SF Express <span class="cn">顺丰快递</span></span></div>
+                <div class="pick"><span>Post and Other <span class="cn">邮费</span></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="verdict">
+        <div class="g"><b>Good at</b><span>Works at thirty-one or three hundred, with no setup and nothing for you to maintain. Typing two characters beats scrolling past twenty-four rows.</span></div>
+        <div class="c"><b>Costs</b><span>An extra tap on every claim, and the wrong options are still reachable — a driver can still file a taxi under Salaries if they try.</span></div>
+      </div>
+    </article>
+
+    <!-- C ────────────────────────────────────────────────────────────── -->
+    <article class="opt">
+      <div>
+        <span class="opt-tag">Option C</span>
+        <h3>Six that learn, then More</h3>
+      </div>
+      <p class="thesis">
+        Show the six this person has used most, and one <em>More…</em> chip that
+        opens the rest. Nothing to configure; the list shapes itself.
+      </p>
+      <div class="frames">
+        <div class="frame-wrap">
+          <div class="cap">After a week of use</div>
+          <div class="phone">
+            <div class="bar"><span class="x">‹</span><span>Expense</span></div>
+            <div class="body">
+              <span class="lab">Amount · 金额</span>
+              <span class="amount"><span class="y">¥</span><span class="n">38</span></span>
+              <span class="lab">Category · 分类</span>
+              <div class="chips">
+                <span class="chip on">Logistics 物流</span>
+                <span class="chip">Paotui 跑腿配送</span>
+                <span class="chip">Post 邮费</span>
+                <span class="chip">Office Supplies 办公用品</span>
+                <span class="chip">Tools 工具类</span>
+                <span class="chip">其他 Other</span>
+                <span class="chip" style="border-style:dashed">More… · 更多</span>
+              </div>
+              <span class="lab">Who paid</span>
+              <div class="chips"><span class="chip on">My own money</span><span class="chip">Company 公司</span></div>
+              <div style="flex:1"></div>
+              <div class="cta">Submit · 提交</div>
+            </div>
+          </div>
+        </div>
+        <div class="frame-wrap">
+          <div class="cap">Day one, before it has learned</div>
+          <div class="phone">
+            <div class="bar"><span class="x">‹</span><span>Expense</span></div>
+            <div class="body">
+              <span class="lab">Amount · 金额</span>
+              <span class="amount"><span class="y">¥</span><span class="n">0.00</span></span>
+              <span class="lab">Category · 分类</span>
+              <div class="crowd">
+                <span class="chip">Dates 椰枣</span><span class="chip">Dried Fruits 果干</span>
+                <span class="chip">Electricity 电费</span><span class="chip">Employee Social Insurance</span>
+                <span class="chip">In House Delivery</span><span class="chip">Ingredients 原材料</span>
+              </div>
+              <div class="note" style="margin-top:4px">With nothing to learn from, the first claim still meets the alphabet — the same wall, once per person.</div>
+              <div style="flex:1"></div>
+              <div class="cta">Submit · 提交</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="verdict">
+        <div class="g"><b>Good at</b><span>Zero setup, and it is right for each person rather than right on average — a driver and an office manager see different six.</span></div>
+        <div class="c"><b>Costs</b><span>The first claim each person makes still faces all thirty-one, which is the screen you are looking at. It also quietly hides the option somebody needs once a quarter.</span></div>
+      </div>
+    </article>
+
+  </section>
+
+  <section class="close">
+    <h2>What I would do</h2>
+    <p>
+      <span class="rec">A, then B if it is still crowded.</span> A is the honest
+      fix — the phone was being given the wrong list, and one tick per category
+      says which list is which. B is the right control for a long list and can be
+      added later without undoing A. C is the one I would not build: it fixes the
+      average case by making the first use of every new employee the worst case.
+    </p>
+    <div class="asks">
+      <div class="ask">
+        <h4>1 · Which one?</h4>
+        <p>A is about ten minutes of work plus seven ticks from you. A + B together is an afternoon.</p>
+      </div>
+      <div class="ask">
+        <h4>2 · Should I sort by use rather than alphabet?</h4>
+        <p>Independent of the choice above, and free: the shop's most-claimed categories first, so the alphabet stops deciding what a driver sees.</p>
+      </div>
+      <div class="ask">
+        <h4>3 · The two duplicate pairs</h4>
+        <p>Say the word and I will hide <em>营销 Marketing</em> and the unprefixed <em>低值易耗品</em> — existing rows keep their category and their history.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Drawn against <code>public/m.html</code>'s own tokens, from the live list on
+    2026-09-10. Chinese shown is live vocabulary only; new pairs are declared in
+    <code>docs/tacet-delivery-vocabulary.md</code> when a choice is built.
+  </footer>
+
+</div>

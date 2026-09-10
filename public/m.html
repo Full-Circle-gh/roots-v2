@@ -787,7 +787,11 @@ const state = {
 
      `photo` is a data URI already downscaled by the phone. The full-size frame a
      camera hands over is 4–8 MB and never leaves this device. */
-  exp:{cats:null,stores:null,tried:false,metaErr:'',
+  exp:{cats:null,recent:[],stores:null,tried:false,metaErr:'',
+       /* THE PICKER (§87 amendment). `pick` is whether it is open; `q` is what
+          is in its search box, held here rather than in the DOM because the
+          results repaint and the input must not. */
+       pick:false,q:'',
        amount:'',cat:'',paid:'employee',note:'',storeId:null,date:null,photo:null,
        busy:false,err:'',sent:null,
        mine:null,mineTried:false,owed:0,waiting:0},
@@ -944,7 +948,8 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
     a.rows=null; a.tried=false; a.err=''; a.busy=0; a.shot=null; a.shotFor=null; }
   if(route==='expense'){ const x=state.exp;
     x.amount=''; x.cat=''; x.paid='employee'; x.note=''; x.photo=null; x.date=null;
-    x.err=''; x.busy=false; x.sent=null; x.mine=null; x.mineTried=false; }
+    x.err=''; x.busy=false; x.sent=null; x.mine=null; x.mineTried=false;
+    x.pick=false; x.q=''; }
   /* A broadcast is written from an empty screen every time. What was left in
      the form after one was sent is the LAST one sent, and re-opening on it is
      how the same announcement goes out twice. */
@@ -10242,7 +10247,7 @@ function expLoadMeta(){
   const x=state.exp;
   if(x.tried) return; x.tried=true;
   api('/staff-expenses/meta').then(d=>{
-    x.cats=(d&&d.categories)||[]; x.stores=(d&&d.stores)||[];
+    x.cats=(d&&d.categories)||[]; x.stores=(d&&d.stores)||[]; x.recent=(d&&d.recent)||[];
     /* ONE STORE IS NOT A CHOICE (§1.9), so the field never renders — but the
        claim still carries it, because the column is what makes a per-shop
        expense figure possible at all (§87 part three). */
@@ -10300,9 +10305,67 @@ function expMineRow(r){
     </span>${expStatusPill(r)}</div>`;
 }
 
+/* THE RESULTS, IN ONE PATCHABLE BOX — everything the query changes, with the
+   search input deliberately OUTSIDE it. `expQ` repaints this and nothing else,
+   so the field survives a whole search: `render()` replaces the app in one
+   innerHTML, and a rebuilt <input> opens a fresh soft keyboard on its letter
+   page. Ash reported that from the kitchen — typing a SKU gave one digit, then
+   the alphabet — and four screens were repaired for it in #437 and its
+   follow-up. This is the fifth search box and it is born following the rule. */
+function expPickBodyHtml(){
+  const x=state.exp;
+  const q=String(x.q||'').trim().toLowerCase();
+  const all=(x.cats||[]);
+  const hit=c=>!q||String(c).toLowerCase().indexOf(q)>=0;
+  const shown=all.filter(hit);
+
+  /* RECENTS ARE HIDDEN WHILE SEARCHING, on purpose. They are a shortcut past
+     the list; somebody typing has already declined the shortcut, and leaving
+     them up would show the same category twice in one result set. */
+  const recent=q?[]:(x.recent||[]).filter(c=>all.indexOf(c)>=0);
+
+  const row=(c,mark)=>`<button style="display:flex;align-items:center;justify-content:space-between;gap:10px;
+      width:100%;padding:13px 4px;border:0;border-bottom:1px solid var(--border-default);background:none;
+      cursor:pointer;font-family:inherit;text-align:left;font-size:14.5px;
+      color:${x.cat===c?'var(--accent)':'var(--text-primary)'};font-weight:${x.cat===c?'500':'400'}"
+      onclick="APP.cmd('expCat',${JSON.stringify(c).replace(/"/g,'&quot;')})">
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(c)}</span>
+      ${x.cat===c?`<span style="flex:none;display:flex">${ic('check',17)}</span>`:(mark||'')}</button>`;
+
+  const head=t=>`<div style="font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--text-secondary);padding:14px 4px 6px">${t}</div>`;
+
+  if(!shown.length) return `<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+    T('Nothing matches that search.','没有匹配的分类。')}</div>`;
+
+  return (recent.length?head(T('You used recently','最近使用'))+recent.map(c=>row(c)).join(''):'')
+    + head(q?T('Results','搜索结果'):T('All categories','全部分类'))
+    + shown.map(c=>row(c)).join('');
+}
+
+function screenExpensePicker(){
+  const x=state.exp;
+  const search=`<div style="padding:4px 16px 10px;position:relative">
+    <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
+    <input id="mExpQ" inputmode="search" enterkeyhint="search" value="${escAttr(x.q)}" style="padding-left:42px"
+      placeholder="${T('Search categories','搜索分类')}" oninput="APP.cmd('expQ',this.value)"></div>`;
+  return `<div style="padding:12px 0 24px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px 10px">
+      <span style="font-size:15px;font-weight:500">${T('Category','分类')}</span>
+      <button class="btn2" style="padding:0 14px;height:38px;font-size:13px" onclick="APP.cmd('expPickClose')">${T('Close','关闭')}</button>
+    </div>
+    ${search}
+    <div style="padding:0 16px" id="mExpPickBody">${expPickBodyHtml()}</div>
+  </div>`;
+}
+
 function screenExpense(){
   expLoadMeta(); expLoadMine();
   const x=state.exp;
+  /* The picker replaces the form rather than covering it. Everything typed
+     lives in `state.exp`, so the form comes back exactly as it was left — and a
+     sheet over a form on a 360px screen leaves neither readable. */
+  if(x.pick&&(x.cats||[]).length) return screenExpensePicker();
 
   /* THE RECEIPT AFTER A SEND, and it replaces the form rather than sitting above
      it. A form still on screen under a confirmation is an invitation to send the
@@ -10316,11 +10379,27 @@ function screenExpense(){
     </div>`;
 
   const cats=x.cats||[];
+  /* ONE ROW, NOT THIRTY-ONE CHIPS (§87 amendment, Ash's option B).
+
+     The form shipped offering every active category as a chip, on the reasoning
+     that the tenant's own list is the right list — true of Finance, false of a
+     phone. Roots' list is thirty-one entries: the amount field was pushed off
+     the top and a driver scrolled past Employee Social Insurance to reach
+     Logistics. **The volume moves into the picker; the form goes back to one
+     screen.** */
   const catField = cats.length
     ? `<div style="display:flex;flex-direction:column;gap:8px">
          <span style="font-size:12.5px;color:var(--text-secondary)">${T('Category','分类')}</span>
-         <div style="display:flex;flex-wrap:wrap;gap:8px">${cats.map(c=>
-           `<button class="chip ${x.cat===c?'on':''}" onclick="APP.cmd('expCat',${JSON.stringify(c).replace(/"/g,'&quot;')})">${escAttr(c)}</button>`).join('')}</div>
+         <button style="display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;
+           padding:12px 14px;border-radius:8px;cursor:pointer;font-family:inherit;text-align:left;
+           border:1.5px solid ${x.cat?'var(--accent)':'var(--edge)'};
+           background:${x.cat?'var(--accent-tint)':'var(--surface-card)'};
+           color:var(--text-primary);font-size:15px"
+           onclick="APP.cmd('expPickOpen')">
+           <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${
+             x.cat?escAttr(x.cat):`<span style="color:var(--text-secondary)">${T('Choose a category','选择分类')}</span>`}</span>
+           <span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right',18)}</span>
+         </button>
        </div>`
     /* NO CHIPS AND NO FREE-TEXT BOX WHEN THE SHOP HAS NO LIST. §36's rule is
        that an empty list cannot offer a wrong option, and the answer to an empty
@@ -10440,7 +10519,21 @@ function screenExpense(){
    under a thumb. Same rule as mbTyped, learned on the waste picker before it. */
 reg('expAmt', v=>{ state.exp.amount=String(v==null?'':v); if(state.exp.err) { state.exp.err=''; } });
 reg('expNote', v=>{ state.exp.note=String(v==null?'':v); });
-reg('expCat', c=>{ const x=state.exp; x.cat=(x.cat===c)?'':String(c); render(); });
+/* PICKING CLOSES THE PICKER, and picking the SAME one again clears it — the
+   chip behaviour this replaced, kept: a category chosen by mistake has to be
+   removable without a second control for it. */
+reg('expCat', c=>{ const x=state.exp;
+  x.cat=(x.cat===c)?'':String(c); x.pick=false; x.q=''; render(); });
+reg('expPickOpen', ()=>{ const x=state.exp; x.pick=true; x.q=''; render(); });
+reg('expPickClose', ()=>{ const x=state.exp; x.pick=false; x.q=''; render(); });
+/* STORES THE QUERY AND REPAINTS THE RESULTS BOX — never the app. See
+   expPickBodyHtml for what that is protecting. */
+reg('expQ', v=>{
+  state.exp.q=String(v||'');
+  const host=document.getElementById('mExpPickBody');
+  if(host) host.innerHTML=expPickBodyHtml();
+  else render();
+});
 reg('expPaid', p=>{ state.exp.paid=(p==='company')?'company':'employee'; render(); });
 reg('expStore', id=>{ state.exp.storeId=Number(id)||null; render(); });
 reg('expDate', d=>{ state.exp.date=String(d||'')||null; });

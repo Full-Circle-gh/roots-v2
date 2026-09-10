@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.193
+# Tacet shared-core consolidation — decisions record, v4.194
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,7 +23,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
+2026-09-10 · v4.194 — **§87 AMENDED: THE CATEGORY CONTROL IS A SEARCHABLE PICKER, NOT A WALL OF CHIPS — DECIDED by Ash** from the live screen: thirty-one categories as chips, alphabetical, the amount field pushed off the top. Given three options in `reference/expense-category-picker-mockup.html`, he chose **B**, a collapsed field opening a picker with **this person's own recent categories on top**. **THE LAYOUT WAS THE SYMPTOM; THE CAUSE IS THAT THE PHONE WAS HANDED THE BOOKKEEPER'S LIST** — step two offered every active `kind='accounting'` category on the reasoning that the tenant's own list is the right list, which is true of Finance and false of a phone: rent, wages, social insurance, electricity and ingredients are real costs that **nobody raises out of their own pocket**. **WHY B RATHER THAN THIS SESSION'S OWN RECOMMENDATION (A, a per-category *offer on the phone* tick)**: A needs the shop to curate a second list and keep curating it, and a category added later is invisible on the phone until somebody remembers to tick it — a silent failure on the screen where silence means an expense filed under the wrong name or not at all. B maintains nothing and is correct at thirty-one categories or three hundred. **A is NOT withdrawn**: it narrows what the picker offers and can land later without undoing this. **WHAT B DOES NOT FIX, recorded so it is not read as fixed**: every category stays reachable, so a driver can still file a taxi under Salaries if they set out to — that is a curation problem and A is its answer. **RECENTS ARE THE PERSON'S OWN AND NEVER THE SHOP'S**: a driver and an office manager do not want the same six, and a shop-wide most-used would hand the driver whatever the office manager files most. **THE SEARCH BOX FOLLOWS THE RULE #437 AND ITS FOLLOW-UP ESTABLISHED** — `oninput` stores the query and repaints ONLY the results box, never the app, because `render()` rebuilds the `<input>` and a rebuilt field reopens the soft keyboard on its letter page; a new box calling `render()` would be the fifth instance of a defect four screens were just repaired for. **TWO DUPLICATE PAIRS RECORDED AND DELIBERATELY NOT ACTED ON**: the live list holds `Marketing&Promotion 市场推广费用` beside `营销 Marketing`, and the two spellings of `低值易耗品`. Each splits the monthly breakdown into two lines that read alike — §36's three-rent-payments defect arriving through the vocabulary rather than a typo — and hiding one of each is fifteen seconds on the Categories screen, but WHICH spelling survives is a decision about the shop's books and is the tenant's.
+
 2026-09-10 · v4.193 — **FOUR MORE PLACES PUBLISHED THE BARE SHELF, AND ONE OF THEM CLOSED THE WINDOW ON A LIVE MORNING. No new section: §85 enforced against the enqueues it missed.** Found by reading production during the first batch morning, not by a test: gzgrocery was carrying shelf + allowance at 07:05 and was back to the bare shelf by 07:23. **The cause was `enqueueCurrentStock` in `scripts/guanyi-daemon.js`** — the healer that re-asserts our numbers after a session recovery or a drift — which read `COALESCE(physical_qty, 0)` straight out of the table and queued it. Every heal and every resync therefore re-published the shelf and quietly withdrew the morning's pre-orders, on a timer, from the component whose job is keeping the channel honest. **§85 TAUGHT THE SWEEPS AND MISSED THE ENQUEUES THAT LIVE OUTSIDE `lib/*-sync.js`.** Three more had the same shape and are fixed with it: `routes/guanyi-admin.js` and `routes/meituan-admin.js`'s "push all" buttons, where an operator's click would have closed an open window by hand, and `lib/store-close.js`'s sweep, where a close and reopen would have done the same. All four now go through `channel-publish.publishableAt`, which is the whole point of that module existing. **WHAT THIS SAYS ABOUT THE ORIGINAL CHANGE**: §85 found the enqueues by following `bundleStock.sellableAt`, and the one that mattered most did not call it — it read the column. A grep for the FUNCTION found three call sites; a grep for the TABLE would have found four more. **PROVED**: `scripts/test_preorder_window.js` grows two cases that walk all four files by name and assert both halves — that each publishes through `channel-publish` for its own channel, and that the healer no longer mentions `physical_qty` at all. `npm run test:fast` 194 passed, 0 failed. Code, tests and docs; no schema, no migration, no new strings, and no change to `.gitignore` or CI.
+
 
 2026-09-09 · v4.191 — **§87 STEP FOUR BUILT: SETTLEMENT, AND THE SECTION IS COMPLETE END TO END.** `POST /staff-expenses/:id/settle` writes ONE column and **posts nothing** — the ¥38 was recorded once, at approval, and a second row for the repayment would report ¥76 of taxis; the suite asserts the handler touches `expense_entries` in no way at all. **WHAT IT IS FOR is a question the ledger cannot answer**: the books know the shop spent ¥38 on transport, not that the ¥38 is still in a driver's pocket. **THE ROW IS A PERSON, NOT A CLAIM**, because that is how it is paid — one transfer, not four taps — so the owed total carries the claim ids behind it and the phone settles them SEQUENTIALLY, four writes racing on a shop's wifi being how two of them land. **THE OWED FIGURE IS COUNTED OVER EVERY CLAIM AND NOT THE QUEUE'S 200-ROW PAGE**: a debt does not stop existing because it fell off the end of a list, so it has its own uncapped query, and the name lookup covers everybody either half of the payload mentions — otherwise an owed person outside the queue shows a total with no name against it. **GATED ON `expenses:approve` RATHER THAN A KEY OF ITS OWN**: a third capability would gate a single toggle, be granted to the same people, and add a row to a matrix somebody has to understand — and saying "we have paid Wei back" is an assertion about money by the person who already decides money on this screen. If it ever belongs to a bookkeeper who is not an approver, that is when the key earns its place. **ONLY A DEBT CAN BE SETTLED, WITH TWO SEPARATE REFUSALS**: an unapproved claim might still be rejected, and a company-account one owes nobody; a shared message would send an operator hunting a permission problem that is not there. **UN-SETTLING EXISTS BECAUSE THE UN-APPROVE REFUSAL DEPENDS ON IT** — step three refuses to un-approve a settled claim, so one marked paid by mistake would be stuck for good otherwise. Both directions are logged. Nine composed pairs in `docs/tacet-delivery-vocabulary.md` v1.48, completing a SET OF THREE lines meant to be read together — not in the accounts yet / approving records it / paying it back changes nothing — the third being the least obvious and therefore the one that had to exist. **`报销` REJECTED A SECOND TIME**, on the very button v1.46 reserved it for: `标记已付` says what the control does, while `报销` would suggest this app pays the money out. `npm run test:fast` 193/193; the suite reaches 47 assertions. **§87 is now built end to end — a category list, a claim, an approval that posts, and a debt that clears** — with OCR prefill, recurring expenses, per-role limits and multi-step approval deliberately unbuilt and named as such. No change to `.gitignore` or CI.
 
@@ -8880,3 +8883,59 @@ debt that clears. **What is deliberately still not built** is named in the secti
 above — OCR prefill on the receipt, recurring expenses, per-role spending limits,
 and any approval chain beyond one approver. None of them is needed by the cases
 that opened this section.
+
+### AMENDED 2026-09-10 — the category control is a picker, not a wall of chips
+
+Ash opened the live Expense screen and sent the screenshot: **thirty-one
+categories rendered as chips, alphabetical, with the amount field pushed off the
+top.** He was given three options in
+`reference/expense-category-picker-mockup.html` and chose **B — a collapsed field
+that opens a searchable picker, with what this person picked recently on top.**
+
+**THE LAYOUT WAS THE SYMPTOM. THE CAUSE IS THAT THE PHONE WAS HANDED THE
+BOOKKEEPER'S LIST.** Step two shipped the claim form offering every active
+`kind='accounting'` category, on the reasoning that the tenant's own list is the
+right list — which is true of Finance and false of a phone. Rent, wages, employee
+social insurance, electricity, ingredients and protein powder are all real costs
+that belong in the books, and **nobody raises one out of their own pocket.**
+
+**WHY B AND NOT A.** Option A — a per-category *offer on the phone* tick — was
+this session's own recommendation, because it fixes the cause rather than the
+symptom. Ash chose the picker, and the choice is defensible on a ground the
+recommendation undervalued: **A needs the shop to curate a second list and to
+keep curating it**, and a category added later is invisible on the phone until
+somebody remembers to tick it — a silent failure, on the screen where a silent
+failure means an expense filed under the wrong name or not at all. B needs
+nothing maintained and is correct at thirty-one categories or three hundred.
+**A remains available and is not withdrawn**: it narrows what the picker offers
+and can be added later without undoing anything built here.
+
+**WHAT B DOES NOT FIX, recorded so it is not read as fixed**: every category is
+still reachable, so a driver can still file a taxi under Salaries if they set out
+to. The mockup says so in terms. That is a curation problem, and A is its answer.
+
+**RECENTS ARE THIS PERSON'S OWN, AND THEY ARE THE POINT.** The picker's top
+section is the categories this operator has claimed under before, newest first —
+so the second claim anybody makes is two taps, and the alphabet stops deciding
+what they see. **It is derived from their own claims and never from the shop's**:
+a driver and an office manager do not want the same six, and a shop-wide "most
+used" would hand the driver whatever the office manager files most.
+
+**THE SEARCH BOX FOLLOWS THE HOUSE RULE THAT #437 AND ITS FOLLOW-UP ESTABLISHED**
+— `oninput` stores the query and repaints ONLY the results box, never the app.
+`render()` replaces the whole app in one `innerHTML`, and a rebuilt `<input>`
+opens a fresh soft keyboard on its letter page: Ash reported that from the
+kitchen, typing a SKU and getting one digit then the alphabet. A new search box
+that called `render()` would be the fifth instance of a defect four screens were
+just repaired for.
+
+**TWO DUPLICATE PAIRS ARE RECORDED HERE AND NOT ACTED ON.** Putting the list on
+one screen made it readable in one go for the first time, and it holds
+`Marketing&Promotion 市场推广费用` beside `营销 Marketing`, and
+`Kitchen low cost & non-durable equipment 厨房低值易耗品` beside
+`low cost & non-durable equipment 低值易耗品`. Every expense filed under one of
+each pair splits the monthly breakdown into two lines that read alike — §36's
+three-rent-payments defect, arriving through the vocabulary rather than through a
+typo. **Hiding one of each is the tenant's call and takes fifteen seconds on the
+Categories screen**; this session did not make it, because which spelling
+survives is a decision about the shop's books.
