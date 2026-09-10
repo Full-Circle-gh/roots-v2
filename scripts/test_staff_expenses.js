@@ -506,5 +506,73 @@ it('the owed block is absent when nothing is owed', () => {
   assert.match(PHONE_CODE, /owed\.length \? `<div/, '§1.12: a zero here is a row that only says nothing happened');
 });
 
+console.log('\n7 · the category picker (§87 amendment — Ash chose option B)');
+
+it('the form offers ONE row, not one chip per category', () => {
+  // The live list is 31 entries. As chips it filled the screen and pushed the
+  // amount field off the top.
+  const field = PHONE_CODE.slice(PHONE_CODE.indexOf('const catField = cats.length'),
+                                 PHONE_CODE.indexOf('const stores=x.stores'));
+  assert.ok(!/cats\.map\(/.test(field), 'the form must not render the whole list');
+  assert.match(field, /APP\.cmd\('expPickOpen'\)/);
+  assert.ok(PHONE.includes('选择分类'), 'and it says what it is for when nothing is chosen');
+});
+
+it('the search box stores the query and repaints the RESULTS, never the app', () => {
+  // The rule #437 and its follow-up established across four screens: render()
+  // rebuilds the <input>, and a rebuilt field reopens the soft keyboard on its
+  // letter page.
+  const cmd = PHONE_CODE.slice(PHONE_CODE.indexOf("reg('expQ'"));
+  const body = cmd.slice(0, cmd.indexOf('});') + 3);
+  assert.match(body, /getElementById\('mExpPickBody'\)/);
+  assert.match(body, /host\.innerHTML=expPickBodyHtml\(\)/);
+  // render() only as the fallback when the box is not on screen, exactly as
+  // rqSearch does it.
+  assert.match(body, /else render\(\);/);
+  assert.ok(!/^\s*render\(\);/m.test(body.replace(/else render\(\);/, '')),
+    'no unconditional repaint of the app');
+});
+
+it('the input sits OUTSIDE the box that gets repainted', () => {
+  const picker = PHONE.slice(PHONE.indexOf('function screenExpensePicker()'),
+                             PHONE.indexOf('function screenExpense()'));
+  const inputAt = picker.indexOf('id="mExpQ"');
+  const boxAt = picker.indexOf('id="mExpPickBody"');
+  assert.ok(inputAt > -1 && boxAt > -1 && inputAt < boxAt,
+    'an input inside the repainted container is destroyed on every keystroke');
+});
+
+it('recents are THIS PERSON\'S, and a hidden category cannot return through them', () => {
+  const meta = ROUTE_CODE.slice(ROUTE_CODE.indexOf('let recent = []'));
+  assert.match(meta, /WHERE submitted_by IS \?/, "a driver and an office manager want different six");
+  assert.match(meta, /active\.has\(c\)/,
+    'a category the tenant has hidden must not come back through somebody\'s history');
+  assert.match(meta, /ORDER BY last DESC/);
+  assert.match(meta, /\.slice\(0, 5\)/);
+});
+
+it('recents step aside while searching', () => {
+  // Somebody typing has declined the shortcut, and leaving them up would show
+  // the same category twice in one result set.
+  assert.match(PHONE_CODE, /const recent=q\?\[\]:/);
+});
+
+it('a search with no hit says so rather than rendering an empty list', () => {
+  assert.ok(PHONE.includes('没有匹配的分类。'));
+  assert.match(PHONE_CODE, /if\(!shown\.length\) return/);
+});
+
+it('choosing closes the picker, and choosing again clears the category', () => {
+  const cmd = PHONE_CODE.slice(PHONE_CODE.indexOf("reg('expCat'"));
+  const body = cmd.slice(0, cmd.indexOf('});') + 3);
+  assert.match(body, /x\.cat=\(x\.cat===c\)\?'':String\(c\)/, 'a mis-tap must be removable');
+  assert.match(body, /x\.pick=false/);
+});
+
+it('the picker opens closed, and a reopened screen never opens on it', () => {
+  const reset = PHONE_CODE.match(/if\(route==='expense'\)\{[\s\S]*?\}/);
+  assert.match(reset[0], /x\.pick=false; x\.q='';/);
+});
+
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

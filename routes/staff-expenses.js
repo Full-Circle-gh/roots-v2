@@ -202,7 +202,30 @@ router.get('/api/retail-admin/staff-expenses/meta', requireRetailAdmin, (req, re
       }
     } catch (e) { stores = []; }
 
-    res.json({ success: true, data: { categories, stores } });
+    // ── What THIS person has claimed under before (§87 amendment) ──
+    // The picker's top section. **THEIR OWN, NEVER THE SHOP'S**: a driver and an
+    // office manager do not want the same six, and a shop-wide "most used" would
+    // hand the driver whatever the office manager files most.
+    //
+    // Filtered against the active list rather than trusted as-is: a category the
+    // tenant has since hidden must not come back through a person's history,
+    // which is the one way a retired name could still reach a new claim.
+    let recent = [];
+    try {
+      const active = new Set(categories);
+      recent = db.prepare(`
+        SELECT category, MAX(id) AS last
+          FROM staff_expenses
+         WHERE submitted_by IS ? AND category IS NOT NULL AND TRIM(category) <> ''
+         GROUP BY category
+         ORDER BY last DESC
+         LIMIT 12`).all(req.user?.id || null)
+        .map(r => r.category)
+        .filter(c => active.has(c))
+        .slice(0, 5);
+    } catch (e) { recent = []; }
+
+    res.json({ success: true, data: { categories, stores, recent } });
   } catch (e) {
     console.error('[staff-expenses meta]', e.message);
     res.status(500).json({ error: e.message });
