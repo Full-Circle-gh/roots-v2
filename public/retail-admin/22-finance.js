@@ -297,9 +297,19 @@ function finCatRow(r) {
         ? cuT('Staff claim · own money', '费用申请 · 个人支付')
         : cuT('Staff claim', '费用申请'))
     : '';
-  // The PO's number leads, then whatever was typed on the line. Both, where
-  // both exist: the number says which purchase and the note says which part.
-  const name = [po ? (r.po_number || '') : '', r.note || ''].filter(Boolean).join(' · ');
+  /* THE DESCRIPTION ALREADY CARRIES THE PO NUMBER — do not prepend it again.
+     Both posters build the same string and both lead with it:
+     `${po_number}${supplier ? ' · ' + supplier : ''} · N line(s)`, in
+     `postRetailPOExpenses` (routes/retail-purchasing.js) and `postPOExpenses`
+     (routes/purchases.js). Joining the number onto the front of that printed
+     `RPO-0028 · RPO-0028 · 1 line` on the live screen — reported by Ash from the
+     card the day this shipped.
+
+     So the posted description is the name, whole, and the bare PO number is only
+     the FALLBACK for a row that somehow has none. Reconstructing a label from
+     parts when the writer already wrote one is how the two come to disagree; the
+     poster owns that sentence and this renders it. */
+  const name = r.note || (po ? (r.po_number || '') : '') || '';
   return '<div class="fin-catrow">'
     + `<span class="fin-catdate">${escapeHtml(finTxDay(r.date))}</span>`
     + '<span class="fin-catwhat">'
