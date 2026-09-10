@@ -257,6 +257,15 @@ const ctx = {
   Date, Math, Number, String, JSON,
   cuT: (en) => en,
   escapeHtml: (s) => String(s == null ? '' : s),
+  // The drill-down's rows render a date and a figure through the house helpers.
+  // Identity stubs: this file asserts what the row SAYS, not how 01-core.js
+  // formats a day or wraps a currency — both have their own tests.
+  tdWhen: (d) => String(d),
+  // acWrap is 01-core.js's currency wrapper — the ¥ on this card comes from
+  // there, not from finMoney, which formats the digits alone. The stub carries
+  // the symbol so the assertions below can read a figure the way the screen
+  // draws one.
+  acWrap: (s) => '¥' + String(s),
 };
 vm.createContext(ctx);
 new vm.Script(
@@ -264,6 +273,11 @@ new vm.Script(
     .replace(/^'use strict';$/m, '')
   + '\nthis.finRow=finRow; this.finMoney=finMoney; this.finNotRecorded=finNotRecorded;\n  this.finNotRecordedValue=finNotRecordedValue;'
   + '\nthis.finBreakdown=finBreakdown;'
+  // The drill-down's state is module-local by design — nothing in the shipped
+  // file exposes it. This appends a setter to the SOURCE AS EVALUATED IN THE VM,
+  // the same trick the exports above already use, so the render can be driven
+  // through its three states without a test hook shipping in the product.
+  + '\nthis.__finSet=(d,c)=>{FIN_DATA=d;FIN_CAT=c;};'
 ).runInContext(ctx);
 
 it('cost of goods and gross profit READ Not recorded — not a blank, not a dash', () => {
@@ -434,6 +448,290 @@ it('the sub-view strip ships now that there are two sub-views', () => {
   assert.ok(/id="fin-subviews"/.test(sec), 'the strip is missing');
   assert.ok(/data-sub="summary"/.test(sec) && /data-sub="transactions"/.test(sec),
     'both sub-views must be named on the strip');
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   5 · THE CATEGORY DRILL-DOWN — the list adds up to the line it opened from.
+
+   The endpoint exists for exactly one guarantee: tap ¥27,081 and the rows that
+   appear total ¥27,081. Everything below tests that guarantee against the ways
+   it is easy to lose, each of which was a real option while it was built.
+
+   THE SQL IS SLICED OUT OF THE SHIPPED ROUTE, not restated here. A test that
+   re-typed the query would pass on its own copy while the route drifted, which
+   on this endpoint means passing while the two numbers disagree — the single
+   thing it is for.
+   ══════════════════════════════════════════════════════════════════════════ */
+console.log('\n5 · the category drill-down — the detail equals the line');
+
+/** The shipped grouped query, with LEDGER_DATE resolved. */
+function shippedGrouped() {
+  const m = ROUTE.match(/const grouped = db\.prepare\(`([\s\S]*?)`\)/);
+  assert.ok(m, 'the breakdown query is no longer where the test reads it');
+  return m[1].replace(/\$\{LEDGER_DATE\}/g, EDATE);
+}
+/** The shipped detail query, for one of its two category branches. */
+function shippedDetail(uncategorised) {
+  const m = ROUTE.match(/const rows = db\.prepare\(`([\s\S]*?)`\)/);
+  assert.ok(m, 'the detail query is no longer where the test reads it');
+  const branch = m[1].match(/\$\{uncategorised \? "([^"]*)" : '([^']*)'\}/);
+  assert.ok(branch, 'the detail query no longer branches on the uncategorised bucket');
+  return m[1]
+    .replace(/\$\{LEDGER_DATE\}/g, EDATE)
+    .replace(branch[0], uncategorised ? branch[1] : branch[2]);
+}
+
+const cdb = new Database(':memory:');
+cdb.exec(`
+  CREATE TABLE expense_entries (
+    id INTEGER PRIMARY KEY, date DATE, amount REAL, category TEXT,
+    description TEXT, po_id INTEGER, claim_id INTEGER);
+  CREATE TABLE purchase_orders (
+    id INTEGER PRIMARY KEY, po_number TEXT, date DATE, scope TEXT);
+  CREATE TABLE staff_expenses (id INTEGER PRIMARY KEY, paid_by TEXT);
+`);
+cdb.prepare("INSERT INTO purchase_orders VALUES (50,'PO-0050','2026-08-22','kitchen')").run();
+cdb.prepare("INSERT INTO purchase_orders VALUES (51,'PO-0051','2026-08-28','retail')").run();
+cdb.prepare("INSERT INTO staff_expenses VALUES (9,'employee')").run();
+
+const ING = 'Ingredients(Kitchen+Retail Use)';
+const ins = cdb.prepare('INSERT INTO expense_entries VALUES (?,?,?,?,?,?,?)');
+// The worked example from the brief: ONE category, three provenances, and a
+// purchase order that bought it on two lines.
+ins.run(1, '2026-08-14', 3000, ING, 'cash and carry', null, null);
+ins.run(2, '2026-08-20', 2000, ING, 'taxi to market', null, 9);
+ins.run(3, '2026-08-22', 12000, ING, 'dry goods', 50, null);
+ins.run(4, '2026-08-22', 8000, ING, 'produce', 50, null);
+ins.run(5, '2026-08-28', 2081, ING, null, 51, null);
+// The two spellings lib/category-text.js resolves for the FLAG and pointedly
+// does not merge for display. Two lines on the card; two separate lists.
+ins.run(6, '2026-08-05', 700, 'Office Supplies', null, null, null);
+ins.run(7, '2026-08-06', 300, 'Office  Supplies', null, null, null);
+// The uncategorised bucket, arriving as both of the two things SQLite groups
+// apart and the screen draws the same.
+ins.run(8, '2026-08-07', 40, null, 'unlabelled', null, null);
+ins.run(9, '2026-08-08', 10, '', 'also unlabelled', null, null);
+// Outside the window entirely.
+ins.run(10, '2026-07-31', 9999, ING, 'last month', null, null);
+
+const CFROM = '2026-08-01', CTO = '2026-08-31';
+const cGrouped = cdb.prepare(shippedGrouped()).all(CFROM, CTO);
+const detailFor = (cat) => (cat === null
+  ? cdb.prepare(shippedDetail(true)).all(CFROM, CTO)
+  : cdb.prepare(shippedDetail(false)).all(CFROM, CTO, cat));
+
+it('EVERY line of the breakdown equals the rows behind it', () => {
+  // The whole feature, asserted over every category at once rather than the one
+  // that happened to be interesting. A future edit that reshapes either query
+  // fails here on whichever line it moved.
+  assert.ok(cGrouped.length >= 4, 'the fixture stopped exercising several categories');
+  for (const g of cGrouped) {
+    const rows = detailFor(g.category);
+    const total = rows.reduce((t, r) => t + r.amount, 0);
+    assert.strictEqual(total, g.amount,
+      `the detail for ${JSON.stringify(g.category)} totals ${total}, the card says ${g.amount}`);
+    assert.strictEqual(rows.length, g.n, `row count disagrees for ${JSON.stringify(g.category)}`);
+  }
+});
+
+it('a purchase order is listed per ROW, never collapsed to one line', () => {
+  // The failure the endpoint exists to avoid: `readTransactions` collapses these
+  // two into one PO-0050 row carrying no category at all, which is why the
+  // Transactions list cannot answer this question.
+  const rows = detailFor(ING);
+  assert.strictEqual(rows.length, 5, 'the five ingredient rows must all be listed');
+  assert.strictEqual(rows.filter(r => r.po_id === 50).length, 2,
+    'PO-0050 bought this category on two lines and both are inside the figure');
+  assert.strictEqual(rows.reduce((t, r) => t + r.amount, 0), 27081);
+});
+
+it('the three provenances survive the read', () => {
+  const rows = detailFor(ING);
+  const by = (f) => rows.filter(f).length;
+  assert.strictEqual(by(r => r.po_id), 3, 'PO-posted rows');
+  assert.strictEqual(by(r => r.claim_id), 1, 'claim-posted rows');
+  assert.strictEqual(by(r => !r.po_id && !r.claim_id), 1, 'hand-typed rows');
+  // The claim's own paid_by rides along — the difference between a cost that is
+  // finished and one the shop still owes somebody.
+  assert.strictEqual(rows.find(r => r.claim_id).paid_by, 'employee');
+  // The PO number, so the row can say which purchase it came from…
+  assert.strictEqual(rows.find(r => r.po_id === 50).po_number, 'PO-0050');
+  // …and the scope, because Purchasing's opener serves retail only (§36).
+  assert.strictEqual(rows.find(r => r.po_id === 50).po_scope, 'kitchen');
+  assert.strictEqual(rows.find(r => r.po_id === 51).po_scope, 'retail');
+});
+
+it('the LEFT joins report provenance and never filter on it', () => {
+  // An inner join on either would drop rows out of a total that counted them —
+  // a PO deleted after its expenses posted would take its yuan off this list and
+  // leave them on the line above.
+  const sql = shippedDetail(false);
+  assert.ok(/LEFT JOIN purchase_orders/.test(sql), 'purchase_orders must be a LEFT join');
+  assert.ok(/LEFT JOIN staff_expenses/.test(sql), 'staff_expenses must be a LEFT join');
+});
+
+it("the empty string and NULL are ONE uncategorised line, not two", () => {
+  // SQLite groups '' and NULL apart while the payload maps both to null and the
+  // screen draws both as "Not recorded" — so before NULLIF this rendered two
+  // identical lines with different figures, and the drill-down had two buckets
+  // to disagree with. 40 + 10.
+  const blank = cGrouped.filter(g => g.category === null);
+  assert.strictEqual(blank.length, 1, 'the uncategorised bucket must be one line');
+  assert.strictEqual(blank[0].amount, 50);
+  assert.strictEqual(detailFor(null).reduce((t, r) => t + r.amount, 0), 50);
+});
+
+it('NULLIF folds only the empty string — spacing is left alone', () => {
+  // TRIM here would merge ' Ingredients' onto 'Ingredients' and decide a
+  // question about typography that lib/category-text.js deliberately refuses to.
+  const g = shippedGrouped();
+  assert.ok(/NULLIF\(category, ''\)/.test(g), 'the fold must be NULLIF on the empty string');
+  assert.ok(!/TRIM\(/i.test(g), 'the breakdown must not trim category text');
+});
+
+it('two spellings stay two lines, and each opens onto its own rows', () => {
+  // §87's flag resolution matches these on `spacingKey`; the BREAKDOWN does not,
+  // and a detail read keyed on spacingKey would gather both spellings under
+  // either line and overshoot the figure that was clicked.
+  const a = cGrouped.find(g => g.category === 'Office Supplies');
+  const b = cGrouped.find(g => g.category === 'Office  Supplies');
+  assert.ok(a && b, 'the two spellings must remain two lines of the card');
+  assert.strictEqual(detailFor('Office Supplies').reduce((t, r) => t + r.amount, 0), 700);
+  assert.strictEqual(detailFor('Office  Supplies').reduce((t, r) => t + r.amount, 0), 300);
+});
+
+it('the detail read is not capped — a capped list does not add up', () => {
+  const sql = shippedDetail(false);
+  assert.ok(!/\bLIMIT\b/i.test(sql),
+    'a LIMIT here trades the one guarantee this endpoint makes for a ceiling');
+});
+
+it('the drill-down endpoint is admin-gated and multi-tenant, like the summary', () => {
+  // Sliced from the router.get, NOT from the first mention of the path — the
+  // header comment above it names the route too, and a slice that started there
+  // would test the prose rather than the handler.
+  const at = ROUTE.indexOf("router.get('/api/retail-admin/finance/summary/category'");
+  assert.notStrictEqual(at, -1, 'the drill-down route is not mounted');
+  const handler = ROUTE.slice(at, ROUTE.indexOf('\n});', at));
+  assert.ok(/requireRetailAdmin/.test(handler.slice(0, handler.indexOf('=>'))),
+    'the route must carry requireRetailAdmin');
+  assert.ok(/\btdb\(\)/.test(handler), 'the handler must read through tdb()');
+  assert.ok(!/require\('\.\.\/database'\)/.test(handler), 'never the global handle');
+});
+
+console.log('\n6 · the drill-down on screen');
+
+it('each breakdown line is a control that opens its own rows', () => {
+  assert.ok(/class="fin-row fin-cat/.test(CLIENT_CODE), 'the line must render as a control');
+  assert.ok(/onclick="finCatOpen\(/.test(CLIENT_CODE), 'and it must open the category');
+  assert.ok(/aria-expanded=/.test(CLIENT_CODE), 'a disclosure states whether it is open');
+  assert.ok(/window\.finCatOpen = function/.test(CLIENT_CODE), 'the handler must be published');
+});
+
+it('the drill-down reads the APPLIED window, never the date inputs', () => {
+  // The inputs can hold a range that was typed and not applied. Reading them
+  // here would open a figure onto rows from a different month — the exact class
+  // of quiet wrongness this feature removes.
+  const fn = CLIENT_CODE.slice(CLIENT_CODE.indexOf('window.finCatOpen'));
+  const body = fn.slice(0, fn.indexOf('\n};'));
+  assert.ok(/FIN_DATA && FIN_DATA\.window/.test(body), 'the window must come from the payload');
+  assert.ok(!/getElementById\('fin-(from|to)'\)/.test(body),
+    'the date inputs are not the window this card is showing');
+});
+
+it('the open category is dropped when the window changes', () => {
+  const fn = CLIENT_CODE.slice(CLIENT_CODE.indexOf('async function finLoad'));
+  assert.ok(/FIN_CAT = null;/.test(fn.slice(0, fn.indexOf('finRender();'))),
+    'a new window must not leave one window’s rows under another window’s figure');
+});
+
+it('the drill-down composes NO new Chinese — every pair is already live here', () => {
+  // Rule 4, as amended 2026-09-06: composing is delegated, composing SILENTLY is
+  // not. Nothing is composed, so nothing is owed to the vocabulary — and that is
+  // checked rather than asserted in a commit message. Each of these ships on the
+  // Transactions or Approvals sub-view of this same file for the same fact.
+  for (const cn of ['采购单自动记入', '费用申请 · 个人支付', '费用申请',
+                    '加载中…', '暂无记录', '财务数据加载失败。']) {
+    const n = CLIENT.split(cn).length - 1;
+    assert.ok(n >= 2, `${cn} is used once — it would be a new pair, not a reuse`);
+  }
+});
+
+it('the rows sit on the card’s own figure column', () => {
+  // A reader checking that the list sums to the line above is the reason the
+  // list exists; figures that do not line up under it cannot be checked.
+  const block = CSS.slice(CSS.indexOf('#tab-finance .fin-catrow {'));
+  assert.ok(/grid-template-columns: 62px 1fr 104px/.test(block.slice(0, 200)),
+    'the detail figures must share the staircase’s 104px column');
+});
+
+/* The three categories the render is driven over: one operating line with rows
+   behind it, one the operator has not opened, and the uncategorised bucket. */
+const CROWS = [
+  { category: ING, amount: 27081, entries: 5, is_operating: 1 },
+  { category: 'Rent', amount: 800, entries: 1, is_operating: 1 },
+  { category: null, amount: 50, entries: 2, is_operating: 1 },
+];
+const CDETAIL = [
+  { id: 5, date: '2026-08-28', amount: 2081, note: null, source: 'po', po_id: 51, po_number: 'PO-0051', po_open: true, claim_id: null, paid_by: null },
+  { id: 4, date: '2026-08-22', amount: 8000, note: 'produce', source: 'po', po_id: 50, po_number: 'PO-0050', po_open: false, claim_id: null, paid_by: null },
+  { id: 3, date: '2026-08-22', amount: 12000, note: 'dry goods', source: 'po', po_id: 50, po_number: 'PO-0050', po_open: false, claim_id: null, paid_by: null },
+  { id: 2, date: '2026-08-20', amount: 2000, note: 'taxi to market', source: 'claim', po_id: null, po_number: null, po_open: null, claim_id: 9, paid_by: 'employee' },
+  { id: 1, date: '2026-08-14', amount: 3000, note: 'cash and carry', source: 'manual', po_id: null, po_number: null, po_open: null, claim_id: null, paid_by: null },
+];
+const drawn = (open) => {
+  ctx.__finSet({ window: { from: '2026-08-01', to: '2026-08-31' }, expense_breakdown: CROWS }, open);
+  return ctx.finBreakdown(CROWS, CROWS);
+};
+
+it('a closed line is a control and shows no rows', () => {
+  const html = drawn(null);
+  assert.strictEqual((html.match(/class="fin-row fin-cat/g) || []).length, 3,
+    'every line of the breakdown is a control');
+  assert.ok(/aria-expanded="false"/.test(html), 'and says it is closed');
+  assert.ok(!/fin-catrows/.test(html), 'nothing is disclosed until one is opened');
+  // The figures are untouched by the change — this is still the breakdown.
+  assert.ok(/<span class="fin-fig">¥27,081<\/span>/.test(html));
+});
+
+it('an opened line discloses its rows, and only that line', () => {
+  const html = drawn({ i: 0, rows: CDETAIL, err: '' });
+  assert.strictEqual((html.match(/fin-catrows/g) || []).length, 1, 'one line opens at a time');
+  assert.strictEqual((html.match(/aria-expanded="true"/g) || []).length, 1);
+  assert.strictEqual((html.match(/class="fin-catrow"/g) || []).length, 5, 'all five rows');
+  // PO-0050 twice: one purchase that bought this category on two lines. The
+  // Transactions tab draws that as ONE row with no category, which is why this
+  // list cannot be borrowed from it.
+  assert.strictEqual((html.match(/PO-0050/g) || []).length, 2);
+  // Each provenance says what it is, in the words Transactions already uses.
+  assert.ok(/Posted by Purchasing/.test(html), 'the PO mark');
+  assert.ok(/Staff claim · own money/.test(html), 'the claim mark, with whose money it was');
+  // A typed row carries no mark at all — the same silence Transactions keeps.
+  assert.ok(/cash and carry/.test(html));
+  // And the rows add up to the line they hang under.
+  assert.strictEqual(CDETAIL.reduce((t, r) => t + r.amount, 0), CROWS[0].amount);
+});
+
+it('a row with nothing typed on it draws its date and its figure, and no filler', () => {
+  const html = drawn({ i: 0, rows: [{ id: 7, date: '2026-08-09', amount: 12, note: null, source: 'manual', po_id: null, po_number: null, claim_id: null, paid_by: null }], err: '' });
+  assert.ok(/class="fin-catdate"/.test(html) && /¥12/.test(html));
+  assert.ok(!/fin-catname/.test(html), '§1.12 prefers an empty cell to an invented one');
+  assert.ok(!/fin-catmark/.test(html), 'a typed row has no provenance to announce');
+});
+
+it('loading, empty and failed each say so on one line', () => {
+  assert.ok(/Loading…/.test(drawn({ i: 0, rows: null, err: '' })));
+  assert.ok(/Nothing recorded yet/.test(drawn({ i: 0, rows: [], err: '' })));
+  const failed = drawn({ i: 0, rows: null, err: 'Could not load Finance.' });
+  assert.ok(/Could not load Finance\./.test(failed));
+  assert.ok(!/Loading…/.test(failed), 'a failed read must stop claiming to be loading');
+});
+
+it('the uncategorised line opens too, and keeps its seventh-state word', () => {
+  const html = drawn({ i: 2, rows: [], err: '' });
+  assert.ok(/Not recorded/.test(html), 'the null category keeps its own line and word');
+  assert.strictEqual((html.match(/aria-expanded="true"/g) || []).length, 1,
+    'a line with no category name is still a line an operator can open');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

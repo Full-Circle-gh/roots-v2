@@ -14484,10 +14484,14 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   margin: 0 -12px; border-radius: 8px;
   transition: background-color .12s cubic-bezier(.16,1,.3,1);
 }
-/* Hover lights THIS row only, and only this one, because this row is the one
-   control on the card. The static rows above and below get no tint: a row that
-   reacts to the pointer reads as a row that can be clicked, and lighting five
-   that do nothing would spend the cue that tells the reader which one opens.
+/* Hover lights the rows that DO something, and only those. The static rows of
+   the staircase get no tint: a row that reacts to the pointer reads as a row
+   that can be clicked, and lighting five that do nothing would spend the cue
+   that tells the reader which one opens.
+   **AMENDED — the summary row is no longer the only control.** Each line of the
+   breakdown beneath it opens onto the expense rows behind that category, so
+   each carries the same cue for the same reason. The rule was never "one row";
+   it was "the cue marks a control", and there are more controls now.
    The 12px inset with a matching negative margin lets the tint run past the
    text on both sides without moving the grid the figures line up on. */
 #tab-finance details.fin-exp > summary:hover { background: var(--td-raised); }
@@ -14512,6 +14516,73 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 #tab-finance .fin-breakdown .fin-row { padding: 5px 0; }
 #tab-finance .fin-breakdown .fin-lbl { padding-left: 20px; font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); }
 #tab-finance .fin-breakdown .fin-fig { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); }
+
+/* ── A breakdown line, as the control it now is ─────────────────────────────
+   It is a <button> carrying .fin-row, so the grid, the tabular figures and the
+   104px column are inherited rather than restated — the line must sit on the
+   same three columns as the rows above and below it or the figures stop lining
+   up, which is the whole reason that grid is shared.
+   Everything reset here is a button default that would break that: the UA's own
+   font, its centred text, its border, its background and its width. */
+#tab-finance .fin-breakdown .fin-cat {
+  width: 100%; text-align: left; background: none; border: 0;
+  font: inherit; color: inherit; cursor: pointer;
+  padding: 5px 12px; margin: 0 -12px; border-radius: 8px;
+  transition: background-color .12s cubic-bezier(.16,1,.3,1);
+}
+#tab-finance .fin-breakdown .fin-cat:hover { background: var(--td-raised); }
+#tab-finance .fin-breakdown .fin-cat:focus-visible {
+  outline: 2px solid var(--td-text); outline-offset: 1px;
+}
+/* The chevron takes over the 20px indent the label used to hold on its own, so
+   the words start where they started. 4px + a 9px glyph + a 7px gap = 20px. */
+#tab-finance .fin-breakdown .fin-cat .fin-lbl {
+  padding-left: 4px; display: flex; align-items: baseline; gap: 7px;
+}
+#tab-finance .fin-breakdown .fin-cat.on .fin-chev { transform: rotate(90deg); }
+/* An opened line is the heading of what is under it, so it stops being
+   Graphite. Nothing else changes — no tint, no rule, no weight: the rows
+   beneath are the disclosure, and a heading that shouted would compete with the
+   figures it was opened to explain. */
+#tab-finance .fin-breakdown .fin-cat.on .fin-lbl,
+#tab-finance .fin-breakdown .fin-cat.on .fin-fig { color: var(--td-text); }
+
+/* ── The rows behind one category ──────────────────────────────────────────
+   Indented past the chevron so the block reads as belonging to the line above
+   it, and hung on a hairline rather than boxed: a card inside a card would make
+   the fourth level of nesting on this screen look like a new component instead
+   of the same money seen closer.
+   THE FIGURE COLUMN IS THE CARD'S 104px, again shared and not restated. These
+   figures must line up under the category total they add to — a reader checking
+   that the list sums to the line above is the reason the list exists. */
+#tab-finance .fin-catrows {
+  margin: 2px 0 8px 12px; padding: 4px 0 4px 12px;
+  border-left: 1px solid var(--td-border);
+}
+#tab-finance .fin-catrow {
+  display: grid; grid-template-columns: 62px 1fr 104px; align-items: baseline;
+  column-gap: 10px; padding: 4px 0;
+}
+#tab-finance .fin-catdate {
+  font: 400 13px/1.6 var(--f-sans); color: var(--td-text2);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+#tab-finance .fin-catwhat { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+#tab-finance .fin-catname {
+  font: 400 14px/1.5 var(--f-sans); color: var(--td-text);
+  overflow-wrap: anywhere;
+}
+/* The provenance mark — 12px Graphite, the same treatment .fin-tx-meta gets on
+   Transactions, because it is the same fact about the same row. */
+#tab-finance .fin-catmark { font: 400 12px/1.5 var(--f-sans); color: var(--td-text2); }
+#tab-finance .fin-catfig {
+  font: 400 14px/1.5 var(--f-sans); color: var(--td-text2);
+  font-variant-numeric: tabular-nums; text-align: right;
+}
+/* Loading, empty, failed — one line, Graphite, no box and no icon (§1.12). */
+#tab-finance .fin-catnote-line {
+  font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); padding: 4px 0;
+}
 
 /* The terminus — the card's own bottom edge, so the final figure and anything
    qualifying it cannot be separated. 13px = the 14px radius minus its 1px
