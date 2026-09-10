@@ -1701,7 +1701,7 @@ function coInjectCheckoutStyle(){
      header, summary after coupons). */
   .cox{display:flex;flex-direction:column;}
   .cx-col-main,.cx-col-side{display:contents;}
-  .cx-header{order:0;} #coBatch{order:1;} #coPreorder{order:2;} #coLocalFresh{order:2;}
+  .cx-header{order:0;} #coBatch{order:1;} #coPreorder{order:2;} #coLocalFresh{order:2;} #coStoreMove{order:2;}
   .cx-sec--items{order:3;}
   .cx-sec--addr{order:4;} .cx-sec--when{order:5;} .cx-sec--pay{order:6;}
   .cx-sec--addons{order:7;} .cx-sec--coupons{order:8;}
@@ -1829,6 +1829,7 @@ async function renderCheckout(){
   co.preorderSeen=false;   // pre-order popup auto-shows once per checkout visit
   co.batchSeen=false;      // fresh-batch popup auto-shows once per checkout visit
   co.localFreshSeen=false; // next-fresh-batch popup auto-shows once per checkout visit
+  co.storeMoveSeen=false;  // sent-from-another-shop popup auto-shows once per checkout visit
   co.addrPickerOpen=false;
   const n=coItems().reduce((a,l)=>a+(Number(l.qty)||0),0);
   // Two wrappers for the PC 2-column layout (form left, order rail right).
@@ -1843,6 +1844,7 @@ async function renderCheckout(){
     <div id="coBatch" style="padding:0 22px"></div>
     <div id="coPreorder" style="padding:0 22px"></div>
     <div id="coLocalFresh" style="padding:0 22px"></div>
+    <div id="coStoreMove" style="padding:0 22px"></div>
     <section class="cx-sec cx-sec--addr">
       <div class="cx-sectitle">${cn?'配送至':'Deliver to'}</div>
       <div id="coAddr">…</div>
@@ -2389,7 +2391,7 @@ async function coQuote(){
   catch(e){ coMsg(state.lang==='cn'?'网络错误':'Network error'); return; }
   if(j&&j.success===false){ if(j.error==='no_zone_match'){renderNoZone(j.data);} else {coMsg(coErrMsg(j.error));} return; }
   const d=(j&&j.data)||j||{}; co.quote=d; coMsg('');
-  renderCoSlots(d); renderCoPoints(d); renderCoBalance(d); renderCoSummary(d); renderCoBatch(d); renderCoPreorder(d); renderCoLocalFresh(d); renderCoRiderPhone(d);
+  renderCoSlots(d); renderCoPoints(d); renderCoBalance(d); renderCoSummary(d); renderCoBatch(d); renderCoPreorder(d); renderCoLocalFresh(d); renderCoStoreMove(d); renderCoRiderPhone(d);
   coLoadOffers();   // keep the pre-pay upsell warm for the current cart
 }
 /* ════════ Rider-phone notice (mirrors the mini-app) ════════
@@ -2635,7 +2637,7 @@ function renderCoLocalFresh(d){
 }
 // Is one of the checkout notice modals on screen right now?
 function coNoticePopupOpen(){
-  return ['#cobPop','#copoPop','#colfPop'].some(id=>{const el=$(id);return !!el&&!el.hidden;});
+  return ['#cobPop','#copoPop','#colfPop','#cosmPop'].some(id=>{const el=$(id);return !!el&&!el.hidden;});
 }
 function coLocalFreshPopup(){
   const n=co.quote&&co.quote.local_fresh_notice; if(!n)return;
@@ -2664,6 +2666,58 @@ function coLocalFreshPopup(){
   const close=()=>{ov.hidden=true;};
   ov.onclick=e=>{if(e.target===ov)close();};
   $('#colfGot').addEventListener('click',close);
+}
+// "Sent from another shop" notice (server store_move_notice): the location that
+// would normally have served this Guangzhou delivery is closed, so the order
+// quietly moved to another shop and may be slower. Informational only — it
+// never blocks placing the order. Mirrors the mini-app checkout's
+// storeMoveNoticePopup.
+//
+// It reuses the PRE-ORDER stylesheet rather than injecting a fourth
+// near-identical copy: this modal wants that one's plain kicker/title/body
+// shell, with no timeline and no tip, which is exactly the shape it has.
+//
+// Every word a customer reads here is the operator's, from storefront_config
+// `notice.store_move.*`. The server returns null unless all six bilingual
+// fields are filled in, so there is nothing to fall back TO and this renderer
+// composes nothing — a tenant who has not written the copy shows no notice
+// rather than half of one.
+function renderCoStoreMove(d){
+  const box=$('#coStoreMove'); if(!box)return;
+  const n=d&&d.store_move_notice;
+  if(!n){ box.innerHTML=''; return; }
+  coInjectPreorderStyle();
+  const t=state.lang==='cn'?n.title_cn:n.title_en, m=state.lang==='cn'?n.message_cn:n.message_en;
+  box.innerHTML=`<div class="copo-banner"><span class="copo-ic">🚚</span>
+    <div><div class="copo-t">${esc(t||'')}</div><div class="copo-m">${esc(m||'')}</div></div>
+    <button class="copo-more" id="cosmMore">${state.lang==='cn'?'详情':'Details'}</button></div>`;
+  $('#cosmMore').addEventListener('click',coStoreMovePopup);
+  // Last of the four notices to render, so it is the one most likely to find a
+  // modal already up — this cart can raise the batch notice too. Only auto-open
+  // onto an empty screen; the banner stays either way, so nothing is lost when
+  // the pop is skipped.
+  if(!co.storeMoveSeen&&!coNoticePopupOpen()){ co.storeMoveSeen=true; coStoreMovePopup(); }
+}
+function coStoreMovePopup(){
+  const n=co.quote&&co.quote.store_move_notice; if(!n)return;
+  coInjectPreorderStyle();
+  let ov=$('#cosmPop');
+  if(!ov){ov=document.createElement('div');ov.id='cosmPop';ov.className='copo-overlay';document.body.appendChild(ov);}
+  const L=state.lang;
+  // NO item chips, unlike the three notices above. This one is about where the
+  // order ships FROM, not which items are affected, so the server sends no
+  // `items` array at all and a chip strip here would be permanently empty.
+  ov.innerHTML=`<div class="copo-card">
+    <div class="copo-hero">🚚</div>
+    <div class="copo-kicker">${esc(L==='cn'?n.kicker_cn:n.kicker_en)}</div>
+    <div class="copo-title">${esc(L==='cn'?n.title_cn:n.title_en)}</div>
+    <div class="copo-body">${esc(L==='cn'?n.message_cn:n.message_en)}</div>
+    <button class="copo-go" id="cosmGot">${L==='cn'?'知道了':'Got it'}</button>
+  </div>`;
+  ov.hidden=false;
+  const close=()=>{ov.hidden=true;};
+  ov.onclick=e=>{if(e.target===ov)close();};
+  $('#cosmGot').addEventListener('click',close);
 }
 // Points redemption: a single opt-in toggle (server clamps points_to_use to the
 // usable max). Hidden when the customer has no usable points on this order.

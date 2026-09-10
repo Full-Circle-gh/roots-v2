@@ -57,6 +57,7 @@ function sliceBlock(src, anchor) {
 const SHOP = fs.readFileSync(path.join(ROOT, 'public/shop.html'), 'utf8');
 const MPROD = fs.readFileSync(path.join(ROOT, 'miniapp/pages/product/product.js'), 'utf8');
 const MSHOP = fs.readFileSync(path.join(ROOT, 'miniapp/pages/shop/shop.js'), 'utf8');
+const MSHOPX = fs.readFileSync(path.join(ROOT, 'miniapp/pages/shop/shop.wxml'), 'utf8');
 const RETAIL = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
 
 // ── The web storefront's two deciders, run as shipped ──────────────────────
@@ -160,6 +161,31 @@ section('3 · the mini app — the surface the report came from');
     assert.ok(/const today = preorder && !!onLocalRun && !!p\.local_fresh_today;/.test(MSHOP));
     assert.ok(/soldOut: out && !preorder/.test(MSHOP), 'preorder still gates sold-out');
     assert.ok(/preText: preToday \? ''/.test(MSHOP));
+  });
+  it('…and the TEMPLATE honours that silence rather than filling it in', () => {
+    /* THE ASSERTION THAT WAS MISSING, AND THE WHOLE BUG. The case above proves
+       shop.js sets preText to '' for a batch made today. It says nothing about
+       what gets DRAWN, and the band was written "preText OR preLabel" — WXML
+       counts '' as falsy, so the one state §80 exists to silence fell straight
+       through to preLabel, which is the literal 'PRE-ORDER' / '可预订'. The row
+       went from saying the wrong word to saying the FORBIDDEN one, on a
+       tenant-verified suite that never opened the template. Reported again from
+       the live app with a 天河 address, `_onLocalRun` true and the batch made
+       that morning — the same Quinoa Salad as the report at the head of this
+       file. A change that only proves the JS can be green while the customer
+       reads PRE-ORDER. */
+    const bands = MSHOPX.split('\n').filter(l => /class="(?:row|card|gal)-pre f-toni"/.test(l));
+    assert.strictEqual(bands.length, 3, 'the list row, the grid card and the gallery tile');
+    for (const b of bands) {
+      assert.ok(/item\.preorder && item\.preText/.test(b),
+        `the band is gated on the TEXT, not on the flag that keeps the row alive: ${b.trim()}`);
+      assert.ok(!/\|\|\s*preLabel/.test(b),
+        `an empty preText must draw nothing — no fallback to preLabel: ${b.trim()}`);
+    }
+    // …and the variant sheet keeps preLabel: its rows never set preText, so
+    // there the fallback is the only thing standing between it and a blank pill.
+    assert.ok(/class="vp-opt-pre f-toni">\{\{preLabel\}\}/.test(MSHOPX),
+      'the size sheet still reads preLabel — do not sweep it up with the grid bands');
   });
 }
 
