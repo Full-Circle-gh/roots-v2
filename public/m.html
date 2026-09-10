@@ -1284,24 +1284,147 @@ reg('dispatchParcel', sid=>{
     render();
   });
 });
-/* The one forward step the status machine allows from where this order is. */
+/* The forward step the status machine allows from where this order is. Reached
+   from the drawer's primary button, and from the More sheet for the one step
+   that skips a rung (paid → dispatched). */
 reg('advance', to=>{
-  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
-  if(!o||o._id==null) return;
-  orderWrite('advance', async()=>{
+  const o=currentOrder(); state.detailActions=false;
+  if(!o||o._id==null){ render(); return; }
+  const go=()=>orderWrite('advance', async()=>{
     await apiWrite('/orders/'+o._id+'/status',{status:to},'PATCH');
     return T('Order updated','订单已更新');
   });
+  /* THE ONE QUESTION THE DESKTOP ASKS HERE AND THIS SURFACE DID NOT. Shipping
+     a made-fresh batch before its day, or a scheduled delivery days early, is
+     not a state the status machine can refuse — it is a judgement, and the
+     phone was making it silently for anyone holding one. */
+  const warn=(to==='dispatched')?earlyShipAsk(o):null;
+  if(!warn){ go(); return; }
+  state.ask={title:warn.title, body:warn.body,
+    confirmLabel:T('Mark dispatched anyway','仍要标记已发货'), run:go};
+  render();
 });
+/* The desktop's words, written at ask time rather than at map time so they
+   follow the language toggle. earlyShipFacts holds the dates; this holds the
+   sentences, and the slot label is store data so it is escaped like any. */
+function earlyShipAsk(o){
+  const e=o&&o.earlyShip; if(!e) return null;
+  if(e.kind==='fresh') return {
+    title:T('Made fresh later','稍后制作'),
+    body:T('This order is scheduled to be made fresh on <b>'+e.day+'</b>'+(e.arrives?' (arrives ~'+e.arrives+')':'')
+           +". It hasn't been made yet — dispatching now ships it early. Mark dispatched anyway?",
+           '此订单计划于 <b>'+e.day+'</b> 当天新鲜制作,目前尚未制作。现在发货将提前出库。仍要标记已发货吗?')};
+  const when=escAttr(e.label||e.day);
+  return {
+    title:T('Delivery requested later','要求稍后送达'),
+    body:T('The customer requested delivery around <b>'+when+'</b> — about '+e.days+' days from now. Shipping today will likely arrive early. Mark dispatched anyway?',
+           '客户要求约在 <b>'+when+'</b> 送达,距今约 '+e.days+' 天。今天发货可能提前送达。仍要标记已发货吗?')};
+}
+/* Both undos ask first, as the desktop does. They are silent writes — the
+   customer is not told — which is exactly why the person doing it should be. */
 reg('undoDispatch', ()=>{
-  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
-  state.detailActions=false;
-  if(!o||o._id==null) return;
-  orderWrite('undo', async()=>{
-    await apiWrite('/orders/'+o._id+'/undo-dispatch',{});
-    return T('Back to preparing','已退回备货中');
-  });
+  const o=currentOrder(); state.detailActions=false;
+  if(!o||o._id==null){ render(); return; }
+  const wasDelivered=o.raw==='delivered';
+  state.ask={title:wasDelivered?T('Undo delivery?','撤销送达?'):T('Undo dispatch?','撤销发货?'),
+    body:T('This moves the order back to <b>Preparing</b>. Use it if you marked it '+(wasDelivered?'delivered':'dispatched')
+           +" by mistake — it hasn't actually shipped. The customer is not notified.",
+           '这会把订单退回<b>备货中</b>。如果你是误点了'+(wasDelivered?'送达':'发货')+'(实际上还没发出),可以用它撤销。不会通知顾客。'),
+    confirmLabel:wasDelivered?T('Undo delivery','撤销送达'):T('Undo dispatch','撤销发货'),
+    run:()=>orderWrite('undo', async()=>{
+      await apiWrite('/orders/'+o._id+'/undo-dispatch',{});
+      return T('Back to preparing','已退回备货中');
+    })};
+  render();
 });
+reg('undoPreparing', ()=>{
+  const o=currentOrder(); state.detailActions=false;
+  if(!o||o._id==null){ render(); return; }
+  state.ask={title:T('Undo preparing?','撤销备货?'),
+    body:T('This moves the order back to <b>Paid</b>. Use it if you marked it preparing by mistake. The customer is not notified.',
+           '这会把订单退回<b>已支付</b>。如果你是误点了备货,可以用它撤销。不会通知顾客。'),
+    confirmLabel:T('Undo preparing','撤销备货'),
+    run:()=>orderWrite('undo', async()=>{
+      await apiWrite('/orders/'+o._id+'/undo-preparing',{});
+      return T('Back to paid','退回已支付');
+    })};
+  render();
+});
+/* CANCELLING RECORDS WHY. The desktop asks and stores it on the order, and a
+   phone that skipped the question would be a second source of the blank cancel
+   reasons already sitting in the data. Optional, exactly as there — an answer
+   nobody can skip is an answer nobody means. */
+reg('cancelOrder', ()=>{
+  const o=currentOrder(); state.detailActions=false;
+  if(!o||o._id==null){ render(); return; }
+  state.ask={title:T('Cancel order','取消订单'),
+    body:T('Recorded on the order for your records.','将记录在订单中以备查询。'),
+    fields:[{id:'reason',label:T('Reason for cancellation (optional)','取消原因(可选)'),
+             placeholder:T('Optional','可选'), multiline:true}],
+    confirmLabel:T('Cancel order','确认取消'), danger:true,
+    run:v=>orderWrite('advance', async()=>{
+      await apiWrite('/orders/'+o._id+'/status',{status:'cancelled',reason:(v.reason||'')||null},'PATCH');
+      return T('Order updated','订单已更新');
+    })};
+  render();
+});
+/* A REFUND THE SHOP STARTS. Full and part-by-amount, which is the desktop's
+   first two choices; its third — picking the lines — is a table of checkboxes
+   and per-line quantities and is not in this change. The amount is capped
+   against the order total here as well as at the server, so a thumb learns it
+   from the sheet rather than from a 400. */
+reg('refundOrder', ()=>{
+  const o=currentOrder(); state.detailActions=false;
+  if(!o||o._id==null){ render(); return; }
+  state.ask={title:T('Refund order','退款订单'),
+    body:T('Money goes back the way it was paid. Full also reverses points + flips the order to Refunded; partial does not.',
+           '原路退回。全额退款会同时退还积分并将订单标记为已退款;部分退款不会。'),
+    options:[{key:'full',label:T('Full','全额')+' '+o.total},{key:'amount',label:T('Part — by amount','部分 — 按金额')}],
+    run:k=>{ if(k==='full') askRefundFull(o); else if(k==='amount') askRefundAmount(o); }};
+  render();
+});
+/* FULL keeps the status shortcut the desktop keeps it on — PATCH status
+   refunded — which is the path that reverses the points and moves the order.
+   /refund/direct with no amount would settle the money and leave the order
+   sitting at Delivered. */
+function askRefundFull(o){
+  state.ask={title:T('Refund order','退款订单'),
+    body:T('Full','全额')+' '+o.total,
+    fields:[{id:'note',label:T('Reason / note','原因 / 备注'),placeholder:T('Optional','可选'),multiline:true}],
+    confirmLabel:T('Refund','退款'), danger:true,
+    run:v=>orderWrite('refund', async()=>{
+      await apiWrite('/orders/'+o._id+'/status',{status:'refunded',reason:(v.note||'')||null},'PATCH');
+      return T('Refunded in full','已全额退款');
+    })};
+  render();
+}
+function askRefundAmount(o){
+  const max=Number(o.totalNum)||0;
+  const num=v=>Number(String(v==null?'':v).replace(/[^0-9.]/g,''));
+  state.ask={title:T('Refund order','退款订单'),
+    body:T('Order total','订单总额')+' '+o.total,
+    fields:[{id:'amount',label:T('Amount','金额')+' ('+CUR+')',numeric:true,placeholder:max?max.toFixed(2):''},
+            {id:'note',label:T('Reason / note','原因 / 备注'),placeholder:T('Optional','可选'),multiline:true}],
+    confirmLabel:T('Refund','退款'), danger:true,
+    validate:v=>{
+      const n=num(v.amount);
+      if(!(n>0)) return T('Enter an amount above 0','请输入大于 0 的金额');
+      if(max&&n>max+0.005) return T('Amount is more than the order total','金额超过订单总额');
+      return null; },
+    run:v=>orderWrite('refund', async()=>{
+      const amt=+num(v.amount).toFixed(2);
+      const j=await apiWrite('/orders/'+o._id+'/refund/direct',{amount:amt,note:v.note||''});
+      const paid=money(CUR,(j&&j.amount!=null)?j.amount:amt);
+      /* A 'manual' payout means no gateway money moved — the order was paid
+         off-app, so the books are right and the operator still has to send the
+         cash. Saying only "Refunded" there reads as done, and the customer waits. */
+      return (j&&j.method==='manual')
+        ? T('Recorded '+paid+' — pay the customer back by hand (paid off-app)',
+            '已记录 '+paid+' — 该订单为线下支付,请手动退款给顾客')
+        : T('Refunded','已退款')+' '+paid;
+    })};
+  render();
+}
 /* Off-app payment records WHICH tender it was — that is the whole reason this
    was desktop-only. The phone can ask, so now it can do it. */
 const PAY_METHODS=[['cash','Cash','现金'],['bank_transfer','Bank transfer','银行转账'],
@@ -11297,9 +11420,88 @@ const ORDER_NEXT={
    desktop relabels both; so does this, or the phone tells a counter to dispatch
    something nobody is shipping. */
 const ORDER_NEXT_PICKUP={dispatched:{en:'Mark ready for pickup',zh:'标记可取货'},delivered:{en:'Mark picked up',zh:'标记已取货'}};
-/* pending_payment is deliberately absent: marking an off-app payment records
-   WHICH tender it was, and guessing that from a phone would put "unknown" on
-   the books. It stays a desktop action until the phone can ask. */
+/* pending_payment is absent from the table above and is NOT missing: markPaid
+   asks which tender it was and PATCHes the same status, because a phone that
+   could not ask would have put "unknown" on the books. It is the primary button
+   on an unpaid order all the same — see orderActionRow. */
+
+/* EVERYTHING ELSE THE DESKTOP'S NEXT_STATUS OFFERS (04-orders.js). The phone
+   carried only the forward column of that table, and the whole of what was
+   missing is this one: **it could not refund an order and could not cancel one,
+   from any status.** Approve / Reject / Pay on a refund the CUSTOMER opened is
+   a different act — it moves a request somebody else raised — and it was all
+   the phone had. §97 retires the rule that made that a decision.
+
+   These are More-sheet rows, never the primary button. A refund is not what you
+   opened the order to do, and a thumb finds a primary button by accident.
+
+   Keyed and ordered exactly as NEXT_STATUS is, so the two can be read side by
+   side; the server's STATUS_TRANSITIONS is the same shape again, which is why
+   nothing here can be offered that the server would refuse. */
+const ORDER_ALSO={
+  pending_payment:['cancelled'],
+  paid:['dispatched','refunded','cancelled'],
+  preparing:['refunded','cancelled'],
+  dispatched:['refunded'],
+  delivered:['refunded'],
+  awaiting_restock:['cancelled'],
+  rider_pickup:[],
+};
+/* Does any parcel carry a real waybill? Both undos are refused by the server
+   once one does (`already_shipped`), and the desktop mirrors that guard in the
+   view so the row only appears when it would work. */
+function orderHasWaybill(o){ return (o.shipments||[]).some(s=>s&&s.trk&&s.trk.number); }
+/* EVERY SECONDARY ACT ON AN OPEN ORDER, IN ONE PLACE. The drawer's "…" button
+   asks this whether there is anything to show and the sheet renders it, so the
+   two cannot disagree — they used to be written out separately, the button on
+   three conditions and the sheet on four, which is a row that exists with no
+   way to reach it. Reprint is not here: it is on the drawer's own toolbar and
+   the sheet prepends it. */
+function orderActs(o){
+  const acts=[];
+  if(!o||o._id==null||o.viewOnly) return acts;
+  const st=o.raw;
+  // A refund the customer opened, and a refund the shop starts, are two acts.
+  // While either is in flight the server refuses the other (`refund_in_progress`),
+  // so the panel that owns it is the only one offered.
+  const reqOpen=['pending','reviewing'].includes(o.refundStatus);
+  const inFlight=['pending','reviewing','approved','paying'].includes(o.refundStatus);
+  if(reqOpen){
+    acts.push(['check',T('Approve refund','通过退款'),"APP.cmd('approveRefund')"]);
+    acts.push(['x',T('Reject refund','拒绝退款'),"APP.cmd('rejectRefund')"]);
+  }
+  if(o.refundStatus==='approved') acts.push(['banknote',T('Pay the refund','打出退款'),"APP.cmd('payRefund')"]);
+  for(const to of (ORDER_ALSO[st]||[])){
+    if(to==='refunded'){
+      if(inFlight) continue;
+      acts.push(['receipt',T('Refund','退款'),"APP.cmd('refundOrder')"]);
+    }else if(to==='cancelled'){
+      // The desktop's own two labels, and the difference is the whole warning:
+      // cancelling an unpaid order moves no money, cancelling a paid one does.
+      acts.push(['ban', st==='pending_payment'?T('Cancel','取消'):T('Cancel + refund','取消并退款'),"APP.cmd('cancelOrder')"]);
+    }else if(to==='dispatched'){
+      // paid → dispatched, skipping preparing. Relabelled for a pickup exactly
+      // as the primary button is, or the phone tells a counter to dispatch
+      // something nobody is shipping.
+      acts.push(['truck', o.pickup?T('Mark ready for pickup','标记可取货'):T('Mark dispatched','标记已发货'),"APP.cmd('advance','dispatched')"]);
+    }
+  }
+  /* Backing out of a mis-tap. A WALK-IN IS NOT OFFERED AN UNDO FOR A DISPATCH
+     THAT NEVER HAPPENED — a counter sale sits at `delivered` with no parcel and
+     no waybill, which is the exact shape undoDispatchable was written to spot,
+     and this sheet was offering it "Undo delivery" on every walk-in. The
+     desktop's rule (ordShipsNothing), which the phone did not have. */
+  const ships=!(o.pickup||o.counter);
+  if(ships&&['dispatched','delivered'].includes(st)&&!orderHasWaybill(o))
+    acts.push(['rotate-ccw', st==='delivered'?T('Undo delivery · back to preparing','撤销送达 · 退回备货')
+                                             :T('Undo dispatch · back to preparing','撤销发货 · 退回备货'),"APP.cmd('undoDispatch')"]);
+  // One step earlier than that one: a too-early "Start preparing" had no way
+  // back on this surface at all, which on a forward-only machine left a refund
+  // as the only exit from a mis-tap.
+  if(st==='preparing'&&!orderHasWaybill(o))
+    acts.push(['rotate-ccw',T('Undo preparing','撤销备货'),"APP.cmd('undoPreparing')"]);
+  return acts;
+}
 function orderNext(o){
   // A marketplace mirror is read at 100% legibility and acted on at 0%: the
   // platform drives it, and a button here would write into a queue we do not own.
@@ -11321,9 +11523,16 @@ async function apiWrite(path, body, method){
 }
 function orderErrorText(e){
   if(e.code==='__plain') return e.message;
-  if(e.code==='invalid_transition') return T('This order has already moved on. Close and open it again to see where it is now.',
+  // invalid_status is /refund/direct's word for the same thing invalid_transition
+  // is the status route's: the order is no longer where the screen thinks it is.
+  if(e.code==='invalid_transition'||e.code==='invalid_status') return T('This order has already moved on. Close and open it again to see where it is now.',
                                              '这个订单已经进入下一步。请关闭后重新打开查看当前状态。');
-  if(e.code==='refund_already_processing'||e.code==='use_refund_payout') return e.message;
+  /* The server's own sentence, on the codes where it carries the fact — how
+     much is left to refund, which refund is already in flight, what WeChat
+     said. The desktop passes these through for the same reason, and they are
+     English-only on both surfaces: that is the server's, not this screen's. */
+  if(['refund_already_processing','use_refund_payout','refund_in_progress','invalid_amount',
+      'wechat_refund_abnormal','wechat_refund_failed'].includes(e.code)) return e.message;
   if(e.code==='already_shipped') return T('A parcel already has a waybill, so this cannot be undone here. Cancel the waybill first.',
                                           '已有包裹生成运单，无法在此撤销。请先取消运单。');
   return T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
@@ -12742,15 +12951,14 @@ function orderActionRow(o,isPO){
   if(o._id==null) return '';   // sample data in the static preview: no live order to act on
   const next=orderNext(o);
   const busy=state.orderBusy;
-  const undoable=['dispatched','delivered'].includes(o.raw);
-  const refundOpen=['pending','reviewing'].includes(o.refundStatus);
-  const refundApproved=o.refundStatus==='approved';
   const canPay=o.raw==='pending_payment'&&!o.viewOnly;
   const btns=[];
   if(canPay) btns.push(`<button class="btn2" style="flex:1;min-width:0" ${busy?'disabled':''} onclick="APP.cmd('markPaid')">${busy==='advance'?T('Marking…','处理中…'):T('Mark paid','标记已付款')}</button>`);
   else if(next) btns.push(`<button class="btn2" style="flex:1;min-width:0" ${busy?'disabled':''} onclick="APP.cmd('advance','${next.to}')">${busy==='advance'?T(next.busyEn,next.busyZh):T(next.en,next.zh)}</button>`);
   btns.push(`<button class="btn2" style="${next?'width:44px;padding:0;flex:none':'flex:1;gap:8px'}" ${busy?'disabled':''} onclick="APP.cmd('printOrder')" aria-label="${T('Reprint receipt','重打小票')}">${ic('printer',20)}${next?'':`<span>${busy==='print'?T('Printing…','打印中…'):T('Reprint receipt','重打小票')}</span>`}</button>`);
-  if(undoable||refundOpen||refundApproved) btns.push(`<button class="btn2" style="width:44px;padding:0;flex:none" ${busy?'disabled':''} onclick="APP.cmd('detailActions')" aria-label="${T('More actions','更多操作')}">${ic('ellipsis',20)}</button>`);
+  // ONE LIST DECIDES BOTH. This condition and the sheet's rows used to be
+  // written out separately and had drifted apart; now the button asks the sheet.
+  if(orderActs(o).length) btns.push(`<button class="btn2" style="width:44px;padding:0;flex:none" ${busy?'disabled':''} onclick="APP.cmd('detailActions')" aria-label="${T('More actions','更多操作')}">${ic('ellipsis',20)}</button>`);
   return `<div style="display:flex;align-items:center;gap:8px;margin-top:12px">${btns.join('')}</div>`;
 }
 function sheetAsk(){
@@ -12781,20 +12989,10 @@ function sheetAsk(){
    </div>`;
 }
 function sheetActions(){
-  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
-  const wasDelivered=o&&o.raw==='delivered';
-  const acts=[['printer',T('Reprint receipt','重打小票'),"APP.cmd('printOrder')"]];
-  if(o&&['pending','reviewing'].includes(o.refundStatus)){
-    acts.push(['check',T('Approve refund','通过退款'),"APP.cmd('approveRefund')"]);
-    acts.push(['x',T('Reject refund','拒绝退款'),"APP.cmd('rejectRefund')"]);
-  }
-  if(o&&o.refundStatus==='approved') acts.push(['banknote',T('Pay the refund','打出退款'),"APP.cmd('payRefund')"]);
-  if(o&&['dispatched','delivered'].includes(o.raw)){
-    // Forward-only machine: without this, a mis-tap sits on the queue with only
-    // a refund as the way out. The server refuses once a parcel has a waybill,
-    // and that refusal is shown rather than swallowed.
-    acts.push(['undo-2',wasDelivered?T('Undo delivery · back to preparing','撤销送达 · 退回备货'):T('Undo dispatch · back to preparing','撤销发货 · 退回备货'),"APP.cmd('undoDispatch')"]);
-  }
+  const o=currentOrder();
+  // Reprint is the drawer's own toolbar button and rides at the top of the
+  // sheet as well; everything else is orderActs, which the "…" button gates on.
+  const acts=[['printer',T('Reprint receipt','重打小票'),"APP.cmd('printOrder')"]].concat(orderActs(o));
   return `<div class="scrim" style="z-index:47;background:rgba(17,26,43,.30)" onclick="APP.scrimClose('closeActions')"></div>
    <div class="sheet" style="z-index:48;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 30px)"><div class="grabber" style="margin-bottom:10px"></div>
    ${acts.map(([i,l,c])=>`<button class="row" style="min-height:52px;padding:12px 20px" onclick="${c}"><span style="display:flex;flex:none;color:var(--text-secondary)">${ic(i)}</span><span style="flex:1;font-size:15px">${l}</span></button>`).join('')}</div>`;
@@ -15649,6 +15847,33 @@ function shipByPlan(r){
     sub:'', when:_slotEndAnchor(r.scheduled_for,r.delivery_slot_label),
     basis:'arrival', done};
 }
+/* WOULD DISPATCHING THIS ORDER NOW SHIP IT EARLY? The desktop asks before it
+   ships one (earlyDispatchWarning, 04-orders.js) and the phone did not, so an
+   order the customer asked for on Saturday could leave on Wednesday with no
+   question put to anybody. Two cases, in the desktop's own priority order: a
+   make-fresh batch whose day has not come (it is not made yet, so dispatching
+   is always wrong), and a requested delivery more than two days out (one or
+   two days is ordinary land transit and is not early).
+
+   THE FACTS ONLY, never the sentence. mapDetail's result is cached in
+   state.liveDetail and the language toggle re-renders without refetching, so a
+   warning worded here would keep speaking the old language — the same rule
+   ITEM_TUPLE and placedFull follow. earlyShipAsk writes the words at ask time.
+
+   The store's today, not the browser's: shopToday/shopDayOf read the account's
+   own zone, where the desktop hardcodes +8. */
+function earlyShipFacts(r){
+  const t=String(r.fulfillment_type||'').toLowerCase();
+  if(t==='pickup'||t==='counter') return null;      // ships nothing to be early with
+  const today=shopToday();
+  const fresh=shopDayOf(r.promised_ship_date);
+  if(fresh&&fresh>today) return {kind:'fresh', day:fresh, arrives:shopDayOf(r.promised_delivery_date)||null};
+  const target=shopDayOf(r.promised_delivery_date)||shopDayOf(r.scheduled_for);
+  if(!target) return null;
+  const days=Math.round((Date.parse(target+'T00:00:00Z')-Date.parse(today+'T00:00:00Z'))/86400000);
+  if(!(days>2)) return null;
+  return {kind:'late', day:target, days, label:r.delivery_slot_label||''};
+}
 /* shipByUrgency, ported thresholds and all — including the rule that "today" is
    the STORE's today, not the browser's, so an operator abroad does not read
    yesterday's bucket. The store's zone was hardcoded to +8 here; it is now
@@ -15909,6 +16134,18 @@ function mapOrderRow(r){
     shopCode:(r.shop_order_code!=null&&r.shop_order_code!=='')?String(r.shop_order_code):null,
     // fmtDay, not hhmm: an order from three days ago showed a bare "9:07 AM".
     total:money(CUR,r.total), placed:fmtDay(r.placed_at),
+    /* The SAME total as a number. `total` above is already formatted for the
+       glass, and a partial refund has to be capped against the figure rather
+       than against "¥312.00" — the server caps it too, and a phone that
+       could not would be posting an amount it knew was refusable. */
+    totalNum:Number(r.total)||0,
+    /* ON THE ROW, NOT ONLY ON THE DETAIL READ. The drawer paints from the list
+       row on its first frame and swaps to the fetched detail when it lands, so
+       a fact carried only by mapDetail is absent for as long as that read
+       takes — and the primary button is live throughout. A guard with a window
+       in it is not a guard. The list query already returns these three dates:
+       the row's own ship-by cell is drawn from them. */
+    earlyShip:earlyShipFacts(r),
     status:[sk[1],sk[2]], kind, raw:r.status||null, refundStatus:r.refund_status||null, isNew:!r.seen_at,
     ship:Array.isArray(shipCity)?shipCity:[shipCity,shipCity],
     deliv,
