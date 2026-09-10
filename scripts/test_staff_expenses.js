@@ -476,6 +476,92 @@ it('the phone screen says what approving does', () => {
     'the mirror of the line under Submit on the other screen');
 });
 
+console.log('\n5b · voiding a posted claim (§88)');
+
+it('voiding removes the ledger row without writing rejected over it', () => {
+  POST.postClaim(pdb, claim); // re-post so a row exists to void
+  const gone = POST.postClaim(pdb, { ...claim, status: 'voided' });
+  assert.strictEqual(gone, null, 'the same non-approved branch rejected already takes');
+  assert.strictEqual(pdb.prepare('SELECT COUNT(*) n FROM expense_entries WHERE claim_id = 41').get().n, 0);
+});
+
+it('the void route is its own capability, checked above the generic prefix', () => {
+  const i = CAPROUTES.indexOf("return 'expenses:cancel'");
+  const j = CAPROUTES.indexOf("return 'expenses:submit'");
+  assert.ok(i > -1 && j > -1 && i < j,
+    'below the general rule, the money-reversing route would answer expenses:submit');
+  assert.match(CAPROUTES, /\/staff-expenses\\\/\\d\+\\\/void\$\/\.test\(P\)/);
+});
+
+it('the void route exists, is gated apart from approve, and fails closed', () => {
+  assert.match(ROUTE_CODE, /function requireCanceller/);
+  assert.match(ROUTE_CODE, /requireRetailAdmin, requireCanceller/);
+  assert.match(ROUTE_CODE, /req\.caps\.has\('expenses:cancel'\)/);
+  // Not the approver's gate — the whole reason the key exists.
+  const voidFn = ROUTE_CODE.slice(ROUTE_CODE.indexOf('function requireCanceller'));
+  const body = voidFn.slice(0, voidFn.indexOf('router.post'));
+  assert.ok(!/expenses:approve/.test(body), 'requireCanceller must not fall back to the approver key');
+});
+
+it('only an approved, unsettled claim can be voided', () => {
+  const voidRoute = ROUTE_CODE.slice(ROUTE_CODE.indexOf("staff-expenses/:id/void"));
+  const body = voidRoute.slice(0, voidRoute.indexOf('module.exports'));
+  assert.match(body, /claim\.status !== 'approved'/);
+  assert.match(body, /if \(claim\.settled\) return res\.status\(409\)/,
+    'the same settled guard /decide already enforces');
+});
+
+it('voiding writes its own columns rather than overwriting who approved it', () => {
+  const voidRoute = ROUTE_CODE.slice(ROUTE_CODE.indexOf("staff-expenses/:id/void"));
+  const body = voidRoute.slice(0, voidRoute.indexOf('module.exports'));
+  assert.match(body, /SET status = 'voided', voided_by = \?, voided_at = datetime\('now'\), void_note = \?/);
+  assert.ok(!/decided_by\s*=\s*\?/.test(body), 'decided_by is not touched — it still says who approved it');
+});
+
+it('the schema carries voided_by/voided_at/void_note beside decided_by, never in place of it', () => {
+  assert.match(SCHEMA, /voided_by\s+INTEGER/);
+  assert.match(SCHEMA, /voided_at\s+DATETIME/);
+  assert.match(SCHEMA, /void_note\s+TEXT/);
+});
+
+it('the capability exists, moves money, and is distinct from expenses:approve', () => {
+  const row = CAPS.match(/\{ key: 'expenses:cancel'.*/);
+  assert.ok(row, 'expenses:cancel must be registered');
+  assert.match(row[0], /money: 'moves'/, 'this is what removes a posted row from the books');
+  for (const preset of ['staff', 'store_manager', 'kitchen', 'store_stock', 'warehouse', 'admin', 'manager']) {
+    const block = CAPS.match(new RegExp(`${preset}:\\s*(?:'\\*'|ALL_KEYS\\.filter[\\s\\S]*?\\)|\\[[\\s\\S]*?\\])`));
+    if (preset === 'admin' || preset === 'manager') continue; // ALL_KEYS minus a short exclusion list — they DO hold it
+    assert.ok(block && !/expenses:cancel/.test(block[0]), `${preset} must NOT void by default`);
+  }
+});
+
+it('bookkeeper holds it without holding expenses:approve', () => {
+  const block = CAPS.match(/bookkeeper:\s*\[[\s\S]*?\],\n\n/);
+  assert.ok(block && /'expenses:cancel'/.test(block[0]), 'a bookkeeper can undo a mistaken approval');
+  // Quoted form only — the block's own comment names `expenses:approve` in
+  // backticks to explain the split, which is prose, not a grant.
+  assert.ok(!/'expenses:approve'/.test(block[0]), 'without being made an approver');
+});
+
+it('the Transactions row offers Void, gated on the capability and hidden once settled', () => {
+  const code = codeOnly(CLIENT);
+  assert.match(code, /can\('expenses:cancel'\) && !r\.settled/,
+    'both the permission and the already-paid-back state gate the link');
+  assert.match(code, /finTxVoidClaim\(\$\{Number\(r\.claim_id\)\}\)/);
+  assert.match(code, /window\.finTxVoidClaim = async function finTxVoidClaim/);
+  assert.match(code, /api\(`\/api\/retail-admin\/staff-expenses\/\$\{Number\(claimId\)\}\/void`/);
+});
+
+it('the migration reaches admin/manager/bookkeeper only, edited or not', () => {
+  assert.match(ROLES, /function migrateExpenseCancelCap/);
+  assert.match(ROLES, /EXPENSE_CANCEL_ROLE_KEYS\s*=\s*\['admin', 'manager', 'bookkeeper'\]/);
+  // No untouched-role guard — the reason migrateKitchenRequestCap gives:
+  // nobody can have unticked a key that did not exist yesterday.
+  const fn = ROLES.slice(ROLES.indexOf('function migrateExpenseCancelCap'));
+  const body = fn.slice(0, fn.indexOf('module.exports'));
+  assert.ok(!/JSON\.stringify\(caps\.presetCapsFor/.test(body), 'read from the tenant row, not stamped fresh');
+});
+
 console.log('\n6 · settlement — the step that posts nothing (step four)');
 
 it('settling writes ONE column and touches the ledger in no way at all', () => {

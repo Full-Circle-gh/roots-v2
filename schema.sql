@@ -311,8 +311,11 @@ CREATE TABLE IF NOT EXISTS staff_expenses (
   -- meaning here.
   store_id      INTEGER,
   receipt_data  TEXT,                   -- base64 data URI, nullable — a photo is optional
-  -- submitted → approved | rejected. There is no 'draft': a claim exists
-  -- because somebody pressed Submit.
+  -- submitted → approved | rejected. approved → voided (§88: an approver's own
+  -- decision reversed by whoever holds `expenses:cancel`, after the claim has
+  -- already posted a row). There is no 'draft': a claim exists because somebody
+  -- pressed Submit, and there is no path back from 'voided' — the same one-way
+  -- shape 'rejected' already has.
   status        TEXT NOT NULL DEFAULT 'submitted',
   -- SETTLEMENT IS NOT AN EXPENSE AND POSTS NOTHING. Paying the driver back
   -- moves money between the business and a person; the ¥38 was already recorded
@@ -325,6 +328,12 @@ CREATE TABLE IF NOT EXISTS staff_expenses (
   decided_by    INTEGER,
   decided_at    DATETIME,
   decided_note  TEXT,
+  -- §88: WHO VOIDED AN APPROVED CLAIM, AND WHEN — kept apart from decided_by/
+  -- decided_at rather than overwriting them, so the record still says who
+  -- approved it after somebody else reverses that decision. NULL until voided.
+  voided_by     INTEGER,
+  voided_at     DATETIME,
+  void_note     TEXT,
   -- The `expense_entries` row this claim posted, once approved. NULL until
   -- then, and the only link between the two tables.
   expense_id    INTEGER,
