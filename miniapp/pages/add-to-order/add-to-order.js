@@ -62,6 +62,11 @@ Page({
       added: 'Added to your order ✓',
       payIncomplete: 'Payment incomplete',
       soldOut: 'Sold out',
+      // The shop grid's own live pair for this exact shelf state
+      // (miniapp/pages/shop/shop.js preText), and the same words
+      // computePreorderNotice titles the checkout notice with. Reused rather
+      // than reworded so one product does not read two ways in one app.
+      shipsSoon: 'SHIPS SOON',
       pickRequired: 'Please choose an option',
       opAdd: 'Add',
       opCancel: 'Cancel',
@@ -111,6 +116,7 @@ Page({
         added: '已加入订单 ✓',
         payIncomplete: '支付未完成',
         soldOut: '已售罄',
+        shipsSoon: '现订现发',
         pickRequired: '请选择一个选项',
         opAdd: '加入',
         opCancel: '取消',
@@ -213,6 +219,20 @@ Page({
           price_disp: '¥' + price.toFixed(2),
           image: absUrl(p.image_data || (`/api/retail/products/${p.id}/image`)),
           stock: atStore != null ? Number(atStore) : chainStock,
+          // Sold out, and left orderable as a pre-order by the operator. The
+          // shop grid says this about the same product with the same two server
+          // fields (miniapp/pages/shop/shop.js → _stockState); this picker said
+          // nothing at all, so on an order that never reserved — out-of-GZ or
+          // scheduled, where nothing caps the stepper — a customer added a
+          // sold-out line with no sign it was out.
+          //
+          // No local-run term here, unlike _stockState. The shop grid needs one
+          // because it decides whether to OFFER the row; by the time a product
+          // reaches this list the add-on gate has already ruled on that
+          // (addonBlockReason rule 2 refuses a local-run pre-order outright), so
+          // this flag only has to describe the shelf, which it does everywhere.
+          preorder: !p.ship_from_supplier && !!p.oos_preorder &&
+                    (atStore != null ? Number(atStore) : chainStock) <= 0,
           // Carried so the stepper's supplier-direct exemption actually works —
           // it was reading an undefined field, capping supplier items that hold
           // no stock of ours.

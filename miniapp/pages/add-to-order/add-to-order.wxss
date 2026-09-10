@@ -122,6 +122,16 @@
   font-size: calc(26rpx * var(--font-scale));
   color: var(--olive);
 }
+/* Lifted verbatim from the shop grid's own pill (miniapp/pages/shop/shop.wxss
+   .row-pre) — the same words about the same product should not arrive in two
+   different shapes depending on which screen the customer is standing on.
+   Left margin dropped: there is no price sitting beside it here. */
+.row-pre {
+  display: inline-block; margin-top: 10rpx;
+  background: var(--olive); color: #fff;
+  padding: 2rpx 12rpx; border-radius: 999rpx;
+  font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.08em; font-weight: 700;
+}
 
 /* ── Qty stepper ── */
 .stepper { display: flex; align-items: center; flex: 0 0 auto; }
