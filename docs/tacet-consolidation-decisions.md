@@ -9313,3 +9313,72 @@ yet read back anywhere. Voiding a *rejected* or *submitted* claim is refused
 (there is nothing posted to reverse); a submitter who wants to withdraw a claim
 still waiting on a decision is the shape `routes/staff-expenses.js`'s own header
 comment already reserves for later, and is not this.
+
+### FIXED 2026-09-10 — §90's Void reported success and did nothing: two bugs, found by finally hitting the real route
+
+Reported by Ash off the live Transactions screen, minutes after §90 shipped:
+*"once i void it its still here and i can void it again."* Every test §90
+shipped with passed — because none of them called the real `/decide` or
+`/void` ROUTE over HTTP against the real schema. `scripts/test_staff_expenses.js`
+exercises `postClaim` and `readBody` as pure functions against hand-built
+fixtures; nothing in the suite booted the actual Express routers. Two bugs were
+hiding behind that gap, and either alone would have produced exactly this
+symptom.
+
+**BUG ONE — NEITHER ROUTE AWAITED `withTransaction`.** `routes/staff-
+expenses.js`'s `/decide` and `/void` handlers were not `async` and called
+`withTransaction(db, (tx) => {...})` as a fire-and-forget statement. That looks
+harmless with better-sqlite3's synchronous binding, and every other call site
+in the codebase does await it — this was the only place that didn't. It is not
+harmless: `lib/db-transaction.js`'s `acquire()` serialises outermost
+transactions through a promise queue (`st.tail.then(run, run)`), and `.then()`
+callbacks always run on a LATER MICROTASK, even against an already-resolved
+queue. Unawaited, the code immediately after the call — the activity log, the
+`after` read, `res.json(...)` — ran on the SAME tick as the call, before a
+single statement inside the transaction had executed. **The HTTP response
+reported the claim's PRE-decision state as the result of the decision.** A
+throw inside the transaction (see Bug Two) became an unhandled promise
+rejection outside the route's own try/catch — never logged by its
+`console.error`, never turned into the 500 it should have been.
+
+**BUG TWO — THE DELETE WAS ORDERED BEFORE THE REFERENCE TO IT WAS CLEARED.**
+`staff_expenses.expense_id` carries `FOREIGN KEY REFERENCES
+expense_entries(id)` (schema.sql). Reversing an approval — §90's void, and the
+pre-existing but never-actually-reachable-from-the-UI reject-after-approve path
+in `/decide` — calls `lib/expense-posting.js`'s `postClaim`, which `DELETE`s
+the posted `expense_entries` row. Both routes read the claim, wrote its new
+status, and only cleared `expense_id` to the DELETE's result AFTER calling
+`postClaim` — so at the moment of the DELETE, `staff_expenses.expense_id` on
+the very row being processed still pointed at the row about to be removed, and
+SQLite (`foreign_keys=ON`, `database.js`) refused it: `FOREIGN KEY constraint
+failed`. **The unit-level fixture for `postClaim` never caught this because it
+declares no `expense_id` column and no such constraint** — it is a plain
+in-memory `expense_entries` table with nothing referencing it, standing in for
+half the real schema.
+
+**TOGETHER: clicking Void threw the FK error inside the un-awaited
+transaction, which surfaced nowhere the route could catch it — the response
+Express had already half-sent reported success (or the connection simply
+hung, depending on timing), the claim's status never actually changed, and the
+ledger row stayed exactly where it was.** Ash saw a claim that could be voided
+again because nothing had voided it the first time.
+
+**THE FIX.** Both routes are now `async` and `await withTransaction(...)`.
+Both transactions now clear `expense_id = NULL` in the SAME `UPDATE` that
+writes the new status, before `postClaim` runs — so the row `postClaim` deletes
+is never still referenced when the DELETE executes.
+
+**FOUND BY, AND THE LESSON.** Not by re-reading the diff — by writing
+`scripts/test_staff_expenses_transaction_timing.js`, which boots the real
+`routes/staff-expenses.js` and `routes/finance-transactions.js` behind a real
+HTTP server on tenant 1 (Roots — the one tenant id `lib/tenant-db.js` maps
+straight onto the shared `database.js` handle rather than a separate
+per-tenant file) and calls `/decide` and `/void` exactly as the browser does.
+CLAUDE.md's own rule on citations — "a finding filed as a coordinate is where
+it was found, not the extent of the problem" — applies to test coverage too:
+a suite that only calls a library function directly can be green while the
+route wrapped around it is not, and the two are not the same claim. The new
+suite also covers the pre-existing reject-after-approve path in `/decide`,
+which shared Bug Two and had never been exercised against the real schema
+either — it was unreachable from the UI (the Approvals queue offers Approve/
+Reject only while a claim is `submitted`) and so had never been noticed.
