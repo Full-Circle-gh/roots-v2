@@ -1547,7 +1547,9 @@ function cuRenderDetail() {
     months.push({ key, n: row ? row.n : 0, revenue: row ? row.revenue : 0 });
   }
   const maxRevenue = Math.max(1, ...months.map(m => m.revenue));
-  const barMax = 44;   // fixed quiet height — the summary line carries the headline
+  const barMax = 56;   // fixed quiet height — the summary line carries the headline.
+                       // Paired with #cu-drawer .cu-bar-row's 78px: the row holds
+                       // bar + 6px gap + label, so these two move together.
   const monthBars = months.map(m => `
     <div class="cu-bar-col" data-m="${m.key}" data-n="${m.n}" data-rev="${escapeAttr(yuanBare(m.revenue))}" onmousemove="cuBarTip(event)" onmouseleave="cuBarTipHide()">
       <div class="cu-bar ${m.revenue === 0 ? 'empty' : (m.revenue === maxRevenue ? 'peak' : '')}" style="height: ${m.revenue === 0 ? 3 : Math.max(8, (m.revenue / maxRevenue) * barMax)}px;"></div>
@@ -1999,6 +2001,15 @@ function cuRenderDetail() {
 // Panes are hidden rather than unmounted: the ledger folds keep whatever the
 // operator opened while they move between tabs, and Diagnostics keeps the
 // open state it was rendered with.
+//
+// The scroll fix is the point of the second half. Panes are wildly different
+// heights — Overview runs long, History is three collapsed folds — so swapping
+// one for another changes the scrollable height under a scroll position that
+// does not move, and the browser clamps it. The reader had scrolled to the
+// tabs and was thrown somewhere else the moment they used them. Bringing the
+// tab strip back to the top edge whenever it has been scrolled past means the
+// strip you just clicked is still under your eye, and the new pane starts
+// where the old one did.
 function cuTab(key) {
   ['overview', 'history', 'account'].forEach(k => {
     const pane = document.getElementById('cu-pane-' + k);
@@ -2010,6 +2021,13 @@ function cuTab(key) {
       tab.setAttribute('aria-selected', String(on));
     }
   });
+  const body  = document.querySelector('#cu-drawer .drawer-body');
+  const strip = document.querySelector('#cu-drawer .cux-tabs');
+  if (!body || !strip) return;
+  // Only ever scrolls UP, and only when the strip is already off the top: a
+  // reader who can still see the tabs is left exactly where they were.
+  const delta = strip.getBoundingClientRect().top - body.getBoundingClientRect().top;
+  if (delta < 0) body.scrollTop += delta;
 }
 
 // Affiliate block in the customer drawer — code, who referred them,

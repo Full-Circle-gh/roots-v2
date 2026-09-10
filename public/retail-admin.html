@@ -3983,22 +3983,25 @@
       #cu-drawer .cux-tabs button:hover { color: var(--text-1); }
       #cu-drawer .cux-tabs button.on { color: var(--text-1); font-weight: 500; box-shadow: inset 0 -2px 0 var(--text-1); }
       #cu-drawer .cux-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
-      #cu-drawer .cux-pane { padding-top: 22px; }
-
-      /* ── Sections inside a pane — a hairline and a kicker, NOT a card.
-         Six bordered cards in one column was what made the old drawer read as
-         a stack of boxes; the ledger folds below have always separated
-         themselves this way and nobody ever missed a border there. */
-      #cu-drawer .cux-sec { border-top: 1px solid var(--td-border); padding-top: 18px; margin-top: 24px; }
-      #cu-drawer .cux-pane > .cux-sec:first-child { border-top: none; padding-top: 0; margin-top: 0; }
-      #cu-drawer .cux-pane > .cux-folds:first-child { margin-top: 0; }
+      /* ── Sections are a SURFACE, not a border ─────────────────────────
+         The first live build put sections flat on the drawer's Paper with a
+         hairline between. In the mockup that read fine because the drawer sat
+         as a panel on a darker page ground; in the real product the drawer is
+         edge-to-edge and there is no ground behind it, so the whole thing read
+         as one undifferentiated sheet. White on Paper separates them without
+         the six competing borders that made the old drawer a stack of boxes:
+         a change of surface, not another outline. */
+      #cu-drawer .cux-pane { padding-top: 20px; display: grid; gap: 12px; align-content: start; }
+      #cu-drawer .cux-sec { background: var(--bg-pane); border-radius: 12px; padding: 18px 20px; min-width: 0; }
+      #cu-drawer .cux-pane > .cux-folds { background: var(--bg-pane); border-radius: 12px; padding: 0 20px; margin-top: 0; border-top: none; }
+      #cu-drawer .cux-pane > .cux-folds details.cux-fold:last-child { border-bottom: 0; }
 
       /* Activity's three facts as a line-up: short values do not each need a
          118px label gutter. auto-fit so the optional Reviews cell joins the
          row where it fits and wraps where it doesn't. */
       #cu-drawer .cux-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
       #cu-drawer .cux-strip > div { min-width: 0; }
-      #cu-drawer .cux-strip .k { font-size: 12px; color: var(--text-2); margin-bottom: 3px; }
+      #cu-drawer .cux-strip .k { font-size: 12.5px; color: var(--text-2); margin-bottom: 4px; }
       #cu-drawer .cux-strip .v { font-size: 14.5px; font-weight: 500; color: var(--text-1); min-width: 0; overflow-wrap: anywhere; }
       #cu-drawer .cux-strip .v.quiet, #cu-drawer .cux-strip .v.none { font-weight: 400; color: var(--text-2); }
       #cu-drawer .cux-strip .v .muted { color: var(--text-3); font-weight: 400; }
@@ -4059,6 +4062,10 @@
       #cu-drawer .cu-note-foot[hidden] { display: none; }
 
       #cu-drawer .cux-kicker { display: flex; align-items: baseline; gap: 8px; font-size: 13px; font-weight: 500; color: var(--text-1); letter-spacing: 0; margin-bottom: 10px; }
+      /* Three sizes, so the eye ranks them without reading: title 16, value
+         14.5 at weight 500, label 12.5 at weight 400 in Graphite. */
+      #cu-drawer .cux-sec > .cux-kicker { font-size: 16px; letter-spacing: -.005em; margin-bottom: 14px; }
+      #cu-drawer .cux-sec > .cux-kicker .side { font-size: 12.5px; }
       #cu-drawer .cux-kicker .side { margin-left: auto; font-weight: 400; font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; }
       /* A hairline between every row inside a card. */
       #cu-drawer .cux-frow { display: grid; grid-template-columns: 118px 1fr; gap: 12px; padding: 9px 0; border-top: 1px solid var(--td-border); align-items: baseline; }
@@ -4066,7 +4073,7 @@
       /* Label and value must not look alike — the reader should know which half
          is the answer before reading either. Label 13/400 Graphite, value
          15/500 Ink. */
-      #cu-drawer .cux-frow .k { font-size: 13px; font-weight: 400; color: var(--text-2); }
+      #cu-drawer .cux-frow .k { font-size: 12.5px; font-weight: 400; color: var(--text-2); }
       #cu-drawer .cux-frow .v { font-size: 15px; font-weight: 500; color: var(--text-1); min-width: 0; overflow-wrap: anywhere; text-align: right; }
       #cu-drawer .cux-frow .v .muted { color: var(--text-3); font-weight: 400; }
       #cu-drawer .cux-frow .v.quiet { font-weight: 400; color: var(--text-2); }
@@ -4078,7 +4085,12 @@
       #cu-drawer .cux-chart { margin-bottom: 26px; }
 
       /* Chart — shorter sage bars, quiet labels (tooltip singleton unchanged). */
-      #cu-drawer .cu-bar-row { height: 52px; gap: 6px; }
+      /* .cu-bar-col is a COLUMN of bar + 6px gap + label, all inside this
+         fixed height — so the row has to hold every one of them. 52px under
+         44px bars left 2px for an 11.5px label and the bars sat on the
+         months. Height tracks barMax (56) + gap (6) + label (16) in
+         08-customers.js; change the two together or they collide again. */
+      #cu-drawer .cu-bar-row { height: 78px; gap: 6px; }
       #cu-drawer .cu-bar { background: var(--tacet-sage); opacity: 1; border-radius: 5px 5px 2px 2px; max-width: 34px; margin: 0 auto; }
       #cu-drawer .cu-bar.peak { background: var(--tacet-sage-ink); }
       #cu-drawer .cu-bar.empty { background: var(--line-strong); border-radius: 2px; }
@@ -4094,8 +4106,8 @@
       #cu-drawer .cux-addr + .cux-addr { border-top: 1px solid var(--td-border); }
       #cu-drawer .cux-addr:last-child { padding-bottom: 0; }
       #cu-drawer .cux-addr .top { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; min-width: 0; }
-      #cu-drawer .cux-addr .nm { font-weight: 500; font-size: 14px; color: var(--text-1); }
-      #cu-drawer .cux-addr .ph { color: var(--text-2); font-size: 13px; font-variant-numeric: tabular-nums; }
+      #cu-drawer .cux-addr .nm { font-weight: 500; font-size: 14.5px; color: var(--text-1); }
+      #cu-drawer .cux-addr .ph { color: var(--text-2); font-size: 13.5px; font-variant-numeric: tabular-nums; }
       #cu-drawer .cux-addr .def { font-size: 10px; font-weight: 500; letter-spacing: .04em; color: var(--text-2); background: var(--bg-elev-1); border: 1px solid var(--td-border); border-radius: 999px; padding: 1px 7px; }
       /* Actions sit on the SAME line as the identifiers, pushed right — they
          only wrap if the row genuinely can't hold them, never by default. */
@@ -4108,20 +4120,20 @@
       #cu-drawer .cux-addr .acts button { border: 0; background: none; font-family: var(--f-sans); font-size: 13.5px; color: var(--text-2); cursor: pointer; padding: 2px 6px; border-radius: 6px; }
       #cu-drawer .cux-addr .acts button:hover { color: var(--text-1); background: var(--bg-elev-1); }
       #cu-drawer .cux-addr .acts button.del:hover { color: var(--tacet-brick); background: var(--tacet-brick-tint); }
-      #cu-drawer .cux-addr .line2 { color: var(--text-2); font-size: 12px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #cu-drawer .cux-addr .line2 { color: var(--text-2); font-size: 12.5px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
       /* Top items — Item · Qty · Spend, with the SKU on a SECOND LINE under the
          product name. A fourth column at this width forces the name to wrap,
          and the name must never wrap: it truncates with an ellipsis instead.
          An absent SKU renders nothing (Eleme lines have none) — never a dash. */
-      #cu-drawer .cux-titbl { width: 100%; border-collapse: collapse; table-layout: auto; font-size: 13px; }
-      #cu-drawer .cux-titbl th { text-align: left; font-weight: 500; color: var(--text-2); font-size: 12px; padding: 0 0 6px; border-bottom: 1px solid var(--td-border); }
+      #cu-drawer .cux-titbl { width: 100%; border-collapse: collapse; table-layout: auto; font-size: 14px; }
+      #cu-drawer .cux-titbl th { text-align: left; font-weight: 500; color: var(--text-2); font-size: 12.5px; padding: 0 0 6px; border-bottom: 1px solid var(--td-border); }
       #cu-drawer .cux-titbl td { padding: 9px 0; border-bottom: 1px solid var(--td-border); line-height: 1.4; }
       #cu-drawer .cux-titbl tr:last-child td { border-bottom: 0; }
       #cu-drawer .cux-titbl :is(th, td).numeric { text-align: right; padding-left: 16px; white-space: nowrap; width: 1%; font-variant-numeric: tabular-nums; }
       #cu-drawer .cux-titbl :is(th, td):first-child { width: 100%; max-width: 0; min-width: 0; }
       #cu-drawer .cux-titbl .ti-name { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-1); }
-      #cu-drawer .cux-titbl .ti-sku { display: block; font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; margin-top: 2px; }
+      #cu-drawer .cux-titbl .ti-sku { display: block; font-size: 12.5px; color: var(--text-2); font-variant-numeric: tabular-nums; margin-top: 2px; }
 
       /* 🔴 THE PANEL NEVER SCROLLS SIDEWAYS. A horizontal scrollbar inside the
          drawer is a bug at any width — if two cards can't sit side by side they
