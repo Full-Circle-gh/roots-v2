@@ -1079,20 +1079,22 @@ Page({
     // Same-city shoppers never see the + on a sold-out reservable row (the card
     // renders the dead SOLD OUT pill instead), but a stale page can still fire
     // this — re-check rather than trusting the tap.
-    const { preorder, soldOut } = _stockState(raw, !!this._onLocalRun);
+    const { preorder, today, soldOut } = _stockState(raw, !!this._onLocalRun);
     if (soldOut) {
       wx.showToast({ title: this.data.lang === 'cn' ? '已售罄' : 'Sold out', icon: 'none' });
       return;
     }
-    this._addRawToCart(raw, id, preorder);
+    this._addRawToCart(raw, id, preorder && !today);
   },
 
   // Add one product row to the cart + run the fly-to-cart animation. originId
   // is the id of the card whose + button anchors the animation (the
   // representative card, even when the chosen size is a different sibling).
-  // preorder: the row is out of stock but reservable — say so, so a quick-add
-  // never silently looks like a normal in-stock add.
-  _addRawToCart(raw, originId, preorder) {
+  // sayPreorder: the row is out of stock and reserved, so a quick-add never
+  // silently looks like a normal in-stock add. NOT simply `preorder` — a
+  // batch made TODAY is reservable and is not a reservation (§80), so the
+  // callers pass `preorder && !today` and it is added like any other line.
+  _addRawToCart(raw, originId, sayPreorder) {
     cart.add({
       id: raw.id,
       name_en: raw.name_en,
@@ -1109,7 +1111,7 @@ Page({
       bundle_worth: raw.bundle_worth,   // a bundle card: its "separately" worth
     }, 1, []);
 
-    if (preorder) {
+    if (sayPreorder) {
       wx.showToast({
         title: this.data.lang === 'cn' ? '已预订，加入购物车' : 'Added — pre-order',
         icon: 'none',
@@ -1125,7 +1127,7 @@ Page({
       .exec((res) => {
         const rect = res && res[0];
         if (!rect) {
-          if (!preorder) wx.showToast({ title: this.data.lang === 'cn' ? '已加入' : 'Added', icon: 'success', duration: 800 });
+          if (!sayPreorder) wx.showToast({ title: this.data.lang === 'cn' ? '已加入' : 'Added', icon: 'success', duration: 800 });
           return;
         }
         const startX = rect.left + (rect.width / 2) - 20;
@@ -1138,6 +1140,7 @@ Page({
   // Bottom sheet listing each sibling size with its own price / stock.
   _openVariantPicker(repId, members) {
     const L = this.data.lang;
+    const onLocalRun = !!this._onLocalRun;
     const money = v => '¥' + (Number.isInteger(v) ? v : v.toFixed(2));
     const options = members.map(m => {
       const regular = Number(m.price ?? m.sell_price) || 0;
@@ -1148,11 +1151,27 @@ Page({
       const cmp = Number(m.compare_at_price) || 0;
       const wasN = isFlash ? regular : (cmp > eff && eff > 0 ? cmp : 0);
       const saveN = wasN > eff && eff > 0 ? Math.round((wasN - eff) * 100) / 100 : 0;
-      // Out but pre-orderable (out-of-city) → keep the row tappable with a
-      // PRE-ORDER badge; only a hard-out size shows the dead SOLD OUT pill.
-      // Mirrors the PDP's own size picker. For a same-city address every
-      // sold-out size is hard-out — pre-order isn't on offer for today's run.
-      const { out, preorder, soldOut, stock } = _stockState(m, !!this._onLocalRun);
+      // Out but pre-orderable → keep the row tappable with a word of its own;
+      // only a hard-out size shows the dead SOLD OUT pill. Mirrors the PDP's
+      // own size picker. For a same-city address a sold-out size is hard-out
+      // unless the kitchen has dated the next batch for it.
+      const { out, preorder, today, soldOut, stock } = _stockState(m, onLocalRun);
+      /* §80 follow-up, per SIZE — this sheet drew the page-level `preLabel`
+         flat, so every reservable size read PRE-ORDER whatever the shopper's
+         address was. One string cannot answer three questions:
+           made today, on the run → orderable, and SILENT
+           made later, on the run → NEXT BATCH · 下批现做
+           shipped                → PRE-ORDER · 可预订, unchanged
+         `preorder` STAYS TRUE in all three — it is what keeps the row out of
+         SOLD OUT (see _stockState), so silencing the band by turning it off
+         would mark the size sold out on the morning it is most available. The
+         band in shop.wxml is gated on this TEXT instead, and an empty string
+         is a real answer there, not a missing one. Do not restore an
+         "|| preLabel" fallback: it reads '' as absent and prints the one word
+         §80 forbids. */
+      const preText = (!preorder || today) ? ''
+        : onLocalRun ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
+                     : (L === 'cn' ? '可预订' : 'PRE-ORDER');
       return {
         id: m.id,
         label: lang.pickVariantLabel(m.variant_label, m.variant_label_cn, L) || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
@@ -1163,6 +1182,7 @@ Page({
         isFlash,
         soldOut,
         preorder,
+        preText,
         low: (!out && stock != null && stock <= 5)
           ? (L === 'cn' ? `仅剩 ${stock}` : `Only ${stock} left`)
           : '',
@@ -1192,14 +1212,14 @@ Page({
     if (!m) return;
     // A pre-orderable out-of-stock size stays orderable for an out-of-city
     // shopper; a same-city one gets the dead row (_stockState folds that in).
-    const { preorder, soldOut } = _stockState(m, !!this._onLocalRun);
+    const { preorder, today, soldOut } = _stockState(m, !!this._onLocalRun);
     if (soldOut) {
       wx.showToast({ title: this.data.lang === 'cn' ? (m.ship_from_supplier ? '暂时缺货' : '已售罄') : (m.ship_from_supplier ? 'Unavailable' : 'Sold out'), icon: 'none' });
       return;
     }
     this.setData({ vpShow: false });
     // Fly from the representative card's + button (still in the DOM).
-    this._addRawToCart(m, this._vpRepId, preorder);
+    this._addRawToCart(m, this._vpRepId, preorder && !today);
   },
 
   _launchFly(startX, startY, imgUrl) {

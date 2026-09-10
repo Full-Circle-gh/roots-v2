@@ -218,8 +218,11 @@
                          PRE-ORDER — the one word §80 forbids for a shopper on the
                          local run. Do not restore that fallback here: every row this
                          list renders comes from the grid builder in shop.js, which
-                         always sets preText. The OR-preLabel form stays correct in the
-                         variant sheet below, whose rows carry no preText at all.
+                         always sets preText. NOR in the variant sheet below — when
+                         this was written its rows carried no preText and the fallback
+                         was all that stood between them and a blank pill, so it was
+                         left alone; they carry their own word now, and it is gated on
+                         the text like every band here.
                          Same shape at .card-pre and .gal-pre. -->
                     <view wx:elif="{{item.preorder && item.preText}}" class="row-pre f-toni">{{item.preText}}</view>
                   </view>
@@ -348,7 +351,16 @@
             <text wx:if="{{opt.low}}" class="vp-opt-low f-toni">{{opt.low}}</text>
             <text wx:if="{{opt.save}}" class="vp-opt-save f-toni">{{opt.save}}</text>
             <text wx:if="{{opt.soldOut}}" class="vp-opt-oos f-toni">{{oosLabel}}</text>
-            <text wx:elif="{{opt.preorder}}" class="vp-opt-pre f-toni">{{preLabel}}</text>
+            <!-- §80 follow-up — gated on the TEXT, not on `preorder`. That flag
+                 also keeps the row out of SOLD OUT, so silencing the band by
+                 turning it off would mark the size sold out on the morning it is
+                 most available; an EMPTY preText is the silence itself.
+                 This drew the page-level {{preLabel}} flat — the literal
+                 'PRE-ORDER' / '可预订', the one word §80 forbids a shopper on the
+                 local run — no matter what the builder decided. The rows carry
+                 their own word now (shop.js → _openVariantPicker). Do not put
+                 the "|| preLabel" fallback back: it reads '' as absent. -->
+            <text wx:elif="{{opt.preorder && opt.preText}}" class="vp-opt-pre f-toni">{{opt.preText}}</text>
           </view>
           <view class="vp-opt-price-stack">
             <text wx:if="{{opt.priceWas}}" class="vp-opt-was f-aleo">{{opt.priceWas}}</text>

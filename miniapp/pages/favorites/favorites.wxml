@@ -59,7 +59,10 @@
         </view>
         <view wx:if="{{item.priceDrop}}" class="tag-drop f-bear">−¥{{item.priceDrop}}</view>
         <view wx:if="{{item.soldOut}}" class="tag-out f-gothic">{{copy.soldOut}}</view>
-        <view wx:elif="{{item.preorder}}" class="tag-pre f-gothic">{{copy.preorder}}</view>
+        <!-- §80 follow-up — gated on the TEXT, not on `preorder`: that flag also
+             keeps the tile out of SOLD OUT and out of the literal ADD ALL, so an
+             EMPTY preText is the silence, not a missing value. Same at .row-pre. -->
+        <view wx:elif="{{item.preorder && item.preText}}" class="tag-pre f-gothic">{{item.preText}}</view>
       </view>
       <view class="card-name f-bear">{{item.name}}</view>
       <view wx:if="{{item.subLine}}" class="card-sub f-yuan">{{item.subLine}}</view>
@@ -85,7 +88,8 @@
           <text class="row-saved f-toni">{{item.savedDisplay}}</text>
           <text wx:if="{{item.priceDrop}}" class="row-drop f-bear">−¥{{item.priceDrop}}</text>
           <text wx:if="{{item.soldOut}}" class="row-out f-gothic">{{copy.soldOut}}</text>
-          <text wx:elif="{{item.preorder}}" class="row-pre f-gothic">{{copy.preorder}}</text>
+          <!-- Gated on the text, not on the flag — see the .tag-pre band above. -->
+          <text wx:elif="{{item.preorder && item.preText}}" class="row-pre f-gothic">{{item.preText}}</text>
         </view>
       </view>
       <view class="row-right">
