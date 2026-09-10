@@ -135,11 +135,24 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
     // with a made-up name: §36 records that Finance stores category text raw
     // and un-normalised, so inventing a label here would put a second wrong
     // name on top of a known-dirty column. The client renders the null.
+    //
+    // `NULLIF(category, '')` FOLDS THE EMPTY STRING ONTO NULL, and it is the one
+    // thing here that is not a bare GROUP BY. SQLite groups '' and NULL apart,
+    // while the payload below maps both to `null` and the screen draws both as
+    // "Not recorded" — so a tenant holding one of each rendered TWO identical
+    // lines with different figures and no way to tell them apart. It also broke
+    // the drill-down's whole contract: the detail read matches one bucket, and
+    // there were two for it to disagree with. Folding is safe in a way that
+    // trimming would not be — it merges only rows that already draw the same,
+    // where TRIM would merge ' Ingredients' onto 'Ingredients' and silently
+    // decide a question about typography that lib/category-text.js refuses to.
+    // Nothing about the totals moves: the same rows are summed either way.
     const grouped = db.prepare(`
-      SELECT category, COALESCE(SUM(amount), 0) AS amount, COUNT(*) AS n
+      SELECT NULLIF(category, '') AS category,
+             COALESCE(SUM(amount), 0) AS amount, COUNT(*) AS n
         FROM expense_entries
        WHERE ${LEDGER_DATE} BETWEEN ? AND ?
-       GROUP BY category
+       GROUP BY NULLIF(category, '')
        ORDER BY amount DESC`).all(from, to);
 
     // ── Which categories the tenant has marked non-operating ──
@@ -283,6 +296,142 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
     });
   } catch (e) {
     console.error('[finance/summary]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /api/retail-admin/finance/summary/category?from=&to=&category= ─────
+//
+// THE ROWS BEHIND ONE LINE OF THE BREAKDOWN. The disclosure above says
+// Ingredients cost ¥27,081; this says which rows make it up.
+//
+// **IT IS THE BREAKDOWN'S OWN QUERY WITH THE GROUP BY REMOVED, AND THAT IS THE
+// WHOLE DESIGN.** Same table, same window expression, same category match —
+// listed instead of summed. The detail therefore adds up to the figure that was
+// clicked by construction rather than by agreement, and there is no second
+// place for the two to drift apart.
+//
+// ── WHY NOT REUSE THE TRANSACTIONS LIST, WHICH ALREADY READS THIS TABLE ────
+// Because it answers a different question and would show a smaller number.
+// `routes/finance-transactions.js` COLLAPSES PO-derived rows to one row per
+// purchase order — a purchase order buys several categories at once, so the
+// collapsed row carries `category: null` and no category filter can match it.
+// It also windows those rows on the PO's own date rather than the expense row's.
+// A drill-down built on it would open ¥27,081 onto a list totalling whatever
+// happened to be hand-typed, with the purchase orders — usually most of an
+// ingredients line — missing and nothing on screen to say so. §36 treats a
+// figure whose own breakdown does not add up as the worst thing this card can
+// do, and borrowing a list reshaped for another purpose is how that happens.
+//
+// So the PO rows are listed INDIVIDUALLY here. PO-0050 appearing twice in one
+// category is not a duplicate: it bought ingredients on two lines, and both are
+// inside the total. The po_number rides along so the row can still say where it
+// came from.
+//
+// ── THE MATCH IS ON RAW TEXT, AND DELIBERATELY NOT ON `spacingKey` ─────────
+// The breakdown groups by the category column as stored. `Ingredients(Kitchen+
+// Retail Use)` and `Ingredients (Kitchen + Retail Use)` are therefore TWO lines
+// on the card, each with its own figure — lib/category-text.js resolves that
+// pair for the is_operating flag and pointedly does not merge them for display.
+// A detail read keyed on `spacingKey` would gather both spellings under either
+// line and overshoot the figure clicked. The one rule that keeps this honest is
+// *match what the GROUP BY grouped*: `=` against the raw text, which shares
+// BINARY collation with it (`schema.sql:276`, no COLLATE on the column).
+//
+// ── NO ROW CEILING, and that is a decision rather than an oversight ────────
+// A capped list is a list that does not add up, which is the one thing this
+// endpoint exists to guarantee. `readTransactions` caps at 2,000 across a whole
+// window because it is a browsable ledger; this is one category inside one
+// window, bounded by how much a shop buys, and a cap here would trade the
+// contract for a ceiling nothing is near. If that ever stops being true the fix
+// is paging with the total stated, never a silent slice.
+router.get('/api/retail-admin/finance/summary/category', requireRetailAdmin, (req, res) => {
+  const win = resolveWindow(req.query);
+  const { from, to } = win;
+  if (win.inverted) {
+    return res.status(400).json({ error: 'from is after to · 起始日期晚于结束日期' });
+  }
+
+  // The uncategorised bucket, addressed by an EMPTY `category` parameter.
+  // NOT trimmed, on purpose: the grouping above folds '' onto NULL and folds
+  // nothing else, so a category of one space is a real category there and has to
+  // be a real category here too. Trimming on this side alone would send a
+  // whitespace label to the NULL bucket and return the wrong rows for it.
+  const raw = req.query.category;
+  const uncategorised = raw === undefined || raw === null || String(raw) === '';
+  const wanted = uncategorised ? null : String(raw);
+
+  try {
+    const db = tdb();
+
+    // The two joins are LEFT joins and carry no filter of their own: a row's
+    // provenance is a thing to REPORT, never a thing to select on. An inner join
+    // on either would drop rows out of a total that counted them — a PO deleted
+    // after its expenses posted would take its yuan off this list and leave them
+    // on the line above.
+    const rows = db.prepare(`
+      SELECT e.id, e.${LEDGER_DATE} AS date, e.amount, e.description,
+             e.po_id, po.po_number, COALESCE(po.scope, 'kitchen') AS po_scope,
+             e.claim_id, c.paid_by
+        FROM expense_entries e
+   LEFT JOIN purchase_orders po ON po.id = e.po_id
+   LEFT JOIN staff_expenses  c  ON c.id  = e.claim_id
+       WHERE e.${LEDGER_DATE} BETWEEN ? AND ?
+         AND ${uncategorised ? "NULLIF(e.category, '') IS NULL" : 'e.category = ?'}
+       ORDER BY e.date DESC, e.id DESC`)
+      .all(...(uncategorised ? [from, to] : [from, to, wanted]));
+
+    // Summed in MINOR UNITS, for the reason the summary's own totals are: a
+    // running total of REAL yuan accumulates a residue, and this figure exists
+    // precisely so a caller can hold it against the breakdown line and find them
+    // equal. Adding it up the sloppy way would be the one bug this endpoint
+    // cannot afford.
+    let minor = 0;
+    const out = rows.map((r) => {
+      minor += money.toMinor(r.amount) || 0;
+      return {
+        id: r.id,
+        date: String(r.date),
+        amount: fen(r.amount),
+        note: r.description || null,
+        // WHERE THE ROW CAME FROM, said the way Transactions says it, because an
+        // operator meets these three kinds on that screen first. 'manual' is a
+        // row somebody typed; 'claim' one an approved staff expense posted;
+        // 'po' one a purchase order posted.
+        source: r.po_id ? 'po' : r.claim_id ? 'claim' : 'manual',
+        po_id: r.po_id || null,
+        po_number: r.po_number || null,
+        // Whether THIS admin's opener can serve that purchase order, not a fact
+        // about the order. Both realms post into this table and share
+        // `purchase_orders`; Purchasing's opener answers for retail scope only,
+        // so a kitchen PO must not be offered a link that cannot complete (§36).
+        po_open: r.po_id ? r.po_scope === 'retail' : null,
+        claim_id: r.claim_id || null,
+        // Whether the shop paid it or a person did — the difference between a
+        // cost that is finished and one that is also a debt.
+        paid_by: r.claim_id ? (r.paid_by || null) : null,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        window: { from, to, span_days: win.span_days },
+        // Echoed back exactly as asked, so a caller can tell which line it holds
+        // — and null for the uncategorised bucket, matching the breakdown row's
+        // own null rather than an invented label. §36: Finance stores category
+        // text raw, and a name minted here would be a second wrong one.
+        category: uncategorised ? null : wanted,
+        // THE ASSERTION THIS ENDPOINT IS FOR. It equals the `amount` on the
+        // matching `expense_breakdown` row of the same window, always, because
+        // both are the same rows added the same way. A test holds them together.
+        total: money.fromMinor(minor),
+        entries: out.length,
+        rows: out,
+      },
+    });
+  } catch (e) {
+    console.error('[finance/summary/category]', e.message);
     res.status(500).json({ error: e.message });
   }
 });

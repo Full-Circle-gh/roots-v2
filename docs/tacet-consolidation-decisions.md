@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.196
+# Tacet shared-core consolidation — decisions record, v4.197
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-10 · v4.197 — **§88 DECIDED: A LINE OF THE EXPENSE BREAKDOWN OPENS ONTO THE ROWS BEHIND IT — asked for by Ash** off the live Summary card: *"there should be an option to click on each category and see details payment break down."* **THE CHEAP BUILD WAS REJECTED BEFORE IT WAS STARTED, and the reason is the whole of this decision.** Sending the operator to the Transactions tab filtered to that category would have shown a SMALLER NUMBER than the line they tapped: `readTransactions` collapses PO-derived rows to one per purchase order — a purchase order buys several categories at once, so the collapsed row carries `category: null` and no category filter can match it — and it windows those rows on the PO's own date rather than the expense row's. Ingredients is precisely the category most likely to be mostly purchase orders, so ¥27,081 would have opened onto whatever happened to be hand-typed, with nothing on screen to say the rest was missing. §36 treats a figure whose own breakdown does not add up as the worst thing this card can do; borrowing a list reshaped for another purpose is how that happens. **SO THE DRILL-DOWN IS THE BREAKDOWN'S OWN QUERY WITH THE `GROUP BY` REMOVED** — same table, same window expression, same category match, listed instead of summed — and the detail equals the figure clicked BY CONSTRUCTION rather than by agreement. PO rows are listed individually; PO-0050 twice in one category is one purchase that bought it on two lines. **THE MATCH IS ON RAW TEXT AND DELIBERATELY NOT ON `spacingKey`**: the breakdown groups by the column as stored, so the two live spellings of the ingredients category are TWO lines on the card, and a detail read keyed on `spacingKey` would gather both under either line and overshoot. §87's flag resolution matches on `spacingKey` and this does not — the rule is *match what the `GROUP BY` grouped*, and the two are different questions. **ONE PRE-EXISTING DEFECT FIXED IN PASSING AND CALLED OUT**: SQLite groups `''` and `NULL` apart while the payload maps both to `null`, so a tenant holding one of each rendered TWO identical "Not recorded" lines with different figures. `NULLIF(category, '')` folds them; `TRIM` was rejected because it would merge ` Ingredients` onto `Ingredients` and decide a question about typography that `lib/category-text.js` refuses to. **NO ROW CEILING, and that is a decision**: a capped list is a list that does not add up, which is the one guarantee this endpoint makes. If the volume ever justifies one the fix is paging with the total stated, never a silent slice. **NO NEW CHINESE — nothing composed, so nothing is owed to the vocabulary**, and that is asserted by a test rather than claimed in a commit message: every pair the rows render (`采购单自动记入`, `费用申请 · 个人支付`, `加载中…`, `暂无记录`, `财务数据加载失败。`) already ships on the Transactions or Approvals sub-view of the same file for the same fact. **THE DRILL-DOWN IS READ-ONLY**, and deliberately: a concurrent session was deciding who may edit and cancel a transaction, and a second edit path into `expense_entries` opened while that was unsettled is how two rules about one table come to disagree. **ONE TEST WAS RE-SCOPED, NOT RELAXED**: `test_finance_categories.js` counted `FROM expense_entries` across the whole route FILE, which a second route in that file necessarily breaks; the rule it enforces is that the SUMMARY must not answer with two reads, so it now counts inside the summary handler, and a companion assertion holds the drill-down to one read and forbids it re-deciding the operating split. `npm run test:fast` 196/196 green; `test_finance_summary.js` grows 31 → 50, `test_finance_categories.js` 27 → 28, with `test_finance_transactions.js` 53/53 and `test_finance_presentation.js` 31/31 unchanged. Verified end to end over HTTP against a seeded ledger: every breakdown line reconciles to the fen, fractional amounts included. No schema, no migration. No change to `.gitignore` or CI.
 
 2026-09-10 · v4.196 — **§87 FIXED: THE LEDGER ROW NEVER SAID WHO SPENT IT, BECAUSE NOTHING EVER SET THE FIELD THAT SAYS SO.** Reported by Ash off the live Transactions screen: a ¥200 money-out row marked **Staff claim** with no person on it. **v4.190 DECIDED THIS AND THE CODE HAS DISAGREED WITH IT SINCE THE DAY IT SHIPPED** — "who spent it is in the description, because a ¥38 line with no supplier, no invoice and no purchase order behind it is answerable months later only if it says whose taxi it was." `claimDescription` in `lib/expense-posting.js` reads `claim.submitted_name`; a `staff_expenses` row carries the integer `submitted_by` and nothing else, and `/decide` handed `postClaim` that row untouched. **So the name branch was dead in production and every claim-posted row in the books says the note alone.** **THE PASSING TEST IS WHAT HID IT.** `scripts/test_staff_expenses.js` asserted the description carries the name — against a hand-built fixture that sets `submitted_name: 'Wei'` itself. The lib was covered, the wiring was not, and a green suite said the decision was honoured. The new assertion reads the ROUTE, and it fails against the pre-fix file — checked by reverting, not assumed. **NAMES ARE A CROSS-HANDLE READ AND A JOIN IS NOT AVAILABLE**: `tenant_users` is control-plane, `staff_expenses` is tenant. The approval queue already did this lookup inline; `submitterNames(ids)` is now the ONE place the route resolves a name, so the name on the approver's screen and the name in the books cannot drift apart — a second lookup shaped slightly differently is the whole mechanism by which they would. **RESOLVED BEFORE THE TRANSACTION OPENS**, because a second database's latency does not belong inside a lock the tenant handle is holding for a value the write cannot fail on; and a name is still a nicety — the lookup swallows its own failure and a claim with no name against it still decides and still posts its money. **EXISTING ROWS ARE NOT BACKFILLED, and that is Ash's decision rather than an omission**: the description is a snapshot taken at approval, one live row is affected, and posting is delete-and-reinsert — so re-deciding that claim re-posts it with the name. A migration rewriting descriptions on rows already in the books buys one row and writes over ledger text nobody asked it to touch. **THE OTHER TWO OPTIONS ARE RECORDED AS REJECTED, not unconsidered**: a backfill (above), and resolving the name at READ time in `routes/finance-transactions.js` so the mark reads `Staff claim · Asher`. The second is the more robust mechanism — it reaches every existing row and follows a later rename — but it contradicts v4.190's placement of the fact in the description, and with the post path fixed it would print the name twice. If the snapshot ever proves wrong, that is the change to make, and it is a decision rather than a fix. `npm run test:fast` 195/195 green, plus `test_finance_transactions.js` 50/50 and `test_finance_summary.js` 31/31; the claims suite grows 64 → 66 assertions. No schema, no migration, no new Chinese — the `·` join already exists and no string is minted. No change to `.gitignore` or CI.
 
@@ -8987,3 +8989,103 @@ that name rather than a number.
 else — so a receipt already photographed, screenshotted, or sent by a supplier
 could not be attached at all, which is most of them. The attribute is gone;
 `accept="image/*"` is what keeps the chooser to pictures.
+
+
+## §88 — A LINE OF THE BREAKDOWN OPENS ONTO THE ROWS BEHIND IT
+
+**Decided 2026-09-10 by Ash**, from the live Summary card: *"there should be an
+option to click on each category and see details payment break down."*
+
+### The question the operator arrives with
+
+The disclosure on the operating-expenses row says Ingredients cost ¥27,081 and
+then stops. The next question — *which purchases were those* — has no answer on
+the card, and the operator's only route to one is to leave for the Transactions
+tab and read a ledger that is not organised by the thing they clicked.
+
+### THE OBVIOUS BUILD IS WRONG, AND THAT IS THE DECISION
+
+Filtering the Transactions list to the clicked category is one line of client
+code and it **shows a smaller number than the line it opened from.**
+
+`routes/finance-transactions.js` collapses PO-derived rows to **one row per
+purchase order**. A purchase order buys several categories at once, so the
+collapsed row carries no category at all — `category: null` — and no category
+filter can match it. It also windows those rows on the **purchase order's own
+date**, where the breakdown windows on the expense row's. Ingredients is exactly
+the category most likely to be mostly purchase orders, so the drill-down would
+have opened ¥27,081 onto a list totalling whatever happened to be hand-typed,
+with the purchases missing and nothing on screen to say so.
+
+§36 already names this as the worst thing this card can do — a figure whose own
+breakdown does not add up. **Borrowing a list that was reshaped for a different
+question is how that happens**, and the reshaping is correct where it lives: a
+purchase is one fact on a ledger a bookkeeper is reading.
+
+### WHAT IS BUILT INSTEAD
+
+`GET /api/retail-admin/finance/summary/category?from=&to=&category=` — **the
+breakdown's own query with the `GROUP BY` removed.** Same table, same window
+expression, same category match; listed instead of summed. The detail therefore
+totals the figure that was clicked **by construction rather than by agreement**,
+and there is no second place for the two to drift apart.
+
+PO rows are listed **individually**. PO-0050 appearing twice inside one category
+is not a duplicate: it bought that category on two lines, and both are inside the
+total. The PO number rides along so the row still says where it came from.
+
+### THE MATCH IS ON RAW TEXT, NOT ON `spacingKey`
+
+The breakdown groups by the category column **as stored**, so
+`Ingredients(Kitchen+Retail Use)` and `Ingredients (Kitchen + Retail Use)` are
+two lines on the card, each with its own figure. §87's `is_operating` resolution
+matches those on `spacingKey`; the breakdown pointedly does not merge them for
+display.
+
+**A detail read keyed on `spacingKey` would gather both spellings under either
+line and overshoot the figure clicked.** The rule that keeps this honest is
+*match what the `GROUP BY` grouped*: `=` against the raw text, which shares
+BINARY collation with it — the column carries no `COLLATE`.
+
+### `NULLIF(category, '')` — a pre-existing defect fixed here
+
+SQLite groups `''` and `NULL` apart, while the payload maps both to `null` and
+the screen draws both as "Not recorded". A tenant holding one of each therefore
+rendered **two identical lines with different figures**, and the drill-down had
+two buckets to disagree with.
+
+The fold is `NULLIF`, never `TRIM`. `TRIM` would merge ` Ingredients` onto
+`Ingredients` and decide a question about typography that `lib/category-text.js`
+deliberately refuses to. Nothing about the totals moves: the same rows are summed
+either way.
+
+### NO ROW CEILING
+
+A capped list is a list that does not add up, which is the one guarantee this
+endpoint makes. `readTransactions` caps at 2,000 because it is a browsable
+ledger; this is one category inside one window. **If the volume ever justifies a
+ceiling, the answer is paging with the total stated — never a silent slice.**
+
+### READ-ONLY, AND THE REASON IS RECORDED
+
+The rows disclose and do not edit. Editing lives on the Transactions tab, where
+the refusals for PO- and claim-derived rows already are (§36, §87 step three).
+Opening a second write path into `expense_entries` while a concurrent session was
+settling who may edit and cancel a transaction is how two rules about one table
+come to disagree.
+
+**No link out from a detail row**, unlike Transactions' PO link. The row is
+inside a figure, not a ledger the operator is working, and the tab that carries
+the link is one click away.
+
+### NO NEW CHINESE
+
+Nothing is composed. Every pair the rows render — `采购单自动记入`,
+`费用申请 · 个人支付`, `费用申请`, `加载中…`, `暂无记录`,
+`财务数据加载失败。` — already ships on the Transactions or Approvals sub-view of
+the same file, for the same fact about the same kind of row. **A test asserts it**
+rather than a commit message claiming it: each string must appear at least twice
+in `22-finance.js`, so a "reuse" that is really a mint fails the build.
+
+The delegation of `docs/tacet-delivery-vocabulary.md` Rule 4 (amended
+2026-09-06) is therefore not exercised, and nothing is owed to that document.
