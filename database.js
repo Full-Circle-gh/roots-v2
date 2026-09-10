@@ -7088,7 +7088,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_material_request_items_src ON material_request_items(sourced_po_id);
 `);
 
-// §89: voiding an approved staff claim. New columns rather than reusing
+// §90: voiding an approved staff claim. New columns rather than reusing
 // decided_by/decided_at/decided_note, so the record still says who approved a
 // claim after somebody else reverses that decision — see schema.sql.
 addColumn('staff_expenses', 'voided_by', 'INTEGER');

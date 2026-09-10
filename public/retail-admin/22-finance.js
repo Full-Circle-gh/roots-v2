@@ -692,7 +692,7 @@ function finTxRow(r) {
      Edit — §36's "the row explains its own constraint instead of merely
      enforcing it", applied to the other document that owns rows in this table.
 
-     §89 AMENDS THE "NO LINK OUT" NOTE THIS BLOCK USED TO CARRY, RATHER THAN
+     §90 AMENDS THE "NO LINK OUT" NOTE THIS BLOCK USED TO CARRY, RATHER THAN
      LEAVING IT STANDING WRONG: the row now offers Void, requested by Ash off
      this exact screen — a claim posted by mistake had no way back except
      editing a row that would only be regenerated. Void is not Edit: it does not
@@ -740,7 +740,7 @@ function finTxRow(r) {
     // string is minted to explain the absence, there being no locked pair for
     // one and Rule 4 forbidding composing it.
     //
-    // A CLAIM ROW OFFERS VOID (§89), NOT EDIT, AND ONLY TO `expenses:cancel` —
+    // A CLAIM ROW OFFERS VOID (§90), NOT EDIT, AND ONLY TO `expenses:cancel` —
     // a distinct capability from `finance:record`, because reversing somebody
     // else's approval is not the same power as typing a ledger row by hand.
     // HIDDEN ONCE SETTLED, for the same reason the server refuses the write:
@@ -1194,7 +1194,7 @@ window.finTxDelete = async function finTxDelete() {
     api(`/api/retail-admin/finance/transactions/${row.kind}/${row.id}`, { method: 'DELETE' }));
 };
 
-/* Void a posted claim (§89). NOT finTxDelete: that endpoint refuses a
+/* Void a posted claim (§90). NOT finTxDelete: that endpoint refuses a
    claim-linked row outright (see the note above finTxRow) because the row is a
    projection of the claim — this calls the CLAIM's own endpoint instead, which
    marks the claim 'voided' and lets `postClaim` take the row back out, the same
@@ -1709,7 +1709,7 @@ function finAprPill(r) {
   if (r.status === 'rejected') {
     return `<span class="fin-apr-pill is-no">${escapeHtml(cuT('Not approved', '已拒绝'))}</span>`;
   }
-  // §89. NOT `is-no` — a voided claim was legitimately approved and later
+  // §90. NOT `is-no` — a voided claim was legitimately approved and later
   // reversed, which is a different fact from having been refused from the
   // start, so it gets the neutral pill rather than Brick's refusal colour.
   if (r.status === 'voided') {

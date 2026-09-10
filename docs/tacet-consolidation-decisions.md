@@ -9089,7 +9089,7 @@ in `22-finance.js`, so a "reuse" that is really a mint fails the build.
 The delegation of `docs/tacet-delivery-vocabulary.md` Rule 4 (amended
 2026-09-06) is therefore not exercised, and nothing is owed to that document.
 
-### DECIDED 2026-09-10 — §89: a capability to void a posted staff claim
+### DECIDED 2026-09-10 — §90: a capability to void a posted staff claim
 
 Reported by Ash off the live Transactions screen: a ¥200 "Staff claim" row (the
 same row v4.196 fixed the name on) offered no way to undo it. §87 already

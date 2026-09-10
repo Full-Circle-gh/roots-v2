@@ -311,7 +311,7 @@ CREATE TABLE IF NOT EXISTS staff_expenses (
   -- meaning here.
   store_id      INTEGER,
   receipt_data  TEXT,                   -- base64 data URI, nullable — a photo is optional
-  -- submitted → approved | rejected. approved → voided (§89: an approver's own
+  -- submitted → approved | rejected. approved → voided (§90: an approver's own
   -- decision reversed by whoever holds `expenses:cancel`, after the claim has
   -- already posted a row). There is no 'draft': a claim exists because somebody
   -- pressed Submit, and there is no path back from 'voided' — the same one-way
@@ -328,7 +328,7 @@ CREATE TABLE IF NOT EXISTS staff_expenses (
   decided_by    INTEGER,
   decided_at    DATETIME,
   decided_note  TEXT,
-  -- §89: WHO VOIDED AN APPROVED CLAIM, AND WHEN — kept apart from decided_by/
+  -- §90: WHO VOIDED AN APPROVED CLAIM, AND WHEN — kept apart from decided_by/
   -- decided_at rather than overwriting them, so the record still says who
   -- approved it after somebody else reverses that decision. NULL until voided.
   voided_by     INTEGER,
