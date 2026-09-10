@@ -14715,19 +14715,47 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 /* The table (§1.19 — fixed layout, classed cols, percentages summing to 100).
    FIVE columns, not the mockup's six: its Location column is gone, because
    neither ledger table carries a location and every cell would be empty. */
+/* CLIPS WITH clip-path, NOT overflow — §1.13a rule 2's mechanism, and it is the
+   whole reason the band below can pin. `overflow` in either axis makes this card
+   a scroll container, and a sticky header pins to its nearest scrollport: the
+   band would park 56px down from the card's own top, on row one. clip-path
+   rounds the corners without creating a scrollport, so the card keeps its shape
+   and the band still escapes to the page scroller. */
 #tab-finance .fin-tx-card {
   margin-top: 16px; background: var(--td-surface);
-  border: 1px solid var(--td-border); border-radius: 14px; overflow: hidden;
+  border: 1px solid var(--td-border); border-radius: 14px;
+  clip-path: inset(0 round 14px);
 }
 #tab-finance .fin-tx-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
 #tab-finance .fin-c-date { width: 12%; } #tab-finance .fin-c-desc { width: 46%; }
 #tab-finance .fin-c-dir { width: 12%; } #tab-finance .fin-c-amt { width: 16%; }
 #tab-finance .fin-c-act { width: 14%; }
 /* §1.13a band values, product-wide: --td-header fill, 13px/500 sentence case in
-   Ink, 10px 12px padding, a 1px rule under it. */
+   Ink, 10px 12px padding, a 1px rule under it. Orders is the anchor and these
+   are not a per-page decision.
+
+   `--td-header`, NOT `--td-raised`. This read --td-raised for its first three
+   months while the line above named the right token: raised is the surface a
+   card already sits on, so the band and the rows differed by nothing and the
+   header stopped reading as a header. --td-header exists because that exact
+   comparison was made and rejected (tacet-design-system.md §1).
+
+   `text-transform` AND `letter-spacing` ARE DECLARED HERE BECAUSE THEY HAVE TO
+   BE. The global `th` rule sets `uppercase` + `.08em`, and specificity is
+   compared PER PROPERTY: everything above out-ranks it, but a property this
+   rule never mentions has only one candidate declaration in the cascade — the
+   global one. So Finance shipped DATE / ASKED BY / AMOUNT against §1.6's
+   no-uppercase ban while every value it did declare was correct. Same trap as
+   §1.22, one property over. Do not remove these two lines.
+
+   STICKY, per §1.13a rule 1 — a ledger runs to hundreds of rows and the
+   operator must not lose which column is Amount. top: 56px is the topbar, and
+   z-index 5 sits under it and over the rows, matching Orders/Products/Customers. */
 #tab-finance .fin-tx-table thead th {
   font: 500 13px/1.6 var(--f-sans); color: var(--td-text); text-align: left;
-  background: var(--td-raised); padding: 10px 12px; border-bottom: 1px solid var(--td-border);
+  text-transform: none; letter-spacing: 0;
+  background: var(--td-header); padding: 10px 12px; border-bottom: 1px solid var(--td-border);
+  position: sticky; top: 56px; z-index: 5;
 }
 #tab-finance .fin-tx-table td {
   font: 400 15px/1.6 var(--f-sans); color: var(--td-text);
@@ -14854,12 +14882,31 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 }
 #tab-finance .fin-apr-shoterr { font: 400 14px/1.6 var(--f-sans); color: var(--td-text2); }
 
-/* The actions column. Approve is the CTA and Reject is beside it as a plain
-   control — refusing a ¥38 taxi is an ordinary decision, and a danger-red button
-   would make an approver hesitate over the one they are meant to make. */
+/* The actions column. Approve leads and Reject is beside it as a plain control —
+   refusing a ¥38 taxi is an ordinary decision, and a danger-red button would
+   make an approver hesitate over the one they are meant to make.
+
+   APPROVE IS INK, NOT DUSK, AND IT IS NOT A `.fin-cta`. It shipped as one, which
+   was wrong twice over. §1.8 rule 4: a page holds ONE Dusk CTA, and this button
+   is per row — a queue of six drew six of them. And §1.8 rule 5's corrected
+   axis, which is the deeper half: Dusk means *tacet did this for you*, so the
+   question is not where the button sits but WHO IS ACTING. An approver deciding
+   a claim is the operator acting, exactly as a modal confirm is, and the same
+   reasoning gives Profile zero Dusk. Ink keeps the hierarchy over Reject without
+   claiming the AI's voice. Values are the house Ink primary, copied from
+   `.cs-modal .btn-primary` rather than re-picked.
+
+   The class is its own rather than an override on `.fin-cta`, so Finance's one
+   real Dusk element — New transaction, the header CTA that holds §1.8 rule 1's
+   first claim — cannot be restyled from here by someone tidying this rule. */
 #tab-finance .fin-apr-act { text-align: right; }
 #tab-finance .fin-apr-acts { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
-#tab-finance .fin-apr-acts .fin-cta,
+#tab-finance .fin-apr-yes {
+  font: 500 15px/1.6 var(--f-sans); border-radius: 8px; cursor: pointer;
+  background: var(--td-text); border: 1px solid var(--td-text); color: var(--td-paper);
+}
+#tab-finance .fin-apr-yes:hover { background: var(--td-text); border-color: var(--td-text); opacity: .88; }
+#tab-finance .fin-apr-acts .fin-apr-yes,
 #tab-finance .fin-apr-acts .fin-btn-sec { padding: 4px 14px; font-size: 14px; }
 #tab-finance .fin-apr-act button[disabled] { opacity: .55; cursor: default; }
 

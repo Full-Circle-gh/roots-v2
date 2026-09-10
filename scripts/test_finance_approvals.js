@@ -122,6 +122,67 @@ it('the range bar and the CTA leave when the queue arrives', () => {
   assert.match(CLIENT_CODE, /if \(cta\) cta\.hidden = !isTx;/);
 });
 
+it('the range ECHO leaves with the bar, not after it', () => {
+  // The bar was hidden here from the day this pane shipped and the echo was
+  // not, so the queue sat under `Aug 12 – Sep 10 · 30 days` in the page head —
+  // the exact claim hiding the bar was meant to prevent, now unanswerable
+  // because the control that would change it is gone. Asserted separately from
+  // the bar: they are two elements saying one thing, and the failure was
+  // shipping half the rule.
+  assert.match(CLIENT_CODE, /if \(echo\) echo\.hidden = [^;]*\bisApr\b[^;]*;/);
+  assert.match(CLIENT_CODE, /if \(echo\) echo\.hidden = [^;]*\bisCats\b[^;]*;/);
+});
+
+it('the three blocks are DIVs — §1.22, the rule that has bitten four times', () => {
+  /* `section { display: none }` runs the tab system and is unscoped, so it
+     matches a <section> at any depth. All three blocks shipped as <section>s
+     and the whole sub-view rendered into the DOM with no box: correct HTML,
+     correct data, no pixels. The rule's own history is why this is asserted
+     rather than trusted — it had three documented bites and a correctly-worded
+     convention before it took this one. */
+  assert.doesNotMatch(APR_CODE, /<section/,
+    'a content block inside retail-admin is a <div>; <section> means "a tab page"');
+  assert.match(APR_CODE, /<div class="fin-apr-queue"/);
+  assert.match(APR_CODE, /<div class="fin-apr-owed"/);
+  assert.match(APR_CODE, /<div class="fin-apr-done"/);
+  // And the forbidden remedy must not come back in its place (§1.22: "change
+  // the tag, do not add a display override" — the block moves, never the rule).
+  const blocks = CSS.slice(CSS.indexOf('#tab-finance .fin-apr-owed,'));
+  assert.doesNotMatch(blocks.slice(0, 200), /display:\s*block/,
+    'the blocks are divs now — a display override here re-arms the trap');
+});
+
+it('the column band obeys §1.13a and §1.6 — Ink on --td-header, sentence case', () => {
+  /* Two drifts, one rule. The band read --td-raised, which is the surface the
+     card already sits on, so it stopped reading as a header — --td-header
+     exists because that comparison was made and rejected. And `text-transform`
+     has to be declared: the global `th` rule sets uppercase, specificity is
+     compared per property, and a property this rule never mentions has exactly
+     one candidate in the cascade. DATE / ASKED BY / AMOUNT shipped against
+     §1.6 while every value the rule did declare was correct. */
+  const band = CSS.slice(CSS.indexOf('#tab-finance .fin-tx-table thead th {'));
+  const decl = band.slice(0, 320);
+  assert.match(decl, /background: var\(--td-header\)/);
+  assert.doesNotMatch(decl, /background: var\(--td-raised\)/);
+  assert.match(decl, /text-transform: none/);
+  assert.match(decl, /position: sticky/);
+});
+
+it('Approve is Ink, and Finance keeps its one Dusk for the header CTA', () => {
+  // §1.8: one Dusk CTA per page, and this button repeats per row — but the
+  // half that decides it is rule 5's axis. Dusk means "tacet did this for
+  // you"; an approver deciding a claim is the OPERATOR acting, the same as a
+  // modal confirm. The button must not carry .fin-cta (Finance's Dusk fill),
+  // and its own class must paint the house Ink primary.
+  assert.doesNotMatch(APR_CODE, /class="fin-cta fin-apr-yes"/,
+    'Approve must not wear .fin-cta — that is Finance\'s Dusk element');
+  assert.match(APR_CODE, /class="fin-apr-yes"/);
+  const yes = CSS.slice(CSS.indexOf('#tab-finance .fin-apr-yes {'));
+  assert.match(yes.slice(0, 240), /background: var\(--td-text\)/,
+    'Approve fills with Ink (--td-text), the house Ink primary');
+  assert.doesNotMatch(yes.slice(0, 240), /--td-dusk/);
+});
+
 it('Summary is not left showing underneath the fourth pane', () => {
   // The bug every added pane re-introduces if the flags are written as negations.
   assert.match(CLIENT_CODE, /stair\.hidden = isTx \|\| isCats \|\| isApr/);
