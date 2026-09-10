@@ -106,6 +106,7 @@
     "test:inbox-fires": "node scripts/test_inbox_fires.js",
     "test:finance-summary": "node scripts/test_finance_summary.js",
     "test:finance-transactions": "node scripts/test_finance_transactions.js",
+    "test:finance-approvals": "node scripts/test_finance_approvals.js",
     "test:unit-cost-sanity": "node scripts/test_unit_cost_sanity_warning.js",
     "test:normalise-finance-categories": "node scripts/test_normalise_finance_categories.js",
     "test:finance-presentation": "node scripts/test_finance_presentation.js",

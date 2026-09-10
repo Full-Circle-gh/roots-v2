@@ -458,20 +458,38 @@ window.finShow = function finShow(which) {
   // one, and with three it is the bug where opening Categories leaves Summary
   // on screen underneath it.
   const isCats = which === 'categories';
+  // FOUR PANES SINCE §87 step three. Each flag is written positively for the
+  // reason the third one was: `!isTx` was the same thing as naming the other
+  // pane while there were two, and every pane added after that turns a negation
+  // into the bug where opening one leaves another on screen underneath it.
+  const isApr = which === 'approvals';
   document.querySelectorAll('#fin-subviews button')
     .forEach(b => b.classList.toggle('on', b.dataset.sub === which));
   const stair = document.getElementById('fin-stair');
   const tx = document.getElementById('fin-tx');
   const cats = document.getElementById('fin-cats');
-  if (stair) stair.hidden = isTx || isCats;
+  const apr = document.getElementById('fin-apr');
+  if (stair) stair.hidden = isTx || isCats || isApr;
   if (tx) tx.hidden = !isTx;
   if (cats) cats.hidden = !isCats;
+  if (apr) apr.hidden = !isApr;
   // The range bar belongs to the two views that read a window. The category
   // list is the tenant's own vocabulary and has no date about it — leaving the
   // bar up would offer a control that changes nothing on the screen under it.
+  //
+  // A QUEUE HAS NO WINDOW EITHER, and for a sharper reason than the category
+  // list has: what is waiting to be approved is waiting NOW, and a bar reading
+  // "30 days" over it would suggest there are older claims it is hiding. The
+  // server sends the queue whole, oldest first, and the screen shows the queue.
   const bar = document.querySelector('.fin-rangebar');
-  if (bar) bar.hidden = isCats;
+  if (bar) bar.hidden = isCats || isApr;
   if (isCats && !FIN_CATS_SEEN) { FIN_CATS_SEEN = true; finCatsLoad(); }
+  // A payload the dot poller already pulled paints immediately; the fetch is
+  // only for the first visit that beat it.
+  if (isApr) {
+    FIN_APR_SEEN = true;
+    if (FIN_APR) finAprRender(); else finAprLoad();
+  }
   // The CTA belongs to Transactions, not to the surface: Summary types nothing.
   // Its capability gate is `data-cap`, applied by applyCapGates as a display
   // rule, so the two compose — hidden here by sub-view, display:none there by
@@ -520,10 +538,15 @@ function finTxRow(r) {
      Edit — §36's "the row explains its own constraint instead of merely
      enforcing it", applied to the other document that owns rows in this table.
 
-     NO LINK OUT, unlike a PO row. A claim is worked on the phone by whoever
-     approves it, and this admin has no claim screen to open — a link that
-     switched to a tab that does not exist is the exact failure §36 names when
-     it refuses to offer a PO link the opener cannot serve. */
+     NO LINK OUT, unlike a PO row — AND THE REASON HAS CHANGED, so the note is
+     rewritten rather than left standing. It used to be that a claim was worked
+     on the phone and this admin had no claim screen to open; §87 step three's
+     Approvals sub-view is that screen, one click away in this same strip. What
+     is still true is that there is nothing on the other side worth the link:
+     a row in THIS table is a claim already decided, and Approvals would open on
+     a queue that no longer contains it. A link that lands somewhere not showing
+     what was clicked is the same failure §36 names when it refuses a PO link the
+     opener cannot serve — it has simply stopped being about a missing tab. */
   const claim = r.source === 'claim';
   // §36: the note vanishes ENTIRELY at one category. "It does not read '1
   // category'" — at one nothing was collapsed, so a note would assert a
@@ -1199,3 +1222,471 @@ window.finCatAdd = async function finCatAdd() {
 window.finCatAddKey = function finCatAddKey(ev) {
   if (ev.key === 'Enter') { ev.preventDefault(); finCatAdd(); }
 };
+
+/* ══════════════════════════════════════════════════════════════════════════
+   APPROVALS (§87 step three), ON THE DESKTOP — the tap that puts money in the
+   books, on the surface where the books are read.
+
+   **WHY IT IS A FINANCE SUB-VIEW AND NOT A RAIL ROW OF ITS OWN.** Approving a
+   claim posts a row into `expense_entries` — it is not a screen NEAR the ledger,
+   it is the act that writes to it. Transactions lists what was entered; this
+   lists what is waiting to be entered, and one click separates them. The phone
+   gives it a row of its own (m.html, Operations) because a phone has no Finance
+   screen to put it inside; this surface does.
+
+   **THIS REPLACES A DOCUMENTED ABSENCE.** finTxRow above says of a claim row:
+   "A claim is worked on the phone by whoever approves it, and this admin has no
+   claim screen to open." That was true and is no longer. The claim row still
+   offers no link out — wiring one is a separate decision about where a ledger
+   row should send somebody, and §36's refusal there was about a link to a tab
+   that does not exist, not about this queue.
+
+   **NOTHING HERE IS COMPOSED.** Every pair below is lifted verbatim from the
+   phone's own approvals screen (public/m.html, screenApprovals / aprRow), which
+   is the first preference in the Rule 4 amendment: copy a live pair. The two
+   surfaces now say the same words for the same act, which is the point.
+
+   Server: routes/staff-expenses.js — /pending, /:id/decide, /:id/settle. All
+   three are gated on `expenses:approve`, which no floor preset holds.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+let FIN_APR = null;          // the last /pending payload
+let FIN_APR_SEEN = false;    // has this sub-view ever been pulled
+let FIN_APR_BUSY = 0;        // id being decided, or -1 while a settle runs
+let FIN_APR_SHOT = null;     // the receipt currently open: { id, data, err }
+
+/* THE ROW IS BUSY, NOT THE SCREEN. Ported verbatim from the phone's reasoning:
+   a manager working down a queue of six clicks the next one while the last is
+   still in flight, and a spinner over the whole list would make that impossible
+   for no benefit. */
+
+// The claim amount, EXACT. Not finMoney() — that is the staircase's formatter
+// and rounds to whole units, which is right for a ¥180,332 headline and wrong
+// here: the figure on this row is the one being approved, and a ¥38.50 taxi
+// that renders as ¥39 is the screen misreporting the decision it is asking for.
+function finAprMoney(n) {
+  return typeof acMoney === 'function' ? acMoney(n) : '¥' + Number(n || 0).toFixed(2);
+}
+
+async function finAprLoad() {
+  const host = document.getElementById('fin-apr-list');
+  if (!host) return;
+  if (!FIN_APR) host.innerHTML = '<div class="fin-skel"></div>';
+  try {
+    const j = await api('/api/retail-admin/staff-expenses/pending');
+    FIN_APR = j.data || { rows: [], owed: [], waiting: 0 };
+    finAprPaintDot(FIN_APR.waiting || 0);
+    finAprRender();
+  } catch (e) {
+    // Same rule as the staircase and the category list: a failed read renders
+    // where the operator is looking and never becomes a toast.
+    host.innerHTML = `<div class="fin-error">${escapeHtml(cuT('Could not load the queue.', '无法加载列表。'))} <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
+  }
+}
+
+/* ── THE DOT ────────────────────────────────────────────────────────────────
+   Two places, and they answer two different questions. The rail row's dot says
+   "there is money waiting on you somewhere in Finance"; the sub-view's says
+   "it is behind this one of the three". A dot in only the second place would be
+   invisible to everybody not already on the screen it is trying to summon them
+   to, which is nobody.
+
+   **AMBER, NOT RED, AND IT DOES NOT PULSE.** The house rule is already written
+   in retail-admin.css: `.tabs .tab-badge { background: var(--td-amber);
+   animation: none; }` — "calm Amber (matches the topbar inbox), never the red".
+   §1.10: colour encodes state, and a claim waiting to be approved is attention,
+   not an error. The generic `.tab-badge` component is reused rather than a new
+   dot invented, so it inherits that rule and any later change to it.
+
+   THE COUNT IS SHOWN FROM TWO UP, a bare dot at one — the same threshold the
+   orders badge uses, and for the same reason: volume is the thing worth a
+   number, and "1" next to a single waiting claim is chrome for its own sake. */
+function finAprPaintDot(waiting) {
+  const n = Number(waiting) || 0;
+  const label = n > 1 ? (n > 99 ? '99+' : String(n)) : '';
+  const set = (btn, badge) => {
+    if (!btn || !badge) return;
+    btn.classList.toggle('has-unseen', n > 0);
+    badge.textContent = n > 0 ? label : '';
+  };
+  set(document.querySelector('.tabs [data-tab="finance"]'), document.getElementById('financeTabBadge'));
+  set(document.querySelector('#fin-subviews button[data-sub="approvals"]'), document.getElementById('fin-apr-dot'));
+}
+
+/* ── THE POLLER ─────────────────────────────────────────────────────────────
+   The rail dot has to appear for somebody who never opens Finance — that is the
+   entire job of a rail dot — so the count is pulled at boot and on a timer,
+   the same shape as the unseen-orders and unseen-inbox pollers in 04-orders.js.
+
+   **IT STOPS ITSELF ON THE FIRST 403 AND NEVER ASKS AGAIN.** `can()` FAILS OPEN
+   (CAPS === null ⇒ true, 01-core.js), so gating the poll on the capability
+   alone would still fire it for every operator during the window before
+   /api/backend/me lands — and for a warehouse packer that is a 403 every
+   fifteen seconds, forever, for a dot they can never be shown. The capability
+   check is the cheap filter; the 403 is the authoritative one, and one of them
+   is enough to settle it. */
+let FIN_APR_POLL_OFF = false;
+
+async function finAprPollDot() {
+  if (FIN_APR_POLL_OFF || document.hidden) return;
+  if (typeof can === 'function' && !can('expenses:approve')) return;
+  try {
+    const j = await api('/api/retail-admin/staff-expenses/pending');
+    // The payload is kept, not just the count: an operator who opens Approvals
+    // straight after a poll gets a painted screen rather than a skeleton for a
+    // list the browser is already holding.
+    FIN_APR = j.data || FIN_APR;
+    finAprPaintDot((j.data && j.data.waiting) || 0);
+    if (FIN_APR_SEEN) finAprRender();
+  } catch (e) {
+    if (e && (e.status === 403 || e.code === 'forbidden')) {
+      FIN_APR_POLL_OFF = true;
+      finAprPaintDot(0);
+    }
+    // Any other failure — offline, a 500 — leaves the badge exactly as it was.
+    // A dot that vanished on a dropped wifi packet would report the queue empty.
+  }
+}
+
+/* THE ONLY THING IN THIS FILE THAT ACTS AT LOAD, and it therefore has to check
+   that it is in a browser before it does. Every other top-level statement here
+   is a declaration; three of this repo's suites (test_finance_summary,
+   test_finance_transactions, test_finance_categories) load this file into a bare
+   `vm` context to exercise its renderers against the locked pairs, and that
+   context is a deliberate minimum — `window` is `{}` and there are no timers on
+   it at all. An unguarded setTimeout here took all three suites down at REQUIRE
+   time, before a single assertion ran.
+
+   Guarded on the APIs actually used rather than on a "am I a browser" sniff, so
+   the check cannot drift from what the body needs. */
+(function _startApprovalsDotPoller() {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  if (typeof setTimeout !== 'function' || typeof setInterval !== 'function') return;
+  if (typeof window.addEventListener !== 'function'
+      || typeof document.addEventListener !== 'function') return;
+  if (window._aprDotPollerWired) return;
+  window._aprDotPollerWired = true;
+  // 600ms, behind the orders badge at 400 and level with the inbox one: three
+  // pollers racing the first paint is what makes a cold boot feel slow.
+  setTimeout(finAprPollDot, 600);
+  setInterval(finAprPollDot, 15000);
+  window.addEventListener('focus', finAprPollDot);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) finAprPollDot(); });
+})();
+
+/* ── THE RECEIPT ────────────────────────────────────────────────────────────
+   Fetched only when somebody asks to see one. The list carries `has_receipt`
+   and not the bytes — twenty claims would otherwise drag twenty photographs
+   across a shop's wifi to render none of them.
+
+   **A FAILURE HERE SAYS SO.** The phone's version swallows the error and
+   silently paints nothing, which is why nobody noticed that
+   `/staff-expenses/:id/receipt` scopes to `submitted_by` and therefore serves an
+   approver NOTHING for anybody else's claim. Until that route is widened, this
+   control tells the operator the photo could not be read rather than looking
+   broken — and it needs no change when it is.
+
+   The sentence is the phone's own, verbatim: `Could not read that photo. ·
+   无法读取该照片。` already ships three times in m.html on the picker that TAKES
+   these photographs. The same failure said the same way on both ends of one
+   feature, and nothing composed. */
+window.finAprShot = function finAprShot(id) {
+  const claim = Number(id);
+  if (!claim) return;
+  if (FIN_APR_SHOT && FIN_APR_SHOT.id === claim) { FIN_APR_SHOT = null; finAprRender(); return; }
+  FIN_APR_SHOT = { id: claim, data: null, err: '' };
+  finAprRender();
+  api('/api/retail-admin/staff-expenses/' + claim + '/receipt').then((j) => {
+    if (!FIN_APR_SHOT || FIN_APR_SHOT.id !== claim) return;   // a later click already won
+    FIN_APR_SHOT.data = (j.data && j.data.receipt_data) || null;
+    if (!FIN_APR_SHOT.data) FIN_APR_SHOT.err = cuT('Could not read that photo.', '无法读取该照片。');
+    finAprRender();
+  }).catch(() => {
+    if (!FIN_APR_SHOT || FIN_APR_SHOT.id !== claim) return;
+    FIN_APR_SHOT.err = cuT('Could not read that photo.', '无法读取该照片。');
+    finAprRender();
+  });
+};
+
+/* ── DECIDING ───────────────────────────────────────────────────────────────
+   **THE TAP THAT PUTS MONEY IN THE BOOKS.** Approving posts one row into
+   `expense_entries` carrying this claim's id; rejecting takes it back out. Both
+   happen server-side inside one transaction with the claim's own status, so a
+   claim that says approved with no row behind it cannot exist.
+
+   THE LEDGER BEHIND THIS SCREEN IS NOW STALE, and the code says so rather than
+   leaving it to be discovered: a decision writes `expense_entries`, which is
+   exactly what Transactions and the Summary staircase are reading. Both are
+   dropped so the next visit re-pulls, instead of showing an operator a total
+   that does not include the ¥38 they just approved. */
+window.finAprDecide = async function finAprDecide(id, decision) {
+  const claim = Number(id);
+  if (!claim || FIN_APR_BUSY) return;
+  FIN_APR_BUSY = claim;
+  finAprRender();
+  try {
+    await api('/api/retail-admin/staff-expenses/' + claim + '/decide',
+      { method: 'POST', body: { decision } });
+    FIN_APR_BUSY = 0;
+    FIN_APR_SHOT = null;
+    FIN_TX = null; FIN_TX_SEEN = false;     // the ledger this just wrote to
+    FIN_DATA = null;                        // and the staircase drawn from it
+    await finAprLoad();
+    if (window.toast) toast(decision === 'approve' ? cuT('Approved', '已通过') : cuT('Not approved', '已拒绝'));
+  } catch (e) {
+    FIN_APR_BUSY = 0;
+    if (window.toast) toast(e.message, 'err');
+    finAprRender();
+  }
+};
+
+/* ── MARKING A DEBT PAID (§87 step four) ────────────────────────────────────
+   **IT POSTS NOTHING TO THE BOOKS** — the ¥38 was recorded once, when the claim
+   was approved, and a second row for the repayment would report ¥76 of taxis.
+   What it changes is the answer to "who are we still out of pocket to", which
+   the ledger cannot give.
+
+   ONE PERSON AT A TIME, EVERY CLAIM AT ONCE, because that is how it is actually
+   paid: one transfer to Wei, not four clicks. The confirm names the person and
+   the figure, since this is an assertion that money has already changed hands
+   somewhere this app cannot see. */
+window.finAprSettle = async function finAprSettle(idx) {
+  if (FIN_APR_BUSY) return;
+  /* THE ROW IS LOOKED UP AT CLICK TIME, and only its INDEX travels through the
+     markup. A name is free text somebody typed into `tenant_users`, and pushing
+     one through an onclick attribute means it survives two decoders — HTML
+     entities, then the JS string literal — so an apostrophe in O'Brien ends the
+     argument early and a quiet syntax error eats the click. Nothing but a number
+     goes in the attribute, and the payload the screen is already holding
+     supplies the rest. The confirm below then names whoever is in the row NOW,
+     so a background poll that reshaped the list cannot leave the operator
+     agreeing to a sentence about somebody else. */
+  const o = (FIN_APR && FIN_APR.owed || [])[Number(idx)];
+  if (!o) return;
+  const total = finAprMoney(o.total);
+  const list = String(o.ids || '').split(',').map(Number).filter(Boolean);
+  if (!list.length) return;
+  const person = o.who || cuT('Someone', '未知');
+  if (typeof askConfirm === 'function') {
+    if (!(await askConfirm({
+      title: cuT('Paid ' + total + ' back?', '已付款 ' + total + '？'),
+      body: cuT('This records that ' + person + ' has been paid back. It does not change the accounts — the expense was recorded when it was approved.',
+                '记录已向' + person + '付款。不会改动账目 — 该费用在审批通过时已记入。'),
+      confirmLabel: cuT('Mark paid', '标记已付'),
+    }))) return;
+  }
+  FIN_APR_BUSY = -1;
+  finAprRender();
+  try {
+    // Sequential rather than parallel, the phone's reasoning unchanged: four
+    // writes racing on one connection is how a settle ends with two applied.
+    for (const claim of list) {
+      await api('/api/retail-admin/staff-expenses/' + claim + '/settle',
+        { method: 'POST', body: { settled: true } });
+    }
+    FIN_APR_BUSY = 0;
+    await finAprLoad();
+    if (window.toast) toast(cuT('Marked paid', '已标记付款'));
+  } catch (e) {
+    FIN_APR_BUSY = 0;
+    if (window.toast) toast(e.message, 'err');
+    // Reloaded rather than repainted: a run that failed on the third of four
+    // left two settled, and the screen has to show which.
+    await finAprLoad();
+  }
+};
+
+// The status pill for a claim that has already been decided. APPROVED SPLITS IN
+// TWO, and that is the point of it: a claim paid out of somebody's pocket is
+// still open to them until it is settled, so "approved" alone would report a
+// debt as finished. Sage for done, Amber for still owed — §1.10, and the same
+// division the phone makes.
+function finAprPill(r) {
+  if (r.status === 'approved') {
+    const owed = r.paid_by === 'employee' && !Number(r.settled);
+    /* `Owed to your team · 应付团队` AND NOT THE PHONE'S `Owed · 应付您`, though
+       both are live and the phone uses the second one on this very screen.
+       应付您 is "owed to YOU", written for expStatusPill's first home — the
+       employee reading their own claims, where it is exactly right. An approver
+       working a queue is reading other people's, and a pill telling them the
+       shop owes THEM for Wei's taxi is wrong on every row but their own. The
+       pair taken instead is the heading of the block above that lists these same
+       claims, so the pill and the block name one thing. Nothing composed. */
+    return owed
+      ? `<span class="fin-apr-pill is-owed">${escapeHtml(cuT('Owed to your team', '应付团队'))}</span>`
+      : `<span class="fin-apr-pill is-ok">${escapeHtml(cuT('Approved', '已通过'))}</span>`;
+  }
+  if (r.status === 'rejected') {
+    return `<span class="fin-apr-pill is-no">${escapeHtml(cuT('Not approved', '已拒绝'))}</span>`;
+  }
+  return `<span class="fin-apr-pill">${escapeHtml(cuT('Waiting', '待审批'))}</span>`;
+}
+
+// One claim. The meta line is the phone's, in the phone's order: date, category,
+// and whose money it was — the three facts an approver reads before deciding.
+function finAprRow(r) {
+  const waiting = r.status === 'submitted';
+  const busy = FIN_APR_BUSY === r.id;
+  const anyBusy = !!FIN_APR_BUSY;
+  const bits = [finTxDay(r.date)];
+  if (r.category) bits.push(finCatLabel(r.category));
+  bits.push(r.paid_by === 'employee' ? cuT('own money', '个人支付') : cuT('company', '公司'));
+
+  /* WHOSE CLAIM IT IS, FROM THE SERVER. §87 part five allows an approver to
+     approve their own claim and makes the RECORD the guard rather than a
+     refusal — so the row has to say so. `mine` is computed server-side because
+     it is the only side that knows both the claim's submitter and the caller;
+     the phone's first attempt read it off a client-held identity that carries a
+     name and a role and no id, and the marker silently never appeared. */
+  const mine = r.mine
+    ? `<span class="fin-apr-mine">${escapeHtml(cuT('Your own claim', '本人提交'))}</span>`
+    : '';
+
+  const shotOpen = FIN_APR_SHOT && FIN_APR_SHOT.id === r.id;
+  const shotBtn = r.has_receipt
+    ? `<button type="button" class="fin-btn-sec fin-apr-shotbtn" onclick="finAprShot(${r.id})">`
+      + escapeHtml(shotOpen ? cuT('Hide photo', '收起照片') : cuT('View photo', '查看照片'))
+      + '</button>'
+    : '';
+
+  /* APPROVE IS THE CTA AND REJECT IS NOT, because the queue exists to be cleared
+     and most claims in it are real. Reject is a plain control beside it rather
+     than a danger-red one: refusing a ¥38 taxi is an ordinary decision, and
+     colouring it as an alarm would make an approver hesitate over the one they
+     are meant to make. (The phone's argument, and its layout.)
+
+     EVERY BUTTON IN THE LIST DISABLES WHILE ANY WRITE IS IN FLIGHT, but only the
+     row being decided says "Working…". A settle is a run of writes over claims
+     that are also in this list, and leaving the rest live invites a second
+     decision landing on a queue the first one is still reshaping. */
+  const actions = waiting
+    ? `<div class="fin-apr-acts">`
+      + `<button type="button" class="fin-cta fin-apr-yes"${anyBusy ? ' disabled' : ''} `
+      + `onclick="finAprDecide(${r.id}, 'approve')">`
+      + escapeHtml(busy ? cuT('Working…', '处理中…') : cuT('Approve', '通过')) + '</button>'
+      + `<button type="button" class="fin-btn-sec"${anyBusy ? ' disabled' : ''} `
+      + `onclick="finAprDecide(${r.id}, 'reject')">${escapeHtml(cuT('Reject', '拒绝'))}</button>`
+      + '</div>'
+    : finAprPill(r);
+
+  const shotCell = shotOpen
+    ? '<tr class="fin-apr-shot"><td colspan="4">'
+      + (FIN_APR_SHOT.data
+        ? `<img src="${escapeAttr(FIN_APR_SHOT.data)}" alt="${escapeAttr(cuT('Receipt', '照片'))}">`
+        : FIN_APR_SHOT.err
+          ? `<span class="fin-apr-shoterr">${escapeHtml(FIN_APR_SHOT.err)}</span>`
+          : `<span class="fin-apr-shoterr">${escapeHtml(cuT('Loading…', '加载中…'))}</span>`)
+      + '</td></tr>'
+    : '';
+
+  return '<tr>'
+    + `<td class="fin-tx-date">${escapeHtml(finTxDay(r.date))}</td>`
+    + '<td><span class="fin-apr-who">' + escapeHtml(r.who || cuT('Someone', '未知')) + mine + '</span>'
+    + `<span class="fin-tx-meta">${escapeHtml(bits.join(' · '))}</span>`
+    + (r.note ? `<span class="fin-apr-note">${escapeHtml(r.note)}</span>` : '')
+    + (shotBtn ? `<span class="fin-apr-shotwrap">${shotBtn}</span>` : '')
+    + '</td>'
+    + `<td class="fin-tx-num">${escapeHtml(finAprMoney(r.amount))}</td>`
+    + `<td class="fin-apr-act">${actions}</td>`
+    + '</tr>'
+    + shotCell;
+}
+
+function finAprRender() {
+  const host = document.getElementById('fin-apr-list');
+  if (!host || !FIN_APR) return;
+  const rows = FIN_APR.rows || [];
+  const waiting = rows.filter(r => r.status === 'submitted');
+  const done = rows.filter(r => r.status !== 'submitted');
+
+  /* WHAT THE SHOP STILL OWES ITS OWN PEOPLE, above the queue.
+
+     IT IS A DIFFERENT KIND OF THING FROM EVERYTHING BELOW IT — those are
+     decisions waiting to be made; this is money already spent and not yet handed
+     back — so it is a block of its own with its own verb, and it is ABSENT when
+     nothing is owed rather than rendering a zero (§1.12).
+
+     THE ROW IS A PERSON, NOT A CLAIM, because that is how it gets paid. */
+  const owed = (FIN_APR.owed || []).filter(o => Number(o.total) > 0);
+  const owedBlock = owed.length
+    ? '<section class="fin-apr-owed"><h3>' + escapeHtml(cuT('Owed to your team', '应付团队')) + '</h3>'
+      /* ITS OWN COLGROUP, and it is not decoration. .fin-tx-table is
+         `table-layout: fixed`, so a table shipped without one splits its columns
+         EVENLY — three at 33% here, against the queue table's 58/16/26 directly
+         below. The amount and the button would sit in different places in two
+         stacked tables on one screen, which reads as a mis-drawn page. The
+         widths below are the queue's own: 12 + 46 collapsed into one Who column,
+         then the same amount and action columns, so the three line up. */
+      + '<div class="fin-tx-card"><table class="fin-tx-table">'
+      + '<colgroup><col class="fin-apr-c-who"><col class="fin-c-amt"><col class="fin-apr-c-act"></colgroup>'
+      + '<tbody>'
+      + owed.map((o, i) => {
+        const money = finAprMoney(o.total);
+        const n = Number(o.claims) || 0;
+        return '<tr><td><span class="fin-apr-who">' + escapeHtml(o.who || cuT('Someone', '未知')) + '</span>'
+          /* THE NUMERAL SITS OUTSIDE THE PAIR, which is the phone's shape and
+             the house rule both: `${n} ${T('claim','笔')}`. Folding the count in
+             — cuT('3 claims', '3 笔') — mints a brand-new pair for every value n
+             can take, none of them declarable and all of them indistinguishable
+             from a locked string once shipped. The Chinese half is 笔 at any
+             count; only English inflects. */
+          + `<span class="fin-tx-meta">${n} ${escapeHtml(cuT(n === 1 ? 'claim' : 'claims', '笔'))}</span></td>`
+          + `<td class="fin-tx-num">${escapeHtml(money)}</td>`
+          + '<td class="fin-apr-act"><button type="button" class="fin-btn-sec"'
+          + (FIN_APR_BUSY ? ' disabled' : '')
+          + ` onclick="finAprSettle(${i})">`
+          + escapeHtml(cuT('Mark paid', '标记已付')) + '</button></td></tr>';
+      }).join('')
+      + '</tbody></table></div>'
+      /* THE SENTENCE THAT KEEPS THE BUTTON HONEST, and it is the third of a set
+         written to be read together (vocabulary v1.48): nothing is in the books
+         until approval; approving records it; and paying it back changes
+         nothing, because it was already recorded. */
+      + `<p class="fin-apr-foot">${escapeHtml(cuT(
+          'Marking paid does not change the accounts — the expense was recorded when it was approved.',
+          '标记已付不会改动账目 — 该费用在审批通过时已记入。'))}</p>`
+      + '</section>'
+    : '';
+
+  const table = (list) => '<div class="fin-tx-card"><table class="fin-tx-table">'
+    + '<colgroup><col class="fin-c-date"><col class="fin-c-desc">'
+    + '<col class="fin-c-amt"><col class="fin-apr-c-act"></colgroup>'
+    + '<thead><tr>'
+    + `<th>${escapeHtml(cuT('Date', '日期'))}</th>`
+    /* `Asked by · 申请人` is LIVE at 16-purchasing.js:806, heading the column
+       that names who raised a request — in a table, in this admin, for the same
+       kind of thing. Reused rather than minting a `Who`. */
+    + `<th>${escapeHtml(cuT('Asked by', '申请人'))}</th>`
+    + `<th class="fin-tx-num">${escapeHtml(cuT('Amount', '金额'))}</th>`
+    + '<th>&nbsp;</th></tr></thead><tbody>'
+    + list.map(finAprRow).join('')
+    + '</tbody></table></div>';
+
+  /* §1.12 — AN EMPTY QUEUE IS A COMPLIMENT, NOT A GAP. There is nothing to retry
+     and nothing to configure; everything that was sent has been decided. The two
+     empty states are different facts and say different things: nothing has ever
+     arrived, versus nothing is left. */
+  const queue = waiting.length
+    ? '<section class="fin-apr-queue"><h3>' + escapeHtml(cuT('Waiting', '待审批'))
+      + ' · ' + waiting.length + '</h3>'
+      + table(waiting)
+      /* THE SENTENCE THAT MAKES THE BUTTON HONEST. Mirror of the one under
+         Submit on the phone: there, nothing is in the accounts yet; here,
+         approving is what puts it there. */
+      + `<p class="fin-apr-foot">${escapeHtml(cuT(
+          'Approving records the expense in this month’s accounts.',
+          '审批通过后即记入本月账目。'))}</p>`
+      + '</section>'
+    : `<div class="fin-tx-state"><h3>${escapeHtml(cuT('Nothing waiting', '暂无待审批'))}</h3>`
+      + `<p>${escapeHtml(done.length
+          ? cuT('Everything your team has sent has been decided.', '团队提交的记录都已处理。')
+          : cuT('Expenses your team records will arrive here for you to approve.',
+                '团队登记的费用会出现在这里等待审批。'))}</p></div>`;
+
+  const history = done.length
+    ? '<section class="fin-apr-done"><h3>' + escapeHtml(cuT('Already decided', '已处理')) + '</h3>'
+      + table(done) + '</section>'
+    : '';
+
+  host.innerHTML = owedBlock + queue + history;
+}

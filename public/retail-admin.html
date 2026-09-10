@@ -1326,7 +1326,7 @@
        a pure reseller with no production still buys stock and pays rent. -->
   <button data-tab="finance" onclick="finInit()" style="order:8">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19h5v-5H4z"/><path d="M9 14h5V9H9z"/><path d="M14 9h5V4h-5z"/></svg>
-    Finance · 财务
+    Finance · 财务<span id="financeTabBadge" class="tab-badge" aria-label="Expense claims waiting for approval"></span>
   </button>
   <!-- Channels & Delivery is now merged into the Sales page (setup + operations
        in one screen); its standalone tab was removed. -->
@@ -11676,6 +11676,25 @@
     <nav class="fin-subviews" id="fin-subviews" role="tablist">
       <button type="button" data-sub="summary" class="on" onclick="finShow('summary')">Summary · 汇总</button>
       <button type="button" data-sub="transactions" onclick="finShow('transactions')">Transactions · 交易记录</button>
+      <!-- §87 step three. THE OTHER END OF THE LEDGER, and it sits beside
+           Transactions rather than in a rail row of its own because approving a
+           claim IS the act that writes a transaction: Transactions lists what was
+           entered, this lists what is waiting to be. The phone gives it a row of
+           its own (m.html, Operations) only because a phone has no Finance screen
+           to put it inside.
+
+           GATED ON `expenses:approve`, which no floor preset holds — the same
+           key routes/staff-expenses.js requires of every call behind this pane,
+           so the gate and the refusal agree. data-cap is applyCapGates' generic
+           hook; it writes style.display, which composes with the [hidden] that
+           finShow toggles on the pane below.
+
+           The dot is the shared .tab-badge component, so it inherits the rail's
+           calm-amber, no-pulse rule rather than the red default (§1.10: a claim
+           waiting on you is attention, not an error). -->
+      <button type="button" data-sub="approvals" data-cap="expenses:approve"
+              onclick="finShow('approvals')">Approvals · 审批<span
+              id="fin-apr-dot" class="tab-badge" aria-label="Expense claims waiting for approval"></span></button>
       <!-- §87 part two. The tenant's own expense-category list, and it sits here
            rather than in Settings because it is the vocabulary of THIS screen:
            the list the transaction form offers and the list the Summary's
@@ -11756,6 +11775,25 @@
         <button class="fin-cta" type="button" onclick="finCatAdd()" data-cap="finance:record">Add · 添加</button>
       </div>
       <div id="fin-cats-list"></div>
+    </div>
+
+    <!-- APPROVALS — expense claims waiting to be put in the books (§87 step
+         three). Rendered entirely by finAprRender in retail-admin/22-finance.js;
+         every string in it is a live pair lifted from the phone's own approvals
+         screen, so the two surfaces say the same words for the same act and
+         nothing here is composed.
+
+         NO RANGE BAR OVER IT. finShow hides the bar on this sub-view for a
+         sharper reason than it hides it on Categories: what is waiting to be
+         approved is waiting NOW, and a bar reading "30 days" above the queue
+         would suggest there are older claims it is holding back. The server
+         sends the queue whole, oldest first.
+
+         NO CTA EITHER — the page's one Dusk button belongs to Transactions
+         (§1.8 rule 1), and this screen types nothing. Its Approve buttons are
+         per-row and live inside the table. -->
+    <div id="fin-apr" hidden>
+      <div id="fin-apr-list"></div>
     </div>
 
     <!-- The typed-row form (§1.13 modal: bounded, fixed height, one commit —
