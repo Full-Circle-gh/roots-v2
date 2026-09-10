@@ -620,7 +620,29 @@ function finTxRender() {
         `<div class="fin-tx-tile"><div class="fin-tx-k">${escapeHtml(cuT('Money out', '支出'))}</div>`
       + `<div class="fin-tx-v">${escapeHtml(finMoney(d.totals.out))}</div></div>`
       + `<div class="fin-tx-tile"><div class="fin-tx-k">${escapeHtml(cuT('Money in', '进账'))}</div>`
-      + `<div class="fin-tx-v">${escapeHtml(finMoney(d.totals.in))}</div></div>`;
+      + `<div class="fin-tx-v">${escapeHtml(finMoney(d.totals.in))}</div>`
+      // ── WHERE THE SALES ARE ────────────────────────────────────────────
+      // Reported by Ash off the live screen, 2026-09-10: money in reads ¥0
+      // and the obvious reading is that the screen is broken. It is not —
+      // §36's *Transactions reads typed rows, not the order record* keeps
+      // orders off this list on purpose, and `income_entries` has had no row
+      // since 31 July. **The number was right and the screen said nothing**,
+      // which is the whole defect: a tile showing zero where a person expects
+      // a month of sales has to say where the sales went, or every operator
+      // who meets it re-derives the same wrong conclusion.
+      //
+      // IT IS A POINTER, NOT AN EMPTY STATE. §1.12's states are about data
+      // that is absent; this line is true at ¥0 and true at ¥3,000, because
+      // what it names — revenue living one tab away — does not change with
+      // the figure. So it renders unconditionally and is not one of the
+      // seven states.
+      //
+      // THE LABEL ABOVE IT IS UNTOUCHED. `Money in · 进账` is locked in the
+      // Finance table, and Ruling 1 reserves 收入 for Income, so renaming
+      // this tile was not available — the vocabulary amendment behind this
+      // line records the alternatives and why this one was taken.
+      + `<div class="fin-tx-note">${escapeHtml(cuT('Sales revenue is on Summary', '营收见汇总'))}</div>`
+      + `</div>`;
   }
 
   const c = document.getElementById('fin-tx-chips');

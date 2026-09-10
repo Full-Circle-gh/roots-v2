@@ -14555,6 +14555,12 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   font: 500 24px/1.3 var(--f-sans); color: var(--td-text);
   font-variant-numeric: tabular-nums; letter-spacing: -.01em;
 }
+/* The pointer under money in. Quieter than the tile's own label — it is not a
+   second figure and must not read as one — and it sits below the value rather
+   than beside the key, so the tile still reads label-then-number at a glance. */
+#tab-finance .fin-tx-note {
+  font: 400 12px/1.5 var(--f-sans); color: var(--td-text2); margin-top: 4px;
+}
 #tab-finance .fin-tx-chips { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
 #tab-finance .fin-tx-chip {
   font: 400 13px/1.6 var(--f-sans); color: var(--td-text2);

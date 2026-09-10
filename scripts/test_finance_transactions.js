@@ -399,6 +399,43 @@ it('Money in is 进账 and never Income’s 收入', () => {
   assert.ok(/Money in', '进账'/.test(CLIENT));
 });
 
+// ── The pointer under money in ─────────────────────────────────────────────
+// Ash, off the live screen 2026-09-10: money in reads ¥0 and the screen looks
+// broken. §36 keeps orders off this list by decision, so the fix is a line
+// saying where revenue is — NOT a relabelled tile, which Ruling 1 blocks.
+it('the money-in tile says where the sales are', () => {
+  assert.ok(/'Sales revenue is on Summary', '营收见汇总'/.test(CLIENT),
+    'the pointer pair must render');
+  assert.ok(FINANCE_TABLE.includes('营收见汇总') || VOCAB.includes('营收见汇总'),
+    'and be locked in the vocabulary — a composed string is declared or it is not made');
+});
+
+it('the pointer is built from the two words it points at', () => {
+  // The whole argument for composing it: 营收 is Ruling 1's Revenue and 汇总 is
+  // the locked Summary. A pointer that renamed either would send the operator
+  // looking for a screen that is not there.
+  assert.ok(/'Revenue', '营收'/.test(CLIENT), '营收 is the staircase’s own top line');
+  assert.ok(/'Summary', '汇总'/.test(CLIENT) || HTML.includes('汇总'),
+    '汇总 is the tab it names');
+});
+
+it('the pointer renders unconditionally, not as an empty state', () => {
+  // It is true at ¥0 and true at ¥3,000. A line that appeared only on an empty
+  // tile would read as an error about the emptiness rather than a standing fact
+  // about the screen, and §1.12's seven states are for absent data.
+  // The tiles block, bounded by its own assignment rather than a character
+  // count — comments grow, and a distance assertion would fail on prose.
+  const start = CLIENT.indexOf("t.innerHTML =");
+  const end   = CLIENT.indexOf("fin-tx-chips", start);
+  assert.ok(start > -1 && end > start, 'the tiles block must be findable');
+  const tiles = CLIENT.slice(start, end);
+  assert.ok(tiles.includes('营收见汇总'), 'it must sit inside the tiles block');
+  assert.ok(tiles.indexOf('营收见汇总') > tiles.indexOf("cuT('Money in'"),
+    'and under money in, not money out');
+  assert.ok(!/totals\.in\s*(?:\?|===|==|>|&&|\|\|)[^\n]*营收见汇总/.test(CLIENT),
+    'it must not be conditioned on the figure');
+});
+
 it('the interpolated pair is marked for the §1.11 glue rule', () => {
   assert.ok(/data-lang-block/.test(CLIENT),
     'Sum of {n} category subtotals is interpolated and must not be glued');
