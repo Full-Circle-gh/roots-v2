@@ -261,11 +261,22 @@ const ctx = {
   // Identity stubs: this file asserts what the row SAYS, not how 01-core.js
   // formats a day or wraps a currency — both have their own tests.
   tdWhen: (d) => String(d),
+  // The item name follows the reader's language (tmStoreLabel's pattern). The
+  // English surface is the default; the CN case overrides this per assertion.
+  cuLang: () => 'en',
   // acWrap is 01-core.js's currency wrapper — the ¥ on this card comes from
   // there, not from finMoney, which formats the digits alone. The stub carries
   // the symbol so the assertions below can read a figure the way the screen
   // draws one.
   acWrap: (s) => '¥' + String(s),
+  // acMoney is the SAME currency wrapper at real precision — the two-decimal
+  // form 01-core.js reserves for figures an operator reconciles, which a unit
+  // price is. The stub keeps two places so the assertions can tell a ¥3.50 jar
+  // from the ¥4 finMoney would have drawn.
+  acMoney: (n, dp) => '¥' + Number(n || 0).toLocaleString('en-US', {
+    minimumFractionDigits: Number.isInteger(dp) ? dp : 2,
+    maximumFractionDigits: Number.isInteger(dp) ? dp : 2,
+  }),
 };
 vm.createContext(ctx);
 new vm.Script(
@@ -277,7 +288,7 @@ new vm.Script(
   // file exposes it. This appends a setter to the SOURCE AS EVALUATED IN THE VM,
   // the same trick the exports above already use, so the render can be driven
   // through its three states without a test hook shipping in the product.
-  + '\nthis.__finSet=(d,c)=>{FIN_DATA=d;FIN_CAT=c;};'
+  + '\nthis.__finSet=(d,c,p)=>{FIN_DATA=d;FIN_CAT=c;FIN_POL=p===undefined?null:p;};'
 ).runInContext(ctx);
 
 it('cost of goods and gross profit READ Not recorded — not a blank, not a dash', () => {
@@ -753,6 +764,203 @@ it('the uncategorised line opens too, and keeps its seventh-state word', () => {
   assert.ok(/Not recorded/.test(html), 'the null category keeps its own line and word');
   assert.strictEqual((html.match(/aria-expanded="true"/g) || []).length, 1,
     'a line with no category name is still a line an operator can open');
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   7 · THE PURCHASE-ORDER LINES — the items equal the row they opened from.
+
+   §88's rule, one level down: a purchase order posts ONE EXPENSE ROW PER
+   CATEGORY, so the items behind a row are the order's lines IN THAT CATEGORY,
+   never the whole order. Listing the order would show a list that does not add
+   up to the figure clicked — the same defect the level above exists to avoid.
+   ══════════════════════════════════════════════════════════════════════════ */
+console.log('\n7 · the purchase-order lines — the items equal the row');
+
+function shippedPoLines() {
+  const m = ROUTE.match(/const lines = db\.prepare\(`([\s\S]*?)`\)/);
+  assert.ok(m, 'the po-lines query is no longer where the test reads it');
+  const caseM = ROUTE.match(/const PO_CATEGORY_CASE = \([^)]*\) =>\s*`([\s\S]*?)`;/);
+  assert.ok(caseM, 'the per-realm category expression has moved');
+  const cat = caseM[1].replace(/\$\{line\}/g, 'l').replace(/\$\{po\}/g, 'po');
+  const billable = (a) => `MAX(0, COALESCE(${a}.qty_received, ${a}.qty) - COALESCE(${a}.returned_qty, 0))`;
+  return m[1]
+    .replace(/\$\{billableQtySql\('l'\)\}/g, billable('l'))
+    .replace(/\$\{PO_CATEGORY_CASE\('l', 'po'\)\}/g, cat);
+}
+
+const pdb = new Database(':memory:');
+pdb.exec(`
+  CREATE TABLE purchase_orders (id INTEGER PRIMARY KEY, po_number TEXT, date DATE, scope TEXT);
+  CREATE TABLE po_line_items (
+    id INTEGER PRIMARY KEY, po_id INTEGER, name_en TEXT, name_cn TEXT, sku TEXT,
+    qty REAL, qty_received REAL, returned_qty REAL, unit TEXT,
+    cost_per_unit REAL, expense_category TEXT, sort_order INTEGER);
+`);
+pdb.prepare("INSERT INTO purchase_orders VALUES (17,'RPO-0017','2026-08-18','retail')").run();
+pdb.prepare("INSERT INTO purchase_orders VALUES (60,'PO-0060','2026-08-19','kitchen')").run();
+const RETAIL_ONLY = 'Retail-Only Goods(Not Used in Kitchen)';
+const pl = pdb.prepare('INSERT INTO po_line_items VALUES (?,?,?,?,?,?,?,?,?,?,?,?)');
+// RPO-0017 buys THREE categories. Only the Retail-Only three are the ¥1,230.
+pl.run(1, 17, 'Glass jars 250ml', '玻璃罐250毫升', 'JAR250', 200, null, null, 'pc', 3.50, RETAIL_ONLY, 1);
+pl.run(2, 17, 'Kraft labels', '牛皮纸标签', 'LBL', 500, null, null, 'pc', 0.66, RETAIL_ONLY, 2);
+pl.run(3, 17, 'Ribbon 20m', null, 'RIB', 10, null, null, 'roll', 20.00, RETAIL_ONLY, 3);
+pl.run(4, 17, 'Chickpeas', '鹰嘴豆', 'CHK', 40, null, null, 'kg', 12.00, 'Ingredients(Kitchen+Retail Use)', 4);
+pl.run(5, 17, 'Cling film', null, 'CLF', 5, null, null, 'roll', 9.00, 'Packaging Materials', 5);
+// A line PARTLY RETURNED: billed for 8 of 10, so ¥80 not ¥100.
+pl.run(6, 17, 'Gift boxes', null, 'BOX', 10, 10, 2, 'pc', 10.00, RETAIL_ONLY, 6);
+// A line FULLY returned drops out entirely.
+pl.run(7, 17, 'Wrong item', null, 'WRG', 4, 4, 4, 'pc', 50.00, RETAIL_ONLY, 7);
+// A blank category on each realm — the two posters give them DIFFERENT names.
+pl.run(8, 17, 'Unlabelled retail', null, null, 2, null, null, 'pc', 5.00, '  ', 8);
+pl.run(9, 60, 'Unlabelled kitchen', null, null, 3, null, null, 'pc', 7.00, null, 9);
+
+const poLinesFor = (poId, category) =>
+  pdb.prepare(shippedPoLines()).all(poId, '门店进货 Retail stock', '未分类 Uncategorized', category);
+
+it('the items are the CATEGORY’s slice of the order, never the whole order', () => {
+  const rows = poLinesFor(17, RETAIL_ONLY);
+  // 200×3.50 + 500×0.66 + 10×20 + 8×10 = 700 + 330 + 200 + 80
+  assert.strictEqual(rows.length, 4, 'four billable Retail-Only lines');
+  assert.strictEqual(rows.reduce((t, r) => t + r.amount, 0), 1310);
+  // The order's OTHER categories must not appear — that is the whole trap.
+  assert.ok(!rows.some(r => /Chickpeas|Cling film/.test(r.name_en)),
+    'a line posted under another category is inside another figure');
+});
+
+it('a returned line is billed for what is owed, and a fully returned one is gone', () => {
+  const rows = poLinesFor(17, RETAIL_ONLY);
+  const box = rows.find(r => r.name_en === 'Gift boxes');
+  assert.strictEqual(box.qty, 8, 'ten arrived, two went back');
+  assert.strictEqual(box.amount, 80, 'a reader using qty would price this at 100');
+  assert.ok(!rows.some(r => r.name_en === 'Wrong item'),
+    'a fully returned line is billed for nothing and is not in the figure above');
+});
+
+it('the blank-category fallback follows the ORDER’S REALM, not one hardcoded name', () => {
+  // Both realms post into this one ledger and are told apart only by scope.
+  // Binding either label across a mixed read files the other realm's blank
+  // lines under a name they were never posted with.
+  const retail = poLinesFor(17, '门店进货 Retail stock');
+  assert.strictEqual(retail.length, 1);
+  assert.strictEqual(retail[0].name_en, 'Unlabelled retail');
+  const kitchen = poLinesFor(60, '未分类 Uncategorized');
+  assert.strictEqual(kitchen.length, 1);
+  assert.strictEqual(kitchen[0].name_en, 'Unlabelled kitchen');
+  // And crossed, each finds nothing.
+  assert.strictEqual(poLinesFor(17, '未分类 Uncategorized').length, 0);
+  assert.strictEqual(poLinesFor(60, '门店进货 Retail stock').length, 0);
+});
+
+it('the two fallback labels still match what the posters actually write', () => {
+  /* THE LITERALS ARE COPIED INTO THE READER, and this is what holds them there.
+     Lifting them into a shared module would mean editing two posters that WRITE
+     MONEY inside a change that only reads; copying them and testing the copy
+     buys the drift protection without touching the write path. If either poster
+     changes its fallback, this fails and names the file. */
+  const retailPoster = fs.readFileSync(path.join(ROOT, 'routes', 'retail-purchasing.js'), 'utf8');
+  const kitchenPoster = fs.readFileSync(path.join(ROOT, 'routes', 'purchases.js'), 'utf8');
+  const declared = ROUTE.match(/const PO_CATEGORY_FALLBACK = \{([\s\S]*?)\};/);
+  assert.ok(declared, 'the fallback pair has moved');
+  assert.ok(/retail: '门店进货 Retail stock'/.test(declared[1]));
+  assert.ok(/kitchen: '未分类 Uncategorized'/.test(declared[1]));
+  assert.ok(retailPoster.includes("NULLIF(TRIM(expense_category),''),'门店进货 Retail stock'"),
+    'postRetailPOExpenses no longer falls back to the label the reader copied');
+  assert.ok(kitchenPoster.includes("NULLIF(TRIM(expense_category),''),'未分类 Uncategorized'"),
+    'postPOExpenses no longer falls back to the label the reader copied');
+});
+
+it('the billable-quantity rule is REFERENCED from lib/po-returns, never restated', () => {
+  assert.ok(/require\('\.\.\/lib\/po-returns'\)/.test(ROUTE), 'must import the one rule');
+  assert.ok(!/qty_received/.test(ROUTE_CODE),
+    'spelling the expression out here is a second copy that will drift from returns');
+});
+
+it('the row is addressed by its LEDGER ID, and a non-PO row cannot resolve', () => {
+  // Passing (po_id, category) would let a caller ask for a combination no row
+  // was posted for and get a plausible list totalling a figure on no screen.
+  const at = ROUTE.indexOf("router.get('/api/retail-admin/finance/summary/po-lines'");
+  assert.notStrictEqual(at, -1, 'the po-lines route is not mounted');
+  const handler = ROUTE.slice(at, ROUTE.indexOf('\n});', at));
+  assert.ok(/req\.query\.entry_id/.test(handler), 'the request is one ledger id');
+  assert.ok(/e\.po_id IS NOT NULL/.test(handler),
+    'a typed or claim-posted row has no purchase order and must not resolve to one');
+  assert.ok(/requireRetailAdmin/.test(handler.slice(0, handler.indexOf('=>'))), 'admin-gated');
+  assert.ok(/\btdb\(\)/.test(handler), 'multi-tenant');
+  // The category comes off the ROW, never off the request.
+  assert.ok(/entry\.category/.test(handler) && !/req\.query\.category/.test(handler),
+    'the category must be read from the ledger row, not accepted from the caller');
+});
+
+console.log('\n8 · the purchase-order lines on screen');
+
+const POL = [
+  { id: 1, name_en: 'Glass jars 250ml', name_cn: '玻璃罐250毫升', sku: 'JAR250', qty: 200, unit: 'pc', unit_cost: 3.5, amount: 700 },
+  { id: 3, name_en: 'Ribbon 20m', name_cn: null, sku: 'RIB', qty: 10, unit: 'roll', unit_cost: 20, amount: 200 },
+];
+const CROWS_PO = [{ category: RETAIL_ONLY, amount: 1310, entries: 2, is_operating: 1 }];
+const drawnPo = (cat, pol) => {
+  ctx.__finSet({ window: { from: '2026-08-01', to: '2026-08-31' }, expense_breakdown: CROWS_PO }, cat, pol);
+  return ctx.finBreakdown(CROWS_PO, CROWS_PO);
+};
+const PO_ROW = { id: 42, date: '2026-08-18', amount: 1310, note: 'RPO-0017 · 3 lines', source: 'po', po_id: 17, po_number: 'RPO-0017', claim_id: null, paid_by: null, lines: 3 };
+const FEES_ROW = { id: 43, date: '2026-08-18', amount: 90, note: 'RPO-0017 · shipping & fees', source: 'po', po_id: 17, po_number: 'RPO-0017', claim_id: null, paid_by: null, lines: 0 };
+
+it('a PO row with items is a control; the landed-cost row is not', () => {
+  const html = drawnPo({ i: 0, rows: [PO_ROW, FEES_ROW], err: '' }, null);
+  assert.strictEqual((html.match(/class="fin-catrow fin-pol/g) || []).length, 1,
+    'only the row with line items opens');
+  assert.ok(/shipping & fees/.test(html), 'the fees row still renders and still counts');
+  assert.ok(/onclick="finPoLines\(42\)/.test(html), 'and it is addressed by its ledger id');
+});
+
+it('an opened PO row lists its items, and the items total the row', () => {
+  const html = drawnPo({ i: 0, rows: [PO_ROW], err: '' }, { id: 42, rows: POL, err: '' });
+  assert.strictEqual((html.match(/class="fin-polrow"/g) || []).length, 2);
+  assert.ok(/Glass jars 250ml/.test(html) && /Ribbon 20m/.test(html));
+  // The arithmetic behind each figure is on the row, so a line that looks wrong
+  // can be read rather than only disbelieved.
+  // A PRICE, NOT A ROUNDED ONE. finMoney would have drawn this ¥3.50 jar as ¥4.
+  assert.ok(/200 pc × ¥3\.50/.test(html), 'quantity, unit and the real unit cost');
+  assert.ok(!/× ¥4\b/.test(html), 'a whole-yuan unit price is a lie about the invoice');
+  assert.ok(/10 roll × ¥20\.00/.test(html), 'and it holds where the price is exact');
+  assert.ok(/¥700/.test(html) && /¥200/.test(html));
+  assert.strictEqual(POL.reduce((t, r) => t + r.amount, 0), 900);
+});
+
+it('the item name follows the language, with a fallback across', () => {
+  // The house pattern for bilingual DATA (tmStoreLabel) — NOT finCatLabel,
+  // which splits one glued free-text value, which an item name is not.
+  const en = drawnPo({ i: 0, rows: [PO_ROW], err: '' }, { id: 42, rows: POL, err: '' });
+  assert.ok(/Glass jars 250ml/.test(en) && !/玻璃罐/.test(en), 'the English surface shows English');
+  ctx.cuLang = () => 'cn';
+  const cn = drawnPo({ i: 0, rows: [PO_ROW], err: '' }, { id: 42, rows: POL, err: '' });
+  assert.ok(/玻璃罐250毫升/.test(cn), 'the Chinese surface shows Chinese');
+  assert.ok(/Ribbon 20m/.test(cn), 'a line with no Chinese half falls back across, never to blank');
+  ctx.cuLang = () => 'en';
+});
+
+it('the third level says loading, empty and failed the same way the second does', () => {
+  assert.ok(/Loading…/.test(drawnPo({ i: 0, rows: [PO_ROW], err: '' }, { id: 42, rows: null, err: '' })));
+  assert.ok(/Nothing recorded yet/.test(drawnPo({ i: 0, rows: [PO_ROW], err: '' }, { id: 42, rows: [], err: '' })));
+  assert.ok(/Could not load Finance\./.test(
+    drawnPo({ i: 0, rows: [PO_ROW], err: '' }, { id: 42, rows: null, err: 'Could not load Finance.' })));
+});
+
+it('closing the category drops the open PO row with it', () => {
+  const fn = CLIENT_CODE.slice(CLIENT_CODE.indexOf('window.finCatOpen'));
+  const body = fn.slice(0, fn.indexOf('\n};'));
+  assert.ok(/FIN_POL = null/.test(body),
+    'a row nothing is drawing must not be left open underneath');
+  const load = CLIENT_CODE.slice(CLIENT_CODE.indexOf('async function finLoad'));
+  assert.ok(/FIN_POL = null;/.test(load.slice(0, load.indexOf('finRender();'))),
+    'and a new window drops it too');
+});
+
+it('the third level composes NO new Chinese either', () => {
+  for (const cn of ['加载中…', '暂无记录', '财务数据加载失败。']) {
+    assert.ok(CLIENT.split(cn).length - 1 >= 3,
+      `${cn} must be the pair already live on the two levels above`);
+  }
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

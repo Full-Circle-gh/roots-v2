@@ -256,7 +256,12 @@ it('the totals and the breakdown come from ONE read', () => {
 it('the drill-down reads the same table once, and applies no split of its own', () => {
   const at = SUMMARY_CODE.indexOf("router.get('/api/retail-admin/finance/summary/category'");
   assert.notStrictEqual(at, -1, 'the drill-down route is not mounted');
-  const handler = SUMMARY_CODE.slice(at);
+  // BOUNDED TO THIS HANDLER, like the summary's above. The file holds a third
+  // route now — `/summary/po-lines`, the items behind one purchase-order row —
+  // and a slice running to the end of the file counts its lookup here. Each
+  // handler is held to one read of the table, which is the rule; the file's
+  // total is not a number that means anything.
+  const handler = SUMMARY_CODE.slice(at, SUMMARY_CODE.indexOf('\nrouter.get(', at + 1));
   assert.strictEqual((handler.match(/FROM expense_entries/g) || []).length, 1,
     'one read here too — the list it returns must be the rows, added once');
   // The flag lives on the summary's own grouped read. A second resolution here
@@ -265,6 +270,18 @@ it('the drill-down reads the same table once, and applies no split of its own', 
   // opening ONE line that has already been placed on one side or the other.
   assert.ok(!/is_operating|operatingFlag/.test(handler),
     'the drill-down must not re-decide which side of the split a category is on');
+});
+
+it('the purchase-order lines read the ledger once, and decide no split either', () => {
+  const at = SUMMARY_CODE.indexOf("router.get('/api/retail-admin/finance/summary/po-lines'");
+  assert.notStrictEqual(at, -1, 'the po-lines route is not mounted');
+  const handler = SUMMARY_CODE.slice(at);
+  assert.strictEqual((handler.match(/FROM expense_entries/g) || []).length, 1,
+    'one lookup: the ledger row that names the (purchase order, category) pair');
+  // It opens ONE row that has already been placed on one side of the split. The
+  // flag has no business being re-resolved three levels down.
+  assert.ok(!/is_operating|operatingFlag|spacingKey/.test(handler),
+    'the third level must not re-decide anything the card above it already decided');
 });
 
 it('a category any expense names cannot be deleted', () => {

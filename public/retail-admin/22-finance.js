@@ -268,6 +268,14 @@ function finNonOperating(rows) {
    August rows hanging under a September figure. */
 let FIN_CAT = null;   // { i, rows, err } — rows null while the read is in flight
 
+/* THE THIRD LEVEL: the items behind one purchase-order row.
+   Keyed by the LEDGER ROW'S OWN id, which is what the endpoint takes — one
+   `expense_entries` row is one (purchase order, category) pair, so the id names
+   the slice with nothing for this screen to reconstruct.
+   One at a time, like the category above it. Dropped whenever the category
+   closes or the window moves, both of which take its row off the screen. */
+let FIN_POL = null;   // { id, rows, err } — rows null while the read is in flight
+
 /* One expense row inside an opened category.
 
    EVERY STRING HERE IS ALREADY LIVE ON THE TRANSACTIONS TAB, and that is on
@@ -310,15 +318,108 @@ function finCatRow(r) {
      parts when the writer already wrote one is how the two come to disagree; the
      poster owns that sentence and this renders it. */
   const name = r.note || (po ? (r.po_number || '') : '') || '';
-  return '<div class="fin-catrow">'
-    + `<span class="fin-catdate">${escapeHtml(finTxDay(r.date))}</span>`
+  /* OPENABLE ONLY WHERE THERE IS SOMETHING BEHIND IT. `lines` is counted
+     server-side; it is 0 on the landed-cost row, which posts freight, tax and
+     handling against the order with no `po_line_items` at all. This screen
+     already refuses a chevron that opens onto nothing on the expenses
+     disclosure, and the same rule decides here. A row that cannot open renders
+     exactly as it did before — no control, no chevron, no explanation owed. */
+  const openable = po && Number(r.lines) > 0;
+  const open = openable && !!FIN_POL && FIN_POL.id === r.id;
+  const body = '<span class="fin-catdate">' + escapeHtml(finTxDay(r.date)) + '</span>'
     + '<span class="fin-catwhat">'
     + (name ? `<span class="fin-catname">${escapeHtml(name)}</span>` : '')
     + (mark ? `<span class="fin-catmark">${escapeHtml(mark)}</span>` : '')
     + '</span>'
-    + `<span class="fin-catfig">${escapeHtml(finMoney(r.amount))}</span>`
+    + `<span class="fin-catfig">${escapeHtml(finMoney(r.amount))}</span>`;
+  if (!openable) return `<div class="fin-catrow">${body}</div>`;
+  return `<button type="button" class="fin-catrow fin-pol${open ? ' on' : ''}" `
+    + `aria-expanded="${open ? 'true' : 'false'}" onclick="finPoLines(${Number(r.id)})">`
+    + body + '</button>'
+    + (open ? `<div class="fin-polrows">${finPolBody()}</div>` : '');
+}
+
+/* One item on a purchase order, inside the category it was posted under.
+
+   THE NAME IS TWO COLUMNS PICKED BY LANGUAGE, with a fallback across when a
+   line carries only one — the house pattern for bilingual DATA (`tmStoreLabel`
+   on stores, `name_en`/`name_cn` on roles). It is NOT `finCatLabel`: that
+   splits ONE glued free-text value, which is what a category is and what an
+   item name is not.
+
+   QUANTITY AND UNIT COST ARE THE LINE'S OWN, and the quantity is what the shop
+   is BILLED for — what turned up less what went back. A line partly returned
+   shows the smaller number, because the smaller number is what is in the figure
+   above it. */
+function finPolRow(r) {
+  const cn = (typeof cuLang === 'function') && cuLang() === 'cn';
+  const name = (cn ? (r.name_cn || r.name_en) : (r.name_en || r.name_cn)) || '';
+  /* `200 pc × ¥3.50`, with the unit where the line carries one. A count and a
+     price need no label — §1.12's preference for the figure over a word about it.
+
+     **THE UNIT COST IS `acMoney`, NOT `finMoney`, AND THAT IS LOAD-BEARING.**
+     `finMoney` renders whole units, which is right for a period total and
+     WRONG FOR A PRICE: it drew a ¥3.50 jar as ¥4, a lie about what the supplier
+     charged, and three of them as ¥12 against a line of ¥10.50. 01-core.js
+     states the rule this follows — "anywhere an operator might reconcile the
+     number against something… uses acMoney and shows the real amount".
+
+     The figure in the aligned column stays `finMoney`, at all three levels. It
+     is the staircase's own column and its magnitude is §36's decision; a list
+     that switched to fen halfway down would stop lining up under the total it
+     is there to be checked against. */
+  const qty = Number(r.qty || 0);
+  const each = `${qty.toLocaleString('en-US', { maximumFractionDigits: 3 })}`
+    + `${r.unit ? ' ' + r.unit : ''} × ${acMoney(r.unit_cost)}`;
+  return '<div class="fin-polrow">'
+    + `<span class="fin-polname">${escapeHtml(name)}</span>`
+    + `<span class="fin-polqty">${escapeHtml(each)}</span>`
+    + `<span class="fin-polfig">${escapeHtml(finMoney(r.amount))}</span>`
     + '</div>';
 }
+
+/* What sits under an opened purchase-order row. Same three states as the level
+   above, said the same way, with the same live pairs. No total line: the figure
+   it opened from is directly above it and is that total. */
+function finPolBody() {
+  if (FIN_POL.err) {
+    return `<div class="fin-catnote-line">${escapeHtml(FIN_POL.err)}</div>`;
+  }
+  if (FIN_POL.rows === null) {
+    return `<div class="fin-catnote-line">${escapeHtml(cuT('Loading…', '加载中…'))}</div>`;
+  }
+  if (!FIN_POL.rows.length) {
+    return `<div class="fin-catnote-line">${escapeHtml(cuT('Nothing recorded yet', '暂无记录'))}</div>`;
+  }
+  return FIN_POL.rows.map(finPolRow).join('');
+}
+
+/* ── Opening a purchase-order row ──────────────────────────────────────────
+   THE LEDGER ROW'S ID IS THE WHOLE REQUEST. The server resolves the order and
+   the category from it, so this screen never assembles a (purchase order,
+   category) pair the ledger has no row for.
+
+   The in-flight guard and the click-to-shut are the level above's, unchanged:
+   one open at a time, a stale response dropped on arrival. */
+window.finPoLines = function finPoLines(id) {
+  const entry = Number(id);
+  if (!entry) return;
+  if (FIN_POL && FIN_POL.id === entry) { FIN_POL = null; finRender(); return; }
+
+  FIN_POL = { id: entry, rows: null, err: '' };
+  finRender();
+  api('/api/retail-admin/finance/summary/po-lines?entry_id=' + encodeURIComponent(entry))
+    .then((j) => {
+      if (!FIN_POL || FIN_POL.id !== entry) return;   // a later click already won
+      FIN_POL.rows = (j.data && j.data.rows) || [];
+      finRender();
+    })
+    .catch(() => {
+      if (!FIN_POL || FIN_POL.id !== entry) return;
+      FIN_POL.err = cuT('Could not load Finance.', '财务数据加载失败。');
+      finRender();
+    });
+};
 
 /* What sits under an opened category row: the rows, or why they are not there.
 
@@ -396,8 +497,13 @@ window.finCatOpen = function finCatOpen(i) {
   const all = (FIN_DATA && FIN_DATA.expense_breakdown) || [];
   const row = all[Number(i)];
   if (!row) return;
-  if (FIN_CAT && FIN_CAT.i === Number(i)) { FIN_CAT = null; finRender(); return; }
+  // AN OPEN PURCHASE-ORDER ROW BELONGS TO THE CATEGORY IT IS INSIDE. Closing
+  // that category, or opening another, takes the row off the screen — so the
+  // level below it is dropped with it rather than left pointing at a ledger row
+  // nothing is drawing.
+  if (FIN_CAT && FIN_CAT.i === Number(i)) { FIN_CAT = null; FIN_POL = null; finRender(); return; }
 
+  FIN_POL = null;
   FIN_CAT = { i: Number(i), rows: null, err: '' };
   finRender();
 
@@ -534,6 +640,7 @@ async function finLoad(opts) {
   // already fetched belong to the window being left. Nothing here is worth
   // preserving across a window change — the operator asked a new question.
   FIN_CAT = null;
+  FIN_POL = null;
 
   try {
     const j = await api(`/api/retail-admin/finance/summary?from=${encodeURIComponent(from || '')}&to=${encodeURIComponent(to || '')}`);

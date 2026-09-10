@@ -14579,6 +14579,61 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   font: 400 14px/1.5 var(--f-sans); color: var(--td-text2);
   font-variant-numeric: tabular-nums; text-align: right;
 }
+/* ── A purchase-order row, as the control it becomes ────────────────────────
+   Same reset as .fin-cat above and for the same reason: it is a <button>
+   wearing .fin-catrow, so the 62px / 1fr / 104px grid and the tabular figures
+   are inherited rather than restated. Only PO rows WITH line items get this
+   class — the landed-cost row stays a plain div, because a chevron that opens
+   onto nothing is a control that lies. */
+#tab-finance .fin-catrows .fin-pol {
+  width: 100%; text-align: left; background: none; border: 0;
+  font: inherit; color: inherit; cursor: pointer;
+  padding: 4px 8px; margin: 0 -8px; border-radius: 6px;
+  transition: background-color .12s cubic-bezier(.16,1,.3,1);
+}
+#tab-finance .fin-catrows .fin-pol:hover { background: var(--td-raised); }
+#tab-finance .fin-catrows .fin-pol:focus-visible {
+  outline: 2px solid var(--td-text); outline-offset: 1px;
+}
+#tab-finance .fin-catrows .fin-pol.on .fin-catname { color: var(--td-text); }
+
+/* ── The items on one purchase order ───────────────────────────────────────
+   The third level, and the last. It is hung on a second hairline at the same
+   inset as the first so the nesting reads as depth rather than as a new
+   component, and it drops the date column the level above it owns: every line
+   here belongs to one purchase order on one day, and repeating that date on
+   each would be three columns saying one thing.
+   THE FIGURE COLUMN IS STILL THE CARD'S 104px. It has to be: a reader checking
+   that three items come to ¥1,230 is the reason this level exists. */
+#tab-finance .fin-polrows {
+  margin: 2px 0 6px 10px; padding: 3px 0 3px 10px;
+  border-left: 1px solid var(--td-border);
+}
+#tab-finance .fin-polrow {
+  display: grid; grid-template-columns: 1fr auto 104px; align-items: baseline;
+  column-gap: 10px; padding: 3px 0;
+}
+#tab-finance .fin-polname {
+  font: 400 13px/1.5 var(--f-sans); color: var(--td-text); overflow-wrap: anywhere;
+}
+/* `200 kg × ¥3.50` — the arithmetic behind the figure on the right, so a line
+   that looks wrong can be read rather than only disbelieved. */
+#tab-finance .fin-polqty {
+  font: 400 12px/1.5 var(--f-sans); color: var(--td-text2);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+#tab-finance .fin-polfig {
+  font: 400 13px/1.5 var(--f-sans); color: var(--td-text2);
+  font-variant-numeric: tabular-nums; text-align: right;
+}
+/* At phone width the three columns become two: the quantity moves under the
+   name rather than squeezing the figure column that has to stay aligned. */
+@media (max-width: 560px) {
+  #tab-finance .fin-polrow { grid-template-columns: 1fr 104px; }
+  #tab-finance .fin-polqty { grid-column: 1; grid-row: 2; }
+  #tab-finance .fin-polfig { grid-column: 2; grid-row: 1 / span 2; }
+}
+
 /* Loading, empty, failed — one line, Graphite, no box and no icon (§1.12). */
 #tab-finance .fin-catnote-line {
   font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); padding: 4px 0;
