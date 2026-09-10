@@ -325,7 +325,7 @@ function versionOf(tid) {
   // marker is for: raising a claim writes to a table nothing sums, and approving
   // one writes a row into `expense_entries` that the month's accounts count.
   // Same feature, same section, opposite answers.
-  // 116 is `expenses:cancel` (2026-09-10, §88) — the twenty-third money-MOVING
+  // 116 is `expenses:cancel` (2026-09-10, §89) — the twenty-third money-MOVING
   // key, and it carries the marker for the same reason its approving sibling
   // does: voiding a claim is what removes an already-posted row from
   // `expense_entries`, which is exactly the kind of change to what the

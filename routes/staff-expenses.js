@@ -49,7 +49,7 @@ const ERR = {
   notApproved: 'only an approved claim can be paid back · 仅审批通过的申请可标记付款',
   notOwed:  'this one was paid from the company account · 该笔由公司账户支付',
   forbidden:'this account cannot approve expense claims · 此账号无法审批费用申请',
-  // §88.
+  // §89.
   notApprovedVoid: 'only an approved claim can be voided · 仅审批通过的申请可以作废',
   forbiddenVoid:   'this account cannot void expense claims · 此账号无法作废费用申请',
 };
@@ -81,7 +81,7 @@ function requireApprover(req, res, next) {
   return next();
 }
 
-/* WHO MAY VOID (§88). Same fail-closed shape as requireApprover and for the
+/* WHO MAY VOID (§89). Same fail-closed shape as requireApprover and for the
    same reason: this reverses money already in the books, so a route this can
    reach must not fall open on a question the RBAC layer could not answer. It is
    its own function, checking `expenses:cancel` rather than `expenses:approve`,
@@ -462,7 +462,7 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
 });
 
 // ── POST /api/retail-admin/staff-expenses/:id/void ─────────────────────────
-// §88 — REVERSING A CLAIM THAT HAS ALREADY POSTED. Requested by Ash off the
+// §89 — REVERSING A CLAIM THAT HAS ALREADY POSTED. Requested by Ash off the
 // live Transactions screen: a "Staff claim" row carried no way to undo a
 // mistaken approval, because `/finance/transactions` refuses to edit or delete
 // a claim-posted row directly (routes/finance-transactions.js `claimEdit` /

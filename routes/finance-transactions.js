@@ -294,7 +294,7 @@ function readTransactions(query, opts = {}) {
   //
   // It carries the claim id so the screen can say where the row came from, and
   // it is NOT editable there for the reason the PO rows are not.
-  // `c.settled` rides along for §88's Void action: a claim already paid back to
+  // `c.settled` rides along for §89's Void action: a claim already paid back to
   // the employee must not be voided (the same guard `/staff-expenses/:id/void`
   // enforces server-side), so the row says so rather than the screen finding
   // out from a failed request.
@@ -425,7 +425,7 @@ function readTransactions(query, opts = {}) {
       // a cost that is finished and one that is also a debt, and the bookkeeper
       // reading this row is the person who needs to know.
       paid_by: r.paid_by || null,
-      // §88: whether the claim has already been paid back — see the note above
+      // §89: whether the claim has already been paid back — see the note above
       // the query.
       settled: !!r.settled,
     })),

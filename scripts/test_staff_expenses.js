@@ -476,7 +476,7 @@ it('the phone screen says what approving does', () => {
     'the mirror of the line under Submit on the other screen');
 });
 
-console.log('\n5b · voiding a posted claim (§88)');
+console.log('\n5b · voiding a posted claim (§89)');
 
 it('voiding removes the ledger row without writing rejected over it', () => {
   POST.postClaim(pdb, claim); // re-post so a row exists to void

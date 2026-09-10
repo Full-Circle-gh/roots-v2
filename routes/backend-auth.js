@@ -341,7 +341,7 @@ try {
   // it because saying what you spent is not a power over anything.
   const claims = roles.migrateExpenseSubmitCap();
   if (claims) console.log('[backend-auth] granted expenses:submit to ' + claims + ' role(s)');
-  // §88's key, on the same shape as production:request: it did not exist
+  // §89's key, on the same shape as production:request: it did not exist
   // yesterday, so no untouched-role guard, only the admin/manager/bookkeeper
   // rows that already hold the finance/approval capabilities this rides beside.
   const voids = roles.migrateExpenseCancelCap();

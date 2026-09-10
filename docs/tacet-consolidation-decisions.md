@@ -8988,7 +8988,7 @@ else — so a receipt already photographed, screenshotted, or sent by a supplier
 could not be attached at all, which is most of them. The attribute is gone;
 `accept="image/*"` is what keeps the chooser to pictures.
 
-### DECIDED 2026-09-10 — §88: a capability to void a posted staff claim
+### DECIDED 2026-09-10 — §89: a capability to void a posted staff claim
 
 Reported by Ash off the live Transactions screen: a ¥200 "Staff claim" row (the
 same row v4.196 fixed the name on) offered no way to undo it. §87 already
