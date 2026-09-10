@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer drawer — section reorder mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ── Tacet tokens — same set as reference/customer-drawer-mockup.html ──
+     Values from docs/tacet-design-system.md §1. Light theme only: this
+     mockup is about ORDER, not about theming, and a second theme here would
+     be one more thing to keep true. */
+  :root{
+    --ink:#111A2B; --paper:#FBF9F4; --pane:#FFFFFF; --graphite:#58606E;
+    --cream:#F6F3EC; --elev1:#F6F3EC;
+    --line-soft:#ECE8DE; --line:#E4E0D5; --line-strong:#D9D4C7;
+    --text-1:#111A2B; --text-2:#58606E; --text-3:#8A8B8E; --text-4:#B4B3AC;
+    --dusk:#6E67AF;
+    --sage:#A3B49F; --sage-tint:#EDF1EC; --sage-ink:#4A6249;
+    --amber:#C9954A; --amber-tint:#F7EEDE; --amber-ink:#8A6425;
+    --brick:#B4533E; --brick-tint:#F6E7E3;
+    --f:'Inter','IBM Plex Sans SC','PingFang SC','Hiragino Sans GB',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--text-1);
+    font-family:var(--f); font-size:15px; line-height:1.5;
+    -webkit-font-smoothing:antialiased; padding:32px 24px 96px;
+    font-variant-numeric:tabular-nums;
+  }
+
+  .page-head{max-width:1420px; margin:0 auto 8px;}
+  .page-head h1{font-size:20px; font-weight:500; margin:0 0 6px; letter-spacing:-.01em;}
+  .page-head p{margin:0 0 4px; color:var(--text-2); font-size:13.5px; max-width:760px;}
+
+  /* ── What moved — the legend, stated once, above both columns ── */
+  .moves{max-width:1420px; margin:20px auto 28px; display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px;}
+  @media (max-width:900px){ .moves{grid-template-columns:minmax(0,1fr);} }
+  .move{background:var(--pane); border:1px solid var(--line); border-radius:14px; padding:18px 20px;}
+  .move .n{font-size:13px; font-weight:500; color:var(--text-1); margin-bottom:6px;
+    display:flex; align-items:baseline; gap:8px;}
+  .move .n .arrow{color:var(--text-3); font-weight:400;}
+  .move p{margin:0; font-size:13px; color:var(--text-2); line-height:1.55;}
+
+  .stage{max-width:1420px; margin:0 auto; display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr)); gap:32px; align-items:start;}
+  @media (max-width:1100px){ .stage{grid-template-columns:minmax(0,1fr);} }
+  .col > h2{font-size:13px; font-weight:500; color:var(--text-2); margin:0 0 12px;
+    letter-spacing:.02em;}
+  .col.after > h2{color:var(--text-1);}
+
+  /* ── Drawer shell ── */
+  .drawer{
+    background:var(--paper); border:1px solid var(--line);
+    border-radius:18px; padding:24px; position:relative;
+    box-shadow:0 4px 16px rgba(17,26,43,.04);
+  }
+
+  /* ── Header ── */
+  .cu-head{display:flex; gap:16px; margin-bottom:20px;}
+  .avatar{flex:none; width:52px; height:52px; border-radius:999px; background:var(--cream);
+    border:1px solid var(--line-soft);}
+  .eyebrow{font-size:13px; color:var(--text-2); margin:0 0 5px;}
+  .name{font-size:24px; font-weight:500; letter-spacing:-.005em; line-height:1.2;
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .phone{font-size:14px; color:var(--text-2); margin-top:5px;}
+  .pill{display:inline-flex; align-items:center; font-size:13px; font-weight:500;
+    border-radius:999px; padding:2px 11px; background:var(--sage-tint); color:var(--sage-ink);}
+  .copy{font-size:11.5px; font-weight:500; color:var(--text-2); background:var(--elev1);
+    border:1px solid var(--line); border-radius:999px; padding:1px 8px; margin-left:7px;}
+
+  /* ── Snapshot band ── */
+  .snap{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0; margin-bottom:24px;}
+  .snap > div{padding:0 18px;}
+  .snap > div:first-child{padding-left:0;}
+  .snap > div + div{border-left:1px solid var(--line-strong);}
+  .snap .lbl{font-size:13px; font-weight:500; color:var(--text-2); letter-spacing:.02em;
+    display:flex; align-items:baseline; gap:8px;}
+  .snap .adj{margin-left:auto; font-size:13px; color:var(--text-2);
+    text-decoration:underline; text-underline-offset:3px; text-decoration-color:var(--line-strong);}
+  .snap .fig{font-size:30px; font-weight:500; letter-spacing:-.01em; margin-top:6px;}
+  .snap .fig.zero{color:var(--text-3);}
+  .snap .sub{font-size:13px; color:var(--text-2); margin-top:3px; line-height:1.45;}
+  .snap .sub .warn{color:var(--amber-ink);}
+
+  /* ── Cards ── */
+  .pairs{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:24px;
+    align-items:start;}
+  @media (max-width:620px){ .pairs{grid-template-columns:minmax(0,1fr);} }
+  .card{background:var(--pane); border:1px solid var(--line); border-radius:14px;
+    padding:24px; min-width:0; align-self:start; margin-bottom:24px;}
+  .pairs .card{margin-bottom:0;}
+  .kicker{display:flex; align-items:baseline; gap:8px; font-size:13px; font-weight:500;
+    color:var(--text-1); margin-bottom:10px;}
+  .kicker .side{margin-left:auto; font-weight:400; font-size:13px; color:var(--text-2);}
+  .frow{display:grid; grid-template-columns:118px 1fr; gap:12px; padding:9px 0;
+    border-top:1px solid var(--line); align-items:baseline;}
+  .kicker + .frow{border-top:none; padding-top:0;}
+  .frow .k{font-size:13px; font-weight:400; color:var(--text-2);}
+  .frow .v{font-size:15px; font-weight:500; text-align:right; overflow-wrap:anywhere;}
+  .frow .v .muted{color:var(--text-3); font-weight:400;}
+  .frow .v.quiet{font-weight:400; color:var(--text-2);}
+  .frow .v.mono{font-family:var(--mono); font-size:13px; font-weight:400; color:var(--text-2);}
+
+  /* ── The joined block: Notes & tags + Orders by month, one card, one
+        hairline between. This is the "stick to" answer — see the legend. ── */
+  .joined{background:var(--pane); border:1px solid var(--line); border-radius:14px;
+    margin-bottom:24px;}
+  .joined > section{padding:24px;}
+  .joined > section + section{border-top:1px solid var(--line);}
+
+  .tagrow{display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:8px 0 10px;
+    min-height:24px; font-size:13px; color:var(--text-3);}
+  .tagadd{display:flex; gap:6px; margin-bottom:10px;}
+  .tagadd .fake-in{flex:1; min-width:0; background:var(--elev1); border:1px solid var(--line);
+    border-radius:8px; padding:7px 11px; font-size:13.5px; color:var(--text-3);}
+  .btn{font-size:13px; font-weight:500; border:1px solid var(--line); background:var(--pane);
+    color:var(--text-1); border-radius:8px; padding:7px 14px;}
+  .note-in{background:var(--elev1); border:1px solid var(--line); border-radius:10px;
+    padding:9px 11px; min-height:62px; font-size:13.5px; color:var(--text-3); line-height:1.6;}
+
+  /* ── Chart ── */
+  .bar-row{display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:6px;
+    height:96px; align-items:end; margin-top:14px;}
+  .bar-row i{display:block; background:var(--sage); border-radius:5px 5px 2px 2px;
+    max-width:34px; margin:0 auto; width:100%;}
+  .bar-row i.peak{background:var(--sage-ink);}
+  .bar-row i.empty{background:var(--line-strong); border-radius:2px; height:3px;}
+  .bar-labels{display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:6px;
+    margin-top:7px; font-size:11.5px; color:var(--text-4); text-align:center;}
+
+  /* ── Addresses ── */
+  .addr{padding:9px 0; min-width:0;}
+  .addr + .addr{border-top:1px solid var(--line);}
+  .addr:last-child{padding-bottom:0;}
+  .addr .top{display:flex; align-items:baseline; gap:9px; flex-wrap:wrap;}
+  .addr .nm{font-weight:500; font-size:14px;}
+  .addr .ph{color:var(--text-2); font-size:13px;}
+  .addr .def{font-size:10px; font-weight:500; letter-spacing:.04em; color:var(--text-2);
+    background:var(--elev1); border:1px solid var(--line); border-radius:999px; padding:1px 7px;}
+  .addr .line2{color:var(--text-2); font-size:12px; margin-top:4px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .ghost{margin-left:auto; font-weight:400; font-size:13px; color:var(--text-2);}
+
+  /* ── Top items ── */
+  table{width:100%; border-collapse:collapse;}
+  thead th{font-weight:500; font-size:11.5px; letter-spacing:.02em; color:var(--text-2);
+    text-align:left; padding:0 0 7px; border-bottom:1px solid var(--line);}
+  thead th.num, tbody td.num{text-align:right;}
+  tbody td{font-size:13.5px; padding:8px 0; border-bottom:1px solid var(--line-soft);}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody .sku{display:block; font-size:11.5px; color:var(--text-3); margin-top:2px;}
+
+  /* ── Folds ── */
+  .fold{border-top:1px solid var(--line); padding:13px 2px; display:flex;
+    align-items:center; gap:9px; font-size:14px;}
+  .fold .chev{color:var(--text-3); font-size:11px;}
+  .fold .hint{margin-left:auto; font-size:13px; color:var(--text-2);}
+
+  /* ── Move markers — only on the "after" column ── */
+  .mark{position:relative;}
+  .mark::before{
+    content:attr(data-mark); position:absolute; left:-11px; top:20px;
+    writing-mode:vertical-rl; font-size:10px; letter-spacing:.06em;
+    color:var(--dusk); background:var(--paper); padding:5px 0;
+  }
+  .mark{box-shadow:inset 3px 0 0 var(--dusk);}
+  .foot{max-width:1420px; margin:34px auto 0; color:var(--text-2); font-size:13px;
+    border-top:1px solid var(--line); padding-top:16px; line-height:1.6;}
+  .foot code{font-family:var(--mono); font-size:12px; color:var(--text-1);}
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>Customer drawer — section reorder</h1>
+  <p>Same sections, same data, same components. Only the order changes. Left is
+     what ships today; right is the proposal. Marked edges on the right show
+     what moved.</p>
+</div>
+
+<div class="moves">
+  <div class="move">
+    <div class="n">Addresses <span class="arrow">↑</span> up</div>
+    <p>Where a person's parcels go is an operating fact, wanted as often as
+       their last order. It pairs with Activity directly under the snapshot
+       band, where Device &amp; account used to sit.</p>
+  </div>
+  <div class="move">
+    <div class="n">Device &amp; account <span class="arrow">↓</span> down</div>
+    <p>Build string, session count and openid are support material — read when
+       something is wrong, not on every open. It takes the slot Addresses
+       vacated, beside Top items.</p>
+  </div>
+  <div class="move">
+    <div class="n">Notes &amp; tags <span class="arrow">+</span> Orders by month</div>
+    <p>Joined into one card with a hairline between, so nothing can be
+       inserted between them again. What the team knows about this person sits
+       against what this person actually does.</p>
+  </div>
+</div>
+
+<div class="stage">
+
+  <!-- ══════════════════ BEFORE ══════════════════ -->
+  <div class="col">
+    <h2>Today</h2>
+    <div class="drawer">
+
+      <div class="cu-head">
+        <div class="avatar"></div>
+        <div style="flex:1; min-width:0;">
+          <div class="eyebrow">Customer #4182 · joined 12 Aug 2026</div>
+          <div class="name">Linn Fogelberg <span class="pill">Sprout</span></div>
+          <div class="phone">15603361641 <span class="copy">Copy</span></div>
+        </div>
+      </div>
+
+      <div class="snap">
+        <div>
+          <div class="lbl">Orders · 订单</div>
+          <div class="fig">6</div>
+          <div class="sub">¥1,467 ordered · AOV ¥244.50</div>
+        </div>
+        <div>
+          <div class="lbl">Points · 积分 <span class="adj">Adjust · 调整</span></div>
+          <div class="fig">11</div>
+          <div class="sub">11 earned · <span class="warn">2 expiring soon</span></div>
+        </div>
+        <div>
+          <div class="lbl">Wallet · 钱包 <span class="adj">Adjust · 调整</span></div>
+          <div class="fig zero">¥0</div>
+          <div class="sub">never topped up</div>
+        </div>
+      </div>
+
+      <div class="pairs">
+        <div class="card">
+          <div class="kicker">Activity · 动态</div>
+          <div class="frow"><div class="k">Last order · 最近订单</div><div class="v">#TC000639 · Preparing</div></div>
+          <div class="frow"><div class="k">Last login · 最近登录</div><div class="v quiet">12m ago</div></div>
+          <div class="frow"><div class="k">Completed · 已完成</div><div class="v">6 / 6</div></div>
+        </div>
+        <div class="card">
+          <div class="kicker">Device &amp; account · 设备与账号</div>
+          <div class="frow"><div class="k">App build · 版本</div><div class="v quiet">release 9.9 · iPhone 14 Pro&lt;iPhone15,2&gt;</div></div>
+          <div class="frow"><div class="k">Sessions · 会话</div><div class="v">16 <span class="muted">active</span></div></div>
+          <div class="frow"><div class="k">openid</div><div class="v mono">oeqDi5EY…r5o5v8 <span class="copy">Copy</span></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="kicker">Notes &amp; tags · 备注与标签</div>
+        <div class="tagrow">No tags yet</div>
+        <div class="tagadd">
+          <div class="fake-in">Add a tag — e.g. wholesale</div>
+          <span class="btn">Add</span>
+        </div>
+        <div class="note-in">Anything your team should know — allergies, delivery quirks, invoicing.</div>
+      </div>
+
+      <div class="card">
+        <div class="kicker">Orders by month · 月度订单
+          <span class="side">6 orders · ¥1,467 in 12 months</span></div>
+        <div class="bar-row">
+          <i class="empty"></i><i class="empty"></i><i class="empty"></i><i class="empty"></i>
+          <i class="empty"></i><i class="empty"></i><i class="empty"></i><i class="empty"></i>
+          <i class="empty"></i><i class="empty"></i>
+          <i class="peak" style="height:88px"></i><i style="height:41px"></i>
+        </div>
+        <div class="bar-labels">
+          <span>10</span><span>11</span><span>12</span><span>01</span><span>02</span><span>03</span>
+          <span>04</span><span>05</span><span>06</span><span>07</span><span>08</span><span>09</span>
+        </div>
+      </div>
+
+      <div class="pairs">
+        <div class="card">
+          <div class="kicker">Top items · 热销商品</div>
+          <table>
+            <thead><tr><th>Item · 商品</th><th class="num">Qty · 数量</th><th class="num">Spend · 消费</th></tr></thead>
+            <tbody>
+              <tr><td>Quinoa salad<span class="sku">SKU-QS-200</span></td><td class="num">7</td><td class="num">¥413</td></tr>
+              <tr><td>Sourdough loaf<span class="sku">SKU-SD-001</span></td><td class="num">5</td><td class="num">¥290</td></tr>
+              <tr><td>Cold brew 500ml<span class="sku">SKU-CB-500</span></td><td class="num">4</td><td class="num">¥176</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card">
+          <div class="kicker">Addresses · 地址 <span class="ghost">+ Add · 添加</span></div>
+          <div class="addr">
+            <div class="top"><span class="nm">Linn Fogelberg</span><span class="ph">15603361641</span><span class="def">Default</span></div>
+            <div class="line2">广州市天河区珠江新城华夏路 8 号 22B</div>
+          </div>
+          <div class="addr">
+            <div class="top"><span class="nm">Office</span><span class="ph">15603361641</span></div>
+            <div class="line2">广州市越秀区东风中路 305 号 11 楼</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="fold"><span class="chev">▸</span> Recent orders · 近期订单 <span class="hint">6 orders</span></div>
+        <div class="fold"><span class="chev">▸</span> Points ledger · 积分明细 <span class="hint">4 entries</span></div>
+        <div class="fold"><span class="chev">▸</span> Diagnostics · 诊断 <span class="hint">none</span></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════ AFTER ══════════════════ -->
+  <div class="col after">
+    <h2>Proposed</h2>
+    <div class="drawer">
+
+      <div class="cu-head">
+        <div class="avatar"></div>
+        <div style="flex:1; min-width:0;">
+          <div class="eyebrow">Customer #4182 · joined 12 Aug 2026</div>
+          <div class="name">Linn Fogelberg <span class="pill">Sprout</span></div>
+          <div class="phone">15603361641 <span class="copy">Copy</span></div>
+        </div>
+      </div>
+
+      <div class="snap">
+        <div>
+          <div class="lbl">Orders · 订单</div>
+          <div class="fig">6</div>
+          <div class="sub">¥1,467 ordered · AOV ¥244.50</div>
+        </div>
+        <div>
+          <div class="lbl">Points · 积分 <span class="adj">Adjust · 调整</span></div>
+          <div class="fig">11</div>
+          <div class="sub">11 earned · <span class="warn">2 expiring soon</span></div>
+        </div>
+        <div>
+          <div class="lbl">Wallet · 钱包 <span class="adj">Adjust · 调整</span></div>
+          <div class="fig zero">¥0</div>
+          <div class="sub">never topped up</div>
+        </div>
+      </div>
+
+      <!-- Activity keeps its slot; Addresses takes the one beside it. -->
+      <div class="pairs">
+        <div class="card">
+          <div class="kicker">Activity · 动态</div>
+          <div class="frow"><div class="k">Last order · 最近订单</div><div class="v">#TC000639 · Preparing</div></div>
+          <div class="frow"><div class="k">Last login · 最近登录</div><div class="v quiet">12m ago</div></div>
+          <div class="frow"><div class="k">Completed · 已完成</div><div class="v">6 / 6</div></div>
+        </div>
+        <div class="card mark" data-mark="MOVED UP">
+          <div class="kicker">Addresses · 地址 <span class="ghost">+ Add · 添加</span></div>
+          <div class="addr">
+            <div class="top"><span class="nm">Linn Fogelberg</span><span class="ph">15603361641</span><span class="def">Default</span></div>
+            <div class="line2">广州市天河区珠江新城华夏路 8 号 22B</div>
+          </div>
+          <div class="addr">
+            <div class="top"><span class="nm">Office</span><span class="ph">15603361641</span></div>
+            <div class="line2">广州市越秀区东风中路 305 号 11 楼</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- One card, two sections, a hairline between. -->
+      <div class="joined mark" data-mark="JOINED">
+        <section>
+          <div class="kicker">Notes &amp; tags · 备注与标签</div>
+          <div class="tagrow">No tags yet</div>
+          <div class="tagadd">
+            <div class="fake-in">Add a tag — e.g. wholesale</div>
+            <span class="btn">Add</span>
+          </div>
+          <div class="note-in">Anything your team should know — allergies, delivery quirks, invoicing.</div>
+        </section>
+        <section>
+          <div class="kicker">Orders by month · 月度订单
+            <span class="side">6 orders · ¥1,467 in 12 months</span></div>
+          <div class="bar-row">
+            <i class="empty"></i><i class="empty"></i><i class="empty"></i><i class="empty"></i>
+            <i class="empty"></i><i class="empty"></i><i class="empty"></i><i class="empty"></i>
+            <i class="empty"></i><i class="empty"></i>
+            <i class="peak" style="height:88px"></i><i style="height:41px"></i>
+          </div>
+          <div class="bar-labels">
+            <span>10</span><span>11</span><span>12</span><span>01</span><span>02</span><span>03</span>
+            <span>04</span><span>05</span><span>06</span><span>07</span><span>08</span><span>09</span>
+          </div>
+        </section>
+      </div>
+
+      <div class="pairs">
+        <div class="card">
+          <div class="kicker">Top items · 热销商品</div>
+          <table>
+            <thead><tr><th>Item · 商品</th><th class="num">Qty · 数量</th><th class="num">Spend · 消费</th></tr></thead>
+            <tbody>
+              <tr><td>Quinoa salad<span class="sku">SKU-QS-200</span></td><td class="num">7</td><td class="num">¥413</td></tr>
+              <tr><td>Sourdough loaf<span class="sku">SKU-SD-001</span></td><td class="num">5</td><td class="num">¥290</td></tr>
+              <tr><td>Cold brew 500ml<span class="sku">SKU-CB-500</span></td><td class="num">4</td><td class="num">¥176</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="card mark" data-mark="MOVED DOWN">
+          <div class="kicker">Device &amp; account · 设备与账号</div>
+          <div class="frow"><div class="k">App build · 版本</div><div class="v quiet">release 9.9 · iPhone 14 Pro&lt;iPhone15,2&gt;</div></div>
+          <div class="frow"><div class="k">Sessions · 会话</div><div class="v">16 <span class="muted">active</span></div></div>
+          <div class="frow"><div class="k">openid</div><div class="v mono">oeqDi5EY…r5o5v8 <span class="copy">Copy</span></div></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="fold"><span class="chev">▸</span> Recent orders · 近期订单 <span class="hint">6 orders</span></div>
+        <div class="fold"><span class="chev">▸</span> Points ledger · 积分明细 <span class="hint">4 entries</span></div>
+        <div class="fold"><span class="chev">▸</span> Diagnostics · 诊断 <span class="hint">none</span></div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<div class="foot">
+  <p><strong>Nothing here is new.</strong> Every label, every Chinese string and
+     every component already ships in <code>public/retail-admin/08-customers.js</code>.
+     No string was composed for this mockup, so nothing is owed to
+     <code>docs/tacet-delivery-vocabulary.md</code>.</p>
+  <p><strong>Dusk count:</strong> the three move markers are mockup annotation,
+     not product. In the built drawer there is zero Dusk, as today — a customer
+     record is the customer acting, not the AI.</p>
+  <p><strong>The one open question the joined card raises:</strong> Notes &amp; tags
+     is read-write and Orders by month is read-only. Sharing one border puts a
+     Save button inside a card that is half chart. The alternative is two cards
+     kept adjacent by rule rather than by border. The mockup shows the joined
+     version because it is the one that cannot be undone by a later insertion.</p>
+</div>
+
+</body>
+</html>
