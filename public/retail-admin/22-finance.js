@@ -788,7 +788,19 @@ window.finShow = function finShow(which) {
   // only for the first visit that beat it.
   if (isApr) {
     FIN_APR_SEEN = true;
-    if (FIN_APR) finAprRender(); else finAprLoad();
+    if (FIN_APR) {
+      // finAprLoad's own render call is inside ITS try/catch; this one is not,
+      // because it runs straight from the click handler with no fetch around
+      // it to catch inside. Unguarded, a throw here left the tab open, active,
+      // and completely blank — no skeleton (this path never shows one) and no
+      // banner (nothing catches it) — the one failure mode worse than an error
+      // message: an operator with no idea anything went wrong at all.
+      try { finAprRender(); }
+      catch (e) {
+        const host = document.getElementById('fin-apr-list');
+        if (host) host.innerHTML = `<div class="fin-error">${escapeHtml(cuT('Could not load the queue.', '无法加载列表。'))} <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
+      }
+    } else finAprLoad();
   }
   // The CTA belongs to Transactions, not to the surface: Summary types nothing.
   // Its capability gate is `data-cap`, applied by applyCapGates as a display
