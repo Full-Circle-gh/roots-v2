@@ -2918,7 +2918,25 @@
                   <div class="onw-f"><label for="onw-ful">Fulfilment · 履约方式</label><div class="onw-selw"><svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><select class="onw-in" id="onw-ful" onchange="ordNewFulChange()">
                     <option value="delivery">Delivery · 配送</option>
                     <option value="pickup">Pickup · 自提</option>
-                    <option value="counter">Counter sale · 前台销售</option>
+                    <!-- COUNTER SALE IS NOT OFFERED HERE, AND ITS ABSENCE IS THE
+                         POINT (§94). It was offered until 2026-09-10 and could
+                         not produce a correct row: §44's amendment records a
+                         shop sale as channel 'shop' with a shop_entry_method
+                         naming the door, and this form sends neither — it has
+                         no 'shop' origin (a shop sale is not an answer to "how
+                         did the customer reach us?") and no door to name. So a
+                         walk-in keyed here filed as pickup or other and fell
+                         OUT of the shop's revenue line, which is the one thing
+                         that amendment exists to keep whole.
+                         The counter path is public/till.html, reachable from
+                         the rail — it posts the same endpoint with both fields
+                         and settles the money at the same time. The phone's
+                         copy of this form has only ever offered these two
+                         (ONW_FULS, public/m.html); this is the desktop catching
+                         up with it, not a new rule.
+                         'counter' STAYS a server fulfilment type and stays in
+                         this file's error catalogue: the till still writes it,
+                         and the codes it can answer with still need a home. -->
                   </select></div></div>
                 </div>
                 <!-- Revealed only for "Other" — the origin is required there, so

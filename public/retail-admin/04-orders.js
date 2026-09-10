@@ -9464,17 +9464,16 @@ function ordNewFulChange() {
   const ft = sel.value;
   const addr = document.getElementById('onw-addr-blk');
   if (addr) addr.hidden = ft !== 'delivery';
-  const st = document.getElementById('onw-status');
-  const pay = document.getElementById('onw-pay');
-  if (ft === 'counter') {
-    if (st) st.value = 'paid';
-    if (pay) pay.value = 'offline';
-  } else if (ONW.ful === 'counter') {
-    if (st) st.value = 'pending_payment';
-    if (pay) pay.value = 'wechat';
-  }
+  /* THE COUNTER DEFAULTS ARE GONE WITH THE COUNTER OPTION (§94). This used to
+     open a counter sale on Paid · Cash and put the pending defaults back on the
+     way out; the select no longer offers 'counter' and ordNewRestore maps a
+     draft that carries it onto 'pickup', so neither branch had a way of being
+     reached. Delivery and pickup are both born unpaid and neither touches these
+     two fields, which is why nothing replaces them.
+     Deleted rather than left standing: an unreachable branch reads as a rule
+     this form still has. Where a counter sale IS born paid is the till. */
   ONW.ful = ft;
-  // Delivery, collection and counter are three different fee answers — re-quote
+  // Delivery and collection are two different fee answers — re-quote
   // rather than carrying the previous choice's numbers into this one. Shipping
   // specifically cannot survive the switch: nothing ships on a pickup or a
   // counter sale, and ordNewFees() only refills a field the operator has NOT
@@ -9776,9 +9775,6 @@ function ordNewPaintFeeNote(ft, d) {
   } else if (ft === 'pickup') {
     txt = cuT('Packing fills in from the store-pickup fee; there is no delivery to charge. Edit either to override.',
               '包装费按自提包装费填入,自提无运费。可直接修改。');
-  } else if (ft === 'counter') {
-    txt = cuT('A counter sale has nothing to ship or box. Edit either fee if this one does.',
-              '前台销售无需配送或打包。如有需要可自行填写。');
   } else {
     const zone = d && d.zone ? cuT(d.zone.name_en || d.zone.name_cn || '', d.zone.name_cn || d.zone.name_en || '') : '';
     txt = zone
@@ -10226,11 +10222,22 @@ function ordNewRestore(draft) {
   ONW.saveCust = p.saveCust !== false;
 
   const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+  /* A DRAFT SAVED AS A COUNTER SALE COMES BACK AS A PICKUP (§94). The select no
+     longer offers 'counter', and setting a select to a value it has no option
+     for leaves it on whatever was already selected — so a draft would have
+     restored as a DELIVERY, silently acquiring an address requirement it was
+     never written with. Pickup is the honest neighbour: nothing ships, the
+     customer collects at a store, and the address block stays absent exactly as
+     it was when the draft was saved. The status and pay method the operator had
+     chosen are restored on top, unchanged, further down.
+     The draft's stored payload is NOT rewritten — this is a reading of an old
+     draft, not an edit to it. */
+  const restoredFul = f.fulfillment_type === 'counter' ? 'pickup' : f.fulfillment_type;
   set('onw-channel', f.channel);
   set('onw-channel-note', f.channel_note);
   ordNewChannelChange();   // re-reveal the note field if the draft was an "Other"
   set('onw-store', f.store_id != null ? String(f.store_id) : null);
-  set('onw-ful', f.fulfillment_type);
+  set('onw-ful', restoredFul);
   set('onw-status', f.status);
   set('onw-pay', f.payment_method);
   set('onw-ship', f.shipping_fee != null ? String(f.shipping_fee) : '0');
@@ -10261,10 +10268,13 @@ function ordNewRestore(draft) {
     .then(() => ordNewFillDistricts(a.city || '', a.district || ''))
     .catch(() => { /* leaves the picker empty; the operator re-picks */ });
 
-  // ordNewFulChange reads the select and would treat a restored counter sale as
-  // a fresh switch INTO counter, overwriting the status and pay method the
-  // operator saved. Tell it the state it is already in first.
-  ONW.ful = f.fulfillment_type || 'delivery';
+  // Tell ordNewFulChange the state it is already in before calling it, so a
+  // restore is not read as a fresh switch. (It used to matter more: the counter
+  // branches it had would have overwritten the status and pay method the
+  // operator saved. Those are gone with the counter option (§94), and this stays
+  // because ONW.ful is the flag ordNewChannelChange reads to decide whether the
+  // origin picker still owns the fulfilment.)
+  ONW.ful = restoredFul || 'delivery';
   ordNewFulChange();
   set('onw-status', f.status);
   set('onw-pay', f.payment_method);

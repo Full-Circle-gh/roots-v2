@@ -631,9 +631,9 @@ const addrHarness = new Function(`
              status: nodes['onw-status'].value, pay: nodes['onw-pay'].value };
   };
 `)();
-check('address block: present on delivery, ABSENT on pickup and counter',
-  ['delivery', 'pickup', 'counter'].map(t => addrHarness(t).hidden),
-  [false, true, true]);
+check('address block: present on delivery, ABSENT on pickup',
+  ['delivery', 'pickup'].map(t => addrHarness(t).hidden),
+  [false, true]);
 // "hidden", never a disabled-but-present block: a disabled field still reads as
 // a blank the operator failed to fill, and readonly reads as one they cannot.
 // The markup half only — the behavioural half is the assertion above, running
@@ -643,12 +643,69 @@ const addrMarkup = newSection.slice(newSection.indexOf('onw-addr-blk'),
                                    newSection.indexOf('onw-notes'));
 check('the address block carries no disabled or readonly idiom',
   /disabled|readonly/.test(addrMarkup), false);
-// Born fulfilled, not born closed: a counter sale opens Paid + Cash, and
-// leaving counter restores the pending defaults rather than stranding them.
-check('counter opens Paid and Cash; leaving counter restores pending',
-  [addrHarness('counter').status, addrHarness('counter').pay,
-   addrHarness('delivery', 'counter').status, addrHarness('delivery', 'counter').pay],
-  ['paid', 'offline', 'pending_payment', 'wechat']);
+/* ── THE FORM NO LONGER OFFERS A COUNTER SALE (§94) ───────────────────────
+   It did until 2026-09-10, opening on Paid · Cash — and it could not produce a
+   correct row. §44's amendment records a shop sale as channel 'shop' with a
+   shop_entry_method naming the door; this form sends neither, so a walk-in
+   keyed here filed as pickup or other and fell OUT of the shop's revenue line.
+   The till is the counter path and posts both fields.
+
+   The assertion that stood here held the counter DEFAULTS — Paid and Cash on
+   the way in, pending on the way out. It is not relaxed away: what replaces it
+   holds that the option is gone from the markup, that no other fulfilment
+   touches those two fields, and (further down) that an old draft carrying
+   'counter' comes back as a pickup rather than silently as a delivery. */
+const fulOptions = [...newSection.slice(newSection.indexOf('id="onw-ful"'),
+                                        newSection.indexOf('onw-channel-note-wrap'))
+  .matchAll(/<option value="([a-z_]+)"/g)].map(m => m[1]);
+check('the fulfilment picker offers delivery and pickup, and nothing else',
+  fulOptions, ['delivery', 'pickup']);
+// Neither remaining fulfilment writes the status or the pay method: both are
+// born unpaid, and the fields are the operator's alone.
+check('switching fulfilment leaves status and pay method where the operator put them',
+  ['delivery', 'pickup'].map(t => [addrHarness(t).status, addrHarness(t).pay]),
+  [['pending_payment', 'wechat'], ['pending_payment', 'wechat']]);
+// The server keeps the type and the till keeps writing it — this is a change to
+// one form, not to what a counter sale IS.
+check('counter is still a server fulfilment type',
+  [F.FULFILMENT_TYPES.includes('counter'), F.isCounter({ fulfillment_type: 'counter' })], [true, true]);
+
+/* ── AN OLD DRAFT SAVED AS A COUNTER SALE COMES BACK AS A PICKUP (§94) ────
+   This is the one behaviour change an operator can actually walk into, so it
+   is held rather than described. Setting a <select> to a value it has no
+   option for leaves it on whatever was already selected — so without the map a
+   counter draft would restore as a DELIVERY and silently acquire an address
+   requirement it was never written with. Pickup keeps the address block absent,
+   which is the state the draft was saved in.
+
+   THE RULE IS EVALUATED, and the WIRING is read: ordNewRestore drives a dozen
+   DOM nodes and two async pickers, so standing a harness up for it would test
+   the stubs. Instead the mapping runs for real, and the source is held to using
+   its result everywhere the fulfilment is restored — `f.fulfillment_type` must
+   not survive anywhere else in that function, which is precisely how the bug
+   would come back. */
+const restoreSrc = extractFn('ordNewRestore') || '';
+check('the restore function was found (extraction is intact)', restoreSrc.length > 200, true);
+const mapLine = /const restoredFul = ([^;]+);/.exec(restoreSrc);
+check('draft restore maps the fulfilment through one expression', !!mapLine, true);
+if (mapLine) {
+  const mapFul = new Function('f', `return ${mapLine[1]};`);
+  check('a counter draft restores as a pickup, never as a delivery',
+    ['counter', 'pickup', 'delivery'].map(t => mapFul({ fulfillment_type: t })),
+    ['pickup', 'pickup', 'delivery']);
+  // A draft that never named one is left to the caller's own default.
+  check('a draft with no fulfilment is not invented one', mapFul({}), undefined);
+}
+// Counted with the mapping line REMOVED, not against a total: the expression
+// itself names `f.fulfillment_type` twice, so a raw count would have to encode
+// how the map happens to be written and would go red on a harmless rewrite of
+// it. What must be zero is every OTHER read.
+check('nothing outside the mapping reads the raw stored fulfilment',
+  (restoreSrc.replace(/const restoredFul = [^;]+;/, '').match(/f\.fulfillment_type/g) || []).length, 0);
+check('the select and the flag are both set from the mapped value',
+  [/set\('onw-ful', restoredFul\)/.test(restoreSrc),
+   /ONW\.ful = restoredFul \|\| 'delivery'/.test(restoreSrc)],
+  [true, true]);
 
 // "PICK UP" AS THE ORIGIN IS A COLLECTION. The form opens on Delivery, so an
 // operator who answered "Pick up" and went on to the products was quoted the
@@ -692,10 +749,16 @@ check('origin set programmatically (open / draft restore) leaves fulfilment alon
 check('a mis-click on "Pick up" corrected to another origin falls back to Delivery',
   originHarness([['origin', 'pickup', true], ['origin', 'wechat_chat', true]]).ful,
   'delivery');
+/* A fulfilment the operator chose by hand is never overridden by the origin.
+   The first row used to drive 'counter' — a third type the origin logic knows
+   nothing about — which the form no longer has (§94). It is replaced by the
+   case that still exists and still matters: a hand-picked Pickup survives the
+   origin that would otherwise have set it, because `fulFromOrigin` is false
+   when the operator did the picking. */
 check('a fulfilment the operator chose by hand is never overridden by the origin',
-  [originHarness([['ful', 'counter'], ['origin', 'pickup', true]]).ful,
+  [originHarness([['ful', 'pickup'], ['origin', 'pickup', true]]).ful,
    originHarness([['origin', 'pickup', true], ['ful', 'pickup'], ['origin', 'wholesale', true]]).ful],
-  ['counter', 'pickup']);
+  ['pickup', 'pickup']);
 
 // THE BY-PHONE WARNING ON A BLOCKED MATCH (frame C). It must use the by-phone
 // endpoint — the identical equality the create path's reuse runs — never the
