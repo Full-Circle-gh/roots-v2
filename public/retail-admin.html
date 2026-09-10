@@ -4103,7 +4103,18 @@
       #cu-drawer .cux-frow .v.mono .cux-copy { vertical-align: -5px; margin-left: 6px; }
 
       /* Uppercase section labels with an optional right-side summary. */
-      #cu-drawer .cux-chart { margin-bottom: 26px; }
+      /* .cux-flow's grid gap now carries the spacing between sections; the
+         old bottom margin doubled it under the chart. */
+      #cu-drawer .cux-chart { margin-bottom: 0; }
+
+      /* Recent orders lives INSIDE the chart section. In a fold stack a fold
+         wears a bottom rule to divide it from the next one; here there is no
+         next one, so it takes a rule ABOVE instead, to part it from the bars.
+         The row-wide hover from the stack would also spill past the section's
+         padding, so it is inset to the content width. */
+      #cu-drawer .cux-sec > details.cux-fold { border-bottom: 0; border-top: 1px solid var(--td-border); margin-top: 16px; }
+      #cu-drawer .cux-sec > details.cux-fold > summary { padding-left: 0; padding-right: 0; }
+      #cu-drawer .cux-sec > details.cux-fold > .cux-fold-body { padding-left: 0; padding-right: 0; }
 
       /* Chart — shorter sage bars, quiet labels (tooltip singleton unchanged). */
       /* .cu-bar-col is a COLUMN of bar + 6px gap + label, all inside this
