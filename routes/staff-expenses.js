@@ -110,6 +110,28 @@ function listMine(db, userId) {
      LIMIT 200`).all(userId);
 }
 
+/* The names behind `submitted_by`, resolved in ONE read for however many ids.
+
+   IT IS A CROSS-HANDLE LOOKUP AND A JOIN IS NOT AVAILABLE. `tenant_users` lives
+   on the CONTROL-PLANE handle; `staff_expenses` lives on the tenant one and
+   carries the id alone. Two readers need this — the approval queue, which names
+   a screenful, and the decide route, which names exactly one on its way to the
+   ledger — so it is one function rather than two lookups that would drift.
+
+   A MISSING NAME IS NOT A FAILURE. The map simply has no entry: a claim without
+   a name still decides, and a ledger row without one still carries its money. */
+function submitterNames(ids) {
+  const names = new Map();
+  const want = [...new Set((ids || []).filter(Boolean))];
+  if (!want.length) return names;
+  try {
+    const q = require('../database').prepare(
+      `SELECT id, display_name, username FROM tenant_users WHERE id IN (${want.map(() => '?').join(',')})`);
+    for (const u of q.all(...want)) names.set(u.id, u.display_name || u.username);
+  } catch (e) { /* a name is a nicety; a claim without one still decides */ }
+  return names;
+}
+
 // ── POST /api/retail-admin/staff-expenses ──────────────────────────────────
 router.post('/api/retail-admin/staff-expenses', requireRetailAdmin, express.json({ limit: '4mb' }), (req, res) => {
   try {
@@ -279,22 +301,16 @@ router.get('/api/retail-admin/staff-expenses/pending', requireRetailAdmin, requi
                 e.decided_at DESC, e.id DESC
        LIMIT 200`).all();
 
-    // The names, resolved in one read rather than per row. `tenant_users` lives
-    // on the CONTROL-PLANE handle, not the tenant one — the claim carries only
-    // the id, so a join is not available and would be wrong if it were.
-    const names = new Map();
+    // The names, resolved in one read rather than per row, through the same
+    // `submitterNames` the decide route posts with — one lookup, so the name on
+    // this queue and the name in the books cannot disagree.
+    let names = new Map();
     try {
       // Every id either half of this payload will name. An owed person whose
       // last claim fell outside the 200-row queue would otherwise have a total
       // and no name against it.
-      const ids = [...new Set(rows.map(r => r.submitted_by)
-        .concat(db.prepare("SELECT DISTINCT submitted_by FROM staff_expenses WHERE status = 'approved' AND paid_by = 'employee' AND COALESCE(settled, 0) = 0").all().map(r => r.submitted_by))
-        .filter(Boolean))];
-      if (ids.length) {
-        const q = require('../database').prepare(
-          `SELECT id, display_name, username FROM tenant_users WHERE id IN (${ids.map(() => '?').join(',')})`);
-        for (const u of q.all(...ids)) names.set(u.id, u.display_name || u.username);
-      }
+      names = submitterNames(rows.map(r => r.submitted_by)
+        .concat(db.prepare("SELECT DISTINCT submitted_by FROM staff_expenses WHERE status = 'approved' AND paid_by = 'employee' AND COALESCE(settled, 0) = 0").all().map(r => r.submitted_by)));
     } catch (e) { /* a name is a nicety; a claim without one still decides */ }
 
     // ── WHAT THE SHOP STILL OWES, BY PERSON (§87 step four) ──
@@ -383,6 +399,21 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
     const note = (req.body.note == null || req.body.note === '') ? null : String(req.body.note).slice(0, 500);
     const decidedBy = req.user?.id || null;
 
+    // WHO SPENT IT, RESOLVED BEFORE THE TRANSACTION OPENS. §87: "who spent it is
+    // in the description, because a ¥38 line with no supplier, no invoice and no
+    // purchase order behind it is answerable months later only if it says whose
+    // taxi it was." `claimDescription` has always read `submitted_name` — and
+    // nothing ever set it, a `staff_expenses` row carrying only the integer id,
+    // so every posted row in the books so far says the note and no name. The
+    // fixture at scripts/test_staff_expenses.js passed the field by hand, which
+    // is why the lib looked covered while the route was not.
+    //
+    // OUTSIDE THE TRANSACTION because it reads the CONTROL-PLANE handle: a
+    // cross-handle read held open inside a tenant write is a second database's
+    // latency added to a lock this one is holding, for a value the write does
+    // not depend on.
+    const submittedName = submitterNames([claim.submitted_by]).get(claim.submitted_by) || null;
+
     withTransaction(db, (tx) => {
       tx.prepare(`UPDATE staff_expenses
                      SET status = ?, decided_by = ?, decided_at = datetime('now'), decided_note = ?
@@ -390,6 +421,11 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
       // Posted from the row AS IT NOW STANDS, not from the one read above: the
       // status this decision just wrote is what decides whether a row exists.
       const fresh = tx.prepare('SELECT * FROM staff_expenses WHERE id = ?').get(claim.id);
+      // Set ONTO `fresh` rather than spread into a copy: the name is the one
+      // fact the claim row cannot carry itself, and `postClaim(tx, fresh)` is
+      // the shape the suite asserts — a `{ ...fresh }` here would fail it for no
+      // behavioural reason at all.
+      fresh.submitted_name = submittedName;
       const expenseId = postClaim(tx, fresh);
       tx.prepare('UPDATE staff_expenses SET expense_id = ? WHERE id = ?').run(expenseId, claim.id);
     });

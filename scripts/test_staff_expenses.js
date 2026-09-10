@@ -422,6 +422,34 @@ it('the claim status and the ledger row move together or not at all', () => {
     'posted from the row as it now stands, not the one read before the update');
 });
 
+it('the route gives the ledger row the spender\'s name — the lib cannot find it alone', () => {
+  // THE FIXTURE ABOVE HANDS `submitted_name` OVER BY HAND, and for months that
+  // was the ONLY place it was ever set. A `staff_expenses` row carries the
+  // integer `submitted_by` and nothing else, so `claimDescription`'s name branch
+  // was dead in production and every posted row said the note alone — §87's
+  // "who spent it is in the description" true in the lib and false in the books.
+  // The lib test passing is exactly what hid it, so this one reads the route.
+  assert.match(ROUTE_CODE, /const submittedName = submitterNames\(\[claim\.submitted_by\]\)/,
+    'resolved from submitted_by through the one lookup the approval queue also uses');
+  assert.match(ROUTE_CODE, /fresh\.submitted_name\s*=/,
+    'and set on the row postClaim is actually handed');
+  // OUTSIDE THE TRANSACTION. It reads the control-plane handle, and a
+  // cross-handle read held inside a tenant write adds a second database's
+  // latency to a lock this one is holding, for a value the write cannot fail on.
+  const decide = ROUTE_CODE.slice(ROUTE_CODE.indexOf("decision !== 'approve'"));
+  assert.ok(decide.indexOf('const submittedName') >= 0
+         && decide.indexOf('const submittedName') < decide.indexOf('withTransaction(db'),
+    'the control-plane read happens before the tenant transaction opens');
+});
+
+it('one name lookup serves both the queue and the books', () => {
+  // Two reads of `tenant_users` shaped slightly differently are two things that
+  // can drift, and the drift would show as a screen and a ledger naming the same
+  // claim differently.
+  assert.strictEqual((ROUTE_CODE.match(/FROM tenant_users/g) || []).length, 1,
+    'submitterNames is the one place this route resolves a name');
+});
+
 it('the approval list is a different route from the personal one', () => {
   assert.match(ROUTE_CODE, /staff-expenses\/pending/);
   assert.match(ROUTE_CODE, /staff-expenses\/mine/);
