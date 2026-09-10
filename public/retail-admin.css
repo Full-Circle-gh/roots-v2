@@ -14802,10 +14802,16 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 
 /* The three blocks stack, each with its own heading, because they are three
    different kinds of thing: money already owed, decisions waiting, and a record.
-   §1.13a's band values, one step down for a sub-heading. */
+   §1.13a's band values, one step down for a sub-heading.
+
+   `display: block` IS LOAD-BEARING, same reason as .db-hero above: the tab
+   system hides every bare <section> (`section { display: none; }`), and each
+   of these three is a <section> nested inside the active Finance tab. Without
+   it here, all three collapse to 0×0 — the DOM holds the queue, the fetch
+   succeeds, and the pane still shows nothing. */
 #tab-finance .fin-apr-owed,
 #tab-finance .fin-apr-queue,
-#tab-finance .fin-apr-done { margin-top: 32px; }
+#tab-finance .fin-apr-done { display: block; margin-top: 32px; }
 #tab-finance .fin-apr-owed:first-child { margin-top: 24px; }
 #tab-finance .fin-apr-owed h3,
 #tab-finance .fin-apr-queue h3,
