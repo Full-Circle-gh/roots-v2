@@ -1096,6 +1096,43 @@ function effectiveOosPolicy(p) {
   return (p && p.is_batch_made) ? 'backorder_gz' : 'strict';
 }
 
+// The other half of that offer, and it has to travel with it: WHICH DAY the
+// reservation is for. `local_fresh_date` is the day the kitchen next makes a
+// batch-made row; `local_fresh_today` says whether that day is today.
+//
+// ONE COPY, because a route that forgets this does not fail loudly. Every
+// client reads "no date" as "not reservable on the local run" — the right
+// reading for a grocery row, a silent lie for a fresh one — so the surface
+// just draws SOLD OUT and drops the + button. GET /favorites stamped
+// `oos_preorder` and never this, for the whole life of §80: a Guangzhou
+// shopper's saved Quinoa Salad read as dead stock on the morning it was being
+// cooked. Nothing threw. If you are writing a route that stamps
+// `oos_preorder`, stamp this too — the case in scripts/test_fresh_today_label.js
+// §4 walks the route bodies and will hold you to it.
+//
+// §80 FOLLOW-UP — IS THAT DAY TODAY? A dated fresh row is orderable on the
+// Guangzhou local run, and the clients label that PRE-ORDER. On a batch
+// MORNING the date is today: the meal is made at the ready hour and reaches
+// the customer's own window, so "pre-order" is not merely the wrong word, it
+// invites a reservation for food they can eat at lunch. The label has to be
+// able to tell the two apart, and only this boolean lets it.
+//
+// COMPUTED HERE AND NEVER ON THE CLIENT (§82). "Is this date today" is a
+// business decision about a cutoff, and the only clock entitled to answer it
+// is the tenant's. A handset in another zone — or one with a wrong clock —
+// must not be the thing that decides whether a customer is told to pre-order.
+function decorateFreshBatch(rows) {
+  const list = Array.isArray(rows) ? rows : [rows];
+  const d = nextFreshBatchDate();
+  const isToday = !!d && d === toYmdLocal(new Date());
+  for (const r of list) {
+    if (!r) continue;
+    r.local_fresh_date  = (d && r.is_batch_made) ? d : null;
+    r.local_fresh_today = !!(r.local_fresh_date && isToday);
+  }
+  return rows;
+}
+
 // The one line a same-day local shopper may not have: sold out, and orderable
 // only because the operator marked it 'backorder_gz'.
 //
@@ -1947,25 +1984,7 @@ router.get('/api/retail/products', (req, res) => {
   // whom oos_preorder alone means "sold out", since the local run has no
   // pre-order — see NEXT BATCH and a working + button instead of a dead pill.
   // A grocery row never carries it, so it stays dead there, correctly.
-  {
-    const d = nextFreshBatchDate();
-  // §80 FOLLOW-UP — IS THAT DAY TODAY? A dated fresh row is orderable on the
-  // Guangzhou local run, and the clients label that PRE-ORDER. On a batch
-  // MORNING the date is today: the meal is made at the ready hour and reaches
-  // the customer's own window, so "pre-order" is not merely the wrong word, it
-  // invites a reservation for food they can eat at lunch. The label has to be
-  // able to tell the two apart, and only this boolean lets it.
-  //
-  // COMPUTED HERE AND NEVER ON THE CLIENT (§82). "Is this date today" is a
-  // business decision about a cutoff, and the only clock entitled to answer it
-  // is the tenant's. A handset in another zone — or one with a wrong clock —
-  // must not be the thing that decides whether a customer is told to pre-order.
-    const isToday = !!d && d === toYmdLocal(new Date());
-    for (const r of rows) {
-      r.local_fresh_date  = (d && r.is_batch_made) ? d : null;
-      r.local_fresh_today = !!(r.local_fresh_date && isToday);
-    }
-  }
+  decorateFreshBatch(rows);
   attachSoldCounts(rows);
   resolveAutoBadges(rows);
   const termClause = terms.map(() => 'AND ' + termClauseFor()).join(' ');
@@ -2791,28 +2810,10 @@ router.get('/api/retail/products/:id', (req, res) => {
   }
   // Same pre-order flag for the single (non-variant) product hero.
   product.oos_preorder = effectiveOosPolicy(product) === 'backorder_gz';
-  // …and the same fresh-batch day the grid ships, for the same reason.
-  {
-    const d = nextFreshBatchDate();
-  // §80 FOLLOW-UP — IS THAT DAY TODAY? A dated fresh row is orderable on the
-  // Guangzhou local run, and the clients label that PRE-ORDER. On a batch
-  // MORNING the date is today: the meal is made at the ready hour and reaches
-  // the customer's own window, so "pre-order" is not merely the wrong word, it
-  // invites a reservation for food they can eat at lunch. The label has to be
-  // able to tell the two apart, and only this boolean lets it.
-  //
-  // COMPUTED HERE AND NEVER ON THE CLIENT (§82). "Is this date today" is a
-  // business decision about a cutoff, and the only clock entitled to answer it
-  // is the tenant's. A handset in another zone — or one with a wrong clock —
-  // must not be the thing that decides whether a customer is told to pre-order.
-    const isToday = !!d && d === toYmdLocal(new Date());
-    product.local_fresh_date  = (d && product.is_batch_made) ? d : null;
-    product.local_fresh_today = !!(product.local_fresh_date && isToday);
-    for (const v of (product.variants || [])) {
-      v.local_fresh_date  = (d && v.is_batch_made) ? d : null;
-      v.local_fresh_today = !!(v.local_fresh_date && isToday);
-    }
-  }
+  // …and the same fresh-batch day the grid ships, for the same reason — the
+  // hero AND every sibling size, because the size picker labels each row on
+  // its own and a size the hero never mentions still has to know its day.
+  decorateFreshBatch([product, ...(product.variants || [])]);
 
   // "Buy together" bundle — resolved to item cards (each its own product/stock).
   const bundleRow = tdb().prepare('SELECT bundle FROM store_products WHERE id = ?').get(id);
@@ -36335,6 +36336,11 @@ router.get('/api/retail/favorites', requireRetailAuth, (req, res) => {
   // Pre-order flag (see the shop list above): a sold-out favourite on the
   // backorder_gz policy stays quick-addable instead of reading as dead stock.
   for (const r of rows) r.oos_preorder = effectiveOosPolicy(r) === 'backorder_gz';
+  // …and the day that reservation is for, which this route never sent. Without
+  // it the favourites page's own guard (`!onLocalRun || local_fresh_date`) read
+  // every sold-out favourite as dead for a Guangzhou shopper — SOLD OUT and no
+  // + button on a meal the kitchen was making that morning. See the helper.
+  decorateFreshBatch(rows);
   resolveAutoBadges(rows);
   res.json({ success: true, data: rows, meta: { count: rows.length, server_time_ms: now } });
 });
