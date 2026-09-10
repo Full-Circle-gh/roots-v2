@@ -3974,48 +3974,10 @@
          14px radius, 24px padding, its title inside at the top. Cards take
          their NATURAL height and top-align — neither stretches to match its
          neighbour, so an uneven bottom edge is correct. */
-      /* ── Jump navigation ──────────────────────────────────────────────
-         Overview / History / Account. NOT tabs: the drawer is one continuous
-         document and this bar scrolls to a part of it, marking whichever part
-         you are in. The marker is an INK underline, not Dusk — Dusk means
-         "Tacet did this for you", and an operator moving around a record is
-         the operator working, not an automation.
-
-         Sticky, so the jump is available from anywhere in the scroll. It needs
-         its own background: the drawer body scrolls underneath it, and the
-         negative top plus matching padding stop a sliver of moving content
-         showing above the bar. */
-      #cu-drawer .cux-nav {
-        display: flex; gap: 22px; flex-wrap: wrap; margin-top: 4px;
-        border-bottom: 1px solid var(--td-border);
-        /* Sticky offsets are measured from the SCROLLPORT, which is the scroll
-           container's padding box — so a plain top:0 parks the bar one
-           --s5 below the drawer body's visible top edge and leaves a band
-           where sections scroll past in the open above it. Pulling the bar up
-           by exactly that padding, and giving it back as padding of its own,
-           puts the buttons where they belong while the background covers the
-           band. The two calcs track the same token, so they cannot drift. */
-        position: sticky; top: calc(var(--s5) * -1); z-index: 3;
-        background: var(--bg-app); padding-top: calc(var(--s5) + 8px);
-      }
-      #cu-drawer .cux-nav button { font-family: var(--f-sans); font-size: 13.5px; font-weight: 400; color: var(--text-2); background: none; border: 0; padding: 0 0 10px; cursor: pointer; }
-      #cu-drawer .cux-nav button:hover { color: var(--text-1); }
-      #cu-drawer .cux-nav button.on { color: var(--text-1); font-weight: 500; box-shadow: inset 0 -2px 0 var(--text-1); }
-      #cu-drawer .cux-nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
-      /* ── Sections are a SURFACE, not a border ─────────────────────────
-         The first live build put sections flat on the drawer's Paper with a
-         hairline between. In the mockup that read fine because the drawer sat
-         as a panel on a darker page ground; in the real product the drawer is
-         edge-to-edge and there is no ground behind it, so the whole thing read
-         as one undifferentiated sheet. White on Paper separates them without
-         the six competing borders that made the old drawer a stack of boxes:
-         a change of surface, not another outline. */
-      #cu-drawer .cux-flow { padding-top: 20px; display: grid; gap: 12px; align-content: start; }
+      #cu-drawer .cux-flow { margin-top: 24px; display: grid; gap: 12px; align-content: start; }
       #cu-drawer .cux-sec { background: var(--bg-pane); border-radius: 12px; padding: 18px 20px; min-width: 0; }
       #cu-drawer .cux-flow > .cux-folds { background: var(--bg-pane); border-radius: 12px; padding: 0 20px; margin-top: 0; border-top: none; }
       #cu-drawer .cux-flow > .cux-folds details.cux-fold:last-child { border-bottom: 0; }
-      /* Jumping must not tuck a section under the sticky bar. */
-      #cu-drawer .cux-flow > [id^="cu-anchor-"] { scroll-margin-top: 56px; }
 
       /* Activity's three facts as a line-up: short values do not each need a
          118px label gutter. auto-fit so the optional Reviews cell joins the

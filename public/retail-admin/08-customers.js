@@ -1831,27 +1831,10 @@ function cuRenderDetail() {
          were what made the old drawer read as a stack of boxes, and inside a
          single column a border earns nothing — the folds below have always
          separated themselves this way. -->
-    <!-- ── Jump navigation, NOT tabs ──────────────────────────────────
-         The drawer is one continuous document; this bar scrolls to a part of
-         it and highlights whichever part you are in. It shipped briefly as
-         real tabs that swapped panes, and the panes were the wrong shape for
-         the content: everything an operator wants is in Overview, so two of
-         the three tabs were somewhere you went to find nothing. A reader who
-         wants the ledgers wants to arrive at them, not to lose the rest.
-         It is sticky, so the jump is available from anywhere in the scroll. -->
-    <nav class="cux-nav" aria-label="${escapeAttr(cuT('Jump to a section', '跳转到分区'))}">
-      <button type="button" id="cu-nav-overview" class="on" aria-current="true"
-              onclick="cuJump('overview')">Overview · 概览</button>
-      <button type="button" id="cu-nav-history" aria-current="false"
-              onclick="cuJump('history')">History · 历史</button>
-      <button type="button" id="cu-nav-account" aria-current="false"
-              onclick="cuJump('account')">Account · 账号</button>
-    </nav>
-
     <div class="cux-flow">
       <!-- Activity as a line-up rather than label/value rows: three short
            facts do not need a 118px label gutter each. -->
-      <div class="cux-sec" id="cu-anchor-overview">
+      <div class="cux-sec">
         <div class="cux-kicker">Activity · 动态</div>
         <div class="cux-strip">
           <div><div class="k">Last order · 最近订单</div><div class="v${lastOrd ? '' : ' none'}" data-no-i18n>${escapeHtml(lastOrderV)}</div></div>
@@ -1891,7 +1874,7 @@ function cuRenderDetail() {
            the one fold that opens by default — it is why an operator came.
            Month labels are NUMERIC (08 09 10 …) — single letters give two "A"s
            and two "M"s in one row. -->
-      <div class="cux-sec cux-chart" id="cu-anchor-history">
+      <div class="cux-sec cux-chart">
         <div class="cux-kicker">Orders by month · 月度订单
           <span class="side" data-no-i18n>${chartSummary}</span>
         </div>
@@ -1969,7 +1952,7 @@ function cuRenderDetail() {
            open section it was three rows of chrome between the operator and the
            end of the record. Its summary carries the two facts worth seeing
            without opening it. -->
-      <div class="cux-folds" id="cu-anchor-account">
+      <div class="cux-folds">
         <details class="cux-fold">
           <summary>${chevron}<span class="t">Device &amp; account · 设备与账号</span>
             <span class="hint" data-no-i18n>${escapeHtml(buildV && buildV.app_version ? buildV.app_version : cuT('not recorded', '未记录'))} · ${cuNum(sessions)} ${escapeHtml(cuT('active', '个活跃'))}</span></summary>
@@ -2006,66 +1989,8 @@ function cuRenderDetail() {
     </div>
   `;
 
-  // A drawer always opens at the top, so the nav starts on Overview; the sync
-  // then follows the scroll from there.
-  cuNavInit();
 }
 
-const CU_NAV_KEYS = ['overview', 'history', 'account'];
-
-// Nothing is hidden any more, so nothing has to be restored: the drawer is one
-// document and this only moves the scroll. That is the whole point of the
-// change — panes meant two of the three destinations held nothing an operator
-// had come for, and hiding the rest to show them cost more than it gave.
-function cuJump(key) {
-  const body = document.querySelector('#cu-drawer .drawer-body');
-  const target = document.getElementById('cu-anchor-' + key);
-  if (!body || !target) return;
-  const nav = document.querySelector('#cu-drawer .cux-nav');
-  const navH = nav ? nav.getBoundingClientRect().height : 0;
-  // Land the section just under the sticky bar, not behind it. Overview is the
-  // exception: it is the first destination and the name covers the whole top of
-  // the record, so it goes to the top proper — name, phone and the snapshot
-  // band — rather than to the Activity heading with all of that scrolled off.
-  const top = (key === CU_NAV_KEYS[0]) ? 0 : (body.scrollTop
-    + (target.getBoundingClientRect().top - body.getBoundingClientRect().top)
-    - navH - 10);
-  const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  body.scrollTo({ top: Math.max(0, top), behavior: still ? 'auto' : 'smooth' });
-}
-
-// Which section is the reader actually in? The last anchor whose top has gone
-// under the bar wins, so the highlight follows a plain scroll as well as a jump.
-function cuNavSync() {
-  const body = document.querySelector('#cu-drawer .drawer-body');
-  const nav  = document.querySelector('#cu-drawer .cux-nav');
-  if (!body || !nav) return;
-  const edge = body.getBoundingClientRect().top + nav.getBoundingClientRect().height + 14;
-  let active = CU_NAV_KEYS[0];
-  CU_NAV_KEYS.forEach(k => {
-    const el = document.getElementById('cu-anchor-' + k);
-    if (el && el.getBoundingClientRect().top <= edge) active = k;
-  });
-  CU_NAV_KEYS.forEach(k => {
-    const btn = document.getElementById('cu-nav-' + k);
-    if (!btn) return;
-    const on = (k === active);
-    btn.classList.toggle('on', on);
-    btn.setAttribute('aria-current', on ? 'true' : 'false');
-  });
-}
-
-// .drawer-body outlives every render — only #cu-detail-body's innerHTML is
-// replaced — so the listener is bound once and never stacks up per customer.
-let CU_NAV_BOUND = false;
-function cuNavInit() {
-  const body = document.querySelector('#cu-drawer .drawer-body');
-  if (!body) return;
-  cuNavSync();
-  if (CU_NAV_BOUND) return;
-  body.addEventListener('scroll', cuNavSync, { passive: true });
-  CU_NAV_BOUND = true;
-}
 
 // Affiliate block in the customer drawer — code, who referred them,
 // and the people they've referred. Edits funnel back to the main
