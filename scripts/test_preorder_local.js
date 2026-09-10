@@ -799,5 +799,46 @@ console.log('\nweb storefront — stockState / slStock');
   });
 }
 
+// ── "Add to your order" ─────────────────────────────────────────────────────
+// Every surface above tells a shopper that a sold-out row is still orderable.
+// This one did not. On an order that never reserved (out-of-GZ or scheduled,
+// tracks_stock=false) nothing caps the stepper, so a sold-out backorder line
+// was added with no sign it was out — the same silence, on the one screen that
+// had no pill at all.
+console.log('\nmini-app add-to-order — the SHIPS SOON pill');
+{
+  const js   = fs.readFileSync(path.join(ROOT, 'miniapp/pages/add-to-order/add-to-order.js'), 'utf8');
+  const wxml = fs.readFileSync(path.join(ROOT, 'miniapp/pages/add-to-order/add-to-order.wxml'), 'utf8');
+  const wxss = fs.readFileSync(path.join(ROOT, 'miniapp/pages/add-to-order/add-to-order.wxss'), 'utf8');
+
+  it('the row carries the flag, off the same two server fields the grid reads', () => {
+    assert.ok(/preorder: !p\.ship_from_supplier && !!p\.oos_preorder &&/.test(js),
+      'ship_from_supplier holds no stock of ours; oos_preorder is the policy verdict');
+    assert.ok(/\(atStore != null \? Number\(atStore\) : chainStock\) <= 0/.test(js),
+      'and it is the SAME stock figure the stepper caps on — store first, catalog second');
+  });
+
+  it('the pill renders on the row', () => {
+    assert.ok(/wx:if="\{\{ item\.preorder \}\}" class="row-pre f-toni">\{\{ copy\.shipsSoon \}\}/.test(wxml));
+    assert.ok(/^\.row-pre \{/m.test(wxss), 'and has a style, or it renders as bare text');
+  });
+
+  it('both languages, and neither string is minted here', () => {
+    assert.ok(/shipsSoon: 'SHIPS SOON'/.test(js) && /shipsSoon: '现订现发'/.test(js));
+    // The pair is the shop grid's own (shop.js preText). Lifted, not reworded:
+    // one product must not read two ways in one app. If the grid ever changes
+    // its wording this fails, which is the point.
+    const shopJs = fs.readFileSync(path.join(ROOT, 'miniapp/pages/shop/shop.js'), 'utf8');
+    assert.ok(/'现订现发' : 'SHIPS SOON'/.test(shopJs),
+      'the grid still uses this pair — if it moved, move this one with it');
+  });
+
+  it('no local-run term, unlike the grid — the gate has already ruled', () => {
+    const map = js.slice(js.indexOf('preorder: !p.ship_from_supplier'));
+    assert.ok(!/onLocalRun|_onLocalRun|local_fresh_date/.test(map.slice(0, 200)),
+      'this flag describes the shelf; addonBlockReason decides who may order off it');
+  });
+}
+
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

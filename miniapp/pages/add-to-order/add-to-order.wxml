@@ -56,6 +56,10 @@
         <view class="row-mid">
           <view class="row-name f-bear">{{ item.name }}</view>
           <view class="row-price f-bear">{{ item.price_disp }}</view>
+          <!-- Sold out but still orderable: the same pill the shop grid puts on
+               this product. Without it the row looked identical to a stocked
+               one on an order that never reserved. -->
+          <view wx:if="{{ item.preorder }}" class="row-pre f-toni">{{ copy.shipsSoon }}</view>
         </view>
         <!-- Options product → open the chooser; plain product → qty stepper -->
         <view wx:if="{{ item.has_options }}" class="choose-btn f-toni"
