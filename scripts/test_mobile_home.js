@@ -371,4 +371,51 @@ CASES.push(['a shop where nobody has come back', `state.custMeta={all:12,buyers:
   ['and the never-ordered', `txt('content').includes('7 never ordered')`],
 ]]);
 
+/* ONE HEADING OVER THE TWO TODAY CARDS, drawn for whichever survives its gate.
+   The second card used to carry "Also today", a label that named its POSITION
+   rather than its contents — Sessions, Conversion, Returning and Refunded are
+   not "other today", they are the same day the card above counts. The static
+   half of this is asserted in test_backend_nav_parity §4; what needs a browser
+   is the GATE CROSS-PRODUCT, because the two cards are gated independently and
+   one of the four combinations used to render a contradiction: a role with
+   `orders` hidden and `customers` shown read "Also today" with no Today above
+   it for it to be also to. All four are checked here, the empty one included —
+   a heading left standing over two hidden cards would put the word Today on a
+   screen with nothing counted under it. */
+{
+  const KPI4 = `state.liveKpis=[
+    [['Revenue (all channels)','营收（全渠道）'],'¥3,180',null],
+    [['Orders (storefront)','订单（自营）'],'19',null],
+    [['Avg. order','客单价'],'¥167.37',null],
+    [['New customers','新客'],'4',null]];`;
+  const VITALS = `state.liveVitals={sessions:2,orders:1,conv:null,buyers:0,returning:0,refunded:0,refundRate:0};`;
+  // dashCards is the owner's override off /me: null is "no override".
+  const seed = cards => `${KPI4}${VITALS}state.dashCards=${cards};APP.cmd('tab','home');`;
+  const money = `txt('content').includes('Revenue (all channels)')`;
+  const vitals = `txt('content').includes('Sessions')`;
+
+  CASES.push(['both Today cards allowed', seed('null'), [
+    ['the money card draws',        money],
+    ['and the second card with it', `${vitals} && txt('content').includes('Refunded')`],
+    ['under exactly one heading',   `(txt('content').match(/Today/g)||[]).length===1`],
+    ['and never "Also today"',      `!txt('content').includes('Also today')`],
+  ]]);
+  CASES.push(['the money card gated away, the second one not', seed(`['recap','needs','customers']`), [
+    ['no revenue on Home',    `!${money}`],
+    ['the second card draws', vitals],
+    ['still headed Today',    `txt('content').includes('Today')`],
+    ['not an orphaned "Also today"', `!txt('content').includes('Also today')`],
+  ]]);
+  CASES.push(['the second card gated away, the money one not', seed(`['recap','needs','orders']`), [
+    ['the money card draws', money],
+    ['no sessions figure',   `!${vitals}`],
+    ['headed Today',         `txt('content').includes('Today')`],
+  ]]);
+  CASES.push(['both Today cards gated away', seed(`['recap','needs']`), [
+    ['no revenue',                       `!${money}`],
+    ['no sessions figure',               `!${vitals}`],
+    ['and no heading left standing over nothing', `!txt('content').includes('Today')`],
+  ]]);
+}
+
 run('home', CASES);
