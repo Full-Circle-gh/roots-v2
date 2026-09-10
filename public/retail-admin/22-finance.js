@@ -1953,6 +1953,13 @@ function finAprRender() {
   const waiting = rows.filter(r => r.status === 'submitted');
   const done = rows.filter(r => r.status !== 'submitted');
 
+  /* THE THREE BLOCKS BELOW ARE DIVs AND MUST STAY DIVs — §1.22. Inside
+     retail-admin.html a <section> means "a tab page": the unscoped
+     `section { display: none }` that runs the tab system matches every one at
+     any depth, so a block emitted as <section> renders into the DOM with real
+     content and no box. All three shipped as <section> and were invisible from
+     §87 step three until 2026-09-10 — the fourth time this rule has bitten. */
+
   /* WHAT THE SHOP STILL OWES ITS OWN PEOPLE, above the queue.
 
      IT IS A DIFFERENT KIND OF THING FROM EVERYTHING BELOW IT — those are
@@ -1963,7 +1970,7 @@ function finAprRender() {
      THE ROW IS A PERSON, NOT A CLAIM, because that is how it gets paid. */
   const owed = (FIN_APR.owed || []).filter(o => Number(o.total) > 0);
   const owedBlock = owed.length
-    ? '<section class="fin-apr-owed"><h3>' + escapeHtml(cuT('Owed to your team', '应付团队')) + '</h3>'
+    ? '<div class="fin-apr-owed"><h3>' + escapeHtml(cuT('Owed to your team', '应付团队')) + '</h3>'
       /* ITS OWN COLGROUP, and it is not decoration. .fin-tx-table is
          `table-layout: fixed`, so a table shipped without one splits its columns
          EVENLY — three at 33% here, against the queue table's 58/16/26 directly
@@ -1999,7 +2006,7 @@ function finAprRender() {
       + `<p class="fin-apr-foot">${escapeHtml(cuT(
           'Marking paid does not change the accounts — the expense was recorded when it was approved.',
           '标记已付不会改动账目 — 该费用在审批通过时已记入。'))}</p>`
-      + '</section>'
+      + '</div>'
     : '';
 
   const table = (list) => '<div class="fin-tx-card"><table class="fin-tx-table">'
@@ -2021,7 +2028,7 @@ function finAprRender() {
      empty states are different facts and say different things: nothing has ever
      arrived, versus nothing is left. */
   const queue = waiting.length
-    ? '<section class="fin-apr-queue"><h3>' + escapeHtml(cuT('Waiting', '待审批'))
+    ? '<div class="fin-apr-queue"><h3>' + escapeHtml(cuT('Waiting', '待审批'))
       + ' · ' + waiting.length + '</h3>'
       + table(waiting)
       /* THE SENTENCE THAT MAKES THE BUTTON HONEST. Mirror of the one under
@@ -2030,7 +2037,7 @@ function finAprRender() {
       + `<p class="fin-apr-foot">${escapeHtml(cuT(
           'Approving records the expense in this month’s accounts.',
           '审批通过后即记入本月账目。'))}</p>`
-      + '</section>'
+      + '</div>'
     : `<div class="fin-tx-state"><h3>${escapeHtml(cuT('Nothing waiting', '暂无待审批'))}</h3>`
       + `<p>${escapeHtml(done.length
           ? cuT('Everything your team has sent has been decided.', '团队提交的记录都已处理。')
@@ -2038,8 +2045,8 @@ function finAprRender() {
                 '团队登记的费用会出现在这里等待审批。'))}</p></div>`;
 
   const history = done.length
-    ? '<section class="fin-apr-done"><h3>' + escapeHtml(cuT('Already decided', '已处理')) + '</h3>'
-      + table(done) + '</section>'
+    ? '<div class="fin-apr-done"><h3>' + escapeHtml(cuT('Already decided', '已处理')) + '</h3>'
+      + table(done) + '</div>'
     : '';
 
   host.innerHTML = owedBlock + queue + history;

@@ -1210,7 +1210,7 @@ That break is at **~32 columns.** Doubled, the limit would be 16 and line one wo
 
 ---
 
-### 1.22 A content block emitted as `<section>` inside retail-admin is invisible *(DID · CONFIRMED ×3)*
+### 1.22 A content block emitted as `<section>` inside retail-admin is invisible *(DID · CONFIRMED ×4)*
 
 *Added 2026-09-02, after the channel money panel shipped in PR #206 and never rendered once in production. Two prior instances had each been patched locally without anyone writing the rule down; this is the third.*
 
@@ -1237,13 +1237,16 @@ The failure has no symptom that points at CSS. The renderer runs, returns correc
 
 And the obvious diagnostic misses it. Scanning `document.styleSheets` for rules whose `cssText` names the block's class *and* `none` **returns an empty array** — the killing rule names neither `.cmp` nor anything else about the block. It is `section`. *(Ash, 2026-09-02, on order EL20260831339491: `getComputedStyle` → `display:none`, DOMRect all zeros, ancestor chain all visible, class-scan empty. Deploy drift ruled out by hashing the file against `origin/main` first — worth doing, and it is not the answer.)*
 
-#### The three bites
+#### The four bites
 
 | | What was hidden | How it was patched | Written down as a rule? |
 |---|---|---|---|
 | `.db-hero` — dashboard right-now hero | collapsed to 0×0 inside the active tab | `display: block` on the class — `css:1514` | no, a comment at `css:1510` |
 | `#pd-editor .pd-sec` — product-editor content groups | whole editor panes | `display: block` on the class — `css:3108` | no, a comment at `css:3106` |
 | `.cmp` — channel settlement panel (PR #206) | **every Meituan and Eleme order, from merge to 2026-09-02** | tag changed to `<div>` — `04-orders.js:5286` | **yes — this section** |
+| `.fin-apr-owed` / `.fin-apr-queue` / `.fin-apr-done` — Finance ▸ Approvals (§87 step three) | **the whole sub-view, from the day it shipped to 2026-09-10** | tag changed to `<div>` — `22-finance.js`, `finAprRender` | **yes — the fourth bite, added below** |
+
+**🔴 The fourth bite is the one that tests this section, because the rule was already written when it happened.** *(2026-09-10.)* Finance ▸ Approvals shipped its three blocks as `<section>`s and the sub-view was blank from that day on — the tab highlighted, the dot showing a real waiting count, and nothing under it. The session that chased it read the renderer first, exactly as the mechanism note above predicts: it found the fetch returning 200, `FIN_APR` holding real rows, 1,914 characters of correct HTML written into `#fin-apr-list`, and no console error. **It also shipped a wrong fix before the right one** — a `try/catch` around the render, on the theory that a silent exception was eating the screen, which was a real hardening but not the bug. What ended it was reading computed `display` down the tree, which is the diagnostic this section already prescribes; then the *first* remedy reached for was `display: block` on the class, the one this section forbids, and it went to production before the rule was read. **Read this section before fixing, not after.** The tell is in the symptom: DOM correct, box absent.
 
 The new-order form already states the convention correctly in a comment at `html:2716` — *"Blocks are DIVs, never nested sections — the global `section { display:none }` tab rule would hide a nested one."* **That comment is right and it is in the wrong place.** It sits inside one form, where only someone editing that form reads it, so it protected that form and nothing else. **A convention recorded at the site that obeys it does not travel.** That is the whole reason this section exists.
 
@@ -1265,9 +1268,11 @@ The new-order form already states the convention correctly in a comment at `html
 
 #### How this rule is known
 
-**DID** — this session traced the live failure to `css:940`, changed the tag, and shipped it. **CONFIRMED ×3** — three independent occurrences in the codebase, two of them already patched in place before anyone connected them.
+**DID** — this session traced the live failure to `css:940`, changed the tag, and shipped it. **CONFIRMED ×4** — four independent occurrences in the codebase, two of them already patched in place before anyone connected them, and one (Approvals, 2026-09-10) that happened *after* this section existed.
 
 **The finding is not the panel. It is that the rule had two documented exceptions and one correctly-stated convention, and still bit a third time** — because all three lived at the sites that had already been fixed, and none of them lived where someone about to write `<section>` would look. *A rule that exists only as a comment next to its own workaround is not recorded; it is survived.*
+
+**And the fourth bite says what writing it down did and did not buy.** The rule did not stop the `<section>` being written, and it did not stop the forbidden remedy being deployed — both happened with this section already in the tree. What it bought was the *end* of the search: once someone read it, the diagnosis and the correct fix were immediate. **Its job is the last ten minutes, not the first ten.** Shortening the first ten means the check has to run before the code does, which is `§6 New-feature gate` territory, not another paragraph here.
 
 ---
 

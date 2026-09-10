@@ -14804,14 +14804,15 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
    different kinds of thing: money already owed, decisions waiting, and a record.
    §1.13a's band values, one step down for a sub-heading.
 
-   `display: block` IS LOAD-BEARING, same reason as .db-hero above: the tab
-   system hides every bare <section> (`section { display: none; }`), and each
-   of these three is a <section> nested inside the active Finance tab. Without
-   it here, all three collapse to 0×0 — the DOM holds the queue, the fetch
-   succeeds, and the pane still shows nothing. */
+   NO `display` DECLARATION HERE, DELIBERATELY. These three were <section>s and
+   therefore invisible under the tab system's `section { display: none }`; the
+   fix is the one §1.22 prescribes — the blocks became <div>s in 22-finance.js.
+   A `display: block` override here would also have worked, and is exactly what
+   the rule tells you not to do: it grows the exception list and leaves a live
+   <section> for the next reader to fork. Do not add one back. */
 #tab-finance .fin-apr-owed,
 #tab-finance .fin-apr-queue,
-#tab-finance .fin-apr-done { display: block; margin-top: 32px; }
+#tab-finance .fin-apr-done { margin-top: 32px; }
 #tab-finance .fin-apr-owed:first-child { margin-top: 24px; }
 #tab-finance .fin-apr-owed h3,
 #tab-finance .fin-apr-queue h3,
