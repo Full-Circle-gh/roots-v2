@@ -673,9 +673,14 @@ const CROWS = [
   { category: null, amount: 50, entries: 2, is_operating: 1 },
 ];
 const CDETAIL = [
+  // The note on a PO row is what the poster wrote, and it ALREADY LEADS WITH THE
+  // PO NUMBER — `${po_number}${supplier ? ' · ' + supplier : ''} · N line(s)`,
+  // identically in postRetailPOExpenses and postPOExpenses. The fixture carries
+  // that real shape, because a fixture with a bare note is what let the screen
+  // print the number twice.
   { id: 5, date: '2026-08-28', amount: 2081, note: null, source: 'po', po_id: 51, po_number: 'PO-0051', po_open: true, claim_id: null, paid_by: null },
-  { id: 4, date: '2026-08-22', amount: 8000, note: 'produce', source: 'po', po_id: 50, po_number: 'PO-0050', po_open: false, claim_id: null, paid_by: null },
-  { id: 3, date: '2026-08-22', amount: 12000, note: 'dry goods', source: 'po', po_id: 50, po_number: 'PO-0050', po_open: false, claim_id: null, paid_by: null },
+  { id: 4, date: '2026-08-22', amount: 8000, note: 'PO-0050 · 2 lines', source: 'po', po_id: 50, po_number: 'PO-0050', po_open: false, claim_id: null, paid_by: null },
+  { id: 3, date: '2026-08-22', amount: 12000, note: 'PO-0050 · 2 lines', source: 'po', po_id: 50, po_number: 'PO-0050', po_open: false, claim_id: null, paid_by: null },
   { id: 2, date: '2026-08-20', amount: 2000, note: 'taxi to market', source: 'claim', po_id: null, po_number: null, po_open: null, claim_id: 9, paid_by: 'employee' },
   { id: 1, date: '2026-08-14', amount: 3000, note: 'cash and carry', source: 'manual', po_id: null, po_number: null, po_open: null, claim_id: null, paid_by: null },
 ];
@@ -703,6 +708,13 @@ it('an opened line discloses its rows, and only that line', () => {
   // Transactions tab draws that as ONE row with no category, which is why this
   // list cannot be borrowed from it.
   assert.strictEqual((html.match(/PO-0050/g) || []).length, 2);
+  // ONCE PER ROW, NEVER TWICE. The poster's description already leads with the
+  // number; the screen shipped prepending it again and drew
+  // `RPO-0028 · RPO-0028 · 1 line` on the live card.
+  assert.ok(!/PO-0050 · PO-0050/.test(html),
+    'the PO number is in the description already — printing it twice is the bug this asserts against');
+  // The description is rendered WHOLE, not rebuilt from parts.
+  assert.ok(/PO-0050 · 2 lines/.test(html), 'the poster owns that sentence and the row renders it');
   // Each provenance says what it is, in the words Transactions already uses.
   assert.ok(/Posted by Purchasing/.test(html), 'the PO mark');
   assert.ok(/Staff claim · own money/.test(html), 'the claim mark, with whose money it was');
@@ -710,6 +722,15 @@ it('an opened line discloses its rows, and only that line', () => {
   assert.ok(/cash and carry/.test(html));
   // And the rows add up to the line they hang under.
   assert.strictEqual(CDETAIL.reduce((t, r) => t + r.amount, 0), CROWS[0].amount);
+});
+
+it('a PO row with no description falls back to the bare number', () => {
+  // Defensive: both posters always write one. If a row somehow arrives without,
+  // the number is better than an empty cell — but it is the FALLBACK, never the
+  // prefix.
+  const html = drawn({ i: 0, rows: [{ id: 9, date: '2026-08-30', amount: 5, note: null, source: 'po', po_id: 51, po_number: 'PO-0051', claim_id: null, paid_by: null }], err: '' });
+  assert.ok(/PO-0051/.test(html), 'a PO row must still say which purchase it was');
+  assert.ok(!/PO-0051 · PO-0051/.test(html));
 });
 
 it('a row with nothing typed on it draws its date and its figure, and no filler', () => {
