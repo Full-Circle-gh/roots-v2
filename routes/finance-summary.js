@@ -87,6 +87,13 @@ const money = require('../lib/money');
 // is how the writer and the reader come to disagree about which category a row
 // is in.
 const { spacingKey } = require('../lib/category-text');
+// What the shop actually owes on a purchase-order line: what turned up, less
+// what went back. REFERENCED, NEVER RESTATED — both expense posters bill on this
+// expression, so a reader that re-derived it would show a returned item at a
+// price that is not in the books, and would drift the first time a return rule
+// changed. lib/po-returns.js carries the reasoning and tests its SQL half
+// against its JS half.
+const { billableQtySql } = require('../lib/po-returns');
 
 // ── GET /api/retail-admin/finance/summary?from=&to= ────────────────────────
 router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) => {
@@ -300,6 +307,37 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
   }
 });
 
+// ── The category a purchase-order LINE was posted under ────────────────────
+//
+// The two posters group `po_line_items` by this expression and write one
+// expense row per group, so a reader that wants the lines behind ONE of those
+// rows has to ask the question the same way or it gets a different set.
+//
+// **THE FALLBACK DIFFERS BY REALM AND THAT IS NOT A TYPO.** A line with no
+// category posts as `门店进货 Retail stock` from `postRetailPOExpenses`
+// (routes/retail-purchasing.js) and as `未分类 Uncategorized` from
+// `postPOExpenses` (routes/purchases.js). Both realms write into this one
+// ledger and are told apart only by `purchase_orders.scope`, so the fallback is
+// chosen per row rather than fixed here.
+//
+// THE LITERALS ARE COPIED, WHICH IS THE ONE THING THIS FILE TRIES NOT TO DO.
+// The alternative was to lift them into a shared module and change both
+// posters to import it — a behaviour-preserving refactor of code that WRITES
+// MONEY, in a change that only reads. So they are copied and then held in place
+// by a test that reads both shipped posters and fails if either string moves.
+// That buys the drift protection without touching the write path. If a third
+// poster ever appears, lift them properly.
+const PO_CATEGORY_FALLBACK = {
+  retail: '门店进货 Retail stock',
+  kitchen: '未分类 Uncategorized',
+};
+// The posters' own expression, with the realm chosen in SQL from the order's own
+// scope. Two bound parameters, retail first, so one read serves a set of rows
+// holding both realms — which any window can, both posting into this one ledger.
+const PO_CATEGORY_CASE = (line, po) =>
+  `COALESCE(NULLIF(TRIM(${line}.expense_category),''),
+            CASE WHEN COALESCE(${po}.scope,'kitchen') = 'retail' THEN ? ELSE ? END)`;
+
 // ── GET /api/retail-admin/finance/summary/category?from=&to=&category= ─────
 //
 // THE ROWS BEHIND ONE LINE OF THE BREAKDOWN. The disclosure above says
@@ -413,6 +451,41 @@ router.get('/api/retail-admin/finance/summary/category', requireRetailAdmin, (re
       };
     });
 
+    // ── Which of these rows has items behind it ───────────────────────────
+    // **A CHEVRON THAT OPENS ONTO NOTHING IS A CONTROL THAT LIES**, which is
+    // already this screen's rule for the expenses disclosure. Most PO rows have
+    // line items; the landed-cost row does NOT — freight, tax and handling post
+    // as their own expense row against the purchase order with no
+    // `po_line_items` behind them at all (`postRetailPOExpenses`). So the count
+    // is reported and the client draws the control only where there is one.
+    //
+    // ONE GROUPED QUERY OVER THE WHOLE RESULT, not a count per row: a category
+    // holding forty purchase orders would otherwise be forty round trips to
+    // decide forty chevrons.
+    //
+    // THE FALLBACK IS RESOLVED PER ROW, IN SQL, from the order's own scope. A
+    // set of rows can hold both realms — both post into this one ledger — and
+    // binding either realm's label across the whole read would file the other's
+    // blank-category lines under a name they were not posted with.
+    const poIds = [...new Set(out.filter(r => r.po_id).map(r => r.po_id))];
+    if (poIds.length) {
+      const marks = new Map();
+      const holes = poIds.map(() => '?').join(',');
+      for (const r of db.prepare(`
+        SELECT l.po_id, ${PO_CATEGORY_CASE('l', 'po')} AS category, COUNT(*) AS n
+          FROM po_line_items l
+          JOIN purchase_orders po ON po.id = l.po_id
+         WHERE l.po_id IN (${holes}) AND ${billableQtySql('l')} > 0
+         GROUP BY l.po_id, category`)
+        .all(PO_CATEGORY_FALLBACK.retail, PO_CATEGORY_FALLBACK.kitchen, ...poIds)) {
+        marks.set(`${r.po_id}\u0000${r.category}`, r.n);
+      }
+      const key = uncategorised ? '' : wanted;
+      for (const r of out) {
+        if (r.po_id) r.lines = marks.get(`${r.po_id}\u0000${key}`) || 0;
+      }
+    }
+
     res.json({
       success: true,
       data: {
@@ -432,6 +505,129 @@ router.get('/api/retail-admin/finance/summary/category', requireRetailAdmin, (re
     });
   } catch (e) {
     console.error('[finance/summary/category]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── GET /api/retail-admin/finance/summary/po-lines?entry_id= ───────────────
+//
+// THE ITEMS BEHIND ONE PURCHASE-ORDER ROW of a category drill-down. The row
+// above says `RPO-0017 · 3 lines · ¥1,230`; this says which three.
+//
+// ── IT IS THE CATEGORY'S SLICE OF THE ORDER, NOT THE ORDER ────────────────
+// **This is the whole trap, and it is §88's trap one level down.** A purchase
+// order buys several categories at once, and the poster writes ONE EXPENSE ROW
+// PER CATEGORY: RPO-0017 may hold twelve lines, of which three were
+// Retail-Only Goods, and those three are the ¥1,230. Listing the order's twelve
+// would show a list that does not add up to the row it opened from — the same
+// defect §36 calls the worst thing this card can do, and the reason the level
+// above this one is not built on the Transactions list.
+//
+// So the read is the poster's own grouped query with the GROUP BY removed and
+// one group selected, which is exactly what §88's own endpoint is to the
+// breakdown. Three levels, one rule, applied three times.
+//
+// ── THE ROW IS ADDRESSED BY ITS LEDGER ID, NOT BY (po_id, category) ───────
+// One `expense_entries` row IS one (purchase order, category) pair, so its id
+// names the group with nothing for a caller to get wrong. Passing the pair
+// would let a client ask for a combination that no row was posted for and get
+// a plausible list of lines totalling something no figure on the screen shows.
+// The id is looked up, and the category comes off the ROW rather than the
+// request.
+//
+// ── BILLABLE QUANTITY, NEVER `qty` ────────────────────────────────────────
+// `billableQtySql` from lib/po-returns.js — what turned up less what went back,
+// the expression both posters bill on. A reader using `qty` would price a
+// returned item at what it cost before it was sent back, which is not what the
+// row above it counted. Referenced, never restated.
+//
+// ── ROUNDING, STATED RATHER THAN DISCOVERED ───────────────────────────────
+// The poster rounds ONCE over the group (`money.round(SUM(...))`, audit I-02),
+// so `lines_total` here is computed the same way and equals the posted figure
+// exactly — a test holds them together. The per-line figures are each rounded
+// for display, so they can sum to a cent away from that total on a line whose
+// unit cost carries a third decimal. The card renders whole yuan, so it does
+// not surface; it is recorded here because the alternative — allocating the
+// rounded total across the lines with `splitMinor` — would print a line at a
+// price the supplier never charged, and a purchase-order line's truth is
+// quantity times unit cost.
+router.get('/api/retail-admin/finance/summary/po-lines', requireRetailAdmin, (req, res) => {
+  const entryId = Number(req.query.entry_id);
+  if (!Number.isInteger(entryId) || entryId <= 0) {
+    return res.status(400).json({ error: 'entry_id is required · 缺少条目编号' });
+  }
+
+  try {
+    const db = tdb();
+
+    // The ledger row, and the order behind it. `po_id IS NOT NULL` is the whole
+    // gate: a hand-typed or claim-posted row has no purchase order and no lines,
+    // and must not resolve to some other row's.
+    const entry = db.prepare(`
+      SELECT e.id, e.po_id, e.category, e.amount,
+             po.po_number, po.date AS po_date, COALESCE(po.scope, 'kitchen') AS po_scope
+        FROM expense_entries e
+        JOIN purchase_orders po ON po.id = e.po_id
+       WHERE e.id = ? AND e.po_id IS NOT NULL`).get(entryId);
+    if (!entry) return res.status(404).json({ error: 'not_found' });
+
+    const lines = db.prepare(`
+      SELECT l.id, l.name_en, l.name_cn, l.sku, l.unit,
+             ${billableQtySql('l')}                            AS qty,
+             COALESCE(l.cost_per_unit, 0)                      AS unit_cost,
+             ${billableQtySql('l')} * COALESCE(l.cost_per_unit, 0) AS amount
+        FROM po_line_items l
+        JOIN purchase_orders po ON po.id = l.po_id
+       WHERE l.po_id = ?
+         AND ${billableQtySql('l')} > 0
+         AND ${PO_CATEGORY_CASE('l', 'po')} = ?
+       ORDER BY l.sort_order, l.id`)
+      .all(entry.po_id, PO_CATEGORY_FALLBACK.retail, PO_CATEGORY_FALLBACK.kitchen,
+           entry.category == null ? '' : entry.category);
+
+    // Summed the poster's way — over the raw products, rounded once — so this
+    // figure and `posted` are the same arithmetic and cannot drift.
+    let raw = 0;
+    for (const l of lines) raw += l.qty * l.unit_cost;
+
+    res.json({
+      success: true,
+      data: {
+        entry_id: entry.id,
+        po_id: entry.po_id,
+        po_number: entry.po_number || null,
+        // The category this slice was posted under, off the ROW. Null keeps its
+        // null — §36 stores category text raw and a label minted here would be a
+        // second wrong name on a known-dirty column.
+        category: entry.category || null,
+        // What the ledger row says, and what its lines come to. Equal, always.
+        posted: fen(entry.amount),
+        lines_total: money.round(raw),
+        entries: lines.length,
+        rows: lines.map((l) => ({
+          id: l.id,
+          // Two columns, picked by the reader's language with a fallback across
+          // — the house pattern for bilingual DATA (`tmStoreLabel`). The client
+          // does the picking; both halves ride so it can.
+          name_en: l.name_en || null,
+          name_cn: l.name_cn || null,
+          sku: l.sku || null,
+          qty: l.qty,
+          unit: l.unit || null,
+          // **NOT `fen()`.** A unit cost is a PRICE, not a money total, and it
+          // can be sub-cent — lib/money keeps `toMicro`/`fromMicro` and acMoney
+          // takes a `dp` override for exactly these. Rounding it to whole cents
+          // here would destroy the value in the payload to save nothing: the
+          // screen formats it at the tenant's decimals anyway, and a later
+          // reader wanting the real per-unit figure would find it already gone.
+          unit_cost: l.unit_cost,
+          // The line's money, which IS a total and rounds like one.
+          amount: fen(l.amount),
+        })),
+      },
+    });
+  } catch (e) {
+    console.error('[finance/summary/po-lines]', e.message);
     res.status(500).json({ error: e.message });
   }
 });

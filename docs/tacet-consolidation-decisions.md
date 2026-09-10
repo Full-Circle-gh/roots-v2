@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.199
+# Tacet shared-core consolidation — decisions record, v4.200
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -26,6 +26,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-09-10 · v4.197 — **§88 DECIDED: A LINE OF THE EXPENSE BREAKDOWN OPENS ONTO THE ROWS BEHIND IT — asked for by Ash** off the live Summary card: *"there should be an option to click on each category and see details payment break down."* **THE CHEAP BUILD WAS REJECTED BEFORE IT WAS STARTED, and the reason is the whole of this decision.** Sending the operator to the Transactions tab filtered to that category would have shown a SMALLER NUMBER than the line they tapped: `readTransactions` collapses PO-derived rows to one per purchase order — a purchase order buys several categories at once, so the collapsed row carries `category: null` and no category filter can match it — and it windows those rows on the PO's own date rather than the expense row's. Ingredients is precisely the category most likely to be mostly purchase orders, so ¥27,081 would have opened onto whatever happened to be hand-typed, with nothing on screen to say the rest was missing. §36 treats a figure whose own breakdown does not add up as the worst thing this card can do; borrowing a list reshaped for another purpose is how that happens. **SO THE DRILL-DOWN IS THE BREAKDOWN'S OWN QUERY WITH THE `GROUP BY` REMOVED** — same table, same window expression, same category match, listed instead of summed — and the detail equals the figure clicked BY CONSTRUCTION rather than by agreement. PO rows are listed individually; PO-0050 twice in one category is one purchase that bought it on two lines. **THE MATCH IS ON RAW TEXT AND DELIBERATELY NOT ON `spacingKey`**: the breakdown groups by the column as stored, so the two live spellings of the ingredients category are TWO lines on the card, and a detail read keyed on `spacingKey` would gather both under either line and overshoot. §87's flag resolution matches on `spacingKey` and this does not — the rule is *match what the `GROUP BY` grouped*, and the two are different questions. **ONE PRE-EXISTING DEFECT FIXED IN PASSING AND CALLED OUT**: SQLite groups `''` and `NULL` apart while the payload maps both to `null`, so a tenant holding one of each rendered TWO identical "Not recorded" lines with different figures. `NULLIF(category, '')` folds them; `TRIM` was rejected because it would merge ` Ingredients` onto `Ingredients` and decide a question about typography that `lib/category-text.js` refuses to. **NO ROW CEILING, and that is a decision**: a capped list is a list that does not add up, which is the one guarantee this endpoint makes. If the volume ever justifies one the fix is paging with the total stated, never a silent slice. **NO NEW CHINESE — nothing composed, so nothing is owed to the vocabulary**, and that is asserted by a test rather than claimed in a commit message: every pair the rows render (`采购单自动记入`, `费用申请 · 个人支付`, `加载中…`, `暂无记录`, `财务数据加载失败。`) already ships on the Transactions or Approvals sub-view of the same file for the same fact. **THE DRILL-DOWN IS READ-ONLY**, and deliberately: a concurrent session was deciding who may edit and cancel a transaction, and a second edit path into `expense_entries` opened while that was unsettled is how two rules about one table come to disagree. **ONE TEST WAS RE-SCOPED, NOT RELAXED**: `test_finance_categories.js` counted `FROM expense_entries` across the whole route FILE, which a second route in that file necessarily breaks; the rule it enforces is that the SUMMARY must not answer with two reads, so it now counts inside the summary handler, and a companion assertion holds the drill-down to one read and forbids it re-deciding the operating split. `npm run test:fast` 196/196 green; `test_finance_summary.js` grows 31 → 50, `test_finance_categories.js` 27 → 28, with `test_finance_transactions.js` 53/53 and `test_finance_presentation.js` 31/31 unchanged. Verified end to end over HTTP against a seeded ledger: every breakdown line reconciles to the fen, fractional amounts included. No schema, no migration. No change to `.gitignore` or CI.
 
 2026-09-10 · v4.196 — **§87 FIXED: THE LEDGER ROW NEVER SAID WHO SPENT IT, BECAUSE NOTHING EVER SET THE FIELD THAT SAYS SO.** Reported by Ash off the live Transactions screen: a ¥200 money-out row marked **Staff claim** with no person on it. **v4.190 DECIDED THIS AND THE CODE HAS DISAGREED WITH IT SINCE THE DAY IT SHIPPED** — "who spent it is in the description, because a ¥38 line with no supplier, no invoice and no purchase order behind it is answerable months later only if it says whose taxi it was." `claimDescription` in `lib/expense-posting.js` reads `claim.submitted_name`; a `staff_expenses` row carries the integer `submitted_by` and nothing else, and `/decide` handed `postClaim` that row untouched. **So the name branch was dead in production and every claim-posted row in the books says the note alone.** **THE PASSING TEST IS WHAT HID IT.** `scripts/test_staff_expenses.js` asserted the description carries the name — against a hand-built fixture that sets `submitted_name: 'Wei'` itself. The lib was covered, the wiring was not, and a green suite said the decision was honoured. The new assertion reads the ROUTE, and it fails against the pre-fix file — checked by reverting, not assumed. **NAMES ARE A CROSS-HANDLE READ AND A JOIN IS NOT AVAILABLE**: `tenant_users` is control-plane, `staff_expenses` is tenant. The approval queue already did this lookup inline; `submitterNames(ids)` is now the ONE place the route resolves a name, so the name on the approver's screen and the name in the books cannot drift apart — a second lookup shaped slightly differently is the whole mechanism by which they would. **RESOLVED BEFORE THE TRANSACTION OPENS**, because a second database's latency does not belong inside a lock the tenant handle is holding for a value the write cannot fail on; and a name is still a nicety — the lookup swallows its own failure and a claim with no name against it still decides and still posts its money. **EXISTING ROWS ARE NOT BACKFILLED, and that is Ash's decision rather than an omission**: the description is a snapshot taken at approval, one live row is affected, and posting is delete-and-reinsert — so re-deciding that claim re-posts it with the name. A migration rewriting descriptions on rows already in the books buys one row and writes over ledger text nobody asked it to touch. **THE OTHER TWO OPTIONS ARE RECORDED AS REJECTED, not unconsidered**: a backfill (above), and resolving the name at READ time in `routes/finance-transactions.js` so the mark reads `Staff claim · Asher`. The second is the more robust mechanism — it reaches every existing row and follows a later rename — but it contradicts v4.190's placement of the fact in the description, and with the post path fixed it would print the name twice. If the snapshot ever proves wrong, that is the change to make, and it is a decision rather than a fix. `npm run test:fast` 195/195 green, plus `test_finance_transactions.js` 50/50 and `test_finance_summary.js` 31/31; the claims suite grows 64 → 66 assertions. No schema, no migration, no new Chinese — the `·` join already exists and no string is minted. No change to `.gitignore` or CI.
+
+2026-09-10 · v4.200 — **§88 EXTENDED: A PURCHASE-ORDER ROW OPENS ONTO ITS ITEMS — asked for by Ash**, from the working drill-down: *"what about collapsing if i want of each po to see the exact item?"* A third level, and the last. **IT IS §88'S OWN TRAP ONE LEVEL DOWN, AND THE SAME ANSWER**: a purchase order buys several categories at once and the poster writes ONE EXPENSE ROW PER CATEGORY, so `RPO-0017 · 3 lines · ¥1,230` is THREE OF THAT ORDER'S LINES, not the order. Listing the order's twelve would show a list that does not add up to the row it opened from — the defect §36 calls the worst thing this card can do, arriving a third time by a third road. So the read is the poster's own grouped query with the `GROUP BY` removed and one group selected, exactly as `/summary/category` is to the breakdown: three levels, one rule, applied three times. **THE ROW IS ADDRESSED BY ITS LEDGER ID, NEVER BY (po_id, category)**: one `expense_entries` row IS one such pair, so its id names the group with nothing for a client to get wrong; passing the pair would let a caller ask for a combination no row was posted for and receive a plausible list totalling a figure on no screen. The category is read off the ROW, never accepted from the request. **BILLABLE QUANTITY, NEVER `qty`** — `billableQtySql` from `lib/po-returns.js`, referenced not restated, because a reader using `qty` prices a returned item at what it cost before it went back: the fixture bills 8 of 10 gift boxes at ¥80 and drops a fully returned line out of the list entirely, both of which is what the figure above already did. **THE BLANK-CATEGORY FALLBACK DIFFERS BY REALM AND IS RESOLVED PER ROW IN SQL** from `purchase_orders.scope`: a line with no category posts as `门店进货 Retail stock` from `postRetailPOExpenses` and `未分类 Uncategorized` from `postPOExpenses`, both realms write into this one ledger, and binding either label across a mixed read files the other's lines under a name they were never posted with. **THE TWO LITERALS ARE COPIED INTO THE READER, WHICH THIS FILE NORMALLY FORBIDS, AND THE TRADE IS STATED**: lifting them into a shared module means editing two posters that WRITE MONEY inside a change that only reads, so they are copied and pinned by a test that reads both shipped posters and fails if either string moves. If a third poster appears, lift them properly. **THE LANDED-COST ROW GETS NO CHEVRON.** Freight, tax and handling post as their own expense row against the order with no `po_line_items` behind them, so the server counts the lines and the client draws a control only where there is one — this screen's existing rule, that a chevron opening onto nothing is a control that lies, applied rather than restated. **ONE BUG CAUGHT BEFORE IT SHIPPED, AND IT IS THE INTERESTING ONE**: the first draft rendered the unit cost with `finMoney`, which renders whole units — correct for a period total and A LIE ABOUT A PRICE. A ¥3.50 jar drew as **¥4**. `01-core.js` already states the rule — *"anywhere an operator might reconcile the number against something… uses acMoney and shows the real amount"* — so the inline arithmetic is `acMoney` while the ALIGNED COLUMN stays `finMoney` at all three levels, that column being the staircase's own and its magnitude §36's decision. For the same reason the payload no longer passes a unit cost through `fen()`: a price can be sub-cent, and rounding it server-side would destroy the value to save nothing. **ROUNDING IS STATED RATHER THAN DISCOVERED**: the poster rounds once over the group (audit I-02), `lines_total` is computed the same way and equals the posted figure exactly — asserted — while per-line display rounding can differ by a cent on a three-decimal price; allocating the total across the lines with `splitMinor` was REJECTED because it would print a price the supplier never charged, and a line's truth is quantity times unit cost. **NO NEW CHINESE for the third time** — the three state sentences are the pairs already live on the two levels above, and the item name is two columns picked by language with a fallback across, the house pattern for bilingual DATA (`tmStoreLabel`) and NOT `finCatLabel`, which splits one glued free-text value. **ONE TEST RE-BOUNDED**: v4.197's own one-read assertion sliced to the end of the route file, which a third route breaks; each handler is now held to one read of `expense_entries` separately, and the new one is held to deciding no split at all. `npm run test:fast` 197/197 green; `test_finance_summary.js` 51 → 63, `test_finance_categories.js` 28 → 29. Verified end to end over HTTP: all three levels reconcile, the fees row draws no control, a non-PO id 404s and a missing id 400s. No schema, no migration, no change to `.gitignore` or CI.
 
 2026-09-10 · v4.199 — **§88 FIXED: THE PO NUMBER PRINTED TWICE ON EVERY DRILL-DOWN ROW.** Reported by Ash off the live card the day §88 shipped: `RPO-0028 · RPO-0028 · 1 line`. **THE ROW REBUILT A LABEL ITS WRITER HAD ALREADY WRITTEN.** Both posters compose the same description and both LEAD WITH THE NUMBER — `${po_number}${supplier ? ' · ' + supplier : ''} · N line(s)`, identically in `postRetailPOExpenses` (`routes/retail-purchasing.js`) and `postPOExpenses` (`routes/purchases.js`) — and `finCatRow` joined `po_number` onto the front of it, on the reasoning that "the number says which purchase and the note says which part". The note already said both. **THE POSTED DESCRIPTION IS NOW THE NAME, WHOLE**, and the bare number is only the fallback for a row that somehow carries none; the poster owns that sentence and the screen renders it. **THE FIXTURE IS WHY THE SUITE MISSED IT** — the same defect class as v4.196's: `CDETAIL` carried notes like `'dry goods'` and `'produce'`, hand-written shapes no poster ever emits, so the duplication had nothing to duplicate. The fixture now carries the real string, the new assertion FAILS against the pre-fix line (checked by reverting, not assumed), and a companion case covers the fallback. **THE SUPPLIER IS VISIBLE AGAIN AS A SIDE EFFECT AND THAT IS THE POINT**: where a PO has one, the description reads `RPO-0021 · 顺丰 · 1 line`, which the old prefix pushed off the front of a narrow row. `npm run test:fast` 196/196 green; `test_finance_summary.js` 50 → 51. No new Chinese — no string is minted or edited, only one stopped being printed twice. No schema, no migration, no change to `.gitignore` or CI.
 
@@ -9092,6 +9094,105 @@ in `22-finance.js`, so a "reuse" that is really a mint fails the build.
 
 The delegation of `docs/tacet-delivery-vocabulary.md` Rule 4 (amended
 2026-09-06) is therefore not exercised, and nothing is owed to that document.
+
+
+### AMENDED 2026-09-10 — and a purchase-order row opens onto its items
+
+**Asked for by Ash** from the working drill-down: *"what about collapsing if i
+want of each po to see the exact item?"* A third level, and the last one there
+is: category → purchase-order row → the items on it.
+
+**It is this section's own trap one level down, and it takes the same answer.**
+A purchase order buys several categories at once and the poster writes ONE
+EXPENSE ROW PER CATEGORY, so `RPO-0017 · 3 lines · ¥1,230` is **three of that
+order's lines**, not the order. RPO-0017 may hold twelve. Listing all twelve
+would show a list that does not add up to the row it opened from — the same
+defect, arriving a third time by a third road.
+
+So `GET /api/retail-admin/finance/summary/po-lines` is the poster's own grouped
+query with the `GROUP BY` removed and one group selected, exactly as
+`/summary/category` is to the breakdown. **Three levels, one rule, applied three
+times.**
+
+#### The row is addressed by its ledger id
+
+One `expense_entries` row IS one (purchase order, category) pair, so its id names
+the group with nothing for a client to get wrong. Passing the pair would let a
+caller ask for a combination no row was posted for and receive a plausible list
+totalling a figure that appears on no screen. **The category is read off the row,
+never accepted from the request.**
+
+#### Billable quantity, never `qty`
+
+`billableQtySql` from `lib/po-returns.js` — what turned up less what went back,
+the expression both posters bill on — **referenced, never restated.** A reader
+using `qty` prices a returned item at what it cost before it went back, which is
+not what the figure above it counted. A partly returned line shows the smaller
+quantity; a fully returned one is not in the list at all, because it is not in
+the money either.
+
+#### The blank-category fallback differs by realm
+
+A line with no category posts as `门店进货 Retail stock` from
+`postRetailPOExpenses` and as `未分类 Uncategorized` from `postPOExpenses`. Both
+realms write into this one ledger and are told apart only by
+`purchase_orders.scope`, so the fallback is **resolved per row, in SQL, from the
+order's own scope.** Binding either label across a mixed read files the other
+realm's blank lines under a name they were never posted with.
+
+**The two literals are copied into the reader, which this file normally
+forbids.** Lifting them into a shared module means editing two posters that WRITE
+MONEY inside a change that only reads. So they are copied and pinned by a test
+that reads both shipped posters and fails if either string moves. That buys the
+drift protection without touching the write path. **If a third poster ever
+appears, lift them properly.**
+
+#### The landed-cost row gets no chevron
+
+Freight, tax and handling post as their own expense row against the order with no
+`po_line_items` behind them. The server counts the lines and the client draws a
+control only where there is one — **this screen's existing rule, that a chevron
+opening onto nothing is a control that lies, applied rather than restated.** The
+row still renders and still counts; §36 hides no money.
+
+#### A price is not a period total
+
+The first draft rendered the unit cost with `finMoney`, which renders whole
+units. **A ¥3.50 jar drew as ¥4** — correct for a period total and a lie about
+what the supplier charged.
+
+`public/retail-admin/01-core.js` already states the rule: *"anywhere an operator
+might reconcile the number against something — a list, a total, a dialog, an
+export — uses acMoney and shows the real amount."* So the inline arithmetic
+(`200 pc × ¥3.50`) is `acMoney`, while **the aligned figure column stays
+`finMoney` at all three levels** — that column is the staircase's own, its
+magnitude is §36's decision, and a list that switched to fen halfway down would
+stop lining up under the total it exists to be checked against.
+
+For the same reason the payload does not pass a unit cost through `fen()`: **a
+price can be sub-cent** (`lib/money` keeps `toMicro`/`fromMicro` and `acMoney`
+takes a `dp` override for exactly these), and rounding it server-side destroys
+the value to save nothing.
+
+#### Rounding, stated rather than discovered
+
+The poster rounds **once over the group** (audit I-02), so `lines_total` is
+computed the same way and equals the posted figure exactly — asserted by a test.
+Per-line display rounding can differ by a cent on a three-decimal unit price. The
+card renders whole yuan so it does not surface.
+
+**Allocating the rounded total across the lines with `splitMinor` was
+REJECTED.** It would print a line at a price the supplier never charged, and a
+purchase-order line's truth is quantity times unit cost.
+
+#### Still no new Chinese
+
+Third time. The three state sentences are the pairs already live on the two
+levels above. The item name is **two columns picked by the reader's language with
+a fallback across** — the house pattern for bilingual DATA (`tmStoreLabel` on
+stores) and explicitly NOT `finCatLabel`, which splits one glued free-text value.
+A category is such a value; an item name is not.
+
 
 ## §89 — MONEY IN IS LISTED FROM THE BEGINNING AND SUMMED FROM 1 AUGUST 2026
 
