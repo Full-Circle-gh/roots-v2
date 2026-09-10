@@ -325,9 +325,14 @@ function versionOf(tid) {
   // marker is for: raising a claim writes to a table nothing sums, and approving
   // one writes a row into `expense_entries` that the month's accounts count.
   // Same feature, same section, opposite answers.
-  is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 22, '22 capabilities move money');
+  // 116 is `expenses:cancel` (2026-09-10, §90) — the twenty-third money-MOVING
+  // key, and it carries the marker for the same reason its approving sibling
+  // does: voiding a claim is what removes an already-posted row from
+  // `expense_entries`, which is exactly the kind of change to what the
+  // business has spent this marker exists to flag.
+  is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 23, '23 capabilities move money');
   is(caps.CAPABILITIES.filter(c => c.money === 'shows').length, 16, '16 show it');
-  is(caps.CAPABILITIES.length, 115, 'across all 115');
+  is(caps.CAPABILITIES.length, 116, 'across all 116');
   // Seeing the waste ledger and reading what it cost are two permissions
   // (Ash, 2026-09-02). They were one, and `waste:view` carried the money
   // marker — so the two floor presets, whose job is recording what spoiled,

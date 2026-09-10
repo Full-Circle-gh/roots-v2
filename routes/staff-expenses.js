@@ -49,6 +49,9 @@ const ERR = {
   notApproved: 'only an approved claim can be paid back · 仅审批通过的申请可标记付款',
   notOwed:  'this one was paid from the company account · 该笔由公司账户支付',
   forbidden:'this account cannot approve expense claims · 此账号无法审批费用申请',
+  // §90.
+  notApprovedVoid: 'only an approved claim can be voided · 仅审批通过的申请可以作废',
+  forbiddenVoid:   'this account cannot void expense claims · 此账号无法作废费用申请',
 };
 
 /* WHO MAY DECIDE. `lib/cap-routes.js` gates the decide route on
@@ -75,6 +78,22 @@ function requireApprover(req, res, next) {
     return res.status(403).json({ error: ERR.forbidden });
   }
   if (!req.caps.has('expenses:approve')) return res.status(403).json({ error: ERR.forbidden });
+  return next();
+}
+
+/* WHO MAY VOID (§90). Same fail-closed shape as requireApprover and for the
+   same reason: this reverses money already in the books, so a route this can
+   reach must not fall open on a question the RBAC layer could not answer. It is
+   its own function, checking `expenses:cancel` rather than `expenses:approve`,
+   because that is the whole point of the split — an owner can hand a
+   bookkeeper the power to undo a mistaken approval without also making them an
+   approver (lib/capabilities.js). */
+function requireCanceller(req, res, next) {
+  if (req.backendUser && req.backendUser.role === 'owner') return next();
+  if (!req.caps || typeof req.caps.has !== 'function') {
+    return res.status(403).json({ error: ERR.forbiddenVoid });
+  }
+  if (!req.caps.has('expenses:cancel')) return res.status(403).json({ error: ERR.forbiddenVoid });
   return next();
 }
 
@@ -438,6 +457,66 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
     res.json({ success: true, data: after });
   } catch (e) {
     console.error('[staff-expenses decide]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── POST /api/retail-admin/staff-expenses/:id/void ─────────────────────────
+// §90 — REVERSING A CLAIM THAT HAS ALREADY POSTED. Requested by Ash off the
+// live Transactions screen: a "Staff claim" row carried no way to undo a
+// mistaken approval, because `/finance/transactions` refuses to edit or delete
+// a claim-posted row directly (routes/finance-transactions.js `claimEdit` /
+// `claimDelete`) — any value typed there would be lost the next time the claim
+// was decided. This is the route that undoes the DECISION instead, the same
+// way `/decide` made it in the first place.
+//
+// STATUS BECOMES `voided`, NEVER `rejected`. Reusing `rejected` would read as
+// though the claim was never approved — and would overwrite `decided_by`, the
+// one field that says who approved it, the moment somebody reversed that call.
+// `voided_by` / `voided_at` / `void_note` carry the reversal instead, beside
+// the untouched approval record.
+//
+// GATED ON `expenses:cancel`, NOT `expenses:approve` — see requireCanceller.
+router.post('/api/retail-admin/staff-expenses/:id/void', requireRetailAdmin, requireCanceller, express.json(), (req, res) => {
+  try {
+    const db = tdb();
+    if (!/^\d+$/.test(String(req.params.id))) return res.status(404).json({ error: ERR.notFound });
+    const claim = db.prepare('SELECT * FROM staff_expenses WHERE id = ?').get(req.params.id);
+    if (!claim) return res.status(404).json({ error: ERR.notFound });
+
+    // ONLY AN APPROVED, POSTED CLAIM CAN BE VOIDED — a submitted or already-
+    // rejected one has nothing in the books to take back out, and `/decide`
+    // is the route that handles either.
+    if (claim.status !== 'approved') return res.status(409).json({ error: ERR.notApprovedVoid });
+    // A SETTLED CLAIM IS FINISHED, for the same reason `/decide` refuses one:
+    // the employee has already been paid back outside this system, and voiding
+    // it would take the expense out of the books while leaving the payment
+    // made.
+    if (claim.settled) return res.status(409).json({ error: ERR.settled });
+
+    const note = (req.body && req.body.note != null && req.body.note !== '')
+      ? String(req.body.note).slice(0, 500) : null;
+    const voidedBy = req.user?.id || null;
+
+    withTransaction(db, (tx) => {
+      tx.prepare(`UPDATE staff_expenses
+                     SET status = 'voided', voided_by = ?, voided_at = datetime('now'), void_note = ?
+                   WHERE id = ?`).run(voidedBy, note, claim.id);
+      // Posted from the row AS IT NOW STANDS, exactly as /decide does: the
+      // status this just wrote is what decides whether a row exists, and
+      // 'voided' takes the same branch 'rejected' does in postClaim — it
+      // deletes the expense_entries row and returns null.
+      const fresh = tx.prepare('SELECT * FROM staff_expenses WHERE id = ?').get(claim.id);
+      const expenseId = postClaim(tx, fresh);
+      tx.prepare('UPDATE staff_expenses SET expense_id = ? WHERE id = ?').run(expenseId, claim.id);
+    });
+
+    logActivity(req.user?.id || null, req.user?.username || null, 'void', 'staff_expense', claim.id,
+      { amount: fen(claim.amount), category: claim.category }, req.ip);
+    const after = db.prepare('SELECT status, expense_id FROM staff_expenses WHERE id = ?').get(claim.id);
+    res.json({ success: true, data: after });
+  } catch (e) {
+    console.error('[staff-expenses void]', e.message);
     res.status(500).json({ error: e.message });
   }
 });

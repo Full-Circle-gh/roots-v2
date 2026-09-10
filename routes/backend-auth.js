@@ -341,6 +341,11 @@ try {
   // it because saying what you spent is not a power over anything.
   const claims = roles.migrateExpenseSubmitCap();
   if (claims) console.log('[backend-auth] granted expenses:submit to ' + claims + ' role(s)');
+  // §90's key, on the same shape as production:request: it did not exist
+  // yesterday, so no untouched-role guard, only the admin/manager/bookkeeper
+  // rows that already hold the finance/approval capabilities this rides beside.
+  const voids = roles.migrateExpenseCancelCap();
+  if (voids) console.log('[backend-auth] granted expenses:cancel to ' + voids + ' role(s)');
 } catch (e) {
   // Seeding is best-effort by design. An unseeded tenant resolves from
   // presetCapsFor exactly as it did before roles became data.

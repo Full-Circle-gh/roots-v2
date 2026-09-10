@@ -294,9 +294,13 @@ function readTransactions(query, opts = {}) {
   //
   // It carries the claim id so the screen can say where the row came from, and
   // it is NOT editable there for the reason the PO rows are not.
+  // `c.settled` rides along for §90's Void action: a claim already paid back to
+  // the employee must not be voided (the same guard `/staff-expenses/:id/void`
+  // enforces server-side), so the row says so rather than the screen finding
+  // out from a failed request.
   const claims = db.prepare(`
     SELECT e.id, e.${LEDGER_DATE} AS date, e.amount, e.category,
-           e.description, e.claim_id, c.paid_by
+           e.description, e.claim_id, c.paid_by, c.settled
       FROM expense_entries e
       LEFT JOIN staff_expenses c ON c.id = e.claim_id
      WHERE e.claim_id IS NOT NULL AND e.${LEDGER_DATE} BETWEEN ? AND ?
@@ -421,6 +425,9 @@ function readTransactions(query, opts = {}) {
       // a cost that is finished and one that is also a debt, and the bookkeeper
       // reading this row is the person who needs to know.
       paid_by: r.paid_by || null,
+      // §90: whether the claim has already been paid back — see the note above
+      // the query.
+      settled: !!r.settled,
     })),
     ...posted.map(r => ({
       kind: 'out', id: `po-${r.po_id}`, date: r.date,

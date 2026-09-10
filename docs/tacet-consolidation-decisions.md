@@ -8992,7 +8992,6 @@ else — so a receipt already photographed, screenshotted, or sent by a supplier
 could not be attached at all, which is most of them. The attribute is gone;
 `accept="image/*"` is what keeps the chooser to pictures.
 
-
 ## §88 — A LINE OF THE BREAKDOWN OPENS ONTO THE ROWS BEHIND IT
 
 **Decided 2026-09-10 by Ash**, from the live Summary card: *"there should be an
@@ -9234,3 +9233,81 @@ than resolved.
 `routes/finance-summary.js` has never read `income_entries`, so nothing in
 production sums these rows today. This ruling binds the code that would have, and
 that code has not been written.
+
+### DECIDED 2026-09-10 — §90: a capability to void a posted staff claim
+
+Reported by Ash off the live Transactions screen: a ¥200 "Staff claim" row (the
+same row v4.196 fixed the name on) offered no way to undo it. §87 already
+refuses to let a claim-posted row be edited or deleted directly — it is a
+projection of the claim, and any value typed onto it is lost the next time the
+claim is decided — but that refusal left no path back at all once a claim was
+approved by mistake, approved for the wrong amount, or turned out to be
+somebody else's spending. **THIS SECTION RECORDS THE TWO QUESTIONS ASH DECIDED,
+ASKED BEFORE ANY CODE WAS WRITTEN, PER THIS FILE'S OWN RULE.**
+
+**QUESTION ONE — WHAT DOES "CANCEL" DO. DECIDED: VOID THE CLAIM, NOT EDIT-AND-
+REPOST.** The claim's status moves to a new terminal state, `voided`, which
+`lib/expense-posting.js`'s `postClaim` treats exactly as `rejected` already is
+— it deletes the `expense_entries` row and returns null, the same branch §87
+built for a rejection reversing an approval. **`voided` IS NOT `rejected`,
+DELIBERATELY.** Writing `rejected` over an approved claim would read as though
+it was never approved, and would overwrite `decided_by` — the one column that
+says who approved it — the moment somebody else reversed that call. Two new
+columns, `voided_by` / `voided_at` / `void_note` (schema.sql), carry the
+reversal beside the untouched approval record, not in place of it. There is no
+path back from `voided`, the same one-way shape `rejected` already has — this
+is a correction mechanism, not an "un-void."
+
+Editing the claim's own fields (amount, category, who paid) and letting it
+re-post was the alternative on the table and was rejected: it would let a
+claim's story change after an approver already read and decided it, which is
+the exact defect §87's own header comment names for why editing a *submitted*
+claim was never built ("a claim that changed under them after they read it is
+the defect the approval step exists to prevent"). Voiding and re-submitting a
+fresh, correct claim keeps that guarantee; editing a decided one would not.
+
+**QUESTION TWO — WHO IS AUTHORIZED. DECIDED: A NEW CAPABILITY, `expenses:cancel`,
+SEPARATE FROM `expenses:approve`.** Reusing `expenses:approve` was the
+alternative and was rejected: an owner may want a bookkeeper who can undo a
+mistaken approval without also being able to approve one in the first place —
+the same reasoning §87 already gives for why `expenses:approve` is not
+`finance:record`. `lib/capabilities.js` registers the key with a `money:
+'moves'` marker (it is what removes an already-posted row from the books) and
+places it in no floor preset — owner, admin and manager hold it because they
+hold everything short of the standard exclusions, and `bookkeeper` is the one
+preset that names it explicitly, beside `finance:record` and without
+`expenses:approve`. `lib/roles.js`'s `migrateExpenseCancelCap` backfills it onto
+existing admin/manager/bookkeeper `tenant_roles` rows — edited or not, for the
+reason `migrateKitchenRequestCap` gives at length: nobody can have unticked a
+key that did not exist yesterday.
+
+**THE ROUTE: `POST /api/retail-admin/staff-expenses/:id/void`** (routes/staff-
+expenses.js), gated by a new `requireCanceller` built the same fail-closed way
+`requireApprover` is — the owner always passes, an unresolved capability set
+403s rather than falling open, because this reverses money already in the
+books. It refuses a claim that is not `approved` (nothing to take back out) and
+a claim that is `settled` (the employee has already been paid back outside this
+system; voiding would remove the expense from the books while leaving the
+payment made) — the same guard `/decide` already enforces, reused rather than
+restated. `lib/cap-routes.js` maps the route to `expenses:cancel` ABOVE the
+generic `/staff-expenses` prefix, the same ordering guard §87 already relies on
+for `/decide`: below the general rule, every submitter's floor-preset
+`expenses:submit` would answer for a money-reversing route.
+
+**THE SCREEN: a Void link on the claim's Transactions row** (public/retail-
+admin/22-finance.js `finTxRow`), where the row's own comment used to say there
+was nothing on the other side worth linking to — that note is amended, not left
+standing, now that there is an action to offer. Shown only to `can('expenses:
+cancel')` and only while the claim is not yet settled — a control that fails
+every time it is pressed is the fault §36 already names for a PO link the
+opener cannot serve. The Approvals sub-view's status pill (`finAprPill`) gains
+a neutral `Voided · 已作废` state, distinct from `is-no`'s Brick refusal colour:
+a voided claim was legitimately approved and later reversed, which is a
+different fact from having been refused from the start.
+
+**WHAT THIS DOES NOT BUILD.** No UI surfaces `voided_by` / `voided_at` /
+`void_note` beyond the pill's label — the data is kept for accountability, not
+yet read back anywhere. Voiding a *rejected* or *submitted* claim is refused
+(there is nothing posted to reverse); a submitter who wants to withdraw a claim
+still waiting on a decision is the shape `routes/staff-expenses.js`'s own header
+comment already reserves for later, and is not this.

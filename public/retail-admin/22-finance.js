@@ -692,15 +692,13 @@ function finTxRow(r) {
      Edit — §36's "the row explains its own constraint instead of merely
      enforcing it", applied to the other document that owns rows in this table.
 
-     NO LINK OUT, unlike a PO row — AND THE REASON HAS CHANGED, so the note is
-     rewritten rather than left standing. It used to be that a claim was worked
-     on the phone and this admin had no claim screen to open; §87 step three's
-     Approvals sub-view is that screen, one click away in this same strip. What
-     is still true is that there is nothing on the other side worth the link:
-     a row in THIS table is a claim already decided, and Approvals would open on
-     a queue that no longer contains it. A link that lands somewhere not showing
-     what was clicked is the same failure §36 names when it refuses a PO link the
-     opener cannot serve — it has simply stopped being about a missing tab. */
+     §90 AMENDS THE "NO LINK OUT" NOTE THIS BLOCK USED TO CARRY, RATHER THAN
+     LEAVING IT STANDING WRONG: the row now offers Void, requested by Ash off
+     this exact screen — a claim posted by mistake had no way back except
+     editing a row that would only be regenerated. Void is not Edit: it does not
+     let a value be typed onto this row, it reverses the CLAIM's own decision
+     (`finTxVoidClaim`, calling the claim's `/void` endpoint) and lets the same
+     mechanism that deletes this row on rejection delete it here too. */
   const claim = r.source === 'claim';
   // §36: the note vanishes ENTIRELY at one category. "It does not read '1
   // category'" — at one nothing was collapsed, so a note would assert a
@@ -741,10 +739,20 @@ function finTxRow(r) {
     // Posted-by-Purchasing mark either way — §36 hides no money — and no new
     // string is minted to explain the absence, there being no locked pair for
     // one and Rule 4 forbidding composing it.
+    //
+    // A CLAIM ROW OFFERS VOID (§90), NOT EDIT, AND ONLY TO `expenses:cancel` —
+    // a distinct capability from `finance:record`, because reversing somebody
+    // else's approval is not the same power as typing a ledger row by hand.
+    // HIDDEN ONCE SETTLED, for the same reason the server refuses the write:
+    // the employee has already been paid back for this claim, and a control
+    // that failed every time it was pressed is the fault §36 names.
     + '<td>' + (po
       ? (r.po_open === false ? ''
         : `<a class="fin-tx-act" href="#" onclick="finTxOpenPO(${Number(r.po_id)});return false">${escapeHtml(cuT('Open purchase order', '查看采购单'))}</a>`)
-      : claim ? ''
+      : claim
+      ? ((typeof can === 'function' && can('expenses:cancel') && !r.settled)
+        ? `<a class="fin-tx-act" href="#" onclick="finTxVoidClaim(${Number(r.claim_id)});return false">${escapeHtml(cuT('Void', '作废'))}</a>`
+        : '')
       : (typeof can === 'function' && !can('finance:record')) ? ''
       : `<a class="fin-tx-act" href="#" onclick="finTxEdit('${escapeHtml(String(r.kind))}',${Number(r.id)});return false">${escapeHtml(cuT('Edit', '编辑'))}</a>`)
     + '</td>'
@@ -1184,6 +1192,34 @@ window.finTxDelete = async function finTxDelete() {
   }))) return;
   return finTxWrite(() =>
     api(`/api/retail-admin/finance/transactions/${row.kind}/${row.id}`, { method: 'DELETE' }));
+};
+
+/* Void a posted claim (§90). NOT finTxDelete: that endpoint refuses a
+   claim-linked row outright (see the note above finTxRow) because the row is a
+   projection of the claim — this calls the CLAIM's own endpoint instead, which
+   marks the claim 'voided' and lets `postClaim` take the row back out, the same
+   mechanism a rejection already uses. There is no modal open here — the row's
+   own link calls this directly — so it manages its own confirm and toast rather
+   than going through finTxWrite. */
+window.finTxVoidClaim = async function finTxVoidClaim(claimId) {
+  if (!claimId || typeof askConfirm !== 'function') return;
+  if (!(await askConfirm({
+    title: cuT('Void this claim?', '作废这条费用申请？'),
+    body: cuT('This removes the row from the ledger. This cannot be undone.',
+              '此操作将从账本中移除该记录。此操作无法撤销。'),
+    confirmLabel: cuT('Void', '作废'),
+    danger: true,
+  }))) return;
+  try {
+    await api(`/api/retail-admin/staff-expenses/${Number(claimId)}/void`, { method: 'POST' });
+    FIN_TX = null;                          // force a real reload, not a repaint
+    FIN_DATA = null;                        // the staircase drawn from the same ledger
+    FIN_APR = null; FIN_APR_SEEN = false;    // the claim's own pill, on the other sub-view
+    await finTxLoad();
+    if (window.toast) toast(cuT('Voided', '已作废'));
+  } catch (e) {
+    if (window.toast) toast(e.message, 'err');
+  }
 };
 
 /* Edit a typed row, looked up in the payload already on screen rather than
@@ -1672,6 +1708,12 @@ function finAprPill(r) {
   }
   if (r.status === 'rejected') {
     return `<span class="fin-apr-pill is-no">${escapeHtml(cuT('Not approved', '已拒绝'))}</span>`;
+  }
+  // §90. NOT `is-no` — a voided claim was legitimately approved and later
+  // reversed, which is a different fact from having been refused from the
+  // start, so it gets the neutral pill rather than Brick's refusal colour.
+  if (r.status === 'voided') {
+    return `<span class="fin-apr-pill">${escapeHtml(cuT('Voided', '已作废'))}</span>`;
   }
   return `<span class="fin-apr-pill">${escapeHtml(cuT('Waiting', '待审批'))}</span>`;
 }
