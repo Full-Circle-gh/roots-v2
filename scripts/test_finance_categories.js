@@ -321,8 +321,13 @@ it('the sub-view exists, and the range bar leaves with it', () => {
   assert.match(HTML, /data-sub="categories"/);
   assert.match(HTML, /id="fin-cats"/);
   assert.match(CLIENT_CODE, /const isCats = which === 'categories';/);
-  assert.match(CLIENT_CODE, /if \(bar\) bar\.hidden = isCats;/);
-  // Three panes, and Summary must not be left showing underneath a third one.
+  // THE FACT, NOT THE LINE. This pinned `bar.hidden = isCats;` exactly, so
+  // §87 step three's Approvals pane — which hides the bar for its own reason, a
+  // queue having no window either — failed a test about Categories while
+  // changing nothing Categories does. The assertion now says what it means: the
+  // range bar's hidden state is driven by isCats, whatever else joins it.
+  assert.match(CLIENT_CODE, /if \(bar\) bar\.hidden = [^;]*\bisCats\b[^;]*;/);
+  // Summary must not be left showing underneath any later pane.
   assert.match(CLIENT_CODE, /stair\.hidden = isTx \|\| isCats/);
 });
 

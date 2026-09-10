@@ -14649,6 +14649,95 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   margin: 4px 0 0; font: 400 13px/1.6 var(--f-sans); color: var(--td-text2);
 }
 
+/* ── the approval queue (§87 step three) ─────────────────────────────────────
+   Finance's fourth sub-view, built from Transactions' own card and table so the
+   two read as one screen: .fin-tx-card, .fin-tx-table, .fin-tx-meta and the
+   right-aligned .fin-tx-num are reused verbatim rather than restyled. Only what
+   this pane has and Transactions does not gets a rule below.
+
+   FOUR COLUMNS, not Transactions' five. There is no Direction: every claim is
+   money out, and a column reading "Out" on every row is what §1.12 refuses. */
+#tab-finance .fin-apr-c-act { width: 26%; }
+/* The owed table's one wide column — Transactions' date + description added
+   together, so the amount and action columns land under the queue table's. */
+#tab-finance .fin-apr-c-who { width: 58%; }
+
+/* The three blocks stack, each with its own heading, because they are three
+   different kinds of thing: money already owed, decisions waiting, and a record.
+   §1.13a's band values, one step down for a sub-heading. */
+#tab-finance .fin-apr-owed,
+#tab-finance .fin-apr-queue,
+#tab-finance .fin-apr-done { margin-top: 32px; }
+#tab-finance .fin-apr-owed:first-child { margin-top: 24px; }
+#tab-finance .fin-apr-owed h3,
+#tab-finance .fin-apr-queue h3,
+#tab-finance .fin-apr-done h3 {
+  margin: 0; font: 500 15px/1.6 var(--f-sans); color: var(--td-text2);
+}
+/* The sentence that keeps a button honest — under the block it belongs to, in
+   the secondary voice, never inside the card. It is a note about what the
+   control does to the accounts, not a row of data. */
+#tab-finance .fin-apr-foot {
+  margin: 8px 0 0; max-width: 62ch; font: 400 13px/1.6 var(--f-sans); color: var(--td-text2);
+}
+
+#tab-finance .fin-apr-who { display: block; }
+/* Whose claim it is, when it is the approver's own (§87 part five). A quiet
+   marker, NOT a warning colour: self-approval is allowed and the record is the
+   guard, so the row states the fact rather than flagging a problem. */
+#tab-finance .fin-apr-mine {
+  display: inline-block; margin-left: 8px; padding: 0 7px; border-radius: 999px;
+  font: 500 12px/1.7 var(--f-sans); color: var(--td-text2);
+  background: var(--td-raised); border: 1px solid var(--td-border); vertical-align: 1px;
+}
+/* What they typed. Its own line under the meta rather than glued into it: a note
+   is somebody's sentence, and the meta line is a list of facts. */
+#tab-finance .fin-apr-note {
+  display: block; margin-top: 4px; font: 400 14px/1.6 var(--f-sans); color: var(--td-text);
+}
+#tab-finance .fin-apr-shotwrap { display: block; margin-top: 8px; }
+#tab-finance .fin-apr-shotbtn { padding: 3px 12px; font-size: 13px; }
+
+/* The receipt, in a row of its own spanning the table. Capped in height so a
+   tall photograph cannot push the next claim off the screen, and `contain` so a
+   phone snap is never cropped — the point of it is that it can be read. */
+#tab-finance .fin-apr-shot td { background: var(--td-raised); }
+#tab-finance .fin-apr-shot img {
+  display: block; max-width: 420px; max-height: 320px; width: 100%;
+  object-fit: contain; border-radius: 10px; border: 1px solid var(--td-border);
+  background: var(--td-surface);
+}
+#tab-finance .fin-apr-shoterr { font: 400 14px/1.6 var(--f-sans); color: var(--td-text2); }
+
+/* The actions column. Approve is the CTA and Reject is beside it as a plain
+   control — refusing a ¥38 taxi is an ordinary decision, and a danger-red button
+   would make an approver hesitate over the one they are meant to make. */
+#tab-finance .fin-apr-act { text-align: right; }
+#tab-finance .fin-apr-acts { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+#tab-finance .fin-apr-acts .fin-cta,
+#tab-finance .fin-apr-acts .fin-btn-sec { padding: 4px 14px; font-size: 14px; }
+#tab-finance .fin-apr-act button[disabled] { opacity: .55; cursor: default; }
+
+/* A decided claim's pill. THREE STATES AND NOT TWO: approved-and-settled is
+   finished, approved-and-still-owed is not, and one word for both would report a
+   debt as paid. §1.10 — Sage for done, Amber for outstanding, Brick for refused. */
+#tab-finance .fin-apr-pill {
+  display: inline-block; padding: 1px 10px; border-radius: 999px;
+  font: 500 13px/1.7 var(--f-sans); color: var(--td-text2);
+  background: var(--td-raised); border: 1px solid var(--td-border); white-space: nowrap;
+}
+#tab-finance .fin-apr-pill.is-ok   { background: var(--td-sage-tint);  color: var(--td-sage-ink);  border-color: transparent; }
+#tab-finance .fin-apr-pill.is-owed { background: var(--td-amber-tint); color: var(--td-amber-ink); border-color: transparent; }
+#tab-finance .fin-apr-pill.is-no   { background: var(--td-brick-tint); color: var(--td-brick-ink); border-color: transparent; }
+
+/* The sub-view dot. The shared .tab-badge is red and pulses by default — that is
+   the storefront alarm, and this is not one. Same correction the rail already
+   makes for itself at `.tabs .tab-badge`: calm Amber, no animation. A claim
+   waiting on you is attention, not an error (§1.10). */
+#tab-finance .fin-subviews .tab-badge {
+  background: var(--td-amber); animation: none; box-shadow: none; vertical-align: 2px;
+}
+
 /* ── the expense-category list (§87 part two) ─────────────────────────────── */
 #tab-finance .fin-cats-intro {
   margin: 16px 0 0; max-width: 62ch; font: 400 15px/1.6 var(--f-sans); color: var(--td-text2);
