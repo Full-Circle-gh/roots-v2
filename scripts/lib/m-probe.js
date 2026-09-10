@@ -16,7 +16,13 @@
  *     window, so a parent frame cannot reach it.
  *
  * A case is [name, setupJs, [[label, exprJs], …]]. Inside setup and exprs you
- * have the app's own globals plus txt(id) → that element's innerText.
+ * have the app's own globals plus txt(id) → that element's innerText,
+ * sheetText() → the open sheet's, and dialText() → the Quick actions dial's.
+ *
+ * dialText() is there for the same reason sheetText() is: the shortcuts are not
+ * inside #content any more — they rise out of the floating button, which is a
+ * sibling of the scroller — so a probe that reads #content for them is reading
+ * the wrong element and would pass whatever the dial did.
  */
 'use strict';
 
@@ -98,6 +104,7 @@ function run(label, cases, opts) {
       var out=[];
       function txt(id){ var el=document.getElementById(id); return el?el.innerText:''; }
       function sheetText(){ var el=document.querySelector('.sheet'); return el?el.innerText:''; }
+      function dialText(){ var el=document.querySelector('.dial'); return el?el.innerText:''; }
       try{ ${setup} }catch(e){ document.title='BAD setup threw: '+e.message; return; }
       var names=${JSON.stringify(checks.map((c) => c[0]))};
       var fns=[${checks.map((c) => `function(){return (${c[1]})}`).join(',')}];

@@ -139,6 +139,10 @@ function buildCases(src) {
     // The Quick actions picker, in both states that lay out differently: room
     // for more, and the six-row ceiling with every add row dimmed.
     'sheet:quick': "APP.cmd('tab','home');APP.cmd('quickEdit')",
+    // And the dial the shortcuts themselves now rise out of — full, and empty,
+    // where the only row is the one that offers to fill it.
+    'dial:quick': "APP.cmd('tab','home');APP.cmd('fabToggle')",
+    'dial:quick-empty': "state.quick=[];APP.cmd('tab','home');APP.cmd('fabToggle')",
     'sheet:quick-full': "state.quick=['inbox','purchasing','tab:products','waste','delivery','invoices'];APP.cmd('tab','home');APP.cmd('quickEdit')",
     // The two writes the phone gained: one store on one channel, and coming
     // back from holiday mode. Both render their confirm as well as their sheet.

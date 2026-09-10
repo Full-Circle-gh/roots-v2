@@ -53,17 +53,21 @@ const CASES = [
     ['in Chinese too',     `(function(){ APP.cmd('toggleLang'); var zh=txt('content'); APP.cmd('toggleLang');
        return zh.indexOf('营收（全渠道）')>=0 && zh.indexOf('较平常日 +12%')>=0; })()`],
   ]],
-  ['quick actions are things the phone can actually do', `APP.cmd('tab','home');`, [
+  ['quick actions are things the phone can actually do', `APP.cmd('tab','home'); APP.cmd('fabToggle');`, [
     // Each of these opens a screen that performs the action named.
-    ['answer the inbox',       `txt('content').includes('Answer the inbox')`],
-    ['tick a delivery in',     `txt('content').includes('Tick a delivery in')`],
-    ['fix a price or a count', `txt('content').includes('Fix a price or a count')`],
-    ['no "Add product"',       `!txt('content').includes('Add product')`],
-    ['no "Create coupon"',     `!txt('content').includes('Create coupon')`],
-    ['no "Send broadcast"',    `!txt('content').includes('Send broadcast')`],
+    ['answer the inbox',       `dialText().includes('Answer the inbox')`],
+    ['tick a delivery in',     `dialText().includes('Tick a delivery in')`],
+    ['fix a price or a count', `dialText().includes('Fix a price or a count')`],
+    ['no "Add product"',       `!dialText().includes('Add product')`],
+    ['no "Create coupon"',     `!dialText().includes('Create coupon')`],
+    ['no "Send broadcast"',    `!dialText().includes('Send broadcast')`],
     // …and they are only the DEFAULT. An operator who never opens the picker
-    // keeps exactly these three; the row that changes that is on the heading.
-    ['with a way to change them', `txt('content').includes('Edit')`],
+    // keeps exactly these three; the row that changes that is the last one in
+    // the dial, where the section's Edit link used to be on the heading.
+    ['with a way to change them', `dialText().includes('Edit')`],
+    // And Home itself is shorter for it — the section is gone, not duplicated.
+    ['Home no longer carries the rows', `!txt('content').includes('Answer the inbox')`],
+    ['nor the heading',                 `!txt('content').includes('Quick actions')`],
   ]],
   // waiting_since, the column /dashboard/ops actually returns — placed_at here
   // meant the age line never rendered and the sub-line assertions below could
@@ -110,22 +114,22 @@ CASES.push(['the picker offers what this role can reach', `APP.cmd('tab','home')
   ['destinations are offered too',          `sheetText().includes('Destinations') && sheetText().includes('Customers')`],
   ['and a way back to the defaults',        `sheetText().includes('Back to the suggested three')`],
 ]]);
-CASES.push(['adding one puts it on Home', `APP.cmd('tab','home'); APP.cmd('quickEdit');
-  APP.cmd('quickToggle','waste'); APP.cmd('quickClose');`, [
-  ['the new row is there',    `txt('content').includes('Waste')`],
-  ['beside the old ones',     `txt('content').includes('Answer the inbox')`],
+CASES.push(['adding one puts it in the dial', `APP.cmd('tab','home'); APP.cmd('quickEdit');
+  APP.cmd('quickToggle','waste'); APP.cmd('quickClose'); APP.cmd('fabToggle');`, [
+  ['the new row is there',    `dialText().includes('Waste')`],
+  ['beside the old ones',     `dialText().includes('Answer the inbox')`],
   ['and it is last, where it was added',
-   `txt('content').indexOf('Waste') > txt('content').indexOf('Fix a price or a count')`],
+   `dialText().indexOf('Waste') > dialText().indexOf('Fix a price or a count')`],
 ]]);
-CASES.push(['removing one takes it off Home', `APP.cmd('tab','home');
-  APP.cmd('quickToggle','inbox'); render();`, [
-  ['gone',                    `!txt('content').includes('Answer the inbox')`],
-  ['the others stay',         `txt('content').includes('Tick a delivery in')`],
+CASES.push(['removing one takes it out of the dial', `APP.cmd('tab','home');
+  APP.cmd('quickToggle','inbox'); render(); APP.cmd('fabToggle');`, [
+  ['gone',                    `!dialText().includes('Answer the inbox')`],
+  ['the others stay',         `dialText().includes('Tick a delivery in')`],
 ]]);
 CASES.push(['the order is the operator’s', `APP.cmd('tab','home');
-  APP.cmd('quickMove','receiving',-1); render();`, [
+  APP.cmd('quickMove','receiving',-1); render(); APP.cmd('fabToggle');`, [
   ['moved above the one it followed',
-   `txt('content').indexOf('Tick a delivery in') < txt('content').indexOf('Answer the inbox')`],
+   `dialText().indexOf('Tick a delivery in') < dialText().indexOf('Answer the inbox')`],
   ['and the top row cannot climb further',
    `(function(){ APP.cmd('quickMove','receiving',-1); return state.quick[0]==='receiving'; })()`],
 ]]);
@@ -134,19 +138,19 @@ CASES.push(['the order is the operator’s', `APP.cmd('tab','home');
 // a delivery in" and "Receiving" — two rows, one job, and the verb on the order
 // list rather than on the screen that performs it.
 CASES.push(['the delivery row is not two rows', `APP.cmd('tab','home');
-  state.quick=['receiving','purchasing']; render();`, [
-  ['the verb is on Receiving',   `txt('content').includes('Tick a delivery in')`],
-  ['and Purchasing is Purchasing', `txt('content').includes('Purchasing')`],
-  ['so neither row is called Receiving', `!txt('content').includes('Receiving')`],
+  state.quick=['receiving','purchasing']; render(); APP.cmd('fabToggle');`, [
+  ['the verb is on Receiving',   `dialText().includes('Tick a delivery in')`],
+  ['and Purchasing is Purchasing', `dialText().includes('Purchasing')`],
+  ['so neither row is called Receiving', `!dialText().includes('Receiving')`],
   ['and the verb opens the receiving list',
    `(function(){ APP.cmd('push','receiving'); return state.stack[state.stack.length-1].route==='receiving'; })()`],
 ]]);
 CASES.push(['six is the ceiling', `APP.cmd('tab','home');
   state.quick=['inbox','purchasing','tab:products','waste','delivery','invoices']; render();
-  APP.cmd('quickToggle','coupons');`, [
+  APP.cmd('quickToggle','coupons'); APP.cmd('fabToggle');`, [
   ['the seventh is refused',  `state.quick.length===6`],
   ['and it says why',         `!!state.toast`],
-  ['the six still render',    `txt('content').includes('Invoices') && txt('content').includes('Delivery')`],
+  ['the six still render',    `dialText().includes('Invoices') && dialText().includes('Delivery')`],
 ]]);
 // A KEY THAT NO LONGER RESOLVES MUST NOT HOLD A SLOT ON HOME. The stored list
 // is KEYS, and one whose screen has been retired (kitchenpending, folded into
@@ -156,11 +160,11 @@ CASES.push(['six is the ceiling', `APP.cmd('tab','home');
 // ones. An operator with four rows on Home was told six was the most that fits
 // and given nothing to remove: the two eating the slots were invisible, and
 // "Back to the suggested three" was the only way out.
-CASES.push(['a retired shortcut does not hold a slot on Home', `APP.cmd('tab','home');
+CASES.push(['a retired shortcut does not hold a slot in the dial', `APP.cmd('tab','home');
   state.quick=['waste','receiving','tab:products','inbox','kitchenpending','gone:nowhere'];
-  render(); APP.cmd('quickToggle','coupons');`, [
+  render(); APP.cmd('quickToggle','coupons'); APP.cmd('fabToggle');`, [
   ['only the live rows are drawn', `quickRows().length===5`],
-  ['the new one among them',       `txt('content').includes('Coupons')`],
+  ['the new one among them',       `dialText().includes('Coupons')`],
   ['nothing said it was full',     `!state.toast`],
   ['and the retired key is still stored', `state.quick.indexOf('kitchenpending')>=0`],
 ]]);
@@ -168,34 +172,34 @@ CASES.push(['a retired shortcut does not hold a slot on Home', `APP.cmd('tab','h
 // neither fills it nor lifts it.
 CASES.push(['six drawn rows is still the ceiling', `APP.cmd('tab','home');
   state.quick=['inbox','kitchenpending','purchasing','tab:products','waste','delivery','invoices'];
-  render(); APP.cmd('quickToggle','coupons');`, [
+  render(); APP.cmd('quickToggle','coupons'); APP.cmd('fabToggle');`, [
   ['the seventh is refused',  `quickRows().length===6 && state.quick.indexOf('coupons')<0`],
   ['and it says why',         `!!state.toast`],
-  ['the six still render',    `txt('content').includes('Invoices') && txt('content').includes('Delivery')`],
+  ['the six still render',    `dialText().includes('Invoices') && dialText().includes('Delivery')`],
 ]]);
 // Whatever is in storage, Home draws at most six. A list that grew past the cap
 // on another build is trimmed at the point the rows are resolved, not by
 // deleting keys off the phone.
-CASES.push(['Home draws no more than six however many are stored', `APP.cmd('tab','home');
+CASES.push(['the dial draws no more than six however many are stored', `APP.cmd('tab','home');
   state.quick=['inbox','purchasing','tab:products','waste','delivery','invoices','coupons'];
-  render();`, [
+  render(); APP.cmd('fabToggle');`, [
   ['six rows',                `quickRows().length===6`],
-  ['the seventh is not drawn', `!txt('content').includes('Coupons')`],
+  ['the seventh is not drawn', `!dialText().includes('Coupons')`],
   ['and it is not erased',    `state.quick.indexOf('coupons')>=0`],
 ]]);
 // Move works on the rows the operator can SEE. Stepping a row over a stored key
 // that draws nothing used to look like a dead button: the key moved one place
 // in storage and Home repainted identically.
 CASES.push(['a move steps over what is not drawn', `APP.cmd('tab','home');
-  state.quick=['inbox','kitchenpending','waste']; render(); APP.cmd('quickMove','waste',-1);`, [
+  state.quick=['inbox','kitchenpending','waste']; render(); APP.cmd('quickMove','waste',-1); APP.cmd('fabToggle');`, [
   ['the row actually moves',
-   `txt('content').indexOf('Waste') < txt('content').indexOf('Answer the inbox')`],
+   `dialText().indexOf('Waste') < dialText().indexOf('Answer the inbox')`],
   ['and the key that draws nothing is still stored',
    `state.quick.indexOf('kitchenpending')>=0`],
 ]]);
-CASES.push(['an emptied list stays empty', `APP.cmd('tab','home'); state.quick=[]; render();`, [
-  ['no rows',                 `!txt('content').includes('Answer the inbox')`],
-  ['it offers to fill itself', `txt('content').includes('Choose your shortcuts')`],
+CASES.push(['an emptied list stays empty', `APP.cmd('tab','home'); state.quick=[]; render(); APP.cmd('fabToggle');`, [
+  ['no rows',                 `!dialText().includes('Answer the inbox')`],
+  ['it offers to fill itself', `dialText().includes('Choose your shortcuts')`],
   // The defaults must not creep back in on the next read — an operator who
   // cleared the list cleared it.
   ['and the defaults do not creep back', `(function(){ return quickKeys().length===0; })()`],
@@ -209,15 +213,68 @@ CASES.push(['the choice is remembered on this phone', `APP.cmd('tab','home'); AP
      if(raw==null) return true; state.quick=null; return quickKeys().indexOf('waste')>=0; })()`],
 ]]);
 CASES.push(['a shortcut to a screen the role lost just drops off', `APP.cmd('tab','home');
-  state.quick=['inbox','waste']; state.caps=['dashboard:view','reviews:view']; render();`, [
-  ['the one it can reach stays',   `txt('content').includes('Answer the inbox')`],
-  ['the one it cannot is not drawn', `!txt('content').includes('Waste')`],
+  state.quick=['inbox','waste']; state.caps=['dashboard:view','reviews:view']; render(); APP.cmd('fabToggle');`, [
+  ['the one it can reach stays',   `dialText().includes('Answer the inbox')`],
+  ['the one it cannot is not drawn', `!dialText().includes('Waste')`],
   ['and nothing was erased',       `state.quick.indexOf('waste')>=0`],
 ]]);
-CASES.push(['both halves follow the language switch', `APP.cmd('tab','home'); APP.cmd('toggleLang');`, [
-  ['the rows',    `txt('content').includes('回复消息') && txt('content').includes('改价或改库存')`],
-  ['the heading and its control', `txt('content').includes('快捷操作') && txt('content').includes('编辑')`],
+CASES.push(['both halves follow the language switch', `APP.cmd('tab','home'); APP.cmd('toggleLang'); APP.cmd('fabToggle');`, [
+  ['the rows',    `dialText().includes('回复消息') && dialText().includes('改价或改库存')`],
+  ['the row that edits them', `dialText().includes('编辑')`],
+  // The dial's own name is not drawn — it is what the button announces itself
+  // as, so it is read off the label rather than out of the text.
+  ['and the button says what it is', `(function(){ var b=document.getElementById('mFab');
+     return !!b && b.getAttribute('aria-label')==='快捷操作'; })()`],
   ['and the picker', `(function(){ APP.cmd('quickEdit'); return sheetText().includes('显示在首页'); })()`],
+]]);
+
+/* ── The button the rows now live behind ───────────────────────────────────
+   Quick actions were the last section of Home; they float over every tab
+   screen instead. These cases hold what that MOVE promised, which is a
+   different contract from the list's own (held above, unchanged): the button
+   is there without scrolling, it is there on the other tabs too, it is not
+   there over a job in progress, and taking a row puts it away. */
+CASES.push(['the button is on Home without scrolling to it', `APP.cmd('tab','home');`, [
+  ['it is there',            `!!document.getElementById('mFab')`],
+  ['outside the scroller',   `!document.getElementById('content').contains(document.getElementById('mFab'))`],
+  ['shut, with nothing open', `!dialText() && !state.quickFab`],
+  // Measured off the dock, not typed: the offset has to be a real number of
+  // pixels or the button sits under the tab bar on some phones and over the
+  // last row of a list on others.
+  ['and standing clear of the tab bar',
+   `(function(){ var v=getComputedStyle(document.getElementById('app')).getPropertyValue('--dock-h');
+      return parseFloat(v) > 0; })()`],
+]]);
+CASES.push(['the same button on the other tabs', `APP.cmd('tab','orders');`, [
+  ['Orders has it',    `!!document.getElementById('mFab')`],
+  ['and it opens the same rows', `(function(){ APP.cmd('fabToggle');
+     return dialText().includes('Answer the inbox') && dialText().includes('Tick a delivery in'); })()`],
+]]);
+/* NOT OVER A JOB IN PROGRESS. Receiving, Waste and three others carry a sticky
+   Save along their own bottom edge, and a circle floating over the control that
+   commits somebody's count is the one place here a stray tap costs real money. */
+CASES.push(['no button over a pushed screen', `APP.cmd('tab','home'); APP.cmd('push','receiving');`, [
+  ['the screen is up',   `state.stack.length===1`],
+  ['and the button is not', `!document.getElementById('mFab')`],
+  ['it comes back on the way out', `(function(){ APP.cmd('back'); return !!document.getElementById('mFab'); })()`],
+]]);
+CASES.push(['taking a row puts the dial away', `APP.cmd('tab','home'); APP.cmd('fabToggle');`, [
+  ['the dial is open',  `!!dialText()`],
+  ['the row travels',   `(function(){ APP.cmd('fabClose'); APP.cmd('push','receiving');
+     return state.stack[state.stack.length-1].route==='receiving'; })()`],
+  ['and nothing is left hanging over it', `!state.quickFab && !dialText()`],
+]]);
+CASES.push(['Back shuts the dial before it leaves the screen', `APP.cmd('tab','home'); APP.cmd('fabToggle');`, [
+  ['the dial counts as a layer', `layers().length===1`],
+  ['and Back closes it',
+   `(function(){ layers()[0](); render(); return !state.quickFab && !dialText(); })()`],
+]]);
+/* A role with nowhere to go gets no button rather than one that opens onto an
+   empty dial — the same rule the section it replaces used for its heading. */
+CASES.push(['no button for a role with nothing to shortcut to', `state.caps=[];
+  APP.cmd('tab','home'); render();`, [
+  ['the catalogue is empty', `quickCatalogue().length===0`],
+  ['and there is no button', `!document.getElementById('mFab')`],
 ]]);
 
 // opsFires evaluates every argument before add() looks at its condition, so
