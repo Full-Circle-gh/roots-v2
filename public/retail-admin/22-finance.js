@@ -88,6 +88,22 @@ function finSetRange(key) {
   finLoad();
 }
 
+// Keeps the segmented buttons truthful when the window moves some way other
+// than a click on one of them — typing into #fin-from/#fin-to and hitting
+// Apply (or Refresh) left whichever preset was clicked last still bold, over
+// a range that no longer matched it. Called wherever finSetRange is not the
+// one setting the fields, so the bar never asserts a preset the dates deny.
+function finSyncRangeButtons(from, to) {
+  const today = tdToday();
+  let key = null;
+  if (from === today && to === today) key = 'today';
+  else if (from === tdToday(-6) && to === today) key = '7';
+  else if (from === tdToday(-29) && to === today) key = '30';
+  else if (from === tdToday(-89) && to === today) key = '90';
+  document.querySelectorAll('#fin-range-seg button')
+    .forEach(b => b.classList.toggle('on', b.dataset.range === key));
+}
+
 // The echo on the title line. dashRangeLabel's shape minus its store half —
 // there is no store dimension on this screen, so naming one would be a claim.
 function finRangeLabel() {
@@ -364,6 +380,7 @@ async function finLoad(opts) {
   if (!host) return;
   const from = (document.getElementById('fin-from') || {}).value;
   const to = (document.getElementById('fin-to') || {}).value;
+  finSyncRangeButtons(from, to);
   finRangeLabel();
 
   // §1.12: the skeleton is for a REAL load only. On a refresh the current card
@@ -651,7 +668,29 @@ function finTxRender() {
         `<div class="fin-tx-tile"><div class="fin-tx-k">${escapeHtml(cuT('Money out', '支出'))}</div>`
       + `<div class="fin-tx-v">${escapeHtml(finMoney(d.totals.out))}</div></div>`
       + `<div class="fin-tx-tile"><div class="fin-tx-k">${escapeHtml(cuT('Money in', '进账'))}</div>`
-      + `<div class="fin-tx-v">${escapeHtml(finMoney(d.totals.in))}</div></div>`;
+      + `<div class="fin-tx-v">${escapeHtml(finMoney(d.totals.in))}</div>`
+      // ── WHERE THE SALES ARE ────────────────────────────────────────────
+      // Reported by Ash off the live screen, 2026-09-10: money in reads ¥0
+      // and the obvious reading is that the screen is broken. It is not —
+      // §36's *Transactions reads typed rows, not the order record* keeps
+      // orders off this list on purpose, and `income_entries` has had no row
+      // since 31 July. **The number was right and the screen said nothing**,
+      // which is the whole defect: a tile showing zero where a person expects
+      // a month of sales has to say where the sales went, or every operator
+      // who meets it re-derives the same wrong conclusion.
+      //
+      // IT IS A POINTER, NOT AN EMPTY STATE. §1.12's states are about data
+      // that is absent; this line is true at ¥0 and true at ¥3,000, because
+      // what it names — revenue living one tab away — does not change with
+      // the figure. So it renders unconditionally and is not one of the
+      // seven states.
+      //
+      // THE LABEL ABOVE IT IS UNTOUCHED. `Money in · 进账` is locked in the
+      // Finance table, and Ruling 1 reserves 收入 for Income, so renaming
+      // this tile was not available — the vocabulary amendment behind this
+      // line records the alternatives and why this one was taken.
+      + `<div class="fin-tx-tile-note">${escapeHtml(cuT('Sales revenue is on Summary', '营收见汇总'))}</div>`
+      + `</div>`;
   }
 
   const c = document.getElementById('fin-tx-chips');
