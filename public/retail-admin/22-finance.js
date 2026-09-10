@@ -88,6 +88,22 @@ function finSetRange(key) {
   finLoad();
 }
 
+// Keeps the segmented buttons truthful when the window moves some way other
+// than a click on one of them — typing into #fin-from/#fin-to and hitting
+// Apply (or Refresh) left whichever preset was clicked last still bold, over
+// a range that no longer matched it. Called wherever finSetRange is not the
+// one setting the fields, so the bar never asserts a preset the dates deny.
+function finSyncRangeButtons(from, to) {
+  const today = tdToday();
+  let key = null;
+  if (from === today && to === today) key = 'today';
+  else if (from === tdToday(-6) && to === today) key = '7';
+  else if (from === tdToday(-29) && to === today) key = '30';
+  else if (from === tdToday(-89) && to === today) key = '90';
+  document.querySelectorAll('#fin-range-seg button')
+    .forEach(b => b.classList.toggle('on', b.dataset.range === key));
+}
+
 // The echo on the title line. dashRangeLabel's shape minus its store half —
 // there is no store dimension on this screen, so naming one would be a claim.
 function finRangeLabel() {
@@ -364,6 +380,7 @@ async function finLoad(opts) {
   if (!host) return;
   const from = (document.getElementById('fin-from') || {}).value;
   const to = (document.getElementById('fin-to') || {}).value;
+  finSyncRangeButtons(from, to);
   finRangeLabel();
 
   // §1.12: the skeleton is for a REAL load only. On a refresh the current card
