@@ -3756,14 +3756,7 @@
       .cu-bar-tip .r span { color: rgba(255,255,255,.6); }
       .cu-bar-tip .r b { font-weight: 700; }
 
-      /* Top items | Addresses — 50/50, top-aligned, each its natural height. */
-      .cu-detail-pairs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s6); align-items: start; }
       @media (max-width: 720px) {
-        /* minmax(0,1fr) lets the single column shrink below its content's
-           intrinsic width — without it the Top items table's min-content forces
-           the whole track (and the address cards in it) wider than the viewport,
-           cropping the Spend column and the address Edit/Delete buttons. */
-        .cu-detail-pairs { grid-template-columns: minmax(0, 1fr); }
         /* Address modal: stack every field full-width so it fits one phone
            window. The .row fields carry desktop min-widths (140–200px) that
            otherwise refuse to shrink and force horizontal scrolling. */
@@ -3791,10 +3784,6 @@
            second line, which costs the body real estate on the narrowest
            windows. Desktop has no chevron, so there it stays. */
         #cu-drawer .cu-back-order { display: none; }
-        /* Top items is a slim 3-col table (Item/Qty/Spend) — let it fit the phone
-           width instead of inheriting the global 560px min-width, which pushed the
-           Spend column off-screen and cropped the row. */
-        .cu-detail-pairs .table-wrap > table { min-width: 0; width: 100%; }
       }
       /* Drawer section rhythm — every H3 below the stats grid gets the same
          breathing room so the address card / chart / ledger tables don't bleed
@@ -3807,7 +3796,6 @@
         margin: var(--s5) 0 var(--s3);
       }
       #cu-detail-body .card + h3,
-      #cu-detail-body .cu-detail-pairs + h3 { margin-top: var(--s6); }
       #cu-detail-body .table-wrap + h3 { margin-top: var(--s5); }
 
       /* Empty-state row inside the ledger tables — centered + softer so
@@ -3986,7 +3974,56 @@
          14px radius, 24px padding, its title inside at the top. Cards take
          their NATURAL height and top-align — neither stretches to match its
          neighbour, so an uneven bottom edge is correct. */
-      #cu-drawer .cux-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; align-items: start; }
+      /* ── Tabs ─────────────────────────────────────────────────────────
+         Overview / History / Account. The active tab is an INK underline, not
+         Dusk: Dusk means "Tacet did this for you", and an operator choosing a
+         tab is the operator working, not an automation. */
+      #cu-drawer .cux-tabs { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 24px; border-bottom: 1px solid var(--td-border); }
+      #cu-drawer .cux-tabs button { font-family: var(--f-sans); font-size: 13.5px; font-weight: 400; color: var(--text-2); background: none; border: 0; padding: 0 0 10px; cursor: pointer; }
+      #cu-drawer .cux-tabs button:hover { color: var(--text-1); }
+      #cu-drawer .cux-tabs button.on { color: var(--text-1); font-weight: 500; box-shadow: inset 0 -2px 0 var(--text-1); }
+      #cu-drawer .cux-tabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 2px; }
+      #cu-drawer .cux-pane { padding-top: 22px; }
+
+      /* ── Sections inside a pane — a hairline and a kicker, NOT a card.
+         Six bordered cards in one column was what made the old drawer read as
+         a stack of boxes; the ledger folds below have always separated
+         themselves this way and nobody ever missed a border there. */
+      #cu-drawer .cux-sec { border-top: 1px solid var(--td-border); padding-top: 18px; margin-top: 24px; }
+      #cu-drawer .cux-pane > .cux-sec:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+      #cu-drawer .cux-pane > .cux-folds:first-child { margin-top: 0; }
+
+      /* Activity's three facts as a line-up: short values do not each need a
+         118px label gutter. auto-fit so the optional Reviews cell joins the
+         row where it fits and wraps where it doesn't. */
+      #cu-drawer .cux-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
+      #cu-drawer .cux-strip > div { min-width: 0; }
+      #cu-drawer .cux-strip .k { font-size: 12px; color: var(--text-2); margin-bottom: 3px; }
+      #cu-drawer .cux-strip .v { font-size: 14.5px; font-weight: 500; color: var(--text-1); min-width: 0; overflow-wrap: anywhere; }
+      #cu-drawer .cux-strip .v.quiet, #cu-drawer .cux-strip .v.none { font-weight: 400; color: var(--text-2); }
+      #cu-drawer .cux-strip .v .muted { color: var(--text-3); font-weight: 400; }
+
+      /* ── Header: what the team knows ──────────────────────────────────
+         Tags and the note, beside the name. The editor below them is closed
+         until asked for, which is the whole reason this stopped being a card. */
+      #cu-drawer .cux-know { margin-top: 12px; }
+      #cu-drawer .cux-know .cu-tagrow { margin: 0 0 8px; }
+      /* No tags and not editing: the row goes entirely. An empty band under
+         someone's name is a gap with no explanation. */
+      #cu-drawer .cux-know.no-tags:not(.editing) .cu-tagrow { display: none; }
+      /* A chip that can delete itself on a stray click is not read-only. */
+      #cu-drawer .cux-know:not(.editing) .cu-tagchip .x { display: none; }
+      #cu-drawer .cux-know:not(.editing) .cu-tagchip { padding-right: 10px; }
+      #cu-drawer .cux-knowline { display: flex; align-items: baseline; gap: 10px; }
+      #cu-drawer .cu-noteline { flex: 1; min-width: 0; display: flex; gap: 8px; align-items: baseline; font-size: 13px; color: var(--text-2); line-height: 1.55; }
+      /* An author `display` beats the UA sheet's [hidden] { display: none },
+         so the line has to opt back out by hand — without this it stays on
+         screen while the editor is open, repeating the textarea underneath it. */
+      #cu-drawer .cu-noteline[hidden] { display: none; }
+      #cu-drawer .cu-noteline .ic { flex: none; color: var(--text-4); font-size: 11px; }
+      #cu-drawer .cu-noteline .tx { min-width: 0; overflow-wrap: anywhere; }
+      #cu-drawer #cu-note-toggle { margin-left: auto; flex: none; }
+      #cu-drawer .cu-noteedit { margin-top: 10px; }
       /* ── Notes & tags card (audit E-02) ──────────────────────────────────
          The tag row, the add field and the note share the card. The Save/Reset
          foot is hidden until something has actually changed, so the card is
@@ -4013,11 +4050,14 @@
       }
       #cu-drawer .cu-note-in:focus { outline: none; border-color: var(--accent); }
       #cu-drawer .cu-note-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+      /* PRE-EXISTING BUG, fixed here because it is the same flaw as the line
+         above and sits in the same block: the foot is toggled with .hidden and
+         is meant to appear only once something has actually changed, but an
+         author `display` outranks the UA sheet's [hidden] { display: none },
+         so Save and Reset have been showing on every open since the card
+         shipped — on a customer nobody had edited. */
+      #cu-drawer .cu-note-foot[hidden] { display: none; }
 
-      #cu-drawer .cux-card {
-        background: var(--bg-pane); border: 1px solid var(--td-border); border-radius: 14px;
-        padding: 24px; min-width: 0; align-self: start;
-      }
       #cu-drawer .cux-kicker { display: flex; align-items: baseline; gap: 8px; font-size: 13px; font-weight: 500; color: var(--text-1); letter-spacing: 0; margin-bottom: 10px; }
       #cu-drawer .cux-kicker .side { margin-left: auto; font-weight: 400; font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; }
       /* A hairline between every row inside a card. */
@@ -4038,7 +4078,7 @@
       #cu-drawer .cux-chart { margin-bottom: 26px; }
 
       /* Chart — shorter sage bars, quiet labels (tooltip singleton unchanged). */
-      #cu-drawer .cu-bar-row { height: 96px; gap: 6px; }
+      #cu-drawer .cu-bar-row { height: 52px; gap: 6px; }
       #cu-drawer .cu-bar { background: var(--tacet-sage); opacity: 1; border-radius: 5px 5px 2px 2px; max-width: 34px; margin: 0 auto; }
       #cu-drawer .cu-bar.peak { background: var(--tacet-sage-ink); }
       #cu-drawer .cu-bar.empty { background: var(--line-strong); border-radius: 2px; }
@@ -4047,7 +4087,7 @@
       /* Tables inside the drawer — sentence-case Inter headers. */
       #cu-drawer #cu-detail-body thead th { font-family: var(--f-sans); font-weight: 500; font-size: 11.5px; letter-spacing: .02em; text-transform: none; color: var(--text-2); }
 
-      /* Addresses — ONE card (see .cux-card), each address a ROW inside it
+      /* Addresses — ONE section, each address a ROW inside it
          separated by a hairline. Not a nested card: a card inside a card gave
          the drawer two competing borders and stole 30px of width per address. */
       #cu-drawer .cux-addr { padding: 9px 0; min-width: 0; }
@@ -4092,7 +4132,6 @@
          descendants of the container, never the container element itself. */
       #cu-drawer #cu-detail-body { container-type: inline-size; }
       @container (max-width: 560px) {
-        #cu-drawer .cu-detail-pairs, #cu-drawer .cux-cards { grid-template-columns: minmax(0, 1fr); }
       }
 
       /* Ledger folds — flat rows, svg chevron, right-side hint. */
@@ -4121,7 +4160,6 @@
       @media (max-width: 720px) {
         #cu-drawer .cux-snap { grid-template-columns: 1fr; }
         #cu-drawer .cux-snap > div + div { border-left: 0; border-top: 1px solid var(--line-strong); margin-top: 12px; padding-top: 12px; }
-        #cu-drawer .cux-cards { grid-template-columns: 1fr; }
         #cu-drawer .cux-head { padding-right: 0; }
       }
     </style>
