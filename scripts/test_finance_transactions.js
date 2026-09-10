@@ -824,5 +824,117 @@ it('the three new pairs are locked at v1.11, and the rest are reused', () => {
   assert.ok(CLIENT.includes('此操作无法撤销。'), 'the undo warning is reused from the product editor');
 });
 
+// ── Who put the row in the books (§92) ─────────────────────────────────────
+// Ash, off the live screen 2026-09-10: a ¥200 claim row marked Staff claim,
+// with the SPENDER named in the description (§87) and nothing anywhere saying
+// who had approved it into the accounts. `created_by` held the answer on every
+// row and no reader had ever selected it.
+console.log('\n6 · who put the row in the books');
+
+it('all three ledger reads select created_by', () => {
+  // The claim read is the one Ash reported, but the same column is written by
+  // the typed-row POST on both directions and was equally unread — CLAUDE.md:
+  // a finding is where it was found, not the extent of the problem.
+  // BY NAME, not by counting SELECTs: the PO roll-up reads expense_entries too
+  // and is deliberately NOT among these three (see the PO assertion below), so
+  // a count would either miss the point or go red the day a fourth read lands.
+  ['income', 'manual', 'claims'].forEach(name => {
+    const q = ROUTE_CODE.match(new RegExp(`const ${name} = db\\.prepare\\(\`([\\s\\S]*?)\`\\)`));
+    assert.ok(q, `the ${name} read is gone or renamed`);
+    assert.ok(/created_by/.test(q[1]), `the ${name} read does not select created_by`);
+  });
+});
+
+it('the name is resolved ONCE for the page, not once per row', () => {
+  // A 2,000-row window would otherwise fire 2,000 cross-handle queries to print
+  // a handful of distinct names.
+  assert.strictEqual((ROUTE_CODE.match(/userNames\(/g) || []).length, 1,
+    'exactly one resolve call');
+  assert.ok(/const recordedBy = userNames\(\[[\s\S]*?income\.map[\s\S]*?manual\.map[\s\S]*?claims\.map/.test(ROUTE_CODE),
+    'the ids are collected across all three lists and resolved together');
+  assert.ok(!/\.map\([^)]*userNames/.test(ROUTE_CODE), 'never inside a row map');
+});
+
+it('the lookup is the SAME one the claims route posts with', () => {
+  // §87 (v4.196): one lookup, so the name on the approver's screen and the name
+  // in the books cannot drift. A third reader in a second route file is what
+  // turned that one function into one FILE — a copy here would be exactly the
+  // second lookup §87 refused.
+  const CLAIMS = fs.readFileSync(path.join(ROOT, 'routes', 'staff-expenses.js'), 'utf8');
+  assert.ok(/require\('\.\.\/lib\/user-names'\)/.test(ROUTE_CODE),
+    'the ledger read must resolve names through the shared lib');
+  assert.ok(/require\('\.\.\/lib\/user-names'\)/.test(codeOnly(CLAIMS)),
+    'and so must the claims route — one lookup, or they drift');
+  // And neither route carries its own copy of the query.
+  [ROUTE_CODE, codeOnly(CLAIMS)].forEach(src =>
+    assert.ok(!/FROM tenant_users/.test(src), 'the query lives in the lib alone'));
+});
+
+it('reaching tenant_users did NOT weaken the global-handle rule', () => {
+  // The suite above already forbids `require('../database')` in this route,
+  // because routes/finance.js reads TENANT data off the global handle. That
+  // assertion is unchanged and still passing is the point: `tenant_users` is
+  // control-plane and has nowhere else to come from, so the read went into a
+  // lib that names the distinction — not into a relaxed assertion here.
+  assert.ok(!/require\('\.\.\/database'\)/.test(ROUTE_CODE),
+    'the route still never touches the global handle directly');
+  const LIB = codeOnly(fs.readFileSync(path.join(ROOT, 'lib', 'user-names.js'), 'utf8'));
+  assert.ok(/require\('\.\.\/database'\)/.test(LIB), 'the lib is where the control-plane read lives');
+  // Control-plane ONLY. A tenant table read off that handle is the actual bug.
+  assert.ok(!/expense_entries|income_entries|staff_expenses/.test(LIB),
+    'the lib must never read a tenant table off the global handle');
+});
+
+it('a PO row is never given a name', () => {
+  // One PO row is a COLLAPSE of several expense_entries rows with different
+  // posters; naming one would mean picking arbitrarily. Posted by Purchasing is
+  // the true answer, and the CSV column is empty for the same reason.
+  const posted = ROUTE_CODE.slice(ROUTE_CODE.indexOf('...posted.map'));
+  assert.ok(!/recorded_by/.test(posted.slice(0, posted.indexOf('}))'))),
+    'the PO row must carry no recorded_by');
+  assert.ok(/const who = !po && r\.recorded_by/.test(CLIENT_CODE),
+    'and the screen refuses to draw one');
+});
+
+it('the screen tells an approval apart from a piece of typing', () => {
+  // They are two different acts by two different people. §87 put the SPENDER in
+  // the description; this is who let the money into the accounts. One label over
+  // both would flatten an approval into typing.
+  assert.ok(/'Approved by ' \+ r\.recorded_by, '审批人 ' \+ r\.recorded_by/.test(CLIENT_CODE),
+    'the claim row must render the Approved by pair');
+  assert.ok(/'Entered by ' \+ r\.recorded_by, '录入人 ' \+ r\.recorded_by/.test(CLIENT_CODE),
+    'the typed row must render the Entered by pair');
+  assert.ok(/claim\s*\?\s*cuT\('Approved by /.test(CLIENT_CODE),
+    'the claim row gets the approval label, the typed row the other');
+});
+
+it('the two composed pairs are declared in the vocabulary', () => {
+  // Rule 4 as amended 2026-09-06: composing is delegated, composing SILENTLY is
+  // not. An undeclared string is indistinguishable from a locked one.
+  ['审批人', '录入人'].forEach(cn =>
+    assert.ok(VOCAB.includes(cn), `composed and not declared: ${cn}`));
+  // Both are built from words already live on this feature rather than minted:
+  // 审批 ships as 待审批/审批通过, 录入 as 可录入交易, and the 人 suffix is 申请人's.
+  assert.ok(VOCAB.includes('申请人'), 'the 人 suffix is lifted, not invented');
+});
+
+it('the name is escaped — it is free text out of tenant_users', () => {
+  const who = CLIENT_CODE.slice(CLIENT_CODE.indexOf('const who = !po'));
+  assert.ok(/escapeHtml\(/.test(who.slice(0, who.indexOf(": ''"))),
+    'an unescaped display_name is an injection on every ledger row');
+});
+
+it('the CSV carries the person WITHOUT disturbing the old columns', () => {
+  // `Entered by` says how the row got here; `Recorded by` says who. A
+  // spreadsheet built against the old header keeps every position it had.
+  const head = ROUTE_CODE.match(/const head = \[([^\]]*)\]/)[1];
+  const cols = head.split(',').map(c => c.trim().replace(/^'|'$/g, ''));
+  assert.deepStrictEqual(cols.slice(0, 8),
+    ['Date', 'Direction', 'Description', 'Category', 'Amount', 'Signed amount', 'Entered by', 'Purchase order'],
+    'the existing columns keep their order');
+  assert.strictEqual(cols[8], 'Recorded by', 'the person is appended, not folded in');
+  assert.ok(/r\.recorded_by \|\| ''/.test(ROUTE_CODE), 'and the row emits it');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -886,12 +886,43 @@ function finTxRow(r) {
         ? cuT('Staff claim · own money', '费用申请 · 个人支付')
         : cuT('Staff claim', '费用申请'))}</span>`
     : '';
+  /* WHO PUT THIS ROW IN THE BOOKS (§92). Reported by Ash off this screen: a
+     ¥200 claim row and no way to see who had let it into the accounts.
+
+     IT IS NOT THE NAME IN THE SUBJECT, and the two labels exist so nobody reads
+     it as one. §87 put the SPENDER in the description — `Asher · personal` is
+     who spent the money — while `created_by` has always meant who put the row
+     in the books. On a claim those are two different people doing two different
+     things, and one of them is exercising an authority: `Approved by` says so,
+     `Entered by` says the other. A single label over both would flatten an
+     approval into a piece of typing.
+
+     A PO ROW IS NOT NAMED. It is a collapse of several ledger rows and there is
+     no one person behind it — the read declines to pick one, and the row keeps
+     Posted by Purchasing, which is the true answer.
+
+     NOTHING RENDERS WHERE THE NAME DID NOT RESOLVE. A deleted account, or a row
+     typed before anyone was recorded against it, gets no meta at all rather
+     than a placeholder — §1.12 prefers an empty cell to an invented one, and
+     the live pair `Someone · 未知` belongs to the approvals queue, where the
+     name is the whole point of the column it sits in.
+
+     ESCAPED, LIKE EVERY OTHER NAME ON THIS SCREEN. It is free text somebody
+     typed into `tenant_users`. */
+  const who = !po && r.recorded_by
+    ? `<span class="fin-tx-who">${escapeHtml(claim
+        ? cuT('Approved by ' + r.recorded_by, '审批人 ' + r.recorded_by)
+        : cuT('Entered by ' + r.recorded_by, '录入人 ' + r.recorded_by))}</span>`
+    : '';
+  // The meta line is a `·`-joined list rather than a hand-built pair, so a
+  // third part cannot reintroduce the separator bug a hand-built one invites.
+  const meta = [mark, hint, who].filter(Boolean);
   // The date is the PO's own, never `created_at` — the route never selects
   // created_at, so there is nothing here that could drift onto a row.
   return `<tr class="${po || claim ? 'fin-tx-posted' : ''}">`
     + `<td class="fin-tx-date">${escapeHtml(finTxDay(r.date))}</td>`
     + `<td><span class="fin-tx-subj">${escapeHtml(finTxSubject(r))}</span>`
-    + (mark || hint ? `<span class="fin-tx-meta">${mark}${mark && hint ? ' · ' : ''}${hint}</span>` : '')
+    + (meta.length ? `<span class="fin-tx-meta">${meta.join(' · ')}</span>` : '')
     + '</td>'
     + `<td>${escapeHtml(r.kind === 'out' ? cuT('Out', '出') : cuT('In', '进'))}</td>`
     + `<td class="fin-tx-num">${escapeHtml(finTxAmount(r))}</td>`

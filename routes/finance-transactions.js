@@ -64,6 +64,11 @@
 const express = require('express');
 const { tdb } = require('../lib/tenant-db');
 const { LEDGER_DATE, resolveWindow, fen } = require('../lib/finance-window');
+// A ledger row says WHO PUT IT IN THE BOOKS (§92). `created_by` is a
+// `tenant_users` id and `tenant_users` is control-plane, so resolving it is a
+// cross-handle read — `lib/user-names.js` is the one place that does it, shared
+// with the claims route so the two cannot name the same person differently.
+const { userNames } = require('../lib/user-names');
 // The row ceiling (audit J-01). The window is the only bound this read has, and
 // a merchant widening it to "all time" is asking for every ledger row they have
 // ever entered.
@@ -268,7 +273,7 @@ function readTransactions(query, opts = {}) {
   // Typed non-sale income only: sublet space, sold equipment, grants, supplier
   // rebates (§36's own examples). Sales are not here and must not be added.
   const income = db.prepare(`
-    SELECT id, ${LEDGER_DATE} AS date, amount, category, description
+    SELECT id, ${LEDGER_DATE} AS date, amount, category, description, created_by
       FROM income_entries
      WHERE ${LEDGER_DATE} BETWEEN ? AND ?
      ORDER BY date DESC, id DESC`).all(from, to);
@@ -281,7 +286,7 @@ function readTransactions(query, opts = {}) {
   // the claim behind it was decided. §87 named this trap when the claim table
   // was designed rather than after somebody found it.
   const manual = db.prepare(`
-    SELECT id, ${LEDGER_DATE} AS date, amount, category, description
+    SELECT id, ${LEDGER_DATE} AS date, amount, category, description, created_by
       FROM expense_entries
      WHERE po_id IS NULL AND claim_id IS NULL AND ${LEDGER_DATE} BETWEEN ? AND ?
      ORDER BY date DESC, id DESC`).all(from, to);
@@ -300,7 +305,7 @@ function readTransactions(query, opts = {}) {
   // out from a failed request.
   const claims = db.prepare(`
     SELECT e.id, e.${LEDGER_DATE} AS date, e.amount, e.category,
-           e.description, e.claim_id, c.paid_by, c.settled
+           e.description, e.claim_id, e.created_by, c.paid_by, c.settled
       FROM expense_entries e
       LEFT JOIN staff_expenses c ON c.id = e.claim_id
      WHERE e.claim_id IS NOT NULL AND e.${LEDGER_DATE} BETWEEN ? AND ?
@@ -396,6 +401,32 @@ function readTransactions(query, opts = {}) {
     "SELECT name FROM categories WHERE kind = 'accounting' AND COALESCE(is_active, 1) = 1 ORDER BY sort_order, name"
   ).all().map(r => r.name);
 
+  // ── Who put each row in the books (§92) ────────────────────────────────
+  // ONE READ FOR THE WHOLE PAGE, not one per row: the ids are collected across
+  // all three lists first and resolved together. A per-row lookup over a 2,000
+  // row window would be 2,000 cross-handle queries to print maybe four distinct
+  // names.
+  //
+  // RESOLVED AT READ TIME, AND THAT IS A DEPARTURE §87 CONSIDERED AND REJECTED
+  // FOR THE OTHER NAME ON THIS ROW. v4.196 rejected read-time resolution for
+  // the SPENDER because v4.190 had placed that fact in the description, where
+  // the poster snapshots it, and resolving it again here would print it twice.
+  // Neither objection reaches this name: nothing snapshots the approver, so
+  // there is nothing to print twice, and read-time is what makes it true of
+  // every row already in the books rather than only of rows written from now
+  // on. §87's own record named this as the more robust mechanism.
+  //
+  // THE PO ROWS ARE DELIBERATELY NOT NAMED. One PO row on this screen is a
+  // COLLAPSE of several `expense_entries` rows, and `created_by` on them is
+  // whoever posted each — so there is no single person the row could name
+  // without picking one arbitrarily. It already says Posted by Purchasing,
+  // which is the true answer for a row nobody typed.
+  const recordedBy = userNames([
+    ...income.map(r => r.created_by),
+    ...manual.map(r => r.created_by),
+    ...claims.map(r => r.created_by),
+  ]);
+
   // ── One list, both directions ──
   // Sorted by date, newest first, the way the mockup draws it. `id` breaks a
   // tie so the order is stable across reloads rather than left to the engine.
@@ -406,6 +437,7 @@ function readTransactions(query, opts = {}) {
       category: r.category || null,
       amount: fen(r.amount),
       source: 'manual', po_id: null, po_number: null, categories: null,
+      recorded_by: recordedBy.get(r.created_by) || null,
     })),
     ...manual.map(r => ({
       kind: 'out', id: r.id, date: r.date,
@@ -413,6 +445,7 @@ function readTransactions(query, opts = {}) {
       category: r.category || null,
       amount: fen(r.amount),
       source: 'manual', po_id: null, po_number: null, categories: null,
+      recorded_by: recordedBy.get(r.created_by) || null,
     })),
     ...claims.map(r => ({
       kind: 'out', id: r.id, date: r.date,
@@ -428,6 +461,11 @@ function readTransactions(query, opts = {}) {
       // §90: whether the claim has already been paid back — see the note above
       // the query.
       settled: !!r.settled,
+      // WHO APPROVED IT, which on a claim row is who put it in the books —
+      // `postClaim` writes `decided_by` into `created_by` for exactly that
+      // reason. It is NOT the person in the description: that one spent the
+      // money, this one let it into the accounts.
+      recorded_by: recordedBy.get(r.created_by) || null,
     })),
     ...posted.map(r => ({
       kind: 'out', id: `po-${r.po_id}`, date: r.date,
@@ -505,7 +543,12 @@ router.get('/api/retail-admin/finance/transactions/export.csv', requireRetailAdm
   }
   try {
     const data = readTransactions(req.query, { cap: false });
-    const head = ['Date', 'Direction', 'Description', 'Category', 'Amount', 'Signed amount', 'Entered by', 'Purchase order'];
+    // `Entered by` says HOW the row got here (typed, Purchasing, a claim);
+    // `Recorded by` says WHO — §92. They are two columns because they are two
+    // facts, and folding the name into the first would lose the distinction a
+    // bookkeeper reconciling a claim actually needs. The new column goes at the
+    // END so a spreadsheet built against the old header keeps its positions.
+    const head = ['Date', 'Direction', 'Description', 'Category', 'Amount', 'Signed amount', 'Entered by', 'Purchase order', 'Recorded by'];
     const cell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
     const lines = [head.join(',')];
     for (const r of data.rows) {
@@ -522,6 +565,8 @@ router.get('/api/retail-admin/finance/transactions/export.csv', requireRetailAdm
           : r.source === 'claim' ? (r.paid_by === 'employee' ? 'Staff claim (own money)' : 'Staff claim')
           : 'Entered by hand',
         r.po_number || '',
+        // Empty on a PO row, which names no single person — see the read.
+        r.recorded_by || '',
       ].map(cell).join(','));
     }
     // The window is in the filename, not a row: a total row inside a CSV is the
