@@ -4,12 +4,18 @@
  *
  *   node scripts/test_mobile_scroll.js
  *
- * Home is a long board and the Quick actions sit at the BOTTOM of it, so
- * taking a shortcut is always a scroll to the end of Home first. The app
- * remembered one position — whichever screen was painted last — so the tap
- * that opened Receiving overwrote Home's, and Back returned to the top of a
- * board the operator had just scrolled to the end of. Every shortcut cost that
- * scroll twice.
+ * Home WAS a long board with the Quick actions at the bottom of it, so taking
+ * a shortcut was always a scroll to the end of Home first. The app remembered
+ * one position — whichever screen was painted last — so the tap that opened
+ * Receiving overwrote Home's, and Back returned to the top of a board the
+ * operator had just scrolled to the end of. Every shortcut cost that scroll
+ * twice.
+ *
+ * The shortcuts have since moved off the bottom of Home and onto the floating
+ * button, which is where that particular cost went. This suite did not: the
+ * memory is about every long screen, not about Quick actions, and the cases
+ * below force a short scroller of their own rather than leaning on Home being
+ * long. Read the paragraph above as the history that bought them.
  *
  * The claims, one case each:
  *

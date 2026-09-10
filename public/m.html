@@ -391,6 +391,65 @@ input.qsnum:focus{outline:none;border-color:var(--accent);}
 .toast{position:absolute;left:50%;transform:translateX(-50%);bottom:112px;z-index:60;background:var(--text-primary);
   color:var(--bg);padding:10px 18px;border-radius:999px;font-size:13px;white-space:nowrap;
   box-shadow:0 6px 20px rgba(17,26,43,.22);animation:tFade .2s ease both}
+/* ── The Quick actions button ──────────────────────────────────────────────
+   Quick actions used to be the LAST section of Home: six rows at the bottom of
+   a board that opens with a greeting, two tiles of figures and whatever needs
+   handling. Reaching the one an operator takes every morning was a scroll to
+   the end of the longest screen in the app — and taking it, then coming back,
+   is the whole reason scroll memory had to be built (see _scrollMem). The
+   shortcut cost more to reach than the screen it shortcuts to.
+
+   So it floats instead. One circle, bottom right, over every tab screen, and
+   the rows rise out of it.
+
+   WHERE IT SITS IS MEASURED, NOT TYPED. --dock-h is written on #app after each
+   paint (see render()) and holds the real height of the install strip plus the
+   tab bar, whichever of the two are actually there. A hard-coded offset would
+   have been right on exactly one phone and one state: the tab bar's own bottom
+   padding is env(safe-area-inset-bottom), the install strip comes and goes, and
+   a role narrowed to one screen has no tab bar at all.
+
+   DIM IS NOT DISABLED. The button settles to .45 after a few seconds of no
+   touch so it never competes with the figures underneath, and any touch or
+   scroll brings it straight back — see fabWake(). It stays exactly where it is
+   and stays tappable the whole time; nothing here moves it or takes it away.
+
+   24px OFF THE RIGHT EDGE, NOT THE 16px GUTTER THE BOARDS USE, and the extra
+   eight are the rotation's. Open, the circle turns 45°, and a square's bounding
+   box grows by half its diagonal as it turns — the visible button stays a
+   circle 24px in, but its hit box reaches 12px further out at the corners. At
+   the gutter that put the corner 4px from the screen edge, inside the strip the
+   browser's own edge-swipe gesture lives in (test_mobile_geometry.js). */
+.fab{position:absolute;right:24px;bottom:calc(var(--dock-h, 0px) + 16px);z-index:30;
+  width:56px;height:56px;flex:none;border:none;border-radius:50%;background:var(--accent);color:#fff;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  box-shadow:0 6px 20px rgba(17,26,43,.22);
+  transition:opacity .5s var(--ease-settle), transform .25s var(--ease-settle), background .2s var(--ease-settle)}
+.fab:active{background:var(--accent-press)}
+.fab.dim{opacity:.45}
+/* The same plus, turned. A + at 45° IS an ×, so the control that opens the
+   dial is the control that shuts it — one button, one place, no second icon to
+   fade between. */
+.fab.on{z-index:44;background:var(--accent-hover);transform:rotate(45deg)}
+.dial{position:absolute;right:24px;bottom:calc(var(--dock-h, 0px) + 84px);z-index:44;
+  display:flex;flex-direction:column;align-items:flex-end;gap:10px;max-width:calc(100% - 48px)}
+/* Label and icon are one button, not a pill beside a target: the label is the
+   part an operator aims at, and a 44px circle on its own is a small thing to
+   hit one-handed with a box in the other hand. */
+.dialrow{display:flex;align-items:center;gap:10px;max-width:100%;padding:0;border:none;
+  background:transparent;color:var(--text-primary);font-family:inherit;cursor:pointer;
+  animation:tDial .28s var(--ease-settle) both}
+.diallabel{min-width:0;padding:9px 14px;border-radius:999px;background:var(--surface-card);
+  border:1px solid var(--border-default);font-size:14px;line-height:1.2;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;box-shadow:0 2px 10px rgba(17,26,43,.10)}
+.dialico{width:44px;height:44px;flex:none;border-radius:50%;background:var(--surface-card);
+  border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;
+  color:var(--text-secondary);box-shadow:0 2px 10px rgba(17,26,43,.10)}
+@keyframes tDial{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+/* The dock is the strip and the bar together, and it exists to be MEASURED —
+   see --dock-h above. Nothing about the layout changes: both children were
+   already flex:none siblings of the scroller and still are, one level down. */
+.dock{flex:none}
 input,textarea{padding:12px 14px;border:1px solid var(--border-default);border-radius:8px;background:var(--surface-card);
   color:var(--text-primary);font-size:15px;width:100%}
 input:focus,textarea:focus{outline:none;border-color:var(--border-focus)}
@@ -591,6 +650,12 @@ const state = {
      picker needs it more than most, since every add, remove and move repaints
      while .sheet carries `animation:tSheetUp .4s`. */
   quick:null, quickSheet:false, quickMounted:false,
+  /* quickFab is the floating button's dial — the pills, open or shut. It is
+     NOT a sheet and deliberately not one: the whole point of the button is
+     that it sits over the screen the operator is already on rather than
+     covering it, so the dial is a layer of its own, closed by Back and by the
+     scrim like every other, and by taking one of its own rows. */
+  quickFab:false,
   /* Installed-app state. canInstall is set by the browser telling us it would
      offer an install (beforeinstallprompt); installBar is the strip that says
      so, dismissible and remembered; installSheet is the iOS walkthrough, which
@@ -2960,6 +3025,75 @@ reg('quickMove', (key,dir)=>{
   state.quick=list; quickSave(); render();
 });
 reg('quickReset', ()=>{ state.quick=QUICK_DEFAULT.slice(); quickSave(); render(); });
+
+/* ── The button itself ─────────────────────────────────────────────────────
+   The rows are the same rows, resolved by the same quickRows(); only where
+   they are drawn has changed. Everything the picker knows still holds — the
+   cap, the order, the keys that outlive a screen — because nothing below
+   touches any of it.
+
+   WHY IT IS NOT ON A PUSHED SCREEN. It rides the five tab screens and stops
+   there. A pushed screen is a job in progress — receiving a delivery, writing
+   off waste, taking an order — and five of them carry a sticky Save or Record
+   bar along their own bottom edge. A circle floating over the button that
+   commits somebody's count is the one place in this app a stray tap costs
+   real money. Coming back is one Back press; the button is there again.
+
+   AND NOT WHEN THERE IS NOWHERE TO GO. A role narrowed to Home alone has an
+   empty catalogue, so it gets no button rather than a button that opens an
+   empty dial — the same rule the section it replaces used for its heading. */
+const FAB_IDLE=4200;
+let _fabDim=false, _fabT=0, _fabWoke=0, _fabArmed=false;
+function fabShows(){ return !state.stack.length && quickCatalogue().length>0; }
+/* The class is toggled on the LIVE element rather than by repainting. The
+   whole app is one innerHTML, and a render fired every few seconds to fade one
+   circle would throw away every scroll position and input focus on the screen
+   to do it. The dim state is carried in a variable so the next real paint
+   draws it correctly (see fabHtml), and the fade in between is this one line. */
+function fabPaint(){ const el=document.getElementById('mFab');
+  if(el) el.classList.toggle('dim', _fabDim && !state.quickFab); }
+/* Any touch, any scroll. Guarded on the clock because a scroll fires this on
+   every frame of a flick and re-arming a timer sixty times a second is work
+   for nothing — while the button is already bright and the timer already
+   fresh, the wake is a no-op. */
+function fabWake(){
+  const now=Date.now();
+  _fabArmed=true;
+  if(!_fabDim && now-_fabWoke<250) return;
+  _fabWoke=now;
+  if(_fabDim){ _fabDim=false; fabPaint(); }
+  clearTimeout(_fabT);
+  _fabT=setTimeout(()=>{ _fabDim=true; fabPaint(); }, FAB_IDLE);
+}
+document.addEventListener('pointerdown',fabWake,true);
+document.addEventListener('scroll',fabWake,true);
+reg('fabToggle', ()=>{ state.quickFab=!state.quickFab; fabWake(); render(); });
+reg('fabClose', ()=>{ state.quickFab=false; render(); });
+/* THE DIAL READS TOP-DOWN, in the operator's own order — the same order the
+   picker lists them in and the same one Move up and Move down speak about. The
+   nearest-the-thumb-first arrangement a phone usually uses would have made
+   "Move up" send a row DOWN the dial, which is a worse trade than the reach it
+   buys. Edit sits last, closest to the button, because it is the one row here
+   that is about the list rather than in it.
+   The pills arrive bottom-first all the same: the stack unrolls out of the
+   button it came from rather than landing from nowhere. */
+function fabHtml(){
+  if(!fabShows()) return '';
+  const rows=quickRows(), open=state.quickFab, n=rows.length+1;
+  const item=(i,icon,label,cmd,muted)=>`<button class="dialrow" role="menuitem" style="animation-delay:${((n-1-i)*.03).toFixed(2)}s" onclick="${cmd}">
+      <span class="diallabel"${muted?' style="color:var(--text-secondary)"':''}>${label}</span>
+      <span class="dialico">${ic(icon)}</span></button>`;
+  const dial = open ? `<div class="scrim" style="z-index:43;background:rgba(17,26,43,.30)" onclick="APP.scrimClose('fabClose')"></div>
+    <div class="dial" role="menu" aria-label="${escAttr(T('Quick actions','快捷操作'))}">
+      ${rows.map((q,i)=>item(i,q.icon,quickLabel(q),`APP.cmd('fabClose');${q.cmd}`,false)).join('')}
+      ${item(rows.length, rows.length?'pencil':'plus',
+             rows.length?T('Edit','编辑'):T('Choose your shortcuts','选择您的快捷方式'),
+             "APP.cmd('fabClose');APP.cmd('quickEdit')", true)}
+    </div>` : '';
+  return dial + `<button class="fab${open?' on':''}${(!open&&_fabDim)?' dim':''}" id="mFab"
+    aria-label="${escAttr(T('Quick actions','快捷操作'))}" aria-expanded="${open?'true':'false'}"
+    onclick="APP.cmd('fabToggle')">${ic('plus',26,2)}</button>`;
+}
 /* The picker. Chosen rows sit at the top in the order Home draws them, each
    with the two controls a phone can do this with — move and remove; everything
    still available is grouped underneath exactly as More groups it, so the
@@ -3024,12 +3158,12 @@ function screenHome(){
      first screen the app opens. Nothing else in the app was in a worse place
      to be inventing money. A tile with no figure yet says so. */
   const kpis = state.liveKpis;
-  /* Whatever this operator put here — see the block above quickCatalogue().
-     Defaults to the three the phone can genuinely do in one tap. */
-  const quick=quickRows();
-  /* A role narrowed to nothing but Home has nothing to shortcut TO, so the
-     section and its Edit button both go rather than offering an empty picker. */
-  const quickAny=quickCatalogue().length>0;
+  /* QUICK ACTIONS ARE NOT DRAWN HERE ANY MORE. They were the last section of
+     this board — see the note over the .fab rule in the CSS for why six rows
+     at the bottom of the longest screen in the app was the wrong place for
+     them. They float over every tab screen now, this one included, and Home
+     ends where its figures end. Nothing about the LIST changed: same rows,
+     same order, same picker, same six. */
   /* The shop's day, not the handset's — this line sits under the greeting and
      names the day every other number on the screen is counted over. */
   const dateLine = tdWhen(new Date(),'weekday',_tdL());
@@ -3053,18 +3187,6 @@ function screenHome(){
           <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>`:''}
     ${todayBlock(kpis)}
     ${vitalsBlock()}
-    ${quickAny?`<div class="rise" style="animation-delay:.18s">
-      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:2px 4px 8px">
-        <span style="font-size:18px;font-weight:500">${T('Quick actions','快捷操作')}</span>
-        <button onclick="APP.cmd('quickEdit')" style="flex:none;background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;color:var(--text-primary)">${T('Edit','编辑')}</button></div>
-      ${quick.length?`<div class="list">${quick.map((q,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
-        <button class="row" onclick="${q.cmd}"><span class="rowico">${ic(q.icon)}</span>
-        <span style="flex:1;font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${quickLabel(q)}</span>
-        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div>`
-      : `<div class="list"><button class="row" onclick="APP.cmd('quickEdit')">
-          <span class="rowico">${ic('plus')}</span>
-          <span style="flex:1;font-size:15px;color:var(--text-secondary)">${T('Choose your shortcuts','选择您的快捷方式')}</span>
-          <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button></div>`}</div>`:''}
   </div>`;
 }
 
@@ -14849,7 +14971,11 @@ function screenKey(){ return state.tab+'|'+state.stack.map(f=>f.route).join('>')
    took, which is the exact cost the note below was written to remove.
    A map keeps the position of the screen underneath while the pushed one is
    open, so Back puts Home back exactly where it was, and the same holds for a
-   tab left and returned to. */
+   tab left and returned to.
+   HISTORY, NOT A CURRENT POSITION: the Quick actions have since moved off the
+   bottom of Home and onto the floating button, so that particular scroll is
+   gone. The map stays — it is about every screen long enough to lose a place,
+   and Receiving is still the one that made it unusable without it. */
 const _scrollMem=Object.create(null);
 let _scrollKey='';
 /* A screen that is CLOSED forgets where it was. Pushing Receiving a second
@@ -14954,7 +15080,8 @@ function render(){
      it takes its own room instead of covering the last row of a list. */
   let html = pullRing()
     + `<div class="content" id="content"${state.refreshing?' style="transform:translateY(var(--pull-gap));transition:transform .3s var(--ease-settle)"':''}>${bodyHtml()}</div>`
-    + installStrip() + tabbar();
+    + `<div class="dock" id="mDock">${installStrip()}${tabbar()}</div>`
+    + fabHtml();
   if(state.installSheet) html += sheetInstall();
   if(state.overflow) html += sheetOverflow();
   if(state.ask) html += sheetAsk();
@@ -14970,6 +15097,18 @@ function render(){
   if(state.search) html += sheetSearch();
   if(state.toast) html += `<div class="toast">${state.toast}</div>`;
   app.innerHTML = html;
+  /* WHERE THE FLOATING BUTTON SITS, measured off the dock that was just
+     written — the install strip plus the tab bar, whichever of the two are
+     actually on screen. Read HERE rather than on a frame of its own: this is
+     the same tick as the innerHTML above, so the button is painted at its
+     final height and never lands in the corner first and jumps. */
+  const _dock=document.getElementById('mDock');
+  app.style.setProperty('--dock-h', (_dock?_dock.offsetHeight:0)+'px');
+  /* The idle fade starts counting the first time the button is actually on the
+     glass — not at boot, which is before /me has said whether this operator
+     has one, and not on every paint, which would keep waking it while a poll
+     answered in the background. */
+  if(!_fabArmed && document.getElementById('mFab')) fabWake();
   if(_keep){ const c=document.getElementById('content');
     if(c){ c.scrollTop=_keep;
       // What the scroller ACCEPTED, not what was asked of it: a screen still
@@ -15145,6 +15284,10 @@ function layers(){
   if(state.productSku) L.push(()=>{ state.productSku=null; });
   if(state.poId!=null) L.push(()=>{ state.poId=null; });
   if(state.chanSheet) L.push(()=>{ state.chanSheet=null; });
+  /* Below the picker on purpose: taking Edit out of the dial closes the dial
+     and opens the sheet, so the two are never both open — but if they ever
+     were, the sheet is the one on top and the one Back must close first. */
+  if(state.quickFab) L.push(()=>{ state.quickFab=false; });
   if(state.quickSheet) L.push(()=>{ state.quickSheet=false; });
   if(state.reply!=null) L.push(()=>{ state.reply=null; });
   if(state.detailActions) L.push(()=>{ state.detailActions=false; });
