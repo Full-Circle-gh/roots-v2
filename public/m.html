@@ -10129,7 +10129,7 @@ function aprRow(r){
   // the marker silently never appeared.
   const mine=!!r.mine;
   const bits=[fmtDateOnly(r.date)];
-  if(r.category) bits.push(r.category);
+  if(r.category) bits.push(catLabel(r.category));
   bits.push(own?T('own money','个人支付'):T('company','公司'));
   const busy=a.busy===r.id;
   return `<div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
@@ -10238,10 +10238,81 @@ function screenApprovals(){
 }
 reg('aprRetry', ()=>{ const a=state.apr; a.tried=false; a.err=''; a.rows=null; render(); aprLoad(); });
 
+/* ── A CATEGORY IS DATA, NOT A LOCKED PAIR ─────────────────────────────────
+   PORTED FROM `public/retail-admin/22-finance.js` (finCatSplit / finCatLabel /
+   finCatLabels), which carries the full argument. It is copied rather than
+   shared because that file is a retail-admin bundle and this one is a standalone
+   document; the two are held to one answer by
+   `scripts/test_staff_expenses.js`, which runs both over the same values.
+
+   THE DEFECT THIS FIXES, reported by Ash from the live screen: the English UI
+   rendered `Logistics&Delivery 物流与配送费用` — both languages at once, in the
+   one place on this screen that `T()` cannot reach. Every other bilingual thing
+   here is a locked pair; a category is a value the tenant typed, held as ONE
+   free-text column with both halves glued into it (§36).
+
+   IT REFUSES TO GUESS. A value splits only when its Latin letters and its CJK
+   sit in two contiguous runs, in either order. Anything interleaved, or carrying
+   only one language (`销货成本`, `Rent`), renders WHOLE in both languages:
+   showing half of a name that has no other half is worse than showing a word the
+   reader does not need. */
+const CAT_CJK=/[\u2e80-\u9fff\u3000-\u303f\uf900-\uffef]/;
+const CAT_LAT=/[A-Za-z]/;
+function catSplit(value){
+  const str=String(value==null?'':value);
+  const chars=Array.from(str);
+  let firstCjk=-1,lastCjk=-1,firstLat=-1,lastLat=-1;
+  chars.forEach((ch,i)=>{
+    if(CAT_CJK.test(ch)){ if(firstCjk<0) firstCjk=i; lastCjk=i; }
+    else if(CAT_LAT.test(ch)){ if(firstLat<0) firstLat=i; lastLat=i; }
+  });
+  if(firstCjk<0||firstLat<0) return null;              // only one language
+  let en,cn;
+  if(lastLat<firstCjk){ en=chars.slice(0,firstCjk).join(''); cn=chars.slice(firstCjk).join(''); }
+  else if(lastCjk<firstLat){ cn=chars.slice(0,firstLat).join(''); en=chars.slice(firstLat).join(''); }
+  else return null;                                     // interleaved — do not guess
+  en=en.trim(); cn=cn.trim();
+  return (en&&cn)?{en:en,cn:cn}:null;
+}
+/** The half for the live language. Falls back to the whole value, never to ''. */
+function catLabel(value){
+  const pair=catSplit(value);
+  if(!pair) return String(value==null?'':value);
+  return LANG==='en'?pair.en:pair.cn;
+}
+/* The labels for a SET, with the collision rule applied. Two stored values whose
+   halves read the same in this language — `Rent 房租` and `Rent 租金` — would
+   draw two rows nobody can tell apart, which is §36's three-rent-payments defect
+   arriving through the display instead of the data. **Both then render whole.**
+   The live list holds two such pairs (`市场推广费用` / `营销 Marketing`, and the
+   two spellings of `低值易耗品`), so this is not hypothetical here. */
+function catLabels(list){
+  const map=new Map(), claims=new Map();
+  for(const v of list){
+    if(v==null||map.has(v)) continue;
+    const label=catLabel(v);
+    map.set(v,label);
+    claims.set(label,(claims.get(label)||0)+1);
+  }
+  for(const [v,label] of map) if(claims.get(label)>1) map.set(v,String(v));
+  return map;
+}
+
 /* The claim's own day. Defaults to the phone's today and is changeable — a
    receipt found in a coat pocket on Thursday was still spent on Tuesday, and a
    date nobody can correct is how it gets filed in the wrong month. */
 function expDate(){ return state.exp.date || shopToday(); }
+
+/* A STORE NAME IS TWO COLUMNS, and the live language picks — the pattern this
+   app already follows for product names. It shipped as `name_cn||name_en`,
+   which put Chinese on an English screen for every store that has both. The
+   fallback ACROSS is kept: a store named in one language only shows that name
+   rather than a number. */
+function mStoreName(st){
+  if(!st) return '';
+  const en=st.name_en||'', cn=st.name_cn||'';
+  return (LANG==='en'?(en||cn):(cn||en))||('#'+st.id);
+}
 
 function expLoadMeta(){
   const x=state.exp;
@@ -10296,7 +10367,7 @@ function expStatusPill(r){
 
 function expMineRow(r){
   const bits=[fmtDateOnly(r.date)];
-  if(r.category) bits.push(r.category);
+  if(r.category) bits.push(catLabel(r.category));
   bits.push(r.paid_by==='employee'?T('Own money','个人支付'):T('Company','公司'));
   return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px">
     <span style="display:flex;flex-direction:column;min-width:0;gap:2px">
@@ -10316,6 +10387,10 @@ function expPickBodyHtml(){
   const x=state.exp;
   const q=String(x.q||'').trim().toLowerCase();
   const all=(x.cats||[]);
+  /* THE SEARCH READS THE WHOLE STORED VALUE, not the half on screen. An English
+     operator typing `物流` and a Chinese one typing `logistics` both find the
+     row: the column holds both halves, and searching only the rendered one would
+     make half the vocabulary unreachable in each language. */
   const hit=c=>!q||String(c).toLowerCase().indexOf(q)>=0;
   const shown=all.filter(hit);
 
@@ -10324,12 +10399,16 @@ function expPickBodyHtml(){
      them up would show the same category twice in one result set. */
   const recent=q?[]:(x.recent||[]).filter(c=>all.indexOf(c)>=0);
 
+  /* The whole shown set at once, so the collision rule can see it — asking per
+     row would rebuild the map for every line and could not detect a collision
+     at all. */
+  const labels=catLabels(shown.concat(recent));
   const row=(c,mark)=>`<button style="display:flex;align-items:center;justify-content:space-between;gap:10px;
       width:100%;padding:13px 4px;border:0;border-bottom:1px solid var(--border-default);background:none;
       cursor:pointer;font-family:inherit;text-align:left;font-size:14.5px;
       color:${x.cat===c?'var(--accent)':'var(--text-primary)'};font-weight:${x.cat===c?'500':'400'}"
       onclick="APP.cmd('expCat',${JSON.stringify(c).replace(/"/g,'&quot;')})">
-      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(c)}</span>
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(labels.get(c)||catLabel(c))}</span>
       ${x.cat===c?`<span style="flex:none;display:flex">${ic('check',17)}</span>`:(mark||'')}</button>`;
 
   const head=t=>`<div style="font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;
@@ -10373,7 +10452,7 @@ function screenExpense(){
   if(x.sent) return `<div style="padding:24px 16px 32px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center">
       <span style="width:52px;height:52px;border-radius:50%;background:var(--sage-tint);color:var(--sage-ink);display:flex;align-items:center;justify-content:center">${ic('check',26)}</span>
       <div style="font-size:19px;font-weight:500">${T('Sent for approval','已提交，等待审批')}</div>
-      <div class="num" style="font-size:15px;color:var(--text-secondary)">¥${escAttr(String(x.sent.amount))}${x.sent.cat?' · '+escAttr(x.sent.cat):''}</div>
+      <div class="num" style="font-size:15px;color:var(--text-secondary)">¥${escAttr(String(x.sent.amount))}${x.sent.cat?' · '+escAttr(catLabel(x.sent.cat)):''}</div>
       <div style="font-size:14px;color:var(--text-secondary);max-width:270px;line-height:1.55">${T('It is not in the accounts yet. Nothing is recorded until it is approved.','尚未记入账目。审批通过后才会记录。')}</div>
       <button class="btn2" style="margin-top:4px" onclick="APP.cmd('expAgain')">${T('Record another','再记一笔')}</button>
     </div>`;
@@ -10397,7 +10476,7 @@ function screenExpense(){
            color:var(--text-primary);font-size:15px"
            onclick="APP.cmd('expPickOpen')">
            <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${
-             x.cat?escAttr(x.cat):`<span style="color:var(--text-secondary)">${T('Choose a category','选择分类')}</span>`}</span>
+             x.cat?escAttr(catLabel(x.cat)):`<span style="color:var(--text-secondary)">${T('Choose a category','选择分类')}</span>`}</span>
            <span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right',18)}</span>
          </button>
        </div>`
@@ -10415,7 +10494,7 @@ function screenExpense(){
     ? `<div style="display:flex;flex-direction:column;gap:8px">
          <span style="font-size:12.5px;color:var(--text-secondary)">${T('Shop','门店')}</span>
          <div style="display:flex;flex-wrap:wrap;gap:8px">${stores.map(st=>
-           `<button class="chip ${String(x.storeId)===String(st.id)?'on':''}" onclick="APP.cmd('expStore','${st.id}')">${escAttr(st.name_cn||st.name_en||('#'+st.id))}</button>`).join('')}</div>
+           `<button class="chip ${String(x.storeId)===String(st.id)?'on':''}" onclick="APP.cmd('expStore','${st.id}')">${escAttr(mStoreName(st))}</button>`).join('')}</div>
        </div>`
     : '';
 
@@ -10474,7 +10553,14 @@ function screenExpense(){
            </div>`
         : `<label class="btn2" style="width:auto;align-self:flex-start;padding:0 16px;cursor:pointer">
              ${ic('camera',18)}<span>${T('Add a photo','拍照')}</span>
-             <input type="file" accept="image/*" capture="environment" style="display:none"
+             ${/* NO `capture` ATTRIBUTE, and its absence is the decision. With
+                  `capture="environment"` Android opens the camera and offers
+                  nothing else — so a receipt already photographed, screenshotted
+                  or sent by a supplier could not be attached at all, which is
+                  most of them. Without it the OS offers its own chooser: camera,
+                  gallery, files, whatever the phone has. `accept="image/*"` is
+                  what keeps that chooser to pictures. */''}
+             <input type="file" accept="image/*" style="display:none"
                onchange="APP.cmd('expPhoto',this)">
            </label>`}
     </div>

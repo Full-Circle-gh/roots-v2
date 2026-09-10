@@ -574,5 +574,136 @@ it('the picker opens closed, and a reopened screen never opens on it', () => {
   assert.match(reset[0], /x\.pick=false; x\.q='';/);
 });
 
+console.log('\n8 · one language on screen, and where the photo comes from');
+
+/* The phone's splitter and the desktop's, RUN SIDE BY SIDE over the same values.
+   The phone's copy says in its own comment that the two are held to one answer
+   by this suite; this is that. A copy nobody compares is a copy that drifts. */
+const vm2 = require('vm');
+const PHONE_CAT = PHONE.slice(PHONE.indexOf('const CAT_CJK'), PHONE.indexOf("/* The claim's own day."));
+const DESK = read('public', 'retail-admin', '22-finance.js');
+const DESK_CAT = DESK.slice(DESK.indexOf('const FIN_CJK'), DESK.indexOf('function finRow('));
+
+function phoneCtx(lang) {
+  const ctx = { LANG: lang, Map, Array, String };
+  vm2.createContext(ctx);
+  new vm2.Script(PHONE_CAT + '\nthis.catLabel=catLabel; this.catLabels=catLabels; this.catSplit=catSplit;')
+    .runInContext(ctx);
+  return ctx;
+}
+function deskCtx(lang) {
+  const ctx = { window: { cuLang: () => lang }, Map, Array, String };
+  ctx.cuLang = ctx.window.cuLang;
+  vm2.createContext(ctx);
+  new vm2.Script(DESK_CAT + '\nthis.finCatLabel=finCatLabel; this.finCatLabels=finCatLabels;')
+    .runInContext(ctx);
+  return ctx;
+}
+
+const VALUES = [
+  'Logistics&Delivery 物流与配送费用',      // the one Ash photographed
+  'Ingredients(Kitchen+Retail Use) 原材料（厨房及零售通用）',
+  'Rent+Management Fee 房租+物业管理费',
+  '营销 Marketing',                          // Chinese first
+  '销货成本',                                // one language only
+  'Rent',                                    // one language only
+  '其他 Other',
+  null, '',
+];
+
+it('the English screen shows the English half, and only that', () => {
+  const en = phoneCtx('en');
+  assert.strictEqual(en.catLabel('Logistics&Delivery 物流与配送费用'), 'Logistics&Delivery');
+  assert.strictEqual(en.catLabel('营销 Marketing'), 'Marketing', 'either order splits');
+  // The defect, stated as an assertion: no CJK reaches an English screen from a
+  // value that carries an English half.
+  for (const v of VALUES) {
+    const out = en.catLabel(v);
+    if (v && /[A-Za-z]/.test(v) && /[\u4e00-\u9fff]/.test(v)) {
+      assert.ok(!/[\u4e00-\u9fff]/.test(out), `both languages still on screen: ${out}`);
+    }
+  }
+});
+
+it('the Chinese screen shows the Chinese half', () => {
+  const zh = phoneCtx('zh');
+  assert.strictEqual(zh.catLabel('Logistics&Delivery 物流与配送费用'), '物流与配送费用');
+  assert.strictEqual(zh.catLabel('营销 Marketing'), '营销');
+});
+
+it('a value with only one language renders WHOLE, in both languages', () => {
+  // Showing half of a name that has no other half is worse than showing a word
+  // the reader does not need.
+  for (const lang of ['en', 'zh']) {
+    const c = phoneCtx(lang);
+    assert.strictEqual(c.catLabel('销货成本'), '销货成本');
+    assert.strictEqual(c.catLabel('Rent'), 'Rent');
+  }
+});
+
+it('the phone and the desktop give the SAME answer, value for value', () => {
+  // The two copies exist because one file is a retail-admin bundle and the other
+  // a standalone document. This is what stops them drifting.
+  for (const [pl, dl] of [['en', 'en'], ['zh', 'cn']]) {
+    const ph = phoneCtx(pl), dk = deskCtx(dl);
+    for (const v of VALUES) {
+      assert.strictEqual(ph.catLabel(v), dk.finCatLabel(v), `${pl}: ${JSON.stringify(v)}`);
+    }
+  }
+});
+
+it('two categories that read alike in this language both render WHOLE', () => {
+  // The live list holds exactly this: `Marketing&Promotion 市场推广费用` beside
+  // `营销 Marketing`, and the two spellings of 低值易耗品. Drawing two rows a
+  // person cannot tell apart is §36's defect arriving through the display.
+  const en = phoneCtx('en');
+  const m = en.catLabels(['Rent 房租', 'Rent 租金', 'Office Supplies 办公用品']);
+  assert.strictEqual(m.get('Rent 房租'), 'Rent 房租', 'the collision renders whole');
+  assert.strictEqual(m.get('Rent 租金'), 'Rent 租金');
+  assert.strictEqual(m.get('Office Supplies 办公用品'), 'Office Supplies', 'and the rest still split');
+  // And the desktop agrees.
+  const dk = deskCtx('en');
+  const d = dk.finCatLabels(['Rent 房租', 'Rent 租金', 'Office Supplies 办公用品']);
+  for (const k of ['Rent 房租', 'Rent 租金', 'Office Supplies 办公用品']) {
+    assert.strictEqual(m.get(k), d.get(k), k);
+  }
+});
+
+it('the picker searches the STORED value, not the half on screen', () => {
+  // An English operator typing 物流 and a Chinese one typing logistics must both
+  // find the row; searching the rendered half makes half the vocabulary
+  // unreachable in each language.
+  assert.match(PHONE_CODE, /const hit=c=>!q\|\|String\(c\)\.toLowerCase\(\)\.indexOf\(q\)>=0;/);
+});
+
+it('every place a category is drawn goes through the splitter', () => {
+  // CLAUDE.md: a finding is where it was found, not the extent of the problem.
+  // These are the five: the collapsed row, the picker, the receipt, the
+  // submitter's list and the approver's.
+  assert.strictEqual((PHONE_CODE.match(/catLabel\(/g) || []).length >= 5, true,
+    'a new render site that skips it puts both languages back on screen');
+  assert.ok(!/bits\.push\(r\.category\)/.test(PHONE_CODE), 'the two list rows are covered');
+  assert.ok(!/escAttr\(x\.sent\.cat\)/.test(PHONE_CODE), 'the receipt is covered');
+});
+
+it('a store name follows the live language too', () => {
+  assert.match(PHONE_CODE, /function mStoreName\(st\)/);
+  assert.match(PHONE_CODE, /LANG==='en'\?\(en\|\|cn\):\(cn\|\|en\)/,
+    'it shipped as name_cn||name_en, which put Chinese on an English screen');
+  // Scoped to THIS screen's chip rather than to the file: `name_cn||name_en` is
+  // correct elsewhere as the zh branch of a language-aware expression, and an
+  // assertion that forbade it everywhere would be red for correct code.
+  const chip = PHONE_CODE.slice(PHONE_CODE.indexOf("APP.cmd('expStore'"));
+  assert.match(chip.slice(0, 200), /mStoreName\(st\)/);
+});
+
+it('the photo can come from the gallery, not only the camera', () => {
+  // `capture="environment"` opens the camera and offers nothing else, so a
+  // receipt already photographed or sent by a supplier could not be attached.
+  assert.ok(!/capture=/.test(PHONE_CODE.replace(/capture="environment"` Android/g, '')),
+    'no capture attribute may remain on the file input');
+  assert.match(PHONE, /<input type="file" accept="image\/\*" style="display:none"/);
+});
+
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
