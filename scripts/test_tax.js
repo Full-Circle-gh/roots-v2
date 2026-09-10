@@ -206,6 +206,18 @@ function handlerFor(db) {
       `${extractFunction(RETAIL_SRC, 'costAtSale')}\n${extractFunction(RETAIL_SRC, 'resolveManualOrderLines')}\nreturn resolveManualOrderLines;`
     )(() => db, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan),
     posClosedForStore: new Function('tdb', `${extractFunction(RETAIL_SRC, 'posClosedForStore')}\nreturn posClosedForStore;`)(() => db),
+    /* Store credit (§93). THE REAL FUNCTION AND ITS WHOLE CHAIN, not a stub
+       returning zero — this suite's question is what the create route STORES,
+       and points are applied after tax on purpose. A stub would have let a
+       change that taxed the residual instead of the bill pass here unseen.
+       None of the orders below asks for any credit, so every existing
+       assertion is answered exactly as it was; what is bought is that the day
+       one does, this file notices. */
+    manualOrderCredit: new Function('tdb', [
+      'cfgValue', 'pointsRedeemRate', 'pointsCashValue', 'pointsRequiredFor',
+      'pointsCoverShipping', 'pointsRedeemableBase', 'walletSpendableBase',
+      'walletSpendForOrder', 'sweepExpiredPoints', 'manualOrderCredit',
+    ].map((f) => extractFunction(RETAIL_SRC, f)).join('\n') + '\nreturn manualOrderCredit;')(() => db),
     // The real reader, over the fixture's own storefront_config rows.
     taxSettings: new Function('tdb', 'tax', `${extractFunction(RETAIL_SRC, 'taxSettings')}\nreturn taxSettings;`)(() => db, tax),
     tax, money,

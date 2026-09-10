@@ -207,6 +207,18 @@ function makeHandler(db, spies) {
     )(() => db, require(path.join(ROOT, 'lib', 'tax'))),
     tax: require(path.join(ROOT, 'lib', 'tax')),
     money: require(path.join(ROOT, 'lib', 'money')),
+    /* Store credit (§93), real and whole for the same reason tax above is. This
+       file's subject is WHAT COMMITS TOGETHER, and the credit deduction is now
+       part of the transaction the cases below count rows in — a stub returning
+       zero would take it back out of the thing being measured. No case here
+       asks for credit, so every existing row count is unchanged; what is bought
+       is that a deduction escaping the transaction shows up as a row count that
+       no longer adds up. */
+    manualOrderCredit: new Function('tdb', [
+      'cfgValue', 'pointsRedeemRate', 'pointsCashValue', 'pointsRequiredFor',
+      'pointsCoverShipping', 'pointsRedeemableBase', 'walletSpendableBase',
+      'walletSpendForOrder', 'sweepExpiredPoints', 'manualOrderCredit',
+    ].map((f) => extractFunction(RETAIL_SRC, f)).join('\n') + '\nreturn manualOrderCredit;')(() => db),
     ...spies,
   };
   const keys = Object.keys(scope);

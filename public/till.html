@@ -578,6 +578,39 @@ button{font:inherit;color:inherit;margin:0}
   width:100%;min-height:44px;border:0;background:transparent;color:var(--td-text2);
   font-size:13px;font-weight:500;text-align:left;padding:4px 0;
 }
+/* ---- store credit (§93) ----
+   The same row as a wallet, because it is the same act — choosing what pays for
+   this sale — and a cashier should not have to learn two controls for it. Two
+   differences, both carrying meaning rather than decoration:
+
+   THE INDICATOR IS A SQUARE, NOT A CIRCLE. The wallet rows are a radio group,
+   exactly one of which can be true; points and balance are independent and can
+   both be on at once. A round indicator on a multi-select is the one place this
+   screen would be lying about how it behaves.
+
+   AND THE ROW CARRIES ITS FIGURE. A wallet row is a name — the amount is the
+   one big number above it — while a credit row has to answer "how much does
+   this take off?" before it is tapped, which is the whole question the cashier
+   is being asked. `.cv` holds it, right-aligned and tabular so two rows'
+   figures line up on the decimal, and it goes quiet until the row is on so the
+   applied deduction is visibly different from the offer. */
+.cred{margin-bottom:8px}
+.cred .box{
+  width:22px;height:22px;flex:none;border-radius:5px;
+  border:1.5px solid var(--td-border);display:grid;place-items:center;
+}
+.cred.on .box{border-color:var(--td-text)}
+.cred.on .box::after{
+  content:"";width:11px;height:6px;margin-top:-3px;
+  border-left:2px solid var(--td-text);border-bottom:2px solid var(--td-text);
+  transform:rotate(-45deg);
+}
+.cred .cl{flex:1;min-width:0;display:flex;align-items:baseline;gap:8px}
+/* The balance behind the row: how many points, or how much wallet. A numeral
+   needs no label, which is why this row mints no string. */
+.cred .cl em{font-style:normal;font-size:13px;color:var(--td-text2);font-variant-numeric:tabular-nums}
+.cred .cv{flex:none;font-variant-numeric:tabular-nums;color:var(--td-text2)}
+.cred.on .cv{color:var(--td-text)}
 .sfoot{flex:none;display:flex;flex-direction:column;align-items:center;gap:8px}
 .sconf{
   width:340px;height:72px;border-radius:var(--r-control);
@@ -986,7 +1019,14 @@ button{font:inherit;color:inherit;margin:0}
       // Ready to confirm? The wallet is REQUIRED — without it the sale records
       // as generic 'offline' and cannot be reconciled against the terminal's
       // daily statement, which is the one thing this screen exists to prevent.
-      ready: function (st) { return !!st.wallet; }
+      //
+      // UNLESS THERE IS NO CASH TO TAKE (§93). Store credit covering the bill in
+      // full means no terminal was touched, so there is no wallet to name and
+      // requiring one would ask the cashier to invent a reconciliation. The rule
+      // is unchanged in substance — every ¥ of CASH still names the wallet that
+      // took it — and `creditTender()` gives the order the tender that really
+      // settled it, so the row is never 'offline' either way.
+      ready: function (st) { return cashDue() <= 0 ? creditApplied() > 0 : !!st.wallet; }
     }
   };
 
@@ -1031,6 +1071,26 @@ button{font:inherit;color:inherit;margin:0}
     leaveOpen: false,          // is the "leave without saving?" question up?
     mode: 'manual',
     wallet: null, moreOpen: false, busy: false, err: '',
+    /* Store credit the cashier has chosen to spend on THIS sale (§93), and the
+       shop's rules for it.
+
+       BOTH ARE OFF UNTIL TAPPED, on every sale. A customer who has points does
+       not necessarily want to spend them today, and defaulting to "spend
+       everything" would burn a balance somebody was saving — silently, because
+       the sale is one tap from done. reset() clears them with the basket.
+
+       `pts` mirrors two PUBLIC settings out of the same /api/retail/config read
+       the tax and currency come from: how many points buy ¥1, and whether the
+       shop lets points pay a shipping fee. Neither is authority — the server
+       clamps what it actually spends — but without them this screen would have
+       to guess what a point is worth, and quote the customer a figure the
+       server then disagreed with. The fallback is the live stored value (1
+       point = ¥1), the same fallback pointsRedeemRate() uses, so a failed
+       config read shows what the shop actually charges rather than a rate
+       nobody set. `coverShipping` is carried for completeness and is inert
+       here: a counter sale ships nothing. */
+    useP: false, useB: false,
+    pts: { rate: 1, coverShipping: false },
     done: null, printState: 'idle',
     // The shop's tax settings, or null for a shop that charges none (audit
     // I-03). Null is the state every shop starts in and the only one that
@@ -1175,6 +1235,17 @@ button{font:inherit;color:inherit;margin:0}
       .then(function (r) {
         var j = r[0], cs = r[1], me = r[2], cfg = r[3];
         S.tax = taxFrom(cfg && cfg.data);
+        // The shop's points rules, from the same read (§93). Guarded the same
+        // way the currency below is: a malformed or absent value leaves the
+        // live default standing rather than zeroing what a point is worth.
+        var ptsCfg = cfg && cfg.data && cfg.data.points;
+        if (ptsCfg && typeof ptsCfg === 'object') {
+          var rate = Number(ptsCfg.redeemRate);
+          S.pts = {
+            rate: (Number.isFinite(rate) && rate > 0) ? rate : 1,
+            coverShipping: ptsCfg.coverShipping === true,
+          };
+        }
         var curCfg = cfg && cfg.data && cfg.data.currency;
         if (curCfg && typeof curCfg === 'object' && curCfg.symbol) S.cur = curCfg;
         else if (typeof curCfg === 'string' && curCfg) S.cur = { symbol: curCfg, decimals: 2, position: 'before' };
@@ -1670,7 +1741,7 @@ button{font:inherit;color:inherit;margin:0}
       name: o.recipient_name || '', total: Number(o.total) || 0, loading: true
     };
     S.cxArm = false;
-    S.wallet = null; S.moreOpen = false; S.err = '';
+    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = '';
     // The sheet is where the rail lives on a phone, and it is closed by
     // default. Opening it is what makes "check the order" a thing that has
     // happened rather than a thing the cashier could have done.
@@ -1701,7 +1772,7 @@ button{font:inherit;color:inherit;margin:0}
   function cancelRecall() {
     S.cxArm = false;
     S.recall = null; S.lines = []; S.sel = null;
-    S.wallet = null; S.moreOpen = false; S.err = '';
+    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = '';
     S.view = 'till'; S.pane = 'pend'; S.paneTouched = true;
     render();
   }
@@ -1712,6 +1783,84 @@ button{font:inherit;color:inherit;margin:0}
   // is how the counter ends up asking for a different number than the one on
   // the customer's screen.
   function settleDue() { return S.recall ? S.recall.total : dueNow(subtotal()); }
+
+  /* ── Store credit on this sale (§93) ────────────────────────────────────
+     What the attached customer's points and wallet COULD take off this bill,
+     and what the cashier has actually turned on.
+
+     THE ARITHMETIC MIRRORS THE SERVER'S, for the counter case only, and that is
+     why it is allowed to be this short: a counter sale has no shipping and no
+     packing, so `pointsRedeemableBase` collapses to the whole tax-inclusive
+     bill and both ceilings the server applies become the same number. Nothing
+     here is the authority — manualOrderCredit clamps what is really spent, and
+     a disagreement of one fen shows up as a fen of cash, not as a wrong sale.
+
+     POINTS FIRST, THEN BALANCE, because points expire and a wallet does not:
+     spending the perishable tender first is the answer that costs the customer
+     least. Same order the server applies them in, so the figure on this screen
+     and the figure it charges cannot come apart.
+
+     NOT OFFERED ON A RECALLED ORDER, and the reason is the settle path rather
+     than the screen: a recall PATCHes the existing row's status and nothing
+     else, so credit chosen here would be shown, charged as though it applied,
+     and never deducted. The customer already picked their tender on their own
+     phone. A control that silently does nothing is worse than no control. */
+  function creditOffer() {
+    var out = { pMax: 0, pAmt: 0, bAmt: 0, applied: 0 };
+    if (S.recall || !S.customer) return out;
+    var gross = settleDue();
+    if (!(gross > 0)) return out;
+    var rate = (S.pts && S.pts.rate > 0) ? S.pts.rate : 1;
+    var havePts = Math.max(0, Math.floor(Number(S.customer.points) || 0));
+    var haveBal = Math.max(0, Number(S.customer.balance) || 0);
+    // Points beyond what this bill can absorb would simply be burned, so the
+    // offer is capped there — the same clamp the server applies, not a
+    // presentation choice.
+    out.pMax = Math.min(havePts, Math.ceil(gross * rate));
+    out.havePts = havePts;
+    out.haveBal = haveBal;
+    var pAmt = S.useP ? Math.min(Math.floor((out.pMax / rate) * 100) / 100, gross) : 0;
+    out.pAmt = pAmt;
+    out.bAmt = S.useB ? Math.round(Math.min(haveBal, gross - pAmt) * 100) / 100 : 0;
+    out.applied = Math.round((out.pAmt + out.bAmt) * 100) / 100;
+    /* What each tender WOULD take if it were switched on now — the figure the
+       row shows while it is still off, so the cashier can answer "how much do
+       my points cover?" without tapping and then having to undo it.
+       `bWould` is measured against the points state as it stands, because
+       turning points on genuinely leaves the wallet less to do. */
+    out.pWould = Math.min(Math.floor((out.pMax / rate) * 100) / 100, gross);
+    out.bWould = Math.round(Math.min(haveBal, gross - pAmt) * 100) / 100;
+    return out;
+  }
+  // What a wallet still has to take once the credit is off. This is the figure
+  // the settle screen states and the one the card machine is handed.
+  function cashDue() {
+    return Math.max(0, Math.round((settleDue() - creditOffer().applied) * 100) / 100);
+  }
+  function creditApplied() { return creditOffer().applied; }
+  /* The tender to record when CREDIT settled the whole bill and no wallet took
+     anything. Points lead because they apply first and are the larger half of
+     any sale they cover; 'balance' is named only when the wallet did it alone.
+     Both are values the server already accepts on this route (ALLOWED_PAY) and
+     — as of §93 — actually deducts, so the word on the row is now true. */
+  function creditTender() {
+    var cr = creditOffer();
+    return cr.pAmt > 0 ? 'points' : 'balance';
+  }
+  /* The credit half of the create payload. `points_to_use` is the WHOLE offer,
+     not a figure this screen worked out for itself: manualOrderCredit clamps it
+     against the shop's redeem rate and the bill actually due, and letting the
+     server do that is what stops the till from having to re-implement two
+     settings it does not own. `use_balance` is a flag for the same reason — how
+     much the wallet may take is the server's rule (never shipping, never past
+     what points left behind), not this screen's. */
+  function creditBody() {
+    var cr = creditOffer();
+    var out = {};
+    if (S.useP && cr.pMax > 0) out.points_to_use = cr.pMax;
+    if (S.useB && cr.bWould > 0) out.use_balance = true;
+    return out;
+  }
 
   // Walk-ins are anonymous. Attaching a customer is optional and never blocks
   // the sale; when one is attached the row shows the two things that change
@@ -1934,7 +2083,13 @@ button{font:inherit;color:inherit;margin:0}
     // machine will take (audit I-03) — the tax-inclusive amount, with the tax
     // named under it so the cashier can answer "what's the extra?" without
     // going back.
-    var due = settleDue();
+    //
+    // WITH CREDIT APPLIED THAT NUMBER IS THE RESIDUAL, not the gross (§93): it
+    // is what gets keyed into the terminal, and quoting the pre-credit total
+    // here is how a customer pays twice for the part their points covered. The
+    // gross moves to the subline beside the sale, so both are on screen.
+    var due = cashDue();
+    var cr = creditOffer();
     // The subline is the cashier's check that they opened the right row. For a
     // recalled QR order it repeats the number the customer is holding up and the
     // name they gave — the only two things the customer can themselves verify.
@@ -1943,6 +2098,12 @@ button{font:inherit;color:inherit;margin:0}
     var subline = S.recall
       ? esc(String(S.recall.code) + (S.recall.name ? ' · ' + S.recall.name : ''))
       : esc(T('counterSale')) + (S.tax ? ' · ' + esc(S.tax.label) + ' ' + money(taxOn(sub)) : '');
+    // T('total') is this file's own locked pair for the gross, so naming it here
+    // costs no new string. (Its Chinese half is not quoted in this comment: the
+    // house rule for this file is no Chinese outside STRINGS, comments
+    // included, and a character that never renders is still one nobody checked
+    // against a source.)
+    if (cr.applied > 0) subline += ' · ' + esc(T('total')) + ' ' + money(settleDue());
     var lead = WALLETS.filter(function (w) { return w.lead; });
     var rest = WALLETS.filter(function (w) { return !w.lead; });
     var walletBtn = function (w) {
@@ -1963,10 +2124,36 @@ button{font:inherit;color:inherit;margin:0}
       // split — a recalled order's tax was settled when it was placed and is
       // not re-derived here.
       +     '<div class="sb">' + subline + '</div></div>'
-      +   '<div class="spick"><div class="lb">' + esc(T('payMethod')) + '</div>'
-      +     lead.map(walletBtn).join('')
-      +     (S.moreOpen ? rest.map(walletBtn).join('')
-                        : '<button class="more" type="button" data-more="1">' + esc(T('other')) + ' ›</button>')
+      +   '<div class="spick">'
+      /* Store credit, above the wallets and only when there is any to spend
+         (§93). A row for a tender the customer does not have is a control that
+         can only disappoint, so a customer with no points sees no points row
+         and a walk-in sees neither. */
+      +     (cr.pMax > 0
+              ? '<button class="wal cred' + (S.useP ? ' on' : '') + '" type="button" data-cred="p">'
+                + '<span class="box"></span>'
+                + '<span class="cl">' + esc(T('points')) + '<em>' + cr.havePts + '</em></span>'
+                + '<span class="cv">-' + money(S.useP ? cr.pAmt : cr.pWould) + '</span></button>'
+              : '')
+      +     (cr.haveBal > 0 && cr.bWould > 0
+              ? '<button class="wal cred' + (S.useB ? ' on' : '') + '" type="button" data-cred="b">'
+                + '<span class="box"></span>'
+                + '<span class="cl">' + esc(T('wallet')) + '<em>' + money(cr.haveBal) + '</em></span>'
+                + '<span class="cv">-' + money(S.useB ? cr.bAmt : cr.bWould) + '</span></button>'
+              : '')
+      /* THE WALLET PICKER GOES AWAY WHEN THERE IS NOTHING LEFT TO TAKE. Credit
+         covering the bill in full means no terminal is touched and no wallet
+         took the money, so asking which one did would be asking the cashier to
+         invent an answer — and 'cash' on a sale where no cash moved is exactly
+         the unreconcilable row the wallet requirement exists to prevent. The
+         order still names its tender: confirm() sends 'points' or 'balance',
+         which is what actually settled it. */
+      +     (due > 0 ? '<div class="lb">' + esc(T('payMethod')) + '</div>' : '')
+      +     (due > 0 ? lead.map(walletBtn).join('') : '')
+      +     (due > 0
+              ? (S.moreOpen ? rest.map(walletBtn).join('')
+                            : '<button class="more" type="button" data-more="1">' + esc(T('other')) + ' ›</button>')
+              : '')
       +   '</div>'
       + '</div>'
       + '<div class="sfoot">'
@@ -1987,15 +2174,40 @@ button{font:inherit;color:inherit;margin:0}
 
   function doneHtml() {
     var d = S.done || {};
-    var w = WALLETS.filter(function (x) { return x.v === d.wallet; })[0];
+    /* THE HEADLINE IS THE SALE, NOT THE CASH (§93). `d.total` is what a wallet
+       took, and on a bill settled entirely in points that is ¥0.00 — a figure
+       that reads as a giveaway rather than a sale. The gross is the sum of the
+       three tenders, which is orderTenders()'s own definition of it server-side,
+       so the two surfaces agree on what the sale was worth. With no credit the
+       sum is `d.total` and this screen prints exactly what it always printed. */
+    var cash  = Number(d.total) || 0;
+    var gross = Math.round((cash + (Number(d.pointsAmount) || 0)
+                                 + (Number(d.balanceUsed)  || 0)) * 100) / 100;
+    /* The wallet is named only if a wallet actually took something. A cashier
+       who picked WeChat and then applied enough credit to cover the bill leaves
+       `S.wallet` set behind them; printing it here would put a tender on a
+       receipt for money that terminal never saw. */
+    var w = cash > 0 ? WALLETS.filter(function (x) { return x.v === d.wallet; })[0] : null;
     var printLabel = S.printState === 'sent' ? T('printReceipt') + ' ✓'
                    : S.printState === 'busy' ? T('printReceipt') + '…'
                    : T('printReceipt');
     return '<div class="stop"></div>'
       + '<div class="smain"><div class="done">'
       +   '<span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12.5 5.5 5.5L20 7"/></svg></span>'
-      +   '<h2>' + esc(T('completed')) + ' ' + money(d.total) + '</h2>'
-      +   '<div class="meta">' + esc(w ? cuT(w.en, w.cn) : '') + ' · ' + esc(d.order_no || '') + '</div>'
+      +   '<h2>' + esc(T('completed')) + ' ' + money(gross) + '</h2>'
+      /* WHAT SETTLED IT, in the order it was applied (§93): points, then wallet,
+         then the tender that took the rest, then the order number. A sale paid
+         partly in points names both halves; one paid entirely in credit names
+         the credit alone, there being no wallet to name. Every label is a
+         locked pair already on this screen — T('points'), T('wallet'), the
+         WALLETS row's own — and every figure is a numeral, so this line mints
+         nothing. (No Chinese is quoted in this comment: see the house rule at
+         renderCust.) */
+      +   '<div class="meta">'
+      +     (d.pointsAmount > 0 ? esc(T('points')) + ' -' + money(d.pointsAmount) + ' · ' : '')
+      +     (d.balanceUsed  > 0 ? esc(T('wallet')) + ' -' + money(d.balanceUsed)  + ' · ' : '')
+      +     (w ? esc(cuT(w.en, w.cn)) + ' · ' : '')
+      +     esc(d.order_no || '') + '</div>'
       +   '<div class="drow">'
       +     '<button class="dsec" type="button" data-print="1"' + (S.printState === 'busy' ? ' disabled' : '') + '>' + esc(printLabel) + '</button>'
       +     '<button class="dprim" type="button" data-go="reset">' + esc(T('newOrder')) + '</button>'
@@ -2074,14 +2286,27 @@ button{font:inherit;color:inherit;margin:0}
       // receipt suppresses the hand-over block on a counter sale anyway.
       recipient_name: S.customer ? (S.customer.nickname || 'Guest') : 'Guest',
       items: S.lines.map(function (l) { return { product_id: l.id, qty: l.qty }; })
-    }, mode.payload(S));
+    }, mode.payload(S), creditBody());
+    /* THE TENDER IS THE CREDIT'S when no cash changed hands (§93). mode.payload
+       set `payment_method` from the wallet picker, and with the bill fully
+       covered there is no picker and no wallet — so the field would arrive
+       null, fall through ALLOWED_PAY to 'offline', and be refused by the
+       counter-sale rule that insists a walk-in names its tender. Naming the
+       credit satisfies that rule with the truth rather than around it. */
+    if (cashDue() <= 0 && creditApplied() > 0) body.payment_method = creditTender();
 
     api('/api/retail-admin/orders', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
     }).then(function (j) {
       S.busy = false;
       if (!j || !j.success) { S.err = T('didNotSave'); render(); return; }
-      S.done = { id: j.data.id, order_no: j.data.order_no, total: j.data.total, wallet: S.wallet };
+      // The SERVER's figures, not this screen's: what it actually charged and
+      // what it actually took off in credit. A done screen quoting the till's
+      // own arithmetic would hide exactly the disagreement worth seeing.
+      S.done = { id: j.data.id, order_no: j.data.order_no, total: j.data.total,
+                 wallet: S.wallet, tender: body.payment_method,
+                 pointsAmount: Number(j.data.points_amount) || 0,
+                 balanceUsed: Number(j.data.balance_used) || 0 };
       S.view = 'done'; S.printState = 'idle';
       // The shelf moved server-side; mirror it locally so the next sale's
       // tiles are honest without a full reload.
@@ -2205,7 +2430,7 @@ button{font:inherit;color:inherit;margin:0}
 
   function reset() {
     S.lines = []; S.sel = null; S.customer = null;
-    S.wallet = null; S.moreOpen = false; S.err = ''; S.done = null;
+    S.wallet = null; S.useP = false; S.useB = false; S.moreOpen = false; S.err = ''; S.done = null;
     S.view = 'till'; S.printState = 'idle';
     S.q = ''; $('q').value = '';
     // The sale is over, so the pane goes back to being defaulted rather than
@@ -2282,7 +2507,11 @@ button{font:inherit;color:inherit;margin:0}
   function attachCustomer(id) {
     var c = (S.custRows || []).filter(function (x) { return String(x.id) === String(id); })[0];
     if (!c) return;
-    S.customer = c; S.custOpen = false; S.custRows = null;
+    // A NEW customer starts with their credit untouched (§93). Attaching over
+    // an existing one is possible from this sheet, and inheriting the previous
+    // customer's toggles would spend this one's points without anybody asking.
+    S.customer = c; S.useP = false; S.useB = false;
+    S.custOpen = false; S.custRows = null;
     var el = $('custpick'); if (el) el.removeAttribute('data-built');
     render();
   }
@@ -2356,7 +2585,7 @@ button{font:inherit;color:inherit;margin:0}
       // Tapping away from the leave question is staying, the same dismissal the
       // store picker takes — and the safe answer is the one a stray tap gives.
       if (S.leaveOpen && ev.target.id === 'leavepick') { S.leaveOpen = false; return render(); }
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-cancel-order]');
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-cancel-order]');
       if (!t) return;
       // Choosing a pane. The flag is what stops the next poll from defaulting
       // the cashier back off the face they just asked for.
@@ -2390,7 +2619,10 @@ button{font:inherit;color:inherit;margin:0}
       if (t.hasAttribute('data-q'))     return bumpQty(t.getAttribute('data-q'), t.getAttribute('data-i'));
       if (t.hasAttribute('data-cust'))  {
         var act = t.getAttribute('data-cust');
-        if (act === 'clear') { S.customer = null; return render(); }
+        // Their credit goes with them: leaving the toggles on would apply the
+        // NEXT customer's points the moment one is attached, or — with nobody
+        // attached — quietly send a redemption the server would refuse.
+        if (act === 'clear') { S.customer = null; S.useP = false; S.useB = false; return render(); }
         if (act === 'close') return closeCustPicker();
         // 'use' attaches a searched row; 'pick' OPENS the picker and is the
         // + Customer button's own long-standing value — do not merge the two.
@@ -2398,6 +2630,19 @@ button{font:inherit;color:inherit;margin:0}
         return pickCustomer();
       }
       if (t.hasAttribute('data-wal'))   { S.wallet = t.getAttribute('data-wal'); S.err = ''; return render(); }
+      /* Store credit (§93). Independent toggles, not a group — a customer can
+         put points AND wallet against one bill, which is why these are squares
+         and the wallets are radios. Turning one ON can leave nothing for a
+         wallet to take, and the picker disappears; a wallet already chosen is
+         LEFT SET rather than cleared, so switching the credit back off restores
+         the tender the cashier had already picked instead of making them pick
+         it twice. */
+      if (t.hasAttribute('data-cred'))  {
+        var which = t.getAttribute('data-cred');
+        if (which === 'p') S.useP = !S.useP; else S.useB = !S.useB;
+        S.err = '';
+        return render();
+      }
       if (t.hasAttribute('data-more'))  { S.moreOpen = true; return render(); }
       if (t.hasAttribute('data-confirm')) return confirm();
       if (t.hasAttribute('data-print')) return reprint();
