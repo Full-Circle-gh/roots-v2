@@ -419,13 +419,32 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
     // so the banner and the checkout agree about who is on the local run.
     assert.ok(/inventory\.isOptInSameDayDistrict\(address\) && slotKind !== 'today'/.test(body),
       'the notice keeps its ship-district audience');
-    assert.ok(/computePreorderNotice\(zone, address, \(items \|\| \[\]\)\.map\(\(i\) => i\.product_id\), body\.delivery_slot_id, body\.slot_kind\)/.test(retailSrc),
+    assert.ok(/computePreorderNotice\(zone, address, noticeProductIds\(items\), body\.delivery_slot_id, body\.slot_kind\)/.test(retailSrc),
       'the quote passes the slot kind it already passes to computeBatchNotice');
     // The day term is gone: a Guangzhou customer on a future day used to get
     // the notice, and that is exactly the shopper the gate turns away. Judge
     // the code, not the comment that explains the removal.
     const code = body.split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
     assert.ok(!/requiresStockGate/.test(code), 'no day-dependent escape hatch left');
+  });
+  // A PAID EXTRA with a stock_product_id is a real stocked product —
+  // expandStockLines reserves and commits it beside the dish it hangs off. The
+  // notice used to see only the cart's top-level ids, so a sold-out backorder
+  // extra was pre-ordered in silence: the very gap this notice exists to close,
+  // one level down.
+  it('the notice weighs paid extras, not just the cart lines', () => {
+    const fn = retailSrc.slice(retailSrc.indexOf('function noticeProductIds'));
+    const body = fn.slice(0, fn.indexOf('\n}'));
+    assert.ok(/it\.choices/.test(body), 'the chosen option ids are read off the line');
+    assert.ok(/stock_product_id AS pid/.test(body) && /stock_product_id IS NOT NULL/.test(body),
+      'and resolved to the products standing behind them');
+    assert.ok(/\[\.\.\.new Set\(ids\)\]/.test(body),
+      'an extra that is also a cart line must not be named twice');
+    // The same rows expandStockLines reserves — if one grows a filter the other
+    // lacks, the notice and the reservation stop describing the same order.
+    const exp = retailSrc.slice(retailSrc.indexOf('function expandStockLines'));
+    assert.ok(/o\.stock_product_id/.test(exp.slice(0, exp.indexOf('\n}'))),
+      'expandStockLines still reserves on the same field this notice now reads');
   });
 }
 

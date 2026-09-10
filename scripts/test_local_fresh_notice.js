@@ -392,6 +392,52 @@ let PORT = 0;
   check('the express date does not precede it either',
     () => !sched || !sched.express_slot || sched.express_slot.date_iso >= batchDay);
 
+  // ── The WEB storefront shows it too ──────────────────────────────────────
+  // Everything above proves the server computes the notice. The web checkout
+  // then dropped it on the floor: shop.html rendered batch_notice and
+  // preorder_notice and had no renderer for this one, so a Guangzhou shopper
+  // who pre-ordered a sold-out wrap on the WEBSITE was told nothing, while the
+  // identical cart in the mini app opened a dated popup. The page lets them add
+  // the row on purpose (stockState's local-run exemption, the mini-app twin of
+  // which is asserted above), which is what made the silence a half-finished
+  // job rather than a decision. Source assertions, in the style
+  // test_recipient_phone.js uses for the same page.
+  console.log('\n── The web storefront (public/shop.html)');
+  const webSrc = require('fs').readFileSync(
+    path.join(ROOT, 'public', 'shop.html'), 'utf8');
+
+  check('the quote render pass calls the local-fresh renderer',
+    () => /renderCoSlots\(d\);[^\n]*renderCoLocalFresh\(d\);/.test(webSrc));
+
+  check('the renderer reads the server field, and stays silent without it',
+    () => /function renderCoLocalFresh/.test(webSrc) &&
+          /const n=d&&d\.local_fresh_notice;\s*\n\s*if\(!n\)\{ box\.innerHTML=''; return; \}/.test(webSrc));
+
+  check('it auto-opens the popup once per checkout visit',
+    () => /co\.localFreshSeen=false;/.test(webSrc) &&
+          /if\(!co\.localFreshSeen&&!coNoticePopupOpen\(\)\)\{ co\.localFreshSeen=true; coLocalFreshPopup\(\); \}/.test(webSrc));
+
+  // The banner is the persistent half — the popup is dismissed once and the
+  // date must still be reachable afterwards, which is what Details is for.
+  check('…and leaves a banner behind it with a way back in',
+    () => /id="colfMore"/.test(webSrc) &&
+          /\$\('#colfMore'\)\.addEventListener\('click',coLocalFreshPopup\)/.test(webSrc));
+
+  check('the popup prints the ONE date the local run has',
+    () => /function coLocalFreshPopup/.test(webSrc) &&
+          /cob-tl-date">\$\{esc\(n\.delivery_date\|\|''\)\}/.test(webSrc));
+
+  // make_date and delivery_date are equal on the local run (no courier day).
+  // Printing both either side of the batch modal's dashed line would read as a
+  // wait that isn't there, so this modal carries a single step.
+  const lfPopup = webSrc.slice(webSrc.indexOf('function coLocalFreshPopup'));
+  const lfBody  = lfPopup.slice(0, lfPopup.indexOf('\n}'));
+  check('one timeline step, not the courier modal\'s make → arrive pair',
+    () => (lfBody.match(/cob-tl-step/g) || []).length === 1 && !/cob-tl-line/.test(lfBody));
+
+  check('it never touches the submit button',
+    () => !/coPlace/.test(lfBody));
+
   server.close();
   restoreOtherStores();
   console.log(failed ? `\n${failed} assertion(s) FAILED` : '\nAll assertions passed');

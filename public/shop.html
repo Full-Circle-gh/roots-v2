@@ -1701,7 +1701,7 @@ function coInjectCheckoutStyle(){
      header, summary after coupons). */
   .cox{display:flex;flex-direction:column;}
   .cx-col-main,.cx-col-side{display:contents;}
-  .cx-header{order:0;} #coBatch{order:1;} #coPreorder{order:2;}
+  .cx-header{order:0;} #coBatch{order:1;} #coPreorder{order:2;} #coLocalFresh{order:2;}
   .cx-sec--items{order:3;}
   .cx-sec--addr{order:4;} .cx-sec--when{order:5;} .cx-sec--pay{order:6;}
   .cx-sec--addons{order:7;} .cx-sec--coupons{order:8;}
@@ -1828,6 +1828,7 @@ async function renderCheckout(){
   co.idem=co.idem||('web-'+Date.now()+'-'+Math.random().toString(36).slice(2,8));
   co.preorderSeen=false;   // pre-order popup auto-shows once per checkout visit
   co.batchSeen=false;      // fresh-batch popup auto-shows once per checkout visit
+  co.localFreshSeen=false; // next-fresh-batch popup auto-shows once per checkout visit
   co.addrPickerOpen=false;
   const n=coItems().reduce((a,l)=>a+(Number(l.qty)||0),0);
   // Two wrappers for the PC 2-column layout (form left, order rail right).
@@ -1841,6 +1842,7 @@ async function renderCheckout(){
     </div>
     <div id="coBatch" style="padding:0 22px"></div>
     <div id="coPreorder" style="padding:0 22px"></div>
+    <div id="coLocalFresh" style="padding:0 22px"></div>
     <section class="cx-sec cx-sec--addr">
       <div class="cx-sectitle">${cn?'配送至':'Deliver to'}</div>
       <div id="coAddr">…</div>
@@ -2387,7 +2389,7 @@ async function coQuote(){
   catch(e){ coMsg(state.lang==='cn'?'网络错误':'Network error'); return; }
   if(j&&j.success===false){ if(j.error==='no_zone_match'){renderNoZone(j.data);} else {coMsg(coErrMsg(j.error));} return; }
   const d=(j&&j.data)||j||{}; co.quote=d; coMsg('');
-  renderCoSlots(d); renderCoPoints(d); renderCoBalance(d); renderCoSummary(d); renderCoBatch(d); renderCoPreorder(d); renderCoRiderPhone(d);
+  renderCoSlots(d); renderCoPoints(d); renderCoBalance(d); renderCoSummary(d); renderCoBatch(d); renderCoPreorder(d); renderCoLocalFresh(d); renderCoRiderPhone(d);
   coLoadOffers();   // keep the pre-pay upsell warm for the current cart
 }
 /* ════════ Rider-phone notice (mirrors the mini-app) ════════
@@ -2604,6 +2606,64 @@ function coBatchPopup(){
   const close=()=>{ov.hidden=true;};
   ov.onclick=e=>{if(e.target===ov)close();};
   $('#cobGot').addEventListener('click',close);
+}
+// "Next fresh batch" notice (server local_fresh_notice): the Guangzhou local-run
+// counterpart of the two above — a sold-out fresh item the kitchen makes on a
+// named future day and delivers on that same day's run. It was the one notice
+// the server computed and this page never rendered, so a shopper on the run
+// pre-ordered a sold-out wrap here in silence while the same cart in the mini
+// app opened a dated popup. Mirrors miniapp/pages/checkout/checkout.wxml.
+//
+// It reuses the batch notice's stylesheet rather than injecting a third
+// near-identical copy: this modal needs the same timeline + tip shell, and the
+// mini app likewise dresses all three notices in one set of classes.
+function renderCoLocalFresh(d){
+  const box=$('#coLocalFresh'); if(!box)return;
+  const n=d&&d.local_fresh_notice;
+  if(!n){ box.innerHTML=''; return; }
+  coInjectBatchStyle();
+  const t=state.lang==='cn'?n.title_cn:n.title_en, m=state.lang==='cn'?n.message_cn:n.message_en;
+  box.innerHTML=`<div class="cob-banner"><span class="cob-ic">🥬</span>
+    <div><div class="cob-t">${esc(t||'')}</div><div class="cob-m">${esc(m||'')}</div></div>
+    <button class="cob-more" id="colfMore">${state.lang==='cn'?'详情':'Details'}</button></div>`;
+  $('#colfMore').addEventListener('click',coLocalFreshPopup);
+  // Only auto-open onto an empty screen. preorder_notice can never co-occur
+  // with this one (the server's two address gates are complements), but
+  // batch_notice renders just above and opens itself, and a second overlay
+  // dropped on top of the first would bury it.
+  if(!co.localFreshSeen&&!coNoticePopupOpen()){ co.localFreshSeen=true; coLocalFreshPopup(); }
+}
+// Is one of the checkout notice modals on screen right now?
+function coNoticePopupOpen(){
+  return ['#cobPop','#copoPop','#colfPop'].some(id=>{const el=$(id);return !!el&&!el.hidden;});
+}
+function coLocalFreshPopup(){
+  const n=co.quote&&co.quote.local_fresh_notice; if(!n)return;
+  coInjectBatchStyle();
+  let ov=$('#colfPop');
+  if(!ov){ov=document.createElement('div');ov.id='colfPop';ov.className='cob-overlay';document.body.appendChild(ov);}
+  const L=state.lang;
+  const items=(Array.isArray(n.items)?n.items:[]).map(it=>`<span class="cob-chip">${esc(pick(it.name_en,it.name_cn))}</span>`).join('');
+  const tip=esc(L==='cn'?(n.tip_cn||''):(n.tip_en||''));
+  // ONE dated step, not the courier modal's make → arrive pair: the local run
+  // spends no transit day, so delivery_date IS make_date and printing it twice
+  // either side of a dashed line would read as a wait that isn't there.
+  ov.innerHTML=`<div class="cob-card">
+    <div class="cob-hero">🥬</div>
+    <div class="cob-kicker">${esc(L==='cn'?n.kicker_cn:n.kicker_en)}</div>
+    <div class="cob-title">${esc(L==='cn'?n.title_cn:n.title_en)}</div>
+    ${items?`<div class="cob-items">${items}</div>`:''}
+    <div class="cob-body">${esc(L==='cn'?n.message_cn:n.message_en)}</div>
+    <div class="cob-tl">
+      <div class="cob-tl-step"><div class="cob-tl-dot cob-tl-dot--arrive"></div><div class="cob-tl-lbl">${L==='cn'?'现做当天送达':'MADE &amp; DELIVERED'}</div><div class="cob-tl-date">${esc(n.delivery_date||'')}</div></div>
+    </div>
+    ${tip?`<div class="cob-tip"><span class="cob-tip-dot"></span><span class="cob-tip-text">${tip}</span></div>`:''}
+    <button class="cob-go" id="colfGot">${L==='cn'?'知道了':'Got it'}</button>
+  </div>`;
+  ov.hidden=false;
+  const close=()=>{ov.hidden=true;};
+  ov.onclick=e=>{if(e.target===ov)close();};
+  $('#colfGot').addEventListener('click',close);
 }
 // Points redemption: a single opt-in toggle (server clamps points_to_use to the
 // usable max). Hidden when the customer has no usable points on this order.

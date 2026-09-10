@@ -567,7 +567,10 @@ console.log('\ncheckout notice — web storefront (lifted from the page)');
       'all four exits — no quote, no rider, no number, or a good number');
   });
   it('is wired into the quote render pass', () => {
-    assert.ok(/renderCoPreorder\(d\); renderCoRiderPhone\(d\);/.test(html));
+    // Anchored on the pass itself (it opens with renderCoSlots), not on which
+    // renderer happens to sit immediately before this one — the pass gains a
+    // notice renderer from time to time and the adjacency was never the point.
+    assert.ok(/renderCoSlots\(d\);[^\n]*renderCoRiderPhone\(d\);/.test(html));
   });
   it('never disables Place order', () => {
     const fn = grab('renderCoRiderPhone') + grab('coSaveRiderPhone');
