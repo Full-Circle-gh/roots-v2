@@ -1885,9 +1885,13 @@ function cuRenderDetail() {
            title and summary: eleven empty stubs and one bar is not a chart,
            it's a chart-shaped apology. The section itself stays so the pane's
            shape doesn't change between customers.
+           Recent orders lives INSIDE this block: the shape of the last twelve
+           months and the orders that made it are one question, and reading
+           the chart used to mean scrolling past it to find the list. It is
+           the one fold that opens by default — it is why an operator came.
            Month labels are NUMERIC (08 09 10 …) — single letters give two "A"s
            and two "M"s in one row. -->
-      <div class="cux-sec cux-chart">
+      <div class="cux-sec cux-chart" id="cu-anchor-history">
         <div class="cux-kicker">Orders by month · 月度订单
           <span class="side" data-no-i18n>${chartSummary}</span>
         </div>
@@ -1895,31 +1899,32 @@ function cuRenderDetail() {
           <div class="cu-bar-row">${monthBars}</div>
           <!-- tooltip is a body-level singleton (cuBarTip) so the drawer can't crop it -->
         </div>` : ''}
+          <details class="cux-fold" open>
+            <!-- The summary states the customer's TRUE order count, not how many
+                 rows this fold happens to hold. recent_orders is LIMIT 10, so a
+                 48-order customer used to read "10" here — a number that looked
+                 like an answer and wasn't. stats.orders.orders_count is already
+                 on the payload; the list below is still the last 10, and the
+                 "View all N" link at its foot says so. -->
+            <summary>${chevron}<span class="t">Recent orders · 近期订单</span>
+              <span class="hint" data-no-i18n>${ordersN
+                ? escapeHtml(cuT(cuNum(ordersN) + (ordersN === 1 ? ' order' : ' orders'), cuNum(ordersN) + ' 单'))
+                : noneHint}</span></summary>
+            <div class="cux-fold-body">
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>Order # · 订单号</th><th>Status · 状态</th><th class="numeric">Total · 总额</th><th>When · 时间</th></tr></thead>
+                  <tbody>${recentOrdersRows}</tbody>
+                </table>
+              </div>
+              ${recentOrdersViewAll}
+            </div>
+          </details>
+
       </div>
 
-      <div class="cux-folds" id="cu-anchor-history">
-        <details class="cux-fold">
-          <!-- The summary states the customer's TRUE order count, not how many
-               rows this fold happens to hold. recent_orders is LIMIT 10, so a
-               48-order customer used to read "10" here — a number that looked
-               like an answer and wasn't. stats.orders.orders_count is already
-               on the payload; the list below is still the last 10, and the
-               "View all N" link at its foot says so. -->
-          <summary>${chevron}<span class="t">Recent orders · 近期订单</span>
-            <span class="hint" data-no-i18n>${ordersN
-              ? escapeHtml(cuT(cuNum(ordersN) + (ordersN === 1 ? ' order' : ' orders'), cuNum(ordersN) + ' 单'))
-              : noneHint}</span></summary>
-          <div class="cux-fold-body">
-            <div class="table-wrap">
-              <table>
-                <thead><tr><th>Order # · 订单号</th><th>Status · 状态</th><th class="numeric">Total · 总额</th><th>When · 时间</th></tr></thead>
-                <tbody>${recentOrdersRows}</tbody>
-              </table>
-            </div>
-            ${recentOrdersViewAll}
-          </div>
-        </details>
 
+      <div class="cux-folds">
         <details class="cux-fold">
           <!-- Was recent_points.length — capped at 20 by the query and labelled
                "earned", so it was neither the row count nor the earned total.
@@ -1938,7 +1943,6 @@ function cuRenderDetail() {
             </div>
           </div>
         </details>
-
         <details class="cux-fold">
           <summary>${chevron}<span class="t">Top-ups · 充值明细</span>
             <span class="hint" data-no-i18n>${d.recent_topups.length || noneHint}</span></summary>
@@ -1951,10 +1955,25 @@ function cuRenderDetail() {
             </div>
           </div>
         </details>
+
+        <details class="cux-fold">
+          <summary>${chevron}<span class="t">Affiliate · 推广</span>
+            <span class="hint" data-no-i18n>${affTotal ? escapeHtml(cuT(affTotal + ' invites', '邀请 ' + affTotal)) : escapeHtml(cuT('no invites', '暂无邀请'))}</span></summary>
+          <div class="cux-fold-body">${renderAffiliateBlock(d.affiliate)}</div>
+        </details>
       </div>
 
-      <div class="cux-sec" id="cu-anchor-account">
-        <div class="cux-kicker">Device &amp; account · 设备与账号</div>
+      <!-- Device & account and Diagnostics are the support pair and sit last.
+           Device & account is a FOLD, closed: build string, session count and
+           openid are read when something is wrong, not on every open, and as an
+           open section it was three rows of chrome between the operator and the
+           end of the record. Its summary carries the two facts worth seeing
+           without opening it. -->
+      <div class="cux-folds" id="cu-anchor-account">
+        <details class="cux-fold">
+          <summary>${chevron}<span class="t">Device &amp; account · 设备与账号</span>
+            <span class="hint" data-no-i18n>${escapeHtml(buildV && buildV.app_version ? buildV.app_version : cuT('not recorded', '未记录'))} · ${cuNum(sessions)} ${escapeHtml(cuT('active', '个活跃'))}</span></summary>
+          <div class="cux-fold-body">
         <div class="cux-frow"><div class="k">App build · 版本</div><div class="v${(buildV && buildV.app_version) ? ' quiet' : ' none'}" data-no-i18n>${escapeHtml(buildText)}</div></div>
         <!-- Number in Ink, "active" in Graphite — the same treatment every
              other value in this pane gets. It used to turn AMBER at 5+
@@ -1965,9 +1984,8 @@ function cuRenderDetail() {
              in this drawer. -->
         <div class="cux-frow"><div class="k">Sessions · 会话</div><div class="v" data-no-i18n>${cuNum(sessions)} <span class="muted">${escapeHtml(cuT('active', '个活跃'))}</span></div></div>
         <div class="cux-frow"><div class="k">openid</div><div class="v mono${openid ? '' : ' none'}" data-no-i18n>${escapeHtml(openidShort)}${openid ? `<button class="cux-copy" onclick="cuCopyChip(this, '${escapeAttr(openid)}')">${escapeHtml(cuT('Copy', '复制'))}</button>` : ''}</div></div>
-      </div>
-
-      <div class="cux-folds">
+          </div>
+        </details>
         <!-- Three states, not two. "no errors in 7 days" is an ALL-CLEAR and is
              only earned when the query actually ran and returned zero. When the
              read failed (diagnostics.unavailable) the summary says so plainly —
@@ -1983,12 +2001,6 @@ function cuRenderDetail() {
           <div class="cux-fold-body">${diagUnavail
             ? `<div class="muted">${escapeHtml(cuT("Diagnostics couldn't be read for this customer. This is not an all-clear — the check itself failed.", '无法读取该顾客的诊断数据。这不代表一切正常 — 是检查本身失败了。'))}</div>`
             : renderDiagnosticsBlock(d.diagnostics)}</div>
-        </details>
-
-        <details class="cux-fold">
-          <summary>${chevron}<span class="t">Affiliate · 推广</span>
-            <span class="hint" data-no-i18n>${affTotal ? escapeHtml(cuT(affTotal + ' invites', '邀请 ' + affTotal)) : escapeHtml(cuT('no invites', '暂无邀请'))}</span></summary>
-          <div class="cux-fold-body">${renderAffiliateBlock(d.affiliate)}</div>
         </details>
       </div>
     </div>
