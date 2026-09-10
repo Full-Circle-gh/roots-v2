@@ -32524,6 +32524,42 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind, opts = {}) 
 // so a shortage there routes to the fallback modal, not a pre-order.) Mirrors
 // the computeBatchNotice shape so the checkout can reuse its popup/banner.
 // Returns null when nothing qualifies.
+// The product ids a checkout notice must weigh: the cart's own lines PLUS the
+// stocked products sitting behind any paid extra the customer picked.
+//
+// A choice row carrying `stock_product_id` IS a real store_products row —
+// expandStockLines reserves, routes and commits it right alongside the dish it
+// hangs off (see there). The notices were fed only the top-level product_ids,
+// so a sold-out backorder EXTRA on an out-of-city order went through as a
+// pre-order with nothing said: the same silence the notice exists to end, one
+// level down. A plain (no-stock) option pick carries no id and is ignored here,
+// exactly as it is in expandStockLines.
+function noticeProductIds(items) {
+  const ids = [], choiceIds = [];
+  for (const it of (items || [])) {
+    const pid = parseInt(it && it.product_id, 10);
+    if (pid) ids.push(pid);
+    for (const c of (Array.isArray(it && it.choices) ? it.choices : [])) {
+      const cid = parseInt(c, 10);
+      if (cid) choiceIds.push(cid);
+    }
+  }
+  if (choiceIds.length) {
+    const ph = choiceIds.map(() => '?').join(',');
+    try {
+      for (const r of tdb().prepare(
+        `SELECT DISTINCT stock_product_id AS pid
+           FROM retail_product_option_choices
+          WHERE id IN (${ph}) AND stock_product_id IS NOT NULL`
+      ).all(...choiceIds)) {
+        const pid = parseInt(r.pid, 10);
+        if (pid) ids.push(pid);
+      }
+    } catch (e) { /* options tables are optional — the cart's own ids still stand */ }
+  }
+  return [...new Set(ids)];
+}
+
 function computePreorderNotice(zone, address, productIds, slotId, slotKind) {
   // Never promise a shopper on the local run that their order "ships soon":
   // the local pre-order gate in POST /orders refuses that line whatever day
@@ -34334,7 +34370,10 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
         zone, (items || []).map((i) => i.product_id), quoteNow, body.delivery_slot_id, body.slot_kind,
         { decision: quoteBatchDecision },
       ),
-      preorder_notice: computePreorderNotice(zone, address, (items || []).map((i) => i.product_id), body.delivery_slot_id, body.slot_kind),
+      // noticeProductIds, not a bare map of the lines: a sold-out backorder
+      // PAID EXTRA is as much a pre-order as a sold-out dish, and the cart's
+      // top-level ids alone never mentioned it.
+      preorder_notice: computePreorderNotice(zone, address, noticeProductIds(items), body.delivery_slot_id, body.slot_kind),
       // The local-run counterpart of the two above, and mutually exclusive with
       // preorder_notice by construction (their address gates are complements).
       local_fresh_notice: computeLocalFreshNotice(
