@@ -664,7 +664,7 @@ function finTxRender() {
       // Finance table, and Ruling 1 reserves 收入 for Income, so renaming
       // this tile was not available — the vocabulary amendment behind this
       // line records the alternatives and why this one was taken.
-      + `<div class="fin-tx-note">${escapeHtml(cuT('Sales revenue is on Summary', '营收见汇总'))}</div>`
+      + `<div class="fin-tx-tile-note">${escapeHtml(cuT('Sales revenue is on Summary', '营收见汇总'))}</div>`
       + `</div>`;
   }
 

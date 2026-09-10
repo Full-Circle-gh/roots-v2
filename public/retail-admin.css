@@ -14557,8 +14557,14 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 }
 /* The pointer under money in. Quieter than the tile's own label — it is not a
    second figure and must not read as one — and it sits below the value rather
-   than beside the key, so the tile still reads label-then-number at a glance. */
-#tab-finance .fin-tx-note {
+   than beside the key, so the tile still reads label-then-number at a glance.
+
+   NAMED `-tile-note` AND NOT `-note`, WHICH IS TAKEN: `#fin-tx-note` is the
+   Note input on the transaction form (retail-admin.html:11845). An id and a
+   class do not collide in the selector, so the near-miss costs nothing today —
+   it costs the next person to write `.fin-tx-note` meaning one and getting the
+   other. */
+#tab-finance .fin-tx-tile-note {
   font: 400 12px/1.5 var(--f-sans); color: var(--td-text2); margin-top: 4px;
 }
 #tab-finance .fin-tx-chips { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
