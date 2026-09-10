@@ -783,6 +783,14 @@ window.finShow = function finShow(which) {
   // server sends the queue whole, oldest first, and the screen shows the queue.
   const bar = document.querySelector('.fin-rangebar');
   if (bar) bar.hidden = isCats || isApr;
+  /* THE ECHO GOES WITH THE BAR, and leaving it behind made the bar's own
+     argument false. Hiding the controls while `Aug 12 – Sep 10 · 30 days`
+     stayed in the page head is the worse half of the thing the paragraph above
+     refuses: the queue was captioned with a window it does not have, and the
+     operator could not even reach the control to check. §1.17 — a page may not
+     claim something that is not true of what is under it. */
+  const echo = document.getElementById('fin-range');
+  if (echo) echo.hidden = isCats || isApr;
   if (isCats && !FIN_CATS_SEEN) { FIN_CATS_SEEN = true; finCatsLoad(); }
   // A payload the dot poller already pulled paints immediately; the fetch is
   // only for the first visit that beat it.
@@ -1903,11 +1911,18 @@ function finAprRow(r) {
       + '</button>'
     : '';
 
-  /* APPROVE IS THE CTA AND REJECT IS NOT, because the queue exists to be cleared
+  /* APPROVE LEADS AND REJECT DOES NOT, because the queue exists to be cleared
      and most claims in it are real. Reject is a plain control beside it rather
      than a danger-red one: refusing a ¥38 taxi is an ordinary decision, and
      colouring it as an alarm would make an approver hesitate over the one they
      are meant to make. (The phone's argument, and its layout.)
+
+     APPROVE IS INK, NOT DUSK. It shipped as a `.fin-cta` and therefore in the
+     AI's colour, which §1.8 refuses on two counts: one Dusk CTA per page and
+     this one repeats per row, and — the half that decides it — Dusk means
+     *tacet did this for you*, while an approver deciding a claim is the
+     operator acting. Same axis as the modal-primary correction. The styling
+     lives on `.fin-apr-yes` in the stylesheet.
 
      EVERY BUTTON IN THE LIST DISABLES WHILE ANY WRITE IS IN FLIGHT, but only the
      row being decided says "Working…". A settle is a run of writes over claims
@@ -1915,7 +1930,7 @@ function finAprRow(r) {
      decision landing on a queue the first one is still reshaping. */
   const actions = waiting
     ? `<div class="fin-apr-acts">`
-      + `<button type="button" class="fin-cta fin-apr-yes"${anyBusy ? ' disabled' : ''} `
+      + `<button type="button" class="fin-apr-yes"${anyBusy ? ' disabled' : ''} `
       + `onclick="finAprDecide(${r.id}, 'approve')">`
       + escapeHtml(busy ? cuT('Working…', '处理中…') : cuT('Approve', '通过')) + '</button>'
       + `<button type="button" class="fin-btn-sec"${anyBusy ? ' disabled' : ''} `
