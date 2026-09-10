@@ -24206,6 +24206,32 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
   const taxRateMicro = taxCfg.enabled ? taxCfg.rateMicro : null;
   const taxMode = taxCfg.enabled ? (overridden ? 'inclusive' : taxCfg.mode) : null;
 
+  // ── Store credit: points and prepaid balance (§93) ───────────────────────
+  // The counter till's "pay with points" / "pay with balance". Absent from the
+  // body — which is every caller that predates this — leaves `total` exactly
+  // where the lines and the fees put it, so nothing about an ordinary manual
+  // order moves.
+  //
+  // AFTER TAX, DELIBERATELY. Points and balance are TENDERS, not discounts:
+  // they settle a bill that has already been priced, tax included, which is the
+  // same order the checkout applies them in and the same reading
+  // pointsRedeemableBase's own note argues for. Subtracting them before tax
+  // would charge a customer less tax for paying with points.
+  const credit = manualOrderCredit({
+    customerId: customer ? customer.id : null,
+    pointsToUse: b.points_to_use, useBalance: b.use_balance,
+    subtotal, shippingFee, packingFee, taxAdded: money.fromMinor(taxLine.addedMinor), total,
+  });
+  if (credit.error) {
+    const { status, code, ...rest } = credit.error;
+    return res.status(status).json({ success: false, error: code, ...rest });
+  }
+  // What is left for a wallet to take. `total` is the CASH figure from here on
+  // — the receipt's, the payment row's, the pay link's — and the two credit
+  // tenders are carried beside it on the order, which is what lets
+  // orderTenders() split a later refund back across all three.
+  total = Math.max(0, money.round(total - credit.pointsAmount - credit.balanceUsed));
+
   // ── Status + payment method. Default pending; staff may mark paid offline. ──
   const status = b.status === 'paid' ? 'paid' : 'pending_payment';
   // The off-app tenders are here because the counter till settles by HAND: the
@@ -24224,6 +24250,26 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
   const ALLOWED_PAY = ['offline', 'wechat', 'alipay', 'points', 'balance', 'other',
                        'cash', 'bank_transfer', 'wechat_offline', 'alipay_offline'];
   const paymentMethod = ALLOWED_PAY.includes(String(b.payment_method)) ? String(b.payment_method) : 'offline';
+  /* ── A CREDIT TENDER HAS TO BE TRUE (§93) ────────────────────────────────
+     'points' and 'balance' have sat in ALLOWED_PAY since the off-app tenders
+     landed, and until §93 they were a LABEL: the route deducted nothing, so an
+     order could say it was paid in points while the customer's balance sat
+     untouched — and markOrderPaid would then award earn-points on top of it.
+     Adding the deduction fixes the case where credit was actually asked for;
+     it does not, on its own, stop a caller sending the word and no
+     `points_to_use`, which is the original untruth with the fix beside it.
+
+     So the word now has to be earned. A credit tender is only accepted when
+     credit actually settled the bill — some was applied, and nothing is left
+     for a wallet. Anything else names the wallet that took the remainder,
+     which is what every other counter sale does. */
+  if ((paymentMethod === 'points' || paymentMethod === 'balance')
+      && !(credit.pointsAmount + credit.balanceUsed > 0 && total <= 0)) {
+    return res.status(400).json({
+      success: false, error: 'credit_did_not_settle',
+      points_amount: credit.pointsAmount, balance_used: credit.balanceUsed, due: total,
+    });
+  }
   const staffNote    = b.staff_note    == null ? null : String(b.staff_note).slice(0, 2000);
   const customerNote = b.customer_note == null ? null : String(b.customer_note).slice(0, 2000);
 
@@ -24450,6 +24496,9 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
   // has to roll the order back. The throw unwinds the transaction; this carries
   // the reason out past it.
   let custError = null;
+  // Same job as custError, for the credit deduction: a floor check that fails
+  // inside the transaction has to leave as a 409, not a 500.
+  let creditError = null;
   try {
     await withTransaction(tdb(), async (tx) => {
       if (wantsCustomer) {
@@ -24489,8 +24538,9 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
            recipient_name, recipient_phone, address_full, address_json,
            subtotal, shipping_fee, packing_fee, total,
            customer_note, staff_note, channel, channel_note, source, created_by, fulfillment_type, pay_token,
-           store_id, tax_amount, tax_rate_micro, tax_mode, shop_entry_method
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+           store_id, tax_amount, tax_rate_micro, tax_mode, shop_entry_method,
+           points_used, points_amount, balance_used
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       ).run(
         // Always inserted as pending_payment first; markOrderPaid() flips it below
         // when staff chose 'paid', keeping the settle logic in one place.
@@ -24502,7 +24552,12 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
         // keying an order in, which is what the column records. §44's till/QR
         // distinction is shop_entry_method, bound last — see SHOP_ENTRY_METHODS.
         customerNote, staffNote, channel, channelNote, 'manual', req.user.id, fulfillmentType, payToken,
-        storeId, taxAmount, taxRateMicro, taxMode, shopEntryMethod
+        storeId, taxAmount, taxRateMicro, taxMode, shopEntryMethod,
+        // The two credit tenders, stored beside the cash `total` rather than
+        // folded into it, so a refund can be split back across all three
+        // (orderTenders / splitRefundAcrossTenders) instead of being returned
+        // entirely in cash the shop never took.
+        credit.pointsUsed, credit.pointsAmount, credit.balanceUsed
       );
       orderId = info.lastInsertRowid;
       // ship_modes / needs_ice_pack / ship_from_supplier are SNAPSHOTTED here, the
@@ -24532,11 +24587,56 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
         `INSERT INTO retail_payments (order_id, method, amount, status, out_trade_no)
          VALUES (?, ?, ?, 'pending', ?)`
       ).run(orderId, paymentMethod, total, orderNo);
+
+      /* ── Consume the credit, INSIDE this transaction (§93) ────────────────
+         Same placement and the same conditional UPDATEs as the checkout, for
+         the same reason: the floor check and the deduction are one statement,
+         so two tills settling the same customer at the same moment cannot both
+         read ¥40 and both spend it. A read-then-write here would be a race the
+         busiest counter hits first.
+
+         A failed floor check THROWS rather than clamping. The order row is
+         already written in this transaction, so unwinding costs nothing and
+         leaves no sale behind; clamping would let a customer walk out having
+         paid a residual computed against credit that was not there. The catch
+         below turns it into a 409 with the same code the checkout answers. */
+      if (credit.pointsUsed > 0) {
+        const upd = tx.prepare(
+          'UPDATE retail_customers SET points_balance = points_balance - ? WHERE id = ? AND points_balance >= ?'
+        ).run(credit.pointsUsed, customerId, credit.pointsUsed);
+        if (upd.changes !== 1) { creditError = 'insufficient_points'; throw new Error('insufficient_points'); }
+        const after = tx.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(customerId).points_balance;
+        tx.prepare(
+          `INSERT INTO retail_points_transactions
+             (customer_id, delta, balance_after, source, order_id, note)
+           VALUES (?, ?, ?, 'order_redeem', ?, ?)`
+        ).run(customerId, -credit.pointsUsed, after, orderId,
+              `Order ${orderId} redeemed ${credit.pointsUsed} pts`);
+      }
+      if (credit.balanceUsed > 0) {
+        const upd = tx.prepare(
+          'UPDATE retail_customers SET balance = ROUND(COALESCE(balance, 0) - ?, 2) WHERE id = ? AND ROUND(COALESCE(balance, 0) - ?, 2) >= 0'
+        ).run(credit.balanceUsed, customerId, credit.balanceUsed);
+        if (upd.changes !== 1) { creditError = 'insufficient_balance'; throw new Error('insufficient_balance'); }
+        // Ledgered exactly as the checkout ledgers it — a negative
+        // 'order_redeem' row tagged `orderspend:<id>` — because that tag is what
+        // reverseOrderBalance looks the spend up by when the sale is refunded.
+        tx.prepare(
+          `INSERT INTO retail_topup_transactions
+             (customer_id, amount, bonus_points, payment_method, status, paid_at, out_trade_no, raw_callback_json)
+           VALUES (?, ?, 0, 'order_redeem', 'success', CURRENT_TIMESTAMP, ?, ?)`
+        ).run(customerId, -credit.balanceUsed, `orderspend:${orderId}`, JSON.stringify({ order_id: orderId }));
+      }
     });
   } catch (e) {
     // A rejected customer rolls the whole write back — no order, no customer,
     // nothing to clean up — and answers with the field that was wrong.
     if (custError) return res.status(400).json({ success: false, error: custError });
+    // The credit moved between the read that priced this order and the write
+    // that spent it — another till, or the customer's own phone, got there
+    // first. Nothing was created; the operator re-reads the balance and tries
+    // again. Same code the checkout answers, so a client handles one case.
+    if (creditError) return res.status(409).json({ success: false, error: creditError });
     // Rethrowing from an async handler produces a REJECTED PROMISE rather than
     // a synchronous throw. It reaches the same error handler by a different
     // road: lib/express-async-guard patches Route.prototype and does
@@ -24590,6 +24690,10 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
     : null;
   res.json({ success: true, data: { id: orderId, order_no: orderNo, status, total, pay_token: payToken, pay_url: payUrl,
                                     customer_id: customerId, customer_reused: customerReused, carried,
+                                    // What the credit actually took, so the till can print the
+                                    // split without re-deriving it from settings it does not own.
+                                    points_used: credit.pointsUsed, points_amount: credit.pointsAmount,
+                                    balance_used: credit.balanceUsed,
                                     // What was charged, so the caller can print
                                     // it without a second read (audit I-03).
                                     tax_amount: taxAmount, tax_mode: taxMode, tax_rate_micro: taxRateMicro } });
@@ -33716,6 +33820,83 @@ function walletSpendableBase(subtotal, packingFee, voucherDiscount = 0, pointsAm
 function walletSpendForOrder(balanceAvailable, subtotal, packingFee, voucherDiscount = 0, pointsAmount = 0, taxAdded = 0) {
   const base = walletSpendableBase(subtotal, packingFee, voucherDiscount, pointsAmount, taxAdded);
   return Math.round(Math.min(Math.max(0, Number(balanceAvailable || 0)), base) * 100) / 100;
+}
+
+/* ── Points and prepaid balance offered at the COUNTER (§93) ──────────────
+   The customer checkout has redeemed both since long before this; a walk-in
+   holding the same account could not spend either, because the hand-keyed
+   route never asked. This is the one place that decides how much of each a
+   manual order may take, so the till and any later caller cannot answer the
+   question two different ways.
+
+   IT DECIDES AND DOES NOT WRITE. The deduction itself happens inside the
+   order's own transaction (see POST /api/retail-admin/orders), against the
+   same conditional UPDATEs the checkout uses, so two tills settling the same
+   customer at once cannot spend one balance twice. A helper that both computed
+   and consumed would have to be called inside the transaction, and the two
+   reads it makes would then sit inside a write lock for no reason.
+
+   `pointsToUse` IS A REQUEST, NOT AN INSTRUCTION. The till sends the whole of
+   the customer's balance and lets this clamp it to what the order can absorb,
+   because the clamp depends on `points.redeemRate` and `points.coverShipping`
+   — shop settings the till would otherwise have to re-implement, and be wrong
+   about on the day one of them changed. Asking for more points than the
+   customer HAS is a different thing and is refused rather than clamped: it
+   means the screen was showing a stale balance, and silently charging the
+   difference to the card is exactly the failure the checkout's own
+   `insufficient_points` exists to prevent.
+
+   TWO CEILINGS, AND THE LOWER ALWAYS WINS.
+     · the shop's redeemable base — subtotal + packing + tax, and shipping only
+       where `points.coverShipping` says so;
+     · THE BILL ACTUALLY DUE, which is not the same figure the moment an
+       operator has typed a grand-total override. Without this second cap an
+       order overridden down to ¥5 would still redeem points against the full
+       ¥50 of goods, and the shop would hand back ¥45 of credit it never
+       charged for.
+   Balance is capped a third time, at the bill less shipping, and that one is
+   not a setting: store credit never pays a shipping fee and there is no
+   switch that lets it (see walletSpendableBase). Points apply first because
+   they expire and balance does not. */
+function manualOrderCredit({ customerId, pointsToUse, useBalance,
+                             subtotal, shippingFee, packingFee, taxAdded, total }) {
+  const out = { pointsUsed: 0, pointsAmount: 0, balanceUsed: 0, error: null };
+  const requested = Math.max(0, Math.floor(Number(pointsToUse) || 0));
+  const wantsBalance = useBalance === true;
+  // Neither asked for → the route behaves exactly as it did before this existed.
+  if (!requested && !wantsBalance) return out;
+  // A guest has no points and no wallet, and an order that is about to CREATE a
+  // customer has neither yet — `customerId` here is the one resolved before the
+  // transaction opens, never one minted inside it. Refusing is the honest
+  // answer; quietly charging the full amount would look like the credit was
+  // spent.
+  if (!customerId) { out.error = { status: 400, code: 'credit_requires_customer' }; return out; }
+
+  const ship  = Math.max(0, Number(shippingFee) || 0);
+  const gross = Math.max(0, Number(total) || 0);
+  const cashCap = Math.max(0, gross - (pointsCoverShipping() ? 0 : ship));
+  const pointsBase = Math.min(
+    pointsRedeemableBase(subtotal, ship, packingFee, 0, taxAdded), cashCap);
+
+  if (requested > 0) {
+    sweepExpiredPoints(customerId);
+    const have = Number(tdb().prepare(
+      'SELECT points_balance FROM retail_customers WHERE id = ?').get(customerId)?.points_balance) || 0;
+    if (requested > have) {
+      out.error = { status: 409, code: 'insufficient_points', requested, available: have };
+      return out;
+    }
+    out.pointsUsed   = Math.min(requested, pointsRequiredFor(pointsBase));
+    out.pointsAmount = Math.min(pointsCashValue(out.pointsUsed), pointsBase);
+  }
+  if (wantsBalance) {
+    const have = Math.max(0, Number(tdb().prepare(
+      'SELECT balance FROM retail_customers WHERE id = ?').get(customerId)?.balance) || 0);
+    const balCap = Math.max(0, gross - ship - out.pointsAmount);
+    out.balanceUsed = Math.min(
+      walletSpendForOrder(have, subtotal, packingFee, 0, out.pointsAmount, taxAdded), balCap);
+  }
+  return out;
 }
 
 // ── Multi-tender refund split ────────────────────────────────────────────

@@ -5282,6 +5282,13 @@ const ONW_WHERE={
      is nowhere near the control that caused it. 'from' is the channel block. */
   bad_shop_entry_method:'from', shop_entry_method_required:'from',
   shop_entry_method_not_allowed:'from',
+  /* §93's store credit. Unreachable from this form for the same reason — it
+     sends neither points_to_use nor use_balance — and mapped for the same
+     reason: the endpoint answers with them to any caller, and an unmapped code
+     lands on 'who' by the fallback rather than by decision. 'who' is where they
+     belong anyway: points and a wallet are the customer's. */
+  credit_requires_customer:'who', insufficient_points:'who',
+  insufficient_balance:'who', credit_did_not_settle:'who',
 };
 /* One sentence per code, the desktop's own (04-orders.js ordNewErrText) — two
    surfaces answering the same refusal with the same words. E(), not T(): this
@@ -5299,6 +5306,12 @@ function onwErrText(code,msg){
     invalid_item:E('Every line needs a quantity of 1 or more.','每行数量需为 1 或以上。'),
     product_unavailable:E('One product is no longer on sale. Remove that line.','有商品已下架,请移除该行。'),
     bad_unit_price:E('A line price is not a valid amount.','某行单价金额不正确。'),
+    /* §93's store credit — the desktop's own four sentences, per this block's
+       rule above: two surfaces answering the same refusal with the same words. */
+    credit_requires_customer:E('Points and balance need a customer account.','积分和余额需要顾客账户。'),
+    insufficient_points:E('There are not enough points for that.','积分不足。'),
+    insufficient_balance:E('Not enough balance.','余额不足。'),
+    credit_did_not_settle:E('Points or balance did not cover the whole amount. Pick a payment method for the rest.','积分或余额不足以支付全部金额,请选择剩余金额的付款方式。'),
     bad_shipping_fee:E('Shipping is not a valid amount.','运费金额不正确。'),
     bad_packing_fee:E('Packing is not a valid amount.','包装费金额不正确。'),
     bad_channel:E('Pick a channel this order can be created on.','请选择可下单的渠道。'),

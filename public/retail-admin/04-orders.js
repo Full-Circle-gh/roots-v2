@@ -9972,6 +9972,16 @@ const ONW_ERR_WHERE = {
   bad_fulfillment_type: 'route', fulfillment_type_required: 'route',
   payment_method_required_for_counter: 'route',
   pos_closed_for_store: 'route',
+  /* §93's store credit. NONE of the four is reachable from THIS form — it
+     sends neither `points_to_use` nor `use_balance`, so it can never spend
+     points or balance — but the endpoint returns them to any caller (the
+     counter till does), and a code the server can send with no home on the page
+     is exactly what this map exists to prevent. Same reasoning, and the same
+     placement decision, as §44's three doors above. They land in 'cust' because
+     points and a wallet belong to the customer, which is the block the customer
+     control sits in. */
+  credit_requires_customer: 'cust', insufficient_points: 'cust',
+  insufficient_balance: 'cust', credit_did_not_settle: 'cust',
   address_required_for_delivery: 'addr',
   address_not_allowed_for_pickup: 'addr', address_not_allowed_for_counter: 'addr',
   shipping_fee_not_allowed_for_pickup: 'money', shipping_fee_not_allowed_for_counter: 'money',
@@ -10059,6 +10069,29 @@ function ordNewErrText(code, detail) {
     // just closed it there reads the same two words back. Replace with a full
     // sentence the moment one is locked.
     pos_closed_for_store: cuT('Closed', '已关闭'),
+    /* ── §93's store credit ────────────────────────────────────────────────
+       Unreachable from this form (see ONW_ERR_WHERE) and written anyway,
+       because the endpoint can return all four.
+
+       TWO ARE QUOTED, NOT COMPOSED. `insufficient_points` is the admin's own
+       locked pair from its shared error catalogue (01-core.js) — the same code
+       for the same fact, so it is the same sentence. `insufficient_balance` is
+       the live pair the web storefront and the mini app both ship for this code
+       (`public/shop.html`, `miniapp/pages/checkout/checkout.js`), carried across
+       with the full stop this catalogue's sentences all end in, exactly as
+       01-core normalised `积分不足` before it.
+
+       TWO ARE COMPOSED under Rule 4's standing delegation and declared in
+       docs/tacet-delivery-vocabulary.md, with every content word lifted from a
+       live string rather than minted: no screen in this product has ever had to
+       say that a tender fell short of the bill, because until §93 no hand-keyed
+       order had a tender that could. */
+    credit_requires_customer: cuT('Points and balance need a customer account.',
+                                  '积分和余额需要顾客账户。'),
+    insufficient_points: cuT('There are not enough points for that.', '积分不足。'),
+    insufficient_balance: cuT('Not enough balance.', '余额不足。'),
+    credit_did_not_settle: cuT('Points or balance did not cover the whole amount. Pick a payment method for the rest.',
+                               '积分或余额不足以支付全部金额,请选择剩余金额的付款方式。'),
     address_required_for_delivery: cuT('A delivery order needs a full address.', '配送订单需要完整地址。'),
     address_not_allowed_for_pickup: cuT('A pickup order cannot carry a delivery address.', '自提订单不能填写收货地址。'),
     address_not_allowed_for_counter: cuT('A counter sale cannot carry a delivery address.', '前台销售不能填写收货地址。'),

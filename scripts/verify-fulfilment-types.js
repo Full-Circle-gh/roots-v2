@@ -20,6 +20,8 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+// The till's own settle gate is LIFTED AND RUN below (§93), not pattern-matched.
+const vm = require('vm');
 const Database = require('better-sqlite3');
 
 const F = require('../lib/fulfilment');
@@ -1593,8 +1595,37 @@ check('the till posts to the ordinary manual-order endpoint, not a private one',
 // and the next payment method is a rewrite rather than an entry.
 check('the wallet reaches the request through the settle-mode seam',
   /payload: function \(st\) \{ return \{ payment_method: st\.wallet \}; \}/.test(TILL_SRC), true);
-check('the manual mode refuses to confirm without a wallet',
-  /ready: function \(st\) \{ return !!st\.wallet; \}/.test(TILL_SRC), true);
+/* ── The wallet rule, RUN rather than spelled (§93) ───────────────────────
+   This used to pin the literal source of `ready` — `return !!st.wallet;` — and
+   went red the day store credit landed, for a change that made the rule MORE
+   careful rather than less. That is the rot this file's own header warns about:
+   an assertion pinned to a spelling a correct change moved.
+
+   It is RE-SCOPED, NOT RELAXED, and it now proves more than the regex did. The
+   function is lifted out and EXECUTED against stubbed money, so what is held is
+   the behaviour: every ¥ of CASH still names the wallet that took it, and the
+   only bill that may settle without one is a bill with no cash left in it. A
+   `ready` that simply returned true would have satisfied the old regex's
+   successor and fails all four rows below. */
+{
+  // Non-greedy to the first closing brace: the body is one expression and
+  // carries none of its own, so this cannot swallow the next property.
+  const m = /ready: function \(st\) \{([^{}]*)\}/.exec(TILL_SRC);
+  check('the manual mode still has a ready() gate', !!m, true);
+  const ready = (cash, credit) => vm.runInNewContext(
+    `(function (st) {${m[1]}})`,
+    { cashDue: () => cash, creditApplied: () => credit });
+  check('cash still refuses to confirm without a wallet',
+    ready(42, 0)({ wallet: null }), false);
+  check('cash confirms once a wallet is named',
+    ready(42, 0)({ wallet: 'wechat_offline' }), true);
+  check('a bill fully covered by credit needs no wallet',
+    ready(0, 42)({ wallet: null }), true);
+  // The escape is the CREDIT, not the zero: a basket that came to nothing has
+  // no tender of any kind and is not a sale this screen may confirm.
+  check('a zero bill with no credit behind it still refuses',
+    ready(0, 0)({ wallet: null }), false);
+}
 // Receipt printing is automatic on settle (markOrderPaid → autoPrintOrder). The
 // till's own print control is therefore a SECOND copy, and must not present
 // itself as the primary action.
