@@ -15447,8 +15447,10 @@ function wireDrag(){
    So each piece below either replaces something the browser chrome was doing,
    or removes something the browser does that an app must not.
 
-     1. pullRing / wirePull  — refresh. There is no reload button in a
-                               standalone window, and nothing here polls.
+     1. pullRing / wirePull  — refresh BY HAND. There is no reload button in a
+                               standalone window.
+     1b. the live stream      — refresh WITHOUT being asked, which is what
+                               "nothing here polls" used to be the absence of.
      2. syncHistory / Back   — the phone's Back gesture closes the top layer
                                instead of quitting the app.
      3. installStrip / sheet — how the operator gets it onto the home screen
@@ -15540,6 +15542,169 @@ function refreshNow(){
   });
 }
 reg('refresh', refreshNow);
+
+/* ── 1b. Staying current without being asked ────────────────────────────────
+   THE COMPLAINT, sent from the phone against a screenshot of Home: "I have to
+   refresh to see updates." The shell note above states the cause as though it
+   were a feature — "nothing here polls" — and on a board of ARRIVING WORK it
+   is not one. Home is orders to start, a channel that has stopped syncing,
+   stock running out, and the day's takings: every figure on it changes while
+   the operator is looking at it, and all of them were painted once at boot and
+   then held still until somebody pulled the screen down. Worse than stale, it
+   was stale SILENTLY — nothing on the glass said the board had stopped being
+   true, so the only way to find out was to refresh and watch the numbers move.
+
+   THE DESKTOP HAS ANSWERED THIS SINCE THE STREAM WENT IN, and the phone is
+   simply the client that never subscribed. routes/retail.js serves
+   `/api/retail-admin/stream`: a cheap per-tenant activity watermark sampled on
+   a 5s server tick, which fans a payload-free {ts} nudge to whoever is
+   watching and costs nothing when nobody is. 03-dashboard.js pairs it with a
+   60s backstop poll, stops both while the tab is hidden and resumes them on
+   the way back. That endpoint takes the very session this app already holds,
+   and `API` here is already '/api/retail-admin'. So this is the desktop's
+   mechanism moved across rather than a phone-shaped reinvention of it: same
+   endpoint, same interval, same stop-while-hidden.
+
+   THE NUDGE CARRIES NO DATA — it says only that something moved, and each
+   client re-reads under its own auth. That is the live-updates spec's rule
+   (reference/live-updates-spec.md) and it is what makes this safe to wire to a
+   handset at all: a nudge can never hand a phone a row the role may not see.
+
+   EVERY AUTOMATIC REFRESH RUNS ONLY WHILE THE APP IS ON SCREEN, which is
+   load-bearing and not housekeeping. These reads go through api(), and api()
+   sends a 401 STRAIGHT TO /backend/login — the honest answer to a tap, and the
+   exact thing fetchUnseenOrders hand-rolls its own fetch to avoid, because a
+   session that lapses overnight would otherwise move the app from inside a
+   pocket. Refreshing only while visible puts any bounce in front of the person
+   it concerns, precisely as a pull-to-refresh does. So the timer stops on
+   hide, and a nudge landing on a hidden page is remembered rather than fired
+   at it.
+
+   AND IT MUST NOT LAND ON SOMEBODY MID-SENTENCE. render() rewrites the whole
+   app in one innerHTML. It puts the scroll position back (_scrollMem) but a
+   caret only when the handler that caused the paint asked for one, so a
+   repaint nobody requested would empty the field an operator is typing in —
+   and it has nothing at all to say to a half-counted delivery. mAutoOK()
+   therefore refuses while a field has focus, while a sheet is being dragged,
+   and while there is unsaved work: mUnsavedWork(), the same list the
+   service-worker reload already waits on, rather than a second opinion about
+   what counts as work in progress. A refusal is never a skip — the nudge stays
+   owed in `dirty` and the next tick spends it. */
+const M_LIVE_POLL_MS=60000;   // DASH_HERO_INTERVALS.today, to the millisecond
+const _mLive={ es:null, timer:null, debounce:null, dirty:false, wired:false, busy:false };
+/* Typing, anywhere. Deliberately not a list of field ids: this app draws
+   fields in sheets, in the waste form, in quick stock and in the order
+   composer, and a list would be one field out of date the day the next one
+   lands. */
+function mTyping(){
+  const a=document.activeElement; if(!a) return false;
+  const t=a.tagName;
+  return t==='INPUT'||t==='TEXTAREA'||t==='SELECT'||a.isContentEditable===true;
+}
+/* May an automatic refresh repaint the screen right now? Every caller reads a
+   false as "not yet", never as "never". */
+function mAutoOK(){
+  if(document.visibilityState!=='visible') return false;
+  /* No board to refresh — and the stream is not on a confined role's allowlist
+     (lib/stock-app-only.js), so a kitchen phone opening it would 403, which
+     api()'s own rule turns into a bounce to /backend/login and server.js
+     bounces back to /m: the boot loop loadLive's flatNav gate exists to
+     prevent. Same gate, same reason, one line earlier. */
+  if(!state.capsLoaded||flatNav()) return false;
+  if(state.refreshing||_mLive.busy) return false;   // a pull is already doing this
+  if(state.dragging) return false;                  // a sheet mid-gesture
+  if(mTyping()) return false;
+  if(mUnsavedWork()) return false;
+  return true;
+}
+/* THE BACKSTOP, every 60 seconds: the four Today tiles, "Needs you", and the
+   awaiting-shipment count — the figures that move minute to minute — and
+   nothing else. The rest of loadLive is a dozen reads that do not move that
+   fast (invoices, vouchers, flash sales, the product seed), and putting them
+   on a timer would spend a phone's data plan on answers that had not changed.
+   The desktop scopes its own timer the same way: DASH_HERO_INTERVALS carries
+   `today` and `presence`, and nothing else on that page. */
+function mLiveTick(){
+  if(!mAutoOK()) return;
+  _mLive.busy=true;
+  Promise.all([
+    Promise.resolve(loadToday()).catch(()=>{}),
+    Promise.resolve(loadOps()).catch(()=>{}),
+    api('/order-status-counts').then(d=>{ if(d){ state.liveStatusCounts=d;
+      state.liveAttn=Object.assign({},state.liveAttn||{},{ship:(d.paid||0)+(d.preparing||0)}); } }).catch(()=>{}),
+  ]).then(()=>{ _mLive.busy=false; state.refreshedAt=Date.now(); render(); });
+}
+/* SOMETHING ACTUALLY MOVED — the whole board, the way a pull does it, without
+   the spinner and the half-second floor that a gesture needs to read as work
+   and a nudge does not.
+
+   The paged lists are the one place this parts company with refreshNow().
+   loadOrdersPage() and loadCustomers() BLANK their list before refilling it,
+   which is right under a pull ring the operator is holding open and wrong
+   under nobody's thumb. So Orders refreshes through refreshOrders() instead —
+   same filters, same depth, in place, and it repaints the open order sheet
+   too — and Customers waits for a pull, because it has no in-place equivalent
+   and inventing one here is a bigger change than this complaint asked for. */
+function mLiveRefreshAll(){
+  if(!mAutoOK()) return;
+  _mLive.dirty=false; _mLive.busy=true;
+  const jobs=[Promise.resolve(loadLive()).catch(()=>{})];
+  if(state.tab==='orders'||state.detailId!=null) jobs.push(Promise.resolve(refreshOrders()).catch(()=>{}));
+  Promise.all(jobs).then(()=>{ _mLive.busy=false; state.refreshedAt=Date.now(); render(); });
+}
+/* Coalesce a burst into one refresh — a dispatch run moves a dozen orders in a
+   few seconds, and the watermark reports every tick it moved on — and hold one
+   that lands while the app is off screen so a returning operator gets a single
+   refresh rather than a backlog of them. */
+function mLiveNudge(){
+  if(!mAutoOK()){ _mLive.dirty=true; return; }
+  clearTimeout(_mLive.debounce);
+  _mLive.debounce=setTimeout(mLiveRefreshAll,500);
+}
+function mLiveStart(){ mLiveStop(); _mLive.timer=setInterval(mLiveTick,M_LIVE_POLL_MS); }
+function mLiveStop(){
+  if(_mLive.timer){ clearInterval(_mLive.timer); _mLive.timer=null; }
+  if(_mLive.debounce){ clearTimeout(_mLive.debounce); _mLive.debounce=null; }
+}
+/* EventSource rather than a socket: the frames only run one way, the browser
+   reconnects on its own when a handset changes cell or comes out of a lift,
+   and a proxy that will not pass a stream simply leaves the 60s backstop
+   carrying the whole job — which is why that poll is not conditional on this
+   working. */
+function mLiveConnect(){
+  if(_mLive.es||typeof EventSource==='undefined') return;
+  let es; try{ es=new EventSource(apiURL('/stream')); }catch(e){ return; }
+  _mLive.es=es;
+  es.addEventListener('activity',mLiveNudge);
+  // CLOSED, not "errored": EventSource retries by itself and reports each
+  // attempt here. Only a stream it has given up on is worth letting go of.
+  es.onerror=()=>{ if(es.readyState===2&&_mLive.es===es) _mLive.es=null; };
+}
+/* Wired once, from loadLive — the first moment this app knows who is signed
+   in, which is what decides whether there is a board to refresh at all and
+   whether the stream is on this role's allowlist. Idempotent because loadLive
+   runs again on every pull. */
+function mLiveInit(){
+  if(_mLive.wired) return; _mLive.wired=true;
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState!=='visible'){ mLiveStop(); return; }
+    mLiveStart();
+    /* AND RE-OPEN THE STREAM IF IT IS GONE. EventSource retries by itself, but
+       only until it gives up for good — a handset in a tunnel, a proxy that
+       dropped the socket, a session that lapsed — and after that the board
+       would run on the 60s backstop alone, quietly, forever. A no-op while the
+       stream is up, so the ordinary case costs nothing. */
+    mLiveConnect();
+    /* Whatever arrived while the screen was off, and the plain fact that time
+       passed with it: a phone picked up after twenty minutes should not have
+       to be asked to catch up. Unconditional, exactly as dashHeroStart() is —
+       `dirty` decides whether a nudge is still owed, never whether a return is
+       worth a read. */
+    mLiveRefreshAll();
+  });
+  mLiveStart();
+  mLiveConnect();
+}
 
 /* ── 2. The Back gesture ────────────────────────────────────────────────────
    On Android, Back in an installed app with nothing on the history stack QUITS
@@ -17282,49 +17447,20 @@ function landOnSomethingReachable(){
   if(state.tab==='customers' && !state.custLoaded && !state.custLoading) loadCustomers();
   if(state.tab==='orders' && !state.ordersView && !state.ordersLoading) loadOrdersPage();
 }
-async function loadLive(){
-  // Role first, and awaited: the Recap renders money rows or does not depending
-  // on it, and a card that shows revenue for half a second before hiding it has
-  // already shown it.
-  await loadMe();
-  // config → store name + currency (best-effort; keeps mock on any miss)
-  try{ const cfg=await api('/config') || {};
-    state.cfg=cfg;
-    // Store name lives at brand.me_footer.wordmark_text; currency at currency.symbol.
-    // (The old code read store_name/currency_symbol, which don't exist — so the app
-    //  kept showing the fake "Maru Studio" and could render currency as [object Object].)
-    const wm = cfg.brand && cfg.brand.me_footer && cfg.brand.me_footer.wordmark_text;
-    if(wm) state.storeName = wm;
-    const cur = cfg.currency;
-    if(cur && typeof cur==='object' && cur.symbol) CUR = cur.symbol;
-    else if(typeof cur==='string') CUR = cur;
-    /* The store's timezone, which every date and time on this app is drawn in
-       (see /assets/td-datetime.js in the head). The endpoint resolves it from
-       the account's first active location — the same column lib/business-date
-       reads — and this is the same assignment the desktop's loadConfig makes.
-       Left alone when the account carries none, so td-datetime's own fallback
-       stands rather than being overwritten with undefined. */
-    if(cfg.timezone) window.TD_TZ = cfg.timezone;
-  }catch(e){ if(String(e.message)==='auth') return; }
-  /* AN OPERATOR WITH NO TAB BAR HAS NO BOARD TO FILL, so the boot stops here.
-     Everything below this line loads the four tabs — KPIs, orders, products,
-     reviews, coupons, feedback, zones — and `flatNav()` is precisely the
-     operator none of those screens exist for: their tool list IS the home
-     screen (see flatNav's own note). Fetching a revenue board to render nothing
-     was always waste; what makes it a BUG rather than waste is §48 step 3.
+/* THE TODAY BOARD — the four tiles, the vitals beside them, and the
+   awaiting-shipment count Home reads. Its own function because the backstop
+   poll refreshes exactly this and nothing else (see mLiveTick): the rest of
+   loadLive is a dozen reads that do not move minute to minute — invoices,
+   vouchers, flash sales, the product seed — and putting them on a 60-second
+   timer would spend a phone's data plan on answers that had not changed.
+   The desktop draws the same line: DASH_HERO_INTERVALS polls `today` and
+   `presence`, and nothing else on that page.
 
-     A confined role (kitchen, store_stock) now lives in this app, and
-     lib/stock-app-only.js does not admit `/dashboard` — it is the revenue
-     endpoint, and admitting it to a kitchen phone is the whole thing that gate
-     exists to prevent. So for them these calls do not merely waste a request:
-     `api()` turns a 403 into location.href='/backend/login', server.js bounces
-     that back to '/m', and the app boot-loops. The gate cannot open and the app
-     must not ask — this is the app not asking.
-
-     It is placed AFTER /config deliberately: the store's name titles their home
-     screen when the role record carries no name, and its timezone is what every
-     date on their screens is drawn in. */
-  if(flatNav()) return;
+   Returns false ONLY when the read failed on auth, which is loadLive's signal
+   to stop rather than run a boot's worth of reads into the same 401. Any other
+   failure returns true: the tiles keep whatever they had and the rest of the
+   boot carries on, which is what this catch has always done. */
+async function loadToday(){
   // dashboard → KPIs + deltas. MUST scope to today (the STORE's date) — the
   // endpoint defaults to a trailing 30 days, so an unscoped call made the
   // "Today" tiles show 30-day totals (and killed the vs-typical-day baseline).
@@ -17388,7 +17524,58 @@ async function loadLive(){
     // No `reviews` key any more: Home reads that fire off /dashboard/ops, which
     // knows the count without this phone having opened the Inbox first.
     state.liveAttn={ ship:(bs.paid?bs.paid.n:null) };
+  }catch(e){ if(String(e.message)==='auth') return false; }
+  return true;
+}
+
+async function loadLive(){
+  // Role first, and awaited: the Recap renders money rows or does not depending
+  // on it, and a card that shows revenue for half a second before hiding it has
+  // already shown it.
+  await loadMe();
+  // config → store name + currency (best-effort; keeps mock on any miss)
+  try{ const cfg=await api('/config') || {};
+    state.cfg=cfg;
+    // Store name lives at brand.me_footer.wordmark_text; currency at currency.symbol.
+    // (The old code read store_name/currency_symbol, which don't exist — so the app
+    //  kept showing the fake "Maru Studio" and could render currency as [object Object].)
+    const wm = cfg.brand && cfg.brand.me_footer && cfg.brand.me_footer.wordmark_text;
+    if(wm) state.storeName = wm;
+    const cur = cfg.currency;
+    if(cur && typeof cur==='object' && cur.symbol) CUR = cur.symbol;
+    else if(typeof cur==='string') CUR = cur;
+    /* The store's timezone, which every date and time on this app is drawn in
+       (see /assets/td-datetime.js in the head). The endpoint resolves it from
+       the account's first active location — the same column lib/business-date
+       reads — and this is the same assignment the desktop's loadConfig makes.
+       Left alone when the account carries none, so td-datetime's own fallback
+       stands rather than being overwritten with undefined. */
+    if(cfg.timezone) window.TD_TZ = cfg.timezone;
   }catch(e){ if(String(e.message)==='auth') return; }
+  /* AN OPERATOR WITH NO TAB BAR HAS NO BOARD TO FILL, so the boot stops here.
+     Everything below this line loads the four tabs — KPIs, orders, products,
+     reviews, coupons, feedback, zones — and `flatNav()` is precisely the
+     operator none of those screens exist for: their tool list IS the home
+     screen (see flatNav's own note). Fetching a revenue board to render nothing
+     was always waste; what makes it a BUG rather than waste is §48 step 3.
+
+     A confined role (kitchen, store_stock) now lives in this app, and
+     lib/stock-app-only.js does not admit `/dashboard` — it is the revenue
+     endpoint, and admitting it to a kitchen phone is the whole thing that gate
+     exists to prevent. So for them these calls do not merely waste a request:
+     `api()` turns a 403 into location.href='/backend/login', server.js bounces
+     that back to '/m', and the app boot-loops. The gate cannot open and the app
+     must not ask — this is the app not asking.
+
+     It is placed AFTER /config deliberately: the store's name titles their home
+     screen when the role record carries no name, and its timezone is what every
+     date on their screens is drawn in. */
+  if(flatNav()) return;
+  /* The Today board, in its own function so the backstop poll can refresh it
+     without re-running everything below. `return` on false: an auth failure
+     has already sent the app to the login screen, and the reads below would
+     each follow it there. */
+  if(!await loadToday()) return;
   // orders list (the heart of the app). The Recap no longer derives anything
   // from it — it reads the activity feed since you last left, like the desktop.
   try{ const rows=await api('/orders?limit=50');
@@ -17445,6 +17632,11 @@ async function loadLive(){
      opened rather than after a tap. */
   refreshPushState();
   loadOps();
+  /* From here the board keeps itself current — the live stream plus the 60s
+     backstop. Wired here rather than at the bottom of the file because this is
+     the first point at which the caps are known AND the flatNav gate above has
+     been passed, i.e. the first point at which there is a board to keep. */
+  mLiveInit();
   api('/setup').then(d=>set(()=>{ if(d&&d.percent!=null) state.setup=d; })).catch(()=>{});
   api('/delivery-zones').then(r=>set(()=>{ if(Array.isArray(r)) state.zones=r; })).catch(()=>{});
   api('/stores').then(r=>set(()=>{ if(Array.isArray(r)) state.stores=r.filter(s=>s.is_active==null||s.is_active); })).catch(()=>{});
