@@ -7313,6 +7313,32 @@ function renderDelayCase(o, s, delayDays) {
     step2 = delayStepRow('done', cuT('Claim filed with the carrier', '已申请延误赔偿'), bits.join(' · '));
   }
 
+  // The evidence sent to the carrier. It hangs under the claim because that is
+  // what it is for, and it NEVER gates the close: a case with no photographs is
+  // finishable, since plenty are settled on a phone call.
+  const files = (dc && dc.files) || [];
+  const evidence = `
+    <div style="display:grid; grid-template-columns:16px 1fr; gap:9px; align-items:start;
+                padding:8px 0; border-top:1px solid var(--line-soft);">
+      <span style="color:var(--text-3); line-height:1.4;">${files.length ? '▣' : '▢'}</span>
+      <div style="min-width:0; display:flex; flex-direction:column; gap:5px;">
+        <div style="color:var(--text-2);">${cuT('Evidence', '凭证')}${files.length ? ` · ${files.length}` : ''}</div>
+        ${files.length ? `<div style="display:flex; gap:6px; flex-wrap:wrap;">${
+          files.map(f => `<span style="display:inline-flex; align-items:center; gap:5px;
+                 border:1px solid var(--line); border-radius:var(--r-sm,5px); padding:2px 6px; font-size:11px;">
+            <a href="#" onclick="delayViewEvidence(${oid},${sid},${Number(f.id)},event);return false;"
+               style="color:var(--text-1); text-decoration:none;">${escapeHtml(f.label || cuT('View', '查看'))}</a>
+            <a href="#" onclick="delayRemoveEvidence(${oid},${sid},${Number(f.id)},event);return false;"
+               style="color:var(--text-3); text-decoration:none;" title="${cuT('Remove', '删除')}">×</a>
+          </span>`).join('')}</div>` : ''}
+        <div style="${row}">
+          <input type="file" accept="image/*" id="dcev-${sid}" style="display:none;"
+                 onchange="delayAddEvidence(${oid},${sid},this)">
+          ${delayBtn(`document.getElementById('dcev-${sid}').click()`, cuT('Add photo', '添加照片'))}
+        </div>
+      </div>
+    </div>`;
+
   // 3 — the customer is made whole. A branch, taken once. The refund arm is a
   // record that it happened; the refund itself stays on the path it always had.
   // Done: the replacement's own order number and what it cost us — the figure
@@ -7373,10 +7399,10 @@ function renderDelayCase(o, s, delayDays) {
       <div style="display:flex; gap:9px; align-items:flex-start;">
         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; color:var(--danger, #e8556a);"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
         <div style="font-weight:700; font-size:13px; color: var(--danger, #e8556a); text-transform:uppercase; letter-spacing:.04em;">
-          ${cuT(`Air shipment delayed — arrived ${delayDays} day${delayDays > 1 ? 's' : ''} late`, `空运延误 — 晚到 ${delayDays} 天`)}
+          ${cuT(`Delivery delayed — arrived ${delayDays} day${delayDays > 1 ? 's' : ''} late`, `配送延误 — 晚到 ${delayDays} 天`)}
         </div>
       </div>
-      <div style="margin-top:6px;">${step1}${step2}${step3}${step4}</div>
+      <div style="margin-top:6px;">${step1}${step2}${evidence}${step3}${step4}</div>
       <div style="margin-top:10px; padding-top:9px; border-top:1px solid var(--line-soft);">${foot}</div>
     </div>`;
 }
@@ -7420,6 +7446,59 @@ function delayRemedy(orderId, sid, kind, ev) {
   return delayStep(orderId, sid, 'remedy', { kind }, ev);
 }
 
+// ── Evidence: read the file here, send a data URI ──────────────────────────
+// The same shape the staff-claim receipt upload uses — there is no object store
+// in this product, and inventing one for this would be the tail wagging the dog.
+async function delayAddEvidence(orderId, sid, input) {
+  const file = input && input.files && input.files[0];
+  if (!file) return;
+  input.value = '';                                  // so the same file can be re-picked
+  if (file.size > 3.5 * 1024 * 1024) {
+    toast(cuT('That photo is too large — under 3.5MB please', '照片过大,请小于 3.5MB'), 'err');
+    return;
+  }
+  const data = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result || ''));
+    r.onerror = () => rej(new Error('read failed'));
+    r.readAsDataURL(file);
+  }).catch(() => null);
+  if (!data) { toast(cuT('Could not read that photo', '无法读取该照片'), 'err'); return; }
+  try {
+    await adminWrite({
+      url: `/api/retail-admin/orders/${orderId}/delay-case/evidence`,
+      method: 'POST', body: { shipment_id: sid, data, label: file.name || null },
+      errLabelEn: 'Could not attach', errLabelCn: '上传失败',
+    });
+    openOrder(orderId, { instant: true });
+  } catch {}
+}
+
+// The picture, fetched only now — the list carried its name and size, never its
+// bytes. Opened in a tab rather than a lightbox: it is evidence somebody is
+// about to send to a carrier, so they want it full size.
+async function delayViewEvidence(orderId, sid, fileId) {
+  try {
+    const j = await api(`/api/retail-admin/orders/${orderId}/delay-case/evidence/${fileId}?shipment_id=${sid}`);
+    const data = j?.data?.data;
+    if (!data) { toast(cuT('Photo not found', '未找到照片'), 'err'); return; }
+    const w = window.open();
+    if (w) w.document.write(`<img src="${data}" style="max-width:100%">`);
+  } catch { toast(cuT('Could not open that photo', '无法打开该照片'), 'err'); }
+}
+
+async function delayRemoveEvidence(orderId, sid, fileId) {
+  if (!confirm(cuT('Remove this photo?', '删除这张照片?'))) return;
+  try {
+    await adminWrite({
+      url: `/api/retail-admin/orders/${orderId}/delay-case/evidence/${fileId}`,
+      method: 'DELETE', body: { shipment_id: sid },
+      errLabelEn: 'Could not remove', errLabelCn: '删除失败',
+    });
+    openOrder(orderId, { instant: true });
+  } catch {}
+}
+
 // Raise the ¥0 replacement order (§98 stage three). Unlike every other step
 // this one CREATES something — real stock leaves the building — so it confirms
 // first, and the toast names the order it made rather than saying "saved".
@@ -7442,17 +7521,12 @@ async function delayReplacement(orderId, sid, ev) {
   } catch {}
 }
 
+// How late this parcel was — READ FROM THE SERVER, not recomputed here.
+// This used to be a local copy of the one-day air rule, in date arithmetic that
+// had to agree with three SQL predicates and the phone. lib/delay-case.js owns
+// the thresholds now and the payload carries the answer; 0 means on time.
 function airShipmentDelayDays(o, s) {
-  if ((s.mode || '') !== 'air') return 0;
-  const deliveredDate  = shipmentDeliveredDate(s);
-  const dispatchedDate = (s.dispatched_at || '').slice(0, 10);
-  if (!deliveredDate  || deliveredDate  === '0000-00-00') return 0;
-  if (!dispatchedDate || dispatchedDate === '0000-00-00') return 0;
-  const d = new Date(dispatchedDate + 'T00:00:00Z');
-  d.setUTCDate(d.getUTCDate() + 1);
-  const deadline = d.toISOString().slice(0, 10);
-  if (deliveredDate <= deadline) return 0;
-  return Math.round((new Date(deliveredDate) - new Date(deadline)) / 86400000);
+  return Number(s && s.late_days) || 0;
 }
 
 // Tracking card for one shipment row. Each shipment gets its own carrier +

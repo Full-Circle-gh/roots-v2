@@ -6527,20 +6527,28 @@ function buildOrderStatusData(orderId, orderNo, tip) {
 // True when an order carries an AIR parcel that delivered MORE than one day
 // after it dispatched — a late cold-chain shipment whose fresh/perishable
 // contents may no longer be safe. Mirrors the `air_delivery_delayed` computed
-// field on the admin orders list (mode='air', dispatched, delivered, and
-// DATE(delivered) > DATE(dispatched +1d)), using tracking_synced_at as the
-// delivered-date fallback because JD live-sync flips tracking_status to
-// 'delivered' but never stamps delivered_at. Best-effort; false on any error.
-function orderHasDelayedAirShipment(orderId) {
+// field on the admin orders list, using tracking_synced_at as the delivered-date
+// fallback because JD live-sync flips tracking_status to 'delivered' but never
+// stamps delivered_at. Best-effort; false on any error.
+//
+// EVERY MODE SINCE 2026-09-11, NOT JUST AIR, and the threshold is per mode —
+// `lib/delay-case.js` owns both. This function was `orderHasDelayedAirShipment`
+// and matched `mode = 'air'` only, which left every Guangdong order unwatched:
+// `planShipments` sends the whole province by land "regardless of any item's
+// air flag", ice packs included.
+//
+// THE `air_` NAMES ON THE WIRE AND IN THE DATABASE ARE HISTORICAL AND STAY.
+// `air_delivery_delayed` is read by both clients and `air_delay_cleared_at` is a
+// live column with production rows behind it; renaming either to match the
+// wider meaning is a migration and two client releases, in exchange for nothing
+// an operator can see. They mean "a late parcel", and this note is where that
+// is written down.
+function orderHasDelayedParcel(orderId) {
   try {
     const row = tdb().prepare(
       `SELECT 1 FROM retail_shipments sha
          WHERE sha.order_id = ?
-           AND sha.mode = 'air'
-           AND sha.dispatched_at IS NOT NULL
-           AND (sha.delivered_at IS NOT NULL OR sha.tracking_status = 'delivered')
-           AND DATE(COALESCE(sha.delivered_at, sha.tracking_synced_at))
-                 > DATE(sha.dispatched_at, '+1 day')
+           AND ${delayCase.lateShipmentSql('sha')}
          LIMIT 1`
     ).get(orderId);
     return !!row;
@@ -6564,7 +6572,7 @@ function notifyOrderStatusChange(orderId, newStatus) {
   // warning instead of the usual celebratory note — the customer mirror of
   // the admin "AIR SHIPMENT DELAYED" banner. Inform + apologise only; the
   // operator handles JD compensation / refunds on the staff side.
-  const airDelayed = newStatus === 'delivered' && orderHasDelayedAirShipment(orderId);
+  const airDelayed = newStatus === 'delivered' && orderHasDelayedParcel(orderId);
   // In-app notification first — independent of WeChat push configuration.
   notifyForOrder(orderId, (o) => {
     if (airDelayed) {
@@ -11876,7 +11884,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
   o.tracking = buildTrackingView(o);
   // Late air parcel → drives the customer-facing food-safety banner on the
   // order page (the mirror of the admin "AIR SHIPMENT DELAYED" alert).
-  o.air_delayed = orderHasDelayedAirShipment(orderId);
+  o.air_delayed = orderHasDelayedParcel(orderId);
   // Split orders (2+ parcels): surface a per-parcel `shipments[]` so the
   // customer sees how their order is being shipped — each parcel's own status
   // (not shipped / dispatched / delivered) and the items riding in it. Tracking
@@ -16074,7 +16082,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // These orders are status='delivered' (terminal), so the dispatched-only
     // ALERT_WHERE above never sees them — the exact reason the list flagged
     // "AIR DELAYED · contact customer" while the dashboard still said "on track".
-    // Mirrors the `air_delivery_delayed` list column + orderHasDelayedAirShipment().
+    // Mirrors the `air_delivery_delayed` list column + orderHasDelayedParcel().
     // Dispatched-order alerts self-clear when they deliver, but a delivered
     // air-delay is terminal, so it stays on the dashboard until an operator marks
     // it handled (air_delay_cleared_at) — set from the drawer once they've
@@ -16083,11 +16091,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     const AIR_DELAY_EXISTS = `EXISTS (
         SELECT 1 FROM retail_shipments sha
          WHERE sha.order_id = o.id
-           AND sha.mode = 'air'
-           AND sha.dispatched_at IS NOT NULL
-           AND (sha.delivered_at IS NOT NULL OR sha.tracking_status = 'delivered')
-           AND DATE(COALESCE(sha.delivered_at, sha.tracking_synced_at))
-                 > DATE(sha.dispatched_at, '+1 day')
+           AND ${delayCase.lateShipmentSql('sha')}
            AND sha.air_delay_cleared_at IS NULL)`;
     const airCount = tdb().prepare(`
       SELECT COUNT(*) AS n FROM retail_orders o WHERE ${AIR_DELAY_EXISTS}
@@ -25152,11 +25156,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                        WHERE sh2.order_id = o.id AND sh2.mode = 'local' LIMIT 1) AS is_local,
                     (SELECT 1 FROM retail_shipments sha
                        WHERE sha.order_id = o.id
-                         AND sha.mode = 'air'
-                         AND sha.dispatched_at IS NOT NULL
-                         AND (sha.delivered_at IS NOT NULL OR sha.tracking_status = 'delivered')
-                         AND DATE(COALESCE(sha.delivered_at, sha.tracking_synced_at))
-                               > DATE(sha.dispatched_at, '+1 day')
+                         AND ${delayCase.lateShipmentSql('sha')}
                          AND sha.air_delay_cleared_at IS NULL
                        LIMIT 1) AS air_delivery_delayed,
                     s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn
@@ -25601,9 +25601,16 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     // parcels nobody ever had a problem with. NULL means "nothing done yet",
     // which is what both screens draw a fresh checklist from; the row appears
     // on the first step an operator actually takes.
-    delay_case: s.mode === 'air'
-      ? delayCase.forScreen(tdb(), delayCase.readCase(tdb(), s.id))
-      : null,
+    // HOW LATE THIS PARCEL WAS, COMPUTED HERE AND RENDERED THERE. Both screens
+    // used to do this arithmetic themselves against their own copy of the
+    // one-day rule — two more places for the threshold in lib/delay-case.js to
+    // drift from. 0 means on time.
+    late_days: delayCase.lateDays(s),
+    // The four steps. Read only, never created: a GET that wrote a row for
+    // every drawer opened would mint a case for parcels nobody had trouble
+    // with. NULL means nothing done yet, which is what both screens draw a
+    // fresh checklist from.
+    delay_case: delayCase.forScreen(tdb(), delayCase.readCase(tdb(), s.id)),
     local_eta:     s.local_eta || null,   // 'HH:MM' arrival time for local delivery (no waybill)
     eta_source:    s.eta_source || null,  // 'auto' = from Qingyun courier, 'manual' = operator-set
     state: shipmentState(s),
@@ -26555,10 +26562,7 @@ router.post('/api/retail-admin/orders/:id/air-delay/ack',
   const clear = req.body?.cleared !== false;
   // Scope to the actually-delayed air parcels so re-opening doesn't touch an
   // on-time air leg, and clearing only marks the ones that raised the alert.
-  const DELAYED = `mode = 'air'
-       AND dispatched_at IS NOT NULL
-       AND (delivered_at IS NOT NULL OR tracking_status = 'delivered')
-       AND DATE(COALESCE(delivered_at, tracking_synced_at)) > DATE(dispatched_at, '+1 day')`;
+  const DELAYED = delayCase.lateShipmentSql();
   // §98 — THE BUTTON THAT USED TO MEAN "I PHONED THE CUSTOMER" NOW MEANS "THIS
   // IS FINISHED", AND IT CAN BE REFUSED. Every delayed parcel on the order must
   // have a case that is allowed to close: the customer told, the customer made
@@ -26664,6 +26668,78 @@ router.post('/api/retail-admin/orders/:id/delay-case/step',
   logActivity(req.user.id, req.user.username, 'delay_case_step', 'retail_order', id,
     { shipment_id: sid, step }, req.ip);
   res.json({ success: true, data: delayCase.forScreen(tdb(), updated) });
+});
+
+// ── Evidence on a late-parcel case (§98) ────────────────────────────────────
+// The photographs sent to the carrier. §98 left these open on the condition
+// that the phase "must not make adding them harder"; this is the addition.
+//
+// A 4mb body, matching the staff-claim receipt upload, which is the only other
+// place this product takes a photograph from an operator.
+router.post('/api/retail-admin/orders/:id/delay-case/evidence',
+  requireRetailAdmin, express.json({ limit: '4mb' }), (req, res) => {
+  const id  = parseInt(req.params.id, 10);
+  const sid = parseInt(req.body?.shipment_id, 10);
+  if (!Number.isInteger(id) || !Number.isInteger(sid)) {
+    return res.status(400).json({ success: false, error: 'bad_request' });
+  }
+  const parcel = tdb().prepare(
+    'SELECT id FROM retail_shipments WHERE id = ? AND order_id = ?').get(sid, id);
+  if (!parcel) return res.status(404).json({ success: false, error: 'not_found' });
+  const actor = { id: req.user.id, label: req.user.username || null };
+  // ensureCase, because attaching the first photograph can genuinely be the
+  // first thing anybody does about a late parcel.
+  const c = delayCase.ensureCase(tdb(), id, sid, actor);
+  try {
+    delayCase.addCaseFile(tdb(), c.id, { data: req.body?.data, label: req.body?.label, actor });
+  } catch (e) {
+    if (e && e.code) return res.status(400).json({ success: false, error: e.code });
+    throw e;
+  }
+  logActivity(req.user.id, req.user.username, 'delay_case_evidence', 'retail_order', id,
+    { shipment_id: sid }, req.ip);
+  res.json({ success: true, data: delayCase.forScreen(tdb(), delayCase.readCase(tdb(), sid)) });
+});
+
+// One photograph, on its own. Served apart from the case for the reason the
+// case gives: bytes travel when somebody asks to look at them, not when a list
+// is drawn. Scoped through the order AND the parcel AND the case, so a file id
+// on its own opens nothing.
+router.get('/api/retail-admin/orders/:id/delay-case/evidence/:fileId',
+  requireRetailAdmin, (req, res) => {
+  const id  = parseInt(req.params.id, 10);
+  const sid = parseInt(req.query?.shipment_id, 10);
+  const fid = parseInt(req.params.fileId, 10);
+  if (!Number.isInteger(id) || !Number.isInteger(sid) || !Number.isInteger(fid)) {
+    return res.status(400).json({ success: false, error: 'bad_request' });
+  }
+  const parcel = tdb().prepare(
+    'SELECT id FROM retail_shipments WHERE id = ? AND order_id = ?').get(sid, id);
+  if (!parcel) return res.status(404).json({ success: false, error: 'not_found' });
+  const c = delayCase.readCase(tdb(), sid);
+  if (!c) return res.status(404).json({ success: false, error: 'not_found' });
+  const row = delayCase.caseFileData(tdb(), c.id, fid);
+  if (!row) return res.status(404).json({ success: false, error: 'not_found' });
+  res.json({ success: true, data: { data: row.data } });
+});
+
+router.delete('/api/retail-admin/orders/:id/delay-case/evidence/:fileId',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id  = parseInt(req.params.id, 10);
+  const sid = parseInt(req.body?.shipment_id ?? req.query?.shipment_id, 10);
+  const fid = parseInt(req.params.fileId, 10);
+  if (!Number.isInteger(id) || !Number.isInteger(sid) || !Number.isInteger(fid)) {
+    return res.status(400).json({ success: false, error: 'bad_request' });
+  }
+  const parcel = tdb().prepare(
+    'SELECT id FROM retail_shipments WHERE id = ? AND order_id = ?').get(sid, id);
+  if (!parcel) return res.status(404).json({ success: false, error: 'not_found' });
+  const c = delayCase.readCase(tdb(), sid);
+  if (!c) return res.status(404).json({ success: false, error: 'not_found' });
+  delayCase.removeCaseFile(tdb(), c.id, fid);
+  logActivity(req.user.id, req.user.username, 'delay_case_evidence_removed', 'retail_order', id,
+    { shipment_id: sid, file_id: fid }, req.ip);
+  res.json({ success: true, data: delayCase.forScreen(tdb(), delayCase.readCase(tdb(), sid)) });
 });
 
 // Raise the ¥0 replacement order for a late-parcel case (§98 stage three).

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.219
+# Tacet shared-core consolidation — decisions record, v4.220
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-11 · v4.220 — **§98'S LAST TWO OPEN ITEMS ARE BUILT AND THE SECTION CLOSES: EVERY MODE RAISES A CASE, AND THE EVIDENCE IS ATTACHED.** **AIR-ONLY WAS A HOLE, NOT A CONSERVATIVE DEFAULT** — `planShipments` sends every Guangdong order by land "regardless of any item's air flag", so the destination closest to the kitchen, ice packs included, was the one whose late parcels raised nothing at all. Thresholds are now per mode in `LATE_AFTER_DAYS` (`lib/delay-case.js`): air stays **1** because widening must not restate an existing case, local **1** against a same-day promise, land **3** because at 1 it would fire on ordinary two-day freight until the badge became noise. A mode absent from the map never raises one, so supplier-direct is excluded without being named. **Fixed in this phase and not tenant-editable, exactly as §32 fixed the waste reason codes.** The rule had been written out four times in `routes/retail.js` and twice more on the clients — same drift as the paid predicate, consolidated the same way; **the clients no longer do date arithmetic at all**, the server computes `late_days` and both screens render it. The `air_` names on the wire and in the database are historical and STAY (two client releases and a migration for nothing an operator can see); the function was renamed to `orderHasDelayedParcel` because that is free. **EVIDENCE IS A CHILD TABLE** — a claim is several photographs where a staff receipt is one — and **the bytes never travel with a list**, per `staff_expenses`'s own rule; only a `data:image/…;base64,` URI is accepted, since both screens render it into an `<img src>`; a file is reachable only through its own case; the phone downscales to 1280px/JPEG 0.7 as the claim photo already does. **Evidence does not gate closing**, deliberately: plenty of claims settle on a call, and a checklist that demands a photograph teaches people to attach a blank one. Chinese: `docs/tacet-delivery-vocabulary.md` v1.58 — the banner heading was RESTRUCTURED rather than tripled, because `配送延误` is already live inside the customer's own notification. **§98 is complete**: four stages, five addenda, nothing open. 206 fast suites pass, 0 fail.
 
 2026-09-11 · v4.219 — **§99 ADDENDUM 2: THE AUTO-ISSUE SWITCH IS REMOVED; THE INTEGRATION STAYS DORMANT. THE OPEN QUESTION IS ANSWERED.** §99 left *why is auto-issue off* open and it was asked three more times; Ash answered: **the shop's fapiao provider issues none for us and offers no open API.** **THE SWITCH WAS NEVER A SETTING** — `maybeAutoIssueInvoice` returns unless the flag AND Nuonuo credentials are both present, and the phone showed only the first lock. Ash turned it on from the phone mid-session, the screen said 自动开票已开启, and nothing happened because nothing could: **the same defect the §99 snooze was designed around — a control that reads as set and does nothing — from the other direction**, and worse, because the server already computes `credsReady` and **neither surface has ever read it**. Removed: the settings row, `toggleFapiao`, `loadFapiao`, the `r.fapiao` branches in both renderers, four state slots, and the phone's ONLY call to `/fapiao-settings` — a hidden control whose fetch survives is one render away from returning, so the suite asserts unreachability rather than non-rendering. **NOT REMOVED, AND ASH WAS ASKED BECAUSE THE CREDS ARE PER-TENANT**: Roots reads env, every other tenant stores its own encrypted, so this provider having no API is a fact about ONE tenant and deleting `lib/nuonuo.js` would take a platform capability from all of them to solve it. The session proposed the full rip-out, put the scope as a choice, and **Ash chose UI-only**; the suite fails in BOTH directions — switch back, or integration deleted. **BOTH GUARDS STAY AND NEITHER MAY BE RELAXED** to compensate for the missing control. The note bar keeps the half that is true (`请在电脑端开具`), which is **the live pair's own tail with its first clause dropped — nothing composed, vocabulary untouched**, the v4.211 treatment. **A LEFTOVER OF THE SESSION'S OWN IS FIXED**: addendum 1's snooze recovery set `state.fapiaoTried=false`, which gated the settings read and never the list. **`credsReady` REMAINS READ BY NOBODY, on purpose here** — recorded so the next person to find it knows. 13 new fast assertions checked to fail both ways; `test_mobile_settings` is edited and **NOT verified, being in the slow shard this repo does not run** — said plainly rather than implied. `test:fast` green at 208. A build under a new decision, hence a patch.
 
@@ -10270,6 +10272,71 @@ Nothing in §98 blocks a complete case any more. Still not decided, and unchange
 by this: **which parcels raise a case** (air only, delivered only, more than a
 day late — a late land parcel or same-city rider still raises nothing, and each
 mode needs its own threshold), and **whether evidence lives in Tacet**.
+
+### §98 addendum 5 — the last two open items, and §98 closes (2026-09-11)
+
+**Which parcels raise a case, and evidence in Tacet.** Both were recorded as
+open from the first section; both are now built, and nothing in §98 is
+outstanding.
+
+#### Air-only was a hole, not a conservative default
+
+The alert matched `mode = 'air'`. `planShipments` sends **every Guangdong order
+by land** — its own comment: *"the province ships by ground regardless of any
+item's air flag, so a single land shipment carries everything (an 'Air only'
+product still goes by land within Guangdong)"*. So the destination closest to
+the kitchen, carrying ice-pack goods, was the one whose late parcels raised
+nothing at all. That is the gap this closes, and it was larger than the feature
+that had been built on top of it.
+
+**The thresholds are per mode and live in one place** — `LATE_AFTER_DAYS` in
+`lib/delay-case.js`. Air stays **1**, unchanged, because widening must not
+restate a case that already exists. Local is **1**: a same-city rider against a
+same-day promise, a day past which is a failure rather than a slow day. Land is
+**3**: ground freight is legitimately slower, and at 1 it would fire on ordinary
+two-day deliveries until the badge became noise, which is how an alert stops
+being read. A mode absent from the map never raises one, so a supplier-direct
+parcel — not ours to claim against — is excluded without being named.
+
+**FIXED IN THIS PHASE AND NOT TENANT-EDITABLE**, exactly as §32 fixed the waste
+reason codes. A number somebody can change is a settings screen, a migration and
+a per-tenant default, and none of it is worth building before anyone has run the
+alert for a month and said it is wrong.
+
+**The rule was written out four times in `routes/retail.js` and twice more on
+the two clients** — the same drift the paid predicate had, found the same way,
+and consolidated the same way. The clients no longer do date arithmetic at all:
+the server computes `late_days` per parcel and both screens render it.
+
+**The `air_` names on the wire and in the database are historical and stay.**
+`air_delivery_delayed` is read by both clients and `air_delay_cleared_at` has
+production rows behind it; renaming them is a migration and two client releases
+in exchange for nothing an operator can see. The function was renamed
+(`orderHasDelayedAirShipment` → `orderHasDelayedParcel`) because that one is
+free, and the header now says what the `air_` prefix means.
+
+#### Evidence is attached, and it never gates the close
+
+A child table rather than a column, because a claim is several photographs where
+`staff_expenses.receipt_data` is one receipt. **The bytes never travel with a
+list**: `forScreen` returns each file's id, label and size, and the picture has
+its own route — `staff_expenses`'s own rule, in its own words, *"bytes travel
+when somebody asks to look at them, not when a list is drawn"*.
+
+Only a `data:image/...;base64,` URI is accepted; the two screens render these
+into an `<img src>`, so a column that took any string would be an injection with
+a UI attached. A file is reachable only through its own case, so an id on its
+own opens nothing. The phone downscales to 1280px and JPEG 0.7 before uploading,
+as the staff-claim photo already does, because a phone camera outruns the 4mb
+body limit on its own.
+
+**Evidence does not gate closing a case, deliberately.** Plenty of claims are
+settled on a phone call, and a checklist that refuses to finish without a
+photograph teaches people to attach a blank one.
+
+#### §98 is complete
+
+Four stages, five addenda. Nothing in the section is now open.
 
 ## §99 — THE FAPIAO CHASE: A REQUEST NOBODY ISSUED ASKS AGAIN, AND ONLY ISSUING IT STOPS THE ASKING
 
