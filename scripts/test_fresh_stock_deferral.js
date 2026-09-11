@@ -17,6 +17,16 @@
 // decrement drives physical_qty negative, that path having no availability check
 // at all.
 //
+// AND THE SAME BUG ONE ROUTE OVER, 2026-09-11 (§58 ADDENDUM). TC000656 and
+// TC000647, 小程序, Tianhe: three wraps and a salad off the count at 18:22 on
+// food going out the next day. §58 had said the fresh line decrements at "the
+// first forward transition into fulfilment ... a parcel dispatched", which is
+// right for one parcel and wrong for two. A split order ships its 陆运 box days
+// ahead so it ARRIVES with the 空运 box that carries the food; clicking 发货 on
+// the land box handed the whole order to the commit and took the fresh half with
+// it — and where the shelf was already at zero, to -1, which is §58's own stated
+// failure reappearing through a door it had not looked at.
+//
 // AND THE HALF THAT MUST NOT MOVE WITH IT. The 2026-08-31 rule that every paid
 // order decrements whatever its address is what stops a shelf-stable jar being
 // sold to five out-of-city shoppers off one unit. A jar has no batch behind it.
@@ -70,7 +80,8 @@ const ROUTES_SRC = fs.readFileSync(path.join(__dirname, '..', 'routes', 'retail.
 const INVENTORY_SRC = fs.readFileSync(path.join(__dirname, '..', 'lib', 'inventory.js'), 'utf8');
 
 const ROUTE_FNS = ['prepareCommitUnreservedOrder', 'freshLinesDeferred',
-  'batchMadeProductIds', 'expandStockLines', 'parseBundleItems'];
+  'batchMadeProductIds', 'expandStockLines', 'parseBundleItems',
+  'parcelsStillInTheBuilding'];
 const INV_FNS = ['commitUnreservedOrder', 'reverseCommittedLedger',
   'isStockPending', 'hasUndeductedFreshLine'];
 
@@ -90,7 +101,11 @@ db.exec(`
   );
   CREATE TABLE retail_order_items (
     id INTEGER PRIMARY KEY, order_id INTEGER, product_id INTEGER, qty INTEGER,
-    options_json TEXT
+    options_json TEXT, shipment_id INTEGER
+  );
+  CREATE TABLE retail_shipments (
+    id INTEGER PRIMARY KEY, order_id INTEGER, mode TEXT,
+    dispatched_at DATETIME, delivered_at DATETIME
   );
   CREATE TABLE store_products (
     id INTEGER PRIMARY KEY, bundle_items TEXT, is_batch_made INTEGER DEFAULT 0,
@@ -118,12 +133,19 @@ db.exec(`
 // not, and a bundle wrapping the salad — the bundle row itself carrying NO
 // batch-made flag, because the flag lives on what the kitchen actually makes.
 const SALAD = 310, WRAP = 440, JAR = 700, BOX = 900;
+// A second set, for the split-parcel assertions. Their own products so the
+// running shelf counts of the four above stay readable line by line.
+const SALAD2 = 311, WRAP2 = 441, JAR2 = 701, BOX2 = 901;
 const mkProduct = db.prepare(
   'INSERT INTO store_products (id, bundle_items, is_batch_made) VALUES (?,?,?)');
 mkProduct.run(SALAD, null, 1);
 mkProduct.run(WRAP, null, 1);
 mkProduct.run(JAR, null, 0);
 mkProduct.run(BOX, JSON.stringify([{ id: SALAD, qty: 2 }]), 0);
+mkProduct.run(SALAD2, null, 1);
+mkProduct.run(WRAP2, null, 1);
+mkProduct.run(JAR2, null, 0);
+mkProduct.run(BOX2, JSON.stringify([{ id: SALAD2, qty: 1 }]), 0);
 
 const STORE = 1;
 const setStock = db.prepare(
@@ -131,6 +153,9 @@ const setStock = db.prepare(
 setStock.run(STORE, SALAD, 5);
 setStock.run(STORE, WRAP, 0);
 setStock.run(STORE, JAR, 3);
+setStock.run(STORE, SALAD2, 5);
+setStock.run(STORE, WRAP2, 0);   // sold out, pre-orderable — the screenshot's wrap
+setStock.run(STORE, JAR2, 3);
 
 const qty = (pid) => db.prepare(
   'SELECT physical_qty AS q FROM retail_store_stock WHERE store_id = ? AND product_id = ?'
@@ -148,6 +173,30 @@ function mkOrder(ft, lines, { channel = 'wechat', status = 'paid' } = {}) {
     ).run(id, pid, n, '[]');
   }
   return id;
+}
+
+// Parcels. `planShipments` fans a split order into 'air' + 'land'; here the two
+// rows are made directly and the items pointed at them, which is what that
+// function leaves behind in retail_order_items.shipment_id.
+let nextShip = 8000;
+function mkParcel(orderId, mode) {
+  const id = ++nextShip;
+  db.prepare('INSERT INTO retail_shipments (id, order_id, mode) VALUES (?,?,?)').run(id, orderId, mode);
+  return id;
+}
+function putOnParcel(orderId, pid, sid) {
+  db.prepare('UPDATE retail_order_items SET shipment_id = ? WHERE order_id = ? AND product_id = ?')
+    .run(sid, orderId, pid);
+}
+// The stamp every parcel-level route writes BEFORE it reaches the commit.
+function shipParcel(sid) {
+  db.prepare("UPDATE retail_shipments SET dispatched_at = '2026-09-11 18:22:00' WHERE id = ?").run(sid);
+}
+// The kitchen making the batch. A sold-out fresh line is pre-ordered against a
+// named day; on that day the food exists before the parcel leaves.
+function addStock(pid, n) {
+  db.prepare('UPDATE retail_store_stock SET physical_qty = physical_qty + ? WHERE store_id = ? AND product_id = ?')
+    .run(n, STORE, pid);
 }
 
 if (!missing.length) {
@@ -171,6 +220,8 @@ if (!missing.length) {
 
   const atPayment = (id) => routes.prepareCommitUnreservedOrder(id, { actorLabel: 'Auto · paid', atPayment: true });
   const atFulfilment = (id) => routes.prepareCommitUnreservedOrder(id, { actorLabel: 'Auto · preparing' });
+  // ONE PARCEL going out, which is what the three parcel-level routes are.
+  const atParcel = (id, sid) => routes.prepareCommitUnreservedOrder(id, { actorLabel: 'Auto · parcel', shipmentId: sid });
 
   // ── 1. The order from the screenshot: one fresh line, one grocery line ─────
   const mixed = mkOrder('delivery', [[SALAD, 1], [JAR, 1]]);
@@ -265,6 +316,134 @@ if (!missing.length) {
     [r9 && r9.skipped, qty(SALAD)], ['reserved', 1]);
   check('and an order holding only reserved lines owes the shelf nothing',
     inventory.isStockPending(reserved, 'paid', 'wechat'), false);
+
+  // ── 10. §58 ADDENDUM — TC000656: the land box leaves, the food stays ──────
+  // The order from the 2026-09-11 report. Fresh salad + sold-out fresh wrap ride
+  // the 空运 parcel that leaves on the batch day; the jar rides the 陆运 parcel
+  // that leaves days earlier so the two arrive together. Clicking 发货 on the
+  // land box used to hand the WHOLE order to the commit.
+  const split = mkOrder('delivery', [[SALAD2, 1], [WRAP2, 1], [JAR2, 1]]);
+  const air  = mkParcel(split, 'air');
+  const land = mkParcel(split, 'land');
+  putOnParcel(split, SALAD2, air);
+  putOnParcel(split, WRAP2,  air);
+  putOnParcel(split, JAR2,   land);
+
+  atPayment(split);
+  check('a split order still commits its grocery line at payment and holds the kitchen\'s',
+    [qty(JAR2), qty(SALAD2), qty(WRAP2)], [2, 5, 0]);
+
+  shipParcel(land);
+  const r10 = atParcel(split, land);
+  // 'already_committed' and not 'fresh_on_another_parcel': the land box's own
+  // jar came off at payment, so what survives the hold-back reaches
+  // commitUnreservedOrder and ITS per-product guard answers. The by-name skip is
+  // asserted below on a parcel that carries nothing of its own.
+  check('the land parcel going out does NOT take the fresh food still in the fridge',
+    [r10 && r10.skipped, qty(SALAD2)], ['already_committed', 5]);
+  // THE SCREENSHOT'S OWN LINE. Pesto 'Chicken' Wrap read -1 because this path
+  // has no availability check in front of it; §58 named that failure and this is
+  // the door it came back through.
+  check('and it cannot drive a sold-out fresh shelf negative', qty(WRAP2), 0);
+  check('the order still reads "stock pending" while its fresh parcel waits',
+    inventory.isStockPending(split, 'paid', 'wechat'), true);
+  check('nothing was written to the ledger for the waiting fresh lines',
+    db.prepare('SELECT COUNT(*) AS n FROM retail_stock_ledger WHERE ref_id = ? AND product_id IN (?,?)')
+      .get(split, SALAD2, WRAP2).n, 0);
+
+  // Batch day: the kitchen makes the wrap, then the air box goes.
+  addStock(WRAP2, 2);
+  shipParcel(air);
+  atParcel(split, air);
+  check('the fresh lines come off when THEIR parcel goes out',
+    [qty(SALAD2), qty(WRAP2)], [4, 1]);
+  check('and the grocery line is not taken a second time on the way through',
+    db.prepare('SELECT COALESCE(SUM(delta),0) AS d FROM retail_stock_ledger WHERE ref_id = ? AND product_id = ?')
+      .get(split, JAR2).d, -1);
+  check('nothing is owed once the last parcel has left',
+    inventory.isStockPending(split, 'paid', 'wechat'), false);
+
+  // The hold-back says so BY NAME when it is the whole of what was asked for.
+  // A "(to follow · 后补)" parcel really can carry no items of its own, so this
+  // is the shape rather than a contrivance.
+  const toFollow = mkOrder('delivery', [[SALAD2, 1]]);
+  const tfAir   = mkParcel(toFollow, 'air');
+  const tfLater = mkParcel(toFollow, 'land');
+  putOnParcel(toFollow, SALAD2, tfAir);
+  atPayment(toFollow);
+  shipParcel(tfLater);
+  const beforeTf = qty(SALAD2);
+  const rTf = atParcel(toFollow, tfLater);
+  check('a parcel carrying nothing of its own commits nothing, by name',
+    [rTf && rTf.skipped, qty(SALAD2) - beforeTf], ['fresh_on_another_parcel', 0]);
+
+  // ── 11. The fresh line on the parcel that IS leaving still commits ────────
+  // The deferral is about WHICH box, not about fresh being untouchable: hold
+  // back on a parcel dispatch what is not in that parcel, and nothing else.
+  const flip = mkOrder('delivery', [[SALAD2, 1], [JAR2, 1]]);
+  const fLand = mkParcel(flip, 'land');
+  const fAir  = mkParcel(flip, 'air');
+  putOnParcel(flip, SALAD2, fLand);   // fresh by ground — Guangdong / Fujian
+  putOnParcel(flip, JAR2,   fAir);
+  atPayment(flip);
+  shipParcel(fLand);
+  atParcel(flip, fLand);
+  check('the fresh line rides out with the parcel it is actually in', qty(SALAD2), 3);
+
+  // ── 12. One parcel, and the last parcel, both sweep up ────────────────────
+  // An order with a single parcel has no "other parcel still here", so a parcel
+  // dispatch is the whole order leaving and takes everything — the pre-addendum
+  // behaviour, which was correct for exactly this shape and must not regress.
+  const solo = mkOrder('delivery', [[SALAD2, 1]]);
+  const sOnly = mkParcel(solo, 'land');
+  putOnParcel(solo, SALAD2, sOnly);
+  atPayment(solo);
+  shipParcel(sOnly);
+  atParcel(solo, sOnly);
+  check('a single-parcel order takes its fresh line when that parcel goes out', qty(SALAD2), 2);
+
+  // ── 13. A bundle on the waiting parcel is held by its COMPONENTS ──────────
+  // The wrapper carries no batch-made flag. Reading the order-level ids alone
+  // would ship the salad inside it straight off the count.
+  const bundled = mkOrder('delivery', [[BOX2, 1], [JAR2, 1]]);
+  const bAir  = mkParcel(bundled, 'air');
+  const bLand = mkParcel(bundled, 'land');
+  putOnParcel(bundled, BOX2, bAir);
+  putOnParcel(bundled, JAR2, bLand);
+  atPayment(bundled);
+  shipParcel(bLand);
+  atParcel(bundled, bLand);
+  check('a bundle waiting on another parcel is held back on its components',
+    qty(SALAD2), 2);
+  shipParcel(bAir);
+  atParcel(bundled, bAir);
+  check('and expands to component demand when its own parcel leaves', qty(SALAD2), 1);
+
+  // ── 14. An UNASSIGNED line is not held back ──────────────────────────────
+  // shipment_id NULL means no parcel claims it (an add-on attached before the
+  // re-plan ran). It is on no other parcel, so nothing defers it — the
+  // pre-addendum behaviour, kept deliberately: this rule only ever moves a line
+  // that is demonstrably somewhere else.
+  const loose = mkOrder('delivery', [[SALAD2, 1], [JAR2, 1]]);
+  const lLand = mkParcel(loose, 'land');
+  const lAir  = mkParcel(loose, 'air');
+  putOnParcel(loose, JAR2, lLand);     // SALAD2 left unassigned
+  atPayment(loose);
+  shipParcel(lLand);
+  atParcel(loose, lLand);
+  check('a line on no parcel at all is committed, not stranded',
+    [qty(SALAD2), lAir > 0], [0, true]);
+
+  // ── 15. A whole-order transition still takes everything ──────────────────
+  // PATCH /status and the auto-deliver sweeps pass no shipmentId. They are the
+  // backstop §58 built and the addendum must not have narrowed them.
+  const whole = mkOrder('delivery', [[SALAD2, 1], [JAR2, 1]]);
+  const wAir  = mkParcel(whole, 'air');
+  putOnParcel(whole, SALAD2, wAir);
+  atPayment(whole);
+  atFulfilment(whole);
+  check('Mark dispatched on the ORDER takes the fresh line whatever its parcel',
+    qty(SALAD2), -1);
 }
 
 // ── The rule as it is spelled at the two call sites ─────────────────────────
@@ -288,6 +467,40 @@ check('the rider auto-deliver sweep does too',
   /Auto · delivered \(rider\)/.test(ROUTES_SRC), true);
 check('both sweeps claim from paid, which is why they owe it',
   /AUTO_DELIVER_FROM_STATUSES = \['paid', 'preparing', 'dispatched', 'rider_pickup'\]/.test(ROUTES_SRC), true);
+// ── §58 ADDENDUM: THE THREE ROUTES THAT SHIP ONE PARCEL MUST SAY WHICH ──────
+// Behaviour above, wiring here — and this half is the one that actually failed.
+// The rule was right and complete; three call sites handed it the ORDER when
+// what had left was a parcel. A fourth such route added later and wired the same
+// way fails here rather than on a shelf.
+// A parcel-level call site is identified by the label in its OWN catch line, and
+// the question asked of it is whether the call above that line named a parcel.
+// An index scan rather than one long regex: the thing under test is a call-site
+// property, and it should read as one.
+const parcelSite = (label) => {
+  const at = ROUTES_SRC.indexOf("[inventory.prepareCommit (" + label + ")]");
+  if (at === -1) return 'no such call site';
+  const call = ROUTES_SRC.slice(Math.max(0, at - 400), at);
+  const last = call.lastIndexOf('prepareCommitUnreservedOrder(');
+  if (last === -1) return 'label has no call before it';
+  return /shipmentId: [A-Za-z.]+ \}\)/.test(call.slice(last));
+};
+check('the parcel-dispatch route names the parcel that left', parcelSite('parcel dispatch'), true);
+check('so does the parcel-deliver route', parcelSite('parcel deliver'), true);
+check('and minting a JD waybill for one parcel takes one parcel of stock', parcelSite('jd waybill'), true);
+check('exactly three call sites are parcel-scoped — the three that ship one box',
+  (ROUTES_SRC.match(/shipmentId: [A-Za-z.]+ \}\)/g) || []).length, 3);
+// The backstop, stated as a test because the deferral is only ever safe while
+// something downstream takes what it held: the whole-order transition passes no
+// shipmentId and therefore no parcel can narrow it.
+check('the whole-order status transition still takes everything',
+  /\['preparing', 'dispatched', 'delivered'\]\.includes\(status\)[\s\S]{0,300}?prepareCommitUnreservedOrder\(id, \{ actorUserId: req\.user\.id, actorLabel: req\.user\.display_name \|\| req\.user\.username \|\| null \}\)/.test(ROUTES_SRC), true);
+// The parcel is excluded by ITS OWN STAMP, not by having been passed in: all
+// three routes write dispatched_at before they call, so a route that forgets to
+// would still be caught by the id test, and vice versa.
+check('a parcel that has already gone out never holds anything back',
+  /dispatched_at IS NULL AND delivered_at IS NULL/.test(
+    extractFn('parcelsStillInTheBuilding', ROUTES_SRC) || ''), true);
+
 // The narrow flag, and it is narrow on purpose: oos_policy 'backorder_gz' opens
 // any product to out-of-city pre-order, shelf goods included, and a jar opened
 // that way has no batch behind it. §58 rule 3.

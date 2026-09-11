@@ -1622,20 +1622,31 @@ function expandStockLines(resolvedLines) {
 // lines; see freshLinesDeferred below. Every other caller is a forward
 // transition into fulfilment and takes everything, which is where the held-back
 // lines land.
-function prepareCommitUnreservedOrder(orderId, { actorUserId = null, actorLabel = null, atPayment = false } = {}) {
+//
+// `shipmentId` marks the callers that are ONE PARCEL going out rather than the
+// whole order — see parcelsStillInTheBuilding below. A whole-order caller passes
+// nothing and takes everything, exactly as it always did.
+function prepareCommitUnreservedOrder(orderId, { actorUserId = null, actorLabel = null, atPayment = false, shipmentId = null } = {}) {
   const o = tdb().prepare('SELECT id, order_no, fulfillment_type FROM retail_orders WHERE id = ?').get(orderId);
   if (!o) return;
   const items = tdb().prepare(
-    'SELECT product_id, qty, options_json FROM retail_order_items WHERE order_id = ?'
+    'SELECT product_id, qty, options_json, shipment_id FROM retail_order_items WHERE order_id = ?'
   ).all(orderId);
+  // Which of this order's OTHER parcels have not gone out. Empty for a
+  // whole-order caller, and empty for the last parcel to ship — so the final
+  // dispatch always sweeps up whatever the earlier ones held back.
+  const waiting = shipmentId ? parcelsStillInTheBuilding(orderId, shipmentId) : new Set();
   const resolved = [];
+  const elsewhere = [];
   for (const it of items) {
     if (!it.product_id) continue;
     const prod = tdb().prepare('SELECT id, bundle_items FROM store_products WHERE id = ?').get(it.product_id);
     if (!prod) continue;
     let options = [];
     try { const oj = JSON.parse(it.options_json || '[]'); if (Array.isArray(oj)) options = oj; } catch { /* no options */ }
-    resolved.push({ product: prod, qty: Number(it.qty) || 0, options });
+    const row = { product: prod, qty: Number(it.qty) || 0, options };
+    resolved.push(row);
+    if (waiting.size && it.shipment_id && waiting.has(it.shipment_id)) elsewhere.push(row);
   }
   let lines = expandStockLines(resolved);
   if (atPayment && freshLinesDeferred(o)) {
@@ -1644,8 +1655,52 @@ function prepareCommitUnreservedOrder(orderId, { actorUserId = null, actorLabel 
       lines = lines.filter((l) => !fresh.has(l.product_id));
       if (!lines.length) return { skipped: 'fresh_deferred' };
     }
+  } else if (elsewhere.length) {
+    // §58 ADDENDUM — a parcel going out is not the whole order going out. The
+    // kitchen lines riding on a parcel that is still here keep waiting for the
+    // day THAT parcel ships, which is the day the food actually leaves.
+    //
+    // EXPANDED, for the same reason the payment path is: a bundle's batch-made
+    // components are caught by the flag they carry, not by the wrapper's.
+    //
+    // WHOLE-PRODUCT, and it is the safe direction rather than an oversight: the
+    // commit guard is per product and cannot hold back part of one, so a fresh
+    // product split across both parcels waits for the later of them. §58's error
+    // to avoid is taking the food off EARLY; late by one dispatch is the same
+    // count a day nearer the truth, and the sweep-up above guarantees it lands.
+    const fresh = batchMadeProductIds(expandStockLines(elsewhere).map((l) => l.product_id));
+    if (fresh.size) {
+      lines = lines.filter((l) => !fresh.has(l.product_id));
+      if (!lines.length) return { skipped: 'fresh_on_another_parcel' };
+    }
   }
   return inventory.commitUnreservedOrder(orderId, lines, { actorUserId, actorLabel, note: o.order_no });
+}
+// §58 ADDENDUM — the order's OTHER parcels that have not left yet.
+//
+// A split order fans out into an 空运 parcel and a 陆运 one (planShipments), and
+// they do not leave together: the land box goes days ahead so it arrives with
+// the air box, which carries the fresh food and leaves on the batch day. Every
+// parcel-level dispatch therefore has to say WHICH parcel left, or §58's
+// held-back lines come off the shelf on the first box out — tomorrow's food
+// taken out of today's count, which is the exact complaint §58 was written for.
+//
+// `dispatched_at IS NULL` is the test and the calling parcel is excluded by name
+// as well: all three call sites stamp their own parcel before they reach here,
+// so the timestamp alone would already exclude it, and the `id != ?` says so
+// rather than leaving it to the order the statements happen to run in.
+//
+// A supplier (drop-ship) parcel is not special-cased. It holds nothing the
+// kitchen makes, so it never carries a line this can hold back.
+function parcelsStillInTheBuilding(orderId, shipmentId) {
+  const sid = parseInt(shipmentId, 10) || 0;
+  return new Set(
+    tdb().prepare(
+      `SELECT id FROM retail_shipments
+        WHERE order_id = ? AND id != ?
+          AND dispatched_at IS NULL AND delivered_at IS NULL`
+    ).all(orderId, sid).map((r) => r.id)
+  );
 }
 // §58 — does this order hold its kitchen lines back at payment?
 //
@@ -26649,7 +26704,12 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch',
   // physical_qty is never deducted — silently, because isStockPending() only
   // flags 'paid' orders, so the "Stock pending" badge vanishes with the flip.
   // Idempotent: a no-op for the second parcel and for orders already committed.
-  try { prepareCommitUnreservedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null }); }
+  //
+  // SCOPED TO THIS PARCEL (§58 addendum): what it owes is the stock THIS box is
+  // carrying. A fresh line riding on the air parcel that has not left yet keeps
+  // waiting — sending the land box early is how a split order is meant to work,
+  // and it is not the kitchen's food leaving the fridge.
+  try { prepareCommitUnreservedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null, shipmentId: sid }); }
   catch (e) { console.error('[inventory.prepareCommit (parcel dispatch)]', e); }
 
   logActivity(req.user.id, req.user.username, 'shipment_dispatched', 'retail_order', id,
@@ -27071,8 +27131,8 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/deliver',
 
   // Same rule as the parcel-dispatch handler above: this stamps dispatched_at
   // too, so a single-parcel order can land paid → delivered here without ever
-  // passing PATCH /status. Idempotent.
-  try { prepareCommitUnreservedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null }); }
+  // passing PATCH /status. Idempotent, and parcel-scoped for the same reason.
+  try { prepareCommitUnreservedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null, shipmentId: sid }); }
   catch (e) { console.error('[inventory.prepareCommit (parcel deliver)]', e); }
 
   logActivity(req.user.id, req.user.username, 'shipment_delivered', 'retail_order', id,
@@ -29910,8 +29970,11 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
     firstDispatch = true;
   }
   // Minting a JD waybill ships the parcel, so it owes the stock decrement the
-  // bulk waybill-paste path already does (see PUT /tracking/bulk). Idempotent.
-  try { prepareCommitUnreservedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null }); }
+  // bulk waybill-paste path already does (see PUT /tracking/bulk). Idempotent,
+  // and scoped to the parcel the waybill was minted for (§58 addendum) — this
+  // route stamps ONE shipment's dispatched_at, so it may only take one
+  // shipment's stock.
+  try { prepareCommitUnreservedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null, shipmentId: shipment.id }); }
   catch (e) { console.error('[inventory.prepareCommit (jd waybill)]', e); }
   logActivity(req.user.id, req.user.username, 'jd_waybill_created', 'retail_order', id,
     { waybill, product, shipment_id: shipment.id, package_count: packageCount }, req.ip);
