@@ -9326,6 +9326,22 @@ function isGuangdong(province, city) {
   return false;
 }
 
+// Fujian / Guangxi — land-only for a different reason than Guangdong (which is
+// short-distance). JD's own 生鲜标快 (LL-HD-M, fresh-ground) product is
+// confirmed next-day into these two provinces too (JD's printed 时效产品), so
+// an "Air only" item doesn't need the pricier 生鲜特快 (air, LL-SD-M) lane to
+// keep its delivery promise there — paying for air buys nothing extra.
+function isJdLandNextDayProvince(province, city) {
+  const norm = s => String(s || '').trim().toLowerCase().replace(/省$|市$|自治区$/g, '');
+  const isOne = p => p === '福建' || p === 'fujian' || p === '广西' || p === 'guangxi';
+  if (isOne(norm(province))) return true;
+  if (city) {
+    const prov = provinceForCity(city);
+    if (prov && isOne(norm(prov))) return true;
+  }
+  return false;
+}
+
 // Decide which modes a single item is allowed to ship by. csv -> array.
 // 'local' is exclusive: a "Local only" product delivers ONLY within Guangzhou
 // (same-city), never air/land — so it stands alone, ignoring any stray air/land.
@@ -9493,7 +9509,9 @@ function planShipments(items, destCity, destProvince, opts = {}) {
   // Anywhere else in Guangdong → land only. The province ships by ground
   // regardless of any item's air flag, so a single land shipment carries
   // everything (an "Air only" product still goes by land within Guangdong).
-  if (isGuangdong(destProvince, destCity)) {
+  // Fujian / Guangxi get the same single-land-shipment treatment — see
+  // isJdLandNextDayProvince for why paying for the air lane there is wasted.
+  if (isGuangdong(destProvince, destCity) || isJdLandNextDayProvince(destProvince, destCity)) {
     return [{ mode: 'land', label: 'Land shipment · 陆运', item_ids: items.map(i => i.id) }];
   }
   const air  = [];
@@ -9792,7 +9810,7 @@ function shipmentDeliveryRollup(orderId) {
 //
 // Returns { eligible, reason, current: {plan, cost}, suggested: {plan, cost},
 //           savings, threshold, currency }.
-// `reason` codes: 'ok' | 'in_guangzhou' | 'in_guangdong' | 'asap_paid'
+// `reason` codes: 'ok' | 'in_guangzhou' | 'in_guangdong' | 'jd_land_next_day_province' | 'asap_paid'
 //                 | 'holiday_mode_off' | 'only_one_bucket'
 //                 | 'savings_below_threshold' | 'land_bucket_too_small'
 //                 | 'no_parseable_weight' | 'already_optimal' | 'no_items'
@@ -9814,6 +9832,12 @@ function buildShipmentSuggestion(orderId) {
   // Guangdong ships land-only — no air/land split to optimize.
   if (isGuangdong(destProvince, destCity)) {
     return { eligible: false, reason: 'in_guangdong' };
+  }
+  // Fujian / Guangxi ship land-only too (isJdLandNextDayProvince) — same
+  // no-split-to-optimize outcome, distinct reason so admin tooling can tell
+  // the two apart if it ever needs to.
+  if (isJdLandNextDayProvince(destProvince, destCity)) {
+    return { eligible: false, reason: 'jd_land_next_day_province' };
   }
 
   // ASAP paid → never suggest splitting; the customer paid for speed.
