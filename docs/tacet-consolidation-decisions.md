@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.223
+# Tacet shared-core consolidation — decisions record, v4.224
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-11 · v4.224 — **§101 DECIDED AND BUILT: THE NIGHT'S ORDERS RAISE THEIR OWN KITCHEN REQUEST IN THE MORNING, BECAUSE THE PUSH AND THE PRINTER ALREADY KNOW HOW TO CARRY ONE.** Asked by Ash from the §84 walkthrough — the screen block answers *how many to prepare* and answers it only to somebody who opens the screen — and the ask was three words: **"we need it to be push, print"**. **§84 BUILT A NUMBER; §51 AND §71 BUILT A DELIVERY MECHANISM; NOTHING CONNECTED THEM.** Push (`_fireRestockPush`), the kitchen slip (`lib/kitchen-print`), the deep link onto `kitchenqueue`, the tickable card, §61's per-line close and §61's handover to *What you made* that actually moves the shelf — **every one of those keys on a `restock_orders` row**, and a night of `awaiting_restock` pre-orders creates no such row. So eighteen owed wraps pushed nothing, printed nothing, and waited for somebody to walk in and tap the right tab. **THE RULING: ONE REQUEST, RAISED BY THE SERVER, AT A PER-TENANT HOUR, DEFAULT 06:00** (`fresh.morningRequestHour`, blank turns it off) — chosen over a digest push/slip carrying the same numbers because a digest is a SECOND thing to build and a second place the kitchen reads, and it still leaves them nothing to close; and over per-order push/print, which on a thirty-order night is thirty slips at 2am and still never states the total. **THE SHAPE IS A REQUEST NOBODY TYPED, AND THAT CROSSES §84'S OWN LINE ON PURPOSE.** §84 refused to write orders into the request table and that refusal stands **in the direction it was made**: `lib/batch-owed.js` is unchanged, learns nothing, and is still the one definition of owed — the request is DERIVED from it once a day and never feeds back, so the number on the screen and the number on the paper cannot disagree. **The row is an ordinary kitchen request in every respect a reader can see**: `from_role` warehouse, `to_role` kitchen, `purpose` `'order'` — which already prints *For an order · 用于发货* (`lib/feie.js`) and already sorts below §65's urgent — `status` `'sent'`, a `PR-` number from `genRsNumber` (**injected, not copied** — §80's copy rule), no locations at all per §51, `created_by` NULL. **ONE NEW COLUMN, `restock_orders.auto_source`, AND IT IS WHAT MAKES THE ONCE-A-DAY GUARD EXACT** rather than inferred: `created_by IS NULL` is also true of rows predating `drop_created_by_user_fk_v1`, and a guard that is usually right raises a second request on the morning it is wrong. NULL means a person raised it, which is true of every row already written, so **no backfill and no migration beyond one `addColumn`**. **THE GUARD IS THE DATABASE, NOT A FILE LATCH.** `lib/alert-latch`'s `claimWindow` was the obvious reach and is deliberately NOT used: it is per-box file state, so a rebuilt container forgets and sends twice, and the thing being guarded here is not an advisory but a row the kitchen will cook from. The query asks whether today already has an `auto_source` request — which is also the answer after a restart, a redeploy and a second app server. **IT CATCHES UP AND THEN STOPS**: it fires at the configured hour or up to three hours after, so a box that was down at 06:00 still prints at 07:10, while an order landing at 15:00 does not raise a surprise request for food wanted tomorrow. **QUANTITIES SUM PER PRODUCT ACROSS SHOPS** because a kitchen request carries no locations to split them into (§51) — which shop gets the wraps is a transfer's question, asked after they exist. **LINES CARRY SKU AND NAMES AND NO `product_id`**, matching every live kitchen request, because §61's recorded-derivation matches SKU-then-name and a line shaped differently would not tick off. **NOT SOLVED, AND THE DIRECTION IS CHOSEN RATHER THAN MISSED: a human request for the same food is not subtracted.** Subtracting would mean matching lines across open requests by SKU-then-name and trusting the result to REDUCE what gets cooked; wrong, the kitchen under-makes and a customer who paid gets nothing, where the opposite error is a visible over-make on a card somebody can read. Named here so the next reader knows it was weighed. **NO new push channel, NO second printer, NO new capability, NO change to `batch-owed`, and the kitchen's on-screen block is untouched** — it now agrees with a slip instead of being the only place the fact lived. **Chinese: nothing minted for the request, the slip or the push** — `purpose='order'`, `厨房新请求` and `用于发货` are all live and all reached unchanged; the note reuses `有客户订单等待` verbatim from §84's own block. **Two settings strings are ARRANGEMENTS of live fragments** (`厨房制作请求` whole from `routes/restock.js`, `留空则…` from the low-stock and campaign hints, `每天` from the low-stock digest), declared in `docs/tacet-delivery-vocabulary.md` v1.60 under Rule 4's standing delegation with the candidates rejected. **Tests:** `scripts/test_kitchen_morning_request.js`, new, in the fast shard — the owed night end to end (parked order in, request out, push and print fired exactly once), the once-a-day guard across a simulated restart, the catch-up window's both edges, nothing-owed raising nothing, the hour switched off, the per-product sum across two shops, lines carrying SKU and no `product_id`, and `batch-owed` asserted unchanged by source. Checked to fail with the change reverted. `test:fast` green at 210, plus `test_batch_owed`, `test_kitchen_queue_item_split` and `test_restock_tenant2_split` run individually per CLAUDE.md. **One `addColumn` — called out here and in the PR body, not slipped in.** A build under a new decision, hence a patch.
 
 2026-09-11 · v4.223 — **§58 ADDENDUM: A PARCEL GOING OUT IS NOT THE ORDER GOING OUT. THE THREE ROUTES THAT SHIP ONE BOX NOW SAY WHICH BOX.** Reported by Ash from the stock ledger — *"明天发快递的订单，鲜食自动扣了库存。原因，订单的陆运部分，点击发货，触发了扣除库存"* — TC000656 (Pesto 'Chicken' Wrap, Beet Salad, Quinoa Salad) and TC000647 (Tofu Banh Mi Wrap), 小程序 / Tianhe, four units off the count at 18:19 and 18:22 on food going out the next day, one of them to **-1**. **THIS IS §58's OWN COMPLAINT ARRIVING THROUGH A DOOR §58 DID NOT LOOK AT** — the ruling said the fresh line decrements at "the first forward transition into fulfilment … a parcel dispatched", which is exactly right for an order with one parcel and exactly wrong for an order with two. **A SPLIT ORDER'S BOXES DO NOT LEAVE TOGETHER, AND THAT IS THE FEATURE, NOT THE FAULT**: `planShipments` fans an out-of-Guangdong mixed basket into 空运 + 陆运, and the land box is sent days ahead **so that it arrives with** the air box carrying the food. So the first parcel out is, by design, the one with no kitchen line in it. **THE BUG WAS NEVER IN THE RULE, IT WAS IN THREE CALL SITES PASSING THE ORDER WHERE A PARCEL HAD LEFT**: `shipments/:sid/dispatch`, `shipments/:sid/deliver` and `orders/:id/jd-waybill` each stamp ONE shipment's `dispatched_at` and then handed `prepareCommitUnreservedOrder` the whole order id, whose per-product guard (`lib/inventory.js`) correctly found the held-back fresh products uncommitted and correctly took them. **Every guard behaved as written; none of them was ever told what had actually shipped.** **THE RULE, STATED SO IT SURVIVES THE NEXT SHAPE: a batch-made line decrements when the parcel CARRYING IT goes out.** A parcel-level caller passes `shipmentId`; `parcelsStillInTheBuilding` names the order's other parcels with no `dispatched_at`, and kitchen lines riding those are held exactly as payment holds them. **Whole-order callers pass nothing and take everything, unchanged** — PATCH /status, both auto-deliver sweeps, Start preparing — which is the backstop that makes the hold-back safe, and it is asserted rather than assumed. **HELD BACK WHOLE-PRODUCT, AND THE DIRECTION IS DELIBERATE**: the commit guard is per product and cannot hold part of one, so a fresh product split across both boxes waits for the later of them — §58's error to avoid is taking food off EARLY, and the last parcel always sweeps up. **EXPANDED, not order-level**, so a bundle on the waiting parcel is held by the components that carry the flag and not by its wrapper. **A line with `shipment_id` NULL is claimed by no parcel and is therefore NOT held** — this rule only ever defers a line demonstrably somewhere else. **Supplier parcels are not special-cased** because they carry nothing the kitchen makes. **NO SCHEMA CHANGE**: `retail_order_items.shipment_id` has recorded which box a line is in since the split-shipment table was added. **No new ledger reason, no new decrement site, no new strings, vocabulary untouched.** **Tests:** `scripts/test_fresh_stock_deferral.js` 45 assertions (was 24), the new ones reproducing TC000656 end to end — land box out, fresh untouched and a sold-out shelf still at 0 rather than -1; batch made; air box out; fresh off exactly once — plus the fresh line riding the parcel that IS leaving, the single-parcel and last-parcel sweep-ups, the bundle, the unassigned line, and the whole-order backstop. **13 of them checked to fail with the change reverted, in both directions** (behaviour and wiring separately), and the call-site check is by LABEL so a fourth parcel route wired the old way fails here rather than on a shelf. `test:fast` green at 209. **RECORDED AND NOT DONE: the four units already taken are left alone** — the per-product guard means tomorrow's dispatch will skip them, so the count is one day early and not double-counted, and a manual add-back today would leave it over by four from tomorrow; Ash was given the choice and the fix shipped without the adjustment. A fix under an existing decision, hence a patch.
 
@@ -10857,3 +10859,116 @@ it labels when the `customers` gate hides it). `test_backend_nav_parity` §4 gai
 two. `scripts/lib/m-fakeserver.js` grows a `mini_app` block that is **smaller on
 every figure than its all-channel neighbours** — a fixture where the two agreed
 would pass whether or not Home read the right one.
+
+## §101 — THE NIGHT'S ORDERS RAISE THEIR OWN KITCHEN REQUEST IN THE MORNING, BECAUSE THE PUSH AND THE PRINTER ALREADY KNOW HOW TO CARRY ONE
+
+Decided by Ash, 2026-09-11. The question was put after a walkthrough of what
+§84 actually delivers: *"if the meal the customer order is automatic at the
+kitchen queue for them to know the orders that already made so they know how
+many to prepare"* — answered honestly (the number is there, on one screen, if
+somebody opens it) — and the instruction came back in three words: **"we need
+it to be push, print"**.
+
+### What was already built, and the one thing that was not
+
+§84 computes the number: `lib/batch-owed.js`, owed units per (store, product),
+a negative shelf plus the lines of `awaiting_restock` orders, rendered as
+*Customer orders waiting · 有客户订单等待* above the kitchen queue's **To make**
+tab.
+
+§51 and §71 built the delivery mechanism: a push to everyone holding
+`restock:fulfil` with a deep link onto `kitchenqueue`, a slip on the kitchen's
+Feieyun printer, a card in the queue, §61's per-line close, and §61's handover
+to *What you made* — the screen that actually moves the shelf.
+
+**Every part of that second list keys on a `restock_orders` row.** A night of
+pre-orders creates no such row, so it fired none of it. The two halves were
+built four days apart and nothing joined them: the kitchen's own number existed
+in exactly one place, behind a tap nobody is prompted to make.
+
+### The ruling
+
+**One kitchen request, raised by the server, once a day, at an hour the tenant
+sets — `fresh.morningRequestHour`, default 6, blank turns it off.**
+
+Two alternatives were put to Ash and declined, and the reasons are the useful
+part:
+
+- **A digest push and slip carrying the same numbers.** It is a second
+  notification to build and a second place the kitchen reads, and at the end of
+  it they still have nothing to close and nothing that moves stock. The
+  request-shaped answer reuses six existing mechanisms and ends on the screen
+  that fixes the shelf.
+- **Push and print per order, as each one lands.** Thirty orders on a Friday
+  night is thirty slips, most of them at 2am, and not one of them states the
+  total — which is the only number the question was ever about.
+
+### The row, and why it looks like every other kitchen request
+
+`from_role` warehouse, `to_role` kitchen, `purpose` `'order'`, `status`
+`'sent'`, a `PR-` number, both locations NULL per §51, `created_by` NULL.
+
+`purpose='order'` is not a new value and was not chosen for tidiness: it
+already renders *For an order · 用于发货* on the slip (`lib/feie.js`) and in the
+queue (`krPurpose`), and §65 already sorts it below urgent. The request needed
+no vocabulary at all because the vocabulary for "the kitchen is making this
+because customers are waiting for it" was written in §65 and §84.
+
+`genRsNumber` is **injected by `routes/restock.js`, not copied into the new
+lib**. §80's copy rule is the whole reason: a second implementation of the
+per-prefix daily sequence is how two requests end up called PR-260911-002.
+
+### One new column, and what it buys
+
+`restock_orders.auto_source` — `'morning_owed'` on a row this job raised, NULL
+on a row a person raised, which is true of every row already in the table. One
+`addColumn`, no backfill, no migration.
+
+It exists because **the once-a-day guard has to be exact.** The inferable
+marker — `created_by IS NULL` — is also true of rows predating
+`drop_created_by_user_fk_v1`, and a guard that is usually right raises a second
+request on the morning it is wrong, which means the kitchen cooks the night's
+orders twice.
+
+**The guard is the database, not a file latch.** `lib/alert-latch`'s
+`claimWindow` was the obvious reach and is deliberately not used: it is
+per-box file state, so a rebuilt container forgets it and sends again, and what
+is being guarded here is not an advisory that can repeat harmlessly but a row
+somebody cooks from. Asking whether today already holds an `auto_source`
+request is also the correct answer after a restart, a redeploy, and on a second
+app server.
+
+**It catches up, then stops.** The job fires at the configured hour or up to
+three hours after it, so a box that was down at 06:00 still prints at 07:10,
+while an order landing at 15:00 does not raise a surprise request for food
+wanted the following morning.
+
+### The lines
+
+**Summed per product across shops.** A kitchen request carries no locations at
+all (§51), so there is nowhere for a per-shop split to live — and which shop
+gets the wraps is a transfer's question, asked once they exist.
+
+**SKU and both names, and no `product_id`** — the shape every live kitchen
+request has, because §61 derives whether a line has been recorded by matching
+SKU first and exact name second. A line carrying a `product_id` the derivation
+does not read would look identical and fail to tick off.
+
+### Scope, and what is deliberately not done
+
+- **A human request for the same food is not subtracted.** Doing it means
+  matching lines across open requests by SKU-then-name and then trusting the
+  result to *reduce* what gets cooked. Wrong in that direction, the kitchen
+  under-makes and a customer who has paid gets nothing; wrong in the other, a
+  visible over-make sits on a card somebody can read. The asymmetry decides it.
+  Named here so it is known to have been weighed rather than missed.
+- **`lib/batch-owed.js` is not touched** and learns nothing — no cadence, no
+  request vocabulary. The derivation runs one way only.
+- **The on-screen block is unchanged.** It now agrees with a slip instead of
+  being the only place the fact lived.
+- **No new push channel, no second printer, no new capability**, and no change
+  to who can reach the queue.
+- **Nothing is minted in Chinese for the request, the slip or the push.** The
+  note reuses `有客户订单等待` verbatim from §84's own block. The two settings
+  strings are arrangements of live fragments, declared in
+  `docs/tacet-delivery-vocabulary.md` v1.60 with the candidates rejected.

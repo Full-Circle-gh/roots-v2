@@ -300,6 +300,16 @@ async function loadDeliveryZones() {
     if ($('#fresh-resched-cutoff')) {
       $('#fresh-resched-cutoff').value = (fresh.rescheduleCutoffHour != null ? fresh.rescheduleCutoffHour : 20);
     }
+    /* §101 — the hour the kitchen's own request is raised from what customers
+       have already ordered. A KEY THAT HAS NEVER BEEN WRITTEN IS NOT BLANK: the
+       server defaults it to 6 and blank means OFF, so an absent value must paint
+       6 here or a tenant who has never opened this card would see "off" and read
+       it as the truth. An explicitly blank value stays blank. */
+    if ($('#fresh-morning-hour')) {
+      $('#fresh-morning-hour').value = (fresh.morningRequestHour === undefined)
+        ? 6
+        : (fresh.morningRequestHour == null ? '' : fresh.morningRequestHour);
+    }
     // Everything the Fresh batches console derives from the fields above.
     fbWire(); fbRenderSkip(); fbSync();
     // Default zone — rest of China
@@ -447,8 +457,19 @@ async function saveBatchSchedule() {
   if (!Number.isFinite(rawResched) || rawResched < 0 || rawResched > 23) {
     toast('Enter an hour 0–23 · 请输入 0–23 的小时', 'err'); return;
   }
+  /* §101 — blank turns it off, and a typed hour is validated the way every
+     other hour on this card is: refused rather than silently coerced, so an
+     operator who means 6 and types 26 is told, not given 2am. */
+  const rawMorning = (($('#fresh-morning-hour') && $('#fresh-morning-hour').value) || '').trim();
+  if (rawMorning !== '') {
+    const m = parseInt(rawMorning, 10);
+    if (!Number.isFinite(m) || m < 0 || m > 23) {
+      toast('Enter an hour 0–23 · 请输入 0–23 的小时', 'err'); return;
+    }
+  }
   const body = {
     'fresh.rescheduleCutoffHour': rawResched,
+    'fresh.morningRequestHour': rawMorning === '' ? '' : parseInt(rawMorning, 10),
     'batch.schedule': {
       enabled, anchor_date: anchor, interval_days: interval, skip_dates: skip,
       cutoff_hour: cutoffHour,

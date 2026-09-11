@@ -10471,6 +10471,23 @@
                     <span class="fb-unit">:00</span>
                   </div>
                 </div>
+
+                <!-- §101. The hour the kitchen's own request is raised from what
+                     customers have already ordered and the shelf does not have.
+                     Blank turns it off; an unwritten key is 6, not blank, and
+                     06-delivery.js paints that distinction rather than letting an
+                     untouched card read as "off". Both strings are arrangements of
+                     live fragments — docs/tacet-delivery-vocabulary.md v1.60. -->
+                <div class="fb-row">
+                  <div class="fb-lab">
+                    <label class="fb-name" for="fresh-morning-hour">Morning request hour · 厨房制作请求时间</label>
+                    <div class="fb-desc">One request a day for what customers have already ordered and the shelf does not have. It pushes and prints like any kitchen request. Leave blank to turn it off. · 每天一张厨房制作请求,数量取自有客户订单等待的商品,与其他制作请求一样推送并打印。留空则关闭。</div>
+                  </div>
+                  <div class="fb-ctl">
+                    <input type="number" id="fresh-morning-hour" min="0" max="23" step="1" placeholder="6">
+                    <span class="fb-unit">:00</span>
+                  </div>
+                </div>
               </div>
 
               <div class="fb-save">

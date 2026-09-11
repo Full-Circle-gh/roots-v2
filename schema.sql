@@ -426,7 +426,19 @@ CREATE TABLE IF NOT EXISTS restock_orders (
   -- restock could not run for any non-Roots tenant. Same trap, and the same
   -- fix, as retail_stock_ledger.actor_user_id. It stays a plain audit integer.
   -- Dropped from existing databases by drop_created_by_user_fk_v1.
-  created_by    INTEGER
+  created_by    INTEGER,
+  -- WHO RAISED IT, when the answer is "nobody" (decisions §101). NULL means a
+  -- person did, which is true of every row written before this column existed,
+  -- so there is nothing to backfill. 'morning_owed' marks the one request
+  -- lib/kitchen-morning-request.js raises each morning from what customers have
+  -- already ordered and the shelf does not have.
+  --
+  -- IT IS A COLUMN RATHER THAN AN INFERENCE because it is what makes the
+  -- once-a-day guard exact: `created_by IS NULL` is also true of rows predating
+  -- drop_created_by_user_fk_v1, and a guard that is usually right raises a
+  -- second request on the morning it is wrong — which is a tray of food.
+  -- Added to existing databases by database.js, beside the columns above.
+  auto_source   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS restock_items (

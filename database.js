@@ -1020,6 +1020,15 @@ addColumn('restock_orders', 'received_confirmed_at', 'DATETIME');
 addColumn('restock_orders', 'from_store_id', 'INTEGER');
 addColumn('restock_orders', 'to_store_id',   'INTEGER');
 
+// WHO RAISED IT, when the answer is "nobody" (decisions §101). NULL means a
+// person did — true of every row already written, so nothing is backfilled —
+// and 'morning_owed' marks the one request lib/kitchen-morning-request.js
+// raises each morning from what customers have already ordered and the shelf
+// does not have. The once-a-day guard reads this column with `date`, which is
+// why it is stored rather than inferred from a null `created_by`: that is also
+// true of rows predating drop_created_by_user_fk_v1. See schema.sql.
+addColumn('restock_orders', 'auto_source', 'TEXT');
+
 // Kitchen production ticket — the outcome of the slip that prints in the
 // kitchen when a request lands in its queue (lib/kitchen-print.js). The same
 // three columns retail_orders carries for its Feie slips, and for the same
