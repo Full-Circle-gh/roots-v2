@@ -416,6 +416,34 @@ CASES.push(['a shop where nobody has come back', `state.custMeta={all:12,buyers:
     ['no sessions figure',               `!${vitals}`],
     ['and no heading left standing over nothing', `!txt('content').includes('Today')`],
   ]]);
+
+  /* THE SECOND CARD NAMES ITS CHANNEL, and the reason is arithmetic rather than
+     decoration. Sessions can only ever be the mini app's — retail_visits has one
+     writer, the mini app's own tracker — so the three cells beside it have to be
+     the mini app's too, or Conversion divides one population by another. It did:
+     a live phone read "Conversion 68.0% · 17 orders ÷ 25 sessions" on a day
+     whose 17 orders were the mini app's, Meituan's and the till's together.
+     Scoping the card is half the fix; saying so over it is the other half,
+     because the money card above it genuinely IS all channels and the two sit
+     under one "Today".
+
+     Asserted on the RENDERED card, not the source: the heading is inside
+     vitalsBlock's own markup, so a refactor that drops it while leaving the
+     string in a comment would still pass a grep. */
+  CASES.push(['the second card says whose numbers it is showing', seed('null'), [
+    ['it is headed Mini app',    `txt('content').includes('Mini app')`],
+    ['above the session count',  `txt('content').indexOf('Mini app') < txt('content').indexOf('Sessions')`],
+    ['and under the section\'s own Today', `txt('content').indexOf('Today') < txt('content').indexOf('Mini app')`],
+    ['which is still the only one', `(txt('content').match(/Today/g)||[]).length===1`],
+  ]]);
+  /* The heading belongs to the CARD, so it goes when the card goes. A "Mini app"
+     left standing over the money card would relabel all-channel revenue as one
+     channel's — the same class of error the other way round. */
+  CASES.push(['and the heading leaves with the card it labels', seed(`['recap','needs','orders']`), [
+    ['the money card draws', money],
+    ['no sessions figure',   `!${vitals}`],
+    ['and no Mini app heading over it', `!txt('content').includes('Mini app')`],
+  ]]);
 }
 
 // ── The restock fire opens onto the shelf it counted ──────────────────────

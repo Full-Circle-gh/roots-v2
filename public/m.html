@@ -3181,7 +3181,9 @@ function recapCard(){
     ${workFold()}</div>`;
 }
 /* The four figures the desktop keeps beside Today, with the rules it wrote for
-   each of them — they are the whole point of these cells:
+   each of them — they are the whole point of these cells. (The phone now reads
+   all four scoped to the mini app; the desktop scopes only Conversion so far.
+   See vitalsBlock, and §100 for why the rest of the desktop is a separate job.)
 
      • Conversion is a lie at small denominators. Under twenty sessions a
        percentage is noise rendered as a crisis (0.0% over two sessions), so the
@@ -3239,6 +3241,37 @@ function todayBlock(kpis){
            <span style="display:block;font-size:13px;color:var(--text-secondary)">${l}</span>
            <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4;color:var(--text-secondary);opacity:.55">—</span></div>`).join('')}</div>`;
 }
+/* THIS CARD IS THE MINI APP'S, AND IT SAYS SO OVER ITSELF.
+   -------------------------------------------------------------------------
+   Roots sells through four channels and only one of them can be watched. The
+   mini app reports every open (retail_visits, via miniapp/utils/track.js);
+   Meituan, Eleme and gzgrocery hand over finished orders and never say how many
+   people looked. So Sessions was always this channel's figure — and the three
+   cells beside it were every channel's, divided by it or read next to it.
+
+   Reported from a real day: 25 sessions, 17 orders, "Conversion 68.0%". The 25
+   were mini-app opens; the 17 were the mini app, Meituan and the counter added
+   together. The rate was not slightly off, it was a ratio between two different
+   populations, and it can only ever err upward — every marketplace order the
+   shop wins pushes a number that is supposed to describe browsing we can see.
+
+   All four cells now come off the server's `mini_app` block. That makes the
+   card narrower and correct rather than wide and wrong, and it is the only
+   reading that makes the four sit together: Sessions, Conversion, Returning and
+   Refunded are now one channel described four ways.
+
+   THE HEADING IS PART OF THE FIX, NOT DECORATION. An unlabelled card under
+   "Today" claims the whole day, and the money card above it genuinely does
+   (revenue is all channels, and says so in its own label). Two cards under one
+   heading counting two different populations is exactly the confusion that
+   produced 68.0%, so this one names its population once, at the top, and the
+   cells below it are then free to stay short. "Mini app · 小程序" is the live
+   pair off the Orders screen's channel chips, which map the same chip to the
+   same channel — the operator has already learned this word here.
+
+   It is a label for the CONTENTS, not a second "Today": todaySection's heading
+   still covers both cards and still draws once, which is what retired "Also
+   today" (test_backend_nav_parity §4 holds that line). */
 function vitalsBlock(){
   const v=state.liveVitals; if(!v) return '';
   if(!showDashCard('customers')) return '';   // its twin is the desktop's Customers card
@@ -3253,14 +3286,16 @@ function vitalsBlock(){
     : [(v.conv==null?'—':v.conv.toFixed(1)+'%'), T(v.orders+' orders ÷ '+v.sessions+' sessions', v.orders+' 单 ÷ '+v.sessions+' 次会话')];
   const ret = v.buyers ? [String(v.returning), T('of '+v.buyers+' who bought today','今日 '+v.buyers+' 位买家中')]
                        : ['—', T('nobody has bought yet','今日暂无买家')];
-  return `<div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">
+  return `<div class="card" style="padding:16px">
+    <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:14px">${T('Mini app','小程序')}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
       ${cell(T('Sessions','会话'), v.sessions?v.sessions.toLocaleString():'—','')}
       ${cell(T('Conversion','转化率'), conv[0], conv[1])}
       ${cell(T('Returning','回头客'), ret[0], ret[1])}
       ${cell(T('Refunded','已退款'), String(v.refunded),
         v.refunded?T((v.refundRate||0).toFixed(1)+'% of orders','占订单 '+(v.refundRate||0).toFixed(1)+'%')
                   :T('nothing sent back','无退款'))}
-    </div>`;
+    </div></div>`;
 }
 /* ONE HEADING OVER BOTH CARDS, and it belongs to the section rather than to
    either card. The second card used to carry its own — "Also today ·
@@ -3278,7 +3313,15 @@ function vitalsBlock(){
    date line under the greeting, and it says so in its own comment — it "names
    the day every other number on the screen is counted over". One "Today" is the
    whole of what is left to say. The 16px between the cards is the Home column's
-   own gap, kept by hand now that the two are inside one wrapper. */
+   own gap, kept by hand now that the two are inside one wrapper.
+
+   THE SECOND CARD DOES CARRY A LABEL AGAIN, AND IT IS NOT A RETURN OF THE ONE
+   ABOVE. "Mini app · 小程序" names the card's POPULATION, which is the one thing
+   the two cards do not share: the money card is all channels, this one is the
+   only channel with sessions to divide by (see vitalsBlock). "Also today" said
+   where the card sat; this says what is in it, which is the test the rule above
+   sets and the reason that label failed it. The section heading is still drawn
+   once, by this function, and still says Today. */
 function todaySection(kpis){
   const cards=[todayBlock(kpis), vitalsBlock()].filter(Boolean);
   if(!cards.length) return '';
@@ -17972,14 +18015,22 @@ async function loadToday(){
     // The desktop's Today strip carries a fifth figure and its Customers card
     // four more; the phone kept none of them. Each comes with the honesty rule
     // the desktop wrote for it — see vitalsBlock.
+    // EVERY FIGURE IN THIS CARD COMES OFF `mini_app`, AND THAT IS THE WHOLE
+    // POINT OF THE CARD — see vitalsBlock. It used to be assembled from the
+    // all-channel keys (k.refunded_orders, k.orders, new_vs_returning) sitting
+    // beside a session count only the mini app can produce, so the card read
+    // "68.0% · 17 orders ÷ 25 sessions" on a day whose 17 orders were the mini
+    // app's, Meituan's and the till's together. The server now hands the four
+    // narrowed to one channel; nothing here narrows anything itself.
+    const ma=d.mini_app||{};
     state.liveVitals={
-      refunded:Number(k.refunded_orders||0),
-      refundRate:k.refund_rate!=null?Number(k.refund_rate):null,
-      sessions:Number(k.sessions||0),
-      orders:ord,
-      conv:k.conversion_rate!=null?Number(k.conversion_rate):null,
-      buyers:Number((d.new_vs_returning||{}).buyers||0),
-      returning:Number((d.new_vs_returning||{}).returning_buyers||0),
+      refunded:Number(ma.refunded_orders||0),
+      refundRate:ma.refund_rate!=null?Number(ma.refund_rate):null,
+      sessions:Number(ma.sessions||0),
+      orders:Number(ma.orders||0),
+      conv:ma.conversion_rate!=null?Number(ma.conversion_rate):null,
+      buyers:Number(ma.buyers||0),
+      returning:Number(ma.returning_buyers||0),
     };
     // "Orders awaiting shipment" = paid-but-not-shipped. The dashboard exposes the
     // per-status counts under `funnel` (the old code read `byStatus`, which doesn't

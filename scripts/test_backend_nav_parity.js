@@ -234,6 +234,23 @@ yes(!!sectionFn && /if\(!cards\.length\) return '';/.test(sectionFn[0]),
 yes(/\$\{todaySection\(kpis\)\}/.test(PHONE) && !/\$\{vitalsBlock\(\)\}/.test(PHONE),
   'and Home draws the section rather than the two cards side by side');
 
+/* THE SECOND CARD DOES CARRY A LABEL, AND IT PASSES THE TEST "ALSO TODAY"
+   FAILED. That rule is not "no label on the second card" — it is that a heading
+   must say what sits under it. "Also today" named the card's POSITION; "Mini
+   app" names its POPULATION, which is the one thing the two cards do not share.
+   The money card is every channel and says so in its own first label; this one
+   is the only channel that reports a session, so the only one with a conversion
+   rate to divide (routes/retail.js, MINI). Without the label the two cards
+   count two different things under one "Today" — which is how the card shipped
+   reading "17 orders ÷ 25 sessions" with the 17 drawn from Meituan and the till
+   as well. Pinned here beside the rule it could be mistaken for a breach of. */
+yes(/T\('Mini app','小程序'\)/.test(PHONE),
+  'the second card names the channel its four figures are counted over',
+  'unlabelled, it reads as the whole day — and its neighbour under the same heading really is');
+const vitalsFn = /function vitalsBlock\(\)\{[\s\S]*?\n\}/.exec(PHONE);
+yes(!!vitalsFn && !/T\('Today','今日'\)/.test(vitalsFn[0]),
+  'and it is a label for the contents, not a second Today');
+
 /* THE MONEY HALF, which is worse than the card half and was found with it.
    Today's twin — the desktop's `orders` block — is hidden for the warehouse,
    dispatch and customer-service boards by retail-admin.css. On the phone that

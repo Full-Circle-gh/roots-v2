@@ -14023,6 +14023,22 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // the revenue SUM stays gzgrocery-excluded to avoid double-booking its takings.
   const NOTGZ  = "COALESCE(channel,'') != 'gzgrocery'";
   const NOTGZO = "COALESCE(o.channel,'') != 'gzgrocery'";
+  // ── THE MINI APP IS THE ONLY CHANNEL THAT HAS SESSIONS ──────────────────
+  // retail_visits is written by exactly one caller — miniapp/utils/track.js, via
+  // POST /api/retail/track — so `sessions` below counts mini-app opens and
+  // nothing else. Meituan, Eleme and gzgrocery hand us finished orders; there is
+  // no browse to observe on any of them, and the web shop (channel='web') has
+  // never called /track either. That is a fact about the channels, not a gap we
+  // might fill: a marketplace will never tell us how many people looked.
+  //
+  // So any ratio whose denominator is `sessions` must take its numerator from
+  // the mini app too, or it divides one population by another. The predicate is
+  // the one /sales/summary already uses for its WeChat card: channel defaults to
+  // 'wechat' for mini-app orders (same convention as order-channel-counts), and
+  // counter fulfilment is excluded because a till sale can carry a storefront
+  // channel while belonging to the POS.
+  const MINI  = `COALESCE(NULLIF(channel,''),'wechat')='wechat' AND COALESCE(fulfillment_type,'') <> 'counter'`;
+  const MINIO = `COALESCE(NULLIF(o.channel,''),'wechat')='wechat' AND COALESCE(o.fulfillment_type,'') <> 'counter'`;
   const PAID_ALL = financeWindow.PAID;
   const PAID  = `${PAID_ALL} AND ${NOTGZ}`;
   const PAIDO = `${financeWindow.PAID_O} AND ${NOTGZO}`;
@@ -14626,7 +14642,61 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     console.error('[dashboard/article-views]', e.message);
   }
 
-  const conversion = vis.sessions > 0 ? (kpi.orders / vis.sessions) * 100 : null;
+  // ── The mini app on its own ────────────────────────────────────────────
+  // Every figure here is one of the all-channel figures above with the MINI
+  // predicate added and NOTHING else changed — same paid window, same date
+  // convention, same "new means first-ever paid order" rule — so each is the
+  // headline measure narrowed to one channel rather than a second definition of
+  // it. Read the all-channel comments above for what each one means; the only
+  // difference is the population.
+  //
+  // `sessions` needs no narrowing: it is already mini-app-only (see MINI).
+  const miniKpi = tdb().prepare(`
+    SELECT COUNT(*) AS orders, COUNT(DISTINCT customer_id) AS buyers
+      FROM retail_orders
+     WHERE ${PAID_ALL} AND ${MINI} AND ${PDATE} BETWEEN ? AND ?`).get(from, to);
+  // Refunds keep the funnel's date convention (placed_at), because that is what
+  // the all-channel `refunded_orders` beside them counts — two refund figures
+  // measured over different days would be worse than one narrow one.
+  const miniRefunded = tdb().prepare(`
+    SELECT COUNT(*) AS n FROM retail_orders
+     WHERE status = 'refunded' AND ${MINI}
+       AND date(placed_at, '${TZ}') BETWEEN ? AND ?`).get(from, to).n || 0;
+  // RETURNING IS A FACT ABOUT THE PERSON, NOT ABOUT THE CHANNEL, so the inner
+  // "when did they first buy" subquery stays ALL-CHANNEL (`PAID`) while only the
+  // outer set of today's buyers narrows to the mini app. A customer who has been
+  // ordering on Meituan for a year and opens the mini app today is a returning
+  // customer having their first mini-app order — calling them new would be a
+  // claim about them that is simply false, and the cell's own sub-line says
+  // "of N who bought today", which is the narrowed population it divides into.
+  // Scoping the subquery too would make loyalty look like churn on the day a
+  // shop's regulars move channel, which is the day it matters most.
+  const miniNvr = tdb().prepare(`
+    SELECT COUNT(DISTINCT o.customer_id) AS buyers,
+           COUNT(DISTINCT CASE WHEN fo.first_day BETWEEN ? AND ? THEN o.customer_id END) AS new_buyers
+      FROM retail_orders o
+      JOIN (SELECT customer_id, MIN(${PDATE}) AS first_day
+              FROM retail_orders WHERE ${PAID} GROUP BY customer_id) fo
+        ON fo.customer_id = o.customer_id
+     WHERE ${financeWindow.PAID_O} AND ${MINIO} AND ${PDATEO} BETWEEN ? AND ?`)
+    .get(from, to, from, to);
+  const miniOrders = Number(miniKpi.orders || 0);
+  // CONVERSION IS THE MINI APP'S, ON BOTH SIDES OF THE DIVISION, AND THERE IS NO
+  // OTHER KIND. It used to be kpi.orders / vis.sessions — every channel's orders
+  // over one channel's sessions — which is how a shop with 25 mini-app sessions
+  // and 17 orders across the mini app, Meituan and the till read 68.0%. The
+  // error runs one way: every marketplace order inflates a rate that is supposed
+  // to describe browsing we can see. This is the same fault the AOV note above
+  // records for Finance, arrived at from the numerator's side instead of the
+  // denominator's — revenue and its denominator must stand on the same
+  // population, and so must orders and theirs.
+  //
+  // Fixed HERE rather than on the card that reported it, because no caller can
+  // want the blended figure: there is no all-channel conversion to lose, only an
+  // arithmetic mistake to stop repeating. `mini_app_orders` rides alongside so
+  // every screen quoting "N orders ÷ M sessions" can name the numerator it
+  // actually divided by.
+  const conversion = vis.sessions > 0 ? (miniOrders / vis.sessions) * 100 : null;
   const pct = (cur, prev) => (prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
 
   const dashBody = {
@@ -14644,6 +14714,9 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
         sessions:      vis.sessions,
         visitors:      vis.visitors,
         conversion_rate: conversion,
+        // The numerator of conversion_rate, so no screen has to guess which
+        // order count it divided by. `orders` above is every channel.
+        mini_app_orders: miniOrders,
         gross_orders:  grossOrders,
         refunded_orders: refundedOrders,
         cancelled_orders: cancelledOrders,
@@ -14665,6 +14738,26 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
         buyers: nvr.buyers || 0,
         new_buyers: nvr.new_buyers || 0,
         returning_buyers: (nvr.buyers || 0) - (nvr.new_buyers || 0),
+      },
+      // ONE CHANNEL, READ FOUR WAYS — the block behind the phone's Mini app card.
+      // It is deliberately a block rather than four more keys in `kpis`: a
+      // screen either reads the whole of it and says "mini app" over the result,
+      // or it reads none of it. Mixing one of these figures into a row of
+      // all-channel ones is the fault this block was added to end.
+      //
+      // `sessions` and `conversion_rate` are repeated from `kpis` rather than
+      // referenced, because they were ALWAYS this channel's and belong here —
+      // kpis keeps them only so existing readers do not break.
+      mini_app: {
+        sessions:         vis.sessions,
+        orders:           miniOrders,
+        conversion_rate:  conversion,
+        buyers:           miniNvr.buyers || 0,
+        new_buyers:       miniNvr.new_buyers || 0,
+        returning_buyers: (miniNvr.buyers || 0) - (miniNvr.new_buyers || 0),
+        refunded_orders:  miniRefunded,
+        refund_rate: miniOrders + miniRefunded > 0
+          ? Math.round((miniRefunded / (miniOrders + miniRefunded)) * 1000) / 10 : 0,
       },
       payments, delivery, stores, routing,
       topProducts, topCustomers, tiers,

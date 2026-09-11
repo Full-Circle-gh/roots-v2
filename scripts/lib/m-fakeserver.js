@@ -41,9 +41,17 @@ const D = {
              privacy: { body_en: 'We keep only what an order needs.', body_cn: '我们只保留订单所需的信息。', updated_at: '2026-05-01' } },
     about: { content: { kicker_en: 'Our story', kicker_cn: '我们的故事', manifesto_en: 'We started with one shelf of ferments and a very small van.', manifesto_cn: '我们从一架发酵food和一辆小货车开始。', founder_name_en: 'Mei Chen', founder_name_cn: '陈玫', founder_title_en: 'Founder', founder_title_cn: '创始人', founder_quote_en: 'Good food should not be a special occasion.', founder_quote_cn: '好食物不该只在特别的日子。' } },
   },
-  '/dashboard': { kpi: { revenue: 3182.5, orders: 19, new_customers: 4, sessions: 412, conversion_rate: 4.6, refunded_orders: 1, refund_rate: 5.3 },
+  // `orders`, `refunded_orders` and `new_vs_returning` are ALL CHANNELS; the
+  // `mini_app` block beside them is the one channel that reports sessions, and
+  // it is deliberately SMALLER on every figure — a fixture where the two agreed
+  // would pass whether or not Home read the right one. Home's second card reads
+  // the block and nothing else (see vitalsBlock in m.html).
+  '/dashboard': { kpi: { revenue: 3182.5, orders: 19, new_customers: 4, sessions: 412,
+      conversion_rate: 2.7, mini_app_orders: 11, refunded_orders: 1, refund_rate: 5.3 },
     baseline: { revenue: 2840, orders: 16, new_customers: 5 },
     new_vs_returning: { buyers: 17, returning_buyers: 9 },
+    mini_app: { sessions: 412, orders: 11, conversion_rate: 2.7,
+      buyers: 12, new_buyers: 5, returning_buyers: 7, refunded_orders: 1, refund_rate: 8.3 },
     funnel: { paid: 7, preparing: 3 } },
   // `waiting_since` — the field oldestMins actually reads. Sending placed_at
   // made every fire lose its "oldest 2d" line, which looked like the app
