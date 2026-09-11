@@ -67,7 +67,15 @@ function constOf(name) {
 }
 
 // ── The predicates, read from the shipped file rather than restated ────────
-const PAID = constOf('PAID');
+// PAID COMES FROM THE MODULE, NOT FROM A REGEX OVER ITS SOURCE, for exactly the
+// reason recorded below for ODATE. It used to be scraped as `const PAID = '…';`
+// — which broke on 2026-09-11 when the eleven hand-written copies in
+// routes/retail.js were consolidated and PAID became `paidWhere()`, generated
+// from the status list rather than typed. Requiring it tests the value that
+// actually ships instead of a copy of its spelling, and the generated string is
+// pinned byte-for-byte against the pre-consolidation literal in
+// scripts/test_paid_predicate.js.
+const { PAID } = require(path.join(ROOT, 'lib', 'finance-window.js'));
 const TZ = constOf('TZ');
 const EDATE = constOf('LEDGER_DATE');
 // ODATE comes from the MODULE, not from a regex over its source. It used to be
@@ -121,8 +129,18 @@ it('each predicate is declared exactly once and referenced thereafter', () => {
   // comment naming one is documentation rather than a second declaration —
   // counting raw source would fail on the prose that exists to explain the rule.
   const src = codeOnly(ROUTE) + codeOnly(WINDOW_LIB);
+  // ZERO, not one, since 2026-09-11. The allow-list is no longer SPELLED at all
+  // — `paidWhere()` renders it from `PAID_STATUSES`, so the statuses are named
+  // in exactly one array and the SQL exists only as generated output. That is
+  // the same rule this assertion has always enforced, one level further in:
+  // there is now no literal to re-declare. The generated string is pinned
+  // byte-for-byte against the pre-consolidation characters in
+  // scripts/test_paid_predicate.js, which also guards routes/ and lib/ against
+  // a hand-written copy coming back.
   const inline = src.match(/status IN \('paid'/g) || [];
-  assert.strictEqual(inline.length, 1, `the allow-list is spelled out ${inline.length} times`);
+  assert.strictEqual(inline.length, 0, `the allow-list is spelled out ${inline.length} times`);
+  const lists = codeOnly(WINDOW_LIB).match(/'paid',\s*'preparing'/g) || [];
+  assert.strictEqual(lists.length, 1, `the status list is declared ${lists.length} times`);
   const dates = src.match(/date\(COALESCE\(paid_at, placed_at\)/g) || [];
   assert.strictEqual(dates.length, 1, `the date expression is spelled out ${dates.length} times`);
 });
