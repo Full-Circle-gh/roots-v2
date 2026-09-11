@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.214
+# Tacet shared-core consolidation — decisions record, v4.215
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-11 · v4.215 — **THE PAID PREDICATE IS CONSOLIDATED: ELEVEN HAND-WRITTEN COPIES IN `routes/retail.js` NOW ASK `lib/finance-window.js`, WHICH HAD ALWAYS CLAIMED TO BE THE ONE PLACE.** Decided by Ash after addendum 2 measured it. **IT WAS NOT NEW ARCHITECTURE, IT WAS AN EXISTING DECISION BEING HONOURED** — that module's header has always said "editing a constant here is the only way to change what Finance counts", which was true of the two Finance routes that import it and quietly false of `routes/retail.js`, which had never imported it at all; the claim was a description of two files sold as a property of the system. **THE LIST IS NOW THE SOURCE AND THE SQL IS RENDERED FROM IT**: `PAID_STATUSES` holds the five statuses, `paidWhere(alias)` renders them, and `PAID` / `PAID_O` are its two callers — six of the eleven copies were alias-qualified and five bare, which is why one constant could not have replaced them and why the drift was easy to miss. **NOTHING ABOUT WHAT IS COUNTED CHANGED, AND IT IS ASSERTED RATHER THAN PROMISED**: `scripts/test_paid_predicate.js` pins the generated string byte-for-byte against a frozen copy of the pre-consolidation literal, so reordering the list fails a test instead of quietly restating every money figure in the product, and the same suite fails if any file under `routes/` or `lib/` hand-writes the list again. **FIVE NEIGHBOURING PREDICATES WERE LEFT ALONE** — `('paid','awaiting_restock')`, `('paid','preparing')`, `('paid','preparing','rider_pickup')` and the two channel-internal ones answer different questions, folding them in would have been a behaviour change wearing a refactor's clothes, and a test asserts they are still present. **ONE EXISTING SUITE ARGUED FOR ITS OWN AMENDMENT**: `test_finance_summary.js` scraped `PAID` with a regex and counted the literal, and both were fixed the way that file had already fixed the same problem for `ODATE` in a comment it wrote itself — require the module, because that tests the value that ships rather than a copy of its spelling. **Stage three is now one line away and is still not built**: the exclusion is a single clause in `paidWhere`, but what a ¥0 replacement order IS remains open, and the per-customer counts are not gated on payment at all. 203 fast suites pass, 0 fail. A refactor with no behaviour change, hence a patch.
 
 2026-09-11 · v4.214 — **§98 STAGE FOUR IS BUILT: A CARRIER'S PAYMENT POSTS ONE LEDGER ROW WHEN IT LANDS. STAGE THREE IS NOT, AND THE REASON IS A NUMBER.** `lib/delay-case-posting.js` writes exactly one `income_entries` row keyed on a new `delay_case_id`, by the same delete-then-reinsert shape `postClaim` uses; **only `paid` posts**, and a rejection, a withdrawal or a re-filing after a payment takes the row back OUT rather than offsetting it with a negative one — §87's rule for money out, restated for money in. It is **the first projection this ledger has ever had on the money-IN side**; every `income_entries` row before it was hand-typed, which is why `loadTyped` needed a third refusal and the Transactions screen a third mark. The row carries **no category**, deliberately: §36 records that the income category list ships empty so the form cannot offer a wrong option, and seeding one to label carrier compensation would be a library deciding a question that document says is the tenant's. **STAGE THREE STOPPED ON A MEASUREMENT.** A ¥0 replacement order adds ¥0 to every revenue sum, so revenue was never the problem — COUNT and AVG are. The gate those surfaces share, `status IN ('paid','preparing','dispatched','delivered','awaiting_restock')`, is **written out verbatim twelve times** (eleven in `routes/retail.js`, one in `lib/finance-window.js`) with no single definition to amend, and a replacement parcel must pass through `preparing`, `dispatched` and `delivered` to be picked, shipped and tracked — so it sits inside that predicate by construction at all twelve, with the ungated per-customer counts beyond them. Twelve hand-copied predicates and missing one is a silently wrong report, which no test in the tree would catch. **Recorded, not decided:** consolidating that predicate to one exported definition first, as its own change with no behaviour attached, would make excluding a replacement one line — but it edits how every money figure in the product is computed and is **not a decision a session may take**. Until then step three of the case stays what stages one and two shipped: an operator's tick over a replacement raised by hand. Chinese: `docs/tacet-delivery-vocabulary.md` v1.55, two composed pairs, each the live claim refusal with one noun phrase swapped. 202 fast suites pass, 0 fail; all six finance suites green. A build under an existing decision, hence a patch.
 
@@ -10142,3 +10144,55 @@ own merits, and **it is not a decision a session may take** — it edits how eve
 money figure in the product is computed. Until it is taken, stage three stays
 unbuilt and step three of the case remains what stages one and two shipped: an
 operator's tick over a replacement they raised by hand.
+
+### §98 addendum 3 — the paid predicate is consolidated, and stage three is now one line away (2026-09-11)
+
+Addendum 2 recorded that the order-status allow-list every revenue figure is
+gated on was written out verbatim twelve times, with no single definition to
+amend, and that consolidating it was **not a decision a session may take**. Ash
+took it. This records what was done, and — more usefully — what it turned out to
+be.
+
+**IT WAS NOT NEW ARCHITECTURE. IT WAS AN EXISTING DECISION BEING HONOURED.**
+`lib/finance-window.js` has always said, in its own header, that it is "that
+decision, taken once, for every Finance surface … **editing a constant here is
+the only way to change what Finance counts**". That was true of
+`routes/finance-summary.js` and `routes/finance-transactions.js`, which import
+it and declare none of their own. It was quietly false of `routes/retail.js`,
+which carried eleven hand-written copies of the same characters and had never
+imported the module at all. The claim in that header was a description of two
+files being sold as a property of the system.
+
+**THE LIST IS NOW THE SOURCE AND THE SQL IS RENDERED FROM IT.** `PAID_STATUSES`
+is the five statuses; `paidWhere(alias)` renders them, and `PAID` and `PAID_O`
+are its two callers. Six of the eleven copies were alias-qualified
+(`o.status IN …`) and five bare, which is why one constant could not have
+replaced them and why the drift was easy to miss.
+
+**NOTHING ABOUT WHAT IS COUNTED CHANGED**, and that is asserted rather than
+asserted-in-prose: `scripts/test_paid_predicate.js` pins the generated string
+byte-for-byte against a frozen copy of the pre-consolidation literal, so
+reordering the list or adding a status fails a test instead of quietly
+restating every money figure in the product. The same suite fails if any file
+under `routes/` or `lib/` hand-writes the list again.
+
+**FIVE NEIGHBOURING PREDICATES WERE DELIBERATELY LEFT ALONE** —
+`('paid','awaiting_restock')`, `('paid','preparing')`,
+`('paid','preparing','rider_pickup')` and the two channel-internal ones. They
+answer different questions, folding them in would have been a behaviour change
+wearing a refactor's clothes, and a test asserts they are still there.
+
+**One existing suite had to be amended, and it argued for its own amendment.**
+`scripts/test_finance_summary.js` scraped `PAID` out of the module's source with
+a regex and asserted the allow-list appears exactly once. Generated output
+matches neither. Both were fixed the way that file had already fixed the same
+problem for `ODATE`, in a comment it wrote itself: require the module, because
+that "tests the value that actually ships instead of a copy of its spelling".
+The count assertion now reads zero literals and one list — the same rule, one
+level further in.
+
+**STAGE THREE IS NOW ONE LINE AWAY** and is still not built. Excluding a ¥0
+replacement order is a single clause in `paidWhere`, or a sibling constant
+beside it. What is still undecided is everything §98 left open about the
+replacement order itself — and the per-customer counts, which are not gated on
+payment at all and would need their own answer.

@@ -47,6 +47,12 @@ const phoneCn = require('../lib/phone-cn');
 const tracking = require('../lib/tracking');
 const delayCase = require('../lib/delay-case');
 const { postDelayCase } = require('../lib/delay-case-posting');
+// The order-status allow-list every revenue figure in this file is gated on.
+// It lived here as eleven hand-written copies of one string until 2026-09-11;
+// lib/finance-window.js had already declared itself the one place that decides
+// what Finance counts, and this file simply never asked it. Same characters,
+// same figures — see that module's note and scripts/test_paid_predicate.js.
+const financeWindow = require('../lib/finance-window');
 const flashsales = require('../lib/flashsales');
 const reviewTopup = require('../lib/review-topup');
 const { imageAspect } = require('../lib/image-dims');
@@ -2231,8 +2237,7 @@ const SOCIAL_PROOF_CACHE  = new Map();   // product_id → { t, value }
 const SOCIAL_PROOF_WINDOWS = [
   ['today', 'c_today'], ['week', 'c_week'], ['month', 'c_month'], ['all', 'c_all'],
 ];
-const SOCIAL_PROOF_PAID =
-  "o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
+const SOCIAL_PROOF_PAID = financeWindow.PAID_O;
 
 // ── Tenant-tunable social-proof config ─────────────────────────────────────
 // Each of the 5 social-proof widgets has an on/off toggle + tuning knobs the
@@ -13768,7 +13773,7 @@ function guanyiPickupSales(db, from, to, opts) {
     out.orders = db.prepare(`
       SELECT COUNT(*) AS n FROM retail_orders
        WHERE channel='gzgrocery'
-         AND status IN ('paid','preparing','dispatched','delivered','awaiting_restock')
+         AND ${financeWindow.PAID}
          AND date(COALESCE(paid_at, placed_at), '${TZ}') BETWEEN ? AND ?
     `).get(from, to)?.n || 0;
   } catch (e) { /* tenant without the gzgrocery ledger → zeros */ }
@@ -13823,7 +13828,7 @@ function topupCashReceived(db, from, to, opts) {
 function storeCreditRedeemed(db, from, to) {
   try {
     const TZ = shopSqlShift();
-    const PAID = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
+    const PAID = financeWindow.PAID;
     const row = db.prepare(`
       SELECT COALESCE(SUM(balance_used), 0) AS redeemed
         FROM retail_orders
@@ -13842,7 +13847,7 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
   try {
     const TZ    = shopSqlShift();
     const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
-    const PAID  = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
+    const PAID  = financeWindow.PAID;
     const PDATE = `date(COALESCE(paid_at, placed_at), '${TZ}')`;
 
     // Meituan — storefront orders the daemon mirrors in with channel='meituan'.
@@ -13878,7 +13883,7 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
             FROM retail_order_items oi
             JOIN retail_orders o ON o.id = oi.order_id
            WHERE ${whereChanO}
-             AND o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock')
+             AND ${financeWindow.PAID_O}
              AND date(COALESCE(o.paid_at, o.placed_at), '${TZ}') = ?
         `).get(today)?.n || 0;
       } catch (e) { return 0; }
@@ -14005,9 +14010,9 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // the revenue SUM stays gzgrocery-excluded to avoid double-booking its takings.
   const NOTGZ  = "COALESCE(channel,'') != 'gzgrocery'";
   const NOTGZO = "COALESCE(o.channel,'') != 'gzgrocery'";
-  const PAID_ALL = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
+  const PAID_ALL = financeWindow.PAID;
   const PAID  = `${PAID_ALL} AND ${NOTGZ}`;
-  const PAIDO = `o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock') AND ${NOTGZO}`;
+  const PAIDO = `${financeWindow.PAID_O} AND ${NOTGZO}`;
   // Revenue date = day payment landed (see header note). PDATE for bare-table
   // queries, PDATEO when the orders table is aliased `o`, PHOUR for the hourly
   // bucket of a single-day view.
@@ -14691,7 +14696,7 @@ const CAT_HI_TTL = 60 * 1000;
 router.get('/api/retail-admin/products/highlights', requireRetailAdmin, (req, res) => {
   const TZ = shopSqlShift();
   const NOTGZO = "COALESCE(o.channel,'') != 'gzgrocery'";
-  const PAIDO  = `o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock') AND ${NOTGZO}`;
+  const PAIDO  = `${financeWindow.PAID_O} AND ${NOTGZO}`;
   const PDATEO = `date(COALESCE(o.paid_at, o.placed_at), '${TZ}')`;
 
   const memoKey = String(currentTenantId() || ROOTS_TENANT_ID);
@@ -22886,7 +22891,7 @@ router.get('/api/retail-admin/products/:id/sales', requireRetailAdmin, (req, res
   if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
   const TZ = shopSqlShift();
   const NOTGZO = "COALESCE(o.channel,'') != 'gzgrocery'";
-  const PAIDO  = `o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock') AND ${NOTGZO}`;
+  const PAIDO  = `${financeWindow.PAID_O} AND ${NOTGZO}`;
   const PDATEO = `date(COALESCE(o.paid_at, o.placed_at), '${TZ}')`;
 
   const nowGz = new Date(Date.now() + 8 * 3600 * 1000);
@@ -23583,7 +23588,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
         FROM retail_order_items i
         JOIN retail_orders o ON o.id = i.order_id
        WHERE i.product_id IN (${ph})
-         AND o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock')
+         AND ${financeWindow.PAID_O}
          AND COALESCE(o.channel,'') != 'gzgrocery'
          AND date(COALESCE(o.paid_at, o.placed_at), '${shopSqlShift()}') BETWEEN ? AND ?
        GROUP BY i.product_id
@@ -23631,7 +23636,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
            AND o.channel = 'meituan'
            AND o.channel_settle_amount IS NOT NULL
            AND t.lines_total > 0
-           AND o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock')
+           AND ${financeWindow.PAID_O}
          GROUP BY i.product_id
       `).all(...ids);
     } catch (e) {
