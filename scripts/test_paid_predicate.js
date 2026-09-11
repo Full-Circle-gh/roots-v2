@@ -50,15 +50,36 @@ const ALIAS = "o." + BARE;
 const ROOT = path.join(__dirname, '..');
 const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8');
 
-it('the generated predicate is byte-for-byte what shipped', () => {
-  assert.strictEqual(fw.PAID, BARE);
+// §98 stage three appended one clause to every one of these. The status half is
+// still byte-for-byte what shipped; the new half is asserted separately so the
+// two can never be confused for one another in a future edit.
+const NOTREP  = " AND COALESCE(replacement_for_order_id, 0) = 0";
+const NOTREPO = " AND COALESCE(o.replacement_for_order_id, 0) = 0";
+
+it('the status half is byte-for-byte what shipped', () => {
+  assert.ok(fw.PAID.startsWith(BARE), fw.PAID);
+  assert.ok(fw.PAID_O.startsWith(ALIAS), fw.PAID_O);
+});
+
+it('every rendering excludes a replacement order (§98 stage three)', () => {
+  assert.strictEqual(fw.PAID, BARE + NOTREP);
+  assert.strictEqual(fw.PAID_O, ALIAS + NOTREPO);
+  assert.strictEqual(fw.paidWhere('x'), 'x.' + BARE + ' AND COALESCE(x.replacement_for_order_id, 0) = 0');
+});
+
+it('the exclusion is COALESCE, so every pre-existing order still counts', () => {
+  // An order written before the column existed has NULL there. `IS NULL` would
+  // have been correct too; `= 0` alone would have silently dropped every order
+  // in the history of the product.
+  assert.ok(fw.PAID.includes('COALESCE('), fw.PAID);
+  assert.ok(!/replacement_for_order_id\s*=\s*0/.test(fw.PAID.replace(/COALESCE\([^)]*\)/g, '')),
+    'the raw column must never be compared to 0 without COALESCE');
 });
 
 it('the alias-qualified twin is the same list, qualified', () => {
-  assert.strictEqual(fw.PAID_O, ALIAS);
-  assert.strictEqual(fw.paidWhere('o'), ALIAS);
-  assert.strictEqual(fw.paidWhere(), BARE);
-  assert.strictEqual(fw.paidWhere('x'), 'x.' + BARE);
+  assert.strictEqual(fw.PAID_O, ALIAS + NOTREPO);
+  assert.strictEqual(fw.paidWhere('o'), fw.PAID_O);
+  assert.strictEqual(fw.paidWhere(), fw.PAID);
 });
 
 it('the list behind it is the five statuses, in order', () => {
@@ -120,6 +141,45 @@ it('the genuinely different predicates are left alone', () => {
                        "status IN ('paid','preparing','rider_pickup')"]) {
     assert.ok(src.includes(other), 'should still be present untouched: ' + other);
   }
+});
+
+// ── The exclusion, run against a database rather than read ─────────────────
+// Everything above compares strings. This runs the predicate, because the whole
+// point of §98 stage three is what the numbers come out as.
+it('a replacement is excluded from revenue, count and average — a real query', () => {
+  const Database = require('better-sqlite3');
+  const db = new Database(':memory:');
+  db.exec(`CREATE TABLE retail_orders (
+             id INTEGER PRIMARY KEY, status TEXT, total REAL,
+             replacement_for_order_id INTEGER)`);
+  const ins = db.prepare(
+    'INSERT INTO retail_orders (id,status,total,replacement_for_order_id) VALUES (?,?,?,?)');
+  ins.run(1, 'delivered', 800, null);   // a real sale
+  ins.run(2, 'delivered', 200, null);   // another
+  ins.run(3, 'preparing',   0, 1);      // the ¥0 replacement for order 1
+  ins.run(4, 'cancelled', 500, null);   // never counted, before or after
+
+  const agg = db.prepare(
+    `SELECT COUNT(*) AS orders, COALESCE(SUM(total),0) AS revenue,
+            COALESCE(AVG(total),0) AS aov
+       FROM retail_orders WHERE ${fw.PAID}`).get();
+
+  assert.strictEqual(agg.orders, 2, 'the replacement must not be counted as an order');
+  assert.strictEqual(agg.revenue, 1000, 'revenue is unchanged either way');
+  // THE ONE THAT WOULD HAVE BEEN WRONG. With the replacement counted the average
+  // is 1000/3 = 333.33 instead of 500 — a third off, on every dashboard.
+  assert.strictEqual(agg.aov, 500, 'a ¥0 replacement must not drag the average down');
+
+  // And the alias form, since six of the consolidated sites use it.
+  const aliased = db.prepare(
+    `SELECT COUNT(*) AS n FROM retail_orders o WHERE ${fw.PAID_O}`).get();
+  assert.strictEqual(aliased.n, 2);
+
+  // A legacy order with NULL in the column counts exactly as it always did —
+  // which is every order that existed before §98 stage three shipped.
+  const legacy = db.prepare(
+    "SELECT COUNT(*) AS n FROM retail_orders WHERE replacement_for_order_id IS NULL AND status='delivered'").get();
+  assert.strictEqual(legacy.n, 2);
 });
 
 console.log('');

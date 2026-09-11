@@ -4044,6 +4044,53 @@ db.exec(`
 addColumn('retail_delay_cases', 'settled_by_user_id', 'INTEGER');
 addColumn('retail_delay_cases', 'settled_by',         'TEXT');
 
+// ── The replacement that went back out (§98 stage three) ────────────────────
+// The order carrying the goods we sent to replace the spoiled ones, and what
+// those goods cost us.
+//
+// A SECOND ORDER, PRICED ¥0, LINKED TO THE FIRST — Ash's ruling, taken against
+// a stock adjustment, because THE CUSTOMER NEEDS A WAYBILL THEY CAN FOLLOW and
+// in this product only an order carries a parcel. A stock adjustment has no
+// address, no tracking number and no record of who received what.
+//
+// IT IS A WHOLLY ORDINARY ORDER APART FROM THE PRICE. It is created 'paid'
+// (nothing is owed, so nothing is outstanding), the warehouse works it through
+// preparing → dispatched → delivered exactly as it works any other, stock comes
+// off at the preparing transition through `prepareCommitUnreservedOrder` like
+// every other order that never reserved at checkout, and `ensureShipments`
+// plans its parcel and waybill. Nothing about the fulfilment path is special,
+// which is the point: a bespoke path is one nobody maintains.
+//
+// `remedy_cost` IS ON THE CASE, NOT DERIVED FROM THE ORDER, and it is snapshot
+// at the moment the replacement is raised. The order's own lines are ¥0 — that
+// is what makes it a replacement — so the order cannot answer what putting this
+// right cost. Only the case can, and the question it exists to answer is
+// whether the carrier's payment covered it. A later price change must not
+// restate a past incident, which is §32's rule for waste applied here.
+addColumn('retail_delay_cases', 'remedy_order_id', 'INTEGER');
+addColumn('retail_delay_cases', 'remedy_cost',     'REAL');
+
+// THE FLAG EVERY MONEY FIGURE READS. `paidWhere()` in lib/finance-window.js
+// excludes any order carrying this, which is the whole reason the eleven
+// hand-written copies of that predicate were consolidated first: without one
+// definition there was no single place to put this line, and twelve chances to
+// miss one.
+//
+// A REPLACEMENT IS NOT A SALE AND NOT AN ORDER ANYONE PLACED. It contributes ¥0
+// to revenue either way, so revenue was never the risk — the risk is the ORDER
+// COUNT it would inflate and the AVERAGE ORDER VALUE it would drag down on
+// every dashboard and channel report.
+//
+// THE CUSTOMER'S OWN ORDER LIST STILL SHOWS IT, deliberately. Those queries are
+// not payment-gated and are not touched: the customer has a parcel coming and
+// must be able to find and track it. The exclusion is about what the BUSINESS
+// counts as trade, not about hiding a delivery from the person waiting for it.
+addColumn('retail_orders', 'replacement_for_order_id', 'INTEGER');
+addColumn('retail_orders', 'replacement_case_id',      'INTEGER');
+try {
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_retail_orders_replacement ON retail_orders(replacement_for_order_id)').run();
+} catch (e) { /* index only — a failure here costs a scan, never correctness */ }
+
 // Per-store restock *target* — the level this store wants to keep on
 // hand. When physical_qty < restock_target the cross-store grid flags
 // it. Optional (NULL = no target set yet).

@@ -152,7 +152,12 @@ const db = new Database(':memory:');
 db.exec(`
   CREATE TABLE retail_orders (
     id INTEGER PRIMARY KEY, status TEXT, channel TEXT, total REAL,
-    paid_at DATETIME, placed_at DATETIME);
+    paid_at DATETIME, placed_at DATETIME,
+    -- §98 stage three. Every row below leaves it NULL, which is what every
+    -- order in production has, so the sums this file asserts are unchanged —
+    -- the column is here because PAID now reads it, and a fixture missing it
+    -- would fail on the schema rather than on the arithmetic it exists to test.
+    replacement_for_order_id INTEGER);
   CREATE TABLE retail_topup_transactions (
     id INTEGER PRIMARY KEY, amount REAL, status TEXT, payment_method TEXT, paid_at DATETIME);
   CREATE TABLE expense_entries (
@@ -160,15 +165,15 @@ db.exec(`
 `);
 
 const FROM = '2026-08-01', TO = '2026-08-31';
-db.prepare("INSERT INTO retail_orders VALUES (1,'paid','wechat',1000,'2026-08-10 03:00:00',NULL)").run();
-db.prepare("INSERT INTO retail_orders VALUES (2,'delivered','gzgrocery',500,'2026-08-11 03:00:00',NULL)").run();
-db.prepare("INSERT INTO retail_orders VALUES (3,'pending_payment','wechat',999,NULL,'2026-08-12 03:00:00')").run();
-db.prepare("INSERT INTO retail_orders VALUES (4,'refunded','wechat',777,'2026-08-13 03:00:00',NULL)").run();
+db.prepare("INSERT INTO retail_orders (id,status,channel,total,paid_at,placed_at) VALUES (1,'paid','wechat',1000,'2026-08-10 03:00:00',NULL)").run();
+db.prepare("INSERT INTO retail_orders (id,status,channel,total,paid_at,placed_at) VALUES (2,'delivered','gzgrocery',500,'2026-08-11 03:00:00',NULL)").run();
+db.prepare("INSERT INTO retail_orders (id,status,channel,total,paid_at,placed_at) VALUES (3,'pending_payment','wechat',999,NULL,'2026-08-12 03:00:00')").run();
+db.prepare("INSERT INTO retail_orders (id,status,channel,total,paid_at,placed_at) VALUES (4,'refunded','wechat',777,'2026-08-13 03:00:00',NULL)").run();
 // Placed 31 July 22:00 Guangzhou = 31 Jul 14:00 UTC, paid 1 August GZ. §36's
 // worked example: it belongs to August, and only the +8h COALESCE puts it there.
-db.prepare("INSERT INTO retail_orders VALUES (5,'paid','wechat',100,'2026-08-01 00:30:00','2026-07-31 14:00:00')").run();
+db.prepare("INSERT INTO retail_orders (id,status,channel,total,paid_at,placed_at) VALUES (5,'paid','wechat',100,'2026-08-01 00:30:00','2026-07-31 14:00:00')").run();
 // Never paid, so it falls back to placed_at — and is out of the window.
-db.prepare("INSERT INTO retail_orders VALUES (6,'preparing','web',60,NULL,'2026-07-20 03:00:00')").run();
+db.prepare("INSERT INTO retail_orders (id,status,channel,total,paid_at,placed_at) VALUES (6,'preparing','web',60,NULL,'2026-07-20 03:00:00')").run();
 // Real top-up cash, settled inside the window. Revenue must not see it.
 db.prepare("INSERT INTO retail_topup_transactions VALUES (1,3000,'success','wechat','2026-08-15 03:00:00')").run();
 db.prepare("INSERT INTO expense_entries VALUES (1,'2026-08-05',800,'Rent')").run();

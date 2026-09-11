@@ -440,11 +440,16 @@ async function main() {
   });
 
   // ── 11. Existing call sites, and the out-of-scope helpers ────────────────
-  await it('all eleven ensureShipments call sites still pass one argument', () => {
+  // TWELVE SINCE 2026-09-11 — §98 stage three's ¥0 replacement order plans its
+  // own parcel, like every other order that has one. The COUNT is a pin so a
+  // new call site is noticed; the RULE is the loop below, and it still runs
+  // over every site including the new one. Moving the pin is maintenance;
+  // deleting the loop would be the thing to refuse.
+  await it('all twelve ensureShipments call sites still pass one argument', () => {
     const calls = [...RETAIL.matchAll(/(^|[^\w.])ensureShipments\s*\(([^)]*)\)/gm)]
       .filter(m => !/function\s+$/.test(RETAIL.slice(Math.max(0, m.index - 12), m.index + m[1].length)));
     const args = calls.map(m => m[2].trim()).filter(a => !a.startsWith('orderId, h'));
-    assert.strictEqual(args.length, 11, `expected 11 ensureShipments call sites, found ${args.length}`);
+    assert.strictEqual(args.length, 12, `expected 12 ensureShipments call sites, found ${args.length}`);
     for (const a of args) {
       assert.ok(!a.includes(','), `an ensureShipments call site now passes a handle: ${a}`);
     }
