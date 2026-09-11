@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.218
+# Tacet shared-core consolidation — decisions record, v4.219
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-11 · v4.219 — **§99 ADDENDUM 2: THE AUTO-ISSUE SWITCH IS REMOVED; THE INTEGRATION STAYS DORMANT. THE OPEN QUESTION IS ANSWERED.** §99 left *why is auto-issue off* open and it was asked three more times; Ash answered: **the shop's fapiao provider issues none for us and offers no open API.** **THE SWITCH WAS NEVER A SETTING** — `maybeAutoIssueInvoice` returns unless the flag AND Nuonuo credentials are both present, and the phone showed only the first lock. Ash turned it on from the phone mid-session, the screen said 自动开票已开启, and nothing happened because nothing could: **the same defect the §99 snooze was designed around — a control that reads as set and does nothing — from the other direction**, and worse, because the server already computes `credsReady` and **neither surface has ever read it**. Removed: the settings row, `toggleFapiao`, `loadFapiao`, the `r.fapiao` branches in both renderers, four state slots, and the phone's ONLY call to `/fapiao-settings` — a hidden control whose fetch survives is one render away from returning, so the suite asserts unreachability rather than non-rendering. **NOT REMOVED, AND ASH WAS ASKED BECAUSE THE CREDS ARE PER-TENANT**: Roots reads env, every other tenant stores its own encrypted, so this provider having no API is a fact about ONE tenant and deleting `lib/nuonuo.js` would take a platform capability from all of them to solve it. The session proposed the full rip-out, put the scope as a choice, and **Ash chose UI-only**; the suite fails in BOTH directions — switch back, or integration deleted. **BOTH GUARDS STAY AND NEITHER MAY BE RELAXED** to compensate for the missing control. The note bar keeps the half that is true (`请在电脑端开具`), which is **the live pair's own tail with its first clause dropped — nothing composed, vocabulary untouched**, the v4.211 treatment. **A LEFTOVER OF THE SESSION'S OWN IS FIXED**: addendum 1's snooze recovery set `state.fapiaoTried=false`, which gated the settings read and never the list. **`credsReady` REMAINS READ BY NOBODY, on purpose here** — recorded so the next person to find it knows. 13 new fast assertions checked to fail both ways; `test_mobile_settings` is edited and **NOT verified, being in the slow shard this repo does not run** — said plainly rather than implied. `test:fast` green at 208. A build under a new decision, hence a patch.
 
 2026-09-11 · v4.218 — **§98 STAGE THREE IS BUILT: THE ¥0 REPLACEMENT ORDER, AND THE EXCLUSION REALLY WAS ONE LINE. §98 IS COMPLETE.** The replacement is **a wholly ordinary order apart from the price** — created `paid` because nothing is owed, worked preparing → dispatched → delivered like any other, stock off at the preparing transition through the same `prepareCommitUnreservedOrder` every non-reserving order already uses, parcel and waybill planned by `ensureShipments`; **nothing on the fulfilment path is special-cased**, which is why the stage is one route rather than a subsystem. **THE EXCLUSION WAS ONE LINE, AS v4.215 PROMISED**: `paidWhere()` gained `AND COALESCE(<alias>replacement_for_order_id, 0) = 0` and all twelve former copies got it at once — COALESCE rather than IS NULL because every order predating the column has NULL there and must keep counting exactly as it always has. `test_paid_predicate.js` now runs the predicate against a real table and asserts the figure that would have been wrong: with a ¥0 replacement counted, an AOV of 500 reads as 333.33. **WHAT THE CUSTOMER SEES IS DELIBERATELY UNCHANGED** — their order list and status buckets are not payment-gated and were not touched, because they have a parcel coming and must be able to track it; the exclusion is about what the BUSINESS counts as trade, never about hiding a delivery from the person waiting for it. **`remedy_cost` IS SNAPSHOT ON THE CASE, NOT DERIVED FROM THE ORDER**: the replacement's lines are ¥0, so only the case can answer what putting it right cost, which is the question the case exists to answer. One replacement per case is enforced — a double-tap would send real stock twice. **THREE EXISTING GUARDS CAUGHT THIS AND ALL THREE WERE RIGHT**: `test_customer_currency` rejected "a ¥0 order" in a multi-currency product and **also caught two ¥ literals from stages one and two, live since this evening**, which had evaded it only because `'¥' + Number(x)` puts a quote between symbol and digit; `test_finance_summary`'s fixture lacked the new column and now names its columns explicitly; `test_handle_threading_batch2`'s call-site pin moved from eleven to twelve while the rule it guards still runs over every site. Still open and unchanged: which parcels raise a case (air only, delivered only, >1 day), and whether evidence lives in Tacet. 205 fast suites pass, 0 fail. A build under an existing decision, hence a patch.
 
@@ -10499,3 +10501,79 @@ it restored. `npm run test:fast` green at 206.
 outcomes were survive-or-not. The real answer is a third: it survives, and at
 month-end it is frequently a no-op by construction. Left standing and corrected
 here rather than edited, per this file's rule about dated claims.
+
+### §99 addendum 2 — the auto-issue switch is removed; the integration stays dormant (2026-09-11)
+
+**§99 left "why is auto-issue off" open and asked it three more times. Ash
+answered it: the shop's fapiao provider issues no 发票 for us and offers no open
+API.** That closes the question and settles the control.
+
+**THE SWITCH WAS NOT A SETTING.** `maybeAutoIssueInvoice` returns on its first
+line unless `fapiao.autoIssue` is on AND Nuonuo credentials are present. The
+phone showed only the first lock. Ash turned it on from the phone during this
+session, the screen said *"Auto-issue is on · 自动开票已开启"*, and nothing
+happened, because nothing could. **That is precisely the defect the §99 snooze
+was designed around — a control that reads as set and does nothing — arriving
+from the other direction**, and it was worse here: the server ALREADY computes
+`credsReady` on `GET /fapiao-settings` and **neither surface has ever read it**,
+so an operator had no way to find out.
+
+**WHAT WAS REMOVED: the control, and every trace of its state.** The settings
+row, `toggleFapiao`, `loadFapiao`, the `r.fapiao` branches in both settings
+renderers, the four `state.fapiao*` slots, and the phone's only call to
+`/fapiao-settings`. A hidden control whose fetch survives is one render away
+from coming back, so the suite asserts the endpoint is not reachable from
+`m.html` at all rather than merely unrendered.
+
+**WHAT WAS DELIBERATELY NOT REMOVED, AND WHY ASH WAS ASKED.** The session
+proposed ripping out Nuonuo entirely and put the scope to Ash as a choice,
+because **the credentials are PER-TENANT** (`lib/tenant-creds.js`: Roots reads
+`NUONUO_*` from env, every other tenant stores its own encrypted under
+`nuonuo.app_key` / `app_secret` / `saler_tax` / `env`). This shop's provider
+having no API is a fact about ONE tenant. Deleting `lib/nuonuo.js`, the
+auto-issue path and the credential keys would take a platform capability from
+every tenant to solve that, and rebuild it for the first tenant who has an API.
+**Ash chose UI-only.** `scripts/test_fapiao_no_auto_issue.js` fails in BOTH
+directions for that reason: if the switch returns, and if a later session
+"finishes the job" by deleting the integration.
+
+**BOTH GUARDS STAY, AND NEITHER MAY BE RELAXED.** With no switch on the phone,
+`fapiao.autoIssue` can no longer be raised from a screen — but the credential
+check is what has kept this harmless all along, and a future session must not
+drop either guard to compensate for the missing control. The `/fapiao-settings`
+GET and PUT stay: the desktop still reaches them, and so would a tenant who one
+day has a provider with an API.
+
+**THE NOTE BAR KEEPS THE HALF THAT IS TRUE.** It read *"Auto-issue is off ·
+issue fapiao on desktop"*, which reported a state nobody could change while
+inviting the question of how to change it. It now reads *"Issue fapiao on
+desktop · 请在电脑端开具"* — **the live pair's own tail with its first clause
+dropped, so NOTHING WAS COMPOSED and `docs/tacet-delivery-vocabulary.md` is
+untouched**, the same treatment v4.211 recorded for a heading that was deleted
+rather than reworded.
+
+**ONE LEFTOVER OF THE SESSION'S OWN, FIXED HERE.** §99 addendum 1's snooze
+recovery set `state.fapiaoTried = false` when a row came back `not_pending`.
+That flag gated the SETTINGS read, never the list, so it did nothing for that
+recovery; `loadLiveInvoices()` beside it was already doing the refetch. Removed
+with the rest of the state.
+
+**WHAT THIS DOES NOT CHANGE.** The fapiao queue and its chase (§99) are
+untouched and are now the whole answer: every 发票 this shop owes is issued by
+hand at a desk, and the reminder is what stops one sitting for three weeks. The
+two from the screenshot that started this were on cancelled orders and were
+never work at all.
+
+**STILL NOT DONE, AND NOT A DEFECT: `credsReady` is still read by nobody.** With
+the switch gone the phone has no use for it, and the desktop's fapiao settings
+panel is outside this change. Recorded because the next person to find the field
+should know it is unused on purpose here, not overlooked.
+
+**Tests:** `scripts/test_fapiao_no_auto_issue.js` (13 assertions, fast shard),
+checked to fail in both directions — the switch restored (1 fail) and
+`lib/nuonuo.js` deleted (1 fail). `scripts/test_mobile_settings.js` loses the two
+`state.fapiao` fixtures and gains an assertion that the row is absent from the
+RENDERED screen rather than from source; **that suite is in the slow shard, which
+this repo does not run** (CLAUDE.md, Ash's standing instruction given twice), so
+it is edited and NOT verified, and this entry says so rather than implying it
+passed. `npm run test:fast` green at 208.

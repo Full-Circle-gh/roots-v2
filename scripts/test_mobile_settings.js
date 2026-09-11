@@ -290,12 +290,14 @@ CASES.push(['nothing referred yet', `state.affiliateTried=true;
 ]]);
 
 // ── Operations ────────────────────────────────────────────────────────────
-// Two toggles and "deeper config on desktop". Everything the desktop's
+// ONE toggle and "deeper config on desktop" — it was two until §99 addendum 2
+// removed the fapiao auto-issue switch. Its fixtures went with it: this shop's
+// fapiao provider issues none for us and offers no API, so the switch could
+// only ever read "off" while inviting somebody to try turning it on. Everything the desktop's
 // Operations panel exists to answer — is every store located, is the maps key
 // working, can customers pay by Alipay — was absent, and those are the
 // questions you ask when you are away from your desk.
 const OPS = `state.printerTried=true; state.printer={auto_print:true};
-  state.fapiaoTried=true; state.fapiao={autoIssue:false};
   state.geoTried=true; state.geo={provider:'amap',tencent_maps_configured:true,
     stores:{total:3,geocoded:2,missing:1}, addresses:{total:180,geocoded:174,missing:6}, last_error:null};
   state.alipayTried=true; state.alipay={enabled:true,account:'Roots Ltd'};
@@ -304,6 +306,11 @@ const OPS = `state.printerTried=true; state.printer={auto_print:true};
   APP.cmd('push','operations');`;
 
 CASES.push(['operations answers the away-from-desk questions', OPS, [
+  // The switch that is gone, asserted from the rendered screen rather than the
+  // source — a row can be removed from the array and still be drawn by a
+  // renderer that kept its branch.
+  ['NO fapiao auto-issue switch',    `!txt('content').includes('Fapiao auto-issue')`],
+  ['and auto-print still has one',   `txt('content').includes('Auto-print receipts')`],
   ['can customers pay by Alipay QR', `txt('content').includes('Alipay by QR code')`],
   ['and under whose name',           `txt('content').includes('Roots Ltd')`],
   ['which maps provider',            `txt('content').includes('Amap')`],
@@ -315,7 +322,6 @@ CASES.push(['operations answers the away-from-desk questions', OPS, [
 ]]);
 
 CASES.push(['a maps quota that has run out', `state.printerTried=true; state.printer={auto_print:false};
-  state.fapiaoTried=true; state.fapiao={autoIssue:true};
   state.geoTried=true; state.geo={provider:'amap',tencent_maps_configured:true,
     stores:{total:1,geocoded:1,missing:0}, addresses:{total:10,geocoded:4,missing:6},
     last_error:{code:'CUQPS_HAS_EXCEEDED_THE_LIMIT',message:'quota exhausted',quota:true}};
