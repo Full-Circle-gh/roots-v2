@@ -1335,9 +1335,62 @@ reg('clearAirDelay', sid=>{
   }).catch(e=>{
     state.parcelBusy=null;
     if(String(e.message)==='auth') return;
-    state.orderErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    // The close can now be REFUSED, and the refusal is the feature: the carrier
+    // still owes an answer. orderErrorText carries that sentence, so this stops
+    // reporting a real rule as a failed save.
+    state.orderErr=E(orderErrorText(e),orderErrorText(e));
     render();
   });
+});
+/* One step of a late-parcel case (§98). Every step goes through here so the
+   phone cannot grow its own idea of what the steps are; the server validates
+   each one and lib/delay-case.js owns the rule about what may close. */
+function dcStep(sid,step,payload,busyKey){
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  if(!o||o._id==null||state.parcelBusy) return;
+  state.parcelBusy=busyKey||('dc'+sid); state.orderErr=null; render();
+  apiWrite('/orders/'+o._id+'/delay-case/step',Object.assign({shipment_id:sid,step},payload||{})).then(()=>{
+    state.parcelBusy=null;
+    api('/orders/'+o._id).then(d=>{ if(state.detailId===o.id){ state.liveDetail=mapDetail(d); render(); } }).catch(()=>render());
+    loadOps();
+  }).catch(e=>{
+    state.parcelBusy=null;
+    if(String(e.message)==='auth') return;
+    state.orderErr=E(orderErrorText(e),orderErrorText(e));
+    render();
+  });
+}
+reg('dcTold', sid=>{ dcStep(sid,'customer_told',{}); });
+reg('dcRemedy', (sid,kind)=>{ dcStep(sid,'remedy',{kind}); });
+reg('dcClaim', sid=>{
+  /* The carrier is the one that carried THIS parcel, read off the shipment.
+     Nothing here names a company — the banner this replaced hard-coded 京东,
+     and other tenants ship with other carriers. */
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  const sp=((o&&o.shipments)||[]).find(p=>Number(p.id)===Number(sid));
+  state.ask={title:T('Claim filed','已申请延误赔偿'),
+    fields:[{id:'ref',label:T('Claim number','赔偿单号'),placeholder:T('Optional','可选')},
+            {id:'claimed',label:T('Amount claimed','申请金额'),placeholder:T('Optional','可选')}],
+    confirmLabel:T('Claim filed','已申请延误赔偿'),
+    run:v=>dcStep(sid,'claim_filed',{ref:v.ref||'',claimed:v.claimed||'',carrier:(sp&&sp.carrierCode)||''})};
+  render();
+});
+reg('dcNoClaim', sid=>{
+  state.ask={title:T('Not claiming','不申请赔偿'),
+    fields:[{id:'note',label:T('Reason','原因'),placeholder:T('Required','必填'),multiline:true}],
+    validate:v=>(v.note||'').trim()?null:T('Give a reason first.','请先填写原因。'),
+    confirmLabel:T('Not claiming','不申请赔偿'),
+    run:v=>dcStep(sid,'no_claim',{note:v.note||''})};
+  render();
+});
+reg('dcSettle', (sid,outcome)=>{
+  if(outcome!=='paid'){ dcStep(sid,'settled',{outcome}); return; }
+  state.ask={title:T('Carrier paid','已赔偿'),
+    fields:[{id:'received',label:T('Amount received','收到金额'),placeholder:T('Required','必填')}],
+    validate:v=>(v.received||'').trim()?null:T('Enter an amount first.','请先填写金额。'),
+    confirmLabel:T('Carrier paid','已赔偿'),
+    run:v=>dcStep(sid,'settled',{outcome:'paid',received:v.received||''})};
+  render();
 });
 /* One parcel of a multi-parcel order goes on its own. This is how an order can
    read "Dispatched" and still sit in the Paid tab: the other box has not left. */
@@ -11912,6 +11965,14 @@ function orderErrorText(e){
       'wechat_refund_abnormal','wechat_refund_failed'].includes(e.code)) return e.message;
   if(e.code==='already_shipped') return T('A parcel already has a waybill, so this cannot be undone here. Cancel the waybill first.',
                                           '已有包裹生成运单，无法在此撤销。请先取消运单。');
+  /* §98 — a late-parcel case that is not finished. Not a failure: the carrier
+     still owes an answer, and saying so is the whole point of the case. */
+  if(e.code==='case_not_closeable') return T('The carrier claim is not finished yet.','承运商赔偿尚未完成。');
+  if(e.code==='unknown_carrier')    return T('That carrier is not one the system knows.','承运商不正确。');
+  /* Both of these are the desktop catalogue's own sentences for the same two
+     codes, carried across word for word rather than reworded for the phone. */
+  if(e.code==='reason_required')    return T('Give a reason first.','请先填写原因。');
+  if(e.code==='amount_required')    return T('Enter an amount first.','请先填写金额。');
   return T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
 }
 /* Every write disables the control it belongs to and says what it is doing, and
@@ -12872,6 +12933,89 @@ function evTime(t){
   // seconds, the way the desktop's event rows do.
   return String(t||'').replace(/^\d{4}-/,'').replace(/:\d{2}$/,'');
 }
+/* THE LATE-PARCEL CASE (§98), THE PHONE'S HALF.
+   The desktop drawer and this render the same four steps off the same
+   `delay_case` payload, and neither decides anything: `can_close` and the list
+   of what is unfinished are computed in lib/delay-case.js and only drawn here.
+   §97's rule is why this exists at all — the banner it replaces was already on
+   both surfaces, and a close button the desktop refuses while the phone still
+   allows it is the same button with the safety taken off. */
+const M_DC_TERMINAL=['paid','rejected','withdrawn','no_claim'];
+function mDcDays(iso){
+  if(!iso) return 0;
+  const s=String(iso).replace(' ','T'); const t=Date.parse(s.endsWith('Z')?s:s+'Z');
+  return isFinite(t)?Math.max(0,Math.floor((Date.now()-t)/86400000)):0;
+}
+function mDcRow(state_,label,detail,controls){
+  const mark=state_==='done'?'✓':state_==='wait'?'◷':state_==='na'?'–':'○';
+  const tone=state_==='done'?'var(--sage-ink,#5a7d5a)':state_==='wait'?'var(--brick-ink)':'var(--text-secondary)';
+  return `<div style="display:grid;grid-template-columns:16px 1fr;gap:9px;align-items:start;padding:9px 0;border-top:1px solid var(--hairline)">
+    <span style="color:${tone};font-weight:600">${mark}</span>
+    <div style="min-width:0;display:flex;flex-direction:column;gap:5px">
+      <span style="font-size:13.5px;font-weight:${state_==='done'?500:400}">${label}</span>
+      ${detail?`<span style="font-size:12px;color:var(--text-secondary);line-height:1.45">${detail}</span>`:''}
+      ${controls||''}</div></div>`;
+}
+function mDcBtn(cmd,arg,text){
+  return `<button class="btn2" style="width:auto;padding:6px 12px;flex:none;font-size:12.5px" onclick="APP.cmd('${cmd}',${arg})">${text}</button>`;
+}
+function delayCaseCard(o,sp){
+  const dc=sp.dcase||null, sid=Number(sp.id);
+  const told=!!(dc&&dc.customer_told_at);
+  const ds=(dc&&dc.dispute_state)||'none';
+  const remedy=(dc&&dc.remedy)||null;
+  const rowSty=`display:flex;gap:7px;flex-wrap:wrap;align-items:center`;
+
+  const s1=told
+    ? mDcRow('done',T('Customer told','已联系客户'),
+        escAttr((dc.customer_told_by||'')+' · '+String(dc.customer_told_at||'').slice(0,16)))
+    : mDcRow('todo',T('Tell the customer — fresh items may not be safe','联系客户 — 生鲜可能已不安全'),
+        T('Perishable / fresh items may no longer be safe — advise them not to consume.','生鲜/易腐产品可能已不安全，请告知客户勿食用。'),
+        `<div style="${rowSty}">${mDcBtn('dcTold',sid,T('Customer told','已联系客户'))}</div>`);
+
+  let s2;
+  if(ds==='none'){
+    s2=mDcRow('todo',T('Claim the delay off the carrier','向承运商申请延误赔偿'),'',
+      `<div style="${rowSty}">${mDcBtn('dcClaim',sid,T('Claim filed','已申请延误赔偿'))}${mDcBtn('dcNoClaim',sid,T('Not claiming','不申请赔偿'))}</div>`);
+  } else if(ds==='no_claim'){
+    s2=mDcRow('done',T('Not claiming','不申请赔偿'),escAttr(dc.dispute_note||''));
+  } else {
+    const bits=[]; if(dc.dispute_ref) bits.push(escAttr(dc.dispute_ref));
+    if(dc.dispute_claimed!=null) bits.push('¥'+Number(dc.dispute_claimed).toFixed(2));
+    s2=mDcRow('done',T('Claim filed with the carrier','已申请延误赔偿'),bits.join(' · '));
+  }
+
+  const s3=remedy
+    ? mDcRow('done',remedy==='refund'?T('Refunded','已退款'):T('Replacement sent','已补发'),
+        escAttr(String(dc.remedy_at||'').slice(0,16)))
+    : mDcRow('todo',T('Replacement or refund','补发或退款'),'',
+        `<div style="${rowSty}">${mDcBtn('dcRemedy',`${sid},'replacement'`,T('Replacement sent','已补发'))}${mDcBtn('dcRemedy',`${sid},'refund'`,T('Refunded','已退款'))}</div>`);
+
+  let s4;
+  if(ds==='no_claim'){
+    s4=mDcRow('na',T('Carrier settled','承运商赔偿'),'');
+  } else if(ds==='filed'){
+    const w=mDcDays(dc.dispute_filed_at);
+    s4=mDcRow('wait',T('Carrier settled','承运商赔偿'),
+      T('Waiting on carrier · '+w+' day'+(w===1?'':'s'),'等待承运商 · '+w+' 天'),
+      `<div style="${rowSty}">${mDcBtn('dcSettle',`${sid},'paid'`,T('Carrier paid','已赔偿'))}${mDcBtn('dcSettle',`${sid},'rejected'`,T('Rejected','已拒绝'))}${mDcBtn('dcSettle',`${sid},'withdrawn'`,T('Withdrawn','已撤销'))}</div>`);
+  } else if(M_DC_TERMINAL.indexOf(ds)>=0){
+    const lbl=ds==='paid'?T('Carrier paid','已赔偿'):ds==='rejected'?T('Carrier rejected the claim','承运商已拒绝'):T('Claim withdrawn','已撤销申请');
+    s4=mDcRow('done',lbl,dc.dispute_received!=null?'¥'+Number(dc.dispute_received).toFixed(2):escAttr(dc.dispute_note||''));
+  } else {
+    s4=mDcRow('todo',T('Carrier settled','承运商赔偿'),'');
+  }
+
+  const canClose=!!(dc&&dc.can_close);
+  const foot=canClose
+    ? `<button class="btn2" style="width:100%;color:var(--brick-ink);border-color:var(--brick-ink)" ${state.parcelBusy===('air'+sid)?'disabled':''} onclick="APP.cmd('clearAirDelay',${sid})">${state.parcelBusy===('air'+sid)?T('Saving…','处理中…'):T('Mark handled','标记已处理')}</button>`
+    : `<span style="font-size:12px;color:var(--text-secondary);font-style:italic">${T('Close once every step above is done.','以上步骤全部完成后方可关闭。')}</span>`;
+
+  return `<div style="display:flex;flex-direction:column;gap:2px;padding:12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink)">
+    <span style="display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500">${ic('triangle-alert',16)}${T('Air shipment delayed','空运延误')}</span>
+    ${s1}${s2}${s3}${s4}
+    <div style="margin-top:10px;padding-top:9px;border-top:1px solid var(--hairline)">${foot}</div></div>`;
+}
 function trackingCard(o,sp,label){
   const t=sp.trk;
   const has=!!(t&&t.number);
@@ -12893,10 +13037,7 @@ function trackingCard(o,sp,label){
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
       <span class="eyebrow">${label?label:T('Tracking','物流')}</span>
       ${st?`<span style="font-size:13px;font-weight:500;color:${DELIV_TONE[tone]}">${st}</span>`:''}</div>
-    ${sp.airCleared==null&&o.airDelayed&&sp.mode==='air'?`<div style="display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink)">
-      <span style="display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500">${ic('triangle-alert',16)}${T('Air shipment delayed','空运延误')}</span>
-      <span style="font-size:13px;line-height:1.5">${T('Fresh items may no longer be safe. Call the customer and tell them not to eat it, then claim the delay with JD.','生鲜可能已不安全。请联系顾客告知勿食用，并向京东申请延误赔偿。')}</span>
-      <button class="btn2" style="width:100%;color:var(--brick-ink);border-color:var(--brick-ink)" ${state.parcelBusy===('air'+sp.id)?'disabled':''} onclick="APP.cmd('clearAirDelay',${sp.id})">${state.parcelBusy===('air'+sp.id)?T('Saving…','处理中…'):T('Mark handled — customer contacted','标记已处理 — 已联系顾客')}</button></div>`:''}
+    ${sp.airCleared==null&&o.airDelayed&&sp.mode==='air'?delayCaseCard(o,sp):''}
     ${sp.airCleared?`<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-secondary)">${ic('check',14)}${T('Air delay handled'+(sp.airClearedBy?' · '+sp.airClearedBy:''),'空运延误已处理'+(sp.airClearedBy?' · '+sp.airClearedBy:''))}</div>`:''}
     ${reuse?`<div style="padding:10px 12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:12.5px;line-height:1.5">${
       reuse.delivered?T('This waybill is already on a delivered order ('+escAttr(reuse.order_no)+'). A reused number will not sync — check it.','此运单号已用于一笔已签收订单('+escAttr(reuse.order_no)+')，重复号码不会同步，请核对。')
@@ -16950,6 +17091,11 @@ function mapDetail(o){
     lastError:sp.tracking_last_error||null,
     localEta:sp.local_eta||null, etaSource:sp.eta_source||null,
     airCleared:sp.air_delay_cleared_at||null, airClearedBy:sp.air_delay_cleared_by||null,
+    dcase:sp.delay_case||null,   // §98 — the four steps behind that stamp; null = none taken yet
+    // The raw carrier CODE, kept beside the worded tracking view above because
+    // a claim is filed against the company that carried this parcel and the
+    // server validates the code against lib/tracking.js.
+    carrierCode:sp.tracking_carrier||null,
     dispatchedAt:sp.dispatched_at||null, deliveredAt:sp.delivered_at||null,
   }));
   base.airDelayed=!!o.air_delivery_delayed;

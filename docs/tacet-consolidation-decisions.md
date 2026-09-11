@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.212
+# Tacet shared-core consolidation — decisions record, v4.213
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-11 · v4.213 — **§98 STAGES ONE AND TWO ARE BUILT: THE LATE-PARCEL CASE, AND THE CHECKLIST THAT WILL NOT CLOSE WHILE THE CARRIER STILL OWES AN ANSWER.** Two tables, `lib/delay-case.js` holding the rule, one step endpoint, and the checklist on BOTH surfaces. **THE THREE READ SITES DID NOT SWAP AND v4.212 SAYS THEY WOULD** — that entry was written before the code and is wrong; it is left standing and corrected in a §98 addendum rather than edited, per this file's own rule about dated claims. `air_delay_cleared_at` REMAINS the single flag meaning "still on the worklist" and the case row gates who may set it: `/dashboard/ops`'s `delivery_alerts` already counts these orders, ages them from `dispatched_at` and refreshes every sixty seconds, so the weeks-long chase surface needed no change at all — and swapping would have required backfilling a closed case for every parcel already cleared in production, or every handled order from the last year lights up on deploy morning. **THE PHONE ALREADY HAD THE BANNER AND THE SURVEY MISSED IT**, having grepped the column name where `public/m.html` keys off `o.airDelayed`; once the server refuses the close, a phone still offering a one-tap dismiss is §97's own "the same button with the safety removed", so both surfaces ship or neither does. **`none` HAD TO HOLD THE CASE OPEN** — an operator who never touched the dispute track has not decided not to claim, and choosing not to claim is its own state needing a typed reason, which is what makes "the dispute, if any" expressible; `scripts/test_delay_case.js` guards that second only to the refusal itself. Chinese: `docs/tacet-delivery-vocabulary.md` v1.54, seventeen composed pairs and fifteen lifted, **none introducing a word the repository did not already ship**; the one thing that could not be carried forward is 京东, hard-coded into both surfaces' live instruction, since the claim is against whichever carrier carried the parcel. Stages three (the ¥0 replacement order) and four (the ledger row) are NOT built and nothing here decides them further. 199 fast suites pass, 0 fail; `test_mobile_screens` renders 142 screens clean. A build under an existing decision, hence a patch.
 
 2026-09-11 · v4.212 — **§98 DECIDED BY ASH: A LATE PARCEL THAT SPOILED THE FOOD IS A CASE WITH STEPS, AND THE CARRIER'S MONEY IS NOT INCOME UNTIL IT LANDS.** Asked from the phone, in Ash's own scenario: the package arrived complete but late, the fresh items were spoiled, the carrier is given evidence and pays for the spoiled goods, and replacement goods go back to the customer — *"where would you suggest to record it?"* **THE STEPS ALREADY EXIST ON SCREEN AS PROSE WITH ONE CHECKBOX UNDER THEM.** Measured against `5ab75c8`: `orderHasDelayedAirShipment` already raises the `AIR DELAYED · contact customer` badge, a dashboard card and an `order_air_delayed` customer warning not to eat the perishables, and the order drawer already prints TWO numbered instructions — contact the customer, contact the carrier for compensation — above a single button that writes `retail_shipments.air_delay_cleared_at` and nothing else. **Four facts behind one checkbox cannot answer whether the carrier was ever chased**, and no money or stock is recorded at all. So the instructions become the steps IN PLACE: not a new screen, not a new module, and the detector is untouched. **THE SHAPE IS `retail_refund_events`, DELIBERATELY** — one row per step with an amount, a note and who did it, because refunds already read as a timeline and a second shape would have to agree with the first forever; **there is no task or checklist table anywhere in this repo** (grepped) and a general one must not be built here, which is §32's "a reason, not a feature" arriving from the other side. **THE CASE LIVES ON THE SHIPMENT, NOT THE ORDER**, because an order fans out into air and land parcels and both the detector and the ack route are already scoped per parcel. **THE SESSION'S FIRST READING OF THE MONEY WAS WRONG AND ASH CORRECTED IT**: *"jingdong will pay a certain amount for the spoiled products so it doesn't really cost roots … but we do have the cost for the new food that been shipped out."* **Measured, and it makes the accounting SMALLER than it looked**: `routes/finance-summary.js` returns `cost_of_goods: null` / `gross_profit: null` and no route in `routes/retail.js` writes an `expense_entries` row for a sale, so food is an expense the day it is BOUGHT — the spoiled goods book nothing, the replacement books nothing and merely moves stock, and **the carrier's payment is the ONE row this whole case puts in the books**. **NOT INCOME UNTIL IT LANDS** — §87's rule for money out restated for money in, because a claim the carrier rejects or part-pays would otherwise leave money in the books nobody received; posting takes `postClaim`'s delete-then-reinsert shape, and **`income_entries` has no `claim_id`-shaped column where `expense_entries` has one.** **THE REPLACEMENT'S COST IS RECORDED ON THE CASE, NOT IN THE LEDGER**, because the only question worth asking is whether the payment covered what it cost to put right, and a flat-rate carrier against a larger replacement leaves a gap no ledger row in this model would show. **TWO RULINGS TAKEN IN SESSION**: the replacement leaves as a **¥0 order linked to the first** (a stock adjustment is rejected — the customer needs a waybill to follow and only an order carries a parcel), and step three **branches to a refund** where the customer would rather have their money. **AMOUNTS ARE TYPED, NOT CALCULATED** — flat sums, percentages and assessed values all differ per carrier, so a typed "claimed" and "received" serves every tenant with no configuration, which is what *"other tenants have different configuration"* asks for; a compensation-rules engine is rejected. **NOTHING MAY NAME JD** — `lib/tracking.js` already holds the general carrier list, and the text being replaced is the one place that hard-codes it. **RECORDED AS OPEN, NOT DECIDED**: which parcels raise a case (today air-only, delivered-only, >1 day — a late land parcel and a late rider raise nothing, and widening needs a lateness number per mode because a day late is ordinary for land), whether evidence is held in Tacet, which readers must exclude a ¥0 order from counts and averages, and whether a case can ever be both a replacement and a refund (offered, not taken). **Rejected: recording the spoiled goods as waste** — `waste_records` demands a `location_id` and a subject at that location while the food is at the customer's house, and the carrier pays for it so it is not the tenant's loss; recorded because it is the intuitive wrong answer. The Chinese is deliberately not composed here: the live pair `空运延误 · 联系客户` exists and the labels should restructure around it per `docs/tacet-delivery-vocabulary.md` Rule 4. A new decision reversing no earlier rule, hence a patch. **Docs only; no code changed.**
 
@@ -10041,3 +10043,51 @@ Per `CLAUDE.md` and `docs/tacet-delivery-vocabulary.md` Rule 4, every label this
 - **Rejected: booking the carrier's payment when the claim is filed.** §87. A rejected or part-paid claim would put money in the books that never arrived.
 - **Rejected: a stock adjustment instead of a ¥0 order.** The customer needs a waybill they can follow, and in this product only an order carries a parcel. A stock adjustment has no address, no tracking number and no record of who received what.
 - **Rejected: extending the existing single ack button to mean "all four steps done".** It is what exists today and it is the defect: four facts behind one checkbox cannot answer whether the carrier was ever chased.
+
+### §98 addendum — what building it changed, and the read sites that did NOT swap (2026-09-11)
+
+**Stages one and two are built** (the case, and the checklist that keeps it open
+until the carrier answers). Stages three and four — the ¥0 replacement order and
+the `income_entries` row — are not, and nothing here decides them further.
+
+**THE THREE READ SITES DO NOT SWAP, AND THE CHANGELOG ENTRY ABOVE SAYS THEY DO.**
+v4.212 states that `air_delay_cleared_at IS NULL` becomes "has an open case" in
+the badge, the dashboard card and the drawer. It was written before the code and
+it is wrong — recorded here rather than edited out of the entry, because a
+changelog line is dated and this file does not rewrite dated claims to match what
+happened next.
+
+What was built instead: **`air_delay_cleared_at` remains the single flag meaning
+"still on the worklist"**, and the case row gates who may set it. Three reasons,
+in the order they decided it:
+
+1. **It buys the weeks-long chase for nothing.** `/dashboard/ops`'s
+   `delivery_alerts` already counts these orders, already ages them from
+   `dispatched_at`, and already refreshes every sixty seconds. That IS the
+   surface a three-week-old dispute has to sit on, and it needed no change at
+   all — only the condition that takes an order off it.
+2. **Swapping would have needed a backfill.** Every parcel already cleared in
+   production would have to be given a closed case, or every handled order from
+   the last year lights up again on the morning of the deploy.
+3. **Two sources of truth for "is this finished" is the thing to avoid.** With
+   the stamp kept, there is exactly one, and `lib/delay-case.js` is the only
+   thing standing in front of it.
+
+**BOTH SURFACES, ONE CHANGE, AND IT WAS NOT OPTIONAL.** The banner being replaced
+was already on the phone as well as the desktop — the survey behind §98 missed
+it, having grepped for the column name where `public/m.html` keys off
+`o.airDelayed`. Once the server refuses the close, a phone still offering a
+one-tap dismiss is §97's own "the same button with the safety removed", so the
+checklist ships on both or the change is not safe to ship at all.
+
+**WHAT IS RECORDED AS OPEN STAYS OPEN.** Air-only detection, evidence in Tacet,
+which reports must skip a ¥0 order, and whether a case can be both a replacement
+and a refund are all untouched by this build.
+
+**One thing was learned that the section did not anticipate.** `none` had to
+become a state that HOLDS the case open rather than one that lets it close: an
+operator who never touches the dispute track has not decided not to claim, and
+the two must not be the same row. Choosing not to claim is its own state and
+requires a typed reason — which is what makes "the dispute with the logistics
+company, **if any**" expressible at all, and it is now the thing
+`scripts/test_delay_case.js` guards hardest after the refusal itself.

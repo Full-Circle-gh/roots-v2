@@ -223,6 +223,16 @@ const TD_ERR = {
   daily_cap:              ['That is today’s limit.', '已达今日上限。'],
   too_soon:               ['Too soon — try again in a moment.', '操作过于频繁,请稍后重试。'],
 
+  // ── A late parcel that spoiled the food (§98) ──
+  // The refusal an operator actually meets: the close button on a delay case,
+  // pressed while the carrier still owes an answer. It is the feature, not a
+  // fault, so it says what is unfinished rather than that something failed.
+  // `reason_required` and `amount_required` are NOT repeated here: this
+  // catalogue already carries both, worded for exactly this situation, and a
+  // second copy would be two sentences for one code drifting apart.
+  case_not_closeable:     ['The carrier claim is not finished yet.', '承运商赔偿尚未完成。'],
+  unknown_carrier:        ['That carrier is not one the system knows.', '承运商不正确。'],
+
   // ── Not set up ──
   not_configured:         ['That is not set up yet — finish it in Settings → Integrations.', '尚未配置,请在设置 → 集成中完成。'],
   unknown_integration:    ['That integration is not one the system knows.', '系统不支持该集成。'],
