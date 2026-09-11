@@ -12261,6 +12261,17 @@ function oldestOf(items){
   const h=Math.round(m/60);
   return h<48?T(h+'h',h+' 小时'):T(Math.round(h/24)+'d',Math.round(h/24)+' 天');
 }
+/* THE LAST THREE DAYS OF THE SHOP'S MONTH. The phone's copy of
+   lib/fapiao-reminders.js's isMonthEnd, computed off the SHOP's date rather
+   than the handset's — a phone in another timezone must not disagree with the
+   server about which month it is, which is the whole point of shopTodayDate().
+   Derived from the month's own length so February is not quietly exempt. */
+const FAPIAO_MONTH_END_DAYS=3;
+function fapiaoMonthEnd(){
+  const d=shopTodayDate();
+  const days=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+  return d.getDate()>days-FAPIAO_MONTH_END_DAYS;
+}
 /* Severity, then oldest first, and a fire with no clock sorts last — a state
    cannot be ranked by how long it has waited. */
 function opsFires(){
@@ -12298,7 +12309,15 @@ function opsFires(){
   add(c('refunds'),'amber','refund',T('Refunds waiting','退款待处理'),c('refunds'),items('refunds'),'',"APP.cmd('ordersGo','refund')");
   add(c('unhandled'),'amber','package',T('Orders to start','待开始备货'),c('unhandled'),items('unhandled'),'',"APP.cmd('ordersGo','paid')");
   add(c('awaiting_restock'),'amber','clock',T('Orders awaiting restock','订单待补货'),c('awaiting_restock'),items('awaiting_restock'),'',"APP.cmd('ordersGo','restock')");
-  add(c('invoices'),'amber','receipt',T('Invoices to issue','待开发票'),c('invoices'),items('invoices'),'',"APP.cmd('push','invoices')");
+  /* BRICK IN THE LAST THREE DAYS OF THE MONTH, amber the rest of the time —
+     the same boundary lib/fapiao-reminders.js switches its cadence on, and for
+     the same reason. What makes a late fapiao expensive is not that it is old
+     but that the month is about to close: a 发票 requested in August and
+     issued in September is issued in the wrong tax period against an August
+     order. The row sorts with the bricks then, above refunds and restock,
+     because on the 30th it genuinely does outrank them. No new string — the
+     label is the live pair, and the colour is the whole message. */
+  add(c('invoices'),fapiaoMonthEnd()?'brick':'amber','receipt',T('Invoices to issue','待开发票'),c('invoices'),items('invoices'),'',"APP.cmd('push','invoices')");
   /* The inbox, from the snapshot rather than from whatever this phone happened
      to have loaded. Home used to build the reviews row out of DB.reviews — the
      list the Inbox screen fetches — so the fire only existed AFTER the operator

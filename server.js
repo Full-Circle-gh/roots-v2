@@ -1166,6 +1166,20 @@ app.listen(PORT, () => {
       getTenantDb: tenantDb.getTenantDb,
     });
   } catch (e) { console.warn('[lowstock.digest] start failed:', e.message); }
+  // Fapiao chase sweeper. A 发票 a customer asked for and nobody issued had one
+  // amber row on Home and nothing else — no push existed for it at all. Asks at
+  // 10:00 shop-local: first at T+24h, then every 48h, then DAILY in the last
+  // three days of the month (a fapiao issued in the following month lands in
+  // the wrong tax period). Re-asks until it is ISSUED — dismissing a
+  // notification writes nothing, which is the point. Above three pending it
+  // sends one digest instead of one each. Runs every 10 min; the window-claim
+  // makes a missed tick free. No-op when push is off.
+  try {
+    require('./lib/fapiao-reminders').startFapiaoReminderSweeper({
+      mainDb:      require('./database'),
+      getTenantDb: tenantDb.getTenantDb,
+    });
+  } catch (e) { console.warn('[fapiao.reminder] start failed:', e.message); }
   // Seeded-review top-up sweeper. Holds every published product at the review
   // floor the operator set on Inbox → Reviews. OFF unless they turned it on, and
   // a no-op once the catalogue sits at the floor, so it costs nothing when idle.

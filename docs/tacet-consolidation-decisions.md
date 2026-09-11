@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.213
+# Tacet shared-core consolidation — decisions record, v4.214
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-11 · v4.214 — **§99 BUILT: THE FAPIAO CHASE, AND THE COUNT THAT DISAGREED WITH HOME.** Asked from the phone with a screenshot reading *Pending 2* — *"why we have 2 open invoices and the system doesn't alert me … if customer close the notification and invoice still open, system should recognize it and pop up again."* **TWO DEFECTS WEARING ONE COAT, AND ASH FOUND THE SECOND**: told that *"those invoice that not settled came from canceled order"*, the survey found why there was nothing to alert about — **five call sites asked which fapiao were pending and `GET /api/retail-admin/invoices` was the only one not requiring the order to be alive**, filtering on `needs_invoice = 1` alone while Home, the unseen dot, the Orders pseudo-status and its badge all excluded `cancelled` and `pending_payment`. So the list counted the dead, Home did not, and the operator drew the more damaging of the two available conclusions — that the ALERTING was broken — which is the reasonable one to draw from two sincere numbers that disagree. `lib/fapiao-queue.js` is the predicate now and the regression guard is in the suite, not in review: the test fails if `routes/retail.js` states the exclusion anywhere itself, because **the defect was never a wrong clause but five copies of one**. Dead requests are excluded from the count and NOT hidden — they wear the order's own live `已取消` / `待付款` in the muted pill, so no new string and no row vanishes; `counts.blocked` is new so All still sums its rows; an issued fapiao keeps reading issued whatever became of its order, being a 红冲 waiting to happen. **THE REMINDER IS A WINDOW, NOT A LATCH, AND `lib/alert-latch.js` HAD ALREADY DRAWN THE DISTINCTION** — which is why `lib/delivery-reminders.js` could not take a fifth case: its claim is `WHERE … IS NULL`, once ever. **DISMISSING WRITES NOTHING, WHICH IS THE ANSWER TO THE QUESTION**: there is no dismissed column because there must not be one, the row still matches `pendingSql` next sweep, and only ISSUING stops it — by dropping out of the queue, so no state is ever cleared. Tagged per order, so `sw.js`'s existing `renotify` replaces the tray entry rather than stacking. **THE CADENCE KEYS OFF MONTH-END, NOT ELAPSED DAYS** — silent 24h, then 48h, then DAILY in the last three days with Home's row going brick, because what makes a late fapiao expensive is the tax period closing and not its age; the window is computed from the month's own length so February is not exempt, and the phone reads the SHOP's date. At 10:00, **which is NOT the quiet hours `push-events.js` refuses** — that file drops an alert by a clock, this one schedules its own send, the same `DAYOF_HOUR = 10` the delivery sweeper uses. One digest above three; a digest claims every row it covered. Audience `invoices:manage` ("issuing a 发票 is a fiscal act"), switch `invoice_pending`, ON by default. **NOT BUILT AND NOT DECIDED: the snooze** (its own column, endpoint and month-end question — held back rather than folded in) and **why auto-issue is off**, raised in session and unanswered. Chinese: `docs/tacet-delivery-vocabulary.md` v1.55, two composed pairs and one lifted, **`逾期` rejected and the reason recorded** — a 发票 unissued on the 29th has broken no promise to the customer. 52 new assertions across two fast suites, the load-bearing ones on each side checked to fail with the change reverted; `test:fast` green. Two PRs. A build under a new decision, hence a patch.
 
 2026-09-11 · v4.213 — **§98 STAGES ONE AND TWO ARE BUILT: THE LATE-PARCEL CASE, AND THE CHECKLIST THAT WILL NOT CLOSE WHILE THE CARRIER STILL OWES AN ANSWER.** Two tables, `lib/delay-case.js` holding the rule, one step endpoint, and the checklist on BOTH surfaces. **THE THREE READ SITES DID NOT SWAP AND v4.212 SAYS THEY WOULD** — that entry was written before the code and is wrong; it is left standing and corrected in a §98 addendum rather than edited, per this file's own rule about dated claims. `air_delay_cleared_at` REMAINS the single flag meaning "still on the worklist" and the case row gates who may set it: `/dashboard/ops`'s `delivery_alerts` already counts these orders, ages them from `dispatched_at` and refreshes every sixty seconds, so the weeks-long chase surface needed no change at all — and swapping would have required backfilling a closed case for every parcel already cleared in production, or every handled order from the last year lights up on deploy morning. **THE PHONE ALREADY HAD THE BANNER AND THE SURVEY MISSED IT**, having grepped the column name where `public/m.html` keys off `o.airDelayed`; once the server refuses the close, a phone still offering a one-tap dismiss is §97's own "the same button with the safety removed", so both surfaces ship or neither does. **`none` HAD TO HOLD THE CASE OPEN** — an operator who never touched the dispute track has not decided not to claim, and choosing not to claim is its own state needing a typed reason, which is what makes "the dispute, if any" expressible; `scripts/test_delay_case.js` guards that second only to the refusal itself. Chinese: `docs/tacet-delivery-vocabulary.md` v1.54, seventeen composed pairs and fifteen lifted, **none introducing a word the repository did not already ship**; the one thing that could not be carried forward is 京东, hard-coded into both surfaces' live instruction, since the claim is against whichever carrier carried the parcel. Stages three (the ¥0 replacement order) and four (the ledger row) are NOT built and nothing here decides them further. 199 fast suites pass, 0 fail; `test_mobile_screens` renders 142 screens clean. A build under an existing decision, hence a patch.
 
@@ -10091,3 +10093,136 @@ the two must not be the same row. Choosing not to claim is its own state and
 requires a typed reason — which is what makes "the dispute with the logistics
 company, **if any**" expressible at all, and it is now the thing
 `scripts/test_delay_case.js` guards hardest after the refusal itself.
+
+## §99 — THE FAPIAO CHASE: A REQUEST NOBODY ISSUED ASKS AGAIN, AND ONLY ISSUING IT STOPS THE ASKING
+
+**2026-09-11 · Asked from the phone, with a screenshot of the Invoices screen:
+"why we have 2 open invoices and the system doesn't alert me with a reminder to
+close them … if customer close the notification and invoice still open, system
+should recognize it and pop up again a reminder after certain time."**
+
+**THE SCREENSHOT CONTAINED TWO DEFECTS WEARING ONE COAT, AND THE SECOND WAS
+FOUND BY ASH.** The screen read *Pending 2* — TC000342 from 21 August and
+TC000407 from 26 August, on 11 September. Both had crossed a month boundary.
+Asked why nothing had alerted, the survey found no operator push for fapiao at
+all; told by Ash that *"those invoice that not settled came from canceled
+order"*, it found the reason there was nothing to alert about: **five call sites
+asked which fapiao were pending and the Invoices list was the only one that did
+not require the order to be alive.** Home's `/dashboard/ops` row, the unseen dot,
+the Orders tab's `needs_invoice` pseudo-status and its badge all excluded
+`cancelled` and `pending_payment`; `GET /api/retail-admin/invoices` filtered on
+`needs_invoice = 1` and stopped. So the list counted the dead and Home did not,
+and the operator — reading two sincere numbers that disagreed — concluded the
+alerting was broken rather than that the list was wrong. **That is the more
+damaging of the two available readings and it is the reasonable one to draw.**
+
+**THE PREDICATE IS ONE PLACE NOW: `lib/fapiao-queue.js`.** Not a fixed clause in
+a sixth location — the defect was never a wrong clause, it was five copies of
+one, four of which were maintained together and one of which was not. The
+regression guard is in the suite rather than in review: `test_fapiao_queue.js`
+fails if `routes/retail.js` states the cancelled/unpaid exclusion anywhere
+itself.
+
+**CANCELLED AND UNPAID ARE EXCLUDED FROM THE COUNT AND NOT HIDDEN FROM THE
+LIST**, and they are deliberately not the same fact: a cancelled order has no
+sale to put a fiscal document behind, an unpaid one has no money received to
+issue against. Both stay under All wearing the order's own status from the live
+`ORDER_STATUS` pairs (`已取消` / `待付款`) with the muted pill, so no new string
+was needed and no row silently vanishes. **`counts.blocked` is new** so the All
+chip still sums the rows beneath it, and so that "two requests nobody can act
+on" is a fact an operator can see rather than a gap between two other numbers.
+**AN ISSUED FAPIAO KEEPS READING AS ISSUED whatever became of its order** — that
+row is a 红冲 waiting to happen and is the one thing here nobody should lose.
+
+**THE REMINDER IS A WINDOW, NOT A LATCH, AND `lib/alert-latch.js` HAD ALREADY
+DRAWN THE DISTINCTION.** That file says a latch answers "is this condition still
+flagged?" and is the wrong question for an ADVISORY, which has no moment at all
+— "true all week", needing "not a flag but a WINDOW". An unissued 发票 is exactly
+that shape. So `lib/delivery-reminders.js` could not simply be given a fifth
+case: its claim is `UPDATE … WHERE reminder_ship_sent_at IS NULL`, where a
+non-null stamp means never again. `invoice_reminder_last_at` is the same atomic
+claim with the window in the WHERE, so overlapping ticks and restarts still
+cannot double-fire but the row becomes claimable again once the gap passes.
+
+**DISMISSING A NOTIFICATION WRITES NOTHING, WHICH IS THE ANSWER TO THE QUESTION
+ASKED.** There is no dismissed column for a sweep to read because there must not
+be one — a swipe is a statement about a phone, not about the work. The order
+still matches `pendingSql` on the next sweep and asks again. **Only ISSUING
+stops it**, and it stops it by dropping the row out of the queue, so no reminder
+state ever has to be cleared. Each order carries the tag `retail-fapiao-<id>`,
+and `public/sw.js` already sets `renotify` whenever a tag is present, so the
+second reminder REPLACES the first in the tray and still re-alerts: one invoice
+holds one slot however many times it has asked.
+
+**THE CADENCE KEYS OFF MONTH-END, NOT ELAPSED DAYS.** Silent for the first 24h
+(the request is already on Home and an operator gets their working day), then
+every 48h, then **DAILY in the last three days of the month, with Home's row
+going from amber to brick on the same boundary.** What makes a late fapiao
+expensive is not its age but the tax period closing: a 发票 requested in August
+and issued in September is issued against an August order in the wrong period,
+and no "it is 12 days old" says that. Both of the requests in the screenshot
+would have been asking daily from 29 August. **The window is computed from the
+month's own length** so February is not quietly exempt, and the phone reads the
+SHOP's date (`shopTodayDate()`) so a handset in another timezone cannot disagree
+with the server about which month it is.
+
+**AT 10:00, AND THAT IS NOT THE QUIET HOURS `lib/push-events.js` REFUSES.** The
+difference is worth stating because the two look alike: quiet hours silence an
+alert that has already become true, by a clock typed once, and that file is
+right that "an operational alert dropped by a clock is indistinguishable from
+one that failed". This is the reminder's own schedule — the same `DAYOF_HOUR =
+10` delivery-reminders uses for a date-only delivery. Nothing is dropped; it is
+sent at ten, so a fapiao never wakes anybody at 03:00.
+
+**ONE DIGEST ABOVE THREE.** Two pending, a push each, naming the customer — that
+is what makes it actionable. Twenty pending, twenty banners is how a merchant
+learns to switch the category off, and the notification that then goes unread is
+the refund one; `lib/low-stock-digest.js` reached this conclusion first and for
+the same reason. **A digest claims every row it covered**, or the three it did
+not name re-send on the next tick.
+
+**THE AUDIENCE IS `invoices:manage`, NOT `invoices:view`** — `lib/capabilities.js`
+says it plainly: "Issuing a 发票 is a fiscal act, not a record of one." Whoever
+can do the thing, not everyone who can read the list. **`invoice_pending` is a
+switch** in `lib/push-events.js`, starting ON by that file's own rule that an
+absent preference is consent — and it exists so that the control somebody
+reaches for is "not this one" rather than push off entirely.
+
+**THE PUSH OPENS `/?to=invoices`, THE PHONE'S OWN PARAMETER, DELIBERATELY.**
+`?tab=invoices` on the desktop opens the PURCHASING invoices screen — supplier
+invoices, the other direction entirely, and a worse landing than the default.
+The phone is the surface holding the push subscription, so it is the one that
+gets deep-linked.
+
+**NOT BUILT, AND NOT DECIDED: THE SNOOZE.** Proposed in session and deliberately
+held back to its own change. An explicit "remind me tomorrow" — distinct from
+swiping, which must keep doing nothing — is what stops the only available way of
+saying "I know, not today" from being switching the category off. It needs a
+column, a write endpoint, a control on a screen that cannot itself issue a
+fapiao, and a decision about whether a snooze survives month-end. None of that
+belongs inside the change that fixed the counting.
+
+**ALSO OPEN, AND RAISED IN SESSION: WHY AUTO-ISSUE IS OFF.** The screen says
+*"Auto-issue is off · issue fapiao on desktop"*. If it is off for a fixable
+reason, most of these requests would never become a reminder at all, and a
+well-engineered nag for work that should not need nagging is the more expensive
+answer. The reminder is worth having either way — auto-issue will never cover
+every case, and the cases it misses are the ones that sit for three weeks — but
+the question is not answered here.
+
+**Chinese:** `docs/tacet-delivery-vocabulary.md` v1.55, two composed pairs and
+one lifted, neither composed pair introducing a word the repository did not
+already ship. Three pairs for a whole feature because most of it needed no
+string: the ordinary title is the live pair Home already prints, the bodies are
+numerals and names, and the month-end escalation on Home is a colour.
+
+**Tests:** `scripts/test_fapiao_queue.js` (20 assertions) and
+`scripts/test_fapiao_reminders.js` (32), both fast shard. The load-bearing
+assertions on each side were checked to FAIL with the change reverted — the
+window claim replaced by a once-ever latch, month-end replaced by a fixed date,
+the digest removed — and to pass with it restored. `npm run test:fast` green.
+
+**Two PRs, per the one-PR-per-change rule**: the predicate fix first, the
+reminder on top of it. Sessions live against this repo at the time
+(`store-section-setup`, `spoiled-shipment-workflow`) touch neither path; §99 is
+the next free number as of `6555ecb` and neither had pushed a branch.

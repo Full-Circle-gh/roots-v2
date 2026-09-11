@@ -4197,6 +4197,18 @@ addColumn('retail_orders', 'reminder_ship_sent_at', 'DATETIME');
 // Stamped the moment the one-and-only pickup reminder Web Push is fired (20 min
 // before the chosen pickup time), so it never re-fires. NULL = not yet reminded.
 addColumn('retail_orders', 'reminder_pickup_sent_at', 'DATETIME');
+// Fapiao chase (see lib/fapiao-reminders.js). DELIBERATELY UNLIKE THE TWO
+// ABOVE: those two stamp a one-and-only send, where a non-null value means
+// never again. An un-issued 发票 is not an event with a moment — it is true
+// every day until somebody issues one — so this stamp is a WINDOW: it records
+// when the operator was last asked, and the row becomes claimable again once
+// the cadence's gap has passed. The only thing that stops the asking is the
+// fapiao being issued (which drops the order out of fapiao-queue's pendingSql
+// altogether); dismissing a notification writes nothing here, by design.
+// `_count` is how many times we have asked, kept for the record rather than
+// read by the cadence — nothing is capped, because a debt does not expire.
+addColumn('retail_orders', 'invoice_reminder_last_at', 'DATETIME');
+addColumn('retail_orders', 'invoice_reminder_count',   'INTEGER DEFAULT 0');
 // Item-level: when this row is a substitute, point back to the original
 // product the customer was trying to buy. Lets us show "replaces X" on
 // receipts and analytics.
