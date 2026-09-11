@@ -643,6 +643,10 @@ const state = {
      field. null means no override, exactly as on the desktop. */
   dashCards:null,
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
+  /* A photo blown up full-screen — the src being shown, or null. Generic: any
+     screen can open one (see aprRow's receipt), rather than each screen
+     growing its own zoomed-view state. */
+  imgZoom:null,
   /* The shop note being typed on the open order, {id, text}. Kept HERE rather
      than left in the textarea because render() rewrites the drawer's innerHTML
      and anything only in the DOM goes with it. Keyed by order id so a draft
@@ -10718,7 +10722,7 @@ function aprRow(r){
     ${r.has_receipt?`<button class="btn2" style="align-self:flex-start;padding:0 12px;height:36px;font-size:13px"
         onclick="APP.cmd('aprShot',${r.id})">${a.shotFor===r.id?T('Hide photo','收起照片'):T('View photo','查看照片')}</button>`:''}
     ${a.shotFor===r.id?(a.shot
-      ? `<img src="${a.shot}" alt="" style="width:100%;max-height:280px;object-fit:contain;border-radius:10px;border:1px solid var(--border-default);background:var(--surface-raised)">`
+      ? `<img src="${a.shot}" alt="" style="width:100%;max-height:280px;object-fit:contain;border-radius:10px;border:1px solid var(--border-default);background:var(--surface-raised);cursor:zoom-in" onclick="APP.cmd('zoomImg','${a.shot}')">`
       : `<div style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`):''}
     ${waiting?`<div style="display:flex;gap:8px">
       ${/* APPROVE IS THE CTA AND REJECT IS NOT, because the queue exists to be
@@ -13596,6 +13600,22 @@ function sheetAsk(){
           </div>`}
    </div>`;
 }
+/* A photo, full-screen. GENERIC ON PURPOSE — a data URI in, nothing else —
+   so any screen with a thumbnail (the receipt in aprRow, and whatever grows
+   one next) gets a bigger look by calling APP.cmd('zoomImg', src) rather than
+   building its own viewer. z-index 70 clears the highest sheet in the app
+   (install, at 61): a zoomed photo is meant to sit over anything already open. */
+function sheetImgZoom(){
+  const src=state.imgZoom; if(!src) return '';
+  return `<div style="position:absolute;inset:0;z-index:70;background:rgba(10,14,22,.92);display:flex;align-items:center;justify-content:center;animation:tFade .15s ease both"
+       onclick="APP.cmd('closeZoom')">
+     <img src="${src}" alt="" style="max-width:100%;max-height:100%;object-fit:contain" onclick="event.stopPropagation()">
+     <button class="iconbtn" style="position:absolute;top:calc(env(safe-area-inset-top,0px) + 14px);right:14px;background:rgba(17,26,43,.55);color:#fff"
+       onclick="event.stopPropagation();APP.cmd('closeZoom')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button>
+   </div>`;
+}
+reg('zoomImg', src=>{ if(!src) return; state.imgZoom=src; render(); });
+reg('closeZoom', ()=>{ state.imgZoom=null; render(); });
 function sheetActions(){
   const o=currentOrder();
   // Reprint is the drawer's own toolbar button and rides at the top of the
@@ -15582,6 +15602,7 @@ function render(){
   if(state.quickSheet) html += sheetQuick();
   if(state.wst.open) html += sheetWaste();
   if(state.search) html += sheetSearch();
+  if(state.imgZoom) html += sheetImgZoom();
   if(state.toast) html += `<div class="toast">${state.toast}</div>`;
   app.innerHTML = html;
   /* WHERE THE FLOATING BUTTON SITS, measured off the dock that was just
@@ -15946,6 +15967,8 @@ function layers(){
   if(state.search) L.push(()=>{ state.search=false; });
   if(state.overflow) L.push(()=>{ state.overflow=false; });
   if(state.installSheet) L.push(()=>{ state.installSheet=false; });
+  // Last, so it is first closed: a zoomed photo sits over whatever else is open.
+  if(state.imgZoom) L.push(()=>{ state.imgZoom=null; });
   return L;
 }
 function syncHistory(){
