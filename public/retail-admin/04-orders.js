@@ -7758,6 +7758,31 @@ function jdSuggestedService(mode, isFresh) {
   return isFresh ? 'LL-HD-M' : 'ed-m-0001';      // ground splits by fresh flag
 }
 
+// Provinces whose waybill DEFAULTS to the ground product even on an air parcel.
+//
+// A WAYBILL SETTING AND NOTHING MORE. The parcel's own air/land mode is not
+// touched and neither is anything that plans or splits shipments — an 'air'
+// parcel stays an 'air' parcel and is simply booked on 生鲜标快 rather than
+// 生鲜特快. Ground is next-day into Fujian and Guangxi (JD's printed 时效产品),
+// so air there costs more and arrives no sooner.
+//
+// PREFIX, NOT EQUALITY: a stored address carries the full official name.
+// 福建省 would survive a suffix-strip but Guangxi's 广西壮族自治区 leaves
+// 广西壮族, which equality misses. Prefix admits it and still excludes 广东.
+//
+// lib/jd.js `isLandDefaultProvince` is the SOURCE OF TRUTH and re-applies this
+// server-side; this copy exists only to pre-select the right radio before the
+// request is sent. scripts/test_jd_waybill_land_default.js fails if the two
+// province lists ever drift apart.
+const JD_LAND_DEFAULT_PROVINCES = ['福建', '广西'];
+function jdIsLandDefaultProvince(province) {
+  const p = String(province || '').trim();
+  if (!p) return false;
+  if (JD_LAND_DEFAULT_PROVINCES.some(x => p.startsWith(x))) return true;
+  const lower = p.toLowerCase();
+  return lower === 'fujian' || lower === 'guangxi';
+}
+
 // ─── JD waybill cloud-print (面单云打印) — local print component ────────────
 // After a JD waybill is created, fire its label STRAIGHT to the JD print
 // component (京东物流云打印组件) running on THIS PC, which renders the encrypted
@@ -7987,16 +8012,33 @@ async function submitJdLabel(orderId, shipmentId, product, btn, pieces) {
 
 // Create a JD waybill for a parcel. Ground/local parcels ask the one thing the
 // order can't tell us: fresh-ground (生鲜标快) vs ambient-ground (京东标快), since
-// that depends on what's in the box; air always ships fresh-express (生鲜特快 /
-// LL-SD-M), so that section of the modal is skipped. Every mode also gets a
+// that depends on what's in the box. An air parcel normally ships fresh-express
+// (生鲜特快 / LL-SD-M) with that section skipped — EXCEPT into Fujian / Guangxi,
+// where ground is next-day and the two fresh services are offered instead with
+// ground pre-selected (jdIsLandDefaultProvince). Every mode also gets a
 // pieces (箱数) stepper — staff bump it above 1 when the parcel doesn't fit in
 // one box, so JD splits it across boxes under the SAME waybill number
 // (一单多件); left at 1 it's the ordinary single-box case. We never re-ask air
 // vs ground — only the two GROUND service options are offered.
 function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
   const isAir = mode === 'air';
-  const preset = isAir ? 'LL-SD-M' : jdSuggestedService(mode, !!Number(isFresh));
-  const services = isAir ? [] : JD_SERVICES.filter(s => s.code !== 'LL-SD-M');   // ground-only: fresh vs ambient
+  // Province comes off the open order (the GET parses address_json into
+  // o.address) — the same source openEditShipTo reads.
+  const ord = (_OPEN_ORDER && _OPEN_ORDER.id === orderId) ? _OPEN_ORDER : null;
+  const destProvince = (ord && ord.address && typeof ord.address === 'object' && ord.address.province) || '';
+  // An air parcel into Fujian / Guangxi books GROUND by default. Unlike every
+  // other air parcel it now gets the two fresh services to choose between,
+  // ground pre-selected — a default, not a lock, so air is still one click away.
+  const landDefault = isAir && jdIsLandDefaultProvince(destProvince);
+  const preset = landDefault ? 'LL-HD-M'
+    : isAir ? 'LL-SD-M'
+    : jdSuggestedService(mode, !!Number(isFresh));
+  const services = landDefault
+    ? JD_SERVICES.filter(s => s.code === 'LL-HD-M' || s.code === 'LL-SD-M')      // fresh: ground (default) or air
+    : isAir ? [] : JD_SERVICES.filter(s => s.code !== 'LL-SD-M');                // ground-only: fresh vs ambient
+  // Built from the service table's own live labels — no new wording is minted
+  // for this case; the row the operator is about to send names itself.
+  const presetSvc = JD_SERVICES.find(s => s.code === preset) || null;
   const bg = document.createElement('div');
   bg.className = 'pu-editor-bg tacet';
   bg.style.display = 'flex';
@@ -8005,9 +8047,11 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
       <div class="pu-editor-head">
         <div>
           <h3 style="margin:0; font-size:14px;">${cuT('Create JD label', '生成京东运单')}</h3>
-          <div class="muted" style="font-size:11px; margin-top:2px;">${isAir
-            ? cuT('Air parcel — fresh express (生鲜特快)', '空运包裹 — 生鲜特快')
-            : cuT('Ground parcel — is it fresh (ice pack) or ambient?', '陆运包裹 — 生鲜(冰袋)还是普通?')}</div>
+          <div class="muted" style="font-size:11px; margin-top:2px;">${landDefault && presetSvc
+            ? `${cuT(presetSvc.en, presetSvc.cn)} · ${presetSvc.sub}`
+            : isAir
+              ? cuT('Air parcel — fresh express (生鲜特快)', '空运包裹 — 生鲜特快')
+              : cuT('Ground parcel — is it fresh (ice pack) or ambient?', '陆运包裹 — 生鲜(冰袋)还是普通?')}</div>
         </div>
         <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">${cuT('Close', '关闭')}</button>
       </div>
