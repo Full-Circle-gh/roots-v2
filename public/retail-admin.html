@@ -10415,6 +10415,17 @@
                      while the switch was on. -->
                 <div class="fb-row">
                   <div class="fb-lab">
+                    <label class="fb-name" for="batch-preorder-open">Pre-order opens · 预订开始</label>
+                    <div class="fb-desc">From this hour a platform may start taking orders for today's batch. Blank or 0 means from midnight. · 从此时间起,平台可以开始为今天这一批接单。留空或填 0 表示从午夜开始。</div>
+                  </div>
+                  <div class="fb-ctl">
+                    <input type="number" id="batch-preorder-open" min="0" max="23" step="1" placeholder="0">
+                    <span class="fb-unit">:00</span>
+                  </div>
+                </div>
+
+                <div class="fb-row">
+                  <div class="fb-lab">
                     <label class="fb-name" for="batch-lock">Pre-order cut-off · 预订截单</label>
                     <div class="fb-desc">Until this hour a platform can take orders for a batch that is still being made. Blank uses the kitchen-ready hour above. · 在此时间之前,平台可以为尚未完成的这一批接单。留空则用上面的厨房已完成时间。</div>
                   </div>

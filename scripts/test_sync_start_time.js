@@ -161,11 +161,22 @@ console.log('\n3. The daemons\' own gate, lifted out of each daemon');
     const src = fs.readFileSync(path.join(HOME, file), 'utf8');
     const m = /\nfunction isStoreOpen\(storeCode, now = new Date\(\)\) \{[\s\S]*?\n\}/.exec(src);
     if (!m) { fail(`${file}: could not find isStoreOpen to lift`); continue; }
+    /* §102 — the gate now has a SECOND answer: an open pre-order window opens it
+       whatever the hour (lib/batch-cadence's preorderSyncOpen). This section is
+       about the HOURS window, so the stub says "no schedule", which is the state
+       of every tenant who has not switched pre-orders on and the state these
+       four assertions were written against. Section 3b below drives it the
+       other way. shangou-daemon carries its own copy of this gate and does not
+       consult the window at all; an absent global is fine there, since its
+       lifted body never mentions one. */
+    const preorderOpen = { value: false };
     const ctx = {
       storeHours: sh.storeHours, within: sh.within, syncWindow: sh.syncWindow,
       FORCE_OPEN_UNTIL: 0, OPEN_GRACE_MIN: /eleme/.test(file) ? 30 : 15,
       PREOPEN_LEAD_MIN: undefined,
       LEGACY_STORE_HOURS: {},
+      db: {},
+      batchCadence: { preorderSyncOpen: () => preorderOpen.value },
       Date, Math,
     };
     vm.createContext(ctx);
@@ -178,6 +189,18 @@ console.log('\n3. The daemons\' own gate, lifted out of each daemon');
     is(open(9, 45), true,  `${label}: still syncing at 09:45`);
     is(open(4, 0),  false, `${label}: asleep at 04:00 — an idle backend is not refreshed at 4am`);
     is(open(23, 0), false, `${label}: asleep at 23:00`);
+
+    /* §102 — the same gate, same store, same 04:00, with a pre-order window
+       open. The hours have not moved; the reason to sync has. Skipped for
+       shangou, whose own copy of this gate predates §102 and never asks. */
+    if (!/shangou/.test(file)) {
+      preorderOpen.value = true;
+      is(open(4, 0), true,
+         `${label}: 04:00 with an OPEN pre-order window — the allowance is live and must be pushed`);
+      is(open(23, 0), true, `${label}: and the window's own hours are what shut it, not the shop's`);
+      preorderOpen.value = false;
+      is(open(4, 0), false, `${label}: window shut again — straight back to the shop's hours`);
+    }
   }
 }
 

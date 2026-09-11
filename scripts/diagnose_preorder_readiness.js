@@ -54,7 +54,9 @@ if (!b) {
 } else {
   const show = (k) => console.log(`   ${k.padEnd(20)} ${JSON.stringify(b[k])}`);
   for (const k of ['enabled', 'anchor_date', 'interval_days', 'cutoff_hour', 'ready_hour',
-                   'lock_hour', 'preorder_qty', 'preorder_channels']) show(k);
+                   'preorder_open_hour', 'lock_hour', 'preorder_qty', 'preorder_channels']) show(k);
+  // §102 — undefined here means the tenant has never set one, which is midnight.
+  if (b.preorder_open_hour == null) console.log('   (preorder_open_hour unset → 00:00, §102 default)');
   const skips = Array.isArray(b.skip_dates) ? b.skip_dates : [];
   console.log(`   ${'skip_dates'.padEnd(20)} ${skips.length} date(s)${skips.length ? ': ' + skips.join(', ') : ''}`);
 }

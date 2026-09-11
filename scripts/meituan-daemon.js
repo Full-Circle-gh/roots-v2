@@ -46,6 +46,9 @@ const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 // §85 — the pre-order window's two edges, checked on the main loop.
 const preorderFlip = require('../lib/preorder-flip');
+// §102 — an open pre-order window is itself a reason to sync, whatever the hour.
+// See isStoreOpen below and lib/batch-cadence's preorderSyncOpen.
+const batchCadence = require('../lib/batch-cadence');
 const mtBundles = require('../lib/meituan-bundles');
 const { getBrowser, closeAll } = require('../lib/meituan-browser');
 const { sweepStockDrift } = require('../lib/meituan-drift-sweep');
@@ -172,7 +175,23 @@ function isStoreOpen(storeCode, now = new Date()) {
   // openGraceMin: 0 — syncWindow has already folded the front grace into its
   // start, so passing it again would begin sync earlier than asked.
   const win = syncWindow(hours, { leadMin: PREOPEN_LEAD_MIN, graceMin: OPEN_GRACE_MIN });
-  return within(win, { openGraceMin: 0, closeGraceMin: OPEN_GRACE_MIN, now });
+  if (within(win, { openGraceMin: 0, closeGraceMin: OPEN_GRACE_MIN, now })) return true;
+  /* §102 — AN OPEN PRE-ORDER WINDOW IS ITSELF A SYNC WINDOW. The store's own
+     hours answer "is it trading"; this answers "is there a morning's allowance
+     live on Meituan right now that customers are ordering against". Before
+     this, flipTick enqueued the allowance at the window's start and
+     pushableStores held every row until (open − 2h), so the listing carried
+     yesterday's bare shelf — usually 售罄 — through most of the window.
+
+     IT WIDENS THE ORDER POLL TOO, AND THAT IS THE POINT, NOT A SIDE EFFECT.
+     §85 caps itself only because each pre-order drives the shelf down by one
+     and the next published figure falls with it. Pushing an allowance nobody
+     then reads orders against would publish a number that can never fall.
+     Approved by Ash with that cost stated (§102).
+
+     NOT the 置休 command and not the drift sweep — neither reads this gate, and
+     both were already outside it for their own reasons. */
+  return batchCadence.preorderSyncOpen(db, { channel: 'meituan', now });
 }
 
 // Tier 1 fingerprint reduction: never act on an exact fixed cadence. Each

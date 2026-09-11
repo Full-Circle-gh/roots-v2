@@ -81,6 +81,9 @@ const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 // §85 — the pre-order window's two edges, checked on the main loop.
 const preorderFlip = require('../lib/preorder-flip');
+// §102 — an open pre-order window is itself a reason to sync, whatever the hour.
+// See isStoreOpen below and lib/batch-cadence's preorderSyncOpen.
+const batchCadence = require('../lib/batch-cadence');
 const elemeSync = require('../lib/eleme-sync');
 const { getBrowser } = require('../lib/eleme-browser');
 const { alertPlatform, alertMerchant, alertBoth } = require('../lib/ops-alert');
@@ -161,7 +164,19 @@ const FORCE_OPEN_UNTIL = Number(process.env.ELEME_FORCE_OPEN_MINUTES) > 0
 function isStoreOpen(storeCode, now = new Date()) {
   if (FORCE_OPEN_UNTIL && now.getTime() < FORCE_OPEN_UNTIL) return true;
   const win = syncWindow(storeHours(storeCode), { leadMin: PREOPEN_LEAD_MIN, graceMin: OPEN_GRACE_MIN });
-  return within(win, { openGraceMin: 0, closeGraceMin: OPEN_GRACE_MIN, now });
+  if (within(win, { openGraceMin: 0, closeGraceMin: OPEN_GRACE_MIN, now })) return true;
+  /* §102 — AN OPEN PRE-ORDER WINDOW IS ITSELF A SYNC WINDOW, and on Eleme this
+     gate reaches only the ORDER POLL: processStockQueue below has never been
+     hours-gated, so the allowance was already publishing at the window's start.
+     That asymmetry is precisely what made Eleme the worse of the two channels
+     — the number went up and nothing brought it back down, because §85 caps
+     itself by reading the orders that spend the allowance. A twenty-unit
+     allowance could take sixty orders before the poll woke at (open − 2h).
+
+     So this line is the cap, not a convenience. Approved by Ash with its cost
+     — a merchant backend read at hours it would not otherwise be read — stated
+     (§102). Every one of §85's off switches is still upstream of it. */
+  return batchCadence.preorderSyncOpen(db, { channel: 'eleme', now });
 }
 
 // Bounded JSON for the columns we archive — a raw order payload is unbounded in
