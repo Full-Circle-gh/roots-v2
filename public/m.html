@@ -3940,8 +3940,14 @@ function moreRowsFlat(){ return moreGroups().reduce((a,g)=>a.concat(g.rows),[]);
    read "50% set up · 3 steps left" whatever it had actually done. */
 function setupState(){
   const d=state.setup;
-  if(d) return {pct:d.percent, done:d.requiredDone, total:d.requiredTotal, left:Math.max(0,d.requiredTotal-d.requiredDone), real:true};
-  return {pct:null, real:false};
+  /* `allDone` is the server's own flag (routes/retail-setup.js), and it is what
+     decides whether the checklist is offered at all — the desktop hides its rail
+     row on the same flag. Derived from the counts only when the payload predates
+     it, using the identical comparison the server makes, so the two can never
+     disagree about what "finished" means. */
+  if(d) return {pct:d.percent, done:d.requiredDone, total:d.requiredTotal, left:Math.max(0,d.requiredTotal-d.requiredDone),
+    allDone: d.allDone!=null ? !!d.allDone : (d.requiredTotal!=null && d.requiredDone>=d.requiredTotal), real:true};
+  return {pct:null, real:false, allDone:false};
 }
 /* ==========================================================================
    FAQ & help (desktop: 07-content-billing.js)
@@ -4716,8 +4722,22 @@ function screenMore(){
   const su=setupState();
   // "Open your store" is the owner's onboarding checklist, not a tool. It is
   // gated on the same keys as Settings, so a stocker is not handed a progress
-  // bar for work they cannot do.
-  const setupCard = canRoute('setup');
+  // bar for work they cannot do — AND IT VANISHES FOR GOOD once the store is
+  // open. A checklist with nothing left on it is not a tool either: this card
+  // sat at the top of More reading "Everything is set up" on a finished store
+  // forever, above a full progress bar, first thing in the section.
+  //
+  // Every other surface already knew this. The desktop rail row and dashboard
+  // card hide on `SETUP.allDone` (17-setup-guide.js suRefreshChrome: "Both
+  // appear only while setup is unfinished, and vanish for good at 100%"), and
+  // the Settings store card below shows its progress line only on
+  // `allDone===false`. The phone's More screen was the last holdout.
+  //
+  // Hidden too while /setup is still in flight, exactly as the desktop's
+  // `hide = !SETUP || SETUP.allDone` is. The established store is the common
+  // case, and a card that paints "Checking…" and then disappears is worse than
+  // one that arrives a moment late on the new tenant that actually needs it.
+  const setupCard = canRoute('setup') && su.real && !su.allDone;
   const groups = moreGroups();
   /* A role can be narrowed until this app holds nothing for it — a stocker whose
      only tool is the separate Quick Stock PWA. Say so, and say who can change
@@ -4733,10 +4753,11 @@ function screenMore(){
         <span style="width:38px;height:38px;border-radius:10px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--accent);flex:none">${ic('compass',22)}</span>
         <span style="flex:1;min-width:0">
           <span style="display:block;font-size:15px;font-weight:500;color:var(--text-primary)">${T('Open your store','开店引导')}</span>
-          <span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${su.real
-            ? (su.left?T(su.pct+'% set up · '+su.left+' steps left',`已完成 ${su.pct}% · 还差 ${su.left} 步`):T('Everything is set up','已全部完成'))
-            : T('Checking…','检查中…')}</span>
-          ${su.real?`<span style="display:block;margin-top:10px;height:4px;border-radius:999px;background:var(--surface-raised)"><span style="display:block;height:4px;width:${su.pct}%;border-radius:999px;background:var(--text-primary)"></span></span>`:''}</span>
+          ${/* No "Checking…" and no "Everything is set up": the gate above means
+                this card paints only when the status is known AND unfinished,
+                so there is always a real percentage and at least one step left. */''}
+          <span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${T(su.pct+'% set up · '+su.left+' steps left',`已完成 ${su.pct}% · 还差 ${su.left} 步`)}</span>
+          <span style="display:block;margin-top:10px;height:4px;border-radius:999px;background:var(--surface-raised)"><span style="display:block;height:4px;width:${su.pct}%;border-radius:999px;background:var(--text-primary)"></span></span></span>
         <span style="color:var(--text-secondary);display:flex;flex:none;align-self:flex-start;margin-top:9px">${ic('chevron-right')}</span></button></div></div>`:''}
     ${groups.map(g=>`<div style="margin-top:14px">
       ${g.h?`<div class="eyebrow" style="padding:6px 20px">${T(...g.h)}</div>`:''}
