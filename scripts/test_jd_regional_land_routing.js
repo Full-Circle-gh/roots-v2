@@ -124,10 +124,10 @@ const ANY_MODE = { id: 3, ship_modes: 'air,land' };
 function main() {
   console.log(`\nJD regional land routing — Fujian / Guangxi (§jd-regional-delivery-optimization)\n`);
 
-  const plan = realPlanner({ '厦门': '福建', '南宁': '广西', '上海': '上海' });
+  const plan = realPlanner({ '厦门': '福建省', '南宁': '广西壮族自治区', '上海': '上海市' });
 
   // ── 1. The ruling itself ──────────────────────────────────────────────────
-  for (const [label, province] of [['福建 (Chinese)', '福建'], ['fujian (English)', 'fujian']]) {
+  for (const [label, province] of [['福建 (bare)', '福建'], ['福建省 (full, as stored)', '福建省'], ['fujian (English)', 'fujian']]) {
     it(`Fujian (${label}) with an Air-only item ships ONE land parcel, not air`, () => {
       const rows = plan([AIR_ONLY], 'F市', province, {});
       assert.strictEqual(rows.length, 1, 'Fujian split into more than one shipment');
@@ -136,7 +136,11 @@ function main() {
     });
   }
 
-  for (const [label, province] of [['广西 (Chinese)', '广西'], ['guangxi (English)', 'guangxi']]) {
+  // 广西壮族自治区 is the string a REAL address carries (scripts/miniapp_import.json,
+  // and miniapp checkout captures the full official name) — the bare '广西' below
+  // never occurs in production. An equality-on-normalised test passed the bare form
+  // while the real one fell through to air, so the full name is pinned here first.
+  for (const [label, province] of [['广西壮族自治区 (full, as stored)', '广西壮族自治区'], ['广西 (bare)', '广西'], ['guangxi (English)', 'guangxi']]) {
     it(`Guangxi (${label}) with an Air-only item ships ONE land parcel, not air`, () => {
       const rows = plan([AIR_ONLY], 'G市', province, {});
       assert.strictEqual(rows.length, 1, 'Guangxi split into more than one shipment');

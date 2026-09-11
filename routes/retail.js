@@ -9333,7 +9333,11 @@ function isGuangdong(province, city) {
 // keep its delivery promise there — paying for air buys nothing extra.
 function isJdLandNextDayProvince(province, city) {
   const norm = s => String(s || '').trim().toLowerCase().replace(/省$|市$|自治区$/g, '');
-  const isOne = p => p === '福建' || p === 'fujian' || p === '广西' || p === 'guangxi';
+  // Prefix, not equality: a real address carries the FULL official name, and
+  // Guangxi's is 广西壮族自治区 — stripping the 自治区 suffix leaves 广西壮族, which
+  // an equality test misses, so every Guangxi order would have kept flying.
+  // (福建省 → 福建 survives equality; Guangxi is the one that does not.)
+  const isOne = p => /^(福建|广西)/.test(p) || p === 'fujian' || p === 'guangxi';
   if (isOne(norm(province))) return true;
   if (city) {
     const prov = provinceForCity(city);
