@@ -53,6 +53,7 @@ const { getCategoryTree, sanitizeTree, normalizeCategoryPair } = require('../lib
 // What delivery/pickup/counter each MEAN — see lib/fulfilment.js. Prefer these
 // over `=== 'pickup'`: a bare pickup test reads a counter sale as a delivery.
 const { isCounter, shipsNothing, isTerminalOnPaid, isMirroredChannel } = require('../lib/fulfilment');
+const fapiaoQueue = require('../lib/fapiao-queue');
 // delivery_slot_label is a SNAPSHOT — its leading "Today"/"Tomorrow" was true
 // when the customer picked, not when they read it. attachSlotDisplay() derives a
 // fresh `delivery_slot_display` from scheduled_for at read time; the column is
@@ -16247,9 +16248,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // Fapiao worklist — un-issued invoice requests, oldest debt first. Feeds
     // the "Invoices to issue" attention card; its deep link lands on the
     // Orders list pre-filtered to the same `needs_invoice` pseudo-status.
-    const INV_WHERE = `o.needs_invoice = 1
-         AND COALESCE(o.invoice_status, 'requested') <> 'issued'
-         AND o.status NOT IN ('cancelled','pending_payment')`;
+    const INV_WHERE = fapiaoQueue.pendingSql('o');
     const invCount = tdb().prepare(`
       SELECT COUNT(*) AS n FROM retail_orders o WHERE ${INV_WHERE}
     `).get().n;
@@ -23855,11 +23854,9 @@ router.get('/api/retail-admin/invoices/unseen-count', requireRetailAdmin, (req, 
   const sinceSql = since || '1970-01-01T00:00:00.000Z';
   const row = tdb().prepare(
     `SELECT COUNT(*) AS n, MAX(placed_at) AS latest
-       FROM retail_orders
-      WHERE needs_invoice = 1
-        AND COALESCE(invoice_status, 'requested') <> 'issued'
-        AND status NOT IN ('cancelled','pending_payment')
-        AND datetime(placed_at) > datetime(?)`
+       FROM retail_orders o
+      WHERE ${fapiaoQueue.pendingSql('o')}
+        AND datetime(o.placed_at) > datetime(?)`
   ).get(sinceSql);
   res.json({ success: true, data: { count: row.n || 0, latest: row.latest || null } });
 });
@@ -24902,8 +24899,8 @@ function buildOrderFilter(query) {
     // Pseudo-status: every order carrying a fapiao request, whatever its
     // primary status. Dead orders drop out (a cancelled order owes no fapiao);
     // issued ones stay browsable in this view but sort below the open work.
-    filterSql += ` AND o.needs_invoice = 1
-             AND o.status NOT IN ('cancelled','pending_payment')`;
+    filterSql += ` AND ${fapiaoQueue.requestedSql('o')}
+             AND ${fapiaoQueue.issuableSql('o')}`;
   } else if (status === 'paid') {
     // The "Paid / to-ship" tab is a worklist, not a strict status filter: a
     // multi-parcel order that's had only SOME parcels shipped flips to
@@ -25290,10 +25287,8 @@ router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, re
   // `status=needs_invoice` pseudo-filter's open rows (issued history rides the
   // list but is done work, so it never feeds the badge).
   out.needs_invoice = tdb().prepare(
-    `SELECT COUNT(*) AS n FROM retail_orders
-      WHERE needs_invoice = 1
-        AND COALESCE(invoice_status, 'requested') <> 'issued'
-        AND status NOT IN ('cancelled','pending_payment')${where}`
+    `SELECT COUNT(*) AS n FROM retail_orders o
+      WHERE ${fapiaoQueue.pendingSql('o')}${where}`
   ).get(...args).n;
 
   // Oldest UNFULFILLED order, for the Orders page header status line (§1.7).
@@ -25879,13 +25874,26 @@ router.post('/api/retail-admin/invoice-file', requireRetailAdmin, express.json({
 // one list instead of opening each order. ?status=requested (pending, default
 // surfaced first) | issued | all. Includes items so the per-row block can copy
 // the accounting bundle. `counts` powers the filter chips.
+//
+// PENDING MEANS WHAT HOME MEANS. This endpoint used to filter on
+// `needs_invoice = 1` alone, so a request left behind by a CANCELLED order was
+// counted and listed as work waiting to be done — while Home's "Needs you" row,
+// which has always excluded cancelled and unpaid orders, showed nothing. An
+// operator reading both saw "Pending 2" on this screen and no alert anywhere,
+// and concluded the alerting was broken. It was not; the two screens were
+// answering different questions with the same word. Both now read
+// lib/fapiao-queue.js — see that file for why the dead ones are excluded from
+// the count but NOT hidden from the list.
 router.get('/api/retail-admin/invoices', requireRetailAdmin, (req, res) => {
   const status = ['requested', 'issued', 'all'].includes(req.query.status) ? req.query.status : 'all';
-  let where = 'o.needs_invoice = 1';
-  if (status === 'issued')        where += " AND o.invoice_status = 'issued'";
-  else if (status === 'requested') where += " AND COALESCE(o.invoice_status, 'requested') <> 'issued'";
+  let where = fapiaoQueue.requestedSql('o');
+  if (status === 'issued')        where = fapiaoQueue.issuedSql('o');
+  else if (status === 'requested') where = fapiaoQueue.pendingSql('o');
+  // o.status rides along so the client can label the rows it must not count —
+  // a request on a cancelled order stays visible under All wearing the order's
+  // own status word rather than a "Pending" it can never leave.
   const orders = tdb().prepare(
-    `SELECT o.id, o.order_no, o.total, o.shipping_fee, o.placed_at,
+    `SELECT o.id, o.order_no, o.total, o.shipping_fee, o.placed_at, o.status,
             o.invoice_type, o.invoice_title, o.invoice_tax_id, o.invoice_email,
             o.invoice_status, o.invoice_file_url, o.invoice_number, o.invoice_issued_at,
             c.nickname
@@ -25903,8 +25911,15 @@ router.get('/api/retail-admin/invoices', requireRetailAdmin, (req, res) => {
     success: true,
     data: orders,
     counts: {
-      requested: tdb().prepare("SELECT COUNT(*) AS n FROM retail_orders WHERE needs_invoice = 1 AND COALESCE(invoice_status, 'requested') <> 'issued'").get().n,
-      issued:    tdb().prepare("SELECT COUNT(*) AS n FROM retail_orders WHERE needs_invoice = 1 AND invoice_status = 'issued'").get().n,
+      // `requested` is the PENDING count and nothing else — the figure the
+      // Pending chip prints, and it agrees with Home by construction now.
+      requested: tdb().prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${fapiaoQueue.pendingSql('o')}`).get().n,
+      issued:    tdb().prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${fapiaoQueue.issuedSql('o')}`).get().n,
+      // Un-issued requests on orders that were cancelled or never paid. Its own
+      // number because the All chip sums the three, and because "2 requests
+      // nobody can act on" is a fact worth being able to see rather than a
+      // discrepancy between two other counts.
+      blocked:   tdb().prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${fapiaoQueue.blockedSql('o')}`).get().n,
     },
   });
 });
