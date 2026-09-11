@@ -155,7 +155,7 @@ function ensureTransactionMethod(db) {
  * nothing, which is the address every mirrored order has.
  */
 function realPlanner() {
-  const parts = ['isGuangzhou', 'isGuangdong', 'parseShipModes', 'bucketForItem', 'planShipments']
+  const parts = ['isGuangzhou', 'isGuangdong', 'isJdLandNextDayProvince', 'parseShipModes', 'bucketForItem', 'planShipments']
     .map((n) => extractFunction(RETAIL, n)).join('\n');
   return new Function('provinceForCity', 'inventory',
     `${parts}\nreturn planShipments;`)(
