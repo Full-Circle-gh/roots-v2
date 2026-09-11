@@ -464,4 +464,117 @@ CASES.push(['cancel puts back what was saved',
   ['and the footer',      `document.getElementById('mOrdNoteFoot').hidden===true`],
 ]]);
 
+/* ══════════════════════════════════════════════════════════════════════════
+   §97 — THE WAYBILL
+
+   "No waybill on this parcel yet — add it on the desktop." was the whole of
+   what the drawer could say, on the one screen an operator holds while standing
+   at the bench with the parcel and the courier's slip.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+// A dispatched land parcel, with or without a waybill, and a carrier list the
+// fetch stub will not be asked for.
+const parcelOrder = (trk) => `
+  state.carriers=[{code:'jd',name_en:'JD Logistics',name_cn:'京东物流'},
+                  {code:'sf',name_en:'SF Express',name_cn:'顺丰速运'}];
+  window.__o=mapDetail({id:77, order_no:'RT-077', status:'dispatched', channel:'wechat',
+    recipient_name:'A', total:312, placed_at:'${today} 09:00:00', fulfillment_type:'delivery',
+    items:[], shipments:[{id:9, mode:'land', state:'dispatched', items:[], tracking:${trk}}]});
+  state.liveDetail=window.__o; state.detailId=window.__o.id; state.ordNote=null;
+  state.tab='orders'; render();`;
+
+CASES.push(['a parcel with no waybill is offered the control, not a signpost',
+  parcelOrder('null'), [
+  // THE CARD ITSELF, not document.body: the body carries the whole <script>,
+  // so indexOf() there answers yes to every string in this file's own source.
+  // Two of these assertions passed that way before they were written properly.
+  ['the card offers the control', `trackingCard(window.__o,window.__o.shipments[0],'').indexOf("addWaybill")>=0`],
+  // The sentence that sent an operator to a desk they are not sitting at.
+  ['and no longer points away',   `trackingCard(window.__o,window.__o.shipments[0],'').indexOf('on the desktop')<0`],
+]]);
+
+CASES.push(['the carrier chooser is built from the server list, not from this app',
+  parcelOrder('null') + `APP.cmd('addWaybill',9);`, [
+  ['a sheet opens',       `!!state.ask`],
+  ['with both carriers',  `state.ask.options.length===2`],
+  ['named by the server', `state.ask.options[0].label==='JD Logistics' && state.ask.options[0].key==='jd'`],
+]]);
+
+CASES.push(['the waybill goes up with its carrier and its parcel',
+  parcelOrder('null') + STUB + `
+    APP.cmd('addWaybill',9); APP.cmd('askRun','sf');
+    document.getElementById('ask-no').value='SF1234567890'; APP.cmd('askRun','');`, [
+  ['it PUTs the tracking route', `${sent('/orders/77/tracking')} && window.__sent.some(function(r){return r.m==='PUT'})`],
+  ['carrying the number',        `${body('"tracking_number":"SF1234567890"')}`],
+  ['CARRYING THE CARRIER',       `${body('"carrier":"sf"')}`],
+  // Without this the server attaches it to the FIRST parcel, which on a split
+  // order is the wrong box.
+  ['AND THE PARCEL IT BELONGS TO', `${body('"shipment_id":9')}`],
+]]);
+
+CASES.push(['a number the server would refuse is refused here first',
+  parcelOrder('null') + STUB + `
+    APP.cmd('addWaybill',9); APP.cmd('askRun','sf');
+    document.getElementById('ask-no').value='SF 1234 567'; APP.cmd('askRun','');`, [
+  ['nothing is sent',      `window.__sent.length===0`],
+  ['the sheet stays open', `!!state.ask`],
+  ['and says so',          `!!state.askErr`],
+]]);
+
+CASES.push(['and so is an empty one',
+  parcelOrder('null') + STUB + `APP.cmd('addWaybill',9); APP.cmd('askRun','sf'); APP.cmd('askRun','');`, [
+  ['nothing is sent', `window.__sent.length===0`],
+  ['it says why',     `!!state.askErr`],
+]]);
+
+CASES.push(['backing out of the carrier sheet sends nothing',
+  parcelOrder('null') + STUB + `APP.cmd('addWaybill',9); APP.cmd('closeAsk');`, [
+  ['no request at all', `window.__sent.length===0`],
+]]);
+
+const TRK = `{number:'JD0001', carrier_name_en:'JD Logistics', carrier_name_cn:'京东物流', events:[]}`;
+
+CASES.push(['a parcel that has one is offered Clear, and it asks first',
+  parcelOrder(TRK) + STUB + `APP.cmd('clearWaybill',9);`, [
+  ['nothing is sent yet', `window.__sent.length===0`],
+  ['it asked',            `!!state.ask`],
+]]);
+
+CASES.push(['clearing names the parcel in the query, not just the order',
+  parcelOrder(TRK) + STUB + `APP.cmd('clearWaybill',9); APP.cmd('askRun','');`, [
+  ['it DELETEs',        `window.__sent.some(function(r){return r.m==='DELETE'})`],
+  ['naming the parcel', `${sent('/orders/77/tracking?shipment_id=9')}`],
+]]);
+
+/* Retry sync is offered only where the desktop offers it — on a waybill whose
+   live subscription actually failed. On a healthy one it re-does something that
+   is already working. */
+CASES.push(['retry sync is not offered on a healthy waybill',
+  parcelOrder(TRK), [
+  ['no retry',   `trackingCard(window.__o,window.__o.shipments[0],'').indexOf("resubWaybill")<0`],
+  ['but Clear',  `trackingCard(window.__o,window.__o.shipments[0],'').indexOf("clearWaybill")>=0`],
+]]);
+
+CASES.push(['it is offered on one whose sync failed', `
+  state.carriers=[];
+  window.__o=mapDetail({id:77, order_no:'RT-077', status:'dispatched', channel:'wechat',
+    recipient_name:'A', total:312, placed_at:'${today} 09:00:00', fulfillment_type:'delivery',
+    items:[], shipments:[{id:9, mode:'land', state:'dispatched', items:[],
+      tracking:${TRK}, tracking_last_error:'kd100 rejected the number'}]});
+  state.liveDetail=window.__o; state.detailId=window.__o.id; state.tab='orders'; render();`, [
+  ['the parcel carries the error', `window.__o.shipments[0].lastError==='kd100 rejected the number'`],
+  ['and the retry is offered',     `trackingCard(window.__o,window.__o.shipments[0],'').indexOf("resubWaybill")>=0`],
+]]);
+
+CASES.push(['re-subscribing posts for that parcel', `
+  state.carriers=[];
+  window.__o=mapDetail({id:77, order_no:'RT-077', status:'dispatched', channel:'wechat',
+    recipient_name:'A', total:312, placed_at:'${today} 09:00:00', fulfillment_type:'delivery',
+    items:[], shipments:[{id:9, mode:'land', state:'dispatched', items:[],
+      tracking:${TRK}, tracking_last_error:'x'}]});
+  state.liveDetail=window.__o; state.detailId=window.__o.id; state.tab='orders'; render();`
+  + STUB + `APP.cmd('resubWaybill',9);`, [
+  ['it posts resubscribe', `${sent('/orders/77/tracking/resubscribe?shipment_id=9')}`],
+]]);
+
 run('order writes', CASES);
