@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.224
+# Tacet shared-core consolidation — decisions record, v4.225
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -24,6 +24,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 2026-09-11 · v4.224 — **§101 DECIDED AND BUILT: THE NIGHT'S ORDERS RAISE THEIR OWN KITCHEN REQUEST IN THE MORNING, BECAUSE THE PUSH AND THE PRINTER ALREADY KNOW HOW TO CARRY ONE.** Asked by Ash from the §84 walkthrough — the screen block answers *how many to prepare* and answers it only to somebody who opens the screen — and the ask was three words: **"we need it to be push, print"**. **§84 BUILT A NUMBER; §51 AND §71 BUILT A DELIVERY MECHANISM; NOTHING CONNECTED THEM.** Push (`_fireRestockPush`), the kitchen slip (`lib/kitchen-print`), the deep link onto `kitchenqueue`, the tickable card, §61's per-line close and §61's handover to *What you made* that actually moves the shelf — **every one of those keys on a `restock_orders` row**, and a night of `awaiting_restock` pre-orders creates no such row. So eighteen owed wraps pushed nothing, printed nothing, and waited for somebody to walk in and tap the right tab. **THE RULING: ONE REQUEST, RAISED BY THE SERVER, AT A PER-TENANT HOUR, DEFAULT 06:00** (`fresh.morningRequestHour`, blank turns it off) — chosen over a digest push/slip carrying the same numbers because a digest is a SECOND thing to build and a second place the kitchen reads, and it still leaves them nothing to close; and over per-order push/print, which on a thirty-order night is thirty slips at 2am and still never states the total. **THE SHAPE IS A REQUEST NOBODY TYPED, AND THAT CROSSES §84'S OWN LINE ON PURPOSE.** §84 refused to write orders into the request table and that refusal stands **in the direction it was made**: `lib/batch-owed.js` is unchanged, learns nothing, and is still the one definition of owed — the request is DERIVED from it once a day and never feeds back, so the number on the screen and the number on the paper cannot disagree. **The row is an ordinary kitchen request in every respect a reader can see**: `from_role` warehouse, `to_role` kitchen, `purpose` `'order'` — which already prints *For an order · 用于发货* (`lib/feie.js`) and already sorts below §65's urgent — `status` `'sent'`, a `PR-` number from `genRsNumber` (**injected, not copied** — §80's copy rule), no locations at all per §51, `created_by` NULL. **ONE NEW COLUMN, `restock_orders.auto_source`, AND IT IS WHAT MAKES THE ONCE-A-DAY GUARD EXACT** rather than inferred: `created_by IS NULL` is also true of rows predating `drop_created_by_user_fk_v1`, and a guard that is usually right raises a second request on the morning it is wrong. NULL means a person raised it, which is true of every row already written, so **no backfill and no migration beyond one `addColumn`**. **THE GUARD IS THE DATABASE, NOT A FILE LATCH.** `lib/alert-latch`'s `claimWindow` was the obvious reach and is deliberately NOT used: it is per-box file state, so a rebuilt container forgets and sends twice, and the thing being guarded here is not an advisory but a row the kitchen will cook from. The query asks whether today already has an `auto_source` request — which is also the answer after a restart, a redeploy and a second app server. **IT CATCHES UP AND THEN STOPS**: it fires at the configured hour or up to three hours after, so a box that was down at 06:00 still prints at 07:10, while an order landing at 15:00 does not raise a surprise request for food wanted tomorrow. **QUANTITIES SUM PER PRODUCT ACROSS SHOPS** because a kitchen request carries no locations to split them into (§51) — which shop gets the wraps is a transfer's question, asked after they exist. **LINES CARRY SKU AND NAMES AND NO `product_id`**, matching every live kitchen request, because §61's recorded-derivation matches SKU-then-name and a line shaped differently would not tick off. **NOT SOLVED, AND THE DIRECTION IS CHOSEN RATHER THAN MISSED: a human request for the same food is not subtracted.** Subtracting would mean matching lines across open requests by SKU-then-name and trusting the result to REDUCE what gets cooked; wrong, the kitchen under-makes and a customer who paid gets nothing, where the opposite error is a visible over-make on a card somebody can read. Named here so the next reader knows it was weighed. **NO new push channel, NO second printer, NO new capability, NO change to `batch-owed`, and the kitchen's on-screen block is untouched** — it now agrees with a slip instead of being the only place the fact lived. **Chinese: nothing minted for the request, the slip or the push** — `purpose='order'`, `厨房新请求` and `用于发货` are all live and all reached unchanged; the note reuses `有客户订单等待` verbatim from §84's own block. **Two settings strings are ARRANGEMENTS of live fragments** (`厨房制作请求` whole from `routes/restock.js`, `留空则…` from the low-stock and campaign hints, `每天` from the low-stock digest), declared in `docs/tacet-delivery-vocabulary.md` v1.60 under Rule 4's standing delegation with the candidates rejected. **Tests:** `scripts/test_kitchen_morning_request.js`, new, in the fast shard — the owed night end to end (parked order in, request out, push and print fired exactly once), the once-a-day guard across a simulated restart, the catch-up window's both edges, nothing-owed raising nothing, the hour switched off, the per-product sum across two shops, lines carrying SKU and no `product_id`, and `batch-owed` asserted unchanged by source. Checked to fail with the change reverted. `test:fast` green at 210, plus `test_batch_owed`, `test_kitchen_queue_item_split` and `test_restock_tenant2_split` run individually per CLAUDE.md. **One `addColumn` — called out here and in the PR body, not slipped in.** A build under a new decision, hence a patch.
+2026-09-11 · v4.225 — **§102 DECIDED AND BUILT: THE PRE-ORDER WINDOW OPENS THE SYNC GATE, AND THE TENANT SAYS WHEN IT OPENS — DECIDED by Ash** from the phone, off Home's *"Meituan not syncing · stock updates waiting since Sep 7, 5:56 PM · 19"* card: *"meituan syncing only on the morning it's a problem for pre order"*. **TWO CLOCKS WERE SET INDEPENDENTLY AND NOTHING CHECKED THEY AGREED**: §85's pre-order window opens at 00:00 — not a choice anyone made, just the absence of a lower bound — while the daemons' sync gate opens at the store's "Channel sync starts" time or two hours before opening, which is 08:00 for a shop opening at 10:00. **The hours between are dead, and they are the hours §85 exists to sell in.** **THE TWO CHANNELS FAIL DIFFERENTLY AND ONLY ONE OF THEM IS VISIBLE**: on Meituan `flipTick` enqueues the allowance at midnight and `pushableStores()` holds every row until 08:00, so the listing shows yesterday's bare shelf all night — that queue IS the card. On Eleme the push was never hours-gated so the allowance publishes at 00:00, but the ORDER POLL is, and **§85 is self-capping only because each pre-order drives the shelf down**: an order nobody reads moves no shelf, so a twenty-unit allowance can take sixty orders before breakfast. **The oversell §85 was built to be incapable of, arriving through the one edge §85 did not look at.** **ASH DECIDED BOTH OPEN QUESTIONS**: *"tenent can choose when start , defult can be midnight"* → `preorder_open_hour`, defaulting to 0 so an untouched tenant is unchanged; and *"ok do it"* on the overnight order read, which is the half that matters — widening only the push would publish an allowance nothing could decrement. **THE WIDENING IS ONE FUNCTION, `batchCadence.preorderSyncOpen()`, called by both daemons** — §80's rule about a fourth copy of the cadence is the same rule here. Every one of §85's five off switches still holds, so a tenant with the schedule off has an unchanged daemon. **SETTING "Sync starts" TO 00:00 WAS REJECTED** though it needs no code: it widens every day batch or not, and runs a five-minute order poll at 04:00 on a Sunday the kitchen is not cooking — a fingerprint, not a preference. **TWO THINGS ARE NAMED AS NOT DONE**: `lib/channel-sync-stale.js` still marks Eleme `hoursAware: true` when its pushes never were, so the card under-reports Eleme — a real defect, a different one, not this section's; and **the 19 rows are NOT explained by §101** (17:56 is inside the window), the likely shape being the stale `error` row that file's own line 105 documents from production. Unconfirmed without a production read. Code, tests and docs; no schema, no migration, one composed CN pair declared in the vocabulary, and no change to `.gitignore` or CI.
 
 2026-09-11 · v4.223 — **§58 ADDENDUM: A PARCEL GOING OUT IS NOT THE ORDER GOING OUT. THE THREE ROUTES THAT SHIP ONE BOX NOW SAY WHICH BOX.** Reported by Ash from the stock ledger — *"明天发快递的订单，鲜食自动扣了库存。原因，订单的陆运部分，点击发货，触发了扣除库存"* — TC000656 (Pesto 'Chicken' Wrap, Beet Salad, Quinoa Salad) and TC000647 (Tofu Banh Mi Wrap), 小程序 / Tianhe, four units off the count at 18:19 and 18:22 on food going out the next day, one of them to **-1**. **THIS IS §58's OWN COMPLAINT ARRIVING THROUGH A DOOR §58 DID NOT LOOK AT** — the ruling said the fresh line decrements at "the first forward transition into fulfilment … a parcel dispatched", which is exactly right for an order with one parcel and exactly wrong for an order with two. **A SPLIT ORDER'S BOXES DO NOT LEAVE TOGETHER, AND THAT IS THE FEATURE, NOT THE FAULT**: `planShipments` fans an out-of-Guangdong mixed basket into 空运 + 陆运, and the land box is sent days ahead **so that it arrives with** the air box carrying the food. So the first parcel out is, by design, the one with no kitchen line in it. **THE BUG WAS NEVER IN THE RULE, IT WAS IN THREE CALL SITES PASSING THE ORDER WHERE A PARCEL HAD LEFT**: `shipments/:sid/dispatch`, `shipments/:sid/deliver` and `orders/:id/jd-waybill` each stamp ONE shipment's `dispatched_at` and then handed `prepareCommitUnreservedOrder` the whole order id, whose per-product guard (`lib/inventory.js`) correctly found the held-back fresh products uncommitted and correctly took them. **Every guard behaved as written; none of them was ever told what had actually shipped.** **THE RULE, STATED SO IT SURVIVES THE NEXT SHAPE: a batch-made line decrements when the parcel CARRYING IT goes out.** A parcel-level caller passes `shipmentId`; `parcelsStillInTheBuilding` names the order's other parcels with no `dispatched_at`, and kitchen lines riding those are held exactly as payment holds them. **Whole-order callers pass nothing and take everything, unchanged** — PATCH /status, both auto-deliver sweeps, Start preparing — which is the backstop that makes the hold-back safe, and it is asserted rather than assumed. **HELD BACK WHOLE-PRODUCT, AND THE DIRECTION IS DELIBERATE**: the commit guard is per product and cannot hold part of one, so a fresh product split across both boxes waits for the later of them — §58's error to avoid is taking food off EARLY, and the last parcel always sweeps up. **EXPANDED, not order-level**, so a bundle on the waiting parcel is held by the components that carry the flag and not by its wrapper. **A line with `shipment_id` NULL is claimed by no parcel and is therefore NOT held** — this rule only ever defers a line demonstrably somewhere else. **Supplier parcels are not special-cased** because they carry nothing the kitchen makes. **NO SCHEMA CHANGE**: `retail_order_items.shipment_id` has recorded which box a line is in since the split-shipment table was added. **No new ledger reason, no new decrement site, no new strings, vocabulary untouched.** **Tests:** `scripts/test_fresh_stock_deferral.js` 45 assertions (was 24), the new ones reproducing TC000656 end to end — land box out, fresh untouched and a sold-out shelf still at 0 rather than -1; batch made; air box out; fresh off exactly once — plus the fresh line riding the parcel that IS leaving, the single-parcel and last-parcel sweep-ups, the bundle, the unassigned line, and the whole-order backstop. **13 of them checked to fail with the change reverted, in both directions** (behaviour and wiring separately), and the call-site check is by LABEL so a fourth parcel route wired the old way fails here rather than on a shelf. `test:fast` green at 209. **RECORDED AND NOT DONE: the four units already taken are left alone** — the per-product guard means tomorrow's dispatch will skip them, so the count is one day early and not double-counted, and a manual add-back today would leave it over by four from tomorrow; Ash was given the choice and the fix shipped without the adjustment. A fix under an existing decision, hence a patch.
 
@@ -10972,3 +10973,98 @@ does not read would look identical and fail to tick off.
   note reuses `有客户订单等待` verbatim from §84's own block. The two settings
   strings are arrangements of live fragments, declared in
   `docs/tacet-delivery-vocabulary.md` v1.60 with the candidates rejected.
+## §102 — THE PRE-ORDER WINDOW OPENS THE SYNC GATE, AND THE TENANT SAYS WHEN IT OPENS
+
+**2026-09-11 · Asked from the phone, off the Home card reading *"Meituan not
+syncing · stock updates waiting since Sep 7, 5:56 PM · 19"*: "meituan syncing
+only on the morning it's a problem for pre order. check how the system work and
+give a solution for pre orders meituan, same eleme."** Decided by Ash on the
+survey below: **(1) the tenant chooses when pre-orders open, defaulting to
+midnight; (2) overnight order reading is approved** — *"tenent can choose when
+start , defult can be midnight"*, *"ok do it"*.
+
+**TWO CLOCKS WERE SET INDEPENDENTLY AND NOTHING CHECKED THEY AGREED.** §85 opens
+the pre-order window at **00:00** and closes it at `lock_hour` — there is no
+lower bound in `preorderWindow`, so midnight is not a choice anyone made, it is
+where the absence of a condition happens to land. The daemons' own sync gate
+opens at the store's *"Channel sync starts · 渠道同步开始"* time, or
+`open − DEFAULT_PREOPEN_LEAD_MIN` (two hours) when that is blank — 08:00 for a
+shop opening at 10:00. **The hours between the two are dead**, and they are the
+hours §85 exists to sell in.
+
+**WHAT THAT COSTS, PER CHANNEL, AND THE TWO ARE NOT THE SAME FAULT.**
+
+- **Meituan.** `flipTick` fires at 00:00 and enqueues every mapped batch-made
+  product; `pushableStores()` then drops every store because `isStoreOpen()` is
+  false, so the rows sit. The listing shows the previous day's post-lock number
+  — the bare shelf, usually zero — until 08:00. **The allowance never reaches
+  the platform during most of the window it is open for.** That queue is the
+  card Ash photographed.
+- **Eleme, and this one can oversell.** Eleme's `processStockQueue` is gated on
+  the operator's channel-close switch and **not** on hours, so the allowance
+  *does* publish at 00:00. But Eleme's order poll **is** hours-gated. §85 is
+  self-capping only because each pre-order drives the shelf down by one and the
+  next published figure falls with it; **an order nobody reads moves no shelf**,
+  so the published figure stays at `shelf + qty` while orders accumulate. A
+  twenty-unit allowance can take sixty orders before 08:00. That is precisely
+  the oversell §85 was built to be incapable of, arriving through the one edge
+  §85 did not look at.
+
+**DECIDED.**
+
+1. **The pre-order window's start becomes a tenant setting — `preorder_open_hour`,
+   defaulting to 0.** The lock hour was Ash's to choose and is; the start was
+   nobody's and now is too. **Zero is the default because it is today's
+   behaviour**, so a tenant that never touches the field sees no change — the
+   same no-migration shape §74 and §85 both chose.
+2. **An open pre-order window opens the daemons' sync gate.** `isStoreOpen()` in
+   `scripts/meituan-daemon.js` and `scripts/eleme-daemon.js` is satisfied by the
+   store's ordinary sync window **or** by `preorderWindow(channel).open`.
+   **Every one of §85's five off switches still holds**: the widening happens
+   only on a batch day, only before the lock, only for a channel the operator
+   named, only with an allowance set, only with the schedule enabled. A tenant
+   with the schedule off — which is most of them — has an unchanged daemon.
+3. **Order polling is widened with it, deliberately, and that is the half that
+   matters.** `isStoreOpen()` gates the poll as well as the push, and widening
+   only the push would publish an allowance nothing could ever decrement — the
+   Eleme fault above, extended to Meituan. Ash approved the overnight read
+   knowing its cost.
+4. **The widening lives in ONE place**: `batchCadence.preorderSyncOpen()`, which
+   both daemons call. §80's rule about a fourth copy of the cadence is the same
+   rule here — two daemons each holding their own version of "and also when the
+   pre-order window is open" is how they come to disagree about a morning. It
+   swallows its own errors for the reason `flipTick` does: a config read must
+   never take a daemon loop down.
+
+**WHY NOT JUST SET "SYNC STARTS" TO 00:00, WHICH NEEDS NO CODE AT ALL.**
+`syncWindow` clamps `syncStart ≤ open`, so 00:00 is already accepted, and it is
+the correct lever for one morning in an emergency. It is the wrong rule: it
+widens **every day, batch or not**, and it turns on a full five-minute order
+poll at 04:00 on a Sunday the kitchen is not cooking. The code warns about
+exactly that in three places, and it is a fingerprint, not a preference. The
+window-following rule widens only on the mornings there is something to sell.
+
+**THE STORE'S OWN "SYNC STARTS" FIELD IS UNTOUCHED AND STILL MEANS WHAT IT
+MEANT.** It answers "when does this shop's stock start moving every day"; §102
+answers "when does a cooking day open the gate early". A store that wants its
+stock live from 07:00 daily still sets the field; the two widen the same front
+edge and the earlier of them wins, which is what `within()` already does.
+
+**WHAT IS NOT BUILT, named so it is not read as done.**
+
+- **`lib/channel-sync-stale.js` still counts Eleme's waiting time as
+  hours-aware** (`hoursAware: true`), when Eleme's pushes have never been
+  hours-gated at all. The Home card therefore under-reports how long an Eleme
+  row has waited. **It is a real defect and it is a different one** — it
+  predates this section and is not this section's to fix. Recorded here because
+  it was found here.
+- **The 19 rows on the card are NOT explained by this section.** They date from
+  2026-09-07 17:56, which is inside the sync window on any reading of the
+  store's hours. The likely shape is the one `lib/channel-sync-stale.js:105`
+  already documents from production — a `latest`-per-target row left at `error`
+  that the drift sweep never re-queues because the stock now matches what the
+  platform last accepted, so the card nags forever over targets that are
+  perfectly in sync. **Unconfirmed**, and confirming it needs the two read-only
+  diagnostics run against production, not a code change.
+- **The order that arrives one minute after the lock** is still §85's open item
+  and this section does not touch it.

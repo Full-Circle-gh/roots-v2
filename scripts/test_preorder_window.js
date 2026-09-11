@@ -130,6 +130,10 @@ section('1 · every condition is an off switch on its own');
   it('no lock hour and no ready hour to fall back to', () => {
     assert.strictEqual(win('meituan', MORNING, { ...OPEN, ready_hour: null, lock_hour: null }).reason, 'no_lock_hour');
   });
+  it('before the hour the tenant set for pre-orders to open (§102)', () => {
+    assert.strictEqual(win('meituan', at(BATCH_DAY, 5), { ...OPEN, preorder_open_hour: 6 }).reason,
+      'before_open_hour');
+  });
   it('after the lock hour', () => {
     assert.strictEqual(win('meituan', AFTER_LOCK, OPEN).reason, 'past_lock');
   });
@@ -160,6 +164,42 @@ section('2 · the two hours, and which of them wins');
     setCfg({ ...OPEN, lock_hour: 9 });
     assert.strictEqual(cadence.preorderWindow(db, { channel: 'meituan', now: at(BATCH_DAY, 8), tz: SHOP_TZ }).open, true);
     assert.strictEqual(cadence.preorderWindow(db, { channel: 'meituan', now: at(BATCH_DAY, 10), tz: SHOP_TZ }).reason, 'past_lock');
+  });
+  /* §102 — THE START HOUR. Every case here is about the DEFAULT being invisible:
+     a tenant who never sets this field must get midnight, which is the only
+     behaviour that existed before the field did. A regression here is silent —
+     pre-orders would simply stop happening in the small hours and the card would
+     look the way it looked before §102, which is the state Ash reported. */
+  it('no start hour set at all — midnight, which is what every tenant has today', () => {
+    const w = win('meituan', at(BATCH_DAY, 0), OPEN);   // OPEN names no start hour
+    assert.strictEqual(w.open, true, 'the window is open at 00:00 when nobody set a start');
+    assert.strictEqual(cadence.readCfg(db).preorder_open_hour, 0);
+  });
+  it('a start hour of 0 reads the same as a blank one', () => {
+    assert.strictEqual(win('meituan', at(BATCH_DAY, 0), { ...OPEN, preorder_open_hour: 0 }).open, true);
+  });
+  it('a malformed start hour falls back to midnight, not to shut', () => {
+    // This field can only ever NARROW the window, so failing it open is failing
+    // it the way the window already worked.
+    for (const bad of ['', null, 'nine', 24, -1, 99]) {
+      assert.strictEqual(cadence.readCfg(db) && win('meituan', at(BATCH_DAY, 0),
+        { ...OPEN, preorder_open_hour: bad }).open, true, `preorder_open_hour=${JSON.stringify(bad)}`);
+    }
+  });
+  it('a start hour set — shut before it, open on it, shut again at the lock', () => {
+    const cfg = { ...OPEN, preorder_open_hour: 6, lock_hour: 11 };
+    assert.strictEqual(win('meituan', at(BATCH_DAY, 5), cfg).open, false);
+    assert.strictEqual(win('meituan', at(BATCH_DAY, 6), cfg).open, true, 'open ON the hour, not after it');
+    assert.strictEqual(win('meituan', at(BATCH_DAY, 10), cfg).open, true);
+    assert.strictEqual(win('meituan', at(BATCH_DAY, 11), cfg).reason, 'past_lock');
+  });
+  it('a start at or after the lock is a window that never opens, not one that never shuts', () => {
+    // Operator error the settings card refuses to save; if it ever reaches the
+    // config anyway, the safe direction is shut. Same answer as §74's cutoff.
+    const cfg = { ...OPEN, preorder_open_hour: 11, lock_hour: 11 };
+    for (const h of [0, 8, 10, 11, 12, 23]) {
+      assert.strictEqual(win('meituan', at(BATCH_DAY, h), cfg).open, false, `${h}:00`);
+    }
   });
   it('the day\'s ordering cutoff still wins over a lock hour set past it', () => {
     // Operator error, but expressible. §74 settled this direction for ready_hour
@@ -289,6 +329,97 @@ section('6 · the two edges, on the daemons\' own loop');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+section('6b · §102 — an open window opens the daemons\' sync gate');
+{
+  const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
+
+  it('preorderSyncOpen answers the window, and nothing else', () => {
+    setCfg({ ...OPEN, preorder_open_hour: 6 });
+    // Inside the window.
+    assert.strictEqual(
+      cadence.preorderSyncOpen(db, { channel: 'meituan', now: at(BATCH_DAY, 7) }), true);
+    // Before the tenant's start, after the lock, and on a day nothing is cooked.
+    assert.strictEqual(
+      cadence.preorderSyncOpen(db, { channel: 'meituan', now: at(BATCH_DAY, 5) }), false);
+    assert.strictEqual(
+      cadence.preorderSyncOpen(db, { channel: 'meituan', now: at(BATCH_DAY, 12) }), false);
+    assert.strictEqual(
+      cadence.preorderSyncOpen(db, { channel: 'meituan', now: NON_COOK_MORN }), false);
+  });
+  it('a channel the operator did not name gets no gate of its own', () => {
+    setCfg({ ...OPEN, preorder_channels: ['meituan'] });
+    assert.strictEqual(cadence.preorderSyncOpen(db, { channel: 'meituan', now: MORNING }), true);
+    assert.strictEqual(cadence.preorderSyncOpen(db, { channel: 'eleme', now: MORNING }), false);
+  });
+  it('NO SCHEDULE AT ALL LEAVES EVERY DAEMON EXACTLY AS IT WAS — the case of most tenants', () => {
+    clearCfg();
+    for (const ch of ['meituan', 'eleme', 'gzgrocery']) {
+      assert.strictEqual(cadence.preorderSyncOpen(db, { channel: ch, now: MORNING }), false,
+        `${ch} must not be widened by a schedule nobody switched on`);
+    }
+  });
+  it('it never throws — it sits inside a gate on a ten-second daemon loop', () => {
+    /* flipTick's rule, for flipTick's reason: a config read must not be the
+       thing that takes a daemon down. A broken db handle is the shape a real
+       failure arrives in, and the honest fallback is the daemon's own hours. */
+    const broken = { prepare() { throw new Error('database is locked'); } };
+    assert.strictEqual(cadence.preorderSyncOpen(broken, { channel: 'meituan' }), false);
+    assert.strictEqual(cadence.preorderSyncOpen(null, { channel: 'meituan' }), false);
+  });
+
+  /* ── the two daemons actually consult it ─────────────────────────────────
+     Source assertions, because the alternative is booting a browser daemon in
+     a unit suite. What is being pinned is that neither daemon went back to
+     answering this question on its own: §80's copy rule is the rule here, and
+     two daemons with their own version of "…and also when the window is open"
+     is how they come to disagree about a morning. */
+  for (const [f, ch] of [['scripts/meituan-daemon.js', 'meituan'],
+                         ['scripts/eleme-daemon.js', 'eleme']]) {
+    it(`${f} widens isStoreOpen by the window, through the shared function`, () => {
+      const src = read(f);
+      const at0 = src.indexOf('function isStoreOpen');
+      assert.ok(at0 > 0, 'isStoreOpen is still the gate');
+      const body = src.slice(at0, src.indexOf('\n}', at0));
+      assert.ok(new RegExp(`preorderSyncOpen\\([^)]*channel: '${ch}'`, 's').test(body),
+        'the gate asks batch-cadence, and asks it for its OWN channel');
+      assert.ok(/return within\(|if \(within\(/.test(body),
+        'the store\'s ordinary hours are still the first answer');
+    });
+  }
+  it('the widening has ONE definition site, not one per daemon', () => {
+    for (const f of ['scripts/meituan-daemon.js', 'scripts/eleme-daemon.js']) {
+      const src = read(f);
+      assert.ok(!/preorderWindow\(/.test(src),
+        `${f} must not re-derive the window itself — that is the fourth copy §80 forbids`);
+    }
+  });
+  it('the ORDER POLL rides the same gate, which is what makes the window cap itself', () => {
+    /* §102's load-bearing half, and the one a later tidy-up is most likely to
+       undo. Publishing an allowance while no order against it is ever read
+       gives a number that can only go up — that is the Eleme fault §102 names,
+       and widening the push alone would carry it to Meituan as well. So the
+       poll must keep asking the SAME widened gate, not a narrower copy.
+       Anchored on each daemon's own poll block rather than a call count: the
+       two daemons reach their polls differently and a count says nothing about
+       where the calls are. */
+    const POLL = [
+      // meituan: the jittered ~5 min block that filters `stores` before polling.
+      ['scripts/meituan-daemon.js', 'if (now - lastOrderPoll >= orderPollGap) {'],
+      // eleme: the per-store block under its own ORDER_POLL_ON switch.
+      ['scripts/eleme-daemon.js', 'if (ORDER_POLL_ON) {'],
+    ];
+    for (const [f, anchor] of POLL) {
+      const src = read(f);
+      const at0 = src.indexOf(anchor);
+      assert.ok(at0 > 0, `${f} — the order-poll block moved; re-anchor this test`);
+      const block = src.slice(at0, at0 + 1600);
+      assert.ok(/isStoreOpen\(/.test(block),
+        `${f} polls orders behind isStoreOpen, so §102 widens the read with the push`);
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 section('7 · every channel reads the one publish function (source assertions)');
 {
   const read = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
@@ -400,6 +531,31 @@ section('8 · the settings card can actually save what it reads');
     assert.ok(/lock_hour: lockHour/.test(js));
     assert.ok(/preorder_qty: preorderQty/.test(js));
     assert.ok(/preorder_channels: preorderChannels/.test(js));
+  });
+  it('§102 — the start hour has a control, and the save carries it too', () => {
+    /* The failure this catches is the one the card's own comment records: a
+       field the save reads but the markup never had, which made the whole card
+       unsavable. Both ends, asserted against each other. */
+    assert.ok(html.includes('id="batch-preorder-open"'), 'the input is in the card');
+    assert.ok(/#batch-preorder-open/.test(js), 'the script reads it');
+    assert.ok(/preorder_open_hour: preorderOpenHour/.test(js),
+      'and PUTs it — this save replaces batch.schedule wholesale');
+  });
+  it('§102 — a blank start hour saves as 0, which is the behaviour it replaces', () => {
+    assert.ok(/rawPreOpen === '' \? 0 :/.test(js),
+      'blank is midnight, not an off switch and not null');
+  });
+  it('§102 — a start at or after the cut-off is refused, not silently dead', () => {
+    assert.ok(/preorderOpenHour >= effectiveLock/.test(js),
+      'the pair is compared once both are resolved');
+    assert.ok(/effectiveLock = lockHour != null \? lockHour : readyHour/.test(js),
+      'against the hour the SERVER would use, since a blank lock follows the ready hour');
+  });
+  it('§102 — the Chinese is declared in the vocabulary, not composed silently', () => {
+    assert.ok(html.includes('预订开始'), 'the label is on the card');
+    const vocab = fs.readFileSync(path.join(ROOT, 'docs/tacet-delivery-vocabulary.md'), 'utf8');
+    assert.ok(vocab.includes('预订开始'),
+      'a composed pair that is not declared is indistinguishable from a locked one');
   });
   it('the load leaves a blank lock hour blank, not pre-filled with the fallback', () => {
     assert.ok(/batch\.lock_hour != null \? batch\.lock_hour : ''/.test(js));

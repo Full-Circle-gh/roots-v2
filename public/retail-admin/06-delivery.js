@@ -262,6 +262,12 @@ async function loadDeliveryZones() {
        would then leave a lock hour frozen at the old one without having asked
        for it. Blank means "follow the row above", and the row's own description
        says so. */
+    /* §102 — the window's START. Blank rather than 0, though 0 is what the
+       server will use: an empty box and a typed 0 mean the same thing here, and
+       pre-filling one of the four hour rows with a value the operator never
+       chose is what the lock hour's own note below warns against. The
+       placeholder carries the default instead. */
+    if ($('#batch-preorder-open')) $('#batch-preorder-open').value = (batch.preorder_open_hour ? batch.preorder_open_hour : '');
     if ($('#batch-lock')) $('#batch-lock').value = (batch.lock_hour != null ? batch.lock_hour : '');
     if ($('#batch-preorder-qty')) $('#batch-preorder-qty').value = (batch.preorder_qty ? batch.preorder_qty : '');
     for (const c of ['meituan', 'eleme', 'gzgrocery']) {
@@ -430,6 +436,18 @@ async function saveBatchSchedule() {
      the server, which is the case Ash's own shop is in — the batch reaches the
      shelf at 11:00 and pre-orders stop at 11:00. Nobody should have to type one
      number twice to say that. */
+  /* §102 — the hour the window OPENS. Blank is not an error and is not a
+     fourth off switch: it means 0, which is where the window already opened
+     before anyone could set this. Validated like every hour beside it —
+     refused, never silently coerced. */
+  const rawPreOpen = ($('#batch-preorder-open') && $('#batch-preorder-open').value || '').trim();
+  if (enabled && rawPreOpen !== '') {
+    const o = parseInt(rawPreOpen, 10);
+    if (!Number.isFinite(o) || o < 0 || o > 23) {
+      toast('Pre-order start must be 0–23 · 预订开始请输入 0–23 的小时', 'err'); return;
+    }
+  }
+  const preorderOpenHour = rawPreOpen === '' ? 0 : parseInt(rawPreOpen, 10);
   const rawLock = ($('#batch-lock') && $('#batch-lock').value || '').trim();
   if (enabled && rawLock !== '') {
     const l = parseInt(rawLock, 10);
@@ -438,6 +456,16 @@ async function saveBatchSchedule() {
     }
   }
   const lockHour = rawLock === '' ? null : parseInt(rawLock, 10);
+  /* A start at or after the cut-off is a window that can never open, and a
+     silently dead setting is worse than a refused save — the operator would see
+     pre-orders simply not happening and have nothing to look at. Only checkable
+     once BOTH are resolved, which is why it sits here and not with either. The
+     blank lock hour falls back to the ready hour on the server, so that is the
+     number compared against when the box is empty. */
+  const effectiveLock = lockHour != null ? lockHour : readyHour;
+  if (enabled && effectiveLock != null && preorderOpenHour >= effectiveLock) {
+    toast('Pre-orders must open before the cut-off · 预订开始必须早于预订截单', 'err'); return;
+  }
   const rawPreQty = ($('#batch-preorder-qty') && $('#batch-preorder-qty').value || '').trim();
   if (enabled && rawPreQty !== '') {
     const q = parseInt(rawPreQty, 10);
@@ -477,6 +505,9 @@ async function saveBatchSchedule() {
       // §85. Omitting any of these three would DELETE it — this PUT replaces
       // batch.schedule wholesale — so they ride here with everything else.
       lock_hour: lockHour,
+      // §102. Same reason as the three below it: this PUT replaces
+      // batch.schedule wholesale, so a field omitted here is a field deleted.
+      preorder_open_hour: preorderOpenHour,
       preorder_qty: preorderQty,
       preorder_channels: preorderChannels,
       kicker_en: val('#batch-kicker-en'),
