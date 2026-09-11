@@ -643,6 +643,11 @@ const state = {
      field. null means no override, exactly as on the desktop. */
   dashCards:null,
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
+  /* The shop note being typed on the open order, {id, text}. Kept HERE rather
+     than left in the textarea because render() rewrites the drawer's innerHTML
+     and anything only in the DOM goes with it. Keyed by order id so a draft
+     cannot follow you into the next order you open. */
+  ordNote:null,
   /* The operator's own Quick actions — an array of catalogue keys, null until
      the first read pulls it back off this phone (see quickKeys()), and
      quickMounted the house guard against a sheet that re-enters on every tap:
@@ -1535,6 +1540,49 @@ reg('payRefund', ()=>{
 function currentOrder(){
   return (state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
 }
+/* TYPING NEVER REPAINTS. render() rewrites the drawer's innerHTML, so a paint
+   per keystroke would rebuild the textarea under the caret. The draft goes to
+   state — where a repaint from anything else (a list refresh, the language
+   toggle, a live nudge) restores it — and the footer is shown or hidden by
+   touching that one node, which is exactly what the desktop's ordNoteChanged
+   does and for the same reason. */
+reg('ordNoteTyped', v=>{
+  const o=currentOrder(); if(!o||o._id==null) return;
+  state.ordNote={id:o._id, text:String(v==null?'':v)};
+  const foot=document.getElementById('mOrdNoteFoot');
+  if(foot) foot.hidden=(state.ordNote.text===(o.shopNote||''));
+});
+reg('ordNoteReset', ()=>{
+  const o=currentOrder(); if(!o||o._id==null) return;
+  state.ordNote=null;
+  const box=document.getElementById('mOrdNote'); if(box) box.value=o.shopNote||'';
+  const foot=document.getElementById('mOrdNoteFoot'); if(foot) foot.hidden=true;
+});
+reg('ordNoteSave', ()=>{
+  const o=currentOrder(); if(!o||o._id==null) return;
+  /* THE BOX ON SCREEN, read here as well as on every keystroke. A value put
+     there by the browser itself — an autofill, a paste the field answered with
+     no input event — never reaches ordNoteTyped, and saving must not write the
+     older draft back over it. saveProductEdits follows the same rule for the
+     price box, and for the same reason. */
+  const box=document.getElementById('mOrdNote');
+  const text=box?String(box.value)
+    :((state.ordNote&&state.ordNote.id===o._id)?state.ordNote.text:(o.shopNote||''));
+  orderWrite('note', async()=>{
+    const j=await apiWrite('/orders/'+o._id+'/note',{staff_note:text},'PATCH');
+    /* THE SERVER'S ANSWER IS THE NEW BASELINE, not what was typed: it blanks a
+       note that trims to nothing and caps at 2000, so echoing the draft would
+       leave the editor thinking it still had unsaved work. */
+    const saved=(j&&j.staff_note)||'';
+    if(state.liveDetail&&state.liveDetail._id===o._id) state.liveDetail.shopNote=saved;
+    state.ordNote=null;
+    return T('Note saved','备注已保存');
+  });
+});
+/* A FAILED SAVE KEEPS WHAT WAS TYPED. orderWrite leaves state.ordNote alone on
+   the error path — it is cleared above, inside the success path only — so the
+   repaint that draws the reason also redraws the words that did not save. */
+
 /* The printer can succeed as a request and fail as a print — the endpoint says
    so with ok:false, and so does this. */
 reg('printOrder', ()=>{
@@ -12520,6 +12568,7 @@ function sheetOrderDetail(){
        ${o.custNote?`<div class="card" style="padding:14px;border-color:var(--accent)">
          <div style="display:flex;align-items:center;gap:8px;color:var(--accent)">${ic('message-square-text',16)}<span class="eyebrow" style="color:var(--accent)">${T('Customer note','顾客备注')}</span></div>
          <div style="font-size:14.5px;line-height:1.55;margin-top:8px;white-space:pre-wrap">${escAttr(o.custNote)}</div></div>`:''}
+       ${shopNoteCard(o)}
        ${riderCard(o)}
        ${hoistedTracking(o)}
        ${o.trk&&!o.viewOnly&&!(o.shipments&&o.shipments.length)?`<div class="card" style="padding:14px">
@@ -13084,6 +13133,46 @@ function orderItemsBlock(o){
           <span style="font-size:14.5px;font-weight:500;color:var(--text-primary)">${T('Not yet in a parcel','待分配包裹')}</span>
           <span class="num" style="font-size:12.5px">${countLabel(loose.length,loose.reduce((t,it)=>t+(Number(it[0])||0),0))}</span></div>
         <div style="display:flex;flex-direction:column;gap:8px">${loose.map(itemRow).join('')}</div></div>`:''}
+    </div></div>`;
+}
+/* THE SHOP'S OWN NOTE ON AN ORDER — read and written, which it has never been
+   on this surface. The phone could WRITE one while CREATING an order (the New
+   order form's staff note) and then had no way to read or change it: the drawer
+   did not render the field at all, so the note went in and disappeared.
+
+   The 2026-08-22 audit filed this as `➖` with a reason — "no endpoint edits an
+   existing order's note; it is written at creation only. Backend work, not a
+   screen." THE REASON HAD EXPIRED. `PATCH /orders/:id/note` exists, caps at
+   2000 characters and logs the activity, and nobody re-read the row after the
+   backend caught up. §97 is the rule; this is the row it reopens first.
+
+   IT WAITS FOR THE DETAIL READ. The list endpoint does not select staff_note —
+   only GET /orders/:id does — so the drawer's first frame, which paints from
+   the list row, knows nothing about it. An empty box over a note that exists is
+   a worse answer than no box for the half-second before the read lands.
+
+   A MIRRORED ORDER GETS NO NOTE, matching the desktop exactly: staffNoteBlock
+   is called from renderOpenOrder and never from renderReadonlyOrder. A note on
+   a platform's own order is a note on a record we do not own. */
+function shopNoteCard(o){
+  if(!o||o._id==null||o.viewOnly) return '';
+  if(!(state.liveDetail&&state.liveDetail.id===state.detailId)) return '';
+  const saved=o.shopNote||'';
+  const draft=(state.ordNote&&state.ordNote.id===o._id)?state.ordNote.text:saved;
+  const dirty=draft!==saved;
+  const busy=state.orderBusy==='note';
+  return `<div class="card" style="padding:14px">
+    <div style="display:flex;align-items:center;gap:8px;color:var(--text-secondary)">${ic('pencil',16)}
+      <span class="eyebrow">${T('Shop note','店铺备注')}</span></div>
+    <textarea id="mOrdNote" maxlength="2000" style="margin-top:10px;min-height:${(saved||dirty)?'84px':'46px'};resize:none"
+      placeholder="${escAttr(T('Add a note for whoever handles this order','给处理这张订单的同事留个备注'))}"
+      oninput="APP.cmd('ordNoteTyped',this.value)">${escAttr(draft)}</textarea>
+    ${/* The footer appears only once something has actually changed — the
+          desktop's rule. A Save button that is always there and does nothing
+          four times out of five is noise. */''}
+    <div id="mOrdNoteFoot" ${dirty?'':'hidden'} style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn2" style="flex:1" ${busy?'disabled':''} onclick="APP.cmd('ordNoteReset')">${T('Cancel','取消')}</button>
+      <button class="btn2" style="flex:1" ${busy?'disabled':''} onclick="APP.cmd('ordNoteSave')">${busy?T('Saving…','保存中…'):T('Save note','保存备注')}</button>
     </div></div>`;
 }
 function orderActionRow(o,isPO){
@@ -16505,6 +16594,13 @@ function mapDetail(o){
   // The facts the desktop drawer carries and this one did not. Every one of
   // them is already in the payload — the drawer was simply not reading them.
   base.custNote=(o.customer_note||'').trim()||null;         // what the CUSTOMER asked for
+  /* What the SHOP told itself about this order. NOT trimmed: this is the
+     baseline the editor compares against to decide whether anything changed,
+     and the server stores the string as given (blanking it only when it trims
+     to nothing), so trimming here would report an unedited note as edited.
+     The LIST does not carry it — only this read does — which is why the card
+     waits for the detail rather than painting an empty box over a real note. */
+  base.shopNote=o.staff_note||'';
   base.custId=o.customer_id!=null?o.customer_id:null;       // so the name can be tapped
   base.custName=o.nickname||o.recipient_name||'';
   base.voucher=(Number(o.voucher_amount)>0)?{code:o.voucher_code||'',amount:Number(o.voucher_amount)}:null;

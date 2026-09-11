@@ -364,4 +364,104 @@ CASES.push(['the More button appears when there is something behind it',
   ['and the row draws the button', `orderActionRow(currentOrder(),false).indexOf("detailActions")>=0`],
 ]]);
 
+/* ══════════════════════════════════════════════════════════════════════════
+   §97 — THE SHOP NOTE, read and written
+
+   The phone could write one while CREATING an order and then never see it
+   again. The 2026-08-22 audit filed it as a decision — "no endpoint edits an
+   existing order's note" — and that endpoint has existed for a while.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+// An order as the DETAIL read returns it, mapped the way the app maps it.
+const detailOrder = (extra) => `
+  window.__o=mapDetail(Object.assign({id:77, order_no:'RT-077', status:'paid', channel:'wechat',
+    recipient_name:'Chen Meiling', total:312, placed_at:'${today} 09:00:00',
+    fulfillment_type:'delivery', items:[], shipments:[]}, ${extra}));
+  state.liveDetail=window.__o; state.detailId=window.__o.id; state.ordNote=null;
+  state.tab='orders'; render();`;
+
+CASES.push(['the note is read from the order, not invented',
+  detailOrder(`{staff_note:'Call before the van leaves'}`), [
+  ['the card is drawn',        `document.getElementById('mOrdNote')!==null`],
+  ['carrying the saved note',  `document.getElementById('mOrdNote').value==='Call before the van leaves'`],
+  // Nothing has changed yet, so there is nothing to save.
+  ['with no footer',           `document.getElementById('mOrdNoteFoot').hidden===true`],
+]]);
+
+CASES.push(['an order with no note still offers the field',
+  detailOrder(`{}`), [
+  ['the card is drawn', `document.getElementById('mOrdNote')!==null`],
+  ['empty',             `document.getElementById('mOrdNote').value===''`],
+]]);
+
+/* THE LIST DOES NOT CARRY staff_note. Painting the box from a list row would
+   show an empty note over an order that has one. */
+CASES.push(['the card waits for the detail read rather than guessing', `
+  state.liveDetail=null; state.ordNote=null;
+  state.ordersView=[mapOrderRow({id:77,order_no:'RT-077',status:'paid',channel:'wechat',
+    recipient_name:'A', total:312, placed_at:'${today} 09:00:00', fulfillment_type:'delivery'})];
+  state.liveOrders=state.ordersView; state.ordersLoading=false;
+  state.tab='orders'; APP.cmd('openOrder','RT-077');`, [
+  ['the drawer is up',   `state.detailId==='RT-077'`],
+  ['but no note box',    `document.getElementById('mOrdNote')===null`],
+]]);
+
+CASES.push(['a mirrored order gets none, as on the desktop',
+  detailOrder(`{channel:'meituan', staff_note:'x'}`), [
+  ['read-only',   `window.__o.viewOnly===true`],
+  ['no note box', `document.getElementById('mOrdNote')===null`],
+]]);
+
+CASES.push(['typing shows the footer and never repaints',
+  detailOrder(`{staff_note:'before'}`) + `
+    window.__box=document.getElementById('mOrdNote');
+    APP.cmd('ordNoteTyped','after');`, [
+  ['the draft is held in state', `state.ordNote && state.ordNote.text==='after' && state.ordNote.id===77`],
+  ['the footer appears',         `document.getElementById('mOrdNoteFoot').hidden===false`],
+  // The same node, not a replacement: a repaint per keystroke would rebuild the
+  // textarea under the caret.
+  ['the textarea was not rebuilt', `document.getElementById('mOrdNote')===window.__box`],
+]]);
+
+CASES.push(['typing back to what was there hides the footer again',
+  detailOrder(`{staff_note:'before'}`) + `APP.cmd('ordNoteTyped','after'); APP.cmd('ordNoteTyped','before');`, [
+  ['nothing to save', `document.getElementById('mOrdNoteFoot').hidden===true`],
+]]);
+
+CASES.push(['saving PATCHes the note it was given',
+  detailOrder(`{staff_note:'before'}`) + STUB + `
+    document.getElementById('mOrdNote').value='after'; APP.cmd('ordNoteTyped','after');
+    APP.cmd('ordNoteSave');`, [
+  ['it PATCHes the note route', `${sent('/orders/77/note')} && window.__sent.some(function(r){return r.m==='PATCH'})`],
+  ['CARRYING THE TEXT',         `${body('"staff_note":"after"')}`],
+  ['and not the old one',       `!${body('"staff_note":"before"')}`],
+]]);
+
+/* A value the browser put there — an autofill, a paste the field answered with
+   no input event — never reaches ordNoteTyped. Saving the draft instead of the
+   box would write the older text back over it. */
+CASES.push(['the box on screen wins over a stale draft',
+  detailOrder(`{staff_note:'before'}`) + STUB + `
+    APP.cmd('ordNoteTyped','typed');
+    document.getElementById('mOrdNote').value='pasted by the browser';
+    APP.cmd('ordNoteSave');`, [
+  ['the box is what is sent', `${body('pasted by the browser')}`],
+  ['not the draft',           `!${body('"staff_note":"typed"')}`],
+]]);
+
+CASES.push(['an emptied note is sent as the empty string, so the server can blank it',
+  detailOrder(`{staff_note:'before'}`) + STUB + `
+    document.getElementById('mOrdNote').value=''; APP.cmd('ordNoteTyped','');
+    APP.cmd('ordNoteSave');`, [
+  ['it still writes',    `${sent('/orders/77/note')}`],
+  ['with an empty note', `${body('"staff_note":""')}`],
+]]);
+
+CASES.push(['cancel puts back what was saved',
+  detailOrder(`{staff_note:'before'}`) + `APP.cmd('ordNoteTyped','after'); APP.cmd('ordNoteReset');`, [
+  ['the box is restored', `document.getElementById('mOrdNote').value==='before'`],
+  ['the draft is gone',   `state.ordNote===null`],
+  ['and the footer',      `document.getElementById('mOrdNoteFoot').hidden===true`],
+]]);
+
 run('order writes', CASES);
