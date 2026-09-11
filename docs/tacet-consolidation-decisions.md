@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.217
+# Tacet shared-core consolidation — decisions record, v4.218
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-11 · v4.218 — **§98 STAGE THREE IS BUILT: THE ¥0 REPLACEMENT ORDER, AND THE EXCLUSION REALLY WAS ONE LINE. §98 IS COMPLETE.** The replacement is **a wholly ordinary order apart from the price** — created `paid` because nothing is owed, worked preparing → dispatched → delivered like any other, stock off at the preparing transition through the same `prepareCommitUnreservedOrder` every non-reserving order already uses, parcel and waybill planned by `ensureShipments`; **nothing on the fulfilment path is special-cased**, which is why the stage is one route rather than a subsystem. **THE EXCLUSION WAS ONE LINE, AS v4.215 PROMISED**: `paidWhere()` gained `AND COALESCE(<alias>replacement_for_order_id, 0) = 0` and all twelve former copies got it at once — COALESCE rather than IS NULL because every order predating the column has NULL there and must keep counting exactly as it always has. `test_paid_predicate.js` now runs the predicate against a real table and asserts the figure that would have been wrong: with a ¥0 replacement counted, an AOV of 500 reads as 333.33. **WHAT THE CUSTOMER SEES IS DELIBERATELY UNCHANGED** — their order list and status buckets are not payment-gated and were not touched, because they have a parcel coming and must be able to track it; the exclusion is about what the BUSINESS counts as trade, never about hiding a delivery from the person waiting for it. **`remedy_cost` IS SNAPSHOT ON THE CASE, NOT DERIVED FROM THE ORDER**: the replacement's lines are ¥0, so only the case can answer what putting it right cost, which is the question the case exists to answer. One replacement per case is enforced — a double-tap would send real stock twice. **THREE EXISTING GUARDS CAUGHT THIS AND ALL THREE WERE RIGHT**: `test_customer_currency` rejected "a ¥0 order" in a multi-currency product and **also caught two ¥ literals from stages one and two, live since this evening**, which had evaded it only because `'¥' + Number(x)` puts a quote between symbol and digit; `test_finance_summary`'s fixture lacked the new column and now names its columns explicitly; `test_handle_threading_batch2`'s call-site pin moved from eleven to twelve while the rule it guards still runs over every site. Still open and unchanged: which parcels raise a case (air only, delivered only, >1 day), and whether evidence lives in Tacet. 205 fast suites pass, 0 fail. A build under an existing decision, hence a patch.
 
 2026-09-11 · v4.217 — **§99 ADDENDUM 1: THE SNOOZE IS BUILT, AND IT IS NOT A DISMISSAL.** Asked for by Ash after §99 shipped; that section had recorded it as not built and named the four things it needed, all settled here. **THE JUSTIFICATION IS `lib/push-events.js`'s OWN SENTENCE** — *"The switch that gets used is the one that turns the whole thing off, and then the pick that mattered arrives nowhere"* — because §99 correctly gave a dismissed banner no effect at all, which leaves an operator who cannot act today with exactly one working control: killing every push. **A SWIPE STILL WRITES NOTHING AND STILL MUST**; the deferral is a press on a screen, by somebody holding `invoices:manage`. **THREE PROPERTIES STOP IT BECOMING A WAY TO NEVER DO THE WORK**: it reaches tomorrow's reminder hour and no further, so one press hides at most ONE ask; **IT QUIETS THE PUSH ONLY** — the row still matches `pendingSql`, so Home keeps counting it and still goes brick at month-end, which is the safeguard and is asserted directly; and the row is SKIPPED, never claimed, so a deferral moves the cadence rather than restarting it. **MONTH-END HONOURS IT, RECORDED IN BOTH DIRECTIONS**: the control means *do not ask me again before tomorrow's hour*, so inside month-end's daily cadence a press before the day's ask defers it and a press after it changes nothing — **and that second case must NOT be "fixed" by lengthening the snooze at month-end**, which would invert the rule §99 turns on; both cases are pinned. Disabling the control for three days a month was rejected: a button that reads as set and buzzes anyway is a lying control. **THE GATE ALREADY EXISTED** (`cap-routes` maps every write under the invoices prefix to `invoices:manage`) and the suite proves it through the REAL middleware — `invoices:view` gets 403 and writes nothing while still reading the list. Only a WAITING row may be deferred; issued, cancelled, unpaid, never-requested and non-existent all answer `not_pending`, and `isSnoozed` treats a lapsed, blank or unreadable stamp as not snoozed so nothing ever has to clear the column and an unparseable value fails towards ASKING. **ONE STRING FOR BOTH STATES** — the app's own `.chip` fill says "set", and no date is printed because the button and the server already agree on tomorrow. Chinese: `docs/tacet-delivery-vocabulary.md` v1.57, one composed pair and one lifted, **`忽略` and `跳过` rejected because both describe a dismissal**. 27 new assertions across two suites, load-bearing ones checked to fail reverted; `test:fast` green at 206. **A §99 claim is corrected**: it framed month-end survival as survive-or-not, and the real answer is a third option. **Auto-issue remains open**, asked twice and unanswered. A build under an existing decision, hence a patch.
 
@@ -10200,6 +10202,72 @@ replacement order is a single clause in `paidWhere`, or a sibling constant
 beside it. What is still undecided is everything §98 left open about the
 replacement order itself — and the per-customer counts, which are not gated on
 payment at all and would need their own answer.
+
+### §98 addendum 4 — stage three is built, and the exclusion really was one line (2026-09-11)
+
+The ¥0 replacement order exists. §98 is complete.
+
+**IT IS A WHOLLY ORDINARY ORDER APART FROM THE PRICE**, and that is the design.
+It is created `paid` (nothing is owed, so nothing is outstanding), the warehouse
+works it preparing → dispatched → delivered exactly as it works any other, stock
+comes off at the preparing transition through the same
+`prepareCommitUnreservedOrder` every non-reserving order already uses, and
+`ensureShipments` plans its parcel so the customer gets a waybill to follow.
+**Nothing on the fulfilment path is special-cased**, because a bespoke path is
+one nobody maintains — and it is why the whole stage is one route, not a
+subsystem.
+
+**THE EXCLUSION WAS ONE LINE, AS PROMISED.** `paidWhere()` gained
+`AND COALESCE(<alias>replacement_for_order_id, 0) = 0`, and every one of the
+twelve former copies got it at once. `COALESCE` rather than `IS NULL` because
+every order predating the column has NULL there and must keep counting exactly
+as it always has. `scripts/test_paid_predicate.js` now runs the predicate
+against a real table and asserts the figure that would have been wrong: with a
+¥0 replacement counted, an average order value of 500 reads as 333.33.
+
+**WHAT THE CUSTOMER SEES IS DELIBERATELY UNCHANGED.** Their own order list and
+status buckets are not payment-gated and were not touched: they have a parcel
+coming and must be able to find and track it. The exclusion is about what the
+BUSINESS counts as trade, never about hiding a delivery from the person waiting
+for it. The voucher-redemption counts are unaffected for a different reason — a
+replacement carries no voucher.
+
+**`remedy_cost` IS SNAPSHOT ON THE CASE, NOT DERIVED FROM THE ORDER.** The
+replacement's lines are ¥0 — that is what makes it a replacement — so the order
+cannot answer what putting this right cost. Only the case can, and that is the
+question the case exists to answer: did the carrier's payment cover it. A later
+price change must not restate a past incident, which is §32's rule for waste
+applied here. An uncosted line contributes nothing rather than blocking the
+replacement; the figure is a comparison aid and never a ledger entry.
+
+**ONE REPLACEMENT PER CASE, ENFORCED.** A double-tap would otherwise send the
+goods twice, and the second parcel is real stock leaving the building.
+
+### Three existing guards caught this change, and all three were right
+
+Recorded because the useful part is what they caught, not that they went green
+afterwards.
+
+1. **`test_customer_currency`** — the confirm text said "a ¥0 order". This
+   product is multi-currency and that suite exists because a merchant trading in
+   dollars once had their GMV printed in yuan. The wording now names no currency
+   at all ("a no-charge order"), and the three figures the case renders go
+   through `money(CUR, n)` / `ordMoney(n)`. **It also caught two ¥ literals from
+   stages one and two**, live since this evening, which had evaded the check
+   only because `'¥' + Number(x)` puts a quote between the symbol and the digit.
+2. **`test_finance_summary`** — its fixture built `retail_orders` without the new
+   column and `PAID` now reads it. The fixture names its columns explicitly now,
+   so the next column does not break it.
+3. **`test_handle_threading_batch2`** — pins the number of `ensureShipments` call
+   sites. The pin moved from eleven to twelve; the RULE it guards (no call site
+   passes a handle) still runs over every site including the new one.
+
+### What is left open
+
+Nothing in §98 blocks a complete case any more. Still not decided, and unchanged
+by this: **which parcels raise a case** (air only, delivered only, more than a
+day late — a late land parcel or same-city rider still raises nothing, and each
+mode needs its own threshold), and **whether evidence lives in Tacet**.
 
 ## §99 — THE FAPIAO CHASE: A REQUEST NOBODY ISSUED ASKS AGAIN, AND ONLY ISSUING IT STOPS THE ASKING
 

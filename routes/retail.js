@@ -26666,6 +26666,122 @@ router.post('/api/retail-admin/orders/:id/delay-case/step',
   res.json({ success: true, data: delayCase.forScreen(tdb(), updated) });
 });
 
+// Raise the ¥0 replacement order for a late-parcel case (§98 stage three).
+//
+// AN ORDINARY ORDER, PRICED ¥0. It is created 'paid' because nothing is owed,
+// and from that moment the warehouse works it exactly like any other: stock
+// comes off at the preparing transition through the same
+// `prepareCommitUnreservedOrder` every non-reserving order uses, and
+// `ensureShipments` plans its parcel so the customer gets a waybill to follow.
+// Nothing on the fulfilment path is special-cased, because a bespoke path is
+// one nobody maintains.
+//
+// WHAT IT COST US IS SNAPSHOT ONTO THE CASE, not left to be derived from the
+// order — the order's lines are ¥0, which is what makes it a replacement, so
+// the order cannot answer the one question worth asking: did the carrier's
+// payment cover putting this right.
+router.post('/api/retail-admin/orders/:id/delay-case/replacement',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id  = parseInt(req.params.id, 10);
+  const sid = parseInt(req.body?.shipment_id, 10);
+  if (!Number.isInteger(id) || !Number.isInteger(sid)) {
+    return res.status(400).json({ success: false, error: 'bad_request' });
+  }
+  const src = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(id);
+  if (!src) return res.status(404).json({ success: false, error: 'not_found' });
+  const parcel = tdb().prepare(
+    'SELECT id FROM retail_shipments WHERE id = ? AND order_id = ?').get(sid, id);
+  if (!parcel) return res.status(404).json({ success: false, error: 'not_found' });
+
+  const existing = delayCase.readCase(tdb(), sid);
+  // ONE REPLACEMENT PER CASE. Without this a double-tap sends the goods twice,
+  // and the second parcel is real stock leaving the building.
+  if (existing && existing.remedy_order_id) {
+    return res.status(400).json({ success: false, error: 'replacement_exists' });
+  }
+
+  // The lines of the parcel that was late — those are the goods that spoiled.
+  // A parcel with nothing assigned to it (a single-parcel order planned before
+  // items were split) falls back to the whole order, which is the same thing.
+  let lines = tdb().prepare(
+    'SELECT * FROM retail_order_items WHERE order_id = ? AND shipment_id = ?').all(id, sid);
+  if (!lines.length) {
+    lines = tdb().prepare('SELECT * FROM retail_order_items WHERE order_id = ?').all(id);
+  }
+  if (!lines.length) return res.status(400).json({ success: false, error: 'no_items' });
+
+  const actor = { id: req.user.id, label: req.user.username || null };
+  let out;
+  try {
+    out = withTransaction(tdb(), (h) => {
+      const orderNo = nextOrderNo(h);
+      const info = h.prepare(`
+        INSERT INTO retail_orders
+          (order_no, customer_id, status, paid_at,
+           recipient_name, recipient_phone, address_full, address_json,
+           subtotal, shipping_fee, total, store_id, channel, fulfillment_type,
+           staff_note, source, created_by,
+           replacement_for_order_id, replacement_case_id)
+        VALUES (?,?,'paid',CURRENT_TIMESTAMP, ?,?,?,?, 0,0,0, ?,?,?, ?, 'replacement', ?, ?, ?)`)
+        .run(orderNo, src.customer_id,
+             src.recipient_name, src.recipient_phone, src.address_full, src.address_json,
+             src.store_id, src.channel || 'wechat', src.fulfillment_type || null,
+             `Replacement for ${src.order_no}`, req.user.id || null,
+             src.id, existing ? existing.id : null);
+      const newId = info.lastInsertRowid;
+
+      // Lines copied at ¥0. The product snapshots come across so the packing
+      // slip and the customer's own order read the way the original did.
+      const ins = h.prepare(`
+        INSERT INTO retail_order_items
+          (order_id, product_id, name_en, name_cn, sku, size, image_url,
+           qty, unit_price, line_total, options_json, ship_modes, needs_ice_pack)
+        VALUES (?,?,?,?,?,?,?,?,0,0,?,?,?)`);
+      for (const l of lines) {
+        ins.run(newId, l.product_id, l.name_en, l.name_cn, l.sku, l.size, l.image_url,
+                l.qty, l.options_json, l.ship_modes, l.needs_ice_pack || 0);
+      }
+      return { newId, orderNo };
+    });
+  } catch (e) {
+    console.error('[delay-case replacement]', id, sid, e && e.message);
+    return res.status(500).json({ success: false, error: 'save_failed' });
+  }
+
+  // What it cost us, snapshot now. Best-effort per line: a product with no cost
+  // on file contributes nothing rather than blocking the replacement, and the
+  // figure is a comparison aid, never a ledger entry.
+  let cost = 0;
+  for (const l of lines) {
+    try {
+      const unit = l.product_id ? productUnitCostYuan(l.product_id) : 0;
+      if (unit > 0) cost += unit * (Number(l.qty) || 0);
+    } catch (e) { /* uncosted line — see above */ }
+  }
+  cost = Math.round(cost * 100) / 100;
+
+  try {
+    delayCase.applyStep(tdb(), {
+      orderId: id, shipmentId: sid, step: 'remedy',
+      payload: { kind: 'replacement', note: out.orderNo }, actor,
+    });
+    tdb().prepare(
+      'UPDATE retail_delay_cases SET remedy_order_id = ?, remedy_cost = ? WHERE shipment_id = ?'
+    ).run(out.newId, cost > 0 ? cost : null, sid);
+  } catch (e) { console.error('[delay-case remedy]', id, sid, e && e.message); }
+
+  // Plan the parcel so the operator lands on an order that already has a
+  // shipment to put a waybill on, exactly as any other order would.
+  try { ensureShipments(out.newId); } catch (e) { /* planned on first read instead */ }
+
+  logActivity(req.user.id, req.user.username, 'delay_case_replacement', 'retail_order', id,
+    { shipment_id: sid, replacement_order_id: out.newId, order_no: out.orderNo, cost }, req.ip);
+  res.json({ success: true, data: {
+    order_id: out.newId, order_no: out.orderNo, cost,
+    case: delayCase.forScreen(tdb(), delayCase.readCase(tdb(), sid)),
+  } });
+});
+
 // Switch a Guangzhou outer-district parcel between same-city RIDER ('local',
 // arrival-time card) and JD LOGISTICS ('land', waybill card). The method is
 // normally locked by the checkout routing; this lets the operator pick how the

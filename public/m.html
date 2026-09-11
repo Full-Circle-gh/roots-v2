@@ -1367,6 +1367,33 @@ function dcStep(sid,step,payload,busyKey){
 }
 reg('dcTold', sid=>{ dcStep(sid,'customer_told',{}); });
 reg('dcRemedy', (sid,kind)=>{ dcStep(sid,'remedy',{kind}); });
+/* §98 stage three. The only step that CREATES something — real stock leaves the
+   building — so unlike every other one it asks first. The sheet is the phone's
+   confirm; the desktop's is a browser confirm() for the same reason. */
+reg('dcReplacement', sid=>{
+  state.ask={title:T('Send replacement','补发'),
+    body:T('This creates a no-charge order for the same goods and takes them off the shelf.',
+           '将新建一笔零元订单发出同样商品,并从库存中扣除。'),
+    confirmLabel:T('Send replacement','补发'),
+    run:()=>{
+      const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+      if(!o||o._id==null||state.parcelBusy) return;
+      state.parcelBusy='dc'+sid; state.orderErr=null; render();
+      apiWrite('/orders/'+o._id+'/delay-case/replacement',{shipment_id:sid}).then(j=>{
+        state.parcelBusy=null;
+        const no=j&&j.data&&j.data.order_no;
+        showToast(no?T('Replacement created · '+no,'已补发 · '+no):T('Replacement created','已补发'));
+        api('/orders/'+o._id).then(d=>{ if(state.detailId===o.id){ state.liveDetail=mapDetail(d); render(); } }).catch(()=>render());
+        loadOps();
+      }).catch(e=>{
+        state.parcelBusy=null;
+        if(String(e.message)==='auth') return;
+        state.orderErr=E(orderErrorText(e),orderErrorText(e));
+        render();
+      });
+    }};
+  render();
+});
 reg('dcClaim', sid=>{
   /* The carrier is the one that carried THIS parcel, read off the shipment.
      Nothing here names a company — the banner this replaced hard-coded 京东,
@@ -11996,6 +12023,7 @@ function orderErrorText(e){
   /* §98 — a late-parcel case that is not finished. Not a failure: the carrier
      still owes an answer, and saying so is the whole point of the case. */
   if(e.code==='case_not_closeable') return T('The carrier claim is not finished yet.','承运商赔偿尚未完成。');
+  if(e.code==='replacement_exists') return T('A replacement has already been sent for this parcel.','该包裹已补发。');
   if(e.code==='unknown_carrier')    return T('That carrier is not one the system knows.','承运商不正确。');
   /* Both of these are the desktop catalogue's own sentences for the same two
      codes, carried across word for word rather than reworded for the phone. */
@@ -13075,15 +13103,18 @@ function delayCaseCard(o,sp){
     s2=mDcRow('done',T('Not claiming','不申请赔偿'),escAttr(dc.dispute_note||''));
   } else {
     const bits=[]; if(dc.dispute_ref) bits.push(escAttr(dc.dispute_ref));
-    if(dc.dispute_claimed!=null) bits.push('¥'+Number(dc.dispute_claimed).toFixed(2));
+    if(dc.dispute_claimed!=null) bits.push(money(CUR,dc.dispute_claimed));
     s2=mDcRow('done',T('Claim filed with the carrier','已申请延误赔偿'),bits.join(' · '));
   }
 
+  const rb=[];
+  if(dc&&dc.remedy_at) rb.push(escAttr(String(dc.remedy_at).slice(0,16)));
+  if(dc&&dc.remedy_note) rb.push(escAttr(dc.remedy_note));
+  if(dc&&dc.remedy_cost!=null) rb.push(T('cost ','成本 ')+money(CUR,dc.remedy_cost));
   const s3=remedy
-    ? mDcRow('done',remedy==='refund'?T('Refunded','已退款'):T('Replacement sent','已补发'),
-        escAttr(String(dc.remedy_at||'').slice(0,16)))
+    ? mDcRow('done',remedy==='refund'?T('Refunded','已退款'):T('Replacement sent','已补发'),rb.join(' · '))
     : mDcRow('todo',T('Replacement or refund','补发或退款'),'',
-        `<div style="${rowSty}">${mDcBtn('dcRemedy',`${sid},'replacement'`,T('Replacement sent','已补发'))}${mDcBtn('dcRemedy',`${sid},'refund'`,T('Refunded','已退款'))}</div>`);
+        `<div style="${rowSty}">${mDcBtn('dcReplacement',sid,T('Send replacement','补发'))}${mDcBtn('dcRemedy',`${sid},'refund'`,T('Refunded','已退款'))}</div>`);
 
   let s4;
   if(ds==='no_claim'){
@@ -13095,7 +13126,7 @@ function delayCaseCard(o,sp){
       `<div style="${rowSty}">${mDcBtn('dcSettle',`${sid},'paid'`,T('Carrier paid','已赔偿'))}${mDcBtn('dcSettle',`${sid},'rejected'`,T('Rejected','已拒绝'))}${mDcBtn('dcSettle',`${sid},'withdrawn'`,T('Withdrawn','已撤销'))}</div>`);
   } else if(M_DC_TERMINAL.indexOf(ds)>=0){
     const lbl=ds==='paid'?T('Carrier paid','已赔偿'):ds==='rejected'?T('Carrier rejected the claim','承运商已拒绝'):T('Claim withdrawn','已撤销申请');
-    s4=mDcRow('done',lbl,dc.dispute_received!=null?'¥'+Number(dc.dispute_received).toFixed(2):escAttr(dc.dispute_note||''));
+    s4=mDcRow('done',lbl,dc.dispute_received!=null?money(CUR,dc.dispute_received):escAttr(dc.dispute_note||''));
   } else {
     s4=mDcRow('todo',T('Carrier settled','承运商赔偿'),'');
   }
