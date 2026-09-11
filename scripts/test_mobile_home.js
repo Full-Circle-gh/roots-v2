@@ -418,4 +418,51 @@ CASES.push(['a shop where nobody has come back', `state.custMeta={all:12,buyers:
   ]]);
 }
 
+// ── The restock fire opens onto the shelf it counted ──────────────────────
+// The row says "3 · out of stock, 35 running low" and used to open Products on
+// All, whatever sub-view and category the operator had left behind — the three
+// empty shelves somewhere down a list of hundreds. It presses the chip it is
+// already counting: Out when anything is out, Low when the fire is only the
+// nudge, which is the pill's own `n:oos||low` rule said once more.
+{
+  const OPS = (oos, low) => `state.ops={out_of_stock:{count:${oos}},low_stock:{count:${low}}};
+    state.liveAttn={}; APP.cmd('tab','home');`;
+  // The tap itself, not a hand-called handler: the onclick string on that row is
+  // half of what this case is proving.
+  const TAP = `Array.from(document.querySelectorAll('#content .row'))
+    .find(function(b){return b.innerText.indexOf('Restock needed')>=0;}).click();`;
+  // The chip an operator would have pressed, read off the DOM by its own label.
+  const CHIP = `function(t){ var c=Array.from(document.querySelectorAll('#content .chip'))
+    .find(function(x){return x.innerText.trim().indexOf(t)===0;}); return c&&c.classList.contains('on'); }`;
+
+  CASES.push(['the restock row lands on Out when something is out', OPS(3, 35) + TAP, [
+    ['it left Home for Products', `state.tab==='products'`],
+    ['on the catalogue, not whatever sub-view was last open', `(state.prodView||'catalogue')==='catalogue'`],
+    ['filtered on Out',           `state.prodStatus==='out'`],
+    ['and the chip shows it',     `(${CHIP})('Out')`],
+  ]]);
+  // Nothing is out, so Out is an empty list and the fire is the nudge it says
+  // it is. The pill counts the 5 in that case; so does the chip.
+  CASES.push(['and on Low when the fire is only the nudge', OPS(0, 5) + TAP, [
+    ['filtered on Low',       `state.prodStatus==='low'`],
+    ['not on an empty Out',   `state.prodStatus!=='out'`],
+    ['and the chip shows it', `(${CHIP})('Low')`],
+  ]]);
+  // A leftover category chip or a half-typed search silently delivers fewer
+  // products than the number the operator just tapped.
+  CASES.push(['it clears what would narrow the count',
+    `state.prodQ='maple'; state.prodCat='Pastry'; state.prodView='activity'; ` + OPS(3, 0) + TAP, [
+    ['the search is cleared',   `state.prodQ===''`],
+    ['the category is cleared', `state.prodCat==='all'`],
+    ['and it is the catalogue that opened', `state.prodView==='catalogue'`],
+  ]]);
+  // The row is drawn for every role; the tab behind it is not. A tap that
+  // cannot navigate must not leave a filter set on a screen it never opened.
+  CASES.push(['a role that cannot reach Products is left where it was',
+    `state.caps=['dashboard:view']; ` + OPS(3, 0) + TAP, [
+    ['still on Home',          `state.tab==='home'`],
+    ['and no filter was set',  `(state.prodStatus||'all')==='all'`],
+  ]]);
+}
+
 run('home', CASES);
