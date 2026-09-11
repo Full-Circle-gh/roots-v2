@@ -16103,9 +16103,17 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // above walks; it just returns the stamp now.
     const airItems = tdb().prepare(`
       SELECT o.id, o.order_no, o.tracking_synced_at,
+             -- THE SAME PARCELS THE EXISTS ABOVE MATCHED, which is the whole
+             -- point of the subquery and was briefly not true: when the alert
+             -- widened past air on 2026-09-11 this sibling kept its air-only
+             -- test, so a late land or same-city parcel came back with NO age.
+             -- The card skips an item with no waiting_since when it works out
+             -- "oldest", and ORDER BY sorts NULLs first — so the new modes went
+             -- to the top of the list showing nothing, and the age beside the
+             -- card described some older air parcel instead of them.
              (SELECT MIN(sha.dispatched_at) FROM retail_shipments sha
-               WHERE sha.order_id = o.id AND sha.mode = 'air'
-                 AND sha.dispatched_at IS NOT NULL
+               WHERE sha.order_id = o.id
+                 AND ${delayCase.lateShipmentSql('sha')}
                  AND sha.air_delay_cleared_at IS NULL) AS waiting_since,
              COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), NULLIF(TRIM(o.recipient_phone), ''), NULLIF(TRIM(c.phone), '')) AS buyer
         FROM retail_orders o
@@ -24915,6 +24923,21 @@ function buildOrderFilter(query) {
     // issued ones stay browsable in this view but sort below the open work.
     filterSql += ` AND ${fapiaoQueue.requestedSql('o')}
              AND ${fapiaoQueue.issuableSql('o')}`;
+  } else if (status === 'delayed') {
+    // Pseudo-status: the orders behind the dashboard's "Delivery needs a call"
+    // card (§98). THE CARD HAD NOWHERE TO SEND ANYBODY — it navigated to the
+    // Dispatched tab, which by definition cannot contain these: the alert is
+    // about a parcel that has already been DELIVERED, late. So the card counted
+    // one set of orders and the screen it opened showed a different one, which
+    // is exactly what Ash reported off the live phone on 2026-09-11.
+    //
+    // The same predicate the card itself counts, so the number on the card and
+    // the length of this list are the same fact rather than two queries that
+    // have to agree.
+    filterSql += ` AND EXISTS (SELECT 1 FROM retail_shipments sha
+                      WHERE sha.order_id = o.id
+                        AND ${delayCase.lateShipmentSql('sha')}
+                        AND sha.air_delay_cleared_at IS NULL)`;
   } else if (status === 'paid') {
     // The "Paid / to-ship" tab is a worklist, not a strict status filter: a
     // multi-parcel order that's had only SOME parcels shipped flips to

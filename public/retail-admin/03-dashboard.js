@@ -2902,7 +2902,9 @@ function tdAttnRender() {
       // the count runs past it. A carrier exception carries no waiting_since at
       // all (see the ops route) and simply doesn't vote.
       mins: tdOldestMins(da.items),
-      cta: cuT('Open delivery', '前往配送'), go: "tdSecOpenOrders('dispatched')",
+      // 'delayed', not 'dispatched' — the Dispatched tab cannot contain these,
+      // since the alert is about a parcel already DELIVERED, late (§98).
+      cta: cuT('Open delivery', '前往配送'), go: "tdSecOpenOrders('delayed')",
     });
   }
 

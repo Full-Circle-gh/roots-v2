@@ -3265,7 +3265,7 @@ function renderTrackingCell(o) {
     ? `<div style="margin-top:3px; display:flex; align-items:center; gap:3px; font-size:10px; font-weight:${dl.tone === 'urgent' ? 700 : 600}; color:${dl.color};">${deliveryIcon(dl.icon, 11)}<span>${cuT(dl.en, dl.cn)}</span></div>`
     : '';
   const airDelayBadge = o.air_delivery_delayed
-    ? `<div style="display:flex; align-items:center; gap:3px; font-size:10px; font-weight:700; color: var(--danger); margin-top:3px;">⚠ ${cuT('AIR DELAYED · contact customer', '空运延误 · 联系客户')}</div>`
+    ? `<div style="display:flex; align-items:center; gap:3px; font-size:10px; font-weight:700; color: var(--danger); margin-top:3px;">⚠ ${cuT('DELIVERY DELAYED · contact customer', '配送延误 · 联系客户')}</div>`
     : '';
   return `<div style="font-family: var(--f-mono); font-size: 11px; font-weight: 600;">${escapeHtml(carrier)} ${escapeHtml(o.tracking_number)}</div>
           <div style="margin-top: 2px;">${sync}</div>${splitLine}${dlLine}${airDelayBadge}`;
