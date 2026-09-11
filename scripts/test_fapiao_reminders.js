@@ -103,7 +103,8 @@ CREATE TABLE retail_orders (
   id INTEGER PRIMARY KEY, order_no TEXT, status TEXT, total REAL,
   needs_invoice INTEGER DEFAULT 0, invoice_status TEXT, invoice_title TEXT,
   placed_at TEXT, recipient_name TEXT, customer_id INTEGER,
-  invoice_reminder_last_at DATETIME, invoice_reminder_count INTEGER DEFAULT 0
+  invoice_reminder_last_at DATETIME, invoice_reminder_count INTEGER DEFAULT 0,
+  invoice_reminder_snoozed_until DATETIME
 );
 CREATE TABLE retail_customers (id INTEGER PRIMARY KEY, nickname TEXT);
 INSERT INTO retail_customers (id, nickname) VALUES (1, 'Anders Sloth Nielsen');
@@ -190,6 +191,96 @@ ok(fired === 0 && sent.length === 0,
    'ISSUING IT IS THE ONLY THING THAT STOPS IT. The row drops out of pendingSql and the '
    + 'sweep has nothing to claim — no reminder state had to be cleared');
 
+// ── 4b. "Not today" — the one quieting that is not a dismissal ──────────────
+console.log('\nThe snooze');
+
+// Where tomorrow lands. Not now+24h, which would walk the reminder hour later
+// into the evening on every press.
+const late23 = frLive.snoozeTarget(D('2026-09-03T23:40:00'));
+ok(late23.getDate() === 4 && late23.getHours() === frLive.REMIND_HOUR,
+   'a press at 23:40 lands on TOMORROW at 10:00, not 23:40 the next night', late23.toString());
+const early = frLive.snoozeTarget(D('2026-09-03T09:00:00'));
+ok(early.getDate() === 4,
+   'and a press at 09:00 does not leave an ask an hour later the same morning', early.toString());
+
+ok(!frLive.isSnoozed(null, D('2026-09-03T10:00:00'))
+   && !frLive.isSnoozed('', D('2026-09-03T10:00:00'))
+   && !frLive.isSnoozed('not a date', D('2026-09-03T10:00:00')),
+   'a null, blank or UNREADABLE stamp reads as not snoozed — failing towards asking '
+   + 'is the safe direction for a debt');
+ok(!frLive.isSnoozed('2026-09-03T10:00:00', D('2026-09-03T10:00:00')),
+   'and a stamp that has arrived is spent, so nothing has to clear the column');
+
+// A fresh pending row, reminded once, then deferred.
+db.exec(`INSERT INTO retail_orders (id, order_no, status, total, needs_invoice, invoice_status, placed_at)
+         VALUES (20, 'TC000700', 'paid', 700, 1, 'requested', '2026-09-01T09:00:00');`);
+sent.length = 0;
+frLive.sweepDbOnce(db, D('2026-09-02T10:00:00'), 1);
+ok(rowOf(20).invoice_reminder_count === 1, 'it is asked about once as normal');
+
+// Snooze it to tomorrow, then run the tick that WOULD have asked.
+db.prepare('UPDATE retail_orders SET invoice_reminder_snoozed_until = ? WHERE id = ?')
+  .run(frLive.snoozeTarget(D('2026-09-04T09:00:00')).toISOString(), 20);
+sent.length = 0;
+frLive.sweepDbOnce(db, D('2026-09-04T10:00:00'), 1);
+ok(sent.length === 0 && rowOf(20).invoice_reminder_count === 1,
+   'the ask it would have made is skipped');
+// Derived, never a UTC literal: the runner pins TZ=Asia/Shanghai and a
+// hardcoded Z-string passes on a UTC box and fails on the real one — which is
+// the whole reason the shop's clock is pinned in the first place.
+ok(rowOf(20).invoice_reminder_last_at === D('2026-09-02T10:00:00').toISOString(),
+   'AND THE STAMP IS UNTOUCHED — the row is skipped, never claimed, so a snooze '
+   + 'defers the cadence rather than restarting it', rowOf(20).invoice_reminder_last_at);
+
+// One day later the deferral has lapsed and the chase resumes by itself.
+sent.length = 0;
+frLive.sweepDbOnce(db, D('2026-09-05T10:00:00'), 1);
+ok(sent.length === 1 && rowOf(20).invoice_reminder_count === 2,
+   'ONE PRESS HIDES ONE ASK. The next day it comes back with nothing having cleared '
+   + 'the column', { sent: sent.length, row: rowOf(20).invoice_reminder_count });
+
+// THE SAFEGUARD. A snooze must never take the row off the screen an operator
+// walks past — only the interruption is deferred.
+db.prepare('UPDATE retail_orders SET invoice_reminder_snoozed_until = ? WHERE id = ?')
+  .run(frLive.snoozeTarget(D('2026-09-05T11:00:00')).toISOString(), 20);
+const stillPending = db.prepare(
+  `SELECT COUNT(*) AS n FROM retail_orders o WHERE o.id = 20 AND ${require('../lib/fapiao-queue').pendingSql('o')}`
+).get().n;
+ok(stillPending === 1,
+   'A SNOOZED ROW IS STILL PENDING WORK. It quiets the push and nothing else, so '
+   + "Home's Needs-you row keeps counting it and still goes brick at month-end — "
+   + 'which is what stops this from being a way to never do the work');
+
+// MONTH-END HONOURS IT, and the honest shape of that is worth pinning in both
+// directions — because the tempting "fix" for the second case is to make the
+// snooze longer at month-end, which is exactly the wrong move.
+//
+// The control means: DO NOT ASK ME AGAIN BEFORE TOMORROW'S REMINDER HOUR. At
+// month-end the cadence is already daily, so that defers an ask only when it is
+// pressed BEFORE the day's ask has gone out. Pressed after it, tomorrow is when
+// the next one was coming anyway and the press changes nothing — which is the
+// button telling the truth, not failing.
+db.prepare("UPDATE retail_orders SET invoice_reminder_last_at = '2026-08-29T10:00:00', invoice_reminder_snoozed_until = ? WHERE id = 20")
+  .run(frLive.snoozeTarget(D('2026-08-30T09:00:00')).toISOString());
+sent.length = 0;
+frLive.sweepDbOnce(db, D('2026-08-30T10:00:00'), 1);
+ok(sent.length === 0,
+   'a month-end press made BEFORE the day\'s ask defers it — the control is not '
+   + 'disabled for three days a month, because a button that reads as set and buzzes '
+   + 'anyway is a lying control, and Home is showing the row in brick regardless');
+
+db.prepare("UPDATE retail_orders SET invoice_reminder_last_at = '2026-08-29T10:00:00', invoice_reminder_snoozed_until = ? WHERE id = 20")
+  .run(frLive.snoozeTarget(D('2026-08-29T11:00:00')).toISOString());
+sent.length = 0;
+frLive.sweepDbOnce(db, D('2026-08-30T10:00:00'), 1);
+ok(sent.length === 1,
+   'but pressed AFTER it, the same press is a no-op at month-end: it reaches tomorrow '
+   + 'and tomorrow is when the daily cadence was asking anyway. A snooze cannot defer '
+   + 'below the cadence it is already on, and must not be lengthened so that it could');
+db.prepare('UPDATE retail_orders SET invoice_reminder_snoozed_until = NULL WHERE id = 20').run();
+
+db.prepare('UPDATE retail_orders SET needs_invoice = 0 WHERE id = 20').run();  // out of the way of the digest
+
 // ── 5. The digest ───────────────────────────────────────────────────────────
 console.log('\nThe digest');
 db.exec(`
@@ -206,7 +297,7 @@ ok(sent.length === 1 && sent[0].tag === 'retail-fapiao-digest',
    + 'times is how somebody learns to switch the category off', sent.map(s => s.tag));
 ok(/4/.test(sent[0].body || '') && /最久/.test(sent[0].body || ''),
    'the digest carries the count and the age of the oldest', sent[0] && sent[0].body);
-ok(db.prepare('SELECT COUNT(*) AS n FROM retail_orders WHERE invoice_reminder_count > 0 AND id >= 10').get().n === 4,
+ok(db.prepare('SELECT COUNT(*) AS n FROM retail_orders WHERE invoice_reminder_count > 0 AND id BETWEEN 10 AND 13').get().n === 4,
    'AND EVERY ROW IT COVERED IS CLAIMED. A digest that claimed only the row it named '
    + 'would re-send the other three on the next tick');
 
@@ -224,6 +315,18 @@ ok(EVENTS.EVENTS ? EVENTS.EVENTS.some(e => e.key === 'invoice_pending')
    + 'that list can never be muted, which is the safe direction, but a switch is better');
 ok(/fapiaoMonthEnd\(\)\?'brick':'amber'/.test(M_SRC),
    "Home's row goes brick at month-end, on the same boundary the cadence switches on");
+ok(/addColumn\('retail_orders', 'invoice_reminder_snoozed_until'/.test(DB_SRC),
+   'the snooze column is declared in database.js too');
+ok(/invoices\/:id\/snooze/.test(fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8')),
+   'the snooze endpoint exists');
+ok(/fapiaoReminders\.snoozeTarget/.test(fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8')),
+   'AND IT TAKES ITS DATE FROM THE SWEEPER. Two copies of "tomorrow" would '
+   + 'eventually disagree by an hour on one day of the year');
+ok(/明天提醒我/.test(M_SRC) && /APP\.cmd\('invSnooze'/.test(M_SRC),
+   'the phone offers the control, in the live-word pair');
+ok(/mCan\('invoices:manage'\)/.test(M_SRC.slice(M_SRC.indexOf("invSnooze"), M_SRC.indexOf("invSnooze") + 4000))
+   || /!v\.dead&&!v\.issued&&v\.dbId!=null&&mCan\('invoices:manage'\)/.test(M_SRC),
+   'offered only on a pending row, to somebody who could actually issue it');
 ok(/const FAPIAO_MONTH_END_DAYS=3/.test(M_SRC) && /shopTodayDate\(\)/.test(M_SRC),
    "and it reads the SHOP's date, so a phone in another timezone cannot disagree with "
    + 'the server about which month it is');
