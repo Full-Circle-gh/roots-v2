@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.221
+# Tacet shared-core consolidation — decisions record, v4.222
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-11 · v4.222 — **§100 DECIDED AND BUILT: CONVERSION DIVIDES ONE CHANNEL BY ITSELF, AND THE CARD SAYS WHICH ONE.** Reported from the phone with Home's second card circled — *"this part should only reflect the mini app channel, nothing else. title should say that as well … it's the only private sale channel platform that can count conver[sion]. others are meituan, eleme, gzgrocery."* **THE SCREENSHOT IS THE PROOF**: *Sessions 25 · Conversion 68.0% · 17 orders ÷ 25 sessions*, where the 25 were mini-app opens and the 17 were the day's paid orders across the mini app, Meituan AND the counter till. **IT COULD ONLY EVER BE WRONG, NOT SOMETIMES WRONG.** `retail_visits` has exactly one writer in the tree — `miniapp/utils/track.js` posting to `/api/retail/track`; not `shop.html`, not any daemon — so a session is a mini-app session by construction, while a marketplace hands over finished orders and will never report a browse. **The error therefore runs one way only: every Meituan order the shop wins inflates a number meant to describe browsing we can watch**, so the better the marketplace day, the healthier the mini app looked. **THIS IS §36's FINANCE FINDING FROM THE OTHER SIDE** — that one had a blended NUMERATOR over a storefront denominator; this is the denominator's half of the same rule, and m.html's own AOV note already states it ("revenue and its denominator must stand on the same population") two cards from where it was being broken. **FIXED AT SOURCE, NOT ON THE CARD THAT REPORTED IT**: there is no all-channel conversion to lose — only an arithmetic mistake to stop repeating — so `kpis.conversion_rate` is now mini-app orders ÷ mini-app sessions for every caller, with `kpis.mini_app_orders` riding alongside so any screen quoting "N orders ÷ M sessions" names the numerator it actually divided by. A `mini_app` block joins the payload (sessions, orders, conversion_rate, buyers, new/returning_buyers, refunded_orders, refund_rate), **each one an existing headline measure with the channel predicate added and nothing else changed** — same paid window, same date convention, same first-ever-paid-order rule — and it is a BLOCK rather than eight more `kpis` keys so that a screen reads the whole of it and says "mini app" over the result, or reads none of it. **THE PREDICATE IS `/sales/summary`'s OWN** and both halves are load-bearing: `COALESCE(NULLIF(channel,''),'wechat')` because mini-app rows predating the column default carry no channel and `channel='wechat'` would drop them as a quiet decline, and the counter exclusion because a till sale is written through the manual-order endpoint and can wear a storefront channel. **THE HEADING IS PART OF THE FIX AND IS NOT A RETURN OF "ALSO TODAY"**: §97 retired that label for naming the card's POSITION, and the rule it set — a heading says what sits under it — is what "Mini app · 小程序" satisfies, naming the POPULATION the two cards under "Today" do not share while its neighbour says "Revenue (all channels)" in its own first label. `todaySection` still draws one Today. **THE DESKTOP IS PARTLY DONE, DELIBERATELY, AND THE LINE IS RECORDED**: everything the corrected rate forces is done (KPI card relabelled `转化率（小程序）` with the numerator named, the Customers-card cell on both sides of its threshold, `mini_app_orders` in the AI digest, and the money-path funnel's first two rows now **Visited the mini app → Ordered in the mini app** — the same fault wearing a bar chart), while its Returning and Refunded stay all-channel because those are legitimate all-channel questions laid out differently over there; **§100 says so rather than leaving it to be discovered.** Chinese: `docs/tacet-delivery-vocabulary.md` v1.59, **one pair lifted whole from the Orders screen's own channel chip** and two arrangements of live strings; nothing minted. **Tests:** `scripts/test_mini_app_conversion.js`, 20 assertions in the fast shard, which **lifts the predicate out of `routes/retail.js` by regex** and runs it against an in-memory database seeded one order per channel, so a later widening fails here instead of shipping; checked to fail in both directions. Two rendered cases added to `test_mobile_home.js`, two to `test_backend_nav_parity` §4, and the fake server's fixture made deliberately SMALLER on every mini-app figure than its all-channel neighbour — a fixture where the two agreed would pass whether or not Home read the right one. `test:fast` green. A build under a new decision, hence a patch.
 
 2026-09-11 · v4.221 — **THE CUTOVER: NO CASE IS RAISED FOR A PARCEL DELIVERED BEFORE TODAY, AND THREE THINGS v4.220 BROKE ARE FIXED.** Reported by Ash off the live phone within the hour — "Delivery needs a call · 7, oldest 79d", and tapping it opened unrelated orders from today and yesterday. **WIDENING A LIVE ALERT IS RETROACTIVE UNLESS YOU STOP IT**: the rule changed from `mode='air'` to every mode and the query does not care when the rule changed — it asked the same question of every parcel ever shipped and correctly answered that a pile were late, the oldest seventy-nine days, which is work nobody will ever do on the one card whose job is to list work that will be. Ash: *"no need to raise a case for previous orders, only from today."* `CASES_FROM` is a FIXED DATE, not a rolling window — a window re-raises history every time somebody changes its length; a cutover says the feature began on a day, which is what happened. **A parcel that already has a case row stays in scope however old**, or a dispute being chased would vanish mid-chase; `lateDays()` mirrors the cutover so no screen draws a checklist the query filtered out. **THE AGE QUERY KEPT ITS AIR-ONLY TEST** — `waiting_since` is a sibling of the EXISTS and v4.220 replaced one and not the other, so a late land parcel came back with NO age, was skipped in "oldest", and sorted FIRST because ORDER BY puts NULLs first. **THE CARD HAD NOWHERE TO SEND ANYBODY**: it opened the Dispatched tab, which cannot contain an order whose parcel is already DELIVERED — older than v4.220 and merely exposed by it, now a `delayed` pseudo-status built on the very predicate the card counts, so the number and the list are one fact. **THE LIST BADGE STILL SAID AIR** on both surfaces; the drawer heading had been made mode-neutral and the row missed. **THREE OF THE FOUR WERE MINE AND ALL OF ONE KIND — a predicate was consolidated and its NEIGHBOURS were not**: the EXISTS moved and `waiting_since` stayed, the heading moved and the badge stayed, the rule widened and its navigation stayed. 208 fast suites pass, 0 fail; `test_delay_case` 31, adding the cutover, its escape hatch, and the SQL/JS agreement across it. A fix under an existing decision, hence a patch.
 
@@ -10712,3 +10714,116 @@ RENDERED screen rather than from source; **that suite is in the slow shard, whic
 this repo does not run** (CLAUDE.md, Ash's standing instruction given twice), so
 it is edited and NOT verified, and this entry says so rather than implying it
 passed. `npm run test:fast` green at 208.
+
+## §100 — CONVERSION DIVIDES ONE CHANNEL BY ITSELF, AND THE CARD SAYS WHICH ONE
+
+**2026-09-11 · Asked from the phone, with Home's second card circled in red:
+"this part should only reflect the mini app channel, nothing else. title should
+say that as well. this only make sense. it's the only private sale channel
+platform that can count conver[sion]. others are meituan, eleme, gzgrocery. so
+for roots it make sense."**
+
+**THE SCREENSHOT IS THE PROOF.** The card read *Sessions 25 · Conversion 68.0%
+· 17 orders ÷ 25 sessions · Returning 6 of 8 who bought today · Refunded 0*. The
+25 were mini-app opens. The 17 were the day's paid orders across every channel —
+the mini app, Meituan and the counter till together — because `kpis.orders` is
+`COUNT(*)` over `retail_orders` with only gzgrocery's mirror rows excluded.
+A conversion rate was being computed from two different populations.
+
+**WHY IT CAN ONLY EVER BE WRONG, RATHER THAN SOMETIMES WRONG.** `retail_visits`
+has exactly one writer: `miniapp/utils/track.js`, posting to the public
+`POST /api/retail/track`. Nothing else in the tree calls that route — not
+`shop.html`, not any daemon. So a session is a mini-app session by construction.
+Meituan, Eleme and gzgrocery hand over finished orders and will never report a
+browse; that is a fact about what a marketplace is, not a gap in our tracking we
+might one day close. **The error therefore runs one way only: every marketplace
+order the shop wins inflates a number that is supposed to describe browsing we
+can watch.** The better the Meituan day, the healthier the mini app looked.
+
+**THIS IS §36's FINANCE FINDING FROM THE OTHER SIDE.** That one recorded a ratio
+whose NUMERATOR was blended (all-channel revenue over storefront orders, which
+pushed one ¥3,000 top-up into an average-order tile). This is the same fault
+approached from the denominator: a ratio's two halves must stand on the same
+population. m.html's own AOV note already says so in those words; the card
+beside it was breaking the rule the note states.
+
+**DECIDED, and the shape of the fix.**
+
+1. **`kpis.conversion_rate` is corrected AT SOURCE, not on the card that
+   reported it.** It is now mini-app paid orders ÷ mini-app sessions. There is
+   no all-channel conversion to lose — only an arithmetic mistake to stop
+   repeating — so no caller can want the blended figure and none is offered it.
+2. **`kpis.mini_app_orders` rides alongside it**, so every screen that quotes
+   "N orders ÷ M sessions" can name the numerator it actually divided by. The
+   Orders card two along still shows the bigger all-channel count, and without
+   this the two read as a contradiction.
+3. **A `mini_app` block joins the payload** — sessions, orders, conversion_rate,
+   buyers, new_buyers, returning_buyers, refunded_orders, refund_rate. Each is
+   one of the existing all-channel figures with the channel predicate added and
+   **nothing else changed**: same paid window, same date convention, same
+   "new means first-ever paid order" rule. They are the headline measures
+   narrowed, never second definitions of them. It is a block rather than eight
+   more `kpis` keys deliberately: **a screen reads the whole of it and says
+   "mini app" over the result, or it reads none of it.**
+4. **The predicate is the one `/sales/summary` already uses for its WeChat
+   card** — `COALESCE(NULLIF(channel,''),'wechat')='wechat'` AND not counter
+   fulfilment. The NULL/'' default is load-bearing: mini-app rows that predate
+   the column default carry no channel, and `channel='wechat'` would drop them
+   and read as a decline. The counter exclusion is load-bearing too: a till sale
+   is written through the manual-order endpoint and can wear a storefront
+   channel, so `fulfillment_type='counter'` is the till's real signature.
+5. **Home's second card reads that block and nothing else, and carries the
+   heading "Mini app · 小程序".**
+6. **Returning stays a fact about the PERSON, not about the channel.** Only the
+   outer set — who bought today — narrows to the mini app; the inner "when did
+   they first ever buy" subquery stays all-channel. A customer who has ordered
+   on Meituan for a year and opens the mini app today is a returning customer
+   having their first mini-app order, and calling them new would be a claim
+   about them that is false. Scoping the subquery too would make loyalty read as
+   churn on exactly the day a shop's regulars move channel.
+
+**THE HEADING IS PART OF THE FIX, AND IT IS NOT A RETURN OF "ALSO TODAY".** §97's
+sweep retired that label because it named the card's POSITION rather than its
+contents. The rule it set is that a heading must say what sits under it — and
+this one does: it names the card's POPULATION, the one thing the two cards under
+"Today" do not share. The money card above genuinely is all channels and says so
+in its own first label ("Revenue (all channels)"). An unlabelled card of
+one-channel figures sitting beside it under a shared heading is exactly the
+confusion that produced 68.0%. `todaySection` still draws one section heading
+and it still says Today. `test_backend_nav_parity` §4 holds both lines, with the
+distinction written out beside them.
+
+**THE DESKTOP IS PARTLY DONE, DELIBERATELY, AND HERE IS THE LINE.** Everything
+forced by the corrected rate is done: the KPI card is relabelled
+`Conversion (mini app) · 转化率（小程序）` and its sub-line names
+`mini_app_orders`; the Customers card's conversion cell does the same on both
+sides of its small-denominator threshold; the AI digest carries
+`mini_app_orders` beside `conversion_rate_pct` so a model reading it cannot
+divide by the wrong count; and the "money path" funnel's first two rows — a
+session count above an order count, with a percentage between them — are now
+**Visited the mini app → Ordered in the mini app**, which is the same fault this
+entry is about, wearing a bar chart.
+
+**What is NOT done on the desktop: its Returning and Refunded remain
+all-channel.** Those two are legitimate all-channel questions (a refund rate
+across every channel is a real number an owner wants), and the desktop presents
+them in a different layout from the phone — Returning in the Customers card,
+Refunded in the Today strip — so scoping them is a layout decision, not a
+one-line narrowing. **The phone's card scopes all four because Ash asked for
+that card.** The divergence is recorded here rather than left to be discovered:
+until the desktop is rebuilt to match, its Refunded figure and the phone's are
+answering different questions, and only the phone's says which.
+
+**Tests:** `scripts/test_mini_app_conversion.js` (20 assertions, fast shard).
+It **lifts the predicate out of `routes/retail.js` by regex** and runs it against
+an in-memory database seeded with one order per channel, so a later edit that
+widens the predicate — tidying the COALESCE away, dropping the counter
+exclusion, adding a channel — fails here rather than shipping. Checked to fail in
+both directions: numerator reverted to `kpi.orders` (1 fail) and the counter
+exclusion removed (4 fails, three of them the seeded rows rather than the lift —
+which is the point of seeding them). `test_mobile_home.js` gains two rendered cases (the
+heading draws above Sessions, under the one Today; and it leaves with the card
+it labels when the `customers` gate hides it). `test_backend_nav_parity` §4 gains
+two. `scripts/lib/m-fakeserver.js` grows a `mini_app` block that is **smaller on
+every figure than its all-channel neighbours** — a fixture where the two agreed
+would pass whether or not Home read the right one.

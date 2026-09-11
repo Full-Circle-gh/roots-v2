@@ -2525,6 +2525,15 @@ function tdSecPaint() {
     // rendered as a crisis (0.0% over 2 sessions), so under the threshold we show
     // the raw counts instead and only above it a %. At zero sessions there's
     // nothing to divide, so a calm dash. Threshold tuned here.
+    //
+    // BOTH SIDES OF THE DIVISION ARE THE MINI APP'S, including the raw counts
+    // under the threshold. Sessions could never be anything else — only the mini
+    // app reports them — and the numerator is `mini_app_orders`, not `k.orders`,
+    // which is every channel. Quoting the all-channel count here was the fault:
+    // it made the sub-line describe a division the rate was not doing, and on a
+    // shop selling through Meituan as well it could quote MORE orders than
+    // sessions under a label that says conversion. The cell says "mini-app"
+    // out loud because the card's other figures are not scoped that way yet.
     const CONV_MIN_SESSIONS = 20;
     const convSub = document.getElementById('td-sec-conv-sub');
     if (!sessions) {
@@ -2539,18 +2548,19 @@ function tdSecPaint() {
       // label that says it is. At five sessions that is the worst of both: it
       // looks like 1%, and the one reader who takes it at face value is misled
       // by the cell that exists to stop exactly that.
-      const ord = Number(k.orders || 0);
+      const ord = Number(k.mini_app_orders || 0);
       set('td-sec-conv', '—');
       if (convSub) {
         convSub.textContent = cuT(
-          `${ord} ${ord === 1 ? 'order' : 'orders'} from ${sessions} ${sessions === 1 ? 'session' : 'sessions'}`,
-          `${sessions} 次会话中 ${ord} 单`);
+          `${ord} mini-app ${ord === 1 ? 'order' : 'orders'} from ${sessions} ${sessions === 1 ? 'session' : 'sessions'}`,
+          `${sessions} 次会话中 ${ord} 单（小程序）`);
       }
     } else {
       set('td-sec-conv', k.conversion_rate == null ? '—' : Number(k.conversion_rate).toFixed(1) + '%');
       if (convSub) {
-        convSub.textContent = cuT(`${Number(k.orders || 0).toLocaleString()} orders ÷ ${sessions.toLocaleString()} sessions`,
-                                  `${Number(k.orders || 0).toLocaleString()} 单 ÷ ${sessions.toLocaleString()} 次会话`);
+        const ord = Number(k.mini_app_orders || 0);
+        convSub.textContent = cuT(`${ord.toLocaleString()} mini-app orders ÷ ${sessions.toLocaleString()} sessions`,
+                                  `${ord.toLocaleString()} 单（小程序）÷ ${sessions.toLocaleString()} 次会话`);
       }
     }
     // Returning buyers — the Customers card's fourth cell, and the only number
@@ -3422,7 +3432,25 @@ function dashRenderKpis() {
     { lbl: 'New customers · 新客户', val: dashNum(k.new_customers),   num: k.new_customers,   fmt: 'num',    delta: null,            sub: cuT(`of ${dashNum(k.visitors)} visitors`, `共 ${dashNum(k.visitors)} 访客`) },
     { lbl: 'Visits · 访问',         val: dashNum(k.visits),          num: k.visits,          fmt: 'num',    delta: null,            sub: k.visits === 0 ? 'No data yet · 暂无' : dashNum(k.sessions) + ' ' + cuT('sessions', '会话') },
     { lbl: 'Unique visitors · 独立访客', val: dashNum(k.visitors),    num: k.visitors,        fmt: 'num',    delta: null,            sub: '' },
-    { lbl: 'Conversion · 转化率',    val: conv,                       num: k.conversion_rate, fmt: 'pct',    delta: null,            sub: 'orders ÷ sessions · 订单 ÷ 会话' },
+    // CONVERSION IS THE MINI APP'S — the only channel that reports sessions, so
+    // the only one with a rate at all (see the note on MINI in routes/retail.js).
+    // The sub-line names the numerator out loud because the Orders card two rows
+    // up shows a BIGGER number for the same window: that one is every channel,
+    // this one is the mini app, and without the count here the two look like a
+    // contradiction. It used to say the bare words "orders ÷ sessions" over a
+    // rate computed from all-channel orders, which is how the same card could
+    // show 8 mini-app orders and quote a rate built from 17.
+    // CONVERSION IS THE MINI APP'S — the only channel that reports sessions, so
+    // the only one with a rate at all (see the note on MINI in routes/retail.js).
+    // The label says which channel and the sub-line names the numerator, because
+    // the Orders card two along shows a BIGGER number over the same window: that
+    // one is every channel, this one is the mini app, and without both the two
+    // read as a contradiction. The sub used to be the bare words "orders ÷
+    // sessions" over a rate built from all-channel orders — the card describing
+    // a division it was not doing.
+    { lbl: 'Conversion (mini app) · 转化率（小程序）', val: conv,      num: k.conversion_rate, fmt: 'pct',    delta: null,
+      sub: cuT(`${dashNum(k.mini_app_orders)} orders ÷ ${dashNum(k.sessions)} sessions`,
+               `${dashNum(k.mini_app_orders)} 单 ÷ ${dashNum(k.sessions)} 次会话`) },
     { lbl: 'Refund rate · 退款率',   val: (k.refund_rate || 0).toFixed(1) + '%', num: k.refund_rate || 0, fmt: 'pct', delta: null, sub: dashNum(k.refunded_orders) + ' ' + cuT('refunded', '已退款') },
   ];
   // Snapshot the currently-shown headline values before we blow away the DOM,
@@ -4229,6 +4257,11 @@ function dashAiDigest() {
     kpis: {
       revenue: r2(k.revenue), orders: k.orders, average_order: r2(k.aov), buyers: k.buyers,
       new_customers: k.new_customers, visits: k.visits, sessions: k.sessions, unique_visitors: k.visitors,
+      // `orders` above is every channel; these two are the mini app's, and they
+      // travel together so the model reading this digest can see that
+      // conversion_rate_pct divides one by `sessions` and NOT by `orders`.
+      // Without the numerator it would do the arithmetic itself and disagree.
+      mini_app_orders: k.mini_app_orders,
       conversion_rate_pct: r2(k.conversion_rate), refund_rate_pct: r2(k.refund_rate),
       cancelled_orders: k.cancelled_orders, refunded_orders: k.refunded_orders,
     },
@@ -4343,18 +4376,26 @@ function dashReadVisual(r) {
   const flowCap = dashReadPick(r, 'flow_cap');
   const orders = Number(k.orders || 0), revenue = Number(k.revenue || 0);
   const sessions = Number(k.sessions || k.visits || 0);
+  // THE BROWSE→BUY STEP IS ONE CHANNEL'S. "Visited the store" can only be the
+  // mini app (nothing else reports a session), so the row under it has to be the
+  // mini app's orders too, or the funnel narrows from one population into
+  // another and the percentage between them is not a step at all. The row
+  // labelled itself "Placed an order" while counting Meituan and counter sales
+  // that never visited anything. Both rows say the channel now.
+  const miniOrders = Number(k.mini_app_orders || 0);
   if (flowCap && orders > 0 && revenue > 0) {
     const cancel = (D.funnel || {}).cancelled || null;
     const cancelRev = cancel ? Number(cancel.revenue || 0) : 0;
     const keptPct = revenue + cancelRev > 0 ? revenue / (revenue + cancelRev) * 100 : 100;
-    const convPct = k.conversion_rate != null ? Number(k.conversion_rate) : (sessions > 0 ? orders / sessions * 100 : null);
+    const convPct = k.conversion_rate != null ? Number(k.conversion_rate)
+                  : (sessions > 0 ? miniOrders / sessions * 100 : null);
     const rows = [];
     if (sessions > 0) {
-      rows.push(dashRvRow(cuT('Visited the store', '到店浏览'), '<i style="flex-basis:100%"></i>', dashNum(sessions), ''));
+      rows.push(dashRvRow(cuT('Visited the mini app', '小程序浏览'), '<i style="flex-basis:100%"></i>', dashNum(sessions), ''));
       const w = dashRvBarW(convPct == null ? 5 : convPct, 1.2);
-      rows.push(dashRvRow(cuT('Placed an order', '下了单'),
+      rows.push(dashRvRow(cuT('Ordered in the mini app', '小程序下单'),
         `<i style="flex-basis:${w}%"></i><i class="ghost" style="flex-basis:${(100 - w).toFixed(2)}%"></i>`,
-        dashNum(orders), convPct == null ? '' : convPct.toFixed(1) + '%'));
+        dashNum(miniOrders), convPct == null ? '' : convPct.toFixed(1) + '%'));
     } else {
       rows.push(dashRvRow(cuT('Orders placed', '下单数'), '<i style="flex-basis:100%"></i>', dashNum(orders), ''));
     }
