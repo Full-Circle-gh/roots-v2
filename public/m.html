@@ -3629,6 +3629,20 @@ function ordSkeleton(){
     <div style="display:flex;justify-content:space-between;gap:16px">${bar('35%',15)}${bar('24%',24)}</div>
     ${bar('55%',13)}</div>`;
 }
+/* WHAT THE SAGE LEFT EDGE MEANS ON AN ORDER CARD, and it is not "seen_at is
+   null". `isNew` is that raw column and nothing more, and drawn straight it
+   marked rows nobody is waiting on. A Meituan or gzgrocery order is a ledger
+   copy this store never opens — no stamp is ever written, so it stayed marked
+   new for the life of the row; the screenshot that opened this was a DELIVERED
+   gzgrocery order wearing the edge. A cancelled order is closed, and an unpaid
+   one has nothing to act on yet.
+   The desktop has drawn its own row wash through exactly this test since it
+   had one (retail-admin/04-orders.js `isActionable`); the phone drew the raw
+   column. Same definition on both surfaces now, so the two agree about which
+   rows are new instead of each deciding. */
+function ordUnread(o){
+  return !!o.isNew && !o.viewOnly && o.raw!=='pending_payment' && o.raw!=='cancelled';
+}
 function screenOrders(){
   const os=ordersFiltered();
   /* The one authoring control in this app, and it sits where the work it makes
@@ -3653,7 +3667,7 @@ function screenOrders(){
         <div style="font-size:15px;color:var(--text-secondary);max-width:260px">${T('Clear them and the whole list comes back.','清除筛选即可看到全部。')}</div>
         <button class="btn2" onclick="APP.cmd('ordersClear')">${T('Clear filters','清除筛选')}</button></div>`:''}
     ${os.length?os.map(o=>`
-      <button class="card${o.isNew?' unseen':''}" onclick="APP.cmd('openOrder','${o.id}')" style="display:flex;flex-direction:column;gap:8px;text-align:left;cursor:pointer;padding:16px;color:var(--text-primary)">
+      <button class="card${ordUnread(o)?' unseen':''}" onclick="APP.cmd('openOrder','${o.id}')" style="display:flex;flex-direction:column;gap:8px;text-align:left;cursor:pointer;padding:16px;color:var(--text-primary)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
           <span style="display:flex;align-items:center;gap:7px;min-width:0;color:var(--text-secondary)">${chIcon(o.ch)}
             <span class="num" style="font-size:13px">${o.ch==='shop'?T('Shop','门店')+' · ':''}${o.id} · ${o.placed}</span></span>
@@ -15366,15 +15380,34 @@ function pollKitchenReady(){
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) pollKitchenReady(); });
 })();
 
-/* The list on screen, not a snapshot taken at boot. `seen_at` is stamped
-   server-side the moment an order is opened, and openOrder clears the row
-   locally too so the dot goes out on the tap rather than on the next reload. */
-/* Two sources, either one lights the dot: the rows this phone has actually
-   loaded, and the server's count of what is un-actioned — which is the only
-   one that knows about an order that arrived while the operator sat on Home
-   and never opened the list. */
-function unseenOrders(){ return canRoute('orders') &&
-  (state.ordersUnseen>0 || (state.ordersView||state.liveOrders||[]).some(o=>o.isNew)); }
+/* ONE SOURCE, THE SERVER'S COUNT — and the second source this used to OR in is
+   what made the dot permanent. It also asked the loaded rows, `.some(o=>o.isNew)`,
+   which is a different question with a different answer:
+
+   - It is not scoped to un-actioned work. /orders/unseen-count counts
+     `paid`/`awaiting_restock` only; a row arm reading the raw `seen_at` column
+     lit for anything unopened at any age, delivered and cancelled included.
+   - It is not scoped to work this store picks up. The endpoint excludes the
+     marketplace mirrors (meituan / eleme / gzgrocery); nobody opens a ledger
+     copy, so its `seen_at` is null forever and the arm never went quiet.
+   - It does not answer to markOrdersSeen(). Opening Orders stamps the phone's
+     last-seen and zeroes the count — and the rows sat there still saying new,
+     so the dot came straight back. Only opening every order one by one could
+     put it out, which is the complaint.
+   - It was lit before Orders was ever opened. loadLive() reads fifty rows into
+     state.liveOrders at boot for an operator standing on Home.
+
+   That is the whole reported behaviour, including why filtering to Paid put the
+   dot out (that page of rows is stamped) and All brought it back (the mirrors
+   return). The count already covers the case the arm was added for — an order
+   arriving while the operator sits on Home raises it within one 15s poll, and
+   on focus immediately — and it clears everywhere the moment ANYONE handles the
+   order, on any device. The desktop's nav badge has only ever read this count.
+
+   The rows keep their own mark: ordUnread() still draws the Sage edge on the
+   card, so which rows are new is still visible in the list. That is a reading
+   aid inside a screen already open, not a summons to open it. */
+function unseenOrders(){ return canRoute('orders') && state.ordersUnseen>0; }
 function unseenReviews(){ return state.inboxUnseen==null?0:state.inboxUnseen; }
 /* Made and not collected. Gated on the row it points at for the same reason
    the inbox count is: a dot must never promise work behind a door this operator
