@@ -709,7 +709,7 @@ const state = {
   push:'unknown', pushBusy:false,
   ops:null, opsLoading:false, featBusy:null, featErr:null,
   media:null, mediaLoading:false, mediaTried:false, mediaBusy:null, mediaErr:null,
-  fapiao:null, fapiaoLoading:false, fapiaoBusy:false, fapiaoTried:false, printerTried:false,
+  printerTried:false,
   ordersView:null, ordersTotal:null, ordersLoading:false, ordersMore:false,
   storeF:'all', stores:null, orderQ:'',
   reply:null, thread:null,
@@ -2705,7 +2705,6 @@ reg('closeReply', ()=>{ state.reply=null; state.thread=null; render(); });
 reg('toggleCoupon', code=>toggleCoupon(code));
 reg('recallBroadcast', id=>recallBroadcast(Number(id)));
 reg('togglePrint', ()=>togglePrint());
-reg('toggleFapiao', ()=>toggleFapiao());
 /* qsInc/qsDec went the same way: Quick stock has counted in Products since the
    parity sweep, and these two moved a number nothing ever saved. */
 reg('signout', ()=>{
@@ -4431,7 +4430,6 @@ function opsStoreRow(st,i){
 }
 function screenOperations(){
   if(!state.printer&&!state.printerTried) loadPrinter();
-  if(!state.fapiao&&!state.fapiaoTried) loadFapiao();
   loadGeo(); loadAlipayManual();
   const g=state.geo;
   const stores=Array.isArray(state.stores)?state.stores:null;
@@ -4453,7 +4451,6 @@ function screenOperations(){
       <span style="font-size:13.5px;color:var(--amber-ink);line-height:1.5">${T('Last locate attempt failed','最近一次定位失败')} (${escAttr(provider)}): ${escAttr(String(le.code||''))} ${escAttr(le.message||'')}</span></div>`:''}
     ${settingsGroupCard([
       {label:T('Auto-print receipts','自动打印小票'),printer:true},
-      {label:T('Fapiao auto-issue','发票自动开具'),fapiao:true},
     ])}
     <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Taking money','收款')}</div>
       ${settingsGroupCard([{label:T('Alipay by QR code','支付宝收款码'),
@@ -6685,10 +6682,6 @@ function settingsGroupCard(rows){
       ? (state.printer
           ? toggle(!!state.printer.auto_print,"APP.cmd('togglePrint')")
           : `<span style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`)
-      : r.fapiao
-      ? (state.fapiao
-          ? toggle(!!state.fapiao.autoIssue,"APP.cmd('toggleFapiao')")
-          : `<span style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`)
       : r.feat ? (state.featBusy===r.feat
           ? `<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`
           : toggle(featOn(r.feat),`APP.cmd('toggleFeature','${r.feat}')`))
@@ -6696,7 +6689,7 @@ function settingsGroupCard(rows){
   return `<div class="list">${rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
     <div style="display:flex;align-items:center;gap:16px;padding:12px 16px;min-height:56px"><span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.label}</span>
     ${ctl(r)}</div>`).join('')}
-    ${state.printerErr&&rows.some(r=>r.printer||r.fapiao)?`<div style="padding:12px 16px;font-size:13px;color:var(--brick-ink);background:var(--brick-tint)">${state.printerErr}</div>`:''}</div>`;
+    ${state.printerErr&&rows.some(r=>r.printer)?`<div style="padding:12px 16px;font-size:13px;color:var(--brick-ink);background:var(--brick-tint)">${state.printerErr}</div>`:''}</div>`;
 }
 /* ==========================================================================
    Receiving — what turned up, and booking it in
@@ -7667,7 +7660,6 @@ const SUBS={
     render:()=>screenWaste()},
   delivery:{title:['Delivery','配送'],render:()=>screenDelivery()},
   invoices:{title:['Invoices','发票'],render:()=>{
-    if(!state.fapiao&&!state.fapiaoTried) loadFapiao();
     const c=state.liveInvoiceCounts;
     /* All sums THREE now. `requested` is the pending queue alone — the server
        stopped folding dead requests into it (lib/fapiao-queue.js) — so an All
@@ -7682,13 +7674,15 @@ const SUBS={
        defect the server fix closes: with both halves the chip, the rows and
        Home's "Needs you" figure are one number. */
     const rows=(DB.invoices||[]).filter(v=>seg==='all'||(seg==='issued'?v.issued:(!v.issued&&!v.dead)));
-    // The banner used to claim "8 fapiao issued automatically overnight" — a
-    // sentence nothing measured. What is actually knowable is whether auto-issue
-    // is ON, which the fapiao settings say.
-    const auto=state.fapiao?!!state.fapiao.autoIssue:null;
-    const note = auto===null ? '' : noteBar(auto
-      ? T('Auto-issue is on · issue and edit on desktop','自动开票已开启 · 开具与编辑在电脑端')
-      : T('Auto-issue is off · issue fapiao on desktop','自动开票已关闭 · 请在电脑端开具'));
+    /* The banner used to claim "8 fapiao issued automatically overnight" — a
+       sentence nothing measured. It was then made to report auto-issue's state,
+       which was honest until auto-issue stopped being something this shop can
+       have (§99 addendum 2): the provider issues no 发票 for us and offers no
+       API, so the clause could only ever read "off" while inviting the question
+       of how to turn it on. What is left is the half that is still true and is
+       the only half an operator can act on — and it is the live pair's own tail
+       with its first clause dropped, so nothing was composed. */
+    const note = noteBar(T('Issue fapiao on desktop','请在电脑端开具'));
     if(state.invLoaded&&!(DB.invoices||[]).length) return nothingYet(T('No fapiao requested','没有发票申请'),
       T('When a customer asks for a fapiao with their order, the request shows here.','顾客下单时申请发票，申请会显示在这里。'));
     return `<div><div style="padding:12px 0 4px">${chipRow(chips,seg,'invSeg')}</div>
@@ -11886,7 +11880,7 @@ function screenSettings(){
                 which are tappable — each pointed at a screen that does not
                 exist. It also cost 28px of the row, which is what squeezed "Add
                 to home screen" into a 124px box. It follows the tap now. */''}
-          ${(r.tgl||r.feat||r.printer||r.fapiao)?rt(r):`<span style="display:flex;align-items:center;gap:8px;flex:none">${r.value?`<span style="font-size:15px;color:var(--text-secondary);white-space:nowrap">${r.value}</span>`:''}${r.chev?`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`:''}</span>`}</div>`).join('')}</div></div>`).join('')}
+          ${(r.tgl||r.feat||r.printer)?rt(r):`<span style="display:flex;align-items:center;gap:8px;flex:none">${r.value?`<span style="font-size:15px;color:var(--text-secondary);white-space:nowrap">${r.value}</span>`:''}${r.chev?`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`:''}</span>`}</div>`).join('')}</div></div>`).join('')}
     <button onclick="APP.cmd('signout')" style="width:100%;padding:15px;border:1px solid var(--border-default);border-radius:14px;background:var(--surface-card);color:var(--danger);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer">${T('Sign out','退出登录')}</button>
     <div style="text-align:center;font-size:12px;color:var(--text-secondary);padding:2px 0 6px">tacet · v1.0 · ${T('runs in silence','静默运行')}</div></div>`;
 }
@@ -12583,13 +12577,6 @@ async function loadMedia(){
   }catch(e){ state.media={rows:[],total:0}; }
   state.mediaLoading=false; render();
 }
-/* Fapiao auto-issue is a real preference with a real endpoint, same shape as
-   the printer's: read it before showing a switch that claims to know its state. */
-async function loadFapiao(){
-  if(state.fapiaoLoading||state.fapiaoTried) return; state.fapiaoLoading=true; state.fapiaoTried=true;
-  try{ state.fapiao=await api('/fapiao-settings'); }catch(e){}
-  state.fapiaoLoading=false; render();
-}
 /* The fapiao list read, named so it has two callers: loadLive's boot pass and
    the snooze's stale-row recovery. apiRaw, not api: the chip counts ride the
    envelope beside `data`, and api() returns `data` alone — so liveInvoiceCounts
@@ -12632,24 +12619,11 @@ function invSnooze(id){
     /* not_pending means it was issued, cancelled or paid off under us — the
        list in hand is stale, so say what is true and refetch rather than
        leaving a chip that lies about a row that no longer waits. */
-    if(e.code==='not_pending'){ state.invLoaded=false; state.fapiaoTried=false; loadLiveInvoices(); }
+    if(e.code==='not_pending'){ state.invLoaded=false; loadLiveInvoices(); }
     showToast(T('That did not save.','没有保存成功。'));
   });
 }
 reg('invSnooze', id=>invSnooze(id));
-function toggleFapiao(){
-  if(!state.fapiao||state.fapiaoBusy) return;
-  const next=!state.fapiao.autoIssue;
-  state.fapiaoBusy=true; state.printerErr=null; render();
-  apiWrite('/fapiao-settings',{autoIssue:next},'PUT').then(()=>{
-    state.fapiao.autoIssue=next; state.fapiaoBusy=false; render();
-    showToast(next?T('Auto-issue on','已开启自动开票'):T('Auto-issue off','已关闭自动开票'));
-  }).catch(e=>{
-    state.fapiaoBusy=false;
-    if(String(e.message)==='auth') return;
-    state.printerErr=E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
-  });
-}
 async function loadPrinter(){
   if(state.printerLoading||state.printerTried) return; state.printerLoading=true; state.printerTried=true;
   try{ const p=await api('/printer'); state.printer=p||null; }catch(e){}
