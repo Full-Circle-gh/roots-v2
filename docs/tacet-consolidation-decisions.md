@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.213
+# Tacet shared-core consolidation — decisions record, v4.214
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-11 · v4.214 — **§98 STAGE FOUR IS BUILT: A CARRIER'S PAYMENT POSTS ONE LEDGER ROW WHEN IT LANDS. STAGE THREE IS NOT, AND THE REASON IS A NUMBER.** `lib/delay-case-posting.js` writes exactly one `income_entries` row keyed on a new `delay_case_id`, by the same delete-then-reinsert shape `postClaim` uses; **only `paid` posts**, and a rejection, a withdrawal or a re-filing after a payment takes the row back OUT rather than offsetting it with a negative one — §87's rule for money out, restated for money in. It is **the first projection this ledger has ever had on the money-IN side**; every `income_entries` row before it was hand-typed, which is why `loadTyped` needed a third refusal and the Transactions screen a third mark. The row carries **no category**, deliberately: §36 records that the income category list ships empty so the form cannot offer a wrong option, and seeding one to label carrier compensation would be a library deciding a question that document says is the tenant's. **STAGE THREE STOPPED ON A MEASUREMENT.** A ¥0 replacement order adds ¥0 to every revenue sum, so revenue was never the problem — COUNT and AVG are. The gate those surfaces share, `status IN ('paid','preparing','dispatched','delivered','awaiting_restock')`, is **written out verbatim twelve times** (eleven in `routes/retail.js`, one in `lib/finance-window.js`) with no single definition to amend, and a replacement parcel must pass through `preparing`, `dispatched` and `delivered` to be picked, shipped and tracked — so it sits inside that predicate by construction at all twelve, with the ungated per-customer counts beyond them. Twelve hand-copied predicates and missing one is a silently wrong report, which no test in the tree would catch. **Recorded, not decided:** consolidating that predicate to one exported definition first, as its own change with no behaviour attached, would make excluding a replacement one line — but it edits how every money figure in the product is computed and is **not a decision a session may take**. Until then step three of the case stays what stages one and two shipped: an operator's tick over a replacement raised by hand. Chinese: `docs/tacet-delivery-vocabulary.md` v1.55, two composed pairs, each the live claim refusal with one noun phrase swapped. 202 fast suites pass, 0 fail; all six finance suites green. A build under an existing decision, hence a patch.
 
 2026-09-11 · v4.213 — **§98 STAGES ONE AND TWO ARE BUILT: THE LATE-PARCEL CASE, AND THE CHECKLIST THAT WILL NOT CLOSE WHILE THE CARRIER STILL OWES AN ANSWER.** Two tables, `lib/delay-case.js` holding the rule, one step endpoint, and the checklist on BOTH surfaces. **THE THREE READ SITES DID NOT SWAP AND v4.212 SAYS THEY WOULD** — that entry was written before the code and is wrong; it is left standing and corrected in a §98 addendum rather than edited, per this file's own rule about dated claims. `air_delay_cleared_at` REMAINS the single flag meaning "still on the worklist" and the case row gates who may set it: `/dashboard/ops`'s `delivery_alerts` already counts these orders, ages them from `dispatched_at` and refreshes every sixty seconds, so the weeks-long chase surface needed no change at all — and swapping would have required backfilling a closed case for every parcel already cleared in production, or every handled order from the last year lights up on deploy morning. **THE PHONE ALREADY HAD THE BANNER AND THE SURVEY MISSED IT**, having grepped the column name where `public/m.html` keys off `o.airDelayed`; once the server refuses the close, a phone still offering a one-tap dismiss is §97's own "the same button with the safety removed", so both surfaces ship or neither does. **`none` HAD TO HOLD THE CASE OPEN** — an operator who never touched the dispute track has not decided not to claim, and choosing not to claim is its own state needing a typed reason, which is what makes "the dispute, if any" expressible; `scripts/test_delay_case.js` guards that second only to the refusal itself. Chinese: `docs/tacet-delivery-vocabulary.md` v1.54, seventeen composed pairs and fifteen lifted, **none introducing a word the repository did not already ship**; the one thing that could not be carried forward is 京东, hard-coded into both surfaces' live instruction, since the claim is against whichever carrier carried the parcel. Stages three (the ¥0 replacement order) and four (the ledger row) are NOT built and nothing here decides them further. 199 fast suites pass, 0 fail; `test_mobile_screens` renders 142 screens clean. A build under an existing decision, hence a patch.
 
@@ -10091,3 +10093,52 @@ the two must not be the same row. Choosing not to claim is its own state and
 requires a typed reason — which is what makes "the dispute with the logistics
 company, **if any**" expressible at all, and it is now the thing
 `scripts/test_delay_case.js` guards hardest after the refusal itself.
+
+### §98 addendum 2 — stage four is built; stage three is NOT, and here is the measurement (2026-09-11)
+
+**Stage four is built.** A carrier's payment posts exactly one `income_entries`
+row, keyed on a new `delay_case_id`, by `lib/delay-case-posting.js` — the same
+delete-then-reinsert shape `postClaim` uses, so the ledger always says what the
+case currently says and calling it twice cannot bank the money twice. **Only
+`paid` posts**: a filed claim posts nothing, and a rejection, a withdrawal or a
+re-filing after a payment takes the row back out rather than offsetting it with a
+negative one. It is the first projection this ledger has ever had on the money-IN
+side; every `income_entries` row before it was hand-typed.
+
+The row carries **no category**, deliberately. `routes/finance-transactions.js`
+records that the income category list "ships empty. No defaults" so the form
+cannot offer a wrong option; seeding one here to label carrier compensation would
+be a library quietly deciding a question that document says is the tenant's.
+
+### Stage three is not built, and the reason is a number
+
+§98 recorded *which readers must exclude a ¥0 order* as open. It has now been
+measured, and the answer is why the stage stopped rather than shipped.
+
+**A ¥0 replacement order contributes ¥0 to every revenue sum, so revenue is
+self-correcting and was never the problem. The problem is COUNT and AVG.** An
+order that nobody paid for adds one to the order count and drags the average
+order value down, on every surface that reports either.
+
+**The gate those surfaces share is copied twelve times.**
+`status IN ('paid','preparing','dispatched','delivered','awaiting_restock')` is
+written out verbatim in eleven places in `routes/retail.js` and once in
+`lib/finance-window.js`. **There is no single definition to amend.** And a
+replacement parcel must pass through `preparing`, `dispatched` and `delivered`
+to be picked, shipped and tracked — so it is inside that predicate by
+construction, at all twelve. Beyond them sit the per-customer counts, which are
+not gated on payment at all (`SELECT COUNT(*) FROM retail_orders WHERE
+customer_id = ?` and its siblings).
+
+**Twelve hand-copied predicates plus the ungated counts, and missing one is a
+silently wrong report** — a class of defect this file exists to prevent, and one
+no test currently in the tree would catch.
+
+**What is recorded, not decided:** the safe order of work looks like
+consolidating that predicate to one exported definition FIRST, as its own change
+with no behaviour attached, after which excluding a replacement is one line in
+one place. That is a separate PR under §36's territory, it is worth doing on its
+own merits, and **it is not a decision a session may take** — it edits how every
+money figure in the product is computed. Until it is taken, stage three stays
+unbuilt and step three of the case remains what stages one and two shipped: an
+operator's tick over a replacement they raised by hand.
