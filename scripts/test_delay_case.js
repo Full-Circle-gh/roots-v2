@@ -47,6 +47,15 @@ const DB_SRC = fs.readFileSync(path.join(__dirname, '..', 'database.js'), 'utf8'
 const m = DB_SRC.match(
   /db\.exec\(`(\s*CREATE TABLE IF NOT EXISTS retail_delay_cases[\s\S]*?)`\);/
 );
+// The evidence table is its own db.exec, so it is lifted separately rather than
+// hand-copied — same reason as the block above.
+const FILES = DB_SRC.match(
+  /db\.exec\(`(\s*CREATE TABLE IF NOT EXISTS retail_delay_case_files[\s\S]*?)`\);/
+);
+if (!FILES) {
+  console.error('could not find the retail_delay_case_files schema in database.js');
+  process.exit(1);
+}
 if (!m) {
   console.error('could not find the retail_delay_cases schema in database.js — ' +
                 'if it moved or was renamed, fix this test rather than deleting it');
@@ -66,6 +75,7 @@ function fresh() {
     CREATE TABLE retail_shipments (id INTEGER PRIMARY KEY);
   `);
   db.exec(m[1]);
+  db.exec(FILES[1]);
   db.prepare('INSERT INTO retail_orders (id) VALUES (100)').run();
   db.prepare('INSERT INTO retail_shipments (id) VALUES (55)').run();
   return db;
@@ -253,6 +263,153 @@ it('forScreen hands both surfaces the same answer', () => {
   assert.strictEqual(v.dispute_open, true);
   assert.deepStrictEqual(v.blockers.sort(), ['customer_not_made_whole', 'dispute_open']);
   assert.ok(Array.isArray(v.events) && v.events.length >= 3);
+});
+
+// ── When a parcel is late enough to raise a case ───────────────────────────
+// Widened from air-only on 2026-09-11. The hole it closed: `planShipments`
+// sends EVERY Guangdong order by land "regardless of any item's air flag", so
+// the province closest to the kitchen — ice packs included — was the one
+// destination whose late parcels raised nothing at all.
+it('the thresholds are per mode, and air is unchanged', () => {
+  assert.strictEqual(dc.LATE_AFTER_DAYS.air, 1, 'air is the live rule and must not move');
+  assert.strictEqual(dc.LATE_AFTER_DAYS.local, 1);
+  assert.strictEqual(dc.LATE_AFTER_DAYS.land, 3);
+  assert.throws(() => { dc.LATE_AFTER_DAYS.air = 9; });
+});
+
+it('lateDays counts from each mode\'s own allowance', () => {
+  const p = (mode, dispatched, delivered) => ({ mode, dispatched_at: dispatched, delivered_at: delivered });
+  // Air: one day allowed.
+  assert.strictEqual(dc.lateDays(p('air', '2026-08-26', '2026-08-27')), 0, 'a day is on time');
+  assert.strictEqual(dc.lateDays(p('air', '2026-08-26', '2026-08-29')), 2);
+  // Land: three. Two days is ordinary ground freight and must NOT raise a case,
+  // or the badge is noise inside a week and stops being read.
+  assert.strictEqual(dc.lateDays(p('land', '2026-08-26', '2026-08-28')), 0);
+  assert.strictEqual(dc.lateDays(p('land', '2026-08-26', '2026-08-31')), 2);
+  // Local: same-city, same-day promise.
+  assert.strictEqual(dc.lateDays(p('local', '2026-08-26', '2026-08-28')), 1);
+  // A mode with no threshold never raises — supplier-direct is not ours to claim.
+  assert.strictEqual(dc.lateDays(p('supplier', '2026-08-01', '2026-09-01')), 0);
+  // Missing stamps are not lateness.
+  assert.strictEqual(dc.lateDays(p('air', null, '2026-08-29')), 0);
+  assert.strictEqual(dc.lateDays(p('air', '2026-08-26', null)), 0);
+});
+
+it('the SQL and the JS agree — they are two renderings of one rule', () => {
+  const db = new Database(':memory:');
+  db.exec(`CREATE TABLE retail_shipments (
+             id INTEGER PRIMARY KEY, mode TEXT, dispatched_at TEXT,
+             delivered_at TEXT, tracking_status TEXT, tracking_synced_at TEXT)`);
+  const ins = db.prepare(
+    'INSERT INTO retail_shipments (id,mode,dispatched_at,delivered_at) VALUES (?,?,?,?)');
+  const rows = [
+    [1, 'air',      '2026-08-26', '2026-08-27'],  // on time
+    [2, 'air',      '2026-08-26', '2026-08-29'],  // 2 late
+    [3, 'land',     '2026-08-26', '2026-08-28'],  // ordinary ground freight
+    [4, 'land',     '2026-08-26', '2026-08-31'],  // 2 late
+    [5, 'local',    '2026-08-26', '2026-08-28'],  // 1 late
+    [6, 'supplier', '2026-08-01', '2026-09-01'],  // never ours
+  ];
+  rows.forEach(r => ins.run(...r));
+
+  const lateIds = db.prepare(
+    `SELECT id FROM retail_shipments WHERE ${dc.lateShipmentSql()} ORDER BY id`
+  ).all().map(r => r.id);
+  assert.deepStrictEqual(lateIds, [2, 4, 5]);
+
+  // The same six through the JS. If these ever disagree, one of the two screens
+  // shows a badge the query behind it will not produce.
+  const jsLate = rows
+    .filter(([, mode, d, del]) => dc.lateDays({ mode, dispatched_at: d, delivered_at: del }) > 0)
+    .map(([id]) => id);
+  assert.deepStrictEqual(jsLate, lateIds, 'the SQL and the JS disagree about which parcels are late');
+
+  // And the alias form, which three of the four call sites use.
+  const aliased = db.prepare(
+    `SELECT COUNT(*) AS n FROM retail_shipments sha WHERE ${dc.lateShipmentSql('sha')}`).get();
+  assert.strictEqual(aliased.n, 3);
+});
+
+it('a delivered-status parcel with no delivered_at still counts — JD never stamps it', () => {
+  const db = new Database(':memory:');
+  db.exec(`CREATE TABLE retail_shipments (
+             id INTEGER PRIMARY KEY, mode TEXT, dispatched_at TEXT,
+             delivered_at TEXT, tracking_status TEXT, tracking_synced_at TEXT)`);
+  db.prepare(`INSERT INTO retail_shipments
+    (id,mode,dispatched_at,delivered_at,tracking_status,tracking_synced_at)
+    VALUES (1,'air','2026-08-26',NULL,'delivered','2026-08-30')`).run();
+  const n = db.prepare(
+    `SELECT COUNT(*) AS n FROM retail_shipments WHERE ${dc.lateShipmentSql()}`).get().n;
+  assert.strictEqual(n, 1, 'the tracking_synced_at fallback is load-bearing for JD live sync');
+});
+
+// ── The evidence sent to the carrier ───────────────────────────────────────
+it('a photograph attaches, and the bytes never come back with the list', () => {
+  const db = fresh();
+  const c = dc.ensureCase(db, 100, 55, ACTOR);
+  const png = 'data:image/png;base64,iVBORw0KGgo=';
+  const fid = dc.addCaseFile(db, c.id, { data: png, label: 'spoiled greens', actor: ACTOR });
+
+  const listed = dc.caseFiles(db, c.id);
+  assert.strictEqual(listed.length, 1);
+  assert.strictEqual(listed[0].label, 'spoiled greens');
+  assert.strictEqual(listed[0].uploaded_by_label, 'mei');
+  assert.strictEqual(listed[0].bytes, png.length);
+  // THE POINT. A case with six photographs must not put six photographs into
+  // every order-detail payload that mentions it.
+  assert.strictEqual(listed[0].data, undefined, 'the list must not carry the bytes');
+  assert.ok(!('data' in listed[0]), 'the list must not carry the bytes');
+
+  // forScreen is what both surfaces actually receive.
+  const v = dc.forScreen(db, dc.readCase(db, 55));
+  assert.strictEqual(v.files.length, 1);
+  assert.ok(!('data' in v.files[0]), 'forScreen must not carry the bytes either');
+
+  // And the picture itself, when somebody asks for it by id.
+  assert.strictEqual(dc.caseFileData(db, c.id, fid).data, png);
+});
+
+it('anything that is not an image is refused', () => {
+  const db = fresh();
+  const c = dc.ensureCase(db, 100, 55, ACTOR);
+  for (const bad of ['', 'hello', 'https://example.com/x.png',
+                     'data:text/html;base64,PHNjcmlwdD4=',
+                     'javascript:alert(1)']) {
+    assert.throws(() => dc.addCaseFile(db, c.id, { data: bad, actor: ACTOR }),
+      e => e.code === 'bad_image', 'should refuse: ' + bad);
+  }
+  assert.strictEqual(dc.caseFiles(db, c.id).length, 0);
+});
+
+it('a file is reachable only through its own case', () => {
+  const db = fresh();
+  db.prepare('INSERT INTO retail_shipments (id) VALUES (56)').run();
+  const a = dc.ensureCase(db, 100, 55, ACTOR);
+  const b = dc.ensureCase(db, 100, 56, ACTOR);
+  const fid = dc.addCaseFile(db, a.id, { data: 'data:image/jpeg;base64,AAA=', actor: ACTOR });
+  // The id alone is not a key — the other case cannot read or delete it.
+  assert.strictEqual(dc.caseFileData(db, b.id, fid), null);
+  assert.strictEqual(dc.removeCaseFile(db, b.id, fid), false);
+  assert.ok(dc.caseFileData(db, a.id, fid));
+  assert.strictEqual(dc.removeCaseFile(db, a.id, fid), true);
+  assert.strictEqual(dc.caseFiles(db, a.id).length, 0);
+});
+
+it('evidence does not gate closing — a case can finish without photographs', () => {
+  const db = fresh();
+  step(db, 'customer_told');
+  step(db, 'remedy', { kind: 'refund' });
+  step(db, 'no_claim', { note: 'small' });
+  assert.strictEqual(dc.canClose(dc.readCase(db, 55)), true);
+});
+
+it('no file hand-writes the lateness rule any more', () => {
+  const files = ['routes/retail.js', 'public/retail-admin/04-orders.js', 'public/m.html'];
+  for (const f of files) {
+    const src = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+    assert.ok(!src.includes("'+1 day'"),
+      `${f} re-introduces a hand-written lateness threshold — use lib/delay-case.js`);
+  }
 });
 
 console.log('\n  driver: better-sqlite3\n');

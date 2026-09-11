@@ -4070,6 +4070,42 @@ addColumn('retail_delay_cases', 'settled_by',         'TEXT');
 addColumn('retail_delay_cases', 'remedy_order_id', 'INTEGER');
 addColumn('retail_delay_cases', 'remedy_cost',     'REAL');
 
+// ── The evidence sent to the carrier (§98) ──────────────────────────────────
+// Photographs of the spoiled goods, the tracking record, whatever was attached
+// to the claim. §98 left this open: the claim reference and the amounts were in
+// scope and the pictures were not, on the condition that "this phase must not
+// make adding them harder". This is that addition.
+//
+// A CHILD TABLE, NOT A COLUMN, because a claim is several photographs — the
+// goods, the box, the carrier's own record — where `staff_expenses.receipt_data`
+// is one receipt and correctly a column.
+//
+// THE BYTES NEVER TRAVEL WITH A LIST. `forScreen` returns each file's id, label
+// and size and no data at all; the picture is fetched by its own route when
+// somebody asks to look at it. That is `staff_expenses`'s rule, in its own
+// words — "bytes travel when somebody asks to look at them, not when a list is
+// drawn" — and a case with six photographs on an orders list would be the
+// reason to have it even if that file had not already said so.
+//
+// STORED AS A DATA URI, as the receipt is. There is no object store in this
+// product and inventing one for this feature would be the tail wagging the dog;
+// the 4mb body limit on the upload route is the cap.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS retail_delay_case_files (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id           INTEGER NOT NULL,
+    label             TEXT,
+    data              TEXT NOT NULL,     -- base64 data URI
+    bytes             INTEGER,           -- of the encoded string, for the list
+    uploaded_by       INTEGER,
+    uploaded_by_label TEXT,              -- snapshotted; a rename cannot rewrite it
+    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (case_id) REFERENCES retail_delay_cases(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_delay_case_files_case
+    ON retail_delay_case_files(case_id, id);
+`);
+
 // THE FLAG EVERY MONEY FIGURE READS. `paidWhere()` in lib/finance-window.js
 // excludes any order carrying this, which is the whole reason the eleven
 // hand-written copies of that predicate were consolidated first: without one

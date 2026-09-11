@@ -1365,6 +1365,74 @@ function dcStep(sid,step,payload,busyKey){
     render();
   });
 }
+/* Evidence for the carrier. DOWNSCALED BEFORE IT LEAVES THE PHONE, the way the
+   staff-claim photo already is — a modern phone camera produces four or five
+   megabytes and the upload route caps the body at four. 1280px on the long edge
+   and JPEG 0.7 is what that path settled on, and a photograph of a spoiled box
+   needs no more. */
+reg('dcPhoto', (sid,input)=>{
+  const f=input&&input.files&&input.files[0];
+  if(!f) return;
+  input.value='';                                   // so the same file can be re-picked
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  if(!o||o._id==null||state.parcelBusy) return;
+  const rd=new FileReader(), img=new Image();
+  rd.onload=()=>{ img.onload=()=>{
+      let data=null;
+      try{
+        const max=1280;
+        const scale=Math.min(1, max/Math.max(img.width||1, img.height||1));
+        const w=Math.max(1,Math.round((img.width||1)*scale)), h=Math.max(1,Math.round((img.height||1)*scale));
+        const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        data=cv.toDataURL('image/jpeg',0.7);
+      }catch(e){ data=null; }
+      if(!data){ state.orderErr=E('Could not read that photo.','无法读取该照片。'); render(); return; }
+      state.parcelBusy='dc'+sid; state.orderErr=null; render();
+      apiWrite('/orders/'+o._id+'/delay-case/evidence',{shipment_id:sid,data,label:f.name||null}).then(()=>{
+        state.parcelBusy=null;
+        api('/orders/'+o._id).then(d=>{ if(state.detailId===o.id){ state.liveDetail=mapDetail(d); render(); } }).catch(()=>render());
+      }).catch(e=>{
+        state.parcelBusy=null;
+        if(String(e.message)==='auth') return;
+        state.orderErr=E(orderErrorText(e),orderErrorText(e)); render();
+      });
+    };
+    img.onerror=()=>{ state.orderErr=E('Could not read that photo.','无法读取该照片。'); render(); };
+    img.src=String(rd.result||'');
+  };
+  rd.onerror=()=>{ state.orderErr=E('Could not read that photo.','无法读取该照片。'); render(); };
+  rd.readAsDataURL(f);
+});
+/* Fetched only now — the case carried each photo's name and size, never its
+   bytes. Full-screen, because it is about to be sent to a carrier. */
+reg('dcViewEv', (sid,fid)=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  if(!o||o._id==null) return;
+  api('/orders/'+o._id+'/delay-case/evidence/'+fid+'?shipment_id='+sid).then(j=>{
+    const data=j&&j.data&&j.data.data;
+    if(!data){ state.orderErr=E('Photo not found.','未找到照片。'); render(); return; }
+    state.imgZoom=data; render();   // the generic full-screen viewer, not a new one
+  }).catch(()=>{ state.orderErr=E('Could not open that photo.','无法打开该照片。'); render(); });
+});
+reg('dcDelEv', (sid,fid)=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  if(!o||o._id==null||state.parcelBusy) return;
+  state.ask={title:T('Remove this photo?','删除这张照片?'),
+    confirmLabel:T('Remove','删除'), danger:true,
+    run:()=>{
+      state.parcelBusy='dc'+sid; state.orderErr=null; render();
+      apiWrite('/orders/'+o._id+'/delay-case/evidence/'+fid,{shipment_id:sid},'DELETE').then(()=>{
+        state.parcelBusy=null;
+        api('/orders/'+o._id).then(d=>{ if(state.detailId===o.id){ state.liveDetail=mapDetail(d); render(); } }).catch(()=>render());
+      }).catch(e=>{
+        state.parcelBusy=null;
+        if(String(e.message)==='auth') return;
+        state.orderErr=E(orderErrorText(e),orderErrorText(e)); render();
+      });
+    }};
+  render();
+});
 reg('dcTold', sid=>{ dcStep(sid,'customer_told',{}); });
 reg('dcRemedy', (sid,kind)=>{ dcStep(sid,'remedy',{kind}); });
 /* §98 stage three. The only step that CREATES something — real stock leaves the
@@ -13081,6 +13149,24 @@ function delayCaseCard(o,sp){
     s2=mDcRow('done',T('Claim filed with the carrier','已申请延误赔偿'),bits.join(' · '));
   }
 
+  /* The evidence sent to the carrier. Sits under the claim because that is what
+     it is for, and never gates the close — plenty of claims settle on a call. */
+  const files=(dc&&dc.files)||[];
+  const ev=`<div style="display:grid;grid-template-columns:16px 1fr;gap:9px;align-items:start;padding:9px 0;border-top:1px solid var(--hairline)">
+    <span style="color:var(--text-secondary)">${files.length?'▣':'▢'}</span>
+    <div style="min-width:0;display:flex;flex-direction:column;gap:6px">
+      <span style="font-size:13.5px">${T('Evidence','凭证')}${files.length?' · '+files.length:''}</span>
+      ${files.length?`<div style="display:flex;gap:6px;flex-wrap:wrap">${files.map(f=>
+        `<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--hairline);border-radius:8px;padding:3px 8px;font-size:12px">
+           <a href="#" onclick="APP.cmd('dcViewEv',${sid},${Number(f.id)});return false" style="color:inherit;text-decoration:none">${escAttr(f.label||T('View','查看'))}</a>
+           <a href="#" onclick="APP.cmd('dcDelEv',${sid},${Number(f.id)});return false" style="color:var(--text-secondary);text-decoration:none">×</a>
+         </span>`).join('')}</div>`:''}
+      <label class="btn2" style="width:auto;padding:6px 12px;flex:none;font-size:12.5px;display:inline-flex;align-items:center;justify-content:center">
+        ${T('Add photo','添加照片')}
+        <input type="file" accept="image/*" style="display:none" onchange="APP.cmd('dcPhoto',${sid},this)">
+      </label>
+    </div></div>`;
+
   const rb=[];
   if(dc&&dc.remedy_at) rb.push(escAttr(String(dc.remedy_at).slice(0,16)));
   if(dc&&dc.remedy_note) rb.push(escAttr(dc.remedy_note));
@@ -13111,8 +13197,8 @@ function delayCaseCard(o,sp){
     : `<span style="font-size:12px;color:var(--text-secondary);font-style:italic">${T('Close once every step above is done.','以上步骤全部完成后方可关闭。')}</span>`;
 
   return `<div style="display:flex;flex-direction:column;gap:2px;padding:12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink)">
-    <span style="display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500">${ic('triangle-alert',16)}${T('Air shipment delayed','空运延误')}</span>
-    ${s1}${s2}${s3}${s4}
+    <span style="display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500">${ic('triangle-alert',16)}${T('Delivery delayed','配送延误')}</span>
+    ${s1}${s2}${ev}${s3}${s4}
     <div style="margin-top:10px;padding-top:9px;border-top:1px solid var(--hairline)">${foot}</div></div>`;
 }
 function trackingCard(o,sp,label){
@@ -13136,7 +13222,7 @@ function trackingCard(o,sp,label){
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
       <span class="eyebrow">${label?label:T('Tracking','物流')}</span>
       ${st?`<span style="font-size:13px;font-weight:500;color:${DELIV_TONE[tone]}">${st}</span>`:''}</div>
-    ${sp.airCleared==null&&o.airDelayed&&sp.mode==='air'?delayCaseCard(o,sp):''}
+    ${sp.airCleared==null&&(sp.lateDays>0)?delayCaseCard(o,sp):''}
     ${sp.airCleared?`<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-secondary)">${ic('check',14)}${T('Air delay handled'+(sp.airClearedBy?' · '+sp.airClearedBy:''),'空运延误已处理'+(sp.airClearedBy?' · '+sp.airClearedBy:''))}</div>`:''}
     ${reuse?`<div style="padding:10px 12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:12.5px;line-height:1.5">${
       reuse.delivered?T('This waybill is already on a delivered order ('+escAttr(reuse.order_no)+'). A reused number will not sync — check it.','此运单号已用于一笔已签收订单('+escAttr(reuse.order_no)+')，重复号码不会同步，请核对。')
@@ -17210,6 +17296,10 @@ function mapDetail(o){
     localEta:sp.local_eta||null, etaSource:sp.eta_source||null,
     airCleared:sp.air_delay_cleared_at||null, airClearedBy:sp.air_delay_cleared_by||null,
     dcase:sp.delay_case||null,   // §98 — the four steps behind that stamp; null = none taken yet
+    // How late this parcel was, computed server-side in lib/delay-case.js.
+    // This screen used to gate on mode==='air' and never saw a late land
+    // parcel — which is every Guangdong order, ice packs included.
+    lateDays:sp.late_days||0,
     // The raw carrier CODE, kept beside the worded tracking view above because
     // a claim is filed against the company that carried this parcel and the
     // server validates the code against lib/tracking.js.
