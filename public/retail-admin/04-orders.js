@@ -7309,19 +7309,27 @@ function renderDelayCase(o, s, delayDays) {
   } else {
     const bits = [];
     if (dc.dispute_ref)     bits.push(escapeHtml(dc.dispute_ref));
-    if (dc.dispute_claimed != null) bits.push('¥' + Number(dc.dispute_claimed).toFixed(2));
+    if (dc.dispute_claimed != null) bits.push(ordMoney(dc.dispute_claimed));
     step2 = delayStepRow('done', cuT('Claim filed with the carrier', '已申请延误赔偿'), bits.join(' · '));
   }
 
   // 3 — the customer is made whole. A branch, taken once. The refund arm is a
   // record that it happened; the refund itself stays on the path it always had.
+  // Done: the replacement's own order number and what it cost us — the figure
+  // the carrier's payment gets set against, further down.
+  const remedyBits = [];
+  if (dc && dc.remedy_at)   remedyBits.push(escapeHtml(String(dc.remedy_at).slice(0, 16)));
+  if (dc && dc.remedy_note) remedyBits.push(escapeHtml(dc.remedy_note));
+  if (dc && dc.remedy_cost != null) {
+    remedyBits.push(cuT(`cost ${ordMoney(dc.remedy_cost)}`, `成本 ${ordMoney(dc.remedy_cost)}`));
+  }
   const step3 = remedy
     ? delayStepRow('done',
         remedy === 'refund' ? cuT('Refunded', '已退款') : cuT('Replacement sent', '已补发'),
-        `${escapeHtml(String(dc.remedy_at || '').slice(0, 16))}${dc.remedy_note ? ' · ' + escapeHtml(dc.remedy_note) : ''}`)
+        remedyBits.join(' · '))
     : delayStepRow('todo', cuT('Replacement or refund', '补发或退款'), '',
         `<div style="${row}">
-           ${delayBtn(`delayRemedy(${oid},${sid},'replacement',event)`, cuT('Replacement sent', '已补发'))}
+           ${delayBtn(`delayReplacement(${oid},${sid},event)`, cuT('Send replacement', '补发'), true)}
            ${delayBtn(`delayRemedy(${oid},${sid},'refund',event)`, cuT('Refunded', '已退款'))}
          </div>`);
 
@@ -7346,7 +7354,7 @@ function renderDelayCase(o, s, delayDays) {
                 : ds === 'rejected' ? cuT('Carrier rejected the claim', '承运商已拒绝')
                                     : cuT('Claim withdrawn', '已撤销申请');
     step4 = delayStepRow('done', label,
-      dc.dispute_received != null ? '¥' + Number(dc.dispute_received).toFixed(2) : escapeHtml(dc.dispute_note || ''));
+      dc.dispute_received != null ? ordMoney(dc.dispute_received) : escapeHtml(dc.dispute_note || ''));
   } else {
     step4 = delayStepRow('todo', cuT('Carrier settled', '承运商赔偿'), '');
   }
@@ -7410,6 +7418,28 @@ function delaySettle(orderId, sid, outcome, ev) {
 
 function delayRemedy(orderId, sid, kind, ev) {
   return delayStep(orderId, sid, 'remedy', { kind }, ev);
+}
+
+// Raise the ¥0 replacement order (§98 stage three). Unlike every other step
+// this one CREATES something — real stock leaves the building — so it confirms
+// first, and the toast names the order it made rather than saying "saved".
+async function delayReplacement(orderId, sid, ev) {
+  if (!confirm(cuT(
+      'Send a replacement? This creates a no-charge order for the same goods and takes them off the shelf.',
+      '确认补发?将新建一笔零元订单发出同样商品,并从库存中扣除。'))) return;
+  try {
+    const j = await adminWrite({
+      btn: ev?.currentTarget,
+      url: `/api/retail-admin/orders/${orderId}/delay-case/replacement`,
+      method: 'POST', body: { shipment_id: sid },
+      errLabelEn: 'Could not create the replacement', errLabelCn: '补发失败',
+    });
+    const no = j?.data?.order_no;
+    toast(no ? cuT(`Replacement created · ${no}`, `已补发 · ${no}`)
+             : cuT('Replacement created', '已补发'));
+    openOrder(orderId, { instant: true });
+    loadOrders();
+  } catch {}
 }
 
 function airShipmentDelayDays(o, s) {

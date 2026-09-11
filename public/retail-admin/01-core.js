@@ -231,6 +231,7 @@ const TD_ERR = {
   // catalogue already carries both, worded for exactly this situation, and a
   // second copy would be two sentences for one code drifting apart.
   case_not_closeable:     ['The carrier claim is not finished yet.', '承运商赔偿尚未完成。'],
+  replacement_exists:     ['A replacement has already been sent for this parcel.', '该包裹已补发。'],
   unknown_carrier:        ['That carrier is not one the system knows.', '承运商不正确。'],
 
   // ── Not set up ──
