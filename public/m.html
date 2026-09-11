@@ -12413,7 +12413,10 @@ function opsFires(){
      look stale. The server sends every key today; this does not depend on it
      continuing to. */
   const items=k=>(o[k]&&o[k].items)||[];
-  add(c('delivery_alerts'),'brick','truck',T('Delivery needs a call','配送需要跟进'),c('delivery_alerts'),items('delivery_alerts'),'',"APP.cmd('ordersGo','dispatched')");
+  /* 'delayed', not 'dispatched'. The Dispatched tab cannot contain these — the
+     alert is about a parcel that has already been DELIVERED, late — so the card
+     used to count one set of orders and open a screen showing another. */
+  add(c('delivery_alerts'),'brick','truck',T('Delivery needs a call','配送需要跟进'),c('delivery_alerts'),items('delivery_alerts'),'',"APP.cmd('ordersGo','delayed')");
   add(c('payment_mismatch'),'brick','banknote',T("Payment doesn't match",'付款金额不符'),c('payment_mismatch'),items('payment_mismatch'),'',"APP.cmd('ordersGo','pending')");
   // The brick fire's sibling: a proof IS on file, it was not rejected, and the
   // order is still unpaid — verified with auto-flip off, unreadable, or never
@@ -17031,7 +17034,7 @@ function deliveryLine(r){
   }
   const moving = r.status==='dispatched'||r.status==='delivered'||r.tracking_number||r.local_eta;
   if(moving&&r.fulfillment_type!=='pickup'){
-    if(r.air_delivery_delayed) return {text:T('Air delayed · call the customer','空运延误 · 请联系顾客'),tone:'brick'};
+    if(r.air_delivery_delayed) return {text:T('Delivery delayed · call the customer','配送延误 · 请联系顾客'),tone:'brick'};
     const live=courierLine(r); if(live) return live;
     if(r.is_local){
       if(r.local_eta) return {text:T('arrival '+r.local_eta,'预计 '+r.local_eta),tone:'plain'};
@@ -17090,7 +17093,7 @@ function orderNotes(r){
     const issued=r.invoice_status==='issued';
     out.push({sev:issued?'muted':'amber',icon:'receipt',label:issued?T('Invoice issued','已开票'):T('Invoice to issue','待开票')});
   }
-  if(r.air_delivery_delayed) out.push({sev:'brick',icon:'plane',label:T('Air delayed · call the customer','空运延误 · 请联系顾客')});
+  if(r.air_delivery_delayed) out.push({sev:'brick',icon:'truck',label:T('Delivery delayed · call the customer','配送延误 · 请联系顾客')});
   return out.length?out:null;
 }
 /* The desktop's renderSplitRollupLine, on a phone. Under two parcels there is

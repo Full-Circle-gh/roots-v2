@@ -81,6 +81,19 @@ function fresh() {
   return db;
 }
 
+// A shipments-only fixture for the lateness tests. It carries an EMPTY
+// retail_delay_cases because the predicate's escape clause names that table —
+// empty is the normal case and the one the cutover has to hold for.
+function shipFixture() {
+  const db = new Database(':memory:');
+  db.exec(`CREATE TABLE retail_shipments (
+             id INTEGER PRIMARY KEY, mode TEXT, dispatched_at TEXT,
+             delivered_at TEXT, tracking_status TEXT, tracking_synced_at TEXT);
+           CREATE TABLE retail_delay_cases (
+             id INTEGER PRIMARY KEY AUTOINCREMENT, order_id INTEGER, shipment_id INTEGER);`);
+  return db;
+}
+
 const ACTOR = { id: 7, label: 'mei' };
 const step = (db, step_, payload) =>
   dc.applyStep(db, { orderId: 100, shipmentId: 55, step: step_, payload: payload || {}, actor: ACTOR });
@@ -279,36 +292,36 @@ it('the thresholds are per mode, and air is unchanged', () => {
 
 it('lateDays counts from each mode\'s own allowance', () => {
   const p = (mode, dispatched, delivered) => ({ mode, dispatched_at: dispatched, delivered_at: delivered });
+  // DATES AFTER THE CUTOVER, so this measures the thresholds and nothing else —
+  // a pre-cutover date returns 0 for a different reason and would hide a
+  // threshold that had drifted.
   // Air: one day allowed.
-  assert.strictEqual(dc.lateDays(p('air', '2026-08-26', '2026-08-27')), 0, 'a day is on time');
-  assert.strictEqual(dc.lateDays(p('air', '2026-08-26', '2026-08-29')), 2);
+  assert.strictEqual(dc.lateDays(p('air', '2026-09-20', '2026-09-21')), 0, 'a day is on time');
+  assert.strictEqual(dc.lateDays(p('air', '2026-09-20', '2026-09-23')), 2);
   // Land: three. Two days is ordinary ground freight and must NOT raise a case,
   // or the badge is noise inside a week and stops being read.
-  assert.strictEqual(dc.lateDays(p('land', '2026-08-26', '2026-08-28')), 0);
-  assert.strictEqual(dc.lateDays(p('land', '2026-08-26', '2026-08-31')), 2);
+  assert.strictEqual(dc.lateDays(p('land', '2026-09-20', '2026-09-22')), 0);
+  assert.strictEqual(dc.lateDays(p('land', '2026-09-20', '2026-09-25')), 2);
   // Local: same-city, same-day promise.
-  assert.strictEqual(dc.lateDays(p('local', '2026-08-26', '2026-08-28')), 1);
+  assert.strictEqual(dc.lateDays(p('local', '2026-09-20', '2026-09-22')), 1);
   // A mode with no threshold never raises — supplier-direct is not ours to claim.
-  assert.strictEqual(dc.lateDays(p('supplier', '2026-08-01', '2026-09-01')), 0);
+  assert.strictEqual(dc.lateDays(p('supplier', '2026-09-01', '2026-10-01')), 0);
   // Missing stamps are not lateness.
-  assert.strictEqual(dc.lateDays(p('air', null, '2026-08-29')), 0);
-  assert.strictEqual(dc.lateDays(p('air', '2026-08-26', null)), 0);
+  assert.strictEqual(dc.lateDays(p('air', null, '2026-09-23')), 0);
+  assert.strictEqual(dc.lateDays(p('air', '2026-09-20', null)), 0);
 });
 
 it('the SQL and the JS agree — they are two renderings of one rule', () => {
-  const db = new Database(':memory:');
-  db.exec(`CREATE TABLE retail_shipments (
-             id INTEGER PRIMARY KEY, mode TEXT, dispatched_at TEXT,
-             delivered_at TEXT, tracking_status TEXT, tracking_synced_at TEXT)`);
+  const db = shipFixture();
   const ins = db.prepare(
     'INSERT INTO retail_shipments (id,mode,dispatched_at,delivered_at) VALUES (?,?,?,?)');
   const rows = [
-    [1, 'air',      '2026-08-26', '2026-08-27'],  // on time
-    [2, 'air',      '2026-08-26', '2026-08-29'],  // 2 late
-    [3, 'land',     '2026-08-26', '2026-08-28'],  // ordinary ground freight
-    [4, 'land',     '2026-08-26', '2026-08-31'],  // 2 late
-    [5, 'local',    '2026-08-26', '2026-08-28'],  // 1 late
-    [6, 'supplier', '2026-08-01', '2026-09-01'],  // never ours
+    [1, 'air',      '2026-09-20', '2026-09-21'],  // on time
+    [2, 'air',      '2026-09-20', '2026-09-23'],  // 2 late
+    [3, 'land',     '2026-09-20', '2026-09-22'],  // ordinary ground freight
+    [4, 'land',     '2026-09-20', '2026-09-25'],  // 2 late
+    [5, 'local',    '2026-09-20', '2026-09-22'],  // 1 late
+    [6, 'supplier', '2026-09-01', '2026-10-01'],  // never ours
   ];
   rows.forEach(r => ins.run(...r));
 
@@ -331,13 +344,10 @@ it('the SQL and the JS agree — they are two renderings of one rule', () => {
 });
 
 it('a delivered-status parcel with no delivered_at still counts — JD never stamps it', () => {
-  const db = new Database(':memory:');
-  db.exec(`CREATE TABLE retail_shipments (
-             id INTEGER PRIMARY KEY, mode TEXT, dispatched_at TEXT,
-             delivered_at TEXT, tracking_status TEXT, tracking_synced_at TEXT)`);
+  const db = shipFixture();
   db.prepare(`INSERT INTO retail_shipments
     (id,mode,dispatched_at,delivered_at,tracking_status,tracking_synced_at)
-    VALUES (1,'air','2026-08-26',NULL,'delivered','2026-08-30')`).run();
+    VALUES (1,'air','2026-09-20',NULL,'delivered','2026-09-24')`).run();
   const n = db.prepare(
     `SELECT COUNT(*) AS n FROM retail_shipments WHERE ${dc.lateShipmentSql()}`).get().n;
   assert.strictEqual(n, 1, 'the tracking_synced_at fallback is load-bearing for JD live sync');
@@ -401,6 +411,52 @@ it('evidence does not gate closing — a case can finish without photographs', (
   step(db, 'remedy', { kind: 'refund' });
   step(db, 'no_claim', { note: 'small' });
   assert.strictEqual(dc.canClose(dc.readCase(db, 55)), true);
+});
+
+// ── The cutover ────────────────────────────────────────────────────────────
+// Ash, 2026-09-11, off the live phone: "no need to raise a case for previous
+// orders, only from today". Widening the alert past air had asked the same
+// question of every parcel ever shipped and lit up the whole history — the
+// oldest seventy-nine days — on the one card whose job is to list work that
+// will actually be done.
+it('a parcel delivered before the cutover raises nothing, whatever its mode', () => {
+  const db = shipFixture();
+  const ins = db.prepare('INSERT INTO retail_shipments (id,mode,dispatched_at,delivered_at) VALUES (?,?,?,?)');
+  ins.run(1, 'air',  '2026-06-20', '2026-06-24');   // 79 days old, badly late
+  ins.run(2, 'land', '2026-09-01', '2026-09-08');   // late, but before today
+  ins.run(3, 'land', '2026-09-06', '2026-09-11');   // delivered ON the cutover
+  ins.run(4, 'air',  '2026-09-11', '2026-09-13');   // after it
+  const late = db.prepare(
+    `SELECT id FROM retail_shipments WHERE ${dc.lateShipmentSql()} ORDER BY id`).all().map(r => r.id);
+  assert.deepStrictEqual(late, [3, 4],
+    'only parcels delivered on or after the cutover may raise a case');
+});
+
+it('lateDays mirrors the cutover, so no screen disagrees with the query', () => {
+  // A drawer drawing a checklist the dashboard has filtered out is one screen
+  // saying there is work and two saying there is none.
+  assert.strictEqual(dc.lateDays({ mode: 'air', dispatched_at: '2026-06-20', delivered_at: '2026-06-24' }), 0);
+  assert.strictEqual(dc.lateDays({ mode: 'land', dispatched_at: '2026-09-01', delivered_at: '2026-09-08' }), 0);
+  assert.ok(dc.lateDays({ mode: 'air', dispatched_at: '2026-09-11', delivered_at: '2026-09-13' }) > 0);
+});
+
+it('a parcel somebody already opened a case on stays in scope, however old', () => {
+  // THE ESCAPE HATCH, exercised rather than asserted about. Without it a dispute
+  // already being chased would vanish from the card mid-chase — the exact
+  // failure §98 exists to prevent.
+  const db = shipFixture();
+  db.prepare(`INSERT INTO retail_shipments (id,mode,dispatched_at,delivered_at)
+              VALUES (1,'air','2026-06-20','2026-06-24')`).run();
+  const q = `SELECT COUNT(*) AS n FROM retail_shipments WHERE ${dc.lateShipmentSql()}`;
+  assert.strictEqual(db.prepare(q).get().n, 0, 'untouched and pre-cutover: filtered out');
+
+  db.prepare('INSERT INTO retail_delay_cases (order_id, shipment_id) VALUES (100, 1)').run();
+  assert.strictEqual(db.prepare(q).get().n, 1, 'a case row brings it back into scope');
+});
+
+it('the cutover is a fixed date, not a rolling window', () => {
+  assert.match(dc.CASES_FROM, /^\d{4}-\d{2}-\d{2}$/);
+  assert.ok(dc.lateShipmentSql().includes(`>= '${dc.CASES_FROM}'`));
 });
 
 it('no file hand-writes the lateness rule any more', () => {

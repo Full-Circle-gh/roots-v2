@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.220
+# Tacet shared-core consolidation — decisions record, v4.221
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-11 · v4.221 — **THE CUTOVER: NO CASE IS RAISED FOR A PARCEL DELIVERED BEFORE TODAY, AND THREE THINGS v4.220 BROKE ARE FIXED.** Reported by Ash off the live phone within the hour — "Delivery needs a call · 7, oldest 79d", and tapping it opened unrelated orders from today and yesterday. **WIDENING A LIVE ALERT IS RETROACTIVE UNLESS YOU STOP IT**: the rule changed from `mode='air'` to every mode and the query does not care when the rule changed — it asked the same question of every parcel ever shipped and correctly answered that a pile were late, the oldest seventy-nine days, which is work nobody will ever do on the one card whose job is to list work that will be. Ash: *"no need to raise a case for previous orders, only from today."* `CASES_FROM` is a FIXED DATE, not a rolling window — a window re-raises history every time somebody changes its length; a cutover says the feature began on a day, which is what happened. **A parcel that already has a case row stays in scope however old**, or a dispute being chased would vanish mid-chase; `lateDays()` mirrors the cutover so no screen draws a checklist the query filtered out. **THE AGE QUERY KEPT ITS AIR-ONLY TEST** — `waiting_since` is a sibling of the EXISTS and v4.220 replaced one and not the other, so a late land parcel came back with NO age, was skipped in "oldest", and sorted FIRST because ORDER BY puts NULLs first. **THE CARD HAD NOWHERE TO SEND ANYBODY**: it opened the Dispatched tab, which cannot contain an order whose parcel is already DELIVERED — older than v4.220 and merely exposed by it, now a `delayed` pseudo-status built on the very predicate the card counts, so the number and the list are one fact. **THE LIST BADGE STILL SAID AIR** on both surfaces; the drawer heading had been made mode-neutral and the row missed. **THREE OF THE FOUR WERE MINE AND ALL OF ONE KIND — a predicate was consolidated and its NEIGHBOURS were not**: the EXISTS moved and `waiting_since` stayed, the heading moved and the badge stayed, the rule widened and its navigation stayed. 208 fast suites pass, 0 fail; `test_delay_case` 31, adding the cutover, its escape hatch, and the SQL/JS agreement across it. A fix under an existing decision, hence a patch.
 
 2026-09-11 · v4.220 — **§98'S LAST TWO OPEN ITEMS ARE BUILT AND THE SECTION CLOSES: EVERY MODE RAISES A CASE, AND THE EVIDENCE IS ATTACHED.** **AIR-ONLY WAS A HOLE, NOT A CONSERVATIVE DEFAULT** — `planShipments` sends every Guangdong order by land "regardless of any item's air flag", so the destination closest to the kitchen, ice packs included, was the one whose late parcels raised nothing at all. Thresholds are now per mode in `LATE_AFTER_DAYS` (`lib/delay-case.js`): air stays **1** because widening must not restate an existing case, local **1** against a same-day promise, land **3** because at 1 it would fire on ordinary two-day freight until the badge became noise. A mode absent from the map never raises one, so supplier-direct is excluded without being named. **Fixed in this phase and not tenant-editable, exactly as §32 fixed the waste reason codes.** The rule had been written out four times in `routes/retail.js` and twice more on the clients — same drift as the paid predicate, consolidated the same way; **the clients no longer do date arithmetic at all**, the server computes `late_days` and both screens render it. The `air_` names on the wire and in the database are historical and STAY (two client releases and a migration for nothing an operator can see); the function was renamed to `orderHasDelayedParcel` because that is free. **EVIDENCE IS A CHILD TABLE** — a claim is several photographs where a staff receipt is one — and **the bytes never travel with a list**, per `staff_expenses`'s own rule; only a `data:image/…;base64,` URI is accepted, since both screens render it into an `<img src>`; a file is reachable only through its own case; the phone downscales to 1280px/JPEG 0.7 as the claim photo already does. **Evidence does not gate closing**, deliberately: plenty of claims settle on a call, and a checklist that demands a photograph teaches people to attach a blank one. Chinese: `docs/tacet-delivery-vocabulary.md` v1.58 — the banner heading was RESTRUCTURED rather than tripled, because `配送延误` is already live inside the customer's own notification. **§98 is complete**: four stages, five addenda, nothing open. 206 fast suites pass, 0 fail.
 
@@ -10337,6 +10339,72 @@ photograph teaches people to attach a blank one.
 #### §98 is complete
 
 Four stages, five addenda. Nothing in the section is now open.
+
+### §98 addendum 6 — the cutover, and three things widening the alert broke (2026-09-11)
+
+Reported by Ash off the live phone within the hour: **"Delivery needs a call · 7,
+oldest 79d"**, and tapping it opened a screen showing unrelated orders from today
+and yesterday. Four faults, three of them introduced by addendum 5.
+
+#### 1. Widening a live alert is retroactive unless you stop it
+
+The rule changed from `mode='air'` to every mode. The query behind the card does
+not care when the rule changed — it asked the same question of every parcel ever
+shipped and correctly answered that a pile of them were late, the oldest
+seventy-nine days. **Nobody is going to ring a customer about food from
+seventy-nine days ago**, so every one of those rows was work that would never be
+done, on the one card whose whole job is to list work that will be.
+
+**Decided by Ash: "no need to raise a case for previous orders, only from
+today."** `CASES_FROM` in `lib/delay-case.js` is a fixed date, not a rolling
+window — a window would re-raise history every time somebody changed its length,
+where a cutover says plainly that the feature began on a day, which is what
+happened. **A parcel that already has a case row stays in scope however old it
+is**, or a dispute already being chased would vanish mid-chase. `lateDays()`
+mirrors the cutover, so no screen can draw a checklist the query has filtered
+out.
+
+#### 2. The age query kept its air-only test
+
+`waiting_since` is a sibling subquery of the EXISTS, and addendum 5 replaced the
+EXISTS and not it. A late land or same-city parcel therefore came back with **no
+age at all**: the card skips an item with no `waiting_since` when it computes
+"oldest", and `ORDER BY` sorts NULLs first — so the new modes went to the top of
+the preview showing nothing, while the age beside the card described some older
+air parcel instead of them. It now uses the same predicate as the EXISTS.
+
+#### 3. The card had nowhere to send anybody
+
+Tapping "Delivery needs a call" ran `ordersGo('dispatched')` — the **Dispatched**
+tab, which by definition cannot contain these orders, because the alert is about
+a parcel that has already been **delivered**, late. The card counted one set of
+orders and opened a screen showing a different one.
+
+This one is older than addendum 5 and was merely exposed by it: the card used to
+be mostly in-transit tracking alerts, so "dispatched" roughly matched. Once
+delivered parcels started alerting it was simply wrong. There is now a `delayed`
+pseudo-status on the orders list — the same shape as `refunds_open` and
+`needs_invoice` — **built on the very predicate the card counts**, so the number
+and the list are one fact rather than two queries that have to agree.
+
+#### 4. The list badge still said AIR
+
+Both surfaces labelled a late land or same-city parcel `AIR DELAYED · 空运延误`.
+Addendum 5 made the drawer's heading mode-neutral and missed the list row. Both
+now read `DELIVERY DELAYED · 配送延误`, the pair already locked in v1.58, and the
+phone's icon is a truck rather than a plane.
+
+#### What this cost, and what it is worth writing down
+
+Three of the four were mine, all in one change, and all of the same kind: **a
+predicate was consolidated and its neighbours were not.** The EXISTS moved and
+`waiting_since` stayed; the drawer heading moved and the list badge stayed; the
+rule widened and the thing it navigates to stayed. `scripts/test_paid_predicate.js`
+guards exactly this for the money predicate — a test that fails when a copy comes
+back. There is no equivalent for the alert's *neighbours*, and there could not
+easily be: they are not copies of the predicate, they are things that have to
+agree with it. The cheap defence is the one now taken — one definition, and
+everything that reads it reads it from there.
 
 ## §99 — THE FAPIAO CHASE: A REQUEST NOBODY ISSUED ASKS AGAIN, AND ONLY ISSUING IT STOPS THE ASKING
 
