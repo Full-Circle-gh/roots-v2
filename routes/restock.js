@@ -1937,6 +1937,34 @@ router.post('/api/restock/archive-bulk', requireRestockAccess, tacetOnly, (req, 
    public/app.html was its only caller. Tacet Mobile has never had a delete on
    this screen. Nothing replaces it: a draft nobody can reach is not a job. */
 
+/* ── §101: THE NIGHT'S ORDERS RAISE THEIR OWN KITCHEN REQUEST ──────────────
+   §84 gave the kitchen the number and gave it to one screen. Push, the printed
+   slip, the deep link and the card that closes a line all key on a
+   `restock_orders` row, and a night of `awaiting_restock` pre-orders creates
+   none — so the fact reached nobody who had not thought to look for it.
+   Ash: "we need it to be push, print".
+
+   NOTHING NEW IS WIRED HERE, and that is the whole reason this shape was
+   chosen over a digest notification: the three calls below are the SAME three,
+   in the same order, that POST /api/restock fires on a request it creates
+   `sent`. The audience is §51's, the deep link is §71's, the printer is §51's.
+
+   THE ACTOR IS NULL BECAUSE THERE IS NOBODY TO EXCLUDE. Both notifiers take an
+   actor only to keep a person's own action from pinging their own phone, and
+   this request has no author — which is also what `auto_source` records.
+
+   `genRsNumber` IS PASSED IN RATHER THAN REIMPLEMENTED (§80's copy rule): a
+   second per-prefix daily sequence is how two requests come to be called
+   PR-260911-002. */
+require('../lib/kitchen-morning-request').startMorningKitchenRequestSweeper({
+  genRsNumber,
+  onRaised: ({ id }) => {
+    _fireRestockPush(id, 'sent', null);
+    _broadcastRestock(id, 'sent', null);
+    _kprint.autoPrintKitchenRequest(id, 'sent');
+  },
+});
+
 module.exports = router;
 // Exported for scripts/test_warehouse_store_pin.js — the tier order in
 // _resolveWarehouseStoreId is the whole point of the configured key, and it is
