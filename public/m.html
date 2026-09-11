@@ -1822,6 +1822,34 @@ reg('closeCustomer', ()=>{ state.custId=null; state.custDetail=null; render(); }
 reg('prodView', v=>{ state.prodView=v; render(); });
 reg('prodStatus', v=>{ state.prodStatus=(state.prodStatus===v?'all':v); render(); });
 reg('prodCat', v=>{ state.prodCat=v; render(); });
+/* THE RESTOCK FIRE'S DOOR. Home's "Restock needed" row opened the
+   Products tab and stopped there — on All, on whatever sub-view and category
+   the operator had left behind, with the three empty shelves it had just
+   counted somewhere down a list of two hundred. The row names a number; the
+   screen it opens has a chip for exactly that number and was not pressing it.
+
+   WHICH CHIP IS THE ROW'S OWN RULE, not a second opinion. The pill counts what
+   is actually OUT and falls back to the low count when nothing is out
+   (`n:oos||low`), so the chip does the same: Out when there is anything out,
+   Low when the fire is only ever a nudge. Landing on an empty "Out" list
+   because today's fire is five running low would be a door onto nothing.
+
+   The category, the search box and the sub-view are cleared for the same
+   reason: the fire promises N products and a leftover category chip or a
+   half-typed search silently delivers fewer. The chips themselves are
+   untouched — this is one tap of the one the operator would have made.
+
+   GATED, and gated BEFORE the state is written: reg('tab') refuses a route
+   this operator cannot reach, and setting a filter on a screen that then never
+   opens leaves their Products tab narrowed by a tap that appeared to do
+   nothing. CMD.tab renders, so this does not. */
+reg('goRestock', which=>{
+  if(!canRoute('products')) return;
+  state.prodView='catalogue';
+  state.prodStatus=(which==='low')?'low':'out';
+  state.prodCat='all'; state.prodQ='';
+  CMD.tab('products');
+});
 /* The whole app re-renders into one innerHTML, so an input loses focus on
    every keystroke unless the caret is put back. Nothing is trimmed here —
    trimming mid-word would eat the space the operator just typed. */
@@ -12257,7 +12285,9 @@ function opsFires(){
     // summing both would say 23 and mean neither.
     const state_=(oos&&low)?T(oos?'out of stock, '+low+' running low':'', '已售罄，另有 '+low+' 项库存不足')
       :oos?T('out of stock','已售罄'):T('running low','库存不足');
-    f.push({sev:'amber',icon:'box',label:T('Restock needed','需要补货'),n:oos||low,meta:state_,go:"APP.cmd('tab','products')",mins:null});
+    // Opens onto the chip the pill is counting — Out when anything is out, Low
+    // when the fire is only the nudge. Same `oos||low` rule as the pill above.
+    f.push({sev:'amber',icon:'box',label:T('Restock needed','需要补货'),n:oos||low,meta:state_,go:"APP.cmd('goRestock','"+(oos?'out':'low')+"')",mins:null});
   }
   // Channel stock-sync stall — mirrors the desktop card's new row (see
   // lib/channel-sync-stale.js). The phone has no per-channel screen to open
