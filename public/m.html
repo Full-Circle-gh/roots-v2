@@ -648,6 +648,11 @@ const state = {
      and anything only in the DOM goes with it. Keyed by order id so a draft
      cannot follow you into the next order you open. */
   ordNote:null,
+  /* The carriers the server will accept on a waybill, read once from
+     /tracking/carriers. The server refuses a code it does not know
+     (`invalid_carrier`), so this list is not a convenience — it is the only
+     way a phone can offer a chooser that cannot be wrong. */
+  carriers:null,
   /* The operator's own Quick actions — an array of catalogue keys, null until
      the first read pulls it back off this phone (see quickKeys()), and
      quickMounted the house guard against a sheet that re-enters on every tap:
@@ -1582,6 +1587,102 @@ reg('ordNoteSave', ()=>{
 /* A FAILED SAVE KEEPS WHAT WAS TYPED. orderWrite leaves state.ordNote alone on
    the error path — it is cleared above, inside the success path only — so the
    repaint that draws the reason also redraws the words that did not save. */
+
+/* ── THE WAYBILL ──────────────────────────────────────────────────────────
+   You pack the box, the courier hands you a number, and until now the phone
+   could not take it: this drawer said "add it on the desktop" and meant it.
+   PUT /orders/:id/tracking has always been there; nothing on this surface
+   called it. §97.
+
+   THE SERVER'S THREE RULES ARE MIRRORED HERE so a thumb meets them in the
+   sheet rather than as a 400: the carrier must be one the server knows (hence
+   the chooser, built from its own list), the number must be alphanumerics and
+   dashes within 64 characters, and a parcel of ours must already be on its way.
+   That last one needs no check — hoistedTracking only draws a card for a parcel
+   that is dispatched or delivered, which is the same condition. */
+async function ensureCarriers(){
+  if(Array.isArray(state.carriers)) return state.carriers;
+  try{ const d=await api('/tracking/carriers'); state.carriers=Array.isArray(d)?d:[]; }
+  catch(e){ if(String(e.message)==='auth') throw e; state.carriers=[]; }
+  return state.carriers;
+}
+const WAYBILL_OK=/^[A-Za-z0-9-]+$/;      // the server's own test, verbatim
+reg('addWaybill', sid=>{
+  const o=currentOrder(); if(!o||o._id==null) return;
+  /* A LIST ALREADY IN HAND OPENS THE SHEET IN THIS TASK. Going through the
+     promise either way put the sheet a microtask late on every tap after the
+     first — nothing an operator would see, and exactly the kind of "it arrives
+     eventually" that makes a control impossible to assert on. The fetch is for
+     the first tap only. */
+  if(Array.isArray(state.carriers)){ askWaybillCarrier(o,sid,state.carriers); return; }
+  ensureCarriers().then(list=>askWaybillCarrier(o,sid,list)).catch(()=>{});
+});
+/* The carrier first, then the number: a chooser is one tap and typing is not,
+   so losing a typed number by backing out of a later step is the order to
+   avoid. Both names come from the server, so neither is a string this app had
+   to know — and neither is one it could get wrong. */
+function askWaybillCarrier(o,sid,list){
+  if(!list||!list.length){ state.orderErr=orderErrorText({}); render(); return; }
+  state.ask={title:T('Save tracking','保存运单号'),
+    options:list.map(c=>({key:String(c.code),
+      label:LANG==='en'?(c.name_en||c.name_cn||c.code):(c.name_cn||c.name_en||c.code)})),
+    run:code=>{ if(code) askWaybillNumber(o,sid,code); }};
+  render();
+}
+function askWaybillNumber(o,sid,carrier){
+  state.ask={title:T('Save tracking','保存运单号'),
+    fields:[{id:'no',label:T('Tracking / waybill number','快递单号 / 运单号'),numeric:true}],
+    confirmLabel:T('Save tracking','保存运单号'),
+    validate:v=>{
+      const n=String(v.no||'').trim();
+      /* One sentence for empty and for malformed alike. It is the desktop's
+         own, it is a live pair, and it is never wrong about what to do next —
+         the same standard the ship-by labels are held to. */
+      if(!n||n.length>64||!WAYBILL_OK.test(n)) return T('Enter a tracking number first','请先输入运单号');
+      return null; },
+    run:v=>orderWrite('trk', async()=>{
+      await apiWrite('/orders/'+o._id+'/tracking',
+        {carrier, tracking_number:String(v.no||'').trim(), shipment_id:sid},'PUT');
+      await rereadOrder(o);
+      /* NO TOAST ABOUT A REUSED WAYBILL. The desktop warns in one, which is
+         gone in four seconds; the card this re-read repaints carries
+         reuse_warning as a standing block, so the warning is still on screen
+         when the operator goes looking for it. */
+      return T('Tracking saved','运单号已保存');
+    })};
+  render();
+}
+reg('clearWaybill', sid=>{
+  const o=currentOrder(); if(!o||o._id==null) return;
+  state.ask={title:T('Remove the tracking number from this shipment?','移除此运单号?'),
+    danger:true,
+    run:()=>orderWrite('trk', async()=>{
+      await apiWrite('/orders/'+o._id+'/tracking?shipment_id='+encodeURIComponent(sid),{},'DELETE');
+      await rereadOrder(o);
+      return T('Tracking cleared','运单号已清除');
+    })};
+  render();
+});
+reg('resubWaybill', sid=>{
+  const o=currentOrder(); if(!o||o._id==null) return;
+  orderWrite('trk', async()=>{
+    await apiWrite('/orders/'+o._id+'/tracking/resubscribe?shipment_id='+encodeURIComponent(sid),{});
+    await rereadOrder(o);
+    return T('Re-subscribed','已重新订阅');
+  });
+});
+/* THE ORDER IS RE-READ, NEVER GUESSED AT. A waybill lands on the parcel, the
+   order-level mirror, the live-sync badge and the list row's delivery cell all
+   at once, and the server decides every one of them — mirroring a waybill to
+   the order row depends on which parcel shipped first. Same rule dispatchParcel
+   already follows. */
+async function rereadOrder(o){
+  try{
+    const d=await api('/orders/'+o._id);
+    if(state.detailId===o.id){ state.liveDetail=mapDetail(d); }
+  }catch(e){}
+  loadOrdersPage();
+}
 
 /* The printer can succeed as a request and fail as a print — the endpoint says
    so with ok:false, and so does this. */
@@ -12687,6 +12788,7 @@ function evTime(t){
 function trackingCard(o,sp,label){
   const t=sp.trk;
   const has=!!(t&&t.number);
+  const trkBusy=state.orderBusy==='trk';
   const st=t&&(LANG==='en'?(t.status_label_en||t.status_label_cn):(t.status_label_cn||t.status_label_en));
   const tone=(t&&TRK_STATE_TONE[t.status_code])||'plain';
   const badge = !has ? ''
@@ -12721,6 +12823,11 @@ function trackingCard(o,sp,label){
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn2" style="width:auto;padding:8px 14px;flex:none" onclick="APP.cmd('copyWaybill','${escAttr(t.number)}')">${ic('copy',14)} ${T('Copy','复制')}</button>
         ${t.track_url?`<a href="${escAttr(t.track_url)}" target="_blank" rel="noopener" class="btn2" style="width:auto;padding:8px 14px;flex:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none">${T('Carrier site','承运商官网')} ${ic('chevron-right',14)}</a>`:''}
+        ${/* Retry sync is offered only where the desktop offers it — on a
+              waybill whose live subscription actually failed. On a healthy one
+              it is a button that re-does something already working. */''}
+        ${sp.lastError?`<button class="btn2" style="width:auto;padding:8px 14px;flex:none" ${trkBusy?'disabled':''} onclick="APP.cmd('resubWaybill',${sp.id})">${T('Retry sync','重试同步')}</button>`:''}
+        <button class="btn2" style="width:auto;padding:8px 14px;flex:none" ${trkBusy?'disabled':''} onclick="APP.cmd('clearWaybill',${sp.id})">${T('Clear','清除')}</button>
       </div>
       ${evs.length?`<div style="padding-top:10px;border-top:1px solid var(--border-default);display:flex;flex-direction:column;gap:7px">
         <span class="eyebrow">${T('Recent events','最近事件')}</span>
@@ -12728,7 +12835,14 @@ function trackingCard(o,sp,label){
         ${rest.length?`<details><summary style="cursor:pointer;list-style:none;font-size:12.5px;color:var(--text-secondary);padding:4px 0">${T(rest.length+' earlier events','更早的 '+rest.length+' 条')}</summary>
           <div style="display:flex;flex-direction:column;gap:7px;margin-top:7px">${rest.map(evRow).join('')}</div></details>`:''}
       </div>`:`<div style="font-size:13px;color:var(--text-secondary)">${T('Waiting for the first carrier update.','等待承运商第一条更新。')}</div>`}
-    `:`<div style="font-size:13.5px;color:var(--brick-ink)">${T('No waybill on this parcel yet — add it on the desktop.','此包裹尚无运单号 — 请在电脑端录入。')}</div>`}
+    `:`${/* WAS A SIGNPOST, IS NOW THE CONTROL. This read "No waybill on this
+            parcel yet — add it on the desktop." — the same small lie as a row
+            that leads nowhere, and on the one screen an operator is holding
+            while standing at the bench with the parcel and the courier's slip.
+            The brick "No waybill yet" warning is not lost with the sentence:
+            the LIST row carries it, which is where an order needing one is
+            spotted. The drawer is where it gets done. */''}
+      <button class="btn2" style="width:100%" ${trkBusy?'disabled':''} onclick="APP.cmd('addWaybill',${sp.id})">${trkBusy?T('Saving…','保存中…'):T('Save tracking','保存运单号')}</button>`}
   </div>`;
 }
 /* A same-city parcel has no waybill; what the operator watches is the arrival

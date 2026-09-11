@@ -23,7 +23,7 @@
  *      line takes the Any bucket and lands on LAND.
  *   4. The order is `delivered`, so the legacy back-fill stamps that phantom
  *      parcel dispatched and delivered, which is what promotes it onto the
- *      phone as "Land — No waybill on this parcel yet — add it on the desktop."
+ *      phone as "Land", with a Save tracking button on it.
  *
  * On a screen whose desktop half offers no waybill field for these orders at
  * all.

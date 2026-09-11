@@ -11,7 +11,7 @@
  * the full drawer:
  *
  *     Land
- *     No waybill on this parcel yet — add it on the desktop.
+ *     Land — and a Save tracking button for a parcel nobody here ships.
  *
  * on a gzgrocery order, sending the operator to a screen that does not offer
  * the field. Ash, from a phone, looking at exactly that: "no way I'll for
@@ -53,7 +53,7 @@ const CASES = [
     // from a different angle, and they are listed separately because a partial
     // fix that removes the sentence but keeps the "Land" heading is still a
     // drawer offering a shipping mode on an order we do not ship.
-    ['NO WAYBILL PROMPT', `!sheetText().includes('No waybill on this parcel yet')`],
+    ['NO WAYBILL CONTROL', `!sheetText().includes('Save tracking')`],
     ['it does not send anyone to the desktop', `!sheetText().includes('add it on the desktop')`],
     ['NO LAND MODE',      `!sheetText().includes('Land')`],
     ['no parcel heading', `!sheetText().includes('parcel')`],
@@ -78,14 +78,14 @@ const CASES = [
   ['an ELEME order is read-only too',
    openDetail('eleme', PHANTOM_PARCEL), [
     ['it is mapped read-only', `state.liveDetail.viewOnly === true`],
-    ['NO WAYBILL PROMPT',      `!sheetText().includes('No waybill on this parcel yet')`],
+    ['NO WAYBILL CONTROL',     `!sheetText().includes('Save tracking')`],
     ['no land mode',           `!sheetText().includes('Land')`],
   ]],
 
   ['a MEITUAN order is read-only too',
    openDetail('meituan', PHANTOM_PARCEL), [
     ['it is mapped read-only', `state.liveDetail.viewOnly === true`],
-    ['NO WAYBILL PROMPT',      `!sheetText().includes('No waybill on this parcel yet')`],
+    ['NO WAYBILL CONTROL',     `!sheetText().includes('Save tracking')`],
     ['no land mode',           `!sheetText().includes('Land')`],
   ]],
 
@@ -96,7 +96,7 @@ const CASES = [
      red prompt exists to shout about. */
   ['a storefront order still shows its parcel and shouts about the missing waybill',
    openDetail('wechat', PHANTOM_PARCEL), [
-    ['the waybill prompt is there', `sheetText().includes('No waybill on this parcel yet')`],
+    ['the waybill control is there', `sheetText().includes('Save tracking')`],
     ['the mode is named',           `sheetText().includes('Land')`],
     ['and the lines are in a parcel', `sheetText().includes('1 parcel')`],
     ['it is not mapped read-only',  `state.liveDetail.viewOnly === false`],
@@ -108,7 +108,7 @@ const CASES = [
      tracking fields either. */
   ['a mirrored order with no parcels at all is still parcel-free',
    openDetail('gzgrocery', '[]'), [
-    ['no waybill prompt', `!sheetText().includes('No waybill')`],
+    ['no waybill control', `!sheetText().includes('Save tracking')`],
     ['no tracking block', `!sheetText().includes('Tracking')`],
     ['the items are there', `sheetText().includes('Sourdough loaf')`],
   ]],
