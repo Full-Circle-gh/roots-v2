@@ -438,7 +438,50 @@ function main() {
   // every chipRow filter are wired.
   {
     const raw = (src.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
-    const js5 = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+    // STRIPPING COMMENTS IS NOT `/\*` — IT IS `/\*` THAT ISN'T INSIDE SOMETHING.
+    // This read `/\/\*[\s\S]*?\*\//` and reported expPhoto unreachable for
+    // months, because the expense screen's file input carries
+    // accept="image/*" — the two characters of a MIME wildcard are also the
+    // two that open a block comment. The stripper started there and ate
+    // everything to the next `*/`, taking the onchange="APP.cmd('expPhoto',this)"
+    // eight lines below with it. The handler was wired the whole time; this
+    // check could not see the wire.
+    //
+    // A real block comment in this file opens at the start of a line, or after
+    // `${`, `(`, `,`, `;` or a space — never immediately after a word
+    // character. `image/*`, and any `https://…/*` that shows up later, always
+    // do. So the guard is one character wide, and it is the same shape as the
+    // `[^:]` already guarding the line-comment strip below (which exists so
+    // `https://` is not read as a comment).
+    const js5 = raw.replace(/(^|[^\w])\/\*[\s\S]*?\*\//g, '$1 ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+
+    /* THE STRIPPER IS CHECKED AGAINST ITS OWN TRAP BEFORE IT IS TRUSTED.
+       A stripper that eats too much does not fail loudly — it reports a wired
+       handler as unreachable, which reads as a real finding and cost this
+       suite months of being red on main with its 400-odd renders never
+       running. Two fixtures, and the second is the one that regressed:
+       a comment must go, and a MIME wildcard in an attribute must stay. */
+    {
+      const strip = (t) => t.replace(/(^|[^\w])\/\*[\s\S]*?\*\//g, '$1 ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+      const cases = [
+        ['a block comment is removed', `a=1; /* reg('ghost') */ b=2;`, (o) => !o.includes('ghost')],
+        // THE SHAPE THAT REGRESSED, and the trailing comment is load-bearing:
+        // the old stripper needed a `*/` somewhere later to run TO. In the real
+        // file that `*/` is whatever comment comes next, which is why the
+        // damage was eight lines wide and invisible.
+        ['a MIME wildcard is not a comment',
+         `<input accept="image/*" onchange="APP.cmd('kept',this)">\n/* a later comment */`,
+         (o) => o.includes("'kept'")],
+        ['a line comment is removed', `a=1; // reg('ghost2')\nb=2;`, (o) => !o.includes('ghost2')],
+        ['a url is not a line comment', `u="https://x.example/p"; APP.cmd('kept2')`, (o) => o.includes("'kept2'")],
+      ];
+      const bad = cases.filter(([, src, ok]) => !ok(strip(src))).map(([name]) => name);
+      if (bad.length) {
+        for (const n of bad) console.error(`FAIL static — the comment stripper is wrong: ${n}`);
+        console.error('\nThis check cannot be trusted while its own stripper is broken.');
+        process.exit(1);
+      }
+    }
     const names = [...new Set([...js5.matchAll(/\breg\(\s*'([a-zA-Z_$][\w$]*)'/g)].map((m) => m[1]))];
     const orphans = names.filter((n) => {
       const asString = (js5.match(new RegExp("'" + n + "'", 'g')) || []).length;
