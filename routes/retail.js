@@ -30830,7 +30830,23 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
   if (!(amount > 0)) return res.status(400).json({ success: false, error: 'invalid_amount', message: 'Nothing left to refund on this order.' });
   // "Full" = this refund clears the remaining value (single full refund or the
   // final partial that completes the order).
-  const isFull = amount + 0.005 >= remainingGross && priorApproved <= 0.005;
+  //
+  // THE SECOND HALF USED TO READ `&& priorApproved <= 0.005`, WHICH DENIED THE
+  // SENTENCE ABOVE IT. That clause made "the final partial that completes the
+  // order" unreachable: any earlier refund sets refund_amount_approved > 0, so
+  // the refund that returned the last of the money scored isFull === false. The
+  // order then never left 'paid'/'delivered' — it sat open, fully refunded,
+  // while reverseOrderPoints, reverseOrderReferral and reverseLifetimeCommission
+  // never ran, so the customer kept the points and the referrer kept the bounty
+  // on an order that had been paid back in full. Nor could the status shortcut
+  // rescue it: PATCH /status → 'refunded' answers 409 use_refund_payout once a
+  // refund is 'paid', so "Cancel + refund" was the only way to close such an
+  // order, and closing it that way files a refund as a cancellation.
+  //
+  // /refund/approve has always computed this the way it reads now, from the same
+  // priorApproved and remainingGross. The clause made the two siblings disagree
+  // about what "full" means; they agree again.
+  const isFull = amount + 0.005 >= remainingGross; // tolerance for ¥0.01 rounding
 
   // Split across tenders. Only `split.cash` moves via the gateway / manual cash;
   // the credit slice goes back to wallet+points below.
@@ -30924,10 +30940,41 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
   // on a full refund (matches /refund/approve).
   try {
     const _actorLabel = req.user.display_name || req.user.username || null;
-    if (isFull) {
+    // Anything already given back on an EARLIER refund. Read before
+    // applyRefundedQty below moves the line marks, or the answer is always yes.
+    const _priorRefundedUnits = tdb().prepare(
+      'SELECT 1 FROM retail_order_items WHERE order_id = ? AND COALESCE(refunded_qty, 0) > 0 LIMIT 1'
+    ).get(id);
+    if (isFull && !_priorRefundedUnits) {
       reverseOrderStock(id, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund (direct full)' });
     } else if (lines) {
       reverseOrderStock(id, { lines, actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund (direct partial lines)' });
+    } else if (isFull) {
+      // A COMPLETING refund with no lines named, after an earlier partial — the
+      // case the isFull fix above just made reachable. The whole-order reverse
+      // on the first branch would hand back every committed unit, including the
+      // ones the earlier partial already released: reverseCommittedLines writes
+      // ledger reason 'order_reverse_partial' and reverseCommittedOrder's
+      // idempotency guard only recognises 'order_reverse', so it cannot see them
+      // and the shop would be credited the same stock twice. Return only what is
+      // still unreturned. Same reasoning as the cancel branch in PATCH /status,
+      // which has always had to handle cancel-after-partial.
+      //
+      // ONE DELIBERATE DIFFERENCE FROM THAT BRANCH: it ends `HAVING qty > 0`,
+      // where `qty` binds to the INPUT COLUMN, not the SUM aliased above it — so
+      // a line whose units were all returned comes back as a qty-0 row instead of
+      // being filtered out. Harmless where it sits (reverseCommittedLines skips
+      // any line that is not qty > 0), which is why it is left alone here rather
+      // than changed under a refund fix, but it is not worth copying forward.
+      // Repeating the SUM binds the test to the total, as the alias was meant to.
+      const remaining = tdb().prepare(
+        `SELECT product_id, SUM(qty - COALESCE(refunded_qty, 0)) AS qty
+           FROM retail_order_items
+          WHERE order_id = ? AND product_id IS NOT NULL
+          GROUP BY product_id
+         HAVING SUM(qty - COALESCE(refunded_qty, 0)) > 0`
+      ).all(id);
+      reverseOrderStock(id, { lines: remaining, actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund (direct completing remainder)' });
     }
   } catch (e) { console.error('[inventory.reverse (direct)]', e); }
   // Mark the refunded units on each line so the drawer strikes them, the packing
