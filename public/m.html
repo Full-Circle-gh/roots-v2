@@ -7641,12 +7641,19 @@ const SUBS={
   invoices:{title:['Invoices','发票'],render:()=>{
     if(!state.fapiao&&!state.fapiaoTried) loadFapiao();
     const c=state.liveInvoiceCounts;
-    const all=c?(c.requested||0)+(c.issued||0):null;
+    /* All sums THREE now. `requested` is the pending queue alone — the server
+       stopped folding dead requests into it (lib/fapiao-queue.js) — so an All
+       built from two would print a total smaller than the rows beneath it. */
+    const all=c?(c.requested||0)+(c.issued||0)+(c.blocked||0):null;
     const chips=[{key:'all',en:'All',zh:'全部',count:all},
       {key:'issued',en:'Issued',zh:'已开',count:c?c.issued:null},
       {key:'pending',en:'Pending',zh:'待开',count:c?c.requested:null}];
     const seg=state.invSeg||'all';
-    const rows=(DB.invoices||[]).filter(v=>seg==='all'||(seg==='issued'?v.issued:!v.issued));
+    /* Pending excludes the dead ones the same way its COUNT does. This filter
+       ran on `!v.issued` alone, which is exactly the client-side half of the
+       defect the server fix closes: with both halves the chip, the rows and
+       Home's "Needs you" figure are one number. */
+    const rows=(DB.invoices||[]).filter(v=>seg==='all'||(seg==='issued'?v.issued:(!v.issued&&!v.dead)));
     // The banner used to claim "8 fapiao issued automatically overnight" — a
     // sentence nothing measured. What is actually knowable is whether auto-issue
     // is ON, which the fapiao settings say.
@@ -12254,6 +12261,17 @@ function oldestOf(items){
   const h=Math.round(m/60);
   return h<48?T(h+'h',h+' 小时'):T(Math.round(h/24)+'d',Math.round(h/24)+' 天');
 }
+/* THE LAST THREE DAYS OF THE SHOP'S MONTH. The phone's copy of
+   lib/fapiao-reminders.js's isMonthEnd, computed off the SHOP's date rather
+   than the handset's — a phone in another timezone must not disagree with the
+   server about which month it is, which is the whole point of shopTodayDate().
+   Derived from the month's own length so February is not quietly exempt. */
+const FAPIAO_MONTH_END_DAYS=3;
+function fapiaoMonthEnd(){
+  const d=shopTodayDate();
+  const days=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+  return d.getDate()>days-FAPIAO_MONTH_END_DAYS;
+}
 /* Severity, then oldest first, and a fire with no clock sorts last — a state
    cannot be ranked by how long it has waited. */
 function opsFires(){
@@ -12291,7 +12309,15 @@ function opsFires(){
   add(c('refunds'),'amber','refund',T('Refunds waiting','退款待处理'),c('refunds'),items('refunds'),'',"APP.cmd('ordersGo','refund')");
   add(c('unhandled'),'amber','package',T('Orders to start','待开始备货'),c('unhandled'),items('unhandled'),'',"APP.cmd('ordersGo','paid')");
   add(c('awaiting_restock'),'amber','clock',T('Orders awaiting restock','订单待补货'),c('awaiting_restock'),items('awaiting_restock'),'',"APP.cmd('ordersGo','restock')");
-  add(c('invoices'),'amber','receipt',T('Invoices to issue','待开发票'),c('invoices'),items('invoices'),'',"APP.cmd('push','invoices')");
+  /* BRICK IN THE LAST THREE DAYS OF THE MONTH, amber the rest of the time —
+     the same boundary lib/fapiao-reminders.js switches its cadence on, and for
+     the same reason. What makes a late fapiao expensive is not that it is old
+     but that the month is about to close: a 发票 requested in August and
+     issued in September is issued in the wrong tax period against an August
+     order. The row sorts with the bricks then, above refunds and restock,
+     because on the 30th it genuinely does outrank them. No new string — the
+     label is the live pair, and the colour is the whole message. */
+  add(c('invoices'),fapiaoMonthEnd()?'brick':'amber','receipt',T('Invoices to issue','待开发票'),c('invoices'),items('invoices'),'',"APP.cmd('push','invoices')");
   /* The inbox, from the snapshot rather than from whatever this phone happened
      to have loaded. Home used to build the reviews row out of DB.reviews — the
      list the Inbox screen fetches — so the fire only existed AFTER the operator
@@ -17316,10 +17342,24 @@ const CAT_ICON={produce:'sprout',fresh:'sprout',bakery:'croissant',bread:'croiss
 function catIcon(name){ const n=String(name||'').toLowerCase(); for(const k in CAT_ICON){ if(n.includes(k)) return CAT_ICON[k]; } return 'tag'; }
 
 const INV_KIND={issued:'on',requested:'pending',pending:'pending'};
+/* Order statuses no fapiao can be issued against — the phone's copy of
+   lib/fapiao-queue.js's UNISSUABLE_STATUSES. The server already excludes these
+   from the Pending count; this is what stops the ROW from still saying
+   "Pending" underneath it, which is how the screen came to disagree with Home
+   in the first place (a request on a cancelled order read as waiting work).
+   Words come from ORDER_STATUS — the live pairs the Orders screen prints —
+   rather than new ones: 已取消 and 待付款 already mean this in this app. */
+const INV_DEAD={cancelled:1,pending_payment:1};
 function mapInvoice(r){
   const st=String(r.invoice_status||'requested').toLowerCase();
   const issued=st==='issued';
-  const label=issued?['Issued','已开票']:['Pending','待开票'];
+  const ordSt=String(r.status||'').toLowerCase();
+  // An issued fapiao keeps saying so whatever became of the order afterwards —
+  // the document exists, and hiding that behind "Cancelled" would lose the one
+  // row that actually needs somebody's attention (a fapiao owed a 红冲).
+  const dead=!issued&&INV_DEAD[ordSt];
+  const os=dead?ORDER_STATUS[ordSt]:null;
+  const label=issued?['Issued','已开票']:(os?[os[1],os[2]]:['Pending','待开票']);
   // The headline used to be `invoice_number || order_no`, and a pending request
   // has no fapiao number — so the card printed the order number twice, once as
   // its title and once as its own subtitle. What actually names a request is
@@ -17329,7 +17369,10 @@ function mapInvoice(r){
   const company = r.invoice_type ? r.invoice_type==='company' : !!r.invoice_tax_id;
   return {id:r.order_no||('#'+r.id), no:r.invoice_number||null,
     title:r.invoice_title||null, company, taxId:r.invoice_tax_id||null, email:r.invoice_email||null,
-    amount:money(CUR,r.total), status:label, kind:INV_KIND[st]||'pending', issued,
+    // 'off' is the muted pill — the same grey the app gives anything switched
+    // out of play. A dead request must not wear Pending's clear pill: that is
+    // the pill an operator scans for work.
+    amount:money(CUR,r.total), status:label, kind:dead?'off':(INV_KIND[st]||'pending'), issued, dead:!!dead,
     // Only an issued fapiao has a file. The button used to be offered on every
     // row and did nothing on any of them.
     file:r.invoice_file_url||null,

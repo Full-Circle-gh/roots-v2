@@ -92,6 +92,14 @@ const SRC = [
   sliceLines(M_HTML, 'const _tdL=', 1),
   sliceLines(M_HTML, 'const shopToday=', 1),
   sliceLines(M_HTML, 'const shopDayOf=', 1),
+  // The shop's today as a Date, and the month-end test built on it. opsFires
+  // reads fapiaoMonthEnd() to decide whether the fapiao row is amber or brick
+  // (§99), and an ARGUMENT is evaluated before add() looks at its condition —
+  // which this file's own note about `o.<key>.items` already records — so a
+  // missing helper throws on every payload, not only on one carrying invoices.
+  sliceLines(M_HTML, 'const shopTodayDate=', 2),
+  sliceLines(M_HTML, 'const FAPIAO_MONTH_END_DAYS=', 1),
+  sliceBlock(M_HTML, 'function fapiaoMonthEnd()'),
   sliceBlock(M_HTML, 'function oldestMins(items)'),
   sliceBlock(M_HTML, 'function oldestOf(items)'),
   sliceBlock(M_HTML, 'function opsFires()'),
