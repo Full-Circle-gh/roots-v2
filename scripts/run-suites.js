@@ -103,6 +103,13 @@ const SLOW = new Set([
   'test_mobile_team.js', 'test_mobile_trend.js', 'test_mobile_dots.js',
   'test_mobile_customer_record.js', 'test_mobile_mirrored_order.js',
   'test_mobile_mirrored_order_info.js',
+  /* Drives Chromium through scripts/lib/m-probe like the rest of this block,
+     and like the rest of this block it defines no findChrome() of its own and
+     prints no Chromium skip line — so isSlow() below cannot see the browser and
+     had it in the FAST shard, which is the exact misfiling the comment above
+     this list describes. Its sibling test_mobile_live.js is NOT here: that one
+     only reads files and belongs in the gate. */
+  'test_mobile_live_guards.js',
   'test_finance_presentation.js',
   // Drives Chromium for its render pass, so it belongs in the shard where
   // REQUIRE_BROWSER=1 — in the fast shard the render half would skip and report
