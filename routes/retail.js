@@ -29580,7 +29580,7 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
   if (!jd.jdEnabled(jc)) return res.status(409).json({ success: false, error: 'jd_not_configured' });
 
   const o = tdb().prepare(
-    `SELECT id, order_no, status, store_id, recipient_name, recipient_phone, address_full, tracking_number
+    `SELECT id, order_no, status, store_id, recipient_name, recipient_phone, address_full, address_json, tracking_number
        FROM retail_orders WHERE id = ?`).get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   if (!['paid', 'preparing', 'dispatched'].includes(o.status)) {
@@ -29621,12 +29621,20 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
   // not offered, but still accepted if explicitly sent.) Fallback when the
   // caller sends nothing: air → fresh-express, land/local → ambient ground.
   const JD_ALLOWED = new Set(['LL-HD-M', 'LL-SD-M', 'ed-m-0001', 'ed-m-0002']);
-  const JD_DEFAULT_BY_MODE = { air: 'LL-SD-M', land: 'ed-m-0001', local: 'ed-m-0001' };
   const reqProduct = req.body?.product != null ? String(req.body.product) : '';
   if (reqProduct && !JD_ALLOWED.has(reqProduct)) {
     return res.status(400).json({ success: false, error: 'invalid_jd_product', product: reqProduct });
   }
-  const product = reqProduct || JD_DEFAULT_BY_MODE[shipment.mode] || 'ed-m-0001';
+  // Fujian / Guangxi book the GROUND product by default (jd.isLandDefaultProvince)
+  // — a waybill setting only. The parcel's own mode is read here and never
+  // written: an 'air' parcel stays an 'air' parcel, it is simply labelled
+  // 生鲜标快 instead of 生鲜特快. An explicit product from the operator still
+  // wins, air included, so this is a default and not a lock.
+  let destProvince = '';
+  try { destProvince = JSON.parse(o.address_json || '{}').province || ''; } catch { /* no structured address */ }
+  const product = reqProduct
+    || jd.defaultWaybillProduct(shipment.mode, destProvince, false)
+    || 'ed-m-0001';
   const weight  = Number(req.body?.weight) > 0 ? Number(req.body.weight) : 1;    // kg
   const vloumn  = Number(req.body?.vloumn) > 0 ? Number(req.body.vloumn) : 100;  // cm³
   // 一单多件 — the parcel didn't fit in one box, so it's split across several
