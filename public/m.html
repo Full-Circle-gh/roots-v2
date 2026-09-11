@@ -1671,6 +1671,42 @@ reg('resubWaybill', sid=>{
     return T('Re-subscribed','已重新订阅');
   });
 });
+/* ── THE SAME-CITY ARRIVAL TIME ───────────────────────────────────────────
+   The drawer's other signpost. PUT /orders/:id/eta wants a bare 24-hour
+   "HH:MM" and refuses anything else (`invalid_eta`), which is exactly what a
+   native time input hands back whatever clock the phone itself displays — so
+   the picker is the operating system's and the wire format is the server's,
+   with nothing in between to get the conversion wrong.
+
+   Only a LOCAL parcel has one; the server says so (`not_local`) and so does
+   this, because localEtaCard is the only caller and it is reached only for
+   mode 'local'. */
+const ETA_OK=/^([01]\d|2[0-3]):[0-5]\d$/;      // the route's own test, verbatim
+reg('setEta', sid=>{
+  const o=currentOrder(); if(!o||o._id==null) return;
+  const sp=(o.shipments||[]).find(x=>x&&x.id===sid);
+  state.ask={title:T('Set arrival time','设置送达时间'),
+    fields:[{id:'eta', type:'time', label:T('Set arrival time','设置送达时间'),
+             value:(sp&&ETA_OK.test(String(sp.localEta||'')))?sp.localEta:''}],
+    confirmLabel:T('Set arrival time','设置送达时间'),
+    validate:v=>ETA_OK.test(String(v.eta||'').trim())?null:T('Pick an arrival time first','请先选择送达时间'),
+    run:v=>orderWrite('eta', async()=>{
+      await apiWrite('/orders/'+o._id+'/eta',{shipment_id:sid, eta:String(v.eta||'').trim()},'PUT');
+      await rereadOrder(o);
+      return T('Arrival time saved','送达时间已保存');
+    })};
+  render();
+});
+reg('clearEta', sid=>{
+  const o=currentOrder(); if(!o||o._id==null) return;
+  state.ask={title:T('Remove the arrival time?','移除送达时间?'), danger:true,
+    run:()=>orderWrite('eta', async()=>{
+      await apiWrite('/orders/'+o._id+'/eta?shipment_id='+encodeURIComponent(sid),{},'DELETE');
+      await rereadOrder(o);
+      return T('Arrival time cleared','送达时间已清除');
+    })};
+  render();
+});
 /* THE ORDER IS RE-READ, NEVER GUESSED AT. A waybill lands on the parcel, the
    order-level mirror, the live-sync badge and the list row's delivery cell all
    at once, and the server decides every one of them — mirroring a waybill to
@@ -12847,13 +12883,47 @@ function trackingCard(o,sp,label){
 }
 /* A same-city parcel has no waybill; what the operator watches is the arrival
    time, so that is what hoists instead. */
+/* A STORED ETA IS A BARE 24-HOUR "HH:MM" WITH NO DATE ON IT, so it cannot go
+   through tdWhen() — and it still owes §1.18 its language rule: a 12-hour clock
+   in English, a 24-hour clock in Chinese. This card printed the stored string,
+   so an English operator read "17:30". The desktop's formatEtaPretty carries
+   the identical comment and was written for the identical reason; this is its
+   port, and the two surfaces now say the same hour the same way.
+   AM/PM are not translated and never were — in Chinese the hour stands alone. */
+function etaPretty(hhmm){
+  const m=/^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(hhmm==null?'':hhmm).trim());
+  if(!m) return String(hhmm==null?'':hhmm);
+  if(LANG!=='en') return m[1]+':'+m[2];
+  const h=parseInt(m[1],10);
+  return ((h%12)||12)+':'+m[2]+' '+(h<12?'AM':'PM');
+}
 function localEtaCard(o,sp,label){
+  const etaBusy=state.orderBusy==='eta';
   return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
       <span class="eyebrow">${label?label:T('Same-city delivery','同城配送')}</span>
       ${sp.etaSource==='auto'?`<span style="font-size:12px;color:var(--text-secondary)">${T('from the courier','来自骑手')}</span>`:''}</div>
-    <div class="num" style="font-size:20px;font-weight:500">${sp.localEta?sp.localEta:T('No arrival time set','未设送达时间')}</div>
-    ${!sp.localEta?`<div style="font-size:13px;color:var(--text-secondary)">${T('Set it on the desktop so the customer sees when to expect it.','请在电脑端设置，顾客才能看到预计时间。')}</div>`:''}
+    <div class="num" style="font-size:20px;font-weight:500">${sp.localEta?etaPretty(sp.localEta):T('No arrival time set','未设送达时间')}</div>
+    ${/* WAS A SIGNPOST, IS NOW THE CONTROL — the second of the two this drawer
+          carried. It read "Set it on the desktop so the customer sees when to
+          expect it.", which names the consequence of NOT doing it and then
+          sends the one person holding the device somewhere else to do it.
+
+          The hierarchy is the desktop's: with no time, setting one is the
+          card's primary act; with a manual one, Update sits beside Clear; and
+          when the COURIER supplied the time, overriding it is quieter, because
+          a manual ETA pins eta_source and the Qingyun daemon stops re-stamping
+          the courier's own. The desktop hides that one behind a <details> and
+          this uses its summary label, word for word. */''}
+    ${etaBusy?'':''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${!sp.localEta
+        ? `<button class="btn2" style="width:100%" ${etaBusy?'disabled':''} onclick="APP.cmd('setEta',${sp.id})">${etaBusy?T('Saving…','保存中…'):T('Set arrival time','设置送达时间')}</button>`
+        : sp.etaSource==='auto'
+          ? `<button class="btn2" style="width:auto;padding:8px 14px;flex:none" ${etaBusy?'disabled':''} onclick="APP.cmd('setEta',${sp.id})">${T('Set a time manually','手动设置时间')}</button>`
+          : `<button class="btn2" style="width:auto;padding:8px 14px;flex:none" ${etaBusy?'disabled':''} onclick="APP.cmd('setEta',${sp.id})">${T('Update time','更新时间')}</button>
+             <button class="btn2" style="width:auto;padding:8px 14px;flex:none" ${etaBusy?'disabled':''} onclick="APP.cmd('clearEta',${sp.id})">${T('Clear','清除')}</button>`}
+    </div>
   </div>`;
 }
 /* One card per parcel that has actually left, at the top of the drawer. */
@@ -13321,7 +13391,7 @@ function sheetAsk(){
          <span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${f.label}</span>
          ${f.multiline
            ? `<textarea id="ask-${f.id}" placeholder="${f.placeholder||''}" style="min-height:96px;resize:none">${f.value!=null?escAttr(f.value):''}</textarea>`
-           : `<input id="ask-${f.id}" ${f.numeric?'inputmode="text"':''} placeholder="${f.placeholder||''}" value="${f.value!=null?escAttr(f.value):''}"
+           : `<input id="ask-${f.id}" ${f.type?`type="${f.type}" `:''}${f.numeric?'inputmode="text"':''} placeholder="${f.placeholder||''}" value="${f.value!=null?escAttr(f.value):''}"
                     onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();APP.cmd('askRun','')}">`}
        </label>`).join('')}
        ${state.askErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.askErr}</div>`:''}

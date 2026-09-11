@@ -577,4 +577,104 @@ CASES.push(['re-subscribing posts for that parcel', `
   ['it posts resubscribe', `${sent('/orders/77/tracking/resubscribe?shipment_id=9')}`],
 ]]);
 
+/* ══════════════════════════════════════════════════════════════════════════
+   §97 — THE SAME-CITY ARRIVAL TIME
+
+   The drawer's other signpost: "Set it on the desktop so the customer sees
+   when to expect it." — a sentence that names the consequence of not doing it
+   and then sends the one person holding the device somewhere else to do it.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const localOrder = (eta, source) => `
+  window.__o=mapDetail({id:77, order_no:'RT-077', status:'dispatched', channel:'wechat',
+    recipient_name:'A', total:312, placed_at:'${today} 09:00:00', fulfillment_type:'delivery',
+    items:[], shipments:[{id:5, mode:'local', state:'dispatched', items:[],
+      local_eta:${eta}, eta_source:${source}}]});
+  state.liveDetail=window.__o; state.detailId=window.__o.id; state.tab='orders'; render();`;
+const etaCard = `localEtaCard(window.__o,window.__o.shipments[0],'')`;
+
+CASES.push(['a parcel with no arrival time is offered the control, not a signpost',
+  localOrder('null','null'), [
+  ['the card offers it',        `${etaCard}.indexOf("setEta")>=0`],
+  ['and no longer points away', `${etaCard}.indexOf('on the desktop')<0`],
+]]);
+
+/* §1.18: a 12-hour clock in English, a 24-hour clock in Chinese. This card
+   printed the stored string, so an English operator read "17:30". */
+CASES.push(['a stored 24h time reads as a 12h clock in English',
+  localOrder("'17:30'","'manual'"), [
+  ['pretty in English', `LANG='en', etaPretty('17:30')==='5:30 PM'`],
+  ['midnight is 12 AM', `etaPretty('00:05')==='12:05 AM'`],
+  ['noon is 12 PM',     `etaPretty('12:00')==='12:00 PM'`],
+  ['and the card shows it', `${etaCard}.indexOf('5:30 PM')>=0`],
+]]);
+
+CASES.push(['and stays a 24h clock in Chinese', `LANG='cn';` + localOrder("'17:30'","'manual'"), [
+  ['no AM/PM on a Chinese screen', `etaPretty('17:30')==='17:30'`],
+  ['and none on the card',         `${etaCard}.indexOf('PM')<0`],
+]]);
+CASES.push(['setting one PUTs a bare 24h time for that parcel',
+  localOrder('null','null') + STUB + `
+    APP.cmd('setEta',5); document.getElementById('ask-eta').value='17:30'; APP.cmd('askRun','');`, [
+  ['it PUTs the eta route', `${sent('/orders/77/eta')} && window.__sent.some(function(r){return r.m==='PUT'})`],
+  ['carrying the time',     `${body('"eta":"17:30"')}`],
+  ['and the parcel',        `${body('"shipment_id":5')}`],
+]]);
+
+/* The native picker hands back "HH:MM" whatever clock the phone displays, so
+   the field is a time input rather than free text — and the route's own
+   expression guards the rest. */
+CASES.push(['the field is a real time picker, not free text',
+  localOrder('null','null') + `APP.cmd('setEta',5);`, [
+  ['a sheet opens',      `!!state.ask`],
+  ['with a time field',  `state.ask.fields[0].type==='time'`],
+  ['rendered as one',    `document.getElementById('ask-eta').getAttribute('type')==='time'`],
+]]);
+
+CASES.push(['an existing time is pre-filled so Update is an edit, not a re-entry',
+  localOrder("'09:15'","'manual'") + `APP.cmd('setEta',5);`, [
+  ['the field carries it', `document.getElementById('ask-eta').value==='09:15'`],
+]]);
+
+CASES.push(['a time the server would refuse never leaves',
+  localOrder('null','null') + STUB + `
+    APP.cmd('setEta',5); document.getElementById('ask-eta').value='25:99'; APP.cmd('askRun','');`, [
+  ['nothing is sent', `window.__sent.length===0`],
+  ['it says why',     `!!state.askErr`],
+]]);
+
+CASES.push(['nor does an empty one',
+  localOrder('null','null') + STUB + `APP.cmd('setEta',5); APP.cmd('askRun','');`, [
+  ['nothing is sent', `window.__sent.length===0`],
+  ['it says why',     `!!state.askErr`],
+]]);
+
+CASES.push(['clearing asks, then names the parcel in the query',
+  localOrder("'17:30'","'manual'") + STUB + `APP.cmd('clearEta',5);`, [
+  ['nothing yet', `window.__sent.length===0`],
+  ['it asked',    `!!state.ask`],
+]]);
+
+CASES.push(['and then deletes it',
+  localOrder("'17:30'","'manual'") + STUB + `APP.cmd('clearEta',5); APP.cmd('askRun','');`, [
+  ['it DELETEs',        `window.__sent.some(function(r){return r.m==='DELETE'})`],
+  ['naming the parcel', `${sent('/orders/77/eta?shipment_id=5')}`],
+]]);
+
+/* A manual ETA pins eta_source and stops the Qingyun daemon re-stamping the
+   courier's own, so overriding a COURIER time is the quieter act — the
+   desktop hides it behind a <details> and this keeps the same hierarchy. */
+CASES.push(["a courier's own time is overridable, but quietly",
+  localOrder("'17:30'","'auto'"), [
+  ['the override is offered', `${etaCard}.indexOf("setEta")>=0`],
+  ['Clear is not',            `${etaCard}.indexOf("clearEta")<0`],
+  ['and it says whose it is', `${etaCard}.indexOf('from the courier')>=0`],
+]]);
+
+CASES.push(['a manual time offers both Update and Clear',
+  localOrder("'17:30'","'manual'"), [
+  ['update', `${etaCard}.indexOf("setEta")>=0`],
+  ['clear',  `${etaCard}.indexOf("clearEta")>=0`],
+]]);
+
 run('order writes', CASES);
