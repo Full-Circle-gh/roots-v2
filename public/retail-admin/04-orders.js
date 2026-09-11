@@ -7222,6 +7222,196 @@ function shipmentDeliveredDate(s) {
 // Returns how many days late an air shipment arrived, or 0 if on time / not air.
 // An "Air shipment · 空运" parcel promises next-day arrival, so the deadline is
 // the dispatch date + 1 day: sent out today → must arrive tomorrow.
+// ── The late-parcel case (§98) ───────────────────────────────────────────────
+// What replaced the red box's two printed instructions and its single button.
+// The instructions were right and stayed unread as prose; they are the steps
+// now, each one closing on its own, and the case will not close while the
+// carrier still owes an answer. The rule itself lives in lib/delay-case.js —
+// `dc.can_close` and `dc.blockers` are computed there and only rendered here,
+// so the screen and the server cannot come to disagree about what is finished.
+const DELAY_TERMINAL = ['paid', 'rejected', 'withdrawn', 'no_claim'];
+
+function delayDaysSince(iso) {
+  if (!iso) return 0;
+  const t = Date.parse(String(iso).replace(' ', 'T') + (String(iso).endsWith('Z') ? '' : 'Z'));
+  if (!isFinite(t)) return 0;
+  return Math.max(0, Math.floor((Date.now() - t) / 86400000));
+}
+
+// One row of the checklist. `state` picks the mark, which is the only thing
+// carrying status at a glance — a tick, a clock, or an empty box.
+function delayStepRow(state, label, detail, controls) {
+  const mark = state === 'done' ? '✓' : state === 'wait' ? '◷' : state === 'na' ? '–' : '○';
+  const tone = state === 'done' ? 'var(--sage, #5a7d5a)'
+             : state === 'wait' ? 'var(--warn, #b4842a)'
+             : 'var(--text-3)';
+  return `
+    <div style="display:grid; grid-template-columns:16px 1fr; gap:9px; align-items:start;
+                padding:8px 0; border-top:1px solid var(--line-soft);">
+      <span style="color:${tone}; font-weight:700; line-height:1.4;">${mark}</span>
+      <div style="min-width:0; display:flex; flex-direction:column; gap:4px;">
+        <div style="font-weight:${state === 'done' ? 600 : 500}; color:${state === 'todo' ? 'var(--text-2)' : 'var(--text-1)'};">${label}</div>
+        ${detail ? `<div style="font-size:11.5px; color:var(--text-3); line-height:1.45;">${detail}</div>` : ''}
+        ${controls || ''}
+      </div>
+    </div>`;
+}
+
+function delayBtn(onclick, text, primary) {
+  return `<button type="button" onclick="${onclick}"
+    style="font:inherit; font-size:11.5px; font-weight:600; cursor:pointer; padding:4px 10px;
+           border:1px solid ${primary ? 'var(--danger, #e8556a)' : 'var(--line)'}; border-radius:var(--r-sm,5px);
+           background:transparent; color:${primary ? 'var(--danger, #e8556a)' : 'var(--text-2)'};">${text}</button>`;
+}
+
+function delayInput(id, ph, extra) {
+  return `<input id="${id}" type="text" placeholder="${escapeHtml(ph)}" ${extra || ''}
+    style="font:inherit; font-size:11.5px; padding:4px 7px; border:1px solid var(--line);
+           border-radius:var(--r-sm,5px); background:var(--surface-1, #fff); color:var(--text-1);
+           min-width:0; width:100%; max-width:150px;">`;
+}
+
+function renderDelayCase(o, s, delayDays) {
+  const dc  = s.delay_case || null;
+  const sid = Number(s.id);
+  const oid = Number(o.id);
+  const told   = !!(dc && dc.customer_told_at);
+  const ds     = (dc && dc.dispute_state) || 'none';
+  const remedy = (dc && dc.remedy) || null;
+  const canClose = !!(dc && dc.can_close);
+  const row = `display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:3px;`;
+
+  // 1 — the customer knows. The only step that existed before, and the reason
+  // the whole alert used to vanish after one phone call.
+  const step1 = told
+    ? delayStepRow('done', cuT('Customer told', '已联系客户'),
+        `${escapeHtml(dc.customer_told_by || '')} · ${escapeHtml(String(dc.customer_told_at || '').slice(0, 16))}`)
+    : delayStepRow('todo', cuT('Tell the customer — fresh items may not be safe', '联系客户 — 生鲜可能已不安全'),
+        cuT('Perishable / fresh items may no longer be safe — advise them <u>not to consume</u>.', '生鲜/易腐产品可能已不安全，请告知客户<u>勿食用</u>。'),
+        `<div style="${row}">${delayBtn(`delayStep(${oid},${sid},'customer_told',{},event)`, cuT('Customer told', '已联系客户'))}</div>`);
+
+  // 2 — the claim. NOT CLAIMING IS A REAL ANSWER and finishes the track: on a
+  // small spoil nobody files anything, and the case still has to be closeable.
+  let step2;
+  if (ds === 'none') {
+    step2 = delayStepRow('todo', cuT('Claim the delay off the carrier', '向承运商申请延误赔偿'), '',
+      `<div style="${row}">
+         ${delayInput(`dcref-${sid}`, cuT('Claim number', '赔偿单号'))}
+         ${delayInput(`dcamt-${sid}`, cuT('Amount claimed', '申请金额'), 'inputmode="decimal"')}
+         ${delayBtn(`delayFileClaim(${oid},${sid},'${escapeHtml(String(s.tracking_carrier || ''))}',event)`, cuT('Claim filed', '已申请延误赔偿'), true)}
+       </div>
+       <div style="${row}">
+         ${delayInput(`dcwhy-${sid}`, cuT('Why not claiming', '不申请的原因'))}
+         ${delayBtn(`delayNoClaim(${oid},${sid},event)`, cuT('Not claiming', '不申请赔偿'))}
+       </div>`);
+  } else if (ds === 'no_claim') {
+    step2 = delayStepRow('done', cuT('Not claiming', '不申请赔偿'), escapeHtml(dc.dispute_note || ''));
+  } else {
+    const bits = [];
+    if (dc.dispute_ref)     bits.push(escapeHtml(dc.dispute_ref));
+    if (dc.dispute_claimed != null) bits.push('¥' + Number(dc.dispute_claimed).toFixed(2));
+    step2 = delayStepRow('done', cuT('Claim filed with the carrier', '已申请延误赔偿'), bits.join(' · '));
+  }
+
+  // 3 — the customer is made whole. A branch, taken once. The refund arm is a
+  // record that it happened; the refund itself stays on the path it always had.
+  const step3 = remedy
+    ? delayStepRow('done',
+        remedy === 'refund' ? cuT('Refunded', '已退款') : cuT('Replacement sent', '已补发'),
+        `${escapeHtml(String(dc.remedy_at || '').slice(0, 16))}${dc.remedy_note ? ' · ' + escapeHtml(dc.remedy_note) : ''}`)
+    : delayStepRow('todo', cuT('Replacement or refund', '补发或退款'), '',
+        `<div style="${row}">
+           ${delayBtn(`delayRemedy(${oid},${sid},'replacement',event)`, cuT('Replacement sent', '已补发'))}
+           ${delayBtn(`delayRemedy(${oid},${sid},'refund',event)`, cuT('Refunded', '已退款'))}
+         </div>`);
+
+  // 4 — what the carrier finally did. THE AMOUNT IS RECORDED, NOT POSTED: it
+  // reaches the books in §98's fourth stage and not before, because a claim is
+  // not income for having been filed (§87).
+  let step4;
+  if (ds === 'no_claim') {
+    step4 = delayStepRow('na', cuT('Carrier settled', '承运商赔偿'), '');
+  } else if (ds === 'filed') {
+    const waited = delayDaysSince(dc.dispute_filed_at);
+    step4 = delayStepRow('wait', cuT('Carrier settled', '承运商赔偿'),
+      cuT(`Waiting on carrier · ${waited} day${waited === 1 ? '' : 's'}`, `等待承运商 · ${waited} 天`),
+      `<div style="${row}">
+         ${delayInput(`dcrec-${sid}`, cuT('Amount received', '收到金额'), 'inputmode="decimal"')}
+         ${delayBtn(`delaySettle(${oid},${sid},'paid',event)`, cuT('Carrier paid', '已赔偿'), true)}
+         ${delayBtn(`delaySettle(${oid},${sid},'rejected',event)`, cuT('Rejected', '已拒绝'))}
+         ${delayBtn(`delaySettle(${oid},${sid},'withdrawn',event)`, cuT('Withdrawn', '已撤销'))}
+       </div>`);
+  } else if (DELAY_TERMINAL.includes(ds)) {
+    const label = ds === 'paid'     ? cuT('Carrier paid', '已赔偿')
+                : ds === 'rejected' ? cuT('Carrier rejected the claim', '承运商已拒绝')
+                                    : cuT('Claim withdrawn', '已撤销申请');
+    step4 = delayStepRow('done', label,
+      dc.dispute_received != null ? '¥' + Number(dc.dispute_received).toFixed(2) : escapeHtml(dc.dispute_note || ''));
+  } else {
+    step4 = delayStepRow('todo', cuT('Carrier settled', '承运商赔偿'), '');
+  }
+
+  // The close button is the one that has always been here. It is refused while
+  // the dispute is open — server-side too, so the phone cannot slip past it.
+  const foot = canClose
+    ? delayBtn(`clearAirDelay(${oid}, event)`, cuT('Mark handled', '标记已处理'), true)
+    : `<span style="font-size:11.5px; color:var(--text-3); font-style:italic;">${
+        cuT('Close once every step above is done.', '以上步骤全部完成后方可关闭。')}</span>`;
+
+  return `
+    <div style="padding:12px 14px; margin-bottom:12px;
+                background: var(--danger-soft, rgba(232,85,106,.14)); border:1px solid var(--danger, #e8556a);
+                border-radius: var(--r-md, 6px); font-size:12.5px; line-height:1.5;">
+      <div style="display:flex; gap:9px; align-items:flex-start;">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; color:var(--danger, #e8556a);"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        <div style="font-weight:700; font-size:13px; color: var(--danger, #e8556a); text-transform:uppercase; letter-spacing:.04em;">
+          ${cuT(`Air shipment delayed — arrived ${delayDays} day${delayDays > 1 ? 's' : ''} late`, `空运延误 — 晚到 ${delayDays} 天`)}
+        </div>
+      </div>
+      <div style="margin-top:6px;">${step1}${step2}${step3}${step4}</div>
+      <div style="margin-top:10px; padding-top:9px; border-top:1px solid var(--line-soft);">${foot}</div>
+    </div>`;
+}
+
+async function delayStep(orderId, shipmentId, step, payload, ev) {
+  try {
+    await adminWrite({
+      btn: ev?.currentTarget,
+      url: `/api/retail-admin/orders/${orderId}/delay-case/step`,
+      method: 'POST', body: { shipment_id: shipmentId, step, ...payload },
+      errLabelEn: 'Could not save', errLabelCn: '保存失败',
+    });
+    openOrder(orderId, { instant: true });
+    loadOrders();
+  } catch {}
+}
+
+// The claim is against the carrier that actually carried this parcel — passed
+// in from the shipment being rendered, never typed here and never hard-coded to
+// one company. That last part is the whole reason the old banner's line about
+// 京东 could not simply be kept.
+function delayFileClaim(orderId, sid, carrier, ev) {
+  const ref = (document.getElementById('dcref-' + sid)?.value || '').trim();
+  const amt = (document.getElementById('dcamt-' + sid)?.value || '').trim();
+  return delayStep(orderId, sid, 'claim_filed', { ref, claimed: amt, carrier: carrier || '' }, ev);
+}
+
+function delayNoClaim(orderId, sid, ev) {
+  const note = (document.getElementById('dcwhy-' + sid)?.value || '').trim();
+  if (!note) { toast(cuT('Give a reason first', '请先填写原因。'), 'err'); return; }
+  return delayStep(orderId, sid, 'no_claim', { note }, ev);
+}
+
+function delaySettle(orderId, sid, outcome, ev) {
+  const received = (document.getElementById('dcrec-' + sid)?.value || '').trim();
+  if (outcome === 'paid' && !received) { toast(cuT('Enter an amount first', '请先填写金额。'), 'err'); return; }
+  return delayStep(orderId, sid, 'settled', { outcome, received }, ev);
+}
+
+function delayRemedy(orderId, sid, kind, ev) {
+  return delayStep(orderId, sid, 'remedy', { kind }, ev);
+}
+
 function airShipmentDelayDays(o, s) {
   if ((s.mode || '') !== 'air') return 0;
   const deliveredDate  = shipmentDeliveredDate(s);
@@ -7383,30 +7573,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
   const airCleared = !!s.air_delay_cleared_at;
   let delayBanner = '';
   if (delayDays > 0 && !airCleared) {
-    delayBanner = `
-    <div style="display:flex; gap:10px; align-items:flex-start; padding:12px 14px; margin-bottom:12px;
-                background: var(--danger-soft, rgba(232,85,106,.14)); border:1px solid var(--danger, #e8556a);
-                border-radius: var(--r-md, 6px); font-size:12.5px; line-height:1.5;">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-      <div style="flex:1;">
-        <div style="font-weight:700; font-size:13px; color: var(--danger, #e8556a); margin-bottom:5px; text-transform:uppercase; letter-spacing:.04em;">
-          ${cuT(`Air shipment delayed — arrived ${delayDays} day${delayDays > 1 ? 's' : ''} late`, `空运延误 — 晚到 ${delayDays} 天`)}
-        </div>
-        <div style="color: var(--text-1); margin-bottom:6px;">
-          <strong>${cuT('1. Contact customer immediately:', '1. 立即联系客户：')}</strong>
-          ${cuT('Perishable / fresh items may no longer be safe — advise them <u>not to consume</u>.', '生鲜/易腐产品可能已不安全，请告知客户<u>勿食用</u>。')}
-        </div>
-        <div style="color: var(--text-1); margin-bottom:10px;">
-          <strong>${cuT('2. Contact JD Logistics for delay compensation.', '2. 联系京东物流，申请延误赔偿。')}</strong>
-        </div>
-        <button type="button" onclick="clearAirDelay(${Number(o.id)}, event)"
-          style="font: inherit; font-size:12px; font-weight:600; cursor:pointer; padding:6px 12px;
-                 border:1px solid var(--danger, #e8556a); border-radius: var(--r-sm, 5px);
-                 background: transparent; color: var(--danger, #e8556a);">
-          ${cuT('Mark handled — customer contacted', '标记已处理 — 已联系客户')}
-        </button>
-      </div>
-    </div>`;
+    delayBanner = renderDelayCase(o, s, delayDays);
   } else if (delayDays > 0 && airCleared) {
     delayBanner = `
     <div style="display:flex; gap:8px; align-items:center; padding:8px 12px; margin-bottom:12px;

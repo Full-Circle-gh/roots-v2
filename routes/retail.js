@@ -45,6 +45,7 @@ const qingyunQueue = require('../lib/qingyun-queue');
 // one. See the warning at the top of lib/phone-cn.js.
 const phoneCn = require('../lib/phone-cn');
 const tracking = require('../lib/tracking');
+const delayCase = require('../lib/delay-case');
 const flashsales = require('../lib/flashsales');
 const reviewTopup = require('../lib/review-topup');
 const { imageAspect } = require('../lib/image-dims');
@@ -25590,6 +25591,14 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     delivered_at:  s.delivered_at,
     air_delay_cleared_at: s.air_delay_cleared_at || null,  // late-air food-safety alert marked handled
     air_delay_cleared_by: s.air_delay_cleared_by || null,
+    // The four steps behind that stamp (§98). READ ONLY HERE, NEVER CREATED:
+    // a GET that writes a row for every drawer opened would mint a case for
+    // parcels nobody ever had a problem with. NULL means "nothing done yet",
+    // which is what both screens draw a fresh checklist from; the row appears
+    // on the first step an operator actually takes.
+    delay_case: s.mode === 'air'
+      ? delayCase.forScreen(tdb(), delayCase.readCase(tdb(), s.id))
+      : null,
     local_eta:     s.local_eta || null,   // 'HH:MM' arrival time for local delivery (no waybill)
     eta_source:    s.eta_source || null,  // 'auto' = from Qingyun courier, 'manual' = operator-set
     state: shipmentState(s),
@@ -26484,6 +26493,38 @@ router.post('/api/retail-admin/orders/:id/air-delay/ack',
        AND dispatched_at IS NOT NULL
        AND (delivered_at IS NOT NULL OR tracking_status = 'delivered')
        AND DATE(COALESCE(delivered_at, tracking_synced_at)) > DATE(dispatched_at, '+1 day')`;
+  // §98 — THE BUTTON THAT USED TO MEAN "I PHONED THE CUSTOMER" NOW MEANS "THIS
+  // IS FINISHED", AND IT CAN BE REFUSED. Every delayed parcel on the order must
+  // have a case that is allowed to close: the customer told, the customer made
+  // whole, and the carrier's dispute in a state it cannot move out of. A claim
+  // still sitting with the carrier holds the whole thing open, which is the
+  // point — the chase is the half that runs for weeks and the half that used to
+  // vanish the moment somebody made a phone call.
+  const actor = { id: req.user.id, label: req.user.username || null };
+  const parcels = tdb().prepare(
+    `SELECT id FROM retail_shipments WHERE order_id = ? AND ${DELAYED}`
+  ).all(id);
+
+  if (clear) {
+    // ALL OR NOTHING, and the refusal names the parcel and the reasons. Clearing
+    // some of an order's delayed parcels would drop the badge and the dashboard
+    // card (both of which ask "is ANY of this still open?") while a real dispute
+    // ran on unwatched — the precise failure this section exists to remove.
+    const refused = [];
+    for (const p of parcels) {
+      const c = delayCase.readCase(tdb(), p.id);
+      const why = delayCase.blockers(c);
+      if (why.length) refused.push({ shipment_id: p.id, blockers: why });
+    }
+    if (refused.length) {
+      return res.status(400).json({
+        success: false, error: 'case_not_closeable', refused,
+        // The first parcel's reasons, so a screen with room for one line has one.
+        blockers: refused[0].blockers,
+      });
+    }
+  }
+
   const info = clear
     ? tdb().prepare(
         `UPDATE retail_shipments
@@ -26499,10 +26540,54 @@ router.post('/api/retail-admin/orders/:id/air-delay/ack',
                 updated_at = CURRENT_TIMESTAMP
           WHERE order_id = ? AND ${DELAYED}`
       ).run(id);
+
+  // The stamp above is still the one flag every worklist reads; the case row
+  // follows it so the timeline records who ended it and when.
+  for (const p of parcels) {
+    try {
+      if (clear) delayCase.closeCase(tdb(), { orderId: id, shipmentId: p.id, actor });
+      else       delayCase.reopenCase(tdb(), { orderId: id, shipmentId: p.id, actor });
+    } catch (e) { console.warn('[delay-case ack]', id, p.id, e && e.message); }
+  }
+
   logActivity(req.user.id, req.user.username,
     clear ? 'air_delay_cleared' : 'air_delay_reopened', 'retail_order', id,
     { shipments: info.changes }, req.ip);
   res.json({ success: true, data: { cleared: clear, shipments: info.changes } });
+});
+
+// One step of a late-parcel case (§98). The steps are named in lib/delay-case.js
+// and validated there; this route is transport, a permission check and the
+// activity line. It does NOT decide anything — a second copy of the close rule
+// living in a route is how the rule and the screen come to disagree.
+router.post('/api/retail-admin/orders/:id/delay-case/step',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id  = parseInt(req.params.id, 10);
+  const sid = parseInt(req.body?.shipment_id, 10);
+  const step = String(req.body?.step || '').trim();
+  if (!Number.isInteger(id) || !Number.isInteger(sid)) {
+    return res.status(400).json({ success: false, error: 'bad_request' });
+  }
+  // The parcel must belong to the order. Without this the shipment_id is an
+  // open door onto any other tenant's case row by number.
+  const parcel = tdb().prepare(
+    'SELECT id FROM retail_shipments WHERE id = ? AND order_id = ?'
+  ).get(sid, id);
+  if (!parcel) return res.status(404).json({ success: false, error: 'not_found' });
+
+  const actor = { id: req.user.id, label: req.user.username || null };
+  let updated;
+  try {
+    updated = delayCase.applyStep(tdb(), {
+      orderId: id, shipmentId: sid, step, payload: req.body || {}, actor,
+    });
+  } catch (e) {
+    if (e && e.code) return res.status(400).json({ success: false, error: e.code });
+    throw e;
+  }
+  logActivity(req.user.id, req.user.username, 'delay_case_step', 'retail_order', id,
+    { shipment_id: sid, step }, req.ip);
+  res.json({ success: true, data: delayCase.forScreen(tdb(), updated) });
 });
 
 // Switch a Guangzhou outer-district parcel between same-city RIDER ('local',

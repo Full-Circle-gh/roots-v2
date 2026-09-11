@@ -3922,6 +3922,92 @@ addColumn('retail_shipments', 'package_count', 'INTEGER');
 addColumn('retail_shipments', 'air_delay_cleared_at', 'DATETIME');
 addColumn('retail_shipments', 'air_delay_cleared_by', 'TEXT');
 
+// ── The late-parcel case (§98) ──────────────────────────────────────────────
+// WHAT WAS DONE ABOUT A PARCEL THAT ARRIVED LATE AND SPOILED THE FOOD, step by
+// step, for as long as it takes. The alert above already existed and already
+// worked; what it had was ONE stamp, and the drawer printed TWO instructions
+// over it — contact the customer, then claim the delay off the carrier. Four
+// facts behind one checkbox cannot answer whether the carrier was ever chased,
+// and the chase is the half that runs for weeks.
+//
+// `air_delay_cleared_at` IS STILL THE ONE FLAG THAT SAYS "OFF THE WORKLIST",
+// deliberately. The badge in the orders list, the dashboard's "Delivery needs a
+// call" card and the phone's banner all read it today and NONE of them changes:
+// a card that already ages from dispatched_at and already refreshes every sixty
+// seconds is exactly the weeks-long chase surface this needed, and re-pointing
+// three readers at a second source of truth would buy nothing and cost a
+// backfill. What changes is who is ALLOWED to set it — lib/delay-case.js
+// refuses while the dispute is still open with the carrier.
+//
+// ONE CASE PER PARCEL, NOT PER ORDER. An order fans out into an air leg and a
+// land leg and only one of them was late; the detector, the ack route and the
+// cleared stamp are all already per-shipment, and an order-level case could not
+// say which parcel it was about. UNIQUE on shipment_id enforces the one.
+//
+// NOT A TASK ENGINE, AND THE NEXT PERSON MUST NOT MAKE IT ONE. There is no
+// checklist table anywhere in this repository and this is not the first one:
+// the steps here are named columns because they are four known facts about one
+// known situation, not rows a user composes. §32 refused the same widening from
+// the other side — waste is a reason, not a feature of its own.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS retail_delay_cases (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id            INTEGER NOT NULL,
+    shipment_id         INTEGER NOT NULL UNIQUE,   -- the parcel that was late
+    -- Track 1 — the customer knows. This is the step that exists today, and the
+    -- whole point of the change is that it stops also meaning the other three.
+    customer_told_at    DATETIME,
+    customer_told_by    TEXT,
+    -- Track 2 — the dispute. 'none' is NOT a finished state: an operator who
+    -- never touches this track leaves the case open, which is correct. Choosing
+    -- not to claim is a real answer and gets its own state rather than being
+    -- indistinguishable from not having decided.
+    dispute_state       TEXT NOT NULL DEFAULT 'none',
+      -- none | filed | paid | rejected | withdrawn | no_claim
+    dispute_carrier     TEXT,     -- lib/tracking.js carrier code; never hard-coded to one
+    dispute_ref         TEXT,     -- the carrier's own claim number
+    dispute_claimed     REAL,     -- what we asked for
+    dispute_received    REAL,     -- what actually arrived; §98 stage four posts it
+    dispute_filed_at    DATETIME,
+    dispute_settled_at  DATETIME,
+    dispute_note        TEXT,     -- required when the state is 'no_claim'
+    -- Track 3 — the customer is made whole. A branch taken once: goods back out,
+    -- or money back. The refund arm records only that it happened; the refund
+    -- itself stays on the refund path that already exists.
+    remedy              TEXT,     -- replacement | refund
+    remedy_at           DATETIME,
+    remedy_note         TEXT,
+    -- Lifecycle
+    opened_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
+    closed_at           DATETIME,
+    closed_by           TEXT,
+    FOREIGN KEY (order_id)    REFERENCES retail_orders(id)    ON DELETE CASCADE,
+    FOREIGN KEY (shipment_id) REFERENCES retail_shipments(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_delay_cases_order ON retail_delay_cases(order_id);
+
+  -- One row per step, the shape retail_refund_events already proved: a refund
+  -- reads as a timeline three months later and a delay case has to as well.
+  -- The columns above are the denormalised NOW so a list can filter cheaply;
+  -- these rows are the HOW IT GOT THERE, and they are never edited or deleted.
+  CREATE TABLE IF NOT EXISTS retail_delay_case_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    case_id     INTEGER NOT NULL,
+    event       TEXT NOT NULL,
+      -- opened | customer_told | claim_filed | no_claim | settled
+      -- | remedy_replacement | remedy_refund | closed | reopened | note
+    note        TEXT,
+    amount      REAL,      -- the amount this step is about; NULL = not about money
+    user_id     INTEGER,
+    user_label  TEXT,      -- who, snapshotted, so a renamed account can't rewrite it
+    meta_json   TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (case_id) REFERENCES retail_delay_cases(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_delay_case_events_case
+    ON retail_delay_case_events(case_id, created_at);
+`);
+
 // Per-store restock *target* — the level this store wants to keep on
 // hand. When physical_qty < restock_target the cross-store grid flags
 // it. Optional (NULL = no target set yet).
