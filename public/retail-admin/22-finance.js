@@ -327,12 +327,18 @@ let FIN_POL = null;   // { id, rows, err } — rows null while the read is in fl
 function finCatRow(r) {
   const po = r.source === 'po';
   const claim = r.source === 'claim';
+  // §98 stage four — the THIRD kind of projection, and the first one on the
+  // money-IN side. Marked for the same reason as the other two: the row belongs
+  // to a delay case and is re-posted whenever that case changes.
+  const fromCase = r.source === 'delay_case';
   const mark = po
     ? cuT('Posted by Purchasing', '采购单自动记入')
     : claim
     ? (r.paid_by === 'employee'
         ? cuT('Staff claim · own money', '费用申请 · 个人支付')
         : cuT('Staff claim', '费用申请'))
+    : fromCase
+    ? cuT('Carrier claim', '承运商赔偿')
     : '';
   /* THE DESCRIPTION ALREADY CARRIES THE PO NUMBER — do not prepend it again.
      Both posters build the same string and both lead with it:
@@ -866,6 +872,7 @@ function finTxRow(r) {
      (`finTxVoidClaim`, calling the claim's `/void` endpoint) and lets the same
      mechanism that deletes this row on rejection delete it here too. */
   const claim = r.source === 'claim';
+  const fromCase = r.source === 'delay_case';
   // §36: the note vanishes ENTIRELY at one category. "It does not read '1
   // category'" — at one nothing was collapsed, so a note would assert a
   // breakdown that does not exist and send the operator looking for it.
@@ -885,6 +892,14 @@ function finTxRow(r) {
     ? `<span class="fin-tx-mark">${escapeHtml(r.paid_by === 'employee'
         ? cuT('Staff claim · own money', '费用申请 · 个人支付')
         : cuT('Staff claim', '费用申请'))}</span>`
+    /* §98 stage four. Marked like the other two projections, and with no Edit
+       for the same reason — `finTxEdit` already gates on `=== 'manual'`, and
+       the note there says it was written that way rather than as `!== 'po'`
+       precisely so a THIRD kind of projection could not slip through the
+       negation. It did not: this row was uneditable before this line existed,
+       and the line only makes the row SAY so. */
+    : fromCase
+    ? `<span class="fin-tx-mark">${escapeHtml(cuT('Carrier claim', '承运商赔偿'))}</span>`
     : '';
   /* WHO PUT THIS ROW IN THE BOOKS (§92). Reported by Ash off this screen: a
      ¥200 claim row and no way to see who had let it into the accounts.

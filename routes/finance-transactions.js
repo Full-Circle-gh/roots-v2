@@ -104,6 +104,11 @@ const ERR = {
   // onto its ledger row is lost the next time somebody changes their mind.
   claimEdit:   'expenses from a staff claim cannot be edited directly · 费用申请产生的支出不能直接编辑',
   claimDelete: 'expenses from a staff claim cannot be deleted directly · 费用申请产生的支出不能直接删除',
+  // §98 stage four: the money-IN counterpart. Same refusal, same reason — the
+  // row is a projection of a delay case and any value typed onto it is lost the
+  // next time that case is re-posted.
+  caseEdit:    'income from a carrier claim cannot be edited directly · 承运商赔偿产生的收入不能直接编辑',
+  caseDelete:  'income from a carrier claim cannot be deleted directly · 承运商赔偿产生的收入不能直接删除',
 };
 
 /** Validate and normalise a submitted row. Returns { error } or the clean values. */
@@ -173,6 +178,14 @@ function loadTyped(db, kind, id, refusal) {
   // would go looking for a purchase order.
   if (kind === 'out' && row.claim_id != null) {
     return { error: refusal === ERR.poEdit ? ERR.claimEdit : ERR.claimDelete, status: 400 };
+  }
+  // §98 stage four: `delay_case_id` is the money-IN counterpart of both, and it
+  // is the FIRST projection this ledger has ever had on the income side — every
+  // row in `income_entries` until now was hand-typed. Without this a carrier's
+  // compensation is editable, and the edit is silently undone the next time the
+  // case behind it changes: the exact trap §87 named for claims.
+  if (kind === 'in' && row.delay_case_id != null) {
+    return { error: refusal === ERR.poEdit ? ERR.caseEdit : ERR.caseDelete, status: 400 };
   }
   return { row };
 }
@@ -272,8 +285,16 @@ function readTransactions(query, opts = {}) {
   // ── Money in ──
   // Typed non-sale income only: sublet space, sold equipment, grants, supplier
   // rebates (§36's own examples). Sales are not here and must not be added.
+  //
+  // A DELAY-CASE ROW STAYS IN THIS LIST (§98 stage four), unlike a claim row on
+  // the money-out side, which is pulled out and re-listed separately. The
+  // reason that split exists there is that a claim row would otherwise LOOK
+  // hand-typed and be freely editable; here the row is refused by `loadTyped`
+  // and carries `delay_case_id` so the screen labels it and hides its edit
+  // control. Pulling it out instead would take the money off the screen while
+  // leaving it in the totals, which is the worse of the two failures.
   const income = db.prepare(`
-    SELECT id, ${LEDGER_DATE} AS date, amount, category, description, created_by
+    SELECT id, ${LEDGER_DATE} AS date, amount, category, description, created_by, delay_case_id
       FROM income_entries
      WHERE ${LEDGER_DATE} BETWEEN ? AND ?
      ORDER BY date DESC, id DESC`).all(from, to);
@@ -436,7 +457,10 @@ function readTransactions(query, opts = {}) {
       subject: r.description || r.category || null,
       category: r.category || null,
       amount: fen(r.amount),
-      source: 'manual', po_id: null, po_number: null, categories: null,
+      // 'delay_case' is the first non-'manual' source money-in has ever had.
+      source: r.delay_case_id != null ? 'delay_case' : 'manual',
+      delay_case_id: r.delay_case_id || null,
+      po_id: null, po_number: null, categories: null,
       recorded_by: recordedBy.get(r.created_by) || null,
     })),
     ...manual.map(r => ({
