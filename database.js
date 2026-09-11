@@ -1198,6 +1198,28 @@ addColumn('categories', 'is_active',    'INTEGER DEFAULT 1');
 // blocked it since 2026-09-02.
 addColumn('expense_entries', 'claim_id', 'INTEGER');
 addColumn('expense_entries', 'store_id', 'INTEGER');
+
+// WHICH LATE-PARCEL CASE PUT THIS MONEY IN THE BOOKS (§98 stage four).
+//
+// `claim_id`'s counterpart on the money-IN side, and it is a separate column
+// rather than a shared one because the two name different documents: a staff
+// expense claim is somebody asking to be paid back, a delay case is a carrier
+// paying US for food its lateness spoiled. A single column serving both would
+// make `WHERE claim_id IS NOT NULL` on either table mean two things.
+//
+// THE ROW APPEARS WHEN THE MONEY LANDS, NOT WHEN THE CLAIM IS FILED. That is
+// §87's rule for money out, restated for money in, and it is the reason this
+// column exists at all rather than the case simply being summed: a claim the
+// carrier later rejects or part-pays would otherwise have left revenue in the
+// books that never arrived, with nothing on any screen to say so.
+//
+// lib/delay-case-posting.js is the ONE place that writes it, by the same
+// delete-then-reinsert shape `postClaim` uses, so the ledger always says what
+// the case currently says and calling it twice is safe.
+addColumn('income_entries', 'delay_case_id', 'INTEGER');
+try {
+  db.prepare('CREATE INDEX IF NOT EXISTS idx_income_entries_delay_case ON income_entries(delay_case_id)').run();
+} catch (e) { /* index only — a failure here costs a scan, never correctness */ }
 // Suppliers — primary communication channel for the buyer to reach
 // this vendor. Type drives the UI (link vs QR vs plain text). Replaces
 // the loose "WeChat ID / phone" stuff with a structured field that
@@ -3970,6 +3992,12 @@ db.exec(`
     dispute_received    REAL,     -- what actually arrived; §98 stage four posts it
     dispute_filed_at    DATETIME,
     dispute_settled_at  DATETIME,
+    -- WHO RECORDED THE SETTLEMENT, because §92 says a ledger row names the
+    -- person who put it in the books and stage four's income row is posted off
+    -- this case. Snapshotted as a label too, so a renamed account cannot
+    -- rewrite who booked money last quarter.
+    settled_by_user_id  INTEGER,
+    settled_by          TEXT,
     dispute_note        TEXT,     -- required when the state is 'no_claim'
     -- Track 3 — the customer is made whole. A branch taken once: goods back out,
     -- or money back. The refund arm records only that it happened; the refund
@@ -4007,6 +4035,14 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_retail_delay_case_events_case
     ON retail_delay_case_events(case_id, created_at);
 `);
+// The two columns above that arrived AFTER the table shipped (§98 stage four).
+// They are in the CREATE TABLE for a fresh database and here for every one that
+// already ran stages one and two — CREATE TABLE IF NOT EXISTS adds no columns
+// to a table that exists, and this table has been in production since §98's
+// first deploy. On a fresh database these ALTERs hit "duplicate column" and are
+// swallowed, which is exactly what addColumn is for.
+addColumn('retail_delay_cases', 'settled_by_user_id', 'INTEGER');
+addColumn('retail_delay_cases', 'settled_by',         'TEXT');
 
 // Per-store restock *target* — the level this store wants to keep on
 // hand. When physical_qty < restock_target the cross-store grid flags

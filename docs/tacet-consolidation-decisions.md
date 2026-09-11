@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.214
+# Tacet shared-core consolidation — decisions record, v4.215
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,7 +23,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-11 · v4.214 — **§99 BUILT: THE FAPIAO CHASE, AND THE COUNT THAT DISAGREED WITH HOME.** Asked from the phone with a screenshot reading *Pending 2* — *"why we have 2 open invoices and the system doesn't alert me … if customer close the notification and invoice still open, system should recognize it and pop up again."* **TWO DEFECTS WEARING ONE COAT, AND ASH FOUND THE SECOND**: told that *"those invoice that not settled came from canceled order"*, the survey found why there was nothing to alert about — **five call sites asked which fapiao were pending and `GET /api/retail-admin/invoices` was the only one not requiring the order to be alive**, filtering on `needs_invoice = 1` alone while Home, the unseen dot, the Orders pseudo-status and its badge all excluded `cancelled` and `pending_payment`. So the list counted the dead, Home did not, and the operator drew the more damaging of the two available conclusions — that the ALERTING was broken — which is the reasonable one to draw from two sincere numbers that disagree. `lib/fapiao-queue.js` is the predicate now and the regression guard is in the suite, not in review: the test fails if `routes/retail.js` states the exclusion anywhere itself, because **the defect was never a wrong clause but five copies of one**. Dead requests are excluded from the count and NOT hidden — they wear the order's own live `已取消` / `待付款` in the muted pill, so no new string and no row vanishes; `counts.blocked` is new so All still sums its rows; an issued fapiao keeps reading issued whatever became of its order, being a 红冲 waiting to happen. **THE REMINDER IS A WINDOW, NOT A LATCH, AND `lib/alert-latch.js` HAD ALREADY DRAWN THE DISTINCTION** — which is why `lib/delivery-reminders.js` could not take a fifth case: its claim is `WHERE … IS NULL`, once ever. **DISMISSING WRITES NOTHING, WHICH IS THE ANSWER TO THE QUESTION**: there is no dismissed column because there must not be one, the row still matches `pendingSql` next sweep, and only ISSUING stops it — by dropping out of the queue, so no state is ever cleared. Tagged per order, so `sw.js`'s existing `renotify` replaces the tray entry rather than stacking. **THE CADENCE KEYS OFF MONTH-END, NOT ELAPSED DAYS** — silent 24h, then 48h, then DAILY in the last three days with Home's row going brick, because what makes a late fapiao expensive is the tax period closing and not its age; the window is computed from the month's own length so February is not exempt, and the phone reads the SHOP's date. At 10:00, **which is NOT the quiet hours `push-events.js` refuses** — that file drops an alert by a clock, this one schedules its own send, the same `DAYOF_HOUR = 10` the delivery sweeper uses. One digest above three; a digest claims every row it covered. Audience `invoices:manage` ("issuing a 发票 is a fiscal act"), switch `invoice_pending`, ON by default. **NOT BUILT AND NOT DECIDED: the snooze** (its own column, endpoint and month-end question — held back rather than folded in) and **why auto-issue is off**, raised in session and unanswered. Chinese: `docs/tacet-delivery-vocabulary.md` v1.55, two composed pairs and one lifted, **`逾期` rejected and the reason recorded** — a 发票 unissued on the 29th has broken no promise to the customer. 52 new assertions across two fast suites, the load-bearing ones on each side checked to fail with the change reverted; `test:fast` green. Two PRs. A build under a new decision, hence a patch.
+2026-09-11 · v4.215 — **§99 BUILT: THE FAPIAO CHASE, AND THE COUNT THAT DISAGREED WITH HOME.** Asked from the phone with a screenshot reading *Pending 2* — *"why we have 2 open invoices and the system doesn't alert me … if customer close the notification and invoice still open, system should recognize it and pop up again."* **TWO DEFECTS WEARING ONE COAT, AND ASH FOUND THE SECOND**: told that *"those invoice that not settled came from canceled order"*, the survey found why there was nothing to alert about — **five call sites asked which fapiao were pending and `GET /api/retail-admin/invoices` was the only one not requiring the order to be alive**, filtering on `needs_invoice = 1` alone while Home, the unseen dot, the Orders pseudo-status and its badge all excluded `cancelled` and `pending_payment`. So the list counted the dead, Home did not, and the operator drew the more damaging of the two available conclusions — that the ALERTING was broken — which is the reasonable one to draw from two sincere numbers that disagree. `lib/fapiao-queue.js` is the predicate now and the regression guard is in the suite, not in review: the test fails if `routes/retail.js` states the exclusion anywhere itself, because **the defect was never a wrong clause but five copies of one**. Dead requests are excluded from the count and NOT hidden — they wear the order's own live `已取消` / `待付款` in the muted pill, so no new string and no row vanishes; `counts.blocked` is new so All still sums its rows; an issued fapiao keeps reading issued whatever became of its order, being a 红冲 waiting to happen. **THE REMINDER IS A WINDOW, NOT A LATCH, AND `lib/alert-latch.js` HAD ALREADY DRAWN THE DISTINCTION** — which is why `lib/delivery-reminders.js` could not take a fifth case: its claim is `WHERE … IS NULL`, once ever. **DISMISSING WRITES NOTHING, WHICH IS THE ANSWER TO THE QUESTION**: there is no dismissed column because there must not be one, the row still matches `pendingSql` next sweep, and only ISSUING stops it — by dropping out of the queue, so no state is ever cleared. Tagged per order, so `sw.js`'s existing `renotify` replaces the tray entry rather than stacking. **THE CADENCE KEYS OFF MONTH-END, NOT ELAPSED DAYS** — silent 24h, then 48h, then DAILY in the last three days with Home's row going brick, because what makes a late fapiao expensive is the tax period closing and not its age; the window is computed from the month's own length so February is not exempt, and the phone reads the SHOP's date. At 10:00, **which is NOT the quiet hours `push-events.js` refuses** — that file drops an alert by a clock, this one schedules its own send, the same `DAYOF_HOUR = 10` the delivery sweeper uses. One digest above three; a digest claims every row it covered. Audience `invoices:manage` ("issuing a 发票 is a fiscal act"), switch `invoice_pending`, ON by default. **NOT BUILT AND NOT DECIDED: the snooze** (its own column, endpoint and month-end question — held back rather than folded in) and **why auto-issue is off**, raised in session and unanswered. Chinese: `docs/tacet-delivery-vocabulary.md` v1.56, two composed pairs and one lifted, **`逾期` rejected and the reason recorded** — a 发票 unissued on the 29th has broken no promise to the customer. 52 new assertions across two fast suites, the load-bearing ones on each side checked to fail with the change reverted; `test:fast` green. Two PRs. A build under a new decision, hence a patch.
+
+2026-09-11 · v4.214 — **§98 STAGE FOUR IS BUILT: A CARRIER'S PAYMENT POSTS ONE LEDGER ROW WHEN IT LANDS. STAGE THREE IS NOT, AND THE REASON IS A NUMBER.** `lib/delay-case-posting.js` writes exactly one `income_entries` row keyed on a new `delay_case_id`, by the same delete-then-reinsert shape `postClaim` uses; **only `paid` posts**, and a rejection, a withdrawal or a re-filing after a payment takes the row back OUT rather than offsetting it with a negative one — §87's rule for money out, restated for money in. It is **the first projection this ledger has ever had on the money-IN side**; every `income_entries` row before it was hand-typed, which is why `loadTyped` needed a third refusal and the Transactions screen a third mark. The row carries **no category**, deliberately: §36 records that the income category list ships empty so the form cannot offer a wrong option, and seeding one to label carrier compensation would be a library deciding a question that document says is the tenant's. **STAGE THREE STOPPED ON A MEASUREMENT.** A ¥0 replacement order adds ¥0 to every revenue sum, so revenue was never the problem — COUNT and AVG are. The gate those surfaces share, `status IN ('paid','preparing','dispatched','delivered','awaiting_restock')`, is **written out verbatim twelve times** (eleven in `routes/retail.js`, one in `lib/finance-window.js`) with no single definition to amend, and a replacement parcel must pass through `preparing`, `dispatched` and `delivered` to be picked, shipped and tracked — so it sits inside that predicate by construction at all twelve, with the ungated per-customer counts beyond them. Twelve hand-copied predicates and missing one is a silently wrong report, which no test in the tree would catch. **Recorded, not decided:** consolidating that predicate to one exported definition first, as its own change with no behaviour attached, would make excluding a replacement one line — but it edits how every money figure in the product is computed and is **not a decision a session may take**. Until then step three of the case stays what stages one and two shipped: an operator's tick over a replacement raised by hand. Chinese: `docs/tacet-delivery-vocabulary.md` v1.55, two composed pairs, each the live claim refusal with one noun phrase swapped. 202 fast suites pass, 0 fail; all six finance suites green. A build under an existing decision, hence a patch.
 
 2026-09-11 · v4.213 — **§98 STAGES ONE AND TWO ARE BUILT: THE LATE-PARCEL CASE, AND THE CHECKLIST THAT WILL NOT CLOSE WHILE THE CARRIER STILL OWES AN ANSWER.** Two tables, `lib/delay-case.js` holding the rule, one step endpoint, and the checklist on BOTH surfaces. **THE THREE READ SITES DID NOT SWAP AND v4.212 SAYS THEY WOULD** — that entry was written before the code and is wrong; it is left standing and corrected in a §98 addendum rather than edited, per this file's own rule about dated claims. `air_delay_cleared_at` REMAINS the single flag meaning "still on the worklist" and the case row gates who may set it: `/dashboard/ops`'s `delivery_alerts` already counts these orders, ages them from `dispatched_at` and refreshes every sixty seconds, so the weeks-long chase surface needed no change at all — and swapping would have required backfilling a closed case for every parcel already cleared in production, or every handled order from the last year lights up on deploy morning. **THE PHONE ALREADY HAD THE BANNER AND THE SURVEY MISSED IT**, having grepped the column name where `public/m.html` keys off `o.airDelayed`; once the server refuses the close, a phone still offering a one-tap dismiss is §97's own "the same button with the safety removed", so both surfaces ship or neither does. **`none` HAD TO HOLD THE CASE OPEN** — an operator who never touched the dispute track has not decided not to claim, and choosing not to claim is its own state needing a typed reason, which is what makes "the dispute, if any" expressible; `scripts/test_delay_case.js` guards that second only to the refusal itself. Chinese: `docs/tacet-delivery-vocabulary.md` v1.54, seventeen composed pairs and fifteen lifted, **none introducing a word the repository did not already ship**; the one thing that could not be carried forward is 京东, hard-coded into both surfaces' live instruction, since the claim is against whichever carrier carried the parcel. Stages three (the ¥0 replacement order) and four (the ledger row) are NOT built and nothing here decides them further. 199 fast suites pass, 0 fail; `test_mobile_screens` renders 142 screens clean. A build under an existing decision, hence a patch.
 
@@ -10094,6 +10096,55 @@ requires a typed reason — which is what makes "the dispute with the logistics
 company, **if any**" expressible at all, and it is now the thing
 `scripts/test_delay_case.js` guards hardest after the refusal itself.
 
+### §98 addendum 2 — stage four is built; stage three is NOT, and here is the measurement (2026-09-11)
+
+**Stage four is built.** A carrier's payment posts exactly one `income_entries`
+row, keyed on a new `delay_case_id`, by `lib/delay-case-posting.js` — the same
+delete-then-reinsert shape `postClaim` uses, so the ledger always says what the
+case currently says and calling it twice cannot bank the money twice. **Only
+`paid` posts**: a filed claim posts nothing, and a rejection, a withdrawal or a
+re-filing after a payment takes the row back out rather than offsetting it with a
+negative one. It is the first projection this ledger has ever had on the money-IN
+side; every `income_entries` row before it was hand-typed.
+
+The row carries **no category**, deliberately. `routes/finance-transactions.js`
+records that the income category list "ships empty. No defaults" so the form
+cannot offer a wrong option; seeding one here to label carrier compensation would
+be a library quietly deciding a question that document says is the tenant's.
+
+### Stage three is not built, and the reason is a number
+
+§98 recorded *which readers must exclude a ¥0 order* as open. It has now been
+measured, and the answer is why the stage stopped rather than shipped.
+
+**A ¥0 replacement order contributes ¥0 to every revenue sum, so revenue is
+self-correcting and was never the problem. The problem is COUNT and AVG.** An
+order that nobody paid for adds one to the order count and drags the average
+order value down, on every surface that reports either.
+
+**The gate those surfaces share is copied twelve times.**
+`status IN ('paid','preparing','dispatched','delivered','awaiting_restock')` is
+written out verbatim in eleven places in `routes/retail.js` and once in
+`lib/finance-window.js`. **There is no single definition to amend.** And a
+replacement parcel must pass through `preparing`, `dispatched` and `delivered`
+to be picked, shipped and tracked — so it is inside that predicate by
+construction, at all twelve. Beyond them sit the per-customer counts, which are
+not gated on payment at all (`SELECT COUNT(*) FROM retail_orders WHERE
+customer_id = ?` and its siblings).
+
+**Twelve hand-copied predicates plus the ungated counts, and missing one is a
+silently wrong report** — a class of defect this file exists to prevent, and one
+no test currently in the tree would catch.
+
+**What is recorded, not decided:** the safe order of work looks like
+consolidating that predicate to one exported definition FIRST, as its own change
+with no behaviour attached, after which excluding a replacement is one line in
+one place. That is a separate PR under §36's territory, it is worth doing on its
+own merits, and **it is not a decision a session may take** — it edits how every
+money figure in the product is computed. Until it is taken, stage three stays
+unbuilt and step three of the case remains what stages one and two shipped: an
+operator's tick over a replacement they raised by hand.
+
 ## §99 — THE FAPIAO CHASE: A REQUEST NOBODY ISSUED ASKS AGAIN, AND ONLY ISSUING IT STOPS THE ASKING
 
 **2026-09-11 · Asked from the phone, with a screenshot of the Invoices screen:
@@ -10210,7 +10261,7 @@ answer. The reminder is worth having either way — auto-issue will never cover
 every case, and the cases it misses are the ones that sit for three weeks — but
 the question is not answered here.
 
-**Chinese:** `docs/tacet-delivery-vocabulary.md` v1.55, two composed pairs and
+**Chinese:** `docs/tacet-delivery-vocabulary.md` v1.56, two composed pairs and
 one lifted, neither composed pair introducing a word the repository did not
 already ship. Three pairs for a whole feature because most of it needed no
 string: the ordinary title is the live pair Home already prints, the bodies are

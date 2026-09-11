@@ -46,6 +46,7 @@ const qingyunQueue = require('../lib/qingyun-queue');
 const phoneCn = require('../lib/phone-cn');
 const tracking = require('../lib/tracking');
 const delayCase = require('../lib/delay-case');
+const { postDelayCase } = require('../lib/delay-case-posting');
 const flashsales = require('../lib/flashsales');
 const reviewTopup = require('../lib/review-topup');
 const { imageAspect } = require('../lib/image-dims');
@@ -26600,6 +26601,16 @@ router.post('/api/retail-admin/orders/:id/delay-case/step',
     if (e && e.code) return res.status(400).json({ success: false, error: e.code });
     throw e;
   }
+  // §98 stage four. Called after EVERY step, not only after a settlement,
+  // because more than one step can change whether a ledger row should exist:
+  // re-filing a claim on a case the carrier had already paid clears
+  // `dispute_received`, and the row has to go with it. postDelayCase is
+  // delete-then-reinsert, so calling it on a step that changed nothing relevant
+  // rewrites the same row and is free.
+  try {
+    const order = tdb().prepare('SELECT order_no FROM retail_orders WHERE id = ?').get(id);
+    postDelayCase(tdb(), updated, order);
+  } catch (e) { console.error('[delay-case posting]', id, sid, e && e.message); }
   logActivity(req.user.id, req.user.username, 'delay_case_step', 'retail_order', id,
     { shipment_id: sid, step }, req.ip);
   res.json({ success: true, data: delayCase.forScreen(tdb(), updated) });
