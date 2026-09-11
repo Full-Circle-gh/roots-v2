@@ -61,6 +61,10 @@ const { getCategoryTree, sanitizeTree, normalizeCategoryPair } = require('../lib
 // over `=== 'pickup'`: a bare pickup test reads a counter sale as a delivery.
 const { isCounter, shipsNothing, isTerminalOnPaid, isMirroredChannel } = require('../lib/fulfilment');
 const fapiaoQueue = require('../lib/fapiao-queue');
+// Only for snoozeTarget — the snooze route and the sweep must agree about what
+// "tomorrow" means. Requiring the sweeper here does not start it; server.js
+// owns that.
+const fapiaoReminders = require('../lib/fapiao-reminders');
 // delivery_slot_label is a SNAPSHOT — its leading "Today"/"Tomorrow" was true
 // when the customer picked, not when they read it. attachSlotDisplay() derives a
 // fresh `delivery_slot_display` from scheduled_for at read time; the column is
@@ -25902,6 +25906,7 @@ router.get('/api/retail-admin/invoices', requireRetailAdmin, (req, res) => {
     `SELECT o.id, o.order_no, o.total, o.shipping_fee, o.placed_at, o.status,
             o.invoice_type, o.invoice_title, o.invoice_tax_id, o.invoice_email,
             o.invoice_status, o.invoice_file_url, o.invoice_number, o.invoice_issued_at,
+            o.invoice_reminder_snoozed_until,
             c.nickname
        FROM retail_orders o
        LEFT JOIN retail_customers c ON c.id = o.customer_id
@@ -25928,6 +25933,46 @@ router.get('/api/retail-admin/invoices', requireRetailAdmin, (req, res) => {
       blocked:   tdb().prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${fapiaoQueue.blockedSql('o')}`).get().n,
     },
   });
+});
+
+// "Not today" — defer THIS fapiao's push until tomorrow's reminder hour.
+//
+// THE ONE WAY TO QUIET THE CHASE WITHOUT ISSUING THE FAPIAO, and deliberately
+// not the notification banner: dismissing a push writes nothing and must keep
+// writing nothing (see lib/fapiao-reminders.js). This is a decision, taken on a
+// screen, by somebody holding invoices:manage — lib/cap-routes.js already maps
+// every write under /api/retail-admin/invoices to that capability, so the gate
+// is the existing one and no route mapping was added.
+//
+// It exists so that the control an overwhelmed operator reaches for is "not
+// this one, not today" rather than the switch that turns every push off. It
+// reaches tomorrow's hour and no further, so one press hides at most one ask,
+// and it quiets the PUSH ONLY: the order still matches pendingSql, so Home
+// keeps counting it and still goes brick at month-end.
+//
+// `snoozed:false` lifts it. Explicit rather than a toggle so a double tap
+// cannot flip a deferral back on by accident.
+router.post('/api/retail-admin/invoices/:id/snooze', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ success: false, error: 'bad_id' });
+  const on = req.body && req.body.snoozed === false ? false : true;
+
+  // Only a row that is actually WAITING may be deferred. Issuing it, or the
+  // order dying, both remove it from the queue — deferring either would write a
+  // date onto work that no longer exists and leave a stale stamp behind for
+  // whoever reads the column next.
+  const row = tdb().prepare(
+    `SELECT o.id FROM retail_orders o WHERE o.id = ? AND ${fapiaoQueue.pendingSql('o')}`
+  ).get(id);
+  if (!row) return res.status(404).json({ success: false, error: 'not_pending' });
+
+  // The sweep and this route must agree about what "tomorrow" means, so the
+  // date comes from the sweeper's own exported calculator rather than a second
+  // copy of the arithmetic here.
+  const until = on ? fapiaoReminders.snoozeTarget(new Date()) : null;
+  tdb().prepare('UPDATE retail_orders SET invoice_reminder_snoozed_until = ? WHERE id = ?')
+    .run(until ? until.toISOString() : null, id);
+  res.json({ success: true, data: { id, snoozed_until: until ? until.toISOString() : null } });
 });
 
 // Apply the split-package suggestion: re-bucket items between the order's

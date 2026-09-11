@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.216
+# Tacet shared-core consolidation — decisions record, v4.217
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-11 · v4.217 — **§99 ADDENDUM 1: THE SNOOZE IS BUILT, AND IT IS NOT A DISMISSAL.** Asked for by Ash after §99 shipped; that section had recorded it as not built and named the four things it needed, all settled here. **THE JUSTIFICATION IS `lib/push-events.js`'s OWN SENTENCE** — *"The switch that gets used is the one that turns the whole thing off, and then the pick that mattered arrives nowhere"* — because §99 correctly gave a dismissed banner no effect at all, which leaves an operator who cannot act today with exactly one working control: killing every push. **A SWIPE STILL WRITES NOTHING AND STILL MUST**; the deferral is a press on a screen, by somebody holding `invoices:manage`. **THREE PROPERTIES STOP IT BECOMING A WAY TO NEVER DO THE WORK**: it reaches tomorrow's reminder hour and no further, so one press hides at most ONE ask; **IT QUIETS THE PUSH ONLY** — the row still matches `pendingSql`, so Home keeps counting it and still goes brick at month-end, which is the safeguard and is asserted directly; and the row is SKIPPED, never claimed, so a deferral moves the cadence rather than restarting it. **MONTH-END HONOURS IT, RECORDED IN BOTH DIRECTIONS**: the control means *do not ask me again before tomorrow's hour*, so inside month-end's daily cadence a press before the day's ask defers it and a press after it changes nothing — **and that second case must NOT be "fixed" by lengthening the snooze at month-end**, which would invert the rule §99 turns on; both cases are pinned. Disabling the control for three days a month was rejected: a button that reads as set and buzzes anyway is a lying control. **THE GATE ALREADY EXISTED** (`cap-routes` maps every write under the invoices prefix to `invoices:manage`) and the suite proves it through the REAL middleware — `invoices:view` gets 403 and writes nothing while still reading the list. Only a WAITING row may be deferred; issued, cancelled, unpaid, never-requested and non-existent all answer `not_pending`, and `isSnoozed` treats a lapsed, blank or unreadable stamp as not snoozed so nothing ever has to clear the column and an unparseable value fails towards ASKING. **ONE STRING FOR BOTH STATES** — the app's own `.chip` fill says "set", and no date is printed because the button and the server already agree on tomorrow. Chinese: `docs/tacet-delivery-vocabulary.md` v1.57, one composed pair and one lifted, **`忽略` and `跳过` rejected because both describe a dismissal**. 27 new assertions across two suites, load-bearing ones checked to fail reverted; `test:fast` green at 206. **A §99 claim is corrected**: it framed month-end survival as survive-or-not, and the real answer is a third option. **Auto-issue remains open**, asked twice and unanswered. A build under an existing decision, hence a patch.
 
 2026-09-11 · v4.216 — **§99 BUILT: THE FAPIAO CHASE, AND THE COUNT THAT DISAGREED WITH HOME.** Asked from the phone with a screenshot reading *Pending 2* — *"why we have 2 open invoices and the system doesn't alert me … if customer close the notification and invoice still open, system should recognize it and pop up again."* **TWO DEFECTS WEARING ONE COAT, AND ASH FOUND THE SECOND**: told that *"those invoice that not settled came from canceled order"*, the survey found why there was nothing to alert about — **five call sites asked which fapiao were pending and `GET /api/retail-admin/invoices` was the only one not requiring the order to be alive**, filtering on `needs_invoice = 1` alone while Home, the unseen dot, the Orders pseudo-status and its badge all excluded `cancelled` and `pending_payment`. So the list counted the dead, Home did not, and the operator drew the more damaging of the two available conclusions — that the ALERTING was broken — which is the reasonable one to draw from two sincere numbers that disagree. `lib/fapiao-queue.js` is the predicate now and the regression guard is in the suite, not in review: the test fails if `routes/retail.js` states the exclusion anywhere itself, because **the defect was never a wrong clause but five copies of one**. Dead requests are excluded from the count and NOT hidden — they wear the order's own live `已取消` / `待付款` in the muted pill, so no new string and no row vanishes; `counts.blocked` is new so All still sums its rows; an issued fapiao keeps reading issued whatever became of its order, being a 红冲 waiting to happen. **THE REMINDER IS A WINDOW, NOT A LATCH, AND `lib/alert-latch.js` HAD ALREADY DRAWN THE DISTINCTION** — which is why `lib/delivery-reminders.js` could not take a fifth case: its claim is `WHERE … IS NULL`, once ever. **DISMISSING WRITES NOTHING, WHICH IS THE ANSWER TO THE QUESTION**: there is no dismissed column because there must not be one, the row still matches `pendingSql` next sweep, and only ISSUING stops it — by dropping out of the queue, so no state is ever cleared. Tagged per order, so `sw.js`'s existing `renotify` replaces the tray entry rather than stacking. **THE CADENCE KEYS OFF MONTH-END, NOT ELAPSED DAYS** — silent 24h, then 48h, then DAILY in the last three days with Home's row going brick, because what makes a late fapiao expensive is the tax period closing and not its age; the window is computed from the month's own length so February is not exempt, and the phone reads the SHOP's date. At 10:00, **which is NOT the quiet hours `push-events.js` refuses** — that file drops an alert by a clock, this one schedules its own send, the same `DAYOF_HOUR = 10` the delivery sweeper uses. One digest above three; a digest claims every row it covered. Audience `invoices:manage` ("issuing a 发票 is a fiscal act"), switch `invoice_pending`, ON by default. **NOT BUILT AND NOT DECIDED: the snooze** (its own column, endpoint and month-end question — held back rather than folded in) and **why auto-issue is off**, raised in session and unanswered. Chinese: `docs/tacet-delivery-vocabulary.md` v1.56, two composed pairs and one lifted, **`逾期` rejected and the reason recorded** — a 发票 unissued on the 29th has broken no promise to the customer. 52 new assertions across two fast suites, the load-bearing ones on each side checked to fail with the change reverted; `test:fast` green. Two commits, one PR — the session was pinned to one branch; recorded in the section. A build under a new decision, hence a patch.
 
@@ -10337,3 +10339,95 @@ Either commit reverts without the other. Recorded because the rule was bent and
 a silently bent rule is the kind that stops being read. Sessions live against this repo at the time
 (`store-section-setup`, `spoiled-shipment-workflow`) touch neither path; §99 is
 the next free number as of `6555ecb` and neither had pushed a branch.
+
+### §99 addendum 1 — the snooze is built, and it is not a dismissal (2026-09-11)
+
+§99 recorded the snooze as **not built, not decided**, and named four things it
+needed: a column, a write endpoint, a control on a screen that cannot itself
+issue a fapiao, and a ruling on whether a deferral survives month-end. Ash asked
+for it after §99 shipped. All four are settled here.
+
+**WHY IT EXISTS, RESTATED, BECAUSE IT IS THE WHOLE JUSTIFICATION.** §99 gave a
+dismissed notification no effect whatsoever — no dismissed column, so a swipe
+writes nothing and the next sweep asks again. That is correct and it is the
+feature. On its own it leaves an operator who genuinely cannot act today with
+exactly one working control: switching every push off. `lib/push-events.js` is
+written about that failure in its own words — *"The switch that gets used is the
+one that turns the whole thing off, and then the pick that mattered arrives
+nowhere."* The snooze exists so that the control within reach is "not this one,
+not today" rather than the one that silences somebody else's refund.
+
+**IT IS A DECISION, NOT A GESTURE, AND THE DIFFERENCE IS THE DESIGN.** A swipe on
+a banner still writes nothing and still must. The deferral is a press on the
+Invoices screen, by somebody holding `invoices:manage`, recorded in
+`retail_orders.invoice_reminder_snoozed_until`. Three properties stop it from
+becoming a way to never do the work:
+
+- **It reaches tomorrow's reminder hour and no further.** One press hides at most
+  ONE ask. There is no "next week", and `snoozeTarget()` is the only thing that
+  decides where tomorrow is.
+- **IT QUIETS THE PUSH ONLY.** The order still matches `pendingSql`, so Home's
+  Needs-you row keeps counting it and still goes brick at month-end. The work
+  never leaves the screen an operator walks past; only the interruption moves.
+  This is the safeguard, and `test_fapiao_reminders.js` asserts it directly.
+- **The row is skipped, never claimed.** The sweep does not touch
+  `invoice_reminder_last_at` for a deferred row, so a snooze DEFERS the cadence
+  rather than restarting it — press it on a 48-hour row and the chase resumes on
+  its own schedule, not two days after the press.
+
+**MONTH-END HONOURS IT, AND THE HONEST SHAPE OF THAT IS RECORDED IN BOTH
+DIRECTIONS.** The control means *do not ask me again before tomorrow's reminder
+hour*. Inside month-end the cadence is already daily, so a press made BEFORE the
+day's ask defers it and a press made AFTER it changes nothing — tomorrow is when
+the next one was coming anyway. **That second case is not a defect and must not
+be "fixed" by lengthening the snooze at month-end**: a control cannot defer below
+the cadence it is already on, and the alternative — a longer deferral in exactly
+the three days the tax period is closing — inverts the rule §99 turns on. The
+suite pins both cases for that reason. Disabling the control at month-end was
+rejected outright: it would leave a button that reads as set and buzzes anyway,
+and a lying control is worse than one day of chosen silence on a row Home is
+showing in brick the whole time.
+
+**THE GATE IS THE ONE THAT ALREADY EXISTED.** `lib/cap-routes.js` maps every
+write under `/api/retail-admin/invoices` to `invoices:manage`, so the route
+needed no new mapping — and the suite proves it through the real middleware
+rather than asserting it from source: an operator holding only `invoices:view`
+gets `403 forbidden_capability` and writes nothing, while still reading the list.
+
+**ONLY A ROW THAT IS WAITING MAY BE DEFERRED.** Issued, cancelled, unpaid, never
+requested and non-existent all answer `404 not_pending`. A date written onto work
+that no longer exists is a stale stamp for whoever reads the column next, and the
+column is deliberately one nobody has to tidy: `isSnoozed()` treats a lapsed,
+blank or UNREADABLE stamp as not snoozed, so nothing ever has to clear it and an
+unparseable value fails towards asking, which is the safe direction for a debt.
+
+**`snoozed:false` LIFTS IT, EXPLICITLY RATHER THAN AS A TOGGLE**, so a double tap
+cannot flip a deferral back on by accident.
+
+**ONE STRING FOR BOTH STATES.** The control is the app's own `.chip` with its
+`on` fill, so `明天提醒我` reads as an offer when empty and as "set" when filled.
+No date is printed beside it: the button promises tomorrow and the server writes
+tomorrow, and a timestamp would be a second source for one fact. Chinese:
+`docs/tacet-delivery-vocabulary.md` v1.57 — one composed pair, one lifted, with
+`忽略` and `跳过` rejected because both describe a dismissal and a word that made
+the two sound alike would undo the distinction this rests on.
+
+**A NOTE ON WHAT THE PHONE CANNOT DO.** The Invoices screen still says
+*"Auto-issue is off · issue fapiao on desktop"*, and the snooze does not change
+that — it is a control for deferring the reminder, on the surface that receives
+it, not a step towards issuing from a handset. **Why auto-issue is off remains
+open**, raised in session twice and unanswered; it is still the larger win if it
+turns out to be fixable.
+
+**Tests:** `scripts/test_fapiao_snooze_route.js` (18 assertions, the endpoint and
+its gate through the real middleware) and nine more in
+`scripts/test_fapiao_reminders.js` (the sweep's half). Load-bearing assertions on
+both sides were checked to FAIL with the change reverted — the `not_pending`
+guard removed (5 fail) and the sweep's skip removed (4 fail) — and to pass with
+it restored. `npm run test:fast` green at 206.
+
+**One correction to a claim in §99's own record.** That section said the snooze
+"needs … a ruling on whether a snooze survives month-end", implying the two
+outcomes were survive-or-not. The real answer is a third: it survives, and at
+month-end it is frequently a no-op by construction. Left standing and corrected
+here rather than edited, per this file's rule about dated claims.

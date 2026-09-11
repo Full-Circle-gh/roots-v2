@@ -4245,6 +4245,14 @@ addColumn('retail_orders', 'reminder_pickup_sent_at', 'DATETIME');
 // read by the cadence — nothing is capped, because a debt does not expire.
 addColumn('retail_orders', 'invoice_reminder_last_at', 'DATETIME');
 addColumn('retail_orders', 'invoice_reminder_count',   'INTEGER DEFAULT 0');
+// "Not today" — an operator's explicit deferral of the fapiao push (§99
+// addendum). NOT the same thing as dismissing a notification, which writes
+// nothing anywhere and must keep writing nothing: this is a decision, taken on
+// a screen, by somebody who can issue the thing. It can only ever reach
+// tomorrow's reminder hour, so it can never hide more than ONE ask, and it
+// quiets the PUSH only — the order stays in fapiao-queue's pendingSql, so Home
+// keeps counting it. NULL or past = not snoozed.
+addColumn('retail_orders', 'invoice_reminder_snoozed_until', 'DATETIME');
 // Item-level: when this row is a substitute, point back to the original
 // product the customer was trying to buy. Lets us show "replaces X" on
 // receipts and analytics.

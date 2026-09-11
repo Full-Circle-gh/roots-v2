@@ -945,6 +945,7 @@ const state = {
   capsLoaded:(typeof location!=='undefined' && location.protocol==='file:'),
   liveOrders:null, liveDetail:null, liveKpis:null, liveVitals:null, liveAttn:null,
   liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
+  invSnoozeBusy:null,
   custLoading:false, custMetaLoaded:false, detailMounted:false, mirrorTried:false, ent:{}, me:null,
   /* The order sheet, when the thing that opened it was the customer record.
      detailFetch says the sheet has nothing to draw yet and must hold the
@@ -7678,7 +7679,23 @@ const SUBS={
           <span style="display:flex;align-items:center;gap:9px;min-width:0">${pill(v.kind,T(...v.status))}
             <span style="font-size:12px;color:var(--text-secondary)">${v.company?T('Company','企业'):T('Personal','个人')}</span>
             ${v.when?`<span class="num" style="font-size:12px;color:var(--text-secondary)">${fmtDay(v.when)}</span>`:''}</span>
-          ${v.file?`<a href="${escAttr(v.file)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;flex:none;text-decoration:none">${ic('download',15)} ${T('Open','打开')}</a>`:''}</div></div>`).join('')}</div></div>`;
+          ${v.file?`<a href="${escAttr(v.file)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;flex:none;text-decoration:none">${ic('download',15)} ${T('Open','打开')}</a>`
+            /* "NOT TODAY" — the one way to quiet the chase without issuing.
+               Deliberately NOT the notification banner: swiping that away
+               writes nothing and must keep writing nothing. This is the
+               control that stops the only available way of saying "I know,
+               not today" from being switching every push off — the failure
+               lib/push-events.js is written about.
+               Offered only where it can act: a pending request, on a live
+               order, to somebody who could actually issue it. An issued row
+               has the Open button in this slot and a dead one has nothing to
+               defer. The app's own .chip idiom carries the on/off state, so
+               the label is one string in both directions — filled reads as
+               "remind me tomorrow: set". */
+            :(!v.dead&&!v.issued&&v.dbId!=null&&mCan('invoices:manage'))
+              ? `<button class="chip ${v.snoozed?'on':''}" style="flex:none" onclick="APP.cmd('invSnooze','${escAttr(v.dbId)}')"
+                   ${state.invSnoozeBusy===v.dbId?'disabled':''}><span>${T('Remind me tomorrow','明天提醒我')}</span></button>`
+              : ''}</div></div>`).join('')}</div></div>`;
   }},
   coupons:{title:['Coupons','优惠券'],render:()=>{
     const all=DB.coupons||[];
@@ -12545,6 +12562,53 @@ async function loadFapiao(){
   try{ state.fapiao=await api('/fapiao-settings'); }catch(e){}
   state.fapiaoLoading=false; render();
 }
+/* The fapiao list read, named so it has two callers: loadLive's boot pass and
+   the snooze's stale-row recovery. apiRaw, not api: the chip counts ride the
+   envelope beside `data`, and api() returns `data` alone — so liveInvoiceCounts
+   was never once set and the chips kept showing the mock's 214 / 198 / 16.
+   `apply` is loadLive's guarded setter when it has one (it swallows a throw and
+   re-renders); a direct caller gets the same behaviour from the default. */
+function loadLiveInvoices(apply){
+  const set=apply||(fn=>{ try{ fn(); }catch(e){} render(); });
+  return apiRaw('/invoices').then(r=>set(()=>{ const rows=(r&&r.data)||[]; state.invLoaded=true;
+    if(rows.length) DB.invoices=rows.map(mapInvoice); else DB.invoices=[];
+    if(r&&r.counts) state.liveInvoiceCounts=r.counts; })).catch(()=>{});
+}
+/* "Not today" on one fapiao request. The row is updated IN PLACE from the
+   server's answer rather than re-fetching the list: the whole screen redrawing
+   under a thumb that just pressed something is how a tap feels like it failed,
+   and the endpoint already returns the date it wrote. `snoozed` is derived from
+   that date exactly as mapInvoice derives it, so the two cannot disagree.
+   Explicit `snoozed:` rather than a toggle on the server — a double tap must
+   not flip a deferral back on by accident. */
+function invSnooze(id){
+  if(state.invSnoozeBusy!=null) return;
+  const row=(DB.invoices||[]).find(v=>String(v.dbId)===String(id));
+  if(!row) return;
+  const next=!row.snoozed;
+  state.invSnoozeBusy=id; render();
+  apiWrite('/invoices/'+encodeURIComponent(id)+'/snooze',{snoozed:next}).then(j=>{
+    const until=j&&j.data&&j.data.snoozed_until;
+    const d=_date(until);
+    row.snoozed=!!(d&&d.getTime()>Date.now());
+    state.invSnoozeBusy=null; render();
+    /* Says which way it went, in the app's own live words for the two states.
+       No date in the toast: "tomorrow" is what the button promised and what
+       the server wrote, and a formatted timestamp here would be a second way
+       of saying it that could drift from the first. */
+    showToast(row.snoozed?T('Reminder set for tomorrow','明天提醒我')
+                         :T('Reminder back on','提醒已恢复'));
+  }).catch(e=>{
+    state.invSnoozeBusy=null; render();
+    if(String(e.message)==='auth') return;
+    /* not_pending means it was issued, cancelled or paid off under us — the
+       list in hand is stale, so say what is true and refetch rather than
+       leaving a chip that lies about a row that no longer waits. */
+    if(e.code==='not_pending'){ state.invLoaded=false; state.fapiaoTried=false; loadLiveInvoices(); }
+    showToast(T('That did not save.','没有保存成功。'));
+  });
+}
+reg('invSnooze', id=>invSnooze(id));
 function toggleFapiao(){
   if(!state.fapiao||state.fapiaoBusy) return;
   const next=!state.fapiao.autoIssue;
@@ -17376,6 +17440,13 @@ function mapInvoice(r){
     // Only an issued fapiao has a file. The button used to be offered on every
     // row and did nothing on any of them.
     file:r.invoice_file_url||null,
+    /* "Not today" is live on this row. Read as a DATE rather than a boolean so
+       a stamp that has already lapsed reads as not-snoozed without the server
+       having to clear it — the sweep applies the same rule (isSnoozed), and a
+       column nobody has to tidy up cannot go stale. */
+    dbId:r.id!=null?r.id:null,
+    snoozed:(()=>{ const d=_date(r.invoice_reminder_snoozed_until);
+      return !!(d&&d.getTime()>Date.now()); })(),
     when:r.invoice_issued_at||r.placed_at||null};
 }
 /* A coupon's headline fact is what it GIVES, and the phone's card never said —
@@ -17903,12 +17974,7 @@ async function loadLive(){
   api('/setup').then(d=>set(()=>{ if(d&&d.percent!=null) state.setup=d; })).catch(()=>{});
   api('/delivery-zones').then(r=>set(()=>{ if(Array.isArray(r)) state.zones=r; })).catch(()=>{});
   api('/stores').then(r=>set(()=>{ if(Array.isArray(r)) state.stores=r.filter(s=>s.is_active==null||s.is_active); })).catch(()=>{});
-  // apiRaw, not api: the chip counts ride the envelope beside `data`, and
-  // api() returns `data` alone — so liveInvoiceCounts was never once set and
-  // the chips kept showing the mock's 214 / 198 / 16.
-  apiRaw('/invoices').then(r=>set(()=>{ const rows=(r&&r.data)||[]; state.invLoaded=true;
-    if(rows.length) DB.invoices=rows.map(mapInvoice); else DB.invoices=[];
-    if(r&&r.counts) state.liveInvoiceCounts=r.counts; })).catch(()=>{});
+  loadLiveInvoices(set);
   // `Array.isArray(r)`, not `r.length`: a shop with no coupons must SEE no
   // coupons. The `&& r.length` these three used to carry meant an empty server
   // answer left the sample rows on screen — the mock outliving the data it was
