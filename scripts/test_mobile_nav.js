@@ -227,6 +227,44 @@ run('mobile nav', [
       ['nor the owner’s setup checklist', `${body}.indexOf('Open your store')===-1`],
       ['Orders kept its tab, so More is a folder again', `${bar}.indexOf('Orders')>-1 && ${bar}.indexOf('More')>-1`],
     ]],
+
+  // ── the setup checklist is offered while there is setup left, and then ──
+  // ── never again ────────────────────────────────────────────────────────
+  // It is an onboarding checklist, not a tool. On a store that has finished
+  // opening it sat at the top of More reading "Everything is set up", above a
+  // full progress bar, first thing in the section — forever. The desktop rail
+  // row has always hidden itself at 100% (17-setup-guide.js suRefreshChrome);
+  // this is the phone catching up.
+  ['an unfinished store is offered the checklist',
+    OWNER + "state.setup={percent:60,requiredDone:3,requiredTotal:5,allDone:false};"
+    + "state.tab='more';state.stack=[];render();", [
+      ['the card is there', `${body}.indexOf('Open your store')>-1`],
+      ['saying how far along and how much is left', `${body}.indexOf('60% set up')>-1 && ${body}.indexOf('2 steps left')>-1`],
+      ['and it opens the guide', "document.querySelector('[onclick*=\"push\\',\\'setup\"]')!==null"],
+    ]],
+  ['a store that is open is not', 
+    OWNER + "state.setup={percent:100,requiredDone:5,requiredTotal:5,allDone:true};"
+    + "state.tab='more';state.stack=[];render();", [
+      ['no card', `${body}.indexOf('Open your store')===-1`],
+      ['and not the line it used to end on', `${body}.indexOf('Everything is set up')===-1`],
+      ['the rest of More is untouched', `${body}.indexOf('Delivery')>-1 && ${body}.indexOf('Invoices')>-1`],
+    ]],
+  // Before /setup answers, the status is unknown. The established store is the
+  // common case, so paint nothing rather than a "Checking…" card that then
+  // disappears — the same choice the desktop makes with `hide = !SETUP || ...`.
+  ['and neither is a store whose status has not come back yet',
+    OWNER + "state.setup=null;state.tab='more';state.stack=[];render();", [
+      ['nothing is claimed', `${body}.indexOf('Open your store')===-1`],
+      ['and no placeholder either', `${body}.indexOf('Checking')===-1`],
+      ['More itself still paints', `${body}.indexOf('Delivery')>-1`],
+    ]],
+  // A payload from before the server carried the flag must not be read as
+  // "unfinished" and put the card back on a store that has finished.
+  ['a status without the flag is judged by its own counts',
+    OWNER + "state.setup={percent:100,requiredDone:5,requiredTotal:5};"
+    + "state.tab='more';state.stack=[];render();", [
+      ['finished, so no card', `${body}.indexOf('Open your store')===-1`],
+    ]],
   // ── the counter till needs BOTH caps, and it is the only row that does ──
   // Its Confirm posts the ordinary manual order, which cap-routes gates on
   // orders:edit. Offered on till:use alone it is Receiving's bug wearing a
