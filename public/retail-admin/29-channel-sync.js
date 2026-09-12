@@ -36,30 +36,14 @@
   const GLYPH = { meituan: ['MT', '美'], eleme: ['EL', '饿'], guanyi: ['GZ', 'GZ'] };
   function chGlyph(k) { const g = GLYPH[k]; return g ? cuT(g[0], g[1]) : ''; }
 
-  // The state word. `unk` is English on both sides like MT_PENDING_CN /
-  // EL_PENDING_CN on the channel tabs — one placeholder, not two.
-  function word(k) {
-    switch (k) {
-      case 'ok':   return cuT('Synced', '已同步');
-      case 'att':  return cuT('Needs attention', '待处理');
-      case 'off':  return cuT('Sync off', '已关闭');
-      case 'unk':  return cuT('Name not checked', 'Name not checked');
-      default:     return cuT('Not listed', '未上架');
-    }
-  }
-  // What the cell says. An amber state with a specific cause names the cause,
-  // the phrase the channel tab already uses for it; a wrong number or a failed
-  // push says "Needs attention" and lets the figures beside it explain.
-  function cellWord(ch, c) {
-    switch (c.reason) {
-      case 'no_name':         return ch === 'meituan' ? cuT('Add name', '待填名称') : cuT('No listing name', '缺商品名');
-      case 'name_not_found':  return cuT('Listing not found', '找不到该商品');
-      case 'no_option':       return cuT('No option picked', '未选规格');
-      case 'store_not_connected': return cuT('Store not connected', '门店未关联');
-      case 'sending':         return cuT('Sending…', '发送中…');
-      default:                return word(c.k);
-    }
-  }
+  /* §103 step 5 — the words moved to 01-core.js's CH_STATE_WORD / CH_REASON_WORD,
+     which the three channel tabs now read too. This file kept the only copy
+     while it was the only surface; six files ask now, and a copy per file is
+     how "Name not in catalogue" and "Listing not found" came to mean one thing
+     in two places. These two are thin wrappers so the rest of the file, and the
+     product editor that imports them, read unchanged. */
+  function word(k) { return chStateWord(k); }
+  function cellWord(ch, c) { return chWord(ch, c.k, c.reason); }
   // The sentence an opened row carries for an amber cell — what is wrong and
   // what fixes it. Nothing for a green or grey one.
   function why(ch, c) {

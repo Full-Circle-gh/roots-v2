@@ -359,6 +359,56 @@ function skuTakenMsg(skuVal, conflict, sizeLabel) {
 }
 function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function escapeAttr(s) { return escapeHtml(s); }
+
+/* ── §103 step 5 · ONE VOCABULARY FOR CHANNEL SYNC STATE ─────────────────────
+   Four words and a handful of named causes, shared by every surface that says
+   whether a product is in step with a channel: the Meituan tab, the Eleme tab,
+   the GZ Grocery tab, the Channel sync page, the Products list's dots and the
+   product editor's Channels card.
+
+   IT LIVES HERE, IN THE CORE, BECAUSE SIX FILES ASK IT. The three channel tabs
+   were written months apart and each minted its own phrases — eighteen between
+   them for what is really four situations, with two of them wording the SAME
+   state differently ("Name not in catalogue" on Meituan, "Listing not found" on
+   Eleme) and GZ Grocery carrying no vocabulary at all. A table in any one of
+   those files would just have made that file the odd one out.
+
+   THE CAUSE WINS OVER THE STATE WHERE THERE IS ONE. "Listing not found" tells an
+   operator what to do; "Needs attention" only tells them to look. The state's own
+   word is the fallback, and the dot's colour carries the state either way.
+
+   `unk` is English on both sides on purpose — it is the placeholder the Meituan
+   and Eleme tabs already carry (MT_PENDING_CN / EL_PENDING_CN) while Ash sources
+   the Chinese, and one placeholder in one place is better than three. */
+const CH_STATE_WORD = {
+  ok:   ['Synced', '已同步'],
+  att:  ['Needs attention', '待处理'],
+  off:  ['Sync off', '已关闭'],
+  none: ['Not listed', '未上架'],
+  unk:  ['Name not checked', 'Name not checked'],
+};
+const CH_REASON_WORD = {
+  name_not_found:      ['Listing not found', '找不到该商品'],
+  no_option:           ['No option picked', '未选规格'],
+  store_not_connected: ['Store not connected', '门店未关联'],
+  linked_by_sku:       ['Linked by SKU', '按货号关联'],
+  sending:             ['Sending…', '发送中…'],
+};
+function chStateWord(k) { const p = CH_STATE_WORD[k] || CH_STATE_WORD.none; return cuT(p[0], p[1]); }
+/* `no_name` is the one cause that genuinely differs by channel, so it is asked
+   of the channel rather than flattened: on Meituan 外卖 a missing name is WORK
+   the operator does here and stock stays frozen until they do it; on Eleme the
+   mapping exists and pushes anyway, against the product's own name, which is a
+   live wrong-target risk rather than an unfinished form. Same state, two jobs. */
+function chWord(ch, k, reason) {
+  if (reason === 'no_name') {
+    return ch === 'meituan' ? cuT('Add name', '待填名称') : cuT('No listing name', '缺商品名');
+  }
+  const p = CH_REASON_WORD[reason];
+  return p ? cuT(p[0], p[1]) : chStateWord(k);
+}
+window.chStateWord = chStateWord;
+window.chWord = chWord;
 function thumbUrl(p) { return p?.image_url || p?.image_data || ''; }
 function fmt(n) { return Number(n || 0).toFixed(2); }
 

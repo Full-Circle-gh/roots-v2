@@ -686,30 +686,44 @@
   //
   // Ordered by what can go wrong, worst first, and the sync switch is read LAST
   // — it changes what a mapping is doing, never whether it is right.
+  //
+  // §103 step 5 — THE WORDS ARE NO LONGER THIS FILE'S. Every state takes its
+  // label from 01-core.js's shared table (chWord), so this tab and its three
+  // siblings say the same thing about the same state. Two changed here:
+  //   'Not on Eleme · 未上架饶了么'      → 'Not listed · 未上架'
+  //   'Ready, sync off · 已就绪 · 同步关闭' → 'Sync off · 已关闭' (Meituan's word)
+  // AND THE FIRST CARRIED A WRONG CHARACTER INTO PRODUCTION: 饶 (ráo) where the
+  // platform is 饿 (è) — 饿了么 is live in three other files. It is retired here
+  // rather than corrected, because the shared word does not name the channel at
+  // all. The same 饶 in the no-name sentence below IS corrected in place.
+  // The classifier is untouched: same tests, same k, same order.
   function elStoreState(map, storeCode) {
     const has  = !!map;
     const on   = has && Number(map.sync_enabled) === 1;
     const name = (has && map.eleme_name) || '';
     const base = { has, on };
+    const st = (k, reason, extra) => ({ ...base, k, reason, t: chWord('eleme', k, reason), ...(extra || {}) });
 
     if (storeCode && !elStoreConnected(storeCode)) {
-      return { ...base, k: 'none', t: cuT('Store not connected', '门店未关联') };
+      return st('none', 'store_not_connected');
     }
 
     // No mapping row is not a job. The product is not sold here, and it cannot
     // even be queued — the enqueue path needs a row to find one. This read "Add
     // name" for as long as the page existed, and 47 of them buried the ten that
     // were real.
-    if (!has) return { ...base, k: 'none', t: cuT('Not on Eleme', '未上架饶了么') };
+    if (!has) return st('none', 'no_map');
 
     // A mapping with no name still pushes. The drain falls back to the product's
     // own Chinese name as the target (scripts/eleme-daemon.js), so this is a live
     // wrong-target risk and not an unfinished form — product 80 sent 25 that way
     // with this exact shape and the switch off.
     if (!name) {
-      return { ...base, k: 'att', t: cuT('No listing name', '缺商品名'),
+      return st('att', 'no_name', {
+        // 饿, not 饶 — the platform is 饿了么. The wrong character shipped here
+        // and in the retired "not on Eleme" label above.
         why: cuT('This mapping has no Eleme listing name. A push falls back to the product’s own name, so it can land on the wrong listing or on none.',
-                 '该匹配没有饶了么商品名。推送会退回使用商品自身名称，可能对上错误商品或对不上。') };
+                 '该匹配没有饿了么商品名。推送会退回使用商品自身名称，可能对上错误商品或对不上。') });
     }
 
     // The check cannot run without a catalogue, so it says so and returns no
@@ -726,8 +740,7 @@
     // the gate's, from EL_PENDING_CN — English on both sides until Ash sources
     // the Chinese, per §30 rule 3 and tacet-delivery-vocabulary.md Rule 4.
     if (!elCatalogueRead(storeCode)) {
-      return { ...base, k: 'unk', t: cuT(EL_PENDING_CN.notChecked, EL_PENDING_CN.notChecked),
-        why: cuT(EL_PENDING_CN.notChecked, EL_PENDING_CN.notChecked) };
+      return st('unk', 'not_checked', { why: cuT(EL_PENDING_CN.notChecked, EL_PENDING_CN.notChecked) });
     }
 
     // Nothing validates a stored name at rest, so this is the check that was
@@ -736,24 +749,24 @@
       // gateSaysIt: the name field below prints its own sentence for exactly
       // this case, so the panel skips ours and the row keeps it. Two sentences
       // saying one thing under one heading is the clutter this screen sheds.
-      return { ...base, k: 'att', gateSaysIt: true, t: cuT('Listing not found', '找不到该商品'),
+      return st('att', 'name_not_found', { gateSaysIt: true,
         why: cuT('No listing on this store carries this exact name, so every push resolves to nothing. Pick the name from the list rather than typing it.',
-                 '该门店没有完全同名的商品，每次推送都会落空。请从列表中选择商品名，不要手动输入。') };
+                 '该门店没有完全同名的商品，每次推送都会落空。请从列表中选择商品名，不要手动输入。') });
     }
 
     // A listing with several options and none claimed cannot be pushed
     // accurately — the driver falls back to a rule that writes a made-up number
     // to every one of them.
     if (Number(map.specCount || 0) > 1 && !elClaims(map).length) {
-      return { ...base, k: 'att', t: cuT('No option picked', '未选规格'),
+      return st('att', 'no_option', {
         why: cuT('This listing holds several options and this product claims none, so a push would write a made-up number to every one of them.',
-                 '该商品有多个规格而本商品未认领任何一个，推送会向每个规格写入编造的数量。') };
+                 '该商品有多个规格而本商品未认领任何一个，推送会向每个规格写入编造的数量。') });
     }
 
     // Right target, switch off. A settled state — and the only one where "off"
     // is the whole story.
-    if (!on) return { ...base, k: 'off', t: cuT('Ready, sync off', '已就绪 · 同步关闭') };
-    return { ...base, k: 'ok', t: cuT('Synced', '已同步') };
+    if (!on) return st('off', 'sync_off');
+    return st('ok', 'synced');
   }
 
   // Work first, and inside the work the mappings that are pushing right now: a

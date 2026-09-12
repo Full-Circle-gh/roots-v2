@@ -184,14 +184,14 @@
   // ── Products + mapping table ──────────────────────────────────────────────────
   window.gyLoadProducts = async function () {
     const body = document.getElementById('gy-products-body');
-    if (body && !_products.length) body.innerHTML = '<tr><td colspan="5" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>';
+    if (body && !_products.length) body.innerHTML = '<tr><td colspan="6" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>';
     try {
       const r = await api('/api/retail-admin/guanyi/products');
       _products = r.data || [];
       _storeCode = r.storeCode || '';
       gyRenderProducts();
     } catch (e) {
-      if (body) body.innerHTML = `<tr><td colspan="5" class="muted" style="padding:24px;text-align:center">Error: ${esc(e.message)}</td></tr>`;
+      if (body) body.innerHTML = `<tr><td colspan="6" class="muted" style="padding:24px;text-align:center">Error: ${esc(e.message)}</td></tr>`;
     }
   };
 
@@ -209,7 +209,7 @@
     });
 
     setText('gy-count', `${rows.length} / ${_products.length}`);
-    if (!rows.length) { body.innerHTML = '<tr><td colspan="5" class="muted" style="padding:24px;text-align:center">No products</td></tr>'; return; }
+    if (!rows.length) { body.innerHTML = '<tr><td colspan="6" class="muted" style="padding:24px;text-align:center">No products</td></tr>'; return; }
 
     body.innerHTML = rows.map(p => {
       const name = esc([p.name_cn, p.name_en].filter(Boolean).join(' '))
@@ -220,6 +220,26 @@
       // Guanyi side: prefer the saved mapping, else the auto-match suggestion.
       const m = p.map, sg = p.suggestion;
       let gyCell, gyQty, sync, delta = '';
+      // §103 step 5 — THIS TAB HAD NO VOCABULARY AT ALL. Its siblings each had
+      // seven or eight state phrases; this one had "no match", a bind button and
+      // a delta, none of which says whether the product is in step. So an
+      // operator could read this screen top to bottom and not learn what the
+      // other two tabs tell you at a glance. It gets the SAME four words, from
+      // the same shared table (01-core.js chWord), and the same dot.
+      //
+      // The comparison is our shelf against what we last reconciled GZ Grocery
+      // to — `last_pushed_qty`, which for this ERP is "the target we last
+      // reconciled to" (database.js) and is exactly what lib/channel-sync-items
+      // compares server-side. The Δ column beside it keeps showing the ERP's own
+      // number, which is a different and also useful fact.
+      const gState = (() => {
+        if (!m || !m.guanyi_sku_id) return 'none';
+        if (Number(m.sync_enabled) !== 1) return 'off';
+        if (m.last_pushed_qty == null) return 'att';
+        return Number(m.last_pushed_qty) === ourQty ? 'ok' : 'att';
+      })();
+      const stateCell = '<span class="gy-state"><i class="cs-dot is-' + gState + '"></i>'
+        + esc(chWord('guanyi', gState, null)) + '</span>';
       if (m) {
         const gqty = sg ? Number(sg.current_qty) : null;
         gyCell = `<div style="font-size:12px">${esc(m.guanyi_name || '—')}</div>
@@ -248,6 +268,7 @@
         <td style="text-align:center;font-weight:600">${ourQty}</td>
         <td>${gyCell}</td>
         <td style="text-align:center">${gyQty} ${delta}</td>
+        <td data-no-i18n>${stateCell}</td>
         <td style="text-align:center">${sync}</td>
       </tr>`;
     }).join('');
