@@ -214,6 +214,10 @@
     queue_stalled:   ['has a stalled stock queue', '库存推送停滞'],
     poll_paused:     ['has order polling paused', '订单轮询已暂停'],
     proxy_stale:     ['has no network route', '网络线路不可用'],
+    // §106 — the shared rule (lib/channel-block.js) also blocks on proxy_down,
+    // which this list never had a word for. Same fault as proxy_stale from the
+    // operator's side, so the same pair rather than a new one.
+    proxy_down:      ['has no network route', '网络线路不可用'],
   };
 
   function mtRenderHead() {

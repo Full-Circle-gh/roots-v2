@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.233
+# Tacet shared-core consolidation — decisions record, v4.234
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-12 · v4.234 — **§106: THE CHANNEL SAYS WHAT IS STOPPING IT, AND THE ITEMS STOP GUESSING.** Asked by Ash, reading §105's own output: **"meituan refused it and couldn't reach it — can't the system also provide the reason?"** Three things proposed, all three approved with **"ok do they"**. **THE REASON WAS ONE FUNCTION AWAY AND NOBODY HAD ASKED.** §105 gave every item its own failure sentence and then shipped *"Cannot reach the sync service"* onto forty rows at once, while `meituanStoreHealth` in `routes/meituan-admin.js` — next door, driving the Meituan tab's store lines for months — already knew it was a **captcha on 天河 since 09:14**. Same shape as §105 itself and as §103 step 5: one rule, two copies, two screens drifting. **THE RULE MOVES TO `lib/channel-block.js` AND BOTH CALLERS ASK IT.** A store is blocked when its most recent blocking event with `status='error'` has not been overtaken by a successful `stock_push` or an explicit clearing event — two ways to recover because the daemons use both. **`status='error'` is the whole test**: `poll_paused` is logged `ok` and means "outside opening hours", and reading the event type alone turned 天河 amber the moment it shut for the night; that warning is carried over verbatim. Copying the algorithm into `lib/channel-sync-items.js` was rejected for §103 step 5's reason; the route now delegates and keeps its exact fields, and the suite runs **the tab's ORIGINAL algorithm beside the shared one over nine fixtures** and demands they agree. **ONE DELIBERATE DIFFERENCE, AND IT CHANGES WHAT AN EXISTING SCREEN SAYS: the shared list also blocks on `proxy_down`**, which the tab's private list omitted even though the daemon logs it as an error reading *proxy cannot reach Meituan — sync paused*. A store in that state pushes nothing and the tab called it fine. **EACH DAEMON HAS ITS OWN NAMES, AND THE FIRST DRAFT GOT THAT WRONG.** The descriptor was first written by giving Eleme and GZ Grocery Meituan's event names — it would have reported nothing at all for Eleme, for ever, in silence, because **Eleme calls a lost session `auth_required`**. The names are now read out of each daemon's own `logSync` calls, and **a test reads the daemons' source and fails if a name in the table is one nothing writes**, because a wrong string in a descriptor produces silence rather than an error. GZ Grocery announces recovery with the fault's OWN event type at status `ok`, so `needs_login` sits in both its lists; that is safe because clearing must be strictly later than the fault, and all three directions are pinned. **Only faults that stop the STOCK PUSH are listed** — Meituan's `sync_stalled` is about order reads and `browser_down` about a process that restarts itself. **WORST = EARLIEST**, not most recent: the fault that has been stopping pushes longest is the one nobody has looked at. It rides on the channel entry and is said **once on the channel's card**, never down forty item rows (§103's founding rule). **AN ITEM DEFERS TO IT IN ONE DIRECTION ONLY**: `chCauseFor` (desktop) and `csCauseFor` (phone) swap an item's cause for the channel's only where the item's own code is generic — `unreachable`, `http`, `signed_out`, `gave_up`, or none. **A stated refusal always keeps its own words**: *美团返回：商品已下架 (code 8003)* is a fact about that item no channel fault explains, and deferring would lose the only actionable sentence on the row. **THE MEITUAN CODES: THE EVIDENCE SAID THERE WAS NOTHING TO MAP.** All three codes the tree has met are handled BEFORE an operator can reach them — 10002 and 30000 are a lost store binding (`_isBindingError` → transient, flushes after re-login), 10048 is a 套餐 combo whose component is out of stock (`_apiSetSku` treats Meituan's refusal as the correct end state). **A what-to-do line for any of them would be a sentence no operator can reach — dead code that reads like coverage.** What ships is the evidence path: `MEITUAN_CODES` records what is known AND where it is handled, `meituanCodeOf` pulls the code back out of a rejection sentence, and **`scripts/report_reject_codes.js` counts every code the logs actually carry and names the ones missing from the table**. It writes nothing and needs no schema — the codes are already in `meituan_sync_log.error_msg` and the queue row — reads every tenant database on the box retroactively, and **refuses (exit 2) when nothing could be read** rather than printing "no unknown codes", per §30 rule 4. **Chinese: nothing new is minted.** `验证中心风控，同步已暂停，需要人工验证` is the Meituan daemon's own merchant alert verbatim; `同步已停` is the Eleme tab's own fallback; the sign-in and cannot-connect sentences come from §105's declared set; `自` is the Orders page's own "since". **One arrangement is composed** — `无法连接同步服务。同步已暂停。` — declared in `docs/tacet-delivery-vocabulary.md` with the candidates rejected. **Tests:** `scripts/test_channel_block.js`, new, fast shard, **40 cases**, plus four in `test_channel_sync_items.js` (**61 total**). No schema, no migration, no new capability, no change to `.gitignore` or CI.
 
 2026-09-12 · v4.233 — **§105: A FAILED PUSH SAYS WHY, BECAUSE IT ALWAYS KNEW — THE REASON WAS BEING DISCARDED ON THE WAY OUT.** Asked by Ash from a live phone screenshot showing *Push failed: transient push failure — retries exhausted*: **"the system can tell the exact reason it won't sync so the tenant can fix it faster?"** The answer was yes, and worse than yes. **THE CAUSE WAS COMPUTED AT EVERY FAILURE AND THROWN AWAY BY THE WRAPPERS ABOVE IT.** `lib/eleme-browser.js`'s `_rpc` resolves an HTTP status, a fetch error or Eleme's own error object; `_apiUpdateFoodStock` **logged it and dropped it one statement later**. `lib/meituan-browser.js`'s `_apiSetSku` captures Meituan's own `{status, code, msg}`, **logged `res` in full to a daemon log nobody reads**, and returned `{ ok, apiRejected }`. Seven Eleme exits and six Meituan ones returned `{ ok, transient }` while holding the reason in scope. So `last_error` — the one field an operator reads — said *retries exhausted*, **which is not a reason but a count of how many times we gave up**, and `docs/channel-mapping-findings.md` F4 had measured exactly that string appearing **17–35 times a day, every day, for two weeks**. It was the dominant error, and it said nothing. **THE FIX IS RETURN VALUES, NOT BEHAVIOUR.** Every check, every order of checks and every `transient` flag in both browser modules is unchanged; thirteen returns gained a field. **The Eleme daemon's preference is corrected to match Meituan's**, which already read `reason || (transient ? …)` and only ever lacked a reason to use — Eleme's read `transient ? <generic> : (reason || …)`, so three failed attempts discarded whatever had been learned. A row still retrying now says why too. **`lib/channel-push-reason.js` CLASSIFIES, IT DOES NOT TRANSLATE**, and that split is the point: the raw text is English from the browser layer and some of it is the PLATFORM's own Chinese, so wording it server-side would mean shipping English to a Chinese operator or inventing Chinese for Meituan's own words. It returns a stable code plus the detail worth keeping; `01-core.js` holds the bilingual sentence beside the rest of the channel vocabulary (§103 step 5). **An uncategorised failure comes back `code: null` with the raw text intact** — the failure nobody has seen is the one most worth reading, and a confident wrong category is worse than none (§30 rule 4's own rule for a check that cannot run). **Rule order is load-bearing and tested**: `cannot reach Meituan (HTTP 502)` matches both `http` and `unreachable`, and a status an operator can act on must not be swallowed by the general case. **MEITUAN'S OWN CHINESE IS KEPT VERBATIM.** A tenant now reads `美团返回：商品已下架 (code 10032)` rather than *retries exhausted* — the platform's sentence about the platform's own refusal, which nothing we could write in its place would improve on. **NOTHING IS COMPOSED IN CHINESE.** `无法连接同步服务` is live whole on the Meituan tab, `已退出登录` and `重新登录` on both channel tabs, `找不到该商品` on Eleme's, `尚未读取商品` on its store line, `多次重试仍失败` in both daemons' own logs, and **`{平台}返回：` is the shape WeChat's own error already uses** (`微信支付未通过校验。微信返回：`) for precisely this job. Two arrangements of those fragments, declared in `docs/tacet-delivery-vocabulary.md`. **Surfaces:** the Channel sync page, the product editor's Channels card and the phone's Channel sync screen all render the worded cause, falling back to the channel's raw sentence. **Tests:** eight added (57 total) — the platform's refusal kept verbatim, every cause the browser layer can write categorised, `http` winning over `unreachable` on a string both match, an uncategorised failure keeping its raw text, a retrying row classified on the cause beneath its suffix, the verdict carrying code + detail + raw together, **and two source-level guards: that neither browser module still has a bare `return { ok: false, transient: … }` and that both daemons prefer the reason over the wrapper**. `test:fast` green at 213. No schema, no migration, no new capability, no CI change. **The risk, named: this edits the browser-automation layer**, which drives live risk-controlled sessions. The diff is return values and comments only — nothing changes about what either module DOES, only about what it says when it fails.
 
@@ -11485,3 +11487,163 @@ sessions. The diff is return values and comments only.
   decision.
 - **Whether `signed_out` should raise an ops alert of its own.** It is the one
   cause no amount of retrying fixes, so it probably should; not built.
+
+---
+
+## §106 — THE CHANNEL SAYS WHAT IS STOPPING IT, AND THE ITEMS STOP GUESSING
+
+Asked by Ash, reading §105's own output: **"meituan refused it and couldn't
+reach it — can't the system also provide the reason?"** Three things were
+proposed and all three were approved with **"ok do they"**.
+
+### The finding that decided the shape
+
+§105 gave every item its own failure sentence and then shipped **"Cannot reach
+the sync service"** onto forty rows at once — while `meituanStoreHealth` in
+`routes/meituan-admin.js`, next door, already knew it was a **captcha on 天河
+since 09:14** and had been driving the Meituan tab's store lines off exactly
+that for months.
+
+**The reason was not missing. It was one function away and nobody had asked.**
+That is the same shape as §105 itself (the cause computed and discarded) and as
+§103 step 5 (one rule, two copies, two screens drifting apart).
+
+### 1 · The rule moves to `lib/channel-block.js` and both callers ask it
+
+A store is blocked when its most recent **blocking** event with `status='error'`
+has not been overtaken by either a successful `stock_push` or an explicit
+**clearing** event. Two ways to recover because the daemons use both: some
+faults are cleared by an announcement (`verify_cleared`), others simply stop
+being true and the proof is that a push landed.
+
+**`status='error'` IS THE WHOLE TEST.** `poll_paused` is logged with status
+`ok` and means "outside opening hours". Reading the event type alone turned 天河
+amber the moment it shut for the night; the warning is carried over verbatim
+from the route it came from, because it is the kind of thing that gets
+re-broken by someone tidying.
+
+**Copying the algorithm into `lib/channel-sync-items.js` was rejected** for the
+reason §103 step 5 spent a section on: a second copy of one rule is how two
+screens start disagreeing about one fact. `routes/meituan-admin.js` now
+delegates and keeps its exact fields; `scripts/test_channel_block.js` runs the
+tab's ORIGINAL algorithm beside the shared one over nine fixtures and demands
+they agree.
+
+**ONE DELIBERATE DIFFERENCE, and it is a fix rather than a slip: the shared list
+also blocks on `proxy_down`**, which the tab's private list omitted even though
+the daemon logs it as an error reading *"proxy cannot reach Meituan — sync
+paused"*. A store in that state pushes nothing and the tab called it fine. It
+will now read blocked, which is a change to what an existing screen says and is
+called out here and in the PR body.
+
+### 2 · Each channel's daemon has its OWN names, and the first draft got that wrong
+
+The descriptor was first written by giving Eleme and GZ Grocery **Meituan's**
+event names. It would have reported nothing at all for Eleme, for ever, in
+silence — **Eleme calls a lost session `auth_required`, not `needs_login`**, and
+writes no proxy events whatever. The names are now read out of each daemon's own
+`logSync` calls:
+
+| channel | blocking | clearing |
+| --- | --- | --- |
+| Meituan | `needs_login` `verify_required` `queue_stalled` `proxy_stale` `proxy_down` | `verify_cleared` `queue_resumed` `poll_resumed` `proxy_elected` `proxy_up` |
+| Eleme | `auth_required` `verify_required` | `auth_recovered` `verify_cleared` |
+| GZ Grocery | `needs_login` `proxy_down` | `needs_login` `proxy_up` |
+
+GZ Grocery announces its recovery with **the same event type as the fault**,
+status `ok` ("session recovered"), which is why `needs_login` is in both of its
+lists. That is safe because clearing must be strictly LATER than the fault row:
+a fault cannot clear itself, and a second fault re-blocks at its own stamp. A
+test pins all three directions.
+
+**Only faults that stop the STOCK PUSH are listed.** Meituan's `sync_stalled` is
+about order READS and its `browser_down` about a process that restarts itself;
+neither is a reason to tell an operator their numbers are stuck. A test reads
+the daemons' source and fails if a name in the table is one nothing writes —
+the guard for the mistake above, because **a wrong string in a descriptor
+produces silence, not an error**.
+
+### 3 · Worst = EARLIEST, and it is said once
+
+`channelBlockFor` folds a channel's stores to one cause and takes the
+**earliest**, not the most recent: the fault that has been stopping pushes
+longest is the one nobody has looked at. It rides on the channel entry
+(`blocked: { by, at, msg, store, storeName, storeNameEn }`), so it is said once
+on the channel's card — never repeated down forty item rows, which is §103's
+founding rule.
+
+### 4 · An item defers to it, in one direction only
+
+`chCauseFor` (desktop, `01-core.js`) and `csCauseFor` (phone, `m.html`) swap an
+item's cause for the channel's **only** when the item's own code is one of the
+generic ones — `unreachable`, `http`, `signed_out`, `gave_up`, or none at all.
+A captcha on 天河 is WHY this push could not reach Meituan; "cannot reach the
+sync service" beside it is the same fact, worse told.
+
+**A stated refusal always keeps its own words.** *Meituan returned: 商品已下架
+(code 8003)* is a fact about this item that no channel fault explains, and
+deferring there would lose the only actionable sentence on the row. Same for
+`option_gone` and `name_not_found`.
+
+### 5 · The Meituan codes: what the evidence actually said
+
+The third item was "map the known codes to a what-to-do line". **Every code the
+tree has ever seen turned out to be handled BEFORE an operator can reach it:**
+
+- **10002** *SET REGION QUERY ERROR* — the session lost its store binding.
+  `_isBindingError` catches it, flags the binding lost, returns the row
+  transient so it flushes after the next login.
+- **30000** *参数异常:acctId … null* — the same lost binding, a different
+  sentence. Same catcher.
+- **10048** — a 套餐 combo whose component is out of stock. Meituan is right to
+  refuse, so `_apiSetSku` treats it as the correct end state.
+
+**So a what-to-do line for any of them would be a sentence no operator can
+reach — dead code that reads like coverage.** What ships instead is the evidence
+path: `MEITUAN_CODES` in `lib/channel-push-reason.js` records what is known and
+where it is handled, `meituanCodeOf` pulls the code back out of a rejection
+sentence, and **`scripts/report_reject_codes.js` counts every code the logs
+actually carry and names the ones missing from the table**. The table grows when
+a real code turns up, not when somebody guesses one.
+
+**It writes nothing and needs no schema.** The codes are ALREADY recorded — the
+daemon's terminal path writes the platform's own sentence to both
+`meituan_sync_log.error_msg` and the queue row — so the report reads what is
+there, retroactively, across every tenant database on the box. It **refuses**
+(exit 2) when nothing could be read rather than printing "no unknown codes",
+per §30 rule 4.
+
+### Chinese
+
+Nothing new is minted. `验证中心风控，同步已暂停，需要人工验证` is the Meituan
+daemon's **own merchant alert, verbatim** (`scripts/meituan-daemon.js`);
+`同步已停` is the Eleme tab's own fallback for a store that is not syncing;
+`同步服务已退出登录…请重新登录` and `无法连接同步服务` come from §105's own
+declared set; `自` is the Orders page's own "since". **One arrangement is
+composed** — `无法连接同步服务。同步已暂停。`, two live sentences joined —
+declared in `docs/tacet-delivery-vocabulary.md` with the candidates rejected.
+
+### Tests
+
+`scripts/test_channel_block.js`, new, fast shard, **40 cases**: the rule and
+every recovery path; `status` as the whole test; the Meituan tab's original
+algorithm run beside the shared one over nine fixtures; the one deliberate
+difference asserted in both directions; each channel's own event names, with the
+Eleme mistake pinned as a failing case; GZ Grocery's self-named recovery; the
+descriptor's names checked against the daemons' source; earliest-wins across
+stores; and **both clients' deferral rules LIFTED out of the shipped files and
+run**, desktop against phone, in both languages, including that every blocking
+event a descriptor can report has a sentence on both surfaces. Four more in
+`scripts/test_channel_sync_items.js` (**61 total**) pin that the cause rides on
+the channel rather than the items, that the Meituan route delegates, and that
+all three clients defer.
+
+### Explicitly NOT decided here
+
+- **The Eleme tab's own `blocked` flag stays as it is.** It reads the session
+  file and the shop id, not the log — a different and more direct signal for the
+  question that tab asks. Folding the two is its own decision.
+- **Nothing here is a write.** No retry button, no clearing a captcha from the
+  page; the Channel sync page stays read-only, as §103 decided.
+- **No ops alert is added** for a channel that has been blocked for hours.
+  §105 left the same question open for `signed_out` and it is still open.

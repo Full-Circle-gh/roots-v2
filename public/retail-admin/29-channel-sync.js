@@ -192,9 +192,20 @@
         else t = cuT('no listings read yet', '尚未读取商品');
         return '<div class="cs-store"><i class="cs-dot ' + (s.connected ? 'is-ok' : 'is-none') + '"></i><span>' + esc(storeName(s) + ' · ' + t) + '</span></div>';
       }).join('');
-      return '<div class="cs-ch' + (down ? ' is-down' : '') + (idle ? ' is-idle' : '') + '">' +
+      /* §106 — WHY the channel is stopped, from its own daemon log: a captcha
+         waiting on a named store since a named time, the proxy down, a
+         signed-out session. One cause, on the card, once. */
+      const blk = ch.blocked;
+      const blkTxt = blk && typeof chBlockSentence === 'function' ? chBlockSentence(ch.key, blk.by) : '';
+      const blkLine = blkTxt
+        ? '<div class="cs-why">' + esc(blkTxt
+            + (blk.storeName ? ' · ' + (document.documentElement.dataset.uiLang === 'cn' ? blk.storeName : (blk.storeNameEn || blk.storeName)) : '')
+            + (blk.at ? ' · ' + cuT('since', '自') + ' ' + clock(blk.at) : '')) + '</div>'
+        : '';
+      return '<div class="cs-ch' + (down || blk ? ' is-down' : '') + (idle ? ' is-idle' : '') + '">' +
         '<div class="cs-nm"><span class="cs-glyph">' + esc(chGlyph(ch.key)) + '</span><span>' + esc(name) + '</span></div>' +
         '<div class="cs-st">' + st + '</div>' +
+        blkLine +
         (sub ? '<div class="cs-sub">' + sub + '</div>' : '') +
         (ch.stores.length > 1 || !ch.stores.every(s => s.connected) ? '<div class="cs-stores">' + stores + '</div>' : '') +
         '<div class="cs-act"><button type="button" class="btn btn-sm" onclick="goTab(\'' + ch.tab + '\')">' +
@@ -270,7 +281,10 @@
       if (c.platform_qty != null) facts.push(cuT(`${name} holds ${c.platform_qty}`, `${name}库存 ${c.platform_qty}`));
       // §105 — the CAUSE, worded, where the channel gave us one; its raw sentence
     // where it did not. chCauseLine (01-core.js) decides which.
-    const causeTxt = typeof chCauseLine === 'function' ? chCauseLine(ch.key, c)
+    // §106 — the channel's own cause where it explains this item's failure
+    // better than the item can. chCauseFor decides (01-core.js).
+    const chBlk = (_data.channels.find(x => x.key === ch.key) || {}).blocked || null;
+    const causeTxt = typeof chCauseFor === 'function' ? chCauseFor(ch.key, c, chBlk)
       : (c.error ? cuT('Push failed', '推送失败') + ': ' + c.error : '');
     const err = causeTxt ? '<div class="cs-err">' + esc(causeTxt) + '</div>' : '';
       const fix = c.k === 'att'

@@ -11724,6 +11724,45 @@ function csCause(ch,c){
   }
   return out + (c.retrying ? ' '+T('Retrying.','重试中。') : '');
 }
+/* §106 — what is stopping the WHOLE channel, from the same daemon log the
+   Meituan tab has read for months (lib/channel-block.js). The desktop twin is
+   chBlockSentence in 01-core.js and the sentences are identical in both; the
+   Chinese is live — 验证中心风控，同步已暂停，需要人工验证 is the merchant alert
+   the Meituan daemon itself sends, and the rest is lifted from csCause above. */
+function csBlockSentence(ch,by){
+  const nm=csChName(ch);
+  switch(by){
+    case 'verify_required': return T(nm+' is asking for a captcha — a human has to pass it on the sync machine. Sync is paused.','验证中心风控，同步已暂停，需要人工验证。');
+    case 'needs_login':
+    case 'auth_required':   return T('The sync service is signed out of '+nm+'. Sign in again.','同步服务已退出登录'+nm+'。请重新登录。');
+    case 'proxy_down':
+    case 'proxy_stale':     return T('Cannot reach the sync service. Sync is paused.','无法连接同步服务。同步已暂停。');
+    case 'queue_stalled':
+    case 'sync_stalled':    return T('Stock updates stopped going out.','同步已停。');
+    default: return '';
+  }
+}
+/* The item's own cause, unless the CHANNEL is blocked and the item's failure is
+   one of the generic ones the block explains better. A captcha on 天河 is WHY
+   this push could not reach Meituan; "cannot reach the sync service" beside it
+   is the same fact, worse told. Same list, same order, as the desktop's
+   CH_GENERIC_CAUSES. */
+const CS_GENERIC_CAUSES=['unreachable','http','signed_out','gave_up',null];
+function csCauseFor(ch,c,blk){
+  if(blk&&blk.by&&CS_GENERIC_CAUSES.indexOf((c&&c.error_code)||null)!==-1){
+    const said=csBlockSentence(ch,blk.by);
+    if(said) return said;
+  }
+  return csCause(ch,c);
+}
+/* The blocking cause with the store it is on and when it started, for the card
+   that speaks for the channel. */
+function csBlockLine(ch,blk){
+  if(!blk||!blk.by) return '';
+  const said=csBlockSentence(ch,blk.by); if(!said) return '';
+  const store=blk.storeName?T(blk.storeNameEn||blk.storeName,blk.storeName||blk.storeNameEn):'';
+  return said+(store?' · '+store:'')+(blk.at?' · '+T('since','自')+' '+fmtDay(blk.at):'');
+}
 /* The cell's word: an amber state with a specific cause names it, in the
    phrase the desktop channel tab already uses; a wrong number or a failed push
    says Needs attention and the figures beside it explain. */
@@ -11767,7 +11806,10 @@ function screenChannelSync(){
   }
   const filter=state.csFilter||(d.counts.att?'att':'all');
   const items=(d.items||[]).filter(p=>filter==='all'||p.worst===filter);
-  const down=(d.channels||[]).filter(ch=>ch.stale);
+  /* §106 — a channel is shown as stopped when its queue has stalled OR when
+     its daemon log carries a live blocking cause. The second is the commoner
+     of the two and was never on this screen. */
+  const down=(d.channels||[]).filter(ch=>ch.stale||ch.blocked);
   const pill=(ch,c)=>{
     const tone=c.k==='att'?'amber':c.k==='ok'?'sage':'plain';
     const bg=tone==='amber'?'var(--amber-tint)':tone==='sage'?'var(--sage-tint)':'var(--surface-raised)';
@@ -11795,7 +11837,8 @@ function screenChannelSync(){
       <div style="display:flex;align-items:center;gap:10px">
         <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
         <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${T(csChName(ch.key)+' stopped taking stock updates',csChName(ch.key)+' 已停止接收库存更新')}</span></div>
-      <div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${T(ch.stale.waiting_count+' stock updates waiting since '+fmtDay(ch.stale.oldest_at)+' — the numbers it shows may be wrong.','库存更新自 '+fmtDay(ch.stale.oldest_at)+' 起等待中（'+ch.stale.waiting_count+' 条）— 其显示的数量可能有误。')}</div></div>`).join('')}
+      ${ch.blocked?`<div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${escAttr(csBlockLine(ch.key,ch.blocked))}</div>`:''}
+      ${ch.stale?`<div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${T(ch.stale.waiting_count+' stock updates waiting since '+fmtDay(ch.stale.oldest_at)+' — the numbers it shows may be wrong.','库存更新自 '+fmtDay(ch.stale.oldest_at)+' 起等待中（'+ch.stale.waiting_count+' 条）— 其显示的数量可能有误。')}</div>`:''}</div>`).join('')}
     ${(!down.length&&!c.att)?`<div style="display:flex;flex-direction:column;gap:4px;background:var(--sage-tint);border-radius:14px;padding:14px 16px;margin:0 16px">
       <div style="display:flex;align-items:center;gap:10px;font-size:14.5px;font-weight:500;color:var(--sage-ink)"><i style="width:8px;height:8px;border-radius:50%;background:var(--sage)"></i>${T('Every channel is in step','各渠道均已同步')}</div>
       <div class="num" style="font-size:13px;color:var(--sage-ink)">${T((c.all||0)+' items. Nothing needs you.',(c.all||0)+' 件商品。无需处理。')}</div></div>`:''}
@@ -11818,7 +11861,9 @@ function screenChannelSync(){
             /* §105 — the cause in words where the channel gave us one. The phone
                has no shared core to import, so the sentences live here; the
                codes and the raw text come from the same server read. */
-            const said=csCause(x.ch.key,c2); if(said) line.push(said);
+            /* §106 — and defers to the CHANNEL's cause where that explains this
+               item's failure better than the item can. */
+            const said=csCauseFor(x.ch.key,c2,x.ch.blocked||null); if(said) line.push(said);
             else if(c2.error) line.push(T('Push failed','推送失败')+': '+c2.error);
             return `<div class="num">${escAttr(line.join(' · '))}</div>`;}).join('')}
           ${bad.length?`<div style="color:var(--text-secondary)">${T('Fix this on the desktop: '+bad.map(x=>csChName(x.ch.key)).join(', ')+' tab.','请在电脑端修复：'+bad.map(x=>csChName(x.ch.key)).join('、')+'页。')}</div>`:''}

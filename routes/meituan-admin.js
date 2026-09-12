@@ -23,6 +23,10 @@ const channelPublish = require('../lib/channel-publish');
 // behaviour can be driven headless against a fixture; this route adds no rule
 // of its own beyond turning the result into a response.
 const mapWrite = require('../lib/meituan-map-write');
+// §106 — the one rule for "what is stopping this store", shared with the
+// Channel sync page. The explanation sits above meituanStoreHealth, where the
+// two private lists it replaces used to be.
+const { channelBlock } = require('../lib/channel-block');
 const { logActivity } = require('../middleware/auth');
 // Opening/closing a location on a channel is ONE operation (see lib/store-close):
 // it owns the flag write AND the queued-push clear together, so no route can do
@@ -377,8 +381,17 @@ function csStorePushEnabled(db, code) {
 // not a broken one. Treating the event type alone as blocking turned 天河 amber
 // the moment it shut for the night. Any future informational event is now
 // harmless here for the same reason.
-const MT_BLOCKING = ['needs_login', 'verify_required', 'queue_stalled', 'proxy_stale'];
-const MT_CLEARING = ['verify_cleared', 'queue_resumed', 'poll_resumed', 'proxy_elected'];
+// §106 — THE RULE MOVED TO lib/channel-block.js AND THIS DELEGATES TO IT. It
+// lived here alone and drove this tab's store lines for months; §105 then said
+// "cannot reach the sync service" on forty items while this function, next
+// door, already knew it was a captcha on 天河 since 09:14. A second copy is how
+// two screens start disagreeing about one fact (§103 step 5), so there is one.
+//
+// ⚠️ ONE DELIBERATE BEHAVIOUR CHANGE, called out in the PR body: the shared
+// list ALSO blocks on `proxy_down`, which the two lists here did not. The Meituan
+// daemon logs it with status 'error' and the message "proxy cannot reach
+// Meituan — sync paused" — a store whose sync is paused IS blocked, and this
+// tab has been saying otherwise. `proxy_up` clears it, symmetrically.
 
 function meituanStoreHealth(db) {
   const stores = db.prepare(`
@@ -387,18 +400,6 @@ function meituanStoreHealth(db) {
       FROM retail_stores ORDER BY sort_order, id
   `).all();
 
-  // Latest genuine failure, and latest thing that would clear one.
-  const lastFault = db.prepare(`
-    SELECT event_type, status, error_msg, created_at
-      FROM meituan_sync_log
-     WHERE store_code = ? AND status = 'error'
-       AND event_type IN (${MT_BLOCKING.map(() => '?').join(',')})
-     ORDER BY created_at DESC LIMIT 1
-  `);
-  const lastClear = db.prepare(`
-    SELECT MAX(created_at) AS t FROM meituan_sync_log
-     WHERE store_code = ? AND event_type IN (${MT_CLEARING.map(() => '?').join(',')})
-  `);
   // Shop hours. poll_paused/poll_resumed are a normal nightly pair; a closed
   // store is reported plainly, never as a fault.
   const lastPause  = db.prepare("SELECT MAX(created_at) AS t FROM meituan_sync_log WHERE store_code = ? AND event_type = 'poll_paused'");
@@ -433,15 +434,9 @@ function meituanStoreHealth(db) {
     'SELECT COUNT(*) AS n FROM store_products WHERE is_active = 1').get()?.n || 0;
 
   return stores.map(st => {
-    const ev  = lastFault.get(st.code, ...MT_BLOCKING) || null;
     const ok  = lastOkPush.get(st.code)?.t || null;
-    const cleared = lastClear.get(st.code, ...MT_CLEARING)?.t || null;
-    const blockedEvent = ev;
-    // Recovered on its own if anything good happened after the fault: a
-    // successful push, or an explicit clearing event.
-    const recovered = !!(blockedEvent && (
-      (ok      && String(ok)      > String(blockedEvent.created_at)) ||
-      (cleared && String(cleared) > String(blockedEvent.created_at))));
+    // One call, one rule. `block` is null when nothing is stopping this store.
+    const block = channelBlock(db, 'meituan', st.code);
     const pausedAt  = lastPause.get(st.code)?.t || null;
     const resumedAt = lastResume.get(st.code)?.t || null;
     const closed = !!(pausedAt && (!resumedAt || String(pausedAt) > String(resumedAt)));
@@ -453,10 +448,10 @@ function meituanStoreHealth(db) {
       name: st.name,
       nameEn: st.nameEn || st.name,
       enabled:    csStorePushEnabled(db, st.code),
-      blocked:    !!blockedEvent && !recovered,
-      blockedBy:  blockedEvent && !recovered ? blockedEvent.event_type : null,
-      blockedAt:  blockedEvent && !recovered ? blockedEvent.created_at : null,
-      blockedMsg: blockedEvent && !recovered ? (blockedEvent.error_msg || null) : null,
+      blocked:    !!block,
+      blockedBy:  block ? block.by : null,
+      blockedAt:  block ? block.at : null,
+      blockedMsg: block ? block.msg : null,
       closed,
       lastPushAt: ok,
       pending:    Number(q.pending    || 0),
