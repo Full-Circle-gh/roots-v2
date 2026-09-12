@@ -535,6 +535,87 @@ check('29-channel-sync exports the one name and glyph table it owns', () => {
   ok(/window\.csChannelGlyph\s*=/.test(src), 'csChannelGlyph is not exported');
 });
 
+// ── 7. §103 step 5 · one vocabulary, and the tabs stopped minting their own ──
+//
+// The three channel tabs were written months apart and each minted its own
+// phrases — eighteen between them — with two of them wording the SAME state
+// differently and GZ Grocery carrying none at all. Step 5 folded them into one
+// table in 01-core.js. These checks read the shipped files: the table is LIFTED
+// and run, not re-declared here, so a rename in the product goes red here rather
+// than passing against a copy.
+section('7 · one channel-state vocabulary, read out of the shipped files');
+
+const CORE = read('public/retail-admin/01-core.js');
+
+// Lift the real table + chWord and run them under a cuT that picks a language.
+function vocab(lang) {
+  const m = CORE.match(/const CH_STATE_WORD = \{[\s\S]*?\nwindow\.chWord = chWord;/);
+  ok(m, 'the shared vocabulary block was not found in 01-core.js — the anchor has drifted');
+  const src = m[0].replace(/window\.\w+ = \w+;/g, '');
+  const f = new Function('cuT', src + '; return { chWord, chStateWord };');
+  return f((en, cn) => (lang === 'cn' ? cn : en));
+}
+
+check('the four words are the four words, in both languages', () => {
+  const en = vocab('en'), cn = vocab('cn');
+  eq(['ok', 'att', 'off', 'none'].map(en.chStateWord),
+     ['Synced', 'Needs attention', 'Sync off', 'Not listed']);
+  eq(['ok', 'att', 'off', 'none'].map(cn.chStateWord),
+     ['已同步', '待处理', '已关闭', '未上架']);
+  eq(en.chStateWord('unk'), 'Name not checked');
+  eq(cn.chStateWord('unk'), 'Name not checked', 'unk is the EN placeholder on both sides, as on the tabs');
+});
+
+check('a named cause wins over the state word, and no_name differs by channel', () => {
+  const en = vocab('en'), cn = vocab('cn');
+  eq(en.chWord('eleme', 'att', 'name_not_found'), 'Listing not found');
+  eq(cn.chWord('eleme', 'att', 'name_not_found'), '找不到该商品');
+  eq(en.chWord('meituan', 'att', 'no_option'), 'No option picked');
+  // The one cause that is genuinely two jobs: type a name here, vs a mapping
+  // that pushes against the wrong name.
+  eq(en.chWord('meituan', 'att', 'no_name'), 'Add name');
+  eq(en.chWord('eleme', 'att', 'no_name'), 'No listing name');
+  eq(cn.chWord('meituan', 'att', 'no_name'), '待填名称');
+  // An unnamed cause falls back to the state's own word.
+  eq(en.chWord('guanyi', 'ok', null), 'Synced');
+  eq(en.chWord('guanyi', 'att', 'wrong_number'), 'Needs attention');
+});
+
+check('the three tabs and the Channel sync page all read the shared table', () => {
+  for (const f of ['11-meituan.js', '14-eleme.js', '12-guanyi.js', '29-channel-sync.js']) {
+    const src = read('public/retail-admin/' + f);
+    ok(/chWord\(/.test(src), f + ' does not call the shared chWord()');
+  }
+});
+
+check('the retired phrases are gone from every live string', () => {
+  // Each of these was one tab's private word for a state another tab already
+  // had a word for. Comments may still name them — that is the record of what
+  // changed — so only cuT() literals are checked.
+  const retired = [
+    ['11-meituan.js', "cuT('Not linked'"],
+    ['11-meituan.js', "cuT('Pick an option'"],
+    ['11-meituan.js', 'MT_PENDING_CN.notInCat'],
+    ['14-eleme.js', "cuT('Not on Eleme'"],
+    ['14-eleme.js', "cuT('Ready, sync off'"],
+    ['14-eleme.js', "cuT('Listing not found'"],
+    ['14-eleme.js', "cuT('No option picked'"],
+  ];
+  for (const [f, lit] of retired) {
+    ok(!read('public/retail-admin/' + f).includes(lit), f + ' still mints ' + lit);
+  }
+});
+
+check('饿了么, not 饶了么 — the wrong character is out of every live string', () => {
+  // 饶 (ráo) shipped where the platform is 饿 (è), in the Eleme tab's "not on
+  // Eleme" label and in its no-listing-name sentence. The label is retired and
+  // the sentence corrected. Comments recording that are not strings.
+  const src = read('public/retail-admin/14-eleme.js');
+  const live = src.split('\n').filter(l => !l.trim().startsWith('//') && l.includes('饶'));
+  eq(live, [], 'a live string still carries 饶');
+  ok(src.includes('饿了么商品名'), 'and the corrected sentence is present');
+});
+
 // ── Summary ──────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {

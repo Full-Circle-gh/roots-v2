@@ -825,10 +825,21 @@
   // it here and stock stays frozen until they do. 越秀 闪购 links itself by
   // 货号, so "not linked" there is a fact about the listing, not a job on this
   // page: neutral, never amber.
+  //
+  // §103 step 5 — THE WORDS ARE NO LONGER THIS FILE'S. Every state below takes
+  // its label from 01-core.js's shared table (chWord), so this tab, the Eleme
+  // tab, the GZ Grocery tab and the Channel sync page say the same thing about
+  // the same state. Three of them changed here and each was a real divergence,
+  // not a rename:
+  //   'Not linked · 未关联'        → 'Not listed · 未上架'      (the page's word)
+  //   'Name not in catalogue'      → 'Listing not found · 找不到该商品'
+  //                                  — the SAME state Eleme already called that
+  //   'Pick an option · 待选规格'  → 'No option picked · 未选规格'
+  // The classifier itself is untouched: same tests, same k, same order.
   function mtStoreState(map, editable, storeCode) {
+    const st = (k, reason) => ({ k, reason, t: chWord('meituan', k, reason) });
     if (!map || !map.meituan_name) {
-      return editable ? { k: 'att',  t: cuT('Add name', '待填名称') }
-                      : { k: 'none', t: cuT('Not linked', '未关联') };
+      return editable ? st('att', 'no_name') : st('none', 'no_map');
     }
 
     // Both name checks sit BEFORE the switch, and on the editable store only.
@@ -841,16 +852,21 @@
         // The check cannot run, so it says so, and never that all is well.
         // Neutral rather than amber: an unread cache is one fact about the
         // store, and amber here would repeat it on every product.
-        return { k: 'none', t: cuT(MT_PENDING_CN.notChecked, MT_PENDING_CN.notChecked) };
+        //
+        // §103 step 5: 'unk', not 'none' — the same kind Eleme has always used
+        // for this exact state. It still DRAWS neutral (.mt-dot.unk is the twin
+        // of .el-dot.unk), and no chip on this page reads k, so nothing counted
+        // moves; what changes is that the two tabs stop calling one state two
+        // names.
+        return st('unk', 'not_checked');
       }
       if (!mtNameKnown(storeCode, map.meituan_name)) {
-        return { k: 'att', t: cuT(MT_PENDING_CN.notInCat, MT_PENDING_CN.notInCat) };
+        return st('att', 'name_not_found');
       }
     }
-    if (map.sync_enabled === 0)  return { k: 'off', t: cuT('Sync off', '已关闭') };
-    if (mtNeedsSpec(map))        return { k: 'att', t: cuT('Pick an option', '待选规格') };
-    return editable ? { k: 'ok', t: cuT('Synced', '已同步') }
-                    : { k: 'ok', t: cuT('Linked by SKU', '按货号关联') };
+    if (map.sync_enabled === 0)  return st('off', 'sync_off');
+    if (mtNeedsSpec(map))        return st('att', 'no_option');
+    return editable ? st('ok', 'synced') : st('ok', 'linked_by_sku');
   }
 
   // The rows the filters leave standing, in list order. The panel and the list

@@ -6291,6 +6291,11 @@
   .mt-dot.att,  .el-dot.att  { background: var(--td-amber); }
   .mt-dot.off,  .el-dot.off  { background: var(--td-text2); }
   .mt-dot.none, .el-dot.none { background: transparent; box-shadow: inset 0 0 0 1px var(--td-text2); opacity: .6; }
+  /* §103 step 5 — the twin this block's own header rule asks for. Meituan's
+     "catalogue not read" state was 'none' while Eleme's was 'unk'; one state
+     with two names is what step 5 is retiring, so Meituan uses 'unk' now and
+     needs the dot Eleme already had. Drawn exactly like 'none'. */
+  .mt-dot.unk { background: transparent; box-shadow: inset 0 0 0 1px var(--td-text2); opacity: .6; }
 
   /* ── Eleme only: the sync switch, and what is wrong, on the row ─────────────
      ⚠️ Every rule above this point sets BOTH prefixes. These three set only
@@ -15478,3 +15483,8 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
   .pd-ch-row .facts { font: 400 12px var(--f-sans); color: var(--td-text2); font-variant-numeric: tabular-nums; }
   .pd-ch-row .go { margin-top: 6px; align-self: flex-start; }
   .pd-ch-empty { font: 400 13px var(--f-sans); color: var(--td-text2); padding: 4px 0 2px; }
+
+
+/* §103 step 5 · the GZ Grocery tab's state cell — the vocabulary it never had. */
+  #tab-guanyi .gy-state { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; font-size: 13px; color: var(--td-text2); }
+  #tab-guanyi .gy-state .cs-dot { flex: none; }
