@@ -12697,49 +12697,64 @@ function opsFires(){
     // when the fire is only the nudge. Same `oos||low` rule as the pill above.
     f.push({sev:'amber',icon:'box',label:T('Restock needed','需要补货'),n:oos||low,meta:state_,go:"APP.cmd('goRestock','"+(oos?'out':'low')+"')",mins:null});
   }
-  // Channel stock-sync stall — mirrors the desktop card's new row (see
-  // lib/channel-sync-stale.js). The phone has no per-channel screen to open
-  // (m.html never rebuilt the desktop's channel-admin tabs), so tapping names
-  // the gap instead of faking a destination. No featOn/permission gate: every
-  // role that sees Home should see when a channel stops syncing.
-  //
-  // Mock: the clock the customer's stock might be wrong at, not a duration —
-  // "waiting since 2:15 PM", not "oldest 4h" — same age:false pattern the
-  // Reviews row above uses for its own custom meta line. `mins` stays real so
-  // this still always outranks Restock below (whose mins is deliberately
-  // null, and a fire with no age always sorts last) — a stale channel may be
-  // SELLING stock we don't have; an empty shelf is only an empty shelf.
-  for(const c of (o.channel_sync_stale||[])){
-    const t=_date(c.oldest_at);
-    /* Carry the date when it isn't today — a bare clock time makes a row stuck
+  /* §104 — ONE channel row, covering all three channels, mirroring the desktop
+     card. Two facts are folded into it: an ITEM a channel holds a wrong number
+     for (§103's `channel_items_attention`) and a CHANNEL that has stopped
+     taking our stock pushes at all (lib/channel-sync-stale.js). They were two
+     rows, and THIS SCREEN is where they read as one thing said twice — "Meituan
+     not syncing · 3" sitting directly above "Channel sync · Meituan 2", same
+     channel, same clock. Ash, from here: "we don't need anymore the individual
+     channel sync notification like meituan. we have the new one that all
+     channels combined."
+
+     The stall is not dropped with its row: a stalled channel's items all read
+     GREEN (a push in flight is green whatever its age, and a queue that never
+     sends leaves last_pushed_qty matching what the channel shows), so nothing
+     else on Home would say it. It is a named channel in the line below, and
+     the channelsync screen's strip says it in full.
+
+     Neither count is summed into the other — different denominators — so the
+     pill shows items wrong, or the waiting count when a channel is down and no
+     item is provably wrong yet. Same either-or the Restock pill above uses.
+
+     No featOn/permission gate for SEEING it: every role that sees Home should
+     see when a channel stops syncing. Opening goes through the screen's gate. */
+  const cia=o.channel_items_attention||{}, stalled=o.channel_sync_stale||[];
+  const attN=Number(cia.count)||0;
+  if(attN>0||stalled.length){
+    const CH={meituan:['Meituan','美团'],eleme:['Eleme','饿了么'],guanyi:['GZ Grocery','GZ Grocery']};
+    const down={}; for(const s of stalled) down[s.channel]=s;
+    const byCh=cia.by_channel||{};
+    /* A channel says ONE thing about itself, worst first: a channel not
+       syncing at all is not also described by how many of its items have been
+       caught out — the stall is the larger fact and it contains them. */
+    const parts=[];
+    for(const k of Object.keys(CH)){
+      if(down[k]) parts.push(T(CH[k][0]+' not syncing',CH[k][1]+' 未同步'));
+      else if(byCh[k]) parts.push(T(CH[k][0],CH[k][1])+' '+byCh[k]);
+    }
+    /* A channel the server names that this map has never heard of is still
+       said rather than dropped — a fourth channel needs no change here. */
+    for(const s of stalled) if(!CH[s.channel]) parts.push(T(s.label+' not syncing',s.label+' 未同步'));
+    for(const k of Object.keys(byCh)) if(!CH[k]&&!down[k]) parts.push(k+' '+byCh[k]);
+    /* The clock is the OLDER of the two facts — the earliest moment a customer
+       may have started reading a wrong number. Both stamps are the server's
+       'YYYY-MM-DD HH:MM:SS' UTC, so a string sort picks the minimum. */
+    const oldest=[cia.oldest_at].concat(stalled.map(s=>s.oldest_at)).filter(Boolean).map(String).sort()[0]||null;
+    const t=oldest?_date(oldest):null;
+    /* Carry the date when it isn't today — a bare clock time makes a fact stuck
        since another DAY read as newer than one stuck this morning, so the text
        argues with the oldest-first order the list is actually in. */
     const sameDay=!!t&&shopDayOf(t)===shopToday();
     const when=!t?'':tdWhen(t,sameDay?'time':'dateTime',_tdL());
-    f.push({sev:'amber',icon:'unplug',label:T(c.label+' not syncing',c.label+' 未同步'),
-      n:c.waiting_count,
-      meta:when?T('stock updates waiting since '+when,'库存更新自 '+when+' 起等待中'):'',
-      age:false,mins:oldestMins([{waiting_since:c.oldest_at}]),
-      /* §103 gave the phone a channel screen, so the row opens it rather than
-         naming a gap. The gate is the screen's own (ROUTE_CAP.channelsync);
-         a role that cannot open it keeps the old honest toast. */
-      go:canRoute('channelsync')?"APP.cmd('push','channelsync')":`showToast(T('Review this on desktop','请在电脑端查看'))`});
-  }
-  /* §103 — items a channel holds a WRONG number for, across all three
-     channels. Distinct from the stall row above (one channel's whole queue sat
-     still): this is any single item lying to a customer while the rest of its
-     channel is fine. Same no-gate rule as the stall row for SEEING it; opening
-     it goes through the screen's own gate. */
-  const cia=o.channel_items_attention;
-  if(cia&&Number(cia.count)>0){
-    const CH={meituan:['Meituan','美团'],eleme:['Eleme','饿了么'],guanyi:['GZ Grocery','GZ Grocery']};
-    const parts=Object.entries(cia.by_channel||{}).map(([k,n])=>T((CH[k]||[k,k])[0],(CH[k]||[k,k])[1])+' '+n);
-    const t=_date(cia.oldest_at);
-    const sameDay=!!t&&shopDayOf(t)===shopToday();
-    const when=!t?'':tdWhen(t,sameDay?'time':'dateTime',_tdL());
     const meta=[parts.join(T(', ','，')),when?T('wrong since '+when,'自 '+when+' 起不符'):''].filter(Boolean).join(T(', ','，'));
-    f.push({sev:'amber',icon:'refresh-cw',label:T('Channel sync','渠道同步'),n:cia.count,meta,
-      age:false,mins:cia.oldest_at?oldestMins([{waiting_since:cia.oldest_at}]):null,
+    f.push({sev:'amber',icon:'refresh-cw',label:T('Channel sync','渠道同步'),
+      n:attN||stalled.reduce((n,s)=>n+(Number(s.waiting_count)||0),0),meta,
+      /* mins stays real so this still outranks Restock below (whose mins is
+         deliberately null, and a fire with no age sorts last) — a channel that
+         may be SELLING stock we don't have beats an empty shelf. age:false
+         because the meta line already carries the clock. */
+      age:false,mins:oldest?oldestMins([{waiting_since:oldest}]):null,
       go:canRoute('channelsync')?"APP.cmd('push','channelsync')":`showToast(T('Review this on desktop','请在电脑端查看'))`});
   }
   const rank={brick:0,amber:1};
