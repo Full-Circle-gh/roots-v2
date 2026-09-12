@@ -16341,22 +16341,31 @@ function mAutoOK(){
   if(mUnsavedWork()) return false;
   return true;
 }
-/* THE BACKSTOP, every 60 seconds: the four Today tiles, "Needs you", and the
-   awaiting-shipment count — the figures that move minute to minute — and
-   nothing else. The rest of loadLive is a dozen reads that do not move that
-   fast (invoices, vouchers, flash sales, the product seed), and putting them
+/* THE BACKSTOP, every 60 seconds: the four Today tiles, "Needs you", the
+   awaiting-shipment count, and — when the operator is actually looking at the
+   Orders list or an open order — the list itself, through the same in-place
+   refreshOrders() the SSE nudge uses. That last part used to be missing: this
+   tick fed the tab counts but never repainted the rows, so an operator whose
+   stream never got a nudge through (a VPN or a proxy sitting on the connection
+   is the case that was reported — EventSource can look connected while
+   nothing arrives) watched a stale Orders list until they reloaded the page by
+   hand, even though the number of "awaiting fulfilment" right above it had
+   already moved. The rest of loadLive is a dozen reads that do not move that
+   fast (invoices, vouchers, flash sales, the product seed), and putting THOSE
    on a timer would spend a phone's data plan on answers that had not changed.
    The desktop scopes its own timer the same way: DASH_HERO_INTERVALS carries
    `today` and `presence`, and nothing else on that page. */
 function mLiveTick(){
   if(!mAutoOK()) return;
   _mLive.busy=true;
-  Promise.all([
+  const jobs=[
     Promise.resolve(loadToday()).catch(()=>{}),
     Promise.resolve(loadOps()).catch(()=>{}),
     api('/order-status-counts').then(d=>{ if(d){ state.liveStatusCounts=d;
       state.liveAttn=Object.assign({},state.liveAttn||{},{ship:(d.paid||0)+(d.preparing||0)}); } }).catch(()=>{}),
-  ]).then(()=>{ _mLive.busy=false; state.refreshedAt=Date.now(); render(); });
+  ];
+  if(state.tab==='orders'||state.detailId!=null) jobs.push(Promise.resolve(refreshOrders()).catch(()=>{}));
+  Promise.all(jobs).then(()=>{ _mLive.busy=false; state.refreshedAt=Date.now(); render(); });
 }
 /* SOMETHING ACTUALLY MOVED — the whole board, the way a pull does it, without
    the spinner and the half-second floor that a gesture needs to read as work
