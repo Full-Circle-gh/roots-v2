@@ -67,7 +67,16 @@ jobs:
             User root
             IdentityFile ~/.ssh/id_deploy
             StrictHostKeyChecking accept-new
+            # ConnectTimeout bounds the HANDSHAKE only. Once a session is
+            # established nothing below it has a deadline, so a connection
+            # dropped mid-session — the box rebooting, the network going away
+            # under a long scp — leaves ssh waiting on a socket that will never
+            # answer, and the job hangs to the 360-minute default without ever
+            # failing. These two make the client notice: a probe every 15s, four
+            # unanswered before it gives up, so a dead peer fails in ~60s.
             ConnectTimeout 20
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
           EOF
           chmod 600 ~/.ssh/config
 
