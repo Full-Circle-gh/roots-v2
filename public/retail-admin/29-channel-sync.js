@@ -268,7 +268,11 @@
       if (!stores && lastLine(c)) facts.push(lastLine(c));
       if (c.k === 'att' && c.expected != null) facts.push(cuT(`shelf says ${c.expected}`, `货架为 ${c.expected}`));
       if (c.platform_qty != null) facts.push(cuT(`${name} holds ${c.platform_qty}`, `${name}库存 ${c.platform_qty}`));
-      const err = c.error ? '<div class="cs-err">' + esc(cuT('Push failed', '推送失败') + ': ' + c.error) + '</div>' : '';
+      // §105 — the CAUSE, worded, where the channel gave us one; its raw sentence
+    // where it did not. chCauseLine (01-core.js) decides which.
+    const causeTxt = typeof chCauseLine === 'function' ? chCauseLine(ch.key, c)
+      : (c.error ? cuT('Push failed', '推送失败') + ': ' + c.error : '');
+    const err = causeTxt ? '<div class="cs-err">' + esc(causeTxt) + '</div>' : '';
       const fix = c.k === 'att'
         ? '<div class="cs-fix"><button type="button" class="btn btn-sm" onclick="event.stopPropagation();csFix(\'' + ch.key + '\',' + p.id + ')">' + esc(cuT(`Open ${name}`, `前往${name}`)) + '</button></div>'
         : '';
