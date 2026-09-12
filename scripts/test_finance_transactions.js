@@ -67,21 +67,52 @@ const CLIENT_HELPERS = CLIENT.slice(
   CLIENT.indexOf('/** One money row of the staircase'));
 const CLIENT_TXFORM = CLIENT.slice(CLIENT.indexOf('let FIN_TX_EDIT'));
 
-/** A context with both slices loaded, and stubs for the form's four elements. */
+/** A context with both slices loaded, and stubs for the form's four elements.
+    Also a minimal document.body/createElement, since the Category box's own
+    suggestion menu (finTxCatSugMenuEl) hangs itself off <body> rather than
+    trusting a native <datalist> to position itself — `created` is where a
+    node it makes can be found again by getElementById. */
 function formCtx(els, lang) {
   let LANG = lang || 'en';
-  const ctx = vm.createContext({
+  const created = new Map();
+  const makeNode = (id) => ({
+    id, innerHTML: '', hidden: true, style: {}, children: [],
+    setAttribute() {}, addEventListener() {},
+    appendChild(child) { if (child && child.id) created.set(child.id, child); this.children.push(child); return child; },
+  });
+  // window IS the sandbox, not a nested stand-in for it — the same trick
+  // test_wizard_line_supplier.js uses for 16-purchasing.js. finTxCatSuggestOpen
+  // and friends are declared as `window.foo = …` (as they must be, to be wired
+  // from onclick/onfocus in the markup) and then called BARE from elsewhere in
+  // the same file (finTxKind calls finTxCatSuggestClose()); a `window` that is
+  // a separate object leaves that bare name undefined.
+  const sandbox = {
     document: {
-      getElementById: (id) => els[id] || null,
+      // Existing callers stub an element as bare `{ value }` — cheap when the
+      // test never looks at ARIA. finTxCatSuggestOpen/Close now set
+      // aria-expanded on #fin-tx-cat unconditionally, so any element handed
+      // back gets a no-op setAttribute rather than every one of those stubs
+      // needing to grow one.
+      getElementById: (id) => {
+        const el = els[id] || created.get(id) || null;
+        if (el && typeof el.setAttribute !== 'function') el.setAttribute = () => {};
+        return el;
+      },
       querySelectorAll: () => [{ classList: { toggle() {} }, dataset: {} }],
+      createElement: () => makeNode(''),
+      addEventListener() {},
+      body: makeNode('body'),
     },
     escapeHtml: (x) => String(x),
-    window: { cuLang: () => LANG },
     cuLang: () => LANG,
     cuT: (en, cn) => (LANG === 'cn' ? cn : en),
     tdWhen, tdToday,
     setLang: (l) => { LANG = l; },
-  });
+    innerHeight: 900,
+    addEventListener() {},
+  };
+  sandbox.window = sandbox;
+  const ctx = vm.createContext(sandbox);
   vm.runInContext(CLIENT_HELPERS, ctx);
   vm.runInContext(CLIENT_TXFORM, ctx);
   return ctx;
@@ -289,7 +320,8 @@ it('a JULY window returns July rows — there is no floor at 1 August', () => {
 console.log('\n3 · the screen — the two states, and the refusal made visible');
 
 const ctx = {
-  window: {}, document: { getElementById: () => null, querySelectorAll: () => [] },
+  window: { addEventListener: () => {} },
+  document: { getElementById: () => null, querySelectorAll: () => [], addEventListener: () => {} },
   Date, Math, Number, String, JSON, isNaN,
   cuT: (en) => en,
   tdWhen, tdToday,
@@ -579,25 +611,32 @@ it('the income category field follows the real list, not an assumption', () => {
     'the field must consult the server list');
   assert.ok(/FIN_TX\.income_categories/.test(CLIENT_CODE), 'read from the payload');
 
-  // Evaluated, not merely matched: empty hides, one entry shows.
+  // Evaluated, not merely matched: empty hides, one entry shows. finTxCatSugRows
+  // is the pure function behind the box's own suggestion menu (no native
+  // <datalist> to inspect any more — see the markup comment above
+  // #fin-tx-cat-row) — it takes the box's typed value and returns what would
+  // be offered, without opening anything.
   const row = { hidden: false };
-  const dl = { innerHTML: '' };
-  const cctx = formCtx({ 'fin-tx-cat-row': row, 'fin-tx-cats': dl, 'fin-tx-cat': { value: '' } });
+  const cctx = formCtx({ 'fin-tx-cat-row': row, 'fin-tx-cat': { value: '' } });
   cctx.FIN_TX = { rows: [], income_categories: [] };
   cctx.window.finTxKind('in');
   assert.strictEqual(row.hidden, true, 'an empty list hides the field');
-  assert.strictEqual(dl.innerHTML, '', 'and offers no options');
+  // .length, not deepStrictEqual against []: the vm sandbox's Array is a
+  // different realm's constructor, so a structurally-equal empty array from
+  // it still fails deepStrictEqual on prototype identity against a
+  // main-realm []. Length is what this assertion actually means.
+  assert.strictEqual(cctx.finTxCatSugRows('').length, 0, 'and offers no options');
   cctx.FIN_TX = { rows: [], income_categories: ['Sublet 转租'] };
   cctx.window.finTxKind('in');
   assert.strictEqual(row.hidden, false, 'one income category brings it back');
   // The list is the income list, rendered in ONE language: the stored value is
   // `Sublet 转租` and the English screen offers `Sublet`.
-  assert.ok(/>?Sublet</.test(dl.innerHTML.replace(/"/g, '')) || /Sublet"/.test(dl.innerHTML),
-    'the income list must reach the box');
-  assert.ok(!/转租/.test(dl.innerHTML), 'and the English screen shows no Chinese');
+  assert.ok(cctx.finTxCatSugRows('').includes('Sublet'), 'the income list must reach the box');
+  assert.ok(!cctx.finTxCatSugRows('').some(l => l.includes('转租')),
+    'and the English screen shows no Chinese');
   cctx.window.finTxKind('out');
   assert.strictEqual(row.hidden, false, 'money out always has the field');
-  assert.ok(!/Sublet/.test(dl.innerHTML),
+  assert.ok(!cctx.finTxCatSugRows('').includes('Sublet'),
     'and the two lists are never pooled — an income value must not be suggested '
     + 'for an expense, which storeCategory would then snap onto the wrong list');
 });
@@ -610,8 +649,7 @@ it('switching direction empties the category box', () => {
   // only; this covers the other one.
   const row = { hidden: false };
   const box = { value: 'Rent 房租' };
-  const dl = { innerHTML: '' };
-  const cctx = formCtx({ 'fin-tx-cat-row': row, 'fin-tx-cat': box, 'fin-tx-cats': dl });
+  const cctx = formCtx({ 'fin-tx-cat-row': row, 'fin-tx-cat': box });
   cctx.FIN_TX = { rows: [], income_categories: ['Sublet 转租'] };
   cctx.window.finTxKind('in');
   assert.strictEqual(box.value, '', 'the expense value must not survive the switch');
@@ -685,7 +723,7 @@ it('a shown half stores as the whole value it came from', () => {
   // storeCategory cannot catch it: it snaps on spacing and case, and these
   // differ by a whole language.
   const cctx = formCtx({
-    'fin-tx-cat-row': { hidden: false }, 'fin-tx-cat': { value: '' }, 'fin-tx-cats': { innerHTML: '' },
+    'fin-tx-cat-row': { hidden: false }, 'fin-tx-cat': { value: '' },
   });
   cctx.FIN_TX = { rows: [{ kind: 'out', category: 'Salaries&Wages 员工工资' }], income_categories: [] };
   cctx.window.finTxKind('out');
@@ -705,6 +743,45 @@ it('a shown half stores as the whole value it came from', () => {
     'the save must map the label back before sending');
   assert.ok(/set\('fin-tx-cat', row && row\.category \? finCatLabel/.test(CLIENT_CODE),
     'and the edit path must fill the box with the label');
+});
+
+it('the category box draws its own menu, not the OS combobox', () => {
+  // THE REPORTED DEFECT: <input list=…> + <datalist> is the OS's own popup,
+  // and inside an embedding webview it can land pinned to a far edge of the
+  // window instead of under the field that opened it. 16-purchasing.js hit
+  // the same thing on its payment-terms/method fields and drew its own menu
+  // instead (retail-admin.css:10947) — this field now does the same.
+  const section = financeSection();
+  assert.ok(!/<datalist/.test(section), 'the native datalist must be gone');
+  assert.ok(!/list="fin-tx-cats"/.test(section), 'the box must not point at one');
+  const field = section.match(/<input type="text" id="fin-tx-cat"[^>]*>/);
+  assert.ok(field, '#fin-tx-cat is missing');
+  assert.ok(/role="combobox"/.test(field[0]), 'the box must announce itself as a combobox');
+
+  const box = {
+    value: '', focus() {}, setAttribute() {},
+    getBoundingClientRect: () => ({ left: 40, top: 300, bottom: 330, width: 300 }),
+  };
+  const cctx = formCtx({ 'fin-tx-cat-row': { hidden: false }, 'fin-tx-cat': box });
+  cctx.FIN_TX = { rows: [{ kind: 'out', category: 'Rent 房租' }], income_categories: [] };
+  cctx.window.finTxKind('out');
+
+  cctx.window.finTxCatSuggestOpen();
+  const menu = cctx.document.getElementById('fin-tx-cat-menu');
+  assert.ok(menu && !menu.hidden, 'opening paints a menu rather than trusting the browser to');
+  assert.ok(menu.innerHTML.includes('Rent'), 'the option is in it');
+  // Off the FIELD's own coordinates — the whole of the fix — not a fixed
+  // corner of the window.
+  assert.strictEqual(menu.style.left, '40px', "placed at the field's own left edge");
+  assert.strictEqual(menu.style.top, '334px', "placed under the field's own bottom edge");
+
+  box.value = 'ren';
+  cctx.window.finTxCatSuggestOpen();
+  assert.ok(cctx.document.getElementById('fin-tx-cat-menu').innerHTML.includes('Rent'), 'typing narrows it, matching');
+
+  cctx.finTxCatSugPick('Rent 房租');
+  assert.strictEqual(box.value, 'Rent 房租', 'a pick fills the box whole, the same as the datalist did');
+  assert.strictEqual(cctx.document.getElementById('fin-tx-cat-menu').hidden, true, 'and closes the menu');
 });
 
 it('a typed NOTE is never split — only a category is', () => {

@@ -276,7 +276,8 @@ it('an uncategorised expense keeps its own line rather than a minted bucket', ()
 console.log('\n3 · the screen — the seventh state, and the locked pairs');
 
 const ctx = {
-  window: {}, document: { getElementById: () => null, querySelectorAll: () => [] },
+  window: { addEventListener: () => {} },
+  document: { getElementById: () => null, querySelectorAll: () => [], addEventListener: () => {} },
   Date, Math, Number, String, JSON,
   cuT: (en) => en,
   escapeHtml: (s) => String(s == null ? '' : s),

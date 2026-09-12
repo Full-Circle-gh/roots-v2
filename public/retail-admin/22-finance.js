@@ -1194,7 +1194,9 @@ window.finTxKind = function finTxKind(kind) {
   // this, so opening the form on an existing row is unaffected.
   const box = document.getElementById('fin-tx-cat');
   if (box) box.value = '';
-  finTxCatList();
+  // The menu, if one is open, is showing the OTHER direction's list — close it
+  // rather than leave it open against options that no longer apply.
+  finTxCatSuggestClose();
 };
 
 /* The tenant's income categories, as the server sent them with the ledger.
@@ -1248,13 +1250,153 @@ function finTxCatOptions() {
     .filter(r => r.kind === 'out' && r.category).map(r => r.category))].sort();
 }
 
-function finTxCatList() {
-  const dl = document.getElementById('fin-tx-cats');
-  if (!dl) return;
-  const labels = finCatLabels(finTxCatOptions());
-  dl.innerHTML = [...labels.values()]
-    .map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
+/* THE BOX'S OWN MENU, drawn by us — not an <input list> + <datalist> left to
+   the browser. That was the field's original shape, and it carried the same
+   defect 16-purchasing.js already found and fixed for its payment-terms and
+   payment-method fields (retail-admin.css:10947): the OS combobox popup is
+   unstyleable, and inside an embedding webview it can land pinned to a far
+   edge of the window instead of under the field that opened it — which is
+   what this field was doing. It reuses that fix's .pu2-suggest-menu /
+   .pu2-suggest-opt classes rather than inventing a second popup style. */
+let FIN_CAT_SUG_OPEN = false;
+let FIN_CAT_SUG_IDX = -1;   // keyboard-highlighted row, -1 = none
+
+/** The rows the menu would show for a given typed value. Pure — no DOM — so
+    a test can check what the box would offer without opening anything. Case-
+    insensitive substring, and a value that already matches an option exactly
+    keeps the whole list open rather than narrowing to itself, which is what
+    lets an already-filled box be reopened and changed. */
+function finTxCatSugRows(query) {
+  const labels = [...finCatLabels(finTxCatOptions()).values()];
+  const q = String(query == null ? '' : query).trim().toLowerCase();
+  if (!q || labels.some(l => l.toLowerCase() === q)) return labels;
+  return labels.filter(l => l.toLowerCase().includes(q));
 }
+
+function finTxCatSugMenuEl() {
+  let menu = document.getElementById('fin-tx-cat-menu');
+  if (!menu) {
+    menu = document.createElement('div');
+    menu.id = 'fin-tx-cat-menu';
+    menu.className = 'pu2-suggest-menu';
+    menu.setAttribute('role', 'listbox');
+    menu.hidden = true;
+    // mousedown, not click: it fires before the input's blur, and
+    // preventDefault() stops the field losing focus at all.
+    menu.addEventListener('mousedown', (e) => {
+      const opt = e.target.closest('.pu2-suggest-opt');
+      if (!opt) return;
+      e.preventDefault();
+      finTxCatSugPick(opt.dataset.v);
+    });
+    document.body.appendChild(menu);
+  }
+  return menu;
+}
+
+/* Off the FIELD's own coordinates, not a guess the browser makes about where
+   its own widget lives — the whole of the fix. Under the field by default;
+   over it when the field sits low enough that the list would run off the
+   bottom of the window. */
+function finTxCatSugPlace(input) {
+  const menu = finTxCatSugMenuEl();
+  const r = input.getBoundingClientRect();
+  menu.style.left = r.left + 'px';
+  menu.style.width = r.width + 'px';
+  const below = window.innerHeight - r.bottom;
+  if (below < menu.offsetHeight + 12 && r.top > below) menu.style.top = Math.max(8, r.top - menu.offsetHeight - 4) + 'px';
+  else menu.style.top = (r.bottom + 4) + 'px';
+}
+
+function finTxCatSugPaint(rows) {
+  finTxCatSugMenuEl().innerHTML = rows.map((label, i) =>
+    `<div class="pu2-suggest-opt${i === FIN_CAT_SUG_IDX ? ' on' : ''}" role="option"
+        aria-selected="${i === FIN_CAT_SUG_IDX}" data-v="${escapeHtml(label)}">
+        <span class="lead">${escapeHtml(label)}</span>
+      </div>`).join('');
+}
+
+window.finTxCatSuggestOpen = function () {
+  const input = document.getElementById('fin-tx-cat');
+  if (!input) return;
+  const rows = finTxCatSugRows(input.value);
+  if (!rows.length) { finTxCatSuggestClose(); return; }
+  if (!FIN_CAT_SUG_OPEN) FIN_CAT_SUG_IDX = -1;
+  FIN_CAT_SUG_OPEN = true;
+  if (FIN_CAT_SUG_IDX >= rows.length) FIN_CAT_SUG_IDX = -1;
+  finTxCatSugPaint(rows);
+  const menu = finTxCatSugMenuEl();
+  menu.hidden = false;
+  input.setAttribute('aria-expanded', 'true');
+  finTxCatSugPlace(input);
+};
+
+function finTxCatSugPick(label) {
+  const input = document.getElementById('fin-tx-cat');
+  if (input) { input.value = label; input.focus(); }
+  finTxCatSuggestClose();
+}
+
+window.finTxCatSuggestClose = function () {
+  const menu = document.getElementById('fin-tx-cat-menu');
+  if (menu) { menu.hidden = true; menu.innerHTML = ''; }
+  const input = document.getElementById('fin-tx-cat');
+  if (input) input.setAttribute('aria-expanded', 'false');
+  FIN_CAT_SUG_OPEN = false; FIN_CAT_SUG_IDX = -1;
+};
+
+window.finTxCatSuggestBlur = function () {
+  // Deferred: an option's mousedown preventDefault()s the focus loss, but a
+  // click landing anywhere else still needs its turn before we tear down.
+  setTimeout(() => { if (FIN_CAT_SUG_OPEN) finTxCatSuggestClose(); }, 150);
+};
+
+// The caret is inside the label's row, so a plain click would re-focus the
+// input and toggle nothing. Handle it on mousedown, before focus moves.
+window.finTxCatSuggestToggle = function (e) {
+  e.preventDefault(); e.stopPropagation();
+  if (FIN_CAT_SUG_OPEN) { finTxCatSuggestClose(); return; }
+  const input = document.getElementById('fin-tx-cat');
+  if (input) input.focus();
+  finTxCatSuggestOpen();
+};
+
+// Arrow keys / Enter / Escape — the keyboard the native popup gave us free.
+window.finTxCatSuggestKey = function (e) {
+  const menu = document.getElementById('fin-tx-cat-menu');
+  const open = FIN_CAT_SUG_OPEN && menu && !menu.hidden;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!open) { FIN_CAT_SUG_IDX = -1; finTxCatSuggestOpen(); }
+    const el = finTxCatSugMenuEl(), n = el.children.length;
+    if (!n) return;
+    FIN_CAT_SUG_IDX = e.key === 'ArrowDown' ? (FIN_CAT_SUG_IDX + 1) % n : (FIN_CAT_SUG_IDX <= 0 ? n - 1 : FIN_CAT_SUG_IDX - 1);
+    finTxCatSugPaint(finTxCatSugRows(document.getElementById('fin-tx-cat').value));
+    const on = el.children[FIN_CAT_SUG_IDX];
+    if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
+    return;
+  }
+  if (!open) return;
+  if (e.key === 'Enter') {
+    const on = menu.children[FIN_CAT_SUG_IDX];
+    // Enter with nothing highlighted means "I typed what I meant" — leave the
+    // free text alone and just get the menu out of the way.
+    if (FIN_CAT_SUG_IDX >= 0 && on) { e.preventDefault(); finTxCatSugPick(on.dataset.v); }
+    else finTxCatSuggestClose();
+    return;
+  }
+  if (e.key === 'Escape') { e.preventDefault(); finTxCatSuggestClose(); }
+};
+
+// A fixed menu doesn't follow the page under it — close on anything that
+// would leave it stranded beside a field that has moved. Scroll events don't
+// bubble, so a capturing listener is the only way to see the modal's own
+// scroller.
+document.addEventListener('scroll', (e) => {
+  const menu = document.getElementById('fin-tx-cat-menu');
+  if (menu && !menu.hidden && !menu.contains(e.target)) finTxCatSuggestClose();
+}, true);
+window.addEventListener('resize', () => { if (FIN_CAT_SUG_OPEN) finTxCatSuggestClose(); });
 
 /* THE HALF THAT IS SHOWN MUST STORE AS THE WHOLE THAT IS HELD, and this is the
    trap in translating a free-text field rather than a label. The box offers
