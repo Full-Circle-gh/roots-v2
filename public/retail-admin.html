@@ -11952,6 +11952,9 @@
     <div class="td-head">
       <h2 style="margin:0">Sales · 销售</h2>
       <span class="tds-actions">
+        <button class="btn btn-sm" type="button" onclick="goTab('channel-sync')" data-cap="meituan:view eleme:view guanyi:view">
+          Channel sync · 渠道同步
+        </button>
         <button class="btn btn-sm btn-ghost" type="button" onclick="igHelp('general')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" style="width:14px;height:14px"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.5 2.5 0 1 1 3.4 2.3c-.7.3-.9.8-.9 1.4v.5"/><path d="M12 16.8h.01"/></svg>
           Get help · 获取帮助
@@ -12217,6 +12220,24 @@
        a "How matching works" disclosure in the header (§1.7 allows three
        elements; the hint now sits on the rows that need it).
        ══════════════════════════════════════════════════════════════════════ -->
+  <!-- §103 · Channel sync — one verdict per item per channel, across Meituan,
+       Eleme and GZ Grocery. Read-only: the three channel tabs stay the place a
+       mapping is repaired; this page says WHICH items need repairing and opens
+       the right tab on the right item. Everything inside #cs-root is painted
+       by 29-channel-sync.js from one endpoint, in one language, so the whole
+       root is data-no-i18n (the walker would otherwise split the composed
+       "Last 18 · 1d ago" style lines). The h2 pair is the only static text. -->
+  <section id="tab-channel-sync">
+    <div class="el-pagehead">
+      <div class="el-pagehead-t">
+        <h2 data-lang-block="en">Channel sync</h2>
+        <h2 data-lang-block="cn">渠道同步</h2>
+        <p class="el-status" id="cs-status" data-no-i18n></p>
+      </div>
+    </div>
+    <div id="cs-root" data-no-i18n></div>
+  </section>
+
   <section id="tab-meituan">
     <div class="mt-pagehead">
       <div class="mt-pagehead-t">
@@ -13731,6 +13752,7 @@
 <script src="/assets/retail-admin/25-views.js"></script>
 <script src="/assets/retail-admin/26-print.js"></script>
 <script src="/assets/retail-admin/28-shops.js"></script>
+<script src="/assets/retail-admin/29-channel-sync.js"></script>
 <script src="/assets/retail-admin/27-keyboard.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->

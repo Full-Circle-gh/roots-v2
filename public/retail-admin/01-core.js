@@ -530,6 +530,10 @@ const TAB_CAP = {
   media: 'media:view', reviews: 'reviews:view', feedback: 'feedback:view',
   meituan: 'meituan:view', guanyi: 'guanyi:view',
   integrations: 'integrations:view', eleme: 'eleme:view',
+  // §103 Channel sync is the cross-channel view of the three screens above, so
+  // it opens for anyone who may open any one of them — the same any-of rule
+  // that admits the Sales page, which is the door to all four.
+  'channel-sync': ['meituan:view', 'eleme:view', 'guanyi:view'],
   activity: 'activity:view', purchasing: 'purchasing:view', materials: 'materials:view',
   recipes: 'recipes:view', waste: 'waste:view', finance: 'finance:view',
   // `delivery:view` joins this list because §79 moved the Delivery page into
@@ -1379,12 +1383,14 @@ const RAIL_PARENT = {
 // populates it instead of showing a stale/empty section.
 const TAB_INIT = {
   meituan: 'mtAdminInit', guanyi: 'gyAdminInit', eleme: 'elAdminInit',
+  'channel-sync': 'csAdminInit',   // §103
   // The two topbar Inbox tabs. Rail-less, so goTab() always takes the manual
   // path and TAB_INIT is the only thing that loads them.
   reviews: 'reviewsTabInit', feedback: 'feedbackTabInit',
 };
 const RAIL_STANDIN = {
   meituan: 'sales', guanyi: 'sales', gzgrocery: 'sales', eleme: 'sales',
+  'channel-sync': 'sales',   // §103 — reached from the dashboard row and the Sales page
   'product-editor': 'mini-app-editor',
   // New order is a sub-page of Orders (§1.7a takeover) — the parent stays lit.
   'orders-new': 'orders',

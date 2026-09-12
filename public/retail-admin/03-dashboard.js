@@ -3121,6 +3121,35 @@ function tdAttnRender() {
     });
   }
 
+  // §103 — items a channel holds a WRONG number for, across all three channels.
+  // Distinct from the stall row above: that is one channel's whole queue sat
+  // still; this is any single item lying to a customer while the rest of its
+  // channel is fine (Harissa: green dot, Meituan showing 18 against a shelf of
+  // 3, for 75 days). Same mock rules as its sibling — the clock the numbers
+  // have been wrong since, never a duration — and the same no-gate rule: every
+  // role that sees the dashboard sees it. Opens the Channel sync page on its
+  // "Needs attention" chip.
+  const cia = DASH_OPS.channel_items_attention;
+  if (cia && Number(cia.count) > 0) {
+    const cn = document.documentElement.dataset.uiLang === 'cn';
+    const CH = { meituan: ['Meituan', '美团'], eleme: ['Eleme', '饿了么'], guanyi: ['GZ Grocery', 'GZ Grocery'] };
+    const parts = Object.entries(cia.by_channel || {})
+      .map(([k, n]) => ((CH[k] || [k, k])[cn ? 1 : 0]) + ' ' + n);
+    const t = new Date(String(cia.oldest_at || '').replace(' ', 'T') + 'Z');
+    const sameDay = !isNaN(t) && tdWhen(t, 'machine') === tdWhen(new Date(dashNow()), 'machine');
+    const when = isNaN(t) ? '' : tdWhen(t, sameDay ? 'time' : 'dateTime');
+    const state = [parts.join(cn ? '，' : ', '), when ? cuT(`wrong since ${when}`, `自 ${when} 起不符`) : '']
+      .filter(Boolean).join(', ');
+    fires.push({
+      sev: 'amber', icon: 'plug',
+      label: cuT('Channel sync', '渠道同步'),
+      n: cia.count,
+      mins: cia.oldest_at ? dashAgeMins(cia.oldest_at) : null,
+      state, noAutoAge: true,
+      cta: cuT('See items', '查看商品'), go: "csOpen('att')",
+    });
+  }
+
   // Severity first, then oldest first, and a fire with no age sorts last —
   // a state cannot be ranked by how long it has waited.
   const sevRank = { brick: 0, amber: 1 };

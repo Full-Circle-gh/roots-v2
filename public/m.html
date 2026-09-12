@@ -4080,6 +4080,10 @@ const MORE_GROUPS=[
        row above will never see this one. Gated on `expenses:approve`, which no
        floor preset holds. */
     ['approvals','check-check','Approvals','审批'],['till','calculator','Counter till','前台收银','/till'],['kitchenqueue','chef-hat','Kitchen queue','厨房制作队列'],['stockapp','package-plus','Add stock','加库存'],
+    /* §103 — which items each channel holds a wrong number for, and the fix.
+       The phone never rebuilt the desktop's channel tabs; this is the one
+       channel screen it has, and it is the one that says where to look. */
+    ['channelsync','refresh-cw','Channel sync','渠道同步'],
     /* THE TWO REQUEST SCREENS, IN THIS APP (§48). They had no rows of their
        own and lived on /stock's launcher; they have rows here now, the launcher
        emptied, and the Transfers row that reached it went with the last of
@@ -10738,6 +10742,10 @@ function batBodyHtml(){
 
 }
 SUBS.kitchenqueue={title:['Kitchen queue','厨房制作队列'],render:()=>screenKitchenQueue()};
+/* §103 — Channel sync. One card per item that needs somebody, three pills
+   across it, the reason in a sentence. Read-only: the repair is a desktop
+   job, and the card says which tab. */
+SUBS.channelsync={title:['Channel sync','渠道同步'],render:()=>screenChannelSync()};
 SUBS.whatmade={title:['What you made','登记制作'],render:()=>screenWhatMade()};
 SUBS.logbatch={title:['Log a batch','登记批次'],render:()=>screenLogBatch()};
 SUBS.pick={title:['Pick','拣货'],render:()=>screenPick()};
@@ -11673,6 +11681,117 @@ async function loadMirror(which){
   }catch(e){ if(String(e.message)==='auth') return; state.mirror[which]=null; }
   state.mirrorLoading=null; render();
 }
+
+/* ==========================================================================
+   §103 · CHANNEL SYNC — one verdict per item per channel, on the phone.
+   Same endpoint as the desktop page (lib/channel-sync-items.js), same four
+   words, same rule that a channel which has stopped syncing is said ONCE at
+   the top and never repeated on the items behind it. Read-only.
+   ========================================================================== */
+async function loadChannelSync(){
+  if(state.csLoading) return;
+  state.csLoading=true; render();
+  try{ state.cs=await api('/channel-sync'); state.csErr=''; }
+  catch(e){ if(String(e.message)==='auth') return; state.cs=null; state.csErr=String(e.message||''); }
+  state.csLoading=false; state.csTried=true; render();
+}
+reg('csFilter', k=>{ state.csFilter=String(k||'att'); render(); });
+reg('csOpen', id=>{ state.csOpen=state.csOpen===Number(id)?null:Number(id); render(); });
+function csWord(k){
+  return k==='ok'?T('Synced','已同步'):k==='att'?T('Needs attention','待处理'):k==='off'?T('Sync off','已关闭')
+    :k==='unk'?T('Name not checked','Name not checked'):T('Not listed','未上架');
+}
+function csChName(k){ return k==='meituan'?T('Meituan','美团'):k==='eleme'?T('Eleme','饿了么'):'GZ Grocery'; }
+/* The cell's word: an amber state with a specific cause names it, in the
+   phrase the desktop channel tab already uses; a wrong number or a failed push
+   says Needs attention and the figures beside it explain. */
+function csCellWord(ch,c){
+  switch(c.reason){
+    case 'no_name': return ch==='meituan'?T('Add name','待填名称'):T('No listing name','缺商品名');
+    case 'name_not_found': return T('Listing not found','找不到该商品');
+    case 'no_option': return T('No option picked','未选规格');
+    case 'store_not_connected': return T('Store not connected','门店未关联');
+    case 'sending': return T('Sending…','发送中…');
+    default: return csWord(c.k);
+  }
+}
+function csWhy(ch,c){
+  const name=csChName(ch);
+  switch(c.reason){
+    case 'push_failed': return T('The last push to '+name+' failed, so '+name+' still shows the previous number.','最近一次推送到'+name+'失败，'+name+'仍显示之前的数量。');
+    case 'wrong_number': return T(name+' holds a different number from the shelf.',name+'上的数量与货架不符。');
+    case 'never_synced': return T('No push has ever landed on '+name+' for this item.','该商品从未成功推送到'+name+'。');
+    case 'no_name': return ch==='meituan'?T('No Meituan listing name is set, so stock stays frozen until one is typed.','尚未填写美团商品名，填写前库存不会更新。')
+      :T('This mapping has no Eleme listing name, so a push can land on the wrong listing.','该匹配没有饿了么商品名，推送可能对上错误商品。');
+    case 'name_not_found': return T('No listing on this store carries this exact name, so every push resolves to nothing.','该门店没有完全同名的商品，每次推送都会落空。');
+    case 'no_option': return T('This listing holds several options and this product claims none.','该商品有多个规格而本商品未认领任何一个。');
+    default: return '';
+  }
+}
+function csAgo(stamp){
+  const t=_date(stamp); if(!t) return '';
+  const m=Math.max(0,Math.round((Date.now()-t.getTime())/60000));
+  if(m<1) return T('just now','刚刚');
+  if(m<60) return T(m+' min ago',m+' 分钟前');
+  const h=Math.round(m/60); if(h<48) return T(h+'h ago',h+' 小时前');
+  return T(Math.round(h/24)+'d ago',Math.round(h/24)+' 天前');
+}
+function screenChannelSync(){
+  if(!state.cs&&!state.csTried&&!state.csLoading) loadChannelSync();
+  const d=state.cs;
+  if(!d){
+    if(state.csLoading||!state.csTried) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    return nothingYet(T('Could not read the channels','无法读取渠道'),T('The channels did not answer. Try again in a moment.','渠道没有响应，请稍后重试。'));
+  }
+  const filter=state.csFilter||(d.counts.att?'att':'all');
+  const items=(d.items||[]).filter(p=>filter==='all'||p.worst===filter);
+  const down=(d.channels||[]).filter(ch=>ch.stale);
+  const pill=(ch,c)=>{
+    const tone=c.k==='att'?'amber':c.k==='ok'?'sage':'plain';
+    const bg=tone==='amber'?'var(--amber-tint)':tone==='sage'?'var(--sage-tint)':'var(--surface-raised)';
+    const fg=tone==='amber'?'var(--amber-ink)':tone==='sage'?'var(--sage-ink)':'var(--text-secondary)';
+    const dot=c.k==='att'?'var(--amber)':c.k==='ok'?'var(--sage)':'var(--border-strong)';
+    const extra=(c.k==='att'&&(c.reason==='wrong_number'||c.reason==='push_failed')&&c.last_pushed_qty!=null)?' · '+c.last_pushed_qty:'';
+    return `<span class="num" style="display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px 3px 8px;font-size:12px;font-weight:500;background:${bg};color:${fg}"><i style="width:7px;height:7px;border-radius:50%;background:${dot};${c.k==='none'||c.k==='unk'?'background:transparent;box-shadow:inset 0 0 0 1px '+dot:''}"></i>${escAttr(csChName(ch.key)+(c.k==='att'?' · '+csCellWord(ch.key,c):''))}${extra}</span>`;
+  };
+  const chip=(k,label,n)=>`<button class="chip${filter===k?' on':''}" onclick="APP.cmd('csFilter','${k}')">${label} <span class="c">${n}</span></button>`;
+  const c=d.counts||{};
+  return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${down.map(ch=>`<div style="display:flex;flex-direction:column;gap:5px;background:var(--brick-tint);border-radius:14px;padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${T(csChName(ch.key)+' stopped taking stock updates',csChName(ch.key)+' 已停止接收库存更新')}</span></div>
+      <div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${T(ch.stale.waiting_count+' stock updates waiting since '+fmtDay(ch.stale.oldest_at)+' — the numbers it shows may be wrong.','库存更新自 '+fmtDay(ch.stale.oldest_at)+' 起等待中（'+ch.stale.waiting_count+' 条）— 其显示的数量可能有误。')}</div></div>`).join('')}
+    ${(!down.length&&!c.att)?`<div style="display:flex;flex-direction:column;gap:4px;background:var(--sage-tint);border-radius:14px;padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:10px;font-size:14.5px;font-weight:500;color:var(--sage-ink)"><i style="width:8px;height:8px;border-radius:50%;background:var(--sage)"></i>${T('Every channel is in step','各渠道均已同步')}</div>
+      <div class="num" style="font-size:13px;color:var(--sage-ink)">${T((c.all||0)+' items. Nothing needs you.',(c.all||0)+' 件商品。无需处理。')}</div></div>`:''}
+    <div style="display:flex;gap:6px;overflow-x:auto;padding:2px 0">
+      ${chip('att',T('Needs attention','待处理'),c.att||0)}${chip('ok',T('Synced','已同步'),c.ok||0)}${chip('none',T('Not listed','未上架'),c.none||0)}${c.off?chip('off',T('Sync off','已关闭'),c.off):''}${chip('all',T('All items','全部商品'),c.all||0)}
+    </div>
+    ${items.length?`<div style="display:flex;flex-direction:column;gap:8px">${items.map(p=>{
+      const open=state.csOpen===p.id;
+      const name=T(p.name_en||p.name_cn||('#'+p.id),p.name_cn||p.name_en||('#'+p.id))+(p.variant_label?' ('+p.variant_label+')':'');
+      const shelf=Object.values(p.shelf||{}).reduce((a,b)=>a+Number(b||0),0);
+      const chans=(d.channels||[]).map(ch=>({ch,c:p.channels[ch.key]||{k:'none',reason:'no_map'}}));
+      const bad=chans.filter(x=>x.c.k==='att');
+      return `<div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px" onclick="APP.cmd('csOpen',${p.id})">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+          <div style="min-width:0"><div style="font-weight:500;line-height:1.35">${escAttr(name)}</div>
+            <div class="num" style="font-size:12px;color:var(--text-secondary)">${p.sku?'SKU '+escAttr(p.sku)+' · ':''}${T('shelf','库存')} ${shelf}</div></div></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${chans.map(x=>pill(x.ch,x.c)).join('')}</div>
+        ${bad.length?`<div style="font-size:13px;color:var(--amber-ink);line-height:1.45">${bad.map(x=>escAttr(csWhy(x.ch.key,x.c))).filter(Boolean).join(' ')}</div>`:''}
+        ${open?`<div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border-default);padding-top:8px;font-size:12.5px;color:var(--text-secondary)">
+          ${chans.map(x=>{const c2=x.c;const line=[csChName(x.ch.key)+' · '+csCellWord(x.ch.key,c2)];
+            if(c2.last_pushed_qty!=null) line.push(T('last '+c2.last_pushed_qty,'上次 '+c2.last_pushed_qty)+(c2.last_pushed_at?' · '+csAgo(c2.last_pushed_at):''));
+            if(c2.error) line.push(T('Push failed','推送失败')+': '+c2.error);
+            return `<div class="num">${escAttr(line.join(' · '))}</div>`;}).join('')}
+          ${bad.length?`<div style="color:var(--text-secondary)">${T('Fix this on the desktop: '+bad.map(x=>csChName(x.ch.key)).join(', ')+' tab.','请在电脑端修复：'+bad.map(x=>csChName(x.ch.key)).join('、')+'页。')}</div>`:''}
+        </div>`:''}
+      </div>`;}).join('')}</div>`
+    : `<div style="padding:24px 8px;text-align:center;font-size:14px;color:var(--text-secondary)">${filter==='att'?T('Nothing needs you.','无需处理。'):T('Nothing here.','暂无商品。')}</div>`}
+    <div style="display:flex;align-items:center;gap:12px;background:var(--surface-raised);border-radius:14px;padding:12px 16px"><span style="color:var(--text-secondary);display:flex;flex:none">${ic('eye',18)}</span><span style="font-size:13px;color:var(--text-secondary)">${T('Read-only. A mapping is repaired on the desktop’s channel tabs.','只读。商品匹配在电脑端的渠道页修复。')}</span></div>
+  </div>`;
+}
 /* ==========================================================================
    Share cards (desktop: 10-extras.js)
    --------------------------------------------------------------------------
@@ -12591,7 +12710,27 @@ function opsFires(){
       n:c.waiting_count,
       meta:when?T('stock updates waiting since '+when,'库存更新自 '+when+' 起等待中'):'',
       age:false,mins:oldestMins([{waiting_since:c.oldest_at}]),
-      go:`showToast(T('Review this on desktop','请在电脑端查看'))`});
+      /* §103 gave the phone a channel screen, so the row opens it rather than
+         naming a gap. The gate is the screen's own (ROUTE_CAP.channelsync);
+         a role that cannot open it keeps the old honest toast. */
+      go:canRoute('channelsync')?"APP.cmd('push','channelsync')":`showToast(T('Review this on desktop','请在电脑端查看'))`});
+  }
+  /* §103 — items a channel holds a WRONG number for, across all three
+     channels. Distinct from the stall row above (one channel's whole queue sat
+     still): this is any single item lying to a customer while the rest of its
+     channel is fine. Same no-gate rule as the stall row for SEEING it; opening
+     it goes through the screen's own gate. */
+  const cia=o.channel_items_attention;
+  if(cia&&Number(cia.count)>0){
+    const CH={meituan:['Meituan','美团'],eleme:['Eleme','饿了么'],guanyi:['GZ Grocery','GZ Grocery']};
+    const parts=Object.entries(cia.by_channel||{}).map(([k,n])=>T((CH[k]||[k,k])[0],(CH[k]||[k,k])[1])+' '+n);
+    const t=_date(cia.oldest_at);
+    const sameDay=!!t&&shopDayOf(t)===shopToday();
+    const when=!t?'':tdWhen(t,sameDay?'time':'dateTime',_tdL());
+    const meta=[parts.join(T(', ','，')),when?T('wrong since '+when,'自 '+when+' 起不符'):''].filter(Boolean).join(T(', ','，'));
+    f.push({sev:'amber',icon:'refresh-cw',label:T('Channel sync','渠道同步'),n:cia.count,meta,
+      age:false,mins:cia.oldest_at?oldestMins([{waiting_since:cia.oldest_at}]):null,
+      go:canRoute('channelsync')?"APP.cmd('push','channelsync')":`showToast(T('Review this on desktop','请在电脑端查看'))`});
   }
   const rank={brick:0,amber:1};
   f.sort((a,b)=>{
@@ -15196,6 +15335,11 @@ const ROUTE_CAP={
      gated on (PUT /api/restock/:id/status), so the row cannot appear for
      somebody whose first tap 403s. */
   kitchenqueue:'restock:fulfil',
+  /* §103 CHANNEL SYNC — the cross-channel view of the desktop's three channel
+     screens, so it opens for anyone who may open any one of them: the same
+     any-of the desktop's TAB_CAP['channel-sync'] applies. Read-only, so no
+     write capability is needed behind it. */
+  channelsync:['meituan:view','eleme:view','guanyi:view'],
   /* THE TWO PRODUCTION SCREENS, on the capability POST /production is gated on
      server-side. `whatmade` is gated even though no row opens it: the queue
      pushes to it, and a kitchen that could close a request but not record the

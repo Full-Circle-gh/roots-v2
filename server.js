@@ -465,6 +465,7 @@ app.use(require('./routes/meituan-admin')); // retail-admin Meituan sync config
 app.use(require('./routes/guanyi-admin')); // retail-admin Guanyi (gzgrocery) sync config
 app.use('/api/internal/eleme', require('./routes/eleme-internal')); // daemon-only, localhost
 app.use(require('./routes/eleme-admin')); // retail-admin Eleme sync config + OAuth callback
+app.use(require('./routes/channel-sync')); // §103 one verdict per item per channel, read-only
 app.use(require('./routes/integrations-admin')); // retail-admin Channels & Delivery hub
 
 /* THE KITCHEN LOGIN IS GONE (§81). `/login` served public/login.html, the

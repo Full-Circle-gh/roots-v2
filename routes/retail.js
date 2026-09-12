@@ -78,6 +78,7 @@ const { getTenantDb, rawTenantDb, rawTdb, ROOTS_TENANT_ID, tenantAls, tdb, curre
 const { withTransaction } = require('../lib/db-transaction');
 const { getTenantCreds, setTenantSecrets, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
 const { channelSyncStale } = require('../lib/channel-sync-stale');
+const { channelSyncSummary } = require('../lib/channel-sync-items');
 // The dashboard's "the kitchen finished it" row counts exactly the requests
 // routes/restock.js's own kitchen-ready endpoint counts — one clause, required
 // by both, for the reason REVIEW_WAITING_SQL is shared with the Reviews fire.
@@ -16035,6 +16036,13 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   // threshold. Empty array is the common case; see that file for the declared
   // channel list and the open-hours-adjusted age calculation.
   let channel_sync_stale = [];
+  // §103 — items a channel holds a WRONG number for (or cannot reach), across
+  // all three channels: the dashboard's "Channel sync" row. Distinct from the
+  // stall above, which is one channel's whole queue; this is any single item
+  // that is lying to a customer while everything else on that channel is fine.
+  // { count, by_channel: { meituan: n, ... }, oldest_at } — see
+  // lib/channel-sync-items.js channelSyncSummary().
+  let channel_items_attention = { count: 0, by_channel: {}, oldest_at: null };
   // Kitchen requests the kitchen has finished and nobody in the warehouse has
   // read yet. Same zero-count default as its siblings, and — like the two Inbox
   // queues above — NOT store-scoped: a kitchen request is a job the kitchen did,
@@ -16916,12 +16924,16 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // channelSyncStale() already isolates one channel's failure from the
     // others (a bad table drops just that entry), so no extra try/catch here.
     channel_sync_stale = channelSyncStale(tdb());
+    // §103 — one read over every mapping; each channel's tables are read
+    // inside their own try, so a box without one channel still answers.
+    try { channel_items_attention = channelSyncSummary(tdb()); }
+    catch (e) { console.warn('[dashboard/ops channel_items_attention]', e.message); }
   } catch (e) {
     console.error('[dashboard/ops]', e.message);
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, kitchen_ready, batch_owed, channel_sync_stale, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, kitchen_ready, batch_owed, channel_sync_stale, channel_items_attention, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.
