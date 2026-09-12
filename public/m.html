@@ -11754,21 +11754,31 @@ function screenChannelSync(){
     const extra=(c.k==='att'&&(c.reason==='wrong_number'||c.reason==='push_failed')&&c.last_pushed_qty!=null)?' · '+c.last_pushed_qty:'';
     return `<span class="num" style="display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px 3px 8px;font-size:12px;font-weight:500;background:${bg};color:${fg}"><i style="width:7px;height:7px;border-radius:50%;background:${dot};${c.k==='none'||c.k==='unk'?'background:transparent;box-shadow:inset 0 0 0 1px '+dot:''}"></i>${escAttr(csChName(ch.key)+(c.k==='att'?' · '+csCellWord(ch.key,c):''))}${extra}</span>`;
   };
-  const chip=(k,label,n)=>`<button class="chip${filter===k?' on':''}" onclick="APP.cmd('csFilter','${k}')">${label} <span class="c">${n}</span></button>`;
   const c=d.counts||{};
-  return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    ${down.map(ch=>`<div style="display:flex;flex-direction:column;gap:5px;background:var(--brick-tint);border-radius:14px;padding:14px 16px">
+  /* chipRow() is the house horizontal chip scroller: .hscroll (which hides the
+     bar — a visible scrollbar under the chips was the first half of what Ash
+     reported) plus its own 16px side padding, so it runs FULL BLEED and the
+     first and last chip get a real gutter instead of being shaved by the
+     screen edge. It only works that way outside a padded wrapper, which is why
+     the blocks below carry their own margin and the wrapper carries none. */
+  const chips=chipRow([
+    {key:'att',  en:'Needs attention', zh:'待处理',   count:c.att||0},
+    {key:'ok',   en:'Synced',          zh:'已同步',   count:c.ok||0},
+    {key:'none', en:'Not listed',      zh:'未上架',   count:c.none||0},
+    ...(c.off?[{key:'off', en:'Sync off', zh:'已关闭', count:c.off}]:[]),
+    {key:'all',  en:'All items',       zh:'全部商品', count:c.all||0},
+  ], filter, 'csFilter');
+  return `<div style="padding:12px 0 24px;display:flex;flex-direction:column;gap:12px">
+    ${down.map(ch=>`<div style="display:flex;flex-direction:column;gap:5px;background:var(--brick-tint);border-radius:14px;padding:14px 16px;margin:0 16px">
       <div style="display:flex;align-items:center;gap:10px">
         <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
         <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${T(csChName(ch.key)+' stopped taking stock updates',csChName(ch.key)+' 已停止接收库存更新')}</span></div>
       <div class="num" style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${T(ch.stale.waiting_count+' stock updates waiting since '+fmtDay(ch.stale.oldest_at)+' — the numbers it shows may be wrong.','库存更新自 '+fmtDay(ch.stale.oldest_at)+' 起等待中（'+ch.stale.waiting_count+' 条）— 其显示的数量可能有误。')}</div></div>`).join('')}
-    ${(!down.length&&!c.att)?`<div style="display:flex;flex-direction:column;gap:4px;background:var(--sage-tint);border-radius:14px;padding:14px 16px">
+    ${(!down.length&&!c.att)?`<div style="display:flex;flex-direction:column;gap:4px;background:var(--sage-tint);border-radius:14px;padding:14px 16px;margin:0 16px">
       <div style="display:flex;align-items:center;gap:10px;font-size:14.5px;font-weight:500;color:var(--sage-ink)"><i style="width:8px;height:8px;border-radius:50%;background:var(--sage)"></i>${T('Every channel is in step','各渠道均已同步')}</div>
       <div class="num" style="font-size:13px;color:var(--sage-ink)">${T((c.all||0)+' items. Nothing needs you.',(c.all||0)+' 件商品。无需处理。')}</div></div>`:''}
-    <div style="display:flex;gap:6px;overflow-x:auto;padding:2px 0">
-      ${chip('att',T('Needs attention','待处理'),c.att||0)}${chip('ok',T('Synced','已同步'),c.ok||0)}${chip('none',T('Not listed','未上架'),c.none||0)}${c.off?chip('off',T('Sync off','已关闭'),c.off):''}${chip('all',T('All items','全部商品'),c.all||0)}
-    </div>
-    ${items.length?`<div style="display:flex;flex-direction:column;gap:8px">${items.map(p=>{
+    ${chips}
+    ${items.length?`<div style="display:flex;flex-direction:column;gap:8px;margin:0 16px">${items.map(p=>{
       const open=state.csOpen===p.id;
       const name=T(p.name_en||p.name_cn||('#'+p.id),p.name_cn||p.name_en||('#'+p.id))+(p.variant_label?' ('+p.variant_label+')':'');
       const shelf=Object.values(p.shelf||{}).reduce((a,b)=>a+Number(b||0),0);
@@ -11788,8 +11798,8 @@ function screenChannelSync(){
           ${bad.length?`<div style="color:var(--text-secondary)">${T('Fix this on the desktop: '+bad.map(x=>csChName(x.ch.key)).join(', ')+' tab.','请在电脑端修复：'+bad.map(x=>csChName(x.ch.key)).join('、')+'页。')}</div>`:''}
         </div>`:''}
       </div>`;}).join('')}</div>`
-    : `<div style="padding:24px 8px;text-align:center;font-size:14px;color:var(--text-secondary)">${filter==='att'?T('Nothing needs you.','无需处理。'):T('Nothing here.','暂无商品。')}</div>`}
-    <div style="display:flex;align-items:center;gap:12px;background:var(--surface-raised);border-radius:14px;padding:12px 16px"><span style="color:var(--text-secondary);display:flex;flex:none">${ic('eye',18)}</span><span style="font-size:13px;color:var(--text-secondary)">${T('Read-only. A mapping is repaired on the desktop’s channel tabs.','只读。商品匹配在电脑端的渠道页修复。')}</span></div>
+    : `<div style="padding:24px 24px;text-align:center;font-size:14px;color:var(--text-secondary)">${filter==='att'?T('Nothing needs you.','无需处理。'):T('Nothing here.','暂无商品。')}</div>`}
+    <div style="display:flex;align-items:center;gap:12px;background:var(--surface-raised);border-radius:14px;padding:12px 16px;margin:0 16px"><span style="color:var(--text-secondary);display:flex;flex:none">${ic('eye',18)}</span><span style="font-size:13px;color:var(--text-secondary)">${T('Read-only. A mapping is repaired on the desktop’s channel tabs.','只读。商品匹配在电脑端的渠道页修复。')}</span></div>
   </div>`;
 }
 /* ==========================================================================

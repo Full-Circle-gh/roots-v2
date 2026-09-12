@@ -427,6 +427,67 @@ check('an empty box (no channel tables at all) answers with every item not liste
   eq(r.items.length, 1); eq(worst(r, 1), 'none'); eq(r.channels.length, 3);
 });
 
+// ── 5. The two projections the list and the drawer ask for ──────────────────
+section('5 · compact and productIds are projections of the same read');
+
+function twoProducts(db) {
+  product(db, 1, { stock: 3 }); product(db, 2, { stock: 10 });
+  mtCatalogue(db, 'tianhe', ['听装1', '听装2']);
+  mtMap(db, 1, { pushed: 18 });            // wrong number  → att
+  mtMap(db, 2, { pushed: 10 });            // in step       → ok
+}
+
+check('compact carries the verdict and drops everything the dots do not draw', () => {
+  const db = freshDb(); twoProducts(db);
+  const r = channelSyncItems(db, { compact: true });
+  eq(r.items.map(i => i.id), [1, 2]);
+  eq(r.items[0], { id: 1, worst: 'att', channels: { meituan: { k: 'att' }, eleme: { k: 'none' }, guanyi: { k: 'none' } } });
+  ok(!('shelf' in r.items[0]), 'no shelf'); ok(!('name_en' in r.items[0]), 'no names');
+  ok(!('stores' in r.items[0].channels.meituan), 'no per-store detail');
+  ok(!('last_pushed_qty' in r.items[0].channels.meituan), 'no push facts');
+});
+
+check('compact agrees with the full read, verdict for verdict', () => {
+  const db = freshDb(); twoProducts(db);
+  const full = channelSyncItems(db), thin = channelSyncItems(db, { compact: true });
+  eq(thin.items.map(i => i.worst), full.items.map(i => i.worst));
+  eq(thin.items.map(i => i.channels.meituan.k), full.items.map(i => i.channels.meituan.k));
+  eq(thin.counts, full.counts, 'and the counts are the same counts');
+});
+
+check('productIds narrows to those products, with the full detail intact', () => {
+  const db = freshDb(); twoProducts(db);
+  const r = channelSyncItems(db, { productIds: [1] });
+  eq(r.items.length, 1); eq(r.items[0].id, 1);
+  eq(r.items[0].channels.meituan.reason, 'wrong_number', 'the drawer still gets its reason');
+  eq(r.items[0].channels.meituan.last_pushed_qty, 18);
+});
+
+check('productIds answers for an INACTIVE product — the editor can be open on one', () => {
+  const db = freshDb(); twoProducts(db);
+  db.prepare('UPDATE store_products SET is_active = 0 WHERE id = 1').run();
+  eq(channelSyncItems(db).items.length, 1, 'the catalogue-wide read still hides it');
+  const r = channelSyncItems(db, { productIds: [1] });
+  eq(r.items.length, 1, 'asked for by id, it answers');
+  eq(r.items[0].channels.meituan.k, 'att', 'and its mapping is still pushing, so it still counts');
+});
+
+check('an empty or junk id list asks for nothing rather than everything', () => {
+  const db = freshDb(); twoProducts(db);
+  eq(channelSyncItems(db, { productIds: [] }).items.length, 0);
+  eq(channelSyncItems(db, { productIds: ['x', null] }).items.length, 0);
+});
+
+check('the channel cards are unchanged by either projection', () => {
+  const db = freshDb(); twoProducts(db);
+  const full = channelSyncItems(db);
+  for (const opts of [{ compact: true }, { productIds: [1] }]) {
+    const r = channelSyncItems(db, opts);
+    eq(r.channels.map(c => c.key), full.channels.map(c => c.key));
+    eq(r.channels.map(c => c.stale), full.channels.map(c => c.stale));
+  }
+});
+
 // ── Summary ──────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {

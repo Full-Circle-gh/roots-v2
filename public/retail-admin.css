@@ -15388,12 +15388,18 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
    dot on the channel tab are visibly the same object. `unk` is drawn like
    `none` — an unread catalogue is one fact about the store, not a warning on
    every item. */
-#tab-channel-sync .cs-dot { width: 8px; height: 8px; border-radius: 999px; flex: none; display: inline-block; }
-#tab-channel-sync .cs-dot.is-ok   { background: var(--td-sage); }
-#tab-channel-sync .cs-dot.is-att  { background: var(--td-amber); }
-#tab-channel-sync .cs-dot.is-down { background: var(--td-brick); }
-#tab-channel-sync .cs-dot.is-off  { background: var(--td-text2); }
-#tab-channel-sync .cs-dot.is-none, #tab-channel-sync .cs-dot.is-unk { background: transparent; box-shadow: inset 0 0 0 1px var(--td-text2); opacity: .6; }
+/* ONE dot, drawn on three surfaces — the Channel sync page, the Products list's
+   Channels column and the product editor's Channels card — so it is deliberately
+   NOT scoped to this tab. Same sizes and colours as .mt-dot / .el-dot on the
+   channel tabs, so a dot here and a dot there are the same object. `is-unk` is
+   drawn like `is-none`: an unread catalogue is one fact about the store, not a
+   warning on every item. */
+.cs-dot { width: 8px; height: 8px; border-radius: 999px; flex: none; display: inline-block; }
+.cs-dot.is-ok   { background: var(--td-sage); }
+.cs-dot.is-att  { background: var(--td-amber); }
+.cs-dot.is-down { background: var(--td-brick); }
+.cs-dot.is-off  { background: var(--td-text2); }
+.cs-dot.is-none, .cs-dot.is-unk { background: transparent; box-shadow: inset 0 0 0 1px var(--td-text2); opacity: .6; }
 
 #tab-channel-sync .cs-tools { display: flex; gap: 8px 16px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
 #tab-channel-sync .cs-tools .el-chips { margin-bottom: 0; }
@@ -15439,3 +15445,36 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
 #tab-channel-sync .cs-dcard .cs-fix .btn { width: 100%; }
 #tab-channel-sync .cs-empty { padding: 40px 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
 #tab-channel-sync .cs-foot { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 12px; font-variant-numeric: tabular-nums; }
+
+
+/* ── §103 step 3 · the Channels column on the Products list ──────────────────
+   Three dots and their one-character channel glyph. Grey stays FAINT on
+   purpose: most of the catalogue is deliberately not on every channel, and a
+   "not there" that looks like a warning turns the column into noise inside a
+   week — the same rule the Channel sync page's own grey follows. */
+  #pa-table col.pa-c-channels { width: 9%; }
+  #pa-table td.pa-c-channels, #pa-table th.pa-c-channels { white-space: nowrap; }
+  .pa-chdots { display: inline-flex; gap: 10px; align-items: center; cursor: pointer; }
+  .pa-chdot { display: inline-flex; align-items: center; gap: 4px; font: 400 11.5px var(--f-sans); color: var(--td-text2); letter-spacing: .02em; }
+  .pa-chdots:hover .pa-chdot { color: var(--td-text); }
+  .pa-card-ch { margin-top: 8px; }
+
+/* ── §103 step 4 · the Channels card in the product editor ───────────────────
+   One row per channel: the state, what the platform last took, and — only when
+   something is wrong — the sentence and the button that opens the channel's own
+   tab on this product. A green row is one quiet line. */
+  .pd-ch-rows { display: flex; flex-direction: column; }
+  .pd-ch-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-top: 1px solid var(--td-border); }
+  .pd-ch-row:first-child { border-top: 0; }
+  #pd-editor .pd-ch-row.is-att { background: var(--td-amber-tint); margin: 0 -18px; padding-inline: 18px; border-radius: 8px; border-top-color: transparent; }
+  .pd-ch-row .nm { font: 500 13.5px var(--f-sans); color: var(--td-text); width: 104px; flex: none; }
+  .pd-ch-row .bd { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+  .pd-ch-row .st { display: flex; align-items: center; gap: 8px; font: 400 13.5px var(--f-sans); }
+  .pd-ch-row.is-att .st { color: var(--td-amber-ink); }
+  .pd-ch-row.is-ok  .st { color: var(--td-sage-ink); }
+  .pd-ch-row.is-none .st, .pd-ch-row.is-off .st, .pd-ch-row.is-unk .st { color: var(--td-text2); }
+  .pd-ch-row .why { font: 400 12.5px/1.5 var(--f-sans); color: var(--td-text); }
+  .pd-ch-row.is-att .why { color: var(--td-amber-ink); }
+  .pd-ch-row .facts { font: 400 12px var(--f-sans); color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  .pd-ch-row .go { margin-top: 6px; align-self: flex-start; }
+  .pd-ch-empty { font: 400 13px var(--f-sans); color: var(--td-text2); padding: 4px 0 2px; }
