@@ -488,6 +488,53 @@ check('the channel cards are unchanged by either projection', () => {
   }
 });
 
+// ── 6. The channel's mark and name are bilingual on every surface ───────────
+//
+// Read out of the shipped client files, not re-implemented here: the regression
+// this guards against is a table that looks fine in code and renders Chinese to
+// an English reader, which no data test can see. §103 shipped with
+// `GLYPH = { meituan: '美', ... }` — one character for both languages — so the
+// Channels column and the channel cards showed 美 / 饿 in the English app;
+// and the product editor took the channel's name from the server's
+// English-only `label`, so the Chinese app offered "前往Meituan".
+section('6 · the channel mark and name are bilingual in the shipped client files');
+
+const fs = require('fs');
+const path = require('path');
+const read = (rel) => fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
+const CJK = /[\u4e00-\u9fff]/;
+
+check('the glyph table is a pair per channel, never one character for both', () => {
+  const src = read('public/retail-admin/29-channel-sync.js');
+  const m = src.match(/const GLYPH = \{([^}]*)\}/);
+  ok(m, 'GLYPH table not found — the anchor has drifted');
+  const body = m[1];
+  // Every entry is `key: ['EN', 'CN']`. A bare string entry is the bug.
+  const entries = body.match(/\w+:\s*(\[[^\]]*\]|'[^']*')/g) || [];
+  ok(entries.length >= 3, 'expected an entry per channel, got ' + entries.length);
+  for (const e of entries) {
+    ok(e.includes('['), 'glyph entry is not a pair: ' + e);
+    const [en] = e.slice(e.indexOf('[') + 1).split(',');
+    ok(!CJK.test(en), 'the ENGLISH side of a glyph carries Chinese: ' + e);
+  }
+});
+
+check('the Products page takes the channel name from the shared table, not the server label', () => {
+  const src = read('public/retail-admin/09-products.js');
+  ok(/csChannelName/.test(src), 'the Products page should resolve names through csChannelName');
+  ok(/csChannelGlyph/.test(src), 'and its glyph through csChannelGlyph');
+  // The two display paths that used ch.label directly, and shipped English into
+  // the Chinese app: the dot's tooltip and the editor card's row + button.
+  ok(!/escapeHtml\(ch\.label\)/.test(src), 'a channel row still renders the raw English label');
+  ok(!/'前往' \+ ch\.label/.test(src), 'the fix button still builds 前往 from the English label');
+});
+
+check('29-channel-sync exports the one name and glyph table it owns', () => {
+  const src = read('public/retail-admin/29-channel-sync.js');
+  ok(/window\.csChannelName\s*=/.test(src), 'csChannelName is not exported');
+  ok(/window\.csChannelGlyph\s*=/.test(src), 'csChannelGlyph is not exported');
+});
+
 // ── Summary ──────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {

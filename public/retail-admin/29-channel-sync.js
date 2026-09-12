@@ -27,7 +27,14 @@
   let _pendingOpen = null;  // a product a Products-list dot asked us to open
 
   const CH_NAME = { meituan: ['Meituan', '美团'], eleme: ['Eleme', '饿了么'], guanyi: ['GZ Grocery', 'GZ Grocery'] };
-  const GLYPH = { meituan: '美', eleme: '饿', guanyi: 'GZ' };
+  /* THE GLYPH IS A PAIR, NOT A CHARACTER. It was 美 / 饿 / GZ in both
+     languages, so an operator reading the app in English got two Chinese
+     characters in the Channels column and on the channel cards — reported by
+     Ash. The Chinese side is unchanged; the English side is the initials of
+     the channel's own English name, which is what the tooltip and the column
+     header spell out in full. GZ Grocery is already Latin and needs no twin. */
+  const GLYPH = { meituan: ['MT', '美'], eleme: ['EL', '饿'], guanyi: ['GZ', 'GZ'] };
+  function chGlyph(k) { const g = GLYPH[k]; return g ? cuT(g[0], g[1]) : ''; }
 
   // The state word. `unk` is English on both sides like MT_PENDING_CN /
   // EL_PENDING_CN on the channel tabs — one placeholder, not two.
@@ -202,7 +209,7 @@
         return '<div class="cs-store"><i class="cs-dot ' + (s.connected ? 'is-ok' : 'is-none') + '"></i><span>' + esc(storeName(s) + ' · ' + t) + '</span></div>';
       }).join('');
       return '<div class="cs-ch' + (down ? ' is-down' : '') + (idle ? ' is-idle' : '') + '">' +
-        '<div class="cs-nm"><span class="cs-glyph">' + GLYPH[ch.key] + '</span><span>' + esc(name) + '</span></div>' +
+        '<div class="cs-nm"><span class="cs-glyph">' + esc(chGlyph(ch.key)) + '</span><span>' + esc(name) + '</span></div>' +
         '<div class="cs-st">' + st + '</div>' +
         (sub ? '<div class="cs-sub">' + sub + '</div>' : '') +
         (ch.stores.length > 1 || !ch.stores.every(s => s.connected) ? '<div class="cs-stores">' + stores + '</div>' : '') +
@@ -342,6 +349,8 @@
      (09-products.js pdLoadChannels) so one state cannot be worded two ways on
      two screens. `label` lets the caller pass the channel's display name
      without reaching into this module's own table. */
+  window.csChannelName = function (ch) { return chName(ch); };
+  window.csChannelGlyph = function (ch) { return chGlyph(ch); };
   window.csCellWordFor = function (ch, c) { return cellWord(ch, c || {}); };
   window.csWhyFor = function (ch, c) { return why(ch, c || {}); };
 
