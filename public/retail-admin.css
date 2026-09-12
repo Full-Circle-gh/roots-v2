@@ -15488,3 +15488,8 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
 /* §103 step 5 · the GZ Grocery tab's state cell — the vocabulary it never had. */
   #tab-guanyi .gy-state { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; font-size: 13px; color: var(--td-text2); }
   #tab-guanyi .gy-state .cs-dot { flex: none; }
+
+/* §103 addendum · the sentence a server-contributed state brings with it. The
+   tab's own states explain themselves through the panel's fields; "the last
+   push failed" has nothing on this screen to point at, so it says so. */
+  .mt-pwhy { font: 400 12.5px/1.5 var(--f-sans); color: var(--td-amber-ink); margin-top: 6px; }

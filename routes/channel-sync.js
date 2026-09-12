@@ -19,10 +19,13 @@ const { tdb } = require('../lib/tenant-db');
 const { requireRetailAdmin } = require('./retail');
 const { channelSyncItems } = require('../lib/channel-sync-items');
 
-// ?compact=1     verdict per channel only — what the Products list's three dots
-//                draw, and nothing else.
+// ?compact=1     verdict + reason per channel only — what the Products list's
+//                three dots draw, and nothing else.
 // ?productId=N   just that product — what the product editor's Channels block
 //                asks for. Repeatable, so a variant family is one request.
+// ?channel=KEY   only that channel, with its per-store detail — what each of
+//                the three channel TABS asks for, so a tab can mark the right
+//                store's dot rather than a folded one. Comma-separated.
 router.get('/api/retail-admin/channel-sync', requireRetailAdmin, (req, res) => {
   try {
     const raw = req.query.productId;
@@ -30,7 +33,10 @@ router.get('/api/retail-admin/channel-sync', requireRetailAdmin, (req, res) => {
       : (Array.isArray(raw) ? raw : String(raw).split(','))
           .map(v => parseInt(v, 10)).filter(Number.isFinite);
     res.set('Cache-Control', 'no-store');
-    res.json({ success: true, data: channelSyncItems(tdb(), { productIds, compact: req.query.compact === '1' }) });
+    const chRaw = req.query.channel;
+    const channels = chRaw === undefined ? null
+      : (Array.isArray(chRaw) ? chRaw : String(chRaw).split(',')).map(v => String(v).trim()).filter(Boolean);
+    res.json({ success: true, data: channelSyncItems(tdb(), { productIds, channels, compact: req.query.compact === '1' }) });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }

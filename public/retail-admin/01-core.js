@@ -409,6 +409,89 @@ function chWord(ch, k, reason) {
 }
 window.chStateWord = chStateWord;
 window.chWord = chWord;
+
+/* ── §103 addendum · THE TABS LEARN WHETHER THE PUSH LANDED ──────────────────
+   The three channel tabs classify locally — is there a mapping, does the name
+   match a listing, is an option claimed, is the switch on — and every one of
+   those questions is about the SHAPE of the mapping. None of them asks the only
+   question a customer can feel: did the last push actually land.
+
+   So a tab could show a green dot and the word Synced for a product the Channel
+   sync page correctly called "Needs attention · the last push failed". That is
+   §103's founding example, unchanged by §103 itself: Harissa Chilli Paste read
+   Synced on the Meituan tab for 75 days while Meituan held 18 against a shelf
+   of 3.
+
+   THE OVERLAY IS DELIBERATELY THE NARROWEST THING THAT CLOSES IT. The server
+   runs every check the tabs run AND the push result, and it tests the mapping's
+   shape FIRST — no map, sync off, catalogue unread and a bad name all return
+   before it ever looks at the queue. So the only state where the two can
+   disagree is: the tab says ok, the server says att. That is the whole gap, and
+   this only ever applies in that one direction:
+
+     • it can turn a green dot amber, never the reverse;
+     • it never touches a row the tab already calls att — the operator is on
+       that screen fixing the cause the tab named, and replacing their cause
+       with another would be a worse screen, not a better one;
+     • a failed fetch leaves every tab exactly as it was.
+
+   Per STORE, not per product: Meituan has two and a folded verdict would mark
+   the wrong one's dot, which is why the tabs ask for ?channel= (full per-store
+   detail) rather than the compact projection the Products dots use. */
+const CH_VERDICT_TTL_MS = 60_000;
+const _chVerdicts = {};        // channel -> { at, byProduct: { id: { k, reason, stores } } }
+const _chVerdictWait = {};     // channel -> in-flight promise, so three renders share one fetch
+
+function chLoadVerdicts(channel, force) {
+  const held = _chVerdicts[channel];
+  if (!force && held && (Date.now() - held.at) < CH_VERDICT_TTL_MS) return Promise.resolve(held);
+  if (_chVerdictWait[channel]) return _chVerdictWait[channel];
+  const p = (async () => {
+    try {
+      const r = await fetch('/api/retail-admin/channel-sync?channel=' + encodeURIComponent(channel),
+        { credentials: 'same-origin' });
+      const j = await r.json();
+      if (!j.success) throw new Error(j.error || 'load_failed');
+      const byProduct = {};
+      for (const it of ((j.data && j.data.items) || [])) {
+        const cell = (it.channels || {})[channel];
+        if (cell) byProduct[it.id] = cell;
+      }
+      _chVerdicts[channel] = { at: Date.now(), byProduct };
+    } catch (e) {
+      // Never a reason to break the tab. Keep whatever we last had; if that is
+      // nothing, the tab simply classifies the way it did before this existed.
+      console.warn('[channel-sync verdicts]', channel, e.message);
+    } finally { _chVerdictWait[channel] = null; }
+    return _chVerdicts[channel] || null;
+  })();
+  _chVerdictWait[channel] = p;
+  return p;
+}
+
+/* The server's verdict for one (product, store), or the folded one when no
+   store is named. Returns null when nothing has been read yet. */
+function chVerdict(channel, productId, storeCode) {
+  const held = _chVerdicts[channel];
+  if (!held) return null;
+  const cell = held.byProduct[productId];
+  if (!cell) return null;
+  if (!storeCode) return { k: cell.k, reason: cell.reason };
+  const st = (cell.stores || []).find(x => x.code === storeCode);
+  return st ? { k: st.k, reason: st.reason } : null;
+}
+
+/* Apply it. `local` is the tab's own {k, reason, t, …}; anything but a plain
+   `ok` comes back untouched. */
+function chApplyVerdict(channel, productId, storeCode, local) {
+  if (!local || local.k !== 'ok') return local;
+  const v = chVerdict(channel, productId, storeCode);
+  if (!v || v.k !== 'att') return local;
+  return { ...local, k: 'att', reason: v.reason, t: chWord(channel, 'att', v.reason), fromPush: true };
+}
+window.chLoadVerdicts = chLoadVerdicts;
+window.chVerdict = chVerdict;
+window.chApplyVerdict = chApplyVerdict;
 function thumbUrl(p) { return p?.image_url || p?.image_data || ''; }
 function fmt(n) { return Number(n || 0).toFixed(2); }
 

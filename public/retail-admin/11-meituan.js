@@ -38,6 +38,10 @@
       _initiated = false;
       throw e;
     }
+    // Whether each push LANDED — the one thing this tab cannot work out for
+    // itself. Fired after the list is painted and repaints when it lands, so a
+    // slow or failed read costs the tab nothing (01-core.js chLoadVerdicts).
+    chLoadVerdicts('meituan').then(function () { mtRenderProducts(); });
     mtLoadBundles();
     mtLoadListingsCache(); // read-only — whatever a past Match-names run cached, for the name-input autocomplete
     mtStartPolling();
@@ -530,6 +534,9 @@
   // re-localizes it.
   const MT_PUSH_IDLE = 'Sync now · 立即同步';
   window.mtPushAll = async function (force) {
+    // The verdicts are about to change wholesale; re-read rather than serve
+    // a cached answer from before the push.
+    setTimeout(function () { chLoadVerdicts('meituan', true); }, 4000);
     const btn = document.getElementById('mt-pushall-btn');
     if (btn) { btn.disabled = true; btn.textContent = cuT('Queuing…', '排队中…'); }
     try {
@@ -866,7 +873,11 @@
     }
     if (map.sync_enabled === 0)  return st('off', 'sync_off');
     if (mtNeedsSpec(map))        return st('att', 'no_option');
-    return editable ? st('ok', 'synced') : st('ok', 'linked_by_sku');
+    // The mapping is right. Whether the last push LANDED is a question this
+    // file cannot answer and the server can, so the verdict is overlaid here
+    // and nowhere else — see chApplyVerdict in 01-core.js. Only ever ok → att.
+    return chApplyVerdict('meituan', map.product_id, storeCode,
+      editable ? st('ok', 'synced') : st('ok', 'linked_by_sku'));
   }
 
   // The rows the filters leave standing, in list order. The panel and the list
@@ -1036,6 +1047,10 @@
       body =
         '<div class="mt-pbh"><span class="nm">' + esc(who) + '</span>' + toggle + '</div>' +
         '<div class="mt-pstate"><span class="mt-dot ' + s.k + '"></span>' + esc(s.t) + '</div>' +
+        // A state the server contributed arrives with no cause the operator can
+        // see on this screen, so it brings the page's own sentence with it.
+        (s.fromPush && typeof csWhyFor === 'function'
+          ? '<div class="mt-pwhy">' + esc(csWhyFor('meituan', s)) + '</div>' : '') +
         // The name field is a picker over the scraped listings, and only a
         // value from them is ever stored - mtNameCommit is what enforces it.
         // Labelled, so no placeholder: the placeholder used to BE the label on
@@ -1089,6 +1104,10 @@
       body =
         '<div class="mt-pbh"><span class="nm">' + esc(who) + '</span></div>' +
         '<div class="mt-pstate"><span class="mt-dot ' + s.k + '"></span>' + esc(s.t) + '</div>' +
+        // A state the server contributed arrives with no cause the operator can
+        // see on this screen, so it brings the page's own sentence with it.
+        (s.fromPush && typeof csWhyFor === 'function'
+          ? '<div class="mt-pwhy">' + esc(csWhyFor('meituan', s)) + '</div>' : '') +
         (map.meituan_name
           ? '<div class="mt-pval">' + esc(map.meituan_name) + '</div>'
           // Not "list it on Meituan": the product is often already listed there

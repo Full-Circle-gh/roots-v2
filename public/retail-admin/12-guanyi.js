@@ -183,6 +183,10 @@
 
   // ── Products + mapping table ──────────────────────────────────────────────────
   window.gyLoadProducts = async function () {
+    // Whether each reconcile LANDED — see the twin in 11-meituan.js. Kicked
+    // from the loader rather than the init because this table is not built
+    // until the Mapping tab is opened. Non-blocking; repaints when it lands.
+    chLoadVerdicts('guanyi').then(function () { gyRenderProducts(); });
     const body = document.getElementById('gy-products-body');
     if (body && !_products.length) body.innerHTML = '<tr><td colspan="6" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>';
     try {
@@ -232,14 +236,17 @@
       // reconciled to" (database.js) and is exactly what lib/channel-sync-items
       // compares server-side. The Δ column beside it keeps showing the ERP's own
       // number, which is a different and also useful fact.
-      const gState = (() => {
-        if (!m || !m.guanyi_sku_id) return 'none';
-        if (Number(m.sync_enabled) !== 1) return 'off';
-        if (m.last_pushed_qty == null) return 'att';
-        return Number(m.last_pushed_qty) === ourQty ? 'ok' : 'att';
+      const gLocal = (() => {
+        if (!m || !m.guanyi_sku_id) return { k: 'none', reason: 'no_map' };
+        if (Number(m.sync_enabled) !== 1) return { k: 'off', reason: 'sync_off' };
+        if (m.last_pushed_qty == null) return { k: 'att', reason: 'never_synced' };
+        return Number(m.last_pushed_qty) === ourQty
+          ? { k: 'ok', reason: 'synced' } : { k: 'att', reason: 'wrong_number' };
       })();
-      const stateCell = '<span class="gy-state"><i class="cs-dot is-' + gState + '"></i>'
-        + esc(chWord('guanyi', gState, null)) + '</span>';
+      // …and whether the last reconcile actually landed is the server's to say.
+      const gSt = chApplyVerdict('guanyi', p.id, _storeCode, gLocal) || gLocal;
+      const stateCell = '<span class="gy-state" title="' + esc(typeof csWhyFor === 'function' ? csWhyFor('guanyi', gSt) : '')
+        + '"><i class="cs-dot is-' + gSt.k + '"></i>' + esc(chWord('guanyi', gSt.k, gSt.reason)) + '</span>';
       if (m) {
         const gqty = sg ? Number(sg.current_qty) : null;
         gyCell = `<div style="font-size:12px">${esc(m.guanyi_name || '—')}</div>
@@ -299,6 +306,9 @@
   };
 
   window.gyPushAll = async function () {
+    // The verdicts are about to change wholesale; re-read rather than serve
+    // a cached answer from before the push.
+    setTimeout(function () { chLoadVerdicts('guanyi', true); }, 4000);
     try {
       const r = await api('/api/retail-admin/guanyi/push-all', { method: 'POST' });
       toast(`Queued ${r.queued} reconcile(s) to Guanyi`);

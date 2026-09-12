@@ -441,7 +441,10 @@ check('compact carries the verdict and drops everything the dots do not draw', (
   const db = freshDb(); twoProducts(db);
   const r = channelSyncItems(db, { compact: true });
   eq(r.items.map(i => i.id), [1, 2]);
-  eq(r.items[0], { id: 1, worst: 'att', channels: { meituan: { k: 'att' }, eleme: { k: 'none' }, guanyi: { k: 'none' } } });
+  eq(r.items[0], { id: 1, worst: 'att', channels: {
+    meituan: { k: 'att', reason: 'wrong_number' },
+    eleme:   { k: 'none', reason: 'store_not_connected' },   // no eleme_shops row in this fixture
+    guanyi:  { k: 'none', reason: 'no_map' } } });
   ok(!('shelf' in r.items[0]), 'no shelf'); ok(!('name_en' in r.items[0]), 'no names');
   ok(!('stores' in r.items[0].channels.meituan), 'no per-store detail');
   ok(!('last_pushed_qty' in r.items[0].channels.meituan), 'no push facts');
@@ -614,6 +617,74 @@ check('饿了么, not 饶了么 — the wrong character is out of every live str
   const live = src.split('\n').filter(l => !l.trim().startsWith('//') && l.includes('饶'));
   eq(live, [], 'a live string still carries 饶');
   ok(src.includes('饿了么商品名'), 'and the corrected sentence is present');
+});
+
+// ── 8. §103 addendum · the tabs learn whether the push landed ───────────────
+//
+// The overlay is LIFTED out of 01-core.js and run, not re-described here. Its
+// whole value is a one-direction rule, and a rule is only worth having if
+// something fails when it is broken: it may turn a green dot amber and must
+// never do anything else.
+section('8 · the server verdict overlays the tabs in one direction only');
+
+function overlay() {
+  const vocab = CORE.match(/const CH_STATE_WORD = \{[\s\S]*?\nwindow\.chWord = chWord;/);
+  const over  = CORE.match(/const CH_VERDICT_TTL_MS[\s\S]*?\nwindow\.chApplyVerdict = chApplyVerdict;/);
+  ok(vocab && over, 'the vocabulary or overlay block was not found in 01-core.js — an anchor has drifted');
+  const src = (vocab[0] + '\n' + over[0]).replace(/window\.\w+ = \w+;/g, '');
+  return new Function('cuT', 'fetch', 'console', src +
+    '; return { chApplyVerdict, _seed:(c,by)=>{ _chVerdicts[c]={at:Date.now(),byProduct:by}; } };'
+  )((en) => en, null, { warn() {} });
+}
+// Harissa's shape: failing on 天河, fine on 越秀.
+const SEED = { 7: { k: 'att', reason: 'push_failed', stores: [
+  { code: 'tianhe', k: 'att', reason: 'push_failed' },
+  { code: 'yuexiu', k: 'ok',  reason: 'synced' }] } };
+const S = (k, reason) => ({ k, reason, t: 'the tab\'s own word' });
+
+check('a tab that says Synced where the push failed now says Needs attention', () => {
+  const o = overlay(); o._seed('meituan', SEED);
+  const r = o.chApplyVerdict('meituan', 7, 'tianhe', S('ok', 'synced'));
+  eq([r.k, r.reason, r.t, !!r.fromPush], ['att', 'push_failed', 'Needs attention', true]);
+});
+
+check('PER STORE — the other store on the same product is untouched', () => {
+  // Meituan has two. A folded verdict would light the wrong one's dot, which is
+  // why the tabs ask for ?channel= rather than the compact projection.
+  const o = overlay(); o._seed('meituan', SEED);
+  const r = o.chApplyVerdict('meituan', 7, 'yuexiu', S('ok', 'synced'));
+  eq([r.k, r.reason, !!r.fromPush], ['ok', 'synced', false]);
+});
+
+check('it never rewrites a state the tab already named', () => {
+  // The operator is on that screen fixing the cause the tab named; replacing it
+  // with another cause would be a worse screen, not a better one.
+  const o = overlay(); o._seed('meituan', SEED);
+  for (const [k, reason] of [['att', 'no_option'], ['off', 'sync_off'], ['none', 'no_map'], ['unk', 'not_checked']]) {
+    const r = o.chApplyVerdict('meituan', 7, 'tianhe', S(k, reason));
+    eq([r.k, r.reason], [k, reason], k + ' was rewritten');
+  }
+});
+
+check('it never downgrades, and a silent read changes nothing', () => {
+  const o = overlay();
+  o._seed('guanyi', { 7: { k: 'ok', reason: 'synced', stores: [] } });
+  eq(o.chApplyVerdict('guanyi', 7, null, S('att', 'wrong_number')).k, 'att', 'server ok upgraded an att');
+  eq(o.chApplyVerdict('guanyi', 7, null, S('ok', 'synced')).k, 'ok');
+  // A channel never read, and a product the read said nothing about: the tab
+  // classifies exactly as it did before this existed. A failed fetch is the
+  // same case, which is why it is not a separate branch.
+  eq(o.chApplyVerdict('eleme', 7, 'tianhe', S('ok', 'synced')).k, 'ok', 'an unread channel changed a state');
+  o._seed('meituan', SEED);
+  eq(o.chApplyVerdict('meituan', 99, 'tianhe', S('ok', 'synced')).k, 'ok', 'an unknown product changed a state');
+});
+
+check('all three tabs apply it, and only at their ok', () => {
+  for (const f of ['11-meituan.js', '14-eleme.js', '12-guanyi.js']) {
+    const src = read('public/retail-admin/' + f);
+    ok(/chApplyVerdict\(/.test(src), f + ' does not overlay the server verdict');
+    ok(/chLoadVerdicts\(/.test(src), f + ' never reads the verdicts it overlays');
+  }
 });
 
 // ── Summary ──────────────────────────────────────────────────────────────────

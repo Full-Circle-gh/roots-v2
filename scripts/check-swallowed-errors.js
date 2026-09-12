@@ -27,7 +27,7 @@
 // reviewable one. It is also the cheapest thing that makes the number go down
 // instead of up.
 //
-// THE BUDGET. There were 457 undocumented ones the day this gate was written,
+// THE BUDGET. There were 456 undocumented ones the day this gate was written,
 // and fixing them all at once is not a change anybody should review. So the
 // gate holds a ceiling and fails when it is EXCEEDED — new code cannot add to
 // the pile, and the ceiling is lowered as the backlog is worked through. Run
@@ -51,7 +51,7 @@ const UPDATE = ARGS.includes('--update');
 // Lower this when you document or fix some. Never raise it: a diff that needs
 // the ceiling lifted is a diff adding an undocumented silent failure, which is
 // the thing this exists to stop.
-const BUDGET = 457;
+const BUDGET = 456;
 
 const DIRS = ['routes', 'lib', 'middleware', 'public'];
 const FILES_EXTRA = ['server.js', 'database.js'];
