@@ -13127,9 +13127,20 @@ function shipByTile(o){
   // Tomorrow rather than as a column, a batch due today read "Today · today".
   // When they agree the pill goes and the label takes the colour, which is the
   // only thing the pill was adding.
+  //
+  // A batch's label leads with the ARRIVAL date, but the pill's word is the
+  // SHIP date's urgency (that's what `when` is anchored to) — so a batch
+  // shipping today but arriving tomorrow read "Tomorrow · today", not a
+  // repeat but a straight contradiction. The list row already special-cases
+  // this (shipByPlan's list renderer, below); the drawer tile did not. The
+  // ship day is already spelled out in the sub-line ("made fresh · ship
+  // Today"), so treat every non-overdue batch pill as the same redundant
+  // case the echo check exists for: keep the colour, drop the pill.
   const word = u.level==='overdue'?T('overdue','已逾期'):u.level==='today'?T('today','今天')
              : u.level==='tomorrow'?T('tomorrow','明天'):T('soon','即将');
-  const echo = tone && String(p.label||'').trim().toLowerCase()===word.toLowerCase();
+  const echo = tone && (p.kind==='batch'
+    ? u.level!=='overdue'
+    : String(p.label||'').trim().toLowerCase()===word.toLowerCase());
   return `<div class="card" style="padding:14px">
     <span class="eyebrow">${T(...k)}</span>
     <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-top:7px">
