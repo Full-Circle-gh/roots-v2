@@ -107,13 +107,13 @@ function pickBadge(tags) {
 const LIST_LAYOUTS = ['list', 'list-compact', 'grid-2col', 'grid-3col'];
 const VALID_LAYOUTS = ['list', 'list-compact', 'grid-2col', 'grid-3col', 'gallery', 'grid'];
 
-// Order mirrors the website's shop switcher (SL_VIEWS in public/shop.html):
-// ☰ list · ⊞ grid-2col · ≡ list-compact · ⊟ grid-3col. Grid-2col is the
-// default view, so the second chip is the lit one on a first visit — exactly
-// what the website shows.
+// ⊞ grid-2col · ☰ list · ≡ list-compact · ⊟ grid-3col. Grid-2col is the
+// default view here, so it leads the row — the first chip is the lit one
+// on a first visit. (The website's SL_VIEWS in public/shop.html keeps its
+// own order/default — 'list' first — so this no longer mirrors it 1:1.)
 const LAYOUT_OPTIONS = [
-  { key: 'list',         icon: '☰',  en: 'List with sidebar',  cn: '列表（侧栏）' },
   { key: 'grid-2col',    icon: '⊞',  en: 'Grid 2-col',          cn: '网格 2 列' },
+  { key: 'list',         icon: '☰',  en: 'List with sidebar',  cn: '列表（侧栏）' },
   { key: 'list-compact', icon: '≡',  en: 'List compact',       cn: '列表（紧凑）' },
   { key: 'grid-3col',    icon: '⊟',  en: 'Grid 3-col',          cn: '网格 3 列' },
 ];
