@@ -646,7 +646,7 @@ function _paChannelDots(u) {
     const word = k === 'ok' ? cuT('Synced', '已同步')
       : k === 'att' ? cuT('Needs attention', '待处理')
       : k === 'off' ? cuT('Sync off', '已关闭')
-      : k === 'unk' ? 'Name not checked'
+      : k === 'unk' ? cuT('Name not checked', '尚未读取商品')
       : cuT('Not listed', '未上架');
     const title = escapeAttr(_paChName(ch) + ' · ' + word);
     return '<span class="pa-chdot" title="' + title + '"><i class="cs-dot is-' + k + '"></i>'

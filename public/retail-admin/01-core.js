@@ -377,15 +377,24 @@ function escapeAttr(s) { return escapeHtml(s); }
    operator what to do; "Needs attention" only tells them to look. The state's own
    word is the fallback, and the dot's colour carries the state either way.
 
-   `unk` is English on both sides on purpose — it is the placeholder the Meituan
-   and Eleme tabs already carry (MT_PENDING_CN / EL_PENDING_CN) while Ash sources
-   the Chinese, and one placeholder in one place is better than three. */
+   `unk` HAD NO CHINESE HALF, and said so on purpose: it was the placeholder the
+   Meituan and Eleme tabs already carry (MT_PENDING_CN / EL_PENDING_CN), held
+   English on both sides while Ash sourced the Chinese. CLAUDE.md's 2026-09-06
+   amendment repealed that default — the Chinese is delegated now — and the word
+   was reaching every Chinese reader in English on three surfaces meanwhile: this
+   table, the phone's csWord, and the Products page's channel dots.
+   `尚未读取商品` is NOT minted for it. It is this page's own live sentence for
+   exactly this condition — 29-channel-sync.js's store line, where a store whose
+   catalogue has never been read already reads `尚未读取商品` — which is the one
+   fact `unk` states. Recorded in docs/tacet-delivery-vocabulary.md with the
+   candidates rejected. The two PENDING_CN sets are untouched and still English;
+   they are a larger block, and this is the verdict word only. */
 const CH_STATE_WORD = {
   ok:   ['Synced', '已同步'],
   att:  ['Needs attention', '待处理'],
   off:  ['Sync off', '已关闭'],
   none: ['Not listed', '未上架'],
-  unk:  ['Name not checked', 'Name not checked'],
+  unk:  ['Name not checked', '尚未读取商品'],
 };
 const CH_REASON_WORD = {
   name_not_found:      ['Listing not found', '找不到该商品'],
