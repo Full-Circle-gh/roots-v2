@@ -929,9 +929,20 @@ function finTxRow(r) {
         ? cuT('Approved by ' + r.recorded_by, '审批人 ' + r.recorded_by)
         : cuT('Entered by ' + r.recorded_by, '录入人 ' + r.recorded_by))}</span>`
     : '';
+  /* THE TYPED NOTE, WHEN THE SUBJECT SLOT IS ALREADY SHOWING THE CATEGORY
+     INSTEAD OF IT. `finTxSubject` shows a manual row's category over its note
+     when both exist — the note is not lost (`note` rides the row from
+     `routes/finance-transactions.js` regardless), it simply has nowhere left
+     to appear, which is exactly the gap Ash reported off this screen: a typed
+     备注 that never showed anywhere. `!r.category` is skipped because in that
+     case `finTxSubject` is already showing the note verbatim — printing it a
+     second time here would duplicate the one line the row has. */
+  const noteBadge = (r.note && r.category)
+    ? `<span class="fin-tx-note">${escapeHtml(cuT('Note · ' + r.note, '备注 · ' + r.note))}</span>`
+    : '';
   // The meta line is a `·`-joined list rather than a hand-built pair, so a
   // third part cannot reintroduce the separator bug a hand-built one invites.
-  const meta = [mark, hint, who].filter(Boolean);
+  const meta = [mark, hint, who, noteBadge].filter(Boolean);
   // The date is the PO's own, never `created_at` — the route never selects
   // created_at, so there is nothing here that could drift onto a row.
   return `<tr class="${po || claim ? 'fin-tx-posted' : ''}">`
@@ -1442,7 +1453,16 @@ window.finTxForm = function finTxForm(kindOrRow, row) {
   // The label, not the stored value — and finTxSave maps it back, so the
   // round trip does not rewrite the category of a row merely opened and saved.
   set('fin-tx-cat', row && row.category ? finCatLabel(row.category) : '');
-  set('fin-tx-note', row && row.source === 'manual' && row.subject && row.subject !== row.category ? row.subject : '');
+  /* READ FROM `row.note` DIRECTLY, NOT DERIVED FROM `subject !== category`.
+     That comparison is false — and this box was left silently blank —
+     whenever a manual row has BOTH a category and a note, because
+     `finTxSubject` shows the category in that case and `subject` then equals
+     `category` exactly. Saving from a blank box wrote an empty note over the
+     real one (`finTxSave` → `note: val('fin-tx-note')` → PUT), so opening
+     Edit on such a row and pressing Save silently erased what had been typed.
+     `row.note` is the column's own value, unaffected by what `subject` is
+     currently standing in for. */
+  set('fin-tx-note', row && row.source === 'manual' && row.note ? row.note : '');
   const t = document.getElementById('fin-tx-modal-t');
   if (t) t.textContent = row ? cuT('Edit', '编辑') : cuT('New transaction', '新建交易');
   const del = document.getElementById('fin-tx-del');

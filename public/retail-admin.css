@@ -14844,6 +14844,10 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 /* Who put the row in the books (§92) — the same Graphite as the hint beside it.
    It is provenance, not a value, and must not compete with the figure. */
 #tab-finance .fin-tx-who { color: var(--td-text2); }
+/* The operator's own typed note, shown only when the subject slot is already
+   showing the category instead of it — same Graphite as the rest of the meta
+   line, for the same reason: it is context, not a value. */
+#tab-finance .fin-tx-note { color: var(--td-text2); }
 #tab-finance .fin-tx-act { color: var(--td-text); text-decoration: underline; cursor: pointer; }
 
 /* ── states (§1.12) ──────────────────────────────────────────────────────────
