@@ -4880,7 +4880,14 @@ function slStock(m){
      WORD. Returned beside, never folded in: flipping `pre` off to silence a
      pill would mark the row sold out, which is the opposite of true. */
   const preToday=pre&&shopperOnLocalRun()&&!!m.local_fresh_today;
-  const preTxt=!pre||preToday?'':(shopperOnLocalRun()
+  /* §108 — the word is the SAME wherever the shopper is. This used to pick it
+     by address (NEXT BATCH on the run, PRE-ORDER off it) while the card badge
+     two functions down picked it by `is_batch_made`, so one product read two
+     ways on one page. Both now ask the same question: a fresh meal the kitchen
+     has yet to make is NEXT BATCH to everybody, and only the DATE differs —
+     which is the checkout notice's job, not a pill's. A reservable grocery size
+     keeps PRE-ORDER: no batch is being cooked for it to name. */
+  const preTxt=!pre||preToday?'':(m.is_batch_made
     ?(state.lang==='cn'?'下批现做':'NEXT BATCH')
     :(state.lang==='cn'?'可预订':'PRE-ORDER'));
   return {out,pre,preToday,preTxt,soldOut:out&&!pre,stock};

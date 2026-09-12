@@ -1156,22 +1156,26 @@ Page({
       // own size picker. For a same-city address a sold-out size is hard-out
       // unless the kitchen has dated the next batch for it.
       const { out, preorder, today, soldOut, stock } = _stockState(m, onLocalRun);
-      /* §80 follow-up, per SIZE — this sheet drew the page-level `preLabel`
-         flat, so every reservable size read PRE-ORDER whatever the shopper's
-         address was. One string cannot answer three questions:
+      /* §108, per SIZE — this sheet drew the page-level `preLabel` flat, so
+         every reservable size read PRE-ORDER whatever the shopper's address
+         was. One string cannot answer three questions:
            made today, on the run → orderable, and SILENT
-           made later, on the run → NEXT BATCH · 下批现做
-           shipped                → PRE-ORDER · 可预订, unchanged
+           a fresh size not yet made → NEXT BATCH · 下批现做, for EVERY shopper
+                                       (§108: the wait is the same fact wherever
+                                       they are; only the date differs, and the
+                                       date lives in the checkout notice)
+           anything else reservable  → PRE-ORDER · 可预订, unchanged — a grocery
+                                       size names no batch, none being cooked
          `preorder` STAYS TRUE in all three — it is what keeps the row out of
          SOLD OUT (see _stockState), so silencing the band by turning it off
          would mark the size sold out on the morning it is most available. The
          band in shop.wxml is gated on this TEXT instead, and an empty string
          is a real answer there, not a missing one. Do not restore an
-         "|| preLabel" fallback: it reads '' as absent and prints the one word
-         §80 forbids. */
+         "|| preLabel" fallback: it reads '' as absent and prints a word the
+         silent case exists to withhold. */
       const preText = (!preorder || today) ? ''
-        : onLocalRun ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
-                     : (L === 'cn' ? '可预订' : 'PRE-ORDER');
+        : m.is_batch_made ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
+                          : (L === 'cn' ? '可预订' : 'PRE-ORDER');
       return {
         id: m.id,
         label: lang.pickVariantLabel(m.variant_label, m.variant_label_cn, L) || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),

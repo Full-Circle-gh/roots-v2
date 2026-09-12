@@ -143,11 +143,15 @@ Page({
       const preorder = out && !p.ship_from_supplier && !!p.oos_preorder
         && (!this._onLocalRun || !!p.local_fresh_date);
       const soldOut = out && !preorder;
-      /* §80 follow-up — the tile's OWN word, because one `copy.preorder` cannot
-         answer three questions:
-           made today, on the run → orderable, and SILENT
-           made later, on the run → NEXT BATCH · 下批现做
-           shipped                → PRE-ORDER · 可预订, unchanged
+      /* §108 — the tile's OWN word, because one `copy.preorder` cannot answer
+         three questions:
+           made today, on the run   → orderable, and SILENT
+           a fresh meal not yet made → NEXT BATCH · 下批现做, for EVERY shopper
+                                       (§108: same wait, same word, wherever
+                                       they are; only the date differs, and the
+                                       date lives in the checkout notice)
+           anything else reservable  → PRE-ORDER · 可预订, unchanged — a grocery
+                                       tile names no batch, none being cooked
          `preorder` STAYS TRUE in all three. It is what keeps the tile out of
          SOLD OUT one line up, and out of the literal ADD ALL below, so
          silencing the tag by turning it off would both mark the meal sold out
@@ -157,8 +161,8 @@ Page({
          never compares a date against the handset's clock. */
       const today = preorder && !!this._onLocalRun && !!p.local_fresh_today;
       const preText = (!preorder || today) ? ''
-        : this._onLocalRun ? copy.nextBatch
-                           : copy.preorder;
+        : p.is_batch_made ? copy.nextBatch
+                          : copy.preorder;
       const priceDrop = flash && reg > eff ? Math.round(reg - eff) : 0;
       const name = L === 'cn' ? (p.name_cn || p.name_en) : (p.name_en || p.name_cn);
       const cnSub = L === 'cn' ? (p.name_en || '') : (p.name_cn || '');

@@ -443,30 +443,38 @@ Page({
     // in pages/shop/shop.js for why the run stopped being a reason to refuse.
     const reservable = m => !!(m && m.oos_preorder)
       && (!this._onLocalRun || !!(m && m.local_fresh_date));
-    /* §80 FOLLOW-UP — TODAY'S BATCH IS NOT A PRE-ORDER, and this is the line
-       that was missing. `reservable` opened the local run to a dated fresh meal
-       and the labels below were left as the out-of-city ones, so a Guangzhou
-       shopper at 07:00 on a cooking morning was invited to PRE-ORDER a salad
-       the kitchen puts out at 11:00 — in time for the lunch window they were
-       about to pick. §80's ruling is that nothing is short from the customer's
-       side while the batch is on its way; a badge saying otherwise is the same
-       claim in a smaller font.
+    /* §108 — ONE WORD FOR THE SAME WAIT, WHEREVER THE SHOPPER IS.
+       §80 split this badge by address: NEXT BATCH · 下批现做 for a Guangzhou
+       shopper waiting on a later batch, PRE-ORDER · 可预订 for one we ship to.
+       Ash's ruling here is that both are waiting on the same thing — a meal the
+       kitchen has yet to make — so both read the SAME word, and it is the one
+       the shop grid has always used. What legitimately differs between them is
+       the DATE, and the checkout notice is where a date belongs.
 
-       THREE STATES, NOT TWO, and only the middle one is new:
-         made today   → orderable and SILENT. No badge, ordinary ADD TO BASKET.
-         made later   → orderable, and the word is NEXT BATCH · 下批现做 — which
-                        is what the shop grid has always called this row, so the
-                        list and the page stop disagreeing.
-         shipped      → PRE-ORDER · 可预订, untouched. It is the right word for a
-                        parcel that leaves after the next batch.
+       TWO STATES, carried in `preKind` so the badge and the buy button cannot
+       drift apart. They already had: an out-of-city shopper whose batch was
+       today's got a SILENT badge (the old `madeToday` never checked the run)
+       over a button that still read PRE-ORDER.
+         'batch'    → a fresh meal not yet made → NEXT BATCH · 下批现做
+         'preorder' → anything else reservable  → PRE-ORDER · 可预订, untouched.
+                      A grocery row names no batch because none is being cooked
+                      for it; its restock has no date to promise.
+
+       SILENCE BELONGS TO THE LOCAL RUN ALONE, and that is the §80 ruling this
+       keeps. A shopper on the run whose batch is TODAY'S is waiting for nothing
+       worth naming — the kitchen serves it inside the window they are about to
+       pick — so that row keeps an ordinary ADD TO BASKET. An out-of-city shopper
+       on that same morning is still waiting on a parcel, which is why the run is
+       half of this test and `local_fresh_today` alone is not enough.
 
        `local_fresh_today` IS THE SERVER'S ANSWER AND NOT A COMPARISON MADE
        HERE (§82). Whether a date is "today" is a business decision about a
        cutoff, and a handset's clock — wrong, or simply in another zone — is
        not entitled to make it. */
-    const madeToday = m => !!(m && m.local_fresh_today);
-    const nextBatchRow = m => this._onLocalRun && reservable(m) && !madeToday(m);
-    let soldOut = false, preorder = false, stockTag = '', stockTagKind = '';
+    const silentToday = m => !!this._onLocalRun && !!(m && m.local_fresh_today);
+    const preKindFor = m => (!reservable(m) || silentToday(m)) ? ''
+      : (m && m.is_batch_made) ? 'batch' : 'preorder';
+    let soldOut = false, preorder = false, preKind = '', stockTag = '', stockTagKind = '';
     if (p.ship_from_supplier) {
       // Supplier-direct: no stock of ours. Always available unless the operator
       // paused it (supplier is out), which shows a soft "Temporarily unavailable".
@@ -485,15 +493,14 @@ Page({
       if (Number(p.stock) <= 0) {
         if (reservable(p)) {
           // Orderable either way. What changes is whether we say anything, and
-          // which word — see the three states above.
+          // which word — see the two states above. `preorder` stays the
+          // ship-vs-run question because the add toast asks that, not this one.
           preorder = !this._onLocalRun;
-          if (madeToday(p)) {
-            stockTag = '';
-            stockTagKind = '';
-          } else if (nextBatchRow(p)) {
+          preKind = preKindFor(p);
+          if (preKind === 'batch') {
             stockTag = L === 'cn' ? '下批现做' : 'NEXT BATCH';
             stockTagKind = 'pre';
-          } else {
+          } else if (preKind === 'preorder') {
             stockTag = L === 'cn' ? '可预订' : 'PRE-ORDER';
             stockTagKind = 'pre';
           }
@@ -740,13 +747,20 @@ Page({
       hasVariants,
       oosLabel: L === 'cn' ? '售罄' : 'SOLD OUT',
       preLabel: L === 'cn' ? '可预订' : 'PRE-ORDER',
+      // §108 — the button says what the badge above it says. It used to read
+      // `preorder`, the ship-vs-run question, so a Guangzhou shopper waiting on
+      // a later batch was offered a plain ADD TO BASKET under a NEXT BATCH
+      // badge. Both now come off `preKind`, so the page cannot contradict
+      // itself and the word is the same one every other surface uses.
       addBtnLabel: soldOut
         ? (L === 'cn' ? '已售罄' : 'SOLD OUT')
         : hasVariants
           ? (L === 'cn' ? '选择规格' : 'CHOOSE A SIZE')
-          : preorder
-            ? (L === 'cn' ? '预订' : 'PRE-ORDER')
-            : (L === 'cn' ? '加入购物车' : 'ADD TO BASKET'),
+          : preKind === 'batch'
+            ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
+            : preKind === 'preorder'
+              ? (L === 'cn' ? '预订' : 'PRE-ORDER')
+              : (L === 'cn' ? '加入购物车' : 'ADD TO BASKET'),
       soldOut,
       preorder,
       stockTag,
@@ -1034,16 +1048,19 @@ Page({
       // shopper is never offered the reservation (see recomputeDisplay).
       const orderable = out && !m.ship_from_supplier && !!m.oos_preorder
         && (!this._onLocalRun || !!m.local_fresh_date);
-      /* §80 follow-up, per SIZE — the same three states the hero badge above
-         resolves. A size made TODAY carries no badge at all: it is orderable
-         now, and a picker row shouting PRE-ORDER over a lunch the kitchen
-         serves at 11 is the defect this fixes. The row keeps its own word
-         because one shared `preLabel` cannot say two things at once. */
+      /* §108, per SIZE — the same two states the hero badge above resolves, and
+         read off the same fields, so one size sheet cannot disagree with the
+         page it opened from. A fresh size not yet made says NEXT BATCH whoever
+         is reading; a reservable grocery size keeps PRE-ORDER, having no batch
+         to name. A size on the local run whose batch is TODAY'S carries no
+         badge at all — orderable now, and a picker row shouting anything over a
+         lunch the kitchen serves at 11 is the §80 defect. The row keeps its own
+         word because one shared `preLabel` cannot say two things at once. */
       const rowToday = this._onLocalRun && orderable && !!m.local_fresh_today;
       const preorder = orderable && !rowToday;
       const preTxt = !preorder ? ''
-        : (this._onLocalRun ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
-                            : (L === 'cn' ? '可预订' : 'PRE-ORDER'));
+        : (m.is_batch_made ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
+                           : (L === 'cn' ? '可预订' : 'PRE-ORDER'));
       const soldOut = out && !orderable;
       return {
         id: m.id,
