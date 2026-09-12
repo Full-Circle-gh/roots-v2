@@ -173,8 +173,16 @@
       } else if (down) {
         const when = clock(ch.stale.oldest_at);
         st = '<i class="cs-dot is-down"></i>' + esc(cuT(`Not syncing since ${when}`, `自 ${when} 起未同步`));
-        sub = esc(cuT(`${ch.stale.waiting_count} stock updates waiting — the numbers ${name} shows may be wrong.`,
-                      `${ch.stale.waiting_count} 条库存更新等待中 — ${name}显示的数量可能有误。`));
+        // §107 — waiting_count (store×product push targets) and counts.att (items,
+        // worst-store-wins) are different denominators by design (§104) and can
+        // legitimately differ; naming both here is what stops that from reading
+        // as a bug on the one screen where an operator sees both numbers at once.
+        const attN = (ch.counts && ch.counts.att) || 0;
+        sub = esc(cuT(
+          `${ch.stale.waiting_count} stock updates waiting — the numbers ${name} shows may be wrong.` +
+            (attN ? ` ${attN} need attention.` : ''),
+          `${ch.stale.waiting_count} 条库存更新等待中 — ${name}显示的数量可能有误。` +
+            (attN ? `${attN} 个待处理。` : '')));
       } else {
         const last = ch.last_push_at ? cuT(`last push ${ago(ch.last_push_at)}`, `上次推送 ${ago(ch.last_push_at)}`) : cuT('never synced', '从未同步');
         st = '<i class="cs-dot is-ok"></i>' + esc(cuT(`Syncing · ${last}`, `同步中 · ${last}`));
