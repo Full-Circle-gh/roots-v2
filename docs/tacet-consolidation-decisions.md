@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.232
+# Tacet shared-core consolidation — decisions record, v4.233
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-12 · v4.233 — **§105: A FAILED PUSH SAYS WHY, BECAUSE IT ALWAYS KNEW — THE REASON WAS BEING DISCARDED ON THE WAY OUT.** Asked by Ash from a live phone screenshot showing *Push failed: transient push failure — retries exhausted*: **"the system can tell the exact reason it won't sync so the tenant can fix it faster?"** The answer was yes, and worse than yes. **THE CAUSE WAS COMPUTED AT EVERY FAILURE AND THROWN AWAY BY THE WRAPPERS ABOVE IT.** `lib/eleme-browser.js`'s `_rpc` resolves an HTTP status, a fetch error or Eleme's own error object; `_apiUpdateFoodStock` **logged it and dropped it one statement later**. `lib/meituan-browser.js`'s `_apiSetSku` captures Meituan's own `{status, code, msg}`, **logged `res` in full to a daemon log nobody reads**, and returned `{ ok, apiRejected }`. Seven Eleme exits and six Meituan ones returned `{ ok, transient }` while holding the reason in scope. So `last_error` — the one field an operator reads — said *retries exhausted*, **which is not a reason but a count of how many times we gave up**, and `docs/channel-mapping-findings.md` F4 had measured exactly that string appearing **17–35 times a day, every day, for two weeks**. It was the dominant error, and it said nothing. **THE FIX IS RETURN VALUES, NOT BEHAVIOUR.** Every check, every order of checks and every `transient` flag in both browser modules is unchanged; thirteen returns gained a field. **The Eleme daemon's preference is corrected to match Meituan's**, which already read `reason || (transient ? …)` and only ever lacked a reason to use — Eleme's read `transient ? <generic> : (reason || …)`, so three failed attempts discarded whatever had been learned. A row still retrying now says why too. **`lib/channel-push-reason.js` CLASSIFIES, IT DOES NOT TRANSLATE**, and that split is the point: the raw text is English from the browser layer and some of it is the PLATFORM's own Chinese, so wording it server-side would mean shipping English to a Chinese operator or inventing Chinese for Meituan's own words. It returns a stable code plus the detail worth keeping; `01-core.js` holds the bilingual sentence beside the rest of the channel vocabulary (§103 step 5). **An uncategorised failure comes back `code: null` with the raw text intact** — the failure nobody has seen is the one most worth reading, and a confident wrong category is worse than none (§30 rule 4's own rule for a check that cannot run). **Rule order is load-bearing and tested**: `cannot reach Meituan (HTTP 502)` matches both `http` and `unreachable`, and a status an operator can act on must not be swallowed by the general case. **MEITUAN'S OWN CHINESE IS KEPT VERBATIM.** A tenant now reads `美团返回：商品已下架 (code 10032)` rather than *retries exhausted* — the platform's sentence about the platform's own refusal, which nothing we could write in its place would improve on. **NOTHING IS COMPOSED IN CHINESE.** `无法连接同步服务` is live whole on the Meituan tab, `已退出登录` and `重新登录` on both channel tabs, `找不到该商品` on Eleme's, `尚未读取商品` on its store line, `多次重试仍失败` in both daemons' own logs, and **`{平台}返回：` is the shape WeChat's own error already uses** (`微信支付未通过校验。微信返回：`) for precisely this job. Two arrangements of those fragments, declared in `docs/tacet-delivery-vocabulary.md`. **Surfaces:** the Channel sync page, the product editor's Channels card and the phone's Channel sync screen all render the worded cause, falling back to the channel's raw sentence. **Tests:** eight added (57 total) — the platform's refusal kept verbatim, every cause the browser layer can write categorised, `http` winning over `unreachable` on a string both match, an uncategorised failure keeping its raw text, a retrying row classified on the cause beneath its suffix, the verdict carrying code + detail + raw together, **and two source-level guards: that neither browser module still has a bare `return { ok: false, transient: … }` and that both daemons prefer the reason over the wrapper**. `test:fast` green at 213. No schema, no migration, no new capability, no CI change. **The risk, named: this edits the browser-automation layer**, which drives live risk-controlled sessions. The diff is return values and comments only — nothing changes about what either module DOES, only about what it says when it fails.
 
 2026-09-12 · v4.232 — **§103 ADDENDUM: THE THREE CHANNEL TABS LEARN WHETHER THE PUSH LANDED, AND THE LAST SCREEN THAT COULD LIE STOPS.** Asked by Ash, who read step 5's own "what this deliberately does not do" and said **"do it"**. §103 built a page, a dashboard row, a phone screen, dots and an editor card that all read the push result; the three TABS still classified locally, so the Meituan tab could show a green dot and the word *Synced* for Harissa Chilli Paste — the product the whole section exists because of — while every push had failed for 75 days. **THE GAP IS EXACTLY ONE STATE WIDE, AND THAT IS WHY THE FIX IS SMALL.** The server runs every check a tab runs AND the push result, and it tests the mapping's SHAPE FIRST: no map, sync off, catalogue unread, bad name and unclaimed option all return before it looks at the queue. So the two can only ever disagree in one place — **the tab says `ok`, the server says `att`** — and `chApplyVerdict` (01-core.js) applies only there. It can turn a green dot amber and can do nothing else: **it never rewrites a state the tab already named** (the operator is on that screen fixing the cause the tab gave them, and swapping it for another cause is a worse screen), never downgrades, and a failed or unread fetch leaves every tab exactly as it was. **PER STORE, NOT PER PRODUCT.** Meituan has two and a folded verdict would light the wrong one's dot, so the tabs ask the new `?channel=KEY` projection — one channel with its per-store detail, a third of the work and a third of the payload of the full read — rather than the compact one the Products dots use. **`compact` now also carries `reason`**, because a surface with a bare `k` falls back to *Needs attention* where the page names a cause. **THE READ NEVER BLOCKS A TAB**: fired after the list is painted, repainted when it lands, 60-second cache, one in-flight request shared by every caller, and dropped after a Push all (which changes every verdict at once). **A server-contributed state brings the page's own sentence with it** — *the last push to Meituan failed, so Meituan still shows the previous number* — because unlike every other state on those screens it has nothing on the page to point at. **WHAT THIS MOVES, SAID PLAINLY: the tabs' own "Needs attention" chips will count MORE.** That is the point and it is the correct number — those products were always wrong, the tab just could not see it. §103's earlier note declined to bundle this into a wording change; asked for on its own, it ships on its own. **AND THE SWALLOWED-ERROR BUDGET GOES DOWN, NOT UP.** The first cut added three `.catch(function () {})` and `scripts/check-swallowed-errors.js` correctly failed at 459 against a ceiling of 457. They were **removed rather than documented**: `chLoadVerdicts` cannot reject — it try/catches its own fetch and resolves either way — so each was dead, and a swallow there could only ever have hidden a bug in the repaint beneath it. Count 457 → **456**, and **the gate's ceiling is ratcheted to 456 in the same commit** so the one freed cannot be silently re-spent. That is a change to a build gate and is called out here and in the PR body per `CLAUDE.md`. **Tests:** five added (49 total) that **lift `chApplyVerdict` out of the shipped `01-core.js` and run it** — Harissa's exact shape turning amber with the server's reason, the sibling store untouched, every non-`ok` state refused, no downgrade, an unread channel and an unknown product both changing nothing, and all three tabs calling both halves. **Checked to fail** with the one-direction rule removed. `test:fast` green at 212. No schema, no migration, no new capability.
 
@@ -11389,3 +11391,97 @@ that is ADDED goes red rather than shipping undeclared.
 - **Whether the Channel sync page should lead with the stall.** It already
   carries it on the strip above the table; no change was asked for and none was
   made.
+
+## §105 — A FAILED PUSH SAYS WHY, BECAUSE IT ALWAYS KNEW
+
+Asked by Ash from a live phone screenshot reading *Push failed: transient push
+failure — retries exhausted*: **"the system can tell the exact reason it won't
+sync so the tenant can fix it faster?"**
+
+### What was actually wrong
+
+Not a missing message — a **discarded** one.
+
+- `lib/eleme-browser.js`'s `_rpc` resolves the real cause: an HTTP status, a
+  fetch error, or Eleme's own error object. `_apiUpdateFoodStock` **logged it
+  and dropped it one statement later.**
+- `lib/meituan-browser.js`'s `_apiSetSku` captures Meituan's own
+  `{status, code, msg}`, **logged `res` in full to a daemon log nobody reads**,
+  and returned `{ ok, apiRejected }`.
+- Seven Eleme exits and six Meituan ones returned `{ ok, transient }` while
+  holding the reason in scope.
+
+So `last_error` — the one field an operator reads — said *retries exhausted*,
+which is **not a reason but a count of how many times we gave up**.
+`docs/channel-mapping-findings.md` F4 had already measured that exact string
+appearing 17–35 times a day, every day, for two weeks. It was the dominant
+error and it said nothing.
+
+### The ruling
+
+**Thread the reason out; classify it once; word it in the core.**
+
+Thirteen returns across the two browser modules gained a field. **No check, no
+order of checks and no `transient` flag changed** — nothing about what either
+module *does*, only about what it says when it fails.
+
+`lib/channel-push-reason.js` turns the raw sentence into a stable code plus the
+detail worth keeping. **It classifies; it does not translate**, and the split is
+the point: the raw text is English from the browser layer and some of it is the
+PLATFORM's own Chinese, so wording it server-side would mean either shipping
+English to a Chinese operator or inventing Chinese for Meituan's own words.
+`01-core.js` holds the bilingual sentence for each code, beside the rest of the
+channel vocabulary (§103 step 5).
+
+| code | what it means |
+|---|---|
+| `rejected` | the platform answered and refused — its own words are the detail |
+| `http` | a reply we could not use; the status is the detail |
+| `signed_out` | the session is gone; a person has to sign in |
+| `unreachable` | no usable answer at all |
+| `option_gone` | the mapping points at an option the listing no longer carries |
+| `name_not_found` | the name matches nothing |
+| `unreadable` | nothing to compare against, so no verdict is possible |
+| `gave_up` | what every failure used to say; survives for pre-§105 rows |
+
+**An uncategorised failure comes back `code: null` with the raw text intact.**
+The failure nobody has seen before is the one most worth reading, and a
+confident wrong category is worse than none — §30 rule 4's own rule for a check
+that cannot run.
+
+**Rule order is load-bearing and tested.** `cannot reach Meituan (HTTP 502)`
+matches both `http` and `unreachable`; a status an operator can act on must not
+be swallowed by the general case.
+
+### The Eleme daemon's preference was the wrong way round
+
+Meituan's daemon already read `reason || (transient ? … )` and only ever lacked
+a reason to use. Eleme's read `transient ? <generic> : (reason || …)` — so a row
+that failed three times **discarded whatever the browser layer had learned**.
+Corrected; the two now agree. A row still retrying says why too.
+
+### Chinese: nothing composed
+
+`无法连接同步服务` is live whole on the Meituan tab, `已退出登录` and `重新登录`
+on both channel tabs, `找不到该商品` on Eleme's, `尚未读取商品` on its store
+line, `多次重试仍失败` in both daemons' own logs — and **`{平台}返回：` is the
+shape WeChat's own error already uses** (`微信支付未通过校验。微信返回：`) for
+precisely this job: showing a platform's sentence about its own refusal. Two
+arrangements of those fragments, declared in `docs/tacet-delivery-vocabulary.md`.
+
+**Meituan's own Chinese is kept verbatim.** A tenant reads
+`美团返回：商品已下架 (code 10032)` — the platform's sentence about the
+platform's own refusal, which nothing we could write in its place would improve.
+
+### The risk, named
+
+This edits the browser-automation layer, which drives live risk-controlled
+sessions. The diff is return values and comments only.
+
+### Explicitly NOT decided here
+
+- **Whether an operator can retry a failed push from the alarm.** §103 kept the
+  page read-only and that is unchanged; a write from the alarm is its own
+  decision.
+- **Whether `signed_out` should raise an ops alert of its own.** It is the one
+  cause no amount of retrying fixes, so it probably should; not built.

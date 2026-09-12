@@ -11702,6 +11702,28 @@ function csWord(k){
     :k==='unk'?T('Name not checked','Name not checked'):T('Not listed','未上架');
 }
 function csChName(k){ return k==='meituan'?T('Meituan','美团'):k==='eleme'?T('Eleme','饿了么'):'GZ Grocery'; }
+/* §105 — why a push failed, from the code lib/channel-push-reason.js assigned.
+   The desktop twin is chCauseSentence in 01-core.js and the wording is the same
+   in both; every Chinese fragment is live (无法连接同步服务, 已退出登录,
+   重新登录, 找不到该商品, 尚未读取商品, 多次重试仍失败, and the {平台}返回：
+   shape WeChat's own error already uses). */
+function csCause(ch,c){
+  if(!c) return '';
+  const nm=csChName(ch), d=c.error_detail||'';
+  let out='';
+  switch(c.error_code){
+    case 'rejected':    out=T(nm+' returned: '+d, nm+'返回：'+d).trim(); break;
+    case 'http':        out=T('Cannot reach the sync service (HTTP '+d+').','无法连接同步服务（HTTP '+d+'）。'); break;
+    case 'unreachable': out=T('Cannot reach the sync service.','无法连接同步服务。'); break;
+    case 'signed_out':  out=T('The sync service is signed out of '+nm+'. Sign in again.','同步服务已退出登录'+nm+'。请重新登录。'); break;
+    case 'option_gone': out=T('The option this product is mapped to is no longer on the listing. Pick it again.','找不到该规格，请重新选择。'); break;
+    case 'name_not_found': out=T('Listing not found.','找不到该商品。'); break;
+    case 'unreadable':  out=T('The listing could not be read.','尚未读取商品。'); break;
+    case 'gave_up':     out=T('Tried several times and gave up.','多次重试仍失败。'); break;
+    default: return '';
+  }
+  return out + (c.retrying ? ' '+T('Retrying.','重试中。') : '');
+}
 /* The cell's word: an amber state with a specific cause names it, in the
    phrase the desktop channel tab already uses; a wrong number or a failed push
    says Needs attention and the figures beside it explain. */
@@ -11793,7 +11815,11 @@ function screenChannelSync(){
         ${open?`<div style="display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--border-default);padding-top:8px;font-size:12.5px;color:var(--text-secondary)">
           ${chans.map(x=>{const c2=x.c;const line=[csChName(x.ch.key)+' · '+csCellWord(x.ch.key,c2)];
             if(c2.last_pushed_qty!=null) line.push(T('last '+c2.last_pushed_qty,'上次 '+c2.last_pushed_qty)+(c2.last_pushed_at?' · '+csAgo(c2.last_pushed_at):''));
-            if(c2.error) line.push(T('Push failed','推送失败')+': '+c2.error);
+            /* §105 — the cause in words where the channel gave us one. The phone
+               has no shared core to import, so the sentences live here; the
+               codes and the raw text come from the same server read. */
+            const said=csCause(x.ch.key,c2); if(said) line.push(said);
+            else if(c2.error) line.push(T('Push failed','推送失败')+': '+c2.error);
             return `<div class="num">${escAttr(line.join(' · '))}</div>`;}).join('')}
           ${bad.length?`<div style="color:var(--text-secondary)">${T('Fix this on the desktop: '+bad.map(x=>csChName(x.ch.key)).join(', ')+' tab.','请在电脑端修复：'+bad.map(x=>csChName(x.ch.key)).join('、')+'页。')}</div>`:''}
         </div>`:''}

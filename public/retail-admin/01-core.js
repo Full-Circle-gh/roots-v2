@@ -407,6 +407,62 @@ function chWord(ch, k, reason) {
   const p = CH_REASON_WORD[reason];
   return p ? cuT(p[0], p[1]) : chStateWord(k);
 }
+/* ── §105 · WHY A PUSH FAILED, in words an operator can act on ────────────────
+   lib/channel-push-reason.js turns a queue row's raw `last_error` into a stable
+   code; this is the sentence for each code. The split is deliberate: the raw
+   text is written in English by the browser layer and some of it is the
+   PLATFORM's own Chinese, so wording it server-side would mean either shipping
+   English to a Chinese operator or inventing Chinese for Meituan's own words.
+
+   NOTHING HERE IS COMPOSED. `无法连接同步服务` is live whole on the Meituan tab,
+   `已退出登录` and `重新登录` on both channel tabs, `找不到该商品` on the Eleme
+   tab, `尚未读取商品` on the Eleme store line, `多次重试仍失败` in both daemons'
+   own logs, and `{platform}返回：` is the shape WeChat's own error already uses
+   (`微信支付未通过校验。微信返回：`) for exactly this job — showing a platform's
+   sentence about its own refusal. Two arrangements of those fragments, declared
+   in docs/tacet-delivery-vocabulary.md.
+
+   A code of null returns '' and the caller shows the raw text instead. An
+   uncategorised failure is the one most worth reading. */
+function chCauseSentence(channel, code, detail) {
+  const ch = (typeof csChannelName === 'function' && csChannelName(channel)) || channel;
+  switch (code) {
+    case 'rejected':
+      // The platform's own words, verbatim, labelled with whose they are.
+      return cuT(`${ch} returned: ${detail || ''}`.trim(), `${ch}返回：${detail || ''}`.trim());
+    case 'http':
+      return cuT(`Cannot reach the sync service (HTTP ${detail}).`, `无法连接同步服务（HTTP ${detail}）。`);
+    case 'unreachable':
+      return cuT('Cannot reach the sync service.', '无法连接同步服务。');
+    case 'signed_out':
+      return cuT(`The sync service is signed out of ${ch}. Sign in again.`, `同步服务已退出登录${ch}。请重新登录。`);
+    case 'option_gone':
+      return cuT('The option this product is mapped to is no longer on the listing. Pick it again.',
+                 '找不到该规格，请重新选择。');
+    case 'name_not_found':
+      return cuT('Listing not found.', '找不到该商品。');
+    case 'unreadable':
+      return cuT('The listing could not be read.', '尚未读取商品。');
+    case 'gave_up':
+      // What every failure used to say. It survives for rows written before §105
+      // and for a path that genuinely has nothing to add.
+      return cuT('Tried several times and gave up.', '多次重试仍失败。');
+    default:
+      return '';
+  }
+}
+/* The line a surface shows under "the last push failed": the worded cause where
+   we have one, the channel's raw sentence where we do not, and the raw text as
+   well when it carries something the sentence does not (the platform's own
+   message is already IN the sentence, so it is not repeated). */
+function chCauseLine(channel, cell) {
+  if (!cell) return '';
+  const said = chCauseSentence(channel, cell.error_code, cell.error_detail);
+  if (said) return said + (cell.retrying ? ' ' + cuT('Retrying.', '重试中。') : '');
+  return cell.error ? cuT('Push failed', '推送失败') + ': ' + cell.error : '';
+}
+window.chCauseSentence = chCauseSentence;
+window.chCauseLine = chCauseLine;
 window.chStateWord = chStateWord;
 window.chWord = chWord;
 
