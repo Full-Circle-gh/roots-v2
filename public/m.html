@@ -13230,8 +13230,8 @@ function sheetOrderDetail(){
            <span style="flex:none;display:flex;margin-top:1px">${ic(o.payNote.icon,15)}</span>
            <span>${T(...o.payNote.why)}</span></div>`:''}
          ${o.proof?`<div style="margin-top:10px">
-           <a href="${escAttr(o.proof)}" target="_blank" rel="noopener" style="display:block;border-radius:10px;overflow:hidden;border:1px solid var(--border-default)">
-             <img src="${escAttr(o.proof)}" alt="${T('Payment screenshot','付款截图')}" style="display:block;width:100%;max-height:220px;object-fit:cover"></a>
+           <div style="display:block;border-radius:10px;overflow:hidden;border:1px solid var(--border-default);cursor:zoom-in" onclick="APP.cmd('zoomImg','${o.proof}')">
+             <img src="${escAttr(o.proof)}" alt="${T('Payment screenshot','付款截图')}" style="display:block;width:100%;max-height:220px;object-fit:cover"></div>
            <div style="font-size:12px;color:var(--text-secondary);margin-top:6px">${T('The screenshot the customer sent — tap to see it whole','顾客上传的付款截图 — 点击查看大图')}</div></div>`:''}</div>
        <div class="card" style="padding:14px"><span class="eyebrow">${T('Fulfilled by','履约门店')}</span>
          <div style="font-size:15px;margin-top:7px">${T(...o.fulfil)}</div>
