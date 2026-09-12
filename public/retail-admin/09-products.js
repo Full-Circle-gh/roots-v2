@@ -626,7 +626,14 @@ async function paLoadChannels() {
 // dot has to speak for all of them or it would call a family green while one
 // size is wrong. Same precedence the server folds stores with.
 const PA_CH_RANK = { att: 4, ok: 3, off: 2, unk: 1, none: 0 };
-const PA_CH_GLYPH = { meituan: '美', eleme: '饿', guanyi: 'GZ' };
+// The channel's short mark and its full name both come from 29-channel-sync.js,
+// which owns the one table: the glyph was 美 / 饿 in BOTH languages (Chinese in
+// the English app), and the server's `label` is English-only (English in the
+// Chinese app). One table fixes both directions and keeps the two screens
+// naming a channel the same way. Falls back to the server's label if that file
+// has not loaded.
+const _paChName = (ch) => (typeof csChannelName === 'function' ? csChannelName(ch.key) : ch.label);
+const _paChGlyph = (ch) => (typeof csChannelGlyph === 'function' ? csChannelGlyph(ch.key) : '');
 function _paChannelDots(u) {
   if (!PA_CH_ON) return '';
   const ids = u.group ? u.members.map(m => m.id) : [u.p.id];
@@ -641,9 +648,9 @@ function _paChannelDots(u) {
       : k === 'off' ? cuT('Sync off', '已关闭')
       : k === 'unk' ? 'Name not checked'
       : cuT('Not listed', '未上架');
-    const title = escapeAttr(cuT(ch.label, ch.label) + ' · ' + word);
+    const title = escapeAttr(_paChName(ch) + ' · ' + word);
     return '<span class="pa-chdot" title="' + title + '"><i class="cs-dot is-' + k + '"></i>'
-      + (PA_CH_GLYPH[ch.key] || '') + '</span>';
+      + escapeHtml(_paChGlyph(ch)) + '</span>';
   }).join('');
   // Opens the Channel sync page filtered to this product rather than the whole
   // catalogue — the operator asked about THIS row.
@@ -3243,24 +3250,25 @@ async function pdLoadChannels(id) {
   card.style.display = '';
   rows.innerHTML = chans.map(ch => {
     const c = (item.channels || {})[ch.key] || { k: 'none', reason: 'no_map' };
+    const nm = _paChName(ch);
     const word = csCellWordFor(ch.key, c);
-    const why = csWhyFor(ch.key, c, ch.label);
+    const why = csWhyFor(ch.key, c);
     const facts = [];
     if (c.last_pushed_qty != null) {
       facts.push(cuT('Last', '上次') + ' ' + c.last_pushed_qty + (c.last_pushed_at ? ' · ' + _pdChAgo(c.last_pushed_at) : ''));
     }
     if (c.k === 'att' && c.expected != null) facts.push(cuT('shelf says ' + c.expected, '货架为 ' + c.expected));
-    if (c.platform_qty != null) facts.push(cuT(ch.label + ' holds ' + c.platform_qty, ch.label + '库存 ' + c.platform_qty));
+    if (c.platform_qty != null) facts.push(cuT(nm + ' holds ' + c.platform_qty, nm + '库存 ' + c.platform_qty));
     const err = c.error ? cuT('Push failed', '推送失败') + ': ' + c.error : '';
     // The button sits UNDER the sentence, not beside it. Beside it, in a pane
     // this narrow, it took a third of the row and wrapped "so Meituan still
     // shows the previous number" into three-word lines.
     const go = c.k === 'att'
       ? '<span class="go"><button type="button" class="btn btn-sm" onclick="csFix(\'' + ch.key + '\',' + item.id + ')">'
-        + escapeHtml(cuT('Open ' + ch.label, '前往' + ch.label)) + '</button></span>'
+        + escapeHtml(cuT('Open ' + nm, '前往' + nm)) + '</button></span>'
       : '';
     return '<div class="pd-ch-row is-' + c.k + '">'
-      + '<span class="nm">' + escapeHtml(ch.label) + '</span>'
+      + '<span class="nm">' + escapeHtml(nm) + '</span>'
       + '<span class="bd">'
       +   '<span class="st"><i class="cs-dot is-' + c.k + '"></i>' + escapeHtml(word) + '</span>'
       +   (why ? '<span class="why">' + escapeHtml(why) + '</span>' : '')
