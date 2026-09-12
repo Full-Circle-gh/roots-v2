@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.234
+# Tacet shared-core consolidation — decisions record, v4.235
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-12 · v4.235 — **§107: THE STALL CARD NAMES BOTH ITS COUNTS, SO THE ONE SCREEN THAT SHOWS THEM TOGETHER STOPS LOOKING WRONG.** Asked by Ash, reading the phone's Channel sync screen: *"why it say 3 stock update when can see only 2"* — the Meituan card said *3 stock updates waiting since Sep 7* directly above a Needs attention list holding 2 items. **THIS IS §104'S OWN DIVERGENCE, NOT A NEW ONE.** §104 already ruled the two figures must never be summed: `channelSyncStale().waiting_count` counts (store, product) push TARGETS still pending or errored; `channel_items_attention.count` (`ch.counts.att` here) counts PRODUCTS, worst-store-wins, so one product wrong at two stores is two targets and one card. §104 settled where each number lives; it did not say the stall line naming only the target count would read as a bug on the one page — the Channel sync page's own strip — that also shows the item count a breath away. **THE FIX NAMES BOTH, IT DOES NOT RECONCILE THEM.** Desktop's `29-channel-sync.js` `strip()` and the phone's `m.html` (new `csStaleLine`, mirroring `csBlockLine`'s shape) append the channel's own `counts.att` to the stall sentence they already had, only when it is nonzero — a channel stalled on pushes still in flight, with nothing yet provably wrong, says only the original sentence, per §104's own "no single item is yet provably wrong" case. **THE SERVER IS UNCHANGED**, same as §104: `lib/channel-sync-stale.js` and `lib/channel-sync-items.js` are untouched, both counts already travelled to both surfaces, and this is display only. **Chinese: one pair lifted whole, one arrangement composed.** Desktop's `N 个待处理` is its own live fragment three lines below in the same file, reused verbatim. The phone has no such sentence — its counts are chip badges, not prose — so `N 件商品待处理` joins two fragments already live on this exact screen (`件商品` from its "every channel is in step" card, `待处理` from the Needs attention chip), declared in `docs/tacet-delivery-vocabulary.md` with the candidates rejected (`涉及 N 件商品`, foremost). **Tests:** no suite pins the literal stall-line text on either surface, so none needed changing; `test_channel_sync_items.js` (61), `test_channel_sync_stale.js` (23) and `test_channel_sync_home_row.js` (31, §104's own) all still pass untouched, and `test:fast` is green at 215. No schema, no migration, no new capability, no new state, no change to `.gitignore` or CI.
 
 2026-09-12 · v4.234 — **§106: THE CHANNEL SAYS WHAT IS STOPPING IT, AND THE ITEMS STOP GUESSING.** Asked by Ash, reading §105's own output: **"meituan refused it and couldn't reach it — can't the system also provide the reason?"** Three things proposed, all three approved with **"ok do they"**. **THE REASON WAS ONE FUNCTION AWAY AND NOBODY HAD ASKED.** §105 gave every item its own failure sentence and then shipped *"Cannot reach the sync service"* onto forty rows at once, while `meituanStoreHealth` in `routes/meituan-admin.js` — next door, driving the Meituan tab's store lines for months — already knew it was a **captcha on 天河 since 09:14**. Same shape as §105 itself and as §103 step 5: one rule, two copies, two screens drifting. **THE RULE MOVES TO `lib/channel-block.js` AND BOTH CALLERS ASK IT.** A store is blocked when its most recent blocking event with `status='error'` has not been overtaken by a successful `stock_push` or an explicit clearing event — two ways to recover because the daemons use both. **`status='error'` is the whole test**: `poll_paused` is logged `ok` and means "outside opening hours", and reading the event type alone turned 天河 amber the moment it shut for the night; that warning is carried over verbatim. Copying the algorithm into `lib/channel-sync-items.js` was rejected for §103 step 5's reason; the route now delegates and keeps its exact fields, and the suite runs **the tab's ORIGINAL algorithm beside the shared one over nine fixtures** and demands they agree. **ONE DELIBERATE DIFFERENCE, AND IT CHANGES WHAT AN EXISTING SCREEN SAYS: the shared list also blocks on `proxy_down`**, which the tab's private list omitted even though the daemon logs it as an error reading *proxy cannot reach Meituan — sync paused*. A store in that state pushes nothing and the tab called it fine. **EACH DAEMON HAS ITS OWN NAMES, AND THE FIRST DRAFT GOT THAT WRONG.** The descriptor was first written by giving Eleme and GZ Grocery Meituan's event names — it would have reported nothing at all for Eleme, for ever, in silence, because **Eleme calls a lost session `auth_required`**. The names are now read out of each daemon's own `logSync` calls, and **a test reads the daemons' source and fails if a name in the table is one nothing writes**, because a wrong string in a descriptor produces silence rather than an error. GZ Grocery announces recovery with the fault's OWN event type at status `ok`, so `needs_login` sits in both its lists; that is safe because clearing must be strictly later than the fault, and all three directions are pinned. **Only faults that stop the STOCK PUSH are listed** — Meituan's `sync_stalled` is about order reads and `browser_down` about a process that restarts itself. **WORST = EARLIEST**, not most recent: the fault that has been stopping pushes longest is the one nobody has looked at. It rides on the channel entry and is said **once on the channel's card**, never down forty item rows (§103's founding rule). **AN ITEM DEFERS TO IT IN ONE DIRECTION ONLY**: `chCauseFor` (desktop) and `csCauseFor` (phone) swap an item's cause for the channel's only where the item's own code is generic — `unreachable`, `http`, `signed_out`, `gave_up`, or none. **A stated refusal always keeps its own words**: *美团返回：商品已下架 (code 8003)* is a fact about that item no channel fault explains, and deferring would lose the only actionable sentence on the row. **THE MEITUAN CODES: THE EVIDENCE SAID THERE WAS NOTHING TO MAP.** All three codes the tree has met are handled BEFORE an operator can reach them — 10002 and 30000 are a lost store binding (`_isBindingError` → transient, flushes after re-login), 10048 is a 套餐 combo whose component is out of stock (`_apiSetSku` treats Meituan's refusal as the correct end state). **A what-to-do line for any of them would be a sentence no operator can reach — dead code that reads like coverage.** What ships is the evidence path: `MEITUAN_CODES` records what is known AND where it is handled, `meituanCodeOf` pulls the code back out of a rejection sentence, and **`scripts/report_reject_codes.js` counts every code the logs actually carry and names the ones missing from the table**. It writes nothing and needs no schema — the codes are already in `meituan_sync_log.error_msg` and the queue row — reads every tenant database on the box retroactively, and **refuses (exit 2) when nothing could be read** rather than printing "no unknown codes", per §30 rule 4. **Chinese: nothing new is minted.** `验证中心风控，同步已暂停，需要人工验证` is the Meituan daemon's own merchant alert verbatim; `同步已停` is the Eleme tab's own fallback; the sign-in and cannot-connect sentences come from §105's declared set; `自` is the Orders page's own "since". **One arrangement is composed** — `无法连接同步服务。同步已暂停。` — declared in `docs/tacet-delivery-vocabulary.md` with the candidates rejected. **Tests:** `scripts/test_channel_block.js`, new, fast shard, **40 cases**, plus four in `test_channel_sync_items.js` (**61 total**). No schema, no migration, no new capability, no change to `.gitignore` or CI.
 
@@ -11647,3 +11649,68 @@ all three clients defer.
   page; the Channel sync page stays read-only, as §103 decided.
 - **No ops alert is added** for a channel that has been blocked for hours.
   §105 left the same question open for `signed_out` and it is still open.
+
+## §107 — THE STALL CARD NAMES BOTH ITS COUNTS
+
+Asked by Ash, reading the phone's Channel sync screen: **"why it say 3 stock
+update when can see only 2"**. The Meituan card read *3 stock updates waiting
+since Sep 7*; the Needs attention list two chips below held 2 items.
+
+### This is §104's own divergence, not a new one
+
+§104 already ruled, from the near-identical Home screenshot, that the two
+counts must never be summed: `channelSyncStale().waiting_count`
+(`lib/channel-sync-stale.js`) counts **(store, product) push TARGETS** whose
+latest queue row is still `pending` or `error`; `channel_items_attention.count`
+(`lib/channel-sync-items.js`'s `counts[ch.key].att`) counts **PRODUCTS**,
+worst-store-wins, so one product wrong at two stores is two targets and one
+card. §104 settled where each number is allowed to live and that Home's pill
+shows only one of them at a time. It did not reach the Channel sync page's own
+stall line, which has shown only the target count since §103 — correctly, on
+its own terms, and still confusing on the one page that also shows the item
+count a few pixels away.
+
+### The fix names both; it does not reconcile them
+
+`29-channel-sync.js`'s `strip()` (desktop) and `m.html`'s new `csStaleLine`
+(phone, mirroring `csBlockLine`'s shape one function above it) append the
+channel's own `counts.att` to the stall sentence they already had:
+
+> *3 stock updates waiting since Sep 7 — the numbers it shows may be wrong.
+> 2 need attention.*
+
+**Shown only when `counts.att` is nonzero.** A channel stalled entirely on
+pushes still in flight — nothing yet provably wrong, §104's other case — keeps
+the original sentence unchanged rather than appending *"0 need attention"*,
+which would read as a claim that nothing is wrong on a card whose whole point
+is that something might be.
+
+**The server is unchanged, same as §104.** `lib/channel-sync-stale.js` and
+`lib/channel-sync-items.js` are untouched; both counts already travelled to
+both surfaces (`channel-sync-items.js`'s per-channel `stale` and `counts`
+fields, read by both the desktop route and the phone's `loadChannelSync`).
+This is a display-only join of two numbers that were both already on the wire.
+
+### Chinese: one pair lifted whole, one arrangement composed
+
+Desktop's added clause, `N 个待处理`, is its own live fragment three lines
+below `strip()`'s stalled branch, in the non-stalled branch's own status bits
+— reused verbatim, nothing new.
+
+The phone has no such sentence to lift: its counts are chip badges
+(`chipRow`), not prose, so nothing on this screen has ever said "N need
+attention" as words. `N 件商品待处理` joins two fragments already live on this
+exact card — `件商品` from its own "every channel is in step" sentence
+(`"N 件商品。无需处理。"`) and `待处理` from the Needs attention chip (`csWord`) —
+declared in `docs/tacet-delivery-vocabulary.md` with the candidates rejected,
+foremost `涉及 N 件商品` (borrowed from `02-settings-ops.js`'s unrelated `N 项涉及
+资金`, and rejected for naming a relationship the sentence does not need).
+
+### Tests
+
+No suite pinned the literal stall-line text on either surface, so none needed
+changing to accommodate the new clause: `test_channel_sync_items.js` (61
+cases), `test_channel_sync_stale.js` (23 cases) and `test_channel_sync_home_row.js`
+(31 cases, §104's own — a different function on both files, untouched by this
+edit) all pass unchanged. `test:fast` green at 215. No schema, no migration,
+no new capability, no new state, no change to `.gitignore` or CI.
