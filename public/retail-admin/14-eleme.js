@@ -29,6 +29,8 @@
     // The mapping table renders in ONE language under data-no-i18n, so repaint it
     // ourselves on EN/CN flips (the translator never touches data-no-i18n nodes).
     if (window.onLangChange) onLangChange(function () { elRenderProducts(); });
+    // Whether each push LANDED — see the twin in 11-meituan.js. Non-blocking.
+    chLoadVerdicts('eleme').then(function () { elRenderProducts(); });
   };
 
   // After the OAuth round-trip Eleme redirects to /retail-admin?eleme=connected.
@@ -766,7 +768,12 @@
     // Right target, switch off. A settled state — and the only one where "off"
     // is the whole story.
     if (!on) return st('off', 'sync_off');
-    return st('ok', 'synced');
+    // Right target, switch on — but did the last push land? That is the server's
+    // to answer (chApplyVerdict, 01-core.js), and it only ever turns ok into att.
+    const okState = st('ok', 'synced');
+    const withPush = chApplyVerdict('eleme', map && map.product_id, storeCode, okState);
+    if (withPush !== okState && typeof csWhyFor === 'function') withPush.why = csWhyFor('eleme', withPush);
+    return withPush;
   }
 
   // Work first, and inside the work the mappings that are pushing right now: a
@@ -1477,6 +1484,9 @@
   }
 
   window.elPushAll = async function () {
+    // The verdicts are about to change wholesale; re-read rather than serve
+    // a cached answer from before the push.
+    setTimeout(function () { chLoadVerdicts('eleme', true); }, 4000);
     const btn = document.getElementById('el-pushall-btn');
     if (btn) { btn.disabled = true; btn.textContent = cuT('Queuing…', '排队中…'); }
     try {
