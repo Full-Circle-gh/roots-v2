@@ -2835,6 +2835,17 @@
      11%. Roots runs three. Re-measure before a five-store tenant ships. */
   #pa-table col.pa-c-margin { width: 13%; }
   #pa-table col.pa-c-status { width: 11%; }
+  /* 2 stores — Roots' own shape (Tianhe + Yuexiu), and every screenshot this
+     table gets reported against. Left unstated, the two stock cols just take
+     the 18% leftover the named columns don't claim, 9% each. That reads
+     cramped in practice — the number box fills its cell edge to edge with no
+     room to spare, so a 3-digit count (or the low/out ring around it) looks
+     squeezed rather than sitting under its header with any air. Stated
+     explicitly at 11% each (+27px at the 996px reference), funded by Product
+     the same way every other tier here funds itself — Product still absorbs
+     by ellipsis, so nothing downstream loses information. */
+  #pa-table[data-stores="2"] col.pa-c-name  { width: 20%; }
+  #pa-table[data-stores="2"] col.pa-c-stock { width: 11%; }
   /* One combined Stock column (a single-store tenant): the whole 18% remainder
      would go to a count, so Product takes it back and Stock lands on 9% — the
      same width a store column gets, so the two shapes read alike. */
