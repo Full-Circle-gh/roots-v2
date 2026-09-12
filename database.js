@@ -6989,6 +6989,10 @@ try {
 // feature with its own cutover, and a schema rebuild is not something to do
 // speculatively across thirteen tables at once.
 //
+// income_entries and expense_entries's cutover arrived: see
+// drop_created_by_user_fk_v2 below, once §92 gave Finance's Transactions
+// ledger backend-operator writers on this exact column.
+//
 // production_batches also carries recipe_id → recipes(id). That one is KEPT:
 // `recipes` is data-plane and IS cloned per tenant, so it resolves fine.
 // ─────────────────────────────────────────────────────────────────────────
@@ -7060,6 +7064,94 @@ try {
     }
   }
 } catch (e) { console.error('[created_by-fk] migration failed (left untouched):', e); }
+
+// ─────────────────────────────────────────────────────────────────────────
+// drop_created_by_user_fk_v2 — the same rebuild, now for income_entries and
+// expense_entries, which v1 above named as carrying "the same latent
+// breakage" and left alone "because each belongs to a feature with its own
+// cutover." Finance's cutover already happened on the READ side: §92
+// (docs/tacet-consolidation-decisions.md) resolves both tables' created_by
+// through `lib/user-names.js` against `tenant_users` — CONTROL-PLANE, not
+// `users` — because a hand-typed row can come from a Mini App Backend
+// operator session (`requireRetailAdmin`'s `req.session.backendUserId`
+// branch, routes/retail.js) as easily as a kitchen one. The schema's hard FK
+// to `users(id)` was simply never updated to match, so the WRITE side still
+// rejected exactly the id §92 already expects to store there.
+//
+// THE SYMPTOM WAS "FOREIGN KEY constraint failed", NOT "no such table:
+// main.users" — Roots keeps `users` in the same file as these two tables, so
+// the table exists; a backend operator's `tenant_users` id just never
+// happens to match a row in it. `routes/finance-transactions.js`'s POST
+// (the "新建交易" / New Transaction dialog) stamps created_by with
+// `req.user.id` on every insert, so this refused EVERY manual income or
+// expense row typed by a Mini App Backend operator — the ledger's own header
+// calls Transactions "the only surface where a person types" once §92 gave
+// it operators to type as.
+//
+// Same mechanism as v1, same guarantees (every row and value survives,
+// indexes and triggers replay, a dangling id is accepted, idempotent).
+try {
+  const done = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('drop_created_by_user_fk_v2');
+  if (!done) {
+    const TARGETS = ['income_entries', 'expense_entries'];
+
+    const stripCreatedByFk = (sql) => {
+      const re = /,?\s*FOREIGN\s+KEY\s*\(\s*["`']?created_by["`']?\s*\)\s*REFERENCES\s+["`']?users["`']?\s*\(\s*["`']?id["`']?\s*\)(\s+ON\s+(?:DELETE|UPDATE)\s+[A-Z ]+)*/gi;
+      return sql.replace(re, '');
+    };
+
+    const rebuilt = [];
+    db.pragma('foreign_keys = OFF');
+    db.pragma('legacy_alter_table = ON');
+    try {
+      db.transaction(() => {
+        for (const t of TARGETS) {
+          const trow = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(t);
+          if (!trow) continue;   // not present on this database — nothing to do
+          const hasFk = db.pragma(`foreign_key_list(${t})`)
+            .some(f => f.from === 'created_by' && f.table === 'users');
+          if (!hasFk) { rebuilt.push(`${t}: already free of the FK — skipped`); continue; }
+
+          const before = db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n;
+          const idxSqls = db.prepare("SELECT sql FROM sqlite_master WHERE type='index'   AND tbl_name=? AND sql IS NOT NULL").all(t).map(r => r.sql);
+          const trgSqls = db.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND tbl_name=? AND sql IS NOT NULL").all(t).map(r => r.sql);
+
+          const createSql = stripCreatedByFk(trow.sql);
+          if (createSql === trow.sql) throw new Error(`[created_by-fk-v2] no created_by FK clause found in the CREATE for ${t}`);
+          const tmp = `_cbfk2_tmp_${t}`;
+          const tmpSql = createSql.replace(
+            new RegExp(`(CREATE\\s+TABLE\\s+(?:IF\\s+NOT\\s+EXISTS\\s+)?["\`']?)${t}(["\`']?)`, 'i'),
+            `$1${tmp}$2`);
+          if (tmpSql === createSql) throw new Error(`[created_by-fk-v2] could not rename the CREATE for ${t}`);
+
+          db.exec(tmpSql);
+          db.exec(`INSERT INTO ${tmp} SELECT * FROM ${t}`);
+          db.exec(`DROP TABLE ${t}`);
+          db.exec(`ALTER TABLE ${tmp} RENAME TO ${t}`);
+          for (const s of idxSqls) db.exec(s);
+          for (const s of trgSqls) db.exec(s);
+
+          const after = db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get().n;
+          if (after !== before) throw new Error(`[created_by-fk-v2] row count changed for ${t}: ${before} → ${after}`);
+          const stillThere = db.pragma(`foreign_key_list(${t})`)
+            .some(f => f.from === 'created_by' && f.table === 'users');
+          if (stillThere) throw new Error(`[created_by-fk-v2] the FK survived the rebuild on ${t}`);
+          const issues = db.pragma(`foreign_key_check(${t})`);
+          if (issues.length) throw new Error(`[created_by-fk-v2] FK check failed for ${t}: ${JSON.stringify(issues).slice(0, 300)}`);
+
+          const keptFks = db.pragma(`foreign_key_list(${t})`).map(f => `${f.from}→${f.table}.${f.to}`);
+          rebuilt.push(`${t}: ${before} row(s) preserved, ${idxSqls.length} index(es) + ${trgSqls.length} trigger(s) replayed` +
+                       (keptFks.length ? `, kept ${keptFks.join(' / ')}` : ', no FKs remain'));
+        }
+        db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('drop_created_by_user_fk_v2');
+      })();
+      if (rebuilt.length) console.log(`[created_by-fk-v2] dropped the users(id) FK:\n  ${rebuilt.join('\n  ')}`);
+    } finally {
+      db.pragma('legacy_alter_table = OFF');
+      db.pragma('foreign_keys = ON');
+    }
+  }
+} catch (e) { console.error('[created_by-fk-v2] migration failed (left untouched):', e); }
 
 // ── Automatic SKUs (2026-09-04) ─────────────────────────────────────────────
 //
