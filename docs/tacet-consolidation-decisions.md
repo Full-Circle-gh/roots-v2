@@ -23,6 +23,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
+2026-09-12 · v4.231 — **§104 DECIDED AND BUILT: ONE CHANNEL ROW ON HOME, AND THE STALL KEEPS ITS VOICE INSIDE IT.** Decided by Ash from a live phone screenshot of Home showing both rows stacked — *"we don't need anymore the individual channel sync notification like meituan. we have the new one that all channels combined"*. **THE SCREENSHOT IS THE WHOLE ARGUMENT**: *Meituan not syncing · stock updates waiting since Sep 7, 5:56 PM · 3* sitting directly above *Channel sync · Meituan 2, wrong since Sep 7, 5:56 PM · 2* — same channel, same minute, two amber plugs, two chips going to two different places, in a list whose heading is *Needs you*. §103 built the second row and deliberately left the first alone (*"the stall is the CHANNEL's fact, said once on its own card"*), which was right about WHERE the fact belongs and wrong about how Home would read with both. **THE HALF THAT WOULD HAVE GONE SILENT, AND IT IS THE WHOLE SUBSTANCE OF THE RULING.** Deleting the per-channel row outright was rejected after checking what would still fire: **a channel that has stopped taking pushes shows GREEN on every one of its items**, by §103's own rule — a push in flight is green whatever its age, and a queue that never sends leaves each item's `last_pushed_qty` matching what the platform still displays — so `channel_items_attention` is **0** for a dead channel. The naive removal would have made 越秀's 1,683 pending Meituan pushes (§102's addendum: no successful push since 2026-08-22) say **nothing at all** on Home, which is the opposite of what was asked for: Ash's reading is that the combined row already covers all channels, so the build makes that true rather than assuming it. **THE RULING: the stall is not a row, it is a NAMED CHANNEL inside the one row's state line** — *Meituan not syncing, Eleme 4, wrong since Sep 7, 5:56 PM* — and it is still spelt out in full, with its waiting count and its own sentence, on the Channel sync page's channel strip, which is where the chip lands. **A channel says ONE thing about itself, worst first**: a channel that is not syncing at all is not also described by how many of its items have been caught out, because the stall contains them and *"Meituan not syncing, Meituan 2"* says one channel twice in seven words. **THE TWO COUNTS ARE NEVER SUMMED.** They have different denominators — `channel_items_attention.count` counts PRODUCTS wrong, `channelSyncStale().waiting_count` counts (store, product) push TARGETS waiting — and 2 + 3 = 5 would mean neither, the same trap the Restock pill three rows up carries its own comment about. **The pill shows the items count, or the waiting count when a channel is down and no single item is yet provably wrong** — the same either-or as Restock's `oosc || lowc`, with the state line naming which is on screen. **The clock is the OLDER of the two facts**, which is also the age the row sorts on: the earliest moment a customer could have started reading a wrong number, whichever way it went wrong. **THE SERVER IS UNCHANGED.** `/dashboard/ops` still sends both `channel_sync_stale` and `channel_items_attention`, and `lib/channel-sync-stale.js` is untouched: the merge is on the screen, and dropping the key would have taken the stall away from the Channel sync page too — the one place it is said in full. **THE CHANNEL'S NAME IS NOT ANSWERED HERE.** v4.229 landed mid-build and took the Products page off its own copy of the channel names, for the reason that applies to this row exactly: two copies are how two screens drift. The desktop row resolves through `csChannelName`, guarded by `typeof` the same way `09-products.js` guards its own call, and keeps a pair map only as the page-without-that-module fallback. The phone cannot reach that export at all and keeps its own, as §103's phone row already did. **TWO SURFACES, ONE CASE TABLE.** Desktop (`03-dashboard.js`) and phone (`m.html`) carry separate copies of the row builder, so the suite runs both through the identical cases and asserts the rows are equal; that check immediately found a pre-existing §103 mismatch — the desktop joined its Chinese line with an ASCII `, ` where the phone used `，` — now corrected to the phone's. **The stall-only chip lands on All items, not Needs attention**, which is empty in exactly that case: a chip that answers the row with a blank table is worse than no chip. **Chinese: nothing composed and nothing to declare.** `未同步` came off the row being removed and off `29-channel-sync.js`; `渠道同步`, `查看商品` and the `自 … 起不符` pair off §103's own row; the channel names off its `CH` map. The suite pins the exact set of Chinese fragments in both blocks, so an ADDED string goes red rather than shipping undeclared. **Tests:** `scripts/test_channel_sync_home_row.js`, new, fast shard, 31 cases — and it does not grep for phrases: it SLICES the §104 block out of both files and RUNS it against stubbed helpers and a payload per case, asserting the fire object. The screenshot's own payload collapsing to one row; the stalled channel not also counted as items; the pill not summing; **stall alone still lighting Home, with the waiting count and the stall's own age**; nothing wrong raising nothing; an absent payload answering rather than throwing; one channel down while another drifts; the older-of-two clock in both directions; all three channels each with its own worst fact; a fourth channel the name map has never heard of still named, drifting or down; two channels down at once; today's fact as a bare time and another day's carrying its date; an unreadable stamp still lighting the row; the duration suffix suppressed; the whole line in Chinese with no English leaking; both chips; a role that cannot open the screen still SEEING the row; the desktop asking `csChannelName` and falling back to its own pair when that module has not loaded; and the two surfaces asserted equal across every case in both languages. **13 of the 31 checked to fail against the naive removal** (the stall dropped, §103's row left alone). `test:fast` green at 213, plus `test_channel_sync_items`, `test_channel_sync_stale`, `test_mobile_home`, `test_phone_dashboard`, `test_app_home` and `test_confined_role_home` run alone. No schema, no migration, no new capability, no new string, no change to `.gitignore` or CI. A build under a new decision, hence a patch.
+
 2026-09-11 · v4.224 — **§101 DECIDED AND BUILT: THE NIGHT'S ORDERS RAISE THEIR OWN KITCHEN REQUEST IN THE MORNING, BECAUSE THE PUSH AND THE PRINTER ALREADY KNOW HOW TO CARRY ONE.** Asked by Ash from the §84 walkthrough — the screen block answers *how many to prepare* and answers it only to somebody who opens the screen — and the ask was three words: **"we need it to be push, print"**. **§84 BUILT A NUMBER; §51 AND §71 BUILT A DELIVERY MECHANISM; NOTHING CONNECTED THEM.** Push (`_fireRestockPush`), the kitchen slip (`lib/kitchen-print`), the deep link onto `kitchenqueue`, the tickable card, §61's per-line close and §61's handover to *What you made* that actually moves the shelf — **every one of those keys on a `restock_orders` row**, and a night of `awaiting_restock` pre-orders creates no such row. So eighteen owed wraps pushed nothing, printed nothing, and waited for somebody to walk in and tap the right tab. **THE RULING: ONE REQUEST, RAISED BY THE SERVER, AT A PER-TENANT HOUR, DEFAULT 06:00** (`fresh.morningRequestHour`, blank turns it off) — chosen over a digest push/slip carrying the same numbers because a digest is a SECOND thing to build and a second place the kitchen reads, and it still leaves them nothing to close; and over per-order push/print, which on a thirty-order night is thirty slips at 2am and still never states the total. **THE SHAPE IS A REQUEST NOBODY TYPED, AND THAT CROSSES §84'S OWN LINE ON PURPOSE.** §84 refused to write orders into the request table and that refusal stands **in the direction it was made**: `lib/batch-owed.js` is unchanged, learns nothing, and is still the one definition of owed — the request is DERIVED from it once a day and never feeds back, so the number on the screen and the number on the paper cannot disagree. **The row is an ordinary kitchen request in every respect a reader can see**: `from_role` warehouse, `to_role` kitchen, `purpose` `'order'` — which already prints *For an order · 用于发货* (`lib/feie.js`) and already sorts below §65's urgent — `status` `'sent'`, a `PR-` number from `genRsNumber` (**injected, not copied** — §80's copy rule), no locations at all per §51, `created_by` NULL. **ONE NEW COLUMN, `restock_orders.auto_source`, AND IT IS WHAT MAKES THE ONCE-A-DAY GUARD EXACT** rather than inferred: `created_by IS NULL` is also true of rows predating `drop_created_by_user_fk_v1`, and a guard that is usually right raises a second request on the morning it is wrong. NULL means a person raised it, which is true of every row already written, so **no backfill and no migration beyond one `addColumn`**. **THE GUARD IS THE DATABASE, NOT A FILE LATCH.** `lib/alert-latch`'s `claimWindow` was the obvious reach and is deliberately NOT used: it is per-box file state, so a rebuilt container forgets and sends twice, and the thing being guarded here is not an advisory but a row the kitchen will cook from. The query asks whether today already has an `auto_source` request — which is also the answer after a restart, a redeploy and a second app server. **IT CATCHES UP AND THEN STOPS**: it fires at the configured hour or up to three hours after, so a box that was down at 06:00 still prints at 07:10, while an order landing at 15:00 does not raise a surprise request for food wanted tomorrow. **QUANTITIES SUM PER PRODUCT ACROSS SHOPS** because a kitchen request carries no locations to split them into (§51) — which shop gets the wraps is a transfer's question, asked after they exist. **LINES CARRY SKU AND NAMES AND NO `product_id`**, matching every live kitchen request, because §61's recorded-derivation matches SKU-then-name and a line shaped differently would not tick off. **NOT SOLVED, AND THE DIRECTION IS CHOSEN RATHER THAN MISSED: a human request for the same food is not subtracted.** Subtracting would mean matching lines across open requests by SKU-then-name and trusting the result to REDUCE what gets cooked; wrong, the kitchen under-makes and a customer who paid gets nothing, where the opposite error is a visible over-make on a card somebody can read. Named here so the next reader knows it was weighed. **NO new push channel, NO second printer, NO new capability, NO change to `batch-owed`, and the kitchen's on-screen block is untouched** — it now agrees with a slip instead of being the only place the fact lived. **Chinese: nothing minted for the request, the slip or the push** — `purpose='order'`, `厨房新请求` and `用于发货` are all live and all reached unchanged; the note reuses `有客户订单等待` verbatim from §84's own block. **Two settings strings are ARRANGEMENTS of live fragments** (`厨房制作请求` whole from `routes/restock.js`, `留空则…` from the low-stock and campaign hints, `每天` from the low-stock digest), declared in `docs/tacet-delivery-vocabulary.md` v1.60 under Rule 4's standing delegation with the candidates rejected. **Tests:** `scripts/test_kitchen_morning_request.js`, new, in the fast shard — the owed night end to end (parked order in, request out, push and print fired exactly once), the once-a-day guard across a simulated restart, the catch-up window's both edges, nothing-owed raising nothing, the hour switched off, the per-product sum across two shops, lines carrying SKU and no `product_id`, and `batch-owed` asserted unchanged by source. Checked to fail with the change reverted. `test:fast` green at 210, plus `test_batch_owed`, `test_kitchen_queue_item_split` and `test_restock_tenant2_split` run individually per CLAUDE.md. **One `addColumn` — called out here and in the PR body, not slipped in.** A build under a new decision, hence a patch.
 2026-09-12 · v4.231 — **§103 ADDENDUM: THE THREE CHANNEL TABS LEARN WHETHER THE PUSH LANDED, AND THE LAST SCREEN THAT COULD LIE STOPS.** Asked by Ash, who read step 5's own "what this deliberately does not do" and said **"do it"**. §103 built a page, a dashboard row, a phone screen, dots and an editor card that all read the push result; the three TABS still classified locally, so the Meituan tab could show a green dot and the word *Synced* for Harissa Chilli Paste — the product the whole section exists because of — while every push had failed for 75 days. **THE GAP IS EXACTLY ONE STATE WIDE, AND THAT IS WHY THE FIX IS SMALL.** The server runs every check a tab runs AND the push result, and it tests the mapping's SHAPE FIRST: no map, sync off, catalogue unread, bad name and unclaimed option all return before it looks at the queue. So the two can only ever disagree in one place — **the tab says `ok`, the server says `att`** — and `chApplyVerdict` (01-core.js) applies only there. It can turn a green dot amber and can do nothing else: **it never rewrites a state the tab already named** (the operator is on that screen fixing the cause the tab gave them, and swapping it for another cause is a worse screen), never downgrades, and a failed or unread fetch leaves every tab exactly as it was. **PER STORE, NOT PER PRODUCT.** Meituan has two and a folded verdict would light the wrong one's dot, so the tabs ask the new `?channel=KEY` projection — one channel with its per-store detail, a third of the work and a third of the payload of the full read — rather than the compact one the Products dots use. **`compact` now also carries `reason`**, because a surface with a bare `k` falls back to *Needs attention* where the page names a cause. **THE READ NEVER BLOCKS A TAB**: fired after the list is painted, repainted when it lands, 60-second cache, one in-flight request shared by every caller, and dropped after a Push all (which changes every verdict at once). **A server-contributed state brings the page's own sentence with it** — *the last push to Meituan failed, so Meituan still shows the previous number* — because unlike every other state on those screens it has nothing on the page to point at. **WHAT THIS MOVES, SAID PLAINLY: the tabs' own "Needs attention" chips will count MORE.** That is the point and it is the correct number — those products were always wrong, the tab just could not see it. §103's earlier note declined to bundle this into a wording change; asked for on its own, it ships on its own. **AND THE SWALLOWED-ERROR BUDGET GOES DOWN, NOT UP.** The first cut added three `.catch(function () {})` and `scripts/check-swallowed-errors.js` correctly failed at 459 against a ceiling of 457. They were **removed rather than documented**: `chLoadVerdicts` cannot reject — it try/catches its own fetch and resolves either way — so each was dead, and a swallow there could only ever have hidden a bug in the repaint beneath it. Count 457 → **456**, and **the gate's ceiling is ratcheted to 456 in the same commit** so the one freed cannot be silently re-spent. That is a change to a build gate and is called out here and in the PR body per `CLAUDE.md`. **Tests:** five added (49 total) that **lift `chApplyVerdict` out of the shipped `01-core.js` and run it** — Harissa's exact shape turning amber with the server's reason, the sibling store untouched, every non-`ok` state refused, no downgrade, an unread channel and an unknown product both changing nothing, and all three tabs calling both halves. **Checked to fail** with the one-direction rule removed. `test:fast` green at 212. No schema, no migration, no new capability.
 
@@ -11272,3 +11274,118 @@ still and touches the tabs, which none of this did.
 One composed string, `渠道同步`, declared in `docs/tacet-delivery-vocabulary.md`
 with the candidates rejected. Everything else is a live pair lifted whole or an
 arrangement of live fragments.
+
+## §104 — ONE CHANNEL ROW ON HOME, AND THE STALL KEEPS ITS VOICE INSIDE IT
+
+Decided by Ash, 2026-09-12, from a live phone screenshot of Home. The ask:
+*"we don't need anymore the individual channel sync notification like meituan.
+we have the new one that all channels combined."*
+
+### What the screenshot showed
+
+Two rows, stacked, under a heading that says *Needs you*:
+
+```
+🔌  Meituan not syncing                                    3  ›
+    stock updates waiting since Sep 7, 5:56 PM
+🔄  Channel sync                                           2  ›
+    Meituan 2, wrong since Sep 7, 5:56 PM
+```
+
+Same channel. Same minute. Two amber icons, two counts, two chips going to two
+different places. §103 built the second row and deliberately left the first
+alone — *"how long a channel has sat on its queue is the CHANNEL's fact, said
+once on its own card, never repeated on the forty items behind it"* — which was
+right about where the fact belongs and did not ask how Home would read with
+both rows in it.
+
+### The one thing that had to be checked before deleting anything
+
+**A stalled channel's items are all GREEN.** That is §103's own ruling working
+as designed: a push in flight is green whatever its age, and a queue that never
+sends leaves every item's `last_pushed_qty` matching the number the platform is
+still showing. So `channel_items_attention.count` is **0** for a channel that
+has completely stopped.
+
+Deleting the per-channel row and keeping only §103's would therefore have made
+**越秀's 1,683 pending Meituan pushes silent on Home** — the outage §102's
+addendum found, with no successful push since 2026-08-22. Ash's reading is that
+the combined row already covers every channel; the build makes that true rather
+than assuming it.
+
+### The ruling
+
+**The stall stops being a row and becomes a named channel inside the one row.**
+
+- The row fires when any item is wrong **or** any channel has stalled.
+- **A channel says one thing about itself, worst first.** A channel that is not
+  syncing at all is not also described by how many of its items have been
+  caught out — the stall contains them. *"Meituan not syncing, Meituan 2"* says
+  one channel twice in seven words.
+- **The two counts are never summed.** They have different denominators:
+  `channel_items_attention.count` counts PRODUCTS wrong,
+  `channelSyncStale().waiting_count` counts (store, product) push TARGETS
+  waiting. 2 + 3 = 5 would mean neither — the trap the Restock pill three rows
+  up carries its own comment about. The pill shows the items count, or the
+  waiting count when a channel is down and nothing is yet provably wrong: the
+  same either-or as Restock's `oosc || lowc`, with the state line naming which.
+- **The clock is the older of the two facts**, and so is the age the row sorts
+  on — the earliest moment a customer could have started reading a wrong
+  number, whichever way it went wrong.
+- **The stall-only chip lands on All items, not Needs attention**, which is
+  empty in exactly that case. A chip that answers the row with a blank table is
+  worse than no chip.
+
+### What is unchanged
+
+`/dashboard/ops` still sends **both** keys, and `lib/channel-sync-stale.js` is
+untouched. The merge is on the screen only: dropping the key would have taken
+the stall away from the Channel sync page's channel strip as well, which is the
+one place it is still said in full — *"Not syncing since 5:56 PM · 3 stock
+updates waiting — the numbers Meituan shows may be wrong."* That strip is where
+the chip lands, so the detail the removed row carried is one tap away.
+
+The three channel tabs, the Channel sync page and the Products-list dots are
+all untouched.
+
+### Where the channel's name comes from
+
+v4.229 landed on main while this was being built: it took the Products page off
+its own copy of the channel names and put them behind `csChannelName` /
+`csChannelGlyph` in `29-channel-sync.js`, because two copies are how two
+screens drift. That reasoning applies to this row without change, so **the
+desktop resolves names through `csChannelName`**, guarded by `typeof` exactly
+as `09-products.js` guards its own call, and keeps a pair map only as the
+fallback for a page loaded without that module.
+
+The phone cannot reach a desktop export at all, so `m.html` keeps its own pair
+map — as §103's phone row already did. The suite's parity check is what holds
+the two in agreement, and it runs the fallback path on every other case.
+
+### The two surfaces are held equal
+
+Desktop (`03-dashboard.js`) and phone (`m.html`) carry separate copies of the
+row builder — they always have — so the suite runs **both through one case
+table** and asserts the resulting rows are equal, in both languages. That check
+earned its keep immediately: it found a pre-existing §103 mismatch where the
+desktop joined its Chinese line with an ASCII `, ` and the phone with `，`. The
+desktop was corrected to the phone's.
+
+### Chinese
+
+**Nothing composed, nothing to declare.** `未同步` came off the row being
+removed and off `29-channel-sync.js`; `渠道同步`, `查看商品` and the
+`自 … 起不符` pair off §103's own row; `美团` and `饿了么` off its `CH` map. The
+suite pins the **exact set** of Chinese fragments in both blocks, so a string
+that is ADDED goes red rather than shipping undeclared.
+
+### Explicitly NOT decided here
+
+- **Whether a stalled channel should turn its items amber.** It should not, and
+  §103 already ruled so; this section does not reopen it. The stall is a
+  channel fact and is said as one.
+- **Brick rather than Amber for a dead channel.** Carried over from §103's own
+  open list unchanged — Amber still, and Brick still reserved.
+- **Whether the Channel sync page should lead with the stall.** It already
+  carries it on the strip above the table; no change was asked for and none was
+  made.

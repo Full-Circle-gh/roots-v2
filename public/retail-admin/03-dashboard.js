@@ -3075,78 +3075,106 @@ function tdAttnRender() {
     });
   }
 
-  // Channel stock-sync stall — a sales channel (Meituan / Eleme / GZ Grocery)
-  // has stopped taking our stock pushes: the oldest push in its queue has sat
-  // unresolved past the threshold in lib/channel-sync-stale.js. Up to one row
-  // per channel, usually zero. The declared channel list lives server-side —
-  // this just loops over whatever the endpoint sends, so a fourth channel
-  // needs no change here. `mins` is still the open-hours-adjusted age from the
-  // server (Meituan/Eleme) or plain wall-clock (GZ Grocery) — it drives sort
-  // order exactly like every other fire's age, even though the row's own text
-  // doesn't show it (see noAutoAge below and tdAttnRowHtml's use of it).
+  // §104 — ONE channel row on Home, covering all three channels. Two different
+  // facts are folded into it, deliberately:
   //
-  // Mock calls for the clock the customer's stock might be wrong at, not a
-  // duration — "waiting since 2:15 PM", never "oldest 4h", and nothing about
-  // sessions/queues/tokens/attempts: the reader needs to know the numbers on
-  // that channel may be wrong, not why. Since `mins` stays a real number, this
-  // still always outranks the Restock row below (whose `mins` is deliberately
-  // null — it has no clock at all — and a fire with no age always sorts last),
-  // which is the ordering the mock settled: a stale channel may be SELLING
-  // stock we don't have; an empty shelf is only an empty shelf.
+  //   · an ITEM a channel holds a WRONG number for — Harissa green on the
+  //     Meituan tab while Meituan showed 18 against a shelf of 3 — which is
+  //     §103's read, `channel_items_attention`; and
+  //   · a CHANNEL that has stopped taking our stock pushes at all: its whole
+  //     queue sat unresolved past the threshold in lib/channel-sync-stale.js.
+  //
+  // They were two rows until now, and on Home they read as one thing said
+  // twice — "Meituan not syncing · 3" directly above "Channel sync · Meituan
+  // 2", same channel, same clock, two chips going to two places. Ash, from the
+  // phone: "we don't need anymore the individual channel sync notification
+  // like meituan. we have the new one that all channels combined."
+  //
+  // THE STALL IS NOT DROPPED ALONG WITH ITS ROW, because nothing else on Home
+  // would say it. A stalled channel's items all read GREEN by §103's own
+  // ruling — a push in flight is green whatever its age, and a queue that
+  // never sends leaves every item's last pushed number matching what the
+  // channel still shows — so deleting the stall outright would have made
+  // 越秀's 1,683 pending pushes (§102's addendum: no successful push since
+  // 2026-08-22) silent here. It is a NAMED CHANNEL in this row's state line
+  // instead, and it is still spelt out in full on the Channel sync page's own
+  // channel strip, which is where the chip lands.
+  //
+  // NEITHER COUNT IS SUMMED INTO THE OTHER: they have different denominators
+  // (products wrong vs (store, product) push targets waiting), and a single
+  // number over both would say "5" and mean neither — the trap the Restock
+  // pill above carries its own comment about. The pill shows the items count,
+  // or, when a channel is down and no single item is yet provably wrong, the
+  // waiting count. Same either-or as Restock's `oosc || lowc`, and the state
+  // line names which one is on screen.
   //
   // No dashCardWants() gate, deliberately: every role that can see the
   // dashboard should see when a channel stops syncing, not only operators with
   // a specific capability.
-  for (const c of (DASH_OPS.channel_sync_stale || [])) {
-    const t = new Date(String(c.oldest_at || '').replace(' ', 'T') + 'Z');
-    // A bare clock time is a trap on this row: two channels stuck on different
-    // DAYS read as "02:06 PM" and "11:39 AM", and the older one looks newer —
-    // the rows sort correctly by real age while the text argues they don't.
-    // Carry the date whenever it isn't today, so what the row says and how it
-    // sorts can't disagree.
-    // "Today" on the STORE's calendar, and both stamps on the store's clock.
-    // Read on the browser's, an operator abroad saw a row stuck since this
-    // morning carry yesterday's date, which is the very confusion the comment
-    // above says this branch exists to prevent.
-    const sameDay = !isNaN(t) && tdWhen(t, 'machine') === tdWhen(new Date(dashNow()), 'machine');
-    const when = isNaN(t) ? '' : tdWhen(t, sameDay ? 'time' : 'dateTime');
-    fires.push({
-      sev: 'amber', icon: 'plug',
-      label: cuT(`${c.label} not syncing`, `${c.label} 未同步`),
-      n: c.waiting_count,
-      mins: dashAgeMins(c.oldest_at),
-      state: when ? cuT(`stock updates waiting since ${when}`, `库存更新自 ${when} 起等待中`) : null,
-      noAutoAge: true,
-      cta: cuT('Open channel', '前往渠道'), go: `goTab('${c.channel}')`,
-    });
-  }
-
-  // §103 — items a channel holds a WRONG number for, across all three channels.
-  // Distinct from the stall row above: that is one channel's whole queue sat
-  // still; this is any single item lying to a customer while the rest of its
-  // channel is fine (Harissa: green dot, Meituan showing 18 against a shelf of
-  // 3, for 75 days). Same mock rules as its sibling — the clock the numbers
-  // have been wrong since, never a duration — and the same no-gate rule: every
-  // role that sees the dashboard sees it. Opens the Channel sync page on its
-  // "Needs attention" chip.
-  const cia = DASH_OPS.channel_items_attention;
-  if (cia && Number(cia.count) > 0) {
+  const cia = DASH_OPS.channel_items_attention || {};
+  const stalled = DASH_OPS.channel_sync_stale || [];
+  const attN = Number(cia.count) || 0;
+  if (attN > 0 || stalled.length) {
     const cn = document.documentElement.dataset.uiLang === 'cn';
+    // The channel's NAME comes from 29-channel-sync.js, which owns it as an
+    // EN/CN pair for every surface that draws one — §103's bilingual fix took
+    // the Products page off its own copy for exactly the reason this row must
+    // not keep one: two copies are how the two screens drifted. The map below
+    // is a FALLBACK for the page loading without that module, not a second
+    // answer; it is guarded the same way 09-products.js guards its own call.
     const CH = { meituan: ['Meituan', '美团'], eleme: ['Eleme', '饿了么'], guanyi: ['GZ Grocery', 'GZ Grocery'] };
-    const parts = Object.entries(cia.by_channel || {})
-      .map(([k, n]) => ((CH[k] || [k, k])[cn ? 1 : 0]) + ' ' + n);
-    const t = new Date(String(cia.oldest_at || '').replace(' ', 'T') + 'Z');
+    const chName = (k) => (typeof csChannelName === 'function'
+      ? csChannelName(k)
+      : (CH[k] || [k, k])[cn ? 1 : 0]);
+    const down = {};
+    for (const s of stalled) down[s.channel] = s;
+    const byCh = cia.by_channel || {};
+    // A channel says ONE thing about itself, worst first. A channel that is not
+    // syncing AT ALL is not also described by how many of its items have been
+    // caught out so far: the stall is the larger fact and it contains them.
+    const parts = [];
+    for (const k of Object.keys(CH)) {
+      // chName has already resolved the language, so both halves of the pair
+      // carry the right name and cuT only picks the phrase around it.
+      if (down[k]) parts.push(cuT(`${chName(k)} not syncing`, `${chName(k)} 未同步`));
+      else if (byCh[k]) parts.push(chName(k) + ' ' + byCh[k]);
+    }
+    // A channel the server names that this map has never heard of is still
+    // said rather than dropped — a fourth channel needs no change here.
+    for (const s of stalled) if (!CH[s.channel]) parts.push(cuT(`${s.label} not syncing`, `${s.label} 未同步`));
+    for (const k of Object.keys(byCh)) if (!CH[k] && !down[k]) parts.push(k + ' ' + byCh[k]);
+    // The clock is the OLDER of the two facts — the earliest moment a customer
+    // may have started reading a wrong number, whichever way it went wrong.
+    // Both are the server's 'YYYY-MM-DD HH:MM:SS' UTC, so a string sort picks
+    // the minimum without three Date parses to get there.
+    const oldest = [cia.oldest_at, ...stalled.map(s => s.oldest_at)]
+      .filter(Boolean).map(String).sort()[0] || null;
+    const t = new Date(String(oldest || '').replace(' ', 'T') + 'Z');
+    // A bare clock time is a trap here: two facts stuck on different DAYS read
+    // as "02:06 PM" and "11:39 AM" and the older one looks newer, so the row
+    // sorts correctly by real age while its own text argues it doesn't. Carry
+    // the date whenever it isn't today — "today" on the STORE's calendar, and
+    // both stamps on the store's clock, since read on the browser's an
+    // operator abroad sees this morning carry yesterday's date.
     const sameDay = !isNaN(t) && tdWhen(t, 'machine') === tdWhen(new Date(dashNow()), 'machine');
-    const when = isNaN(t) ? '' : tdWhen(t, sameDay ? 'time' : 'dateTime');
+    const when = (!oldest || isNaN(t)) ? '' : tdWhen(t, sameDay ? 'time' : 'dateTime');
+    // Comma, not " · " — the i18n walker splits an EN/CN pair on the middot and
+    // would tear a constructed line in half. data-no-i18n on the node as well.
     const state = [parts.join(cn ? '，' : ', '), when ? cuT(`wrong since ${when}`, `自 ${when} 起不符`) : '']
-      .filter(Boolean).join(', ');
+      .filter(Boolean).join(cn ? '，' : ', ');
     fires.push({
       sev: 'amber', icon: 'plug',
       label: cuT('Channel sync', '渠道同步'),
-      n: cia.count,
-      mins: cia.oldest_at ? dashAgeMins(cia.oldest_at) : null,
+      n: attN || stalled.reduce((n, s) => n + (Number(s.waiting_count) || 0), 0),
+      // Real, so the row keeps its place in the oldest-first order, but the
+      // state line above already says the clock, so noAutoAge stops the row
+      // appending a duration to it as well.
+      mins: oldest ? dashAgeMins(oldest) : null,
       state, noAutoAge: true,
-      cta: cuT('See items', '查看商品'), go: "csOpen('att')",
+      // Nothing is on the "Needs attention" filter when the only fact is a
+      // stall — every item is green — so land on All items, where the channel
+      // strip at the top of the page says the stall in full.
+      cta: cuT('See items', '查看商品'), go: `csOpen('${attN ? 'att' : 'all'}')`,
     });
   }
 
