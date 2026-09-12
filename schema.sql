@@ -265,8 +265,16 @@ CREATE TABLE IF NOT EXISTS income_entries (
   description   TEXT,
   channel       TEXT,
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
-  created_by    INTEGER,
-  FOREIGN KEY (created_by) REFERENCES users(id)
+  -- Who typed the row. Deliberately NOT a foreign key to users(id) — same
+  -- trap as restock_orders.created_by above, but caught later: a hand-typed
+  -- Transactions row (routes/finance-transactions.js) can come from a Mini
+  -- App Backend operator session as easily as a kitchen one, and an
+  -- operator's id lives in tenant_users (control-plane), not users. §92
+  -- (docs/tacet-consolidation-decisions.md) already resolves this column
+  -- against tenant_users via lib/user-names.js, so tenant_users ids are the
+  -- column's real, intended contents — the FK just never matched that.
+  -- Dropped from existing databases by drop_created_by_user_fk_v2.
+  created_by    INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS expense_entries (
@@ -277,9 +285,10 @@ CREATE TABLE IF NOT EXISTS expense_entries (
   description   TEXT,
   po_id         INTEGER,               -- linked PO if from purchasing
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  -- See income_entries.created_by above — the same column, the same fix,
+  -- dropped from existing databases by the same drop_created_by_user_fk_v2.
   created_by    INTEGER,
-  FOREIGN KEY (po_id) REFERENCES purchase_orders(id),
-  FOREIGN KEY (created_by) REFERENCES users(id)
+  FOREIGN KEY (po_id) REFERENCES purchase_orders(id)
 );
 
 -- ── Staff expense claims (§87) ────────────────────────────────────
