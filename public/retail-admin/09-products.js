@@ -3259,7 +3259,9 @@ async function pdLoadChannels(id) {
     }
     if (c.k === 'att' && c.expected != null) facts.push(cuT('shelf says ' + c.expected, '货架为 ' + c.expected));
     if (c.platform_qty != null) facts.push(cuT(nm + ' holds ' + c.platform_qty, nm + '库存 ' + c.platform_qty));
-    const err = c.error ? cuT('Push failed', '推送失败') + ': ' + c.error : '';
+    // §105 — the worded cause, or the channel's raw sentence (01-core.js).
+    const err = typeof chCauseLine === 'function' ? chCauseLine(ch.key, c)
+      : (c.error ? cuT('Push failed', '推送失败') + ': ' + c.error : '');
     // The button sits UNDER the sentence, not beside it. Beside it, in a pane
     // this narrow, it took a third of the row and wrapped "so Meituan still
     // shows the previous number" into three-word lines.

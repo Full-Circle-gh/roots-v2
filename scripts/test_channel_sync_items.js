@@ -687,6 +687,97 @@ check('all three tabs apply it, and only at their ok', () => {
   }
 });
 
+// ── 9. §105 · the exact reason a push failed ────────────────────────────────
+//
+// Before §105 every failure on both channels arrived as "transient push failure
+// — retries exhausted", which is not a reason but a count of how many times we
+// gave up. The cause existed at the point of failure and was dropped by the
+// wrapper functions between the browser layer and the daemon. These checks cover
+// both halves: the classifier, and the threading that gives it something to
+// classify.
+section('9 · a failed push says why');
+
+const { classifyPushError } = require('../lib/channel-push-reason');
+
+check('the platform\'s own refusal is kept verbatim as the detail', () => {
+  // Meituan answers with its own Chinese. Nothing we could write in its place
+  // would be more accurate about its own refusal.
+  const r = classifyPushError('Meituan refused it: 商品已下架 (code 10032)');
+  eq([r.code, r.detail], ['rejected', '商品已下架 (code 10032)']);
+});
+
+check('every cause the browser layer can write is categorised', () => {
+  const cases = [
+    ['cannot reach Meituan (HTTP 502)',              'http',           '502'],
+    ['cannot reach Meituan',                         'unreachable',    null],
+    ['fetch error: socket hang up',                  'unreachable',    null],
+    ['could not open the goods page',                'unreachable',    null],
+    ['signed out of Eleme',                          'signed_out',     null],
+    ['no session token captured',                    'signed_out',     null],
+    ['the mapped size is no longer on this listing', 'option_gone',    null],
+    ['the chosen option is no longer on the listing "x"', 'option_gone', null],
+    ['no listing on this store is named "x"',        'name_not_found', null],
+    ['the listing could not be read',                'unreadable',     null],
+    ['transient push failure — retries exhausted',   'gave_up',        null],
+  ];
+  for (const [raw, code, detail] of cases) {
+    const r = classifyPushError(raw);
+    eq([r.code, r.detail], [code, detail], raw);
+  }
+});
+
+check('an HTTP failure is http, not the bare unreachable it also matches', () => {
+  // Both patterns match "cannot reach Meituan (HTTP 502)". Order decides, and a
+  // status the operator could act on must not be swallowed by the general case.
+  eq(classifyPushError('cannot reach Meituan (HTTP 502)').code, 'http');
+});
+
+check('an uncategorised failure keeps its raw text rather than guessing', () => {
+  // The failure nobody has seen before is the one most worth reading. A
+  // confident wrong category is worse than none — §30 rule 4's own rule for a
+  // check that cannot run.
+  const r = classifyPushError('something no rule has ever matched');
+  eq([r.code, r.raw], [null, 'something no rule has ever matched']);
+  eq(classifyPushError('').code, null);
+  eq(classifyPushError(null).raw, '');
+});
+
+check('a row still retrying says so, and is classified on the cause beneath it', () => {
+  const r = classifyPushError('cannot reach Meituan — will retry');
+  eq([r.code, r.retrying, r.raw], ['unreachable', true, 'cannot reach Meituan']);
+});
+
+check('the verdict carries the code, the detail and the raw sentence together', () => {
+  const db = freshDb(); product(db, 1, { stock: 3 });
+  mtCatalogue(db, 'tianhe', ['听装1']); mtMap(db, 1, { pushed: 18 });
+  mtQueue(db, 1, { status: 'error', err: 'Meituan refused it: 商品已下架 (code 10032)' });
+  const c = cell(channelSyncItems(db), 1, 'meituan');
+  eq(c.reason, 'push_failed');
+  eq(c.error_code, 'rejected');
+  eq(c.error_detail, '商品已下架 (code 10032)');
+  eq(c.error, 'Meituan refused it: 商品已下架 (code 10032)', 'the raw text is never thrown away');
+});
+
+check('the browser layers carry a reason out of every failure exit', () => {
+  // The bug was never a missing message — it was a discarded one. These two
+  // files compute the cause and used to return { ok, transient } without it.
+  for (const f of ['lib/eleme-browser.js', 'lib/meituan-browser.js']) {
+    const src = read(f);
+    const bare = (src.match(/return \{ ok: false, transient: (?:true|false) \}/g) || []).length;
+    eq(bare, 0, f + ' still has a failure exit that reports no reason');
+  }
+  // The two collapse helpers that stood between the platform's own words and the
+  // daemon, and dropped them.
+  ok(/reason: r\.reason/.test(read('lib/eleme-browser.js')), 'eleme _apiUpdateFoodStock drops the rpc reason');
+  ok(/r\.reason \? \{ reason: r\.reason \}/.test(read('lib/meituan-browser.js')), 'meituan _toTransient drops the leaf reason');
+});
+
+check('both daemons prefer the reason over the give-up wrapper', () => {
+  for (const f of ['scripts/eleme-daemon.js', 'scripts/meituan-daemon.js']) {
+    ok(/const why = reason\s*\n?\s*\|\|/.test(read(f)), f + ' still lets the wrapper win over the reason');
+  }
+});
+
 // ── Summary ──────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {

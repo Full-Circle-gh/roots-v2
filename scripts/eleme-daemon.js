@@ -713,7 +713,11 @@ async function processStockQueue(stores) {
           // really 3) kept re-marking 'pending' here, but status='pending' AND
           // attempts<3 never selects it again — stuck forever, invisible to both
           // the retry query and the terminal-error branch below.
-          db.prepare(`UPDATE eleme_sync_queue SET status='pending', last_error='transient push failure — will retry' WHERE id=?`).run(row.id);
+          // The mid-retry row says why too: a push still retrying is the state
+          // an operator is most likely to be watching, and "will retry" alone
+          // tells them nothing about whether it is going to work.
+          db.prepare(`UPDATE eleme_sync_queue SET status='pending', last_error=? WHERE id=?`)
+            .run(reason ? `${reason} — will retry` : 'transient push failure — will retry', row.id);
         } else {
           // `reason` is a refusal that explained itself — today that is a name
           // the catalogue does not carry. It reaches BOTH places an operator can
@@ -729,13 +733,19 @@ async function processStockQueue(stores) {
           // The bilingual pairs below are unchanged; the new sentence is English
           // on both sides because no Chinese for it exists yet and §30 rule 3
           // forbids composing one.
-          const why = transient ? 'transient push failure — retries exhausted'
-                                : (reason || 'browser update failed');
+          // §105 — THE REASON WINS OVER THE WRAPPER, whether or not it was
+          // transient. This read `transient ? <generic> : (reason || …)`, so a
+          // row that failed three times threw away whatever the browser layer
+          // had learned and wrote "retries exhausted" — which is not a reason,
+          // it is a count. Meituan's daemon already had the preference this way
+          // round and only lacked a reason to use; both now agree.
+          const why = reason
+            || (transient ? 'transient push failure — retries exhausted' : 'browser update failed');
           db.prepare(`UPDATE eleme_sync_queue SET status='error', processed_at=CURRENT_TIMESTAMP, last_error=? WHERE id=?`)
             .run(why, row.id);
           logSync(storeCode, 'stock_push', 'error', { product_id: row.product_id, sku: row.sku, qty: newQty },
-            transient ? 'update failed after retries · 多次重试仍失败'
-                      : (reason || 'browser update failed · 更新失败'));
+            reason || (transient ? 'update failed after retries · 多次重试仍失败'
+                                 : 'browser update failed · 更新失败'));
         }
       }
     } catch (err) {
