@@ -24,6 +24,7 @@
   let _loading = null;
   let _langHooked = false;
   let _touched = false;     // has the operator picked a chip themselves
+  let _pendingOpen = null;  // a product a Products-list dot asked us to open
 
   const CH_NAME = { meituan: ['Meituan', '美团'], eleme: ['Eleme', '饿了么'], guanyi: ['GZ Grocery', 'GZ Grocery'] };
   const GLYPH = { meituan: '美', eleme: '饿', guanyi: 'GZ' };
@@ -305,6 +306,7 @@
         return;
       } finally { _loading = null; }
       render();
+      if (_pendingOpen != null) { const pid = _pendingOpen; _pendingOpen = null; _csScrollTo(pid); }
     })();
     return _loading;
   }
@@ -322,6 +324,27 @@
     goTab('channel-sync');
     if (_data) render();
   };
+  /* Opened from a Products-list dot: land on THAT product rather than on the
+     whole catalogue. The chip goes to All items because the operator asked
+     about this row and it may well be a green one, and the row opens itself so
+     the reason is on screen without a second click. */
+  window.csOpenProduct = function (pid) {
+    _touched = true; _filter = 'all'; _channel = ''; _q = ''; _open = Number(pid);
+    goTab('channel-sync');
+    if (_data) { render(); _csScrollTo(Number(pid)); } else { _pendingOpen = Number(pid); }
+  };
+  function _csScrollTo(pid) {
+    const row = document.querySelector('#tab-channel-sync .cs-tbl tr.row[data-pid="' + pid + '"]');
+    if (row && row.scrollIntoView) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+
+  /* The two sentence-builders, shared with the product editor's Channels card
+     (09-products.js pdLoadChannels) so one state cannot be worded two ways on
+     two screens. `label` lets the caller pass the channel's display name
+     without reaching into this module's own table. */
+  window.csCellWordFor = function (ch, c) { return cellWord(ch, c || {}); };
+  window.csWhyFor = function (ch, c) { return why(ch, c || {}); };
+
   window.csFilter = function (id) { _touched = true; _filter = id; _open = null; render(); };
   window.csChannel = function (v) { _touched = true; _channel = v || ''; _open = null; render(); };
   window.csSearch = function (v) { _q = v || ''; render(); };

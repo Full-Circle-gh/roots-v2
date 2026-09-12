@@ -4747,6 +4747,19 @@
             <div id="pd-sales-context" class="pd-sales-context" data-no-i18n></div>
           </section>
 
+          <!-- ═══ §103 step 4 · CHANNELS — what Meituan, Eleme and GZ Grocery
+               hold for THIS product, and the one button that opens the channel's
+               own tab on it. Read-only: the mapping is repaired there, not here.
+               Hidden for a not-yet-saved product and for a tenant with nothing
+               mapped to any channel (pdLoadChannels). Painted in one language
+               through cuT, hence data-no-i18n on the body. ═══ -->
+          <section class="pd-card" id="pd-channels-card" style="display:none;">
+            <div class="pd-card-h">
+              <span>Channels · 渠道</span>
+            </div>
+            <div class="pd-ch-rows" id="pd-channels-rows" data-no-i18n></div>
+          </section>
+
           <!-- ═══ Focused panes — Basics · Stock · Page · Details. Every field
                below is the SAME node as before (same ids, same wiring); only the
                grouping changed. pdTab() in 09-products.js swaps the active pane. ═══ -->

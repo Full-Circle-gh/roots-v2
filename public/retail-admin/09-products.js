@@ -20,6 +20,18 @@ const paMoney = n => (typeof acMoney === 'function' ? acMoney(Number(n) || 0) : 
 
 let PA_LOADED = false;
 let PA_PRODUCTS = [];   // server response
+/* §103 step 3 — which channels hold the right number for each product, as the
+   three dots on the row. Verdict only (?compact=1); the reason and the fix live
+   on the Channel sync page and in the editor's own Channels card, both of which
+   read the SAME endpoint, so a dot here and the page it links to cannot
+   disagree.
+
+   PA_CH_ON is the whole gate. A tenant with no channel mappings at all gets no
+   column and no card — an empty column of grey dots on every row is exactly the
+   noise §103 exists to avoid. */
+let PA_CHANNELS = {};        // product_id -> { meituan:'ok', eleme:'none', ... }
+let PA_CH_LIST  = [];        // [{key,label,tab}] in the order the server sends
+let PA_CH_ON    = false;
 let PA_CURRENT = null;  // currently open product (when modal is showing)
 // Per-store stock for the overview table. With 2+ stores the Stock column can
 // edit ONE store at a time (picked via the switcher); 'all' = read-only sum.
@@ -565,6 +577,7 @@ async function paLoad() {
     paRenderKpis(true);   // animated count-up once on load
     paLoadHighlights();   // fills the Going nowhere / On promotion jump tiles
     paLoadStoreStock();   // per-store stock + store list (drives the switcher)
+    paLoadChannels();     // §103 — the three channel dots on each row
   } catch (e) {
     // The operator gets a sentence they can act on; the developer detail goes to
     // the console, where it belongs. It used to print the raw error text — an
@@ -576,6 +589,65 @@ async function paLoad() {
       + ` <button class="btn btn-sm" type="button" onclick="paLoad()" style="margin-left:10px">`
       + cuT('Try again', '重试') + `</button></div>`;
   }
+}
+
+// ── Channel sync dots (§103) ──────────────────────────────────────────────
+// Never blocks the grid: the list is already painted when this lands, and a
+// channel read that fails leaves the rows exactly as they are rather than
+// showing a column of unknowns. Gated on the same any-of the Channel sync tab
+// uses — an operator who cannot open any channel screen is not shown dots that
+// link to one.
+async function paLoadChannels() {
+  if (typeof canTab === 'function' && !canTab('channel-sync')) return;
+  try {
+    const res = await fetch('/api/retail-admin/channel-sync?compact=1', { credentials: 'same-origin' });
+    const j = await res.json();
+    if (!j.success) throw new Error(j.error || 'load_failed');
+    const d = j.data || {};
+    PA_CH_LIST = (d.channels || []).map(c => ({ key: c.key, label: c.label, tab: c.tab, counts: c.counts }));
+    // "Has this tenant got channels at all" — asked of the mappings, not of the
+    // config: a channel switched on but with nothing mapped to it has nothing
+    // to say about any product on this page.
+    PA_CH_ON = PA_CH_LIST.some(c => c.counts && (c.counts.ok + c.counts.att + c.counts.off) > 0);
+    PA_CHANNELS = {};
+    for (const it of (d.items || [])) {
+      const m = {};
+      for (const k of Object.keys(it.channels || {})) m[k] = it.channels[k].k;
+      PA_CHANNELS[it.id] = m;
+    }
+    if (PA_CH_ON) paRender();
+  } catch (e) {
+    console.warn('[products] channel sync', e.message);
+  }
+}
+
+// One product's channel glyphs, or a variant family's worst across its members:
+// the row is one line and the family behind it may be three products, so the
+// dot has to speak for all of them or it would call a family green while one
+// size is wrong. Same precedence the server folds stores with.
+const PA_CH_RANK = { att: 4, ok: 3, off: 2, unk: 1, none: 0 };
+const PA_CH_GLYPH = { meituan: '美', eleme: '饿', guanyi: 'GZ' };
+function _paChannelDots(u) {
+  if (!PA_CH_ON) return '';
+  const ids = u.group ? u.members.map(m => m.id) : [u.p.id];
+  const bits = PA_CH_LIST.map(ch => {
+    let k = 'none';
+    for (const id of ids) {
+      const got = (PA_CHANNELS[id] || {})[ch.key];
+      if (got && PA_CH_RANK[got] > PA_CH_RANK[k]) k = got;
+    }
+    const word = k === 'ok' ? cuT('Synced', '已同步')
+      : k === 'att' ? cuT('Needs attention', '待处理')
+      : k === 'off' ? cuT('Sync off', '已关闭')
+      : k === 'unk' ? 'Name not checked'
+      : cuT('Not listed', '未上架');
+    const title = escapeAttr(cuT(ch.label, ch.label) + ' · ' + word);
+    return '<span class="pa-chdot" title="' + title + '"><i class="cs-dot is-' + k + '"></i>'
+      + (PA_CH_GLYPH[ch.key] || '') + '</span>';
+  }).join('');
+  // Opens the Channel sync page filtered to this product rather than the whole
+  // catalogue — the operator asked about THIS row.
+  return '<span class="pa-chdots" onclick="event.stopPropagation();csOpenProduct(' + u.p.id + ')">' + bits + '</span>';
 }
 
 // ── Per-store stock ───────────────────────────────────────────────────────
@@ -2443,6 +2515,7 @@ function paRender() {
       + '<col class="pa-c-cat"><col class="pa-c-sku">'
       + Array.from({ length: nStock }, () => '<col class="pa-c-stock">').join('')
       + '<col class="pa-c-price">' + (withCost ? '<col class="pa-c-margin">' : '') + '<col class="pa-c-status">'
+      + (PA_CH_ON ? '<col class="pa-c-channels">' : '')
       + '</colgroup>';
     // Single-line labels, no sub-labels — a header that needs a sentence to be
     // understood is the wrong header (§1.13a). The grip's header is blank: a
@@ -2459,6 +2532,7 @@ function paRender() {
         <th class="pa-c-price">${cuT('Price', '价格')}</th>
         ${withCost ? `<th class="pa-c-margin">${cuT('Margin', '毛利')}</th>` : ''}
         <th class="pa-c-status">${cuT('Status', '状态')}</th>
+        ${PA_CH_ON ? `<th class="pa-c-channels">${cuT('Channels', '渠道')}</th>` : ''}
       </tr></thead>`;
 
     const rows = pageUnits.map((u, ui) => {
@@ -2506,6 +2580,7 @@ function paRender() {
           <td class="pa-c-price">${_paPriceCell(u)}</td>
           ${withCost ? `<td class="pa-c-margin">${_paMarginCell(u)}</td>` : ''}
           <td class="pa-c-status">${_paStatusCell(u)}</td>
+          ${PA_CH_ON ? `<td class="pa-c-channels" data-no-i18n>${_paChannelDots(u)}</td>` : ''}
         </tr>`;
     }).join('');
 
@@ -2562,6 +2637,7 @@ function paRender() {
           <div class="pa-card-name">${escapeHtml(cuT(p.name_en || p.name_cn || '—', p.name_cn || p.name_en || '—'))}</div>
           ${meta ? `<div class="pa-card-meta">${meta}</div>` : ''}
           <div class="pa-card-shop">${_paShopToggle(u)}<span class="pa-card-shop-lbl">${pub ? cuT('On shop', '已上架') : cuT('Off shop', '未上架')}</span></div>
+          ${PA_CH_ON ? `<div class="pa-card-ch">${_paChannelDots(u)}</div>` : ''}
         </div>
       </div>`;
   }).join('');
@@ -3069,6 +3145,7 @@ async function pdOpen(id) {
   bpLoad(p ? p.id : null);
   optLoad(p ? p.id : null);
   pdLoadSales(p ? p.id : null);
+  pdLoadChannels(p ? p.id : null);   // §103 step 4
   // Show the docked editor, hide the empty-state placeholder, and mark which
   // row in the list is currently loaded so the operator never loses their place.
   _pdSelectedId = p ? p.id : null;
@@ -3134,6 +3211,73 @@ function pdSalesContext(d) {
 function pdSalesRangeLabel() {
   if (_pdSalesDays === 'all') return cuT('Sales · all time', '销量 · 全部时间');
   return cuT('Sales · last ' + _pdSalesDays + ' days', '销量 · 最近 ' + _pdSalesDays + ' 天');
+}
+
+/* §103 step 4 — this product's three channels, in the editor.
+   Reads the SAME endpoint as the Channel sync page and the Products list dots,
+   narrowed to one product, so nothing here can describe a row differently from
+   the page it links to. Never blocks the editor and never shouts on failure:
+   the card simply stays hidden, because a Channels card that cannot say
+   anything is worse than no card. */
+let _pdChSeq = 0;
+async function pdLoadChannels(id) {
+  const card = document.getElementById('pd-channels-card');
+  const rows = document.getElementById('pd-channels-rows');
+  if (!card || !rows) return;
+  if (id == null || (typeof canTab === 'function' && !canTab('channel-sync'))) { card.style.display = 'none'; return; }
+  const mySeq = ++_pdChSeq;
+  let d;
+  try {
+    const r = await fetch('/api/retail-admin/channel-sync?productId=' + id, { credentials: 'same-origin' });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'load_failed');
+    d = j.data;
+  } catch (e) { card.style.display = 'none'; return; }
+  if (mySeq !== _pdChSeq) return;          // a newer product superseded this fetch
+  const item = (d.items || [])[0];
+  const chans = d.channels || [];
+  // Nothing mapped anywhere on this tenant → no card at all, same gate the
+  // Products list's own column uses.
+  const anyMapped = chans.some(c => c.counts && (c.counts.ok + c.counts.att + c.counts.off) > 0);
+  if (!item || !anyMapped) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  rows.innerHTML = chans.map(ch => {
+    const c = (item.channels || {})[ch.key] || { k: 'none', reason: 'no_map' };
+    const word = csCellWordFor(ch.key, c);
+    const why = csWhyFor(ch.key, c, ch.label);
+    const facts = [];
+    if (c.last_pushed_qty != null) {
+      facts.push(cuT('Last', '上次') + ' ' + c.last_pushed_qty + (c.last_pushed_at ? ' · ' + _pdChAgo(c.last_pushed_at) : ''));
+    }
+    if (c.k === 'att' && c.expected != null) facts.push(cuT('shelf says ' + c.expected, '货架为 ' + c.expected));
+    if (c.platform_qty != null) facts.push(cuT(ch.label + ' holds ' + c.platform_qty, ch.label + '库存 ' + c.platform_qty));
+    const err = c.error ? cuT('Push failed', '推送失败') + ': ' + c.error : '';
+    // The button sits UNDER the sentence, not beside it. Beside it, in a pane
+    // this narrow, it took a third of the row and wrapped "so Meituan still
+    // shows the previous number" into three-word lines.
+    const go = c.k === 'att'
+      ? '<span class="go"><button type="button" class="btn btn-sm" onclick="csFix(\'' + ch.key + '\',' + item.id + ')">'
+        + escapeHtml(cuT('Open ' + ch.label, '前往' + ch.label)) + '</button></span>'
+      : '';
+    return '<div class="pd-ch-row is-' + c.k + '">'
+      + '<span class="nm">' + escapeHtml(ch.label) + '</span>'
+      + '<span class="bd">'
+      +   '<span class="st"><i class="cs-dot is-' + c.k + '"></i>' + escapeHtml(word) + '</span>'
+      +   (why ? '<span class="why">' + escapeHtml(why) + '</span>' : '')
+      +   (err ? '<span class="facts">' + escapeHtml(err) + '</span>' : '')
+      +   (facts.length ? '<span class="facts">' + escapeHtml(facts.join(' · ')) + '</span>' : '')
+      +   go
+      + '</span></div>';
+  }).join('');
+}
+function _pdChAgo(stamp) {
+  const t = Date.parse(String(stamp || '').replace(' ', 'T') + 'Z');
+  if (!Number.isFinite(t)) return '';
+  const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+  if (m < 60) return cuT(m + ' min ago', m + ' 分钟前');
+  const h = Math.round(m / 60);
+  if (h < 48) return cuT(h + 'h ago', h + ' 小时前');
+  return cuT(Math.round(h / 24) + 'd ago', Math.round(h / 24) + ' 天前');
 }
 
 async function pdLoadSales(id) {
