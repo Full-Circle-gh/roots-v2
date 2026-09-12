@@ -461,6 +461,49 @@ function chCauseLine(channel, cell) {
   if (said) return said + (cell.retrying ? ' ' + cuT('Retrying.', '重试中。') : '');
   return cell.error ? cuT('Push failed', '推送失败') + ': ' + cell.error : '';
 }
+/* ── §106 · WHAT IS STOPPING THE WHOLE CHANNEL ───────────────────────────────
+   lib/channel-block.js resolves the live blocking cause per store from the
+   daemons' own log; this is the sentence for each event type. Every Chinese
+   fragment is live: `验证中心风控，同步已暂停，需要人工验证` is the Meituan
+   daemon's OWN merchant alert, verbatim; `已退出登录` and `重新登录` are on both
+   channel tabs; `无法连接同步服务` on the Meituan tab; `同步已停` is the Eleme
+   tab's own fallback for a store that is not syncing.
+
+   This is a CHANNEL fact, so it belongs on the channel's card once — never
+   repeated down forty item rows (§103's founding rule). An item whose own
+   failure is one of the generic ones defers to it instead of guessing. */
+function chBlockSentence(channel, by) {
+  const ch = (typeof csChannelName === 'function' && csChannelName(channel)) || channel;
+  switch (by) {
+    case 'verify_required':
+      return cuT(`${ch} is asking for a captcha — a human has to pass it on the sync machine. Sync is paused.`,
+                 '验证中心风控，同步已暂停，需要人工验证。');
+    case 'needs_login':
+    case 'auth_required':          // Eleme's name for the same thing
+      return cuT(`The sync service is signed out of ${ch}. Sign in again.`, `同步服务已退出登录${ch}。请重新登录。`);
+    case 'proxy_down':
+    case 'proxy_stale':
+      return cuT(`Cannot reach the sync service. Sync is paused.`, '无法连接同步服务。同步已暂停。');
+    case 'queue_stalled':
+    case 'sync_stalled':
+      return cuT('Stock updates stopped going out.', '同步已停。');
+    default: return '';
+  }
+}
+/* An item's own cause, unless the CHANNEL is blocked and the item's failure is
+   one of the generic ones that the block explains better. A captcha on 天河 is
+   why this push could not reach Meituan; saying "cannot reach the sync service"
+   beside it is the same fact, worse told. */
+const CH_GENERIC_CAUSES = ['unreachable', 'http', 'signed_out', 'gave_up', null];
+function chCauseFor(channel, cell, channelBlock) {
+  if (channelBlock && channelBlock.by && CH_GENERIC_CAUSES.indexOf((cell && cell.error_code) || null) !== -1) {
+    const said = chBlockSentence(channel, channelBlock.by);
+    if (said) return said;
+  }
+  return chCauseLine(channel, cell);
+}
+window.chBlockSentence = chBlockSentence;
+window.chCauseFor = chCauseFor;
 window.chCauseSentence = chCauseSentence;
 window.chCauseLine = chCauseLine;
 window.chStateWord = chStateWord;

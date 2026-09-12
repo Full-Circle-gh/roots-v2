@@ -3260,7 +3260,8 @@ async function pdLoadChannels(id) {
     if (c.k === 'att' && c.expected != null) facts.push(cuT('shelf says ' + c.expected, '货架为 ' + c.expected));
     if (c.platform_qty != null) facts.push(cuT(nm + ' holds ' + c.platform_qty, nm + '库存 ' + c.platform_qty));
     // §105 — the worded cause, or the channel's raw sentence (01-core.js).
-    const err = typeof chCauseLine === 'function' ? chCauseLine(ch.key, c)
+    // §106 — defers to the channel's own live cause where there is one.
+    const err = typeof chCauseFor === 'function' ? chCauseFor(ch.key, c, ch.blocked || null)
       : (c.error ? cuT('Push failed', '推送失败') + ': ' + c.error : '');
     // The button sits UNDER the sentence, not beside it. Beside it, in a pane
     // this narrow, it took a third of the row and wrapped "so Meituan still

@@ -778,6 +778,58 @@ check('both daemons prefer the reason over the give-up wrapper', () => {
   }
 });
 
+// ── 10. §106 · the channel carries its own blocking cause ───────────────────
+//
+// The rule itself is tested in scripts/test_channel_block.js. What matters HERE
+// is that the read every surface makes actually carries it: §105 shipped
+// "Cannot reach the sync service" onto forty item rows while the Meituan tab,
+// next door, already knew it was a captcha on one named store since 09:14.
+section('10 · the channel entry says what is stopping it');
+
+check('a live fault rides on the channel, not on the items', () => {
+  const db = freshDb(); product(db, 1, { stock: 3 });
+  mtCatalogue(db, 'tianhe', ['听装1']); mtMap(db, 1, { pushed: 3 });
+  db.prepare(`INSERT INTO meituan_sync_log (store_code, event_type, status, error_msg, created_at)
+              VALUES ('tianhe', 'verify_required', 'error', '验证中心风控，同步已暂停', '2026-09-12 09:14:00')`).run();
+  const out = channelSyncItems(db);
+  const mt = out.channels.find(c => c.key === 'meituan');
+  eq([mt.blocked.by, mt.blocked.at, mt.blocked.store], ['verify_required', '2026-09-12 09:14:00', 'tianhe']);
+  eq(mt.blocked.storeName, '天河', 'the card names the shop in the operator’s own language');
+  // The ITEM is untouched: a channel fact is said once, on the channel.
+  eq(cell(out, 1, 'meituan').k, 'ok');
+});
+
+check('a quiet channel carries null, and the other channels are unaffected', () => {
+  const db = freshDb(); product(db, 1, { stock: 3 });
+  mtCatalogue(db, 'tianhe', ['听装1']); mtMap(db, 1, { pushed: 3 });
+  // `auth_required`, because that is what the ELEME daemon writes — Meituan's
+  // `needs_login` would be read by nothing (lib/channel-block.js).
+  db.prepare(`INSERT INTO eleme_sync_log (store_code, event_type, status, error_msg, created_at)
+              VALUES ('tianhe', 'auth_required', 'error', 'Eleme session missing/expired', '2026-09-12 09:14:00')`).run();
+  const out = channelSyncItems(db);
+  eq(out.channels.find(c => c.key === 'meituan').blocked, null);
+  eq(out.channels.find(c => c.key === 'eleme').blocked.by, 'auth_required');
+  eq(out.channels.find(c => c.key === 'guanyi').blocked, null);
+});
+
+check('the Meituan tab and the Channel sync page ask the SAME question', () => {
+  // routes/meituan-admin.js kept a private copy of this rule for months. Two
+  // copies is how two screens start disagreeing about one fact (§103 step 5's
+  // whole lesson), so the route now delegates and this pins that it still does.
+  const src = read('routes/meituan-admin.js');
+  ok(/require\('\.\.\/lib\/channel-block'\)/.test(src), 'the Meituan route no longer imports the shared rule');
+  ok(/channelBlock\(db, 'meituan', st\.code\)/.test(src), 'the route does not call it per store');
+  ok(!/const MT_BLOCKING/.test(src), 'the route still carries its own blocking list');
+  ok(!/const MT_CLEARING/.test(src), 'the route still carries its own clearing list');
+});
+
+check('both clients read the channel’s cause where the server offers one', () => {
+  ok(/chCauseFor\(/.test(read('public/retail-admin/29-channel-sync.js')), 'the Channel sync page does not defer');
+  ok(/chCauseFor\(/.test(read('public/retail-admin/09-products.js')), 'the product editor does not defer');
+  ok(/csCauseFor\(/.test(read('public/m.html')), 'the phone does not defer');
+  ok(/ch\.stale\|\|ch\.blocked/.test(read('public/m.html')), 'the phone’s stopped-channel card ignores a block');
+});
+
 // ── Summary ──────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {
