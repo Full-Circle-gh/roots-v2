@@ -13,6 +13,30 @@ on:
   pull_request_review:
     types: [submitted]
 
+# One agent run per issue or pull request at a time.
+#
+# THE DUPLICATE IS NOT HYPOTHETICAL, and it is the reason this is here: a single
+# review submission carrying "@claude" in BOTH its body and one of its inline
+# comments fires pull_request_review AND pull_request_review_comment, and the
+# job's `if` below passes for each. Two independent agent runs start on the same
+# commit, each holding its own runner for as long as the agent takes. The same
+# shape reaches `issues` — a body mentioning @claude on an issue that is then
+# assigned fires opened and assigned.
+#
+# cancel-in-progress IS FALSE ON PURPOSE. An agent part-way through a task may
+# already have pushed a commit or opened a pull request; killing it there leaves
+# that work half-done with nobody told, which is worse than the runner minute it
+# would save. This prevents a PILE-UP — the second run waits rather than running
+# beside the first — it does not interrupt anything.
+#
+# THE GROUP KEY covers all four triggers. issue.number serves issue_comment and
+# issues; pull_request.number serves the two review events. A pull request IS an
+# issue as far as issue_comment is concerned, so a comment on PR #12 and a review
+# of PR #12 both resolve to 12 and share one group, which is the whole point.
+concurrency:
+  group: claude-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
 jobs:
   claude:
     # Only run when someone actually writes "@claude"
