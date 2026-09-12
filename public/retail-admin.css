@@ -15042,10 +15042,25 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 #tab-finance .fin-modal-body { display: grid; gap: 12px; }
 #tab-finance .fin-f-row { display: grid; grid-template-columns: 108px 1fr; align-items: center; gap: 12px; }
 #tab-finance .fin-f-row > label { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); }
-#tab-finance .fin-f-row > input {
+#tab-finance .fin-f-row > input,
+#tab-finance .fin-f-row .fin-suggestwrap > input {
   font: 400 15px/1.6 var(--f-sans); color: var(--td-text); background: var(--td-surface);
   border: 1px solid var(--td-border); border-radius: 8px; padding: 6px 12px; width: 100%;
 }
+/* The Category box's own dropdown (22-finance.js) — see the markup comment
+   above #fin-tx-cat-row for why it is no longer a native <datalist>. Same
+   treatment as the payment-terms/method fields on Purchasing (css:10947);
+   .pu2-suggest-menu and .pu2-suggest-opt are shared with those, unscoped, so
+   this reuses them rather than drawing a second popup style. */
+#tab-finance .fin-suggestwrap { position: relative; display: block; }
+#tab-finance .fin-suggestwrap > input { padding-right: 34px; }
+#tab-finance .fin-suggestcaret {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px;
+  background: none; color: var(--td-text2); cursor: pointer; }
+#tab-finance .fin-suggestcaret svg { width: 15px; height: 15px; }
+#tab-finance .fin-suggestcaret:hover { background: var(--td-raised); color: var(--td-text); }
 /* The error sits with the control that produced it and stays until acknowledged
    (§1.12) — never a toast, which flies away and leaves the operator unable to
    know the money did not move. */

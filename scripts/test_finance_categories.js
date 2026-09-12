@@ -315,7 +315,8 @@ it('the old derivation survives while the tenant has no list', () => {
 console.log('\n4 · the screen');
 
 const ctx = {
-  window: {}, document: { getElementById: () => null, querySelectorAll: () => [] },
+  window: { addEventListener: () => {} },
+  document: { getElementById: () => null, querySelectorAll: () => [], addEventListener: () => {} },
   Date, Math, Number, String, JSON, Set, Map,
   cuT: (en) => en,
   escapeHtml: (s) => String(s == null ? '' : s),

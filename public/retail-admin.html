@@ -11935,13 +11935,29 @@
           </div>
           <!-- Money out always; money in once an income category exists. Hidden,
                not disabled and not an empty dropdown: §1.9's data-precondition
-               axis answers an absent dimension with absence. The datalist holds
-               the expense list or the income list, never both — 22-finance.js
-               swaps it with the direction. -->
+               axis answers an absent dimension with absence. The suggestion menu
+               22-finance.js draws under this box holds the expense list or the
+               income list, never both — it swaps with the direction.
+
+               THIS WAS <input list=…> + <datalist> — the OS's own combobox
+               popup, unstyleable and, inside an embedding webview, prone to
+               landing pinned to a far edge of the window instead of under this
+               field (the reported defect). 16-purchasing.js hit the same thing
+               on its payment-terms/method fields and drew its own menu instead;
+               this field now does the same, off the same .pu2-suggest-menu /
+               .pu2-suggest-opt classes. -->
           <div class="fin-f-row" id="fin-tx-cat-row">
             <label for="fin-tx-cat">Category · 分类</label>
-            <input type="text" id="fin-tx-cat" list="fin-tx-cats" autocomplete="off">
-            <datalist id="fin-tx-cats"></datalist>
+            <span class="fin-suggestwrap">
+              <input type="text" id="fin-tx-cat" autocomplete="off" role="combobox"
+                     aria-expanded="false" aria-autocomplete="list" aria-controls="fin-tx-cat-menu"
+                     onfocus="finTxCatSuggestOpen()" oninput="finTxCatSuggestOpen()"
+                     onkeydown="finTxCatSuggestKey(event)" onblur="finTxCatSuggestBlur()">
+              <button type="button" class="fin-suggestcaret" tabindex="-1" aria-hidden="true"
+                      onmousedown="finTxCatSuggestToggle(event)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+            </span>
           </div>
           <div class="fin-f-row">
             <label for="fin-tx-note">Note · 备注</label>
