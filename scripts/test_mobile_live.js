@@ -92,4 +92,22 @@ still('the Recap is left out of it on purpose', () => {
     'the automatic refresh touches the Recap — it would blank itself every 60 seconds');
 });
 
+still('the Orders list is inside the backstop, not just the counts beside it', () => {
+  /* THE COMPLAINT THIS PINS, TAKE TWO. Same words, this time against a
+     screenshot of Orders: "I have to refresh the page to see the update."
+     The Home fix above wired the 60s tick to the tab counts and the SSE nudge
+     to a full refreshOrders() — but left the tick itself blind to the order
+     list. An operator whose stream never delivers (a VPN or a proxy sitting on
+     the connection is the reported case — EventSource can read as open while
+     nothing arrives) watched the "awaiting fulfilment" count move while the
+     rows under it sat still, because nothing on a timer ever called
+     refreshOrders(). It does now, on the same tick, and only when there is a
+     list on screen to repaint. */
+  const live = MHTML.slice(MHTML.indexOf('function mLiveTick()'), MHTML.indexOf('function mLiveInit()'));
+  assert.ok(/refreshOrders\(\)/.test(live),
+    'mLiveTick no longer calls refreshOrders() — the Orders list has lost its 60s backstop again');
+  assert.ok(/state\.tab===['"]orders['"]\s*\|\|\s*state\.detailId!=null/.test(live),
+    'the guard around refreshOrders() in mLiveTick changed — check it still covers the list AND an open order sheet');
+});
+
 console.log(`\nok — ${statics} live-refresh wiring checks.`);
