@@ -792,6 +792,67 @@ it('a typed NOTE is never split — only a category is', () => {
     'a subject that is not the category must render verbatim');
 });
 
+// ── The note that had nowhere to go ─────────────────────────────────────────
+// Ash, off the live screen 2026-09-12: a 备注 typed onto a manual row with a
+// category (员工工资 among them) never showed anywhere, on the list or back in
+// the edit form. `finTxSubject`'s category-over-note choice above is
+// unchanged — this is not a re-litigation of it — but until now the note it
+// steps over was never sent to the client at all, so it had no way to appear
+// beside the category and no way to survive a re-edit either.
+it('the note survives the route even when a category fills the subject slot', () => {
+  // `readTransactions` derives `subject` as `category || description`, which
+  // is right for what `subject` is for — but it must not be the ONLY thing
+  // built from `description`. Both typed-row branches must also emit the raw
+  // column under its own key, unconditionally.
+  const incomeBlock = ROUTE_CODE.slice(ROUTE_CODE.indexOf('...income.map(r => ({'), ROUTE_CODE.indexOf('...manual.map(r => ({'));
+  const manualBlock = ROUTE_CODE.slice(ROUTE_CODE.indexOf('...manual.map(r => ({'), ROUTE_CODE.indexOf('...claims.map(r => ({'));
+  assert.ok(/note:\s*r\.description \|\| null/.test(incomeBlock),
+    'a money-in row must expose its note regardless of what subject is showing');
+  assert.ok(/note:\s*r\.description \|\| null/.test(manualBlock),
+    'a hand-typed expense row must expose its note regardless of what subject is showing');
+});
+
+it("a manual row's note renders beside its category, not instead of it", () => {
+  const withBoth = { kind: 'out', id: 9, date: '2026-08-31', subject: 'Rent',
+    category: 'Rent', note: 'August includes the deposit top-up', amount: 30428, source: 'manual' };
+  const html = ctx.finTxRow(withBoth);
+  assert.ok(/fin-tx-subj">Rent</.test(html), 'the subject stays the category');
+  assert.ok(/fin-tx-note">Note · August includes the deposit top-up</.test(html),
+    'the note must appear somewhere on the row once there is a category to share the line with');
+
+  // No category: `subject` already IS the note (§36's own rule, tested above)
+  // — printing it a second time in the meta line would duplicate the row's
+  // one line of text rather than complete it.
+  const noteOnly = { kind: 'out', id: 10, date: '2026-08-31', subject: 'Cash tip returned',
+    category: null, note: 'Cash tip returned', amount: 50, source: 'manual' };
+  assert.ok(!/fin-tx-note"/.test(ctx.finTxRow(noteOnly)),
+    'a note with no category must not be printed twice');
+});
+
+it('editing a categorised manual row no longer blanks — and then erases — its note', () => {
+  // THE DATA-LOSS SHAPE THIS REPLACES: the box was pre-filled by comparing
+  // `row.subject` to `row.category`, which are equal by construction whenever
+  // a manual expense row has a category — exactly the case above. Edit opened
+  // to an empty 备注 box; pressing Save with nothing typed sent `note: ''`,
+  // `readBody` turned that into NULL, and the PUT overwrote `description` —
+  // silently deleting a note that had been sitting there untouched.
+  assert.ok(!/row\.subject && row\.subject !== row\.category \? row\.subject/.test(CLIENT_CODE),
+    'the broken subject/category heuristic must be gone from the pre-fill');
+  assert.ok(/row\.source === 'manual' && row\.note \? row\.note/.test(CLIENT_CODE),
+    "the pre-fill must read the row's own note field directly");
+
+  const box = { value: '' };
+  const cctx = formCtx({
+    'fin-tx-modal': { hidden: true }, 'fin-tx-note': box,
+    'fin-tx-cat': { value: '' }, 'fin-tx-cat-row': { hidden: false },
+  });
+  cctx.window.finTxForm('out', { kind: 'out', id: 9, date: '2026-08-31',
+    subject: 'Rent', category: 'Rent', note: 'August includes the deposit top-up',
+    amount: 30428, source: 'manual' });
+  assert.strictEqual(box.value, 'August includes the deposit top-up',
+    'reopening Edit must show the note that was actually saved, not a blank box');
+});
+
 it('the PO link switches the tab BEFORE it paints the order', () => {
   // The reported break. This read `if (window.puOpenPO) return puOpenPO(poId);`
   // ahead of the switch, and window.puOpenPO is ALWAYS defined — 16-purchasing

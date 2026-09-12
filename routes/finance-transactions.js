@@ -456,6 +456,13 @@ function readTransactions(query, opts = {}) {
       kind: 'in', id: r.id, date: r.date,
       subject: r.description || r.category || null,
       category: r.category || null,
+      // The typed note verbatim, alongside `subject` rather than instead of it.
+      // `subject` already shows this text when there is no category to prefer
+      // over it; `note` is what lets the client tell that case apart from a row
+      // whose note was simply never typed, instead of re-deriving it by
+      // comparing `subject` to `category` — a comparison that breaks the moment
+      // a row has BOTH, which every manual expense row with a category does.
+      note: r.description || null,
       amount: fen(r.amount),
       // 'delay_case' is the first non-'manual' source money-in has ever had.
       source: r.delay_case_id != null ? 'delay_case' : 'manual',
@@ -467,6 +474,10 @@ function readTransactions(query, opts = {}) {
       kind: 'out', id: r.id, date: r.date,
       subject: r.category || r.description || null,
       category: r.category || null,
+      // See the income branch above: the note the operator typed, sent
+      // regardless of whether `subject` happens to be showing the category
+      // instead of it right now.
+      note: r.description || null,
       amount: fen(r.amount),
       source: 'manual', po_id: null, po_number: null, categories: null,
       recorded_by: recordedBy.get(r.created_by) || null,
