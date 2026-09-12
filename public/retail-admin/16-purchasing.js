@@ -193,8 +193,18 @@
   function isLate(p) {
     return p.status === 'Ordered' && p.delivery_date && p.delivery_date < todayShop();
   }
+  /* An order the receive route already flipped to Delivered on its first
+     arrived count, with lines nobody has answered for yet, is not done —
+     mirrors rcvPartial() in Receiving (public/m.html), which is what keeps
+     this order in its "To receive" list. Same test, same reason: a line only
+     counts once somebody has said what came, "nothing arrived" included. */
+  function puPartial(p) {
+    return p.status === 'Delivered'
+      && Number(p.line_count || 0) > 0 && Number(p.received_lines || 0) < Number(p.line_count || 0);
+  }
   function statusPill(p) {
     if (isLate(p)) return `<span class="pu2-pill amber"><span class="dot"></span>${esc(T('Late', '已逾期'))}</span>`;
+    if (puPartial(p)) return `<span class="pu2-pill amber"><span class="dot"></span>${esc(T('Part arrived', '部分到货'))}</span>`;
     if (p.status === 'Delivered') return `<span class="pu2-pill sage"><span class="dot"></span>${esc(statusWord(p.status))}</span>`;
     if (p.status === 'Ordered')   return `<span class="pu2-pill grey"><span class="dot"></span>${esc(statusWord(p.status))}</span>`;
     return `<span class="pu2-pill grey">${esc(statusWord(p.status))}</span>`;
@@ -374,14 +384,14 @@
   // ═══════════════════════════════════════════════════════════════════════════
   function segRows() {
     return _pos.filter(p => {
-      if (_seg === 'open')     return p.status === 'Requested' || p.status === 'Ordered';
-      if (_seg === 'received') return p.status === 'Delivered';
+      if (_seg === 'open')     return p.status === 'Requested' || p.status === 'Ordered' || puPartial(p);
+      if (_seg === 'received') return p.status === 'Delivered' && !puPartial(p);
       return true;
     });
   }
   function paintOrders() {
-    const openN = _pos.filter(p => p.status === 'Requested' || p.status === 'Ordered').length;
-    const rcvN  = _pos.filter(p => p.status === 'Delivered').length;
+    const openN = _pos.filter(p => p.status === 'Requested' || p.status === 'Ordered' || puPartial(p)).length;
+    const rcvN  = _pos.filter(p => p.status === 'Delivered' && !puPartial(p)).length;
     const lateN = _pos.filter(isLate).length;
     const m = todayShop().slice(0, 7);
     const monthSpend = _pos
