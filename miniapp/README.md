@@ -45,6 +45,37 @@ miniapp/
    - `me.png` + `me-active.png`
 6. **Open the `miniapp/` folder in WeChat Developer Tools** → Project → Import. The preview window should boot to the Home tab.
 
+## Publishing a new version
+
+**WeChat Developer Tools has no idea this is a git repo.** Its Upload button
+packages whatever is sitting on disk in the folder it has open — a merge to
+`main` on GitHub does not reach that folder by itself, so clicking Upload
+after a merge silently ships the OLD code unless that folder is pulled first.
+
+Two ways to publish, both from PowerShell (`scripts/*.ps1`, run from a local
+clone of this repo — not from this cloud session, which has no WeChat
+credentials and can't complete either path):
+
+- **`scripts/sync-miniapp.ps1`** — `git pull`s your local clone to `origin/main`
+  (refusing to discard uncommitted local changes unless you pass `-Force`),
+  then you upload the normal way through WeChat Developer Tools's GUI.
+- **`scripts/upload-miniapp.ps1`** — runs the same sync, then uploads directly
+  via WeChat's own CLI (`miniprogram-ci`), no GUI step at all. First run
+  installs `miniprogram-ci` into `scripts/miniapp-ci-tool/` (isolated on
+  purpose — it pulls an old Babel 6 toolchain that has nothing to do with the
+  app, so it's kept out of the root `package.json`/lockfile entirely rather
+  than showing up in every session's `npm audit`). Needs a mini-program
+  upload private key (mp.weixin.qq.com → 开发 → 开发管理 → 开发设置 →
+  小程序代码上传密钥) and its robot number — never commit that key; `*.key` is
+  already gitignored.
+  ```powershell
+  .\scripts\upload-miniapp.ps1 -Version 1.2.3 -KeyPath C:\keys\private.xxx.key -Robot 1 -Desc "what changed"
+  ```
+
+Either way, an upload only creates a **draft version** — set it as the trial
+version (体验版) in 版本管理, test on a real device, then submit for review and
+release. Neither script does that step for you.
+
 ## What works now
 
 - Loads `home.layout` from the CMS and renders it via `<block-renderer>`. All 8 block types supported (announcement_bar, hero_banner, category_tabs, featured_item, product_grid, spacer, sticker_collage, progress_dots).
