@@ -1,0 +1,70 @@
+<div class="screen" style="height:980px;background:var(--surface-card)">
+
+  <div style="flex:none;padding:16px 16px 10px;border-bottom:1px solid var(--border-default)">
+    <div style="font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--brick-ink)">Shipped 2026-09-13 · §116</div>
+    <div style="font-size:17px;font-weight:500;margin-top:3px">What is on the glass now</div>
+    <div style="font-size:13px;color:var(--text-secondary);line-height:1.55;margin-top:3px">The foot of the customer record. Five controls, and none of them looks like one.</div>
+  </div>
+
+  <div class="now" style="position:relative;padding-top:16px">
+
+    <div class="sect" style="margin-top:0">
+      <div class="eyebrow" style="margin-bottom:8px">Account</div>
+      <div class="list">
+        <div class="lrow"><span class="l">Last order</span><span class="r">2:59 AM</span></div>
+        <div class="sep"></div>
+        <div class="lrow"><span class="l">Last signed in</span><span class="r">2:33 AM</span></div>
+        <div class="sep"></div>
+        <div class="lrow"><span class="l">Signed in on</span><span class="r">2 devices</span></div>
+      </div>
+    </div>
+
+    <div class="sect">
+      <div class="eyebrow" style="margin-bottom:8px">Last 12 months</div>
+      <div class="chart">
+        <span><i style="height:3px"></i></span><span><i style="height:3px"></i></span>
+        <span><i style="height:3px"></i></span><span><i style="height:3px"></i></span>
+        <span><i style="height:3px"></i></span><span><i style="height:3px"></i></span>
+        <span><i style="height:3px"></i></span><span><i style="height:3px"></i></span>
+        <span><i style="height:3px"></i></span><span><i style="height:3px"></i></span>
+        <span><i style="height:3px"></i></span><span><i class="on" style="height:100%"></i></span>
+      </div>
+      <div class="axis"><span>10/25</span><span>9/26</span></div>
+      <div class="caption">Busiest: 2026-09 · 2 orders</div>
+    </div>
+
+    <div class="diag">No app errors in 7 days</div>
+
+    <div class="nowfoot">
+      <button>Reissue referral code</button>
+      <button>Let them earn the ongoing share</button>
+      <button class="brick">Stop them referring friends</button>
+      <button>Sign out all devices (2)</button>
+      <button class="brick">Block this customer</button>
+    </div>
+
+    <span class="marker" style="left:2px;top:436px">1</span>
+    <span class="marker" style="left:2px;top:474px">2</span>
+    <span class="marker" style="right:2px;top:512px">3</span>
+    <span class="marker" style="right:2px;top:436px">4</span>
+    <span class="marker" style="left:2px;top:588px">5</span>
+  </div>
+
+  <div class="faults">
+    <h2>Six faults, and one of them is not styling</h2>
+    <p class="sub">Measured against <b>docs/tacet-design-system.md</b> §5 and the app's own <b>sheetActions</b>, which is the pattern a list of actions already has in this file.</p>
+
+    <div class="fault"><span class="n">1</span><span class="t"><b>No container, no icon, no affordance.</b> Every other action list in <em>m.html</em> is a bordered card of left-aligned rows with an icon. These are five centred sentences in bare space — they read as prose, and nothing says they can be pressed.</span></div>
+
+    <div class="fault"><span class="n">2</span><span class="t"><b>Labels are clauses, not verbs.</b> §6 says labels are verbs. <em>“Let them earn the ongoing share”</em> is a sentence; <em>“Allow”</em> is a label.</span></div>
+
+    <div class="fault"><span class="n">3</span><span class="t"><b>Brick text floating in a list.</b> §5 gives destructive a <em>Brick outline</em>. Two red rows scattered among three black ones reads arbitrary — and puts <em>Block</em>, which locks a person out, at the same visual weight as <em>Reissue</em>, which is reversible in a tap.</span></div>
+
+    <div class="fault"><span class="n">4</span><span class="t"><b>Two unrelated groups in one stack.</b> Three of these are about referrals and two are about the account. Nothing separates them.</span></div>
+
+    <div class="fault"><span class="n">5</span><span class="t"><b>Orphaned.</b> The block has no heading, so it hangs under <em>“No app errors in 7 days”</em> as though it belonged to the diagnostics line.</span></div>
+
+    <div class="fault"><span class="n">6</span><span class="t"><b>The real error: it is in the wrong place.</b> This is the desktop’s <em>More ▾</em> menu, lifted whole. But four of the five act on facts already on screen a few rows up — <em>Signed in on 2 devices</em>, <em>Their code</em>, <em>Referring</em>, <em>Ongoing share</em>. A control belongs beside the fact it changes, not in a drawer at the bottom repeating it.</span></div>
+  </div>
+
+</div>

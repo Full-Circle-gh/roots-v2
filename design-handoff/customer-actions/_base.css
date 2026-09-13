@@ -1,0 +1,98 @@
+/* Tacet mobile tokens — lifted verbatim from public/m.html :root (light).
+   Not rounded, not re-derived: these are the values the app paints with. */
+:root{
+  --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --dusk:#6E67AF;
+  --brick:#B4533E; --brick-tint:#F6E7E3; --brick-ink:#B4533E;
+  --dusk-tint:#EEEDF6; --dusk-ink:#524C8F; --sage:#A3B49F;
+  --raised:#F6F3EC; --border:#E4E0D5; --edge:#948B76;
+  --surface-card:#FFFFFF; --surface-raised:var(--raised);
+  --text-primary:var(--ink); --text-secondary:var(--graphite);
+  --border-default:var(--border);
+  --ui:'Inter','Source Han Sans SC','PingFang SC',system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text-primary);
+  font-family:var(--ui);font-size:15px;font-weight:400;line-height:1.6;
+  -webkit-font-smoothing:antialiased}
+a{color:var(--text-primary)}a:hover{color:var(--dusk)}
+.num{font-variant-numeric:tabular-nums}
+
+/* The frame. 390x844, no drawn device and no fake status bar. */
+.screen{width:390px;height:844px;position:relative;overflow:hidden;
+  background:var(--paper);display:flex;flex-direction:column}
+
+/* What sits behind the sheet — the roster, dimmed by the scrim. */
+.behind{position:absolute;inset:0;padding:14px 16px;background:var(--paper)}
+.behind h1{margin:0;font-size:20px;font-weight:500;letter-spacing:-.01em}
+.scrim{position:absolute;inset:0;background:rgba(17,26,43,.38)}
+
+/* The record sheet — .sheet in m.html, top:46px. */
+.sheet{position:absolute;left:0;right:0;top:46px;bottom:0;background:var(--surface-card);
+  border-radius:18px 18px 0 0;display:flex;flex-direction:column;overflow:hidden}
+.grabber{width:38px;height:5px;border-radius:999px;background:var(--border-default);margin:6px auto 8px}
+.head{flex:none;padding:8px 16px 16px;border-bottom:1px solid var(--border-default)}
+.headrow{display:flex;align-items:center;gap:16px}
+.avatar{width:32px;height:32px;flex:none;border-radius:8px;background:var(--dusk-tint);
+  color:var(--dusk-ink);display:flex;align-items:center;justify-content:center;
+  font-size:15px;font-weight:500}
+.name{font-size:18px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;font-size:13px;font-weight:400;
+  padding:4px 10px;border-radius:999px;white-space:nowrap;flex:none;
+  background:rgba(88,96,110,.10);color:var(--text-secondary)}
+.spacer{flex:1}
+.iconbtn{width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;
+  border:0;border-radius:8px;background:none;color:var(--text-primary);cursor:pointer}
+.phone{margin-top:4px;font-size:13px;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+
+/* The four everyday actions — .btn2, stacked icon over label. */
+.acts{display:flex;align-items:stretch;gap:8px;margin-top:16px}
+.btn2{min-height:44px;border-radius:8px;border:1.5px solid var(--edge);background:transparent;
+  color:var(--text-primary);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.acts .btn2{flex:1;min-width:0;flex-direction:column;gap:4px;padding:9px 4px;height:auto}
+.acts .btn2 span{font-size:12px;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+
+.body{flex:1;min-height:0;overflow:hidden;padding:16px 16px 24px}
+.sect{margin-top:16px}
+.sect:first-child{margin-top:0}
+.secthead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+.eyebrow{font-size:13px;font-weight:500;color:var(--text-secondary)}
+.list{background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;overflow:hidden}
+.sep{height:1px;background:var(--border-default)}
+.lrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 16px}
+.lrow .l{font-size:14.5px}
+.lrow .r{font-size:14.5px;color:var(--text-secondary);font-variant-numeric:tabular-nums;text-align:right}
+
+/* Ghost action sitting on the row it changes (Option B). */
+.rowact{border:0;background:none;padding:6px 0;margin:0;font-family:inherit;
+  font-size:13.5px;font-weight:500;color:var(--text-secondary);cursor:pointer;
+  text-decoration:underline;text-decoration-color:var(--border-default);
+  text-underline-offset:3px;flex:none}
+.rowact.brick{color:var(--brick-ink);text-decoration-color:rgba(180,83,62,.35)}
+
+/* Action row with an icon — the app's own .row, used by sheetActions. */
+.arow{display:flex;align-items:center;gap:16px;width:100%;min-height:52px;padding:12px 16px;
+  background:transparent;border:none;cursor:pointer;text-align:left;
+  color:var(--text-primary);font-family:inherit;font-size:15px}
+.arow .ico{display:flex;flex:none;color:var(--text-secondary)}
+.arow.brick{color:var(--brick-ink)}
+.arow.brick .ico{color:var(--brick-ink)}
+
+/* Destructive — Brick OUTLINE, never a solid slab (design system §5). */
+.danger{width:100%;min-height:44px;border-radius:8px;background:transparent;
+  border:1.5px solid var(--brick);color:var(--brick-ink);font-family:inherit;
+  font-size:15px;font-weight:500;cursor:pointer;display:inline-flex;
+  align-items:center;justify-content:center;gap:8px}
+
+.chart{display:flex;align-items:flex-end;gap:4px;height:56px}
+.chart span{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+.chart i{display:block;border-radius:3px 3px 0 0;background:var(--surface-raised);height:3px}
+.chart i.on{background:var(--text-primary)}
+.axis{display:flex;justify-content:space-between;margin-top:6px;font-size:12px;
+  color:var(--text-secondary);font-variant-numeric:tabular-nums}
+.caption{font-size:12.5px;color:var(--text-secondary);margin-top:4px}
+.diag{margin-top:16px;font-size:13px;color:var(--text-secondary)}
+
+/* A ghost action must still be a 44px target (mockup scale rule). */
+.rowact{min-height:44px;display:inline-flex;align-items:center;padding:0}
+.lrow{min-height:48px}

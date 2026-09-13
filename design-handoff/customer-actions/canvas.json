@@ -1,0 +1,39 @@
+{
+  "artboards": [
+    { "file": "Diagnosis.dc.html", "x": 0,    "y": 0, "w": 390, "h": 980, "title": "What is wrong now" },
+    { "file": "Main.dc.html",      "x": 550,  "y": 0, "w": 390, "h": 844, "title": "Option B · On the row it changes  ← recommended" },
+    { "file": "OptionA.dc.html",   "x": 1030, "y": 0, "w": 390, "h": 844, "title": "Option A · Two grouped lists" },
+    { "file": "OptionC.dc.html",   "x": 1510, "y": 0, "w": 390, "h": 844, "title": "Option C · One More sheet" }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -190,
+      "w": 390,
+      "text": "Customer record — the foot of the sheet\n\nAsh: \"this part need to redesign. not clear.\"\n\nAll three keep the same five controls and the same endpoints. What differs is where they live and how hard each one is to press by accident."
+    },
+    {
+      "id": "rec-b",
+      "x": 550,
+      "y": -190,
+      "w": 390,
+      "text": "RECOMMENDED\n\nEach control sits on the fact it changes, so the state and the switch are never in two places. Only Block is left standing alone — it is the one thing here that takes something away from a person.\n\nTradeoff: a row now carries a value AND a control, which is denser. Needs the labels to stay one word."
+    },
+    {
+      "id": "note-a",
+      "x": 1030,
+      "y": -190,
+      "w": 390,
+      "text": "Safest, closest to what is there now. Two headed lists of icon rows — the app's own sheetActions pattern.\n\nTradeoff: the referral STATE is still shown twice, once in the Referrals block above and once in these labels. That is the duplication Option B removes."
+    },
+    {
+      "id": "note-c",
+      "x": 1510,
+      "y": -190,
+      "w": 390,
+      "text": "Closest to the desktop's More menu, and it keeps the record short — one row at the foot, everything rare behind it.\n\nTradeoff: every rare action costs two taps, and a sheet over a sheet is the deepest stack in the app."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}
