@@ -39,6 +39,8 @@ const CLIENT = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '22-fin
 const CSS = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.css'), 'utf8');
 const HTML = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.html'), 'utf8');
 const VOCAB = fs.readFileSync(path.join(ROOT, 'docs', 'tacet-delivery-vocabulary.md'), 'utf8');
+// The orders list owns the staff-keyed origin names; Finance copies them.
+const ORDERS_SRC = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '04-orders.js'), 'utf8');
 // The predicates moved to lib/finance-window.js so the Summary and Transactions
 // routes share ONE copy — §36's "must not be inherited by copying whichever
 // site is nearest" applied across the Finance module rather than within a file.
@@ -700,25 +702,63 @@ it('revenue opens by default, exactly as the expenses row beside it does', () =>
 });
 
 it('every channel name is COPIED from a live pair — none composed here', () => {
-  // The standing rule's first preference. csName (01-core.js) names these same
-  // channels on the Sales page; DASH_CHAN_SHORT (03-dashboard.js) names the
-  // channel on an order. Each pair must still be present at its source, so a
-  // rename there cannot leave two different words for one channel.
+  /* The standing rule's first preference. Two sources, and which owns a key is
+     not arbitrary: the PLATFORMS come from csName (01-core.js), the only one of
+     the two carrying a Chinese half for them; the STAFF-KEYED ORIGINS come from
+     ordChannelLabel (04-orders.js), which owns the New order form's answers.
+
+     Each pair must still be present at its own source, so a rename there cannot
+     leave two different words for one channel on two screens. */
   const CORE = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '01-core.js'), 'utf8');
+  const ORDERS = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '04-orders.js'), 'utf8');
   const DASH = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '03-dashboard.js'), 'utf8');
-  [["'WeChat', '微信'", CORE], ["'Web shop', '网页商店'", CORE],
-   ["'Meituan', '美团'", CORE], ["'Eleme', '饿了么'", CORE],
-   ["'Manual', '手动'", DASH], ["'Shop', '门店'", DASH]]
-    .forEach(([pair, src]) => {
-      const [en, cn] = pair.split(', ');
-      assert.ok(src.includes(en) && src.includes(cn),
-        `${pair} is no longer live at its source — it would be composed here now`);
-    });
+  const fn = CLIENT.slice(CLIENT.indexOf('function finChannelLabel'),
+                          CLIENT.indexOf('/* ── The revenue disclosure'));
+
+  [['WeChat', '微信', CORE], ['Web shop', '网页商店', CORE],
+   ['Meituan', '美团', CORE], ['Eleme', '饿了么', CORE],
+   // Both sources carry this one; the dashboard's short table is the nearer.
+   ['Shop', '门店', DASH],
+   // The four origins the New order form writes, plus the legacy value.
+   ['Pick up', '到店自取', ORDERS], ['WeChat message', '微信消息', ORDERS],
+   ['Wholesale', '批发', ORDERS], ['Other', '其他', ORDERS],
+   ['Unattributed', '未归属', ORDERS],
+  ].forEach(([en, cn, src]) => {
+    assert.ok(fn.includes("'" + en + "', '" + cn + "'"),
+      `the card no longer renders ${en} · ${cn}`);
+    assert.ok(src.includes("'" + en + "'") && src.includes("'" + cn + "'"),
+      `${en} · ${cn} is no longer live at its source — it would be composed here now`);
+  });
+
   // gzgrocery is a bare string at its source too: the partner's name is the same
   // word in both languages, and pairing it here would be composing one.
-  const fn = CLIENT.slice(CLIENT.indexOf('function finChannelLabel'));
   assert.ok(/gzgrocery:\s*'Gzgrocery'/.test(fn), 'gzgrocery must not be given an invented pair');
   assert.ok(CORE.includes("gzgrocery: 'Gzgrocery'"), 'the bare form is no longer live at its source');
+
+  // EVERY ORIGIN THE FORM CAN WRITE HAS A LINE. routes/retail.js owns the list;
+  // a fifth one added there without a label would reach this card as a raw key.
+  const ROUTES = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8');
+  const origins = ROUTES.match(/const MANUAL_ORDER_ORIGINS\s*=\s*\[([^\]]*)\]/);
+  assert.ok(origins, 'MANUAL_ORDER_ORIGINS is no longer where this test reads it');
+  origins[1].match(/'([a-z_]+)'/g).map(q => q.slice(1, -1)).forEach(k => {
+    assert.ok(new RegExp('\\b' + k + ':').test(fn),
+      `the New order form can write '${k}' and the card has no name for it`);
+  });
+});
+
+it('the legacy channel says Unattributed, never Manual', () => {
+  /* A CORRECTION to what this file shipped with. 04-orders.js records that
+     `manual` is the LEGACY value — rows written before the form asked the
+     question, plus every till sale up to §44's 2026-09-07 amendment — and that
+     it is no longer selectable. `手动` claims an operator picked it; `未归属`
+     says what the row actually is. One name, owned by the screen that reasoned
+     about it. */
+  assert.strictEqual(ctx.finChannelLabel('manual'), 'Unattributed');
+  const fn = CLIENT.slice(CLIENT.indexOf('function finChannelLabel'),
+                          CLIENT.indexOf('/* ── The revenue disclosure'));
+  assert.ok(!/'Manual', '手动'/.test(fn), 'the legacy bucket must not read as a chosen origin');
+  assert.ok(ORDERS_SRC.includes("if (c === 'manual')      return cuT('Unattributed', '未归属');"),
+    'the orders list no longer calls it Unattributed — the two screens have drifted');
 });
 
 it('an unknown channel renders as itself rather than being folded or dropped', () => {
