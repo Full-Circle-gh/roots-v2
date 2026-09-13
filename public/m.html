@@ -19417,7 +19417,16 @@ function shipByPlan(r){
     basis:'arrival', done};
   if(r.promised_ship_date){
     const ship=fmtDateOnly(r.promised_ship_date), arr=r.promised_delivery_date?fmtDateOnly(r.promised_delivery_date):'';
-    return {kind:'batch', label:arr||ship,
+    /* WHICH OF THE TWO DAYS THE HEADLINE IS. A batch carries both — the kitchen
+       makes it on one and the customer has it on the other — and the headline
+       silently swaps between them: the ARRIVAL day when there is an estimate,
+       the SHIP day when there is not. Every screen that shows this plan has to
+       know which one it was handed, and until now only the sub-line's shape
+       said so. The drawer tile reads it off the kicker it prints above the
+       date; the list row has no kicker and had no flag, so it printed a bare
+       day word that could mean either. Said once, here, where the choice is
+       actually made. */
+    return {kind:'batch', label:arr||ship, arrivalLed:!!arr,
       sub:arr?T('made fresh · ship '+ship,'现做 · '+ship+'发货'):T('made fresh','现做'),
       when:r.promised_ship_date, basis:'arrival', done};
   }
@@ -19581,7 +19590,29 @@ function deliveryLine(r){
   const plan=shipByPlan(r); if(!plan) return null;
   const actionable=r.status==='paid'||r.status==='preparing';
   const u=shipByUrgency(plan,actionable);
-  const label=planLabel(plan);
+  let label=planLabel(plan);
+  /* A DAY WORD NEEDS A VERB WHEN NOTHING ABOVE IT SUPPLIES ONE. Every other
+     plan kind names itself in this cell — "Ship when ready", "Right away", a
+     window with its own clock in it. A batch does not: it prints a bare
+     "Tomorrow", and one line below it prints "made fresh · ship Today". Two
+     relative day words, neither labelled, reading as one date disagreeing with
+     itself. Reported from the floor on TC000681 with exactly that pair.
+
+     The desktop says which day it means by printing a kicker over the date —
+     DELIVER BY on 04-orders.js's batch cell, which is why its "Sep 14 · ship
+     Sep 13" reads as a sequence rather than an argument. This row has no
+     kicker (the cell is a headline and a sub-line, right-aligned under a 52%
+     cap), and the drawer tile one screen over does have one. So the word goes
+     into the label itself, the one place this cell can carry it.
+
+     Both shapes get it, not only the confusing one: labelling the arrival case
+     and leaving its no-estimate sibling bare would put a described day word on
+     one batch row and an undescribed one on the next, which is the same
+     question asked again. `arrivalLed` is the plan's own answer to which day the
+     label holds — never guessed back out of the sub-line's wording. */
+  if(plan.kind==='batch')
+    label = plan.arrivalLed ? T('Arrives '+label, label+'送达')
+                            : T('Ship '+label,   label+'发货');
   let tag='';
   if(actionable){
     if(u.level==='overdue') tag=' · '+T('overdue','已逾期');
