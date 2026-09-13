@@ -108,7 +108,7 @@
     return `${time}  ${glyph} ${l.store_code}  ${mid}${reason}`.replace(/\s+$/, '');
   }
 
-  /* ── §121 · the page head, in the channel frame ───────────────────────────────
+  /* ── §122 · the page head, in the channel frame ───────────────────────────────
      Was a bespoke one-line health strip. It is now the same four parts the
      Meituan and Eleme pages carry, painted the way elRenderHead() paints them:
      a status line, three tiles, and one line for the product list.
@@ -201,7 +201,7 @@
   window.gyLoadListings = async function (silent) {
     try {
       const r = await api('/api/retail-admin/guanyi/listings');
-      // §121 — the count, the freshness and the Refresh button are one line now,
+      // §122 — the count, the freshness and the Refresh button are one line now,
       // painted by gyRenderHead() from this response. The disabled state rides
       // on that paint rather than being poked onto the button afterwards.
       _gyLs = r;
@@ -212,7 +212,7 @@
 
   // Refresh the Guanyi product list via the daemon, polling until the job lands.
   window.gyRefreshListings = async function () {
-    /* §121 — THE BUTTON IS NOT HELD, A FLAG IS. This used to capture the button
+    /* §122 — THE BUTTON IS NOT HELD, A FLAG IS. This used to capture the button
        node and re-enable it in `finally`. The button now lives inside the store
        line, which gyRenderHead() REPAINTS on every poll below — so the captured
        node is detached within two seconds and the `finally` re-enabled a dead

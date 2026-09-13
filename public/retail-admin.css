@@ -15444,7 +15444,7 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
   #tab-shop-menu .shp-head-r { padding-top: 0; }
 }
 
-/* ── §121 · GZ Grocery — the frame is shared, these three rules are not ──────
+/* ── §122 · GZ Grocery — the frame is shared, these three rules are not ──────
    The page's head (pagehead, status, tiles, store line, sub-tabs) is painted by
    the frame rules further up, which now name `.gy-` alongside `.mt-` and `.el-`
    — one declaration for all three channel pages, so a change to one is a change

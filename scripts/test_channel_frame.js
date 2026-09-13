@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-// Tests for §121 — GZ Grocery wears the channel frame.
+// Tests for §122 — GZ Grocery wears the channel frame.
 //
 //   node scripts/test_channel_frame.js
 //
