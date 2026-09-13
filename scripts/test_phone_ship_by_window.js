@@ -105,6 +105,8 @@ const MOB_SRC = [
   mob.line('const _pad2='),
   mob.block('function _slotEnd(start,label)'),
   mob.block('function _slotEndAnchor(scheduledFor,label)'),
+  mob.block('function _slotFacts(scheduledFor,label)'),
+  mob.block('function planLabel(p)'),
   mob.block('function shipByPlan(r)'),
   mob.block('function shipByUrgency(p,actionable)'),
 ].join(';\n');
@@ -126,6 +128,7 @@ function phone(lang, nowIso) {
     T: (en, zh) => ((lang || 'en') === 'en' ? en : zh),
     tdWhen: td.tdWhen,
     tdFromShopLocal: td.tdFromShopLocal,
+    tdTimeWindow: td.tdTimeWindow,
     Date: frozenDate(nowIso), Math, Number, String, isNaN,
   };
   vm.createContext(ctx);

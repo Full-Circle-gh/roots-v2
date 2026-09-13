@@ -35,6 +35,7 @@
     "test:mini-app-conversion": "node scripts/test_mini_app_conversion.js",
     "test:role-tags": "node scripts/test_role_tagged_controls.js",
     "test:phone-dates": "node scripts/test_phone_dates.js",
+    "test:phone-slot-day-word": "node scripts/test_phone_slot_day_word.js",
     "test:admin-dates": "node scripts/test_admin_dates.js",
     "test:currency-surfaces": "node scripts/test_customer_currency.js",
     "test:compose-prompt": "node scripts/test_compose_prompt.js",
