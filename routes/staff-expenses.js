@@ -66,18 +66,24 @@ const ERR = {
    enforcement on — which is all of them. §87 part five allows an APPROVER to
    approve their own claim. It does not make everyone an approver.
 
-   The read half is gated too: the approval list is everybody's spending. */
-function requireApprover(req, res, next) {
+   The read half is gated too: the approval list is everybody's spending.
+
+   `isApprover` IS THE PREDICATE, `requireApprover` IS THE PREDICATE AS A GATE.
+   Split out (§109) so the receipt route below can ask the same question
+   without turning it into a hard 403 for a submitter looking at their own
+   photo — that read still has to fall through to the ownership-scoped query,
+   not be refused outright. */
+function isApprover(req) {
   // The owner always passes, as everywhere else in this product.
-  if (req.backendUser && req.backendUser.role === 'owner') return next();
-  // No resolved capability set means the RBAC layer could not answer. It answers
-  // for every backend operator, so this is a control-plane failure rather than a
-  // permission one — and a money route does not fall open on an unanswered
-  // question.
-  if (!req.caps || typeof req.caps.has !== 'function') {
-    return res.status(403).json({ error: ERR.forbidden });
-  }
-  if (!req.caps.has('expenses:approve')) return res.status(403).json({ error: ERR.forbidden });
+  if (req.backendUser && req.backendUser.role === 'owner') return true;
+  // No resolved capability set means the RBAC layer could not answer. It
+  // answers for every backend operator, so this is a control-plane failure
+  // rather than a permission one — and a money route does not fall open on an
+  // unanswered question.
+  return !!(req.caps && typeof req.caps.has === 'function' && req.caps.has('expenses:approve'));
+}
+function requireApprover(req, res, next) {
+  if (!isApprover(req)) return res.status(403).json({ error: ERR.forbidden });
   return next();
 }
 
@@ -276,12 +282,27 @@ router.get('/api/retail-admin/staff-expenses/meta', requireRetailAdmin, (req, re
 // **THE OWNERSHIP TEST IS IN THE QUERY, not a check after it.** A receipt is a
 // picture of somebody's private spending; a route that fetched by id and then
 // compared would be one early return away from serving anybody's.
+//
+// **WIDENED, §109 (Ash's decision, 2026-09-13): an APPROVER is also an
+// owner of the query, not just the submitter.** The approval list is already
+// everybody's spending (`/pending`, gated by this same `isApprover`) — an
+// approver who can already see the amount, the category and the claimant's
+// name for a stranger's claim could never see the one piece of evidence the
+// decision actually turns on. That was the whole defect behind "Could not
+// read that photo." on a claim that was not the approver's own: the route was
+// not broken, it was refusing the person whose job is to look. A submitter
+// who is NOT an approver still gets exactly the old, narrower query — their
+// own receipts and nobody else's — so nothing here widens what a non-approver
+// can reach. */
 router.get('/api/retail-admin/staff-expenses/:id/receipt', requireRetailAdmin, (req, res) => {
   try {
     if (!/^\d+$/.test(String(req.params.id))) return res.status(404).json({ error: 'Not found · 未找到' });
-    const row = tdb().prepare(
-      'SELECT receipt_data FROM staff_expenses WHERE id = ? AND submitted_by IS ?'
-    ).get(req.params.id, req.user?.id || null);
+    const db = tdb();
+    const row = isApprover(req)
+      ? db.prepare('SELECT receipt_data FROM staff_expenses WHERE id = ?').get(req.params.id)
+      : db.prepare(
+          'SELECT receipt_data FROM staff_expenses WHERE id = ? AND submitted_by IS ?'
+        ).get(req.params.id, req.user?.id || null);
     if (!row || !row.receipt_data) return res.status(404).json({ error: 'Not found · 未找到' });
     res.json({ success: true, data: { receipt_data: row.receipt_data } });
   } catch (e) {

@@ -1945,10 +1945,14 @@ async function finAprPollDot() {
 
    **A FAILURE HERE SAYS SO.** The phone's version swallows the error and
    silently paints nothing, which is why nobody noticed that
-   `/staff-expenses/:id/receipt` scopes to `submitted_by` and therefore serves an
-   approver NOTHING for anybody else's claim. Until that route is widened, this
-   control tells the operator the photo could not be read rather than looking
-   broken — and it needs no change when it is.
+   `/staff-expenses/:id/receipt` scoped to `submitted_by` and therefore served
+   an approver NOTHING for anybody else's claim — every claim on THIS screen,
+   since only an approver ever reaches it. **§109 (2026-09-13) widened the
+   route**: an approver's request now matches on id alone, the same ownership
+   test `/pending` already uses to hand them the rest of the row. This control
+   is left exactly as it was rather than removed — a genuinely missing receipt,
+   a dropped connection, or a stale claim id still has to say so instead of
+   looking broken.
 
    The sentence is the phone's own, verbatim: `Could not read that photo. ·
    无法读取该照片。` already ships three times in m.html on the picker that TAKES

@@ -182,9 +182,16 @@ it('the list carries WHETHER there is a receipt, never the receipt', () => {
   assert.match(ROUTE_CODE, /CASE WHEN receipt_data IS NULL THEN 0 ELSE 1 END/);
 });
 
-it('the receipt route matches on the OWNER in the query, not after it', () => {
+it('the receipt route matches on the OWNER in the query, not after it — and an approver is an owner too (§109)', () => {
   assert.match(ROUTE_CODE, /FROM staff_expenses WHERE id = \? AND submitted_by IS \?/,
     'a fetch-then-compare is one early return away from serving anybody\'s receipt');
+  // §109: an approver's branch drops the submitted_by filter entirely — the
+  // ownership test is still IN the query, it is just a different query,
+  // chosen by the same `isApprover` predicate `/pending` and `/decide` gate on.
+  assert.match(ROUTE_CODE, /isApprover\(req\)\s*\n\s*\?\s*db\.prepare\('SELECT receipt_data FROM staff_expenses WHERE id = \?'\)/,
+    'an approver must reach any claim\'s receipt, not just their own');
+  assert.match(ROUTE_CODE, /function isApprover\(req\)/,
+    'one predicate, shared by /pending, /decide and the receipt route — not three copies drifting');
 });
 
 console.log('\n3 · the decisions, in the shipped source');
