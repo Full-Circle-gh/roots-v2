@@ -38,7 +38,7 @@ const express = require('express');
 const { tdb, currentTenantId } = require('../lib/tenant-db');
 const { fen } = require('../lib/finance-window');
 const { requireRetailAdmin } = require('./retail');
-// §113. The two purchasing primitives a claim-raised order needs — the RPO
+// §114. The two purchasing primitives a claim-raised order needs — the RPO
 // number and the poster that turns an order into money. Required from the
 // purchasing router rather than copied, so there is one answer to each.
 const { nextRetailPONumber, postRetailPOExpenses } = require('./retail-purchasing');
@@ -56,7 +56,7 @@ const ERR = {
   // §90.
   notApprovedVoid: 'only an approved claim can be voided · 仅审批通过的申请可以作废',
   forbiddenVoid:   'this account cannot void expense claims · 此账号无法作废费用申请',
-  // §113 part four. A claim that raised an order has NO ledger row of its own to
+  // §114 part four. A claim that raised an order has NO ledger row of its own to
   // remove — the order owns the cost — so the two reversals below have nothing
   // to undo here, and quietly cancelling the order instead would reach into a
   // document that may already have been received, priced and part-delivered.
@@ -141,7 +141,7 @@ function listMine(db, userId) {
   return db.prepare(`
     SELECT id, date, amount, category, note, paid_by, store_id, status, settled,
            submitted_at, decided_at,
-           -- §113: whether the goods are still coming, and the order now tracking
+           -- §114: whether the goods are still coming, and the order now tracking
            -- them. The submitter's own list says so too — they are the one who
            -- said it had not arrived, and the one most likely to ask where it is.
            awaiting_delivery, po_id,
@@ -344,7 +344,7 @@ router.get('/api/retail-admin/staff-expenses/pending', requireRetailAdmin, requi
     const rows = db.prepare(`
       SELECT e.id, e.date, e.amount, e.category, e.note, e.paid_by, e.store_id,
              e.status, e.settled, e.submitted_at, e.decided_at, e.submitted_by,
-             -- §113. The approver needs BOTH: before deciding, that approving
+             -- §114. The approver needs BOTH: before deciding, that approving
              -- this one raises an order; after, which order to open.
              e.awaiting_delivery, e.po_id,
              CASE WHEN e.receipt_data IS NULL THEN 0 ELSE 1 END AS has_receipt
@@ -432,7 +432,7 @@ router.get('/api/retail-admin/staff-expenses/pending', requireRetailAdmin, requi
 // same person, and a rule forbidding it produces an unusable screen rather than
 // a second approver. **The guard is the record, not the refusal** — the approver
 // is stored on the claim, shown on the row, and logged.
-/* ── §113 — THE ORDER AN APPROVAL RAISES ───────────────────────────────────
+/* ── §114 — THE ORDER AN APPROVAL RAISES ───────────────────────────────────
    A claim marked *not arrived* becomes an Ordered purchase order carrying one
    typed line: what was bought, what it cost, and the category it is filed under.
 
@@ -490,7 +490,7 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
     // expense out of the books while leaving the payment made. That is the one
     // state this route refuses, and it refuses it rather than warning.
     if (claim.settled) return res.status(409).json({ error: ERR.settled });
-    // §113 part four. The order owns the cost, so there is no ledger row here to
+    // §114 part four. The order owns the cost, so there is no ledger row here to
     // take back — and cancelling the order on a rejection would reach into a
     // document that may already have been received.
     if (decision === 'reject' && claim.po_id) return res.status(409).json({ error: ERR.onOrder });
@@ -545,7 +545,7 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
       // the shape the suite asserts — a `{ ...fresh }` here would fail it for no
       // behavioural reason at all.
       fresh.submitted_name = submittedName;
-      // §113 — APPROVING A CLAIM WHOSE GOODS HAVE NOT ARRIVED RAISES THE ORDER
+      // §114 — APPROVING A CLAIM WHOSE GOODS HAVE NOT ARRIVED RAISES THE ORDER
       // THAT WILL TRACK THEM. Inside this transaction so a failure rolls the
       // approval back with it, and guarded on `po_id` so approving twice raises
       // one order rather than two.
@@ -606,7 +606,7 @@ router.post('/api/retail-admin/staff-expenses/:id/void', requireRetailAdmin, req
     // rejected one has nothing in the books to take back out, and `/decide`
     // is the route that handles either.
     if (claim.status !== 'approved') return res.status(409).json({ error: ERR.notApprovedVoid });
-    // §113 part four, the same refusal `/decide` makes for the same reason: this
+    // §114 part four, the same refusal `/decide` makes for the same reason: this
     // claim has no ledger row of its own — the order it raised owns the cost —
     // so there is nothing here to take back out, and the way to undo the
     // purchase is Purchasing's own Cancel order.

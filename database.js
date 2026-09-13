@@ -1205,7 +1205,7 @@ addColumn('categories', 'is_active',    'INTEGER DEFAULT 1');
 // pre-marked, because a list that cannot say "I have not been told" has to guess,
 // and a guess on this screen is what the ¥152,309 mis-filing was made of.
 addColumn('categories', 'needs_po',     'INTEGER');
-// ── A claim can be waiting for its goods (§113) ────────────────────────────
+// ── A claim can be waiting for its goods (§114) ────────────────────────────
 // awaiting_delivery — THE MONEY HAS GONE AND THE GOODS HAVE NOT ARRIVED. §111
 // part three left claims alone because "a claim is money already out of a
 // pocket — there is nothing to order and nothing to receive". True of a cook

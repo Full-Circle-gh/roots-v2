@@ -92,7 +92,7 @@ const VALID_INVOICE = new Set(['not_received', 'received', 'no_invoice']);
 
 // Next RPO number from the highest existing suffix (not a row count, so a
 // deleted PO can never cause a UNIQUE collision on po_number).
-// `handle` is optional and exists for ONE caller: §113's claim-raised order,
+// `handle` is optional and exists for ONE caller: §114's claim-raised order,
 // which numbers its PO inside an open transaction and must do it on that
 // transaction's handle. Everything in this file calls it with nothing and gets
 // tdb(), exactly as before. Taking the handle rather than letting the claim
@@ -3050,7 +3050,7 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
 });
 
 module.exports = router;
-// §113. The claim path raises an Ordered purchase order on approval and needs
+// §114. The claim path raises an Ordered purchase order on approval and needs
 // exactly these two: the number for the row it inserts, and the poster that puts
 // the cost in the books afterwards. EXPORTED RATHER THAN REIMPLEMENTED — the
 // poster is the one place that knows how a purchase order becomes money

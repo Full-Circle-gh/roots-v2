@@ -206,9 +206,9 @@ it('nothing in this route writes the ledger', () => {
   assert.ok(!/expense_entries/.test(ROUTE_CODE),
     '§87 part one: a claim reaches the books through APPROVAL, and only there');
 
-  /* THE TABLE RULE, NARROWED BY §113 RATHER THAN DROPPED.
+  /* THE TABLE RULE, NARROWED BY §114 RATHER THAN DROPPED.
      It used to read "one table, and it is the claim table". That was the right
-     shape while a claim could only ever become a ledger row — but §113 lets an
+     shape while a claim could only ever become a ledger row — but §114 lets an
      APPROVAL raise an Ordered purchase order for goods that have not arrived, so
      this file now writes `purchase_orders` and `po_line_items` too.
 
@@ -234,7 +234,7 @@ it('nothing in this route writes the ledger', () => {
 });
 
 it('only a DECISION can raise an order — the submit path writes the claim and nothing else', () => {
-  /* §113's half of §87 part one. An approval may now create a purchase order
+  /* §114's half of §87 part one. An approval may now create a purchase order
      that carries real money; a submission still may not create anything but a
      waiting claim, whatever its sender puts in the body. */
   const submit = ROUTE_CODE.match(/router\.post\('\/api\/retail-admin\/staff-expenses',[\s\S]*?\n}\);/);
@@ -309,7 +309,7 @@ it('the phone route exists and is gated on the key its own Submit is gated on', 
   assert.match(PHONE_CODE, /\['expense','banknote','Expense','费用申请'\]/);
 });
 
-it('§113 — the form asks whether it has arrived, and sends the answer', () => {
+it('§114 — the form asks whether it has arrived, and sends the answer', () => {
   assert.match(PHONE_CODE, /APP\.cmd\('expComing'\)/, 'the opt-in is on the form');
   assert.match(PHONE_CODE, /awaiting_delivery:!!x\.coming/, 'and the answer reaches the server');
   // AN OPT-IN, NOT A PAIR OF CHIPS. Unticked has to mean exactly what this form
@@ -324,7 +324,7 @@ it('§113 — the form asks whether it has arrived, and sends the answer', () =>
   assert.ok(!/expArrived|expNotComing/.test(PHONE_CODE), 'and no opposite command to pair it with');
 });
 
-it('§113 — the two things an order cannot do without are refused on the phone too', () => {
+it('§114 — the two things an order cannot do without are refused on the phone too', () => {
   // The server is the rule (lib/expense-claim.js); this is the same rule said
   // sooner, so the person is told beside the control rather than after a round
   // trip. Both sentences are the server's own.
@@ -336,7 +336,7 @@ it('§113 — the two things an order cannot do without are refused on the phone
   assert.match(CLAIM, /awaitingDelivery && !note/, 'both of them');
 });
 
-it('§113 — the flag does not survive onto the next claim', () => {
+it('§114 — the flag does not survive onto the next claim', () => {
   // "Record another" keeps who paid and which shop — facts about the person —
   // and clears what the claim was. Whether the LAST thing was still coming says
   // nothing about the next one, and a sticky flag would silently raise an order
@@ -345,7 +345,7 @@ it('§113 — the flag does not survive onto the next claim', () => {
     'the reset clears it with the amount and the note');
 });
 
-it('§113 — the approver is told before deciding, and can reach the order after', () => {
+it('§114 — the approver is told before deciding, and can reach the order after', () => {
   const FIN = codeOnly(read('public', 'retail-admin', '22-finance.js'));
   assert.match(FIN, /goes on a purchase order', '将记入采购单'/,
     'the meta line says approving this raises one');
@@ -353,7 +353,7 @@ it('§113 — the approver is told before deciding, and can reach the order afte
     'and once raised, the row opens it — the claim has no ledger row of its own to read');
 });
 
-it('§113 — the terms the two composed strings were built from are still live', () => {
+it('§114 — the terms the two composed strings were built from are still live', () => {
   /* The house rule for a composed pair: say where its Chinese came from, and
      FAIL if that source stops being live, so a rename cannot quietly orphan the
      composition. `到货` is `Arrives · 到货` on the purchasing screen and the

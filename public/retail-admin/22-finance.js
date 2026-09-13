@@ -2480,7 +2480,7 @@ function finAprRow(r) {
   const bits = [finTxDay(r.date)];
   if (r.category) bits.push(finCatLabel(r.category));
   bits.push(r.paid_by === 'employee' ? cuT('own money', '个人支付') : cuT('company', '公司'));
-  // §113. On the meta line beside whose money it was, because it is the same
+  // §114. On the meta line beside whose money it was, because it is the same
   // kind of fact about the purchase — and because an approver reads this line
   // before pressing anything.
   if (Number(r.awaiting_delivery) && !r.po_id) bits.push(cuT('goes on a purchase order', '将记入采购单'));
@@ -2495,7 +2495,7 @@ function finAprRow(r) {
     ? `<span class="fin-apr-mine">${escapeHtml(cuT('Your own claim', '本人提交'))}</span>`
     : '';
 
-  /* §113 — THE GOODS HAVE NOT ARRIVED, SO APPROVING THIS RAISES AN ORDER.
+  /* §114 — THE GOODS HAVE NOT ARRIVED, SO APPROVING THIS RAISES AN ORDER.
      Said BEFORE the decision, not only after it: approving a claim here normally
      writes a ledger row and nothing else, and an approver who was not told would
      find a purchase order in the buying list with no idea where it came from.

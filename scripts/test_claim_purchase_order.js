@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// A CLAIM WHOSE GOODS HAVE NOT ARRIVED RAISES THE ORDER THAT TRACKS THEM — §113.
+// A CLAIM WHOSE GOODS HAVE NOT ARRIVED RAISES THE ORDER THAT TRACKS THEM — §114.
 //
 //   node scripts/test_claim_purchase_order.js
 //
@@ -8,7 +8,7 @@
 // didn't arrive and it need tracking"*. §111 part three had left claims alone on
 // the reasoning that a claim is money already out of a pocket — nothing to
 // order, nothing to receive. True of a cook buying ginger; false of an appliance
-// still in transit, and §113 reverses it for that case.
+// still in transit, and §114 reverses it for that case.
 //
 // WHAT IS ACTUALLY AT RISK HERE IS DOUBLE-COUNTING. A claim posts one row keyed
 // on `claim_id`; an order posts rows keyed on `po_id`. A purchase that went
