@@ -20,7 +20,7 @@ const paMoney = n => (typeof acMoney === 'function' ? acMoney(Number(n) || 0) : 
 
 let PA_LOADED = false;
 let PA_PRODUCTS = [];   // server response
-/* §116 — THE PRODUCTS LIST SAYS NOTHING ABOUT SYNCING, ON PURPOSE.
+/* §117 — THE PRODUCTS LIST SAYS NOTHING ABOUT SYNCING, ON PURPOSE.
    §103 step 3 put a Channels column here: three dots per row, a fourth read of
    /channel-sync on every catalogue load, and a second place an operator had to
    learn what "needs attention" means. Ash, 2026-09-13: "I don't want anything
@@ -587,7 +587,7 @@ async function paLoad() {
   }
 }
 
-/* §116 — the Channels column, its loader and its dots are gone from this list
+/* §117 — the Channels column, its loader and its dots are gone from this list
    (see the note at the head of this file). What survived is the one helper the
    editor's Channels card still needs: the channel's display name, taken from
    29-channel-sync.js so the editor and the Channel sync page cannot name a

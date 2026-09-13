@@ -525,7 +525,7 @@ check('the glyph table is a pair per channel, never one character for both', () 
 check('the Products page takes the channel name from the shared table, not the server label', () => {
   const src = read('public/retail-admin/09-products.js');
   ok(/csChannelName/.test(src), 'the Products page should resolve names through csChannelName');
-  // The glyph half of this case went with the Channels column (§116) — there is
+  // The glyph half of this case went with the Channels column (§117) — there is
   // no glyph on this page any more. Section 11 asserts that removal directly.
   // The two display paths that used ch.label and shipped English into the
   // Chinese app: the dot's tooltip (gone) and the editor card's row + button.
@@ -842,7 +842,7 @@ check('both clients read the channel’s cause where the server offers one', () 
 });
 
 
-// ── 11. §116 · all syncing gathers in one place ──────────────────────────────
+// ── 11. §117 · all syncing gathers in one place ──────────────────────────────
 //
 // §103 step 3 answered "is this product's number right on this channel?" in
 // four places at once — a dot column on the Products list, this page, the
@@ -851,7 +851,7 @@ check('both clients read the channel’s cause where the server offers one', () 
 // halves of part one: the list says nothing about syncing, and Channel sync is
 // reached by a sub-nav that is the SAME OBJECT on both sections rather than a
 // button in a corner.
-section('11 · §116 · the products list is out of the syncing business');
+section('11 · §117 · the products list is out of the syncing business');
 
 check('the Products list carries no channel state of its own', () => {
   const src = read('public/retail-admin/09-products.js');

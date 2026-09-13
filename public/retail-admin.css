@@ -6454,16 +6454,22 @@
 
   /* The sync switch. On the old table it hid until the row was hovered, because
      248 of them at once was noise; in the panel there is exactly one per store
-     block and it is that block's own control, so it is simply visible. */
-  .mt-panel .toggle-label, .el-panel .toggle-label { display: inline-flex; align-items: center; }
-  .mt-panel .toggle-label input, .el-panel .toggle-label input { appearance: none; -webkit-appearance: none; margin: 0; width: 32px; height: 18px; border-radius: 999px; background: var(--td-border); border: none; position: relative; cursor: pointer; transition: background 200ms cubic-bezier(.16,1,.3,1); flex: none; }
-  .mt-panel .toggle-label input::after, .el-panel .toggle-label input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 999px; background: var(--td-surface); transition: left 200ms cubic-bezier(.16,1,.3,1); }
-  .mt-panel .toggle-label input:checked, .el-panel .toggle-label input:checked { background: var(--td-sage); }
-  .mt-panel .toggle-label input:checked::after, .el-panel .toggle-label input:checked::after { left: 17px; }
-  .mt-panel .toggle-label input:focus-visible, .el-panel .toggle-label input:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
+     block and it is that block's own control, so it is simply visible.
+
+     §117 part two — the Channel sync card's own switch is THIS switch, joined
+     to the selector rather than restyled beside it. A second set of values that
+     happened to match today is how the three channel pages came to look like
+     three channel pages; one selector cannot drift from itself. */
+  .mt-panel .toggle-label, .el-panel .toggle-label, #tab-channel-sync .cs-dcard .toggle-label { display: inline-flex; align-items: center; }
+  .mt-panel .toggle-label input, .el-panel .toggle-label input, #tab-channel-sync .cs-dcard .toggle-label input { appearance: none; -webkit-appearance: none; margin: 0; width: 32px; height: 18px; border-radius: 999px; background: var(--td-border); border: none; position: relative; cursor: pointer; transition: background 200ms cubic-bezier(.16,1,.3,1); flex: none; }
+  .mt-panel .toggle-label input::after, .el-panel .toggle-label input::after, #tab-channel-sync .cs-dcard .toggle-label input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 999px; background: var(--td-surface); transition: left 200ms cubic-bezier(.16,1,.3,1); }
+  .mt-panel .toggle-label input:checked, .el-panel .toggle-label input:checked, #tab-channel-sync .cs-dcard .toggle-label input:checked { background: var(--td-sage); }
+  .mt-panel .toggle-label input:checked::after, .el-panel .toggle-label input:checked::after, #tab-channel-sync .cs-dcard .toggle-label input:checked::after { left: 17px; }
+  .mt-panel .toggle-label input:focus-visible, .el-panel .toggle-label input:focus-visible, #tab-channel-sync .cs-dcard .toggle-label input:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) {
     .mt-panel .toggle-label input, .mt-panel .toggle-label input::after,
-    .el-panel .toggle-label input, .el-panel .toggle-label input::after { transition: none; }
+    .el-panel .toggle-label input, .el-panel .toggle-label input::after,
+    #tab-channel-sync .cs-dcard .toggle-label input, #tab-channel-sync .cs-dcard .toggle-label input::after { transition: none; }
   }
 
   /* A command to run on the box, on a store line. Not a monospace face — Tacet
@@ -10120,7 +10126,7 @@
   #tab-sales .td-head { align-items: center; flex-wrap: wrap; }
   .tds-actions { margin-left: auto; display: inline-flex; gap: 8px; }
 
-/* ── §116 · the Sales sub-nav ────────────────────────────────────────────────
+/* ── §117 · the Sales sub-nav ────────────────────────────────────────────────
    Overview and Channel sync are two views of one place, so they get a tab strip
    instead of a button in a corner. The strip is rendered IDENTICALLY on
    #tab-sales and #tab-channel-sync — that sameness is the whole point, and it
@@ -15522,8 +15528,18 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
 #tab-channel-sync .cs-dcard .cs-facts { color: var(--td-text2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
 #tab-channel-sync .cs-dcard .cs-store { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--td-text2); min-width: 0; }
 #tab-channel-sync .cs-dcard .cs-store span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#tab-channel-sync .cs-dcard .cs-fix { margin-top: 4px; }
-#tab-channel-sync .cs-dcard .cs-fix .btn { width: 100%; }
+/* §117 part two — the card repairs as well as reports, so its header now
+   carries the switch beside the state and its foot can carry two buttons. The
+   name takes the slack so the switch and the state stay together on the right;
+   with three children and nothing growing, space-between would strand the
+   state in the middle. */
+#tab-channel-sync .cs-dcard .cs-h > span:first-child { flex: 1 1 auto; min-width: 0; }
+/* A refusal, on the card that caused it. Amber and not red: nothing broke —
+   somebody else moved this row while the page was open, and the answer is to
+   look again. */
+#tab-channel-sync .cs-dcard .cs-note { color: var(--td-amber); font-size: 12.5px; }
+#tab-channel-sync .cs-dcard .cs-fix { margin-top: 4px; display: flex; gap: 8px; }
+#tab-channel-sync .cs-dcard .cs-fix .btn { flex: 1 1 0; width: auto; min-width: 0; }
 #tab-channel-sync .cs-empty { padding: 40px 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
 #tab-channel-sync .cs-foot { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 12px; font-variant-numeric: tabular-nums; }
 

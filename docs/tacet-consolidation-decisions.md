@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.249
+# Tacet shared-core consolidation — decisions record, v4.251
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,7 +23,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-13 · v4.249 — **§116 DECIDED: ALL SYNCING GATHERS IN ONE PLACE, AND THE PRODUCTS LIST SAYS NOTHING ABOUT IT. PART ONE BUILT.** Reported by Ash from the desktop products list: *"now on product list page on pc I see channels sync. I don't want that. I need all syncing should gather in one page."* **THE COMBINED PAGE ALREADY EXISTED AND NOBODY COULD FIND IT** — §103's `#tab-channel-sync` was reached by a `btn btn-sm` in the Sales header's corner, beside Get help, which is where an action goes when nobody has decided it is a destination. **FOUR SURFACES ANSWERED ONE QUESTION**: the products list's dot column (§103 step 3), the Channel sync page, the Meituan and Eleme tabs (twins), and GZ Grocery — which shares neither their layout, their sub-nav, nor their vocabulary and carries its own inline `<style>` block. Ash: *"we also need to sync both sections so they will have the same features and same style."* **THE DECISION IS NOT TO RESTYLE THREE PAGES INTO A FOURTH'S LIKENESS.** Three pages kept in step by hand drift, and GZ Grocery is the proof that they already have. **A CHANNEL'S SYNC VIEW BECOMES A STATE OF THE COMBINED PAGE** — same frame, same chips, same search, same list, the channel picker merely narrowing — approved by Ash with **"ok"** to that exact question. Nothing is left to drift because there is nothing left to keep in step. **CHANNEL ADMIN IS NOT SYNC AND DOES NOT MOVE**: credentials, Meituan's Bundles, and GZ Grocery's Billing/Statement stay on their own pages — Ash on Billing: *"it's got nothing to do with syncing products"*. **THE NAME STAYS `Channel sync · 渠道同步`**, against Ash's own *"channel sync manager or something like that"*, and he did not press it: the name is already live on the dashboard's alert row, the phone's nav row (`m.html`), the Sales button this replaces, and throughout §103–§107, and this repo's one-word-per-thing rule is worth more than the word "manager". **PART ONE, BUILT HERE**: the corner button becomes a **sub-nav rendered identically on `#tab-sales` and `#tab-channel-sync`** — same classes, same two buttons, only `active` moves, which is what makes it a sub-nav rather than two one-way links and is how the operator gets back; both stand in on the Sales rail row already (`RAIL_STANDIN`), so the rail does not move underneath the crossing. The products list loses the Channels column, its three dots, its `PA_CH_*` state, and **a fourth read of `/channel-sync` on every catalogue load**; `csOpenProduct` goes with the dots that were its only caller. **THE EDITOR'S CHANNELS CARD STAYS** (§103 step 4) — one product looked at in depth is not a second overview competing with the first, and Ash scoped the removal to *"the products list page"*. **PARTS TWO AND THREE ARE DECIDED AND NOT BUILT**: folding the Meituan and Eleme sync views into the one frame, and GZ Grocery after them; each is its own PR. **The remaining weakness is named rather than fixed here**: the combined page is read-only and every red row still ends in *Open Meituan*, so the operator is told what is wrong on one screen and must go to another to fix it. Part two carries the repair panel to where the problem is shown; that, not layout, is what Ash asked for with *"how to solve the problem easily"*. **No Chinese was composed**: `Channel sync · 渠道同步` is the button this replaces, and `Overview · 概览` is lifted verbatim from the GZ Grocery page's own sub-nav, which is this same control on a channel page — so no `docs/tacet-delivery-vocabulary.md` entry is due. No route, no schema, no migration, no new capability (the sub-nav's Channel sync tab carries the same any-of gate as `TAB_CAP['channel-sync']`), and no change to `.gitignore` or CI.**
+2026-09-13 · v4.251 — **§117 PART TWO BUILT: THE CHANNEL SYNC PAGE REPAIRS AS WELL AS REPORTS — AND IT IS NARROWER THAN PART ONE PROMISED, ON PURPOSE.** Part one recorded part two as *"fold the Meituan and Eleme sync views into the one frame, and carry the repair panel into depth 3"*. **THE FOLD WAS NOT BUILT AND THE SURVEY SAID WHY.** The channel views are a one-line-per-product list plus a side panel; this page ALREADY has a one-line list — its table — and the channel picker already narrows it, so folding `mt-list`/`el-list` in would add a second list to the page that replaced them. And the panel could not be shared: all three channels write through `/products/:id/map` and **the three payloads agree on exactly one field, `sync_enabled`** — Meituan sends `meituanName` through `lib/meituan-map-write`, Eleme `elemeName` plus a spec pair, an `extendCode` and a `remove` flag, GZ Grocery a `skuId` and no store field at all. A panel driving all three would carry that difference on the one page §117 exists to take it off. **SO THE LINE WAS DRAWN AT THE TWO VERBS THE CHANNELS ALREADY SHARE UNDERNEATH**: every map table has `sync_enabled`, every queue table takes the same five columns. New `lib/channel-sync-write.js` is those two verbs for all three channels; `routes/channel-sync.js`, until now a read, carries them. **Between them they clear four of the seven reasons an item can need attention** — `sync_off` by the switch, `push_failed`/`wrong_number`/`never_synced` by the push — and every amber row keeps its button to the channel's own tab for the three that need that channel's catalogue picker (`no_name`, `name_not_found`, `no_option`). **THE PUSH IS ALSO THE RETRY FOR A DEFECT ALREADY ON FILE**: the daemon picks up only `pending`, so an item whose last push errored sits there forever (`docs/meituan-findings.md` #6; a session on 2026-09-12 found Black Beans stuck amber for exactly this), and a fresh pending row is both the retry and the fix because the verdict reads the latest queue row. **A PENDING ROW IS REFRESHED, NEVER DUPLICATED** — push-all's own comment carries the scar, *"877 pending for 208 products"*, and this button is worse placed for it. **THE TRAP THE SURVEY CAUGHT: GZ Grocery's pre-order key is `gzgrocery`, not `guanyi`** — every other surface calls it `guanyi`, `lib/channel-publish` knows it only as `gzgrocery`, and getting it wrong drops §85's allowance from every GZ Grocery push invisibly until a pre-order window closes itself; the test pins the key to the string `routes/guanyi-admin.js` itself passes, so the two cannot drift. **THE SWITCH IS THE CHANNEL PANELS' SWITCH**, joined to the `.mt-panel`/`.el-panel` `toggle-label` selector group rather than given matching values of its own — and a careless first attempt at that widening dropped ` input` from the Eleme half, which the suite now asserts per suffix. **Both writes are gated** (`push` → `{channel}:sync`, the switch → `{channel}:map`); `lib/cap-routes.js` **fails open for a mutation it does not know**, so all six paths are asserted. **Chinese: nothing composed** — `Sync now · 立即同步` and `Sync on / off · 同步开关` are the Meituan and Eleme panels' own, and the two refusals carry `row_moved`'s pair verbatim because they are the same fact. **Tests:** new `scripts/test_channel_sync_write.js` — **26 cases**, auto-discovered into the fast shard, every key rule confirmed red against a deliberate break (and one case rewritten when the break showed it was not exercising the 套餐 guard it claimed to). `npm run test:fast` 225 passed, 0 failed; eslint 0 errors; doc-numbering PASS. Two new routes, no schema, no migration, no new capability, and no change to `.gitignore` or CI.**
+
+2026-09-13 · v4.250 — **§117 DECIDED: ALL SYNCING GATHERS IN ONE PLACE, AND THE PRODUCTS LIST SAYS NOTHING ABOUT IT. PART ONE BUILT.** Reported by Ash from the desktop products list: *"now on product list page on pc I see channels sync. I don't want that. I need all syncing should gather in one page."* **THE COMBINED PAGE ALREADY EXISTED AND NOBODY COULD FIND IT** — §103's `#tab-channel-sync` was reached by a `btn btn-sm` in the Sales header's corner, beside Get help, which is where an action goes when nobody has decided it is a destination. **FOUR SURFACES ANSWERED ONE QUESTION**: the products list's dot column (§103 step 3), the Channel sync page, the Meituan and Eleme tabs (twins), and GZ Grocery — which shares neither their layout, their sub-nav, nor their vocabulary and carries its own inline `<style>` block. Ash: *"we also need to sync both sections so they will have the same features and same style."* **THE DECISION IS NOT TO RESTYLE THREE PAGES INTO A FOURTH'S LIKENESS.** Three pages kept in step by hand drift, and GZ Grocery is the proof that they already have. **A CHANNEL'S SYNC VIEW BECOMES A STATE OF THE COMBINED PAGE** — same frame, same chips, same search, same list, the channel picker merely narrowing — approved by Ash with **"ok"** to that exact question. Nothing is left to drift because there is nothing left to keep in step. **CHANNEL ADMIN IS NOT SYNC AND DOES NOT MOVE**: credentials, Meituan's Bundles, and GZ Grocery's Billing/Statement stay on their own pages — Ash on Billing: *"it's got nothing to do with syncing products"*. **THE NAME STAYS `Channel sync · 渠道同步`**, against Ash's own *"channel sync manager or something like that"*, and he did not press it: the name is already live on the dashboard's alert row, the phone's nav row (`m.html`), the Sales button this replaces, and throughout §103–§107, and this repo's one-word-per-thing rule is worth more than the word "manager". **PART ONE, BUILT HERE**: the corner button becomes a **sub-nav rendered identically on `#tab-sales` and `#tab-channel-sync`** — same classes, same two buttons, only `active` moves, which is what makes it a sub-nav rather than two one-way links and is how the operator gets back; both stand in on the Sales rail row already (`RAIL_STANDIN`), so the rail does not move underneath the crossing. The products list loses the Channels column, its three dots, its `PA_CH_*` state, and **a fourth read of `/channel-sync` on every catalogue load**; `csOpenProduct` goes with the dots that were its only caller. **THE EDITOR'S CHANNELS CARD STAYS** (§103 step 4) — one product looked at in depth is not a second overview competing with the first, and Ash scoped the removal to *"the products list page"*. **PARTS TWO AND THREE ARE DECIDED AND NOT BUILT**: folding the Meituan and Eleme sync views into the one frame, and GZ Grocery after them; each is its own PR. **The remaining weakness is named rather than fixed here**: the combined page is read-only and every red row still ends in *Open Meituan*, so the operator is told what is wrong on one screen and must go to another to fix it. Part two carries the repair panel to where the problem is shown; that, not layout, is what Ash asked for with *"how to solve the problem easily"*. **No Chinese was composed**: `Channel sync · 渠道同步` is the button this replaces, and `Overview · 概览` is lifted verbatim from the GZ Grocery page's own sub-nav, which is this same control on a channel page — so no `docs/tacet-delivery-vocabulary.md` entry is due. No route, no schema, no migration, no new capability (the sub-nav's Channel sync tab carries the same any-of gate as `TAB_CAP['channel-sync']`), and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.248 — **§114 DECIDED AND BUILT: A PURCHASE THAT HAS NOT ARRIVED IS TRACKED AS AN ORDER, WHOEVER PAID FOR IT — DECIDED BY ASH, AND IT REVERSES §111 PART THREE.** The case that broke it, in his words: *"an employee use the company money to buy a food processor. it wasn't the person that do purchasing... the item didn't arrive and it need tracking"*. §111 part three had left claims alone because *a claim is money already out of a pocket — there is nothing to order and nothing to receive*; **true of a cook buying ginger, false of an appliance still in transit**, where the money is gone AND the goods are owed. Neither door held it: the claim path has no delivery to track, and the order path sits behind `purchasing:edit`, which the floor presets withhold on purpose. **Ash ruled twice**: the APPROVER raises the order from the claim (so nobody gains a capability), and it applies to the employee's OWN money too (the order tracks the delivery and owns the cost; the debt stays on the claim). **THREE FINDINGS MADE IT CHEAP**: `store_manager` already holds `purchasing:receive`, so the missing half was never the tracking but the CREATION; *paid, not yet arrived* is a state the record already has (`postRetailPOExpenses` posts on Ordered, `Delivered` seeds `qty_received`), so the order is raised at Ordered and never as a draft — a draft posts nothing and the money has already gone; and §111 part one's TYPED LINE is what carries a food processor, which is in no catalogue, so this could not have been built a day earlier. **THE MONEY IS POSTED ONCE**: `postClaim` writes nothing for a claim awaiting its delivery — keyed on `awaiting_delivery` and NOT on `po_id`, because on a first approval the order does not exist yet when it runs, and a `po_id` test would leave the same purchase in the books twice. **REJECT AND VOID ARE REFUSED while an order stands** (§114 part four): the claim has no ledger row of its own to take back, and cancelling the order behind the scenes would reach into a document that may already have been received — the refusal names Cancel order instead. **THE OWED FIGURE COSTS NOTHING**, verified rather than assumed: it reads status + paid_by + settled and never `expense_id`, so an employee who laid out their own money is still owed it and **Mark paid** still settles it. A claim marked *not arrived* must name a shop and a description — goods turn up at a door, and §111 part one refuses a line with no name. **Tests:** new `scripts/test_claim_purchase_order.js` (**47 cases**, both routers real, inventory stubbed but RECORDING), and `test_staff_expenses.js` 75 → **82 cases**, whose file-wide *one table, and it is the claim table* guard is NARROWED rather than dropped — the allowed set is named, the two new tables are pinned to `raiseOrderForClaim`, and a new case proves the SUBMIT path still writes the claim and nothing else, which is the assertion that actually carries §87 part one and which the old regex only implied. `npm run test:fast` 223 passed, 0 failed; eslint 0 errors; doc-numbering PASS. **Three composed strings and one taken whole**, all declared in `docs/tacet-delivery-vocabulary.md` v1.72 with a test case that re-reads each source and fails if a term stops being live. Two migrations (`staff_expenses.awaiting_delivery`, `po_id`), no new route, no new capability, and no change to `.gitignore` or CI.**
 
@@ -12882,7 +12884,7 @@ new string — *Kitchen queue · 3 more to make* — was restructured into the n
 plus a numeral instead, which is the preference `CLAUDE.md` states.
 
 
-## §116 — ALL SYNCING GATHERS IN ONE PLACE, AND THE PRODUCTS LIST SAYS NOTHING ABOUT IT
+## §117 — ALL SYNCING GATHERS IN ONE PLACE, AND THE PRODUCTS LIST SAYS NOTHING ABOUT IT
 
 **2026-09-13 · decided by Ash. Part one built the same day; parts two and three are
 decided and not built.**
@@ -12954,20 +12956,82 @@ with the dots that were their only caller.
 looked at in depth is not a second overview competing with the first, and Ash scoped the
 removal to *"the products list page"*. `_paChName` survives because that card needs it.
 
-### Parts two and three — decided, not built
+### Part two — built, and NARROWER than part one promised
 
-- **Part two:** fold the Meituan and Eleme sync views into the one frame, and carry the
-  repair panel into depth 3.
-- **Part three:** GZ Grocery into the same frame. Billing and Mapping stay on its page.
+Part one wrote: *"fold the Meituan and Eleme sync views into the one frame, and carry the
+repair panel into depth 3."* **The fold was not built, and on the survey it turned out not
+to be the thing worth building.** What was built is the repair. The record of why:
 
-One PR each (working rules: one PR per change).
+**THE FOLD WOULD HAVE BUILT A THIRD LIST.** The Meituan and Eleme sync views are a
+one-line-per-product list with a side panel. This page already has a
+one-line-per-product list — its table — and the channel picker already narrows it to one
+channel. Rebuilding `mt-list` / `el-list` inside it would add a second list to the page
+that replaced them, to show the same rows.
 
-### The weakness this part does not fix, named so it is not mistaken for finished
+**THE PANEL COULD NOT BE SHARED, AND THE SURVEY SAID SO IN THE ROUTES.** All three
+channels write through `/products/:id/map`, and the three payloads agree on exactly one
+field — `sync_enabled`. Meituan sends `meituanName` through `lib/meituan-map-write`; Eleme
+sends `elemeName` plus a spec pair, an `extendCode` and a `remove` flag; GZ Grocery sends a
+`skuId` and has no store field at all because it has one store. A panel driving all three
+would carry that difference on the page §117 exists to take it off.
 
-The combined page is **read-only**. Every red row ends in *Open Meituan*. The operator is
-told what is wrong on one screen and must travel to another to fix it. That — not
-layout — is what *"how to solve the problem easily"* was asking for, and part two is
-where it is answered.
+**SO THE LINE WAS DRAWN AT THE VERBS THE CHANNELS ALREADY SHARE**, and there are two:
+every map table has `sync_enabled`, and every queue table takes the same five columns.
+`lib/channel-sync-write.js` is those two verbs for all three channels, and
+`routes/channel-sync.js` — until now a read — carries them. **Between them they clear four
+of the seven reasons an item can need attention**: `sync_off` by the switch;
+`push_failed`, `wrong_number` and `never_synced` by the push. The other three —
+`no_name`, `name_not_found`, `no_option` — need the channel's own catalogue picker, and
+every amber row keeps the button to the channel's tab for them.
+
+**THE PUSH IS ALSO THE RETRY, AND THAT WAS ALREADY A KNOWN DEFECT.** The daemon picks up
+only `pending` rows, so an item whose last push errored sits there forever
+(`docs/meituan-findings.md` #6, and a session on 2026-09-12 that found Black Beans stuck
+amber for exactly this). A fresh pending row is both the retry and the fix: the verdict
+reads the latest queue row per (store, product), so the item leaves *needs attention* the
+moment it lands.
+
+**A PENDING ROW IS REFRESHED, NEVER DUPLICATED.** `routes/meituan-admin.js`'s push-all
+carries the scar in its own comment — *"877 pending for 208 products"* — and this button
+is worse placed for it, sitting next to a red row where it gets pressed twice.
+
+**THE TRAP THE SURVEY CAUGHT: GZ Grocery's pre-order key is `gzgrocery`, not `guanyi`.**
+Every surface in this codebase calls that channel `guanyi`; `lib/channel-publish` knows it
+only as `gzgrocery`, which is the string `routes/guanyi-admin.js`'s own push-all passes.
+Getting it wrong drops §85's allowance from every GZ Grocery push and looks like nothing at
+all until a pre-order window closes itself. The mapping lives in one table and the test
+pins it to the route rather than to a literal, so the two cannot drift apart.
+
+**THE SWITCH IS THE CHANNEL PANELS' SWITCH.** `toggle-label` was styled under
+`.mt-panel` / `.el-panel`; the Channel sync card is joined to that selector group rather
+than given matching values of its own. A second set of numbers that happens to match today
+is how three channel pages came to look like three channel pages.
+
+**Chinese: nothing composed.** `Sync now · 立即同步` is `11-meituan.js`'s own push button;
+`Sync on / off · 同步开关` is the title on both the Meituan and the Eleme panel switches.
+The two refusals (`not_mapped`, `not_syncing`) carry `row_moved`'s existing pair verbatim
+from `TD_ERR` — they are the same fact from the operator's side, *somebody moved this while
+you had it open*, so they say it in the same words rather than two new ones.
+
+**Both writes are gated** in `lib/cap-routes.js`: `push` answers `{channel}:sync` (the
+same verb as push-all, one item wide), the switch answers `{channel}:map` (it changes a
+mapping). That file **fails open for a mutation it does not know**, so a write missing
+from it has no gate at all — which is why the test asserts all six.
+
+### Part three — decided, not built
+
+**GZ Grocery's page into the frame.** It is the one channel page that shares neither the
+other two's layout nor their sub-nav, and it carries its own inline `<style>` block.
+Billing/Statement and Mapping stay on it — Ash: *"it's got nothing to do with syncing
+products"*. Its own PR (working rules: one PR per change).
+
+### What part two still does not fix
+
+The three picker reasons — `no_name`, `name_not_found`, `no_option` — still send the
+operator to the channel's tab. That is deliberate and recorded above, not an oversight: it
+is where the three channels genuinely differ. If it turns out to be the common case in
+practice rather than the tail, the answer is a shared listing-name picker fed by the
+catalogue this endpoint already reads — **not** three pickers on one page.
 
 ### The phone
 
