@@ -2832,6 +2832,52 @@ router.get('/api/retail/products/:id', (req, res) => {
     ).all(...optionIds);
     for (const c of choices) (choicesByOpt[c.option_id] ||= []).push(c);
   }
+  // WHETHER A STOCK-BACKED PAID EXTRA CAN STILL BE GIVEN. A choice carrying a
+  // stock_product_id is a real thing on a shelf — expandStockLines reserves and
+  // commits its inventory alongside the main product — so when it runs out the
+  // client must grey it out rather than sell it. Both clients have always asked
+  // this question as `addon_available === false` (miniapp product.js and
+  // add-to-order.js); NOTHING HAS EVER ANSWERED IT. The field was read in two
+  // places and written in none, so the comparison was never true, the sold-out
+  // guard never fired, and a shopper could buy — and be billed for — an extra
+  // the counter had run out of.
+  //
+  // The stock question is the SAME ONE the product itself is asked (real_stock
+  // above and on every storefront list): sellableStockSql, i.e. the whole
+  // company's sellable count. This is the online storefront, which does not
+  // route to one location until checkout, so a per-store count would be an
+  // answer to a question nobody has asked yet.
+  //
+  // A choice with NO stock_product_id is untouched and carries no flag at all:
+  // a sugar level or a cutlery pick has no shelf, and `!!c.stock_product_id &&`
+  // in both clients already guards that arm. Absent stays "not applicable",
+  // never "sold out".
+  const addonIds = [...new Set(
+    Object.values(choicesByOpt).flat()
+      .map(c => c.stock_product_id).filter(Boolean)
+  )];
+  if (addonIds.length) {
+    const ph = addonIds.map(() => '?').join(',');
+    const stockRows = tdb().prepare(
+      `SELECT id, ${inventory.sellableStockSql('store_products.id', 'stock_qty')} AS stock,
+              is_published, is_active, ship_from_supplier, supplier_paused
+         FROM store_products WHERE id IN (${ph})`
+    ).all(...addonIds);
+    const availById = new Map(stockRows.map(r => [r.id, (
+      // Unpublished or deactivated: the extra is not sellable at all. An id
+      // pointing at a row that no longer exists never reaches the map and is
+      // answered `false` below — a dangling link cannot be honoured either.
+      (!r.is_published || !r.is_active) ? false
+        // Supplier-direct add-on: we hold none of it, so our own count says
+        // nothing. It is available unless the supplier is paused — the same
+        // reading the product path takes for a ship_from_supplier line.
+        : r.ship_from_supplier ? !r.supplier_paused
+          : Number(r.stock) > 0
+    )]));
+    for (const c of Object.values(choicesByOpt).flat()) {
+      if (c.stock_product_id) c.addon_available = availById.get(c.stock_product_id) === true;
+    }
+  }
   product.options = options.map(o => ({ ...o, choices: choicesByOpt[o.id] || [] }));
 
   // Variant siblings — every purchasable product in the same variant_group_id

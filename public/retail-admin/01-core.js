@@ -260,6 +260,13 @@ const TD_ERR = {
   request_failed:         ['That did not go through. Try again.', '请求未成功,请重试。'],
   timeout:                ['That took too long and was stopped. Try again.', '请求超时已中止,请重试。'],
   row_moved:              ['Somebody else changed this while you had it open — reload and try again.', '该记录已被他人修改,请刷新后重试。'],
+  /* §117 part two — the two refusals the Channel sync page's own writes can
+     give. BOTH ARE THE SAME FACT FROM THE OPERATOR'S SIDE: the mapping was
+     removed, or its switch was turned off, since this page was painted. That
+     is row_moved, so they carry row_moved's sentence verbatim rather than two
+     new ones saying it again in different words. */
+  not_mapped:             ['Somebody else changed this while you had it open — reload and try again.', '该记录已被他人修改,请刷新后重试。'],
+  not_syncing:            ['Somebody else changed this while you had it open — reload and try again.', '该记录已被他人修改,请刷新后重试。'],
   cycle:                  ['That would make something contain itself.', '该操作会造成循环引用。'],
 };
 

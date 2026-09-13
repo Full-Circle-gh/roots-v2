@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.249
+# Tacet shared-core consolidation — decisions record, v4.254
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,16 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-13 · v4.254 — **§120 DECIDED: THE QR MENU ASKS THE QUESTIONS THE COUNTER WOULD HAVE ASKED — DECIDED BY ASH, who answered both open questions and then said *"do all as you see fit"*.** Asked whether the QR menu has variant options, the answer was flatly no: it sells a flat row, tap Add and get one unit, and it reads NEITHER of the two choice mechanisms this system already has. **THE SURVEY IS THE VALUABLE HALF and it shrank the job from days to about one:** `options_json` on `retail_order_items` already exists and the web/mini-app checkout already fills it; `lib/feie.js` already prints every chosen option with its question in both languages on both templates; and the till NEVER re-prices a QR order — `recall()` loads it read-only and the settle path only marks it paid — so base-plus-extras needs nothing from the till but a line that shows what was chosen. **TWO RULES DECIDED BY ASH: a sold-out paid extra greys out and the drink still sells (1A), and a required question BLOCKS and names itself (2B).** **NO CHINESE COMPOSED** — `请选择 ` + the question is the storefront's own required-option toast and the mini app's, character for character, and the vocabulary document is not touched. **AND THE PRECEDENT THIS WAS ABOUT TO COPY TURNED OUT TO BE DEAD CODE:** `addon_available` was read by both mini-app surfaces and written nowhere in the repository, so the sold-out-extra guard had never once fired and a shopper could be billed for an extra the counter had run out of. Fixed separately, one PR per change, before this build starts. **NUMBERED §120, NOT §117.** This was drafted and its PR opened as §117 while that number was free; three sections (§117, §118, §119) landed on main from other sessions in the hours it sat open. A number is permanent once it is ON MAIN, so the unmerged one moves — and the doc-numbering check is what caught it.
+
+2026-09-13 · v4.253 — **§119 DECIDED AND BUILT: TWO SCREENS THAT ARRIVE FROM DIFFERENT PLACES DO NOT SHARE A NAME — DECIDED BY ASH in three words, *"yes do it"*, on the evidence §118 had just produced.** Two of option A's four renames are adopted; **its grouping and its three pills remain undecided**, and `Invoices` is deliberately left alone because batch three already folds that row into Orders. **THE DEFECT WAS GREPPED BEFORE IT WAS CALLED CLOSED, and it went four levels deeper than the row it was reported on**: `Receiving` and `Receive delivery` shared `收货` in both row labels, in **both screen titles**, in **three buttons inside the transfer screen** (two back rows and one step-back control, all rendering `T('Receiving','收货')` — the screen calling itself by the other row's name), and in `SUBS.receive`'s `backLabel`. **Eleven sites, one change.** `收货` STAYS WITH THE SUPPLIER FLOW — it is correct there and 48 other uses put it there, so the supplier row changes **in English alone** (`Receive from a supplier`) and only the transfer flow takes a new Chinese label, `调拨收货`, **copied from that screen's own error copy** rather than composed. `Delivery` → `Delivery settings · 配送设置` closes the second, unrelated defect in the same list: zones, holiday mode and a printer, the only configuration screen among twenty-one tasks, which the design canvas had already drawn as an A4 Console. **THE TWO BACK CONTROLS ARE NOT THE SAME CONTROL**: the two back ROWS go to the screen's own list and take its name, while the third goes back one STEP, so it says `Back to the count · 返回清点` — the one composed string, and composed precisely because the screen's name on it would have put one label on two destinations. **§118 NEEDED NO EDIT**: its rule 1 (a question reads its destination's label off the More row) meant the strip picked both new names up for free — and the Chinese render of that strip showing `收货` twice is what turned this rename from an argument into an observation. **A GUARD THAT HAD STOPPED GUARDING**: `test_mobile_nav.js` proved a view-only buyer is not offered the receiving row by asserting the word `Receiving` was absent — which a renamed row satisfies whether or not the row is shown. Re-pointed at the row KEY, as were the two assertions proving the old `/stock` launcher is gone, one of which read the absence of `调拨` — characters the new label contains. **A guard written against a label is a guard a rename can silently retire.** **RECORDED AGAINST THIS SESSION: the fast shard missed a real defect.** `state.askOpen` was read but never declared in the state literal, and the only thing that found it was `test_mobile_screens.js`'s static state-key guard — **in the slow shard, which this repo does not run.** Declared, and `test_mobile_ask_strip.js` gained a red-proofed case asserting it in the FAST shard, where the gate can see it. **Tests:** `test_mobile_ask_strip.js` 10 → **12 checks** (the collision guard INVERTED — it asserted the collision was still open, and now asserts the two flows never share a name in either language, plus the extent); `test_mobile_nav.js` **100 assertions across 38 cases** green with three re-pointed; `test_mobile_receiving.js` 181/45, `test_mobile_home.js` 153/46, `test_mobile_purchasing.js` 48/11 all green. **One composed string, one live pair copied, one lift and two English-only changes**, declared in `docs/tacet-delivery-vocabulary.md` v1.76 with the rejected candidates — including `供应商收货`, which would have moved a Chinese label that was never wrong. No route, no schema, no migration, no new capability, no CSS file, and no change to `.gitignore` or CI.**
+
+2026-09-13 · v4.252 — **§118 DECIDED AND BUILT: THE OPERATIONS MENU IS ENTERED BY THE JOB, IN THE OPERATOR'S OWN WORDS — DECIDED BY ASH, who chose OPTION B over the recommendation.** The brief: *"it's not clear for any [account] every feature of operation… starting with the name, explanation, etc."* Twenty-two rows under one heading, labelled with bare nouns. `docs/tacet-operations-clarity-options.md` drew two options and recommended **A** (group by the job, three pills, four renames); Ash picked **B** (plain questions above the list), and the argument is kept unedited because a record whose losing option has been tidied away cannot be re-checked. **THE PREDICTED BLOCKER DISSOLVED ON CONTACT.** The options document said B's first row would answer one question with two destinations and called that B's honest limit — and the session opened by telling Ash B therefore *depended* on A's renames. **Both readings were wrong**, and §115 corrects them rather than quietly dropping them: B asks **two** questions — *Something arrived from a supplier* / *from another shop* — each going straight to its screen, so the distinction lives in the words somebody is reading at the moment they need it, and B needs no rename at all. **THE 收货 COLLISION IS THEREFORE STILL OPEN, AND ITS EXTENT IS NOW MEASURED**: `Receiving` and `Receive delivery` share `收货` in both row labels (`m.html:4139`, `:4169`), in **both screen titles** (`:11565`, `:10844`), and the transfer screen labels its own back and count buttons `T('Receiving','收货')` (`:10385`, `:10397`, `:10412`) — the other row's name. A Chinese render of the new strip shows the two questions' second lines reading `收货` and `收货`, which is the argument for A's rename OBSERVED rather than predicted. **FIVE RULES** hold the strip: a question resolves its destination through the More row so a later rename moves both and the strip can never offer a screen the list does not; the gate is the row's presence in `moreRowsFlat()` (already capability-filtered) plus the Features switch presence cannot cover; it collapses and the choice is kept on the phone like the theme and the language, because seven questions above twenty-two rows is a gift to a new account and an imposition on somebody who has known the list for a year; seven questions, rationed to the five confusable clusters plus the two rows that are hard to FIND; and **no icon on a question row**, or the two layers read as one list of twenty-nine. **NOT ONE ROW MOVED** — `MORE_GROUPS` is read here and never rewritten, no row key changed, so `ROUTE_CAP`, `SUBS` and every stored Quick-actions preference are untouched, and **option A is neither adopted nor rejected**. **Chinese:** one string composed (`你需要做什么？`, `你` over `您` on the neighbouring screen's evidence, not a count), one pair taken whole (`需要补货`), one collapse pair copied minus its noun, and six lifts — all declared in `docs/tacet-delivery-vocabulary.md` v1.75 with the rejected candidates beside them, including why `收货` is spent on neither question. **Tests:** new `scripts/test_mobile_ask_strip.js` — **10 checks, reads only, FAST shard and part of the gate**, deliberately not a render pass: browser suites go in the slow shard, which this repo does not run. **Three red-proofed** by restating a row label in the table, adding an icon well, and mounting the strip below the rows — each failed as it should. Its first draft passed a `rowico` it found in an unrelated screen seven hundred lines away, so the slice is bounded to the strip's own source and says so. `npm run test:fast` **224 passed, 0 failed** on its own branch and **225 passed, 0 failed** after merging origin/main TWICE — §115 (the kitchen-job back row, 139 lines of `public/m.html`) and §116 (the customer section, 783 more) both landed mid-build, both merged automatically, and their suites were re-run green against the result; eslint 0 errors; doc-numbering PASS. **This section is §118 because §115 and §116 were each taken while it was being written**, which is the permanent-numbering rule doing its job rather than a renumber. Rendered and read back in both languages and at three capability levels (owner 7 questions, a receiver 2, collapsed 0). **No route, no schema, no migration, no new capability, no CSS file, and no change to `.gitignore` or CI.**
+
+2026-09-13 · v4.251 — **§117 PART TWO BUILT: THE CHANNEL SYNC PAGE REPAIRS AS WELL AS REPORTS — AND IT IS NARROWER THAN PART ONE PROMISED, ON PURPOSE.** Part one recorded part two as *"fold the Meituan and Eleme sync views into the one frame, and carry the repair panel into depth 3"*. **THE FOLD WAS NOT BUILT AND THE SURVEY SAID WHY.** The channel views are a one-line-per-product list plus a side panel; this page ALREADY has a one-line list — its table — and the channel picker already narrows it, so folding `mt-list`/`el-list` in would add a second list to the page that replaced them. And the panel could not be shared: all three channels write through `/products/:id/map` and **the three payloads agree on exactly one field, `sync_enabled`** — Meituan sends `meituanName` through `lib/meituan-map-write`, Eleme `elemeName` plus a spec pair, an `extendCode` and a `remove` flag, GZ Grocery a `skuId` and no store field at all. A panel driving all three would carry that difference on the one page §117 exists to take it off. **SO THE LINE WAS DRAWN AT THE TWO VERBS THE CHANNELS ALREADY SHARE UNDERNEATH**: every map table has `sync_enabled`, every queue table takes the same five columns. New `lib/channel-sync-write.js` is those two verbs for all three channels; `routes/channel-sync.js`, until now a read, carries them. **Between them they clear four of the seven reasons an item can need attention** — `sync_off` by the switch, `push_failed`/`wrong_number`/`never_synced` by the push — and every amber row keeps its button to the channel's own tab for the three that need that channel's catalogue picker (`no_name`, `name_not_found`, `no_option`). **THE PUSH IS ALSO THE RETRY FOR A DEFECT ALREADY ON FILE**: the daemon picks up only `pending`, so an item whose last push errored sits there forever (`docs/meituan-findings.md` #6; a session on 2026-09-12 found Black Beans stuck amber for exactly this), and a fresh pending row is both the retry and the fix because the verdict reads the latest queue row. **A PENDING ROW IS REFRESHED, NEVER DUPLICATED** — push-all's own comment carries the scar, *"877 pending for 208 products"*, and this button is worse placed for it. **THE TRAP THE SURVEY CAUGHT: GZ Grocery's pre-order key is `gzgrocery`, not `guanyi`** — every other surface calls it `guanyi`, `lib/channel-publish` knows it only as `gzgrocery`, and getting it wrong drops §85's allowance from every GZ Grocery push invisibly until a pre-order window closes itself; the test pins the key to the string `routes/guanyi-admin.js` itself passes, so the two cannot drift. **THE SWITCH IS THE CHANNEL PANELS' SWITCH**, joined to the `.mt-panel`/`.el-panel` `toggle-label` selector group rather than given matching values of its own — and a careless first attempt at that widening dropped ` input` from the Eleme half, which the suite now asserts per suffix. **Both writes are gated** (`push` → `{channel}:sync`, the switch → `{channel}:map`); `lib/cap-routes.js` **fails open for a mutation it does not know**, so all six paths are asserted. **Chinese: nothing composed** — `Sync now · 立即同步` and `Sync on / off · 同步开关` are the Meituan and Eleme panels' own, and the two refusals carry `row_moved`'s pair verbatim because they are the same fact. **Tests:** new `scripts/test_channel_sync_write.js` — **26 cases**, auto-discovered into the fast shard, every key rule confirmed red against a deliberate break (and one case rewritten when the break showed it was not exercising the 套餐 guard it claimed to). `npm run test:fast` 225 passed, 0 failed; eslint 0 errors; doc-numbering PASS. Two new routes, no schema, no migration, no new capability, and no change to `.gitignore` or CI.**
+
+2026-09-13 · v4.250 — **§117 DECIDED: ALL SYNCING GATHERS IN ONE PLACE, AND THE PRODUCTS LIST SAYS NOTHING ABOUT IT. PART ONE BUILT.** Reported by Ash from the desktop products list: *"now on product list page on pc I see channels sync. I don't want that. I need all syncing should gather in one page."* **THE COMBINED PAGE ALREADY EXISTED AND NOBODY COULD FIND IT** — §103's `#tab-channel-sync` was reached by a `btn btn-sm` in the Sales header's corner, beside Get help, which is where an action goes when nobody has decided it is a destination. **FOUR SURFACES ANSWERED ONE QUESTION**: the products list's dot column (§103 step 3), the Channel sync page, the Meituan and Eleme tabs (twins), and GZ Grocery — which shares neither their layout, their sub-nav, nor their vocabulary and carries its own inline `<style>` block. Ash: *"we also need to sync both sections so they will have the same features and same style."* **THE DECISION IS NOT TO RESTYLE THREE PAGES INTO A FOURTH'S LIKENESS.** Three pages kept in step by hand drift, and GZ Grocery is the proof that they already have. **A CHANNEL'S SYNC VIEW BECOMES A STATE OF THE COMBINED PAGE** — same frame, same chips, same search, same list, the channel picker merely narrowing — approved by Ash with **"ok"** to that exact question. Nothing is left to drift because there is nothing left to keep in step. **CHANNEL ADMIN IS NOT SYNC AND DOES NOT MOVE**: credentials, Meituan's Bundles, and GZ Grocery's Billing/Statement stay on their own pages — Ash on Billing: *"it's got nothing to do with syncing products"*. **THE NAME STAYS `Channel sync · 渠道同步`**, against Ash's own *"channel sync manager or something like that"*, and he did not press it: the name is already live on the dashboard's alert row, the phone's nav row (`m.html`), the Sales button this replaces, and throughout §103–§107, and this repo's one-word-per-thing rule is worth more than the word "manager". **PART ONE, BUILT HERE**: the corner button becomes a **sub-nav rendered identically on `#tab-sales` and `#tab-channel-sync`** — same classes, same two buttons, only `active` moves, which is what makes it a sub-nav rather than two one-way links and is how the operator gets back; both stand in on the Sales rail row already (`RAIL_STANDIN`), so the rail does not move underneath the crossing. The products list loses the Channels column, its three dots, its `PA_CH_*` state, and **a fourth read of `/channel-sync` on every catalogue load**; `csOpenProduct` goes with the dots that were its only caller. **THE EDITOR'S CHANNELS CARD STAYS** (§103 step 4) — one product looked at in depth is not a second overview competing with the first, and Ash scoped the removal to *"the products list page"*. **PARTS TWO AND THREE ARE DECIDED AND NOT BUILT**: folding the Meituan and Eleme sync views into the one frame, and GZ Grocery after them; each is its own PR. **The remaining weakness is named rather than fixed here**: the combined page is read-only and every red row still ends in *Open Meituan*, so the operator is told what is wrong on one screen and must go to another to fix it. Part two carries the repair panel to where the problem is shown; that, not layout, is what Ash asked for with *"how to solve the problem easily"*. **No Chinese was composed**: `Channel sync · 渠道同步` is the button this replaces, and `Overview · 概览` is lifted verbatim from the GZ Grocery page's own sub-nav, which is this same control on a channel page — so no `docs/tacet-delivery-vocabulary.md` entry is due. No route, no schema, no migration, no new capability (the sub-nav's Channel sync tab carries the same any-of gate as `TAB_CAP['channel-sync']`), and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.249 — **THE CUSTOMER SECTION IS THE WHOLE CUSTOMER SECTION, ON THE PHONE TOO — §116, DECIDED BY ASH: *"customer section on the mobile should be fully functional like the pc version. overview the customer section all functionality and make sure it's all available on mobile also audit that section."*** **The audit found a defect before it found a gap:** the record's four action buttons and the Block under them were drawn for every operator, while `lib/cap-routes.js` gates those writes on `customers:adjust`, `customers:block` and `customers:edit` — and `apiWrite` in `public/m.html` treats a 403 as a lost session, so a `customer_service` or warehouse account tapping Points was **logged out of the app mid-shift**. Every control is gated now, absent rather than disabled, with the guard in the COMMAND as well as the view — the hole §112 found in `teamToggle`. **The other twelve gaps were UI and the data was already arriving:** `GET /customers` returns `note`, `tags` and `tag_vocabulary`, and `GET /customers/:id` is a `SELECT *` already carrying `orders_by_month`, `affiliate.lifetime_*` and `stats.active_sessions`. **No route, no schema, no migration, no new capability.** Tier and channel are multi-select against the endpoint that always took a comma list, the tag filter is the server's own vocabulary, the sort reverses; the record gains tags and the note, the phone number, gender and birthday, every address with add/edit/delete/default, sign out all devices, the three referral controls **and the two states they turn** (which were on no screen, so a shop could stop somebody referring and never see that it had), twelve months of activity and a CSV export at the filters on screen. **Two decisions of 2026-08-22 reversed and said plainly:** the phone number (the endpoint has answered `phone_taken` since its own check went in, and this sheet already carried that refusal's wording) and sign out all devices (the device count is the reason to have the control, not a substitute for it). **Print statement, CSV import and reset-test stay off**, each for a stated reason — the last of the three is not a parity gap at all, since the desktop draws no control for it either. One desktop label deliberately NOT copied: `详细地址` is on two different fields there and the refusal that names it points at the wrong box. **Chinese:** 11 verbatim lifts, 3 arrangements, 38 composed, declared in `docs/tacet-delivery-vocabulary.md` v1.72. **Tests:** new `scripts/test_mobile_customers.js` — 84 assertions across 30 cases over request bodies and both directions of every capability gate; five render cases added to `scripts/test_mobile_screens.js` (456 renders, warm, cold and Chinese); registered in `run-suites.js`'s SLOW set. No CSS file, and no change to `.gitignore` or CI.**
 
@@ -13007,3 +13017,401 @@ when each command is called directly. Five render cases join
 them the view-only record. Registered in `run-suites.js`'s SLOW set, with the
 comment saying why `isSlow()` cannot see the browser in an `m-probe` suite. No
 CSS file, and no change to `.gitignore` or to CI.
+
+
+## §117 — ALL SYNCING GATHERS IN ONE PLACE, AND THE PRODUCTS LIST SAYS NOTHING ABOUT IT
+
+**2026-09-13 · decided by Ash. Part one built the same day; parts two and three are
+decided and not built.**
+
+### What was wrong
+
+Four surfaces answered one question — *is this product's number right on this channel?*
+
+1. The **products list** carried a Channels column: three dots per row (§103 step 3),
+   and a fourth read of `/api/retail-admin/channel-sync` on every catalogue load.
+2. The **Channel sync page** (`#tab-channel-sync`, §103) — the combined overview, which
+   already did most of what was being asked for, and which was reached by a `btn btn-sm`
+   in the Sales header's corner beside Get help.
+3. The **Meituan** and **Eleme** tabs — twins: pagehead, tiles, store lines, sub-tabs,
+   chips, list + panel.
+4. **GZ Grocery** — none of that. Its own heading, two paragraphs of teaching copy, its
+   own inline `<style>` block, a health strip, and a sub-nav of its own invention.
+
+Ash, from the products list: *"now on product list page on pc I see channels sync. I
+don't want that. I need all syncing should gather in one page … we also need to sync both
+sections so they will have the same features and same style … we want tenant to have easy
+understanding of each channel situation, problem, and how to solve the problem easily."*
+
+### The decision
+
+**One page. Three depths. The same frame all the way down.**
+
+- **Depth 1 — all channels.** One card per channel, broken first: is it syncing, why not,
+  how much is wrong. Below it, the combined table — one row per item, one column per
+  channel. This is the one thing no other screen gives, and it stays.
+- **Depth 2 — one channel.** **A STATE OF THE SAME PAGE, NOT A PAGE OF ITS OWN.** Same
+  chips, same search, same store filter, same list; the channel picker merely narrows.
+- **Depth 3 — one item.** The panel carries what the shelf says, what the channel holds,
+  one sentence naming what is wrong, and **the controls that fix it**.
+
+**Why depth 2 is a state and not a restyle.** The literal reading of *"same features and
+same style"* is to restyle three channel pages into the overview's likeness. That is more
+work and leaves three pages to keep in step by hand — and GZ Grocery is standing proof
+that hand-kept pages drift. A per-channel view that is a state of the one page has nothing
+left to drift, because there is nothing left to keep in step. Put to Ash as that exact
+question; answered **"ok"**.
+
+**Channel admin is not sync, and does not move.** Credentials, Meituan's Bundles, and GZ
+Grocery's Billing/Statement stay where they are. Ash on Billing: *"it's got nothing to do
+with syncing products"*. Only the sync half gathers; otherwise "one page" becomes one
+enormous page.
+
+**The name stays `Channel sync · 渠道同步`.** Ash asked for *"channel sync manager or
+something like that"* and did not press it when the cost was named. The name is already
+live in four places — the dashboard's alert row, the phone's nav row, the Sales button,
+and §103–§107 throughout — and one word per thing is worth more here than "manager".
+
+### Part one — built
+
+**The sub-nav.** `#tab-sales` and `#tab-channel-sync` each render the same strip: two
+buttons, same classes, only `active` moves. That sameness is the mechanism, not decoration
+— it is what makes this a sub-nav rather than two one-way links, and it is how the
+operator gets back. Both tabs already stand in on the Sales rail row (`01-core.js`
+`RAIL_STANDIN`), so the rail does not move underneath the crossing. The Channel sync
+button carries the same any-of gate as `TAB_CAP['channel-sync']`.
+
+**The products list says nothing about syncing.** Gone: the `Channels` column and its
+`<col>`/`<th>`/`<td>`, the card-grid equivalent, `paLoadChannels`, `_paChannelDots`,
+`PA_CHANNELS` / `PA_CH_LIST` / `PA_CH_ON` / `PA_CH_RANK`, `_paChGlyph`, the CSS block, and
+the per-load fetch of `/channel-sync?compact=1`. `csOpenProduct` and its scroll helper go
+with the dots that were their only caller.
+
+**What stays.** The editor's Channels card (§103 step 4, `pdLoadChannels`). One product
+looked at in depth is not a second overview competing with the first, and Ash scoped the
+removal to *"the products list page"*. `_paChName` survives because that card needs it.
+
+### Part two — built, and NARROWER than part one promised
+
+Part one wrote: *"fold the Meituan and Eleme sync views into the one frame, and carry the
+repair panel into depth 3."* **The fold was not built, and on the survey it turned out not
+to be the thing worth building.** What was built is the repair. The record of why:
+
+**THE FOLD WOULD HAVE BUILT A THIRD LIST.** The Meituan and Eleme sync views are a
+one-line-per-product list with a side panel. This page already has a
+one-line-per-product list — its table — and the channel picker already narrows it to one
+channel. Rebuilding `mt-list` / `el-list` inside it would add a second list to the page
+that replaced them, to show the same rows.
+
+**THE PANEL COULD NOT BE SHARED, AND THE SURVEY SAID SO IN THE ROUTES.** All three
+channels write through `/products/:id/map`, and the three payloads agree on exactly one
+field — `sync_enabled`. Meituan sends `meituanName` through `lib/meituan-map-write`; Eleme
+sends `elemeName` plus a spec pair, an `extendCode` and a `remove` flag; GZ Grocery sends a
+`skuId` and has no store field at all because it has one store. A panel driving all three
+would carry that difference on the page §117 exists to take it off.
+
+**SO THE LINE WAS DRAWN AT THE VERBS THE CHANNELS ALREADY SHARE**, and there are two:
+every map table has `sync_enabled`, and every queue table takes the same five columns.
+`lib/channel-sync-write.js` is those two verbs for all three channels, and
+`routes/channel-sync.js` — until now a read — carries them. **Between them they clear four
+of the seven reasons an item can need attention**: `sync_off` by the switch;
+`push_failed`, `wrong_number` and `never_synced` by the push. The other three —
+`no_name`, `name_not_found`, `no_option` — need the channel's own catalogue picker, and
+every amber row keeps the button to the channel's tab for them.
+
+**THE PUSH IS ALSO THE RETRY, AND THAT WAS ALREADY A KNOWN DEFECT.** The daemon picks up
+only `pending` rows, so an item whose last push errored sits there forever
+(`docs/meituan-findings.md` #6, and a session on 2026-09-12 that found Black Beans stuck
+amber for exactly this). A fresh pending row is both the retry and the fix: the verdict
+reads the latest queue row per (store, product), so the item leaves *needs attention* the
+moment it lands.
+
+**A PENDING ROW IS REFRESHED, NEVER DUPLICATED.** `routes/meituan-admin.js`'s push-all
+carries the scar in its own comment — *"877 pending for 208 products"* — and this button
+is worse placed for it, sitting next to a red row where it gets pressed twice.
+
+**THE TRAP THE SURVEY CAUGHT: GZ Grocery's pre-order key is `gzgrocery`, not `guanyi`.**
+Every surface in this codebase calls that channel `guanyi`; `lib/channel-publish` knows it
+only as `gzgrocery`, which is the string `routes/guanyi-admin.js`'s own push-all passes.
+Getting it wrong drops §85's allowance from every GZ Grocery push and looks like nothing at
+all until a pre-order window closes itself. The mapping lives in one table and the test
+pins it to the route rather than to a literal, so the two cannot drift apart.
+
+**THE SWITCH IS THE CHANNEL PANELS' SWITCH.** `toggle-label` was styled under
+`.mt-panel` / `.el-panel`; the Channel sync card is joined to that selector group rather
+than given matching values of its own. A second set of numbers that happens to match today
+is how three channel pages came to look like three channel pages.
+
+**Chinese: nothing composed.** `Sync now · 立即同步` is `11-meituan.js`'s own push button;
+`Sync on / off · 同步开关` is the title on both the Meituan and the Eleme panel switches.
+The two refusals (`not_mapped`, `not_syncing`) carry `row_moved`'s existing pair verbatim
+from `TD_ERR` — they are the same fact from the operator's side, *somebody moved this while
+you had it open*, so they say it in the same words rather than two new ones.
+
+**Both writes are gated** in `lib/cap-routes.js`: `push` answers `{channel}:sync` (the
+same verb as push-all, one item wide), the switch answers `{channel}:map` (it changes a
+mapping). That file **fails open for a mutation it does not know**, so a write missing
+from it has no gate at all — which is why the test asserts all six.
+
+### Part three — decided, not built
+
+**GZ Grocery's page into the frame.** It is the one channel page that shares neither the
+other two's layout nor their sub-nav, and it carries its own inline `<style>` block.
+Billing/Statement and Mapping stay on it — Ash: *"it's got nothing to do with syncing
+products"*. Its own PR (working rules: one PR per change).
+
+### What part two still does not fix
+
+The three picker reasons — `no_name`, `name_not_found`, `no_option` — still send the
+operator to the channel's tab. That is deliberate and recorded above, not an oversight: it
+is where the three channels genuinely differ. If it turns out to be the common case in
+practice rather than the tail, the answer is a shared listing-name picker fed by the
+catalogue this endpoint already reads — **not** three pickers on one page.
+
+### The phone
+
+`m.html` already ships a Channel sync screen with its own nav row, reading the same
+endpoint. Nothing here changes it. **Any part-two change to the desktop's vocabulary or
+verdicts must reach it in the same PR**, or the two surfaces will answer one question two
+ways — which is the defect §103 through §107 spent five sections closing.
+
+### Chinese
+
+**Nothing composed, so nothing is due in `docs/tacet-delivery-vocabulary.md`.**
+`Channel sync · 渠道同步` is the button this replaces (and the dashboard row, and the
+phone's nav row). `Overview · 概览` is lifted verbatim from the GZ Grocery page's own
+sub-nav — this same control, on a channel page.
+
+## §118 — THE OPERATIONS MENU IS ENTERED BY THE JOB, IN THE OPERATOR'S OWN WORDS
+
+**DECIDED 2026-09-13 by Ash: OPTION B**, chosen from the two in
+`docs/tacet-operations-clarity-options.md`. That document recommended option A
+(grouping the twenty-two rows under eight headings) and named B as a layer to
+build later on evidence; the recommendation was declined in favour of B. The
+argument is kept there unedited, because a decision record whose losing option
+has been tidied away afterwards cannot be re-checked.
+
+**What B is.** A short block at the top of More, above the Operations heading,
+that asks the operator what they need to do in plain words and routes each
+answer to the screen that answers it. Seven questions, each gated on the
+capability its destination is gated on.
+
+**The twenty-two rows do not change.** No row is renamed, regrouped, reordered
+or removed; `MORE_GROUPS` is read, never rewritten. B adds a way IN; it does not
+reorganise what it leads to. An operator who knows the list keeps the list they
+know.
+
+### Why the questions carry the distinction rather than the rows
+
+The options document said B's first row would answer one question with two
+destinations, and that this was B's honest limit. **Built, it is not a limit but
+the shape of the answer**: instead of one "Something arrived" opening a chooser
+whose two entries both read 收货, B asks **two** questions — *Something arrived
+from a supplier* and *Something arrived from another shop* — and each goes
+straight to its screen.
+
+That matters beyond the wording. It means **B has no dependency on option A's
+renames.** The reading in the options document — that B could not be written
+without them — was wrong, and is corrected here rather than silently: the
+distinction lives in the question, which is the one place the operator is
+reading when they have to make it.
+
+**The 收货 collision on the two rows is therefore still open** (options document
+§1). B does not fix it and does not need it fixed. It remains a real defect,
+recorded and unaddressed, and it is a defect whether or not any option ever
+ships — see that document for its full extent, which includes both screen
+titles and three in-screen buttons.
+
+### Rules the strip holds to
+
+1. **A question resolves its destination's label through the More row itself**,
+   never a copy of it. The row's current name is what the question's second line
+   shows, so a later rename moves both, and the strip can never offer a screen
+   the list below it does not — the same "three consumers must agree" discipline
+   `moreGroups()` already enforces for the list, the tab bar and the search.
+2. **A question is gated on the capability its destination is gated on**, by
+   asking `canRoute` about the destination rather than restating a key. A
+   question whose screen would 403 is not a shortcut, it is a trap.
+3. **The strip collapses, and the choice is remembered on the phone** the way
+   the theme and the language are. Questions-first is a gift to a new account and
+   an imposition on an operator who has known the list for a year; seven
+   questions above twenty-two rows pushes the list a screen down, and that
+   operator must be able to put it back for good with one tap.
+4. **Seven questions, and they are rationed.** They cover the five clusters the
+   options document found plus the two rows that are hard to FIND rather than
+   hard to tell apart. A question per row would be a second menu in a worse
+   order, which is the problem, not the fix.
+5. **No icons on a question row.** The rows below carry icons; the questions
+   carry text and their destination. Two layers that look alike read as one
+   list, and then the strip is just twenty-nine rows.
+
+### What is NOT decided here
+
+**Option A is neither adopted nor rejected.** The grouping, the pills and the
+four renames stay on the table in the options document. B was built to sit on
+top of A and does not block it: adopting A later changes the headings and four
+labels beneath the strip, and rule 1 means the questions follow those labels
+without being touched.
+
+**Whether seven is the right seven** is an evidence question. The strip is one
+table, and adding or dropping a question is one line in it.
+
+## §119 — TWO SCREENS THAT ARRIVE FROM DIFFERENT PLACES DO NOT SHARE A NAME
+
+**DECIDED 2026-09-13 by Ash**, immediately after §118 shipped and on the evidence §118
+produced: *"yes do it."* Option A's four renames were on the table in
+`docs/tacet-operations-clarity-options.md`; **two of them are adopted here and two are
+not.** A's grouping and its pills remain undecided.
+
+### What was wrong, and how far it went
+
+`Receiving` and `Receive delivery` are two different jobs — goods from a supplier, and
+goods from another of this account's shops — and **both read `收货`**. A finding filed as
+one line is where it was found, not the extent of the problem, so it was grepped before
+being called closed. The extent:
+
+- both row labels in `MORE_GROUPS`;
+- **both screen titles** (`SUBS.receiving`, `SUBS.receivexfer`);
+- **three buttons inside the transfer screen** that rendered `T('Receiving','收货')` — two
+  back rows and one step-back control — so the transfer screen called itself by the other
+  row's name;
+- and `SUBS.receive`'s `backLabel`, which named the supplier screen.
+
+`Delivery` was a second, unrelated defect in the same list: it is **zones, holiday mode and
+a printer**, the only configuration screen among twenty-one tasks, and batch three of the
+mobile design canvas had already drawn it as an A4 Console.
+
+### What it reads now
+
+| Was | Is | Chinese |
+|---|---|---|
+| `Receiving` · 收货 | **Receive from a supplier** | **收货, unchanged** — 48 other uses put it here |
+| `Receive delivery` · 收货 | **Receive from another shop** | `调拨收货`, the pair already live in this screen's own error copy |
+| `Delivery` · 配送 | **Delivery settings** | `配送设置`, live in the desktop setup guide |
+
+**`收货` STAYS WITH THE SUPPLIER FLOW.** It is correct there and always was; the defect was
+never the word but the transfer flow taking it as a name. So only one Chinese label changes,
+and it is a copy of a live pair rather than anything composed.
+
+**`Invoices` IS DELIBERATELY NOT RENAMED.** Option A proposed *Issue tax invoices* as an
+interim; batch three already decided the row folds into Orders as a filter, and renaming a
+row that is going away is churn. It keeps `Invoices · 发票`.
+
+### The two back controls, which are not the same control
+
+The transfer screen's two back ROWS go to its own list, so they take its own name. The third
+control goes back one STEP, from confirm to the count, and giving it the screen's name would
+have put two identical labels on two different destinations — so it says where it goes:
+**Back to the count · 返回清点**. The one button that named the SUPPLIER screen keeps its
+Chinese (`返回收货`) and reads **Back to deliveries** in English, because *Back to Receive
+from a supplier* is not a sentence and `deliveries` is that screen's own live noun.
+
+### Why §118's strip needed no edit
+
+§118 rule 1 — a question renders its destination's label by reading the More row — is what
+made this free. The two arriving-goods questions now show *Receive from a supplier* and
+*Receive from another shop* beneath them without a line of §118 being touched. **Before this
+change a Chinese render of that strip showed both second lines reading `收货`**, which is
+what turned A's rename from an argument into an observation.
+
+### A guard that had stopped guarding
+
+`test_mobile_nav.js` asserted `body.indexOf('Receiving')===-1` to prove a buyer holding only
+`purchasing:view` is not offered the receiving row. **The rename made that assertion pass
+whether or not the row was shown** — a renamed row satisfies it either way. It is re-pointed
+at the row KEY, as are the two assertions that proved the old `/stock` launcher row is gone
+(one of which read the absence of the characters `调拨`, which the new label contains).
+**A guard written against a label is a guard a rename can silently retire.**
+
+### Recorded: the fast shard did not catch a real defect
+
+`state.askOpen` was read but never declared in the state literal. The only thing that found
+it was `test_mobile_screens.js`'s static state-key guard, **which lives in the slow shard,
+and this repo does not run the slow shard.** The declaration was added, and
+`test_mobile_ask_strip.js` gained a case asserting it — in the FAST shard, where the gate
+can see it. A defect findable only in a shard nobody runs is a defect that ships.
+
+## §120 — THE QR MENU ASKS THE QUESTIONS THE COUNTER WOULD HAVE ASKED
+
+**2026-09-13 · Ash decided. Not yet built.**
+
+**THE GAP.** The public QR menu (`routes/shop-menu.js`, §41/§42/§44/§45/§47) sells a
+flat row: tap Add, get one unit. It reads neither of the two choice mechanisms
+this system already has — variants (`variant_group_id`) and per-product options
+(`retail_product_options` + `retail_product_option_choices`). A customer standing
+at the counter cannot say "half sugar", and a drink sold in three sizes occupies
+three rows of a phone screen, or fewer, depending on what the operator happened
+to list. The web storefront and the mini app have both asked these questions for
+a long time. The QR menu is the one customer surface that does not.
+
+**IT IS BUILT ON OPTIONS, NOT ON VARIANTS, AND THE REASON IS THE SCREEN.** Options
+already carry a price delta, both languages, required/optional, and
+`stock_product_id` — the link from a paid extra back to a real stock item. Every
+part is present. Variants would answer the same question by putting each size on
+its own menu row, which is three lines of a small screen for one drink read by
+somebody who is standing up. The variant path stays where it is (the storefront's
+size switcher, `routes/retail.js`) and is not extended here.
+
+**NOTHING DOWNSTREAM IS BEING BUILT, because two of the three pieces already
+exist.** This is the finding that shrank the work, and it is recorded so nobody
+re-derives it:
+
+1. **Storage.** `retail_order_items.options_json` exists and is described in
+   `database.js` as "chosen option labels + price deltas, for the receipt". The
+   web/mini-app checkout fills it, validating that each choice belongs to the
+   product and snapshotting the QUESTION and both languages so the line still
+   reads "Heat up?: Yes" after the option is edited or deleted. The QR menu's
+   own INSERT simply omits the column. One column, one INSERT.
+2. **The kitchen ticket.** `lib/feie.js` already prints each chosen option on its
+   own line, with its question, in both languages, on both templates. QR orders
+   print on paid (§50, narrowed) through that same path. Nothing to build.
+3. **The till.** The till NEVER re-prices a QR order — `recall()` in
+   `public/till.html` loads it read-only and the settle path only marks it paid,
+   at the total the server already wrote. So a base-plus-extras price needs
+   nothing from the till. One gap only, and it is display: the till's line mapper
+   drops `it.options`, so a cashier settling order 12 reads "Latte x1" and not
+   "Half sugar". The admin detail endpoint already returns the field.
+
+**RULE 1 — A SOLD-OUT PAID EXTRA GREYS OUT; THE DRINK STILL SELLS.** Oat milk runs
+out, the oat-milk choice goes dead, the latte is still a latte and is still
+bought. The opposite reading — the whole product sold out because one optional
+extra is — punishes the customer who did not want the extra. Only a
+stock-LINKED choice can be sold out at all; a free choice (sugar, ice, hot/cold)
+has no stock record and is never affected. A sold-out extra is never billed and
+never written to the order line.
+
+**RULE 2 — A REQUIRED QUESTION BLOCKS, AND SAYS WHICH QUESTION.** Tapping Add with
+a required question unanswered does not add the item; it says
+`Please choose: <question>` / `请选择 <question>`. The alternative — pre-select the
+first choice and never block — was considered and rejected: a silently defaulted
+sugar level is a wrong drink the customer did not order and the counter cannot
+tell was never chosen.
+
+**NO CHINESE IS COMPOSED, and the vocabulary document is not touched.** Every
+string this needs is already live on a customer surface. `请选择 ` + the question
+is the web storefront's own required-option toast (`public/shop.html`) and the
+mini app's (`miniapp/pages/product/product.js`), character for character, in both
+places, for exactly this purpose. Question and choice labels come from the
+tenant's own option records, which carry both languages already. `售罄` for a
+dead choice is the QR menu's own sold-out word, already on the page.
+
+**RULE 3 — TWO SUGAR LEVELS ARE TWO LINES.** The QR page's cart is keyed by
+product id alone. It becomes keyed by product id AND the chosen choice ids, or a
+customer ordering one full-sugar and one half-sugar latte gets two full-sugar
+lattes. This is the fiddliest part of the change and the one most likely to be
+got wrong quietly.
+
+**THE MINI APP'S VERSION OF RULE 1 DID NOT ACTUALLY RUN, and it was fixed
+FIRST, on its own branch, before any of this was built.** `miniapp/pages/product/product.js` and
+`miniapp/pages/add-to-order/add-to-order.js` both compute a choice's sold-out
+state as `!!c.stock_product_id && c.addon_available === false`. **`addon_available`
+is written nowhere in this repository** — two readers, zero writers, confirmed by
+a whole-tree grep. The comparison is therefore never true, the sold-out-extra
+guard never fires, and a shopper can today order and be billed for a paid extra
+that ran out. It is recorded here because it is the precedent this section was
+about to copy, and copying a dead guard would have produced a QR menu that
+looked right and sold oat milk it did not have. The fix answers the question at
+`GET /api/retail/products/:id` and changes no client; four of its six test cases
+fail without it. The QR menu computes its OWN availability rather than reaching
+for that field, because its stock question is a different one — this shop's
+shelf, not the company's sellable count (§47).
