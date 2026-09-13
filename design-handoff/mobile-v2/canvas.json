@@ -208,6 +208,46 @@
       "w": 390,
       "h": 844,
       "title": "Waste · option C"
+    },
+    {
+      "file": "OpsToday.dc.html",
+      "x": 0,
+      "y": 7300,
+      "w": 390,
+      "h": 1240,
+      "title": "Operations · today"
+    },
+    {
+      "file": "OpsGrouped.dc.html",
+      "x": 470,
+      "y": 7300,
+      "w": 390,
+      "h": 1630,
+      "title": "Operations · option A"
+    },
+    {
+      "file": "OpsGroupedPhone.dc.html",
+      "x": 940,
+      "y": 7300,
+      "w": 390,
+      "h": 844,
+      "title": "Option A · above the fold"
+    },
+    {
+      "file": "OpsAsk.dc.html",
+      "x": 1410,
+      "y": 7300,
+      "w": 390,
+      "h": 844,
+      "title": "Operations · option B"
+    },
+    {
+      "file": "OpsChanges.dc.html",
+      "x": 1880,
+      "y": 7300,
+      "w": 390,
+      "h": 1100,
+      "title": "Option A · what changes"
     }
   ],
   "annotations": [
@@ -364,6 +404,48 @@
       "y": 6668,
       "w": 390,
       "text": "OPTION C — capture-first: the form IS the screen. The premise the other two do not test — on a phone the loss is in front of you and you are holding the jar. Reading a 30-day ledger is a desk job the desktop already does well.\n\nSo More carries “Record waste”, beside Add stock, and the row lands on the form. The ledger under it is TODAY AT THIS STORE and nothing else: enough to see your entry landed and that a colleague already logged the same tray. “All entries” is one line at the foot and opens the desktop screen.\n\nSteppers are 56px, matching Add stock — same thumb, same posture, same aisle. The search field collapses into the card once a product is picked; the card’s × puts it back.\n\nWhat it gives up, stated rather than discovered later: no range filter, no reason filter, no history past today, no void. If the phone must answer “what did we lose this month”, this is the wrong option and A is the right one."
+    },
+    {
+      "id": "batch-five",
+      "x": 0,
+      "y": 7180,
+      "w": 1800,
+      "text": "Batch five — the Operations menu. TWO OPTIONS, and they are not alternatives: B sits on top of A and can ship after it. The argument, the evidence and a recommendation are in docs/tacet-operations-clarity-options.md.\n\nThe finding behind it: twenty-two rows under one heading, labelled with bare nouns, and five clusters that look like duplicates because nothing on the row says who a screen goes to. Three of the rows are not merely vague but wrong — Delivery is a settings screen, and Receiving and Receive delivery are both 收货.\n\nEnglish only, as every artboard here is (§1.11). The proposed Chinese is in the options document with the live candidate each one was copied or lifted from."
+    },
+    {
+      "id": "ops-today-note",
+      "x": 0,
+      "y": 8580,
+      "w": 390,
+      "text": "TODAY, verbatim from public/m.html:4148–4166 — labels, icons and order. Drawn so the options are compared against the truth and not a memory of it.\n\nNothing here is a report of a broken screen. Every one of these twenty-two works. What the list does not do is tell a new account what any of them is for."
+    },
+    {
+      "id": "ops-a-note",
+      "x": 470,
+      "y": 8970,
+      "w": 390,
+      "text": "OPTION A — grouped by the job, eight headings, three pills, four renames. No row gains a subtitle: a sentence under all twenty-two doubles the height of the list, and the grouping already separates every confusable pair by putting its twin in a different group.\n\nTwelve new strings against a subtitle's forty-four, and it fixes the duplicate 收货 on the way past."
+    },
+    {
+      "id": "ops-fold-note",
+      "x": 940,
+      "y": 8184,
+      "w": 390,
+      "text": "The same option in the sheet it opens in, because a list that reads well flat can still be four screens of scrolling. Seven rows and three headings clear the fold — against nine bare rows today.\n\nThat is the cost of A, stated plainly: grouping spends vertical space to buy meaning."
+    },
+    {
+      "id": "ops-b-note",
+      "x": 1410,
+      "y": 8184,
+      "w": 390,
+      "text": "OPTION B — the operator's own words above the list, each routing to the screen that answers it. For somebody who does not yet know that a thing arriving from a supplier and the same thing arriving from the next shop are two screens.\n\nIt does not replace A: the grouped list is still underneath, and B is a layer on top. Note the first row answers one question with two destinations — the only place B has to admit the split A makes visible."
+    },
+    {
+      "id": "ops-changes-note",
+      "x": 1880,
+      "y": 8440,
+      "w": 390,
+      "text": "The words, on their own, because that is what is actually being decided.\n\nNo pill is the default — a row you simply do wears nothing, so the pill stays scarce enough to read. It is p-mute in every case: a direction is a fact about the row, not a state needing attention, the same reason tier pills are neutral (batch two).\n\nFour renames and only four. Every other row keeps the name it wears today."
     }
   ],
   "launch": {

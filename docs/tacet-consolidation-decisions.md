@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.251
+# Tacet shared-core consolidation — decisions record, v4.253
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-13 · v4.253 — **§119 DECIDED AND BUILT: TWO SCREENS THAT ARRIVE FROM DIFFERENT PLACES DO NOT SHARE A NAME — DECIDED BY ASH in three words, *"yes do it"*, on the evidence §118 had just produced.** Two of option A's four renames are adopted; **its grouping and its three pills remain undecided**, and `Invoices` is deliberately left alone because batch three already folds that row into Orders. **THE DEFECT WAS GREPPED BEFORE IT WAS CALLED CLOSED, and it went four levels deeper than the row it was reported on**: `Receiving` and `Receive delivery` shared `收货` in both row labels, in **both screen titles**, in **three buttons inside the transfer screen** (two back rows and one step-back control, all rendering `T('Receiving','收货')` — the screen calling itself by the other row's name), and in `SUBS.receive`'s `backLabel`. **Eleven sites, one change.** `收货` STAYS WITH THE SUPPLIER FLOW — it is correct there and 48 other uses put it there, so the supplier row changes **in English alone** (`Receive from a supplier`) and only the transfer flow takes a new Chinese label, `调拨收货`, **copied from that screen's own error copy** rather than composed. `Delivery` → `Delivery settings · 配送设置` closes the second, unrelated defect in the same list: zones, holiday mode and a printer, the only configuration screen among twenty-one tasks, which the design canvas had already drawn as an A4 Console. **THE TWO BACK CONTROLS ARE NOT THE SAME CONTROL**: the two back ROWS go to the screen's own list and take its name, while the third goes back one STEP, so it says `Back to the count · 返回清点` — the one composed string, and composed precisely because the screen's name on it would have put one label on two destinations. **§118 NEEDED NO EDIT**: its rule 1 (a question reads its destination's label off the More row) meant the strip picked both new names up for free — and the Chinese render of that strip showing `收货` twice is what turned this rename from an argument into an observation. **A GUARD THAT HAD STOPPED GUARDING**: `test_mobile_nav.js` proved a view-only buyer is not offered the receiving row by asserting the word `Receiving` was absent — which a renamed row satisfies whether or not the row is shown. Re-pointed at the row KEY, as were the two assertions proving the old `/stock` launcher is gone, one of which read the absence of `调拨` — characters the new label contains. **A guard written against a label is a guard a rename can silently retire.** **RECORDED AGAINST THIS SESSION: the fast shard missed a real defect.** `state.askOpen` was read but never declared in the state literal, and the only thing that found it was `test_mobile_screens.js`'s static state-key guard — **in the slow shard, which this repo does not run.** Declared, and `test_mobile_ask_strip.js` gained a red-proofed case asserting it in the FAST shard, where the gate can see it. **Tests:** `test_mobile_ask_strip.js` 10 → **12 checks** (the collision guard INVERTED — it asserted the collision was still open, and now asserts the two flows never share a name in either language, plus the extent); `test_mobile_nav.js` **100 assertions across 38 cases** green with three re-pointed; `test_mobile_receiving.js` 181/45, `test_mobile_home.js` 153/46, `test_mobile_purchasing.js` 48/11 all green. **One composed string, one live pair copied, one lift and two English-only changes**, declared in `docs/tacet-delivery-vocabulary.md` v1.76 with the rejected candidates — including `供应商收货`, which would have moved a Chinese label that was never wrong. No route, no schema, no migration, no new capability, no CSS file, and no change to `.gitignore` or CI.**
+
+2026-09-13 · v4.252 — **§118 DECIDED AND BUILT: THE OPERATIONS MENU IS ENTERED BY THE JOB, IN THE OPERATOR'S OWN WORDS — DECIDED BY ASH, who chose OPTION B over the recommendation.** The brief: *"it's not clear for any [account] every feature of operation… starting with the name, explanation, etc."* Twenty-two rows under one heading, labelled with bare nouns. `docs/tacet-operations-clarity-options.md` drew two options and recommended **A** (group by the job, three pills, four renames); Ash picked **B** (plain questions above the list), and the argument is kept unedited because a record whose losing option has been tidied away cannot be re-checked. **THE PREDICTED BLOCKER DISSOLVED ON CONTACT.** The options document said B's first row would answer one question with two destinations and called that B's honest limit — and the session opened by telling Ash B therefore *depended* on A's renames. **Both readings were wrong**, and §115 corrects them rather than quietly dropping them: B asks **two** questions — *Something arrived from a supplier* / *from another shop* — each going straight to its screen, so the distinction lives in the words somebody is reading at the moment they need it, and B needs no rename at all. **THE 收货 COLLISION IS THEREFORE STILL OPEN, AND ITS EXTENT IS NOW MEASURED**: `Receiving` and `Receive delivery` share `收货` in both row labels (`m.html:4139`, `:4169`), in **both screen titles** (`:11565`, `:10844`), and the transfer screen labels its own back and count buttons `T('Receiving','收货')` (`:10385`, `:10397`, `:10412`) — the other row's name. A Chinese render of the new strip shows the two questions' second lines reading `收货` and `收货`, which is the argument for A's rename OBSERVED rather than predicted. **FIVE RULES** hold the strip: a question resolves its destination through the More row so a later rename moves both and the strip can never offer a screen the list does not; the gate is the row's presence in `moreRowsFlat()` (already capability-filtered) plus the Features switch presence cannot cover; it collapses and the choice is kept on the phone like the theme and the language, because seven questions above twenty-two rows is a gift to a new account and an imposition on somebody who has known the list for a year; seven questions, rationed to the five confusable clusters plus the two rows that are hard to FIND; and **no icon on a question row**, or the two layers read as one list of twenty-nine. **NOT ONE ROW MOVED** — `MORE_GROUPS` is read here and never rewritten, no row key changed, so `ROUTE_CAP`, `SUBS` and every stored Quick-actions preference are untouched, and **option A is neither adopted nor rejected**. **Chinese:** one string composed (`你需要做什么？`, `你` over `您` on the neighbouring screen's evidence, not a count), one pair taken whole (`需要补货`), one collapse pair copied minus its noun, and six lifts — all declared in `docs/tacet-delivery-vocabulary.md` v1.75 with the rejected candidates beside them, including why `收货` is spent on neither question. **Tests:** new `scripts/test_mobile_ask_strip.js` — **10 checks, reads only, FAST shard and part of the gate**, deliberately not a render pass: browser suites go in the slow shard, which this repo does not run. **Three red-proofed** by restating a row label in the table, adding an icon well, and mounting the strip below the rows — each failed as it should. Its first draft passed a `rowico` it found in an unrelated screen seven hundred lines away, so the slice is bounded to the strip's own source and says so. `npm run test:fast` **224 passed, 0 failed** on its own branch and **225 passed, 0 failed** after merging origin/main TWICE — §115 (the kitchen-job back row, 139 lines of `public/m.html`) and §116 (the customer section, 783 more) both landed mid-build, both merged automatically, and their suites were re-run green against the result; eslint 0 errors; doc-numbering PASS. **This section is §118 because §115 and §116 were each taken while it was being written**, which is the permanent-numbering rule doing its job rather than a renumber. Rendered and read back in both languages and at three capability levels (owner 7 questions, a receiver 2, collapsed 0). **No route, no schema, no migration, no new capability, no CSS file, and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.251 — **§117 PART TWO BUILT: THE CHANNEL SYNC PAGE REPAIRS AS WELL AS REPORTS — AND IT IS NARROWER THAN PART ONE PROMISED, ON PURPOSE.** Part one recorded part two as *"fold the Meituan and Eleme sync views into the one frame, and carry the repair panel into depth 3"*. **THE FOLD WAS NOT BUILT AND THE SURVEY SAID WHY.** The channel views are a one-line-per-product list plus a side panel; this page ALREADY has a one-line list — its table — and the channel picker already narrows it, so folding `mt-list`/`el-list` in would add a second list to the page that replaced them. And the panel could not be shared: all three channels write through `/products/:id/map` and **the three payloads agree on exactly one field, `sync_enabled`** — Meituan sends `meituanName` through `lib/meituan-map-write`, Eleme `elemeName` plus a spec pair, an `extendCode` and a `remove` flag, GZ Grocery a `skuId` and no store field at all. A panel driving all three would carry that difference on the one page §117 exists to take it off. **SO THE LINE WAS DRAWN AT THE TWO VERBS THE CHANNELS ALREADY SHARE UNDERNEATH**: every map table has `sync_enabled`, every queue table takes the same five columns. New `lib/channel-sync-write.js` is those two verbs for all three channels; `routes/channel-sync.js`, until now a read, carries them. **Between them they clear four of the seven reasons an item can need attention** — `sync_off` by the switch, `push_failed`/`wrong_number`/`never_synced` by the push — and every amber row keeps its button to the channel's own tab for the three that need that channel's catalogue picker (`no_name`, `name_not_found`, `no_option`). **THE PUSH IS ALSO THE RETRY FOR A DEFECT ALREADY ON FILE**: the daemon picks up only `pending`, so an item whose last push errored sits there forever (`docs/meituan-findings.md` #6; a session on 2026-09-12 found Black Beans stuck amber for exactly this), and a fresh pending row is both the retry and the fix because the verdict reads the latest queue row. **A PENDING ROW IS REFRESHED, NEVER DUPLICATED** — push-all's own comment carries the scar, *"877 pending for 208 products"*, and this button is worse placed for it. **THE TRAP THE SURVEY CAUGHT: GZ Grocery's pre-order key is `gzgrocery`, not `guanyi`** — every other surface calls it `guanyi`, `lib/channel-publish` knows it only as `gzgrocery`, and getting it wrong drops §85's allowance from every GZ Grocery push invisibly until a pre-order window closes itself; the test pins the key to the string `routes/guanyi-admin.js` itself passes, so the two cannot drift. **THE SWITCH IS THE CHANNEL PANELS' SWITCH**, joined to the `.mt-panel`/`.el-panel` `toggle-label` selector group rather than given matching values of its own — and a careless first attempt at that widening dropped ` input` from the Eleme half, which the suite now asserts per suffix. **Both writes are gated** (`push` → `{channel}:sync`, the switch → `{channel}:map`); `lib/cap-routes.js` **fails open for a mutation it does not know**, so all six paths are asserted. **Chinese: nothing composed** — `Sync now · 立即同步` and `Sync on / off · 同步开关` are the Meituan and Eleme panels' own, and the two refusals carry `row_moved`'s pair verbatim because they are the same fact. **Tests:** new `scripts/test_channel_sync_write.js` — **26 cases**, auto-discovered into the fast shard, every key rule confirmed red against a deliberate break (and one case rewritten when the break showed it was not exercising the 套餐 guard it claimed to). `npm run test:fast` 225 passed, 0 failed; eslint 0 errors; doc-numbering PASS. Two new routes, no schema, no migration, no new capability, and no change to `.gitignore` or CI.**
 
@@ -13175,3 +13179,152 @@ ways — which is the defect §103 through §107 spent five sections closing.
 `Channel sync · 渠道同步` is the button this replaces (and the dashboard row, and the
 phone's nav row). `Overview · 概览` is lifted verbatim from the GZ Grocery page's own
 sub-nav — this same control, on a channel page.
+
+## §118 — THE OPERATIONS MENU IS ENTERED BY THE JOB, IN THE OPERATOR'S OWN WORDS
+
+**DECIDED 2026-09-13 by Ash: OPTION B**, chosen from the two in
+`docs/tacet-operations-clarity-options.md`. That document recommended option A
+(grouping the twenty-two rows under eight headings) and named B as a layer to
+build later on evidence; the recommendation was declined in favour of B. The
+argument is kept there unedited, because a decision record whose losing option
+has been tidied away afterwards cannot be re-checked.
+
+**What B is.** A short block at the top of More, above the Operations heading,
+that asks the operator what they need to do in plain words and routes each
+answer to the screen that answers it. Seven questions, each gated on the
+capability its destination is gated on.
+
+**The twenty-two rows do not change.** No row is renamed, regrouped, reordered
+or removed; `MORE_GROUPS` is read, never rewritten. B adds a way IN; it does not
+reorganise what it leads to. An operator who knows the list keeps the list they
+know.
+
+### Why the questions carry the distinction rather than the rows
+
+The options document said B's first row would answer one question with two
+destinations, and that this was B's honest limit. **Built, it is not a limit but
+the shape of the answer**: instead of one "Something arrived" opening a chooser
+whose two entries both read 收货, B asks **two** questions — *Something arrived
+from a supplier* and *Something arrived from another shop* — and each goes
+straight to its screen.
+
+That matters beyond the wording. It means **B has no dependency on option A's
+renames.** The reading in the options document — that B could not be written
+without them — was wrong, and is corrected here rather than silently: the
+distinction lives in the question, which is the one place the operator is
+reading when they have to make it.
+
+**The 收货 collision on the two rows is therefore still open** (options document
+§1). B does not fix it and does not need it fixed. It remains a real defect,
+recorded and unaddressed, and it is a defect whether or not any option ever
+ships — see that document for its full extent, which includes both screen
+titles and three in-screen buttons.
+
+### Rules the strip holds to
+
+1. **A question resolves its destination's label through the More row itself**,
+   never a copy of it. The row's current name is what the question's second line
+   shows, so a later rename moves both, and the strip can never offer a screen
+   the list below it does not — the same "three consumers must agree" discipline
+   `moreGroups()` already enforces for the list, the tab bar and the search.
+2. **A question is gated on the capability its destination is gated on**, by
+   asking `canRoute` about the destination rather than restating a key. A
+   question whose screen would 403 is not a shortcut, it is a trap.
+3. **The strip collapses, and the choice is remembered on the phone** the way
+   the theme and the language are. Questions-first is a gift to a new account and
+   an imposition on an operator who has known the list for a year; seven
+   questions above twenty-two rows pushes the list a screen down, and that
+   operator must be able to put it back for good with one tap.
+4. **Seven questions, and they are rationed.** They cover the five clusters the
+   options document found plus the two rows that are hard to FIND rather than
+   hard to tell apart. A question per row would be a second menu in a worse
+   order, which is the problem, not the fix.
+5. **No icons on a question row.** The rows below carry icons; the questions
+   carry text and their destination. Two layers that look alike read as one
+   list, and then the strip is just twenty-nine rows.
+
+### What is NOT decided here
+
+**Option A is neither adopted nor rejected.** The grouping, the pills and the
+four renames stay on the table in the options document. B was built to sit on
+top of A and does not block it: adopting A later changes the headings and four
+labels beneath the strip, and rule 1 means the questions follow those labels
+without being touched.
+
+**Whether seven is the right seven** is an evidence question. The strip is one
+table, and adding or dropping a question is one line in it.
+
+## §119 — TWO SCREENS THAT ARRIVE FROM DIFFERENT PLACES DO NOT SHARE A NAME
+
+**DECIDED 2026-09-13 by Ash**, immediately after §118 shipped and on the evidence §118
+produced: *"yes do it."* Option A's four renames were on the table in
+`docs/tacet-operations-clarity-options.md`; **two of them are adopted here and two are
+not.** A's grouping and its pills remain undecided.
+
+### What was wrong, and how far it went
+
+`Receiving` and `Receive delivery` are two different jobs — goods from a supplier, and
+goods from another of this account's shops — and **both read `收货`**. A finding filed as
+one line is where it was found, not the extent of the problem, so it was grepped before
+being called closed. The extent:
+
+- both row labels in `MORE_GROUPS`;
+- **both screen titles** (`SUBS.receiving`, `SUBS.receivexfer`);
+- **three buttons inside the transfer screen** that rendered `T('Receiving','收货')` — two
+  back rows and one step-back control — so the transfer screen called itself by the other
+  row's name;
+- and `SUBS.receive`'s `backLabel`, which named the supplier screen.
+
+`Delivery` was a second, unrelated defect in the same list: it is **zones, holiday mode and
+a printer**, the only configuration screen among twenty-one tasks, and batch three of the
+mobile design canvas had already drawn it as an A4 Console.
+
+### What it reads now
+
+| Was | Is | Chinese |
+|---|---|---|
+| `Receiving` · 收货 | **Receive from a supplier** | **收货, unchanged** — 48 other uses put it here |
+| `Receive delivery` · 收货 | **Receive from another shop** | `调拨收货`, the pair already live in this screen's own error copy |
+| `Delivery` · 配送 | **Delivery settings** | `配送设置`, live in the desktop setup guide |
+
+**`收货` STAYS WITH THE SUPPLIER FLOW.** It is correct there and always was; the defect was
+never the word but the transfer flow taking it as a name. So only one Chinese label changes,
+and it is a copy of a live pair rather than anything composed.
+
+**`Invoices` IS DELIBERATELY NOT RENAMED.** Option A proposed *Issue tax invoices* as an
+interim; batch three already decided the row folds into Orders as a filter, and renaming a
+row that is going away is churn. It keeps `Invoices · 发票`.
+
+### The two back controls, which are not the same control
+
+The transfer screen's two back ROWS go to its own list, so they take its own name. The third
+control goes back one STEP, from confirm to the count, and giving it the screen's name would
+have put two identical labels on two different destinations — so it says where it goes:
+**Back to the count · 返回清点**. The one button that named the SUPPLIER screen keeps its
+Chinese (`返回收货`) and reads **Back to deliveries** in English, because *Back to Receive
+from a supplier* is not a sentence and `deliveries` is that screen's own live noun.
+
+### Why §118's strip needed no edit
+
+§118 rule 1 — a question renders its destination's label by reading the More row — is what
+made this free. The two arriving-goods questions now show *Receive from a supplier* and
+*Receive from another shop* beneath them without a line of §118 being touched. **Before this
+change a Chinese render of that strip showed both second lines reading `收货`**, which is
+what turned A's rename from an argument into an observation.
+
+### A guard that had stopped guarding
+
+`test_mobile_nav.js` asserted `body.indexOf('Receiving')===-1` to prove a buyer holding only
+`purchasing:view` is not offered the receiving row. **The rename made that assertion pass
+whether or not the row was shown** — a renamed row satisfies it either way. It is re-pointed
+at the row KEY, as are the two assertions that proved the old `/stock` launcher row is gone
+(one of which read the absence of the characters `调拨`, which the new label contains).
+**A guard written against a label is a guard a rename can silently retire.**
+
+### Recorded: the fast shard did not catch a real defect
+
+`state.askOpen` was read but never declared in the state literal. The only thing that found
+it was `test_mobile_screens.js`'s static state-key guard, **which lives in the slow shard,
+and this repo does not run the slow shard.** The declaration was added, and
+`test_mobile_ask_strip.js` gained a case asserting it — in the FAST shard, where the gate
+can see it. A defect findable only in a shard nobody runs is a defect that ships.

@@ -31,6 +31,10 @@ Published canvas: https://claude.ai/code/artifact/59dd60e2-cf68-457a-b329-5e96da
 | `WasteList.dc.html` · `WasteRecord.dc.html` · `WasteEmpty.dc.html` | Waste option A — its own Worklist, its record sheet, its empty state |
 | `WasteSubview.dc.html` | Waste option B — a fourth sub-view under Products |
 | `WasteCapture.dc.html` | Waste option C — capture-first, the form is the screen |
+| `OpsToday.dc.html` | Operations — the twenty-two rows as they ship today |
+| `OpsGrouped.dc.html` · `OpsGroupedPhone.dc.html` | Option A — grouped by the job, and what clears the fold |
+| `OpsAsk.dc.html` | Option B — the operator's own words above the list |
+| `OpsChanges.dc.html` | The pill vocabulary and the four renames, on their own |
 | `canvas.json` | Layout, notes, launch view |
 
 ## Rebuilding
@@ -40,7 +44,7 @@ Artboards are generated, not hand-edited — edit `src/` and run:
 ```
 node src/pages-1.mjs && node src/pages-2.mjs && node src/pages-3.mjs \
   && node src/pages-4.mjs && node src/pages-5.mjs && node src/pages-6.mjs \
-  && node src/pages-7.mjs
+  && node src/pages-7.mjs && node src/pages-8.mjs
 ```
 
 `src/_shared.css` holds the tokens (lifted verbatim from the live `--td-*`
@@ -158,3 +162,33 @@ anywhere here (source carries the pair, one language ships — §1.11); Customer
 and Products own the six states by inheritance from Orders but only two of
 theirs are drawn; the co-brand slot has no merchant artwork in this account,
 so it is drawn empty per §8b.
+
+## Batch five asks a question rather than settling one
+
+The Operations menu, and it is the second batch drawn as **options to choose between**. The
+full argument, the evidence and a recommendation are in
+`docs/tacet-operations-clarity-options.md`.
+
+The finding behind it: **twenty-two rows under one heading**, labelled with bare nouns, with
+five clusters that read as duplicates because nothing on a row says who the screen goes to.
+Three rows are wrong rather than vague — `Delivery` is a settings screen (this batch's own
+`Delivery.dc.html` draws it as an A4 Console), and `Receiving` and `Receive delivery` **both
+read 收货**, in the row labels and in both screen titles.
+
+- **A** — grouped by the job under eight headings, three pills, four renames. Twelve new
+  strings, and it closes the 收货 collision. No row leaves Operations and no screen changes.
+- **B** — plain questions above the list, routing into the same screens. **Not an
+  alternative to A**: it is a layer on top and can ship later.
+
+Recommended: A now, B on evidence, and `Invoices` last or not at all — batch three already
+decided that row folds into Orders as a filter.
+
+**Deliberately not proposed: a subtitle under every row.** Forty-four strings, and it doubles
+the height of a list whose fold already cuts at nine rows. The grouping buys most of the same
+clarity for a quarter of the strings; subtitles are the next step if A is not enough, not the
+first one.
+
+The eight group headings and three pills **have no Chinese yet, on purpose** — they get
+composed and declared in `docs/tacet-delivery-vocabulary.md` in the same commit as the build
+that ships them, rather than putting rejected options in the lock document. The four renames
+do have Chinese, and every one is a lift or a copy of a live pair, not a compose.
