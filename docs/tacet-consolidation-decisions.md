@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.237
+# Tacet shared-core consolidation — decisions record, v4.238
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-13 · v4.238 — **§109 DECIDED AND BUILT: AN APPROVER CAN SEE THE RECEIPT THEY ARE APPROVING.** Reported live, from a Finance → Approvals screenshot: two waiting claims, one showing its photo, the other reading *Could not read that photo.* Asked in chat and confirmed by Ash: *"make the picture visible."* **THE ROUTE WAS NOT BROKEN — IT WAS ANSWERING A DIFFERENT QUESTION THAN THE ONE THE SCREEN ASKS.** `GET /staff-expenses/:id/receipt` matched `WHERE id = ? AND submitted_by IS ?`, bound to the CALLER's own id — correct for a submitter looking at their own history, and silently wrong for `/pending`'s approver, who is by definition looking at claims `submitted_by` someone else. Every claim on the Approvals screen that was not the approver's own self-submission failed this way; the control (§87-era, `22-finance.js`) already said so on purpose rather than looking broken, which is why nobody had filed it as a crash. **THE FIX SPLITS THE PREDICATE FROM THE GATE, AND REUSES IT.** `requireApprover` already existed (`routes/staff-expenses.js`, gating `/pending` and `/decide` on `req.backendUser.role === 'owner' || req.caps.has('expenses:approve')`) — its body is now `isApprover(req)`, a plain predicate, with `requireApprover` reduced to that predicate turned into a 403. The receipt route asks the same predicate and branches the query on it: an approver's request drops the `submitted_by` filter and matches on `id` alone; anyone else keeps the exact original, narrower query — their own receipts, nobody else's. **THE OWNERSHIP TEST STAYS IN THE QUERY**, as the route's own header comment insists — it is just now one of two queries, chosen by the same fail-closed predicate `/pending` already trusts to decide who sees everybody's spending in the first place. No new capability: an approver already has `expenses:approve`, already sees the amount, the category and the claimant's name for a stranger's claim on `/pending` — the receipt was the one field that predicate did not yet reach. **Chinese: nothing composed.** The failure sentence (`Could not read that photo. · 无法读取该照片。`) is untouched and still fires on a genuinely missing receipt, a dropped connection or a stale id — it is not being removed, only stopped from firing on the one case that was never actually a failure. **Tests:** `scripts/test_staff_expenses.js`'s "the receipt route matches on the OWNER in the query" case is extended rather than replaced — the original submitted_by-scoped query still has to exist in the source, and a new assertion pins the approver branch and the shared `isApprover` predicate. `scripts/test_finance_approvals.js` gains its own case asserting the same. `npm run test:fast` 216 passed, 0 failed (unchanged file count — both new cases land inside existing suites); `npx eslint` 0 errors on the four changed files; `node scripts/check-doc-numbering.js` PASS; `node scripts/check-swallowed-errors.js` unaffected (456/456, unchanged). Code, tests and this record; no schema, no migration, no new route, no new capability, no new Chinese, and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.237 — **§108 REACHES THE TWO SURFACES IT LEFT BEHIND: THE ADD TOAST AND THE ADD-ON PICKER. No new section — this is §108 being carried to the places the first pass named and deliberately did not touch.** v4.236 shipped §108 and listed, in its own "Explicitly NOT touched", the add toasts (rewording them composes Chinese, which Rule 4 requires be declared) and `add-to-order`'s SHIPS SOON pill (an add-on screen, not one of the two surfaces Ash had named). Shown exactly where each lived and what each would change, Ash: **"you can fix both"**. **THE TOAST WAS THE LAST SURFACE STILL SAYING THE OLD WORD**, and the worst placed to say it: a customer tapped a button reading NEXT BATCH and was answered *Added — pre-order* half a second later. **IT TOOK A BOOLEAN, WHICH IS WHY IT COULD ONLY EVER SAY ONE THING**, and the five callers filled that boolean five ways — the PDP button passed `!onLocalRun`, the PDP size sheet passed plain reservability (so one Guangzhou shopper adding one meal two ways got two different toasts), the shop and favourites passed `preorder && !today`, the web passed `pre && !preToday`. All five now take the same `kind` verdict (`'' | 'batch' | 'preorder'`) their own badge reads. **ONE COMPOSED CHINESE STRING, AND ONLY ONE: `已加入购物车，下批现做`** — the app's own plain add toast joined to the badge the customer just tapped, in the comma shape the pre-order toast beside it already uses, declared in `docs/tacet-delivery-vocabulary.md` v1.67 by Claude Opus 5 under Rule 4's 2026-09-06 delegation, with four candidates rejected recorded (keeping `已预订，加入购物车`; the reversed clause order; a middot instead of the comma; the notice's longer `下一批现做`). EN is `Added — next batch`. **The grocery toast is untouched** — `已预订，加入购物车` stays the honest word for a restock we have no date for, per §108's carve-out. **THE ADD-ON PICKER** (`add-to-order`, reached from an order detail page's *Add to this order · 为订单加单*) drew one page-wide `copy.shipsSoon` for every reservable row, so a fresh meal read SHIPS SOON there while every other surface called it NEXT BATCH. It now carries the row's own `preText`, chosen on `is_batch_made` — the one test every surface uses — with **no new Chinese**: both pairs were already live. Its "no local-run term" comment stands and is restated in code: `addonBlockReason` rule 2 refuses a local-run reservation before a row reaches this screen, so every pill it can draw belongs to an order we ship. **A REAL SIMPLIFICATION CAME OUT OF IT, not just a rewording**: `product.js` grew module-level `_reservable` and `_preKind`, and `shop.js`'s `_stockState` grew `kind`, so the badge, the button, the size sheet and the toast ask ONE function instead of four copies that had drifted three different ways. A case asserts exactly one place decides the word. **PROVED**: `test_fresh_today_label.js` 44 → **46 cases** (the toast now pinned per surface and per language, the PDP size sheet's toast pinned to the same rule as its badge, the grocery carve-out pinned in the toast too); `test_preorder_local.js` 66 → **67**, its add-on section rewritten for the row-level word and now checking BOTH live pairs against the grid rather than one. `npm run test:fast` 216 passed, 0 failed; eslint 0 errors; doc-numbering PASS. Code, tests and docs; no schema, no migration, no new route, no new capability, and no change to `.gitignore` or CI.
 
@@ -11910,3 +11912,116 @@ is still flagged rather than folded in.
 toast ask ONE function where four copies had drifted three ways. A case asserts
 exactly one place decides the word. `test_fresh_today_label.js` 44 → 46 cases,
 `test_preorder_local.js` 66 → 67; `test:fast` 216 passed, 0 failed.
+
+## §109 — AN APPROVER CAN SEE THE RECEIPT THEY ARE APPROVING
+
+**Decided by Ash, 2026-09-13**, from a live Finance → Approvals screenshot:
+two waiting claims, ¥22.70 and ¥20.58, the second showing **Could not read
+that photo.** where the first showed its photo. Asked what was wrong, and
+told the route scopes a receipt to its own submitter — so an approver
+reviewing anyone else's claim gets nothing, every time. Ash: **"make the
+picture visible."**
+
+### The route was answering a different question than the screen asks
+
+`GET /api/retail-admin/staff-expenses/:id/receipt` (`routes/staff-expenses.js`)
+matched:
+
+```sql
+SELECT receipt_data FROM staff_expenses WHERE id = ? AND submitted_by IS ?
+```
+
+bound to the CALLER's own id. That is the right query for `/mine` — a
+submitter looking back at their own history should see exactly their own
+receipts and nobody else's, and the route's own header comment is explicit
+that the ownership test belongs IN the query rather than as a fetch-then-
+compare, so no code path can be one early return away from serving anybody's
+private spending. It is the wrong query for `/pending`, the approval queue,
+which is gated on a completely different question — *can this operator
+approve somebody else's claim* — and hands the approver the amount, the
+category, the date and the claimant's own name for every waiting claim
+regardless of who submitted it. The receipt was the one field on that same
+row the approver could never reach. The screenshot's first claim only
+"worked" because Asher had submitted it himself and was self-approving
+(§87 part five allows this); the second belonged to someone else, which is
+the ordinary case an approval queue exists for.
+
+### The fix: one predicate, asked by the route that had never asked it
+
+`requireApprover` already existed and already answers exactly this
+question for `/pending` and `/decide`: the owner passes outright; anyone
+else needs a resolved capability set carrying `expenses:approve`, and a
+control-plane failure to resolve one fails CLOSED rather than open, because
+this is a money route. It is now split into the predicate and the gate:
+
+```js
+function isApprover(req) {
+  if (req.backendUser && req.backendUser.role === 'owner') return true;
+  return !!(req.caps && typeof req.caps.has === 'function' && req.caps.has('expenses:approve'));
+}
+function requireApprover(req, res, next) {
+  if (!isApprover(req)) return res.status(403).json({ error: ERR.forbidden });
+  return next();
+}
+```
+
+`/pending` and `/decide` are unchanged in behaviour — they still gate on
+`requireApprover` exactly as before. The receipt route now asks the bare
+predicate and branches its query on the answer:
+
+```js
+const row = isApprover(req)
+  ? db.prepare('SELECT receipt_data FROM staff_expenses WHERE id = ?').get(req.params.id)
+  : db.prepare('SELECT receipt_data FROM staff_expenses WHERE id = ? AND submitted_by IS ?')
+      .get(req.params.id, req.user?.id || null);
+```
+
+**The ownership test stays in the query, exactly as the route's own comment
+requires** — it is just a choice between two queries now, made by the same
+fail-closed predicate `/pending` already trusts to decide who sees
+everybody's spending in the first place. A non-approver — someone who holds
+`expenses:submit` and nothing else — gets the untouched original query and
+can still reach only their own receipts; nothing here widens what a
+submitter-only account can see. **No new capability was needed or added**:
+an approver already holds `expenses:approve` and already sees everything
+else about a stranger's claim through `/pending`; this closes the one gap
+where that same authority stopped short.
+
+### What was deliberately left alone
+
+The failure sentence itself — `Could not read that photo. ·
+无法读取该照片。`, the phone's own wording for the same failure on the
+picker that takes these photographs — is untouched. It still fires, and
+correctly: a receipt genuinely missing from the row, a dropped connection,
+or a stale claim id all still need to say so rather than look broken. What
+changes is that it no longer fires on a case that was never actually a
+failure — an approver looking at a claim they are entitled to decide.
+
+### Chinese
+
+Nothing composed. No string changed, no string moved between languages.
+
+### Tests
+
+`scripts/test_staff_expenses.js`'s existing case ("the receipt route matches
+on the OWNER in the query, not after it") is extended rather than replaced:
+the original submitted_by-scoped query still has to appear verbatim in the
+shipped source (it is still what a non-approver's request runs), and a new
+assertion pins the approver branch — the widened query, gated on the shared
+`isApprover` predicate — so a later edit that quietly re-narrows the
+approver's query, or forks the predicate into a second copy, goes red.
+`scripts/test_finance_approvals.js` gains its own case asserting the same
+from the Approvals screen's side, and its pre-existing "a receipt that
+cannot be read SAYS so" case is narrowed to what is still true: the failure
+sentence exists and still ships, without asserting the now-removed
+`submitted_by` restriction that used to make it fire on every stranger's
+claim.
+
+`npm run test:fast` 216 passed, 0 failed (unchanged file count; both new
+cases land inside existing suites). `npx eslint` 0 errors on
+`routes/staff-expenses.js`, `public/retail-admin/22-finance.js`,
+`scripts/test_staff_expenses.js` and `scripts/test_finance_approvals.js`.
+`node scripts/check-doc-numbering.js` PASS. `node
+scripts/check-swallowed-errors.js` unaffected — no catch block touched,
+456/456 against the standing budget. No schema, no migration, no new route,
+no new capability, no new Chinese, and no change to `.gitignore` or CI.

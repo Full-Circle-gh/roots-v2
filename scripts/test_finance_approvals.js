@@ -320,12 +320,20 @@ it('the poller does not act at load outside a browser', () => {
 });
 
 it('a receipt that cannot be read SAYS so', () => {
-  // The phone swallows this error and paints nothing, which is why nobody
-  // noticed that /staff-expenses/:id/receipt scopes to submitted_by and
-  // therefore serves an approver nothing for anybody else's claim.
+  // The control still has to say so on a genuinely missing photo, a dropped
+  // connection, or a stale id — §109 widened the route so an approver is no
+  // longer refused their OWN screen's claims, but this sentence still exists
+  // for the failures that remain.
   assert.match(APR_CODE, /无法读取该照片。/);
-  assert.match(ROUTE, /WHERE id = \? AND submitted_by IS \?/,
-    'when this route is widened, the sentence above stops firing on its own');
+});
+
+it('an approver reaches any claim\'s receipt, not just their own (§109)', () => {
+  // Everybody who can reach THIS screen already passed requireApprover
+  // (/pending is gated on it) — so the fix is that their receipt request
+  // stops being scoped to their own submitted_by.
+  assert.match(ROUTE, /function isApprover\(req\)/);
+  assert.match(ROUTE, /isApprover\(req\)\s*\n\s*\?\s*db\.prepare\('SELECT receipt_data FROM staff_expenses WHERE id = \?'\)/,
+    'an approver\'s query must not filter on submitted_by — that was the whole bug');
 });
 
 it('self-approval is marked, and the SERVER is what marks it', () => {
