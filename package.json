@@ -53,6 +53,7 @@
     "test:warehouse-pin": "node scripts/test_warehouse_store_pin.js",
     "test:shop-listings": "node scripts/test_shop_listings.js",
     "test:shop-menu-geometry": "node scripts/test_shop_menu_geometry.js",
+    "test:shop-menu-options": "node scripts/test_shop_menu_options.js",
     "test:shop-menu": "node scripts/test_shop_menu.js",
     "test:shop-menu-render": "node scripts/test_shop_menu_render.js",
     "test:shop-qr": "node scripts/test_shop_qr.js",

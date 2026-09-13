@@ -378,6 +378,16 @@ button{font:inherit;color:inherit;margin:0}
   font-size:13px;color:var(--td-text2);font-variant-numeric:tabular-nums;margin-top:2px;
   display:flex;align-items:baseline;gap:8px;
 }
+/* WHAT THE CUSTOMER CHOSE on a recalled QR line. Quieter than the product name
+   and sitting under it, because it qualifies that line rather than being one:
+   the cashier reads the drink first and checks the answers against the cup. It
+   wraps rather than truncating — a sugar level the counter cannot finish
+   reading is worse than one that takes two lines. */
+.ln .lno{
+  font-size:12px;color:var(--td-text2);margin-top:2px;
+  overflow-wrap:anywhere;
+}
+
 /* The product code, quieter than the name and steadier than it: tabular figures
    so a column of codes lines up under each other. NOT monospace — Tacet has
    none, and Inter's tabular figures already give the alignment that would have
@@ -1756,7 +1766,14 @@ button{font:inherit;color:inherit;margin:0}
           name: cuT(it.name_en || it.name_cn || '', it.name_cn || it.name_en || ''),
           sku: it.sku || '',
           price: Number(it.unit_price) || 0,
-          qty: Number(it.qty) || 0
+          qty: Number(it.qty) || 0,
+          // WHAT THE CUSTOMER CHOSE. A QR order can carry per-line answers —
+          // sugar level, an extra shot — and the cashier settling number 12
+          // was reading "Latte ×1" with no sign of them, which is the one thing
+          // on the screen they might have needed to check against the cup. The
+          // admin detail endpoint has always parsed options_json into
+          // `it.options`; this mapper simply dropped it.
+          opts: Array.isArray(it.options) ? it.options : []
         };
       });
       S.recall.loading = false;
@@ -1916,6 +1933,26 @@ button{font:inherit;color:inherit;margin:0}
     }
   }
 
+  // The chosen answers on a recalled QR line, one per row, under the product
+  // they qualify. `Question: Answer` — a bare "Yes" under a latte tells the
+  // cashier nothing, and the kitchen ticket beside them prints it the same way
+  // (lib/feie.js). The admin endpoint backfills the question for older rows, so
+  // an entry with no question left is drawn as its answer alone rather than as
+  // a stray colon. Nothing here is emitted for a till sale: its lines carry no
+  // options and `opts` is an empty array.
+  function optsHtml(opts) {
+    if (!opts || !opts.length) return '';
+    var h = '';
+    for (var i = 0; i < opts.length; i++) {
+      var o = opts[i] || {};
+      var a = cuT(o.label || o.label_en || '', o.label_cn || o.label || o.label_en || '');
+      if (!a) continue;
+      var q = cuT(o.question_en || '', o.question_cn || o.question_en || '');
+      h += '<div class="lno">' + esc(q ? q + ': ' + a : a) + '</div>';
+    }
+    return h;
+  }
+
   function renderLines() {
     if (!S.lines.length) {
       $('lines').innerHTML = '<div class="empty"><p>' + esc(T('noLines')) + '</p></div>';
@@ -1934,6 +1971,7 @@ button{font:inherit;color:inherit;margin:0}
       h += '<button class="ln' + (sel ? ' sel' : '') + '" type="button"'
          + (ro ? ' disabled' : ' data-line="' + i + '"') + '>'
          + '<span class="nm">' + (l.qty > 1 ? '<span class="q">×' + l.qty + '</span>' : '') + esc(l.name)
+         + optsHtml(l.opts)
          + '<div class="sb">' + (l.sku ? '<span class="sku">' + esc(l.sku) + '</span>' : '')
          + '<span>' + money(l.price) + '</span></div></span>'
          + '<span class="tt">' + money(l.qty * l.price) + '</span></button>';
