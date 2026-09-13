@@ -85,11 +85,14 @@ const MOB_SRC = [
   mob.block('const shopDayAdd=(iso,n)=>'),
   mob.line('const shopDayOf='),
   mob.block('const shopTodayDate=()=>'),
+  mob.line('function fmtTime(v)'),
   mob.block('function fmtDateOnly(v)'),
   mob.line('const _sched='),
   mob.line('const _pad2='),
   mob.block('function _slotEnd(start,label)'),
   mob.block('function _slotEndAnchor(scheduledFor,label)'),
+  mob.block('function _slotFacts(scheduledFor,label)'),
+  mob.block('function planLabel(p)'),
   mob.block('function shipByPlan(r)'),
   mob.block('function shipByUrgency(p,actionable)'),
   mob.block('function shipByTile(o)'),
@@ -101,6 +104,7 @@ function phone(nowIso) {
     T: (en) => en,
     tdWhen: td.tdWhen,
     tdFromShopLocal: td.tdFromShopLocal,
+    tdTimeWindow: td.tdTimeWindow,
     Date: frozenDate(nowIso), Math, Number, String, isNaN,
   };
   vm.createContext(ctx);
@@ -168,9 +172,15 @@ section('3 · a scheduled (non-batch) order is unaffected');
   const plan = ctx.shipByPlan(order);
   yes(plan.kind === 'scheduled', 'a customer-booked order is not a batch', plan.kind);
   const u = ctx.shipByUrgency(plan, true);
-  yes(u.level === 'today', 'the window closes within 24h, so urgency reads today', u.level);
+  /* THIS ROW USED TO EXPECT 'today', AND THAT EXPECTATION WAS THE BUG. The
+     clock here is 14:31 on Sep 12 and the slot is noon on Sep 13 — twenty hours
+     out, which the old hours-from-now ladder bucketed as today because 20 < 24.
+     It is tomorrow, and TC000692 was reported from the floor for saying
+     otherwise. The section's own subject is unchanged: a scheduled order still
+     gets a relative-day pill where a batch does not. */
+  yes(u.level === 'tomorrow', 'a slot on the next calendar day reads tomorrow, not today', u.level);
   const html = ctx.shipByTile({ plan, planUrgency: u });
-  yes(/class="pill"[^>]*>today</.test(html),
+  yes(/class="pill"[^>]*>tomorrow</.test(html),
     'a scheduled order still shows its relative-day pill when the label differs', html);
 }
 

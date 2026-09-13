@@ -13182,13 +13182,16 @@ function shipByTile(o){
   // case the echo check exists for: keep the colour, drop the pill.
   const word = u.level==='overdue'?T('overdue','已逾期'):u.level==='today'?T('today','今天')
              : u.level==='tomorrow'?T('tomorrow','明天'):T('soon','即将');
+  /* Said at RENDER time, so the toggle reaches it and the day word is recomputed
+     against today's clock rather than the one the customer picked on. */
+  const text=planLabel(p);
   const echo = tone && (p.kind==='batch'
     ? u.level!=='overdue'
-    : String(p.label||'').trim().toLowerCase()===word.toLowerCase());
+    : String(text||'').trim().toLowerCase()===word.toLowerCase());
   return `<div class="card" style="padding:14px">
     <span class="eyebrow">${T(...k)}</span>
     <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-top:7px">
-      <span class="num" style="font-size:16px;font-weight:500${echo?';color:var(--'+tone+'-ink)':''}">${escAttr(p.label)}</span>
+      <span class="num" style="font-size:16px;font-weight:500${echo?';color:var(--'+tone+'-ink)':''}">${escAttr(text)}</span>
       ${(tone&&!echo)?`<span class="pill" style="background:var(--${tone}-tint);color:var(--${tone}-ink)">${word}</span>`:''}</div>
     ${p.sub?`<div style="font-size:13px;color:var(--text-secondary);margin-top:4px">${escAttr(p.sub)}</div>`:''}</div>`;
 }
@@ -17248,15 +17251,82 @@ function _slotEndAnchor(scheduledFor,label){
   }
   return scheduledFor;
 }
+/* THE WINDOW AS FACTS, so its label can be said in either language.
+   `delivery_slot_label` is the CUSTOMER's own frozen text: the server writes
+   label_en "Tomorrow 10AM–12PM" OR label_cn "明天 10:00–12:00", never both, and
+   only the one is stored. Handing it to the screen raw therefore put Chinese on
+   an English drawer — reported from the floor on TC000692, whose Booked tile
+   read 明天 10:00–12:00 with the rest of the sheet in English. The desktop
+   stopped doing this by rebuilding the line out of the ORDER's own data
+   (slotWindowText, retail-admin/04-orders.js §1.18); the reduced port here
+   never carried that half, and the comment above this block said so.
+
+   Both ends are already ours. `scheduled_for` IS the window START as an
+   absolute instant, and _slotEnd above parses the END out of the label — the
+   same two facts the urgency anchor is built from, so the words and the colour
+   can no longer disagree about which window this is.
+
+   Carried RAW and worded at render time by planLabel below, never here:
+   mapDetail's result is cached in state.liveDetail and toggleLang only
+   re-renders, so a string built at map time would keep speaking the language it
+   was minted in. Same rule ITEM_TUPLE and placedFull follow.
+
+   Shop MIDNIGHT is the server's "a day, no hour" sentinel. With no clock in the
+   label the DATE is the whole fact and is rendered alone; with one, the label
+   holds an hour that `scheduled_for` does not, and deriving would silently drop
+   it — so that shape falls back to the stored words. The same carve-out
+   slotWindowText makes, for the same reason. */
+function _slotFacts(scheduledFor,label){
+  const start=_sched(scheduledFor); if(!start) return null;
+  if(typeof tdFromShopLocal!=='function'||typeof tdTimeWindow!=='function') return null;
+  const day=shopDayOf(start); if(!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
+  const mid=tdFromShopLocal(day+'T00:00');
+  if(mid&&mid.getTime()===start.getTime()){
+    const hasClock=/\d{1,2}\s*[:：]\s*\d{2}|\d{1,2}\s*(?:am|pm)/i.test(String(label==null?'':label));
+    return hasClock?null:{start:start.toISOString(),end:null,dayOnly:true};
+  }
+  const end=_slotEnd(start,label);
+  return {start:start.toISOString(),end:end?end.toISOString():null,dayOnly:false};
+}
+/* The plan's headline, in the language on screen NOW and on the shop's clock.
+   A plan carrying the window as facts is said afresh; every other kind keeps
+   the label it was given, so nothing but the two slot kinds changes.
+
+   fmtDateOnly is the day word the rest of this file already uses — Today /
+   Tomorrow / Yesterday, then the date once no relative word is honest — and it
+   reads the shop's today, not the browser's. It is also the reason the stored
+   day word could not simply be trusted: computeDeliverySlots mints "明天" from
+   the clock at the moment the customer was PICKING, and checkout freezes that
+   string, so an order picked yesterday for today still says Tomorrow. Derived
+   from scheduled_for, the word is true every day it is read. */
+function planLabel(p){
+  if(!p) return '';
+  const s=p.slot; if(!s) return p.label||'';
+  const day=fmtDateOnly(s.start);
+  if(s.dayOnly) return day;
+  /* A relative word is not a date, and the two join a clock differently. Today
+     / Tomorrow take a plain space; a DATE takes §1.18's own separator, which is
+     ", " in English and a space in Chinese ("Sep 14, 10:00 AM" · "9月14日
+     10:00"). Neither separator is written here — the first case is a space
+     because there is nothing to separate, and the second asks `dateTime` for
+     the join, which is the name's whole reason for existing. The date form is
+     the desktop's slotWindowText verbatim (04-orders.js), so the two screens
+     spell the same order the same way. */
+  if(day!==tdWhen(s.start,'date',_tdL()))
+    return day+' '+(s.end?tdTimeWindow(s.start,s.end,_tdL()):fmtTime(s.start));
+  return tdWhen(s.start,'dateTime',_tdL())+(s.end?'–'+fmtTime(s.end):'');
+}
 /* shipByPlan, reduced: the same five kinds and the same urgency anchors. The
-   desktop's label prettifiers (humanizeSlotLabel / slotWindowText) are not
-   ported — the stored label is used as-is — so a row can read slightly more
-   raw here than on the desktop, but it never reads WRONG. */
+   desktop's label prettifiers are not ported wholesale, but the two slot kinds
+   now carry their window as FACTS (`slot`, above) so planLabel can say them in
+   the viewer's language — the stored label stays as the fallback for a row
+   nothing can be derived from. */
 function shipByPlan(r){
   const done=['dispatched','delivered','cancelled','refunded'].includes(r.status);
   if(r.fulfillment_type==='counter') return null;
   if(r.fulfillment_type==='pickup') return {kind:'pickup',
     label:r.delivery_slot_label||T('During pickup hours','营业时间内自取'),
+    slot:_slotFacts(r.scheduled_for,r.delivery_slot_label),
     sub:T('pickup','自提'),
     when:r.scheduled_for?_slotEndAnchor(r.scheduled_for,r.delivery_slot_label):null,
     basis:'arrival', done};
@@ -17276,6 +17346,7 @@ function shipByPlan(r){
     return {kind:'asap',label:T('Ship when ready','备好即发'),sub:T('courier','快递'),when:r.placed_at||null,basis:'age',done};
   }
   return {kind:'scheduled', label:r.delivery_slot_label||fmtDay(r.scheduled_for),
+    slot:_slotFacts(r.scheduled_for,r.delivery_slot_label),
     sub:'', when:_slotEndAnchor(r.scheduled_for,r.delivery_slot_label),
     basis:'arrival', done};
 }
@@ -17329,8 +17400,24 @@ function shipByUrgency(p,actionable){
     return out;
   }
   const d=_sched(p.when); if(!d) return out;
-  const hrs=(d.getTime()-Date.now())/3600000;
-  out.level = hrs<0?'overdue' : hrs<24?'today' : hrs<48?'tomorrow' : 'later';
+  /* OVERDUE is a question about the INSTANT — has the deadline passed — and
+     today / tomorrow are questions about the CALENDAR. An hours-from-now bucket
+     cannot answer the second, and answering it anyway is what put a "today"
+     pill on a slot that runs tomorrow morning: reported from the floor on
+     TC000692, read at 20:59 against a 10:00–12:00 window the NEXT day. That
+     window closes fifteen hours out, `hrs<24` called it today, and the tile
+     said 明天 10:00–12:00 · today about one order. The two words were never
+     measuring the same thing.
+
+     So: the instant decides overdue, and whole shop days decide the word —
+     the same comparison the bare-date branch above already makes, on the same
+     shop clock (shopDayOf / shopTodayDate read the account's zone). */
+  if(d.getTime()<Date.now()){ out.level='overdue'; return out; }
+  const day=shopDayOf(d); if(!/^\d{4}-\d{2}-\d{2}$/.test(day)) return out;
+  const dp=day.split('-');
+  const days=Math.round((new Date(+dp[0],+dp[1]-1,+dp[2]).getTime()-shopTodayDate().getTime())/86400000);
+  out.days=days;
+  out.level = days<=0?'today' : days===1?'tomorrow' : 'later';
   return out;
 }
 /* Live courier stage — the same three the desktop names, and the same rule that
@@ -17409,14 +17496,25 @@ function deliveryLine(r){
   const plan=shipByPlan(r); if(!plan) return null;
   const actionable=r.status==='paid'||r.status==='preparing';
   const u=shipByUrgency(plan,actionable);
+  const label=planLabel(plan);
   let tag='';
   if(actionable){
     if(u.level==='overdue') tag=' · '+T('overdue','已逾期');
-    else if(plan.kind!=='batch'&&u.level==='today') tag=' · '+T('today','今天');
-    else if(plan.kind!=='batch'&&u.level==='tomorrow') tag=' · '+T('tomorrow','明天');
+    else if(plan.kind!=='batch'&&(u.level==='today'||u.level==='tomorrow')){
+      const word=u.level==='today'?T('today','今天'):T('tomorrow','明天');
+      /* The label now LEADS with the relative day word wherever one is honest,
+         so a tag repeating it would say that word twice — "Tomorrow 10:00 AM –
+         12:00 PM · tomorrow" — in a cell capped at 52% of the row that does not
+         wrap, where the repeat is what the cap eats first. Dropped where it
+         echoes, kept where the label names a date or a window the word adds to.
+         The drawer tile makes the same trade one screen over. The COLOUR is
+         untouched: `tone` below reads the level, not the tag, so an order that
+         loses the word keeps the amber that made it worth reading. */
+      if(!label.toLowerCase().startsWith(word.toLowerCase())) tag=' · '+word;
+    }
   }
   const tone = !actionable?'plain' : u.level==='overdue'?'brick' : (u.level==='today'||u.level==='tomorrow'||u.level==='soon')?'amber':'plain';
-  return {text:plan.label+tag, sub:plan.sub||'', tone};
+  return {text:label+tag, sub:plan.sub||'', tone};
 }
 /* Why an order is being fulfilled somewhere other than the obvious store.
    Silent for nearest/only-store, which is the normal case and says nothing. */

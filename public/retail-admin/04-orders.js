@@ -2376,11 +2376,25 @@ function shipByUrgency(p, actionable) {
     else if (hrs < 24)  { r.level = 'soon';    if (actionable) r.color = warn; }
     else                { r.level = 'later';   r.color = plain; }
   } else { // arrival
-    if (hrs < 0)        { r.level = 'overdue';  if (actionable) r.color = danger; }
-    else if (hrs < 6)   { r.level = 'today';    if (actionable) r.color = danger; }
-    else if (hrs < 24)  { r.level = 'today';    if (actionable) r.color = warn; }
-    else if (hrs < 48)  { r.level = 'tomorrow'; if (actionable) r.color = warn; }
-    else                { r.level = 'later';    r.color = plain; }
+    // OVERDUE is a question about the INSTANT — has the window closed — and
+    // today / tomorrow are questions about the CALENDAR. An hours-from-now
+    // bucket cannot answer the second: `hrs < 24` called a 10:00–12:00 window
+    // the NEXT morning "today (15h)" whenever it was read after 21:00, and
+    // `hrs < 48` said "tomorrow" about a slot two days out. Reported from the
+    // floor on TC000692 (the phone's copy of this ladder said it too).
+    //
+    // So the instant decides overdue and whole GZ calendar days decide the
+    // word — the same comparison the date-only branch above already makes. The
+    // HOURS stay, but only where they are a statement about time remaining and
+    // not about a day: under six hours is still red, and the tile still badges
+    // it "⚠ in 5h" rather than naming a day at all.
+    const ng2 = gzParts(new Date()), dg = gzParts(d);
+    const days = Math.round((Date.UTC(dg.y, dg.mo, dg.da) - Date.UTC(ng2.y, ng2.mo, ng2.da)) / 86400000);
+    r.days = days;
+    if (hrs < 0)         { r.level = 'overdue';  if (actionable) r.color = danger; }
+    else if (days <= 0)  { r.level = 'today';    if (actionable) r.color = hrs < 6 ? danger : warn; }
+    else if (days === 1) { r.level = 'tomorrow'; if (actionable) r.color = hrs < 6 ? danger : warn; }
+    else                 { r.level = 'later';    r.color = plain; }
   }
   if (!actionable) r.color = plain;
   return r;
