@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.254
+# Tacet shared-core consolidation — decisions record, v4.256
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-13 · v4.256 — **A SWITCH BELONGS ON THE ROW WHOSE VALUE IT CHANGES — §122, REPORTED BY ASH against §116's own record, with the block circled: *"this part need to redesign. not clear."*** Five centred sentences at the foot of the customer record, with no container, no icons, nothing saying they could be pressed, labels that were clauses rather than verbs, and Brick TEXT where §5 gives destructive a Brick OUTLINE — so Block, which locks a person out, read at the same weight as Reissue, which is undone in one tap. **The fault that was not styling:** the block was the desktop's More menu lifted whole, and four of its five controls act on facts already on screen a few rows up. **Three mockups were put up and Ash chose Option B** (`design-handoff/customer-actions/`): each control now sits on the row whose value it changes — Their code · Reissue, Referring · Stop, Ongoing share · Allow, Signed in on 2 devices · Sign out — through `custRowAct`, which renders `custRow`'s exact shape when no control is passed, and **that null is where the capability gate lands**: an operator who may not write is passed no control and the row goes on stating its fact. **Block keeps the foot alone**, as a Brick outline: it is the only thing there that takes something away from a person, and it has no fact-row to sit on. Unblock is NOT dressed as destructive — it gives something back. **The open question is settled by the choice:** §116 drew the Referring row only once referring had been STOPPED; a switch that materialises the first time you use it is worse than the drawer it replaced, so the row is always drawn now (Active / Stopped), gated on the affiliate FEATURE rather than the flag. The ongoing share keeps its narrower 'selected'-mode condition, which is about meaning rather than about carrying a control. **Tests:** 84 → **103 assertions across 37 cases**, asserting WHERE a control is — each switch resolves to the list carrying its own fact, labels are at most two words, the foot holds exactly one button, and every `.rowact` measures 44px or more. **Chinese:** one composed pair (`有效`), four trims and one lift, v1.75; every long label survives on the confirm its verb opens. No route, no schema, no migration, no capability change, no CI or .gitignore change.**
+
+2026-09-13 · v4.255 — **§121 DECIDED AND BUILT: OPERATIONS IS EIGHT GROUPS, AND THREE PILLS SAY WHAT A LABEL CANNOT — DECIDED BY ASH in two words, *"do option a"*, completing the set.** `docs/tacet-operations-clarity-options.md` now has no open options: **B** shipped as §118, **two of A's four renames** as §119, and **A's grouping and pills** here; only the `Invoices` rename stays declined, for §119's reason. **THE GROUPING IS THE MECHANISM, WHICH IS WHY NO ROW GAINED A SUBTITLE**: every pair that read as one row now sits in a different group from its twin — Purchasing under *Stock coming in* and Ask to buy under *Ask someone else*, Add stock and Ask for stock likewise, Kitchen queue and Ask the kitchen likewise — so position says it and a sentence under all twenty-two would say it twice at four times the strings. **Row order inside a group is the order of the job**, not the old flat order. **TWO GROUPINGS THAT LOOK WRONG AND ARE NOT**: the two receiving rows are TOGETHER, because §119 gave them names that differ and side by side those names are the whole difference; and Expense and Approvals are together with the **PILL as their only separator**, because they are two ends of one feature and under a shared heading Approvals would otherwise read as a second Expense — the suite asserts both halves. **ONE ROW MOVED ON ITS OWN EVIDENCE**: *Ready from the kitchen* sat in *Making things* in the first draft, which reads naturally since all three sound like production, and was wrong — `ROUTE_CAP` gates it on `['restock:request','restock:pick']`, *"the people who RAISE these requests"*, so it is the requester's side and sits with the asks, **wearing no pill**: the three rows above it ask, and this one is the answer coming back. **THREE PILLS, AND NO PILL IS THE DEFAULT** — Ask · 申请 on the three request screens, Approve · 审批 on Approvals, Settings · 设置 on Delivery settings. A row you simply do wears nothing, which is the only thing keeping a pill scarce enough to read, and all three are NEUTRAL: a direction is a fact about the row, not a state needing attention (the tier-pill rule), so Sage, Amber, Brick and Dusk are unspent. Keyed in `ROW_PILL` rather than as a seventh positional element, the shape `QUICK_VERB` already uses. **A GROUP WITH ONE ROW IS ACCEPTED**: a picker sees *Send it out* over a single row and the heading still says what it is for; collapsing back below some row count would change the shape of the screen as permissions change. **RECORDED: AN OR-SHAPED GUARD THAT DID NOT GUARD.** The confusable-pair case first asserted separation *by the grouping OR by the pill* — and since every one of those pairs has a pill on one side, the OR was satisfied by the pill every time and the grouping half never bit: **moving Ask to buy back beside Purchasing passed.** Red-proofing found it; each pair is now named with the mechanism that actually carries it. §119 recorded a label-shaped guard that had stopped guarding, and **this is the same failure wearing an `||`.** **Tests:** new `scripts/test_mobile_ops_groups.js` — **12 checks, reads only, FAST shard and part of the gate**, four of them red-proofed (a pair regrouped, the receiving pair split, Approvals' pill dropped, the pill painted Sage); `test_mobile_ask_strip.js` re-pointed at the eight groups by the FIRST HEADING rather than a group count, so a ninth cannot silently narrow what it counts; `test_mobile_home.js` updated where it asserted the retired `Operations` heading. `npm run test:fast` **231 passed, 0 failed**; nav 100/38, home 153/46 green; eslint 0 errors; doc-numbering PASS. **Eleven strings, every one a LIFT and not one composed** — four headings are two live row labels joined by `与`, and the three pills are each a row label or its stem — declared in `docs/tacet-delivery-vocabulary.md` v1.77 with the rejections, including `出货`, which is live in no UI pair and has a test case guarding that claim. No route, no schema, no migration, no new capability, no CSS file, and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.254 — **§120 DECIDED: THE QR MENU ASKS THE QUESTIONS THE COUNTER WOULD HAVE ASKED — DECIDED BY ASH, who answered both open questions and then said *"do all as you see fit"*.** Asked whether the QR menu has variant options, the answer was flatly no: it sells a flat row, tap Add and get one unit, and it reads NEITHER of the two choice mechanisms this system already has. **THE SURVEY IS THE VALUABLE HALF and it shrank the job from days to about one:** `options_json` on `retail_order_items` already exists and the web/mini-app checkout already fills it; `lib/feie.js` already prints every chosen option with its question in both languages on both templates; and the till NEVER re-prices a QR order — `recall()` loads it read-only and the settle path only marks it paid — so base-plus-extras needs nothing from the till but a line that shows what was chosen. **TWO RULES DECIDED BY ASH: a sold-out paid extra greys out and the drink still sells (1A), and a required question BLOCKS and names itself (2B).** **NO CHINESE COMPOSED** — `请选择 ` + the question is the storefront's own required-option toast and the mini app's, character for character, and the vocabulary document is not touched. **AND THE PRECEDENT THIS WAS ABOUT TO COPY TURNED OUT TO BE DEAD CODE:** `addon_available` was read by both mini-app surfaces and written nowhere in the repository, so the sold-out-extra guard had never once fired and a shopper could be billed for an extra the counter had run out of. Fixed separately, one PR per change, before this build starts. **NUMBERED §120, NOT §117.** This was drafted and its PR opened as §117 while that number was free; three sections (§117, §118, §119) landed on main from other sessions in the hours it sat open. A number is permanent once it is ON MAIN, so the unmerged one moves — and the doc-numbering check is what caught it.
 
@@ -13415,3 +13419,188 @@ looked right and sold oat milk it did not have. The fix answers the question at
 fail without it. The QR menu computes its OWN availability rather than reaching
 for that field, because its stock question is a different one — this shop's
 shelf, not the company's sellable count (§47).
+
+## §121 — OPERATIONS IS EIGHT GROUPS, AND THREE PILLS SAY WHAT A LABEL CANNOT
+
+**DECIDED 2026-09-13 by Ash: OPTION A**, in two words — *"do option a"* — completing the
+set. The whole of `docs/tacet-operations-clarity-options.md` is now answered: **B** shipped
+as §118, **two of A's four renames** as §119, and **A's grouping and pills** here. The one
+part still declined is the `Invoices` rename, for the reason §119 gave.
+
+### The grouping is the mechanism, which is why no row gained a subtitle
+
+One heading over twenty-two rows becomes eight headings: *Take an order · Money and numbers ·
+Send it out · Stock coming in · Making things · Ask someone else · Record and review ·
+Messages and channels*.
+
+**Every pair that read as one row now sits in a different group from its twin** — Purchasing
+under *Stock coming in* and Ask to buy under *Ask someone else*; Add stock and Ask for stock
+likewise; Kitchen queue and Ask the kitchen likewise. Position says it, so a sentence under
+all twenty-two would be saying it a second time at four times the strings. **That is the
+argument the options document made for A over a subtitle, and it is the argument that held.**
+
+**Row order inside a group is the order of the job**, not the old flat order: Purchasing (you
+order it) → the two receipts (it arrives) → Add stock.
+
+### Two groupings that look wrong and are not
+
+**The two receiving rows are TOGETHER.** §119 gave them names that differ, and side by side
+under one heading those two names are the whole difference, readable in one glance. Splitting
+them apart would hide the very contrast the rename bought.
+
+**Expense and Approvals are together too, and the PILL is what separates them.** They are two
+ends of one feature, so a shared heading is correct — but under it, Approvals would read as a
+second Expense. The mark is the only thing telling them apart, which is why the suite asserts
+both halves: shared heading, and a pill on exactly one of them.
+
+### One row moved on its own evidence
+
+**Ready from the kitchen was in *Making things* in the first draft of this grouping — which
+reads naturally, since all three sound like production — and it was wrong.** `ROUTE_CAP`
+gates it on `['restock:request','restock:pick']`, *"the people who RAISE these requests"*, and
+its note there says telling a fulfil-only kitchen operator their own work is waiting is
+telling them about themselves. It is the **requester's** side: how the thing you asked for is
+going. So it sits with the asks, and wears no pill — the three rows above it ask, and this one
+is the answer coming back.
+
+### Three pills, and no pill is the default
+
+- **Ask · 申请** — the three request screens. Each asks somebody else and moves nothing
+  itself, the single most load-bearing fact about them and absent from all three rows before.
+- **Approve · 审批** — Approvals. Somebody else's claim, not your own.
+- **Settings · 设置** — Delivery settings. Not a job at all.
+
+**A row you simply do wears nothing**, which is the only thing keeping a pill scarce enough to
+read; on most rows it is a column. **Always neutral** — a direction is a fact about the row,
+not a state needing attention, the same reason the customer tier pills are neutral. Sage,
+Amber and Brick are not spent here, and Dusk certainly is not: nothing on this screen was
+done by the AI.
+
+**Keyed in `ROW_PILL`, not a seventh element on the row.** A row is
+`[key, icon, en, zh, href?, feat?]`; a seventh positional slot would make every pilled row
+carry two nulls to reach it, and the next addition an eighth. `QUICK_VERB` already keeps this
+shape for the same kind of per-row afterthought.
+
+### A group with one row is accepted
+
+A picker holding only `restock:pick` sees *Send it out* over a single row, and that heading
+still says what the row is for. The alternative — collapsing back to one *Operations* below
+some row count — is a rule that changes the shape of the screen as permissions change, and
+nobody could predict it.
+
+### Recorded: an OR-shaped guard that did not guard
+
+The first version of the confusable-pair case asserted each pair was separated *by the
+grouping **or** by the pill*. **Every one of those pairs has a pill on one side, so the OR was
+satisfied by the pill every time and the grouping half never bit** — moving Ask to buy back
+beside Purchasing passed the suite. Red-proofing found it. Each pair is now named with the
+mechanism that actually carries it. **§119 recorded a label-shaped guard that had stopped
+guarding; this is the same failure wearing an `||`.**
+
+### What is now closed
+
+`docs/tacet-operations-clarity-options.md` has no open options left. Its §5 list of things
+deliberately NOT built — a subtitle on every row, a subtitle naming each twin, an ⓘ per row,
+renaming more than four rows, a drill-down — stands as the record of what was considered and
+declined, and none of it is made more likely by this.
+
+---
+
+## §122 — A SWITCH BELONGS ON THE ROW WHOSE VALUE IT CHANGES
+
+**Reported by Ash, 2026-09-13**, against §116's own record, with a photograph
+of the block circled: **"this part need to redesign. not clear."**
+
+The block was mine, shipped hours earlier. The complaint is right, and the
+useful part of it is that only five of the six faults are styling.
+
+### What was wrong
+
+Read against `docs/tacet-design-system.md` §5 and §6, and against the app's own
+`sheetActions` — which is what a list of actions already looks like in this file:
+
+1. **No container, no icon, no affordance.** Every other action list in
+   `public/m.html` is a bordered card of left-aligned icon rows. This was five
+   centred sentences in bare space; nothing said they could be pressed.
+2. **Labels were clauses, not verbs** — *"Let them earn the ongoing share"*.
+   §6 says labels are verbs.
+3. **Brick TEXT floating in a list**, where §5 gives destructive a Brick
+   OUTLINE — so Block, which locks a person out of their account, carried the
+   same weight as Reissue, which is undone in one tap.
+4. **Two unrelated groups in one stack** — three referral controls, two account
+   controls, nothing between them.
+5. **No heading**, so the block hung off the diagnostics line above it.
+6. **It was in the wrong place.** This is the sixth and the only one that is
+   not styling. The block was the desktop's `More ▾` menu lifted whole — and
+   four of its five controls act on facts already on screen a few rows up:
+   *Signed in on 2 devices*, *Their code*, *Referring*, *Ongoing share*. The
+   drawer restated what the record had just said.
+
+### The decision
+
+**A control goes on the row whose value it changes.** Three mockups were put up
+(`design-handoff/customer-actions/`, and the canvas keeps the two that were not
+taken); Ash chose this one.
+
+| Row | States | Offers |
+|---|---|---|
+| Their code | `AB12CD` | Reissue |
+| Referring | Active / Stopped | Stop / Allow |
+| Ongoing share | Earning / Not earning | Stop / Allow |
+| Signed in on | 2 devices | Sign out |
+
+`custRowAct` is the row that carries both. It renders exactly `custRow`'s shape
+when no control is passed, so a list can mix stated facts and changeable ones
+without the rows disagreeing about height — and **that null is where the
+capability gate lands**: an operator who may not make the write is passed no
+control and the row goes on stating its fact, rather than the row vanishing and
+taking the fact with it.
+
+### Block keeps the foot, and it is the only thing down there
+
+Not an oversight and not symmetry for its own sake. Block is the one control
+here that takes something away from a person rather than adjusting a setting
+about them; it has no fact-row to sit on (the blocked state is a pill in the
+sheet's header); and it wants distance from the routine controls, not
+proximity. It is a Brick outline now, per §5 — which is also what stops it
+reading at the same weight as Reissue. **Unblock is not dressed as destructive**:
+it gives something back, so it renders as the ordinary secondary button.
+
+### The one open question, settled by the choice
+
+§116 drew the *Referring* row **only once referring had been stopped**, on the
+stated grounds that "a row reading 'allowed' on every customer is not
+information". That was right about a row that only ever states, and it stops
+being right the moment the row is also the way to change it: a control that
+materialises out of nowhere the first time somebody uses it is worse than the
+drawer it replaced. **The row is always drawn now**, reading Active or Stopped.
+
+It is gated on the affiliate **feature**, not on the flag — in a shop with
+referrals switched off there is nothing to stop, and the row would be a control
+over nothing.
+
+The ongoing share keeps its narrower condition (`lifetime_mode === 'selected'`)
+because that one is about MEANING rather than about whether a row can carry a
+control: in `everyone` mode this customer already earns the share and a
+per-person switch would change nothing. That is the desktop's own rule.
+
+### What holds it
+
+`scripts/test_mobile_customers.js` grows from 84 assertions to **103 across 37
+cases**. Seven new cases, and they assert something neither a render pass nor a
+request-body check can see — WHERE a control is: each switch resolves to the
+`.list` that carries its own fact (`Reissue` in the list containing the code,
+`Sign out` in the list containing *Signed in on*), every row label is at most
+two words, the foot holds exactly one button and it carries `dangerbtn`,
+unblock does not, Referring states itself with the flag clear and turns around
+with it set, the row is absent when the affiliate feature is off, and every
+`.rowact` measures **44px or more** — an underlined 13.5px label is 20px tall on
+its own, which is the trap this row shape walks into.
+
+**Chinese:** one composed pair (`有效`), four trims and one verbatim lift,
+declared in `docs/tacet-delivery-vocabulary.md` v1.75. The long labels are not
+lost — each survives on the confirm its verb opens, so the row and its
+confirmation cannot drift.
+
+No route, no schema, no migration, no capability change, and no change to
+`.gitignore` or CI.

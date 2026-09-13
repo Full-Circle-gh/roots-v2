@@ -1,0 +1,195 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap">
+  <style>
+/* Tacet mobile tokens — lifted verbatim from public/m.html :root (light).
+   Not rounded, not re-derived: these are the values the app paints with. */
+:root{
+  --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --dusk:#6E67AF;
+  --brick:#B4533E; --brick-tint:#F6E7E3; --brick-ink:#B4533E;
+  --dusk-tint:#EEEDF6; --dusk-ink:#524C8F; --sage:#A3B49F;
+  --raised:#F6F3EC; --border:#E4E0D5; --edge:#948B76;
+  --surface-card:#FFFFFF; --surface-raised:var(--raised);
+  --text-primary:var(--ink); --text-secondary:var(--graphite);
+  --border-default:var(--border);
+  --ui:'Inter','Source Han Sans SC','PingFang SC',system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--text-primary);
+  font-family:var(--ui);font-size:15px;font-weight:400;line-height:1.6;
+  -webkit-font-smoothing:antialiased}
+a{color:var(--text-primary)}a:hover{color:var(--dusk)}
+.num{font-variant-numeric:tabular-nums}
+
+/* The frame. 390x844, no drawn device and no fake status bar. */
+.screen{width:390px;height:844px;position:relative;overflow:hidden;
+  background:var(--paper);display:flex;flex-direction:column}
+
+/* What sits behind the sheet — the roster, dimmed by the scrim. */
+.behind{position:absolute;inset:0;padding:14px 16px;background:var(--paper)}
+.behind h1{margin:0;font-size:20px;font-weight:500;letter-spacing:-.01em}
+.scrim{position:absolute;inset:0;background:rgba(17,26,43,.38)}
+
+/* The record sheet — .sheet in m.html, top:46px. */
+.sheet{position:absolute;left:0;right:0;top:46px;bottom:0;background:var(--surface-card);
+  border-radius:18px 18px 0 0;display:flex;flex-direction:column;overflow:hidden}
+.grabber{width:38px;height:5px;border-radius:999px;background:var(--border-default);margin:6px auto 8px}
+.head{flex:none;padding:8px 16px 16px;border-bottom:1px solid var(--border-default)}
+.headrow{display:flex;align-items:center;gap:16px}
+.avatar{width:32px;height:32px;flex:none;border-radius:8px;background:var(--dusk-tint);
+  color:var(--dusk-ink);display:flex;align-items:center;justify-content:center;
+  font-size:15px;font-weight:500}
+.name{font-size:18px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;font-size:13px;font-weight:400;
+  padding:4px 10px;border-radius:999px;white-space:nowrap;flex:none;
+  background:rgba(88,96,110,.10);color:var(--text-secondary)}
+.spacer{flex:1}
+.iconbtn{width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;
+  border:0;border-radius:8px;background:none;color:var(--text-primary);cursor:pointer}
+.phone{margin-top:4px;font-size:13px;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+
+/* The four everyday actions — .btn2, stacked icon over label. */
+.acts{display:flex;align-items:stretch;gap:8px;margin-top:16px}
+.btn2{min-height:44px;border-radius:8px;border:1.5px solid var(--edge);background:transparent;
+  color:var(--text-primary);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.acts .btn2{flex:1;min-width:0;flex-direction:column;gap:4px;padding:9px 4px;height:auto}
+.acts .btn2 span{font-size:12px;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+
+.body{flex:1;min-height:0;overflow:hidden;padding:16px 16px 24px}
+.sect{margin-top:16px}
+.sect:first-child{margin-top:0}
+.secthead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px}
+.eyebrow{font-size:13px;font-weight:500;color:var(--text-secondary)}
+.list{background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;overflow:hidden}
+.sep{height:1px;background:var(--border-default)}
+.lrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 16px}
+.lrow .l{font-size:14.5px}
+.lrow .r{font-size:14.5px;color:var(--text-secondary);font-variant-numeric:tabular-nums;text-align:right}
+
+/* Ghost action sitting on the row it changes (Option B). */
+.rowact{border:0;background:none;padding:6px 0;margin:0;font-family:inherit;
+  font-size:13.5px;font-weight:500;color:var(--text-secondary);cursor:pointer;
+  text-decoration:underline;text-decoration-color:var(--border-default);
+  text-underline-offset:3px;flex:none}
+.rowact.brick{color:var(--brick-ink);text-decoration-color:rgba(180,83,62,.35)}
+
+/* Action row with an icon — the app's own .row, used by sheetActions. */
+.arow{display:flex;align-items:center;gap:16px;width:100%;min-height:52px;padding:12px 16px;
+  background:transparent;border:none;cursor:pointer;text-align:left;
+  color:var(--text-primary);font-family:inherit;font-size:15px}
+.arow .ico{display:flex;flex:none;color:var(--text-secondary)}
+.arow.brick{color:var(--brick-ink)}
+.arow.brick .ico{color:var(--brick-ink)}
+
+/* Destructive — Brick OUTLINE, never a solid slab (design system §5). */
+.danger{width:100%;min-height:44px;border-radius:8px;background:transparent;
+  border:1.5px solid var(--brick);color:var(--brick-ink);font-family:inherit;
+  font-size:15px;font-weight:500;cursor:pointer;display:inline-flex;
+  align-items:center;justify-content:center;gap:8px}
+
+.chart{display:flex;align-items:flex-end;gap:4px;height:56px}
+.chart span{flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%}
+.chart i{display:block;border-radius:3px 3px 0 0;background:var(--surface-raised);height:3px}
+.chart i.on{background:var(--text-primary)}
+.axis{display:flex;justify-content:space-between;margin-top:6px;font-size:12px;
+  color:var(--text-secondary);font-variant-numeric:tabular-nums}
+.caption{font-size:12.5px;color:var(--text-secondary);margin-top:4px}
+.diag{margin-top:16px;font-size:13px;color:var(--text-secondary)}
+
+/* A ghost action must still be a 44px target (mockup scale rule). */
+.rowact{min-height:44px;display:inline-flex;align-items:center;padding:0}
+.lrow{min-height:48px}
+
+  </style>
+</helmet>
+<div class="screen">
+  <div class="behind">
+    <h1>Customers</h1>
+  </div>
+  <div class="scrim"></div>
+
+  <div class="sheet">
+    <div class="head">
+      <div class="grabber"></div>
+      <div class="headrow">
+        <span class="avatar">D</span>
+        <span class="name">Dani</span>
+        <span class="pill">Seed</span>
+        <span class="spacer"></span>
+        <button class="iconbtn" aria-label="Close">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+        </button>
+      </div>
+      <div class="phone">13121915665</div>
+    </div>
+
+    <div class="body">
+
+      <div class="sect" style="margin-top:0">
+        <div class="eyebrow" style="margin-bottom:8px">Account</div>
+        <div class="list">
+          <div class="lrow"><span class="l">Last order</span><span class="r">2:59 AM</span></div>
+          <div class="sep"></div>
+          <div class="lrow"><span class="l">Last signed in</span><span class="r">2:33 AM</span></div>
+          <div class="sep"></div>
+          <div class="lrow"><span class="l">Signed in on</span><span class="r">2 devices</span></div>
+        </div>
+      </div>
+
+      <div class="diag" style="margin-top:14px">No app errors in 7 days</div>
+
+      <div class="sect" style="margin-top:22px">
+        <div class="eyebrow" style="margin-bottom:8px">Referrals</div>
+        <div class="list">
+          <button class="arow">
+            <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></span>
+            <span style="flex:1">Reissue code</span>
+            <span class="r" style="color:var(--text-secondary);font-size:13.5px">AB12CD</span>
+          </button>
+          <div class="sep"></div>
+          <button class="arow">
+            <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+            <span style="flex:1">Allow the ongoing share</span>
+            <span class="r" style="color:var(--text-secondary);font-size:13.5px">Off</span>
+          </button>
+          <div class="sep"></div>
+          <button class="arow brick">
+            <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 8 5 5"/><path d="m22 8-5 5"/></svg></span>
+            <span style="flex:1">Stop them referring</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="sect">
+        <div class="eyebrow" style="margin-bottom:8px">This account</div>
+        <div class="list">
+          <button class="arow">
+            <span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg></span>
+            <span style="flex:1">Sign out all devices</span>
+            <span class="r" style="color:var(--text-secondary);font-size:13.5px">2</span>
+          </button>
+        </div>
+      </div>
+
+      <div style="margin-top:24px">
+        <button class="danger">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>
+          Block this customer
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</x-dc>
+</body>
+</html>

@@ -110,7 +110,7 @@ CASES.push(['the picker offers what this role can reach', `APP.cmd('tab','home')
   ['says what it is for',     `sheetText().includes('Pick the screens you open every day')`],
   ['the chosen three are listed', `sheetText().includes('Answer the inbox') && sheetText().includes('Fix a price or a count')`],
   ['under "On Home"',         `sheetText().includes('On Home')`],
-  ['the rest is grouped as More groups it', `sheetText().includes('Operations') && sheetText().includes('Marketing')`],
+  ['the rest is grouped as More groups it', `sheetText().includes('Take an order') && sheetText().includes('Marketing')`],
   ['destinations are offered too',          `sheetText().includes('Destinations') && sheetText().includes('Customers')`],
   ['and a way back to the defaults',        `sheetText().includes('Back to the suggested three')`],
 ]]);

@@ -130,6 +130,75 @@ const CASES = [
   ]],
 
   // ── What the record shows ───────────────────────────────────────────────
+  // ── §122: each control on the row whose value it changes ────────────────
+  // The foot was five centred sentences ("not clear"). Four moved onto their
+  // own rows; Block kept the foot. These cases are about WHERE a control is,
+  // which no render test and no request-body assertion can see.
+  ['every switch sits on the row it changes', ALL + REC + `render();`, [
+    ['Reissue is on the code row, not in a drawer',
+      `(function(){ var b=document.querySelector('.rowact[onclick*="custRefReissue"]');
+         return !!b && b.closest('.list').innerText.indexOf('AB12CD')>=0; })()`],
+    ['Stop is on the Referring row',
+      `(function(){ var b=document.querySelector('.rowact[onclick*="custRefBlock"]');
+         return !!b && /Referring/.test(b.closest('.list').innerText); })()`],
+    ['the ongoing share switch is on its own row',
+      `(function(){ var b=document.querySelector('.rowact[onclick*="custRefShare"]');
+         return !!b && /Ongoing share/.test(b.closest('.list').innerText); })()`],
+    ['Sign out is on the device-count row',
+      `(function(){ var b=document.querySelector('.rowact[onclick*="forceLogout"]');
+         return !!b && /Signed in on/.test(b.closest('.list').innerText); })()`],
+    ['and each says what it does in a verb, not a clause',
+      `['custRefReissue','custRefBlock','custRefShare','forceLogout'].every(function(c){
+         var b=document.querySelector('.rowact[onclick*="'+c+'"]');
+         return b && b.innerText.trim().split(/\\s+/).length<=2; })`],
+  ]],
+  // The row must be there BEFORE anybody uses it — the gap flagged at mockup
+  // and settled by picking this design. A control that materialises out of
+  // nowhere the first time it is used is worse than the drawer it replaced.
+  ['Referring states itself even when nothing is wrong', ALL + REC + `
+    state.custDetail.affiliate.affiliate_blocked=0; render();`, [
+    ['the row is on the record', `sheetText().includes('Referring')`],
+    ['reading Active',           `sheetText().includes('Active')`],
+    ['with Stop beside it',      `!!document.querySelector('.rowact[onclick*="custRefBlock"]')`],
+  ]],
+  ['and turns around when it is stopped', ALL + REC + `
+    state.custDetail.affiliate.affiliate_blocked=1; render();`, [
+    ['the row reads Stopped', `sheetText().includes('Stopped')`],
+    ['and offers Allow',
+      `(function(){ var b=document.querySelector('.rowact[onclick*="custRefBlock"]');
+         return !!b && /Allow/.test(b.innerText); })()`],
+  ]],
+  // A shop with referrals switched off has nothing to stop, so the row would be
+  // a control over nothing.
+  ['no referrals feature, no Referring row', ALL + REC + `
+    state.cfg={features:{affiliate:false}}; render();`, [
+    ['the row is absent', `!sheetText().includes('Referring')`],
+    ['and so is its switch', `!document.querySelector('.rowact[onclick*="custRefBlock"]')`],
+  ]],
+  ['the foot is one control, and it is the destructive one', ALL + REC + `render();`, [
+    ['Block is there',        `!!document.querySelector('[onclick*="toggleBlock"]')`],
+    ['as a Brick outline, not loose red text',
+      `document.querySelector('[onclick*="toggleBlock"]').classList.contains('dangerbtn')`],
+    ['and nothing else is down there',
+      `(function(){ var f=document.querySelector('[onclick*="toggleBlock"]').parentElement;
+         return f.querySelectorAll('button').length===1; })()`],
+  ]],
+  // Unblock GIVES something back, so it is not dressed as destructive.
+  ['unblocking is not a destructive act', ALL + REC + `
+    state.custDetail.customer.is_blocked=1; render();`, [
+    ['it reads Unblock',   `sheetText().includes('Unblock')`],
+    ['and wears no Brick', `!document.querySelector('[onclick*="toggleBlock"]').classList.contains('dangerbtn')`],
+  ]],
+  // 44px is the floor for anything a thumb aims at, and an underlined 13.5px
+  // label is 20px tall on its own.
+  ['every row control is a real tap target', ALL + REC + `render();`, [
+    ['44px or more',
+      `[].slice.call(document.querySelectorAll('.rowact')).every(function(b){
+         return b.getBoundingClientRect().height >= 44; })`],
+    ['and there are four of them',
+      `document.querySelectorAll('.rowact').length===4`],
+  ]],
+
   ['the record carries what the shop knows', ALL + REC + `render();`, [
     ['the tags are on it',        `sheetText().includes('wholesale') && sheetText().includes('pays late')`],
     ['and the note',              `sheetText().includes('Allergic to nuts')`],

@@ -346,6 +346,27 @@ html:not(.settled) .rise{animation:tRise .5s var(--ease-settle) both}
   color:var(--text-primary);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;
   display:inline-flex;align-items:center;justify-content:center;gap:8px}
 .btn2:disabled{opacity:.55;cursor:default}
+/* THE ACTION THAT SITS ON THE ROW IT CHANGES (§122). A record row states a
+   fact — "Signed in on · 2 devices" — and the control that changes that fact
+   belongs beside it rather than in a drawer at the foot repeating the state.
+   Underlined rather than bordered: a bordered control on every third row turns
+   a list of facts into a wall of buttons, and the underline is enough to say
+   "press me" when the label is a verb sitting next to a value.
+   44px MINIMUM, which is why the padding is vertical and the line-height is
+   not: at 13.5px this text is 20px tall and would be an 20px target. */
+.rowact{min-height:44px;display:inline-flex;align-items:center;flex:none;
+  border:0;background:none;padding:0;margin:0;font-family:inherit;
+  font-size:13.5px;font-weight:500;color:var(--text-secondary);cursor:pointer;
+  text-decoration:underline;text-decoration-color:var(--border-default);text-underline-offset:3px}
+.rowact:disabled{opacity:.55;cursor:default}
+.rowact.brick{color:var(--brick-ink);text-decoration-color:rgba(180,83,62,.35)}
+/* Destructive is a BRICK OUTLINE, never a solid slab — design system §5, and
+   the reason Block stopped being a line of red text in a stack of black ones. */
+.dangerbtn{width:100%;min-height:44px;border-radius:8px;background:transparent;
+  border:1.5px solid var(--brick);color:var(--brick-ink);font-family:inherit;
+  font-size:15px;font-weight:500;cursor:pointer;display:inline-flex;
+  align-items:center;justify-content:center;gap:8px}
+.dangerbtn:disabled{opacity:.55;cursor:default}
 .cta{width:100%;min-height:44px;padding:12px 16px;border:none;border-radius:8px;background:var(--accent);color:#fff;
   font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;transition:background .2s var(--ease-settle)}
 .cta:hover{background:var(--accent-hover)}.cta:active{background:var(--accent-press)}
@@ -4264,42 +4285,112 @@ const MORE_GROUPS=[
      this file keeps out. The rows stay put on a quiet day for the reason the
      launcher's tiles did: "Nothing to pick" is what tells somebody the tool is
      there before the morning they need it. */
-  {h:['Operations','运营'],rows:[['neworder','file-plus','New order','新建订单'],['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery settings','配送设置'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receive from a supplier','收货'],['waste','trash','Waste','损耗'],
-    /* §87 — what somebody spent out of their own pocket for work. It sits in
-       Operations beside Waste on purpose: both are a person recording something
-       small that happened to them during a shift, which somebody else's key
-       later turns into money. */
-    ['expense','banknote','Expense','费用申请'],
-    /* The other end of the same feature, and a SEPARATE ROW because it is a
-       separate job held by separate people: most of the operators who see the
-       row above will never see this one. Gated on `expenses:approve`, which no
-       floor preset holds. */
-    ['approvals','check-check','Approvals','审批'],['till','calculator','Counter till','前台收银','/till'],['kitchenqueue','chef-hat','Kitchen queue','厨房制作队列'],['stockapp','package-plus','Add stock','加库存'],
-    /* §103 — which items each channel holds a wrong number for, and the fix.
-       The phone never rebuilt the desktop's channel tabs; this is the one
-       channel screen it has, and it is the one that says where to look. */
-    ['channelsync','refresh-cw','Channel sync','渠道同步'],
-    /* THE TWO REQUEST SCREENS, IN THIS APP (§48). They had no rows of their
-       own and lived on /stock's launcher; they have rows here now, the launcher
-       emptied, and the Transfers row that reached it went with the last of
-       them. The app itself is deleted (§48 step 4). */
-    ['askkitchen','chef-hat','Ask the kitchen','向厨房下单'],['askstock','package','Ask for stock','申请补货'],
-    /* THE THIRD REQUEST SCREEN (§86), and the only one that spends: the kitchen
-       asks the buyer to BUY a material. Sixth element is a Features switch —
-       `production`, the one that already gates Materials and Recipes on the
-       desktop, because Ash placed this in the production module.
-       `logbatch` below is NOT given the same gate, deliberately: it ships today
-       with no feature check, and adding one here would hide a screen somebody is
-       already using. A new row can be born gated; an old one cannot be gated
-       retroactively inside an unrelated build. */
-    ['askbuy','shopping-cart','Ask to buy','采购申请',null,'production'],
-    ['kitchenready','circle-check','Ready from the kitchen','厨房已完成'],
-    ['receivexfer','truck','Receive from another shop','调拨收货'],['pick','route','Pick','拣货'],
+  /* ══ OPERATIONS, IN EIGHT GROUPS (§121) ═══════════════════════════════════
+     Was one heading over twenty-two rows. Ash chose the grouping after §118's
+     strip shipped; the strip stays where it is, above all of this.
+
+     THE GROUPING IS WHAT DISAMBIGUATES, which is why no row gained a subtitle:
+     every pair that read as one row now sits in a different group from its
+     twin — Purchasing under Stock coming in and Ask to buy under Ask someone
+     else, Add stock and Ask for stock likewise. Position says it, so a sentence
+     under all twenty-two would be saying it twice at four times the strings.
+
+     ROW ORDER INSIDE A GROUP IS THE ORDER OF THE JOB, not the old flat order:
+     Purchasing (you order it) → the two receipts (it arrives) → Add stock.
+
+     A GROUP WITH ONE ROW IS ACCEPTED, deliberately. A picker holding only
+     `restock:pick` sees "Send it out" over a single row, and that heading still
+     says what the row is for. The alternative — collapsing back to one
+     "Operations" below some row count — is a rule that changes the shape of the
+     screen as permissions change, and nobody could predict it. */
+  {h:['Take an order','接单'],rows:[
+    ['neworder','file-plus','New order','新建订单'],
+    ['till','calculator','Counter till','前台收银','/till']]},
+  {h:['Money and numbers','营收与数据'],rows:[
+    ['sales','store','Sales','销售'],
+    ['trend','trending-up','Trend','趋势'],
+    /* Kept as `Invoices · 发票` on purpose. Option A proposed *Issue tax
+       invoices* as an interim and §119 declined it: the design canvas's batch
+       three folds this row into Orders as a filter, and renaming a row that is
+       going away is churn. */
+    ['invoices','receipt','Invoices','发票']]},
+  {h:['Send it out','拣货与配送'],rows:[
+    ['pick','route','Pick','拣货'],
+    /* §119 renamed this. It is zones, holiday mode and the printer — the one
+       configuration screen in a list of tasks — so it wears the Settings pill
+       as well, because a group can say WHERE a row belongs and only the pill
+       can say it is not a job. */
+    ['delivery','truck','Delivery settings','配送设置']]},
+  {h:['Stock coming in','入库'],rows:[
+    ['purchasing','shopping-cart','Purchasing','采购'],
+    /* THE PAIR §119 SEPARATED, now adjacent for the first time. They shared
+       `收货` in both labels, both screen titles and three of the transfer
+       screen's own buttons; side by side under one heading, the two names are
+       the whole difference and can be read in one glance. */
+    ['receiving','package','Receive from a supplier','收货'],
+    ['receivexfer','truck','Receive from another shop','调拨收货'],
+    ['stockapp','package-plus','Add stock','加库存']]},
+  {h:['Making things','生产'],rows:[
+    ['kitchenqueue','chef-hat','Kitchen queue','厨房制作队列'],
     /* LOG A BATCH IS THE ONLY ROW OF THE THREE PRODUCTION SCREENS. `whatmade`
        is never opened from here — it is where the queue and this row both
        arrive, carrying lines with them, and a row that opened it cold would
        open it empty. */
     ['logbatch','clipboard-list','Log a batch','登记批次']]},
+  /* THE THREE REQUEST SCREENS, AND THE ONE GROUP THAT EARNED ITS HEADING MOST.
+     Each asks somebody else to act and moves nothing on its own; each was
+     previously scattered among the rows that DO the thing being asked for.
+     They carry the Ask pill too — the group says it once for the set, the pill
+     says it on the row, and it is the row that gets read from the search index
+     and the Quick-actions picker where no heading follows it. */
+  {h:['Ask someone else','发起申请'],rows:[
+    /* THE TWO REQUEST SCREENS, IN THIS APP (§48). They had no rows of their
+       own and lived on /stock's launcher; they have rows here now, the launcher
+       emptied, and the Transfers row that reached it went with the last of
+       them. The app itself is deleted (§48 step 4). */
+    ['askkitchen','chef-hat','Ask the kitchen','向厨房下单'],
+    ['askstock','package','Ask for stock','申请补货'],
+    /* THE THIRD REQUEST SCREEN (§86), and the only one that spends: the kitchen
+       asks the buyer to BUY a material. Sixth element is a Features switch —
+       `production`, the one that already gates Materials and Recipes on the
+       desktop, because Ash placed this in the production module.
+       `logbatch` above is NOT given the same gate, deliberately: it ships today
+       with no feature check, and adding one here would hide a screen somebody is
+       already using. A new row can be born gated; an old one cannot be gated
+       retroactively inside an unrelated build. */
+    ['askbuy','shopping-cart','Ask to buy','采购申请',null,'production'],
+    /* NOT A KITCHEN TOOL, AND ITS OWN GATE SAYS SO. It sat with Kitchen queue
+       and Log a batch in the first draft of this grouping, which reads
+       naturally — all three sound like production — and is wrong. ROUTE_CAP
+       gates it on `['restock:request','restock:pick']`, "the people who RAISE
+       these requests", and its note there says telling a fulfil-only kitchen
+       operator their own work is waiting is telling them about themselves. So
+       it is the REQUESTER's side: how the thing you asked for is going, still
+       pending or ready to collect. That is this group.
+       NO PILL, deliberately: the three rows above it ask, and this one is the
+       answer coming back. A fourth value for "you get told" would spend the
+       scarcity that makes the other three legible. */
+    ['kitchenready','circle-check','Ready from the kitchen','厨房已完成']]},
+  {h:['Record and review','登记与审批'],rows:[
+    ['waste','trash','Waste','损耗'],
+    /* §87 — what somebody spent out of their own pocket for work. It sits
+       beside Waste on purpose: both are a person recording something small that
+       happened to them during a shift, which somebody else's key later turns
+       into money. */
+    ['expense','banknote','Expense','费用申请'],
+    /* The other end of the same feature, and a SEPARATE ROW because it is a
+       separate job held by separate people: most of the operators who see the
+       row above will never see this one. Gated on `expenses:approve`, which no
+       floor preset holds — and it wears the Approve pill, because "review" in
+       the heading covers the group and only the pill says this row is somebody
+       else's work rather than your own. */
+    ['approvals','check-check','Approvals','审批']]},
+  {h:['Messages and channels','消息与渠道'],rows:[
+    ['inbox','message-square-text','Inbox','消息'],
+    /* §103 — which items each channel holds a wrong number for, and the fix.
+       The phone never rebuilt the desktop's channel tabs; this is the one
+       channel screen it has, and it is the one that says where to look. */
+    ['channelsync','refresh-cw','Channel sync','渠道同步']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
@@ -4325,6 +4416,35 @@ function moreGroups(){
    distinction with no consequence for the person reading it: both rows open a
    tool, both come back. The mark said "this one is different" about a
    difference that had stopped existing. */
+/* ══ THE PILL ON A MORE ROW (§121) ═════════════════════════════════════════
+   The fact a label cannot carry: who a row goes to, or that it is not a job at
+   all. THREE VALUES, and NO PILL IS THE DEFAULT — a row you simply do wears
+   nothing, which is the only thing that keeps a pill scarce enough to read. Put
+   one on all twenty-two and it is a column, not a mark.
+
+   KEYED, NOT A SEVENTH ELEMENT on the row. A row is
+   [key, icon, en, zh, href?, feat?]; a seventh positional slot would mean every
+   pilled row carried two nulls to reach it, and the next addition would be an
+   eighth. This is the shape QUICK_VERB already uses for the same kind of
+   per-row afterthought.
+
+   ALWAYS NEUTRAL. A direction is a fact about the row, not a state needing
+   attention — the same reason the customer tier pills are neutral. Sage and
+   Amber are not spent here, and Dusk certainly is not: nothing on this screen
+   was done by the AI. */
+const ROW_PILL={
+  /* The three request screens. Each asks somebody else and moves nothing
+     itself, which is the single most load-bearing fact about them and was
+     absent from all three rows before this. */
+  askkitchen:['Ask','申请'], askstock:['Ask','申请'], askbuy:['Ask','申请'],
+  /* Somebody else's claim, not your own. Without this the row reads as a
+     second Expense to the few operators who hold both. */
+  approvals:['Approve','审批'],
+  /* Not a job. Zones, holiday mode and a printer — the one configuration
+     screen among twenty-one tasks, which is why §119 renamed it and why the
+     rename alone was not quite enough. */
+  delivery:['Settings','设置'],
+};
 function moreRow(r){
   const label = r[0]==='stockapp' ? stockAppLabel() : [r[2],r[3]];
   /* THE STOCK ROW NO LONGER GOES EITHER WAY. It used to: an operator who only
@@ -4338,7 +4458,7 @@ function moreRow(r){
      `href` stays for the rows that really are elsewhere: /till. */
   const href = r[4]||null;
   const route = r[0]==='stockapp' ? 'stockadd' : r[0];
-  return {key:r[0], icon:r[1], en:label[0], zh:label[1], href,
+  return {key:r[0], icon:r[1], en:label[0], zh:label[1], href, pill:ROW_PILL[r[0]]||null,
           cmd: href ? `APP.cmd('leave','${href}')` : `APP.cmd('push','${route}')`};
 }
 function moreRowsFlat(){ return moreGroups().reduce((a,g)=>a.concat(g.rows),[]); }
@@ -5256,6 +5376,9 @@ function screenMore(){
       <div style="margin:0 16px" class="list">${g.rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
         <button class="row" onclick="${r.cmd}"><span class="rowico">${ic(r.icon)}</span>
         <span style="flex:1;min-width:0;font-size:15px">${T(r.en,r.zh)}</span>
+        ${/* §121. Before the dot, so an arriving-work marker is never pushed off
+             the edge by a pill that says the same thing every time. */''}
+        ${r.pill?`<span class="pill" style="background:var(--surface-raised);color:var(--text-secondary);margin-right:8px">${T(...r.pill)}</span>`:''}
         ${/* Same 6px Sage dot as the tab bar's, on the row that opens the work.
              Never a count: the number lives on the screen it points at. */''}
         ${moreRowDot(r.key)?`<span style="width:6px;height:6px;border-radius:50%;background:var(--sage);flex:none;margin-right:8px"></span>`:''}
@@ -16704,6 +16827,20 @@ const custRow=(l,r,sub)=>`<div style="display:flex;align-items:flex-start;justif
   ${sub?`<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:2px">${sub}</span>`:''}</span>
   <span class="num" style="flex:none;font-size:14.5px;text-align:right">${r}</span></div>`;
 const custList=rows=>rows.length?`<div class="list">${rows.map((r,i)=>(i?'<div class="sep"></div>':'')+r).join('')}</div>`:'';
+/* THE SAME ROW, CARRYING THE CONTROL THAT CHANGES IT (§122). `act` is
+   [label, cmd, danger] or null — null renders exactly custRow's own shape, so a
+   list can mix stated facts and changeable ones without the rows disagreeing
+   about height or alignment.
+   The control is drawn ONLY when `act` is given, which is where the capability
+   gate lands: the caller passes null for an operator who may not make that
+   write, and the row goes on stating its fact. */
+const custRowAct=(l,r,act)=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 16px;min-height:48px">
+  <span style="min-width:0;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l}</span>
+  <span style="flex:none;display:flex;align-items:center;gap:14px">
+    <span class="num" style="font-size:14.5px;color:var(--text-secondary);text-align:right">${r}</span>
+    ${act?`<button class="rowact${act[2]?' brick':''}" ${state.custBusy?'disabled':''} onclick="APP.cmd('${act[1]}')">${
+      state.custBusy&&state.custBusy===act[3]?T('Saving…','保存中…'):act[0]}</button>`:''}
+  </span></div>`;
 
 /* The orders themselves, and every one of them opens.
    This block was five inert lines. An operator reading a customer's history
@@ -16784,22 +16921,47 @@ function custTopups(d){
 function custAffiliate(d){
   const a=d.affiliate; if(!a) return '';
   const sum=a.summary||{};
+  /* Each control is drawn only for the capability its own write is gated on
+     server-side — `customers:edit` for all three (lib/cap-routes.js sends
+     affiliate-block and referral-code down that path, and /affiliate/eligible
+     is its sibling). Absent, never disabled: the row keeps stating its fact. */
+  const may=mCan('customers:edit');
   const rows=[];
-  if(a.referral_code) rows.push(custRow(T('Their code','本人邀请码'),`<span class="num">${escAttr(a.referral_code)}</span>`));
+  if(a.referral_code) rows.push(custRowAct(T('Their code','本人邀请码'),
+    `<span class="num">${escAttr(a.referral_code)}</span>`,
+    may?[T('Reissue','重发'),'custRefReissue',false,'reissue']:null));
   if(a.referred_by) rows.push(custRow(T('Referred by','推荐人'),escAttr(a.referred_by.nickname||a.referred_by.phone||('#'+a.referred_by.id))));
   if(Number(sum.total)) rows.push(custRow(T('Friends invited','已邀请'),
     T(sum.total+' · '+(sum.converted||0)+' ordered', sum.total+' 位 · '+(sum.converted||0)+' 位已下单'),
     Number(sum.earned)?T(money(CUR,sum.earned)+' rewarded','已发放 '+money(CUR,sum.earned)):''));
-  /* THE TWO STATES THE FOOT'S SWITCHES TURN, and neither was on the record — so
-     the shop could stop somebody referring and then have no way to see that it
-     had. Blocked shows only when it is true (a row reading "allowed" on every
-     customer is not information); the ongoing share shows only in 'selected'
-     mode, the same condition its control renders under. */
-  if(a.affiliate_blocked) rows.push(custRow(T('Referring','推荐资格'),
-    T('Stopped','已停止')));
-  if(a.lifetime_mode==='selected') rows.push(custRow(T('Ongoing share','复购分成'),
-    a.lifetime_eligible?T('Earning','获得中'):T('Not earning','不获得'),
-    a.lifetime_eligible_since?T('since '+fmtDay(a.lifetime_eligible_since),'自 '+fmtDay(a.lifetime_eligible_since)):''));
+  /* REFERRING IS ALWAYS STATED NOW (§122), where §116 drew it only once it had
+     been stopped. Ash chose the design that puts each switch on the row whose
+     value it changes, and that trade only works if the row is there to carry
+     it: a control that materialises out of nowhere the first time somebody uses
+     it is worse than the drawer it replaced.
+     The earlier note — "a row reading 'allowed' on every customer is not
+     information" — was right about a row that only ever states. It stops being
+     right when the row is also the way to change it. Gated on the affiliate
+     FEATURE rather than on the flag, because in a shop with referrals switched
+     off there is nothing to stop and the row would be a control over nothing. */
+  const blocked=!!a.affiliate_blocked;
+  if(featOn('affiliate')) rows.push(custRowAct(T('Referring','推荐资格'),
+    blocked?T('Stopped','已停止'):T('Active','有效'),
+    may?[blocked?T('Allow','允许'):T('Stop','停止'),'custRefBlock',!blocked,'refblock']:null));
+  /* The ongoing share still shows only in 'selected' mode — in 'everyone' mode
+     this customer already earns it and a per-person switch would change
+     nothing. That is the desktop's own rule and it is about MEANING, not about
+     whether the row can carry a control. */
+  if(a.lifetime_mode==='selected'){
+    const on=!!a.lifetime_eligible;
+    rows.push(custRowAct(T('Ongoing share','复购分成'),
+      on?T('Earning','获得中'):T('Not earning','不获得'),
+      may?[on?T('Stop','停止'):T('Allow','允许'),'custRefShare',on,'refshare']:null));
+    /* The date it was last chosen is a footnote to the row above, not a row of
+       its own — custRowAct has no `sub` slot because a fact with a control on
+       it should be one line. */
+    if(a.lifetime_eligible_since) rows.push(custRow(T('Chosen','选定于'),fmtDay(a.lifetime_eligible_since)));
+  }
   if(!rows.length) return '';
   return custSection(T('Referrals','推荐'), custList(rows));
 }
@@ -16814,8 +16976,14 @@ function custFacts(d,c,st){
     Number(v.used)?T(v.used+' used','已用 '+v.used):''));
   if(Number(rv.count)) rows.push(custRow(T('Reviews written','已写评价'),String(rv.count),
     rv.avg_rating?T(Number(rv.avg_rating).toFixed(1)+' average',Number(rv.avg_rating).toFixed(1)+' 平均分'):''));
-  if(Number(st.active_sessions)) rows.push(custRow(T('Signed in on','已登录设备'),
-    T(st.active_sessions+(st.active_sessions===1?' device':' devices'), st.active_sessions+' 台')));
+  /* THE DEVICE COUNT AND THE WAY TO END THEM, on one row (§122). The count was
+     the whole argument for keeping sign-out on the desktop back in August, and
+     it is the row somebody reads when a phone has been stolen — so it is where
+     the control goes. `customers:block`, the capability the server gates
+     force-logout on, which is also why it is not beside the everyday four. */
+  if(Number(st.active_sessions)) rows.push(custRowAct(T('Signed in on','已登录设备'),
+    T(st.active_sessions+(st.active_sessions===1?' device':' devices'), st.active_sessions+' 台'),
+    mCan('customers:block')?[T('Sign out','退出'),'forceLogout',false,'logout']:null));
   if(!rows.length) return '';
   return custSection(T('Account','账户'), custList(rows));
 }
@@ -16923,28 +17091,29 @@ function custActivity(d){
    share switch only in 'selected' mode (in 'everyone' mode this customer already
    earns it and a per-person switch would change nothing — the desktop's rule),
    and Reissue only once there is a code to reissue. */
+/* THE FOOT IS ONE BUTTON NOW (§122). It was five centred sentences — reported
+   as "not clear", and it was: no container, no icons, nothing saying they could
+   be pressed, three referral controls and two account ones in an
+   undifferentiated stack, labels that were clauses rather than verbs, and two
+   in Brick text where the design system's destructive is a Brick OUTLINE.
+   Four of the five moved onto the rows whose values they change — see
+   custAffiliate and custFacts. Block did not, and this is why: it is the only
+   thing here that takes something away from a person rather than adjusting a
+   setting about them, it has no fact-row of its own to sit on (the blocked
+   state is a pill in the sheet's header), and it wants distance from the
+   routine controls, not proximity. So it keeps the foot to itself, as the
+   outline §5 asks for — which also stops it reading at the same weight as
+   Reissue, which is undone in one tap. */
 function custFooterActions(d,c){
-  const a=(d&&d.affiliate)||{};
-  const rows=[];
-  if(mCan('customers:edit')){
-    if(a.referral_code) rows.push(['custRefReissue','reissue',T('Reissue referral code','重发邀请码'),false]);
-    if(a.lifetime_mode==='selected') rows.push(['custRefShare','refshare',
-      a.lifetime_eligible?T('Stop the ongoing share','停止复购分成'):T('Let them earn the ongoing share','允许获得复购分成'),false]);
-    rows.push(['custRefBlock','refblock',
-      a.affiliate_blocked?T('Let them refer friends again','恢复推荐资格'):T('Stop them referring friends','停止推荐资格'),!a.affiliate_blocked]);
-  }
-  if(mCan('customers:block')){
-    const n=Number((d&&d.stats&&d.stats.active_sessions)||0);
-    rows.push(['forceLogout','logout',
-      T('Sign out all devices'+(n?' ('+n+')':''), '退出所有设备'+(n?'（'+n+'）':'')),false]);
-    rows.push(['toggleBlock','block',
-      c.is_blocked?T('Unblock this customer','解除封禁'):T('Block this customer','封禁该顾客'),!c.is_blocked]);
-  }
-  if(!rows.length) return '';
-  return `<div style="margin-top:24px;padding-top:8px;border-top:1px solid var(--border-default)">
-    ${rows.map(([cmd,busy,label,danger])=>`<button style="display:block;width:100%;text-align:center;font-size:13.5px;font-weight:500;color:${danger?'var(--brick-ink)':'var(--text-primary)'};background:transparent;border:none;cursor:pointer;font-family:inherit;padding:11px 12px"
-      ${state.custBusy?'disabled':''} onclick="APP.cmd('${cmd}')">${state.custBusy===busy?T('Saving…','保存中…'):label}</button>`).join('')}
-  </div>`;
+  if(!mCan('customers:block')) return '';
+  const blocked=!!c.is_blocked;
+  /* Unblock is NOT destructive — it gives something back — so it renders as the
+     ordinary secondary button and only Block wears the Brick outline. */
+  return `<div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-default)">
+    <button class="${blocked?'btn2':'dangerbtn'}" style="width:100%" ${state.custBusy?'disabled':''} onclick="APP.cmd('toggleBlock')">
+      ${blocked?ic('circle-check',18):ic('ban',18)}${state.custBusy==='block'?T('Saving…','保存中…')
+        :(blocked?T('Unblock this customer','解除封禁'):T('Block this customer','封禁该顾客'))}
+    </button></div>`;
 }
 function sheetCustomer(){
   const d=state.custDetail;
