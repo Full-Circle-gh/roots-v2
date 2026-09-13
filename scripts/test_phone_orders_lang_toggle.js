@@ -236,5 +236,47 @@ section('5 · a row with no plan still renders nothing, not "undefined"');
   is(cn.cell, '', 'in either language');
 }
 
+section('6 · the map itself does not word any of the three');
+{
+  /* THE SECTIONS ABOVE BUILD THE MAPPED ROW BY HAND, and that is their limit:
+     they prove the RENDER side says the right thing in whichever language is
+     current, but they would stay green if mapOrderRow went back to finishing
+     these fields into words — the hand-built object would simply not have the
+     frozen string in it. mapOrderRow cannot be lifted the way the render
+     functions can (ORDER_STATUS, CH_BACK, custLines, parcelRollup and a dozen
+     more come with it), so the map side is asserted on its source: the three
+     calls that froze the language are gone, and the row it needs is carried. */
+  const start = M.indexOf('function mapOrderRow(r){');
+  yes(start > 0, 'mapOrderRow is where this expects it');
+  /* CODE, NOT PROSE. The first cut of this section read the block whole and
+     went red on its own explanations: the comment that says why the stamp is
+     no longer `fmtDay(r.placed_at)` contains the very call it is there to say
+     has gone, and a pre-existing comment names deliveryLine() for the same
+     kind of reason. Block comments go, then whole-line `//` ones — trailing
+     `//` is left alone so a `https://` inside a string cannot truncate a line
+     out of the source being asserted on. */
+  const src = mob.block('function mapOrderRow(r){')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+
+  yes(!/\bdeliveryLine\s*\(/.test(src),
+    'the map does not build the ship-by cell — delivCell does, at paint');
+  yes(!/\bfmtDay\s*\(/.test(src),
+    'the map does not word the placed stamp — the row does, at paint');
+  yes(/_row\s*:\s*r\b/.test(src),
+    'and it carries the raw row that lets the paint do both');
+  yes(/placedAt\s*:/.test(src),
+    'the stamp is carried as a timestamp, not as a word');
+  yes(/routeNote\s*:\s*routingNotePair\(/.test(src),
+    'the routing note is carried as a PAIR, spread through T() by the row');
+
+  /* The wrapper that did nothing but T() that pair at map time. Asserted
+     against the WHOLE FILE, not just this block: left anywhere it is a second
+     way to freeze the same string, and a finding's file:line is where it was
+     found, not the extent of it. */
+  yes(!/function routingNote\s*\(/.test(M),
+    'and routingNote(), which only existed to word it at map time, is gone');
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
