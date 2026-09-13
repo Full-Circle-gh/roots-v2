@@ -16528,9 +16528,16 @@ function screenCustomers(){
      lib/cap-routes.js gates POST /customers on: absent, never disabled, for an
      operator whose save would 403. §112's rule, and the reason it matters here
      is that apiWrite sends a 403 to the login page. */
+  /* 38px, not the class's 44. The band standardises its controls at 38 — every
+     iconbtn in this row overrides the 44px class inline to say so — and the Add
+     slab arrived at 44, which is the whole of what "tight" was. Six pixels:
+     enough that the painted slab stood proud of the title above it and came
+     within 3px of the status line below it, in a row whose other four controls
+     it was meant to sit level with. A slab ~70px wide is a larger target than
+     the 38x38 icons beside it either way. */
   const addCta=mCan('customers:edit')
-    ? `<button class="cta" style="width:auto;padding:12px 20px;flex:none" onclick="APP.cmd('custNew')">${T('Add','添加')}</button>` : '';
-  return `${pageHead({title:T('Customers','顾客'), status:pulse||'', cta:addCta, controls:true})}
+    ? `<button class="cta" style="width:auto;height:38px;min-height:38px;padding:0 18px;flex:none" onclick="APP.cmd('custNew')">${T('Add','添加')}</button>` : '';
+  return `${pageHead({title:T('Customers','顾客'), status:pulse||'', cta:addCta, ctaFilled:true, controls:true})}
     <div style="padding:14px 16px 12px;display:flex;align-items:center;gap:12px">
       <button onclick="APP.cmd('custSortPick')" style="display:inline-flex;align-items:center;gap:5px;background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-secondary)">${T('Sorted by','排序')} <span style="font-weight:500;color:var(--text-primary)">${custSortLabel()}</span> <span style="color:var(--text-primary)">${custDirDesc()?'↓':'↑'}</span> ${ic('chevron-down',14,2)}</button>
       ${/* Export is the server's own file, at the filters the screen is showing —
@@ -17861,7 +17868,7 @@ function headControls(){
 
    The status line sits BELOW the hairline, in the scroll, so it goes away when
    you scroll and the name of the page is the last thing standing. */
-function pageHead({title, status, cta, back, controls}){
+function pageHead({title, status, cta, ctaFilled, back, controls}){
   const right = (cta||'') + (controls?headControls():'');
   /* 10px of right gutter, not 6 — and headControls no longer pulls itself
      another 6px past that with a negative margin. The account button's TAP
@@ -17893,7 +17900,17 @@ function pageHead({title, status, cta, back, controls}){
     ${/* 3px, not 8. The title and its status line are one thing — a name and
          what it currently amounts to — and they were reading as two stacked
          items. Tight to the title, with the band's own bottom padding giving
-         them room above the rule instead. */''}
+         them room above the rule instead.
+
+         EXCEPT UNDER A FILLED CTA, where 3px is measured off the wrong edge.
+         The title is text: its box stops where the letters do, so 3px below it
+         still reads as air. A Dusk slab's painted edge IS its box edge, and at
+         3px the status line sat all but touching it — the gap that made the
+         Customers head look jammed. 8px clears the slab by the same amount the
+         title's own descender space was already giving it, which puts the
+         status 14px off the title text: still one thing, no longer welded to a
+         block of colour. Icon CTAs (Orders) are text-like — glyph centred in
+         its target, air on every side — so they keep the 3px. */''}
     ${/* IT CARRIES AN ID BECAUSE A SCREEN THAT PATCHES MUST BE ABLE TO REACH IT.
          This line is drawn once, by the full render() that builds the band, and
          a screen whose numbers arrive later repaints its own containers without
@@ -17902,7 +17919,7 @@ function pageHead({title, status, cta, back, controls}){
          delivery" above a tab reading "To receive 3" for exactly that reason:
          both count rcvToReceive(), but only the tab was repainted when the
          answer landed. */''}
-    ${status?`<p id="mHeadStatus" class="num" style="margin:3px 0 0;padding-right:10px;font-size:15px;color:var(--text-secondary);line-height:1.35">${status}</p>`:''}
+    ${status?`<p id="mHeadStatus" class="num" style="margin:${ctaFilled?'8px':'3px'} 0 0;padding-right:10px;font-size:15px;color:var(--text-secondary);line-height:1.35">${status}</p>`:''}
   </div>`;
 }
 /* THE BAR IS FOR OPERATORS WITH SOMEWHERE ELSE TO BE, and for most of them it
