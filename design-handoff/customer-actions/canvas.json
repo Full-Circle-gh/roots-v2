@@ -1,0 +1,31 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "Built" },
+    { "id": "page-2", "name": "Options considered" }
+  ],
+  "artboards": [
+    { "file": "Main.dc.html",      "page": "page-1", "x": 0,    "y": 0, "w": 390, "h": 844, "title": "Shipped · each switch on the row it changes" },
+    { "file": "Diagnosis.dc.html", "page": "page-2", "x": 0,    "y": 0, "w": 390, "h": 980, "title": "What it replaced, and why" },
+    { "file": "OptionA.dc.html",   "page": "page-2", "x": 550,  "y": 0, "w": 390, "h": 844, "title": "Option A · Two grouped lists (not taken)" },
+    { "file": "OptionC.dc.html",   "page": "page-2", "x": 1030, "y": 0, "w": 390, "h": 844, "title": "Option C · One More sheet (not taken)" }
+  ],
+  "annotations": [
+    {
+      "id": "built",
+      "page": "page-1",
+      "x": 0,
+      "y": -230,
+      "w": 390,
+      "text": "BUILT — Option B, chosen by Ash.\n\nFour of the five controls moved onto the rows whose values they change. Only Block keeps the foot: it is the one thing here that takes something away from a person rather than adjusting a setting about them, and it has no fact-row of its own to sit on.\n\nChoosing this settled the open question: the Referring row is now drawn ALWAYS, reading Active or Stopped, where before it appeared only once referring had been stopped. A switch that materialises the first time you use it is worse than the drawer it replaced."
+    },
+    {
+      "id": "history",
+      "page": "page-2",
+      "x": 0,
+      "y": -230,
+      "w": 390,
+      "text": "Kept as the record of the decision, not as live work.\n\nThe left board is what shipped in §116 and what was reported as \"not clear\". A and C were the alternatives; neither was taken."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}
