@@ -92,8 +92,14 @@ const VALID_INVOICE = new Set(['not_received', 'received', 'no_invoice']);
 
 // Next RPO number from the highest existing suffix (not a row count, so a
 // deleted PO can never cause a UNIQUE collision on po_number).
-function nextRetailPONumber() {
-  const row = tdb().prepare(
+// `handle` is optional and exists for ONE caller: §114's claim-raised order,
+// which numbers its PO inside an open transaction and must do it on that
+// transaction's handle. Everything in this file calls it with nothing and gets
+// tdb(), exactly as before. Taking the handle rather than letting the claim
+// path carry its own copy of this query is the point — two places deciding what
+// the next RPO number is would eventually disagree about it.
+function nextRetailPONumber(handle) {
+  const row = (handle || tdb()).prepare(
     "SELECT MAX(CAST(SUBSTR(po_number, 5) AS INTEGER)) AS n FROM purchase_orders WHERE po_number LIKE 'RPO-%'"
   ).get();
   return 'RPO-' + String((row?.n || 0) + 1).padStart(4, '0');
@@ -3044,3 +3050,13 @@ router.put('/api/retail-admin/purchases/:id/receive', requireRetailAdmin, expres
 });
 
 module.exports = router;
+// §114. The claim path raises an Ordered purchase order on approval and needs
+// exactly these two: the number for the row it inserts, and the poster that puts
+// the cost in the books afterwards. EXPORTED RATHER THAN REIMPLEMENTED — the
+// poster is the one place that knows how a purchase order becomes money
+// (billable quantity, landed extras, rounded once, DELETE-then-INSERT), and a
+// second copy of that on the claim side would be a second answer to what a
+// purchase cost. Same shape as routes/finance-categories.js exporting
+// `listCategories` beside its router.
+module.exports.nextRetailPONumber = nextRetailPONumber;
+module.exports.postRetailPOExpenses = postRetailPOExpenses;

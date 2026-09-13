@@ -2480,6 +2480,10 @@ function finAprRow(r) {
   const bits = [finTxDay(r.date)];
   if (r.category) bits.push(finCatLabel(r.category));
   bits.push(r.paid_by === 'employee' ? cuT('own money', '个人支付') : cuT('company', '公司'));
+  // §114. On the meta line beside whose money it was, because it is the same
+  // kind of fact about the purchase — and because an approver reads this line
+  // before pressing anything.
+  if (Number(r.awaiting_delivery) && !r.po_id) bits.push(cuT('goes on a purchase order', '将记入采购单'));
 
   /* WHOSE CLAIM IT IS, FROM THE SERVER. §87 part five allows an approver to
      approve their own claim and makes the RECORD the guard rather than a
@@ -2489,6 +2493,23 @@ function finAprRow(r) {
      name and a role and no id, and the marker silently never appeared. */
   const mine = r.mine
     ? `<span class="fin-apr-mine">${escapeHtml(cuT('Your own claim', '本人提交'))}</span>`
+    : '';
+
+  /* §114 — THE GOODS HAVE NOT ARRIVED, SO APPROVING THIS RAISES AN ORDER.
+     Said BEFORE the decision, not only after it: approving a claim here normally
+     writes a ledger row and nothing else, and an approver who was not told would
+     find a purchase order in the buying list with no idea where it came from.
+
+     AFTERWARDS IT IS A WAY IN. The claim has no ledger row of its own — the
+     order owns the cost — so the order is the only place the money can be read,
+     and `Open purchase order · 查看采购单` is the pair this screen already uses
+     for exactly that jump, one function up (finTxOpenPO). Nothing composed for
+     the link. */
+  const coming = Number(r.awaiting_delivery)
+    ? (r.po_id
+        ? `<a class="fin-apr-po" href="#" onclick="finTxOpenPO(${Number(r.po_id)});return false">`
+          + escapeHtml(cuT('Open purchase order', '查看采购单')) + '</a>'
+        : `<span class="fin-apr-coming">${escapeHtml(cuT('Not arrived yet', '尚未到货'))}</span>`)
     : '';
 
   const shotOpen = FIN_APR_SHOT && FIN_APR_SHOT.id === r.id;
@@ -2540,6 +2561,7 @@ function finAprRow(r) {
     + '<td><span class="fin-apr-who">' + escapeHtml(r.who || cuT('Someone', '未知')) + mine + '</span>'
     + `<span class="fin-tx-meta">${escapeHtml(bits.join(' · '))}</span>`
     + (r.note ? `<span class="fin-apr-note">${escapeHtml(r.note)}</span>` : '')
+    + (coming ? `<span class="fin-apr-comingwrap">${coming}</span>` : '')
     + (shotBtn ? `<span class="fin-apr-shotwrap">${shotBtn}</span>` : '')
     + '</td>'
     + `<td class="fin-tx-num">${escapeHtml(finAprMoney(r.amount))}</td>`

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.247
+# Tacet shared-core consolidation — decisions record, v4.248
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-13 · v4.248 — **§114 DECIDED AND BUILT: A PURCHASE THAT HAS NOT ARRIVED IS TRACKED AS AN ORDER, WHOEVER PAID FOR IT — DECIDED BY ASH, AND IT REVERSES §111 PART THREE.** The case that broke it, in his words: *"an employee use the company money to buy a food processor. it wasn't the person that do purchasing... the item didn't arrive and it need tracking"*. §111 part three had left claims alone because *a claim is money already out of a pocket — there is nothing to order and nothing to receive*; **true of a cook buying ginger, false of an appliance still in transit**, where the money is gone AND the goods are owed. Neither door held it: the claim path has no delivery to track, and the order path sits behind `purchasing:edit`, which the floor presets withhold on purpose. **Ash ruled twice**: the APPROVER raises the order from the claim (so nobody gains a capability), and it applies to the employee's OWN money too (the order tracks the delivery and owns the cost; the debt stays on the claim). **THREE FINDINGS MADE IT CHEAP**: `store_manager` already holds `purchasing:receive`, so the missing half was never the tracking but the CREATION; *paid, not yet arrived* is a state the record already has (`postRetailPOExpenses` posts on Ordered, `Delivered` seeds `qty_received`), so the order is raised at Ordered and never as a draft — a draft posts nothing and the money has already gone; and §111 part one's TYPED LINE is what carries a food processor, which is in no catalogue, so this could not have been built a day earlier. **THE MONEY IS POSTED ONCE**: `postClaim` writes nothing for a claim awaiting its delivery — keyed on `awaiting_delivery` and NOT on `po_id`, because on a first approval the order does not exist yet when it runs, and a `po_id` test would leave the same purchase in the books twice. **REJECT AND VOID ARE REFUSED while an order stands** (§114 part four): the claim has no ledger row of its own to take back, and cancelling the order behind the scenes would reach into a document that may already have been received — the refusal names Cancel order instead. **THE OWED FIGURE COSTS NOTHING**, verified rather than assumed: it reads status + paid_by + settled and never `expense_id`, so an employee who laid out their own money is still owed it and **Mark paid** still settles it. A claim marked *not arrived* must name a shop and a description — goods turn up at a door, and §111 part one refuses a line with no name. **Tests:** new `scripts/test_claim_purchase_order.js` (**47 cases**, both routers real, inventory stubbed but RECORDING), and `test_staff_expenses.js` 75 → **82 cases**, whose file-wide *one table, and it is the claim table* guard is NARROWED rather than dropped — the allowed set is named, the two new tables are pinned to `raiseOrderForClaim`, and a new case proves the SUBMIT path still writes the claim and nothing else, which is the assertion that actually carries §87 part one and which the old regex only implied. `npm run test:fast` 223 passed, 0 failed; eslint 0 errors; doc-numbering PASS. **Three composed strings and one taken whole**, all declared in `docs/tacet-delivery-vocabulary.md` v1.72 with a test case that re-reads each source and fails if a term stops being live. Two migrations (`staff_expenses.awaiting_delivery`, `po_id`), no new route, no new capability, and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.247 — **§113 ADDED: THE KEYBOARD GOES DOWN — REPORTED BY ASH in four words, *"keyboard doesn't go down"*, with the expense claim and Add someone photographed under it.** `public/m.html` has **no `<form>` in it**, so the soft keyboard's action key had nothing to submit; with no `enterkeyhint` on the field Gboard drew that key as **Go** (前往 in the screenshot), which on a formless page does nothing, and no tap anywhere on the screen would take focus off the field either. **The six fields that closed cleanly were rescued one at a time** — `mExpAmt` carries `enterkeyhint="done"` and a blurring `onkeydown` and sits **two rows above** the note field that has neither — which on a file with **fifty inputs** is the shape of a rule that was never made. **Three passes, none of them a list of field ids** (the reasoning `mTyping()` already carries): `kbHints()` writes the Done key onto every typed field on the paint that drew it, leaving the search boxes' own `enterkeyhint="search"` and the dates, files and checkboxes alone; Enter blurs, delegated once, **never in a textarea and never mid-pinyin** (`isComposing` / `keyCode 229` is an operator choosing a candidate, not asking to leave); and a tap that is not on a field puts the keyboard down, **judged at `click` and never at touch-down** — the scrim rule directly above it records what touch-down costs, *"the keyboard closing … reflows the page under a finger already in motion"* — and it stands aside wherever the tap moved focus itself, to another field or through a `<label>`. **No `<input>` in the file was edited**: four functions and two listeners, which is what makes it a rule rather than a fifty-first rescue. **Nothing here opens a keyboard** — `mSearch`'s `autofocus` and the add-stock caret are untouched. **No new UI text, so no Chinese and no vocabulary entry.** **Tests:** new `scripts/test_mobile_keyboard.js` — **47 assertions across 6 cases**, the four functions sliced out of the shipped file and driven against a hand-built DOM, red-proofed by removing the pinyin and `<label>` guards; fast shard, no browser, auto-discovered by `run-suites.js` and aliased `test:mobile-keyboard`. `npm run test:fast` 222/222 green; the sweep re-rendered all 147 screens (441 renders) with the pass running on every paint. Geometry unchanged — its two `sheet:kq-*` header findings are identical on `main`. No CSS file, no route, no schema, and no change to `.gitignore` or CI.**
 
@@ -12667,3 +12669,146 @@ key, if the tap rule is ever moved to `pointerdown`/`touchstart`, or if
 sweep (`scripts/test_mobile_screens.js`) re-renders all 147 screens warm, cold
 and in Chinese with the pass running on every paint — 441 renders, no uncaught
 errors.
+## §114 — A PURCHASE THAT HAS NOT ARRIVED IS TRACKED AS AN ORDER, WHOEVER PAID FOR IT
+
+Ruling (Ash, 2026-09-13), on a case that breaks §111 part three: *"an employee use the
+company money to buy a food processor. it wasn't the person that do purchasing. here is an
+example why need a direct PO access for it. the item didn't arrive and it need tracking"*.
+
+Two answers, of the options put to him:
+
+* **THE APPROVER RAISES THE ORDER, FROM THE CLAIM.** The employee records what they bought
+  and says it has not arrived; approving raises an **Ordered** purchase order that owns the
+  money, instead of the claim posting its own ledger row. **Nobody gains a capability.**
+* **IT APPLIES TO THEIR OWN MONEY TOO.** The order tracks the delivery and owns the expense;
+  the debt to the employee stays on the claim, so they are still paid back. Two facts about
+  one purchase, kept apart.
+
+### What §111 part three got wrong, stated plainly
+
+§111 part three left claims alone on the reasoning that a claim is *money already out of a
+pocket — there is nothing to order and nothing to receive*. **That is true of a cook buying
+ginger at the market, which is the case it was written against, and false of anything bought
+that has not arrived yet.** Ash's example is the ordinary shape of the second: an appliance,
+paid for on the company card by somebody who is not the buyer, still in transit. **The money
+is gone AND the goods are owed**, and neither door held it — the claim path has no delivery
+to track, and the order path sits behind `purchasing:edit`, which the floor presets withhold
+on purpose (`store_manager`'s own comment: *"Store managers receive inbound stock but don't
+create POs or edit suppliers"*).
+
+### The three findings that made this cheap
+
+**RECEIVING IS ALREADY IN THAT PERSON'S HANDS.** `store_manager` holds `purchasing:view` and
+`purchasing:receive`. What was missing was never the tracking — it was the CREATION. So this
+section grants no new key to anybody, and the person who bought the thing can tick it in
+himself when it lands.
+
+**"PAID, NOT YET ARRIVED" IS A STATE THE ORDER RECORD ALREADY HAS.**
+`postRetailPOExpenses` posts on `Ordered`; `Delivered` is what seeds `qty_received` and moves
+stock. **An Ordered purchase order IS a purchase whose money has gone and whose goods are
+outstanding.** No new status and no new concept — which is also why the order is raised at
+Ordered and never as a draft: a draft posts nothing, and the money has already left the
+account.
+
+**AND §111 PART ONE IS WHAT CARRIES IT.** A food processor is in no catalogue. Before the
+typed line existed this section could not have been built at all.
+
+### PART ONE — THE EMPLOYEE ANSWERS IT; THE APPROVAL RAISES THE ORDER
+
+One more answer on the claim form: **this has not arrived yet**. It is a single opt-in, not a
+pair of chips, because the overwhelming case is goods in hand and the unticked state is
+exactly today's behaviour — an opt-in cannot make an existing claim mean something new.
+
+**THE EMPLOYEE ANSWERS, THE APPROVER ACTS.** Only the person who bought it knows whether it
+turned up; only the approver may let money into the books. §87's split is unchanged and this
+rides on it rather than beside it.
+
+### PART TWO — THE MONEY IS POSTED ONCE, AND THE ORDER OWNS IT
+
+A claim posts one row keyed on `claim_id`; an order posts rows keyed on `po_id`. **A purchase
+that went through both would be in the books twice**, so exactly one of them posts:
+`postClaim` writes nothing for a claim carrying a `po_id`, and the order's own poster carries
+the cost — under the category the employee chose, on the claim's own date.
+
+**THE LINK IS `staff_expenses.po_id`, AND IT IS ALSO THE IDEMPOTENCE.** Approving a claim
+that already carries one raises no second order.
+
+### PART THREE — OWN MONEY IS STILL OWED, AND THAT COSTS NOTHING
+
+Verified rather than assumed: the owed figure reads
+`status = 'approved' AND paid_by = 'employee' AND COALESCE(settled,0) = 0`
+(`routes/staff-expenses.js`) and **never looks at `expense_id`**. So a claim whose money
+posted through an order still stands under *Owed to your team · 应付团队*, and **Mark paid ·
+标记已付** still settles it — posting nothing, exactly as §87 decided, because the money was
+recorded once already.
+
+### PART FOUR — ONCE AN ORDER STANDS, THE CLAIM IS NOT REVERSED FROM THE CLAIM
+
+Rejecting or voiding an approved claim removes its ledger row (§87, §90). **A claim that
+raised an order has no ledger row of its own to remove**, and quietly cancelling the purchase
+order instead would reach into a document that may already have been received, priced and
+part-delivered. So both are refused while an order stands, and the refusal names the way out:
+**Cancel order**, Purchasing's own reversible exit, which keeps the row and zeroes it.
+
+### PART FIVE — A DELIVERY NEEDS SOMEWHERE TO ARRIVE
+
+`staff_expenses.store_id` is nullable and §87 part three gives NULL a meaning: the cost
+belongs to the business rather than to any one place. **Goods do not have that luxury** — they
+turn up at a door, and the receive path needs the shelf. So a claim marked *not arrived* must
+name a store, and the form asks for one. A tenant with a single store never sees the question.
+
+### Rejected
+
+**A NEW CAPABILITY FOR THE EMPLOYEE** — `purchasing:record-own` or similar. Put to Ash and not
+taken. It would be a second key meaning *may create a purchase order*, sitting beside the one
+that already means that, and the two would have to be kept in agreement forever. The approval
+already carries the authority; nothing needed inventing.
+
+**THE EMPLOYEE RAISING THE ORDER DIRECTLY.** Same reason, plus: the buyer's screen shows
+supplier prices, which is a `money: 'shows'` grant the floor presets withhold.
+
+**LEAVING OWN MONEY OUT, for now.** Considered as the narrower build. Refused because it
+leaves the identical gap one case over — a cook who pays for a mixer out of pocket because the
+card is upstairs — and that is exactly how this gap was found.
+
+**CANCELLING THE ORDER AUTOMATICALLY WHEN A CLAIM IS REJECTED.** See part four.
+
+### What this does NOT decide
+
+**The supplier on the order.** Left blank: the employee may not know what the shop is called,
+and the buyer fills it in. Nothing here guesses one.
+
+### Tests
+
+`scripts/test_claim_purchase_order.js`, **47 cases**, both routers real against a fixture with
+`lib/inventory.js` stubbed but RECORDING — a typed line must never move stock, and an absence
+is only provable against a record of what did. It runs Ash's own case: a ¥1,280 food processor,
+company money, not arrived. It asserts that the claim is refused without a shop and without a
+description; that approving raises an **Ordered** retail order with one typed line carrying the
+name, the whole amount at quantity one and the employee's category, and no invented supplier;
+that **the money is in the books once and the order owns it** — nothing keyed on the claim, one
+row keyed on the order; that approving twice raises one order; that an ordinary claim is
+untouched and still posts its own row; that an own-money purchase is still owed and **Mark
+paid** still settles it while posting nothing; that reject and void are refused while the order
+stands and the refusal names the way out; and that receiving the delivery records the arrival
+and moves no stock.
+
+`scripts/test_staff_expenses.js` 75 → **82 cases**. Its file-wide *one table, and it is the
+claim table* guard is **narrowed rather than dropped**: the allowed set is named, the two new
+tables are pinned to `raiseOrderForClaim`, and a new case proves the SUBMIT path writes the
+claim and nothing else and reaches none of the things a decision does — which is the assertion
+that actually carries §87 part one, and which the file-wide regex only ever implied. The screen
+half asserts the opt-in exists once with no opposite command, that the answer reaches the
+server, that both local refusals match the server's, that the flag does not survive onto the
+next claim, and that the approver is told before deciding and can reach the order after.
+
+A further case re-reads every source the three composed strings were lifted from and fails if
+any of them stops being live, so a rename elsewhere cannot quietly orphan them.
+
+**Whether a 发票 is expected.** The order carries the existing invoice fields and nothing here
+sets them; a purchase made in a shop by an employee is exactly the case
+`no_invoice_expected` was built for, and marking it stays the buyer's call.
+
+**What the buyer is told when an approval raises an order.** It appears in the purchasing list
+like any other Ordered PO. §66 and §69 are the precedent for adding a notification later if
+the day turns out to need one; inventing it now would be inventing the workflow.

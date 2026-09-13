@@ -205,7 +205,45 @@ it('the validator is a pure module — a suite can run it without booting the ap
 it('nothing in this route writes the ledger', () => {
   assert.ok(!/expense_entries/.test(ROUTE_CODE),
     '§87 part one: a claim reaches the books through APPROVAL, and only there');
-  assert.ok(!/INSERT INTO (?!staff_expenses)/.test(ROUTE_CODE), 'one table, and it is the claim table');
+
+  /* THE TABLE RULE, NARROWED BY §114 RATHER THAN DROPPED.
+     It used to read "one table, and it is the claim table". That was the right
+     shape while a claim could only ever become a ledger row — but §114 lets an
+     APPROVAL raise an Ordered purchase order for goods that have not arrived, so
+     this file now writes `purchase_orders` and `po_line_items` too.
+
+     WHAT THE RULE WAS PROTECTING IS UNCHANGED and is now asserted more exactly
+     than before: the claim must not reach the books except through a decision.
+     So the allowed set is named, the two new tables are pinned to the function
+     that raises the order, and the SUBMIT path is checked on its own below —
+     which is the assertion that actually carries §87 part one, and which the old
+     file-wide regex only ever implied. */
+  const inserts = [...ROUTE_CODE.matchAll(/INSERT INTO (\w+)/g)].map(m => m[1]);
+  const allowed = new Set(['staff_expenses', 'purchase_orders', 'po_line_items']);
+  for (const t of inserts) {
+    assert.ok(allowed.has(t), `this file may not write ${t}`);
+  }
+  const raise = ROUTE_CODE.match(/function raiseOrderForClaim[\s\S]*?\n}/);
+  assert.ok(raise, 'the order-raising helper must be readable');
+  for (const t of ['purchase_orders', 'po_line_items']) {
+    assert.strictEqual(ROUTE_CODE.split('INSERT INTO ' + t).length - 1, 1,
+      `${t} is written in exactly one place`);
+    assert.ok(raise[0].includes('INSERT INTO ' + t),
+      `${t} is written only by raiseOrderForClaim`);
+  }
+});
+
+it('only a DECISION can raise an order — the submit path writes the claim and nothing else', () => {
+  /* §114's half of §87 part one. An approval may now create a purchase order
+     that carries real money; a submission still may not create anything but a
+     waiting claim, whatever its sender puts in the body. */
+  const submit = ROUTE_CODE.match(/router\.post\('\/api\/retail-admin\/staff-expenses',[\s\S]*?\n}\);/);
+  assert.ok(submit, 'the submit route must be readable');
+  const tables = [...submit[0].matchAll(/INSERT INTO (\w+)/g)].map(m => m[1]);
+  assert.deepStrictEqual(tables, ['staff_expenses'],
+    'the submit path writes the claim table and nothing else');
+  assert.ok(!/raiseOrderForClaim|postRetailPOExpenses|postClaim/.test(submit[0]),
+    'and it reaches none of the things a decision does');
 });
 
 it('a submitter cannot submit an already-approved claim', () => {
@@ -269,6 +307,65 @@ it('the phone route exists and is gated on the key its own Submit is gated on', 
   assert.match(PHONE_CODE, /SUBS\.expense=\{title:\['Expense','费用申请'\]/);
   assert.match(PHONE_CODE, /expense:'expenses:submit'/);
   assert.match(PHONE_CODE, /\['expense','banknote','Expense','费用申请'\]/);
+});
+
+it('§114 — the form asks whether it has arrived, and sends the answer', () => {
+  assert.match(PHONE_CODE, /APP\.cmd\('expComing'\)/, 'the opt-in is on the form');
+  assert.match(PHONE_CODE, /awaiting_delivery:!!x\.coming/, 'and the answer reaches the server');
+  // AN OPT-IN, NOT A PAIR OF CHIPS. Unticked has to mean exactly what this form
+  // has always meant, or every claim ever submitted changes meaning — so there
+  // is no "it has arrived" chip to be the other half of a default. Counted on
+  // the COMMANDS rather than on the file's Chinese: `已到货` is live on the
+  // receiving screen ("N arrived"), which is a different screen saying a
+  // different thing, and an assertion that tripped over it would be measuring
+  // the wrong file.
+  assert.strictEqual(PHONE_CODE.split("APP.cmd('expComing')").length - 1, 1,
+    'one control, once');
+  assert.ok(!/expArrived|expNotComing/.test(PHONE_CODE), 'and no opposite command to pair it with');
+});
+
+it('§114 — the two things an order cannot do without are refused on the phone too', () => {
+  // The server is the rule (lib/expense-claim.js); this is the same rule said
+  // sooner, so the person is told beside the control rather than after a round
+  // trip. Both sentences are the server's own.
+  const send = PHONE_CODE.match(/reg\('expSend'[\s\S]*?\n\}\);/);
+  assert.ok(send, 'the send command must be readable');
+  assert.ok(/x\.coming && !x\.storeId/.test(send[0]), 'no shop is refused');
+  assert.ok(/x\.coming && !String\(x\.note\|\|''\)\.trim\(\)/.test(send[0]), 'no description is refused');
+  assert.match(CLAIM, /awaitingDelivery && !storeId/, 'and the server refuses it regardless');
+  assert.match(CLAIM, /awaitingDelivery && !note/, 'both of them');
+});
+
+it('§114 — the flag does not survive onto the next claim', () => {
+  // "Record another" keeps who paid and which shop — facts about the person —
+  // and clears what the claim was. Whether the LAST thing was still coming says
+  // nothing about the next one, and a sticky flag would silently raise an order
+  // for a taxi.
+  assert.match(PHONE_CODE, /x\.cat=''; x\.coming=false;/,
+    'the reset clears it with the amount and the note');
+});
+
+it('§114 — the approver is told before deciding, and can reach the order after', () => {
+  const FIN = codeOnly(read('public', 'retail-admin', '22-finance.js'));
+  assert.match(FIN, /goes on a purchase order', '将记入采购单'/,
+    'the meta line says approving this raises one');
+  assert.match(FIN, /finTxOpenPO\(\$\{Number\(r\.po_id\)\}\)/,
+    'and once raised, the row opens it — the claim has no ledger row of its own to read');
+});
+
+it('§114 — the terms the two composed strings were built from are still live', () => {
+  /* The house rule for a composed pair: say where its Chinese came from, and
+     FAIL if that source stops being live, so a rename cannot quietly orphan the
+     composition. `到货` is `Arrives · 到货` on the purchasing screen and the
+     phone's own receiving screen; `尚未` is `Not on any purchase order yet. ·
+     尚未出现在任何采购单中。` on the materials screen; `记入采购单` is v1.70's own, declared for §111
+     part two. Recorded in docs/tacet-delivery-vocabulary.md v1.72. */
+  const PURCH = read('public', 'retail-admin', '16-purchasing.js');
+  assert.ok(/'Arrives', ?'到货'/.test(PURCH), '到货 must stay live where it was taken from');
+  const MATS = read('public', 'retail-admin', '18-materials.js');
+  assert.ok(/尚未出现在任何采购单中/.test(MATS), '尚未 must stay live where it was taken from');
+  const FIN2 = read('public', 'retail-admin', '22-finance.js');
+  assert.ok(/该笔记入采购单/.test(FIN2), '记入采购单 is v1.70\'s, and this leans on it');
 });
 
 it('the form opens empty every time — a reopened screen is not a second claim', () => {
