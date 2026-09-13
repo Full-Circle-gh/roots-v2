@@ -674,7 +674,9 @@ function guanyiStoreCodes() {
 // target: the number that failed to push minutes or days ago is not necessarily
 // the number we hold today, and pushing it would write the wrong figure into
 // Guanyi. Skips products that already have work waiting.
-function enqueueCurrentStock(storeCode, retailStoreId, productId) {
+// `window` may be passed by a caller that already resolved it for this heal, so
+// a store's worth of products costs one config read rather than one per product.
+function enqueueCurrentStock(storeCode, retailStoreId, productId, window = null) {
   const pending = db.prepare(
     `SELECT 1 FROM guanyi_sync_queue WHERE retail_store_id=? AND product_id=? AND status IN ('pending','processing')`
   ).get(retailStoreId, productId);
@@ -687,7 +689,7 @@ function enqueueCurrentStock(storeCode, retailStoreId, productId) {
      carrying shelf + allowance at 07:05 and was back to the shelf by 07:23.
      The sweeps in lib/*-drift-sweep.js were taught this; this one was missed
      because it is the only enqueue that lives inside a daemon. */
-  const qty = channelPublish.publishableAt(db, retailStoreId, productId, { channel: 'gzgrocery' });
+  const qty = channelPublish.publishableAt(db, retailStoreId, productId, { channel: 'gzgrocery', window });
   db.prepare(`INSERT INTO guanyi_sync_queue (retail_store_id, product_id, store_code, new_qty, status)
               VALUES (?, ?, ?, ?, 'pending')`).run(retailStoreId, productId, storeCode, qty);
   return true;
@@ -703,10 +705,9 @@ function autoHeal(storeCode, listing) {
 
   const maps = db.prepare(`
     SELECT m.product_id, m.retail_store_id, m.guanyi_sku_id, m.sync_enabled, m.guanyi_name,
-           p.sku, p.name_en, COALESCE(s.physical_qty, 0) AS tianhe_qty
+           p.sku, p.name_en
       FROM guanyi_product_map m
       LEFT JOIN store_products p ON p.id = m.product_id
-      LEFT JOIN retail_store_stock s ON s.product_id = m.product_id AND s.store_id = m.retail_store_id
      WHERE m.store_code = ? AND m.guanyi_sku_id IS NOT NULL
   `).all(storeCode);
   if (!maps.length) return;
@@ -721,6 +722,9 @@ function autoHeal(storeCode, listing) {
   }
 
   const reenabled = [], revived = [], resynced = [];
+  // One pre-order window read for the whole heal, not one per product: every
+  // enqueue and the comparison in step 3 all want the same answer for this pass.
+  const window = cadence.preorderWindow(db, { channel: 'gzgrocery' });
 
   // 1. Mappings the daemon switched off itself (guanyi-daemon marks 已停用 SKUs
   //    sync_enabled=0 and nothing ever turned them back on). If Guanyi lists the
@@ -731,7 +735,7 @@ function autoHeal(storeCode, listing) {
     if (!cur || cur.disabled) continue;
     db.prepare(`UPDATE guanyi_product_map SET sync_enabled=1, updated_at=CURRENT_TIMESTAMP
                  WHERE retail_store_id=? AND product_id=?`).run(m.retail_store_id, m.product_id);
-    enqueueCurrentStock(storeCode, m.retail_store_id, m.product_id);
+    enqueueCurrentStock(storeCode, m.retail_store_id, m.product_id, window);
     reenabled.push(m.sku || m.guanyi_name || m.product_id);
   }
 
@@ -747,23 +751,43 @@ function autoHeal(storeCode, listing) {
   const retire = db.prepare(`UPDATE guanyi_sync_queue SET status='done', processed_at=CURRENT_TIMESTAMP,
                                     last_error='auto-healed — re-queued at current stock' WHERE id=?`);
   for (const d of dead) {
-    if (enqueueCurrentStock(storeCode, d.retail_store_id, d.product_id)) revived.push(d.sku || d.product_id);
+    if (enqueueCurrentStock(storeCode, d.retail_store_id, d.product_id, window)) revived.push(d.sku || d.product_id);
     retire.run(d.id);
   }
 
-  // 3. Safety net: anything where Guanyi simply disagrees with Tianhe. Skipped
-  //    while pickup inference is live — that mode READS a downward drift as a
-  //    gzgrocery sale, so re-pushing our number first would erase the very signal
-  //    it works from. Capped, so a surprise never turns into a push storm.
+  // 3. Safety net: anything where Guanyi disagrees with what we would publish
+  //    today. Skipped while pickup inference is live — that mode READS a
+  //    downward drift as a gzgrocery sale, so re-pushing our number first would
+  //    erase the very signal it works from. Capped, so a surprise never turns
+  //    into a push storm.
+  //
+  //    AGAINST THE PUBLISHED FIGURE, NOT THE RAW SHELF — §85's rule, which the
+  //    enqueue above and both drift sweeps were taught and this comparison was
+  //    not. It is wrong in both directions against the bare column:
+  //
+  //      • A batch-made product sold past zero holds a NEGATIVE shelf on purpose
+  //        (§84 — the shortfall is what the kitchen owes), while what we send
+  //        Guanyi is floored at 0. So the raw test calls every owed product
+  //        drifted, "heals" it by pushing the same 0 again, and pages the
+  //        merchant to say so — on every reconnect, for as long as the debt
+  //        stands. 2026-09-13: 1-225 and 1-310 reported as 0→-1 in two alerts
+  //        seven hours apart, neither of which changed anything in Guanyi.
+  //      • While the pre-order window is open the queue publishes shelf +
+  //        allowance, so a bare-shelf test reports every batch-made listing as
+  //        drifted and re-enqueues it AT the shelf — closing the window
+  //        silently, which is the failure scripts/test_preorder_window.js
+  //        already pins the two sweeps against.
   if (PICKUP_MODE !== 'live') {
     for (const m of maps) {
       if (!m.sync_enabled) continue;
       if (resynced.length >= RESYNC_MAX) break;
       const cur = bySku.get(String(m.guanyi_sku_id));
       if (!cur || cur.disabled) continue;
-      if (Number(cur.currentQty) === Number(m.tianhe_qty)) continue;
-      if (enqueueCurrentStock(storeCode, m.retail_store_id, m.product_id)) {
-        resynced.push(`${m.sku || m.product_id} ${cur.currentQty}→${m.tianhe_qty}`);
+      const want = channelPublish.publishableAt(db, m.retail_store_id, m.product_id,
+        { channel: 'gzgrocery', window });
+      if (Number(cur.currentQty) === want) continue;
+      if (enqueueCurrentStock(storeCode, m.retail_store_id, m.product_id, window)) {
+        resynced.push(`${m.sku || m.product_id} ${cur.currentQty}→${want}`);
       }
     }
   }
