@@ -6668,10 +6668,18 @@ function poPill(p){
   // pill() takes an order KIND, and a PO's four statuses are not order kinds —
   // so the tone is named here rather than smuggled through a map that would
   // silently answer "clear" to every word it did not recognise.
-  const tone = poLate(p)?'warning' : p.status==='Delivered'?'success'
+  /* PART ARRIVED IS NOT A STORED STATUS, which is the whole reason this screen
+     could disagree with Receiving: the stored word is Delivered from the first
+     arrived count onward, so a pill reading it alone calls an order done while
+     eleven of its twelve lines are still on a van. rcvPartial() is the test
+     Receiving already keeps such an order in "To receive" by; read it here and
+     the two screens cannot say different things about the same order. */
+  const part = rcvPartial(p);
+  const tone = poLate(p)?'warning' : part?'warning' : p.status==='Delivered'?'success'
     : p.status==='Cancelled'?'muted' : 'clear';
   const [bg,fg]=PILL[tone];
-  return `<span class="pill" style="background:${bg};color:${fg}">${poLate(p)?T('Late','已逾期'):T(...poWord(p.status))}</span>`;
+  const word = poLate(p)?T('Late','已逾期') : part?T('Part arrived','部分到货') : T(...poWord(p.status));
+  return `<span class="pill" style="background:${bg};color:${fg}">${word}</span>`;
 }
 function poStore(p){ return LANG==='en' ? (p.store_name_en||p.store_name_cn||'')
                                         : (p.store_name_cn||p.store_name_en||''); }
@@ -6693,9 +6701,16 @@ function poRow(p){
       ${poPill(p)}</div>
     ${arrives?`<div style="font-size:12.5px;color:var(--text-secondary)">${T('Arrives','到货')} ${arrives}</div>`:''}</button>`;
 }
+/* OPEN MEANS GOODS STILL TO COME, not a status word — see rcvPartial() and the
+   note on poPill(). An order the receive route flipped to Delivered on its
+   first arrived count still has lines nobody has spoken for, so it belongs in
+   Open and not in Received. Receiving's "To receive" list has always counted it
+   that way; until this test was applied here too, the phone's Purchasing said
+   "1 open" about the same three orders Receiving was calling "To receive 3".
+   The desktop got the identical test in 16-purchasing.js (puPartial). */
 function statusPurchasing(){
   const all=state.poList; if(!all||!all.length) return '';
-  const open=all.filter(p=>p.status==='Requested'||p.status==='Ordered').length;
+  const open=all.filter(p=>p.status==='Requested'||p.status==='Ordered'||rcvPartial(p)).length;
   const late=all.filter(poLate).length;
   const m=shopToday().slice(0,7);
   const spend=all.filter(p=>String(p.date||'').slice(0,7)===m&&(p.status==='Ordered'||p.status==='Delivered'))
@@ -6715,8 +6730,8 @@ function screenPurchasing(){
   if(!all.length) return nothingYet(T('No purchase orders yet','还没有采购单'),
     T('An order is what you are buying from one supplier for one store. They are written on desktop; once one exists you can read it and tick it in from here.',
       '采购单记录你向某个供应商、为某家门店采购的内容。在电脑端创建后，可在此查看并收货。'));
-  const open=all.filter(p=>p.status==='Requested'||p.status==='Ordered');
-  const rcvd=all.filter(p=>p.status==='Delivered');
+  const open=all.filter(p=>p.status==='Requested'||p.status==='Ordered'||rcvPartial(p));
+  const rcvd=all.filter(p=>p.status==='Delivered'&&!rcvPartial(p));
   const late=all.filter(poLate);
   const m=shopToday().slice(0,7);
   const spend=all.filter(p=>String(p.date||'').slice(0,7)===m&&(p.status==='Ordered'||p.status==='Delivered'))
@@ -7629,6 +7644,14 @@ function rcvPatch(){
   const to=document.getElementById('mRcvToBody');
   const rcv=document.getElementById('mRcvBody');
   if(!segsEl||(!to&&!rcv)) return render();
+  /* THE HEAD COUNTS THE SAME THING THE SEGMENT DOES, so it repaints with it.
+     statusReceiving() and the To receive segment both read rcvToReceive(); the
+     head is drawn by render() and the segment by this function, so leaving it
+     out here is what let the band say 0 above a tab saying 3 — the number was
+     true when the band was built, and the band was built before the orders
+     arrived. */
+  const headEl=document.getElementById('mHeadStatus');
+  if(headEl) headEl.innerHTML=statusReceiving();
   segsEl.innerHTML=rcvSegsHtml();
   if(to)  to.innerHTML=rcvToBodyHtml();
   if(rcv) rcv.innerHTML=rcvBodyHtml();
@@ -15899,7 +15922,15 @@ function pageHead({title, status, cta, back, controls}){
          what it currently amounts to — and they were reading as two stacked
          items. Tight to the title, with the band's own bottom padding giving
          them room above the rule instead. */''}
-    ${status?`<p class="num" style="margin:3px 0 0;padding-right:10px;font-size:15px;color:var(--text-secondary);line-height:1.35">${status}</p>`:''}
+    ${/* IT CARRIES AN ID BECAUSE A SCREEN THAT PATCHES MUST BE ABLE TO REACH IT.
+         This line is drawn once, by the full render() that builds the band, and
+         a screen whose numbers arrive later repaints its own containers without
+         going through render() again — so the head kept whatever it was told
+         while the page was still empty. Receiving showed "0 waiting on a
+         delivery" above a tab reading "To receive 3" for exactly that reason:
+         both count rcvToReceive(), but only the tab was repainted when the
+         answer landed. */''}
+    ${status?`<p id="mHeadStatus" class="num" style="margin:3px 0 0;padding-right:10px;font-size:15px;color:var(--text-secondary);line-height:1.35">${status}</p>`:''}
   </div>`;
 }
 /* THE BAR IS FOR OPERATORS WITH SOMEWHERE ELSE TO BE, and for most of them it

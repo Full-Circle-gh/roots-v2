@@ -681,6 +681,30 @@ const CASES = [
     ['and the matching product is named on the row', `txt('content').includes('Mint')`],
   ]],
 
+  // THE BAND AND THE TAB COUNT THE SAME FUNCTION, so they must never print
+  // different numbers. Both read rcvToReceive(); the band is drawn once by the
+  // render() that builds the head, and the tab is repainted by rcvPatch() when
+  // the orders land. While the request was in flight rcvToReceive() was empty,
+  // so the band was told 0 — truthfully — and then never told again. The screen
+  // an operator actually saw read "0 waiting on a delivery" above a tab reading
+  // "To receive 3", which is a screen contradicting itself about the same three
+  // orders. The fix is that rcvPatch() repaints the band too; this case holds
+  // both halves of it, because asserting only the end state would pass just as
+  // well on a screen that never went through the loading state at all.
+  ['the head band counts what the tab counts', `state.rcvSeg='toreceive'; state.rcvToTried=true;
+     state.rcvTo=null; state.rcvToQ=''; APP.cmd('push','receiving');
+     window.__inFlight = txt('content');
+     state.rcvTo=[{id:34,po_number:'RPO-0034',supplier:'Nut House',status:'Ordered',line_count:14,received_lines:0},
+                  {id:32,po_number:'RPO-0032',supplier:'Oat Works',status:'Delivered',line_count:7,received_lines:2},
+                  {id:30,po_number:'RPO-0030',supplier:'Fresh Co.',status:'Delivered',line_count:16,received_lines:11}];
+     rcvPatch();`, [
+    ['in flight the band honestly said 0', `__inFlight.includes('0 waiting on a delivery')`],
+    ['and the tab said 0 with it',         `/To receive\\s*0/.test(__inFlight)`],
+    ['once they land the band says 3',     `txt('content').includes('3 waiting on a delivery')`],
+    ['and the tab says 3 too',             `/To receive\\s*3/.test(txt('content'))`],
+    ['which is the list itself',           `rcvToReceive().length === 3`],
+  ]],
+
   // The receive route moves a PO to Delivered on the first arrived count it is
   // given. Without this, confirming the one product that turned up would drop
   // the other four out of the only list that leads back to them.
