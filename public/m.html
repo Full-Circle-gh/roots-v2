@@ -1271,9 +1271,7 @@ reg('kqOpen', id=>kqOpen(id));
    stale list would hide the very rows it was raised for. `tried` alone, not
    `list`, so the rows stay on screen while the fetch runs instead of blinking
    through Loading…. */
-reg('kqList', ()=>{ const k=state.kq; k.order=null; k.orderId=null; k.err='';
-  if(k.tab==='active') k.tried=false;
-  render(); });
+reg('kqList', ()=>{ kqDropOrder(); render(); });
 reg('kqTab', t=>{ const k=state.kq; if(k.tab===String(t)) return; k.tab=String(t); k.list=null; k.tried=false; render(); });
 reg('kqItemAdvance', (id,to)=>kqItemAdvance(Number(id),to));
 reg('kqItemRecord', id=>kqItemRecord(Number(id)));
@@ -10536,6 +10534,53 @@ function kqWhen(o){
   const time=fmtTime(v);
   return escAttr(day===time||!time?day:day+' '+time)+' · ';
 }
+/* THE LINES OF A REQUEST THAT ARE ACTUALLY ASKED FOR. A zero-qty row is a line
+   somebody removed before sending, and it is counted nowhere — read in one
+   place so the head's count and the rows underneath it cannot disagree. */
+function kqItems(o){ return ((o&&o.items)||[]).filter(it=>xfrNum(it.qty_requested)>0); }
+/* §115 — THE JOB THE HEAD IS DESCRIBING, or null while the LIST is up. The row
+   from the list stands in while the fetch is in flight, so the head shows the
+   number straight away instead of flashing the screen's own name first. */
+function kqHeadOrder(){
+  const k=state.kq;
+  if(k.orderId==null) return null;
+  return k.order||(Array.isArray(k.list)?k.list.filter(o=>o.id===k.orderId)[0]:null)||null;
+}
+/* CLOSING THE JOB AND GOING BACK TO THE LIST, in one place because two things
+   do it: the bar at the foot of the job, and the phone's own Back (layers()).
+   Those two must never land anywhere different. The re-read is §71's — see the
+   comment on kqList. */
+function kqDropOrder(){
+  const k=state.kq;
+  k.order=null; k.orderId=null; k.err='';
+  if(k.tab==='active') k.tried=false;
+}
+/* §115 — THE WAY BACK TO THE LIST, AT THE FOOT OF THE JOB.
+   TWO EXITS THAT NAME TWO PLACES. The head's own Back says More and goes there
+   — out of the kitchen's tool, to the menu it was opened from. This one goes
+   back to the queue. Neither repeats the other, and neither repeats the title,
+   which is now the request's number: what was here before was a chip reading
+   "Kitchen queue" under a title reading Kitchen queue, i.e. the only door back
+   to the list drawn as a label of the screen it was already standing on.
+   AT THE BOTTOM BECAUSE THAT IS WHERE THE HAND IS. The operator works DOWN the
+   lines and closes the last one at the foot of the list; top-left is then the
+   furthest point on the glass from the thumb that has just tapped.
+   THE COUNT IS WHAT IS STILL WAITING BACK THERE, this job excluded, and only on
+   the tab where waiting means anything — `history` is a record, not a to-do. A
+   numeral needs no label beside the name of the list it counts, which is how
+   Receiving's own segments already say it ("To receive 4"). */
+function kqBackBar(){
+  const k=state.kq;
+  const rest=k.tab==='active'&&Array.isArray(k.list)?k.list.filter(o=>o.id!==k.orderId).length:0;
+  /* The safe-area inset ONLY when no tab bar is drawn under this. The dock
+     already holds that room open when it is there, and paying for it twice
+     leaves the bar floating above the gesture area. */
+  return `<div style="position:sticky;bottom:0;background:var(--surface-card);border-top:1px solid var(--border-default);
+    padding:10px 16px ${navTabs().length?'10px':'calc(env(safe-area-inset-bottom,0px) + 10px)'}">
+    <button class="btn2" style="width:100%;padding:0 16px;font-size:14px;gap:7px" onclick="APP.cmd('kqList')">${
+      ic('chevron-left',16,2)}${T('Kitchen queue','厨房制作队列')}${
+      rest?`<span class="num" style="color:var(--text-secondary)">${rest}</span>`:''}</button></div>`;
+}
 function screenKitchenQueue(){
   // loadOwed rides the same entry as the queue's own fetch. Its own call, not a
   // branch inside loadKq: the two answer different questions of different
@@ -10551,10 +10596,13 @@ function screenKitchenQueue(){
   const note=k.note?`<div style="margin:0 16px 12px;padding:12px 14px;border-radius:12px;
     background:var(--surface-sunken,rgba(0,0,0,.04));font-size:14px;line-height:1.55">${escAttr(k.note)}</div>`:'';
   if(k.orderId!=null){
-    if(k.busy&&!k.order) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    /* THE WAY BACK IS DRAWN WHILE THE REQUEST IS STILL COMING, TOO. This branch
+       used to be the whole screen, and the only exit on it went to More: an
+       operator who opened the wrong job on a slow network had to leave the
+       queue and come back in to reach the list again (§115). */
+    if(k.busy&&!k.order) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`+kqBackBar();
     const o=k.order||{};
-    const items=(o.items||[]).filter(it=>xfrNum(it.qty_requested)>0);
-    const p=krPurpose(o);
+    const items=kqItems(o);
     /* THE SPLIT (decisions §61). Each line reads its OWN status, not the
        order's — that is the whole change. The order-wide button is gone;
        what used to force every line to start and finish together is now one
@@ -10567,7 +10615,7 @@ function screenKitchenQueue(){
        tick is now the honest one, meaning made AND on the shelf. Whether the
        batch was recorded is derived server-side from the batches themselves
        (routes/restock.js _attachRecorded), so it cannot disagree with them. */
-    const rows=items.map(it=>{
+    const rows=items.map((it,ix)=>{
       const ist=it.status||'sent';
       /* ONE TAP, NOT TWO (§71). Reported by Ash from the kitchen: "start
          making step is not neccesary. should start from MARK AS MADE. save
@@ -10585,7 +10633,10 @@ function screenKitchenQueue(){
          same as a fresh one — one button, still to make. */
       const inext=ist==='prepared'?null:'prepared';
       const owed=!inext&&!it.recorded_at;
-      return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
+      /* No rule over the FIRST line: the head's own bottom border is now
+         directly above it (§115), and two hairlines together read as a heavier
+         line than either screen means to draw. */
+      return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;${ix?'border-top:1px solid var(--border-default)':''}">
         <span class="num" style="min-width:44px;font-size:20px;font-weight:500">${xfrNum(it.qty_requested)}</span>
         <span style="flex:1;min-width:0;font-size:15px">${escAttr(xfrName(it))}</span>
         ${inext
@@ -10598,27 +10649,14 @@ function screenKitchenQueue(){
           : `<span style="color:var(--sage-ink);display:flex">${ic('circle-check',20)}</span>`}
       </div>`;
     }).join('');
-    return `<div style="padding:4px 16px 12px">
-        <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('kqList')">${T('Kitchen queue','厨房制作队列')}</button></div>
-      ${err}
-      <!-- The reprint rides the request NUMBER, not the row above it: that row
-           is the way out of here, and an action on this job belongs beside the
-           name of the job. Drawn as the secondary chip the retail receipt's own
-           reprint uses — same act, same weight, and it must not compete with the
-           "Mark as made" buttons that are what this screen is for. -->
-      <div style="display:flex;align-items:center;gap:12px;padding:0 16px 4px">
-        <div style="flex:1;min-width:0;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
-        <!-- No aria-label: this chip always carries its own words, and a fixed
-             label would have gone on saying "Reprint" to a screen reader over
-             the top of the "Printing…" the eye can see. -->
-        <button onclick="APP.cmd('kqReprint')"${k.printing?' disabled':''}
-          style="flex:none;display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);
-                 background:var(--surface-raised);border:1px solid var(--border-default);border-radius:8px;
-                 cursor:pointer;padding:5px 9px;font-family:inherit">${ic('printer',15)} ${
-          k.printing?T('Printing…','打印中…'):T('Reprint','重打')}</button>
-      </div>
-      <div style="padding:0 16px 14px;font-size:13px;color:var(--text-secondary)">${kqWhen(o)}${items.length} ${T('items','项')}${p?' · '+escAttr(p):''}</div>
-      <div>${rows}</div>`;
+    /* §115 — NOTHING BETWEEN THE HEAD AND THE WORK. The request's number is the
+       screen's TITLE, its day · lines · purpose is the head's status line and
+       Reprint is the head's one action — the three hooks pageHead already
+       offers, wired on SUBS.kitchenqueue below, exactly as Receive wires them.
+       So an open job is its lines and the way back out, in that order, and the
+       first thing to make is the first thing on the glass. */
+    return (k.err?`<div style="padding:12px 16px 0;font-size:14px;color:var(--brick-ink)">${escAttr(k.err)}</div>`:'')
+      +`<div>${rows}</div>`+kqBackBar();
   }
   const seg=(key,label,dot)=>`<button class="row" style="min-height:40px;padding:7px 16px;border-radius:999px;width:auto;display:inline-flex;gap:7px;
     border:1px solid ${k.tab===key?'var(--text-primary)':'var(--border-default)'};background:${k.tab===key?'var(--text-primary)':'var(--surface-card)'};
@@ -10833,7 +10871,41 @@ function batBodyHtml(){
     </div>`;
 
 }
-SUBS.kitchenqueue={title:['Kitchen queue','厨房制作队列'],render:()=>screenKitchenQueue()};
+/* §115 — THE HEAD OF AN OPEN JOB. Three hooks pageHead has always had, used the
+   way Receive uses them (SUBS.receivexfer): the title is the request's own
+   number, the status line is what the request is, and the head's one action is
+   the reprint. Every one of them returns NOTHING while the list is up — that is
+   the same screen and a different thing entirely, and it keeps its own name.
+   `backLabel` is deliberately NOT set: the head's Back leaves the kitchen's tool
+   for the menu it was opened from, which is a real destination and already says
+   so. The way back to the LIST is the bar at the foot of the job (kqBackBar),
+   and the two must never claim the same place. */
+SUBS.kitchenqueue={title:['Kitchen queue','厨房制作队列'],
+  titleOf:()=>{ const k=state.kq;
+    if(k.orderId==null) return T('Kitchen queue','厨房制作队列');
+    const o=kqHeadOrder()||{};
+    return escAttr(o.rs_number||('#'+k.orderId)); },
+  /* Only once the request itself has landed: its lines and its purpose come
+     with the fetch, and a count of nothing is worse than no line at all. */
+  status:()=>{ const k=state.kq; const o=k.order;
+    if(k.orderId==null||!o) return '';
+    const p=krPurpose(o);
+    return kqWhen(o)+kqItems(o).length+' '+T('items','项')+(p?' · '+escAttr(p):''); },
+  /* THE REPRINT, in the head's action slot beside the number it reprints.
+     Drawn as the secondary chip the retail receipt's own reprint uses — same
+     act, same weight, and it must not compete with the "Mark as made" buttons
+     that are what this screen is for.
+     No aria-label: this chip always carries its own words, and a fixed label
+     would have gone on saying "Reprint" to a screen reader over the top of the
+     "Printing…" the eye can see. */
+  cta:()=>{ const k=state.kq;
+    if(k.orderId==null||!k.order) return '';
+    return `<button onclick="APP.cmd('kqReprint')"${k.printing?' disabled':''}
+      style="flex:none;display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);
+             background:var(--surface-raised);border:1px solid var(--border-default);border-radius:8px;
+             cursor:pointer;padding:5px 9px;font-family:inherit">${ic('printer',15)} ${
+      k.printing?T('Printing…','打印中…'):T('Reprint','重打')}</button>`; },
+  render:()=>screenKitchenQueue()};
 /* §103 — Channel sync. One card per item that needs somebody, three pills
    across it, the reason in a sentence. Read-only: the repair is a desktop
    job, and the card says which tab. */
@@ -17755,6 +17827,13 @@ function layers(){
   }
   if(state.productSku) L.push(()=>{ state.productSku=null; });
   if(state.poId!=null) L.push(()=>{ state.poId=null; });
+  /* AN OPEN KITCHEN JOB (§115). It is a STATE of the queue screen rather than a
+     screen of its own, so the stack loop above cannot see it — and without this
+     line an edge swipe threw the whole screen away and landed on More, straight
+     past the list the operator was going back to. Now it closes the job first,
+     which is what the bar at the foot of that job does, and the phone's Back
+     and the app's own must never land anywhere different. */
+  if(state.kq.orderId!=null) L.push(kqDropOrder);
   if(state.chanSheet) L.push(()=>{ state.chanSheet=null; });
   /* Below the picker on purpose: taking Edit out of the dial closes the dial
      and opens the sheet, so the two are never both open — but if they ever

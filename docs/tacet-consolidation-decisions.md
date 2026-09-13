@@ -12815,6 +12815,72 @@ sets them; a purchase made in a shop by an employee is exactly the case
 like any other Ordered PO. §66 and §69 are the precedent for adding a notification later if
 the day turns out to need one; inventing it now would be inventing the workflow.
 
+## §115 — TWO WAYS OFF A KITCHEN JOB, AND NEITHER ONE NAMES THE SCREEN IT IS ALREADY ON
+
+**Reported by Ash, 2026-09-13**, against a photograph of the Kitchen queue with
+`PR-260913-001` open: ***"kit jen quote button is not clear."*** The button is
+the chip directly under the title, and it read **Kitchen queue** — the same two
+words as the `<h1>` six pixels above it. It is a label, or a tab, or the name of
+the screen you are standing on. It is in fact the only door back to the list.
+
+### Why a door was drawn as a label
+
+The order detail is a STATE of the queue screen (`state.kq.orderId`), not a
+route of its own, so the pushed stack knows nothing about it and the head's own
+Back leaves for **More**. The chip was added to cover that, and it inherited the
+screen's name because that is where it goes — which is exactly what makes it
+unreadable as a control: nothing on it says back. No chevron, no verb, and a
+destination it shares with the heading above it.
+
+### The rule: a control is named for where it goes, and no two of them go to the same place
+
+Three things on an open job, three answers:
+
+1. **The title is the job.** `titleOf` on `SUBS.kitchenqueue` returns the
+   request's own number — the list keeps the screen's name, an open job takes
+   the number's. With it, `status` carries the day · lines · purpose line and
+   `cta` carries **Reprint**: the three hooks `pageHead` has always offered,
+   wired the way `SUBS.receivexfer` already wires them for a PO. So the body of
+   an open job is its lines and nothing else, and the first thing to make is the
+   first thing on the glass.
+2. **The head's Back keeps saying More**, and keeps meaning it: out of the
+   kitchen's tool, to the menu it was opened from. No `backLabel`. This was
+   Ash's call over the alternative — a head reading `‹ Kitchen queue` with the
+   number as title — and it is the better one: it leaves the app's global `back`
+   command untouched, and it keeps a one-tap exit from the tool.
+3. **The way back to the LIST is a bar at the foot of the job** (`kqBackBar`),
+   because that is where the hand is. The operator works DOWN the lines and
+   closes the last one at the bottom of the list; top-left is then the furthest
+   point on the glass from the thumb that has just tapped. It carries what is
+   waiting back there — this job excluded, and only on `active`, where waiting
+   means something. A numeral needs no label beside the name of the list it
+   counts, which is how Receiving's own segments already say it
+   (*To receive 4*). The price is ~56px of every job screen; it was drawn at
+   size and accepted before it was built.
+
+### And the phone's own Back was going somewhere else entirely
+
+Found while checking whether the split could work, and shipped with it because
+the two must never disagree: `layers()` — the list that keeps the history stack
+as deep as the app's own layers, so an Android edge swipe closes a layer instead
+of the app — covered orders, customers, products, POs and every sheet, but **not
+an open kitchen job**. A swipe threw the whole screen away and landed on More,
+straight past the list. It is one line, and `kqDropOrder` is now the single
+function both it and the bar call, so the gesture and the button cannot drift.
+
+**`Ready from the kitchen` has the identical shape and the identical gap** —
+`state.kr.orderId` is not a layer either. It is left alone here on purpose: that
+screen's own way out is a different control that this decision has not looked
+at, and fixing half of it silently is how the next session inherits a screen
+whose gesture and button disagree.
+
+### No Chinese was composed
+
+`厨房制作队列`, `重打`, `项` and the purpose words are all live pairs already on
+this screen; the count is a numeral. The one candidate that would have needed a
+new string — *Kitchen queue · 3 more to make* — was restructured into the name
+plus a numeral instead, which is the preference `CLAUDE.md` states.
+
 
 ## §116 — ALL SYNCING GATHERS IN ONE PLACE, AND THE PRODUCTS LIST SAYS NOTHING ABOUT IT
 
