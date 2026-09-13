@@ -288,6 +288,109 @@ function shopName(shop) {
   };
 }
 
+// THE QUESTIONS THE COUNTER WOULD HAVE ASKED (§120). Sugar level, hot or cold,
+// an extra shot — `retail_product_options` + `retail_product_option_choices`,
+// the same two tables the web storefront and the mini app have asked from for
+// as long as either has existed. This page read neither until §120, so a
+// customer standing at the counter could not say "half sugar" and a drink sold
+// in three sizes took three rows of a phone screen.
+//
+// OPTIONS, NOT VARIANTS, and §120 gives the reason: a variant is its own
+// store_products row and would need its own listing, its own line on a menu
+// read by somebody standing up. An option is one card that asks.
+//
+// `text` OPTIONS ARE EXCLUDED and their absence is deliberate. The type is
+// half-built and unsupported on BOTH existing clients — neither renders an
+// input for it, and selection state everywhere is choice-id keyed, so a text
+// option can only ever collect nothing (routes/retail.js says so at length
+// above its own sanitiser). Rendering one here would be a third client with
+// the same hole in it.
+//
+// AVAILABILITY IS THIS SHOP'S SHELF, NOT THE COMPANY'S. A choice carrying a
+// stock_product_id is a real thing on a real shelf, and §47's rule governs it
+// exactly as it governs a stocked listing: counted units AT THIS LOCATION, and
+// no shelf record here at all IS sold out. The online storefront asks a
+// different question of the same column (sellableStockSql, the whole company's
+// count) because it has not routed to a location yet; the two are meant to
+// differ and neither is to be changed to match the other.
+function attachOptions(shop, listings) {
+  const pids = listings.map(r => r.store_product_id);
+  if (!pids.length) return;
+  const ph = pids.map(() => '?').join(',');
+  const options = tdb().prepare(
+    `SELECT id, product_id, question_en, question_cn, type, is_required, sort_order
+       FROM retail_product_options
+      WHERE product_id IN (${ph}) AND type IN ('single','multi')
+      ORDER BY sort_order ASC, id ASC`
+  ).all(...pids);
+  if (!options.length) return;
+
+  const oph = options.map(() => '?').join(',');
+  const choices = tdb().prepare(
+    `SELECT id, option_id, label_en, label_cn, price_delta, is_default, stock_product_id, sort_order
+       FROM retail_product_option_choices
+      WHERE option_id IN (${oph})
+      ORDER BY sort_order ASC, id ASC`
+  ).all(...options.map(o => o.id));
+  if (!choices.length) return;
+
+  const addonIds = [...new Set(choices.map(c => c.stock_product_id).filter(Boolean))];
+  const addonAvail = addonIds.length
+    ? inventory.getAvailableMap(shop.location_id, addonIds, SHOP_CHANNEL)
+    : new Map();
+  const extraSoldOut = (c) => {
+    if (!c.stock_product_id) return false;          // a sugar level has no shelf
+    const a = addonAvail.get(c.stock_product_id);
+    return !a || a.available <= 0;                  // absent shelf record IS sold out — §47
+  };
+
+  const byOpt = new Map();
+  for (const c of choices) {
+    if (!byOpt.has(c.option_id)) byOpt.set(c.option_id, []);
+    byOpt.get(c.option_id).push({
+      id: c.id,
+      en: c.label_en || c.label_cn || '',
+      cn: c.label_cn || c.label_en || '',
+      d: Number(c.price_delta) || 0,
+      def: c.is_default ? 1 : 0,
+      out: extraSoldOut(c) ? 1 : 0,
+    });
+  }
+
+  const byProduct = new Map();
+  for (const o of options) {
+    const cs = byOpt.get(o.id) || [];
+    // A QUESTION WITH NOTHING TO ANSWER IT IS NOT ASKED. An option whose
+    // choices were all deleted would otherwise render as a heading with empty
+    // space under it, and — if it were required — as an order that can never
+    // be placed.
+    if (!cs.length) continue;
+    if (!byProduct.has(o.product_id)) byProduct.set(o.product_id, []);
+    byProduct.get(o.product_id).push({
+      id: o.id,
+      q_en: o.question_en || o.question_cn || '',
+      q_cn: o.question_cn || o.question_en || '',
+      multi: o.type === 'multi' ? 1 : 0,
+      req: o.is_required ? 1 : 0,
+      choices: cs,
+    });
+  }
+
+  for (const r of listings) {
+    const opts = byProduct.get(r.store_product_id);
+    if (!opts || !opts.length) continue;
+    r.options = opts;
+    // A REQUIRED QUESTION WITH NO ANSWER LEFT TAKES THE WHOLE PRODUCT WITH IT,
+    // and this is the one place §120's rule 1A stops. 1A says a sold-out paid
+    // extra greys out while the drink still sells, and that holds for every
+    // OPTIONAL question — nobody who did not want oat milk is turned away. But
+    // a drink whose required "milk?" has run out of every milk cannot be made,
+    // and the honest answer is the sold-out bar the card already knows how to
+    // draw, not a picker the customer cannot satisfy.
+    if (!r.sold_out && opts.some(o => o.req && o.choices.every(c => c.out))) r.sold_out = true;
+  }
+}
+
 // A shop's live menu, grouped for display.
 //
 // AVAILABILITY IS TWO DIFFERENT QUESTIONS (§42, §47):
@@ -347,6 +450,8 @@ function buildMenu(shop) {
     const a = avail.get(r.store_product_id);
     r.sold_out = !a || a.available <= 0;      // absent shelf record IS sold out — §47
   }
+
+  attachOptions(shop, listings);
 
   // TWO LEVELS, because that is what the shop already is. The tenant's own
   // category tree gives the rail its top categories and each section its
@@ -754,6 +859,11 @@ img{display:block;max-width:100%}
 .ln{display:flex;flex-direction:column;gap:8px;padding:12px 0;
   border-bottom:1px solid rgba(0,0,0,.08)}
 .ln-t{min-width:0;overflow-wrap:anywhere;font-size:14px}
+/* WHAT WAS CHOSEN, under the name it was chosen for (§120). Quieter than the
+   product and indented under it, because it is a qualifier on that line rather
+   than a line of its own — the same relation the kitchen ticket prints it in
+   (feie.js indents the option under the item's name). */
+.ln-o{font-size:12px;opacity:.65;margin-top:3px;overflow-wrap:anywhere}
 .ln-r{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .ln-p{flex:none;font-variant-numeric:tabular-nums;font-size:14px}
 .qty{flex:none;display:flex;align-items:center;border:2px solid var(--ink)}
@@ -761,6 +871,46 @@ img{display:block;max-width:100%}
   font-family:var(--f-bear);font-size:16px;line-height:1;cursor:pointer;padding:0}
 .qty span{min-width:26px;text-align:center;line-height:1;font-variant-numeric:tabular-nums;
   font-size:14px}
+
+/* ── the picker (§120) ──
+   One block per question, each a heading and its answers. It borrows the
+   basket's own furniture rather than inventing any: the hairline between rows
+   is .ln's, the ticked answer wears the ink ground the rail's current category
+   wears, and the price delta sits in the tabular column every other number on
+   this sheet sits in. A customer who has read the basket has already learned
+   how to read this.
+
+   THE ANSWERS ARE FULL-WIDTH ROWS, not chips. Chips were tried first and read
+   well in English and badly in 中文, where two-character answers all come out
+   the same width and a row of them becomes a puzzle; a row per answer also
+   gives the sold-out ones somewhere to put their word without reflowing the
+   others. The cost is vertical space, which the sheet scrolls. */
+.og{padding:12px 0;border-bottom:1px solid rgba(0,0,0,.08)}
+.og:last-child{border-bottom:0}
+.og-q{font-size:14px;overflow-wrap:anywhere;margin-bottom:8px}
+/* NO "REQUIRED" MARKER, and its absence is a decision. There is no live
+   English/中文 pair for the word anywhere on a customer surface, and §120 will
+   not mint one for a marker: the mini app's own picker marks nothing either
+   and blocks on Add with the question named (rule 2B), which is the same
+   answer given at the moment it is needed rather than decorating every
+   heading with a word most of them do not need. */
+.oc{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  width:100%;padding:9px 10px;margin-top:6px;cursor:pointer;
+  border:2px solid var(--ink);background:transparent;color:var(--ink);
+  font-family:inherit;font-size:14px;text-align:left}
+.oc-l{min-width:0;overflow-wrap:anywhere}
+.oc-d{flex:none;font-variant-numeric:tabular-nums;font-size:13px;opacity:.75}
+/* Ticked. The ground flips rather than a tick appearing beside the label:
+   a checkbox glyph at this size is a smaller target than the row it marks. */
+.oc.on{background:var(--ink);color:var(--paper)}
+.oc.on .oc-d{opacity:.85}
+/* Sold out. Not disabled-and-silent — the word is the whole point, and it
+   takes the delta's column because a price nobody can pay is noise. */
+.oc.out{cursor:not-allowed;opacity:.42}
+.oc.out .oc-l{text-decoration:line-through}
+/* The picker's foot holds one button and, when a required question has been
+   left alone, one line above it. */
+#sheetO .err{margin-bottom:8px}
 
 /* ── the orders this phone has already placed ──
    One row per order: the number staff will call, the amount, and a chevron
@@ -1266,6 +1416,8 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var sheet=document.getElementById('sheet'),body=document.getElementById('sheetB'),` +
   `ttl=document.getElementById('sheetT'),` +
   `foot=document.getElementById('sheetF'),nEl=document.getElementById('cbarN'),` +
+  `optFoot=document.getElementById('sheetO'),oAdd=document.getElementById('oAdd'),` +
+  `oErr=document.getElementById('oErr'),` +
   `vEl=document.getElementById('cbarV'),tEl=document.getElementById('cTot'),` +
   `errEl=document.getElementById('cErr'),nameEl=document.getElementById('cName'),` +
   `place=document.getElementById('cPlace'),lEl=document.getElementById('cbarL');` +
@@ -1349,6 +1501,24 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var L_ORD=${JSON.stringify(bi('Order', '订单号'))},` +
   `L_MINE=${JSON.stringify(bi('My orders', '我的订单'))},` +
   `L_BASKET=${JSON.stringify(bi('YOUR BASKET', '购物车'))};` +
+  // §120's three, and all three are copied, not composed.
+  //
+  // Add to basket · 加入购物车 is the web storefront's own option-sheet button,
+  // with its own separator and running price after it (public/shop.html's
+  // priceLabel: `'加入购物车 · '` / `'Add to basket · '`) — the same control
+  // doing the same job, so the customer who buys online meets the same words
+  // standing at the counter (§30).
+  //
+  // Sold out · 售罄 is already on this page, on the card and in the submit
+  // refusal; a dead answer inside the picker is the same fact one level down.
+  //
+  // Please choose: · 请选择 is the required-option refusal, live in BOTH the
+  // storefront and the mini app, in both cases with the question's own text
+  // appended exactly as it is appended here.
+  `var L_ADD=${JSON.stringify(bi('Add to basket', '加入购物车'))},` +
+  `L_OUT=${JSON.stringify(bi('Sold out', '售罄'))},` +
+  `L_PICK_EN=${JSON.stringify('Please choose: ')},` +
+  `L_PICK_CN=${JSON.stringify('请选择 ')};` +
   // THE TENANT'S CURRENCY, ALL THREE PARTS OF IT, read off the bar's own data
   // attributes rather than baked in here: this script is built once at module
   // load and the currency is resolved per request (§0 — no currency literal in
@@ -1393,7 +1563,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // submitting. A second formatter would be a price that changed at the till.
   `var lineRows=function(a){if(!a||!a.length)return '';var h='';` +
   `for(var i=0;i<a.length;i++){var it=a[i];` +
-  `h+='<div class="ln"><div class="ln-t">'+bi(it.name_en,it.name_cn)+'</div>'+` +
+  `h+='<div class="ln"><div class="ln-t">'+bi(it.name_en,it.name_cn)+opsLine(it.options)+'</div>'+` +
   `'<div class="ln-r"><span class="ln-q">\u00d7'+esc(String(it.qty))+'</span>'+` +
   `'<div class="ln-p">'+money(it.line_total)+'</div></div></div>'}` +
   `return '<div class="done-it">'+h+'</div>'};` +
@@ -1401,7 +1571,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // refusal — and now the list, which is the same furniture with the footer put
   // away and the header renamed. A second panel would have been a second thing
   // over the menu both of them exist to serve.
-  `var openOrders=function(){errEl.hidden=true;foot.hidden=true;` +
+  `var openOrders=function(){pkClose();errEl.hidden=true;foot.hidden=true;` +
   `ttl.innerHTML=L_MINE;body.innerHTML=ordRows();shOpen(sheet)};` +
   // ONE BAR, TWO STATES. With something in the basket it is the basket. With
   // the basket empty and an order already placed from this phone, it is the way
@@ -1430,7 +1600,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // apart: anything that draws the basket says basket.
   `var paintSheet=function(){var k=ids(),h='';ttl.innerHTML=L_BASKET;` +
   `for(var i=0;i<k.length;i++){var it=cart[k[i]];` +
-  `h+='<div class="ln"><div class="ln-t">'+bi(it.en,it.cn)+'</div>'+` +
+  `h+='<div class="ln"><div class="ln-t">'+bi(it.en,it.cn)+opsLine(it.ops)+'</div>'+` +
   `'<div class="ln-r"><div class="qty">'+` +
   `'<button type="button" data-d="'+esc(k[i])+'" aria-label="-">-</button>'+` +
   `'<span>'+it.qty+'</span>'+` +
@@ -1444,13 +1614,123 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `if(mine.length)h+='<div class="mo-h">'+L_MINE+'</div>'+ordRows();` +
   `body.innerHTML=h;tEl.textContent=money(total())};` +
   `var closeIfEmpty=function(){if(count()===0){shClose(sheet)}};` +
-  `var add=function(b){var id=b.getAttribute('data-add');` +
-  `if(!cart[id])cart[id]={qty:0,price:parseFloat(b.getAttribute('data-p'))||0,` +
-  `en:b.getAttribute('data-en'),cn:b.getAttribute('data-cn')};` +
+  /* ── THE QUESTIONS THE COUNTER WOULD HAVE ASKED (§120) ──────────────────
+     The answers a customer picked, printed under the product's name in the
+     basket and again on the placed order. `Question: Answer`, never a bare
+     answer: "Yes" under a latte says nothing, and the order page, the kitchen
+     ticket and the till all already show the question beside it (feie.js's
+     optLine does exactly this). Both languages in every half, like every other
+     row this script draws — the CSS decides which is visible, not this code. */
+  `var opsLine=function(a){if(!a||!a.length)return '';var h='';` +
+  `for(var i=0;i<a.length;i++){var o=a[i];` +
+  `h+='<div class="ln-o">'+bi(o.q_en+': '+o.en,o.q_cn+': '+o.cn)+'</div>'}` +
+  `return h};` +
+  /* THE BASKET IS KEYED BY WHAT WAS ORDERED, NOT BY WHICH PRODUCT. One
+     full-sugar latte and one half-sugar latte are two lines, two prices and
+     two things for the kitchen to make; keyed by product id alone the second
+     tap would have silently become a second of the first. Sorted numerically
+     so the same answers picked in a different order land on the same line. */
+  `var ckey=function(pid,ch){return ch&&ch.length` +
+  `?(pid+'|'+ch.slice().sort(function(a,b){return a-b}).join(','))` +
+  `:String(pid)};` +
+  /* The questions for one product, parsed once and remembered. They were
+     rendered into the card's own <template> in the same response as the menu
+     (see optJson), so opening a picker costs no round trip — the customer has
+     just tapped and is standing up. */
+  `var OPT={};` +
+  `var optsFor=function(pid){if(OPT[pid]!==undefined)return OPT[pid];` +
+  `var t=document.querySelector('template[data-op=\"'+pid+'\"]');` +
+  `var v=null;` +
+  `if(t){try{v=JSON.parse((t.content||t).textContent||'null')}catch(e){v=null}}` +
+  `OPT[pid]=v;return v};` +
+  /* WHAT THE PICKER IS CURRENTLY HOLDING. One product, its questions, and the
+     answer ids ticked so far — a scalar-free model: every question keeps an
+     ARRAY, and a single-answer question is simply one whose array is replaced
+     rather than appended to. Two shapes for one idea is how a picker starts
+     disagreeing with itself. */
+  `var pk=null;` +
+  /* Ticked answers, in the order the questions are asked — which is the order
+     they will read in on the basket line and on the ticket. */
+  `var pkChosen=function(){var out=[];if(!pk)return out;` +
+  `for(var i=0;i<pk.o.length;i++){var g=pk.o[i],sel=pk.s[g.id]||[];` +
+  `for(var j=0;j<g.choices.length;j++){var c=g.choices[j];` +
+  `if(sel.indexOf(c.id)<0)continue;` +
+  /* A SOLD-OUT ANSWER IS NEVER CARRIED OUT OF THE PICKER, even if it somehow
+     got ticked — a default that ran out between the page rendering and the tap
+     is the real case. The server refuses it too (§120 rule 1A); this is the
+     half that stops the customer being shown a price they cannot pay. */
+  `if(c.out)continue;` +
+  `out.push({option_id:g.id,choice_id:c.id,q_en:g.q_en,q_cn:g.q_cn,` +
+  `en:c.en,cn:c.cn,d:c.d})}}` +
+  `return out};` +
+  `var pkPrice=function(){if(!pk)return 0;var t=pk.p,a=pkChosen();` +
+  `for(var i=0;i<a.length;i++)t+=(Number(a[i].d)||0);` +
+  `return Math.round(t*100)/100};` +
+  /* The first required question with nothing ticked, or null. Asked in the
+     order the questions are asked, so the message names the one the customer
+     will meet first when they scroll back up. */
+  `var pkMissing=function(){if(!pk)return null;` +
+  `for(var i=0;i<pk.o.length;i++){var g=pk.o[i];if(!g.req)continue;` +
+  `var sel=pk.s[g.id]||[],live=0;` +
+  `for(var j=0;j<sel.length;j++){var c=pkFind(g,sel[j]);if(c&&!c.out)live++}` +
+  `if(!live)return g}return null};` +
+  `var pkFind=function(g,id){for(var i=0;i<g.choices.length;i++)` +
+  `if(g.choices[i].id===id)return g.choices[i];return null};` +
+  `var pkPaint=function(){var h='';` +
+  `for(var i=0;i<pk.o.length;i++){var g=pk.o[i],sel=pk.s[g.id]||[];` +
+  `h+='<div class=\"og\"><div class=\"og-q\">'+bi(g.q_en,g.q_cn)+'</div>';` +
+  `for(var j=0;j<g.choices.length;j++){var c=g.choices[j];` +
+  `var on=(sel.indexOf(c.id)>=0&&!c.out);` +
+  `h+='<button type=\"button\" class=\"oc'+(on?' on':'')+(c.out?' out':'')+'\"'+` +
+  `(c.out?' disabled':'')+' data-og=\"'+g.id+'\" data-oc=\"'+c.id+'\">'+` +
+  `'<span class=\"oc-l\">'+bi(c.en,c.cn)+'</span>'+` +
+  `'<span class=\"oc-d\">'+(c.out?L_OUT:(c.d?('+'+money(c.d)):''))+'</span>'+` +
+  `'</button>'}` +
+  `h+='</div>'}` +
+  `body.innerHTML=h;` +
+  /* The button carries the running price, so the cost of an extra is read
+     where it is chosen rather than discovered in the basket. */
+  `oAdd.innerHTML=L_ADD+' \u00b7 '+money(pkPrice())};` +
+  `var openPicker=function(b){var pid=parseInt(b.getAttribute('data-add'),10);` +
+  `var o=optsFor(pid);` +
+  /* NO QUESTIONS AFTER ALL — the flag and the template disagree, which can
+     only happen if one was edited away. Add the product rather than opening an
+     empty sheet over it. */
+  `if(!o||!o.length){addLine(pid,parseFloat(b.getAttribute('data-p'))||0,` +
+  `b.getAttribute('data-en'),b.getAttribute('data-cn'),[]);return}` +
+  `pk={pid:pid,p:parseFloat(b.getAttribute('data-p'))||0,` +
+  `en:b.getAttribute('data-en'),cn:b.getAttribute('data-cn'),o:o,s:{}};` +
+  /* PRE-TICKED DEFAULTS, AND ONLY THE ONES THAT ARE STILL THERE. A default
+     that has run out is left alone rather than ticked-then-refused — §120's
+     rule 1A greys it out, and a picker that opens with a dead answer already
+     chosen would be asking the customer to undo it. */
+  `for(var i=0;i<o.length;i++){var g=o[i],d=[];` +
+  `for(var j=0;j<g.choices.length;j++){var c=g.choices[j];` +
+  `if(c.def&&!c.out){d.push(c.id);if(!g.multi)break}}` +
+  `pk.s[g.id]=d}` +
+  `oErr.hidden=true;foot.hidden=true;optFoot.hidden=false;errEl.hidden=true;` +
+  `ttl.innerHTML=bi(pk.en,pk.cn);pkPaint();shOpen(sheet);body.scrollTop=0};` +
+  /* Leaving the picker puts the sheet back to being the basket. Every face of
+     this panel repaints the heading and swaps the foot, or it wears the last
+     one's. */
+  `var pkClose=function(){pk=null;optFoot.hidden=true;oErr.hidden=true};` +
+  `var addLine=function(pid,price,en,cn,ops){` +
+  `var ch=[];for(var i=0;i<ops.length;i++)ch.push(ops[i].choice_id);` +
+  `var k=ckey(pid,ch);` +
+  `if(!cart[k])cart[k]={pid:pid,qty:0,price:price,en:en,cn:cn,ops:ops};` +
   // MAX_QTY on the server is 20 and it refuses past it. Stopping here as well
   // means the customer meets the ceiling as a button that stops moving rather
   // than as an error after they have filled in their name.
-  `if(cart[id].qty<20)cart[id].qty++;paintBar();if(!sheet.hidden)paintSheet()};` +
+  `if(cart[k].qty<20)cart[k].qty++;paintBar();if(!sheet.hidden&&!pk)paintSheet()};` +
+  /* THE + EITHER ADDS OR ASKS, and the card said which before it was tapped
+     (data-ask). A product with no questions on it behaves exactly as it always
+     has — one tap, one unit, the photo flies into the bar — because most of a
+     menu has no questions and making every product cost a sheet would be a
+     tax on the common case. */
+  `var add=function(b){var pid=parseInt(b.getAttribute('data-add'),10);` +
+  `if(b.getAttribute('data-ask')==='1'){openPicker(b);return}` +
+  `addLine(pid,parseFloat(b.getAttribute('data-p'))||0,` +
+  `b.getAttribute('data-en'),b.getAttribute('data-cn'),[])};` +
   // THE FLIGHT RUNS AFTER add(), NOT INSIDE IT, and the order is the whole
   // trick: add() calls paintBar(), which is what un-hides the bar on the very
   // first tap. Measuring the target before that would measure a hidden element
@@ -1483,7 +1763,28 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var gone=function(){if(f.parentNode)f.parentNode.removeChild(f)};` +
   `f.addEventListener('transitionend',gone,false);setTimeout(gone,700)};` +
   `document.addEventListener('click',function(e){` +
-  `var b=e.target.closest?e.target.closest('.add'):null;if(b){add(b);fly(b);return}` +
+  /* TICKING AN ANSWER. A single-answer question REPLACES what was ticked — the
+     customer is changing their mind, not adding a second sugar level — and a
+     multi toggles. A required single cannot be un-ticked back to nothing by
+     tapping the one that is already on: that would be an empty required
+     question the customer did not ask for, and they have no way to see they
+     caused it. */
+  `var oc=e.target.closest?e.target.closest('.oc'):null;` +
+  `if(oc&&pk){if(oc.disabled)return;` +
+  `var gid=parseInt(oc.getAttribute('data-og'),10);` +
+  `var cid=parseInt(oc.getAttribute('data-oc'),10);` +
+  `var g=null;for(var gi=0;gi<pk.o.length;gi++)if(pk.o[gi].id===gid)g=pk.o[gi];` +
+  `if(!g)return;` +
+  `var sel=pk.s[gid]||[],at=sel.indexOf(cid);` +
+  `if(g.multi){if(at>=0)sel.splice(at,1);else sel.push(cid)}` +
+  `else if(at<0)sel=[cid];` +
+  `else if(!g.req)sel=[];` +
+  `pk.s[gid]=sel;oErr.hidden=true;pkPaint();return}` +
+  `var b=e.target.closest?e.target.closest('.add'):null;` +
+  /* The flight is for a product that went STRAIGHT into the basket. One that
+     opens a picker has not been added yet, and a photo sailing into the bar
+     before the customer has answered anything would be telling them a lie. */
+  `if(b){var asked=b.getAttribute('data-ask')==='1';add(b);if(!asked)fly(b);return}` +
   `var d=e.target.getAttribute&&e.target.getAttribute('data-d');` +
   `if(d){if(cart[d]){cart[d].qty--;if(cart[d].qty<1)delete cart[d]}` +
   `paintBar();paintSheet();closeIfEmpty();return}` +
@@ -1500,8 +1801,35 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `document.getElementById('cbarOpen').addEventListener('click',function(){` +
   `if(count()===0&&mine.length){if(mine.length===1){location.href=mine[0].u;return}` +
   `openOrders();return}` +
-  `errEl.hidden=true;foot.hidden=false;paintSheet();shOpen(sheet)},false);` +
-  `var close=function(){shClose(sheet)};` +
+  `pkClose();errEl.hidden=true;foot.hidden=false;paintSheet();shOpen(sheet)},false);` +
+  /* RULE 2B (§120). A required question left unanswered BLOCKS, and the refusal
+     NAMES THE QUESTION — "Please choose: Sugar level", not a bare "please
+     choose", because a picker with four questions on it gives the customer no
+     way to tell which one it means. Both halves are the live pair the web
+     storefront and the mini app already refuse with, question text and all.
+     The alternative — silently pre-picking the first answer and never blocking
+     — was considered and rejected in §120: a defaulted sugar level is a wrong
+     drink the customer did not order and the counter cannot tell was never
+     chosen. */
+  `oAdd.addEventListener('click',function(){if(!pk)return;` +
+  `var miss=pkMissing();` +
+  `if(miss){oErr.innerHTML=bi(L_PICK_EN+miss.q_en,L_PICK_CN+miss.q_cn);` +
+  `oErr.hidden=false;return}` +
+  /* pkPrice(), NOT pk.p. The basket line carries the price the customer will
+     actually be charged — base PLUS every delta they ticked — and pk.p is the
+     base alone. Passing the base put a latte with a paid oat milk in the basket
+     at its bare listing price while the server, which prices from its own
+     tables, charged the extra too: the customer read one number on their phone
+     and heard another at the till.
+     Caught by the render suite, which adds a paid extra and then measures the
+     basket line. */
+  `addLine(pk.pid,pkPrice(),pk.en,pk.cn,pkChosen());` +
+  /* Back to the basket, which is the face that shows what has just been added.
+     The picker's own foot goes with it. */
+  `pkClose();errEl.hidden=true;foot.hidden=false;paintSheet()},false);` +
+  /* Closing the panel from the picker must not leave the picker's foot behind
+     for the basket to wear. */
+  `var close=function(){pkClose();shClose(sheet)};` +
   `document.getElementById('sheetX').addEventListener('click',close,false);` +
   `document.getElementById('sheetBg').addEventListener('click',close,false);` +
   `document.addEventListener('keydown',function(e){if(e.key==='Escape')close()},false);` +
@@ -1530,7 +1858,15 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var name=(nameEl.value||'').trim();` +
   `if(!name){fail(bi(${JSON.stringify('Name')},${JSON.stringify('姓名')}));nameEl.focus();return}` +
   `var k=ids();if(!k.length)return;` +
-  `var items=[];for(var i=0;i<k.length;i++)items.push({store_product_id:parseInt(k[i],10),qty:cart[k[i]].qty});` +
+  /* THE LINE CARRIES ITS ANSWERS. `choices` is the chosen choice ids and
+     nothing else — the labels, the questions and the deltas on the cart line
+     are for drawing the basket, and the server looks all three up again from
+     its own tables rather than trusting a price that arrived from a phone. */
+  `var items=[];for(var i=0;i<k.length;i++){var ln=cart[k[i]];` +
+  `var one={store_product_id:ln.pid,qty:ln.qty};` +
+  `if(ln.ops&&ln.ops.length){one.choices=[];` +
+  `for(var j=0;j<ln.ops.length;j++)one.choices.push(ln.ops[j].choice_id)}` +
+  `items.push(one)}` +
   `sending=true;place.disabled=true;errEl.hidden=true;` +
   `fetch(location.pathname.replace(/\\/$/,'')+'/order',{method:'POST',` +
   `headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,items:items,pay_method:pm})})` +
@@ -1547,7 +1883,13 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // they are told what went.
   `if(o.s===409&&o.j&&o.j.items&&o.j.items.length){var gone='';` +
   `for(var i=0;i<o.j.items.length;i++){var it=o.j.items[i];` +
-  `delete cart[String(it.store_product_id)];` +
+  /* EVERY LINE OF THAT PRODUCT GOES, not the one keyed by its bare id. Since
+     §120 the basket may hold a full-sugar latte and a half-sugar latte as two
+     lines, and a latte that has sold out has sold out for both — deleting
+     cart[pid] would have removed neither of them and left the customer
+     resubmitting the same refusal. */
+  `var pid=Number(it.store_product_id),ks=ids();` +
+  `for(var q=0;q<ks.length;q++)if(cart[ks[q]].pid===pid)delete cart[ks[q]];` +
   `gone+='<div>'+bi(it.name_en,it.name_cn)+' — '+bi(${JSON.stringify('Sold out')},${JSON.stringify('售罄')})+'</div>'}` +
   `paintBar();paintSheet();closeIfEmpty();fail(gone);return}` +
   `fail(bi(${JSON.stringify('Please try again.')},${JSON.stringify('请重试。')}))})` +
@@ -1577,7 +1919,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // (the detail sheet clears its own title for a product with no name), it
   // keeps flex:1 so the × stays where the customer last saw it, and no
   // vocabulary entry is owed for a word that is not said.
-  `var done=function(d){cart={};foot.hidden=true;ttl.innerHTML='';` +
+  `var done=function(d){cart={};pkClose();foot.hidden=true;ttl.innerHTML='';` +
   // REMEMBERED BEFORE IT IS DRAWN, so the one thing that must survive this
   // screen is written before anything can go wrong drawing it.
   // NEWEST FIRST, AND THE ONE BEFORE IT IS KEPT. Deduplicated on the address
@@ -1922,11 +2264,27 @@ router.get('/s/:shopCode', (req, res) => {
     // product it was offering to add, and it is not where this shop's own
     // customers already look for it — the mini app puts it on the price row,
     // and a customer who knows the app should not have to learn a second place.
+    //
+    // THE BUTTON SAYS WHETHER IT ADDS OR ASKS. A product with questions on it
+    // opens the picker instead of dropping straight into the basket, and the
+    // script needs to know which before the tap — `data-ask` is that flag, so
+    // the decision is made from the DOM rather than by looking the product up
+    // in a map that may not have been built yet.
     const add = it.sold_out ? '' :
       `<button type="button" class="add" data-add="${it.store_product_id}"` +
       ` data-p="${esc(String(Number(it.price) || 0))}"` +
+      (it.options ? ` data-ask="1"` : '') +
       ` data-en="${esc(it.name_en || '')}" data-cn="${esc(it.name_cn || '')}"` +
       ` aria-label="${esc(it.name_en || it.name_cn || '')}">+</button>`;
+    // THE QUESTIONS RIDE WITH THE CARD, as JSON in a <template>, for the same
+    // reason the detail sheet's body does: this page renders in ONE response
+    // and a fetch-then-render picker would put a blank sheet in front of a
+    // customer who has just tapped. Escaped with the page's own esc(), and read
+    // back through .content.textContent, which decodes it — so a product named
+    // with an & or a < cannot close the template early.
+    const optJson = it.options
+      ? `<template data-op="${it.store_product_id}">${esc(JSON.stringify(it.options))}</template>`
+      : '';
     // TAPPABLE ONLY WHERE THERE IS SOMETHING TO READ. A product with no
     // ingredients, no nutrition and no allergen flags opens a sheet saying
     // nothing, which is worse than a card that does not respond — so the whole
@@ -1936,6 +2294,7 @@ router.get('/s/:shopCode', (req, res) => {
       ? ` data-open="${it.store_product_id}" role="button" tabindex="0"` : '';
     return `<div class="it${it.sold_out ? ' out' : ''}${detail ? ' has-dt' : ''}"${tap}>` +
       (detail ? `<template data-dt="${it.store_product_id}">${detail}</template>` : '') +
+      optJson +
       `<div class="ph">${photo}` +
       (it.sold_out ? `<div class="sold">${bi('Sold out', '售罄')}</div>` : '') +
       `</div>` +
@@ -2053,6 +2412,18 @@ router.get('/s/:shopCode', (req, res) => {
               `</div>`
             : '') +
           `<button type="button" class="place" id="cPlace">${bi('Place order →', '提交订单 →')}</button>` +
+        `</div>` +
+        // THE PICKER'S OWN FOOT, because the basket's foot asks for a name and
+        // a tender and the picker asks for neither. One foot serving both would
+        // be a name field over a sugar level.
+        //
+        // THE BUTTON CARRIES THE RUNNING PRICE, base plus whatever is ticked,
+        // so the customer sees what the extra costs before they commit to it
+        // rather than discovering it in the basket. Same treatment the mini
+        // app's own option sheet gives it.
+        `<div class="sheet-f" id="sheetO" hidden>` +
+          `<div class="err" id="oErr" hidden></div>` +
+          `<button type="button" class="place" id="oAdd"></button>` +
         `</div>` +
       `</div>` +
     `</div>`
@@ -2183,6 +2554,10 @@ const CANCEL_LIMIT = rateLimit({
 
 const MAX_LINES = 40;         // a menu is not a wholesale order form
 const MAX_QTY = 20;           // per line
+// Answers per line (§120). A drink with more than a dozen ticked extras is a
+// post nobody made from the picker, and the cap is here so a hand-rolled body
+// cannot make the validation loop do unbounded lookups.
+const MAX_CHOICES = 12;
 
 router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), (req, res) => {
   const code = String(req.params.shopCode || '');
@@ -2227,6 +2602,11 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
   `).all(shop.id);
   const byId = new Map(listings.map(r => [r.pid, r]));
 
+  // ONE POSTED LINE IS ONE ROW, and since §120 two rows may share a product:
+  // a full-sugar latte and a half-sugar latte are two things to make, two
+  // prices and two lines on the ticket. `wanted` still aggregates by product
+  // because the SHELF does not care which sugar level drew the cup down.
+  const rows = [];
   const wanted = new Map();
   for (const raw of rawLines) {
     const pid = parseInt(raw && raw.store_product_id, 10);
@@ -2237,7 +2617,104 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
     if (!Number.isInteger(qty) || qty < 1 || qty > MAX_QTY) {
       return res.status(400).json({ success: false, error: 'bad_qty', store_product_id: pid });
     }
+    // The answers, as ids and nothing else. Everything they mean — the label,
+    // the question, the price — is looked up from this tenant's own tables
+    // below. A delta that arrived from a phone is not a delta.
+    const rawCh = Array.isArray(raw && raw.choices) ? raw.choices : [];
+    if (rawCh.length > MAX_CHOICES) {
+      return res.status(400).json({ success: false, error: 'too_many_choices', store_product_id: pid });
+    }
+    const choices = [];
+    for (const c of rawCh) {
+      const cid = parseInt(c, 10);
+      if (!Number.isInteger(cid) || cid < 1) {
+        return res.status(400).json({ success: false, error: 'bad_choice', store_product_id: pid });
+      }
+      if (choices.indexOf(cid) < 0) choices.push(cid);
+    }
+    rows.push({ pid, qty, choices });
     wanted.set(pid, (wanted.get(pid) || 0) + qty);
+  }
+
+  // ── THE ANSWERS, CHECKED AGAINST THE QUESTIONS (§120) ────────────────────
+  // Everything here is asked of the DATABASE, never of the post body: which
+  // product a choice belongs to, what it costs, whether its question was
+  // required, and whether the thing it promises is still on the shelf.
+  const postedChoiceIds = [...new Set(rows.flatMap(r => r.choices))];
+  const choiceById = new Map();
+  if (postedChoiceIds.length) {
+    const cph = postedChoiceIds.map(() => '?').join(',');
+    for (const c of tdb().prepare(
+      `SELECT c.id, c.option_id, c.label_en, c.label_cn, c.price_delta, c.stock_product_id,
+              o.product_id, o.type, o.is_required, o.question_en, o.question_cn
+         FROM retail_product_option_choices c
+         JOIN retail_product_options o ON o.id = c.option_id
+        WHERE c.id IN (${cph})`
+    ).all(...postedChoiceIds)) choiceById.set(c.id, c);
+  }
+  // Every question the products on this order carry, so a REQUIRED one that was
+  // simply left out of the post body is caught. The client blocks on it too
+  // (rule 2B), and the client is not the thing being trusted.
+  const orderedPids = [...wanted.keys()];
+  const pph = orderedPids.map(() => '?').join(',');
+  const questions = tdb().prepare(
+    `SELECT id, product_id, type, is_required FROM retail_product_options
+      WHERE product_id IN (${pph}) AND type IN ('single','multi')`
+  ).all(...orderedPids);
+  const liveChoiceCount = new Map();
+  if (questions.length) {
+    const qph = questions.map(() => '?').join(',');
+    for (const r of tdb().prepare(
+      `SELECT option_id, COUNT(*) AS n FROM retail_product_option_choices
+        WHERE option_id IN (${qph}) GROUP BY option_id`
+    ).all(...questions.map(q => q.id))) liveChoiceCount.set(r.option_id, r.n);
+  }
+  const questionsFor = new Map();
+  for (const q of questions) {
+    // A question with no answers left is not asked — the same rule the menu
+    // renders by, and without it a required one could make the product
+    // impossible to order rather than merely unanswerable.
+    if (!(liveChoiceCount.get(q.id) > 0)) continue;
+    if (!questionsFor.has(q.product_id)) questionsFor.set(q.product_id, []);
+    questionsFor.get(q.product_id).push(q);
+  }
+
+  // Stock-backed extras add their own demand, one per unit bought — exactly as
+  // the web checkout's expandStockLines has always counted them. Aggregated
+  // here so three lattes each taking an oat milk ask the shelf for three.
+  const addonWant = new Map();
+  for (const r of rows) {
+    const seenOpt = new Set();
+    for (const cid of r.choices) {
+      const c = choiceById.get(cid);
+      if (!c) return res.status(400).json({ success: false, error: 'bad_choice', store_product_id: r.pid });
+      if (c.product_id !== r.pid) {
+        return res.status(400).json({ success: false, error: 'choice_wrong_product', store_product_id: r.pid });
+      }
+      if (c.type !== 'single' && c.type !== 'multi') {
+        return res.status(400).json({ success: false, error: 'bad_choice', store_product_id: r.pid });
+      }
+      // A single-answer question takes ONE answer. Two would be a price built
+      // from a question the customer was never shown twice.
+      if (c.type === 'single') {
+        if (seenOpt.has(c.option_id)) {
+          return res.status(400).json({ success: false, error: 'too_many_answers', store_product_id: r.pid });
+        }
+        seenOpt.add(c.option_id);
+      }
+      if (c.stock_product_id) {
+        addonWant.set(c.stock_product_id, (addonWant.get(c.stock_product_id) || 0) + r.qty);
+      }
+    }
+    // RULE 2B, SERVER SIDE. The page blocks first and names the question; this
+    // is the same rule where it cannot be skipped by posting straight at the
+    // endpoint.
+    const answered = new Set(r.choices.map(cid => choiceById.get(cid).option_id));
+    for (const q of (questionsFor.get(r.pid) || [])) {
+      if (q.is_required && !answered.has(q.id)) {
+        return res.status(400).json({ success: false, error: 'choice_required', store_product_id: r.pid });
+      }
+    }
   }
 
   // AVAILABILITY IS RE-CHECKED AT SUBMIT, not trusted from the page the
@@ -2257,20 +2734,74 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
     const a = avail.get(pid);
     if (!a || a.available < qty) soldOut.push(pid);
   }
-  if (soldOut.length) {
+
+  // A CHOSEN EXTRA THAT HAS RUN OUT REFUSES THE LINE THAT CHOSE IT, and §47's
+  // rule governs it as it governs everything else on this shop's shelf: counted
+  // units at THIS location, absent record is sold out.
+  //
+  // THE REFUSAL NAMES THE MENU PRODUCT, NOT THE EXTRA, and that is the whole
+  // reason this is a separate pass. The page answers a 409 by clearing that
+  // product's lines from the basket so the customer can choose again; handed
+  // an oat-milk id it would find nothing to clear and hand back the same order.
+  // What has become unavailable is that latte AS CONFIGURED, and naming the
+  // latte is what lets them re-pick.
+  if (addonWant.size) {
+    const addonAvail = inventory.getAvailableMap(shop.location_id, [...addonWant.keys()], SHOP_CHANNEL);
+    const deadAddons = new Set();
+    for (const [aid, need] of addonWant) {
+      const a = addonAvail.get(aid);
+      if (!a || a.available < need) deadAddons.add(aid);
+    }
+    if (deadAddons.size) {
+      for (const r of rows) {
+        for (const cid of r.choices) {
+          const c = choiceById.get(cid);
+          if (c && c.stock_product_id && deadAddons.has(c.stock_product_id)) { soldOut.push(r.pid); break; }
+        }
+      }
+    }
+  }
+  // De-duplicated: since §120 one product may hold several lines, and the
+  // customer should be told once that the latte has gone, not once per sugar
+  // level they chose.
+  const soldOutIds = [...new Set(soldOut)];
+  if (soldOutIds.length) {
     // Refused whole rather than silently short — a customer must never be
     // charged for, or handed, something different from what they chose.
     return res.status(409).json({
       success: false, error: 'unavailable',
-      items: soldOut.map(pid => ({ store_product_id: pid, name_en: byId.get(pid).name_en, name_cn: byId.get(pid).name_cn })),
+      items: soldOutIds.map(pid => ({ store_product_id: pid, name_en: byId.get(pid).name_en, name_cn: byId.get(pid).name_cn })),
     });
   }
 
   const cur = normalizeCurrency(cfg('currency', null));
-  const lines = [...wanted].map(([pid, qty]) => {
+  const lines = rows.map(({ pid, qty, choices }) => {
     const l = byId.get(pid);
-    const unit = Number(l.price) || 0;
-    return { l, pid, qty, unit, lineTotal: Math.round(unit * qty * 100) / 100 };
+    // BASE PLUS WHAT WAS CHOSEN. The base is the shop's listing price and every
+    // delta is this tenant's own price_delta; nothing in this sum came from the
+    // browser. The order of the answers follows the order they were posted in,
+    // which is the order the questions were asked (see pkChosen).
+    let unit = Number(l.price) || 0;
+    const opts = choices.map(cid => {
+      const c = choiceById.get(cid);
+      unit = Math.round((unit + (Number(c.price_delta) || 0)) * 100) / 100;
+      // SNAPSHOTTED WITH THE QUESTION, and in both languages, exactly as the
+      // web checkout writes it — so the line still reads "Heat up?: Yes" on the
+      // ticket, the order page and the till after the option is edited or
+      // deleted. `label` (not label_en) is the key lib/feie.js reads.
+      return {
+        option_id: c.option_id, choice_id: c.id,
+        label: c.label_en, label_cn: c.label_cn || null,
+        question_en: c.question_en || null, question_cn: c.question_cn || null,
+        delta: Number(c.price_delta) || 0,
+        stock_product_id: c.stock_product_id || null,
+      };
+    });
+    // A negative delta could in principle take a line below zero, which is not
+    // a price. Clamped rather than refused: the operator's own numbers put it
+    // there and a customer standing at a counter should not meet a 500.
+    if (!(unit >= 0)) unit = 0;
+    return { l, pid, qty, unit, opts, lineTotal: Math.round(unit * qty * 100) / 100 };
   });
   const subtotal = Math.round(lines.reduce((n, r) => n + r.lineTotal, 0) * 100) / 100;
 
@@ -2343,11 +2874,19 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
       );
       const orderId = info.lastInsertRowid;
 
+      // options_json IS THE COLUMN THAT ALREADY EXISTED, and using it is what
+      // made §120 a day's work rather than a week's. database.js describes it
+      // as "chosen option labels + price deltas, for the receipt"; the web and
+      // mini-app checkouts have filled it for as long as either has had
+      // options, lib/feie.js prints it on both ticket templates, and the admin
+      // order detail parses it back out. This path was the only one writing
+      // order lines that left it null. NULL when nothing was chosen, never
+      // '[]' — that is the shape every reader already handles.
       const insItem = h.prepare(`
         INSERT INTO retail_order_items
           (order_id, product_id, name_en, name_cn, sku, size, qty, unit_price, line_total,
-           ship_modes, needs_ice_pack, ship_from_supplier, unit_cost_at_sale)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+           ship_modes, needs_ice_pack, ship_from_supplier, unit_cost_at_sale, options_json)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `);
       for (const r of lines) {
         insItem.run(
@@ -2355,7 +2894,8 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
           r.l.ship_modes || 'air,land',
           r.l.needs_ice_pack ? 1 : 0,
           r.l.ship_from_supplier ? 1 : 0,
-          costAtSale(h, r.pid)
+          costAtSale(h, r.pid),
+          r.opts.length ? JSON.stringify(r.opts) : null
         );
       }
       h.prepare(
@@ -2364,9 +2904,23 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
 
       // §45: a QR order RESERVES on submit and decrements on paid. Stocked
       // lines only — a made-here item has no shelf to hold (§43).
-      const resItems = lines
-        .filter(r => r.l.fulfilment_mode === 'stocked')
-        .map(r => ({ product_id: r.pid, qty: r.qty }));
+      //
+      // AND A STOCK-BACKED EXTRA HOLDS ITS OWN (§120). An oat milk that was
+      // chosen is a real thing coming off a real shelf, so it is reserved
+      // alongside the drink it was chosen for — one per unit bought, which is
+      // how expandStockLines has always counted them on the web side. Without
+      // this the submit gate would refuse a sold-out extra and then let the
+      // next order take the last one twice.
+      //
+      // Aggregated across lines, because two sugar levels of the same latte are
+      // two lines and one shelf.
+      const resWant = new Map();
+      const wantRes = (id, qty) => resWant.set(id, (resWant.get(id) || 0) + qty);
+      for (const r of lines) {
+        if (r.l.fulfilment_mode === 'stocked') wantRes(r.pid, r.qty);
+        for (const o of r.opts) if (o.stock_product_id) wantRes(o.stock_product_id, r.qty);
+      }
+      const resItems = [...resWant].map(([product_id, qty]) => ({ product_id, qty }));
       if (resItems.length) {
         inventory.reserveForOrder(
           { storeId: shop.location_id, orderId, items: resItems, channel: SHOP_CHANNEL }, h
@@ -2446,9 +3000,16 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
       status: 'pending_payment',
       total,
       currency: cur,
+      // The done screen draws these rows, and since §120 a row that was
+      // configured must say so — the customer has just paid attention to those
+      // answers and the receipt in front of them should carry them.
       items: lines.map(r => ({
         store_product_id: r.pid, name_en: r.l.name_en, name_cn: r.l.name_cn,
         qty: r.qty, unit_price: r.unit, line_total: r.lineTotal,
+        options: r.opts.map(o => ({
+          q_en: o.question_en || '', q_cn: o.question_cn || o.question_en || '',
+          en: o.label || '', cn: o.label_cn || o.label || '',
+        })),
       })),
     },
   });
@@ -2544,7 +3105,7 @@ function orderLines(orderId, cur) {
   let rows;
   try {
     rows = tdb().prepare(
-      `SELECT name_en, name_cn, qty, line_total
+      `SELECT name_en, name_cn, qty, line_total, options_json
          FROM retail_order_items WHERE order_id = ? ORDER BY id`
     ).all(orderId);
   } catch (e) {
@@ -2552,8 +3113,35 @@ function orderLines(orderId, cur) {
     return '';
   }
   if (!rows || !rows.length) return '';
+  // WHAT WAS CHOSEN, ON THE ORDER'S OWN PAGE (§120). The customer comes back to
+  // this page to check what they asked for, and a latte that says nothing about
+  // its sugar level is the page failing at the one job it has. `Question:
+  // Answer`, the same shape the basket drew and the same shape the kitchen
+  // ticket prints (lib/feie.js's optLine).
+  //
+  // READ DEFENSIVELY, because this column is older than this page's use of it
+  // and holds rows written by three other checkouts. A bare string entry — the
+  // shape the very oldest rows use — still renders, as its answer with no
+  // question in front of it.
+  const optLines = (json) => {
+    let v;
+    try { v = JSON.parse(json || 'null'); } catch { return ''; }
+    if (!Array.isArray(v) || !v.length) return '';
+    return v.map(o => {
+      if (o && typeof o === 'object') {
+        const en = String(o.label != null ? o.label : (o.label_en || '')).trim();
+        const cn = String(o.label_cn || en).trim();
+        if (!en && !cn) return '';
+        const qEn = String(o.question_en || '').trim();
+        const qCn = String(o.question_cn || qEn).trim();
+        return `<div class="ln-o">${bi(qEn ? `${qEn}: ${en}` : en, qCn ? `${qCn}: ${cn}` : cn)}</div>`;
+      }
+      const t = String(o == null ? '' : o).trim();
+      return t ? `<div class="ln-o">${bi(t, t)}</div>` : '';
+    }).join('');
+  };
   return `<div class="done-it">` + rows.map(r =>
-    `<div class="ln"><div class="ln-t">${bi(r.name_en, r.name_cn)}</div>` +
+    `<div class="ln"><div class="ln-t">${bi(r.name_en, r.name_cn)}${optLines(r.options_json)}</div>` +
       `<div class="ln-r">` +
         `<span class="ln-q">×${esc(String(r.qty))}</span>` +
         `<div class="ln-p">${esc(money(r.line_total, cur))}</div>` +

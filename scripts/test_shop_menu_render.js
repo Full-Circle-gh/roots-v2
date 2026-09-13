@@ -71,6 +71,11 @@ const db = tdb();
 
 const LOC = 9871;
 const P_OK = 9971, P_OUT = 9972;
+// §120's picker: a drink that ASKS, and the stock-backed extra one of its
+// answers promises. The extra is never listed on the menu — it is a thing on a
+// shelf, not a thing on sale here — so it needs no listing row, only stock.
+const P_ASK = 9991, A_EXT = 9992;
+const EN_ASK = 'Render fixture asker';
 // Filler rows, in a second category, so the rendered page is taller than a
 // phone. See seed() for why a page that does not scroll cannot test a rail.
 const FILLER = [9973, 9974, 9975, 9976, 9977, 9978, 9979, 9980];
@@ -100,6 +105,12 @@ function cleanup() {
   db.prepare('DELETE FROM shop_listings WHERE shop_id IN (SELECT id FROM shops WHERE location_id = ?)').run(LOC);
   db.prepare('DELETE FROM shops WHERE location_id = ?').run(LOC);
   db.prepare('DELETE FROM retail_store_stock WHERE store_id = ?').run(LOC);
+  db.prepare(
+    `DELETE FROM retail_product_option_choices
+      WHERE option_id IN (SELECT id FROM retail_product_options WHERE product_id = ?)`
+  ).run(P_ASK);
+  db.prepare('DELETE FROM retail_product_options WHERE product_id = ?').run(P_ASK);
+  db.prepare('DELETE FROM store_products WHERE id IN (?, ?)').run(P_ASK, A_EXT);
   db.prepare('DELETE FROM store_products WHERE id IN (?, ?)').run(P_OK, P_OUT);
   db.prepare(`DELETE FROM store_products WHERE id IN (${FILLER.map(() => '?').join(',')})`).run(...FILLER);
   db.prepare('DELETE FROM retail_stores WHERE id = ?').run(LOC);
@@ -177,6 +188,11 @@ function seed() {
   // The filler rows carry NO facts at all — they are the products that must not
   // become tappable, and the check below asserts exactly that.
   FILLER.forEach((id, i) => filler.run(id, FILLER_NAMES[i], `测试填充${i + 1}`, `__R-8${i}`, 20 + i));
+  const askProd = db.prepare(`INSERT INTO store_products
+    (id, name_en, name_cn, sku, sell_price, is_active, is_published, top_category)
+    VALUES (?, ?, ?, ?, ?, 1, 1, 'Drinks')`);
+  askProd.run(P_ASK, EN_ASK, '测试提问饮品', '__R-73', 40);
+  askProd.run(A_EXT, 'Render fixture extra', '测试加料', '__R-74', 3);
   db.prepare('INSERT INTO shops (location_id, public_code, is_active) VALUES (?, ?, 1)').run(LOC, CODE);
   const shopId = db.prepare('SELECT id FROM shops WHERE location_id = ?').get(LOC).id;
   const add = db.prepare(`INSERT INTO shop_listings
@@ -184,7 +200,35 @@ function seed() {
     VALUES (?, ?, ?, 'made_here', ?, ?)`);
   add.run(shopId, P_OK, 33, 1, 0);
   add.run(shopId, P_OUT, 18, 0, 1);   // switched off → the sold-out badge
-  FILLER.forEach((id, i) => add.run(shopId, id, 20 + i, 1, 2 + i));
+  add.run(shopId, P_ASK, 40, 1, 2);   // §120 — the drink that asks
+  FILLER.forEach((id, i) => add.run(shopId, id, 20 + i, 1, 3 + i));
+
+  /* ── §120's questions ───────────────────────────────────────────────────
+     Shaped so the picker's four behaviours can each be driven from a browser:
+
+       Sugar level   single, REQUIRED, and NO DEFAULT — so the picker opens
+                     with it unanswered and rule 2B has something to refuse.
+       Milk          multi, optional. Soy is DEFAULTED, so the pre-tick is
+                     visible; Oat is stock-backed and its shelf is EMPTY, so
+                     rule 1A has a dead answer to grey out while the drink it
+                     belongs to keeps selling. */
+  // The extra's shelf row exists and is at ZERO. §47: it would be sold out with
+  // no row at all too, but an explicit zero is the case an operator actually
+  // creates by selling the last one.
+  db.prepare(`INSERT INTO retail_store_stock (store_id, product_id, physical_qty, safety_buffer)
+              VALUES (?, ?, 0, 0)`).run(LOC, A_EXT);
+
+  const mkOpt = db.prepare(`INSERT INTO retail_product_options
+    (product_id, question_en, question_cn, type, is_required, sort_order) VALUES (?,?,?,?,?,?)`);
+  const mkCh = db.prepare(`INSERT INTO retail_product_option_choices
+    (option_id, label_en, label_cn, price_delta, is_default, stock_product_id, sort_order)
+    VALUES (?,?,?,?,?,?,?)`);
+  const qSugar = mkOpt.run(P_ASK, 'Sugar level', '糖度', 'single', 1, 0).lastInsertRowid;
+  mkCh.run(qSugar, 'Full sugar', '全糖', 0, 0, null, 0);
+  mkCh.run(qSugar, 'Half sugar', '半糖', 0, 0, null, 1);
+  const qMilk = mkOpt.run(P_ASK, 'Milk', '奶', 'multi', 0, 1).lastInsertRowid;
+  mkCh.run(qMilk, 'Soy', '豆奶', 2, 1, null,  0);
+  mkCh.run(qMilk, 'Oat', '燕麦', 3, 0, A_EXT, 1);
 }
 
 // Box of the first element whose text is exactly `text`, or null when the
@@ -1653,6 +1697,173 @@ function boxOf(text) {
         'stripping the language class changed nothing, so the CSS switch this suite ' +
         'measures is not actually live and every check above proves nothing');
       await p2.close();
+    });
+
+    /* ── §120 — THE PICKER, DRIVEN LIKE A CUSTOMER ────────────────────────
+       Everything below happens in a real browser on a 390px viewport, because
+       the picker is client-side JavaScript in a string literal and the only
+       thing that proves such a thing works is running it. The server suite
+       (test_shop_menu_options.js) proves the rules; this proves the sheet. */
+
+    // Back to English and a genuinely clean page. The language checks above left
+    // the document in 中文, and the order checks before them left real orders in
+    // localStorage — which keeps the bar on screen in its "back to your order"
+    // state. That matters here: `barHidden` below is how these checks tell
+    // "nothing was added to the basket" from "something was", and a bar held
+    // open by yesterday's orders would make every one of them vacuous.
+    await page.goto(`http://127.0.0.1:${PORT}/s/${CODE}?lang=en`, { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => { try { localStorage.clear(); } catch (e) { /* private mode */ } });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+
+    const pickerState = () => page.evaluate(() => {
+      const vis = (el) => {
+        if (!el) return false;
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+      };
+      const rows = Array.from(document.querySelectorAll('.oc')).map(b => ({
+        label: (b.querySelector('.oc-l .l-en') || {}).textContent || '',
+        side: (b.querySelector('.oc-d .l-en') || b.querySelector('.oc-d') || {}).textContent || '',
+        on: b.classList.contains('on'),
+        out: b.classList.contains('out'),
+        disabled: !!b.disabled,
+      }));
+      return {
+        sheetOpen: vis(document.querySelector('#sheet .sheet-p')),
+        questions: Array.from(document.querySelectorAll('.og-q .l-en')).map(e => e.textContent),
+        rows,
+        addLabel: (document.getElementById('oAdd') || {}).textContent || '',
+        pickerFootShown: vis(document.getElementById('sheetO')),
+        basketFootShown: vis(document.getElementById('sheetF')),
+        err: (() => { const e = document.getElementById('oErr'); return e && !e.hidden ? e.textContent : ''; })(),
+        barHidden: !!(document.getElementById('cbar') || {}).hidden,
+      };
+    });
+    const tick = (label) => page.evaluate((t) => {
+      const b = Array.from(document.querySelectorAll('.oc'))
+        .find(x => ((x.querySelector('.oc-l .l-en') || {}).textContent || '') === t);
+      if (!b) throw new Error('no answer row labelled ' + t);
+      b.click();
+    }, label);
+
+    await check('§120 the + on a product with questions ASKS instead of adding', async () => {
+      await page.evaluate((name) => {
+        const card = Array.from(document.querySelectorAll('.it'))
+          .find(c => (c.querySelector('.t .l-en') || {}).textContent === name);
+        card.querySelector('.add').click();
+      }, EN_ASK);
+      const st = await pickerState();
+      assert.ok(st.sheetOpen, 'the picker did not open');
+      assert.deepStrictEqual(st.questions, ['Sugar level', 'Milk'], `questions: ${st.questions}`);
+      assert.ok(st.barHidden, 'the drink went into the basket before it was answered');
+      assert.ok(st.pickerFootShown && !st.basketFootShown,
+        'the picker is wearing the basket\'s foot — a name field over a sugar level');
+    });
+
+    await check('§120 rule 1A — the sold-out extra is dead and says so; the rest is live', async () => {
+      const st = await pickerState();
+      const oat = st.rows.find(r => r.label === 'Oat');
+      const soy = st.rows.find(r => r.label === 'Soy');
+      assert.ok(oat && oat.out && oat.disabled, `the empty shelf did not reach the picker: ${JSON.stringify(oat)}`);
+      assert.match(oat.side, /Sold out/, `a dead answer must say why, not show a price: "${oat.side}"`);
+      assert.ok(soy && !soy.out, 'the live extra was greyed out with the dead one');
+      // THE DRINK ITSELF IS STILL BEING SOLD — that is the whole of rule 1A.
+      assert.ok(st.sheetOpen, 'an optional sold-out extra closed the picker');
+    });
+
+    await check('§120 a defaulted answer opens pre-ticked, and a dead one never does', async () => {
+      const st = await pickerState();
+      assert.ok(st.rows.find(r => r.label === 'Soy').on, 'the default was not pre-ticked');
+      assert.ok(!st.rows.find(r => r.label === 'Oat').on, 'a sold-out default was pre-ticked');
+      assert.ok(!st.rows.find(r => r.label === 'Full sugar').on,
+        'a question with no default opened already answered');
+    });
+
+    await check('§120 a dead answer cannot be ticked, by tapping it', async () => {
+      await tick('Oat');
+      const st = await pickerState();
+      assert.ok(!st.rows.find(r => r.label === 'Oat').on, 'a sold-out extra took a tap');
+    });
+
+    await check('§120 RULE 2B — Add refuses, and NAMES the question it wants', async () => {
+      await page.click('#oAdd');
+      const st = await pickerState();
+      assert.ok(st.sheetOpen, 'the picker closed on a refusal');
+      assert.ok(st.barHidden, 'the drink was added despite the unanswered question');
+      // The live pair, question text and all — "Please choose: Sugar level".
+      assert.match(st.err, /Please choose: Sugar level/, `the refusal said: "${st.err}"`);
+      assert.match(st.err, /请选择 糖度/, 'the 中文 half of the refusal is missing');
+    });
+
+    await check('§120 the button carries the running price as answers are ticked', async () => {
+      await tick('Full sugar');
+      const withSoy = (await pickerState()).addLabel;     // 40 base + 2 soy (defaulted)
+      assert.match(withSoy, /42/, `base plus the defaulted extra: "${withSoy}"`);
+      assert.match(withSoy, /Add to basket/, 'the button lost its live label');
+      await tick('Soy');                                   // untick it
+      const plain = (await pickerState()).addLabel;
+      assert.match(plain, /40/, `unticking the extra did not take its price off: "${plain}"`);
+      await tick('Soy');                                   // back on
+    });
+
+    await check('§120 answering it adds ONE line, named with what was chosen', async () => {
+      await page.click('#oAdd');
+      const st = await page.evaluate(() => ({
+        lines: Array.from(document.querySelectorAll('#sheetB .ln')).map(l => ({
+          title: (l.querySelector('.ln-t .l-en') || {}).textContent || '',
+          opts: Array.from(l.querySelectorAll('.ln-o .l-en')).map(o => o.textContent),
+          price: (l.querySelector('.ln-p') || {}).textContent || '',
+        })),
+        basketFoot: !document.getElementById('sheetF').hidden,
+        pickerFoot: !document.getElementById('sheetO').hidden,
+      }));
+      assert.strictEqual(st.lines.length, 1, `one line expected, got ${st.lines.length}`);
+      assert.deepStrictEqual(st.lines[0].opts, ['Sugar level: Full sugar', 'Milk: Soy'],
+        `the basket line does not say what was chosen: ${JSON.stringify(st.lines[0].opts)}`);
+      assert.match(st.lines[0].price, /42/, `base plus extra: "${st.lines[0].price}"`);
+      assert.ok(st.basketFoot && !st.pickerFoot, 'the sheet stayed on the picker after adding');
+    });
+
+    await check('§120 TWO SUGAR LEVELS OF ONE DRINK ARE TWO LINES', async () => {
+      await page.evaluate(() => document.getElementById('sheetX').click());
+      await page.evaluate((name) => {
+        const card = Array.from(document.querySelectorAll('.it'))
+          .find(c => (c.querySelector('.t .l-en') || {}).textContent === name);
+        card.querySelector('.add').click();
+      }, EN_ASK);
+      await tick('Half sugar');
+      await tick('Soy');                                   // drop the default
+      await page.click('#oAdd');
+      const lines = await page.evaluate(() => Array.from(document.querySelectorAll('#sheetB .ln'))
+        .map(l => Array.from(l.querySelectorAll('.ln-o .l-en')).map(o => o.textContent).join(' / ')));
+      assert.strictEqual(lines.length, 2,
+        `a second configuration of the same drink was folded into the first: ${JSON.stringify(lines)}`);
+      assert.ok(lines.some(l => /Full sugar/.test(l)) && lines.some(l => /Half sugar/.test(l)),
+        `both configurations should survive: ${JSON.stringify(lines)}`);
+    });
+
+    await check('§120 and the order it places really carries them', async () => {
+      await page.fill('#cName', 'Mei');
+      await page.click('#cPlace');
+      await page.waitForFunction(() => /\d/.test(
+        (document.querySelector('.done-n') || document.querySelector('#sheetB') || {}).textContent || ''
+      ), null, { timeout: 5000 }).catch(() => {});
+      const rows = db.prepare(
+        `SELECT oi.options_json FROM retail_order_items oi
+           JOIN retail_orders o ON o.id = oi.order_id
+          WHERE o.store_id = ? AND oi.product_id = ? ORDER BY oi.id DESC LIMIT 2`
+      ).all(LOC, P_ASK);
+      assert.strictEqual(rows.length, 2, 'the two configured lines did not reach the database');
+      const saved = rows.map(r => JSON.parse(r.options_json || 'null'));
+      assert.ok(saved.every(a => Array.isArray(a) && a.length),
+        'a configured line was written with no answers on it');
+      // THE SHAPE lib/feie.js PRINTS — the question is what makes the ticket
+      // read "Sugar level: Half sugar" instead of a bare "Half sugar".
+      assert.ok(saved.every(a => a[0].question_en === 'Sugar level'),
+        'the question was not snapshotted onto the line');
+      const labels = saved.map(a => a.map(x => x.label).join(','));
+      assert.ok(labels.some(l => /Full sugar/.test(l)) && labels.some(l => /Half sugar/.test(l)),
+        `both configurations should be on the order: ${JSON.stringify(labels)}`);
     });
 
     await check('a shop with no listings still puts its empty state on screen', async () => {

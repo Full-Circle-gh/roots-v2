@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.253
+# Tacet shared-core consolidation — decisions record, v4.254
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-13 · v4.254 — **§120 DECIDED: THE QR MENU ASKS THE QUESTIONS THE COUNTER WOULD HAVE ASKED — DECIDED BY ASH, who answered both open questions and then said *"do all as you see fit"*.** Asked whether the QR menu has variant options, the answer was flatly no: it sells a flat row, tap Add and get one unit, and it reads NEITHER of the two choice mechanisms this system already has. **THE SURVEY IS THE VALUABLE HALF and it shrank the job from days to about one:** `options_json` on `retail_order_items` already exists and the web/mini-app checkout already fills it; `lib/feie.js` already prints every chosen option with its question in both languages on both templates; and the till NEVER re-prices a QR order — `recall()` loads it read-only and the settle path only marks it paid — so base-plus-extras needs nothing from the till but a line that shows what was chosen. **TWO RULES DECIDED BY ASH: a sold-out paid extra greys out and the drink still sells (1A), and a required question BLOCKS and names itself (2B).** **NO CHINESE COMPOSED** — `请选择 ` + the question is the storefront's own required-option toast and the mini app's, character for character, and the vocabulary document is not touched. **AND THE PRECEDENT THIS WAS ABOUT TO COPY TURNED OUT TO BE DEAD CODE:** `addon_available` was read by both mini-app surfaces and written nowhere in the repository, so the sold-out-extra guard had never once fired and a shopper could be billed for an extra the counter had run out of. Fixed separately, one PR per change, before this build starts. **NUMBERED §120, NOT §117.** This was drafted and its PR opened as §117 while that number was free; three sections (§117, §118, §119) landed on main from other sessions in the hours it sat open. A number is permanent once it is ON MAIN, so the unmerged one moves — and the doc-numbering check is what caught it.
 
 2026-09-13 · v4.253 — **§119 DECIDED AND BUILT: TWO SCREENS THAT ARRIVE FROM DIFFERENT PLACES DO NOT SHARE A NAME — DECIDED BY ASH in three words, *"yes do it"*, on the evidence §118 had just produced.** Two of option A's four renames are adopted; **its grouping and its three pills remain undecided**, and `Invoices` is deliberately left alone because batch three already folds that row into Orders. **THE DEFECT WAS GREPPED BEFORE IT WAS CALLED CLOSED, and it went four levels deeper than the row it was reported on**: `Receiving` and `Receive delivery` shared `收货` in both row labels, in **both screen titles**, in **three buttons inside the transfer screen** (two back rows and one step-back control, all rendering `T('Receiving','收货')` — the screen calling itself by the other row's name), and in `SUBS.receive`'s `backLabel`. **Eleven sites, one change.** `收货` STAYS WITH THE SUPPLIER FLOW — it is correct there and 48 other uses put it there, so the supplier row changes **in English alone** (`Receive from a supplier`) and only the transfer flow takes a new Chinese label, `调拨收货`, **copied from that screen's own error copy** rather than composed. `Delivery` → `Delivery settings · 配送设置` closes the second, unrelated defect in the same list: zones, holiday mode and a printer, the only configuration screen among twenty-one tasks, which the design canvas had already drawn as an A4 Console. **THE TWO BACK CONTROLS ARE NOT THE SAME CONTROL**: the two back ROWS go to the screen's own list and take its name, while the third goes back one STEP, so it says `Back to the count · 返回清点` — the one composed string, and composed precisely because the screen's name on it would have put one label on two destinations. **§118 NEEDED NO EDIT**: its rule 1 (a question reads its destination's label off the More row) meant the strip picked both new names up for free — and the Chinese render of that strip showing `收货` twice is what turned this rename from an argument into an observation. **A GUARD THAT HAD STOPPED GUARDING**: `test_mobile_nav.js` proved a view-only buyer is not offered the receiving row by asserting the word `Receiving` was absent — which a renamed row satisfies whether or not the row is shown. Re-pointed at the row KEY, as were the two assertions proving the old `/stock` launcher is gone, one of which read the absence of `调拨` — characters the new label contains. **A guard written against a label is a guard a rename can silently retire.** **RECORDED AGAINST THIS SESSION: the fast shard missed a real defect.** `state.askOpen` was read but never declared in the state literal, and the only thing that found it was `test_mobile_screens.js`'s static state-key guard — **in the slow shard, which this repo does not run.** Declared, and `test_mobile_ask_strip.js` gained a red-proofed case asserting it in the FAST shard, where the gate can see it. **Tests:** `test_mobile_ask_strip.js` 10 → **12 checks** (the collision guard INVERTED — it asserted the collision was still open, and now asserts the two flows never share a name in either language, plus the extent); `test_mobile_nav.js` **100 assertions across 38 cases** green with three re-pointed; `test_mobile_receiving.js` 181/45, `test_mobile_home.js` 153/46, `test_mobile_purchasing.js` 48/11 all green. **One composed string, one live pair copied, one lift and two English-only changes**, declared in `docs/tacet-delivery-vocabulary.md` v1.76 with the rejected candidates — including `供应商收货`, which would have moved a Chinese label that was never wrong. No route, no schema, no migration, no new capability, no CSS file, and no change to `.gitignore` or CI.**
 
@@ -13328,3 +13330,88 @@ it was `test_mobile_screens.js`'s static state-key guard, **which lives in the s
 and this repo does not run the slow shard.** The declaration was added, and
 `test_mobile_ask_strip.js` gained a case asserting it — in the FAST shard, where the gate
 can see it. A defect findable only in a shard nobody runs is a defect that ships.
+
+## §120 — THE QR MENU ASKS THE QUESTIONS THE COUNTER WOULD HAVE ASKED
+
+**2026-09-13 · Ash decided. Not yet built.**
+
+**THE GAP.** The public QR menu (`routes/shop-menu.js`, §41/§42/§44/§45/§47) sells a
+flat row: tap Add, get one unit. It reads neither of the two choice mechanisms
+this system already has — variants (`variant_group_id`) and per-product options
+(`retail_product_options` + `retail_product_option_choices`). A customer standing
+at the counter cannot say "half sugar", and a drink sold in three sizes occupies
+three rows of a phone screen, or fewer, depending on what the operator happened
+to list. The web storefront and the mini app have both asked these questions for
+a long time. The QR menu is the one customer surface that does not.
+
+**IT IS BUILT ON OPTIONS, NOT ON VARIANTS, AND THE REASON IS THE SCREEN.** Options
+already carry a price delta, both languages, required/optional, and
+`stock_product_id` — the link from a paid extra back to a real stock item. Every
+part is present. Variants would answer the same question by putting each size on
+its own menu row, which is three lines of a small screen for one drink read by
+somebody who is standing up. The variant path stays where it is (the storefront's
+size switcher, `routes/retail.js`) and is not extended here.
+
+**NOTHING DOWNSTREAM IS BEING BUILT, because two of the three pieces already
+exist.** This is the finding that shrank the work, and it is recorded so nobody
+re-derives it:
+
+1. **Storage.** `retail_order_items.options_json` exists and is described in
+   `database.js` as "chosen option labels + price deltas, for the receipt". The
+   web/mini-app checkout fills it, validating that each choice belongs to the
+   product and snapshotting the QUESTION and both languages so the line still
+   reads "Heat up?: Yes" after the option is edited or deleted. The QR menu's
+   own INSERT simply omits the column. One column, one INSERT.
+2. **The kitchen ticket.** `lib/feie.js` already prints each chosen option on its
+   own line, with its question, in both languages, on both templates. QR orders
+   print on paid (§50, narrowed) through that same path. Nothing to build.
+3. **The till.** The till NEVER re-prices a QR order — `recall()` in
+   `public/till.html` loads it read-only and the settle path only marks it paid,
+   at the total the server already wrote. So a base-plus-extras price needs
+   nothing from the till. One gap only, and it is display: the till's line mapper
+   drops `it.options`, so a cashier settling order 12 reads "Latte x1" and not
+   "Half sugar". The admin detail endpoint already returns the field.
+
+**RULE 1 — A SOLD-OUT PAID EXTRA GREYS OUT; THE DRINK STILL SELLS.** Oat milk runs
+out, the oat-milk choice goes dead, the latte is still a latte and is still
+bought. The opposite reading — the whole product sold out because one optional
+extra is — punishes the customer who did not want the extra. Only a
+stock-LINKED choice can be sold out at all; a free choice (sugar, ice, hot/cold)
+has no stock record and is never affected. A sold-out extra is never billed and
+never written to the order line.
+
+**RULE 2 — A REQUIRED QUESTION BLOCKS, AND SAYS WHICH QUESTION.** Tapping Add with
+a required question unanswered does not add the item; it says
+`Please choose: <question>` / `请选择 <question>`. The alternative — pre-select the
+first choice and never block — was considered and rejected: a silently defaulted
+sugar level is a wrong drink the customer did not order and the counter cannot
+tell was never chosen.
+
+**NO CHINESE IS COMPOSED, and the vocabulary document is not touched.** Every
+string this needs is already live on a customer surface. `请选择 ` + the question
+is the web storefront's own required-option toast (`public/shop.html`) and the
+mini app's (`miniapp/pages/product/product.js`), character for character, in both
+places, for exactly this purpose. Question and choice labels come from the
+tenant's own option records, which carry both languages already. `售罄` for a
+dead choice is the QR menu's own sold-out word, already on the page.
+
+**RULE 3 — TWO SUGAR LEVELS ARE TWO LINES.** The QR page's cart is keyed by
+product id alone. It becomes keyed by product id AND the chosen choice ids, or a
+customer ordering one full-sugar and one half-sugar latte gets two full-sugar
+lattes. This is the fiddliest part of the change and the one most likely to be
+got wrong quietly.
+
+**THE MINI APP'S VERSION OF RULE 1 DID NOT ACTUALLY RUN, and it was fixed
+FIRST, on its own branch, before any of this was built.** `miniapp/pages/product/product.js` and
+`miniapp/pages/add-to-order/add-to-order.js` both compute a choice's sold-out
+state as `!!c.stock_product_id && c.addon_available === false`. **`addon_available`
+is written nowhere in this repository** — two readers, zero writers, confirmed by
+a whole-tree grep. The comparison is therefore never true, the sold-out-extra
+guard never fires, and a shopper can today order and be billed for a paid extra
+that ran out. It is recorded here because it is the precedent this section was
+about to copy, and copying a dead guard would have produced a QR menu that
+looked right and sold oat milk it did not have. The fix answers the question at
+`GET /api/retail/products/:id` and changes no client; four of its six test cases
+fail without it. The QR menu computes its OWN availability rather than reaching
+for that field, because its stock question is a different one — this shop's
+shelf, not the company's sellable count (§47).
