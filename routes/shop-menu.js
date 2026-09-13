@@ -288,14 +288,14 @@ function shopName(shop) {
   };
 }
 
-// THE QUESTIONS THE COUNTER WOULD HAVE ASKED (§117). Sugar level, hot or cold,
+// THE QUESTIONS THE COUNTER WOULD HAVE ASKED (§120). Sugar level, hot or cold,
 // an extra shot — `retail_product_options` + `retail_product_option_choices`,
 // the same two tables the web storefront and the mini app have asked from for
-// as long as either has existed. This page read neither until §117, so a
+// as long as either has existed. This page read neither until §120, so a
 // customer standing at the counter could not say "half sugar" and a drink sold
 // in three sizes took three rows of a phone screen.
 //
-// OPTIONS, NOT VARIANTS, and §117 gives the reason: a variant is its own
+// OPTIONS, NOT VARIANTS, and §120 gives the reason: a variant is its own
 // store_products row and would need its own listing, its own line on a menu
 // read by somebody standing up. An option is one card that asks.
 //
@@ -381,7 +381,7 @@ function attachOptions(shop, listings) {
     if (!opts || !opts.length) continue;
     r.options = opts;
     // A REQUIRED QUESTION WITH NO ANSWER LEFT TAKES THE WHOLE PRODUCT WITH IT,
-    // and this is the one place §117's rule 1A stops. 1A says a sold-out paid
+    // and this is the one place §120's rule 1A stops. 1A says a sold-out paid
     // extra greys out while the drink still sells, and that holds for every
     // OPTIONAL question — nobody who did not want oat milk is turned away. But
     // a drink whose required "milk?" has run out of every milk cannot be made,
@@ -859,7 +859,7 @@ img{display:block;max-width:100%}
 .ln{display:flex;flex-direction:column;gap:8px;padding:12px 0;
   border-bottom:1px solid rgba(0,0,0,.08)}
 .ln-t{min-width:0;overflow-wrap:anywhere;font-size:14px}
-/* WHAT WAS CHOSEN, under the name it was chosen for (§117). Quieter than the
+/* WHAT WAS CHOSEN, under the name it was chosen for (§120). Quieter than the
    product and indented under it, because it is a qualifier on that line rather
    than a line of its own — the same relation the kitchen ticket prints it in
    (feie.js indents the option under the item's name). */
@@ -872,7 +872,7 @@ img{display:block;max-width:100%}
 .qty span{min-width:26px;text-align:center;line-height:1;font-variant-numeric:tabular-nums;
   font-size:14px}
 
-/* ── the picker (§117) ──
+/* ── the picker (§120) ──
    One block per question, each a heading and its answers. It borrows the
    basket's own furniture rather than inventing any: the hairline between rows
    is .ln's, the ticked answer wears the ink ground the rail's current category
@@ -889,7 +889,7 @@ img{display:block;max-width:100%}
 .og:last-child{border-bottom:0}
 .og-q{font-size:14px;overflow-wrap:anywhere;margin-bottom:8px}
 /* NO "REQUIRED" MARKER, and its absence is a decision. There is no live
-   English/中文 pair for the word anywhere on a customer surface, and §117 will
+   English/中文 pair for the word anywhere on a customer surface, and §120 will
    not mint one for a marker: the mini app's own picker marks nothing either
    and blocks on Add with the question named (rule 2B), which is the same
    answer given at the moment it is needed rather than decorating every
@@ -1501,7 +1501,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var L_ORD=${JSON.stringify(bi('Order', '订单号'))},` +
   `L_MINE=${JSON.stringify(bi('My orders', '我的订单'))},` +
   `L_BASKET=${JSON.stringify(bi('YOUR BASKET', '购物车'))};` +
-  // §117's three, and all three are copied, not composed.
+  // §120's three, and all three are copied, not composed.
   //
   // Add to basket · 加入购物车 is the web storefront's own option-sheet button,
   // with its own separator and running price after it (public/shop.html's
@@ -1614,7 +1614,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `if(mine.length)h+='<div class="mo-h">'+L_MINE+'</div>'+ordRows();` +
   `body.innerHTML=h;tEl.textContent=money(total())};` +
   `var closeIfEmpty=function(){if(count()===0){shClose(sheet)}};` +
-  /* ── THE QUESTIONS THE COUNTER WOULD HAVE ASKED (§117) ──────────────────
+  /* ── THE QUESTIONS THE COUNTER WOULD HAVE ASKED (§120) ──────────────────
      The answers a customer picked, printed under the product's name in the
      basket and again on the placed order. `Question: Answer`, never a bare
      answer: "Yes" under a latte says nothing, and the order page, the kitchen
@@ -1657,7 +1657,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `if(sel.indexOf(c.id)<0)continue;` +
   /* A SOLD-OUT ANSWER IS NEVER CARRIED OUT OF THE PICKER, even if it somehow
      got ticked — a default that ran out between the page rendering and the tap
-     is the real case. The server refuses it too (§117 rule 1A); this is the
+     is the real case. The server refuses it too (§120 rule 1A); this is the
      half that stops the customer being shown a price they cannot pay. */
   `if(c.out)continue;` +
   `out.push({option_id:g.id,choice_id:c.id,q_en:g.q_en,q_cn:g.q_cn,` +
@@ -1701,7 +1701,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `pk={pid:pid,p:parseFloat(b.getAttribute('data-p'))||0,` +
   `en:b.getAttribute('data-en'),cn:b.getAttribute('data-cn'),o:o,s:{}};` +
   /* PRE-TICKED DEFAULTS, AND ONLY THE ONES THAT ARE STILL THERE. A default
-     that has run out is left alone rather than ticked-then-refused — §117's
+     that has run out is left alone rather than ticked-then-refused — §120's
      rule 1A greys it out, and a picker that opens with a dead answer already
      chosen would be asking the customer to undo it. */
   `for(var i=0;i<o.length;i++){var g=o[i],d=[];` +
@@ -1802,13 +1802,13 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `if(count()===0&&mine.length){if(mine.length===1){location.href=mine[0].u;return}` +
   `openOrders();return}` +
   `pkClose();errEl.hidden=true;foot.hidden=false;paintSheet();shOpen(sheet)},false);` +
-  /* RULE 2B (§117). A required question left unanswered BLOCKS, and the refusal
+  /* RULE 2B (§120). A required question left unanswered BLOCKS, and the refusal
      NAMES THE QUESTION — "Please choose: Sugar level", not a bare "please
      choose", because a picker with four questions on it gives the customer no
      way to tell which one it means. Both halves are the live pair the web
      storefront and the mini app already refuse with, question text and all.
      The alternative — silently pre-picking the first answer and never blocking
-     — was considered and rejected in §117: a defaulted sugar level is a wrong
+     — was considered and rejected in §120: a defaulted sugar level is a wrong
      drink the customer did not order and the counter cannot tell was never
      chosen. */
   `oAdd.addEventListener('click',function(){if(!pk)return;` +
@@ -1884,7 +1884,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `if(o.s===409&&o.j&&o.j.items&&o.j.items.length){var gone='';` +
   `for(var i=0;i<o.j.items.length;i++){var it=o.j.items[i];` +
   /* EVERY LINE OF THAT PRODUCT GOES, not the one keyed by its bare id. Since
-     §117 the basket may hold a full-sugar latte and a half-sugar latte as two
+     §120 the basket may hold a full-sugar latte and a half-sugar latte as two
      lines, and a latte that has sold out has sold out for both — deleting
      cart[pid] would have removed neither of them and left the customer
      resubmitting the same refusal. */
@@ -2554,7 +2554,7 @@ const CANCEL_LIMIT = rateLimit({
 
 const MAX_LINES = 40;         // a menu is not a wholesale order form
 const MAX_QTY = 20;           // per line
-// Answers per line (§117). A drink with more than a dozen ticked extras is a
+// Answers per line (§120). A drink with more than a dozen ticked extras is a
 // post nobody made from the picker, and the cap is here so a hand-rolled body
 // cannot make the validation loop do unbounded lookups.
 const MAX_CHOICES = 12;
@@ -2602,7 +2602,7 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
   `).all(shop.id);
   const byId = new Map(listings.map(r => [r.pid, r]));
 
-  // ONE POSTED LINE IS ONE ROW, and since §117 two rows may share a product:
+  // ONE POSTED LINE IS ONE ROW, and since §120 two rows may share a product:
   // a full-sugar latte and a half-sugar latte are two things to make, two
   // prices and two lines on the ticket. `wanted` still aggregates by product
   // because the SHELF does not care which sugar level drew the cup down.
@@ -2636,7 +2636,7 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
     wanted.set(pid, (wanted.get(pid) || 0) + qty);
   }
 
-  // ── THE ANSWERS, CHECKED AGAINST THE QUESTIONS (§117) ────────────────────
+  // ── THE ANSWERS, CHECKED AGAINST THE QUESTIONS (§120) ────────────────────
   // Everything here is asked of the DATABASE, never of the post body: which
   // product a choice belongs to, what it costs, whether its question was
   // required, and whether the thing it promises is still on the shelf.
@@ -2761,7 +2761,7 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
       }
     }
   }
-  // De-duplicated: since §117 one product may hold several lines, and the
+  // De-duplicated: since §120 one product may hold several lines, and the
   // customer should be told once that the latte has gone, not once per sugar
   // level they chose.
   const soldOutIds = [...new Set(soldOut)];
@@ -2875,7 +2875,7 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
       const orderId = info.lastInsertRowid;
 
       // options_json IS THE COLUMN THAT ALREADY EXISTED, and using it is what
-      // made §117 a day's work rather than a week's. database.js describes it
+      // made §120 a day's work rather than a week's. database.js describes it
       // as "chosen option labels + price deltas, for the receipt"; the web and
       // mini-app checkouts have filled it for as long as either has had
       // options, lib/feie.js prints it on both ticket templates, and the admin
@@ -2905,7 +2905,7 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
       // §45: a QR order RESERVES on submit and decrements on paid. Stocked
       // lines only — a made-here item has no shelf to hold (§43).
       //
-      // AND A STOCK-BACKED EXTRA HOLDS ITS OWN (§117). An oat milk that was
+      // AND A STOCK-BACKED EXTRA HOLDS ITS OWN (§120). An oat milk that was
       // chosen is a real thing coming off a real shelf, so it is reserved
       // alongside the drink it was chosen for — one per unit bought, which is
       // how expandStockLines has always counted them on the web side. Without
@@ -3000,7 +3000,7 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
       status: 'pending_payment',
       total,
       currency: cur,
-      // The done screen draws these rows, and since §117 a row that was
+      // The done screen draws these rows, and since §120 a row that was
       // configured must say so — the customer has just paid attention to those
       // answers and the receipt in front of them should carry them.
       items: lines.map(r => ({
@@ -3113,7 +3113,7 @@ function orderLines(orderId, cur) {
     return '';
   }
   if (!rows || !rows.length) return '';
-  // WHAT WAS CHOSEN, ON THE ORDER'S OWN PAGE (§117). The customer comes back to
+  // WHAT WAS CHOSEN, ON THE ORDER'S OWN PAGE (§120). The customer comes back to
   // this page to check what they asked for, and a latte that says nothing about
   // its sugar level is the page failing at the one job it has. `Question:
   // Answer`, the same shape the basket drew and the same shape the kitchen

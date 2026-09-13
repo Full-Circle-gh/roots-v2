@@ -24,7 +24,8 @@
   let _loading = null;
   let _langHooked = false;
   let _touched = false;     // has the operator picked a chip themselves
-  let _pendingOpen = null;  // a product a Products-list dot asked us to open
+  let _busy = null;         // 'channel:pid' while one of this page's writes is in flight
+  let _note = null;         // { key, text } — a refusal, shown on the card that caused it
 
   const CH_NAME = { meituan: ['Meituan', '美团'], eleme: ['Eleme', '饿了么'], guanyi: ['GZ Grocery', 'GZ Grocery'] };
   /* THE GLYPH IS A PAIR, NOT A CHARACTER. It was 美 / 饿 / GZ in both
@@ -295,17 +296,103 @@
     const causeTxt = typeof chCauseFor === 'function' ? chCauseFor(ch.key, c, chBlk)
       : (c.error ? cuT('Push failed', '推送失败') + ': ' + c.error : '');
     const err = causeTxt ? '<div class="cs-err">' + esc(causeTxt) + '</div>' : '';
-      const fix = c.k === 'att'
-        ? '<div class="cs-fix"><button type="button" class="btn btn-sm" onclick="event.stopPropagation();csFix(\'' + ch.key + '\',' + p.id + ')">' + esc(cuT(`Open ${name}`, `前往${name}`)) + '</button></div>'
-        : '';
+      const fix = actions(ch.key, c, p.id, name);
+      const note = _note && _note.key === wKey(ch.key, p.id)
+        ? '<div class="cs-note">' + esc(_note.text) + '</div>' : '';
       return '<div class="cs-dcard' + (c.k === 'att' ? ' is-att' : '') + '">' +
-        '<div class="cs-h"><span>' + esc(name) + '</span>' + cell(ch.key, c) + '</div>' +
+        '<div class="cs-h"><span>' + esc(name) + '</span>' + cell(ch.key, c) + syncSwitch(ch.key, c, p.id) + '</div>' +
         (w ? '<div class="cs-why">' + esc(w) + '</div>' : '') + err +
         (facts.length ? '<div class="cs-facts">' + esc(facts.join(' · ')) + '</div>' : '') +
-        stores + fix + '</div>';
+        stores + note + fix + '</div>';
     }).join('');
     return '<tr class="cs-detail"><td colspan="' + (2 + _data.channels.length) + '"><div class="cs-dgrid">' + cards + '</div></td></tr>';
   }
+
+  /* ════ §117 part two · THE REPAIRS THIS PAGE MAKES ITSELF ══════════════════
+     §103 built this page read-only and every amber row ended in "Open Meituan":
+     the operator was told what was wrong on one screen and had to travel to
+     another to act. Ash: "we want tenant to have easy understanding of each
+     channel situation, problem, and how to solve the problem easily."
+
+     TWO VERBS, AND ONLY TWO. The switch and one push, because those are the
+     only two things all three channels already implement identically
+     underneath — every map table has `sync_enabled`, every queue table takes
+     the same five columns (lib/channel-sync-write.js). Between them they clear
+     four of the seven reasons an item can need attention: sync_off by the
+     switch, push_failed / wrong_number / never_synced by the push.
+
+     WHAT IS DELIBERATELY NOT HERE: naming a listing (no_name,
+     name_not_found) and claiming a 规格 (no_option). Those need the channel's
+     own catalogue picker, they are where the three channels genuinely differ,
+     and faking them here would put that difference back on this page — which
+     is the thing §117 exists to take off it. Every amber row keeps the button
+     to the channel's own tab as the way out of anything this block cannot do.
+
+     THE WORDS ARE THE CHANNEL TABS' OWN, per §103: "Sync now · 立即同步" is
+     11-meituan.js's push button and "Sync on / off · 同步开关" is the title on
+     both the Meituan and the Eleme panel switches. Nothing here is composed. */
+
+  function wKey(chKey, pid) { return chKey + ':' + pid; }
+
+  // The switch rides in the card's header beside the state, which is where both
+  // channel panels already put it (mt-pbh / the Eleme panel head) — an operator
+  // who learns it there finds it here.
+  function syncSwitch(chKey, c, pid) {
+    if (c.k === 'none') return '';           // nothing mapped, so nothing to switch
+    const busy = _busy === wKey(chKey, pid);
+    // `toggle-label` is the Meituan and Eleme panels' own switch class, joined
+    // to in retail-admin.css rather than copied — see the note there.
+    return '<label class="toggle-label" title="' + esc(cuT('Sync on / off', '同步开关')) + '">' +
+      '<input type="checkbox"' + (c.k === 'off' ? '' : ' checked') + (busy ? ' disabled' : '') +
+      ' onclick="event.stopPropagation()"' +
+      ' onchange="csSetSync(\'' + chKey + '\',' + pid + ',this.checked)"></label>';
+  }
+
+  function actions(chKey, c, pid, name) {
+    const busy = _busy === wKey(chKey, pid);
+    const bits = [];
+    // Nothing to send while the switch is off — the switch is the fix for that,
+    // and a Sync now beside it would be a button whose own answer is "no".
+    if (c.k !== 'none' && c.k !== 'off') {
+      bits.push('<button type="button" class="btn btn-sm"' + (busy ? ' disabled' : '') +
+        ' onclick="event.stopPropagation();csPushNow(\'' + chKey + '\',' + pid + ')">' +
+        esc(cuT('Sync now', '立即同步')) + '</button>');
+    }
+    if (c.k === 'att') {
+      bits.push('<button type="button" class="btn btn-sm" onclick="event.stopPropagation();csFix(\'' +
+        chKey + '\',' + pid + ')">' + esc(cuT(`Open ${name}`, `前往${name}`)) + '</button>');
+    }
+    return bits.length ? '<div class="cs-fix">' + bits.join('') + '</div>' : '';
+  }
+
+  /* One shape for both writes: mark busy, paint, call, reload, paint. The
+     RELOAD is the feedback — the row's own verdict flips to Sending… or to
+     Sync off, which says more than a toast would and cannot drift out of step
+     with what the server actually did. Only a refusal gets words, and api()
+     has already turned the server's code into a sentence (tdErrorText). */
+  async function write(chKey, pid, path, body) {
+    const key = wKey(chKey, pid);
+    if (_busy) return;                        // one write at a time, per page
+    _busy = key; _note = null; render();
+    try {
+      await api(path, { method: 'POST', body: body || {} });
+    } catch (e) {
+      _note = { key, text: e.message };
+    } finally {
+      _busy = null;
+    }
+    await load();                             // load() ends in render()
+  }
+
+  window.csSetSync = function (chKey, pid, on) {
+    return write(chKey, pid,
+      '/api/retail-admin/channel-sync/' + encodeURIComponent(chKey) + '/products/' + Number(pid) + '/sync',
+      { on: !!on });
+  };
+  window.csPushNow = function (chKey, pid) {
+    return write(chKey, pid,
+      '/api/retail-admin/channel-sync/' + encodeURIComponent(chKey) + '/products/' + Number(pid) + '/push');
+  };
 
   // ── Wiring ─────────────────────────────────────────────────────────────────
   async function load() {
@@ -323,7 +410,6 @@
         return;
       } finally { _loading = null; }
       render();
-      if (_pendingOpen != null) { const pid = _pendingOpen; _pendingOpen = null; _csScrollTo(pid); }
     })();
     return _loading;
   }
@@ -341,19 +427,9 @@
     goTab('channel-sync');
     if (_data) render();
   };
-  /* Opened from a Products-list dot: land on THAT product rather than on the
-     whole catalogue. The chip goes to All items because the operator asked
-     about this row and it may well be a green one, and the row opens itself so
-     the reason is on screen without a second click. */
-  window.csOpenProduct = function (pid) {
-    _touched = true; _filter = 'all'; _channel = ''; _q = ''; _open = Number(pid);
-    goTab('channel-sync');
-    if (_data) { render(); _csScrollTo(Number(pid)); } else { _pendingOpen = Number(pid); }
-  };
-  function _csScrollTo(pid) {
-    const row = document.querySelector('#tab-channel-sync .cs-tbl tr.row[data-pid="' + pid + '"]');
-    if (row && row.scrollIntoView) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  }
+  /* §117 — csOpenProduct is gone with the Products-list dots that were its only
+     caller. Landing on one product from elsewhere is a reasonable thing to want
+     again; if it comes back, it comes back for a caller that exists. */
 
   /* The two sentence-builders, shared with the product editor's Channels card
      (09-products.js pdLoadChannels) so one state cannot be worded two ways on

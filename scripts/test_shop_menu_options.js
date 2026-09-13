@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * §117 — the QR menu asks the questions the counter would have asked.
+ * §120 — the QR menu asks the questions the counter would have asked.
  *
  *   node scripts/test_shop_menu_options.js
  *
- * Before §117 the public QR menu sold a flat row: tap Add, get one unit. It
+ * Before §120 the public QR menu sold a flat row: tap Add, get one unit. It
  * read NEITHER of the two choice mechanisms this system already had, so a
  * customer standing at a counter could not say "half sugar" and a drink sold in
  * three sizes took three rows of a phone screen.

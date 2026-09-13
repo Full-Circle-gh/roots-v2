@@ -71,7 +71,7 @@ const db = tdb();
 
 const LOC = 9871;
 const P_OK = 9971, P_OUT = 9972;
-// §117's picker: a drink that ASKS, and the stock-backed extra one of its
+// §120's picker: a drink that ASKS, and the stock-backed extra one of its
 // answers promises. The extra is never listed on the menu — it is a thing on a
 // shelf, not a thing on sale here — so it needs no listing row, only stock.
 const P_ASK = 9991, A_EXT = 9992;
@@ -200,10 +200,10 @@ function seed() {
     VALUES (?, ?, ?, 'made_here', ?, ?)`);
   add.run(shopId, P_OK, 33, 1, 0);
   add.run(shopId, P_OUT, 18, 0, 1);   // switched off → the sold-out badge
-  add.run(shopId, P_ASK, 40, 1, 2);   // §117 — the drink that asks
+  add.run(shopId, P_ASK, 40, 1, 2);   // §120 — the drink that asks
   FILLER.forEach((id, i) => add.run(shopId, id, 20 + i, 1, 3 + i));
 
-  /* ── §117's questions ───────────────────────────────────────────────────
+  /* ── §120's questions ───────────────────────────────────────────────────
      Shaped so the picker's four behaviours can each be driven from a browser:
 
        Sugar level   single, REQUIRED, and NO DEFAULT — so the picker opens
@@ -1699,7 +1699,7 @@ function boxOf(text) {
       await p2.close();
     });
 
-    /* ── §117 — THE PICKER, DRIVEN LIKE A CUSTOMER ────────────────────────
+    /* ── §120 — THE PICKER, DRIVEN LIKE A CUSTOMER ────────────────────────
        Everything below happens in a real browser on a 390px viewport, because
        the picker is client-side JavaScript in a string literal and the only
        thing that proves such a thing works is running it. The server suite
@@ -1746,7 +1746,7 @@ function boxOf(text) {
       b.click();
     }, label);
 
-    await check('§117 the + on a product with questions ASKS instead of adding', async () => {
+    await check('§120 the + on a product with questions ASKS instead of adding', async () => {
       await page.evaluate((name) => {
         const card = Array.from(document.querySelectorAll('.it'))
           .find(c => (c.querySelector('.t .l-en') || {}).textContent === name);
@@ -1760,7 +1760,7 @@ function boxOf(text) {
         'the picker is wearing the basket\'s foot — a name field over a sugar level');
     });
 
-    await check('§117 rule 1A — the sold-out extra is dead and says so; the rest is live', async () => {
+    await check('§120 rule 1A — the sold-out extra is dead and says so; the rest is live', async () => {
       const st = await pickerState();
       const oat = st.rows.find(r => r.label === 'Oat');
       const soy = st.rows.find(r => r.label === 'Soy');
@@ -1771,7 +1771,7 @@ function boxOf(text) {
       assert.ok(st.sheetOpen, 'an optional sold-out extra closed the picker');
     });
 
-    await check('§117 a defaulted answer opens pre-ticked, and a dead one never does', async () => {
+    await check('§120 a defaulted answer opens pre-ticked, and a dead one never does', async () => {
       const st = await pickerState();
       assert.ok(st.rows.find(r => r.label === 'Soy').on, 'the default was not pre-ticked');
       assert.ok(!st.rows.find(r => r.label === 'Oat').on, 'a sold-out default was pre-ticked');
@@ -1779,13 +1779,13 @@ function boxOf(text) {
         'a question with no default opened already answered');
     });
 
-    await check('§117 a dead answer cannot be ticked, by tapping it', async () => {
+    await check('§120 a dead answer cannot be ticked, by tapping it', async () => {
       await tick('Oat');
       const st = await pickerState();
       assert.ok(!st.rows.find(r => r.label === 'Oat').on, 'a sold-out extra took a tap');
     });
 
-    await check('§117 RULE 2B — Add refuses, and NAMES the question it wants', async () => {
+    await check('§120 RULE 2B — Add refuses, and NAMES the question it wants', async () => {
       await page.click('#oAdd');
       const st = await pickerState();
       assert.ok(st.sheetOpen, 'the picker closed on a refusal');
@@ -1795,7 +1795,7 @@ function boxOf(text) {
       assert.match(st.err, /请选择 糖度/, 'the 中文 half of the refusal is missing');
     });
 
-    await check('§117 the button carries the running price as answers are ticked', async () => {
+    await check('§120 the button carries the running price as answers are ticked', async () => {
       await tick('Full sugar');
       const withSoy = (await pickerState()).addLabel;     // 40 base + 2 soy (defaulted)
       assert.match(withSoy, /42/, `base plus the defaulted extra: "${withSoy}"`);
@@ -1806,7 +1806,7 @@ function boxOf(text) {
       await tick('Soy');                                   // back on
     });
 
-    await check('§117 answering it adds ONE line, named with what was chosen', async () => {
+    await check('§120 answering it adds ONE line, named with what was chosen', async () => {
       await page.click('#oAdd');
       const st = await page.evaluate(() => ({
         lines: Array.from(document.querySelectorAll('#sheetB .ln')).map(l => ({
@@ -1824,7 +1824,7 @@ function boxOf(text) {
       assert.ok(st.basketFoot && !st.pickerFoot, 'the sheet stayed on the picker after adding');
     });
 
-    await check('§117 TWO SUGAR LEVELS OF ONE DRINK ARE TWO LINES', async () => {
+    await check('§120 TWO SUGAR LEVELS OF ONE DRINK ARE TWO LINES', async () => {
       await page.evaluate(() => document.getElementById('sheetX').click());
       await page.evaluate((name) => {
         const card = Array.from(document.querySelectorAll('.it'))
@@ -1842,7 +1842,7 @@ function boxOf(text) {
         `both configurations should survive: ${JSON.stringify(lines)}`);
     });
 
-    await check('§117 and the order it places really carries them', async () => {
+    await check('§120 and the order it places really carries them', async () => {
       await page.fill('#cName', 'Mei');
       await page.click('#cPlace');
       await page.waitForFunction(() => /\d/.test(
