@@ -676,6 +676,7 @@ const state = {
      picker needs it more than most, since every add, remove and move repaints
      while .sheet carries `animation:tSheetUp .4s`. */
   quick:null, quickSheet:false, quickMounted:false,
+  askOpen:null,
   /* quickFab is the floating button's dial — the pills, open or shut. It is
      NOT a sheet and deliberately not one: the whole point of the button is
      that it sits over the screen the operator is already on rather than
@@ -4231,7 +4232,7 @@ const MORE_GROUPS=[
      this file keeps out. The rows stay put on a quiet day for the reason the
      launcher's tiles did: "Nothing to pick" is what tells somebody the tool is
      there before the morning they need it. */
-  {h:['Operations','运营'],rows:[['neworder','file-plus','New order','新建订单'],['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receiving','收货'],['waste','trash','Waste','损耗'],
+  {h:['Operations','运营'],rows:[['neworder','file-plus','New order','新建订单'],['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery settings','配送设置'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receive from a supplier','收货'],['waste','trash','Waste','损耗'],
     /* §87 — what somebody spent out of their own pocket for work. It sits in
        Operations beside Waste on purpose: both are a person recording something
        small that happened to them during a shift, which somebody else's key
@@ -4261,7 +4262,7 @@ const MORE_GROUPS=[
        retroactively inside an unrelated build. */
     ['askbuy','shopping-cart','Ask to buy','采购申请',null,'production'],
     ['kitchenready','circle-check','Ready from the kitchen','厨房已完成'],
-    ['receivexfer','truck','Receive delivery','收货'],['pick','route','Pick','拣货'],
+    ['receivexfer','truck','Receive from another shop','调拨收货'],['pick','route','Pick','拣货'],
     /* LOG A BATCH IS THE ONLY ROW OF THE THREE PRODUCTION SCREENS. `whatmade`
        is never opened from here — it is where the queue and this row both
        arrive, carrying lines with them, and a row that opened it cold would
@@ -7646,7 +7647,7 @@ function screenReceive(){
      is where somebody who has finished counting is standing, and sending them
      back to the header for it is the same walk the old button made them take. */
   const done=`<button class="btn2" style="width:100%" onclick="APP.cmd('recvBackToList')">${
-    T('Back to Receiving','返回收货')}</button>`;
+    T('Back to deliveries','返回收货')}</button>`;
   return `<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">
     ${rcvLocation()}
     ${allBtn}
@@ -8058,7 +8059,7 @@ const SUBS={
     cta:()=>mCan('waste:record')
       ? `<button class="cta" style="width:auto;padding:12px 20px;flex:none" onclick="APP.cmd('wasteNew')">${T('Record','记录')}</button>` : '',
     render:()=>screenWaste()},
-  delivery:{title:['Delivery','配送'],render:()=>screenDelivery()},
+  delivery:{title:['Delivery settings','配送设置'],render:()=>screenDelivery()},
   invoices:{title:['Invoices','发票'],render:()=>{
     const c=state.liveInvoiceCounts;
     /* All sums THREE now. `requested` is the pending queue alone — the server
@@ -10563,7 +10564,7 @@ function screenReceiveTransfer(){
     if(x.busy&&!x.order) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
     const o=x.order||{};
     if(x.step==='transit'){
-      return backRow(T('Receiving','收货'))+err+`<div style="padding:0 16px">
+      return backRow(T('Receive from another shop','调拨收货'))+err+`<div style="padding:0 16px">
         <div style="font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
         <div style="font-size:14px;color:var(--text-secondary);margin-top:10px;line-height:1.55">${
           T('Still on its way. Count it in when it arrives.','仍在途中，到货后再清点入库。')}</div></div>`;
@@ -10575,7 +10576,7 @@ function screenReceiveTransfer(){
       // Against the VAN — all this screen can compare before they confirm.
       const diff=items.filter(it=>xfrCount(it)!==xfrSent(it));
       return `<div style="padding:4px 16px 12px">
-          <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('xfrCount')">${T('Receiving','收货')}</button></div>
+          <button class="btn2" style="width:auto;padding:8px 16px;font-size:13px" onclick="APP.cmd('xfrCount')">${T('Back to the count','返回清点')}</button></div>
         ${err}
         <div style="padding:0 16px 6px;font-size:18px;font-weight:500">${T('Confirm receipt','确认收货')}</div>
         <div style="padding:0 16px 14px;font-size:14px;color:var(--text-secondary)">
@@ -10590,7 +10591,7 @@ function screenReceiveTransfer(){
             onclick="APP.cmd('xfrConfirm')">${x.busy?T('Saving…','保存中…'):T('Confirm receipt','确认收货')}</button></div>`;
     }
     // The count itself: one row per line, each opening a number entry.
-    return backRow(T('Receiving','收货'))+err+`
+    return backRow(T('Receive from another shop','调拨收货'))+err+`
       <div style="padding:0 16px 6px;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
       <div style="padding:0 16px 12px;font-size:13px;color:var(--text-secondary)">${
         T('Count what actually arrived.','清点实际到货数量。')}</div>
@@ -11096,7 +11097,7 @@ SUBS.channelsync={title:['Channel sync','渠道同步'],render:()=>screenChannel
 SUBS.whatmade={title:['What you made','登记制作'],render:()=>screenWhatMade()};
 SUBS.logbatch={title:['Log a batch','登记批次'],render:()=>screenLogBatch()};
 SUBS.pick={title:['Pick','拣货'],render:()=>screenPick()};
-SUBS.receivexfer={title:['Receive delivery','收货'],render:()=>screenReceiveTransfer()};
+SUBS.receivexfer={title:['Receive from another shop','调拨收货'],render:()=>screenReceiveTransfer()};
 SUBS.kitchenready={title:['Ready from the kitchen','厨房已完成'],render:()=>screenKitchenReady()};
 SUBS.askkitchen={title:['Ask the kitchen','向厨房下单'],render:()=>screenAskKitchen()};
 SUBS.askstock={title:['Ask for stock','申请补货'],render:()=>screenAskStock()};
@@ -11817,12 +11818,12 @@ reg('expSend', ()=>{
 });
 SUBS.stockadd={title:['Add stock','加库存'],titleOf:()=>T(...stockAppLabel()),
   status:()=>escAttr(qsStoreName()),render:()=>screenStockAdd()};
-SUBS.receiving={title:['Receiving','收货'],status:()=>statusReceiving(),render:()=>screenReceiving()};
+SUBS.receiving={title:['Receive from a supplier','收货'],status:()=>statusReceiving(),render:()=>screenReceiving()};
 /* The one screen pushed from something other than More, so it names its own
    title (the order being received) and its own way back. */
 SUBS.receive={title:['Receive','收货'],
   titleOf:()=>escAttr((state.recvPo&&state.recvPo.po_number)||(state.recvId?'#'+state.recvId:T('Receive','收货'))),
-  backLabel:()=>T('Receiving','收货'),
+  backLabel:()=>T('Receive from a supplier','收货'),
   /* HOW FAR THROUGH, not how many suppliers. The supplier count told the
      operator nothing they could act on; the number of lines still to check is
      the only question this screen leaves open. It is true because `on` is only

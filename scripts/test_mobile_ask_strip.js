@@ -118,6 +118,20 @@ it('it collapses, and the choice outlives the launch', () => {
   assert.match(fn, /catch\(e\)\{\}/, 'an unreadable localStorage must not throw out of the render');
 });
 
+it('state.askOpen is declared in the state literal, not conjured at runtime', () => {
+  /* THIS CASE EXISTS BECAUSE THE FAST SHARD MISSED IT. `askOpen()` set
+     state.askOpen lazily without the literal declaring it; the only thing that
+     caught it was test_mobile_screens.js's static state-key guard — which lives
+     in the slow shard, and this repo does not run the slow shard. A defect
+     findable only there is a defect that ships. */
+  const lit = MHTML.slice(MHTML.indexOf('tab:\'home\''), MHTML.indexOf('stack:[], statusF'));
+  const wider = MHTML.slice(MHTML.indexOf('tab:\'home\''), MHTML.indexOf('tab:\'home\'') + 6000);
+  assert.ok(/\baskOpen\s*:/.test(wider),
+    'state.askOpen is read but never declared in the state literal — the slow shard would fail on this');
+  assert.ok(/askOpen:null/.test(wider),
+    'declared, but not as null — the lazy read in askOpen() depends on it being nullish at boot');
+});
+
 it('a question row carries no icon — two layers must not read as one list', () => {
   const row = STRIP.slice(STRIP.indexOf('function askStripHtml()'));
   assert.ok(!/rowico/.test(row), 'a question row has gained an icon well');
@@ -135,23 +149,55 @@ it('it mounts above the groups and below the setup card', () => {
   assert.ok(setup > 0 && setup < strip, 'the owner\'s setup checklist still comes first');
 });
 
-it('B changed no row: MORE_GROUPS is read, never rewritten', () => {
-  /* Option A is still undecided. If a later session adopts it, these two
-     numbers move together and this case is the reminder to re-read §117. */
+it('B moved no row, and the 收货 collision it left open is now CLOSED', () => {
+  /* When this case was written the collision was open and this assertion was a
+     reminder to re-read §117. §118 closed it — the rename option A proposed,
+     adopted on its own — so the guard is inverted: what it protects now is that
+     the two flows never share a name again, in either language. */
   const groups = MHTML.slice(MHTML.indexOf('const MORE_GROUPS=['), MHTML.indexOf('function moreGroups()'));
   const ops = groups.slice(groups.indexOf("h:['Operations'"), groups.indexOf("h:['Marketing'"));
   assert.strictEqual((ops.match(/\['[a-z]+','[a-z-]+',/g) || []).length, 22,
     'the Operations list is no longer twenty-two rows — §117 says B moves none of them');
-  assert.ok(/'Receiving','收货'/.test(ops) && /'Receive delivery','收货'/.test(ops),
-    'the 收货 collision is recorded as STILL OPEN in §117; if it has been fixed, update that section');
-  assert.ok(/'Delivery','配送'/.test(ops),
-    'Delivery has been renamed — that is option A, which §117 leaves undecided');
+
+  const row = (k) => {
+    const m = new RegExp(`\\['${k}','[a-z-]+','([^']+)','([^']+)'`).exec(ops);
+    assert.ok(m, `no ${k} row in Operations`);
+    return { en: m[1], zh: m[2] };
+  };
+  const sup = row('receiving'), xfr = row('receivexfer');
+  assert.notStrictEqual(sup.en, xfr.en, 'the two receiving rows share an English name again');
+  assert.notStrictEqual(sup.zh, xfr.zh, 'the two receiving rows share a Chinese name again — this is the 收货 collision');
+  assert.strictEqual(sup.zh, '收货', '收货 stays with the supplier flow, where 48 other uses put it');
+  assert.strictEqual(xfr.zh, '调拨收货', 'the transfer flow keeps the pair live in its own error copy');
+
+  /* The extent, not just the row: both screen titles and the three buttons
+     where the transfer screen wore the supplier row's name. A finding filed as
+     one line is where it was found, not how far it went. */
+  assert.ok(/SUBS\.receiving=\{title:\['Receive from a supplier','收货'\]/.test(MHTML),
+    'the supplier screen title no longer matches its row');
+  assert.ok(/SUBS\.receivexfer=\{title:\['Receive from another shop','调拨收货'\]/.test(MHTML),
+    'the transfer screen title no longer matches its row');
+  const xs = MHTML.slice(MHTML.indexOf('function screenReceiveTransfer()'), MHTML.indexOf('function screenPick()'));
+  assert.ok(!/T\('Receiving','收货'\)/.test(xs),
+    'the transfer screen is calling itself by the supplier row\'s name again');
+  assert.strictEqual((xs.match(/调拨收货/g) || []).length, 2,
+    'both of the transfer screen\'s back rows should name the transfer flow');
+  assert.ok(/T\('Back to the count','返回清点'\)/.test(xs),
+    'the step-back button should name the step it returns to, not the screen');
+});
+
+it('Delivery says it is settings, because that is what it is', () => {
+  const groups = MHTML.slice(MHTML.indexOf('const MORE_GROUPS=['), MHTML.indexOf('function moreGroups()'));
+  assert.ok(/\['delivery','truck','Delivery settings','配送设置'\]/.test(groups),
+    'the Delivery row no longer says settings — it is zones, holiday mode and a printer, the one config screen in the list');
+  assert.ok(/delivery:\{title:\['Delivery settings','配送设置'\]/.test(MHTML),
+    'the row and the screen it opens must not disagree');
 });
 
 it('§117 — the terms the composed questions were built from are still live', () => {
   /* House rule for a composed pair: say where its Chinese came from and FAIL if
      that source stops being live, so a rename cannot quietly orphan it.
-     Declared in docs/tacet-delivery-vocabulary.md v1.74. */
+     Declared in docs/tacet-delivery-vocabulary.md v1.75. */
   assert.ok(/'Restock needed','需要补货'/.test(MHTML),
     '需要补货 is taken WHOLE from this pair — it must stay live');
   assert.ok(/其他地点发来的货会显示在这里/.test(MHTML),
