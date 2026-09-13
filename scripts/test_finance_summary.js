@@ -609,6 +609,58 @@ it('the channel rows CANNOT be mistaken for bilingual prose pairs', () => {
   assert.strictEqual(total, 123384, 'the rendered rows must carry the whole figure');
 });
 
+it('the drill-down rows are closed to the walker, at BOTH levels', () => {
+  /* The revenue guard's two siblings, each reproduced against the shipped
+     walker before being fixed — neither is theoretical, and both predate §110.
+
+     ONE · a row whose note is all-English, sitting beside one whose note is
+     all-Chinese, was tagged as the English half of a translation pair and
+     hidden outright in Chinese: an ¥800 expense off the screen while the
+     category total above it still counted it.
+
+     TWO · `processNode` splits a text node on its FIRST ' · ' when the right
+     half carries Chinese and the left does not. Both posters write
+     `RPO-0028 · 天河供应商 · 3 lines`, so an English reader saw `RPO-0028`
+     alone — supplier and line count gone, a one-line order indistinguishable
+     from a twelve-line one. */
+  const marks = CLIENT.match(/<div class="fin-(?:cat|pol)rows"[^>]*>/g) || [];
+  assert.strictEqual(marks.length, 2, 'both drill-down levels must have a container');
+  marks.forEach(m => assert.ok(/\sdata-no-i18n/.test(m),
+    'a drill-down container is open to the walker again: ' + m));
+
+  // The shapes that made it necessary are still the shapes being rendered, so
+  // nobody removes the guard believing it moot.
+  const cnCtx = Object.assign({}, ctx, { cuT: (en, cn) => cn, cuLang: () => 'cn' });
+  vm.createContext(cnCtx);
+  new vm.Script(CLIENT.replace(/^'use strict';$/m, '')
+    + '\nthis.finCatRow=finCatRow;'
+    + '\nthis.__set=(d,c,p)=>{FIN_DATA=d;FIN_CAT=c;FIN_POL=p||null;};').runInContext(cnCtx);
+  cnCtx.__set({}, null, null);
+
+  const EXTRAS = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '10-extras.js'), 'utf8');
+  const grab = (name) => {
+    const m = EXTRAS.match(new RegExp('function ' + name + '\\(el\\)\\s*\\{[\\s\\S]*?return ([^;]+);'));
+    assert.ok(m, name + ' is no longer where this test reads it');
+    return new Function('t', 'return ' + m[1].replace("el.textContent || ''", 't'));
+  };
+  const isCN = grab('isCNBlock'), isEN = grab('isENBlock');
+  const rowText = (r) => cnCtx.finCatRow(r).replace(/<[^>]*>/g, '');
+  assert.ok(isCN(rowText({ id: 1, date: '2026-08-03', amount: 1200, note: '天河店租金', source: 'manual' })),
+    'a Chinese-noted row no longer reads as an all-Chinese block');
+  assert.ok(isEN(rowText({ id: 2, date: '2026-08-04', amount: 800, note: 'Office chairs', source: 'manual' })),
+    'an English-noted row no longer reads as an all-English block — re-check the guard');
+
+  // And the PO description still carries a ' · ' with Chinese after it, which
+  // is the exact shape processNode would cut.
+  const po = cnCtx.finCatRow({ id: 3, date: '2026-08-05', amount: 640, source: 'po',
+    po_number: 'RPO-0028', note: 'RPO-0028 · 天河供应商 · 3 lines', lines: 0 });
+  const name = (po.match(/<span class="fin-catname">(.*?)<\/span>/) || [])[1] || '';
+  const cut = name.indexOf(' · ');
+  assert.ok(cut > 0 && /[一-鿿]/.test(name.slice(cut + 3)) && !/[一-鿿]/.test(name.slice(0, cut)),
+    'the splittable description shape is gone — re-read why the guard exists before removing it');
+  assert.ok(name.includes('3 lines'), 'the whole description must reach the row');
+});
+
 it('a channel line is NOT a control — nothing opens behind one', () => {
   // This file's own rule, stated on the expenses row and again on the PO row: a
   // chevron that opens onto nothing is a control that lies. There is no endpoint

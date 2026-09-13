@@ -371,7 +371,7 @@ function finCatRow(r) {
   return `<button type="button" class="fin-catrow fin-pol${open ? ' on' : ''}" `
     + `aria-expanded="${open ? 'true' : 'false'}" onclick="finPoLines(${Number(r.id)})">`
     + body + '</button>'
-    + (open ? `<div class="fin-polrows">${finPolBody()}</div>` : '');
+    + (open ? `<div class="fin-polrows" data-no-i18n>${finPolBody()}</div>` : '');
 }
 
 /* One item on a purchase order, inside the category it was posted under.
@@ -455,6 +455,34 @@ window.finPoLines = function finPoLines(id) {
       finRender();
     });
 };
+
+/* ── WHY BOTH DRILL-DOWN CONTAINERS CARRY `data-no-i18n` ───────────────────
+   The revenue disclosure's guard, applied to the two levels below it, and for
+   the second of two reasons rather than one. Both were found by reproducing
+   them against the shipped walker; neither is theoretical.
+
+   ONE · A ROW WITH AN ENGLISH NOTE DISAPPEARS IN CHINESE. `tagBlockPair`
+   (`10-extras.js`) reads an all-English <div> beside an all-Chinese one as
+   stacked help text, stamps `data-lang-block`, and a rule in
+   `retail-admin.html` hides the inactive side with `display:none!important`.
+   These rows are free text somebody typed, so a `天河店租金` row beside an
+   `Office chairs` row is exactly that shape — and the ¥800 leaves the screen
+   while the category total above it still counts it. The same defect the
+   revenue lines had, one level down, and it predates them.
+
+   TWO · A PURCHASE-ORDER DESCRIPTION LOSES ITS TAIL IN ENGLISH, which is the
+   half the revenue guard did not have. Both posters write
+   `RPO-0028 · 天河供应商 · 3 lines`, and `processNode` splits a text node on
+   its FIRST ` · ` whenever the right half carries Chinese and the left does
+   not. That is true here by accident of the supplier's name, so an English
+   reader was shown `RPO-0028` alone — the supplier and the line count silently
+   gone, with no way to tell a one-line order from a twelve-line one.
+
+   NOTHING IS LOST BY CLOSING THESE SUBTREES. Every word in them is already
+   language-aware in JS: the marks come from `cuT`, the item names pick their
+   column by `cuLang`, and `finRender` redraws the lot on `onLangChange`. What
+   the walker was doing here was not translation — it was mistaking data for
+   markup, in both directions. */
 
 /* What sits under an opened category row: the rows, or why they are not there.
 
@@ -608,7 +636,7 @@ function finBreakdown(rows, all) {
       + '<span class="fin-sign"></span>'
       + `<span class="fin-fig">${escapeHtml(finMoney(r.amount))}</span>`
       + '</button>'
-      + (open ? `<div class="fin-catrows">${finCatBody()}</div>` : '');
+      + (open ? `<div class="fin-catrows" data-no-i18n>${finCatBody()}</div>` : '');
   }).join('') + '</div>';
 }
 
