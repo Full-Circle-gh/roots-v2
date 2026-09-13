@@ -1,0 +1,8 @@
+{
+  "name": "roots-miniapp-ci-tool",
+  "private": true,
+  "description": "Isolated home for miniprogram-ci, kept deliberately OUT of the root package.json. It pulls an abandoned Babel 6 toolchain (dozens of critical advisories in npm audit) that has nothing to do with this app's own code — only scripts/upload_miniapp.js ever requires it, only a person publishing the mini app from their own machine ever installs it, and every other session/CI run on this shared repo should never see it or pay for installing it. See scripts/upload_miniapp.js for how it's resolved from here.",
+  "dependencies": {
+    "miniprogram-ci": "^2.1.31"
+  }
+}

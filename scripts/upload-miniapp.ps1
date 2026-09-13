@@ -65,10 +65,14 @@ try {
     Write-Host "✗ Node.js isn't on PATH. Install it from https://nodejs.org/ first." -ForegroundColor Red
     exit 1
   }
-  if (-not (Test-Path "node_modules/miniprogram-ci")) {
+  # Deliberately isolated in its own subfolder, not the repo's own
+  # node_modules — miniprogram-ci pulls an old Babel 6 toolchain that has
+  # nothing to do with this app, and only this script ever needs it.
+  $toolDir = "scripts/miniapp-ci-tool"
+  if (-not (Test-Path "$toolDir/node_modules/miniprogram-ci")) {
     Write-Host ""
-    Write-Host "→ Installing dependencies (miniprogram-ci isn't present yet)…" -ForegroundColor Cyan
-    npm install
+    Write-Host "→ Installing miniprogram-ci into $toolDir (first run only)…" -ForegroundColor Cyan
+    npm install --prefix $toolDir
     if ($LASTEXITCODE -ne 0) {
       Write-Host "✗ npm install failed." -ForegroundColor Red
       exit 1
