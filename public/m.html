@@ -719,6 +719,14 @@ const state = {
   cms:{}, cmsPage:'home', cmsErr:null, cmsTried:{},
   alipay:null, alipayTried:false, puBusy:null, puErr:null,
   gzFlagged:null, gzSummary:null, gzBusy:null, gzErr:null,
+  /* §103 Channel sync. csFilter STARTS EMPTY and must: the screen reads it as
+     `state.csFilter||(d.counts.att?'att':'all')`, so the falsy value is what
+     lets the first paint choose its own filter from the data — seeding it
+     'att' would strand an operator on an empty chip whenever nothing needs
+     attention. The rest are the ordinary null/false openings for a payload,
+     its error, its in-flight flag, whether it has been asked for, and which
+     row is expanded. */
+  cs:null, csErr:'', csFilter:'', csLoading:false, csTried:false, csOpen:null,
   mtStatus:null, mtStatusTried:false, mtOffline:false,
   scAff:null, scTried:false,
   tiers:null, tierCounts:null, tiersErr:null, tiersTried:false,
@@ -11722,7 +11730,7 @@ reg('csFilter', k=>{ state.csFilter=String(k||'att'); render(); });
 reg('csOpen', id=>{ state.csOpen=state.csOpen===Number(id)?null:Number(id); render(); });
 function csWord(k){
   return k==='ok'?T('Synced','已同步'):k==='att'?T('Needs attention','待处理'):k==='off'?T('Sync off','已关闭')
-    :k==='unk'?T('Name not checked','Name not checked'):T('Not listed','未上架');
+    :k==='unk'?T('Name not checked','尚未读取商品'):T('Not listed','未上架');
 }
 function csChName(k){ return k==='meituan'?T('Meituan','美团'):k==='eleme'?T('Eleme','饿了么'):'GZ Grocery'; }
 /* §105 — why a push failed, from the code lib/channel-push-reason.js assigned.

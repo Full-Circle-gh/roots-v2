@@ -566,7 +566,17 @@ check('the four words are the four words, in both languages', () => {
   eq(['ok', 'att', 'off', 'none'].map(cn.chStateWord),
      ['已同步', '待处理', '已关闭', '未上架']);
   eq(en.chStateWord('unk'), 'Name not checked');
-  eq(cn.chStateWord('unk'), 'Name not checked', 'unk is the EN placeholder on both sides, as on the tabs');
+  /* `unk` WAS THE ONE ENGLISH-ON-BOTH-SIDES PLACEHOLDER, held while Ash
+     sourced the Chinese, and this line pinned it in place. CLAUDE.md's
+     2026-09-06 amendment repealed that default, so the placeholder is gone and
+     what is pinned now is the pair that replaced it. `尚未读取商品` is not
+     minted for the verdict: it is 29-channel-sync.js's own live store line for
+     exactly this condition — the catalogue has never been read, so the name
+     cannot be checked either way — lifted whole and re-paired with the shipped
+     English. Recorded in docs/tacet-delivery-vocabulary.md with the candidates
+     rejected. The MT_PENDING_CN / EL_PENDING_CN sets are still English; this
+     is the verdict word only, which is why the assertion names it. */
+  eq(cn.chStateWord('unk'), '尚未读取商品', 'unk carries Chinese now — the placeholder is gone');
 });
 
 check('a named cause wins over the state word, and no_name differs by channel', () => {
