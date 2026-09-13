@@ -58,7 +58,44 @@ jobs:
             User root
             IdentityFile ~/.ssh/id_deploy
             StrictHostKeyChecking accept-new
+            # ConnectTimeout bounds the HANDSHAKE only. Once a session is
+            # established nothing below it has a deadline, so a connection
+            # dropped mid-session — the box rebooting, the network going away
+            # under a long scp — leaves ssh waiting on a socket that will never
+            # answer, and the job hangs to the 360-minute default without ever
+            # failing. These two make the client notice: a probe every 15s, four
+            # unanswered before it gives up, so a dead peer fails in ~60s.
             ConnectTimeout 20
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+            # ONE HANDSHAKE FOR THE WHOLE JOB. Every ssh and scp below is a
+            # separate process paying its own TCP and SSH key exchange to a
+            # host on the far side of the world, and a job makes many of them —
+            # most of its wall time is handshakes rather than work.
+            # ControlMaster puts the first connection in charge and every later
+            # ssh and scp rides its socket. The socket outlives the step that
+            # created it, which is the point: Actions runs each step in a new
+            # shell. A stale socket is safe — ssh opens a normal connection
+            # instead — so this degrades to the previous behaviour.
+            #
+            # THE PATH IS NOT IN A SUBDIRECTORY AND THE NAME IS SHORT. Both are
+            # load-bearing; do not tidy either away.
+            #   * A ControlPath whose directory does not exist does NOT fall
+            #     back, it fails the command outright ("unix_listener: cannot
+            #     bind to path"). RUNNER_TEMP exists before the first step; a
+            #     subdirectory would need an mkdir, and a step that forgot it
+            #     would break every ssh in the job.
+            #   * A Unix socket path over 108 bytes is rejected outright, and
+            #     RUNNER_TEMP spends a fifth of that before this name starts.
+            #
+            # RUNNER_TEMP is also wiped between jobs, so the socket cannot
+            # outlive this one.
+            ControlMaster auto
+            ControlPath $RUNNER_TEMP/ssh-prod-$GITHUB_RUN_ID
+            # ControlPersist counts idle time after the last connection
+            # closes, not total job time — an hour is far past any gap
+            # between two ssh calls here.
+            ControlPersist 3600
           EOF
           chmod 600 ~/.ssh/config
 
