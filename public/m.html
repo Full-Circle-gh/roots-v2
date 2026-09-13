@@ -617,9 +617,21 @@ const state = {
      make the Settings row say "Light" on a page that was visibly dark. */
   tab:'home', theme:(document.documentElement.getAttribute('data-theme')==='dark'?'dark':'light'), lang:'en', sound:true,
   stack:[], statusF:'all', channelF:'all', inboxSeg:'reviews',
-  custSeg:'all', custTier:'all', custChan:'all', custQ:'', customers:null, custMeta:null, custLoaded:false,
-  custTotal:null, custMore:false, custSort:'last_seen',
+  /* Tier and channel are ARRAYS, not single keys — the desktop's two filters are
+     multi-select and the endpoint takes a comma list for each, so the phone was
+     asking a narrower question than the same screen on a laptop. 'all' is the
+     empty array; a chip toggles rather than replaces. Tags are the third of the
+     same shape, and their vocabulary is the server's (`tag_vocabulary`) so the
+     row offers groups somebody actually used rather than a list to remember. */
+  custSeg:'all', custTier:[], custChan:[], custTags:[], custTagVocab:null,
+  custQ:'', customers:null, custMeta:null, custLoaded:false,
+  custTotal:null, custMore:false, custSort:'last_seen', custDir:null,
   custId:null, custDetail:null, prodView:'catalogue',
+  /* The address editor's own basket. `id` null is a new address; every text
+     field writes here on input WITHOUT a render (the same rule the roster search
+     follows — there is nothing on the sheet that a keystroke changes except the
+     box already showing it), and only picking a city or a district repaints. */
+  caddr:null,
   prodQ:'', prodStatus:'all', prodCat:'all', catalogueTried:false, catalogueLoading:false,
   // How many products the SERVER says there are, and the read in flight.
   prodTotal:null, cataloguePromise:null,
@@ -2032,15 +2044,84 @@ reg('priceTyped', v=>{
 reg('closeProduct', ()=>{ state.productSku=null; render(); });
 reg('saveProduct', ()=>saveProductEdits());
 reg('custSeg', v=>{ state.custSeg=v; loadCustomers(); });
-reg('custTier', v=>{ state.custTier=v; loadCustomers(); });
-reg('custChan', v=>{ state.custChan=v; loadCustomers(); });
+/* THE THREE MULTI-SELECT ROWS, one toggle. 'all' is the row's clear — it empties
+   the array rather than becoming a fourth value in it, so "All tiers" and "Tree"
+   can never both be lit. Every other key flips in or out of the list, which is
+   what the desktop's tier and tag headers do and what the endpoint's own
+   comma-separated `tier`, `channel` and `tags` already accept. */
+function custToggleFilter(key, v){
+  const cur=state[key]||[];
+  if(v==='all'){ if(!cur.length) return; state[key]=[]; }
+  else state[key]=cur.indexOf(v)>=0 ? cur.filter(x=>x!==v) : cur.concat([v]);
+  loadCustomers();
+}
+reg('custTier', v=>custToggleFilter('custTier',v));
+reg('custChan', v=>custToggleFilter('custChan',v));
+reg('custTag',  v=>custToggleFilter('custTags',v));
+reg('custTagAt', i=>{ const t=(state.custTagVocab||[])[Number(i)]; if(t) custToggleFilter('custTags',t.tag); });
+/* Sort and its direction are one question asked twice. The desktop's column
+   headers carry both — click to sort, click again to turn it over — and the
+   phone sent no `dir` at all, so "Name" could only ever run A→Z and "Most spent"
+   could never show the smallest. Picking the ordering you are already on flips
+   it, which is the same gesture without a second control. */
 reg('custSortPick', ()=>{
+  const cur=state.custSort||'last_seen';
   state.ask={title:T('Sort customers','顾客排序'),
-    options:CUST_SORTS.map(c=>({key:c.key,label:T(c.en,c.zh)+(c.key===(state.custSort||'last_seen')?' ✓':'')})),
-    run:k=>{ if(!k) return; state.custSort=k; loadCustomers(); }};
+    body:T('Pick the one you are already on to turn it around.','再次选择当前排序可反向。'),
+    options:CUST_SORTS.map(c=>({key:c.key,
+      label:T(c.en,c.zh)+(c.key===cur?(custDirDesc()?' ↓':' ↑'):'')})),
+    run:k=>{ if(!k) return;
+      if(k===cur) state.custDir=custDirDesc()?'asc':'desc';
+      else { state.custSort=k; state.custDir=null; }
+      loadCustomers(); }};
   render();
 });
 reg('custMore', ()=>{ if(!state.custLoading) loadCustomers(true); });
+/* The file the desktop's Export button asks for, at the filters this screen is
+   showing — not the fifty rows the phone is holding. The server streams it with
+   a Content-Disposition, so a plain navigation is the whole implementation: the
+   browser takes the download and the app is still standing behind it.
+
+   Built by custFilterParams, which is the ROSTER READ'S OWN builder — so the
+   file and the screen that asked for it cannot describe different sets. Blocked
+   customers then follow the roster's rule without a parameter of their own:
+   buildCustomerFilter reads `segment === 'blocked'` as includeBlocked, so they
+   are in the file exactly when they were on the screen. */
+reg('custExport', ()=>{
+  const s=custFilterParams(new URLSearchParams()).toString();
+  location.href=API+'/customers/export.csv'+(s?'?'+s:'');
+});
+/* Add a walk-in or a telephone customer — the desktop's roster button. Name OR
+   phone is the server's own rule (`name_or_phone_required`), and the phone is
+   what it dedupes on: give one that is already on file and the endpoint LINKS to
+   that record rather than making a second, which is the behaviour to describe
+   rather than to fight. */
+reg('custNew', ()=>{
+  if(!mCan('customers:edit')) return;
+  state.ask={title:T('Add a customer','添加顾客'),
+    body:T('For a walk-in or a telephone order. If the number is already on file this opens that customer instead of making a second one.',
+           '用于到店或电话下单的顾客。若手机号已存在，将直接打开该顾客，而不会重复创建。'),
+    fields:[
+      {id:'nickname',label:T('Name','姓名'),placeholder:T('No name','未填姓名')},
+      {id:'phone',label:T('Phone','电话'),type:'tel',placeholder:'13800000000'},
+      {id:'email',label:T('Email','邮箱')+' '+T('(optional)','(选填)'),placeholder:'name@example.com'},
+    ],
+    confirmLabel:T('Add','添加'),
+    validate:v=>{
+      if(!String(v.nickname||'').trim()&&!String(v.phone||'').trim())
+        return T('A name or a phone number — one of the two.','姓名或手机号，至少填一项。');
+      if(v.email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email))
+        return T('That email address will not work.','邮箱地址无效。');
+      return null; },
+    run:v=>custWrite('new', async()=>{
+      const r=await apiWrite('/customers',{nickname:v.nickname||'',phone:v.phone||'',email:v.email||''});
+      /* Straight into the record. The endpoint answers with the row it created
+         OR the one it reused, so this opens whichever it actually landed on
+         rather than claiming a new customer that may not be new. */
+      const id=r&&r.data&&r.data.id; if(id!=null) CMD.openCustomer(id);
+    }, T('Customer added','顾客已添加'))};
+  render();
+});
 /* TYPING HERE REPAINTS NOTHING, AND NOTHING IS WHAT IT SHOULD EVER HAVE
    REPAINTED. This list is fetched with the query attached, and the fetch only
    happens on Enter or blur (custSearchGo) — so between keystrokes there is
@@ -2050,7 +2131,8 @@ reg('custMore', ()=>{ if(!state.custLoading) loadCustomers(true); });
    it, and destroyed that field's soft keyboard doing so. */
 reg('custSearch', v=>{ state.custQ=String(v||''); });
 reg('custSearchGo', ()=>loadCustomers());
-reg('custClear', ()=>{ state.custSeg='all'; state.custTier='all'; state.custChan='all'; state.custQ=''; loadCustomers(); });
+reg('custClear', ()=>{ state.custSeg='all'; state.custTier=[]; state.custChan=[]; state.custTags=[];
+  state.custQ=''; loadCustomers(); });
 /* From an order to the person who placed it — the desktop's "› #id" link.
    The record opens OVER the order. This used to close the order, empty the
    pushed-screen stack and move the whole app to the Customers tab, then start
@@ -2071,7 +2153,10 @@ reg('openCustomerFromOrder', id=>{
    holds still through every render its own reads cause. See sheetCustomer. */
 reg('openCustomer', id=>{ state.custId=id; state.custDetail=null; state.custErr=null; state.custBusy=null;
   state.custMounted=false; render(); state.custMounted=true; loadCustomerDetail(id); });
-reg('closeCustomer', ()=>{ state.custId=null; state.custDetail=null; render(); });
+/* The address sheet belongs to the record and cannot outlive it — orphaned, it
+   would be a form over the roster still writing to a customer nobody is looking
+   at. Back closes them one at a time (see layers); this is the other way out. */
+reg('closeCustomer', ()=>{ state.custId=null; state.custDetail=null; state.caddr=null; render(); });
 reg('prodView', v=>{ state.prodView=v; render(); });
 reg('prodStatus', v=>{ state.prodStatus=(state.prodStatus===v?'all':v); render(); });
 reg('prodCat', v=>{ state.prodCat=v; render(); });
@@ -2965,6 +3050,18 @@ reg('stepDec', k=>{ sheetStep[k]=Math.max(0,(sheetStep[k]||0)-1); render(); });
 function chipRow(items, current, cmd){
   return `<div class="hscroll" style="display:flex;gap:8px;padding:0 16px">${items.map(c=>
     `<button class="chip ${c.key===current?'on':''}" onclick="APP.cmd('${cmd}','${c.key}')"><span>${T(c.en,c.zh)}</span>${c.count!=null?`<span class="c">${c.count}</span>`:''}</button>`).join('')}</div>`;
+}
+/* The same row, for a filter that takes several answers at once. 'all' lights
+   when nothing is chosen — it is the row's clear, not a fourth choice — and
+   every other chip lights independently. Keys here are ours (tier and channel
+   are fixed vocabularies), so they go into the attribute as themselves; a row
+   whose keys come from operator-typed data uses custTagRow's index instead. */
+function chipRowMulti(items, chosen, cmd){
+  const on=Array.isArray(chosen)?chosen:[];
+  return `<div class="hscroll" style="display:flex;gap:8px;padding:0 16px">${items.map(c=>{
+    const lit=c.key==='all' ? !on.length : on.indexOf(c.key)>=0;
+    return `<button class="chip ${lit?'on':''}" onclick="APP.cmd('${cmd}','${c.key}')"><span>${T(c.en,c.zh)}</span>${c.count!=null?`<span class="c">${c.count}</span>`:''}</button>`;
+  }).join('')}</div>`;
 }
 function emptyState(title,msg){
   return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:56px 24px;text-align:center">
@@ -12703,6 +12800,18 @@ function custWrite(kind, run, okMsg){
       :e.code==='message_required'?T('Write something first.','请先输入内容。')
       :e.code==='reason_required'?T('A reason is required.','需要填写原因。')
       :e.code==='bad_delta'?T('That amount will not work. Use a number, and not zero.','金额无效。请填写非零数字。')
+      :e.code==='name_or_phone_required'?T('A name or a phone number — one of the two.','姓名或手机号，至少填一项。')
+      :e.code==='missing_required'?T('Recipient, phone and street address are all needed.','收件人、电话和详细地址都需要填写。')
+      :e.code==='bad_phone'?T('That phone number will not work.','手机号无效。')
+      /* THE ONE REFUSAL THAT NAMES AN AMOUNT. Both adjust endpoints answer
+         `would_go_negative` when the change would take a balance below zero,
+         and the blanket sentence below turns that into "try again" — which is
+         exactly what an operator then does, with the same number. Every one of
+         these routes answers with a bare `error` code and no `message`, so the
+         wording has to live here; a raw code on the glass would be worse than
+         the blanket sentence, which is why there is no fall-through to it. */
+      :e.code==='would_go_negative'?T('That would take the balance below zero.','该操作会使余额变为负数。')
+      :e.code==='not_found'?T('This customer is no longer on file.','该顾客记录已不存在。')
       :T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
@@ -12712,7 +12821,9 @@ function custWrite(kind, run, okMsg){
    Inbox behind the sheet rather than claiming more than it did. */
 reg('messageCustomer', ()=>{
   const c=(state.custDetail&&state.custDetail.customer)||null;
-  if(!c||c.id==null) return;
+  /* `customers:edit` — lib/cap-routes.js sends every customer write that is not
+     an adjust and not a block down that path, and POST …/message is one. */
+  if(!c||c.id==null||!mCan('customers:edit')) return;
   state.ask={title:T('Message this customer','给顾客发消息'),
     body:T('They get a notification in the mini app. The reply lands in Inbox → Feedback.','顾客会在小程序收到通知。回复会出现在收件箱 → 反馈。'),
     fields:[{id:'msg',label:T('Message','消息'),multiline:true,placeholder:T('Write a message…','写下消息…')}],
@@ -12732,23 +12843,98 @@ reg('messageCustomer', ()=>{
    rather than leaving the operator wondering where it went. */
 reg('editCustomer', ()=>{
   const c=(state.custDetail&&state.custDetail.customer)||null;
-  if(!c||c.id==null) return;
+  if(!c||c.id==null||!mCan('customers:edit')) return;
   state.ask={title:T('Edit profile','编辑资料'),
-    body:T('The phone number is what customer records are matched on, so it is changed on the desktop.','手机号是顾客记录的匹配依据，请在电脑端修改。'),
+    /* THE PHONE NUMBER IS EDITABLE HERE NOW, and the sentence that said it was
+       not is gone with it. It was held back on 2026-08-22 because the number is
+       what customer records are deduped on, so a mistyped digit one-handed is a
+       merge or a split — but that reasoning describes a SILENT collision, and
+       the endpoint has not been silent about one since the duplicate-phone check
+       landed in PATCH /customers/:id. It answers `phone_taken` and writes
+       nothing, and this sheet has carried the wording for that refusal all along
+       (custWrite's own map) without any field that could provoke it. What is
+       left is a number typed wrong into an unused slot, which is the same risk
+       the name and the email already carry and the same fix: type it again.
+       The warning stays, as a warning rather than as a door. */
+    body:T('The phone number is what customer records are matched on — change it only if it is wrong.',
+           '手机号是顾客记录的匹配依据 — 确认填错时才修改。'),
     fields:[
       {id:'nickname',label:T('Name','姓名'),value:c.nickname||'',placeholder:T('No name','未填姓名')},
+      {id:'phone',label:T('Phone','电话'),type:'tel',value:c.phone||'',placeholder:'13800000000'},
       {id:'email',label:T('Email','邮箱'),value:c.email||'',placeholder:'name@example.com'},
+      /* The desktop's modal edits five fields and the phone edited two. Gender
+         and birthday are the other three's quiet siblings — a birthday is what a
+         loyalty greeting is sent on, and neither had any way onto a record from
+         a phone. Both go through the same PATCH, both accept empty as "unknown",
+         and `0` is a real stored value the server takes alongside 1 and 2, so
+         the picker offers it rather than folding it into blank. */
+      {id:'gender',label:T('Gender','性别'),value:c.gender==null?'':String(c.gender),
+       choices:[['',T('— unknown —','— 未知 —')],['1',T('Male','男')],['2',T('Female','女')],['0',T('Other','其他')]]},
+      {id:'birthday',label:T('Birthday','生日'),type:'date',value:(c.birthday||'').slice(0,10)},
     ],
     confirmLabel:T('Save','保存'),
-    validate:v=>(v.email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email))
-      ? T('That email address will not work.','邮箱地址无效。') : null,
+    validate:v=>{
+      if(v.email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email))
+        return T('That email address will not work.','邮箱地址无效。');
+      /* The server's own pattern, so a refusal it would make arrives beside the
+         field rather than as a 400 after the sheet has closed. */
+      const p=String(v.phone||'').replace(/\s+/g,'');
+      if(p&&!/^\+?[0-9]{7,15}$/.test(p))
+        return T('That phone number will not work.','手机号无效。');
+      return null; },
     run:v=>custWrite('profile',
-      ()=>apiWrite('/customers/'+c.id,{nickname:v.nickname,email:v.email||null},'PATCH'),
+      ()=>apiWrite('/customers/'+c.id,
+        {nickname:v.nickname, phone:String(v.phone||'').replace(/\s+/g,''), email:v.email||null,
+         gender:v.gender===''?null:v.gender, birthday:v.birthday||null},'PATCH'),
       T('Profile saved','资料已保存'))};
   render();
 });
+/* ── Tags and the note — the desktop's "Know" block ──────────────────────────
+   Both ride on the SAME PATCH the profile edit uses, and both have been coming
+   down the wire on every record read (the detail route is SELECT *) with nothing
+   on the phone rendering them. A tag is how a shop says wholesale, or allergic,
+   or pays-late; the note is the sentence underneath. Withholding them from the
+   phone meant the person standing in front of the customer was the one who could
+   not see it.
+
+   The tag EDITOR is a comma line rather than the desktop's chip-and-Add pair:
+   one field, one keyboard, and the parse is the same split the server stores. */
+function custTagsOf(c){
+  return String((c&&c.tags)||'').split(',').map(s=>s.trim()).filter(Boolean);
+}
+reg('editCustTags', ()=>{
+  const c=(state.custDetail&&state.custDetail.customer)||null;
+  if(!c||c.id==null||!mCan('customers:edit')) return;
+  state.ask={title:T('Tags','标签'),
+    body:T('Separate them with commas. They group the roster and anybody on your team can see them.',
+           '用逗号分隔。标签用于分组，团队成员都能看到。'),
+    fields:[{id:'tags',label:T('Tags','标签'),value:custTagsOf(c).join(', '),
+             placeholder:T('wholesale, pays late','批发, 结账慢')}],
+    confirmLabel:T('Save','保存'),
+    run:v=>custWrite('tags',
+      /* Deduped and lower-cased on the way in, because the filter row groups on
+         the stored string: "VIP" and "vip" would otherwise be two chips for one
+         idea, and the roster's tag query lower-cases what it matches. */
+      ()=>apiWrite('/customers/'+c.id,{tags:[...new Set(String(v.tags||'').split(',')
+        .map(s=>s.trim().toLowerCase()).filter(Boolean))].join(',')},'PATCH'),
+      T('Tags saved','标签已保存'))};
+  render();
+});
+reg('editCustNote', ()=>{
+  const c=(state.custDetail&&state.custDetail.customer)||null;
+  if(!c||c.id==null||!mCan('customers:edit')) return;
+  state.ask={title:T('Note','备注'),
+    body:T('Anything your team should know — allergies, delivery quirks, invoicing.','团队需要知道的事 — 过敏、配送要求、开票方式等。'),
+    fields:[{id:'note',label:T('Note','备注'),multiline:true,value:c.note||'',
+             placeholder:T('Anything your team should know','团队需要知道的事')}],
+    confirmLabel:T('Save','保存'),
+    run:v=>custWrite('note',
+      ()=>apiWrite('/customers/'+c.id,{note:String(v.note||'').slice(0,2000)},'PATCH'),
+      T('Note saved','备注已保存'))};
+  render();
+});
 reg('adjustPoints', ()=>{
-  const d=state.custDetail, c=(d&&d.customer)||{}; if(!state.custId) return;
+  const d=state.custDetail, c=(d&&d.customer)||{}; if(!state.custId||!mCan('customers:adjust')) return;
   state.ask={title:T('Adjust points','调整积分'),
     body:T('Now: '+Number(c.points_balance||0).toLocaleString()+' points. Use a minus sign to take points away.',
            '当前 '+Number(c.points_balance||0).toLocaleString()+' 分。减少请填负数。'),
@@ -12764,7 +12950,7 @@ reg('adjustPoints', ()=>{
   render();
 });
 reg('adjustWallet', ()=>{
-  const d=state.custDetail, c=(d&&d.customer)||{}; if(!state.custId) return;
+  const d=state.custDetail, c=(d&&d.customer)||{}; if(!state.custId||!mCan('customers:adjust')) return;
   state.ask={title:T('Adjust wallet','调整钱包'),
     body:T('Now: '+money(CUR,c.balance||0)+'. Use a minus sign to take money off.',
            '当前 '+money(CUR,c.balance||0)+'。扣减请填负数。'),
@@ -12780,7 +12966,7 @@ reg('adjustWallet', ()=>{
   render();
 });
 reg('toggleBlock', ()=>{
-  const d=state.custDetail, c=(d&&d.customer)||{}; if(!state.custId) return;
+  const d=state.custDetail, c=(d&&d.customer)||{}; if(!state.custId||!mCan('customers:block')) return;
   const blocked=!!c.is_blocked;
   state.ask={title:blocked?T('Unblock this customer?','解除封禁？'):T('Block this customer?','封禁该顾客？'),
     body:blocked?T('They can sign in and order again.','解除后可以重新登录下单。')
@@ -12788,6 +12974,161 @@ reg('toggleBlock', ()=>{
     confirmLabel:blocked?T('Unblock','解除'):T('Block','封禁'), danger:!blocked,
     run:()=>custWrite('block', ()=>apiWrite('/customers/'+state.custId+'/'+(blocked?'unblock':'block'),{}),
       blocked?T('Unblocked','已解除'):T('Blocked','已封禁'))};
+  render();
+});
+/* SIGN OUT ALL DEVICES — declined for the phone on 2026-08-22 on the grounds
+   that the device COUNT was the useful part and ending the sessions could stay
+   on the desktop. That holds right up until the reason anybody reaches for it:
+   a customer says their phone was stolen, or a staff member notices a shared
+   login, and both of those are said out loud in the shop rather than typed at a
+   desk. The count is already on the record; this is the thing to do about it.
+   `customers:block` — the same capability the server gates force-logout on,
+   which is also why it sits next to Block rather than among the everyday four. */
+reg('forceLogout', ()=>{
+  const d=state.custDetail, c=(d&&d.customer)||{}; if(!state.custId||!mCan('customers:block')) return;
+  const n=Number((d&&d.stats&&d.stats.active_sessions)||0);
+  state.ask={title:T('Sign out all devices?','退出所有设备？'),
+    body:n?T('They are signed in on '+n+(n===1?' device':' devices')+'. All of them are signed out and they will need to sign in again. The account itself is untouched.',
+             '当前有 '+n+' 台设备已登录。全部退出后需要重新登录，账号本身不受影响。')
+          :T('Any session they have is ended and they will need to sign in again. The account itself is untouched.',
+             '结束其所有登录会话，需要重新登录。账号本身不受影响。'),
+    confirmLabel:T('Sign them out','退出登录'),
+    run:()=>custWrite('logout', ()=>apiWrite('/customers/'+state.custId+'/force-logout',{}),
+      T('Signed out','已退出登录'))};
+  render();
+});
+/* ── The three referral controls ─────────────────────────────────────────────
+   All three are the desktop's, all three ride endpoints the phone already has
+   the data for (`affiliate` comes down with every record read), and none of them
+   had any way in from a phone. Each is `customers:edit` — cap-routes sends
+   affiliate-block, affiliate-unblock and referral-code down that path, and
+   /affiliate/eligible is not a customers route at all, so it is gated on the
+   same key its sibling controls are rather than on a guess. */
+reg('custRefBlock', ()=>{
+  const d=state.custDetail, a=(d&&d.affiliate)||{}; if(!state.custId||!mCan('customers:edit')) return;
+  const on=!!a.affiliate_blocked;
+  state.ask={title:on?T('Let them refer friends again?','恢复推荐资格？'):T('Stop this customer referring friends?','停止该顾客的推荐资格？'),
+    body:on?T('Their code works for new friends again, and they start earning referral rewards again.',
+              '其邀请码可再次被新好友使用，也将重新获得推荐奖励。')
+           :T('Their referral code stops working for new friends, and they stop earning new referral or share rewards. Anything already paid into their wallet stays; the account itself is untouched.',
+              '其邀请码将无法被新好友使用，本人也不再获得新的推荐奖励或复购分成。已发放至钱包的奖励不受影响，账号本身不受影响。'),
+    confirmLabel:on?T('Let them refer','恢复推荐资格'):T('Stop them referring','停止推荐资格'), danger:!on,
+    run:()=>custWrite('refblock',
+      ()=>apiWrite('/customers/'+state.custId+'/affiliate-'+(on?'unblock':'block'),{}),
+      on?T('Referring re-enabled','已恢复推荐资格'):T('Referring disabled','已停止推荐资格'))};
+  render();
+});
+reg('custRefShare', ()=>{
+  const d=state.custDetail, a=(d&&d.affiliate)||{}; if(!state.custId||!mCan('customers:edit')) return;
+  const on=!!a.lifetime_eligible;
+  state.ask={title:on?T('Stop this customer earning the ongoing share?','停止该顾客的复购分成？'):T('Let them earn the ongoing share?','允许获得复购分成？'),
+    body:on?T('They keep the one-time referral reward and everything already paid into their wallet. Only future orders stop earning.',
+              '已发放至钱包的分成和一次性推荐奖励均予保留，仅之后的订单不再产生分成。')
+           :T('They start earning a share of what the friends they invited order from now on.',
+              '之后其邀请的好友下单时，本人可获得分成。'),
+    confirmLabel:on?T('Stop the ongoing share','停止复购分成'):T('Let them earn it','允许获得'), danger:on,
+    run:()=>custWrite('refshare',
+      ()=>apiWrite('/affiliate/eligible',{customerId:state.custId, eligible:!on}),
+      on?T('No longer earning the ongoing share','已停止复购分成'):T('Now earning the ongoing share','已开启复购分成'))};
+  render();
+});
+/* ── The address editor's commands ──────────────────────────────────────── */
+reg('caddrOpen', addrId=>{
+  const d=state.custDetail; if(!state.custId||!mCan('customers:edit')) return;
+  const a=addrId==null||addrId===''
+    ? null
+    : ((d&&d.addresses)||[]).find(x=>String(x.id)===String(addrId));
+  if(addrId!=null&&addrId!==''&&!a) return;   // the list moved under the tap
+  state.caddr=caddrBlank(state.custId, a);
+  caddrLoadCities();
+  if(state.caddr.city) caddrLoadDistricts();
+  render();
+});
+reg('caddrClose', ()=>{ state.caddr=null; render(); });
+/* WRITES TO STATE AND REPAINTS NOTHING. Every render of this sheet rebuilds
+   every input in it, so a render per keystroke would destroy the field being
+   typed into and its keyboard with it — the correction the roster search
+   already carries. Nothing on the sheet changes as a character lands except the
+   box the browser is already showing. */
+reg('caddrSet', (k,v)=>{ const s=state.caddr; if(s) s[k]=String(v==null?'':v); });
+reg('caddrCityQ', v=>{
+  const s=state.caddr; if(!s) return;
+  s.cityQ=String(v||'');
+  /* The list under the field is the one thing a keystroke DOES change, so it is
+     patched in place while the field above it keeps focus — the wizard's
+     onwRepaint, whose guard (is the box the sibling of what has focus?) is what
+     makes the patch safe to skip when it is not. */
+  const box=document.getElementById('mCaddrCityBox'), on=document.activeElement;
+  if(box&&on&&box.previousElementSibling===on) box.innerHTML=caddrCityPicks(); else render();
+});
+reg('caddrPickCity', i=>{
+  const s=state.caddr; if(!s) return;
+  const c=caddrCityMatches()[Number(i)]; if(!c) return;
+  s.city=c.name_cn||c.name_en||''; s.province=c.province_cn||'';
+  /* A new city is a new set of districts, so the old one means nothing. */
+  s.district=''; s.districts=null; s.cityQ='';
+  render(); caddrLoadDistricts();
+});
+reg('caddrUnpickCity', ()=>{ const s=state.caddr; if(!s) return;
+  s.city=''; s.province=''; s.district=''; s.districts=null; s.cityQ=''; render(); });
+reg('caddrDistrict', i=>{
+  const s=state.caddr; if(!s) return;
+  const d=i===''?null:(s.districts||[])[Number(i)];
+  s.district=d?(d.name_cn||d.name_en||''):''; render();
+});
+reg('caddrDefault', ()=>{ const s=state.caddr; if(!s) return; s.is_default=!s.is_default; render(); });
+reg('caddrSave', ()=>{
+  const s=state.caddr; if(!s||s.busy) return;
+  /* The endpoint's own three, refused here so the reason lands on the sheet
+     beside the empty box rather than as a 400 after it has closed. */
+  const name=String(s.recipient_name||'').trim(), phone=String(s.phone||'').replace(/\s+/g,'');
+  const line=String(s.address||'').trim();
+  if(!name||!phone||!line){
+    s.err=T('Recipient, phone and street address are all needed.','收件人、电话和详细地址都需要填写。');
+    return render();
+  }
+  s.busy=true; s.err=''; render();
+  const body={recipient_name:name, phone:phone, province:s.province||'', city:s.city||'',
+    district:s.district||'', address:line, detail:String(s.detail||'').trim(),
+    postal_code:String(s.postal_code||'').trim(), is_default:!!s.is_default};
+  const url='/customers/'+s.cid+'/addresses'+(s.id==null?'':'/'+s.id);
+  apiWrite(url, body, s.id==null?'POST':'PUT').then(()=>{
+    state.caddr=null;
+    /* No toast: the record reopens with the address in its list, and the result
+       IS the confirmation — the desktop's own note on the same save. */
+    if(state.custId!=null) loadCustomerDetail(state.custId);
+    render();
+  }).catch(e=>{
+    const t=state.caddr; if(!t) return;
+    if(String(e.message)==='auth') return;
+    t.busy=false;
+    t.err=e.code==='missing_required'?T('Recipient, phone and street address are all needed.','收件人、电话和详细地址都需要填写。')
+      :e.code==='bad_phone'?T('That phone number will not work.','手机号无效。')
+      :e.code==='not_found'?T('This address is no longer on the record.','该地址已不存在。')
+      :T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    render();
+  });
+});
+reg('caddrDelete', addrId=>{
+  const d=state.custDetail; if(!state.custId||!mCan('customers:edit')) return;
+  const a=((d&&d.addresses)||[]).find(x=>String(x.id)===String(addrId)); if(!a) return;
+  state.ask={title:T('Delete this address?','删除此地址？'),
+    body:escAttr([a.province,a.city,a.district,a.address,a.detail].filter(Boolean).join(' ')),
+    confirmLabel:T('Delete address','删除地址'), danger:true,
+    run:()=>custWrite('addr',
+      ()=>apiWrite('/customers/'+state.custId+'/addresses/'+a.id,{},'DELETE'),
+      T('Address deleted','地址已删除'))};
+  render();
+});
+reg('custRefReissue', ()=>{
+  if(!state.custId||!mCan('customers:edit')) return;
+  state.ask={title:T('Reissue this referral code?','重新生成邀请码？'),
+    body:T('Existing referrals keep their history; anything they share from now on uses the new code. The old one stops working.',
+           '已有推荐记录保留；之后分享使用新邀请码，旧码将失效。'),
+    confirmLabel:T('Reissue code','重发邀请码'),
+    run:()=>custWrite('reissue',
+      ()=>apiWrite('/customers/'+state.custId+'/referral-code',{}),
+      T('New code issued','已生成新邀请码'))};
   render();
 });
 /* features.<key> in storefront_config — the same switch the desktop writes, and
@@ -14283,7 +14624,16 @@ function sheetAsk(){
      ${a.fields?`<div style="padding:8px 20px 0;display:flex;flex-direction:column;gap:16px">
        ${a.fields.map(f=>`<label style="display:block">
          <span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${f.label}</span>
-         ${f.multiline
+         ${/* A THIRD SHAPE: a fixed set of answers. A native <select> renders as
+              the platform's own wheel on a phone, which beats a chip row for a
+              list that is short and closed (a gender, a province) and costs one
+              branch here rather than a sheet of its own. Its `choices` are
+              [value,label] pairs; the label is already resolved to one language
+              by the caller, exactly as `label` and `placeholder` are. */''}
+         ${f.choices
+           ? `<select id="ask-${f.id}" style="width:100%">${f.choices.map(([val,lab])=>
+               `<option value="${escAttr(val)}"${String(f.value==null?'':f.value)===String(val)?' selected':''}>${lab}</option>`).join('')}</select>`
+           : f.multiline
            ? `<textarea id="ask-${f.id}" placeholder="${f.placeholder||''}" style="min-height:96px;resize:none">${f.value!=null?escAttr(f.value):''}</textarea>`
            : `<input id="ask-${f.id}" ${f.type?`type="${f.type}" `:''}${f.numeric?'inputmode="text"':''} placeholder="${f.placeholder||''}" value="${f.value!=null?escAttr(f.value):''}"
                     onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();APP.cmd('askRun','')}">`}
@@ -16032,7 +16382,8 @@ function mapCustomer(r){
   };
 }
 function custFiltered(){ return state.customers||[]; }
-function custFiltered0(){ return (state.custSeg||'all')==='all'&&(state.custTier||'all')==='all'&&(state.custChan||'all')==='all'&&!state.custQ; }
+function custFiltered0(){ return (state.custSeg||'all')==='all'&&!(state.custTier||[]).length
+  &&!(state.custChan||[]).length&&!(state.custTags||[]).length&&!state.custQ; }
 /* The pulse renders as one line, not tiles: four tiles cannot share a phone's
    width, and showing two of them would be an arbitrary subset. It renders only
    the figures the server actually returned. */
@@ -16109,6 +16460,25 @@ function custHolds(c){
   if(!bits.length) return '';
   return `<span class="num" style="display:block;font-size:12px;color:var(--text-secondary);margin-top:2px">${bits.join(' · ')}</span>`;
 }
+/* THE TAG ROW, and it appears only once somebody has tagged somebody. An empty
+   filter row is a control that narrows nothing and teaches an operator that the
+   shop has no tags when what it has is none yet — so with no vocabulary there is
+   no row, exactly as the Blocked segment chip only appears when there are any.
+   Counts are the server's, off every row rather than off this page.
+
+   THE TAP CARRIES THE INDEX, NEVER THE TAG. A tag is operator-typed text and
+   this would be putting it inside a JS string inside an HTML attribute; the
+   city picker settled the same question the same way. */
+function custTagRow(){
+  const vocab=state.custTagVocab||[];
+  if(!vocab.length) return '';
+  const on=state.custTags||[];
+  return `<div style="height:8px"></div>
+    <div class="hscroll" style="display:flex;gap:8px;padding:0 16px">
+      <button class="chip ${on.length?'':'on'}" onclick="APP.cmd('custTag','all')"><span>${T('All tags','全部标签')}</span></button>
+      ${vocab.map((t,i)=>`<button class="chip ${on.indexOf(t.tag)>=0?'on':''}" onclick="APP.cmd('custTagAt',${i})"><span>${escAttr(t.tag)}</span><span class="c">${Number(t.count)||0}</span></button>`).join('')}
+    </div>`;
+}
 function custSkeleton(){
   const bar=(w,h)=>`<span style="display:block;width:${w};height:${h}px;border-radius:999px;background:var(--surface-raised)"></span>`;
   return `<div class="card" style="display:flex;align-items:center;gap:16px;padding:16px">
@@ -16134,7 +16504,7 @@ function screenCustomers(){
       <button class="btn2" style="width:auto;padding:11px 26px" onclick="APP.cmd('custRetry')">${T('Try again','重试')}</button></div>`;
   } else if(!state.custLoaded){
     body=`${custSkeleton()}${custSkeleton()}${custSkeleton()}${custSkeleton()}`;
-  } else if(!rows.length && (state.custSeg==='all' && (state.custTier||'all')==='all')){
+  } else if(!rows.length && custFiltered0()){
     body=emptyState(T('No customers yet','还没有顾客'),
       T('They settle in here as soon as someone orders — every channel, remembered without you asking.',
         '有人下单后就会出现在这里 — 每个渠道，无需你操心。'));
@@ -16153,9 +16523,22 @@ function screenCustomers(){
   // sort control is left where the eye starts — right-aligned and alone on an
   // otherwise empty row it read as a stray label rather than a control, so it
   // says what it is doing: "Sorted by Last seen".
-  return `${pageHead({title:T('Customers','顾客'), status:pulse||'', controls:true})}
-    <div style="padding:14px 16px 12px">
-      <button onclick="APP.cmd('custSortPick')" style="display:inline-flex;align-items:center;gap:5px;background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-secondary)">${T('Sorted by','排序')} <span style="font-weight:500;color:var(--text-primary)">${custSortLabel()}</span> ${ic('chevron-down',14,2)}</button>
+  /* THE HEADER'S ONE BUTTON, and it is the desktop's own — the roster's "+ Add"
+     for a walk-in or a telephone order. Gated on `customers:edit`, which is what
+     lib/cap-routes.js gates POST /customers on: absent, never disabled, for an
+     operator whose save would 403. §112's rule, and the reason it matters here
+     is that apiWrite sends a 403 to the login page. */
+  const addCta=mCan('customers:edit')
+    ? `<button class="cta" style="width:auto;padding:12px 20px;flex:none" onclick="APP.cmd('custNew')">${T('Add','添加')}</button>` : '';
+  return `${pageHead({title:T('Customers','顾客'), status:pulse||'', cta:addCta, controls:true})}
+    <div style="padding:14px 16px 12px;display:flex;align-items:center;gap:12px">
+      <button onclick="APP.cmd('custSortPick')" style="display:inline-flex;align-items:center;gap:5px;background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-secondary)">${T('Sorted by','排序')} <span style="font-weight:500;color:var(--text-primary)">${custSortLabel()}</span> <span style="color:var(--text-primary)">${custDirDesc()?'↓':'↑'}</span> ${ic('chevron-down',14,2)}</button>
+      ${/* Export is the server's own file, at the filters the screen is showing —
+           not the rows the phone happens to be holding, which is 50 of them. Its
+           own capability, `customers:export`, because the file carries wallet
+           balances and lifetime spend out of the building. */''}
+      <span style="flex:1"></span>
+      ${mCan('customers:export')?`<button onclick="APP.cmd('custExport')" style="display:inline-flex;align-items:center;gap:5px;background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-secondary)">${ic('download',14,2)} ${T('Export','导出')}</button>`:''}
     </div>
     <div style="padding:0 16px 12px"><input id="mCustQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.custQ)}"
       placeholder="${T('Search name or phone','搜索姓名或手机')}" style="width:100%"
@@ -16164,9 +16547,10 @@ function screenCustomers(){
       onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();APP.cmd('custSearchGo')}"></div>
     ${chipRow(segs,state.custSeg||'all','custSeg')}
     <div style="height:8px"></div>
-    ${chipRow(tiers,state.custTier||'all','custTier')}
+    ${chipRowMulti(tiers,state.custTier||[],'custTier')}
     <div style="height:8px"></div>
-    ${chipRow(chans,state.custChan||'all','custChan')}
+    ${chipRowMulti(chans,state.custChan||[],'custChan')}
+    ${custTagRow()}
     <div style="padding:16px 16px 24px;display:flex;flex-direction:column;gap:16px">${body}
     ${rows.length&&state.custTotal!=null?`<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:4px 0 0">
       <span class="num" style="font-size:13px;color:var(--text-secondary)">${T(rows.length+' of '+state.custTotal, state.custTotal+' 位中的 '+rows.length)}</span>
@@ -16280,6 +16664,16 @@ function custAffiliate(d){
   if(Number(sum.total)) rows.push(custRow(T('Friends invited','已邀请'),
     T(sum.total+' · '+(sum.converted||0)+' ordered', sum.total+' 位 · '+(sum.converted||0)+' 位已下单'),
     Number(sum.earned)?T(money(CUR,sum.earned)+' rewarded','已发放 '+money(CUR,sum.earned)):''));
+  /* THE TWO STATES THE FOOT'S SWITCHES TURN, and neither was on the record — so
+     the shop could stop somebody referring and then have no way to see that it
+     had. Blocked shows only when it is true (a row reading "allowed" on every
+     customer is not information); the ongoing share shows only in 'selected'
+     mode, the same condition its control renders under. */
+  if(a.affiliate_blocked) rows.push(custRow(T('Referring','推荐资格'),
+    T('Stopped','已停止')));
+  if(a.lifetime_mode==='selected') rows.push(custRow(T('Ongoing share','复购分成'),
+    a.lifetime_eligible?T('Earning','获得中'):T('Not earning','不获得'),
+    a.lifetime_eligible_since?T('since '+fmtDay(a.lifetime_eligible_since),'自 '+fmtDay(a.lifetime_eligible_since)):''));
   if(!rows.length) return '';
   return custSection(T('Referrals','推荐'), custList(rows));
 }
@@ -16298,6 +16692,133 @@ function custFacts(d,c,st){
     T(st.active_sessions+(st.active_sessions===1?' device':' devices'), st.active_sessions+' 台')));
   if(!rows.length) return '';
   return custSection(T('Account','账户'), custList(rows));
+}
+/* WHAT THE SHOP KNOWS ABOUT THIS PERSON — the desktop's "Know" block, and the
+   phone had no version of it at all. Both fields have been arriving on every
+   record read since the tags column went in; rendering them is the whole of it.
+   Tags first because they are scanned, the note second because it is read. */
+function custKnow(c){
+  const tags=custTagsOf(c), note=String(c.note||'');
+  const editable=mCan('customers:edit');
+  /* Nothing known and nothing to be done about it → no block. An empty heading
+     over an empty box is a screen saying the shop has no notes when what it has
+     is none yet, and there is no control here to change that either. */
+  if(!tags.length&&!note&&!editable) return '';
+  const edit=(cmd,label)=>editable
+    ? `<button onclick="APP.cmd('${cmd}')" style="background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${label}</button>` : '';
+  return `<div style="margin-top:16px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px">
+      <span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${T('What we know','备注与标签')}</span>
+      ${edit('editCustTags',T('Tags','标签'))}</div>
+    ${tags.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:${note||editable?'10px':'0'}">${
+      tags.map(t=>`<span class="pill" style="background:rgba(88,96,110,.10);color:var(--text-secondary)">${escAttr(t)}</span>`).join('')}</div>`:''}
+    <div class="list"><div style="padding:12px 16px;display:flex;align-items:flex-start;gap:12px">
+      ${/* pre-wrap: an operator who typed three lines meant three lines, and a
+           note is the one field on this record where the shape carries meaning
+           (an allergy on its own line is not the same as one buried mid-sentence).
+           break-word because a note can hold an unbroken order number. */''}
+      <span style="flex:1;min-width:0;font-size:14.5px;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;${note?'':'color:var(--text-secondary)'}">${
+        note?escAttr(note):T('No note yet.','暂无备注。')}</span>
+      ${edit('editCustNote',note?T('Edit','编辑'):T('Add','添加'))}</div></div>
+  </div>`;
+}
+/* EVERY address, not the first three, with the default one marked and each row
+   carrying the two writes the desktop puts beside it. The old block showed
+   city · district · detail — which drops the street line, the part a courier
+   actually needs, and the recipient, who may not be the customer. */
+function custAddresses(d){
+  const list=(d&&d.addresses)||[];
+  const editable=mCan('customers:edit');
+  if(!list.length&&!editable) return '';
+  const add=editable
+    ? `<button onclick="APP.cmd('caddrOpen','')" style="background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Add','添加')}</button>` : '';
+  if(!list.length) return custSection(T('Addresses','地址'),
+    `<div class="list"><div style="padding:12px 16px;font-size:14.5px;color:var(--text-secondary)">${T('None on file.','暂无地址。')}</div></div>`, add);
+  const rows=list.map((a,i)=>`${i?'<div class="sep"></div>':''}
+    <div style="padding:12px 16px">
+      <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+        <span style="font-size:14.5px;font-weight:500">${escAttr(a.recipient_name||T('No name','未填姓名'))}</span>
+        <span class="num" style="font-size:13px;color:var(--text-secondary)">${escAttr(a.phone||'')}</span>
+        ${a.is_default?`<span class="pill" style="background:rgba(88,96,110,.10);color:var(--text-secondary)">${T('Default','默认')}</span>`:''}
+      </div>
+      <div style="font-size:14px;color:var(--text-secondary);line-height:1.55;margin-top:3px">${
+        escAttr([a.province,a.city,a.district,a.address,a.detail].filter(Boolean).join(' ')||'—')}</div>
+      ${editable?`<div style="display:flex;gap:16px;margin-top:8px">
+        <button onclick="APP.cmd('caddrOpen','${a.id}')" style="background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Edit','编辑')}</button>
+        <button onclick="APP.cmd('caddrDelete','${a.id}')" style="background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--brick-ink)">${T('Delete','删除')}</button>
+      </div>`:''}
+    </div>`).join('');
+  return custSection(T('Addresses','地址'), `<div class="list">${rows}</div>`, add);
+}
+/* THE TWELVE MONTHS. The desktop draws bars; the phone was told the figures
+   behind them were enough, and for a while they were — there are no figures
+   here at all, only a shape. `orders_by_month` has been arriving on every
+   record read the whole time. Drawn as bare columns rather than a chart: no
+   axis, no gridlines, no hover — the tallest month is named underneath, which
+   is the one thing a hover would have said. */
+function custActivity(d){
+  const rows=(d&&d.orders_by_month)||[];
+  if(!rows.length) return '';
+  /* `month` is 'YYYY-MM' and the count is `n` — the desktop's chart reads the
+     same two off the same rows. Revenue rides along and is deliberately not
+     drawn: the shape being asked for here is how often, and a bar that is
+     sometimes orders and sometimes money is two charts wearing one axis. */
+  const byKey={}; rows.forEach(r=>{ byKey[String(r.month||'')]=Number(r.n||0); });
+  const now=new Date(), cells=[];
+  for(let i=11;i>=0;i--){
+    const dt=new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const key=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0');
+    cells.push({key, y:dt.getFullYear(), m:dt.getMonth()+1, n:byKey[key]||0});
+  }
+  const max=Math.max.apply(null, cells.map(c=>c.n));
+  if(!max) return '';
+  const top=cells.reduce((a,b)=>b.n>a.n?b:a, cells[0]);
+  return custSection(T('Last 12 months','近 12 个月'),
+    `<div style="display:flex;align-items:flex-end;gap:4px;height:56px">${cells.map(c=>
+      `<span style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;height:100%">
+         <span style="display:block;border-radius:3px 3px 0 0;background:${c.n?'var(--text-primary)':'var(--surface-raised)'};height:${c.n?Math.max(3,Math.round(c.n/max*100)):3}%"></span>
+       </span>`).join('')}</div>
+     ${/* The two ends only. Twelve labels across 358px is a grey smear, and the
+          question a reader brings to a twelve-column shape is which end is now
+          — which two numbers answer. */''}
+     <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px;color:var(--text-secondary)">
+       <span class="num">${T(cells[0].m+'/'+String(cells[0].y).slice(2), cells[0].y+' 年 '+cells[0].m+' 月')}</span>
+       <span class="num">${T(cells[11].m+'/'+String(cells[11].y).slice(2), cells[11].y+' 年 '+cells[11].m+' 月')}</span></div>
+     <div style="font-size:12.5px;color:var(--text-secondary);margin-top:4px">${
+       T('Busiest: '+top.key+' · '+top.n+(top.n===1?' order':' orders'), '最多：'+top.key+' · '+top.n+' 单')}</div>`);
+}
+/* THE FOOT OF THE RECORD — the desktop's More ▾ menu, opened out. These are the
+   rare and the deliberate: they take something away from a person, or they change
+   what the shop pays them. Down here rather than in the four-button row for the
+   reason that row's own note gives — one of them locks a customer out of their
+   account, and it should not sit a thumb's width from Message.
+
+   Referring and the ongoing share render only where they MEAN something: the
+   share switch only in 'selected' mode (in 'everyone' mode this customer already
+   earns it and a per-person switch would change nothing — the desktop's rule),
+   and Reissue only once there is a code to reissue. */
+function custFooterActions(d,c){
+  const a=(d&&d.affiliate)||{};
+  const rows=[];
+  if(mCan('customers:edit')){
+    if(a.referral_code) rows.push(['custRefReissue','reissue',T('Reissue referral code','重发邀请码'),false]);
+    if(a.lifetime_mode==='selected') rows.push(['custRefShare','refshare',
+      a.lifetime_eligible?T('Stop the ongoing share','停止复购分成'):T('Let them earn the ongoing share','允许获得复购分成'),false]);
+    rows.push(['custRefBlock','refblock',
+      a.affiliate_blocked?T('Let them refer friends again','恢复推荐资格'):T('Stop them referring friends','停止推荐资格'),!a.affiliate_blocked]);
+  }
+  if(mCan('customers:block')){
+    const n=Number((d&&d.stats&&d.stats.active_sessions)||0);
+    rows.push(['forceLogout','logout',
+      T('Sign out all devices'+(n?' ('+n+')':''), '退出所有设备'+(n?'（'+n+'）':'')),false]);
+    rows.push(['toggleBlock','block',
+      c.is_blocked?T('Unblock this customer','解除封禁'):T('Block this customer','封禁该顾客'),!c.is_blocked]);
+  }
+  if(!rows.length) return '';
+  return `<div style="margin-top:24px;padding-top:8px;border-top:1px solid var(--border-default)">
+    ${rows.map(([cmd,busy,label,danger])=>`<button style="display:block;width:100%;text-align:center;font-size:13.5px;font-weight:500;color:${danger?'var(--brick-ink)':'var(--text-primary)'};background:transparent;border:none;cursor:pointer;font-family:inherit;padding:11px 12px"
+      ${state.custBusy?'disabled':''} onclick="APP.cmd('${cmd}')">${state.custBusy===busy?T('Saving…','保存中…'):label}</button>`).join('')}
+  </div>`;
 }
 function sheetCustomer(){
   const d=state.custDetail;
@@ -16319,16 +16840,15 @@ function sheetCustomer(){
       ${snap(T('Since','注册于'),since)}
     </div>
     <p style="margin:8px 0 0;font-size:13px;color:var(--text-secondary)">${T('Ordered is the goods total before discounts — the same measure the list column shows.','消费为折扣前的商品金额 — 与列表口径一致。')}</p>
+    ${custKnow(c)}
     ${custRecentOrders(d)}
-    ${(d.addresses||[]).length?`<div style="margin-top:16px">
-      <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Addresses','地址')}</div>
-      <div class="list">${d.addresses.slice(0,3).map((a,i)=>`${i?'<div class="sep"></div>':''}
-        <div style="padding:12px 16px;font-size:15px">${[a.city,a.district,a.detail].filter(Boolean).join(' · ')||'—'}</div>`).join('')}</div></div>`:''}
+    ${custAddresses(d)}
     ${custTopItems(d)}
     ${custPointsLedger(d)}
     ${custTopups(d)}
     ${custAffiliate(d)}
     ${custFacts(d,c,st)}
+    ${custActivity(d)}
     <div style="margin-top:16px;font-size:13px;color:var(--text-secondary)">${
       d.diagnostics && d.diagnostics.unavailable ? T('Diagnostics could not be read.','诊断数据读取失败。')
       : d.diagnostics && d.diagnostics.error_count_7d ? T(d.diagnostics.error_count_7d+' app errors in 7 days', '近 7 天 '+d.diagnostics.error_count_7d+' 次报错')
@@ -16373,28 +16893,177 @@ function sheetCustomer(){
             and blocking moved to the bottom of the sheet, away from the
             routine ones: it is the only thing here that takes something
             away from a person. */''}
-      ${d?`<div style="display:flex;align-items:stretch;gap:8px;margin-top:16px">
-        ${[['adjustPoints','coins',T('Points','积分'),'points'],
-           ['adjustWallet','wallet',T('Wallet','钱包'),'wallet'],
-           ['messageCustomer','message-square-text',T('Message','发消息'),'message'],
-           ['editCustomer','pencil',T('Edit','编辑'),'edit']]
-          .map(([cmd,icon,label,busy])=>`<button class="btn2" style="flex:1;min-width:0;flex-direction:column;gap:4px;padding:9px 4px;height:auto"
+      ${/* AND EACH OF THE FOUR IS NOW GATED ON THE CAPABILITY ITS OWN WRITE IS
+            GATED ON SERVER-SIDE — customers:adjust for the two that move money,
+            customers:edit for the other two (lib/cap-routes.js). All four were
+            offered to every role, and a customer-service or warehouse account
+            holding customers:view alone got the whole row. That is worse here
+            than a dead button: apiWrite treats a 403 as a lost session and sends
+            the operator to the login page, so tapping Points on a record you may
+            read but not adjust logged you out of the app. Absent, never
+            disabled — §112's rule, and the four buttons re-flow to fill the row
+            at whatever number survives. */''}
+      ${d?(()=>{
+        const acts=[['adjustPoints','coins',T('Points','积分'),'points','customers:adjust'],
+           ['adjustWallet','wallet',T('Wallet','钱包'),'wallet','customers:adjust'],
+           ['messageCustomer','message-square-text',T('Message','发消息'),'message','customers:edit'],
+           ['editCustomer','pencil',T('Edit','编辑'),'edit','customers:edit']].filter(a=>mCan(a[4]));
+        if(!acts.length) return '';
+        return `<div style="display:flex;align-items:stretch;gap:8px;margin-top:16px">
+        ${acts.map(([cmd,icon,label,busy])=>`<button class="btn2" style="flex:1;min-width:0;flex-direction:column;gap:4px;padding:9px 4px;height:auto"
             ${state.custBusy?'disabled':''} onclick="APP.cmd('${cmd}')">${ic(icon,19)}
             <span style="font-size:12px;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${state.custBusy===busy?T('Saving…','保存中…'):label}</span></button>`).join('')}
-      </div>`:''}
+      </div>`;})():''}
       </div>
       <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 24px)">
         ${state.custErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint);margin-bottom:16px">
           <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
           <span style="font-size:14px;color:var(--brick-ink)">${state.custErr}</span></div>`:''}
         ${body}
-        ${d?`<div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-default);display:flex;justify-content:center">
-          <button style="font-size:13.5px;font-weight:500;color:${c.is_blocked?'var(--text-primary)':'var(--brick-ink)'};background:transparent;border:none;cursor:pointer;font-family:inherit;padding:8px 12px"
-            ${state.custBusy?'disabled':''} onclick="APP.cmd('toggleBlock')">${state.custBusy==='block'?T('Saving…','保存中…')
-              :(c.is_blocked?T('Unblock this customer','解除封禁'):T('Block this customer','封禁该顾客'))}</button></div>`:''}</div>
+        ${d?custFooterActions(d,c):''}</div>
     </div>`;
 }
 
+/* ── The address editor ─────────────────────────────────────────────────────
+   Addresses were read-only on the phone and decided desktop on 2026-08-22. The
+   reason they are not is the same one the desktop's own modal exists for: a
+   customer rings up to say the flat number is wrong, or that they have moved,
+   and the person who takes that call is standing in the shop. It writes the same
+   four endpoints the desktop does and asks for the same nine fields.
+
+   It is a SHEET, not a pushed screen, because a pushed screen renders under the
+   record sheet that opened it — the desktop's own modal opens over its drawer
+   for the same reason. z 51/52: above the record (48) and above the ask sheet
+   (50), which is where the delete confirm goes and which is never open at the
+   same time as this.
+
+   THE PROVINCE IS READ OFF THE PICKED CITY, never typed. Same rule and the same
+   catalogue as the new-order wizard, whose cache this shares: two screens asking
+   /china-regions for one list would be one list too many, and a province an
+   operator typed is a province they then have to be right about. */
+function caddrBlank(cid, a){
+  a=a||{};
+  return {cid:cid, id:a.id!=null?a.id:null,
+    recipient_name:a.recipient_name||'', phone:a.phone||'',
+    province:a.province||'', city:a.city||'', district:a.district||'',
+    address:a.address||'', detail:a.detail||'', postal_code:a.postal_code||'',
+    is_default:!!a.is_default,
+    cityQ:'', districts:null, err:'', busy:false};
+}
+/* The shared catalogue. `state.onw.cities` is the wizard's cache and this is the
+   second reader of it — held there rather than copied so a shop that opens both
+   screens fetches the list once. */
+function caddrCities(){ return (state.onw&&state.onw.cities)||null; }
+function caddrLoadCities(){
+  const o=state.onw; if(!o||o.citiesTried) return;
+  o.citiesTried=true;
+  api('/china-regions').then(d=>{ o.cities=(d&&d.cities)||[]; if(state.caddr) render(); })
+    .catch(e=>{ if(String(e.message)==='auth') return; o.cities=[]; if(state.caddr) render(); });
+}
+function caddrLoadDistricts(){
+  const s=state.caddr; if(!s) return;
+  const city=s.city;
+  if(!city){ s.districts=[]; return; }
+  s.districts=null;
+  api('/api/retail/districts?city='+encodeURIComponent(city)).then(rows=>{
+    const t=state.caddr; if(!t||t.city!==city) return;
+    t.districts=Array.isArray(rows)?rows:[]; render();
+  }).catch(e=>{
+    const t=state.caddr;
+    if(String(e.message)==='auth'||!t||t.city!==city) return;
+    /* Offline or a 500 → city-wide, the same answer a city with no districts of
+       its own gives. The address still saves: province, city and district are
+       all optional to the endpoint; recipient, phone and street are not. */
+    t.districts=[]; render();
+  });
+}
+function caddrCityMatches(){
+  const s=state.caddr, list=caddrCities();
+  const q=String((s&&s.cityQ)||'').trim().toLowerCase();
+  if(!q||!list) return [];
+  return list.filter(c=>String(c.name_cn||'').toLowerCase().indexOf(q)>=0
+                      ||String(c.name_en||'').toLowerCase().indexOf(q)>=0).slice(0,8);
+}
+function caddrField(label,inner,hint){
+  return `<div style="display:flex;flex-direction:column;gap:6px">
+    <span class="eyebrow">${label}</span>${inner}
+    ${hint?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${hint}</span>`:''}</div>`;
+}
+function caddrCityPicks(){
+  const s=state.caddr;
+  if(!String(s.cityQ||'').trim()) return '';
+  if(caddrCities()===null) return `<div style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const rows=caddrCityMatches();
+  if(!rows.length) return `<div style="font-size:13px;color:var(--text-secondary)">${T('No cities match','没有匹配的城市')}</div>`;
+  /* THE TAP CARRIES THE INDEX, NEVER THE NAME — the wizard's rule, for the same
+     reason: a catalogue of place names is not this file's to make safe. */
+  return `<div class="list">${rows.map((c,i)=>`${i?'<div class="sep"></div>':''}
+    <button class="row" onclick="APP.cmd('caddrPickCity',${i})" style="min-height:48px">
+      <span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(c.name_cn||'')}${c.name_en?' · '+escAttr(c.name_en):''}</span>
+    </button>`).join('')}</div>`;
+}
+function caddrDistricts(){
+  const s=state.caddr;
+  if(s.districts===null) return `<div style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!s.districts.length) return `<div style="font-size:13px;color:var(--text-secondary)">${T('City-wide · no district','全城 · 不分区')}</div>`;
+  const cur=s.district?String(s.districts.findIndex(d=>(d.name_cn||d.name_en)===s.district)):'';
+  const items=[{k:'',en:'City-wide · no district',zh:'全城 · 不分区'}]
+    .concat(s.districts.map((d,i)=>({k:i,en:d.name_cn||d.name_en||'',zh:d.name_cn||d.name_en||''})));
+  return `<div style="display:flex;flex-wrap:wrap;gap:8px">${items.map(c=>
+    `<button class="chip ${String(c.k)===String(cur)?'on':''}" onclick="APP.cmd('caddrDistrict','${c.k}')"><span>${T(c.en,c.zh)}</span></button>`).join('')}</div>`;
+}
+function sheetCustAddr(){
+  const s=state.caddr; if(!s) return '';
+  const txt=(id,label,val,extra,hint)=>caddrField(label,
+    `<input id="mCaddr_${id}" value="${escAttr(val||'')}" ${extra||''} oninput="APP.cmd('caddrSet','${id}',this.value)">`,hint);
+  return `<div class="scrim" style="z-index:51" onclick="APP.scrimClose('caddrClose')"></div>
+    <div class="sheet" style="top:46px;overflow:hidden;z-index:52">
+      <div style="flex:none;padding:8px 16px 14px;border-bottom:1px solid var(--border-default)">
+        <div class="grabber"></div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="flex:1;font-size:18px;font-weight:500">${s.id==null?T('New address','新增地址'):T('Edit address','编辑地址')}</span>
+          <button class="iconbtn" onclick="APP.cmd('caddrClose')" aria-label="${T('Close','关闭')}">${ic('x',20,2)}</button>
+        </div>
+      </div>
+      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px">
+        ${s.err?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+          <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+          <span style="font-size:14px;color:var(--brick-ink)">${s.err}</span></div>`:''}
+        ${txt('recipient_name',T('Recipient','收件人'),s.recipient_name,'maxlength="60"')}
+        ${txt('phone',T('Phone','电话'),s.phone,'inputmode="tel" maxlength="20"')}
+        ${caddrField(T('City','城市'), s.city
+          ? `<div style="display:flex;align-items:center;gap:10px">
+               <span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr([s.province,s.city].filter(Boolean).join(' · '))}</span>
+               <button class="btn2" style="width:auto;padding:8px 14px;flex:none" onclick="APP.cmd('caddrUnpickCity')">${T('Change','更改')}</button></div>`
+          /* enterkeyhint="search", declared, like every other search box in this
+             file. §113's pass writes "done" onto any input that does not say
+             what its key is, which is the right default and the wrong one here:
+             this field's Enter narrows a list rather than finishing a form, and
+             the list is the next thing the thumb goes to. */
+          : `<input id="mCaddrCityQ" inputmode="search" enterkeyhint="search" value="${escAttr(s.cityQ)}" placeholder="${T('Search a city','搜索城市')}"
+               oninput="APP.cmd('caddrCityQ',this.value)">
+             <div id="mCaddrCityBox">${caddrCityPicks()}</div>`)}
+        ${s.city?caddrField(T('District','区'),caddrDistricts()):''}
+        ${txt('address',T('Street address','街道地址'),s.address,'maxlength="200"')}
+        ${txt('detail',T('Building, floor, room','楼栋 / 楼层 / 房号'),s.detail,'maxlength="200"',
+              T('Optional — the part a courier reads last.','选填 — 快递员最后看的部分。'))}
+        ${txt('postal_code',T('Postal code','邮编'),s.postal_code,'inputmode="numeric" maxlength="16"')}
+        ${/* One switch, not a chip pair: it is on or it is not, and turning it on
+             is what takes it off whichever address holds it now — which the line
+             underneath says, because the server does it silently. */''}
+        <button onclick="APP.cmd('caddrDefault')" style="display:flex;align-items:center;gap:12px;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
+          <span style="flex:none;width:22px;height:22px;border-radius:6px;border:1.75px solid ${s.is_default?'var(--text-primary)':'var(--border-strong)'};background:${s.is_default?'var(--text-primary)':'transparent'};color:var(--surface-base);display:flex;align-items:center;justify-content:center">${s.is_default?ic('check',15,2.5):''}</span>
+          <span style="flex:1;min-width:0">
+            <span style="display:block;font-size:15px">${T('Use this one by default','设为默认地址')}</span>
+            <span style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:2px">${T('Whichever address is the default now stops being it.','当前的默认地址将被替换。')}</span></span>
+        </button>
+      </div>
+      <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);display:flex;gap:8px">
+        <button class="btn2" style="flex:1" ${s.busy?'disabled':''} onclick="APP.cmd('caddrClose')">${T('Cancel','取消')}</button>
+        <button class="cta" style="flex:1" ${s.busy?'disabled':''} onclick="APP.cmd('caddrSave')">${s.busy?T('Saving…','保存中…'):T('Save','保存')}</button>
+      </div>
+    </div>`;
+}
 /* The catalogue view used to describe the fifty rows boot happened to fetch:
    the chips under it were wired to 'noop' and filtered nothing, and every count
    beside them was either the mock's or a fraction of the shelf. The desktop
@@ -17451,6 +18120,7 @@ function render(){
   if(state.overflow) html += sheetOverflow();
   if(state.ask) html += sheetAsk();
   if(state.custId) html += sheetCustomer();
+  if(state.caddr) html += sheetCustAddr();
   if(state.detailId) html += sheetOrderDetail();
   if(state.detailActions) html += sheetActions();
   if(state.productSku) html += sheetProduct();
@@ -17825,6 +18495,9 @@ function layers(){
     if(state.detailId) L.push(dropOrder);
     if(state.custId) L.push(dropCust);
   }
+  /* After the record, so Back closes it FIRST: the address sheet sits over the
+     record it was opened from, exactly as its z-index says. */
+  if(state.caddr) L.push(()=>{ state.caddr=null; });
   if(state.productSku) L.push(()=>{ state.productSku=null; });
   if(state.poId!=null) L.push(()=>{ state.poId=null; });
   /* AN OPEN KITCHEN JOB (§115). It is a STATE of the queue screen rather than a
@@ -18318,6 +18991,13 @@ const CUST_SORTS=[
   {key:'name',en:'Name',zh:'按姓名'},
 ];
 const custSortLabel=()=>{ const c=CUST_SORTS.find(x=>x.key===(state.custSort||'last_seen'))||CUST_SORTS[0]; return T(c.en,c.zh); };
+/* Which way the list is running right now. The server's own defaults — every
+   ordering is DESC except Name — so with no explicit `dir` this says what the
+   rows on screen are actually doing rather than assuming one direction. */
+function custDirDesc(){
+  if(state.custDir) return state.custDir==='desc';
+  return (state.custSort||'last_seen')!=='name';
+}
 /* The tier chips used to filter the fifty rows the phone happened to hold, so
    on a roster of 1,200 "Tree" showed whichever Tree customers were in the first
    page and the rest were invisible. Every filter is the server's now — tier,
@@ -18329,12 +19009,21 @@ function custQuery(offset){
   qs.set('pageSize',String(CUST_PAGE));
   qs.set('page',String(Math.floor(offset/CUST_PAGE)+1));
   qs.set('withSegments','1');
-  const seg=state.custSeg||'all'; if(seg!=='all') qs.set('segment',seg);
-  const t=state.custTier||'all'; if(t!=='all') qs.set('tier',t);
-  const ch=state.custChan||'all'; if(ch!=='all') qs.set('channel',ch);
-  if(state.custQ) qs.set('q',state.custQ);
+  custFilterParams(qs);
   qs.set('sort',state.custSort||'last_seen');
+  if(state.custDir) qs.set('dir',state.custDir);
   return qs.toString();
+}
+/* The five that narrow WHICH customers, shared by the roster read and the CSV
+   export so the file can never be a different set from the screen that asked
+   for it — the desktop's own rule, where cuExportCsv rebuilds the same five. */
+function custFilterParams(qs){
+  const seg=state.custSeg||'all'; if(seg!=='all') qs.set('segment',seg);
+  const t=state.custTier||[];  if(t.length)  qs.set('tier',t.join(','));
+  const ch=state.custChan||[]; if(ch.length) qs.set('channel',ch.join(','));
+  const tg=state.custTags||[]; if(tg.length) qs.set('tags',tg.join(','));
+  if(state.custQ) qs.set('q',state.custQ);
+  return qs;
 }
 async function loadCustomers(more){
   const offset=more?((state.customers||[]).length):0;
@@ -18349,6 +19038,12 @@ async function loadCustomers(more){
     state.custTotal=total;
     state.custMore=(total!=null)?state.customers.length<total:rows.length===CUST_PAGE;
     if(j&&j.segments) state.custMeta=Object.assign({},state.custMeta||{},j.segments);
+    /* The tag row's vocabulary, and it is only ever replaced by a FULL answer.
+       A filtered read returns the whole vocabulary too (the server builds it off
+       every row, not the page), so this is safe on Load more as well — but the
+       guard costs nothing and stops a future narrowing of that query from
+       quietly deleting the chip an operator is standing on. */
+    if(j&&Array.isArray(j.tag_vocabulary)) state.custTagVocab=j.tag_vocabulary;
     state.custLoaded=true;
   }catch(e){
     if(String(e.message)==='auth') return;
