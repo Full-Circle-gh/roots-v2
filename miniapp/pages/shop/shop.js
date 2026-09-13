@@ -66,7 +66,15 @@ function _stockState(p, onLocalRun) {
      the band says anything — see preText where the rows are built.
      The server decides "today" (§82); a handset clock does not. */
   const today = preorder && !!onLocalRun && !!p.local_fresh_today;
-  return { out, preorder, today, soldOut: out && !preorder, stock };
+  /* §108 — WHICH WORD this row gets, decided once here so the card band, the
+     size sheet and the add toast cannot answer it differently (they did: the
+     toast said "pre-order" to a Guangzhou shopper whose card said NEXT BATCH).
+       ''         → says nothing: not reservable, or today's batch on the run
+       'batch'    → a fresh meal not yet made → NEXT BATCH · 下批现做
+       'preorder' → anything else reservable → PRE-ORDER · 可预订; a grocery row
+                    names no batch, none being cooked for it. */
+  const kind = (!preorder || today) ? '' : (p.is_batch_made ? 'batch' : 'preorder');
+  return { out, preorder, today, kind, soldOut: out && !preorder, stock };
 }
 
 const DIETARY_FILTERS = [
@@ -1079,22 +1087,23 @@ Page({
     // Same-city shoppers never see the + on a sold-out reservable row (the card
     // renders the dead SOLD OUT pill instead), but a stale page can still fire
     // this — re-check rather than trusting the tap.
-    const { preorder, today, soldOut } = _stockState(raw, !!this._onLocalRun);
+    const { kind, soldOut } = _stockState(raw, !!this._onLocalRun);
     if (soldOut) {
       wx.showToast({ title: this.data.lang === 'cn' ? '已售罄' : 'Sold out', icon: 'none' });
       return;
     }
-    this._addRawToCart(raw, id, preorder && !today);
+    this._addRawToCart(raw, id, kind);
   },
 
   // Add one product row to the cart + run the fly-to-cart animation. originId
   // is the id of the card whose + button anchors the animation (the
   // representative card, even when the chosen size is a different sibling).
-  // sayPreorder: the row is out of stock and reserved, so a quick-add never
-  // silently looks like a normal in-stock add. NOT simply `preorder` — a
-  // batch made TODAY is reservable and is not a reservation (§80), so the
-  // callers pass `preorder && !today` and it is added like any other line.
-  _addRawToCart(raw, originId, sayPreorder) {
+  // kind: `_stockState`'s own verdict ('' | 'batch' | 'preorder'), so a
+  // quick-add never silently looks like a normal in-stock add AND never uses a
+  // different word from the band the customer just tapped (§108). '' covers
+  // both an ordinary in-stock add and a batch made TODAY on the run, which is
+  // reservable but is not a reservation (§80).
+  _addRawToCart(raw, originId, kind) {
     cart.add({
       id: raw.id,
       name_en: raw.name_en,
@@ -1111,9 +1120,14 @@ Page({
       bundle_worth: raw.bundle_worth,   // a bundle card: its "separately" worth
     }, 1, []);
 
-    if (sayPreorder) {
+    // §108 — the toast says what the card said. It used to say "pre-order" for
+    // every reservable row, so a Guangzhou shopper whose band read NEXT BATCH
+    // was told something else the moment they tapped it.
+    if (kind) {
       wx.showToast({
-        title: this.data.lang === 'cn' ? '已预订，加入购物车' : 'Added — pre-order',
+        title: kind === 'batch'
+          ? (this.data.lang === 'cn' ? '已加入购物车，下批现做' : 'Added — next batch')
+          : (this.data.lang === 'cn' ? '已预订，加入购物车' : 'Added — pre-order'),
         icon: 'none',
         duration: 1500,
       });
@@ -1127,7 +1141,7 @@ Page({
       .exec((res) => {
         const rect = res && res[0];
         if (!rect) {
-          if (!sayPreorder) wx.showToast({ title: this.data.lang === 'cn' ? '已加入' : 'Added', icon: 'success', duration: 800 });
+          if (!kind) wx.showToast({ title: this.data.lang === 'cn' ? '已加入' : 'Added', icon: 'success', duration: 800 });
           return;
         }
         const startX = rect.left + (rect.width / 2) - 20;
@@ -1155,7 +1169,7 @@ Page({
       // only a hard-out size shows the dead SOLD OUT pill. Mirrors the PDP's
       // own size picker. For a same-city address a sold-out size is hard-out
       // unless the kitchen has dated the next batch for it.
-      const { out, preorder, today, soldOut, stock } = _stockState(m, onLocalRun);
+      const { out, preorder, kind, soldOut, stock } = _stockState(m, onLocalRun);
       /* §108, per SIZE — this sheet drew the page-level `preLabel` flat, so
          every reservable size read PRE-ORDER whatever the shopper's address
          was. One string cannot answer three questions:
@@ -1173,9 +1187,9 @@ Page({
          is a real answer there, not a missing one. Do not restore an
          "|| preLabel" fallback: it reads '' as absent and prints a word the
          silent case exists to withhold. */
-      const preText = (!preorder || today) ? ''
-        : m.is_batch_made ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
-                          : (L === 'cn' ? '可预订' : 'PRE-ORDER');
+      const preText = kind === 'batch' ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
+        : kind === 'preorder' ? (L === 'cn' ? '可预订' : 'PRE-ORDER')
+        : '';
       return {
         id: m.id,
         label: lang.pickVariantLabel(m.variant_label, m.variant_label_cn, L) || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
@@ -1216,14 +1230,14 @@ Page({
     if (!m) return;
     // A pre-orderable out-of-stock size stays orderable for an out-of-city
     // shopper; a same-city one gets the dead row (_stockState folds that in).
-    const { preorder, today, soldOut } = _stockState(m, !!this._onLocalRun);
+    const { kind, soldOut } = _stockState(m, !!this._onLocalRun);
     if (soldOut) {
       wx.showToast({ title: this.data.lang === 'cn' ? (m.ship_from_supplier ? '暂时缺货' : '已售罄') : (m.ship_from_supplier ? 'Unavailable' : 'Sold out'), icon: 'none' });
       return;
     }
     this.setData({ vpShow: false });
     // Fly from the representative card's + button (still in the DOM).
-    this._addRawToCart(m, this._vpRepId, preorder && !today);
+    this._addRawToCart(m, this._vpRepId, kind);
   },
 
   _launchFly(startX, startY, imgUrl) {

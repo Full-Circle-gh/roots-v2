@@ -17,6 +17,41 @@ function absUrl(u) {
   return u;
 }
 
+// Out of stock, and left orderable by the operator (`oos_preorder`). For a
+// shopper on the same-day local run that only holds when the kitchen has dated
+// the next batch — otherwise the run is served off a shelf with nothing on it.
+function _reservable(m, onLocalRun) {
+  return !!(m && m.oos_preorder) && (!onLocalRun || !!(m && m.local_fresh_date));
+}
+
+// §108 — WHICH WORD such a row gets, and the ONE place this page decides it.
+// The hero badge, the buy button, the size sheet and the add toast each used to
+// answer it separately and had drifted apart in three different ways; they all
+// call this now.
+//   ''         → say nothing: not reservable, or a batch landing TODAY for a
+//                shopper on the run, who waits for nothing worth naming (§80).
+//                Silence is the run's alone — an out-of-city shopper on that
+//                same morning is still waiting on a parcel.
+//   'batch'    → a fresh meal the kitchen has yet to make → NEXT BATCH · 下批现做
+//   'preorder' → anything else reservable → PRE-ORDER · 可预订. A grocery row
+//                names no batch, none being cooked for it.
+// `local_fresh_today` is the SERVER's answer (§82); a handset's clock is not
+// entitled to decide whether a date is today.
+//
+// THE STOCK TEST IS INSIDE, deliberately. `oos_preorder` is a POLICY flag the
+// operator sets, true on a batch-made product whether or not any is left, so a
+// caller that forgot to check the shelf first would have been handed 'batch'
+// for an item sitting in stock — and the add toast, which has no shelf test of
+// its own, would have announced a wait on a meal we were about to hand over.
+function _preKind(m, onLocalRun) {
+  if (!m || m.ship_from_supplier) return '';
+  const stock = m.stock == null ? null : Number(m.stock);
+  if (!(stock != null && stock <= 0)) return '';
+  if (!_reservable(m, onLocalRun)) return '';
+  if (onLocalRun && m.local_fresh_today) return '';
+  return m.is_batch_made ? 'batch' : 'preorder';
+}
+
 // Make every <img> in an office-authored rich description safe for WeChat
 // <rich-text>. Inside <rich-text> external CSS is ignored, so each image is
 // sized purely by its own inline style/attributes: a tall "scroll strip" or
@@ -175,6 +210,7 @@ Page({
     addBtnLabel: 'ADD TO BASKET',
     soldOut: false,
     preorder: false,       // 0-stock but out-of-city pre-order allowed
+    preKind: '',           // '' | 'batch' | 'preorder' — see _preKind
     stockTag: '',          // 'Only 3 left' / 'Sold out' / 'Pre-order' / ''
     stockTagKind: '',      // 'low' | 'out' | 'pre' | ''
     reviewAvg: 0,          // avg rating
@@ -441,8 +477,7 @@ Page({
     // so a sold-out row reads SOLD OUT there, never PRE-ORDER.
     // A dated fresh meal stays reservable on the local run — see _stockState
     // in pages/shop/shop.js for why the run stopped being a reason to refuse.
-    const reservable = m => !!(m && m.oos_preorder)
-      && (!this._onLocalRun || !!(m && m.local_fresh_date));
+    const reservable = m => _reservable(m, this._onLocalRun);
     /* §108 — ONE WORD FOR THE SAME WAIT, WHEREVER THE SHOPPER IS.
        §80 split this badge by address: NEXT BATCH · 下批现做 for a Guangzhou
        shopper waiting on a later batch, PRE-ORDER · 可预订 for one we ship to.
@@ -467,13 +502,9 @@ Page({
        on that same morning is still waiting on a parcel, which is why the run is
        half of this test and `local_fresh_today` alone is not enough.
 
-       `local_fresh_today` IS THE SERVER'S ANSWER AND NOT A COMPARISON MADE
-       HERE (§82). Whether a date is "today" is a business decision about a
-       cutoff, and a handset's clock — wrong, or simply in another zone — is
-       not entitled to make it. */
-    const silentToday = m => !!this._onLocalRun && !!(m && m.local_fresh_today);
-    const preKindFor = m => (!reservable(m) || silentToday(m)) ? ''
-      : (m && m.is_batch_made) ? 'batch' : 'preorder';
+       The rule itself lives in `_preKind` at the top of this file — one copy,
+       because the badge, the button, the size sheet and the add toast all ask
+       it and had each answered differently. */
     let soldOut = false, preorder = false, preKind = '', stockTag = '', stockTagKind = '';
     if (p.ship_from_supplier) {
       // Supplier-direct: no stock of ours. Always available unless the operator
@@ -496,7 +527,7 @@ Page({
           // which word — see the two states above. `preorder` stays the
           // ship-vs-run question because the add toast asks that, not this one.
           preorder = !this._onLocalRun;
-          preKind = preKindFor(p);
+          preKind = _preKind(p, this._onLocalRun);
           if (preKind === 'batch') {
             stockTag = L === 'cn' ? '下批现做' : 'NEXT BATCH';
             stockTagKind = 'pre';
@@ -763,6 +794,7 @@ Page({
               : (L === 'cn' ? '加入购物车' : 'ADD TO BASKET'),
       soldOut,
       preorder,
+      preKind,
       stockTag,
       stockTagKind,
       reviewAvg: avg,
@@ -887,7 +919,7 @@ Page({
     // add-ons) → add. Skip straight to whichever applies; add directly if none.
     if (this.data.optionsSingle.length) { this._openOptionPicker(); return; }
     if (this.data.optionsExtra.length)  { this._openExtrasPicker(); return; }
-    if (this._doAddWithOptions()) this._finishAdd(this.data.preorder);
+    if (this._doAddWithOptions()) this._finishAdd(this.data.preKind);
   },
 
   // Chosen choice-ids for an option group (scalar→[id], array as-is).
@@ -964,7 +996,7 @@ Page({
       }
     }
     if (this.data.optionsExtra.length) { this.setData({ opShow: false }); this._openExtrasPicker(); return; }
-    if (this._doAddWithOptions()) { this.setData({ opShow: false }); this._finishAdd(this.data.preorder); }
+    if (this._doAddWithOptions()) { this.setData({ opShow: false }); this._finishAdd(this.data.preKind); }
   },
 
   // ── Sheet 2: optional paid extras (pickles, sauce…) ──────────────────
@@ -974,17 +1006,26 @@ Page({
   },
   closeExtrasPicker() { this.setData({ exShow: false }); },
   confirmExtras() {
-    if (this._doAddWithOptions()) { this.setData({ exShow: false }); this._finishAdd(this.data.preorder); }
+    if (this._doAddWithOptions()) { this.setData({ exShow: false }); this._finishAdd(this.data.preKind); }
   },
 
   // Shared post-add: confirm toast + pop back to where they came from.
-  _finishAdd(preorder) {
+  // §108 — the toast says what the button said. It took a BOOLEAN before, and
+  // the two callers filled it differently: the buy button passed
+  // `!onLocalRun`, the size sheet passed plain reservability, so one Guangzhou
+  // shopper adding one meal two ways got two different toasts, and neither
+  // matched a button reading NEXT BATCH. It takes the page's own `preKind` now.
+  _finishAdd(kind) {
+    const cn = this.data.lang === 'cn';
+    const title = kind === 'batch'
+      ? (cn ? '已加入购物车，下批现做' : 'Added — next batch')
+      : kind === 'preorder'
+        ? (cn ? '已预订，加入购物车' : 'Added — pre-order')
+        : (cn ? '已加入购物车' : 'Added to cart');
     wx.showToast({
-      title: preorder
-        ? (this.data.lang === 'cn' ? '已预订，加入购物车' : 'Added — pre-order')
-        : (this.data.lang === 'cn' ? '已加入购物车' : 'Added to cart'),
-      icon: preorder ? 'none' : 'success',
-      duration: preorder ? 1500 : 1200,
+      title,
+      icon: kind ? 'none' : 'success',
+      duration: kind ? 1500 : 1200,
     });
     setTimeout(() => wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/home/home' }) }), 500);
   },
@@ -1056,11 +1097,11 @@ Page({
          badge at all — orderable now, and a picker row shouting anything over a
          lunch the kitchen serves at 11 is the §80 defect. The row keeps its own
          word because one shared `preLabel` cannot say two things at once. */
-      const rowToday = this._onLocalRun && orderable && !!m.local_fresh_today;
-      const preorder = orderable && !rowToday;
-      const preTxt = !preorder ? ''
-        : (m.is_batch_made ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
-                           : (L === 'cn' ? '可预订' : 'PRE-ORDER'));
+      const rowKind = _preKind(m, this._onLocalRun);
+      const preorder = !!rowKind;
+      const preTxt = rowKind === 'batch' ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
+        : rowKind === 'preorder' ? (L === 'cn' ? '可预订' : 'PRE-ORDER')
+        : '';
       const soldOut = out && !orderable;
       return {
         id: m.id,
@@ -1115,8 +1156,7 @@ Page({
     // A pre-orderable out-of-stock size stays orderable for an out-of-city
     // shopper; a same-city one can't reserve it (the checkout blocks same-day
     // Guangzhou on stock), so the row is dead for them.
-    const vPreorder = out && !m.ship_from_supplier && !!m.oos_preorder
-      && (!this._onLocalRun || !!m.local_fresh_date);
+    const vPreorder = out && !m.ship_from_supplier && _reservable(m, this._onLocalRun);
     if (out && !vPreorder) {
       wx.showToast({ title: this.data.lang === 'cn' ? (m.ship_from_supplier ? '暂时缺货' : '已售罄') : (m.ship_from_supplier ? 'Unavailable' : 'Sold out'), icon: 'none' });
       return;
@@ -1135,6 +1175,9 @@ Page({
       ship_from_supplier: m.ship_from_supplier,
     }, this.data.qty, []);
     this.setData({ vpShow: false });
-    this._finishAdd(vPreorder);
+    // §108 — this size's OWN word, not the page's: a shopper can open the sheet
+    // from a hero that is silent and pick a size that is not. `_preKind` tests
+    // the shelf itself, so an in-stock size correctly says nothing.
+    this._finishAdd(_preKind(m, this._onLocalRun));
   },
 });
