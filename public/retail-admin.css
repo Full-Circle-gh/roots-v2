@@ -15039,6 +15039,13 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 #tab-finance .fin-cat-use {
   min-width: 84px; font: 400 13px/1.6 var(--f-sans); color: var(--td-text2);
 }
+/* §113 — a claim whose goods are still coming. The marker before approval and
+   the way into the order after it occupy the same slot on the row, because they
+   are the same fact at two moments. */
+#tab-finance .fin-apr-comingwrap { display: block; margin-top: 4px; }
+#tab-finance .fin-apr-coming { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); }
+#tab-finance .fin-apr-po { font: 400 13px/1.6 var(--f-sans); color: var(--td-dusk-ink, var(--td-text2)); text-decoration: none; }
+#tab-finance .fin-apr-po:hover { text-decoration: underline; }
 #tab-finance .fin-cat-del {
   border: 0; background: none; cursor: pointer; padding: 0 4px;
   font: 400 18px/1 var(--f-sans); color: var(--td-text2);

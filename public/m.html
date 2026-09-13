@@ -11293,6 +11293,23 @@ function screenExpense(){
         <button class="chip ${x.paid==='employee'?'on':''}" onclick="APP.cmd('expPaid','employee')">${T('My own money','个人支付')}</button>
         <button class="chip ${x.paid==='company'?'on':''}" onclick="APP.cmd('expPaid','company')">${T('Company','公司')}</button>
       </div>
+      ${/* §113 — HAS IT ARRIVED? A SINGLE OPT-IN, NOT A PAIR OF CHIPS.
+           The overwhelming case is goods already in hand, and unticked is exactly
+           what this form has always meant — so an opt-in cannot make an existing
+           claim say something new, which a pair of chips with a default would.
+
+           Ticking it makes the claim into an ORDER on approval: the shop can
+           then see it is coming, and whoever it arrives to ticks it in. That is
+           the whole of §113, and it is why the shop and the description stop
+           being optional below — goods turn up at a door, and a line on an order
+           with no name is a price with no subject. */''}
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="chip ${x.coming?'on':''}" style="align-self:flex-start"
+          onclick="APP.cmd('expComing')">${T('Not arrived yet','尚未到货')}</button>
+        ${x.coming?`<span style="font-size:13px;color:var(--text-secondary);line-height:1.55">${
+          T('It goes on a purchase order · the shop tracks it until it arrives',
+            '将记入采购单 · 到货前由门店跟进')}</span>`:''}
+      </div>
       ${/* WHY THE ANSWER MATTERS, said once, beside the control that decides it.
            It is the field that turns a cost into a debt, and nobody tapping it
            can be expected to know that from two words. */''}
@@ -11387,7 +11404,7 @@ reg('expAgain', ()=>{ const x=state.exp;
      is how the same taxi gets claimed twice. Who paid and which shop are facts
      about the person, and asking again for every claim in a row is friction for
      nothing. */
-  x.sent=null; x.amount=''; x.note=''; x.photo=null; x.err=''; x.cat='';
+  x.sent=null; x.amount=''; x.note=''; x.photo=null; x.err=''; x.cat=''; x.coming=false;
   x.mineTried=false; render(); });
 
 /* THE PHOTO IS DOWNSCALED ON THE PHONE, and this is the whole of why: a modern
@@ -11419,6 +11436,11 @@ reg('expPhoto', el=>{
   rd.readAsDataURL(f);
 });
 
+/* §113. Turning it OFF leaves the shop and the note exactly as they were — they
+   are ordinary optional fields again, not cleared, because somebody who ticked
+   this by mistake should not lose what they had already typed. */
+reg('expComing', ()=>{ const x=state.exp; x.coming=!x.coming; x.err=''; render(); });
+
 reg('expSend', ()=>{
   const x=state.exp;
   if(x.busy) return;
@@ -11428,10 +11450,19 @@ reg('expSend', ()=>{
      non-number is refused with the reason rather than stripped to the digits
      inside it: "3o" silently becoming 3 writes an amount nobody entered. */
   if(!(n>0)){ x.err=E('Enter an amount above zero.','请输入大于零的金额。'); render(); return; }
+  /* §113 — THE TWO THINGS AN ORDER CANNOT DO WITHOUT, refused here so the person
+     is told beside the control rather than after a round trip. The server refuses
+     both as well (lib/expense-claim.js) and that is the rule; this is the same
+     rule said sooner. Both sentences are the server's own, word for word. */
+  if(x.coming && !x.storeId){
+    x.err=E('Say where it is being delivered.','请选择收货门店。'); render(); return; }
+  if(x.coming && !String(x.note||'').trim()){
+    x.err=E('Give it a name first.','请先填写名称。'); render(); return; }
   x.busy=true; x.err=''; render();
   apiWrite('/staff-expenses',{
     date:expDate(), amount:n, category:x.cat||null, note:x.note||null,
     paid_by:x.paid, store_id:x.storeId||null, receipt_data:x.photo||null,
+    awaiting_delivery:!!x.coming,
   }).then(()=>{
     x.busy=false;
     x.sent={amount:n,cat:x.cat||''};
