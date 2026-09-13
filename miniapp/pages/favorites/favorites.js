@@ -143,11 +143,15 @@ Page({
       const preorder = out && !p.ship_from_supplier && !!p.oos_preorder
         && (!this._onLocalRun || !!p.local_fresh_date);
       const soldOut = out && !preorder;
-      /* §80 follow-up — the tile's OWN word, because one `copy.preorder` cannot
-         answer three questions:
-           made today, on the run → orderable, and SILENT
-           made later, on the run → NEXT BATCH · 下批现做
-           shipped                → PRE-ORDER · 可预订, unchanged
+      /* §108 — the tile's OWN word, because one `copy.preorder` cannot answer
+         three questions:
+           made today, on the run   → orderable, and SILENT
+           a fresh meal not yet made → NEXT BATCH · 下批现做, for EVERY shopper
+                                       (§108: same wait, same word, wherever
+                                       they are; only the date differs, and the
+                                       date lives in the checkout notice)
+           anything else reservable  → PRE-ORDER · 可预订, unchanged — a grocery
+                                       tile names no batch, none being cooked
          `preorder` STAYS TRUE in all three. It is what keeps the tile out of
          SOLD OUT one line up, and out of the literal ADD ALL below, so
          silencing the tag by turning it off would both mark the meal sold out
@@ -157,8 +161,8 @@ Page({
          never compares a date against the handset's clock. */
       const today = preorder && !!this._onLocalRun && !!p.local_fresh_today;
       const preText = (!preorder || today) ? ''
-        : this._onLocalRun ? copy.nextBatch
-                           : copy.preorder;
+        : p.is_batch_made ? copy.nextBatch
+                          : copy.preorder;
       const priceDrop = flash && reg > eff ? Math.round(reg - eff) : 0;
       const name = L === 'cn' ? (p.name_cn || p.name_en) : (p.name_en || p.name_cn);
       const cnSub = L === 'cn' ? (p.name_en || '') : (p.name_cn || '');
@@ -242,9 +246,12 @@ Page({
     const out = p.ship_from_supplier ? !!p.supplier_paused : (p.stock != null && Number(p.stock) <= 0);
     const preorder = out && !p.ship_from_supplier && !!p.oos_preorder
         && (!this._onLocalRun || !!p.local_fresh_date);
-    // …and whether that reservation is for a batch made TODAY, which is not a
-    // reservation at all (§80) — it is added like any other line.
-    const sayPreorder = preorder && !(this._onLocalRun && p.local_fresh_today);
+    // …and WHICH word the toast gets, on the same test the tile's own tag uses
+    // (§108), so tapping a tile that reads NEXT BATCH cannot answer "pre-order".
+    // '' covers a batch made TODAY on the run, which is not a reservation at
+    // all (§80) — it is added like any other line.
+    const kind = !preorder || (this._onLocalRun && p.local_fresh_today) ? ''
+      : (p.is_batch_made ? 'batch' : 'preorder');
     if (out && !preorder) {
       wx.showToast({ title: this.data.copy.soldOut, icon: 'none' });
       return;
@@ -256,12 +263,13 @@ Page({
       return;
     }
     cart.add(p, 1, []);
+    const cn = this.data.lang === 'cn';
     wx.showToast({
-      title: sayPreorder
-        ? (this.data.lang === 'cn' ? '已预订，加入购物车' : 'Added — pre-order')
-        : (this.data.lang === 'cn' ? '已加入购物车' : 'Added'),
-      icon: sayPreorder ? 'none' : 'success',
-      duration: sayPreorder ? 1500 : 900,
+      title: kind === 'batch' ? (cn ? '已加入购物车，下批现做' : 'Added — next batch')
+        : kind === 'preorder' ? (cn ? '已预订，加入购物车' : 'Added — pre-order')
+        : (cn ? '已加入购物车' : 'Added'),
+      icon: kind ? 'none' : 'success',
+      duration: kind ? 1500 : 900,
     });
   },
 
