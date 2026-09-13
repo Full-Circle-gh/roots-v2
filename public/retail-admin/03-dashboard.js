@@ -3819,7 +3819,12 @@ function dashRenderFunnel() {
 
 function dashRenderSplits() {
   const pay = DASH_DATA.payments || [], del = DASH_DATA.delivery || [];
-  const payLabel = m => ({ wechat: 'WeChat Pay · 微信支付', alipay: 'Alipay · 支付宝', points: 'Points · 积分', cash: 'Cash · 现金', bank_transfer: 'Bank transfer · 银行转账', wechat_offline: 'WeChat off-app · 微信(线下)', alipay_offline: 'Alipay off-app · 支付宝(线下)', other: 'Other · 其他', unknown: 'Unknown · 未知' }[m] || m);
+  // meituan/eleme: the channel orders' own payment_method (routes/meituan-internal.js,
+  // routes/eleme-internal.js write it literally) — money settled on that
+  // platform, never touching our own gateways. offline: the pre-existing
+  // generic tender (routes/retail.js ALLOWED_PAY) predating the five specific
+  // off-app methods below it, for a counter payment not tied to a wallet.
+  const payLabel = m => ({ wechat: 'WeChat Pay · 微信支付', alipay: 'Alipay · 支付宝', points: 'Points · 积分', cash: 'Cash · 现金', bank_transfer: 'Bank transfer · 银行转账', wechat_offline: 'WeChat off-app · 微信(线下)', alipay_offline: 'Alipay off-app · 支付宝(线下)', meituan: 'Meituan · 美团', eleme: 'Eleme · 饿了么', offline: 'Offline · 线下', other: 'Other · 其他', unknown: 'Unknown · 未知' }[m] || m);
   const delLabel = m => ({ standard: 'Standard · 标准', max: 'Max speed · 极速', fixed: 'Same-city · 同城', sameday: 'Same-day · 当日', pickup: 'Pickup · 自提', unknown: 'Unknown · 未知' }[m] || m);
   // Two quiet bar groups (the mockup has no group headers): payment methods by
   // revenue, then delivery modes by order count with dimmed fills.
