@@ -232,6 +232,26 @@ function buildCases(src) {
     'sheet:account': "APP.cmd('overflow')",
     'sheet:cust-points': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{nickname:'A',tier_key:'tree',points_balance:120,balance:8},stats:{orders:{}}};render();APP.cmd('adjustPoints')",
     'sheet:cust-block': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{nickname:'A',tier_key:'tree',is_blocked:1},stats:{orders:{}}};render();APP.cmd('toggleBlock')",
+    // ── The customer section's parity build (§116) ────────────────────────
+    // A record carrying every block the desktop's drawer carries: the note and
+    // tags, addresses with their two writes, the referral controls, and twelve
+    // months of activity. Rendered in one case because they share one sheet and
+    // a throw in any of them takes the whole record down.
+    'sheet:cust-full': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{id:1,nickname:'A',tier_key:'tree',points_balance:120,balance:8,phone:'13800000000',note:'Allergic to nuts.\\nBuzzer is broken.',tags:'wholesale,pays late'},stats:{orders:{orders_count:4,revenue:900,aov:225},active_sessions:2},addresses:[{id:7,recipient_name:'A',phone:'13800000000',province:'广东省',city:'广州市',district:'天河区',address:'天河路 1 号',detail:'3 楼',is_default:1},{id:8,recipient_name:'B',phone:'13900000000',city:'深圳市',address:'深南大道 2 号'}],orders_by_month:[{month:'2026-08',n:3},{month:'2026-09',n:1}],affiliate:{referral_code:'AB12',affiliate_blocked:1,lifetime_mode:'selected',lifetime_eligible:1,lifetime_eligible_since:'2026-07-01',summary:{total:3,converted:2,earned:40}}};render()",
+    // The address editor over that record — new, and editing an existing row.
+    // Both, because the sheet's title, its city block and its save URL all fork
+    // on whether `id` is null.
+    'sheet:cust-addr-new': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{id:1,nickname:'A',tier_key:'tree'},stats:{orders:{}},addresses:[]};render();APP.cmd('caddrOpen','')",
+    'sheet:cust-addr-edit': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{id:1,nickname:'A',tier_key:'tree'},stats:{orders:{}},addresses:[{id:7,recipient_name:'A',phone:'13800000000',province:'广东省',city:'广州市',district:'天河区',address:'天河路 1 号',is_default:1}]};render();APP.cmd('caddrOpen','7');state.caddr.districts=[{name_cn:'天河区'},{name_cn:'越秀区'}];render()",
+    // The roster with all three filter rows carrying a choice, a tag vocabulary
+    // to draw them from, and the reversed sort — the state a filtered screen is
+    // actually in, which the plain 'tab' case never reaches.
+    'screen:cust-filtered': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;state.custTotal=DB.customers.length;state.custTagVocab=[{tag:'wholesale',count:4},{tag:'pays late',count:1}];state.custTags=['wholesale'];state.custTier=['tree','root'];state.custChan=['web'];state.custSort='name';state.custDir='desc';APP.cmd('tab','customers')",
+    // The same record read by an operator who may look and not touch: no action
+    // row, no foot, no Edit beside the note or the addresses. The gate is what
+    // this case exists to render — every one of those controls used to draw for
+    // this account and its 403 sent them to the login page.
+    'screen:cust-viewonly': "" + ROWS + "state.caps=['customers:view','orders:view','dashboard:view'];state.capsLoaded=true;state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{id:1,nickname:'A',tier_key:'tree',note:'x',tags:'vip'},stats:{orders:{}},addresses:[{id:7,recipient_name:'A',phone:'1',address:'x'}],affiliate:{referral_code:'AB12'}};render()",
     'sheet:mark-paid': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='pending_payment';state.liveOrders=DB.orders;APP.cmd('tab','orders');APP.cmd('openOrder',DB.orders[0].id);APP.cmd('markPaid')",
     'sheet:refund-review': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='paid';DB.orders[0].refundStatus='pending';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('detailActions')",
     'sheet:refund-approve': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='paid';DB.orders[0].refundStatus='pending';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('approveRefund')",
