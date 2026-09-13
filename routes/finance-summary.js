@@ -12,7 +12,8 @@
 // here to forget, because there is nothing to migrate."
 //
 // WHAT THIS FILE IS RESPONSIBLE FOR, IN ONE LINE EACH
-//   • A revenue figure written FOR Finance, never inherited from the dashboard.
+//   • A revenue figure written FOR Finance, never inherited from the dashboard,
+//     with the channels behind it folded out of that same read.
 //   • An operating-expense sum over an arbitrary date range, which the kitchen
 //     route cannot answer.
 //   • Saying nothing at all about cost of goods, because nothing reads it yet.
@@ -107,14 +108,58 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
   try {
     const db = tdb();
 
-    // ── Line 1 · Revenue ──
+    // ── Line 1 · Revenue, and the channels it arrived through ──
     // Every channel the order record carries, gzgrocery included. No ledger,
     // no top-ups. `orders` rides along so the screen can tell an empty period
     // from a zero-revenue one without a second call.
-    const rev = db.prepare(`
-      SELECT COALESCE(SUM(total), 0) AS revenue, COUNT(*) AS orders
+    //
+    // **THE HEADLINE IS FOLDED OUT OF THE GROUPED READ, not summed beside it**,
+    // which is the shape the operating-expense block below already uses and it
+    // is here for the same reason. Revenue and its own disclosure have to add
+    // up; a second `SUM(total)` over the same set is a second place the
+    // arithmetic is done, and the day the two disagree the card shows a total
+    // its own breakdown contradicts. One read, one total, by construction.
+    //
+    // Summed in MINOR UNITS and converted once. A running total of REAL yuan
+    // accumulates the residue lib/finance-window.js's header records, and here
+    // it would accumulate into a figure the lines beneath it must equal.
+    //
+    // ── THE CHANNEL IS THE ORDER RECORD'S OWN COLUMN ──────────────────────
+    // Folded the one way the rest of this product folds it:
+    // `COALESCE(NULLIF(channel,''),'wechat')`, which is
+    // `/api/retail-admin/order-channel-counts`'s expression verbatim and the
+    // Sales summary's beside it (both routes/retail.js). A mini-app order
+    // placed before the checkout wrote the column carries NULL, and every
+    // screen in this admin that counts channels already reads that as the mini
+    // app. Minting a "Not recorded" bucket here instead would put this card at
+    // odds with the chips on the orders list over the very same rows — and
+    // unlike the expense category beneath, this column is not free text a
+    // human typed: it is written by the checkout, from a known set.
+    //
+    // ── IT IS NOT THE SALES PAGE'S SIX BUCKETS, AND THAT IS DELIBERATE ────
+    // That page splits counter sales out on `fulfillment_type='counter'` and
+    // takes gzgrocery's revenue from the stock ledger through
+    // `guanyiPickupSales()`. Finance reads neither — the ledger is the fold
+    // this whole module exists to avoid (§36) — so borrowing its partition
+    // would give a gzgrocery line that is not the one inside the total above
+    // it. A till sale is written through the manual-order endpoint and carries
+    // `channel='manual'`, so it lands on the Manual line here, which is what
+    // the order record says it is. The rule is the expense breakdown's rule:
+    // group what the total summed, and do not reshape it on the way out.
+    const revGrouped = db.prepare(`
+      SELECT COALESCE(NULLIF(channel, ''), 'wechat') AS channel,
+             COALESCE(SUM(total), 0) AS amount, COUNT(*) AS orders
         FROM retail_orders
-       WHERE ${PAID} AND ${odateFor(sqlDayShiftForShop(tdb()))} BETWEEN ? AND ?`).get(from, to);
+       WHERE ${PAID} AND ${odateFor(sqlDayShiftForShop(tdb()))} BETWEEN ? AND ?
+       GROUP BY COALESCE(NULLIF(channel, ''), 'wechat')
+       ORDER BY amount DESC`).all(from, to);
+
+    let revMinor = 0, revOrders = 0;
+    const revenueBreakdown = revGrouped.map((r) => {
+      revMinor += money.toMinor(r.amount) || 0;
+      revOrders += r.orders;
+      return { channel: r.channel, amount: fen(r.amount), orders: r.orders };
+    });
 
     // ── Line 4 · Operating expenses ──
     // The kitchen route groups by `substr(date,1,7)`, a calendar-month string,
@@ -203,7 +248,7 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
       return { category: r.category || null, amount: fen(r.amount), entries: r.n, is_operating: isOperating };
     });
 
-    const revenue = fen(rev.revenue);
+    const revenue = money.fromMinor(revMinor);
     const expenses = money.fromMinor(opMinor);
     // **SHOWN ON ITS OWN LINE, NEVER DROPPED.** §87: a number that disappears
     // from a total without saying so is the same defect the flag exists to
@@ -276,7 +321,22 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
       data: {
         window: { from, to, span_days: win.span_days },
         revenue,
-        orders: rev.orders || 0,
+        orders: revOrders,
+        // WHERE THE TOP LINE CAME FROM. One row per channel, heaviest first,
+        // summing to `revenue` above because both are the same read — see the
+        // note on it. Ordered by weight for the same reason the expense
+        // breakdown is: an operator opening it is asking which channel earned
+        // the money, not how the channels are spelled.
+        //
+        // EVERY CHANNEL THE WINDOW HOLDS, and no declared key set. The orders
+        // list declares its chips so a quiet channel renders at zero instead of
+        // vanishing; this is a breakdown of a figure, and a ¥0 line inside a
+        // total would assert that a channel took nothing when what is true is
+        // that it took no orders at all. §1.12 keeps a card free of rows that
+        // only ever say nothing happened — and a channel this file has never
+        // heard of still gets its line, carrying its own key, rather than being
+        // dropped out of a total that counted it.
+        revenue_breakdown: revenueBreakdown,
         cost_of_goods: null,
         gross_profit: null,
         operating_expenses: expenses,
