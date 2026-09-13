@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.246
+# Tacet shared-core consolidation — decisions record, v4.247
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-13 · v4.247 — **§113 ADDED: THE KEYBOARD GOES DOWN — REPORTED BY ASH in four words, *"keyboard doesn't go down"*, with the expense claim and Add someone photographed under it.** `public/m.html` has **no `<form>` in it**, so the soft keyboard's action key had nothing to submit; with no `enterkeyhint` on the field Gboard drew that key as **Go** (前往 in the screenshot), which on a formless page does nothing, and no tap anywhere on the screen would take focus off the field either. **The six fields that closed cleanly were rescued one at a time** — `mExpAmt` carries `enterkeyhint="done"` and a blurring `onkeydown` and sits **two rows above** the note field that has neither — which on a file with **fifty inputs** is the shape of a rule that was never made. **Three passes, none of them a list of field ids** (the reasoning `mTyping()` already carries): `kbHints()` writes the Done key onto every typed field on the paint that drew it, leaving the search boxes' own `enterkeyhint="search"` and the dates, files and checkboxes alone; Enter blurs, delegated once, **never in a textarea and never mid-pinyin** (`isComposing` / `keyCode 229` is an operator choosing a candidate, not asking to leave); and a tap that is not on a field puts the keyboard down, **judged at `click` and never at touch-down** — the scrim rule directly above it records what touch-down costs, *"the keyboard closing … reflows the page under a finger already in motion"* — and it stands aside wherever the tap moved focus itself, to another field or through a `<label>`. **No `<input>` in the file was edited**: four functions and two listeners, which is what makes it a rule rather than a fifty-first rescue. **Nothing here opens a keyboard** — `mSearch`'s `autofocus` and the add-stock caret are untouched. **No new UI text, so no Chinese and no vocabulary entry.** **Tests:** new `scripts/test_mobile_keyboard.js` — **47 assertions across 6 cases**, the four functions sliced out of the shipped file and driven against a hand-built DOM, red-proofed by removing the pinyin and `<label>` guards; fast shard, no browser, auto-discovered by `run-suites.js` and aliased `test:mobile-keyboard`. `npm run test:fast` 222/222 green; the sweep re-rendered all 147 screens (441 renders) with the pass running on every paint. Geometry unchanged — its two `sheet:kq-*` header findings are identical on `main`. No CSS file, no route, no schema, and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.246 — **PERMISSIONS ARE MANAGED FROM THE PHONE — §112, DECIDED BY ASH: *"can't manage permission from the mobile version, fix it fully. this feature should be fully functional from mobile."*** `docs/tacet-mobile-parity.md` had ruled Team out in its own words — inviting somebody, assigning a role and setting a per-capability matrix *"is authoring and stays on the desktop"* — and the phone shipped a roster, a deactivate confirm and three sentences pointing at a laptop. **The rule is still right for products and broadcasts and wrong for this: permissions are not authoring.** Somebody starts on Monday, somebody moves from the counter to the kitchen, somebody must not have the books — every one of those happens in the shop, on the day. **`public/m.html` gains four screens** — `teamperson`, `teamperms`, `teaminvite`, `teamrole` — plus a People/Roles switch and the owner's enforcement toggle, covering all six of the desktop tab's write surfaces over the same routes (`POST`/`PUT /api/backend/team`, `POST …/password`, `PUT …/permissions`, the four `/api/backend/roles` verbs, `PUT /api/backend/rbac-enforce`). **No route, no schema, no migration, no new capability** — `team:manage` and `team:permissions` already existed and are kept apart on the phone exactly as the server keeps them apart, absent rather than disabled. **A real guard gap was found and closed before it shipped**: `teamEnforce` was written guarded only by not DRAWING the switch, which `APP.cmd` walks straight past — the same hole `teamToggle` had in 2026-08 — and its own probe caught it. **The capability tree opens one group at a time** rather than printing a hundred toggles into a scroller, stating the same sentence the desktop's collapsed group does. **The dashboard-default table is now duplicated with a GUARD instead of a promise**: the phone's `TM_DASH_DEFAULT` and the desktop's `RL_DASH_LAYOUT_DEFAULT` are compared by `scripts/test_mobile_permissions.js`, which is more than the desktop's own copy of the CSS has ever had. **Chinese:** 134 pairs, **96 lifted verbatim** from the desktop's Team tab and the routes' own refusals, four arrangements that only move a clause naming a device, and **38 composed**, declared in `docs/tacet-delivery-vocabulary.md` v1.70 with the candidates rejected beside them. **Tests:** new `scripts/test_mobile_permissions.js` — **90 assertions across 30 cases**, asserting request bodies, not screens; `scripts/test_mobile_team.js` 29 → **32 assertions**, updated where the read-only decision it encoded was reversed; the sweep renders all four screens warm, cold and in Chinese (**441 renders**); geometry clean at 390px. Registered in `package.json` and in `run-suites.js`'s SLOW set (it drives Chromium). No CSS file, and no change to `.gitignore` or CI.**
 
@@ -12582,3 +12584,86 @@ when the command is called directly. `scripts/test_mobile_team.js` keeps the
 roster and the emergency switch. The sweep renders all four new screens warm,
 cold and in Chinese.
 
+
+## §113 — THE KEYBOARD GOES DOWN, ON EVERY FIELD, WITHOUT ANYBODY HAVING REMEMBERED THAT FIELD
+
+**Reported by Ash, 2026-09-13**, with two photographs of the phone app and four
+words: ***"keyboard doesn't go down."*** One is the expense claim, note field
+holding `knifes`, the soft keyboard sitting across the bottom of the screen with
+**Submit** behind its top edge. The other is Settings → Team → **Add someone**
+with a password typed in, the keyboard covering the Role picker and **Add them**
+below it. Two unrelated screens, one defect.
+
+### A keyboard follows focus, and the app gave a field no way to lose it
+
+`public/m.html` has **no `<form>` element anywhere in it** — every screen is
+markup plus `oninput` handlers — so the keyboard's action key had nothing to
+submit. With no `enterkeyhint` on the field, Gboard draws that key as **Go**
+(前往 in the screenshot), and Go on a formless page does nothing at all. Nor
+does anything else on the screen put the keyboard away: a tap on a heading, a
+caption or the space between two fields leaves focus exactly where it was.
+
+**The fields that DID close cleanly are the six that were rescued one at a
+time.** `mExpAmt` carries `enterkeyhint="done"` and an `onkeydown` that blurs —
+and it sits **two rows above** the note field in the same form, which has
+neither. `mProdQ`, `mMbQ`, `qsnum-*`, `mbnum-*` and the ask sheet's input have
+the same hand-written pair. Six rescues on a file with **fifty inputs** is the
+shape of a rule that was never made: every field added since has been one more
+field you cannot get out of, and nothing said so.
+
+### The rule: three passes, and not one of them is a list of field ids
+
+Under **PUTTING THE KEYBOARD AWAY** in `public/m.html`, beside the scrim
+gesture rule it borrows its timing from. The reasoning for having no list is
+the one `mTyping()` already carries: this app draws fields in sheets, in forms
+and in pickers, and a list of ids would be one field out of date the day the
+next one lands.
+
+1. **Every typed field asks for a Done key.** `kbHints()` writes
+   `enterkeyhint="done"` onto the inputs that do not declare one, on the paint
+   that drew them — so a field added next year is covered without anybody
+   remembering. Android closes the keyboard on Done by itself; iOS gives a
+   Return that rule 2 finishes. A field that already says what its key is (the
+   search boxes, `enterkeyhint="search"`) keeps it, and anything whose keyboard
+   is not one — a date, a file, a checkbox — is left alone.
+2. **Enter blurs**, delegated once. The six hand-rolled fields keep working;
+   every other field gains it. A `<textarea>` is excluded, because Enter there
+   is a new line, which is the whole reason it is a textarea. **And it is deaf
+   during composition** — `isComposing`, or the `keyCode 229` spelling of the
+   same thing, is a Chinese operator mid-pinyin pressing Enter to choose a
+   candidate, and blurring there would take the word away instead of the
+   keyboard.
+3. **A tap on the page puts it down**, judged at `click` and never at
+   touch-down. The scrim rule directly above it records what a decision taken
+   at touch-down costs: *"the keyboard closing as the input blurs … reflows the
+   page under a finger already in motion"*, and the lift lands where nobody
+   aimed. By `click` the tap has been resolved and the control's own handler
+   has already run, so blurring can take nothing away. It also stays out of the
+   browser's way — where the tap moved focus itself, to another field or
+   through a `<label>` to one, the field it would blur is no longer the focused
+   one and the rule does nothing. A scroll fires no click, so a list dragged
+   with the keyboard up keeps it.
+
+### What this is not
+
+**It is not an autofocus policy.** Nothing here opens a keyboard; all three
+passes only ever close one. The one screen that deliberately opens with the
+keyboard up (`mSearch`, `autofocus`) is untouched, as is the add-stock ruling
+that put a caret in a cell on one tap.
+
+**And no field's markup changed.** Four functions and two listeners were added;
+not one `<input>` in the file was edited, which is what makes this a rule rather
+than a fifty-first rescue.
+
+### What holds it
+
+`scripts/test_mobile_keyboard.js` — **47 assertions across 6 cases**, with the
+four functions sliced out of the shipped `public/m.html` and driven against a
+hand-built DOM, the technique `scripts/test_ask_to_buy_keyboard.js` uses on the
+same file. It fails if Enter starts eating pinyin candidates, if a tap starts
+closing the keyboard a `<label>` had just opened, if a textarea is handed a Done
+key, if the tap rule is ever moved to `pointerdown`/`touchstart`, or if
+`render()` stops asking for the hints. In the fast shard: no browser, 0.1s. The
+sweep (`scripts/test_mobile_screens.js`) re-renders all 147 screens warm, cold
+and in Chinese with the pass running on every paint — 441 renders, no uncaught
+errors.
