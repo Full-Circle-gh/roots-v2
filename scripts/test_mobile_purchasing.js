@@ -70,6 +70,39 @@ const POS = `[
 
 const SEEDED = `${CLOCK} state.posTried=true; state.poList=${POS}; APP.cmd('push','purchasing');`;
 
+// THE LEDGER THE TWO SCREENS USED TO DISAGREE ABOUT, and the reason a fixture
+// for it has to exist separately: every order above is either untouched or
+// fully received, so the ledger that broke this had no representative here.
+//
+// The receive route flips a PO to Delivered on its FIRST arrived count
+// (routes/retail-purchasing.js), so an order with lines nobody has answered for
+// yet is STORED as Delivered while goods are still on a van. Receiving has
+// always kept such an order in "To receive" — that is rcvPartial() in
+// public/m.html, and the reason confirming one product cannot drop the other
+// eleven out of the list. Purchasing read the status word alone and counted the
+// same order Received, so over one ledger the phone said "1 open" beside a
+// Receiving tab saying "To receive 3". The desktop got the identical test in
+// 16-purchasing.js (puPartial); these two cases are the phone's half of it.
+//
+// The numbers are the reported ledger: RPO-0030 is 11 of 16 lines answered for
+// and RPO-0032 is 2 of 7 — five still to come on each, which is what Receiving
+// prints on the row.
+const PART_POS = `[
+  {id:34, po_number:'RPO-0034', supplier:'Nut House', date:FIRST, delivery_date:SOON,
+   status:'Ordered',   line_count:14, received_lines:0,  total_cost:1906},
+  {id:32, po_number:'RPO-0032', supplier:'Oat Works', date:FIRST,
+   status:'Delivered', line_count:7,  received_lines:2,  total_cost:800},
+  {id:30, po_number:'RPO-0030', supplier:'Fresh Co.', date:FIRST,
+   status:'Delivered', line_count:16, received_lines:11, total_cost:1200},
+  {id:29, po_number:'RPO-0029', supplier:'Bean Bros', date:FIRST,
+   status:'Delivered', line_count:4,  received_lines:4,  total_cost:500}
+]`;
+// Both screens are seeded off the SAME rows, because the bug was never one
+// screen being wrong on its own — it was two screens counting one ledger
+// differently, which only a fixture they share can catch.
+const PART_SEEDED = `${CLOCK} state.posTried=true; state.poList=${PART_POS};
+  state.rcvToTried=true; state.rcvTo=${PART_POS}; APP.cmd('push','purchasing');`;
+
 // THE SHEET'S DATES STAY LITERAL, deliberately — the opposite call to the list
 // above, for the opposite reason. Nothing here is read against the clock: the
 // assertion is that a stored date is FORMATTED ("Aug 16", not "2026-08-16"), and
@@ -110,6 +143,21 @@ const CASES = [
   ['all', SEEDED + `APP.cmd('poSeg','all');`, [
     ['All holds the cancelled one too', `txt('content').includes('RPO-0008')`],
     ['a draft reads Draft, the desktop\'s word for Requested', `txt('content').includes('Draft')`],
+  ]],
+  ['an order still part-arrived', PART_SEEDED, [
+    ['it is not counted as received',   `/Received\\s*1/.test(txt('content'))`],
+    ['it is counted as open',           `/Open\\s*3/.test(txt('content'))`],
+    ['and the ledger still adds up',    `/All\\s*4/.test(txt('content'))`],
+    ['the head band agrees with Open',  `/3\\s+open/.test(txt('content'))`],
+    // The whole point: one ledger, one number. Receiving derives its list from
+    // the same rows, and if these two ever part company again the phone is back
+    // to telling an operator two different things about the same three orders.
+    ['Receiving counts the same three', `rcvToReceive().length === 3`],
+    ['the row says so, not "Received"', `txt('content').includes('Part arrived')`],
+  ]],
+  ['a part-arrived order is not in Received', PART_SEEDED + `APP.cmd('poSeg','received');`, [
+    ['only the finished one is there', `txt('content').includes('RPO-0029')`],
+    ['the part-arrived ones are not',  `!txt('content').includes('RPO-0030') && !txt('content').includes('RPO-0032')`],
   ]],
   ['empty ledger', `state.posTried=true; state.poList=[]; APP.cmd('push','purchasing');`, [
     ['says there are none',        `txt('content').includes('No purchase orders yet')`],
