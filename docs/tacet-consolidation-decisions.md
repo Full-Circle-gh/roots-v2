@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.244
+# Tacet shared-core consolidation — decisions record, v4.245
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-13 · v4.245 — **§111 PART TWO BUILT: THE EXPENSE FORM ASKS ONCE PER CATEGORY, AND WHAT WAS ORDERED GOES TO PURCHASING INSTEAD OF THE LEDGER — DECIDED BY ASH (v4.244), built on request the same day.** On money out the Transactions form now asks *was this ordered from a supplier?* and writes the answer onto the CATEGORY, so rent is asked about once, ever, and ingredients once, ever. **THE COLUMN CARRIES NO DEFAULT AND THAT IS THE WHOLE MECHANISM**: `categories.needs_po` is nullable — NULL is *nobody has been asked*, 1 *ordered*, 0 *not ordered* — and the ledger payload sends `category_needs_po` as a map of the ANSWERED ones only, because absence is the third state and a 0 for the unasked would be the same wrong default wearing a different hat. §36's "an empty list cannot offer a wrong option", one field further in. **DISMISSING THE QUESTION DOES NOTHING AT ALL** — no row, no wizard, nothing remembered, the form still open with every value in it — which is why it is `askChoice` and not a two-button confirm: on a confirm, Escape lands on whichever answer sits in the cancel slot, so pressing it would either write a row nobody committed to or throw the operator into another tab. **NOTHING IS WRITTEN ON THE WAY TO PURCHASING, NOT EVEN A DRAFT**: Finance's form has no supplier or store field (§36 — the ledger has no location column) and the create route requires a store, so the wizard opens on STEP ONE with the part Finance already knew filled in, as part one's typed line. Walk away and nothing was recorded in either place, which beats an orphan draft nobody returns to. **A CATEGORY IS NEVER CREATED BY ANSWERING** — the new `PUT /finance/categories/answer` takes the NAME the form holds, snaps it through `storeCategory`, and no-ops when the list does not hold it, because a form that grew the list from whatever was typed would rebuild it out of typos. **AND THE MONEY NEVER DEPENDS ON THE PREFERENCE**: a failed answer-write is swallowed and the row is still recorded. Settings gains the way back — a second checkbox beside *Operating expense*, INDETERMINATE where nobody has been asked, because a plain unticked box would say "not ordered" about every category that has simply never come up. Not asked on an edit, and not on money in. **Tests:** two new suites, `test_finance_po_question.js` (**31 cases**, both finance routers real against a fixture) and `test_finance_po_question_client.js` (**41 cases**, the VM sandbox over `22-finance.js`, dismissal given its own case). Both confirmed red without the change. `npm run test:fast` 221 passed, 0 failed; eslint 0 errors; doc-numbering PASS. **Six composed strings, all six declared** in `docs/tacet-delivery-vocabulary.md` v1.70 with the live pair every Chinese term was lifted from — `采购单`, `记入`, `支出`, `财务` off this same screen, `供应商` and `下单` off Purchasing — and four rejected candidates recorded. One migration (nullable, no default), one new route, no new capability, and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.244 — **§111 DECIDED, AND ITS FIRST PART BUILT: WHAT IS ORDERED FROM A SUPPLIER BELONGS ON A PURCHASE ORDER, AND A PURCHASE ORDER CAN NOW CARRY A THING THAT IS IN NO CATALOGUE — DECIDED BY ASH.** Asked how to make an ingredient, an office supply or a piece of equipment reach the books as a PO rather than a typed expense *"like any other stuff that ordered (unless the user specifically say it's not)"*. **THE SURVEY FOUND THE RULE COULD NOT BE OBEYED**: `po_line_items` has accepted a line naming neither a product nor a material since it was written — `lineConflict` refuses a line carrying BOTH ids, never one carrying neither, the stock apply and the price write-back both skip it, and the expense poster groups it by its own `expense_category` — but **nothing could produce one**, because the wizard's only way onto an order was a picker over the two catalogues and a search matching nothing ended at *No match*. So the box of gloves went into Finance as a bare ledger row with no supplier, no receiving, no 发票 and nothing to return it against. **Ash ruled three ways**: the goods/not-goods rule is LEARNED FROM THE ANSWER and stored on the category beside `is_operating` (nothing pre-marked — §36's "an empty list cannot offer a wrong option", the rule written after the ¥152,309 mis-filing); a *yes* OPENS THE DRAFT rather than filing one nobody returns to; and **the free-text line ships first, alone**, because nothing else in the section can be obeyed until a PO can carry a chair. **BUILT HERE: part one only.** The picker's LAST row (never the first — offering to invent a second chair above the one you stock is how a catalogue grows duplicates) adds a line with its own name, unit and expense category and no id; `lineUnnamed` refuses a nameless one as `name_required` on create and edit alike, because `name_en` is NOT NULL and `item.name_en || ''` would have saved a quantity and a price with no subject onto the order, the receive screen and the printed sheet. The unit is editable HERE AND NOWHERE ELSE — a material's stays `ingredients.buy_unit` or `firePriceAlertsForPO` silently stops writing prices back. **PARTS TWO AND THREE ARE DECIDED, NOT BUILT**: the question on the expense form, and staff claims left alone because §87's claim is money already out of a pocket. **THE BEHAVIOUR CHANGE IS RECORDED RATHER THAN DISCOVERED**: a PO posts at Ordered, so routing a purchase into a draft moves that money out of the month until the buyer places it. **Tests:** two new suites. `scripts/test_retail_po_typed_line.js`, **33 cases** on `test_retail_po_material_line.js`'s harness — real router, `lib/inventory.js` stubbed but RECORDING, since "never touches stock" is a claim about a call that must not happen; **25 of its 33 pass against the code before this change**, which is the finding restated as a test rather than a weak suite. And `scripts/test_wizard_typed_line.js`, **31 cases** on `test_wizard_line_supplier.js`'s VM sandbox for the half the server cannot see — the row is offered and offered LAST, the line carries no ids and two name halves, a product line and a material line get none of the three typed-only fields, and a category pick LANDS ON THE LINE (a value set from script leaves the input's dirty flag clear, so without `commit` it would die at the next repaint). It cannot load at all against the old code. `npm run test:fast` 219 passed, 0 failed. **No new Chinese** — every label reuses a live pair (`添加`, `无匹配`, `名称`, `分类`, `采购单位`) and the refusal reuses `name_required`'s own sentence from `01-core.js`. No schema, no migration, no new route, no new capability, and no change to `.gitignore` or CI.**
 
@@ -12290,12 +12292,13 @@ and does not become editable alongside it: `firePriceAlertsForPO` refuses to wri
 price whose line unit does not match, so an editable unit there would silently kill the price
 history §86 part four rests on.
 
-### PART TWO — THE QUESTION ON THE EXPENSE FORM (decided, not yet built)
+### PART TWO — THE QUESTION ON THE EXPENSE FORM (built 2026-09-13)
 
-On money out, one question before the row is saved: **is this something ordered from a
-supplier?** *Yes* seeds a Draft PO from the typed values and opens it; *no* writes the typed
-row exactly as today. **The answer is stored on the CATEGORY**, so rent is asked about once,
-ever, and ingredients are asked about once, ever.
+On money out, one question before the row is saved: **was this ordered from a supplier?**
+*Put it on a purchase order* opens the wizard on a new order carrying the cost as a typed
+line; *Record it as an expense* writes the typed row exactly as today. **The answer is stored
+on the CATEGORY** — `categories.needs_po`, beside the `is_operating` and `is_active` §87 put
+there — so rent is asked about once, ever, and ingredients are asked about once, ever.
 
 **NOTHING IS PRE-MARKED, AND THAT IS §36's RULE HOLDING.** "An empty list cannot offer a
 wrong option" was written after a dropdown of four inherited kitchen categories produced the
@@ -12303,6 +12306,46 @@ wrong option" was written after a dropdown of four inherited kitchen categories 
 field further in: mark the list wrong and the app nags about rent every month or waves an
 ingredient order through in silence. Learning the flag from the answer has no wrong default
 to ship, and Settings can still flip it where `is_operating` already lives.
+
+**THE COLUMN CARRIES NO DEFAULT, AND THAT IS THE WHOLE MECHANISM.** NULL is *nobody has been
+asked*, 1 is *ordered*, 0 is *not ordered*. A `DEFAULT 0` would ship every category
+pre-answered "no", the question would never be put, and the feature would be dead on arrival
+with nothing on any screen to say so. The ledger payload therefore carries `category_needs_po`
+as a map of the ANSWERED ones only: absence is the third state, and sending a 0 for the
+unasked would be the same default wearing a different hat.
+
+**DISMISSING THE QUESTION DOES NOTHING AT ALL** — no row, no wizard, nothing remembered, and
+the form still open with every value in it. That is why it is `askChoice` and not a
+two-button confirm: on a confirm, Escape and the scrim land on whichever answer sits in the
+cancel slot, so "I pressed Escape" would either write a row nobody committed to or throw the
+operator into another tab.
+
+**NOTHING IS WRITTEN ON THE WAY TO PURCHASING — not even a draft.** Finance's form has no
+supplier field and no store field (§36: the ledger has no location column, so the form never
+grew one), and the create route requires a store. So the wizard opens on **step one**, where
+those are the questions, with the part Finance already knew filled in. If the person walks
+away, nothing was recorded in either place — the same as abandoning the Finance form itself,
+and better than an orphan draft nobody returns to.
+
+**THE AMOUNT ARRIVES AS ONE UNIT AT THAT PRICE.** Finance records a sum and has no quantity
+field, so one at ¥680 is the only reading of ¥680 that cannot be wrong. The buyer splits it
+into real quantities on the next step.
+
+**A CATEGORY IS NEVER CREATED BY ANSWERING.** The answer endpoint takes a NAME — that is all
+the form holds at the moment it is answered — snaps it through `storeCategory` so a typed
+spelling lands on the listed row, and is a **no-op** when the tenant's list does not hold it.
+§36 ships that list empty and the tenant decides what goes on it; a form that grew it from
+whatever was typed would rebuild the list out of typos, which is the failure the list exists
+to end. The person still gets the answer they gave for that row; it is simply not remembered.
+
+**AND THE MONEY NEVER DEPENDS ON THE PREFERENCE.** A failure to store the answer is swallowed:
+the row is still written, and the only cost is being asked again. An expense that could not be
+recorded because a flag could not be saved would be this feature doing harm.
+
+**IT DOES NOT ASK ON AN EDIT, OR ON MONEY IN.** §111 is about the moment money is recorded; a
+row already in the books is a different question — converting one would mean deleting it and
+raising an order in its place — and nothing asks for that. There is no such thing as ordering
+revenue.
 
 ### PART THREE — STAFF CLAIMS KEEP THEIR OWN DOOR
 
@@ -12394,7 +12437,28 @@ pick LANDS ON THE LINE — an input's value set from script leaves its dirty fla
 without `commit` the pick would sit on screen and die at the next repaint. It cannot even
 load against the old code: `puPickTyped` does not exist there.
 
-`npm run test:fast` 219 passed, 0 failed. **No new Chinese**: every label added reuses a live
-pair — `添加`, `无匹配`, `名称`, `分类`, `采购单位`, and `name_required`'s own sentence from
-`01-core.js`. No schema, no migration, no new route, no new capability, and no change to
-`.gitignore` or CI.
+`scripts/test_finance_po_question.js`, **31 cases**, is part two's server half: both finance
+routers mounted for real against a fixture database. A fresh category has no answer and is
+absent from the payload map; answering records it and the payload then says so; "not ordered"
+records as a 0 that is PRESENT, which is what stops the asking; a name the list does not hold
+is a no-op that creates nothing; a spacing-different spelling snaps onto the listed row; the
+answer can be taken back to *not asked*, which is the way out of a mistake; a rename leaves it
+alone; a hidden category leaves the map with the list; and none of it touches the ledger row.
+
+`scripts/test_finance_po_question_client.js`, **41 cases**, is when the question is put and
+what each answer does — including the one that is not an answer. Dismissal writes no row,
+opens no wizard, remembers nothing and leaves the form open with what was typed still in it.
+An already-answered category is not asked twice in either direction; money in and an edit are
+never asked; an uncategorised row is still asked and its answer honoured, with nothing
+recorded because there is nothing to record it on; a failure to store the answer still writes
+the money; and if Purchasing cannot be opened at all the row is written after all, because the
+"purchase order" answer is the one path that writes nothing and a half-working jump would close
+the form on a cost that then existed nowhere.
+
+`npm run test:fast` 221 passed, 0 failed. **Part one added no new Chinese**: every label
+reuses a live pair — `添加`, `无匹配`, `名称`, `分类`, `采购单位`, and `name_required`'s own
+sentence from `01-core.js`. **Part two composes six strings and declares all six** in
+`docs/tacet-delivery-vocabulary.md` v1.70, with the live pair each Chinese term was lifted
+from and the four candidates rejected. One migration (`categories.needs_po`, nullable, no
+default), one new route (`PUT /finance/categories/answer`), no new capability, and no change
+to `.gitignore` or CI.

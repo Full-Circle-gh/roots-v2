@@ -46,7 +46,7 @@
 
 const express = require('express');
 const { tdb } = require('../lib/tenant-db');
-const { normaliseCategory, spacingKey } = require('../lib/category-text');
+const { normaliseCategory, spacingKey, storeCategory } = require('../lib/category-text');
 const { withTransaction } = require('../lib/db-transaction');
 const { requireRetailAdmin } = require('./retail');
 const { logActivity } = require('../middleware/auth');
@@ -73,10 +73,15 @@ function listCategories(db) {
   // one question — may this be deleted — and a window would answer a different
   // one while looking like this one. A category last used in May is still named
   // by those rows, and deleting it would still silently re-file them.
+  // `needs_po` IS NOT COALESCED, and that is the difference between it and the
+  // two flags beside it (§111 part two). NULL means nobody has been asked yet;
+  // 1 and 0 are answers a person gave. Defaulting it here would tell the screen
+  // an answer exists when none does, and the form would stop asking.
   return db.prepare(`
     SELECT c.id, c.name, c.sort_order,
            COALESCE(c.is_operating, 1) AS is_operating,
            COALESCE(c.is_active, 1)    AS is_active,
+           c.needs_po                  AS needs_po,
            (SELECT COUNT(*) FROM expense_entries e WHERE e.category = c.name) AS usage_count
       FROM categories c
      WHERE c.kind = ?
@@ -187,6 +192,13 @@ router.patch('/api/retail-admin/finance/categories/:id', requireRetailAdmin, exp
     const isActive = body.is_active === undefined
       ? (cur.is_active == null ? 1 : (cur.is_active ? 1 : 0))
       : (body.is_active === false ? 0 : 1);
+    // §111 part two, and it is the one field here that can be set back to "not
+    // asked". A person who answers wrongly — "no" for Ingredients — would
+    // otherwise never be asked again and would have no way to say so; the same
+    // reason `is_active` exists rather than a delete. `null` is that way back.
+    const needsPo = body.needs_po === undefined
+      ? (cur.needs_po == null ? null : (cur.needs_po ? 1 : 0))
+      : (body.needs_po === null ? null : (body.needs_po ? 1 : 0));
 
     // THE RENAME CARRIES THE ROWS WITH IT, IN ONE TRANSACTION. The expense row
     // stores the category as text, so a rename that did not propagate would
@@ -203,18 +215,61 @@ router.patch('/api/retail-admin/finance/categories/:id', requireRetailAdmin, exp
     // says a line was for, on a screen this one does not serve. §87 does not
     // decide that, and it is not decided by a side effect here.
     await withTransaction(db, (tx) => {
-      tx.prepare('UPDATE categories SET name = ?, is_operating = ?, is_active = ? WHERE id = ?')
-        .run(name, isOperating, isActive, cur.id);
+      tx.prepare('UPDATE categories SET name = ?, is_operating = ?, is_active = ?, needs_po = ? WHERE id = ?')
+        .run(name, isOperating, isActive, needsPo, cur.id);
       if (name !== cur.name) {
         tx.prepare('UPDATE expense_entries SET category = ? WHERE category = ?').run(name, cur.name);
       }
     });
 
     logActivity(req.user?.id || null, req.user?.username || null, 'update', 'finance_category', cur.id,
-      { from: cur.name, to: name, is_operating: isOperating, is_active: isActive }, req.ip);
-    res.json({ success: true, data: { id: cur.id, name, is_operating: isOperating, is_active: isActive } });
+      { from: cur.name, to: name, is_operating: isOperating, is_active: isActive, needs_po: needsPo }, req.ip);
+    res.json({ success: true, data: { id: cur.id, name, is_operating: isOperating, is_active: isActive, needs_po: needsPo } });
   } catch (e) {
     console.error('[finance/categories PATCH]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── PUT /api/retail-admin/finance/categories/answer ────────────────────────
+// §111 part two. THE ANSWER TO THE ONE QUESTION THE EXPENSE FORM ASKS, recorded
+// where the next row filed under the same category will find it.
+//
+// **BY NAME, NOT BY ID, AND THAT IS WHAT THE CALLER HAS.** The form's category
+// box is free text with the tenant's list behind it as suggestions; at the
+// moment the question is answered the screen holds a NAME and nothing else.
+// Making it look the id up first would be a second round trip to learn something
+// this route can read for itself — and it snaps the name through
+// `storeCategory` on the way in, the same normalisation every writer of this
+// vocabulary uses, so an answer given against a typed spelling lands on the
+// listed one rather than missing it.
+//
+// **A NAME THE LIST DOES NOT HOLD IS A NO-OP, NOT A CREATE** (`recorded: false`).
+// §36 ships this list empty and the tenant decides what goes on it; a form that
+// quietly added a category every time somebody answered a question would grow
+// the list out of typos, which is the failure the list exists to end. The person
+// still gets what they answered for THIS row — the answer simply is not
+// remembered, because there is nothing yet to remember it on.
+//
+// The gate is `finance:record`, from lib/cap-routes.js's prefix rule, and it is
+// the right one: this is only ever reached by somebody recording money out.
+router.put('/api/retail-admin/finance/categories/answer', requireRetailAdmin, express.json(), (req, res) => {
+  try {
+    const db = tdb();
+    const body = req.body || {};
+    const name = storeCategory(db, body.name, KIND);
+    if (!name) return res.status(400).json({ error: ERR.name });
+    // Three states in, three states out — `null` un-answers it, the same way
+    // back the PATCH above offers.
+    const needsPo = body.needs_po === null ? null : (body.needs_po ? 1 : 0);
+    const row = db.prepare('SELECT id, name FROM categories WHERE kind = ? AND name = ?').get(KIND, name);
+    if (!row) return res.json({ success: true, recorded: false, name });
+    db.prepare('UPDATE categories SET needs_po = ? WHERE id = ? AND kind = ?').run(needsPo, row.id, KIND);
+    logActivity(req.user?.id || null, req.user?.username || null, 'update', 'finance_category', row.id,
+      { name: row.name, needs_po: needsPo }, req.ip);
+    res.json({ success: true, recorded: true, name: row.name, needs_po: needsPo });
+  } catch (e) {
+    console.error('[finance/categories answer]', e.message);
     res.status(500).json({ error: e.message });
   }
 });
