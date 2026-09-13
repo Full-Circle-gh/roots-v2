@@ -975,6 +975,15 @@ const state = {
      not exist yet at this line, and the single-store default is settled on the
      way into the screen instead. */
   onw:onwBlank([]),
+
+  /* TEAM AND PERMISSIONS (§112). One key for the whole of Settings → Team on
+     the phone — the roster's own flags stay in state.team/state.roles above,
+     which loadTeam has always owned; this holds everything the four screens
+     under it need: which tab, whose screen is open, the capability catalogue,
+     the draft of the role being edited, and the invite form. Built by tmBlank()
+     so this literal carries a name rather than a screenful of fields, the same
+     call onwBlank() makes one line up. */
+  tm:tmBlank(),
 };
 const app = document.getElementById('app');
 let toastTimer;
@@ -2791,46 +2800,11 @@ reg('signout', ()=>{
 });
 reg('enable', f=>{ if(FEATURES.includes(f)) toggleFeature(f); });
 reg('toggleFeature', k=>toggleFeature(k));
-/* Switching one person off. The confirm says what it costs and what it does
-   not — an account that cannot sign in still owns everything it did, and the
-   first worry about deactivating somebody mid-shift is whether their orders go
-   with them. The server's own refusals (yourself, the last owner) are surfaced
-   verbatim: they are already bilingual and they say exactly which rule was hit,
-   which is more use than a generic "that did not save". */
-reg('teamToggle', id=>{
-  if(state.teamBusy) return;
-  const u=(state.team||[]).find(x=>String(x.id)===String(id)); if(!u) return;
-  // The handler checks the rules too, not just the renderer. Drawing no tap
-  // target is a guard the VIEW enforces, and APP.cmd is reachable without it —
-  // so a row that says "the only owner" could still have been walked into a
-  // confirm for something the server was always going to refuse.
-  if(!TEAM_CAN_MANAGE()) return;
-  if(u.isActive&&teamLockReason(u)) return;
-  const next=!u.isActive, who=u.displayName||u.username;
-  state.ask={
-    title: next ? T('Let '+who+' sign in again?', '恢复 '+who+' 的登录？')
-                : T('Switch '+who+' off?', '停用 '+who+'？'),
-    body: next ? T('They get their role back, exactly as it was.','其角色权限将完全恢复。')
-               : T('They cannot sign in on any device from now on. Everything they have already done stays as it is, under their name.',
-                   '此后无法在任何设备登录。此前的所有操作记录保持不变，仍记在其名下。'),
-    confirmLabel: next?T('Let them in','恢复'):T('Switch off','停用'), danger:!next,
-    run:()=>{
-      state.teamBusy=u.id; state.teamActErr=null; render();
-      apiWrite('/api/backend/team/'+u.id,{is_active:next},'PUT').then(()=>{
-        u.isActive=next; state.teamBusy=null; render();
-        showToast(next?T('Can sign in again','已恢复登录'):T('Switched off','已停用'));
-      }).catch(e=>{
-        state.teamBusy=null;
-        if(String(e.message)==='auth') return;
-        // The route's own words — "You can't deactivate your own account",
-        // "The tenant needs at least one active owner" — already bilingual and
-        // already specific.
-        state.teamActErr=e.message||T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。');
-        render();
-      });
-    }};
-  render();
-});
+/* teamToggle — the roster's emergency switch — moved into the Team block
+   below with the rest of Settings → Team (§112): it reads teamMember() and
+   teamLockReason(), which live there, and a handler sitting four hundred
+   lines from the only screen that draws it is a handler nobody reviews
+   beside the rules it enforces. */
 reg('trendRange', v=>{ state.trendRange=v; render(); loadTrend(); });
 reg('trendMetric', v=>{ state.trendMetric=v; render(); });
 reg('openChannel', k=>{ state.chanSheet=k; state.chanErr=null; render(); });
@@ -8094,7 +8068,9 @@ const SUBS={
      counting. The Quick Stock FEATURE switch in Settings is a different thing
      and stays: it decides whether staff can open the /stock app at all. */
   trend:{title:['Trend','趋势'],status:()=>statusTrend(),render:()=>screenTrend()},
-  team:{title:['Team','团队'],status:()=>statusTeam(),render:()=>screenTeam()},
+  /* The CTA names the tab it is standing on — People adds a person, Roles adds
+     a role — and is absent for an operator holding neither capability. */
+  team:{title:['Team','团队'],status:()=>statusTeam(),cta:()=>tmTeamCta(),render:()=>screenTeam()},
   operations:{title:['Operations','运营'],render:()=>screenOperations()},
   settings:{title:['Settings','设置'],render:()=>screenSettings()},
   mirror_meituan:{title:['Meituan','美团'],render:()=>mirrorScreen('meituan',T('Read-only mirror. Manage in the Meituan app.','只读镜像，请在美团后台管理。'))},
@@ -14452,23 +14428,52 @@ function screenTrend(){
 }
 
 /* ==========================================================================
-   Team (desktop: 02-settings-ops.js, the Team tab)
+   Team — who has access, what each of them reaches, and the roles behind it
+   (desktop: 02-settings-ops.js, the Team tab and the Roles pane beside it)
    --------------------------------------------------------------------------
-   The one desktop tab no parity pass had ever looked at — it appears nowhere
-   in docs/tacet-mobile-parity.md, not even as a decided-against row.
+   THIS SCREEN WAS READ-ONLY ON PURPOSE, AND THAT DECISION IS REVERSED.
+   docs/tacet-mobile-parity.md ruled that inviting somebody, assigning a role
+   and setting a per-capability matrix was authoring, so the phone got the
+   roster and the emergency switch and nothing else. §112 of the decisions
+   record reverses it in Ash's own words: permissions must be manageable from
+   the phone. A shop that is RUN from a phone cannot have the question of who
+   may refund an order answered somewhere else — a staffer starts on Monday,
+   the person who decides what they reach is standing in the shop holding this,
+   and "find a laptop" is not an answer while somebody waits to start work.
 
-   Inviting somebody, assigning a role and setting a per-capability permission
-   matrix is authoring, and stays on the desktop. What belongs on a phone is the
-   other half: WHO HAS ACCESS, and switching one of them off in a hurry. A
-   staffer walks out mid-shift, a phone goes missing, and the answer should not
-   be "find a laptop".
+   So the whole of the desktop's Settings → Team is here — People and Roles,
+   its own two tabs — in the shapes a phone has rather than the shapes a
+   1120px pane has: a roster that pushes to ONE PERSON, one person that pushes
+   to THEIR PERMISSIONS, and a capability tree that opens one group at a time
+   instead of printing a hundred checkboxes into a scroller.
 
-   The two rules that make this safe are the server's, not this screen's — it
-   refuses to deactivate you, and it refuses to leave the shop with no active
-   owner (backend-team.js). The screen states both rather than letting a thumb
-   discover them as a 400: the row says why it cannot be switched, before it is
-   tapped.
+   NOTHING ABOUT THE RULES MOVED. Every write goes to the route the desktop
+   posts to, every refusal is rendered in the server's own words, and the four
+   rules that keep a shop out of trouble stay the server's (backend-team.js):
+   you cannot deactivate yourself, you cannot leave the shop with no active
+   owner, you cannot edit your own permissions, and you cannot hand out a
+   permission you do not hold. The first three are STATED on the row, before a
+   thumb finds them as a 400; the fourth is the server's alone, because only it
+   knows the caller's own set.
    ========================================================================== */
+/* One key on state for the whole of it, built here so the state literal at the
+   top of the file carries a name rather than a screenful of fields — the same
+   call onwBlank() makes for the new-order screen. */
+function tmBlank(){
+  return {
+    tab:'people',            // 'people' | 'roles' — the desktop's two tabs
+    personId:null,           // whose screen is open
+    cat:null, catTried:false, catErr:null,          // the capability catalogue
+    perm:null, permFor:null, permTried:false, permErr:null, permBusy:false,
+    open:{},                 // group key → expanded, shared by both trees
+    roles:null, rolesTried:false, rolesErr:null, canEdit:false,
+    layouts:['default'], dashCards:[],
+    roleKey:null, draft:null, roleBusy:false, roleErr:null,
+    inv:null, invBusy:false, invErr:null, invDone:null,
+    busy:null, err:null,
+  };
+}
+function tmS(){ return state.tm; }
 function loadTeam(force){
   if(state.teamTried&&!force) return;
   state.teamTried=true;
@@ -14482,13 +14487,43 @@ function loadTeam(force){
   }).catch(e=>{ if(String(e.message)==='auth') return;
     state.teamErr=E('Could not load the team.','加载团队失败。'); render(); });
 }
-// Only these two can change a roster; requireCap('team:manage') is what the
-// server checks, and drawing an action a staff account cannot use is the kind
-// of promise this app has spent a long time removing.
+/* THE CATALOGUE — the master capability list, its group and section names and
+   the sentence behind each money mark. Read once per app start: it is the same
+   hundred rows for every person and every role on the phone, and fetching it
+   again per screen would be a wait for something already in hand. */
+function tmLoadCat(){
+  const t=tmS(); if(t.cat||t.catTried) return;
+  t.catTried=true;
+  api('/api/backend/capabilities').then(d=>{ t.cat=d||null; t.catErr=null; render(); })
+    .catch(e=>{ if(String(e.message)==='auth') return;
+      t.catErr=E('Could not load the permission list.','无法加载权限列表。'); render(); });
+}
+function loadRoles(force){
+  const t=tmS();
+  if(t.rolesTried&&!force) return;
+  t.rolesTried=true; tmLoadCat();
+  api('/api/backend/roles').then(d=>{
+    t.roles=Array.isArray(d&&d.roles)?d.roles:[];
+    t.canEdit=!!(d&&d.canEdit);
+    t.layouts=Array.isArray(d&&d.layouts)&&d.layouts.length?d.layouts:['default'];
+    t.dashCards=Array.isArray(d&&d.dashCards)?d.dashCards:[];
+    if(d&&d.rbacEnforce!=null) state.teamEnforce=!!d.rbacEnforce;
+    t.rolesErr=null; render();
+  }).catch(e=>{ if(String(e.message)==='auth') return;
+    t.rolesErr=E('Could not load the roles.','无法加载角色。'); render(); });
+}
+// Only these can change a roster; requireCap('team:manage') is what the server
+// checks, and drawing an action a staff account cannot use is the kind of
+// promise this app has spent a long time removing.
 /* The capability the server actually checks, rather than two role names that a
    tenant can now rename or delete. Null caps (an older session) means unknown,
    and this layer has always failed OPEN on unknown — the server still refuses. */
-const TEAM_CAN_MANAGE=()=>!state.caps||state.caps.indexOf('team:manage')!==-1;
+const TEAM_CAN_MANAGE=()=>mCan('team:manage');
+// The second gate, and it is a different one: who may change what a person or
+// a role REACHES, as opposed to who may add somebody and switch them off.
+const TEAM_CAN_PERMS=()=>mCan('team:permissions');
+function teamSelf(){ return (state.team||[]).find(u=>u.isSelf)||null; }
+function teamMember(id){ return (state.team||[]).find(u=>String(u.id)===String(id))||null; }
 function teamActiveOwners(){ return (state.team||[]).filter(u=>u.role==='owner'&&u.isActive).length; }
 /* Why this person cannot be switched off, or '' if they can. The server owns
    these rules; this is the same two, said early. */
@@ -14502,62 +14537,1122 @@ function teamLockReason(u){
 }
 function statusTeam(){
   const t=state.team; if(!t) return '';
+  if(tmS().tab==='roles'){
+    const r=tmS().roles;
+    return r?(r.length+' '+T(r.length===1?'role':'roles','个角色')):'';
+  }
   const on=t.filter(u=>u.isActive).length, off=t.length-on;
   return on+' '+T(on===1?'person with access':'people with access','人可登录')
     + (off?' · '+T(off+(off===1?' switched off':' switched off'),off+' 人已停用'):'');
 }
+/* A shop's own word for a role, from the record. */
+function tmRoleRec(key){ return (state.roles||[]).find(x=>x.key===key)||null; }
+function tmRoleLabel(key){
+  const r=ROLE_NAMES(key);
+  // An unrecognised role string is shown raw rather than guessed at: it means
+  // the record is gone, and inventing a friendly name would hide the thing
+  // somebody needs to fix. The desktop's tmRoleLabel makes the same call.
+  return r?T(...r):String(key||'');
+}
+function tmRoleNeedsStore(key){ const r=tmRoleRec(key); return !!(r&&r.storePinned); }
+function tmStoreName(id){
+  const s=(state.stores||[]).find(x=>String(x.id)===String(id));
+  if(!s) return '#'+id;
+  return LANG==='en'?(s.name_en||s.name_cn||('#'+id)):(s.name_cn||s.name_en||('#'+id));
+}
+function tmStores(){ return (state.stores||[]); }
+/* An error bar in the shop's brick, the shape every screen in this file uses
+   for a failure that has to stay on the glass until it is acted on. */
+function tmErrBar(msg){
+  if(!msg) return '';
+  return `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+    <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+    <span style="font-size:14px;color:var(--brick-ink)">${escAttr(String(msg))}</span></div>`;
+}
+/* One row shape for every list on these screens: a label that WRAPS rather
+   than clips (the app's own words, not data), an optional second line, and
+   whatever control belongs on the right. */
+function tmRow(o){
+  const tap=o.cmd&&!o.locked;
+  const Tag=tap?'button':'div';
+  return `<${Tag} ${tap?`onclick="${o.cmd}"`:''} style="display:flex;align-items:center;gap:14px;width:100%;min-height:56px;padding:13px 16px;background:transparent;border:none;font-family:inherit;text-align:left;color:var(--text-primary);${tap?'cursor:pointer;':''}${o.dim?'opacity:.55;':''}">
+    <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+      <span style="font-size:15px;overflow-wrap:anywhere">${o.label}</span>
+      ${o.note?`<span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5;overflow-wrap:anywhere">${o.note}</span>`:''}</span>
+    <span style="display:flex;align-items:center;gap:9px;flex:none">
+      ${o.value?`<span style="font-size:14px;color:var(--text-secondary);text-align:right;max-width:150px">${o.value}</span>`:''}
+      ${o.right||''}
+      ${tap&&o.chev!==false?`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`:''}</span>
+  </${Tag}>`;
+}
+function tmList(rows){
+  const r=rows.filter(Boolean);
+  if(!r.length) return '';
+  return `<div class="list">${r.map((h,i)=>(i?'<div class="sep" style="margin-left:16px"></div>':'')+h).join('')}</div>`;
+}
+function tmCaption(text){
+  return `<div style="text-align:center;font-size:12.5px;color:var(--text-secondary);line-height:1.5;padding:0 8px">${text}</div>`;
+}
+
+/* ── The hub: People, and the Roles behind them ───────────────────────────── */
 function screenTeam(){
   loadTeam();
-  if(state.teamErr) return `<div style="padding:14px 16px 24px">
-    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick-ink)">${state.teamErr}</span></div></div>`;
+  const t=tmS();
+  if(state.teamErr) return `<div style="padding:14px 16px 24px">${tmErrBar(state.teamErr)}</div>`;
   if(!state.team) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  /* TWO TABS, NOT TWO SCREENS. Roles and People are one subject read from two
+     ends — a role is what a person holds — and the desktop puts them side by
+     side for that reason. A phone cannot do side by side, so it does the next
+     honest thing: one screen, one switch, and the counts on the switch. */
+  const tabs=chipRow([
+    {key:'people',en:'People',zh:'成员',count:state.team.length},
+    {key:'roles',en:'Roles',zh:'角色',count:t.roles?t.roles.length:null},
+  ],t.tab,'teamTab');
+  /* 12px, not 6: the geometry check's floor is 8px of air under the header's
+     hairline, and a chip row that starts on the rule reads as part of the band
+     rather than as the first thing on the screen. */
+  return `<div style="padding:12px 0 2px">${tabs}</div>`
+    + (t.tab==='roles'?teamRolesPane():teamPeoplePane());
+}
+function teamPeoplePane(){
+  const t=tmS();
   const rows=state.team;
-  if(!rows.length) return nothingYet(T('Nobody else yet','暂无其他成员'),
-    T('People are invited on desktop, with a role and the stores they can see. Once they exist you can check who has access from here, and switch someone off.',
-      '成员在电脑端邀请，并设置角色与可见门店。添加后可在此查看谁能登录，并可停用某人。'));
-  /* Still read-only, still true — and now it names where roles are shaped. */
-  const store=id=>{ const st=(state.stores||[]).find(x=>String(x.id)===String(id));
-    return st?(LANG==='en'?(st.name_en||st.name_cn):(st.name_cn||st.name_en)):null; };
   const can=TEAM_CAN_MANAGE();
+  if(!rows.length) return `<div style="padding:6px 16px 24px">${nothingYet(T('Nobody else yet','暂无其他成员'),
+    T('Add someone and they can sign in straight away, with the role you give them.',
+      '添加成员后即可登录，并按所选角色获得权限。'))}</div>`;
+  const self=teamSelf();
+  const owner=!!(self&&self.role==='owner');
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    ${state.teamActErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick-ink)">${escAttr(String(state.teamActErr))}</span></div>`:''}
+    ${tmErrBar(state.teamActErr)}
+    ${/* ENFORCEMENT IS THE FIRST THING ON THE SCREEN WHEN IT IS OFF, because
+         while it is off every permission under it is decoration: the view is
+         shaped and the server blocks nothing. Owner only — the route refuses
+         anybody else — and absent rather than disabled for everyone else. */''}
+    ${owner?tmList([tmRow({
+        label:T('Enforce permissions','强制执行权限'),
+        note:state.teamEnforce
+          ? T('The server refuses what a role does not allow. You always keep full access.','服务端会拒绝角色权限之外的操作。您始终保留完整权限。')
+          : T('Roles shape what people see, but the server is not enforcing them yet.','角色仅影响界面显示，服务端尚未强制执行。'),
+        right:state.teamBusy==='enforce'
+          ? `<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`
+          : toggle(!!state.teamEnforce,"APP.cmd('teamEnforce')"),
+      })])
+      :(state.teamEnforce?'':noteBar(T('Roles shape what people see, but the server is not enforcing them yet — only the owner can switch that on.','角色仅影响界面显示，服务端尚未强制执行 — 仅负责人可开启。')))}
     <div class="list">${rows.map((u,i)=>{
-      const busy=state.teamBusy===u.id;
       const lock=teamLockReason(u);
-      const tap=(can&&!lock&&!state.teamBusy)?`APP.cmd('teamToggle',${u.id})`:'';
       const rl=ROLE_NAMES(u.role);
-
       // Role, store, last seen, and why it cannot be switched — four facts that
       // do not fit one nowrap line beside a pill and a chevron, so the line
       // WRAPS instead of ellipsing. Clipped, the fact being lost was "never
       // signed in", which is the one that says an invite never landed.
-      const sub=[rl?T(...rl):u.role, u.retailStoreId?store(u.retailStoreId):null,
+      const sub=[rl?T(...rl):u.role,
+                 u.retailStoreId?tmStoreName(u.retailStoreId):(u.scopeAll===false?T('limited stores','门店受限'):null),
                  u.lastLogin?T('seen '+fmtDay(u.lastLogin),'最近 '+fmtDay(u.lastLogin)):T('never signed in','从未登录'),
                  lock||null]
                 .filter(Boolean).join(' · ');
-      const Tag=tap?'button':'div';
       return `${i?'<div class="sep" style="margin-left:14px"></div>':''}
-      <${Tag} ${tap?`onclick="${tap}"`:''} style="display:flex;align-items:center;gap:12px;width:100%;padding:14px;background:transparent;border:none;${tap?'cursor:pointer;':''}font-family:inherit;text-align:left${u.isActive?'':';opacity:.62'}">
+      <button onclick="APP.cmd('teamOpen',${u.id})" style="display:flex;align-items:center;gap:12px;width:100%;padding:14px;background:transparent;border:none;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)${u.isActive?'':';opacity:.62'}">
         <span style="width:34px;height:34px;flex:none;border-radius:8px;background:var(--dusk-tint);color:var(--dusk-ink);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500">${escAttr(((u.displayName||u.username||'·').trim().charAt(0)||'·').toUpperCase())}</span>
         <span style="flex:1;min-width:0;display:flex;flex-direction:column">
           <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(u.displayName||u.username)}</span>
           <span class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px;line-height:1.45">${escAttr(sub)}</span></span>
         <span style="display:flex;align-items:center;gap:9px;flex:none">
+          ${u.hasCustomPerms?`<span class="pill" style="background:var(--dusk-tint);color:var(--dusk-ink)">${T('Custom','自定义')}</span>`:''}
           <span class="pill" style="background:${u.isActive?PILL.success[0]:PILL.muted[0]};color:${u.isActive?PILL.success[1]:PILL.muted[1]}">${
-            busy?T('Saving…','保存中…'):(u.isActive?T('Can sign in','可登录'):T('Off','已停用'))}</span>
-          ${tap?`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`:''}</span></${Tag}>`;
+            state.teamBusy===u.id?T('Saving…','保存中…'):(u.isActive?T('Can sign in','可登录'):T('Off','已停用'))}</span>
+          <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span></button>`;
     }).join('')}</div>
-    ${/* One bar, for the fact with a consequence — roles that shape the view
-          but stop nothing are worth knowing about. The rest is the quiet
-          centred line every other screen uses to say where authoring lives. */''}
-    ${state.teamEnforce?'':noteBar(T('Roles shape what people see, but the server is not enforcing them yet — that switch is on desktop.','角色仅影响界面显示，服务端尚未强制执行 — 该开关在电脑端。'))}
-    <div style="text-align:center;font-size:12.5px;color:var(--text-secondary);line-height:1.5">${
-      can?T('Inviting someone, and what each role reaches, are set on desktop — Settings → Team → Roles.','邀请成员及各角色权限在电脑端设置 — 设置 → 团队 → 角色。')
-         :T('Switching someone off needs permission to manage the team.','停用成员需要管理团队的权限。')}</div></div>`;
+    ${can?'':tmCaption(T('Adding somebody, and changing what they reach, needs permission to manage the team.','添加成员及更改其权限需要管理团队的权限。'))}</div>`;
+}
+function teamRolesPane(){
+  const t=tmS();
+  loadRoles();
+  if(t.rolesErr) return `<div style="padding:14px 16px 24px">${tmErrBar(t.rolesErr)}</div>`;
+  if(!t.roles) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${tmErrBar(t.roleErr)}
+    <div class="list">${t.roles.map((r,i)=>{
+      const what=r.isFixed
+        ? T('Everything, always','始终拥有全部权限')
+        : T(r.capCount+' of '+r.capTotal+' permissions',r.capTotal+' 项中已开启 '+r.capCount+' 项');
+      const people=r.people
+        ? T(r.people===1?'1 person':r.people+' people',r.people+' 人')
+        : T('nobody','无成员');
+      return `${i?'<div class="sep" style="margin-left:16px"></div>':''}
+      <button onclick="APP.cmd('roleOpen','${escAttr(r.key)}')" style="display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;background:transparent;border:none;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <span style="font-size:15px;overflow-wrap:anywhere">${escAttr(T(r.nameEn||r.nameCn,r.nameCn||r.nameEn))}</span>
+          <span class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.45">${escAttr(what+' · '+people)}</span></span>
+        ${(r.moneyMoves||r.moneyShows)?`<span class="pill" style="background:var(--amber-tint);color:var(--amber-ink)">${
+            r.moneyMoves?T(r.moneyMoves+' money',r.moneyMoves+' 资金'):T(r.moneyShows+' money',r.moneyShows+' 金额')}</span>`:''}
+        <span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span></button>`;
+    }).join('')}</div>
+    ${tmCaption(t.canEdit
+      ? T('A role is what a person holds. Change one and everybody on it moves with it.','角色决定成员的权限。修改角色后，使用该角色的成员随之变更。')
+      : T('Changing what a role reaches needs permission to set permissions.','修改角色权限需要设置权限的许可。'))}</div>`;
+}
+
+/* ── One person ───────────────────────────────────────────────────────────
+   Everything about an account in one column, in the order somebody standing
+   in a shop asks it: who is this, can they sign in, what are they, where do
+   they work, and then the two doors — their permissions, and a new password.
+
+   WHAT IS MISSING IS ABSENT, NEVER DISABLED. An operator without team:manage
+   reads the facts and is offered nothing; the same rule applyCapGates keeps on
+   the desktop, and the same one this file already keeps on the roster. */
+function screenTeamPerson(){
+  const t=tmS();
+  const u=teamMember(t.personId);
+  if(!u) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Nobody is open.','未选择成员。')}</div>`;
+  const can=TEAM_CAN_MANAGE(), perms=TEAM_CAN_PERMS();
+  const lock=teamLockReason(u);
+  const rl=ROLE_NAMES(u.role);
+  const busy=state.teamBusy===u.id;
+  const needsStore=tmRoleNeedsStore(u.role);
+  /* The access switch, and the three states it has. A switch that springs back
+     has told the operator nothing, so a person who cannot be switched off gets
+     the REASON in place of the control — the rule the roster already states on
+     the row, repeated where the tap would have happened. */
+  const accessRight = busy
+    ? `<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`
+    : (!can||lock)
+      ? `<span class="pill" style="background:${u.isActive?PILL.success[0]:PILL.muted[0]};color:${u.isActive?PILL.success[1]:PILL.muted[1]}">${u.isActive?T('Can sign in','可登录'):T('Off','已停用')}</span>`
+      : toggle(!!u.isActive,`APP.cmd('teamToggle',${u.id})`);
+  const permWord = u.role==='owner'
+    ? T('Everything, always','始终拥有全部权限')
+    : u.hasCustomPerms ? T('Custom','自定义')
+    : T('Exactly the role','与角色完全一致');
+  return `<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">
+    ${tmErrBar(state.teamActErr)}
+    <div class="card" style="display:flex;align-items:center;gap:14px;padding:16px">
+      <span style="width:46px;height:46px;flex:none;border-radius:12px;background:var(--dusk-tint);color:var(--dusk-ink);display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:500">${escAttr(((u.displayName||u.username||'·').trim().charAt(0)||'·').toUpperCase())}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <span style="font-size:17px;font-weight:500;overflow-wrap:anywhere">${escAttr(u.displayName||u.username)}</span>
+        <span class="num" style="font-size:13px;color:var(--text-secondary);margin-top:3px">${escAttr('@'+u.username+(rl?' · '+T(...rl):''))}</span>
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${
+          u.lastLogin?escAttr(T('Last seen '+fmtDay(u.lastLogin),'最近登录 '+fmtDay(u.lastLogin))):T('Never signed in','从未登录')}</span></span>
+    </div>
+    ${tmList([
+      tmRow({label:T('Can sign in','可登录'),
+        note:lock?T('This account cannot be switched off — '+lock,'该账号无法停用 — '+lock)
+            :(can?(u.isActive?T('Switch this off and they are out of every device, at once.','关闭后，其所有设备将立即无法登录。')
+                             :T('Switch this on and their role comes back exactly as it was.','开启后，其角色权限将完全恢复。'))
+                 :null),
+        right:accessRight}),
+      can?tmRow({label:T('Role','角色'),value:escAttr(tmRoleLabel(u.role)),cmd:`APP.cmd('teamRole',${u.id})`}):null,
+      (can&&needsStore)?tmRow({label:T('Store','门店'),
+        value:escAttr(u.retailStoreId?tmStoreName(u.retailStoreId):T('Not set','未设置')),
+        note:T('This is the store they run — their home and data stay on it.','这是其负责的门店——首页与数据仅限本店。'),
+        cmd:`APP.cmd('teamStore',${u.id})`}):null,
+      can?tmRow({label:T('Name','姓名'),value:escAttr(u.displayName||T('Not set','未设置')),cmd:`APP.cmd('teamName',${u.id})`}):null,
+      can?tmRow({label:T('Reset password','重置密码'),value:T('10 or more','至少 10 位'),cmd:`APP.cmd('teamPass',${u.id})`}):null,
+    ])}
+    ${tmList([
+      tmRow({label:T('Permissions','权限'),value:escAttr(permWord),
+        note:u.role==='owner'
+          ? T('Owner always has full access, so a shop can never lock itself out of its own account.','负责人始终拥有全部权限，以确保店铺不会把自己锁在账户之外。')
+          : u.isSelf ? T('You can’t edit your own permissions.','不能编辑自己的权限。')
+          : T('What this person reaches, on top of their role.','该成员在角色之外的权限差异。'),
+        cmd:(perms&&u.role!=='owner'&&!u.isSelf)?`APP.cmd('teamPerms',${u.id})`:null}),
+    ])}
+    ${can?'':tmCaption(T('Changing any of this needs permission to manage the team.','更改这些设置需要管理团队的权限。'))}
+    ${/* Not on your own screen: there the reason is the server's other rule —
+         nobody edits their own matrix — and the row above already says it. */''}
+    ${(can&&!perms&&u.role!=='owner'&&!u.isSelf)?tmCaption(T('Setting one person’s permissions needs permission to set permissions.','设置成员权限需要“设置权限”的许可。')):''}</div>`;
+}
+
+/* ── The capability tree, once, for both screens ──────────────────────────
+   A person's matrix and a role's editor ask the same question of the same
+   catalogue — is this one on? — and differ only in what they do with the
+   answer and what they write beside it. One renderer, so the two can never
+   disagree about what an area is called or which permissions are in it.
+
+   A GROUP AT A TIME. The desktop prints all hundred rows into a tall pane and
+   lets an owner scroll; a phone that did the same would be a hundred toggles
+   in a column with no way to see where you are. The collapsed row states the
+   group's NAME and how much of it is on — "Run the shop · 18 of 30 on" — which
+   is the same sentence the desktop's collapsed group carries, and how many
+   AREAS a group contains is not a fact anybody came for. */
+const TM_HOISTED=['dashboard:view'];   // drawn in the role editor's Dashboard block instead
+function tmCatGroups(hide){
+  const c=tmS().cat; if(!c) return [];
+  const skip=hide||[];
+  const by={};
+  (c.capabilities||[]).forEach(x=>{ if(skip.indexOf(x.key)!==-1) return; (by[x.group]=by[x.group]||[]).push(x); });
+  return (c.groups||[]).filter(g=>by[g]&&by[g].length).map(g=>{
+    // A group with nothing visible in it is ABSENT — no header, no empty
+    // shell. A section holding one permission flattens: a folder around one
+    // thing is noise, which is the call the desktop's role pane makes too.
+    const secs=[], seen={};
+    by[g].forEach(x=>{ if(!seen[x.section]){ seen[x.section]={key:x.section,caps:[]}; secs.push(seen[x.section]); } seen[x.section].caps.push(x); });
+    return {key:g,caps:by[g],sections:secs};
+  });
+}
+function tmGroupLabel(g){ const c=tmS().cat, n=c&&c.groupNames&&c.groupNames[g]; return n?T(n[0],n[1]):g; }
+function tmSectionLabel(s){ const c=tmS().cat, n=c&&c.sections&&c.sections[s]; return n?T(n[0],n[1]):s; }
+/* The money marker. ONE mark for both cases — the word behind it is what
+   differs — because a coin nobody can justify stops being read. */
+function tmCoin(c){
+  if(!c||!c.money) return '';
+  const w=c.money==='moves'?T('moves money','涉及资金'):T('shows money','显示金额');
+  return `<span class="pill" style="background:var(--amber-tint);color:var(--amber-ink);font-size:11.5px">${w}</span>`;
+}
+function tmMoneyWhy(key){
+  const c=tmS().cat, n=c&&c.moneyNotes&&c.moneyNotes[key];
+  return n?T(n[0],n[1]):'';
+}
+function tmCapCount(keys,total){
+  return keys?T(keys+' of '+total+' on',total+' 项中开启 '+keys+' 项'):T('nothing on','未开启');
+}
+/* o = { isOn(key), cmd(key), mark(key), locked, hide, why } */
+function tmTree(o){
+  const t=tmS();
+  tmLoadCat();
+  if(t.catErr) return tmErrBar(t.catErr);
+  if(!t.cat) return `<div style="padding:32px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const groups=tmCatGroups(o.hide);
+  return groups.map(g=>{
+    const open=!!t.open[g.key];
+    const on=g.caps.filter(c=>o.isOn(c.key)).length;
+    let body='';
+    if(open){
+      body=g.sections.map(sec=>{
+        /* A section holding one permission FLATTENS — no header, just the row.
+           Where there is a header the hairline goes ABOVE it, not between it
+           and the first row it names: a rule directly under an eyebrow reads
+           as a divider between the label and its own contents. */
+        const head=sec.caps.length>1
+          ? `<div class="sep" style="margin-left:16px"></div><div class="eyebrow" style="padding:12px 16px 4px;font-size:12.5px">${escAttr(tmSectionLabel(sec.key))}</div>`
+          : '';
+        return head+sec.caps.map((c,ci)=>{
+          const isOn=o.isOn(c.key);
+          const why=o.why?tmMoneyWhy(c.key):'';
+          return `${(head&&ci===0)?'':'<div class="sep" style="margin-left:16px"></div>'}
+          <div style="display:flex;align-items:center;gap:12px;padding:11px 16px;min-height:52px${o.locked?';opacity:.6':''}">
+            <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+              <span style="font-size:14.5px;overflow-wrap:anywhere">${escAttr(T(c.labelEn,c.labelCn))}</span>
+              ${(c.money||o.mark(c.key))?`<span style="display:flex;flex-wrap:wrap;gap:6px">${tmCoin(c)}${o.mark(c.key)}</span>`:''}
+              ${why?`<span style="font-size:12px;color:var(--text-secondary);line-height:1.5">${escAttr(why)}</span>`:''}</span>
+            ${o.locked
+              ? `<span class="pill" style="background:${isOn?PILL.success[0]:PILL.muted[0]};color:${isOn?PILL.success[1]:PILL.muted[1]}">${isOn?T('On','开'):T('Off','关')}</span>`
+              : toggle(isOn,o.cmd(c.key))}</div>`;
+        }).join('');
+      }).join('');
+    }
+    return `<div class="list">
+      <button onclick="APP.cmd('tmGroup','${escAttr(g.key)}')" aria-expanded="${open}" style="display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:14px 16px;background:transparent;border:none;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <span style="font-size:15px;font-weight:500">${escAttr(tmGroupLabel(g.key))}</span>
+          <span class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:3px">${escAttr(tmCapCount(on,g.caps.length))}</span></span>
+        <span style="color:var(--text-secondary);display:flex;transform:rotate(${open?'90deg':'0deg'});transition:transform .2s var(--ease-settle)">${ic('chevron-right')}</span></button>
+      ${body}</div>`;
+  }).join('');
+}
+
+/* ── One person's permissions ─────────────────────────────────────────────
+   The exceptions screen. What is on here is the EFFECTIVE set — the role, plus
+   what this person was given, minus what was taken away — and every row that
+   differs from the role says which way it differs. Two facts, not one: the
+   desktop painted a single tint for both directions for a long time, which
+   showed that an exception existed and refused to say what it was. */
+function screenTeamPerms(){
+  const t=tmS();
+  const p=t.perm;
+  const u=teamMember(t.permFor);
+  /* THE ERROR REPLACES THE SCREEN ONLY WHEN THERE IS NO SCREEN TO KEEP. A read
+     that failed has nothing to show; a SAVE that failed has a matrix the
+     operator has just spent a minute on, and throwing it away to print the
+     reason would cost them the edit as well as the save. The bar renders
+     inside it instead — the rule every other write on this surface keeps. */
+  if(t.permErr&&!p) return `<div style="padding:14px 16px 24px">${tmErrBar(t.permErr)}</div>`;
+  if(!p||!u) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const preset=p.preset;
+  const locked=p.isOwner||p.isSelf||!TEAM_CAN_PERMS();
+  const exceptions=tmPermExceptions();
+  /* SAY WHAT AN EXCEPTION IS before showing a screenful of them: these are
+     differences from the role, so editing the role moves this person too and
+     their exceptions ride along on top. */
+  const ctx=p.isOwner
+    ? T('Owner always has full access — nothing to change here.','负责人始终拥有完整权限 — 此处无需更改。')
+    : p.isSelf
+      ? T('You can’t edit your own permissions.','不能编辑自己的权限。')
+      : T('Role','角色')+': '+tmRoleLabel(u.role)+'. '+(exceptions
+          ? T(exceptions===1?'1 exception to that role, kept if the role changes.':exceptions+' exceptions to that role, kept if the role changes.',
+              '与该角色有 '+exceptions+' 处不同，角色变更后仍保留。')
+          : T('No exceptions — this person gets exactly what the role gives.','无例外 — 该成员的权限与角色完全一致。'));
+  const stores=tmStores();
+  return `<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">
+    ${tmErrBar(t.permErr)}
+    <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${escAttr(ctx)}</div>
+    ${/* SCOPE FIRST. Which stores a person can see is a bigger fact than any
+         single permission under it — a manager with every capability in the
+         list still only runs one shop — and it is the one an owner adding a
+         second branch comes here to change. */''}
+    ${/* A one-store shop has no scope question — until somebody is ALREADY
+         limited, which a two-store shop that closed a branch can leave behind.
+         Hiding the block then would stand an operator in front of a person
+         nobody can widen again, so it appears whenever it is already off. */''}
+    ${(stores.length>1||!p.scopeAll)?tmList([
+      tmRow({label:T('All stores','所有门店'),
+        note:p.scopeAll?T('Everything they can reach, in every store.','其权限适用于所有门店。')
+                       :T('They only see the stores ticked below.','仅可见下方勾选的门店。'),
+        right:locked
+          ? `<span class="pill" style="background:${p.scopeAll?PILL.success[0]:PILL.muted[0]};color:${p.scopeAll?PILL.success[1]:PILL.muted[1]}">${p.scopeAll?T('On','开'):T('Off','关')}</span>`
+          : toggle(!!p.scopeAll,"APP.cmd('permScope')")}),
+    ].concat(p.scopeAll?[]:stores.map(s=>tmRow({
+        label:escAttr(tmStoreName(s.id)),
+        right:locked
+          ? `<span class="pill" style="background:${p.stores[s.id]?PILL.success[0]:PILL.muted[0]};color:${p.stores[s.id]?PILL.success[1]:PILL.muted[1]}">${p.stores[s.id]?T('On','开'):T('Off','关')}</span>`
+          : toggle(!!p.stores[s.id],`APP.cmd('permStore',${s.id})`)})))):''}
+    ${tmTree({
+      isOn:k=>!!p.on[k],
+      cmd:k=>`APP.cmd('permCap','${escAttr(k)}')`,
+      mark:k=>{
+        // Three states, and the two that are not 'same' are different facts:
+        // 'Added' means they were given something the role does not include,
+        // 'Removed' means something the role includes was taken away.
+        const inRole=preset.indexOf(k)!==-1, on=!!p.on[k];
+        if(on===inRole) return '';
+        return on
+          ? `<span class="pill" style="background:var(--dusk-tint);color:var(--dusk-ink);font-size:11.5px">${T('Added','额外')}</span>`
+          : `<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink);font-size:11.5px">${T('Removed','移除')}</span>`;
+      },
+      locked:locked,
+    })}
+    ${locked?tmCaption(p.isOwner
+        ? T('Owner always has full access. It cannot be narrowed.','负责人始终拥有完整权限，不可缩减。')
+        : p.isSelf ? T('Somebody else with permission to set permissions can change yours.','其他拥有“设置权限”许可的成员可以修改你的权限。')
+        : T('Changing this needs permission to set permissions.','修改此项需要“设置权限”的许可。'))
+      : `<button class="cta" ${t.permBusy?'disabled':''} onclick="APP.cmd('permSave')">${
+          t.permBusy?T('Saving…','保存中…'):T('Save permissions','保存权限')}</button>`}
+  </div>`;
+}
+/* How far this person stands from their role, counted the way the server
+   counts it when it writes the override rows: a grant is something on that the
+   role does not carry, a revoke is something off that it does. */
+function tmPermExceptions(){
+  const p=tmS().perm; if(!p) return 0;
+  const preset=p.preset, cat=(tmS().cat&&tmS().cat.capabilities)||[];
+  let n=0;
+  cat.forEach(c=>{ const inRole=preset.indexOf(c.key)!==-1, on=!!p.on[c.key]; if(on!==inRole) n++; });
+  return n;
+}
+
+/* ── Adding somebody ──────────────────────────────────────────────────────
+   The one screen on this surface that creates an account, so it is also the
+   only one that has to hand a credential back. There is no invite email in
+   this product and no reset link: the owner types a password and tells the
+   person what it is, which is what the desktop does too. So the screen ends
+   with the two things they need to be told, on the glass, copyable — not in a
+   toast that is gone in two seconds. */
+function tmInvBlank(){ return {name:'',username:'',password:'',role:'',storeId:null}; }
+/* A password worth typing once. Ambiguous characters are left out (no O/0,
+   l/1) because this one gets read aloud across a counter, and the length is
+   the route's floor plus two rather than exactly the floor, so a mistyped
+   character is still a legal password rather than a 400. */
+function tmSuggestPassword(){
+  const a='abcdefghijkmnpqrstuvwxyz', A='ABCDEFGHJKLMNPQRSTUVWXYZ', d='23456789';
+  const pool=a+A+d;
+  let out='';
+  const buf=(window.crypto&&window.crypto.getRandomValues)?window.crypto.getRandomValues(new Uint32Array(12)):null;
+  for(let i=0;i<12;i++){
+    const n=buf?buf[i]:Math.floor(Math.random()*4294967296);
+    out+=pool.charAt(n%pool.length);
+  }
+  // One of each kind, guaranteed, without telling the operator a rule the
+  // server does not have: the route asks for ten characters and nothing else.
+  return out.slice(0,10)+A.charAt(Math.floor(Math.random()*A.length))+d.charAt(Math.floor(Math.random()*d.length));
+}
+function screenTeamInvite(){
+  const t=tmS();
+  if(!t.inv) t.inv=tmInvBlank();
+  const f=t.inv;
+  /* THE RECEIPT. A screen reopened after a create must not reappear on its own
+     receipt (the rule push() keeps for every other form in this file), so this
+     state is cleared on the way in and only exists between the write and the
+     operator leaving. */
+  if(t.invDone) return `<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px">
+      <div style="font-size:16px;font-weight:500">${T('Added','已添加')} · ${escAttr(t.invDone.name||t.invDone.username)}</div>
+      <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${
+        T('Tell them these two. The password is not stored anywhere you can read it again.','请把这两项告知对方。密码不会以可读形式保存，无法再次查看。')}</div>
+      ${[[T('Username','用户名'),t.invDone.username],[T('Password','密码'),t.invDone.password]].map(([l,v])=>
+        `<button onclick="APP.cmd('copyPlain','${escAttr(v)}')" style="display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;border-radius:10px;background:var(--surface-raised);border:none;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
+          <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+            <span style="font-size:12.5px;color:var(--text-secondary)">${l}</span>
+            <span class="num" style="font-size:16px;margin-top:2px;overflow-wrap:anywhere">${escAttr(v)}</span></span>
+          <span style="color:var(--text-secondary);display:flex;flex:none">${ic('copy',18)}</span></button>`).join('')}
+    </div>
+    <button class="cta" onclick="APP.cmd('inviteAgain')">${T('Add another','再添加一位')}</button>
+    <button class="btn2" style="width:100%" onclick="APP.cmd('back')">${T('Back to the team','返回团队')}</button></div>`;
+  const roles=(state.roles||[]).filter(r=>r.key!=='owner');
+  const needsStore=tmRoleNeedsStore(f.role);
+  const field=(label,inner,hint)=>`<div style="display:flex;flex-direction:column;gap:7px">
+    <span class="eyebrow">${label}</span>${inner}
+    ${hint?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${hint}</span>`:''}</div>`;
+  return `<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:18px">
+    ${tmErrBar(t.invErr)}
+    ${field(T('Name','姓名'),
+      `<input id="mTmName" value="${escAttr(f.name)}" maxlength="60" placeholder="${T('Lin Hao','林浩')}" oninput="APP.cmd('invField','name',this.value)">`)}
+    ${field(T('Username','用户名'),
+      `<input id="mTmUser" value="${escAttr(f.username)}" maxlength="40" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="linhao" oninput="APP.cmd('invField','username',this.value)">`,
+      T('Letters, numbers and . _ - only. This is what they sign in with.','用户名仅限字母、数字和 . _ -。这是其登录账号。'))}
+    ${field(T('Password','密码'),
+      `<div style="display:flex;gap:8px;align-items:center">
+        <input id="mTmPass" value="${escAttr(f.password)}" maxlength="72" autocapitalize="none" autocorrect="off" spellcheck="false" style="flex:1;min-width:0" oninput="APP.cmd('invField','password',this.value)">
+        <button class="btn2" style="flex:none" onclick="APP.cmd('invSuggest')">${T('Suggest','生成')}</button></div>`,
+      T('At least 10 characters. You will see it once more after they are added.','至少 10 位。添加后会再显示一次。'))}
+    ${field(T('Role','角色'),
+      tmList([tmRow({label:f.role?escAttr(tmRoleLabel(f.role)):T('Pick a role','请选择角色'),
+        note:f.role?escAttr(tmRoleDesc(f.role)):null,
+        cmd:"APP.cmd('invRole')"})]),
+      T('A role is a bundle of permissions. You can change what one reaches under Roles, and set exceptions per person afterwards.',
+        '角色是一组权限。可在“角色”中修改其权限，添加后也可为个人设置例外。'))}
+    ${needsStore?field(T('Store','门店'),
+      tmList([tmRow({label:f.storeId?escAttr(tmStoreName(f.storeId)):T('Pick a store','请选择门店'),cmd:"APP.cmd('invStore')"})]),
+      T('This is the store they run — their home and data stay on it.','这是其负责的门店——首页与数据仅限本店。')):''}
+    ${roles.length?'':tmCaption(T('No roles to give yet — make one under Roles first.','暂无可分配的角色 — 请先在“角色”中创建。'))}
+    <button class="cta" ${t.invBusy?'disabled':''} onclick="APP.cmd('invSubmit')">${
+      t.invBusy?T('Adding…','添加中…'):T('Add them','添加成员')}</button></div>`;
+}
+function tmRoleDesc(key){
+  const r=tmRoleRec(key);
+  if(!r) return '';
+  return T(r.descEn||r.descCn||'',r.descCn||r.descEn||'');
+}
+
+/* ── One role ─────────────────────────────────────────────────────────────
+   A role is edited IN PLACE. There is one set per tenant, no copy-from-
+   template, no read-only originals and no reset-to-default, so the thing on
+   screen is the thing that is in force — the same call the desktop's pane
+   makes, and the reason both surfaces can show the same numbers.
+
+   THE BLAST RADIUS IS STATED FIRST, above anything editable: you are told who
+   you are about to affect before you decide. */
+/* What each Home board shows today, absent an override — i.e. what the
+   body.pos-<layout> rules in retail-admin.css draw. Read ONLY to seed the
+   ticks when a role has no override yet, so opening the field for the first
+   time shows the role's real dashboard rather than a blank slate.
+   ⚠ SECOND COPY. The first is RL_DASH_LAYOUT_DEFAULT in
+   public/retail-admin/02-settings-ops.js, and the two must not drift: an owner
+   who seeds the ticks on a phone and saves would otherwise write a different
+   board than the same tap on a desktop. scripts/test_mobile_permissions.js
+   compares the two tables and fails the build if they disagree — which is
+   more than the desktop's own copy had, where the CSS block beside it is kept
+   in step by hand. */
+const TM_DASH_DEFAULT={
+  default:          ['needs','recap','orders','customers'],
+  store_manager:    ['needs','recap','orders','customers','inventory','delivery'],
+  warehouse:        ['needs','recap','unhandled','inventory','incoming'],
+  customer_service: ['needs','recap','unhandled','onroad','ready'],
+  dispatch:         ['needs','recap','unhandled','onroad','ready'],
+};
+const TM_DASH_LABEL={
+  needs:['Needs you','需要您处理'], recap:['While you were away','您不在的这段时间'],
+  orders:['Today','今日'], customers:['Customers','客户'],
+  unhandled:['Unhandled orders','待处理订单'], inventory:['Inventory','库存'],
+  incoming:['On the way / Drafts','在途 / 待发送'], onroad:['On the road','配送在途'],
+  ready:['Ready to hand off','待交接'], delivery:['Delivery','配送'],
+};
+const TM_LAYOUT_LABEL={
+  default:['The full view','完整视图'], store_manager:['One store’s day','单店日常'],
+  warehouse:['Stock and deliveries','库存与收货'], customer_service:['Customers and orders','顾客与订单'],
+  dispatch:['Deliveries in motion','配送进行中'],
+};
+function tmDashDefaults(layout){ return TM_DASH_DEFAULT[layout]||TM_DASH_DEFAULT.default; }
+function tmDashLabel(k){ const p=TM_DASH_LABEL[k]||[k,k]; return T(p[0],p[1]); }
+function tmLayoutLabel(k){ const p=TM_LAYOUT_LABEL[k]||[k,k]; return T(p[0],p[1]); }
+function tmRoleFind(key){ return (tmS().roles||[]).find(r=>r.key===key)||null; }
+function tmDraftFrom(r){
+  return {key:r.key, nameEn:r.nameEn||'', nameCn:r.nameCn||'', descEn:r.descEn||'', descCn:r.descCn||'',
+    caps:(r.caps||[]).slice(), layout:r.layout||'default', stockAppOnly:!!r.stockAppOnly,
+    dashboardCards:Array.isArray(r.dashboardCards)?r.dashboardCards.slice():null};
+}
+function tmDraftHas(k){ const d=tmS().draft; return !!(d&&d.caps.indexOf(k)!==-1); }
+function tmDirty(){
+  const t=tmS(), d=t.draft, r=tmRoleFind(t.roleKey);
+  if(!d||!r) return false;
+  if(d.nameEn!==(r.nameEn||'')||d.nameCn!==(r.nameCn||'')) return true;
+  if(d.descEn!==(r.descEn||'')||d.descCn!==(r.descCn||'')) return true;
+  if(d.layout!==(r.layout||'default')) return true;
+  if(d.stockAppOnly!==!!r.stockAppOnly) return true;
+  const was=r.dashboardCards||null, now=d.dashboardCards||null;
+  if((was===null)!==(now===null)) return true;
+  if(was&&now&&(was.length!==now.length||was.some(k=>now.indexOf(k)===-1))) return true;
+  const had=r.caps||[];
+  if(had.length!==d.caps.length) return true;
+  if(d.caps.some(k=>had.indexOf(k)===-1)) return true;
+  return false;
+}
+function tmMoneyLine(keys){
+  const cat=(tmS().cat&&tmS().cat.capabilities)||[];
+  let moves=0,shows=0;
+  cat.forEach(c=>{ if(!c.money||keys.indexOf(c.key)===-1) return; if(c.money==='moves') moves++; else shows++; });
+  if(!moves&&!shows) return T('Touches no money','不涉及资金');
+  const bits=[];
+  if(moves) bits.push(T(moves+' move money',moves+' 项涉及资金'));
+  if(shows) bits.push(T(shows+(moves?' show it':' show money'),shows+' 项显示金额'));
+  return bits.join(' · ');
+}
+function tmPeopleWord(n){
+  if(!n) return T('Nobody holds this role yet','暂无成员使用此角色');
+  return T(n===1?'1 person holds this role':n+' people hold this role',n+' 人使用此角色');
+}
+/* Only the widening direction has a precondition: a role that is already
+   unlocked can always be locked down. With enforcement off, requireRetailAdmin
+   never consults the route→capability map, so this lockdown is the only thing
+   between a restricted operator and the whole backend — said here, on a
+   disabled switch, rather than only when the save comes back refused. */
+function tmLockHint(on){
+  if(!on) return T('Off: this role reaches the backend, limited to the permissions below.',
+                   '关闭后:该角色可访问后台,权限以下方勾选为准。');
+  if(!state.teamEnforce) return T('To let this role out of the app, turn permissions enforcement on first (People tab) — otherwise it would reach the whole backend rather than the tools below.',
+    '若要让该角色使用其他功能,请先在“成员”中开启权限强制执行,否则该角色将可访问整个后台,而不仅是下方勾选的功能。');
+  return T('On: this role opens the Add Stock app and nothing else. The permissions below have no effect while it is on.',
+    '开启后:该角色仅可打开“加库存”应用,下方权限在此期间不生效。');
+}
+function tmDashHint(on){
+  return on
+    ? T('On: the dashboard is this role’s Home tab on the phone and its first screen on desktop.',
+        '开启后:仪表盘是该角色在手机上的“首页”标签,也是电脑上的首屏。')
+    : T('Off: this role has no dashboard on any device. Both open on the next screen it can reach — usually Orders.',
+        '关闭后:该角色在任何设备上都没有仪表盘。手机和电脑都会打开它可访问的下一个页面(通常是“订单”)。');
+}
+function screenTeamRole(){
+  const t=tmS();
+  const r=tmRoleFind(t.roleKey);
+  if(t.rolesErr) return `<div style="padding:14px 16px 24px">${tmErrBar(t.rolesErr)}</div>`;
+  if(!r) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  // OWNER — locked, WITH THE REASON. A lock nobody can explain reads as a bug.
+  if(r.isFixed) return `<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${escAttr(tmPeopleWord(r.people))}.</div>
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+      <div style="font-size:15px;font-weight:500">${T('Fixed — this one can’t be changed','固定角色 — 不可更改')}</div>
+      <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${
+        T('Owner always has every permission, so a shop can never lock itself out of its own account. It can’t be renamed, narrowed or deleted.',
+          '负责人始终拥有全部权限，以确保店铺不会把自己锁在账户之外。不可重命名、缩减或删除。')}</div></div></div>`;
+  const d=t.draft&&t.draft.key===r.key?t.draft:tmDraftFrom(r);
+  const ro=!t.canEdit;
+  const total=r.capTotal||((t.cat&&t.cat.capabilities)?t.cat.capabilities.length:0);
+  const dashOn=d.caps.indexOf('dashboard:view')!==-1;
+  const cards=d.dashboardCards||tmDashDefaults(d.layout);
+  const field=(label,inner,hint)=>`<div style="display:flex;flex-direction:column;gap:7px">
+    <span class="eyebrow">${label}</span>${inner}
+    ${hint?`<span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${hint}</span>`:''}</div>`;
+  return `<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:16px">
+    ${tmErrBar(t.roleErr)}
+    ${ro?`<div style="display:flex;flex-direction:column;gap:6px">
+        <div style="font-size:17px;font-weight:500">${escAttr(T(d.nameEn||d.nameCn,d.nameCn||d.nameEn))}</div>
+        ${(d.descEn||d.descCn)?`<div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${escAttr(T(d.descEn,d.descCn))}</div>`:''}</div>`
+      : field(T('Name (English)','名称（英文）'),`<input id="mTmRoleEn" value="${escAttr(d.nameEn)}" maxlength="40" oninput="APP.cmd('roleField','nameEn',this.value)">`)
+        + field(T('Name (Chinese)','名称（中文）'),`<input id="mTmRoleCn" value="${escAttr(d.nameCn)}" maxlength="40" oninput="APP.cmd('roleField','nameCn',this.value)">`)
+        + field(T('What this role is for','该角色的职责'),
+            `<input id="mTmRoleDescEn" value="${escAttr(d.descEn)}" maxlength="200" placeholder="${T('One line, in the words your team uses','一句话，用团队自己的说法')}" oninput="APP.cmd('roleField','descEn',this.value)">`)
+        + field(T('Description (Chinese)','说明（中文）'),
+            `<input id="mTmRoleDescCn" value="${escAttr(d.descCn)}" maxlength="200" oninput="APP.cmd('roleField','descCn',this.value)">`)}
+    ${/* BLAST RADIUS, before the ticks. */''}
+    <div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">
+      <b style="color:var(--text-primary);font-weight:500">${escAttr(tmPeopleWord(r.people))}.</b>
+      ${r.people?T('Every change here reaches them on their next screen.','此处的每项更改都会在他们下次打开页面时生效。')
+                :T('Nothing you change here affects anyone yet.','此处的更改目前不影响任何人。')}
+      ${r.exceptions?escAttr(T((r.exceptions===1?'1 of them has an exception':r.exceptions+' of them have exceptions')+' — their own permissions on top of this role. Those survive this edit.',
+          '其中 '+r.exceptions+' 人设有例外权限，编辑角色后仍会保留。')):''}</div>
+    ${ro?'':tmList([tmRow({
+      label:T('Only the Add Stock app','仅可使用“加库存”应用'),
+      note:escAttr(tmLockHint(!!d.stockAppOnly)),
+      right:(d.stockAppOnly&&!state.teamEnforce)
+        ? `<span class="pill" style="background:${PILL.warning[0]};color:${PILL.warning[1]}">${T('On','开')}</span>`
+        : toggle(!!d.stockAppOnly,"APP.cmd('roleStockOnly')")})])}
+    ${/* THE DASHBOARD, as one block: the switch that says whether this role has
+         one at all, and under it the layout and the cards that only matter
+         while it does. */''}
+    ${tmList([
+      tmRow({label:T('Has a dashboard','拥有仪表盘'),note:escAttr(tmDashHint(dashOn)),
+        right:ro?`<span class="pill" style="background:${dashOn?PILL.success[0]:PILL.muted[0]};color:${dashOn?PILL.success[1]:PILL.muted[1]}">${dashOn?T('On','开'):T('Off','关')}</span>`
+                :toggle(dashOn,"APP.cmd('roleCap','dashboard:view')")}),
+      tmRow({label:T('Dashboard layout','仪表盘布局'),value:escAttr(tmLayoutLabel(d.layout)),
+        note:T('Which board it opens on, and the cards it starts with.','打开的看板样式及其初始卡片。'),
+        cmd:(ro||!dashOn)?null:"APP.cmd('roleLayout')",dim:!dashOn}),
+    ].concat((t.dashCards||[]).map(k=>tmRow({
+      label:escAttr(tmDashLabel(k)),dim:!dashOn,
+      right:(ro||!dashOn)
+        ? `<span class="pill" style="background:${cards.indexOf(k)!==-1?PILL.success[0]:PILL.muted[0]};color:${cards.indexOf(k)!==-1?PILL.success[1]:PILL.muted[1]}">${cards.indexOf(k)!==-1?T('On','开'):T('Off','关')}</span>`
+        : toggle(cards.indexOf(k)!==-1,`APP.cmd('roleDash','${escAttr(k)}')`)})))
+     .concat((!ro&&dashOn&&d.dashboardCards)?[tmRow({label:T('Use this board’s default','恢复为该看板的默认设置'),cmd:"APP.cmd('roleDashReset')",chev:false})]:[]))}
+    <div class="card" style="display:flex;justify-content:space-between;gap:12px;padding:14px 16px">
+      <span class="num" style="font-size:13.5px"><b style="font-weight:500">${d.caps.length}</b> ${escAttr(T('of '+total+' on','/ '+total+' 已开启'))}</span>
+      <span style="font-size:13.5px;color:var(--text-secondary);text-align:right">${escAttr(tmMoneyLine(d.caps))}</span></div>
+    ${tmTree({
+      isOn:k=>d.caps.indexOf(k)!==-1,
+      cmd:k=>`APP.cmd('roleCap','${escAttr(k)}')`,
+      mark:()=>'',
+      locked:ro,
+      hide:TM_HOISTED,
+      why:true,
+    })}
+    <div id="mTmRoleFoot">${tmRoleFoot()}</div></div>`;
+}
+/* The footer, patched in place rather than re-rendered: every keystroke in a
+   name field changes whether there is anything to save, and rebuilding the
+   screen underneath would take the caret with it. Same call bcfRepaintFoot
+   makes on the broadcast composer. */
+function tmRoleFoot(){
+  const t=tmS(), r=tmRoleFind(t.roleKey);
+  if(!r||!t.canEdit) return '';
+  const dirty=tmDirty();
+  const save=r.people
+    ? T(r.people===1?'Save · affects 1 person':'Save · affects '+r.people+' people','保存 · 影响 '+r.people+' 人')
+    : T('Save','保存');
+  return `<div style="display:flex;flex-direction:column;gap:10px">
+    <div style="font-size:12.5px;color:${dirty?'var(--amber-ink)':'var(--text-secondary)'};text-align:center">${
+      dirty?T('Unsaved changes','有未保存的更改'):T('No unsaved changes','没有未保存的更改')}</div>
+    <button class="cta" ${(!dirty||t.roleBusy)?'disabled':''} style="${(!dirty||t.roleBusy)?'opacity:.55;':''}" onclick="APP.cmd('roleSave')">${
+      t.roleBusy?T('Saving…','保存中…'):escAttr(save)}</button>
+    ${dirty?`<button class="btn2" style="width:100%" onclick="APP.cmd('roleRevert')">${T('Revert','撤销')}</button>`:''}
+    <button class="btn2" style="width:100%;color:var(--brick-ink);border-color:var(--brick-ink)" onclick="APP.cmd('roleDelete')">${T('Delete role','删除角色')}</button></div>`;
+}
+function tmRepaintFoot(){
+  const el=document.getElementById('mTmRoleFoot');
+  if(el) el.innerHTML=tmRoleFoot(); else render();
+}
+
+/* ── The writes ───────────────────────────────────────────────────────────
+   Every one of these posts to the route the desktop posts to, disables the
+   control it belongs to while it is in flight, and renders the SERVER's own
+   refusal where the operator is looking — those sentences are already
+   bilingual and already say which rule was hit, which is more use than a
+   generic "that did not save". */
+function teamWrite(id,body,okMsg){
+  if(state.teamBusy) return Promise.resolve();
+  state.teamBusy=id; state.teamActErr=null; render();
+  return apiWrite('/api/backend/team/'+id,body,'PUT').then(()=>{
+    state.teamBusy=null;
+    loadTeam(true);
+    showToast(okMsg);
+  }).catch(e=>{
+    state.teamBusy=null;
+    if(String(e.message)==='auth') return;
+    state.teamActErr=e.message||T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。');
+    render();
+  });
+}
+reg('teamTab', v=>{ tmS().tab=(String(v)==='roles')?'roles':'people'; if(tmS().tab==='roles') loadRoles(); render(); });
+reg('tmGroup', g=>{ const o=tmS().open; o[g]=!o[g]; render(); });
+reg('teamOpen', id=>{ tmS().personId=Number(id); state.teamActErr=null; push('teamperson'); });
+/* Switching one person off. The confirm says what it costs and what it does
+   not — an account that cannot sign in still owns everything it did, and the
+   first worry about deactivating somebody mid-shift is whether their orders go
+   with them. */
+reg('teamToggle', id=>{
+  if(state.teamBusy) return;
+  const u=teamMember(id); if(!u) return;
+  // The handler checks the rules too, not just the renderer. Drawing no tap
+  // target is a guard the VIEW enforces, and APP.cmd is reachable without it.
+  if(!TEAM_CAN_MANAGE()) return;
+  if(u.isActive&&teamLockReason(u)) return;
+  const next=!u.isActive, who=u.displayName||u.username;
+  state.ask={
+    title: next ? T('Let '+who+' sign in again?', '恢复 '+who+' 的登录？')
+                : T('Switch '+who+' off?', '停用 '+who+'？'),
+    body: next ? T('They get their role back, exactly as it was.','其角色权限将完全恢复。')
+               : T('They cannot sign in on any device from now on. Everything they have already done stays as it is, under their name.',
+                   '此后无法在任何设备登录。此前的所有操作记录保持不变，仍记在其名下。'),
+    confirmLabel: next?T('Let them in','恢复'):T('Switch off','停用'), danger:!next,
+    run:()=>{
+      state.teamBusy=u.id; state.teamActErr=null; render();
+      apiWrite('/api/backend/team/'+u.id,{is_active:next},'PUT').then(()=>{
+        u.isActive=next; state.teamBusy=null; render();
+        showToast(next?T('Can sign in again','已恢复登录'):T('Switched off','已停用'));
+      }).catch(e=>{
+        state.teamBusy=null;
+        if(String(e.message)==='auth') return;
+        // The route's own words — "You can't deactivate your own account",
+        // "The tenant needs at least one active owner" — already bilingual and
+        // already specific.
+        state.teamActErr=e.message||T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。');
+        render();
+      });
+    }};
+  render();
+});
+/* Enforcement. Owner only, and the confirm says what turning it on does to
+   everybody else — and what it cannot do to the owner. */
+reg('teamEnforce', ()=>{
+  if(state.teamBusy) return;
+  /* THE HANDLER KEEPS THE RULE THE RENDERER DRAWS. Only the owner may move
+     this — PUT /api/backend/rbac-enforce refuses anybody else — and not
+     drawing the switch is a guard the VIEW enforces, which APP.cmd is
+     reachable without. The same gap teamToggle was found to have. */
+  const self=teamSelf();
+  if(!self||self.role!=='owner') return;
+  const on=!state.teamEnforce;
+  const write=()=>{
+    state.teamBusy='enforce'; state.teamActErr=null; render();
+    apiWrite('/api/backend/rbac-enforce',{enforce:on?1:0},'PUT').then(r=>{
+      state.teamEnforce=!!(r&&r.rbacEnforce);
+      state.teamBusy=null; render();
+      showToast(state.teamEnforce?T('Enforcing permissions','已开启强制执行'):T('Not enforcing','已关闭强制执行'));
+    }).catch(e=>{
+      state.teamBusy=null;
+      if(String(e.message)==='auth') return;
+      state.teamActErr=e.message||T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。');
+      render();
+    });
+  };
+  if(!on){ write(); return; }
+  state.ask={title:T('Turn on enforcement?','开启强制权限？'),
+    body:T('Members will be blocked from actions outside their permissions. You (owner) always keep full access.',
+           '成员将无法执行其权限之外的操作。您（负责人）始终保留完整权限。'),
+    confirmLabel:T('Turn it on','开启'),
+    run:write};
+  render();
+});
+/* Giving somebody a role. A picker rather than a form: there is one field and
+   picking IS the act, so a Save button underneath would be a second tap for
+   nothing. A role that wants a store asks for the store in the same breath —
+   the server refuses a pinned role with no store, and meeting that as a 400
+   after the picker has closed would be the phone hiding a question it knew
+   about. */
+reg('teamRole', id=>{
+  const u=teamMember(id); if(!u||!TEAM_CAN_MANAGE()) return;
+  const roles=(state.roles||[]);
+  if(!roles.length) return;
+  state.ask={title:T('Role for '+(u.displayName||u.username),(u.displayName||u.username)+' 的角色'),
+    body:T('What they reach comes from the role. Exceptions for this one person are set under Permissions.',
+           '其权限来自所选角色。个人的例外权限在“权限”中设置。'),
+    options:roles.map(r=>({key:r.key,label:escAttr(T(r.nameEn||r.nameCn,r.nameCn||r.nameEn))+(r.key===u.role?' · '+T('now','当前'):'')})),
+    run:key=>{
+      if(!key||key===u.role) return;
+      if(tmRoleNeedsStore(key)&&!u.retailStoreId){ tmAskStore(u,key); return; }
+      teamWrite(u.id,{role:key,is_active:!!u.isActive,
+        retail_store_id:tmRoleNeedsStore(key)?u.retailStoreId:undefined},T('Role changed','角色已更改'));
+    }};
+  render();
+});
+function tmAskStore(u,role){
+  const stores=tmStores();
+  if(!stores.length){ state.teamActErr=E('This role runs one store, and there are no stores yet.','该角色需要指定门店，但尚未创建门店。'); render(); return; }
+  state.ask={title:T('Which store?','哪家门店？'),
+    body:T('This is the store they run — their home and data stay on it.','这是其负责的门店——首页与数据仅限本店。'),
+    options:stores.map(s=>({key:String(s.id),label:escAttr(tmStoreName(s.id))})),
+    run:key=>{
+      if(!key) return;
+      const body={retail_store_id:Number(key)};
+      if(role) { body.role=role; body.is_active=!!u.isActive; }
+      teamWrite(u.id,body,T('Saved','已保存'));
+    }};
+  render();
+}
+reg('teamStore', id=>{ const u=teamMember(id); if(u&&TEAM_CAN_MANAGE()) tmAskStore(u,null); });
+reg('teamName', id=>{
+  const u=teamMember(id); if(!u||!TEAM_CAN_MANAGE()) return;
+  state.ask={title:T('Name','姓名'),
+    body:T('What the shop calls them. Their username does not change.','店内对其的称呼。登录用户名不变。'),
+    fields:[{id:'name',label:T('Name','姓名'),value:u.displayName||''}],
+    confirmLabel:T('Save','保存'),
+    validate:v=>(!v.name||!v.name.trim())?T('Enter a name first','请先输入姓名'):(v.name.length>60?T('Name is too long','名称过长'):''),
+    run:v=>teamWrite(u.id,{display_name:v.name.trim()},T('Saved','已保存'))};
+  render();
+});
+reg('teamPass', id=>{
+  const u=teamMember(id); if(!u||!TEAM_CAN_MANAGE()) return;
+  /* The desktop's own title and button for this exact act, lifted whole — the
+     person is already named in the header this sheet opens over. */
+  state.ask={title:T('New password (at least 10 characters)','新密码(至少 10 位)'),
+    body:T('They can sign in with it straight away. Whatever they had stops working.','设置后即可使用新密码登录，原密码立即失效。'),
+    fields:[{id:'pw',label:T('Password','密码'),value:''}],
+    confirmLabel:T('Reset password','重置密码'),
+    validate:v=>(!v.pw||v.pw.length<10)?T('Password must be at least 10 characters','密码至少 10 位'):'',
+    run:v=>{
+      state.teamBusy=u.id; state.teamActErr=null; render();
+      apiWrite('/api/backend/team/'+u.id+'/password',{new_password:v.pw},'POST').then(()=>{
+        state.teamBusy=null; render(); showToast(T('Password set','密码已设置'));
+      }).catch(e=>{
+        state.teamBusy=null;
+        if(String(e.message)==='auth') return;
+        state.teamActErr=e.message||T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。'); render();
+      });
+    }};
+  render();
+});
+/* ── One person's permissions ─────────────────────────────────────────── */
+reg('teamPerms', id=>{
+  const u=teamMember(id); if(!u) return;
+  if(!TEAM_CAN_PERMS()||u.role==='owner'||u.isSelf) return;
+  const t=tmS();
+  t.permFor=u.id; t.perm=null; t.permErr=null; t.permBusy=false;
+  tmLoadCat();
+  push('teamperms');
+  api('/api/backend/team/'+u.id+'/permissions').then(d=>{
+    const on={}; (d.effective||[]).forEach(k=>{ on[k]=true; });
+    const stores={}; (d.storeIds||[]).forEach(s=>{ stores[s]=true; });
+    t.perm={id:u.id,preset:(d.presetCaps||[]),on,scopeAll:d.scopeAll!==false,stores,
+      isOwner:!!d.isOwner,isSelf:!!d.isSelf,role:d.role};
+    render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    t.permErr=E('Could not load their permissions.','无法加载该成员的权限。'); render();
+  });
+});
+reg('permCap', k=>{ const p=tmS().perm; if(!p) return; p.on[k]=!p.on[k]; render(); });
+reg('permScope', ()=>{ const p=tmS().perm; if(!p) return; p.scopeAll=!p.scopeAll; render(); });
+reg('permStore', id=>{ const p=tmS().perm; if(!p) return; p.stores[id]=!p.stores[id]; render(); });
+reg('permSave', ()=>{
+  const t=tmS(), p=t.perm;
+  if(!p||t.permBusy) return;
+  const caps=Object.keys(p.on).filter(k=>p.on[k]);
+  const store_ids=Object.keys(p.stores).filter(k=>p.stores[k]).map(Number);
+  if(!p.scopeAll&&!store_ids.length){
+    t.permErr=E('Pick at least one store, or turn All stores back on.','请至少选择一个门店，或重新开启“所有门店”。'); render(); return;
+  }
+  t.permBusy=true; t.permErr=null; render();
+  apiWrite('/api/backend/team/'+p.id+'/permissions',{caps,scope_all:p.scopeAll?1:0,store_ids},'PUT').then(r=>{
+    t.permBusy=false;
+    const u=teamMember(p.id);
+    if(u&&r){ u.hasCustomPerms=!!r.hasCustomPerms; u.scopeAll=r.scopeAll; }
+    showToast(T('Permissions saved','权限已保存'));
+    pop();
+  }).catch(e=>{
+    t.permBusy=false;
+    if(String(e.message)==='auth') return;
+    t.permErr=E(e.message||T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。'),
+                e.message||T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。'));
+    render();
+  });
+});
+/* ── Adding somebody ──────────────────────────────────────────────────── */
+reg('teamInvite', ()=>{
+  if(!TEAM_CAN_MANAGE()) return;
+  const t=tmS();
+  t.inv=tmInvBlank(); t.invErr=null; t.invDone=null; t.invBusy=false;
+  // Seeded with the first role that is not the owner's, because a picker that
+  // opens on nothing makes the operator answer a question the shop has usually
+  // already answered — and the owner role is never what an invite means.
+  const first=(state.roles||[]).find(r=>r.key!=='owner');
+  if(first) t.inv.role=first.key;
+  push('teaminvite');
+});
+reg('inviteAgain', ()=>{ const t=tmS(); t.inv=tmInvBlank(); t.invDone=null; t.invErr=null;
+  const first=(state.roles||[]).find(r=>r.key!=='owner'); if(first) t.inv.role=first.key; render(); });
+// No render: a keystroke that rebuilt the screen would take the caret with it.
+reg('invField', (k,v)=>{ const t=tmS(); if(!t.inv) t.inv=tmInvBlank(); t.inv[k]=String(v==null?'':v); });
+reg('invSuggest', ()=>{ const t=tmS(); if(!t.inv) t.inv=tmInvBlank(); t.inv.password=tmSuggestPassword(); render(); });
+reg('copyPlain', v=>copyText(String(v||'')));
+reg('invRole', ()=>{
+  const t=tmS(); const roles=(state.roles||[]).filter(r=>r.key!=='owner');
+  if(!roles.length) return;
+  state.ask={title:T('Role','角色'),
+    options:roles.map(r=>({key:r.key,label:escAttr(T(r.nameEn||r.nameCn,r.nameCn||r.nameEn))})),
+    run:key=>{ if(!key) return; t.inv.role=key; if(!tmRoleNeedsStore(key)) t.inv.storeId=null; render(); }};
+  render();
+});
+reg('invStore', ()=>{
+  const t=tmS(), stores=tmStores();
+  if(!stores.length) return;
+  state.ask={title:T('Store','门店'),
+    options:stores.map(s=>({key:String(s.id),label:escAttr(tmStoreName(s.id))})),
+    run:key=>{ if(!key) return; t.inv.storeId=Number(key); render(); }};
+  render();
+});
+reg('invSubmit', ()=>{
+  const t=tmS(), f=t.inv||tmInvBlank();
+  if(t.invBusy) return;
+  const username=String(f.username||'').trim().toLowerCase();
+  // The three the route refuses, asked here first — a form that posts and then
+  // reports a rule it could have stated is a keyboard's worth of wasted work.
+  if(!username){ t.invErr=E('Enter a username','请输入用户名'); render(); return; }
+  if(!/^[a-z0-9._-]+$/.test(username)){ t.invErr=E('Username may use letters, numbers, . _ - only','用户名仅限字母、数字和 . _ -'); render(); return; }
+  if(String(f.password||'').length<10){ t.invErr=E('Password must be at least 10 characters','密码至少 10 位'); render(); return; }
+  if(!f.role){ t.invErr=E('Pick a role','请选择角色'); render(); return; }
+  if(tmRoleNeedsStore(f.role)&&!f.storeId){ t.invErr=E('Pick a store','请选择门店'); render(); return; }
+  t.invBusy=true; t.invErr=null; render();
+  apiWrite('/api/backend/team',{username,display_name:String(f.name||'').trim(),role:f.role,
+    password:f.password,retail_store_id:tmRoleNeedsStore(f.role)?Number(f.storeId):null},'POST').then(()=>{
+    t.invBusy=false;
+    t.invDone={username,password:f.password,name:String(f.name||'').trim()};
+    loadTeam(true);
+    render();
+  }).catch(e=>{
+    t.invBusy=false;
+    if(String(e.message)==='auth') return;
+    t.invErr=E(e.message||T('That did not save. Nobody has been added.','没有保存成功。未添加成员。'),
+               e.message||T('That did not save. Nobody has been added.','没有保存成功。未添加成员。'));
+    render();
+  });
+});
+/* ── Roles ────────────────────────────────────────────────────────────── */
+reg('roleOpen', key=>{
+  const t=tmS(); const r=tmRoleFind(key); if(!r) return;
+  t.roleKey=key; t.draft=r.isFixed?null:tmDraftFrom(r); t.roleErr=null;
+  push('teamrole');
+});
+reg('roleRevert', ()=>{ const t=tmS(); const r=tmRoleFind(t.roleKey); if(!r) return; t.draft=tmDraftFrom(r); render(); });
+reg('roleField', (k,v)=>{ const d=tmS().draft; if(!d) return; d[k]=String(v==null?'':v); tmRepaintFoot(); });
+reg('roleCap', k=>{
+  const d=tmS().draft; if(!d||!tmS().canEdit) return;
+  const i=d.caps.indexOf(k);
+  if(i===-1) d.caps.push(k); else d.caps.splice(i,1);
+  render();
+});
+reg('roleStockOnly', ()=>{
+  const d=tmS().draft; if(!d||!tmS().canEdit) return;
+  // Only the widening direction has a precondition, and the server keeps it too.
+  if(d.stockAppOnly&&!state.teamEnforce) return;
+  d.stockAppOnly=!d.stockAppOnly; render();
+});
+reg('roleLayout', ()=>{
+  const t=tmS(), d=t.draft; if(!d||!t.canEdit) return;
+  state.ask={title:T('Dashboard layout','仪表盘布局'),
+    options:(t.layouts||['default']).map(L=>({key:L,label:escAttr(tmLayoutLabel(L))})),
+    run:key=>{
+      if(!key) return;
+      d.layout=key;
+      // Cards has no override yet — its ticks are showing the OLD board's
+      // default set, so they follow the new one. Once overridden the picks are
+      // the owner's own and stop following the board entirely.
+      render();
+    }};
+  render();
+});
+reg('roleDash', k=>{
+  const t=tmS(), d=t.draft; if(!d||!t.canEdit) return;
+  // First tick against an unset field materialises it — from the board's
+  // CURRENT default, with only the touched key flipped — never from an empty
+  // set, or unticking one box would look like it hid every other card too.
+  const set=(d.dashboardCards||tmDashDefaults(d.layout)).slice();
+  const i=set.indexOf(k);
+  if(i===-1) set.push(k); else set.splice(i,1);
+  d.dashboardCards=set; render();
+});
+reg('roleDashReset', ()=>{ const d=tmS().draft; if(!d) return; d.dashboardCards=null; render(); });
+reg('roleSave', ()=>{
+  const t=tmS(), d=t.draft, r=tmRoleFind(t.roleKey);
+  if(!d||!r||t.roleBusy||!t.canEdit) return;
+  if(!d.nameEn.trim()&&!d.nameCn.trim()){ t.roleErr=E('Give the role a name','请为角色命名'); render(); return; }
+  t.roleBusy=true; t.roleErr=null; render();
+  apiWrite('/api/backend/roles/'+encodeURIComponent(r.key),{
+    name_en:d.nameEn.trim(),name_cn:d.nameCn.trim(),desc_en:d.descEn.trim(),desc_cn:d.descCn.trim(),
+    layout:d.layout,stock_app_only:d.stockAppOnly,caps:d.caps,dashboard_cards:d.dashboardCards,
+  },'PUT').then(()=>{
+    t.roleBusy=false;
+    showToast(r.people
+      ? T(r.people===1?'Saved · 1 person moves with it':'Saved · '+r.people+' people move with it','已保存 · '+r.people+' 人随之变更')
+      : T('Saved','已保存'));
+    loadRoles(true);
+    // The roster's role chips and both pickers read the same records.
+    loadTeam(true);
+  }).catch(e=>{
+    t.roleBusy=false;
+    if(String(e.message)==='auth') return;
+    t.roleErr=E(e.message||T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。'),
+                e.message||T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。'));
+    render();
+  });
+});
+reg('roleAdd', ()=>{
+  const t=tmS(); if(!t.canEdit) return;
+  state.ask={title:T('Name the new role','新角色的名称'),
+    fields:[{id:'name',label:T('Role name','角色名称'),value:'',placeholder:T('Bookkeeper, Weekend staff…','会计、周末店员…')}],
+    confirmLabel:T('Create role','创建角色'),
+    validate:v=>(!v.name||!v.name.trim())?T('Give the role a name','请为角色命名'):'',
+    run:v=>{
+      t.roleErr=null; render();
+      // A new role starts EMPTY, not as a copy of anything. Picking what it
+      // reaches is the job the editor exists for, and a role that arrives
+      // pre-filled invites nobody to check what is in it.
+      apiWrite('/api/backend/roles',{name_en:v.name.trim(),name_cn:v.name.trim(),caps:[]},'POST').then(r=>{
+        const key=r&&r.role&&r.role.key;
+        api('/api/backend/roles').then(d=>{
+          t.roles=Array.isArray(d&&d.roles)?d.roles:t.roles;
+          t.canEdit=!!(d&&d.canEdit);
+          t.layouts=Array.isArray(d&&d.layouts)&&d.layouts.length?d.layouts:t.layouts;
+          t.dashCards=Array.isArray(d&&d.dashCards)?d.dashCards:t.dashCards;
+          loadTeam(true);
+          if(key){ const rec=tmRoleFind(key); if(rec){ t.roleKey=key; t.draft=tmDraftFrom(rec); push('teamrole'); } }
+          showToast(T('Role added — now choose what it reaches','角色已创建 — 请设置其权限'));
+          render();
+        }).catch(()=>render());
+      }).catch(e=>{
+        if(String(e.message)==='auth') return;
+        t.roleErr=E(e.message||T('Could not add the role','无法新建角色'),e.message||T('Could not add the role','无法新建角色'));
+        render();
+      });
+    }};
+  render();
+});
+/* Delete WITH A DESTINATION. A role nobody holds goes on a plain confirm; a
+   role somebody holds asks where its people go and says what that means, in
+   the same sentence. There is no pre-selected default — picking is the point. */
+reg('roleDelete', ()=>{
+  const t=tmS(), r=tmRoleFind(t.roleKey);
+  if(!r||r.isFixed||!t.canEdit) return;
+  const name=T(r.nameEn||r.nameCn,r.nameCn||r.nameEn);
+  const go=(moveTo)=>{
+    t.roleBusy=true; t.roleErr=null; render();
+    apiWrite('/api/backend/roles/'+encodeURIComponent(r.key),moveTo?{move_to:moveTo}:{},'DELETE').then(()=>{
+      t.roleBusy=false; t.roleKey=null; t.draft=null;
+      loadRoles(true); loadTeam(true);
+      pop();
+      showToast(r.people
+        ? T(r.people===1?'Role deleted · 1 person moved':'Role deleted · '+r.people+' people moved','角色已删除 · '+r.people+' 人已迁移')
+        : T('Role deleted','角色已删除'));
+    }).catch(e=>{
+      t.roleBusy=false;
+      if(String(e.message)==='auth') return;
+      t.roleErr=E(e.message||T('Could not delete','删除失败'),e.message||T('Could not delete','删除失败'));
+      render();
+    });
+  };
+  if(!r.people){
+    state.ask={title:T('Delete “'+name+'”?','删除“'+name+'”？'),
+      body:T('Nobody holds this role, so nothing changes for anyone.','当前无人使用该角色，删除不会影响任何人。'),
+      confirmLabel:T('Delete role','删除角色'),danger:true,run:()=>go(null)};
+    render(); return;
+  }
+  const others=(t.roles||[]).filter(x=>x.key!==r.key);
+  if(!others.length){ t.roleErr=E('There is nowhere to move them','没有可迁移的角色'); render(); return; }
+  state.ask={title:T('Delete “'+name+'” — where do its people go?','删除“'+name+'” — 这些成员迁移到哪里？'),
+    body:T((r.people===1?'1 person holds this role':r.people+' people hold this role')
+            +(r.exceptions?'. '+(r.exceptions===1?'1 of them has an exception; it stays, on top of the new role.'
+                                                 :r.exceptions+' of them have exceptions; they stay, on top of the new role.'):'.'),
+           r.people+' 人使用此角色。'+(r.exceptions?'其中 '+r.exceptions+' 人设有例外权限，迁移后仍保留。':'')),
+    options:others.map(x=>({key:x.key,label:escAttr(T(x.nameEn||x.nameCn,x.nameCn||x.nameEn))})),
+    run:key=>{
+      const dest=others.find(x=>x.key===key); if(!dest) return;
+      const dn=T(dest.nameEn||dest.nameCn,dest.nameCn||dest.nameEn);
+      state.ask={title:T('Delete “'+name+'” and move '+r.people+' to “'+dn+'”?','删除“'+name+'”并将 '+r.people+' 人迁移到“'+dn+'”？'),
+        body:T('They get its permissions on their next screen.','他们下次打开页面即按新角色权限生效。'),
+        confirmLabel:T('Delete and move','删除并迁移'),danger:true,run:()=>go(dest.key)};
+      render();
+    }};
+  render();
+});
+/* ── The screens these commands push ──────────────────────────────────── */
+SUBS.teamperson={title:['Team member','团队成员'],
+  titleOf:()=>{ const u=teamMember(tmS().personId); return u?escAttr(u.displayName||u.username):T('Team member','团队成员'); },
+  backLabel:()=>T('Team','团队'),
+  render:()=>screenTeamPerson()};
+SUBS.teamperms={title:['Permissions','权限'],
+  backLabel:()=>{ const u=teamMember(tmS().permFor); return u?escAttr(u.displayName||u.username):T('Team','团队'); },
+  status:()=>{ const p=tmS().perm; if(!p||!tmS().cat) return '';
+    const n=Object.keys(p.on).filter(k=>p.on[k]).length;
+    const total=((tmS().cat&&tmS().cat.capabilities)||[]).length;
+    return T(n+' of '+total+' on',total+' 项中开启 '+n+' 项'); },
+  render:()=>screenTeamPerms()};
+SUBS.teaminvite={title:['Add someone','添加成员'],backLabel:()=>T('Team','团队'),render:()=>screenTeamInvite()};
+SUBS.teamrole={title:['Role','角色'],
+  titleOf:()=>{ const r=tmRoleFind(tmS().roleKey); return r?escAttr(T(r.nameEn||r.nameCn,r.nameCn||r.nameEn)):T('Role','角色'); },
+  backLabel:()=>T('Team','团队'),
+  render:()=>screenTeamRole()};
+/* The header's one button, and it names the tab it is standing on: People
+   adds a person, Roles adds a role. Absent — never disabled — for an operator
+   who holds neither capability. */
+function tmTeamCta(){
+  const t=tmS();
+  const btn=(label,cmd)=>`<button class="cta" style="width:auto;padding:12px 20px;flex:none" onclick="${cmd}">${label}</button>`;
+  if(t.tab==='roles') return t.canEdit?btn(T('Add role','新建角色'),"APP.cmd('roleAdd')"):'';
+  return TEAM_CAN_MANAGE()?btn(T('Add','添加'),"APP.cmd('teamInvite')"):'';
 }
 
 /* Who is signed in, in their shop's own words. This was a hardcoded map of
@@ -15518,6 +16613,15 @@ const ROUTE_CAP={
   settings:['settings:shop','settings:push','settings:payments','stores:view','shipping:config'],
   setup:['settings:shop','stores:view'],
   team:'team:view', categories:'categories:view', activity:'activity:view',
+  /* THE FOUR TEAM SCREENS (§112), each gated on the capability its own writes
+     are gated on server-side (routes/backend-team.js) — the call Receiving's
+     line above makes, for the same reason: a screen whose entire purpose is the
+     save at the bottom of it must not be offered to somebody whose save 403s.
+     `teamperson` is the exception and is deliberately `team:view`: it READS as
+     a record — role, store, last seen — and every control on it is drawn only
+     for the capability that control needs. */
+  teamperson:'team:view', teaminvite:'team:manage',
+  teamperms:'team:permissions', teamrole:'team:view',
 };
 /* Fail-OPEN on null, exactly as the desktop's can()/canAny(): caps are null only
    on a resolution hiccup or a stale session, and an operator locked out of their

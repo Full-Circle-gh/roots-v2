@@ -100,7 +100,7 @@ const SLOW = new Set([
   'test_mobile_products.js', 'test_mobile_purchasing.js', 'test_mobile_inbox.js',
   'test_mobile_activity.js', 'test_mobile_categories.js', 'test_mobile_club.js',
   'test_mobile_voting.js', 'test_mobile_settings.js', 'test_mobile_sales.js',
-  'test_mobile_team.js', 'test_mobile_trend.js', 'test_mobile_dots.js',
+  'test_mobile_team.js', 'test_mobile_permissions.js', 'test_mobile_trend.js', 'test_mobile_dots.js',
   'test_mobile_customer_record.js', 'test_mobile_mirrored_order.js',
   'test_mobile_mirrored_order_info.js',
   /* Drives Chromium through scripts/lib/m-probe like the rest of this block,

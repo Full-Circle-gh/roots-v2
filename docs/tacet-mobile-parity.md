@@ -1153,6 +1153,36 @@ desktop. What the phone gets is the other half — **who has access**, and
 switching one of them off in a hurry. A staffer walks out mid-shift, a phone
 goes missing, and the answer should not be "find a laptop".
 
+> **REVERSED, 2026-09-13, by Ash — §112 of the decisions record.** *"can't
+> manage permission from the mobile version, fix it fully. this feature should
+> be fully functional from mobile."* The paragraph above stands as the record
+> of what was decided in August and why; it is **no longer what the product
+> does**. All of it is on the phone now — adding somebody, their role, their
+> store, their password, their per-capability exceptions, their store scope,
+> the tenant's roles (create · edit · delete, with a destination for the people
+> on a deleted one) and the owner's enforcement switch — over the same routes
+> the desktop posts to.
+>
+> **What the August rule got right and what it got wrong.** Right: authoring —
+> a product with options and variants, a coupon, a broadcast, a mini-app page —
+> still belongs to a keyboard, and the create sheet is still deleted rather
+> than wired up. Wrong: it filed permissions under authoring. Nobody writes a
+> role the way they write a product description. The acts are *somebody starts
+> on Monday*, *somebody moves to the kitchen*, *somebody must not have the
+> books* — every one of them happening in the shop, on the day, with the person
+> standing there. That is the daily loop this document's own test, and it
+> passes it.
+>
+> The two server rules this screen used to state are now four, and the phone
+> still states the three it can know before the tap: you cannot deactivate
+> yourself, you cannot leave the shop with no active owner, you cannot edit
+> your own permissions. The fourth — you cannot grant what you do not hold —
+> is the server's alone, because only it knows the caller's own set.
+>
+> **Team devices** (every operator's signed-in sessions, with per-row sign-out)
+> is still desktop-only, and that IS a `➖`: it answers which glass is signed
+> in, not who may do what.
+
 The two rules that make that safe are the server's (`routes/backend-team.js`):
 you cannot deactivate yourself, and you cannot leave the shop with no active
 owner. The row **states** both rather than letting a thumb find them as a 400 —
