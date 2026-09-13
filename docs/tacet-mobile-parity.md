@@ -132,13 +132,16 @@ desktop is the right home
 |---|---|
 | Segments with real counts, tier filter | ✅ |
 | Roster with the unopened treatment | ✅ |
-| Record: ordered / orders / avg, points, wallet, recent orders, addresses, diagnostics | ✅ (read-only) |
+| Record: ordered / orders / avg, points, wallet, recent orders, addresses, diagnostics | ✅ — read-only until §115 |
 | Adjust points | ✅ — with the reason the server requires |
 | Top up wallet | ✅ |
 | Block / unblock | ✅ |
 | Message the customer | ✅ — `POST /customers/:id/message`; the desktop then opens the feedback thread, the phone says where the reply will land and refreshes the Inbox |
-| Edit profile, addresses CRUD | ➖ |
-| Force logout, reset test account, CSV export | ➖ |
+| Edit profile, addresses CRUD | ✅ — **§115, 2026-09-13.** Both were `➖` here until then; see *Customers — the whole section (§115)* below |
+| Force logout, CSV export | ✅ — §115 |
+| Reset test account | ➖ — and **not a parity gap**: `POST /customers/:id/reset-test` exists as a route and the desktop draws no control for it either |
+| Print statement | ➖ — genuinely desktop. `m.html` has no browser-print path at all; the phone's printer is the shop's thermal receipt printer (`POST /orders/:id/print`), and `cuPrintStatement` builds a page through `tdPrintTable`, which the phone does not load |
+| CSV import | ➖ — bulk authoring, by the rule that keeps products and broadcasts on the desktop |
 
 ### Products (`09-products.js`)
 
@@ -398,11 +401,14 @@ columns of fact. Reported from production, then swept column by column.
 | **Referrals**: their code, who referred them, who they brought | ✅ |
 | **Last order / last sign-in / devices signed in** | ✅ |
 | Diagnostics | ✅ |
-| Activity chart by month | ➖ — a chart is the desktop's affordance; the figures behind it are all on the phone |
+| Activity chart by month | ✅ — **§115 reversed this.** The line below was right that the figures matter more than the chart, and wrong that they were already there: none of them were. Twelve bare columns and the busiest month named, off `orders_by_month`, which the record had been fetching all along. *(was: a chart is the desktop's affordance; the figures behind it are all on the phone)* |
+| **Tags and the note** | ✅ — §115. Absent from this table until then, and absent from the phone: `note` and `tags` arrive on every record read and nothing rendered them |
 | Message, Adjust points, Adjust wallet, Block | ✅ |
-| Edit profile (name, email) | ✅ — **asked and answered 2026-08-22.** The phone number stays a desktop edit: it is the key customer records are deduped on, so a mistyped digit is a merge or a split, not a typo. The sheet says where it moved rather than leaving the field missing |
-| Sign out all devices | ➖ — **asked and declined 2026-08-22.** The device count is on the record; ending the sessions stays on the desktop |
-| Address edit / delete / set default | ➖ decided: desktop |
+| Edit profile (name, email, **phone, gender, birthday**) | ✅ — **§115 finished this.** The phone number was held back on 2026-08-22 as the key records dedupe on; `PATCH /customers/:id` has refused a duplicate with `phone_taken` since its own check went in, and this sheet already carried the wording for that refusal without any field that could provoke it. Gender and birthday were never in this table and were never on the phone. *(was: the phone number stays a desktop edit)* |
+| Sign out all devices | ✅ — **§115 reversed 2026-08-22's decline.** The count being on the record is the reason to have the control, not a substitute for it: a stolen phone or a shared login is said out loud in the shop |
+| Address add / edit / delete / set default | ✅ — §115. Its own sheet over the record, the same nine fields and four endpoints the desktop's modal uses, and the province read off the picked city rather than typed *(was: decided: desktop)* |
+| **Referring, the ongoing share, reissue code** | ✅ — §115. Never in this table; the three controls `renderAffiliateBlockToggle`, `renderLifetimeEligibility` and `afReissueCode` draw on the desktop drawer and had no phone equivalent |
+| **The four action buttons, gated** | ✅ — §115, and this was a defect rather than a gap. See below |
 
 ### Inbox — the second sweep (`07-content-billing.js`)
 
@@ -1235,3 +1241,51 @@ Products — open a product and set the count", which is a menu row that leads t
 a signpost: the same small lie as a control wired to nothing. Products carries
 the counting. The Quick Stock *feature switch* in Settings is a different thing
 and stays — it decides whether staff can open the `/stock` app at all.
+
+### Customers — the whole section (§115, 2026-09-13)
+
+Ash: *"customer section on the mobile should be fully functional like the pc
+version. overview the customer section all functionality and make sure it's all
+available on mobile."*
+
+Read against `public/retail-admin/08-customers.js`, `routes/retail.js` and
+`lib/cap-routes.js`. **No route, no schema, no migration and no new capability**
+— every gap was UI. `GET /customers` was already returning `note`, `tags` and
+`tag_vocabulary`; `GET /customers/:id` is a `SELECT *` and already carried
+`orders_by_month`, `affiliate.lifetime_*` and `stats.active_sessions`. The phone
+was fetching all of it and rendering some of it.
+
+**The defect, and it is the one to read first.** The record's four action
+buttons — Points, Wallet, Message, Edit — and Block under them were drawn for
+every operator. The server gates those writes (`customers:adjust` for the two
+that move money, `customers:block` for block/unblock/force-logout,
+`customers:edit` for the rest), so a `customer_service` or warehouse account got
+controls whose save 403s. That is worse here than a dead button: `apiWrite`
+reads a 403 as a lost session and sends the operator to `/backend/login`, so
+tapping Points on a record you may read but not adjust logged you out of the app
+mid-shift. Every control in the section is gated now, absent rather than
+disabled, and each guard is in the COMMAND as well as the view — a guard the
+view enforces is one `APP.cmd` walks straight past, which is §112's finding in
+this section's own words.
+
+**The rest, by class:**
+
+| Class | What |
+|---|---|
+| Filters that asked a narrower question | Tier and channel were single-select against a `tier=a,b` endpoint; there was no tag filter at all though the roster read returns the vocabulary; `dir` was never sent, so Name could only run A→Z |
+| Writes with no way in | Tags, the note, the phone number, gender, birthday, add a customer, all four address verbs, sign out all devices, stop/allow referring, the ongoing share, reissue the code, CSV export |
+| Blocks that rendered nothing | Tags and the note; twelve months of activity; the referral state the new switches turn — so a shop could stop somebody referring and have no way to see that it had |
+| Rendered short | Addresses showed the first three as `city · district · detail`, which drops the street line a courier needs and the recipient, who may not be the customer |
+
+**What stays desktop, and why.** *Print statement* — `m.html` has no
+browser-print path; its printer is the shop's thermal receipt printer.
+*CSV import* — bulk authoring. *Reset test account* — a route with no control on
+either surface, so not a parity gap.
+
+**What holds it:** `scripts/test_mobile_customers.js` — 84 assertions across 30
+cases, asserting REQUEST BODIES for every write (a save that reports success and
+sends the wrong field is the shape `APP.cmd` dropping its second argument
+already shipped once) and the capability gates from both directions: a
+view-only operator sees no control AND the commands themselves send nothing.
+Five render cases join `test_mobile_screens.js`, one of them a view-only record.
+Both are in the slow shard with their siblings and are run per change.

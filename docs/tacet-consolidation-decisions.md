@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.246
+# Tacet shared-core consolidation — decisions record, v4.247
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-13 · v4.247 — **THE CUSTOMER SECTION IS THE WHOLE CUSTOMER SECTION, ON THE PHONE TOO — §115, DECIDED BY ASH: *"customer section on the mobile should be fully functional like the pc version. overview the customer section all functionality and make sure it's all available on mobile also audit that section."*** **The audit found a defect before it found a gap:** the record's four action buttons and the Block under them were drawn for every operator, while `lib/cap-routes.js` gates those writes on `customers:adjust`, `customers:block` and `customers:edit` — and `apiWrite` in `public/m.html` treats a 403 as a lost session, so a `customer_service` or warehouse account tapping Points was **logged out of the app mid-shift**. Every control is gated now, absent rather than disabled, with the guard in the COMMAND as well as the view — the hole §112 found in `teamToggle`. **The other twelve gaps were UI and the data was already arriving:** `GET /customers` returns `note`, `tags` and `tag_vocabulary`, and `GET /customers/:id` is a `SELECT *` already carrying `orders_by_month`, `affiliate.lifetime_*` and `stats.active_sessions`. **No route, no schema, no migration, no new capability.** Tier and channel are multi-select against the endpoint that always took a comma list, the tag filter is the server's own vocabulary, the sort reverses; the record gains tags and the note, the phone number, gender and birthday, every address with add/edit/delete/default, sign out all devices, the three referral controls **and the two states they turn** (which were on no screen, so a shop could stop somebody referring and never see that it had), twelve months of activity and a CSV export at the filters on screen. **Two decisions of 2026-08-22 reversed and said plainly:** the phone number (the endpoint has answered `phone_taken` since its own check went in, and this sheet already carried that refusal's wording) and sign out all devices (the device count is the reason to have the control, not a substitute for it). **Print statement, CSV import and reset-test stay off**, each for a stated reason — the last of the three is not a parity gap at all, since the desktop draws no control for it either. One desktop label deliberately NOT copied: `详细地址` is on two different fields there and the refusal that names it points at the wrong box. **Chinese:** 11 verbatim lifts, 3 arrangements, 38 composed, declared in `docs/tacet-delivery-vocabulary.md` v1.72. **Tests:** new `scripts/test_mobile_customers.js` — 84 assertions across 30 cases over request bodies and both directions of every capability gate; five render cases added to `scripts/test_mobile_screens.js` (456 renders, warm, cold and Chinese); registered in `run-suites.js`'s SLOW set. No CSS file, and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.246 — **PERMISSIONS ARE MANAGED FROM THE PHONE — §112, DECIDED BY ASH: *"can't manage permission from the mobile version, fix it fully. this feature should be fully functional from mobile."*** `docs/tacet-mobile-parity.md` had ruled Team out in its own words — inviting somebody, assigning a role and setting a per-capability matrix *"is authoring and stays on the desktop"* — and the phone shipped a roster, a deactivate confirm and three sentences pointing at a laptop. **The rule is still right for products and broadcasts and wrong for this: permissions are not authoring.** Somebody starts on Monday, somebody moves from the counter to the kitchen, somebody must not have the books — every one of those happens in the shop, on the day. **`public/m.html` gains four screens** — `teamperson`, `teamperms`, `teaminvite`, `teamrole` — plus a People/Roles switch and the owner's enforcement toggle, covering all six of the desktop tab's write surfaces over the same routes (`POST`/`PUT /api/backend/team`, `POST …/password`, `PUT …/permissions`, the four `/api/backend/roles` verbs, `PUT /api/backend/rbac-enforce`). **No route, no schema, no migration, no new capability** — `team:manage` and `team:permissions` already existed and are kept apart on the phone exactly as the server keeps them apart, absent rather than disabled. **A real guard gap was found and closed before it shipped**: `teamEnforce` was written guarded only by not DRAWING the switch, which `APP.cmd` walks straight past — the same hole `teamToggle` had in 2026-08 — and its own probe caught it. **The capability tree opens one group at a time** rather than printing a hundred toggles into a scroller, stating the same sentence the desktop's collapsed group does. **The dashboard-default table is now duplicated with a GUARD instead of a promise**: the phone's `TM_DASH_DEFAULT` and the desktop's `RL_DASH_LAYOUT_DEFAULT` are compared by `scripts/test_mobile_permissions.js`, which is more than the desktop's own copy of the CSS has ever had. **Chinese:** 134 pairs, **96 lifted verbatim** from the desktop's Team tab and the routes' own refusals, four arrangements that only move a clause naming a device, and **38 composed**, declared in `docs/tacet-delivery-vocabulary.md` v1.70 with the candidates rejected beside them. **Tests:** new `scripts/test_mobile_permissions.js` — **90 assertions across 30 cases**, asserting request bodies, not screens; `scripts/test_mobile_team.js` 29 → **32 assertions**, updated where the read-only decision it encoded was reversed; the sweep renders all four screens warm, cold and in Chinese (**441 renders**); geometry clean at 390px. Registered in `package.json` and in `run-suites.js`'s SLOW set (it drives Chromium). No CSS file, and no change to `.gitignore` or CI.**
 
@@ -12582,3 +12584,130 @@ when the command is called directly. `scripts/test_mobile_team.js` keeps the
 roster and the emergency switch. The sweep renders all four new screens warm,
 cold and in Chinese.
 
+
+---
+
+## §115 — THE CUSTOMER SECTION IS THE WHOLE CUSTOMER SECTION, ON THE PHONE TOO
+
+**Decided by Ash, 2026-09-13**, against the phone build: **"customer section on
+the mobile should be fully functional like the pc version. overview the customer
+section all functionality and make sure it's all available on mobile also audit
+that section."**
+
+§112's shape, one section later, and the same sentence underneath it: the rule
+that keeps authoring on a desktop is still right for a product with options and
+variants in it, and it was never the rule that should have governed this. A
+customer record is not authored. It is read at the counter with the person
+standing there, and the acts on it — fix the flat number, note the allergy, tag
+them wholesale, stop the referral code somebody is abusing, sign the stolen
+phone out — all happen in the shop, on the day.
+
+### The defect this audit found, which is not a parity gap
+
+The record's four action buttons and the Block under them were drawn for
+**every** operator. `lib/cap-routes.js` gates those writes — `customers:adjust`
+for points and wallet, `customers:block` for block, unblock and force-logout,
+`customers:edit` for the rest — and `lib/capabilities.js` hands
+`customer_service`, warehouse and dispatch presets a narrower set than that.
+
+**A refusal here does not fail politely.** `apiWrite` in `public/m.html` treats
+`403` the same as `401` — as a lost session — and sends the browser to
+`/backend/login`. So an operator holding `customers:view` who tapped Points was
+logged out of the app mid-shift, with no message and nothing saved. Every
+control in the section is gated now, absent rather than disabled, **and the
+guard is in the command as well as in the view**: a guard the view enforces is
+one `APP.cmd` walks straight past, which is the hole §112 found in `teamToggle`
+and `teamEnforce`, and the probe asserts both directions.
+
+`apiWrite`'s own 403 handling is left alone deliberately. Changing what a 403
+means to that helper touches every screen in the file and belongs to its own
+brief; what this section can honestly do is stop drawing the controls that
+provoke one. Recorded here so the next pass does not read the gate as the whole
+fix.
+
+### Everything else was UI, and the data was already arriving
+
+**No route, no schema, no migration, no new capability.** `GET /customers`
+already returned `note`, `tags` and `tag_vocabulary`; `GET /customers/:id` is a
+`SELECT *` and already carried `orders_by_month`, `affiliate.lifetime_mode` /
+`lifetime_eligible` / `lifetime_eligible_since` and `stats.active_sessions`. The
+phone was fetching all of it and rendering some of it.
+
+Twelve gaps, closed over the desktop's own endpoints:
+
+| | Was | Now |
+|---|---|---|
+| Tier, channel | single-select against a `tier=a,b` endpoint | multi-select; `All` is the row's clear, not a fourth value |
+| Tags | no filter at all | chips from the server's `tag_vocabulary`, with its counts; the row is absent until somebody has tagged somebody |
+| Sort | no `dir` sent, so Name could only run A→Z | picking the ordering you are on turns it over |
+| Tags + note on the record | nothing rendered | shown and editable, through the same `PATCH` |
+| Profile | name and email | name, email, **phone, gender, birthday** |
+| Add a customer | only inside the order wizard | the roster's own button |
+| Addresses | first three, `city · district · detail`, read-only | all of them with the recipient, the street line and the default marked; add, edit, delete, set default |
+| Sign out all devices | `➖` | on the record |
+| Referring / ongoing share / reissue code | not on the phone at all | three controls, and the two **states** they turn, which were on no screen |
+| Activity | `➖` | twelve columns and the busiest month named |
+| CSV export | `➖` | the server's file, at the filters the screen is showing |
+
+### The two reversals, said plainly
+
+`docs/tacet-mobile-parity.md` recorded both as asked and settled on 2026-08-22,
+so overturning them is a decision and not a tidy-up.
+
+**The phone number.** Held back because records dedupe on it, so a mistyped
+digit one-handed is a merge or a split rather than a typo. That describes a
+SILENT collision, and `PATCH /customers/:id` has not been silent about one since
+its own duplicate check went in: it answers `phone_taken` and writes nothing —
+and this sheet has carried the wording for that refusal all along, with no field
+that could provoke it. What is left is a number typed wrong into an unused slot,
+which is the risk the name and the email already carry. The warning stays as a
+warning rather than as a door.
+
+**Sign out all devices.** Declined on the grounds that the device count is the
+useful part. The count is the reason to have the control, not a substitute for
+it: the sentence that precedes it is "my phone was stolen", said out loud, in
+the shop.
+
+### What stays on the desktop
+
+**Print statement** — `m.html` has no browser-print path at all. Its printer is
+the shop's thermal receipt printer (`POST /orders/:id/print`), and
+`cuPrintStatement` builds a page through `tdPrintTable`, which the phone does
+not load. A statement is a document, and that is a desktop affordance rather
+than a withheld feature.
+
+**CSV import** — bulk authoring, by the rule that still holds for products and
+broadcasts.
+
+**Reset test account** — `POST /customers/:id/reset-test` exists as a route and
+the desktop draws no control for it either, so its absence is not a gap between
+the two surfaces. Recorded so the next audit does not file it as one.
+
+### One desktop label deliberately not copied
+
+`08-customers.js` labels both the street line and the sub-address `详细地址`,
+and its own refusal — `收件人、电话和详细地址都需要填写。` — means the street one
+by it. Two fields under one label, in a form that refuses by naming the label,
+is a refusal pointing at the wrong box. The phone splits them: `街道地址` and
+`楼栋 / 楼层 / 房号`. Everything else on these screens uses the desktop's
+characters unchanged, for §112's reason.
+
+**Chinese:** 11 verbatim lifts, three arrangements that move only a clause
+naming a device, and 38 composed pairs — declared in
+`docs/tacet-delivery-vocabulary.md` v1.72 with the rejected candidates beside
+them.
+
+### What holds it
+
+`scripts/test_mobile_customers.js` — **84 assertions across 30 cases**, over
+request bodies rather than screens: tags save lower-cased and deduped through
+the profile `PATCH`, a new address reads its province off the picked city, an
+edit is a `PUT` to its own id, the ongoing share posts `customerId` to
+`/affiliate/eligible` and not to a customers route, the export's query is built
+by the roster read's own helper so the file and the screen cannot disagree, and
+an operator holding only `customers:view` is offered nothing AND gets nothing
+when each command is called directly. Five render cases join
+`scripts/test_mobile_screens.js` (456 renders, warm, cold and Chinese), one of
+them the view-only record. Registered in `run-suites.js`'s SLOW set, with the
+comment saying why `isSlow()` cannot see the browser in an `m-probe` suite. No
+CSS file, and no change to `.gitignore` or to CI.
