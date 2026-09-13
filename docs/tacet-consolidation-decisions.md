@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.249
+# Tacet shared-core consolidation — decisions record, v4.250
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-13 · v4.250 — **A SWITCH BELONGS ON THE ROW WHOSE VALUE IT CHANGES — §117, REPORTED BY ASH against §116's own record, with the block circled: *"this part need to redesign. not clear."*** Five centred sentences at the foot of the customer record, with no container, no icons, nothing saying they could be pressed, labels that were clauses rather than verbs, and Brick TEXT where §5 gives destructive a Brick OUTLINE — so Block, which locks a person out, read at the same weight as Reissue, which is undone in one tap. **The fault that was not styling:** the block was the desktop's More menu lifted whole, and four of its five controls act on facts already on screen a few rows up. **Three mockups were put up and Ash chose Option B** (`design-handoff/customer-actions/`): each control now sits on the row whose value it changes — Their code · Reissue, Referring · Stop, Ongoing share · Allow, Signed in on 2 devices · Sign out — through `custRowAct`, which renders `custRow`'s exact shape when no control is passed, and **that null is where the capability gate lands**: an operator who may not write is passed no control and the row goes on stating its fact. **Block keeps the foot alone**, as a Brick outline: it is the only thing there that takes something away from a person, and it has no fact-row to sit on. Unblock is NOT dressed as destructive — it gives something back. **The open question is settled by the choice:** §116 drew the Referring row only once referring had been STOPPED; a switch that materialises the first time you use it is worse than the drawer it replaced, so the row is always drawn now (Active / Stopped), gated on the affiliate FEATURE rather than the flag. The ongoing share keeps its narrower 'selected'-mode condition, which is about meaning rather than about carrying a control. **Tests:** 84 → **103 assertions across 37 cases**, asserting WHERE a control is — each switch resolves to the list carrying its own fact, labels are at most two words, the foot holds exactly one button, and every `.rowact` measures 44px or more. **Chinese:** one composed pair (`有效`), four trims and one lift, v1.75; every long label survives on the confirm its verb opens. No route, no schema, no migration, no capability change, no CI or .gitignore change.**
 
 2026-09-13 · v4.249 — **THE CUSTOMER SECTION IS THE WHOLE CUSTOMER SECTION, ON THE PHONE TOO — §116, DECIDED BY ASH: *"customer section on the mobile should be fully functional like the pc version. overview the customer section all functionality and make sure it's all available on mobile also audit that section."*** **The audit found a defect before it found a gap:** the record's four action buttons and the Block under them were drawn for every operator, while `lib/cap-routes.js` gates those writes on `customers:adjust`, `customers:block` and `customers:edit` — and `apiWrite` in `public/m.html` treats a 403 as a lost session, so a `customer_service` or warehouse account tapping Points was **logged out of the app mid-shift**. Every control is gated now, absent rather than disabled, with the guard in the COMMAND as well as the view — the hole §112 found in `teamToggle`. **The other twelve gaps were UI and the data was already arriving:** `GET /customers` returns `note`, `tags` and `tag_vocabulary`, and `GET /customers/:id` is a `SELECT *` already carrying `orders_by_month`, `affiliate.lifetime_*` and `stats.active_sessions`. **No route, no schema, no migration, no new capability.** Tier and channel are multi-select against the endpoint that always took a comma list, the tag filter is the server's own vocabulary, the sort reverses; the record gains tags and the note, the phone number, gender and birthday, every address with add/edit/delete/default, sign out all devices, the three referral controls **and the two states they turn** (which were on no screen, so a shop could stop somebody referring and never see that it had), twelve months of activity and a CSV export at the filters on screen. **Two decisions of 2026-08-22 reversed and said plainly:** the phone number (the endpoint has answered `phone_taken` since its own check went in, and this sheet already carried that refusal's wording) and sign out all devices (the device count is the reason to have the control, not a substitute for it). **Print statement, CSV import and reset-test stay off**, each for a stated reason — the last of the three is not a parity gap at all, since the desktop draws no control for it either. One desktop label deliberately NOT copied: `详细地址` is on two different fields there and the refusal that names it points at the wrong box. **Chinese:** 11 verbatim lifts, 3 arrangements, 38 composed, declared in `docs/tacet-delivery-vocabulary.md` v1.72. **Tests:** new `scripts/test_mobile_customers.js` — 84 assertions across 30 cases over request bodies and both directions of every capability gate; five render cases added to `scripts/test_mobile_screens.js` (456 renders, warm, cold and Chinese); registered in `run-suites.js`'s SLOW set. No CSS file, and no change to `.gitignore` or CI.**
 
@@ -13007,3 +13009,104 @@ when each command is called directly. Five render cases join
 them the view-only record. Registered in `run-suites.js`'s SLOW set, with the
 comment saying why `isSlow()` cannot see the browser in an `m-probe` suite. No
 CSS file, and no change to `.gitignore` or to CI.
+
+---
+
+## §117 — A SWITCH BELONGS ON THE ROW WHOSE VALUE IT CHANGES
+
+**Reported by Ash, 2026-09-13**, against §116's own record, with a photograph
+of the block circled: **"this part need to redesign. not clear."**
+
+The block was mine, shipped hours earlier. The complaint is right, and the
+useful part of it is that only five of the six faults are styling.
+
+### What was wrong
+
+Read against `docs/tacet-design-system.md` §5 and §6, and against the app's own
+`sheetActions` — which is what a list of actions already looks like in this file:
+
+1. **No container, no icon, no affordance.** Every other action list in
+   `public/m.html` is a bordered card of left-aligned icon rows. This was five
+   centred sentences in bare space; nothing said they could be pressed.
+2. **Labels were clauses, not verbs** — *"Let them earn the ongoing share"*.
+   §6 says labels are verbs.
+3. **Brick TEXT floating in a list**, where §5 gives destructive a Brick
+   OUTLINE — so Block, which locks a person out of their account, carried the
+   same weight as Reissue, which is undone in one tap.
+4. **Two unrelated groups in one stack** — three referral controls, two account
+   controls, nothing between them.
+5. **No heading**, so the block hung off the diagnostics line above it.
+6. **It was in the wrong place.** This is the sixth and the only one that is
+   not styling. The block was the desktop's `More ▾` menu lifted whole — and
+   four of its five controls act on facts already on screen a few rows up:
+   *Signed in on 2 devices*, *Their code*, *Referring*, *Ongoing share*. The
+   drawer restated what the record had just said.
+
+### The decision
+
+**A control goes on the row whose value it changes.** Three mockups were put up
+(`design-handoff/customer-actions/`, and the canvas keeps the two that were not
+taken); Ash chose this one.
+
+| Row | States | Offers |
+|---|---|---|
+| Their code | `AB12CD` | Reissue |
+| Referring | Active / Stopped | Stop / Allow |
+| Ongoing share | Earning / Not earning | Stop / Allow |
+| Signed in on | 2 devices | Sign out |
+
+`custRowAct` is the row that carries both. It renders exactly `custRow`'s shape
+when no control is passed, so a list can mix stated facts and changeable ones
+without the rows disagreeing about height — and **that null is where the
+capability gate lands**: an operator who may not make the write is passed no
+control and the row goes on stating its fact, rather than the row vanishing and
+taking the fact with it.
+
+### Block keeps the foot, and it is the only thing down there
+
+Not an oversight and not symmetry for its own sake. Block is the one control
+here that takes something away from a person rather than adjusting a setting
+about them; it has no fact-row to sit on (the blocked state is a pill in the
+sheet's header); and it wants distance from the routine controls, not
+proximity. It is a Brick outline now, per §5 — which is also what stops it
+reading at the same weight as Reissue. **Unblock is not dressed as destructive**:
+it gives something back, so it renders as the ordinary secondary button.
+
+### The one open question, settled by the choice
+
+§116 drew the *Referring* row **only once referring had been stopped**, on the
+stated grounds that "a row reading 'allowed' on every customer is not
+information". That was right about a row that only ever states, and it stops
+being right the moment the row is also the way to change it: a control that
+materialises out of nowhere the first time somebody uses it is worse than the
+drawer it replaced. **The row is always drawn now**, reading Active or Stopped.
+
+It is gated on the affiliate **feature**, not on the flag — in a shop with
+referrals switched off there is nothing to stop, and the row would be a control
+over nothing.
+
+The ongoing share keeps its narrower condition (`lifetime_mode === 'selected'`)
+because that one is about MEANING rather than about whether a row can carry a
+control: in `everyone` mode this customer already earns the share and a
+per-person switch would change nothing. That is the desktop's own rule.
+
+### What holds it
+
+`scripts/test_mobile_customers.js` grows from 84 assertions to **103 across 37
+cases**. Seven new cases, and they assert something neither a render pass nor a
+request-body check can see — WHERE a control is: each switch resolves to the
+`.list` that carries its own fact (`Reissue` in the list containing the code,
+`Sign out` in the list containing *Signed in on*), every row label is at most
+two words, the foot holds exactly one button and it carries `dangerbtn`,
+unblock does not, Referring states itself with the flag clear and turns around
+with it set, the row is absent when the affiliate feature is off, and every
+`.rowact` measures **44px or more** — an underlined 13.5px label is 20px tall on
+its own, which is the trap this row shape walks into.
+
+**Chinese:** one composed pair (`有效`), four trims and one verbatim lift,
+declared in `docs/tacet-delivery-vocabulary.md` v1.75. The long labels are not
+lost — each survives on the confirm its verb opens, so the row and its
+confirmation cannot drift.
+
+No route, no schema, no migration, no capability change, and no change to
+`.gitignore` or CI.

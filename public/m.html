@@ -346,6 +346,27 @@ html:not(.settled) .rise{animation:tRise .5s var(--ease-settle) both}
   color:var(--text-primary);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;
   display:inline-flex;align-items:center;justify-content:center;gap:8px}
 .btn2:disabled{opacity:.55;cursor:default}
+/* THE ACTION THAT SITS ON THE ROW IT CHANGES (§117). A record row states a
+   fact — "Signed in on · 2 devices" — and the control that changes that fact
+   belongs beside it rather than in a drawer at the foot repeating the state.
+   Underlined rather than bordered: a bordered control on every third row turns
+   a list of facts into a wall of buttons, and the underline is enough to say
+   "press me" when the label is a verb sitting next to a value.
+   44px MINIMUM, which is why the padding is vertical and the line-height is
+   not: at 13.5px this text is 20px tall and would be an 20px target. */
+.rowact{min-height:44px;display:inline-flex;align-items:center;flex:none;
+  border:0;background:none;padding:0;margin:0;font-family:inherit;
+  font-size:13.5px;font-weight:500;color:var(--text-secondary);cursor:pointer;
+  text-decoration:underline;text-decoration-color:var(--border-default);text-underline-offset:3px}
+.rowact:disabled{opacity:.55;cursor:default}
+.rowact.brick{color:var(--brick-ink);text-decoration-color:rgba(180,83,62,.35)}
+/* Destructive is a BRICK OUTLINE, never a solid slab — design system §5, and
+   the reason Block stopped being a line of red text in a stack of black ones. */
+.dangerbtn{width:100%;min-height:44px;border-radius:8px;background:transparent;
+  border:1.5px solid var(--brick);color:var(--brick-ink);font-family:inherit;
+  font-size:15px;font-weight:500;cursor:pointer;display:inline-flex;
+  align-items:center;justify-content:center;gap:8px}
+.dangerbtn:disabled{opacity:.55;cursor:default}
 .cta{width:100%;min-height:44px;padding:12px 16px;border:none;border-radius:8px;background:var(--accent);color:#fff;
   font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;transition:background .2s var(--ease-settle)}
 .cta:hover{background:var(--accent-hover)}.cta:active{background:var(--accent-press)}
@@ -16578,6 +16599,20 @@ const custRow=(l,r,sub)=>`<div style="display:flex;align-items:flex-start;justif
   ${sub?`<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:2px">${sub}</span>`:''}</span>
   <span class="num" style="flex:none;font-size:14.5px;text-align:right">${r}</span></div>`;
 const custList=rows=>rows.length?`<div class="list">${rows.map((r,i)=>(i?'<div class="sep"></div>':'')+r).join('')}</div>`:'';
+/* THE SAME ROW, CARRYING THE CONTROL THAT CHANGES IT (§117). `act` is
+   [label, cmd, danger] or null — null renders exactly custRow's own shape, so a
+   list can mix stated facts and changeable ones without the rows disagreeing
+   about height or alignment.
+   The control is drawn ONLY when `act` is given, which is where the capability
+   gate lands: the caller passes null for an operator who may not make that
+   write, and the row goes on stating its fact. */
+const custRowAct=(l,r,act)=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 16px;min-height:48px">
+  <span style="min-width:0;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l}</span>
+  <span style="flex:none;display:flex;align-items:center;gap:14px">
+    <span class="num" style="font-size:14.5px;color:var(--text-secondary);text-align:right">${r}</span>
+    ${act?`<button class="rowact${act[2]?' brick':''}" ${state.custBusy?'disabled':''} onclick="APP.cmd('${act[1]}')">${
+      state.custBusy&&state.custBusy===act[3]?T('Saving…','保存中…'):act[0]}</button>`:''}
+  </span></div>`;
 
 /* The orders themselves, and every one of them opens.
    This block was five inert lines. An operator reading a customer's history
@@ -16658,22 +16693,47 @@ function custTopups(d){
 function custAffiliate(d){
   const a=d.affiliate; if(!a) return '';
   const sum=a.summary||{};
+  /* Each control is drawn only for the capability its own write is gated on
+     server-side — `customers:edit` for all three (lib/cap-routes.js sends
+     affiliate-block and referral-code down that path, and /affiliate/eligible
+     is its sibling). Absent, never disabled: the row keeps stating its fact. */
+  const may=mCan('customers:edit');
   const rows=[];
-  if(a.referral_code) rows.push(custRow(T('Their code','本人邀请码'),`<span class="num">${escAttr(a.referral_code)}</span>`));
+  if(a.referral_code) rows.push(custRowAct(T('Their code','本人邀请码'),
+    `<span class="num">${escAttr(a.referral_code)}</span>`,
+    may?[T('Reissue','重发'),'custRefReissue',false,'reissue']:null));
   if(a.referred_by) rows.push(custRow(T('Referred by','推荐人'),escAttr(a.referred_by.nickname||a.referred_by.phone||('#'+a.referred_by.id))));
   if(Number(sum.total)) rows.push(custRow(T('Friends invited','已邀请'),
     T(sum.total+' · '+(sum.converted||0)+' ordered', sum.total+' 位 · '+(sum.converted||0)+' 位已下单'),
     Number(sum.earned)?T(money(CUR,sum.earned)+' rewarded','已发放 '+money(CUR,sum.earned)):''));
-  /* THE TWO STATES THE FOOT'S SWITCHES TURN, and neither was on the record — so
-     the shop could stop somebody referring and then have no way to see that it
-     had. Blocked shows only when it is true (a row reading "allowed" on every
-     customer is not information); the ongoing share shows only in 'selected'
-     mode, the same condition its control renders under. */
-  if(a.affiliate_blocked) rows.push(custRow(T('Referring','推荐资格'),
-    T('Stopped','已停止')));
-  if(a.lifetime_mode==='selected') rows.push(custRow(T('Ongoing share','复购分成'),
-    a.lifetime_eligible?T('Earning','获得中'):T('Not earning','不获得'),
-    a.lifetime_eligible_since?T('since '+fmtDay(a.lifetime_eligible_since),'自 '+fmtDay(a.lifetime_eligible_since)):''));
+  /* REFERRING IS ALWAYS STATED NOW (§117), where §116 drew it only once it had
+     been stopped. Ash chose the design that puts each switch on the row whose
+     value it changes, and that trade only works if the row is there to carry
+     it: a control that materialises out of nowhere the first time somebody uses
+     it is worse than the drawer it replaced.
+     The earlier note — "a row reading 'allowed' on every customer is not
+     information" — was right about a row that only ever states. It stops being
+     right when the row is also the way to change it. Gated on the affiliate
+     FEATURE rather than on the flag, because in a shop with referrals switched
+     off there is nothing to stop and the row would be a control over nothing. */
+  const blocked=!!a.affiliate_blocked;
+  if(featOn('affiliate')) rows.push(custRowAct(T('Referring','推荐资格'),
+    blocked?T('Stopped','已停止'):T('Active','有效'),
+    may?[blocked?T('Allow','允许'):T('Stop','停止'),'custRefBlock',!blocked,'refblock']:null));
+  /* The ongoing share still shows only in 'selected' mode — in 'everyone' mode
+     this customer already earns it and a per-person switch would change
+     nothing. That is the desktop's own rule and it is about MEANING, not about
+     whether the row can carry a control. */
+  if(a.lifetime_mode==='selected'){
+    const on=!!a.lifetime_eligible;
+    rows.push(custRowAct(T('Ongoing share','复购分成'),
+      on?T('Earning','获得中'):T('Not earning','不获得'),
+      may?[on?T('Stop','停止'):T('Allow','允许'),'custRefShare',on,'refshare']:null));
+    /* The date it was last chosen is a footnote to the row above, not a row of
+       its own — custRowAct has no `sub` slot because a fact with a control on
+       it should be one line. */
+    if(a.lifetime_eligible_since) rows.push(custRow(T('Chosen','选定于'),fmtDay(a.lifetime_eligible_since)));
+  }
   if(!rows.length) return '';
   return custSection(T('Referrals','推荐'), custList(rows));
 }
@@ -16688,8 +16748,14 @@ function custFacts(d,c,st){
     Number(v.used)?T(v.used+' used','已用 '+v.used):''));
   if(Number(rv.count)) rows.push(custRow(T('Reviews written','已写评价'),String(rv.count),
     rv.avg_rating?T(Number(rv.avg_rating).toFixed(1)+' average',Number(rv.avg_rating).toFixed(1)+' 平均分'):''));
-  if(Number(st.active_sessions)) rows.push(custRow(T('Signed in on','已登录设备'),
-    T(st.active_sessions+(st.active_sessions===1?' device':' devices'), st.active_sessions+' 台')));
+  /* THE DEVICE COUNT AND THE WAY TO END THEM, on one row (§117). The count was
+     the whole argument for keeping sign-out on the desktop back in August, and
+     it is the row somebody reads when a phone has been stolen — so it is where
+     the control goes. `customers:block`, the capability the server gates
+     force-logout on, which is also why it is not beside the everyday four. */
+  if(Number(st.active_sessions)) rows.push(custRowAct(T('Signed in on','已登录设备'),
+    T(st.active_sessions+(st.active_sessions===1?' device':' devices'), st.active_sessions+' 台'),
+    mCan('customers:block')?[T('Sign out','退出'),'forceLogout',false,'logout']:null));
   if(!rows.length) return '';
   return custSection(T('Account','账户'), custList(rows));
 }
@@ -16797,28 +16863,29 @@ function custActivity(d){
    share switch only in 'selected' mode (in 'everyone' mode this customer already
    earns it and a per-person switch would change nothing — the desktop's rule),
    and Reissue only once there is a code to reissue. */
+/* THE FOOT IS ONE BUTTON NOW (§117). It was five centred sentences — reported
+   as "not clear", and it was: no container, no icons, nothing saying they could
+   be pressed, three referral controls and two account ones in an
+   undifferentiated stack, labels that were clauses rather than verbs, and two
+   in Brick text where the design system's destructive is a Brick OUTLINE.
+   Four of the five moved onto the rows whose values they change — see
+   custAffiliate and custFacts. Block did not, and this is why: it is the only
+   thing here that takes something away from a person rather than adjusting a
+   setting about them, it has no fact-row of its own to sit on (the blocked
+   state is a pill in the sheet's header), and it wants distance from the
+   routine controls, not proximity. So it keeps the foot to itself, as the
+   outline §5 asks for — which also stops it reading at the same weight as
+   Reissue, which is undone in one tap. */
 function custFooterActions(d,c){
-  const a=(d&&d.affiliate)||{};
-  const rows=[];
-  if(mCan('customers:edit')){
-    if(a.referral_code) rows.push(['custRefReissue','reissue',T('Reissue referral code','重发邀请码'),false]);
-    if(a.lifetime_mode==='selected') rows.push(['custRefShare','refshare',
-      a.lifetime_eligible?T('Stop the ongoing share','停止复购分成'):T('Let them earn the ongoing share','允许获得复购分成'),false]);
-    rows.push(['custRefBlock','refblock',
-      a.affiliate_blocked?T('Let them refer friends again','恢复推荐资格'):T('Stop them referring friends','停止推荐资格'),!a.affiliate_blocked]);
-  }
-  if(mCan('customers:block')){
-    const n=Number((d&&d.stats&&d.stats.active_sessions)||0);
-    rows.push(['forceLogout','logout',
-      T('Sign out all devices'+(n?' ('+n+')':''), '退出所有设备'+(n?'（'+n+'）':'')),false]);
-    rows.push(['toggleBlock','block',
-      c.is_blocked?T('Unblock this customer','解除封禁'):T('Block this customer','封禁该顾客'),!c.is_blocked]);
-  }
-  if(!rows.length) return '';
-  return `<div style="margin-top:24px;padding-top:8px;border-top:1px solid var(--border-default)">
-    ${rows.map(([cmd,busy,label,danger])=>`<button style="display:block;width:100%;text-align:center;font-size:13.5px;font-weight:500;color:${danger?'var(--brick-ink)':'var(--text-primary)'};background:transparent;border:none;cursor:pointer;font-family:inherit;padding:11px 12px"
-      ${state.custBusy?'disabled':''} onclick="APP.cmd('${cmd}')">${state.custBusy===busy?T('Saving…','保存中…'):label}</button>`).join('')}
-  </div>`;
+  if(!mCan('customers:block')) return '';
+  const blocked=!!c.is_blocked;
+  /* Unblock is NOT destructive — it gives something back — so it renders as the
+     ordinary secondary button and only Block wears the Brick outline. */
+  return `<div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-default)">
+    <button class="${blocked?'btn2':'dangerbtn'}" style="width:100%" ${state.custBusy?'disabled':''} onclick="APP.cmd('toggleBlock')">
+      ${blocked?ic('circle-check',18):ic('ban',18)}${state.custBusy==='block'?T('Saving…','保存中…')
+        :(blocked?T('Unblock this customer','解除封禁'):T('Block this customer','封禁该顾客'))}
+    </button></div>`;
 }
 function sheetCustomer(){
   const d=state.custDetail;
