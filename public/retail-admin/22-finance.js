@@ -509,33 +509,61 @@ function finCatBody() {
 /* ── The name of a revenue channel ─────────────────────────────────────────
    EVERY PAIR IS COPIED FROM A LIVE ONE, none composed — the standing rule's
    first preference, and the cheapest exercise of the 2026-09-06 delegation is
-   not to use it. The sources, all in this same admin surface:
+   not to use it. There are two sources, and which one owns a key is not
+   arbitrary:
 
-     wechat / web / meituan / eleme / gzgrocery — `csName` (01-core.js), the
-       Sales-page channel control, which is the closest sibling there is: it
-       names these same channels for the same operator two screens over.
-     manual / shop — `DASH_CHAN_SHORT` (03-dashboard.js), which names the
-       channel on an order.
+   THE PLATFORMS come from `csName` (01-core.js), the Sales-page channel
+   control — the closest sibling there is, naming these same channels for the
+   same operator two screens over, and the only one of the two that carries a
+   Chinese half for them. `ordChannelLabel` returns a bare `Meituan` / `Web` /
+   `WeChat`, which is right on a dense order row and wrong on a card an
+   operator reads in Chinese: 美团 is the platform's actual name here.
 
-   `Gzgrocery` HAS NO SECOND HALF, and that is how it is live: the wholesale
-   partner's name is the same word in both languages, and `csName` carries it
-   as a bare string rather than a pair for exactly that reason. Pairing it with
-   a transliteration here would be composing one.
+   THE STAFF-KEYED ORIGINS come from `ordChannelLabel` (04-orders.js), which
+   OWNS them — `MANUAL_ORDER_ORIGINS` in routes/retail.js is the answer to the
+   New order form's "how did the customer reach us?", and the orders list is
+   where an operator meets those words first. Four of them never had a line
+   here at all and rendered as raw keys on the live card: `wechat_chat`
+   (¥3,824 in the reported window) and `pickup` (¥220) were visible, and
+   `wholesale` and `other` were one quiet month away from being.
+
+   `manual` IS `Unattributed`, NOT "Manual", AND THAT IS A CORRECTION. This
+   file called it `Manual · 手动` when it shipped, which reads as a thing
+   somebody chose. It is not: 04-orders.js records that `manual` is the LEGACY
+   value — rows written before the form asked the question, plus every till
+   sale up to §44's 2026-09-07 amendment — and that it is *no longer
+   selectable*. `未归属` says what the row is; `手动` claims an operator picked
+   it. One name, owned by the screen that reasoned about it.
+
+   `Gzgrocery` HAS NO SECOND HALF, and that is how it is live in BOTH sources:
+   the partner's name is the same word in either language, so `csName` carries
+   it as a bare string rather than a pair. Pairing it with a transliteration
+   here would be composing one.
 
    AN UNKNOWN KEY RENDERS AS ITSELF. A channel that starts writing before it is
    named here gets a line carrying its own key rather than being folded into
    somebody else's or dropped — the same fallback `payLabel` uses on Reports.
    The row is inside a total that counted it, so it has to appear; an internal
-   word on screen is a smaller wrong than money with no line under it. */
+   word on screen is a smaller wrong than money with no line under it. That
+   fallback is what put `wechat_chat` and `pickup` on screen to be asked about,
+   which is the behaviour working rather than failing. */
 function finChannelLabel(key) {
   return ({
-    wechat:    cuT('WeChat', '微信'),
-    web:       cuT('Web shop', '网页商店'),
-    meituan:   cuT('Meituan', '美团'),
-    eleme:     cuT('Eleme', '饿了么'),
-    gzgrocery: 'Gzgrocery',
-    manual:    cuT('Manual', '手动'),
-    shop:      cuT('Shop', '门店'),
+    // Platforms and storefronts — csName (01-core.js).
+    wechat:      cuT('WeChat', '微信'),
+    web:         cuT('Web shop', '网页商店'),
+    meituan:     cuT('Meituan', '美团'),
+    eleme:       cuT('Eleme', '饿了么'),
+    gzgrocery:   'Gzgrocery',
+    // A sale that originated at a physical shop — the till or that shop's QR
+    // menu (§14, §44). Both sources agree on this pair.
+    shop:        cuT('Shop', '门店'),
+    // The New order form's origins — ordChannelLabel (04-orders.js).
+    pickup:      cuT('Pick up', '到店自取'),
+    wechat_chat: cuT('WeChat message', '微信消息'),
+    wholesale:   cuT('Wholesale', '批发'),
+    other:       cuT('Other', '其他'),
+    manual:      cuT('Unattributed', '未归属'),
   })[key] || key;
 }
 
