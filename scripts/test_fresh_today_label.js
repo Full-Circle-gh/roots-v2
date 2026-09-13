@@ -26,6 +26,23 @@
  * carries the word is the same flag that keeps the row out of SOLD OUT, so the
  * tempting one-line fix — turn the flag off — marks the meal sold out on the
  * one morning it is most available. That trap has its own cases below.
+ *
+ * §108 AMENDMENT — THE THIRD STATE IS GONE; THE OTHER TWO STAND.
+ * The three states above are §80 as shipped, kept here as the record of what
+ * this suite was built to pin. Ash's later ruling collapsed "shipped" into
+ * "made later": a meal the kitchen has yet to make reads NEXT BATCH · 下批现做
+ * to EVERY shopper, because the wait is the same fact wherever they are. What
+ * still differs is the DATE — the run gets the make day, a courier order gets
+ * make day plus transit — and that belongs in the checkout notice, which
+ * states it, and not in a pill, which cannot.
+ *
+ *   local run + made today  → orderable, and SILENT          (unchanged)
+ *   anything else reservable, fresh → NEXT BATCH · 下批现做    (was two states)
+ *   anything else reservable, grocery → PRE-ORDER · 可预订     (the carve-out)
+ *
+ * THE CARVE-OUT IS DELIBERATE and has cases of its own on every surface: a
+ * sold-out grocery row keeps PRE-ORDER because no batch is being cooked for
+ * it, so "next batch" would name a thing that does not exist.
  */
 'use strict';
 
@@ -168,40 +185,108 @@ section("1 · the web storefront — a Guangzhou shopper on a cooking morning");
   });
 }
 
-section('2 · the web storefront — an out-of-city shopper is UNTOUCHED');
+section('2 · the web storefront — an out-of-city shopper reads the SAME word (§108)');
 {
   const away = webCtx(false);
-  it('still gets PRE-ORDER on a fresh item, today\'s batch or not', () => {
-    assert.strictEqual(away.slStock({ ...FRESH_TODAY }).preTxt, 'PRE-ORDER');
-    assert.strictEqual(away.slStock({ ...FRESH_LATER }).preTxt, 'PRE-ORDER');
+  it('a fresh item says NEXT BATCH, today\'s batch or not — as it does on the run', () => {
+    /* §108. This case used to demand PRE-ORDER here, and it was the size
+       picker's own private answer: the card badge one function away said NEXT
+       BATCH off `is_batch_made` for the very same row, so one product read two
+       ways on one page, and the mini app disagreed with both. Ash's ruling is
+       one word for one wait. The DATE still differs and is still the checkout
+       notice's job. */
+    assert.strictEqual(away.slStock({ ...FRESH_TODAY }).preTxt, 'NEXT BATCH');
+    assert.strictEqual(away.slStock({ ...FRESH_LATER }).preTxt, 'NEXT BATCH');
+    const cn = webCtx(false, 'cn');
+    assert.strictEqual(cn.slStock({ ...FRESH_LATER }).preTxt, '下批现做');
   });
-  it('…and the hero still names the promise', () => {
+  it('…and the hero agrees with it, as it always did', () => {
     assert.strictEqual(away.stockState({ ...FRESH_LATER }).badge, 'NEXT BATCH');
+    assert.strictEqual(away.stockState({ ...FRESH_TODAY }).badge, 'NEXT BATCH');
+  });
+  it('a GROCERY row is the carve-out: no batch is being cooked, so PRE-ORDER stands', () => {
+    // §108 changed the word for a meal the kitchen makes. Nothing is being
+    // made for a sold-out bag of rice, so it keeps the wording it had — the
+    // picker's PRE-ORDER and the card's SHIPS SOON, both untouched.
+    assert.strictEqual(away.slStock({ ...GROCERY_OUT }).preTxt, 'PRE-ORDER');
     assert.strictEqual(away.stockState({ ...GROCERY_OUT }).badge, 'SHIPS SOON');
   });
-  it('a shipped order is still called a pre-order when it is added', () => {
-    assert.ok(/slStock\(m\)\.pre&&!slStock\(m\)\.preToday/.test(SHOP),
-      'the toast asks whether it is today\'s batch before saying "pre-order"');
+  it('the add toast uses the row\'s OWN word, not a second opinion (§108)', () => {
+    // It used to re-derive "is this a reservation" at the toast
+    // (`slStock(m).pre && !slStock(m).preToday`) and then say "pre-order"
+    // whatever the card had said. Both toasts read `kind` now.
+    assert.ok(/const kind=!pre\|\|preToday\?'':\(m\.is_batch_made\?'batch':'preorder'\)/.test(SHOP),
+      'slStock decides the word once');
+    assert.ok(/Added — next batch/.test(SHOP) && /已加入购物车，下批现做/.test(SHOP),
+      'and a fresh meal is announced as the batch it is waiting on');
+    assert.ok(/Added — pre-order/.test(SHOP), 'while a grocery reservation keeps its own');
   });
 }
 
 section('3 · the mini app — the surface the report came from');
 {
-  it('the PDP asks whether the date is TODAY, not merely whether it exists', () => {
-    assert.ok(/const madeToday = m => !!\(m && m\.local_fresh_today\)/.test(MPROD));
+  it('ONE copy of the rule, asked by the badge, the button, the sheet and the toast', () => {
+    /* §108. The four used to answer it separately and had drifted three
+       different ways — including the old `madeToday`, which read
+       `local_fresh_today` with NO run check, so an out-of-city shopper on a
+       cooking morning got a silent badge over a PRE-ORDER button. */
+    const k = sliceBlock(MPROD, 'function _preKind(m, onLocalRun)');
+    assert.ok(/if \(onLocalRun && m\.local_fresh_today\) return '';/.test(k),
+      'silence belongs to the local run alone');
+    assert.ok(/return m\.is_batch_made \? 'batch' : 'preorder';/.test(k),
+      'the word is chosen by what the item IS, never by where the shopper is');
+    assert.strictEqual((MPROD.match(/m\.is_batch_made \? 'batch'/g) || []).length, 1,
+      'and exactly ONE place decides it');
     assert.ok(/preorder = !this\._onLocalRun;/.test(MPROD),
-      'a local-run shopper is never in the pre-order state, so the CTA reads ADD TO BASKET');
+      'the ship-vs-run flag survives for the things that genuinely ask it');
   });
-  it('the badge is empty for today, NEXT BATCH for later, PRE-ORDER for shipped', () => {
+  it('the badge is empty on the run today, else NEXT BATCH — grocery keeps PRE-ORDER', () => {
     const b = sliceBlock(MPROD, 'if (reservable(p))');
-    assert.ok(/stockTag = '';/.test(b), 'silent today');
-    assert.ok(/'下批现做' : 'NEXT BATCH'/.test(b), 'named later');
-    assert.ok(/'可预订' : 'PRE-ORDER'/.test(b), 'shipped keeps its word');
+    assert.ok(/preKind = _preKind\(p, this\._onLocalRun\)/.test(b), 'off the shared rule');
+    assert.ok(/preKind === 'batch'/.test(b) && /'下批现做' : 'NEXT BATCH'/.test(b),
+      'a fresh meal not yet made');
+    assert.ok(/preKind === 'preorder'/.test(b) && /'可预订' : 'PRE-ORDER'/.test(b),
+      'a grocery row names no batch');
+    assert.ok(!/_onLocalRun \?/.test(b),
+      'no address fork left in the badge at all');
+  });
+  it('the BUTTON says what the badge says, so the page cannot contradict itself', () => {
+    // Before §108 the button read `preorder` (ship-vs-run) while the badge read
+    // the batch, so a Guangzhou shopper waiting on a later batch was offered a
+    // plain ADD TO BASKET under a NEXT BATCH badge.
+    // Anchored on the computed one — the first `addBtnLabel:` in the file is
+    // the `data` block's plain default.
+    const at = MPROD.indexOf('addBtnLabel: soldOut');
+    assert.notStrictEqual(at, -1, 'the computed button label is still where it was');
+    const btn = MPROD.slice(at, at + 500);
+    assert.ok(/preKind === 'batch'/.test(btn) && /'下批现做' : 'NEXT BATCH'/.test(btn));
+    assert.ok(/preKind === 'preorder'/.test(btn) && /'预订' : 'PRE-ORDER'/.test(btn));
+    assert.ok(!/: preorder$/m.test(btn), 'the button no longer forks on the run');
   });
   it('the size rows keep their OWN word, since one shared label cannot say two', () => {
-    assert.ok(/const preTxt = !preorder \? ''/.test(MPROD));
+    assert.ok(/const rowKind = _preKind\(m, this\._onLocalRun\);/.test(MPROD),
+      'and they ask the same rule the hero does');
+    assert.ok(/rowKind === 'batch' \? \(L === 'cn' \? '下批现做' : 'NEXT BATCH'\)/.test(MPROD));
     assert.ok(/\{\{opt\.preTxt \|\| preLabel\}\}/.test(
       fs.readFileSync(path.join(ROOT, 'miniapp/pages/product/product.wxml'), 'utf8')));
+  });
+  it('…and the PDP add toast asks it too, by size as well as by button', () => {
+    assert.ok(/this\._finishAdd\(this\.data\.preKind\)/.test(MPROD), 'the buy button');
+    assert.ok(/this\._finishAdd\(_preKind\(m, this\._onLocalRun\)\)/.test(MPROD),
+      'and a size chosen from the sheet, which used to pass a different flag entirely');
+    assert.ok(/'已加入购物车，下批现做' : 'Added — next batch'/.test(MPROD));
+  });
+  it('_preKind tests the SHELF itself, or an in-stock meal is announced as a wait', () => {
+    /* `oos_preorder` is a POLICY flag — true on a batch-made product whether or
+       not any is left — so the rule cannot assume its caller checked the shelf.
+       The badge calls it inside a `stock <= 0` branch and would never have
+       noticed; the add toast has no shelf test of its own and would have told a
+       customer their in-stock wrap was waiting on the next batch. */
+    const k = sliceBlock(MPROD, 'function _preKind(m, onLocalRun)');
+    assert.ok(/if \(!\(stock != null && stock <= 0\)\) return '';/.test(k),
+      'in stock, or untracked → no word at all');
+    assert.ok(/if \(!m \|\| m\.ship_from_supplier\) return '';/.test(k),
+      'and a supplier-direct row holds no stock of ours to be short of');
   });
   it('…and a size stays orderable — `soldOut` reads `orderable`, not the label', () => {
     assert.ok(/const soldOut = out && !orderable;/.test(MPROD),
@@ -314,39 +399,46 @@ section("5 · the shop page's SIZE SHEET — quick-add, off a grid card");
     assert.strictEqual(sheet({ ...FRESH_LATER }, true).preText, 'NEXT BATCH');
     assert.strictEqual(sheet({ ...FRESH_LATER }, true, 'cn').preText, '下批现做');
   });
-  it('an out-of-city shopper still reads PRE-ORDER · 可预订, untouched', () => {
-    assert.strictEqual(sheet({ ...FRESH_TODAY }, false).preText, 'PRE-ORDER');
-    assert.strictEqual(sheet({ ...FRESH_LATER }, false).preText, 'PRE-ORDER');
-    assert.strictEqual(sheet({ ...FRESH_LATER }, false, 'cn').preText, '可预订');
+  it('an out-of-city shopper reads the SAME NEXT BATCH · 下批现做 (§108)', () => {
+    assert.strictEqual(sheet({ ...FRESH_TODAY }, false).preText, 'NEXT BATCH');
+    assert.strictEqual(sheet({ ...FRESH_LATER }, false).preText, 'NEXT BATCH');
+    assert.strictEqual(sheet({ ...FRESH_LATER }, false, 'cn').preText, '下批现做');
   });
   it('a sold-out grocery size is still plainly dead on the run', () => {
     const o = sheet({ ...GROCERY_OUT }, true);
     assert.strictEqual(o.soldOut, true);
     assert.strictEqual(o.preText, '');
   });
+  it('…and off the run it is the carve-out: PRE-ORDER, no batch to name', () => {
+    assert.strictEqual(sheet({ ...GROCERY_OUT }, false).preText, 'PRE-ORDER');
+    assert.strictEqual(sheet({ ...GROCERY_OUT }, false, 'cn').preText, '可预订');
+  });
 
-  it('…and CHOOSING one is not called a pre-order either', () => {
+  it('…and CHOOSING one hands the toast the row\'s OWN word (§108)', () => {
     /* The band going quiet is half the surface. Tapping the size runs
-       _addRawToCart, which fires "Added — pre-order" / "已预订，加入购物车" off
-       the very flag that has to stay true. The web storefront already asks
-       "…and is it today's batch?" before saying the word (section 2); the mini
-       app's shop did not. */
+       _addRawToCart, which fires the add toast. It took a BOOLEAN — "is this a
+       reservation" — so it could only ever say "pre-order", and a shopper who
+       tapped a row reading NEXT BATCH was answered with the other word. It
+       takes `_stockState`'s own `kind` now, so the row and the toast cannot
+       disagree. */
     const choose = (member, onLocalRun) => {
       const ctx = makeCtx({ lang: 'en', _raw: [] });
       ctx._onLocalRun = onLocalRun;
       ctx._memberMap = { 99: [{ id: 501, ...member }] };
       ctx._vpRepId = 99;
-      let sayPreorder = null;
-      ctx._addRawToCart = (raw, originId, say) => { sayPreorder = say; };
+      let kind = null;
+      ctx._addRawToCart = (raw, originId, k) => { kind = k; };
       withToasts(() => page.vpChoose.call(ctx, { currentTarget: { dataset: { id: 501 } } }));
-      return sayPreorder;
+      return kind;
     };
-    assert.strictEqual(choose({ ...FRESH_TODAY }, true), false,
+    assert.strictEqual(choose({ ...FRESH_TODAY }, true), '',
       "today's batch is added like any other line");
-    assert.strictEqual(choose({ ...FRESH_LATER }, true), true,
-      '…while a later batch is still announced as a reservation');
-    assert.strictEqual(choose({ ...FRESH_TODAY }, false), true,
-      '…and so is anything we are actually shipping');
+    assert.strictEqual(choose({ ...FRESH_LATER }, true), 'batch',
+      '…while a later batch is announced as the batch it is');
+    assert.strictEqual(choose({ ...FRESH_TODAY }, false), 'batch',
+      '…and so is a shipped one — same word, same wait (§108)');
+    assert.strictEqual(choose({ ...GROCERY_OUT }, false), 'preorder',
+      '…with grocery the one row still calling it a pre-order');
   });
 
   it('…and the TEMPLATE draws that word, not the page-wide preLabel', () => {
@@ -400,28 +492,47 @@ section('6 · the FAVOURITES page — §80 never reached it at all');
     assert.strictEqual(tile({ ...FRESH_LATER }, true).preText, 'NEXT BATCH');
     assert.strictEqual(tile({ ...FRESH_LATER }, true, 'cn').preText, '下批现做');
   });
-  it('an out-of-city shopper still reads PRE-ORDER · 可预订', () => {
-    assert.strictEqual(tile({ ...FRESH_TODAY }, false).preText, 'PRE-ORDER');
-    assert.strictEqual(tile({ ...FRESH_LATER }, false, 'cn').preText, '可预订');
+  it('an out-of-city shopper reads the SAME NEXT BATCH · 下批现做 (§108)', () => {
+    assert.strictEqual(tile({ ...FRESH_TODAY }, false).preText, 'NEXT BATCH');
+    assert.strictEqual(tile({ ...FRESH_LATER }, false, 'cn').preText, '下批现做');
   });
   it('a sold-out grocery favourite is dead on the run, as before', () => {
     const t = tile({ ...GROCERY_OUT }, true);
     assert.strictEqual(t.soldOut, true);
     assert.strictEqual(t.preText, '');
   });
+  it('…and off the run it is the carve-out: PRE-ORDER, no batch to name', () => {
+    assert.strictEqual(tile({ ...GROCERY_OUT }, false).preText, 'PRE-ORDER');
+    assert.strictEqual(tile({ ...GROCERY_OUT }, false, 'cn').preText, '可预订');
+  });
 
-  it('…and a quick-add of today\'s batch is not called a pre-order', () => {
+  it('…and the quick-add toast says the tile\'s own word (§108)', () => {
     const said = (p, onLocalRun) => {
       const ctx = makeCtx({ lang: 'en', all: [{ id: 601, ...p }], activeCat: 'All', copy: {} });
       page.applyLangCopy.call(ctx);
       ctx._onLocalRun = onLocalRun;
       return withToasts(() => page.onQuickAdd.call(ctx, { currentTarget: { dataset: { id: 601 } } }));
     };
-    assert.ok(!said({ ...FRESH_TODAY }, true).some(t => /pre-order/i.test(t)),
-      "a meal made this morning is added, not reserved");
-    assert.ok(said({ ...FRESH_LATER }, true).some(t => /pre-order/i.test(t)),
-      '…while a later batch is still announced as a reservation');
-    assert.ok(said({ ...FRESH_TODAY }, false).some(t => /pre-order/i.test(t)),
+    assert.ok(!said({ ...FRESH_TODAY }, true).some(t => /pre-order|next batch/i.test(t)),
+      'a meal made this morning is added, not reserved — no word at all');
+    assert.ok(said({ ...FRESH_LATER }, true).some(t => /next batch/i.test(t)),
+      'a later batch is announced as the batch it is');
+    assert.ok(said({ ...FRESH_LATER }, false).some(t => /next batch/i.test(t)),
+      '…and a shipped one the same way — same wait, same word');
+    assert.ok(said({ ...GROCERY_OUT }, false).some(t => /pre-order/i.test(t)),
+      'grocery is the one row still calling it a pre-order');
+  });
+
+  it('…and the OLD case still holds where it should: a reservation is never silent', () => {
+    const said = (p, onLocalRun) => {
+      const ctx = makeCtx({ lang: 'en', all: [{ id: 601, ...p }], activeCat: 'All', copy: {} });
+      page.applyLangCopy.call(ctx);
+      ctx._onLocalRun = onLocalRun;
+      return withToasts(() => page.onQuickAdd.call(ctx, { currentTarget: { dataset: { id: 601 } } }));
+    };
+    assert.ok(said({ ...FRESH_LATER }, true).some(t => /pre-order|next batch/i.test(t)),
+      'a later batch is still announced, whatever the word');
+    assert.ok(said({ ...FRESH_TODAY }, false).some(t => /pre-order|next batch/i.test(t)),
       '…and so is anything we are actually shipping');
   });
 
@@ -434,6 +545,50 @@ section('6 · the FAVOURITES page — §80 never reached it at all');
       assert.ok(!/copy\.preorder/.test(b),
         `one page-wide string cannot say three things: ${b.trim()}`);
     }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// §108 reached the checkout too: the badge is not the only place a shopper is
+// told about a batch. Two notices describe the SAME wait to two shoppers —
+// computeBatchNotice to one we courier to, computeLocalFreshNotice to one on
+// the run — and they were headed differently for no reason but the order they
+// were written in. The DATES they carry still differ, and should: that is the
+// real difference between the two shoppers, and it lives in the message.
+section('7 · the two fresh-batch checkout notices head the same way (§108)');
+{
+  // Full signatures as anchors: `opts = {}` in the parameter list would
+  // otherwise be the first brace sliceBlock finds, and it would return the
+  // signature instead of the body.
+  const BATCH = sliceBlock(RETAIL,
+    'function computeBatchNotice(zone, productIds, now, slotId, slotKind, opts = {})');
+  const LOCAL = sliceBlock(RETAIL,
+    'function computeLocalFreshNotice(address, productIds, now, slotKind, opts = {})');
+  const built = (body, key) => {
+    const m = new RegExp(key + ":\\s*cfg\\.[a-z_]+\\s*\\|\\|\\s*'([^']*)'").exec(body);
+    assert.ok(m, `a built-in default for ${key} is still there to compare`);
+    return m[1];
+  };
+
+  for (const key of ['kicker_en', 'kicker_cn', 'title_en', 'title_cn']) {
+    it(`${key} is the same on both`, () => {
+      assert.strictEqual(built(BATCH, key), built(LOCAL, key));
+    });
+  }
+  it('both still fall back to the OPERATOR\'s copy first', () => {
+    assert.ok(/cfg\.kicker_en\s*\|\|/.test(BATCH) && /cfg\.local_kicker_en\s*\|\|/.test(LOCAL),
+      'matching the defaults must not take the override away');
+  });
+  it('the local-run message still names its date, which the title no longer does', () => {
+    assert.ok(/\$\{makeDate\}/.test(LOCAL),
+      'the date moved into the message, it was not dropped');
+    assert.ok(/make_date: makeDate/.test(LOCAL), 'and it still rides as a field');
+  });
+  it('the GROCERY notice is untouched — it names no batch, having none', () => {
+    const PRE = sliceBlock(RETAIL,
+      'function computePreorderNotice(zone, address, productIds, slotId, slotKind)');
+    assert.ok(/kicker_en: 'Pre-order'/.test(PRE));
+    assert.ok(/title_en:  'Ships soon'/.test(PRE));
   });
 }
 

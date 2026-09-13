@@ -805,36 +805,49 @@ console.log('\nweb storefront — stockState / slStock');
 // tracks_stock=false) nothing caps the stepper, so a sold-out backorder line
 // was added with no sign it was out — the same silence, on the one screen that
 // had no pill at all.
-console.log('\nmini-app add-to-order — the SHIPS SOON pill');
+console.log('\nmini-app add-to-order — the sold-out pill (NEXT BATCH / SHIPS SOON)');
 {
   const js   = fs.readFileSync(path.join(ROOT, 'miniapp/pages/add-to-order/add-to-order.js'), 'utf8');
   const wxml = fs.readFileSync(path.join(ROOT, 'miniapp/pages/add-to-order/add-to-order.wxml'), 'utf8');
   const wxss = fs.readFileSync(path.join(ROOT, 'miniapp/pages/add-to-order/add-to-order.wxss'), 'utf8');
 
   it('the row carries the flag, off the same two server fields the grid reads', () => {
-    assert.ok(/preorder: !p\.ship_from_supplier && !!p\.oos_preorder &&/.test(js),
+    assert.ok(/const preorder = !p\.ship_from_supplier && !!p\.oos_preorder &&/.test(js),
       'ship_from_supplier holds no stock of ours; oos_preorder is the policy verdict');
     assert.ok(/\(atStore != null \? Number\(atStore\) : chainStock\) <= 0/.test(js),
       'and it is the SAME stock figure the stepper caps on — store first, catalog second');
   });
 
-  it('the pill renders on the row', () => {
-    assert.ok(/wx:if="\{\{ item\.preorder \}\}" class="row-pre f-toni">\{\{ copy\.shipsSoon \}\}/.test(wxml));
+  it('the pill renders on the row, drawing the ROW\'s word (§108)', () => {
+    // It drew one page-wide string before, so every pill here read SHIPS SOON —
+    // including a fresh meal, which every other surface now calls NEXT BATCH.
+    assert.ok(/wx:if="\{\{ item\.preText \}\}" class="row-pre f-toni">\{\{ item\.preText \}\}/.test(wxml));
+    assert.ok(!/copy\.shipsSoon/.test(wxml),
+      'one page-wide string cannot say both words');
     assert.ok(/^\.row-pre \{/m.test(wxss), 'and has a style, or it renders as bare text');
   });
 
-  it('both languages, and neither string is minted here', () => {
-    assert.ok(/shipsSoon: 'SHIPS SOON'/.test(js) && /shipsSoon: '现订现发'/.test(js));
-    // The pair is the shop grid's own (shop.js preText). Lifted, not reworded:
-    // one product must not read two ways in one app. If the grid ever changes
-    // its wording this fails, which is the point.
+  it('a fresh meal says NEXT BATCH here too; grocery keeps SHIPS SOON (§108)', () => {
+    assert.ok(/p\.is_batch_made \? this\.data\.copy\.nextBatch : this\.data\.copy\.shipsSoon/.test(js),
+      'chosen by what the item IS, the one test every surface now uses');
+    assert.ok(/nextBatch: 'NEXT BATCH'/.test(js) && /nextBatch: '下批现做'/.test(js),
+      'and both halves of the live pair are here');
+    assert.ok(/shipsSoon: 'SHIPS SOON'/.test(js) && /shipsSoon: '现订现发'/.test(js),
+      'the grocery pair stays, unchanged');
+  });
+
+  it('both pairs are the shop grid\'s own, and neither is minted here', () => {
+    // Lifted, not reworded: one product must not read two ways in one app. If
+    // the grid ever changes either wording this fails, which is the point.
     const shopJs = fs.readFileSync(path.join(ROOT, 'miniapp/pages/shop/shop.js'), 'utf8');
     assert.ok(/'现订现发' : 'SHIPS SOON'/.test(shopJs),
-      'the grid still uses this pair — if it moved, move this one with it');
+      'the grid still uses the grocery pair — if it moved, move this one with it');
+    assert.ok(/'下批现做' : 'NEXT BATCH'/.test(shopJs),
+      'and the fresh-meal pair too');
   });
 
   it('no local-run term, unlike the grid — the gate has already ruled', () => {
-    const map = js.slice(js.indexOf('preorder: !p.ship_from_supplier'));
+    const map = js.slice(js.indexOf('const preorder = !p.ship_from_supplier'));
     assert.ok(!/onLocalRun|_onLocalRun|local_fresh_date/.test(map.slice(0, 200)),
       'this flag describes the shelf; addonBlockReason decides who may order off it');
   });

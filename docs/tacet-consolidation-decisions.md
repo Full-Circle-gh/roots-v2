@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.235
+# Tacet shared-core consolidation — decisions record, v4.237
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-13 · v4.237 — **§108 REACHES THE TWO SURFACES IT LEFT BEHIND: THE ADD TOAST AND THE ADD-ON PICKER. No new section — this is §108 being carried to the places the first pass named and deliberately did not touch.** v4.236 shipped §108 and listed, in its own "Explicitly NOT touched", the add toasts (rewording them composes Chinese, which Rule 4 requires be declared) and `add-to-order`'s SHIPS SOON pill (an add-on screen, not one of the two surfaces Ash had named). Shown exactly where each lived and what each would change, Ash: **"you can fix both"**. **THE TOAST WAS THE LAST SURFACE STILL SAYING THE OLD WORD**, and the worst placed to say it: a customer tapped a button reading NEXT BATCH and was answered *Added — pre-order* half a second later. **IT TOOK A BOOLEAN, WHICH IS WHY IT COULD ONLY EVER SAY ONE THING**, and the five callers filled that boolean five ways — the PDP button passed `!onLocalRun`, the PDP size sheet passed plain reservability (so one Guangzhou shopper adding one meal two ways got two different toasts), the shop and favourites passed `preorder && !today`, the web passed `pre && !preToday`. All five now take the same `kind` verdict (`'' | 'batch' | 'preorder'`) their own badge reads. **ONE COMPOSED CHINESE STRING, AND ONLY ONE: `已加入购物车，下批现做`** — the app's own plain add toast joined to the badge the customer just tapped, in the comma shape the pre-order toast beside it already uses, declared in `docs/tacet-delivery-vocabulary.md` v1.67 by Claude Opus 5 under Rule 4's 2026-09-06 delegation, with four candidates rejected recorded (keeping `已预订，加入购物车`; the reversed clause order; a middot instead of the comma; the notice's longer `下一批现做`). EN is `Added — next batch`. **The grocery toast is untouched** — `已预订，加入购物车` stays the honest word for a restock we have no date for, per §108's carve-out. **THE ADD-ON PICKER** (`add-to-order`, reached from an order detail page's *Add to this order · 为订单加单*) drew one page-wide `copy.shipsSoon` for every reservable row, so a fresh meal read SHIPS SOON there while every other surface called it NEXT BATCH. It now carries the row's own `preText`, chosen on `is_batch_made` — the one test every surface uses — with **no new Chinese**: both pairs were already live. Its "no local-run term" comment stands and is restated in code: `addonBlockReason` rule 2 refuses a local-run reservation before a row reaches this screen, so every pill it can draw belongs to an order we ship. **A REAL SIMPLIFICATION CAME OUT OF IT, not just a rewording**: `product.js` grew module-level `_reservable` and `_preKind`, and `shop.js`'s `_stockState` grew `kind`, so the badge, the button, the size sheet and the toast ask ONE function instead of four copies that had drifted three different ways. A case asserts exactly one place decides the word. **PROVED**: `test_fresh_today_label.js` 44 → **46 cases** (the toast now pinned per surface and per language, the PDP size sheet's toast pinned to the same rule as its badge, the grocery carve-out pinned in the toast too); `test_preorder_local.js` 66 → **67**, its add-on section rewritten for the row-level word and now checking BOTH live pairs against the grid rather than one. `npm run test:fast` 216 passed, 0 failed; eslint 0 errors; doc-numbering PASS. Code, tests and docs; no schema, no migration, no new route, no new capability, and no change to `.gitignore` or CI.
+
+2026-09-12 · v4.236 — **§108: ONE WORD FOR ONE WAIT — A FRESH MEAL NOT YET MADE READS `NEXT BATCH` TO EVERY SHOPPER — DECIDED by Ash, against §80 as shipped.** Reported from the live mini app with two screenshots: the shop grid reading NEXT BATCH on the Falafel Wrap, its own product page reading PRE-ORDER. **THIS SESSION MISDIAGNOSED IT TWICE BEFORE ASH STATED THE RULE, AND THAT IS RECORDED BECAUSE IT SHAPED THE FIX.** It first read the grid as the defect and shipped an address-aware grid (reverted, unmerged); told *"that's not what's happening"*, it then read Ash's description as a request to silence the product page (also reverted). The rule, when he stated it plainly, was neither: **"both of them have the pre order and next batch notification. all I want is that they all have the same wording"** — nobody loses a notice, and the two words become one. Asked which, he chose **`NEXT BATCH`**, and **"match both heading also"** for the checkout pop-ups. **WHAT WAS ACTUALLY WRONG WAS NEITHER SURFACE ALONE BUT THE SPLIT ITSELF.** §80 keyed the PDP, the favourites tile and both size sheets on the shopper's ADDRESS (NEXT BATCH on the local run, PRE-ORDER off it) while the shop grid, the web card and the web mobile list keyed on `is_batch_made` and had never asked where anyone lived. Both halves were internally defensible and together they guaranteed a customer outside Guangzhou saw two words for one product — which is exactly the screenshot pair. **THE RULING: THE WORD DESCRIBES THE ITEM, NOT THE SHOPPER.** A meal the kitchen has yet to make is `NEXT BATCH · 下批现做` to everybody. What legitimately differs between the two customers is the **DATE** — the local run gets the make day, a couriered order gets make day plus transit — and a date belongs in the checkout notice, which states it, not in a pill, which cannot. **ONE §80 RULING SURVIVES INTACT AND IS NOT SOFTENED: silence still belongs to the local run alone.** A shopper on the run whose batch is TODAY'S waits for nothing worth naming — the kitchen serves it inside the window they are about to pick — so that row keeps its ordinary ADD TO BASKET, as §80 built it. An out-of-city shopper on that same morning is still waiting on a parcel, which is why the run is half the test. **AND THAT EXPOSED A REAL DEFECT §80 LEFT BEHIND**: `madeToday` never checked the run, so an out-of-city shopper on a cooking morning got a SILENT badge over a button that still read PRE-ORDER — the page contradicting itself. `silentToday` now asks both. **THE BUTTON NOW SAYS WHAT THE BADGE SAYS**, on Ash's instruction (*"next batch on the button for Guangzhou customers and outside gz customers"*): it read `preorder`, the ship-vs-run question, so a Guangzhou shopper waiting on a later batch was offered a plain ADD TO BASKET beneath a NEXT BATCH badge. Both come off one `preKind` now and cannot drift. **THE GROCERY CARVE-OUT IS ASH'S OWN AND IS DELIBERATE** (*"leave them alone"*): a sold-out grocery row keeps `PRE-ORDER · 可预订`, because no batch is being cooked for it and "next batch" would name a thing that does not exist. It has cases on every surface so nothing sweeps it up later. **THE TWO CHECKOUT NOTICES ARE HEADED ALIKE**: `computeBatchNotice` (courier) and `computeLocalFreshNotice` (the run) described one wait under two headings — *Freshly made* and *Next fresh batch* — for no reason but the order they were written in. Both defaults are now `Next fresh batch · 下一批现做` / `Made fresh for you · 为您新鲜现做`; the local-run title drops the date it carried, which is **not lost** (the message names the same day and explains the run delivers it that day, which a title never had room for) and still rides as `make_date`. **The operator's own copy still wins** — the overrides are untouched, and the two can still be set apart deliberately; `public/retail-admin.html`'s placeholder hints are corrected to the new defaults so the form stops advertising copy customers no longer get. `computePreorderNotice` (the grocery notice) is untouched. **NO NEW CHINESE**: `下批现做`, `可预订`, `下一批现做` and `为您新鲜现做` were all already live; this only changes which of them applies where. **EXPLICITLY NOT TOUCHED, and each for a stated reason**: the add toasts (*"Added — pre-order"*) — not in the ruling, and rewording them would MINT Chinese, which Rule 4 requires declaring; `miniapp/pages/add-to-order/add-to-order.js`'s SHIPS SOON pill — an add-on screen for an order already placed and routed, not one of the two surfaces named; the web PDP button — it already reads ADD TO BASKET for everyone, so there is no address fork there to remove; and the pre-existing grocery disagreement between the grid (SHIPS SOON) and the PDP/picker/favourites (PRE-ORDER), which predates this and is flagged rather than swept in. **PROVED**: `scripts/test_fresh_today_label.js` 34 → **44 cases** — sections 2, 3, 5 and 6 rewritten for the single word in both languages, the grocery carve-out given its own case on every surface, the button pinned to the same `preKind` as the badge, `silentToday` pinned to asking the run, and a **new section 7** that EXTRACTS both notices' built-in headings and asserts they are equal rather than matching two literals, so a future edit to one alone turns red. `npm run test:fast` 216 passed, 0 failed; eslint 0 errors; doc-numbering PASS. Code, tests and docs; no schema, no migration, no new route, no new capability, no new Chinese, and no change to `.gitignore` or CI.
 
 2026-09-12 · v4.235 — **§107: THE STALL CARD NAMES BOTH ITS COUNTS, SO THE ONE SCREEN THAT SHOWS THEM TOGETHER STOPS LOOKING WRONG.** Asked by Ash, reading the phone's Channel sync screen: *"why it say 3 stock update when can see only 2"* — the Meituan card said *3 stock updates waiting since Sep 7* directly above a Needs attention list holding 2 items. **THIS IS §104'S OWN DIVERGENCE, NOT A NEW ONE.** §104 already ruled the two figures must never be summed: `channelSyncStale().waiting_count` counts (store, product) push TARGETS still pending or errored; `channel_items_attention.count` (`ch.counts.att` here) counts PRODUCTS, worst-store-wins, so one product wrong at two stores is two targets and one card. §104 settled where each number lives; it did not say the stall line naming only the target count would read as a bug on the one page — the Channel sync page's own strip — that also shows the item count a breath away. **THE FIX NAMES BOTH, IT DOES NOT RECONCILE THEM.** Desktop's `29-channel-sync.js` `strip()` and the phone's `m.html` (new `csStaleLine`, mirroring `csBlockLine`'s shape) append the channel's own `counts.att` to the stall sentence they already had, only when it is nonzero — a channel stalled on pushes still in flight, with nothing yet provably wrong, says only the original sentence, per §104's own "no single item is yet provably wrong" case. **THE SERVER IS UNCHANGED**, same as §104: `lib/channel-sync-stale.js` and `lib/channel-sync-items.js` are untouched, both counts already travelled to both surfaces, and this is display only. **Chinese: one pair lifted whole, one arrangement composed.** Desktop's `N 个待处理` is its own live fragment three lines below in the same file, reused verbatim. The phone has no such sentence — its counts are chip badges, not prose — so `N 件商品待处理` joins two fragments already live on this exact screen (`件商品` from its "every channel is in step" card, `待处理` from the Needs attention chip), declared in `docs/tacet-delivery-vocabulary.md` with the candidates rejected (`涉及 N 件商品`, foremost). **Tests:** no suite pins the literal stall-line text on either surface, so none needed changing; `test_channel_sync_items.js` (61), `test_channel_sync_stale.js` (23) and `test_channel_sync_home_row.js` (31, §104's own) all still pass untouched, and `test:fast` is green at 215. No schema, no migration, no new capability, no new state, no change to `.gitignore` or CI.
 
@@ -11714,3 +11718,195 @@ cases), `test_channel_sync_stale.js` (23 cases) and `test_channel_sync_home_row.
 (31 cases, §104's own — a different function on both files, untouched by this
 edit) all pass unchanged. `test:fast` green at 215. No schema, no migration,
 no new capability, no new state, no change to `.gitignore` or CI.
+
+## §108 — ONE WORD FOR ONE WAIT: A FRESH MEAL NOT YET MADE READS `NEXT BATCH` TO EVERY SHOPPER
+
+**Decided by Ash, 2026-09-12**, against §80 as shipped. Reported from the live
+mini app as two screenshots of one product: the shop grid reading **NEXT BATCH**
+on the Falafel Wrap, its own product page reading **PRE-ORDER**.
+
+### How this session got it wrong twice first
+
+Recorded because it is why the ruling had to be stated three times, and because
+the second mistake is the more instructive one.
+
+1. It read the grid as the defect and built an address-aware grid badge. Pushed,
+   then reverted unmerged.
+2. Told **"that's not what's happening"**, it read Ash's description of the
+   intended flow as a request to *silence* the product page, and built that.
+   Also reverted unmerged.
+
+Both readings shared an assumption nobody had checked: that the split between
+the two words was correct and only its application was wrong. The ruling is that
+the split itself is the defect. Ash, plainly:
+
+> *"both of them have the pre order and next batch notification. all I want is
+> that they all have the same wording"*
+
+Nobody loses a notice; the two words become one. Asked which, he chose
+**`NEXT BATCH`**, and **"match both heading also"** for the checkout pop-ups.
+
+### What was actually wrong: two rules, each defensible, guaranteed to disagree
+
+§80 keyed the word on the shopper's **ADDRESS** — NEXT BATCH on the local run,
+PRE-ORDER off it — on the PDP hero, the favourites tile and both size sheets.
+The shop grid card, the web card badge and the web mobile list keyed on
+**`is_batch_made`** and had never asked where anyone lived. Neither is wrong on
+its own terms. Together they guarantee that a shopper outside Guangzhou sees one
+word on the list and a different word on the page it opens — which is the
+screenshot pair exactly.
+
+### The ruling
+
+**The word describes the ITEM, not the SHOPPER.** A meal the kitchen has yet to
+make is `NEXT BATCH · 下批现做` to everybody.
+
+What legitimately differs between the two customers is the **DATE**: the local
+run gets the make day, a couriered order gets make day plus a transit day. A
+date belongs in the checkout notice, which states it and can explain it, not in
+a pill, which can do neither.
+
+### One §80 ruling survives intact, and is not softened
+
+**Silence still belongs to the local run alone.** A shopper on the run whose
+batch is TODAY'S is waiting for nothing worth naming — the kitchen serves it
+inside the window they are about to pick — so that row keeps an ordinary ADD TO
+BASKET, exactly as §80 built it. An out-of-city shopper on that same morning is
+still waiting on a parcel, which is why the run is half of the test.
+
+**That is also a defect §80 left behind, now fixed.** The old `madeToday` read
+`local_fresh_today` with **no run check at all**, so an out-of-city shopper on a
+cooking morning got a SILENT badge above a button still reading PRE-ORDER — the
+page contradicting itself, for as long as §80 has existed. `silentToday` asks
+both questions.
+
+### The button says what the badge says
+
+On Ash's instruction — *"next batch on the button for Guangzhou customers and
+outside gz customers"*. The button read `preorder` (the ship-vs-run question)
+while the badge read the batch, so a Guangzhou shopper waiting on a later batch
+was offered a plain ADD TO BASKET beneath a NEXT BATCH badge. Both now come off
+one `preKind` (`'batch'` | `'preorder'` | `''`) and cannot drift apart.
+
+`preorder` itself is left alone: the add toast asks the ship-vs-run question,
+which is genuinely its own question, and rewording that toast would mint Chinese
+(see below).
+
+### The grocery carve-out is Ash's own
+
+Asked directly whether sold-out grocery rows should change too, the answer was
+**"leave them alone"**. Nothing is being cooked for a sold-out bag of rice, so
+`NEXT BATCH` would name a thing that does not exist. Those rows keep
+`PRE-ORDER · 可预订` (and, on the grid and the web card, `SHIPS SOON · 现订现发`).
+The carve-out has its own case on **every** surface so a later tidy-up cannot
+sweep it in by accident.
+
+### The two checkout notices are headed alike
+
+`computeBatchNotice` (courier) and `computeLocalFreshNotice` (the run) describe
+one wait to two shoppers and were headed differently for no reason but the order
+they were written in — *Freshly made · 新鲜现做* against *Next fresh batch ·
+下一批现做*. Both built-in defaults are now:
+
+> **Next fresh batch · 下一批现做** — Made fresh for you · 为您新鲜现做
+
+The local-run title drops the date it used to carry (`Made fresh on {make_date}`).
+**It is not lost**: the message below names the same day and says the run
+delivers it that day, which the title never had room to explain, and it still
+rides as the `make_date` field. **The operator's own copy still wins** — the
+`cfg.*` overrides are untouched, and the two notices can still be set apart
+deliberately by whoever wants that. `public/retail-admin.html`'s placeholder
+hints are corrected to the new defaults, so the form stops advertising copy that
+customers no longer receive.
+
+`computePreorderNotice` — the grocery notice, "Pre-order / Ships soon", dateless
+because we have no restock date to give — is untouched, per the carve-out.
+
+### Files
+
+- **`miniapp/pages/product/product.js`** — `preKind` replaces the address fork on
+  the hero badge; `silentToday` gains the run check; the buy button reads
+  `preKind`; the size sheet keys on `m.is_batch_made`.
+- **`miniapp/pages/shop/shop.js`** — the quick-add size picker keys on
+  `m.is_batch_made`. **The grid card is unchanged**: it was already address-blind
+  and already said NEXT BATCH for a fresh meal. The badge in the screenshot was
+  never the one that was wrong.
+- **`miniapp/pages/favorites/favorites.js`** — the tile keys on `p.is_batch_made`.
+- **`public/shop.html`** — `slStock` keys on `m.is_batch_made`. `stockState` and
+  `slToRows` are unchanged, being address-blind already.
+- **`routes/retail.js`** — the two notice headings.
+- **`public/retail-admin.html`** — two placeholder hints.
+
+### Explicitly NOT touched, each for a stated reason
+
+- **The add toasts** (`Added — pre-order` / `已预订，加入购物车`). Not in the
+  ruling, and rewording them would compose new Chinese, which
+  `docs/tacet-delivery-vocabulary.md` Rule 4 requires be declared. Left alone
+  deliberately rather than by omission.
+- **`miniapp/pages/add-to-order/add-to-order.js`'s SHIPS SOON pill.** An add-on
+  screen for an order already placed and routed, not one of the two surfaces
+  Ash named. (A previous, reverted attempt at this ruling renamed it; that is
+  not carried over.)
+- **The web PDP button.** It already reads ADD TO BASKET for every shopper, so
+  there is no address fork there to remove.
+- **The pre-existing grocery disagreement** between the grid (`SHIPS SOON`) and
+  the PDP / picker / favourites (`PRE-ORDER`). It predates this ruling and is
+  flagged here rather than folded in under cover of it.
+
+### Chinese
+
+Nothing composed. `下批现做`, `可预订`, `下一批现做` and `为您新鲜现做` were all
+already live strings; §108 only changes which of them applies where.
+
+### Tests
+
+`scripts/test_fresh_today_label.js` grows 34 → **44 cases**. Sections 2, 3, 5
+and 6 are rewritten for the single word in both languages; the grocery carve-out
+gains a case on every surface; the button is pinned to the same `preKind` as the
+badge; `silentToday` is pinned to asking the run. **New section 7** EXTRACTS
+both notices' built-in headings from the shipped source and asserts they are
+**equal** — rather than matching two literals, which would pass if someone
+changed both to two new different strings. It also asserts the operator
+overrides survive, that the local-run date moved into the message rather than
+being dropped, and that the grocery notice is untouched. The file's header keeps
+§80's three-state record as history and carries the amendment beneath it.
+
+`npm run test:fast` 216 passed, 0 failed. `npx eslint` 0 errors on the changed
+files in scope (`miniapp/` is outside the configured lint scope per
+`package.json`). `node scripts/check-doc-numbering.js` PASS. Code, tests and
+docs; no schema, no migration, no new route, no new capability, no new Chinese,
+and no change to `.gitignore` or CI.
+
+### AMENDED 2026-09-13 (v4.237) — the two held-back surfaces are done
+
+**The "Explicitly NOT touched" list above is historical from here down.** Its
+first two entries were held back for stated reasons, not forgotten; shown where
+each lived and what each would change, Ash said **"you can fix both"**.
+
+- **The add toasts are now §108's word too.** They were the last surface saying
+  the old one, in the worst possible place — half a second after the customer
+  tapped a button reading NEXT BATCH. The toast took a BOOLEAN, which is why it
+  could only ever say one thing, and its five callers filled that boolean five
+  different ways: the PDP button passed `!onLocalRun`, the PDP size sheet passed
+  plain reservability (so one Guangzhou shopper adding one meal two ways got two
+  different toasts), the shop and favourites passed `preorder && !today`, the web
+  passed `pre && !preToday`. All five take the same `kind` verdict now.
+  **One composed Chinese string, `已加入购物车，下批现做`**, declared in
+  `docs/tacet-delivery-vocabulary.md` v1.67 with its rejected candidates; EN is
+  `Added — next batch`. The grocery toast is untouched.
+- **`add-to-order`'s pill now carries the row's own word**, chosen on
+  `is_batch_made` like everywhere else, with no new Chinese — both pairs were
+  already live. Its "no local-run term" reasoning stands: `addonBlockReason`
+  rule 2 refuses a local-run reservation before a row reaches that screen.
+
+**The other two entries stand unchanged**: the web PDP button still reads ADD TO
+BASKET for every shopper (no address fork to remove), and the pre-existing
+grocery disagreement between the grid's `SHIPS SOON` and the PDP's `PRE-ORDER`
+is still flagged rather than folded in.
+
+**A simplification came out of it rather than just a rewording.**
+`product.js` gained module-level `_reservable` and `_preKind`, and `shop.js`'s
+`_stockState` gained `kind`, so the badge, the button, the size sheet and the
+toast ask ONE function where four copies had drifted three ways. A case asserts
+exactly one place decides the word. `test_fresh_today_label.js` 44 → 46 cases,
+`test_preorder_local.js` 66 → 67; `test:fast` 216 passed, 0 failed.

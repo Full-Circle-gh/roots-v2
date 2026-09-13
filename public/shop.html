@@ -4880,10 +4880,17 @@ function slStock(m){
      WORD. Returned beside, never folded in: flipping `pre` off to silence a
      pill would mark the row sold out, which is the opposite of true. */
   const preToday=pre&&shopperOnLocalRun()&&!!m.local_fresh_today;
-  const preTxt=!pre||preToday?'':(shopperOnLocalRun()
-    ?(state.lang==='cn'?'下批现做':'NEXT BATCH')
-    :(state.lang==='cn'?'可预订':'PRE-ORDER'));
-  return {out,pre,preToday,preTxt,soldOut:out&&!pre,stock};
+  /* §108 — the word is the SAME wherever the shopper is. This used to pick it
+     by address (NEXT BATCH on the run, PRE-ORDER off it) while the card badge
+     two functions down picked it by `is_batch_made`, so one product read two
+     ways on one page. Both now ask the same question: a fresh meal the kitchen
+     has yet to make is NEXT BATCH to everybody, and only the DATE differs —
+     which is the checkout notice's job, not a pill's. A reservable grocery size
+     keeps PRE-ORDER: no batch is being cooked for it to name. */
+  const kind=!pre||preToday?'':(m.is_batch_made?'batch':'preorder');
+  const preTxt=kind==='batch'?(state.lang==='cn'?'下批现做':'NEXT BATCH')
+    :kind==='preorder'?(state.lang==='cn'?'可预订':'PRE-ORDER'):'';
+  return {out,pre,preToday,kind,preTxt,soldOut:out&&!pre,stock};
 }
 // Card image. The slim list puts the streamed-image URL in image_data (not
 // image_url) and only substitutes the literal 'data:' sentinel when the row's
@@ -5307,14 +5314,18 @@ function slAdd(id,srcEl){
 }
 function slAddRaw(raw,srcEl){
   const price=slEff(raw);
-  const pre=slStock(raw).pre;
+  const kind=slStock(raw).kind;
   cartAdd({product_id:raw.id,qty:1,choices:[],
     name:pick(raw.name_en,raw.name_cn),
     price,image:slImg(raw),size:raw.size||'',optLabel:'',ship_from_supplier:!!raw.ship_from_supplier});
   const flew=flyToCart(srcEl,slImg(raw));
-  // A pre-order always gets its own toast (even alongside the animation) so a
-  // quick-add never looks like a normal in-stock add.
-  if(pre){toast(state.lang==='cn'?'已预订，加入购物车 🌱':'Added — pre-order 🌱');return;}
+  // A reservation always gets its own toast (even alongside the animation) so a
+  // quick-add never looks like a normal in-stock add — and since §108 it uses
+  // the same word the card's own band does, so tapping NEXT BATCH cannot answer
+  // "pre-order".
+  if(kind){toast(kind==='batch'
+    ?(state.lang==='cn'?'已加入购物车，下批现做 🌱':'Added — next batch 🌱')
+    :(state.lang==='cn'?'已预订，加入购物车 🌱':'Added — pre-order 🌱'));return;}
   if(flew)return;                                 // animation replaces toast when it runs
   toast(state.lang==='cn'?'已加入 🌱':'Added 🌱');
 }
@@ -5722,9 +5733,12 @@ async function renderProduct(id){
           name:pick(m.name_en,m.name_cn),price:slEff(m),
           image:slImg(m)||thumb(p),size:m.size||m.variant_label||'',optLabel:'',
           ship_from_supplier:!!m.ship_from_supplier});
-        toast(slStock(m).pre&&!slStock(m).preToday
-          ? (state.lang==='cn'?'已预订，加入购物车 🌱':'Added — pre-order 🌱')
-          : (state.lang==='cn'?'已加入购物车 🌱':'Added to cart 🌱'));
+        const vKind=slStock(m).kind;   // §108 — this size's own word, as the sheet drew it
+        toast(vKind==='batch'
+          ? (state.lang==='cn'?'已加入购物车，下批现做 🌱':'Added — next batch 🌱')
+          : vKind==='preorder'
+            ? (state.lang==='cn'?'已预订，加入购物车 🌱':'Added — pre-order 🌱')
+            : (state.lang==='cn'?'已加入购物车 🌱':'Added to cart 🌱'));
       });
     }
     $('#addBtn').addEventListener('click',()=>{

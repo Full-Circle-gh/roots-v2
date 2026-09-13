@@ -62,10 +62,14 @@ Page({
       added: 'Added to your order ✓',
       payIncomplete: 'Payment incomplete',
       soldOut: 'Sold out',
-      // The shop grid's own live pair for this exact shelf state
-      // (miniapp/pages/shop/shop.js preText), and the same words
-      // computePreorderNotice titles the checkout notice with. Reused rather
-      // than reworded so one product does not read two ways in one app.
+      // Both live pairs the shop grid uses for this exact shelf state
+      // (miniapp/pages/shop/shop.js preText). Reused rather than reworded so
+      // one product does not read two ways in one app. §108 split them: a
+      // fresh meal the kitchen has yet to make says NEXT BATCH like everywhere
+      // else, and only a grocery row — nothing being cooked for it — keeps
+      // SHIPS SOON, which is also what computePreorderNotice titles its
+      // checkout notice with.
+      nextBatch: 'NEXT BATCH',
       shipsSoon: 'SHIPS SOON',
       pickRequired: 'Please choose an option',
       opAdd: 'Add',
@@ -116,6 +120,7 @@ Page({
         added: '已加入订单 ✓',
         payIncomplete: '支付未完成',
         soldOut: '已售罄',
+        nextBatch: '下批现做',
         shipsSoon: '现订现发',
         pickRequired: '请选择一个选项',
         opAdd: '加入',
@@ -211,6 +216,8 @@ Page({
         // or the store reported nothing for this product.
         const chainStock = Number(p.stock != null ? p.stock : (p.stock_qty != null ? p.stock_qty : 999));
         const atStore = this._tracksStock ? this._avail[p.id] : null;
+        const preorder = !p.ship_from_supplier && !!p.oos_preorder &&
+                         (atStore != null ? Number(atStore) : chainStock) <= 0;
         return {
           id: p.id,
           name: lang.pick(nameEn, nameCn, L),
@@ -231,8 +238,14 @@ Page({
           // reaches this list the add-on gate has already ruled on that
           // (addonBlockReason rule 2 refuses a local-run pre-order outright), so
           // this flag only has to describe the shelf, which it does everywhere.
-          preorder: !p.ship_from_supplier && !!p.oos_preorder &&
-                    (atStore != null ? Number(atStore) : chainStock) <= 0,
+          preorder,
+          // §108 — and WHICH word that shelf state gets, on the one test every
+          // other surface now uses: what the ITEM is, never where the shopper
+          // is. Still no local-run term, for the reason above — every pill this
+          // screen can draw belongs to an order we ship, the run having been
+          // refused upstream — so this is only ever "is the kitchen making one".
+          preText: !preorder ? ''
+            : (p.is_batch_made ? this.data.copy.nextBatch : this.data.copy.shipsSoon),
           // Carried so the stepper's supplier-direct exemption actually works —
           // it was reading an undefined field, capping supplier items that hold
           // no stock of ours.

@@ -33204,8 +33204,18 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind, opts = {}) 
     kind,
     // Operator-editable popup copy (Mini App Backend → Delivery → Fresh batch
     // schedule). Each falls back to a built-in bilingual default when blank.
-    kicker_en:  cfg.kicker_en  || 'Freshly made',
-    kicker_cn:  cfg.kicker_cn  || '新鲜现做',
+    //
+    // §108 — THE HEADING IS THE SAME ONE computeLocalFreshNotice USES. Both
+    // notices describe one fact — a meal the kitchen has yet to make — to two
+    // shoppers whose only real difference is the DATE, which the message below
+    // states and this heading does not. They read differently here for no
+    // reason but the order they were written in: this one headed "Freshly made"
+    // and the local-run one "Next fresh batch". A shopper who moves house, or
+    // who has an address in each place, met two different notices for the same
+    // wait. The defaults now match; an operator who has set their own copy
+    // still wins, and can still set the two apart deliberately.
+    kicker_en:  cfg.kicker_en  || 'Next fresh batch',
+    kicker_cn:  cfg.kicker_cn  || '下一批现做',
     title_en:   cfg.title_en   || 'Made fresh for you',
     title_cn:   cfg.title_cn   || '为您新鲜现做',
     message_en: cfg.message_en ? fill(cfg.message_en) : defEn,
@@ -33387,10 +33397,16 @@ function computeLocalFreshNotice(address, productIds, now, slotKind, opts = {}) 
     // Equal to make_date by the zero-day rule above, and carried as its own
     // field so a caller reads the arrival it needs instead of re-deriving one.
     delivery_date: makeDate,
+    // §108 — the same heading computeBatchNotice carries, for the same reason:
+    // the two notices describe one wait to two shoppers, and what legitimately
+    // differs between them is the date, which the message states. The title
+    // therefore drops the date it used to carry ('Made fresh on {date}') — it
+    // is not lost, the message below names the same day and says the run
+    // delivers it that day, which the title never had room to explain.
     kicker_en: cfg.local_kicker_en || 'Next fresh batch',
     kicker_cn: cfg.local_kicker_cn || '下一批现做',
-    title_en:  cfg.local_title_en  || 'Made fresh on ' + makeDate,
-    title_cn:  cfg.local_title_cn  || makeDate + ' 新鲜现做',
+    title_en:  cfg.local_title_en  || 'Made fresh for you',
+    title_cn:  cfg.local_title_cn  || '为您新鲜现做',
     message_en: cfg.local_message_en
       ? fill(cfg.local_message_en)
       : `Some freshly-made items in your order are sold out right now. Our kitchen makes the next batch on ${makeDate} and we deliver it to you the same day.`,
