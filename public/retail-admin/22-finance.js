@@ -520,20 +520,35 @@ function finCatBody() {
    operator reads in Chinese: 美团 is the platform's actual name here.
 
    THE STAFF-KEYED ORIGINS come from `ordChannelLabel` (04-orders.js), which
-   OWNS them — `MANUAL_ORDER_ORIGINS` in routes/retail.js is the answer to the
+   OWNS them (`manual` excepted — see below) — `MANUAL_ORDER_ORIGINS` in routes/retail.js is the answer to the
    New order form's "how did the customer reach us?", and the orders list is
    where an operator meets those words first. Four of them never had a line
    here at all and rendered as raw keys on the live card: `wechat_chat`
    (¥3,824 in the reported window) and `pickup` (¥220) were visible, and
    `wholesale` and `other` were one quiet month away from being.
 
-   `manual` IS `Unattributed`, NOT "Manual", AND THAT IS A CORRECTION. This
-   file called it `Manual · 手动` when it shipped, which reads as a thing
-   somebody chose. It is not: 04-orders.js records that `manual` is the LEGACY
-   value — rows written before the form asked the question, plus every till
-   sale up to §44's 2026-09-07 amendment — and that it is *no longer
-   selectable*. `未归属` says what the row is; `手动` claims an operator picked
-   it. One name, owned by the screen that reasoned about it.
+   `manual` IS `Manual · 手动`, AND IT DELIBERATELY DIFFERS FROM THE ORDERS
+   LIST. **DECIDED BY ASH, 2026-09-13**, from the Chinese card with the row
+   circled: *"翻译有点小问题，manual，中文：手动、人工"*. Of the two words he
+   named, `手动` is the one already live — and live for THIS COLUMN rather than
+   near it: `CU_CHAN_OPTS` (08-customers.js) is a channel filter over
+   `retail_orders.channel` and offers `['manual', 'Manual', '手动']`, and
+   `DASH_CHAN_SHORT` (03-dashboard.js) names the channel on an order the same
+   way. `人工` is live too, but only inside verification sentences
+   (`请人工核对`), never as the name of a channel, so using it here would be
+   minting a label out of a fragment.
+
+   **THIS FILE BRIEFLY SAID `Unattributed · 未归属` AND THAT WAS MY ERROR, not a
+   ruling being overturned.** `ordChannelLabel` (04-orders.js) calls it that,
+   and its reasoning is sound on its own terms — `manual` IS the legacy value,
+   no longer selectable — but it is ONE screen against three, and the card an
+   owner reads his month's takings on is not the place to try a new word. The
+   orders list is left exactly as it is: aligning it is a change to a screen
+   nobody reported, and it is Ash's to ask for.
+
+   SO THE TWO SCREENS NOW DISAGREE ABOUT ONE VALUE, KNOWINGLY. That is recorded
+   here rather than left to be discovered, and a case pins both sides so a
+   later session reads this note instead of "fixing" one into the other.
 
    `Gzgrocery` HAS NO SECOND HALF, and that is how it is live in BOTH sources:
    the partner's name is the same word in either language, so `csName` carries
@@ -563,7 +578,7 @@ function finChannelLabel(key) {
     wechat_chat: cuT('WeChat message', '微信消息'),
     wholesale:   cuT('Wholesale', '批发'),
     other:       cuT('Other', '其他'),
-    manual:      cuT('Unattributed', '未归属'),
+    manual:      cuT('Manual', '手动'),
   })[key] || key;
 }
 
