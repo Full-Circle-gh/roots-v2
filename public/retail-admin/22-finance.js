@@ -1735,7 +1735,114 @@ async function finTxWrite(run) {
   }
 }
 
-window.finTxSave = function finTxSave() {
+/* ══════════════════════════════════════════════════════════════════════════
+   §111 PART TWO — THE ONE QUESTION THIS FORM ASKS
+   ──────────────────────────────────────────────────────────────────────────
+   What is ORDERED FROM A SUPPLIER belongs on a purchase order, where it carries
+   a supplier, a receiving step, a 发票 to match and something to return it
+   against. Rent, wages and a taxi are not ordered and belong exactly here.
+
+   THE FORM CANNOT TELL THE TWO APART AND DOES NOT GUESS. It asks, once, and
+   writes the answer onto the CATEGORY — so rent is asked about once, ever, and
+   ingredients once, ever. Nothing ships pre-marked: §36's "an empty list cannot
+   offer a wrong option", one field further in. A category that has never been
+   asked is simply absent from `category_needs_po`.
+
+   THREE THINGS IT DELIBERATELY DOES NOT DO:
+
+   • IT DOES NOT REFUSE. Typing the row is `finance:record`; raising a purchase
+     order is `purchasing:edit`, and a bookkeeper may hold the first and not the
+     second. A hard block would leave them with a cost in hand, no route to
+     record it and nothing on screen saying why — §36's own reason for never
+     gating the add control. The second answer is always there and taking it is
+     never punished. That is Ash's *"unless the user specifically say it's not"*.
+
+   • IT DOES NOT ASK ON AN EDIT. §111 is about the moment money is recorded. A
+     row already in the books is a different question — converting one would mean
+     deleting it and raising an order in its place — and nothing asks for that.
+
+   • IT DOES NOT ASK ON MONEY IN. There is no such thing as ordering revenue.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* What this tenant has already said about a category: true (ordered), false
+   (not ordered), or null — NOBODY HAS BEEN ASKED, which is the state that makes
+   the form ask. An absent map reads null for everything, so a payload from a
+   server that predates this change asks rather than assuming. */
+function finTxNeedsPo(stored) {
+  if (!stored) return null;
+  const map = (FIN_TX && FIN_TX.category_needs_po) || {};
+  const v = map[stored];
+  return v === undefined || v === null ? null : !!v;
+}
+
+/* Put the question. Resolves 'po', 'expense', or null when it was dismissed —
+   and null must mean NOTHING HAPPENS. That is why this is askChoice and not
+   askConfirm: on a two-button confirm, Escape and the scrim would land on
+   whichever answer sat in the cancel slot, and "I pressed Escape" would file a
+   purchase as an expense or throw the operator into Purchasing. */
+async function finTxAskOrdered() {
+  if (typeof askChoice !== 'function') return 'expense';   // no dialog → today's behaviour
+  const picked = await askChoice({
+    title: cuT('Was this ordered from a supplier?', '这笔是向供应商采购的吗？'),
+    sub: cuT('A purchase order reaches Finance when you place it.',
+             '采购单下单后才会记入财务。'),
+    options: [
+      { value: 'po',      label: cuT('Put it on a purchase order', '记入采购单') },
+      { value: 'expense', label: cuT('Record it as an expense', '记入支出') },
+    ],
+    submitLabel: cuT('Continue', '继续'),
+    cancelLabel: cuT('Cancel', '取消'),
+  });
+  return picked === 'po' || picked === 'expense' ? picked : null;
+}
+
+/* Remember it, on the category. FAILURE IS SWALLOWED ON PURPOSE: the answer is a
+   convenience — it saves asking again — and money must never fail to be recorded
+   because a preference could not be stored. A category the tenant's list does not
+   hold comes back `recorded: false` and is not created; §36 ships that list empty
+   and the tenant decides what goes on it, so a form that grew it from whatever
+   was typed would rebuild the list out of typos. */
+async function finTxRememberAnswer(stored, needsPo) {
+  if (!stored) return;
+  try {
+    await api('/api/retail-admin/finance/categories/answer',
+              { method: 'PUT', body: { name: stored, needs_po: !!needsPo } });
+    // Keep the open screen's own copy in step, so a second row typed under the
+    // same category before the next reload is not asked again.
+    if (FIN_TX) {
+      FIN_TX.category_needs_po = FIN_TX.category_needs_po || {};
+      FIN_TX.category_needs_po[stored] = needsPo ? 1 : 0;
+    }
+  } catch (e) { /* asked again next time, which is the whole cost */ }
+}
+
+/* Hand what was typed to Purchasing. NOTHING IS WRITTEN HERE — no ledger row and
+   no draft: the wizard opens on a new order carrying this cost as a typed line,
+   and the buyer saves or places it. `goTab` then the open, in that order, is the
+   house shape for a cross-tab open (finTxOpenPO above, paOpenRecipe on Products). */
+function finTxToPurchasing(body) {
+  // BOTH HALVES OR NEITHER, CHECKED BEFORE ANYTHING CLOSES. This is the one path
+  // where nothing is written at all, so a half-working jump is not a cosmetic
+  // failure — the form would close on a cost that then exists nowhere. Returning
+  // false hands it back to the caller, which records the row instead: an expense
+  // in the books is always recoverable, an expense nobody typed twice is not.
+  if (typeof goTab !== 'function' || typeof window.puNewOrderFrom !== 'function') {
+    console.error('[finance] Purchasing is not loaded — recording the row instead');
+    return false;
+  }
+  try {
+    goTab('purchasing');
+    puNewOrderFrom({ date: body.date, name: body.note || finCatLabel(body.category) || '',
+                     amount: body.amount, category: body.category || '' });
+    finTxFormClose();
+    return true;
+  } catch (e) {
+    console.error('[finance] could not open a purchase order', e);
+    return false;
+  }
+}
+
+window.finTxSave = async function finTxSave() {
   const val = (id) => (document.getElementById(id) || {}).value;
   const body = {
     kind: FIN_TX_KIND,
@@ -1751,6 +1858,28 @@ window.finTxSave = function finTxSave() {
     note: val('fin-tx-note'),
   };
   const row = FIN_TX_EDIT;
+
+  // §111 part two. NEW MONEY-OUT ROWS ONLY — see the block above for why not an
+  // edit and why not money in.
+  if (!row && FIN_TX_KIND === 'out') {
+    const known = finTxNeedsPo(body.category);
+    const answer = known === null ? await finTxAskOrdered() : (known ? 'po' : 'expense');
+    // Dismissed. NOTHING HAPPENS and the form stays open with every value still
+    // in it — the operator is back where they were, not one press from a row
+    // they did not mean to write.
+    if (answer === null) return;
+    if (known === null) await finTxRememberAnswer(body.category, answer === 'po');
+    if (answer === 'po') {
+      // REMEMBERED, SO THE SECOND ONE IS NOT ASKED — and a screen that changed
+      // under them with no explanation would be a worse silence than the
+      // question. The toast is what says where the money went.
+      if (known === true && window.toast) toast(cuT('This goes on a purchase order', '该笔记入采购单'));
+      if (finTxToPurchasing(body)) return;
+      // Purchasing could not be opened. Fall through and record the row rather
+      // than leaving the operator holding a cost with nowhere to put it.
+    }
+  }
+
   return finTxWrite(() => row
     ? api(`/api/retail-admin/finance/transactions/${row.kind}/${row.id}`, { method: 'PUT', body })
     : api('/api/retail-admin/finance/transactions', { method: 'POST', body }));
@@ -1877,6 +2006,23 @@ function finCatsRender() {
       + `<input type="checkbox" ${c.is_operating ? 'checked' : ''} onchange="finCatFlag(${c.id}, this.checked)">`
       + `<span>${escapeHtml(cuT('Operating expense', '营业费用'))}</span>`
       + '</label>'
+      // §111 part two, and THIS IS THE WAY BACK from a wrong answer. The form
+      // asks once and never again; without a control here, one mistaken "no" for
+      // Ingredients would send every future ingredient purchase into the ledger
+      // as a typed row forever, with nothing on any screen to say why it had
+      // stopped asking.
+      //
+      // A THREE-STATE FACT IN A TWO-STATE CONTROL, resolved with the box's own
+      // third state rather than a wrong default: NULL — nobody asked yet —
+      // renders INDETERMINATE (set in script below, since no HTML attribute can
+      // express it), which is visibly neither ticked nor cleared. A plain
+      // unticked box would say "no, this is not ordered" about every category
+      // that has simply never come up.
+      + '<label class="fin-cat-flag">'
+      + `<input type="checkbox" class="fin-cat-po" data-id="${c.id}" ${c.needs_po ? 'checked' : ''}`
+      + `${c.needs_po == null ? ' aria-checked="mixed"' : ''} onchange="finCatPoFlag(${c.id}, this.checked)">`
+      + `<span>${escapeHtml(cuT('Ordered from a supplier', '向供应商采购'))}</span>`
+      + '</label>'
       + `<span class="fin-cat-use">${escapeHtml(finCatsUsage(c.usage_count))}</span>`
       + (off
         ? `<button type="button" class="fin-btn-sec" onclick="finCatActive(${c.id}, true)">${escapeHtml(cuT('Restore', '启用'))}</button>`
@@ -1886,6 +2032,16 @@ function finCatsRender() {
       + (off ? `<span class="fin-cat-off">${escapeHtml(cuT('Hidden', '已停用'))}</span>` : '')
       + '</div>';
   }).join('');
+  // The unasked state, which only script can set. Guarded because the DOM stub
+  // in a suite — and an older browser — may not answer querySelectorAll here,
+  // and a category list that does not paint at all would be a worse failure than
+  // a box that reads unticked.
+  try {
+    (host.querySelectorAll('.fin-cat-po') || []).forEach((el) => {
+      const c = rows.find(r => String(r.id) === String(el.dataset && el.dataset.id));
+      if (c && c.needs_po == null) el.indeterminate = true;
+    });
+  } catch (e) { /* the flag still reads and still writes */ }
 }
 
 /* "Used by N expenses". The count is a NUMBER and needs no translation of its
@@ -1931,6 +2087,15 @@ window.finCatRename = function finCatRename(id, input) {
 window.finCatFlag = function finCatFlag(id, checked) {
   return finCatsWrite(() => api('/api/retail-admin/finance/categories/' + id,
     { method: 'PATCH', body: { is_operating: !!checked } }));
+};
+
+/* §111 part two. Ticking says "what is filed here is ordered from a supplier",
+   which makes the next row typed under it open a purchase order instead of
+   writing a ledger row; clearing it says the opposite. Either way the form stops
+   asking — the answer is what it was asking FOR. */
+window.finCatPoFlag = function finCatPoFlag(id, checked) {
+  return finCatsWrite(() => api('/api/retail-admin/finance/categories/' + id,
+    { method: 'PATCH', body: { needs_po: !!checked } }));
 };
 
 window.finCatActive = function finCatActive(id, active) {

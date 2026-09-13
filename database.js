@@ -1188,6 +1188,23 @@ addColumn('expense_entries', 'updated_at', 'DATETIME');
 // deleting it was for.
 addColumn('categories', 'is_operating', 'INTEGER DEFAULT 1');
 addColumn('categories', 'is_active',    'INTEGER DEFAULT 1');
+// ── And a third, which is §111 part two ────────────────────────────────────
+// needs_po — IS A COST FILED HERE SOMETHING ORDERED FROM A SUPPLIER? Rent,
+// wages and a taxi are not; an ingredient, a box of gloves and a desk chair are,
+// and §111 says what is ordered belongs on a purchase order, where it carries a
+// supplier, a receiving step, a 发票 to match and something to return it
+// against. The Transactions form asks once per category and writes the answer
+// here, so it never has to ask about rent twice.
+//
+// **NO DEFAULT, AND THE THREE STATES ARE THE POINT.** NULL is *nobody has been
+// asked yet* — the state every category is in on the day this ships and the only
+// state that makes the form ask. 1 is *ordered*, 0 is *not ordered*, and both are
+// answers a person gave. A `DEFAULT 0` here would ship every existing category
+// pre-answered "no" and the question would never be asked at all; a `DEFAULT 1`
+// would nag about rent every month. §36's rule, one field further in: nothing is
+// pre-marked, because a list that cannot say "I have not been told" has to guess,
+// and a guess on this screen is what the ¥152,309 mis-filing was made of.
+addColumn('categories', 'needs_po',     'INTEGER');
 // ── The ledger learns two things (§87 step three) ─────────────────────────
 //
 // claim_id — THE ROW WAS POSTED BY AN APPROVED STAFF CLAIM, and it is the exact
