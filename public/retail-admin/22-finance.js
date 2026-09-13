@@ -537,10 +537,41 @@ function finChannelLabel(key) {
    greys, with nothing meant by the difference. `finBreakdown` builds its own
    rows for the same reason; this follows it, down to the empty `.fin-sign`
    span, which is the middle of the three grid columns the figures line up on
-   and holds the column open with nothing in it. */
+   and holds the column open with nothing in it.
+
+   ── `data-no-i18n` IS LOAD-BEARING, AND IT IS NOT DECORATION ──────────────
+   **Without it, three of these rows VANISH in Chinese and the card silently
+   stops adding up.** Reported from the live screen: 营收 ¥123,384 over four
+   channels totalling ¥101,498, against the same window in English showing
+   seven channels that summed to the figure exactly. The ¥21,886 difference was
+   Gzgrocery, wechat_chat and pickup — precisely the three labels with no
+   Chinese in them.
+
+   THE CAUSE IS THE i18n WALKER'S BLOCK-PAIR HEURISTIC (`tagBlockPair`,
+   `10-extras.js`), and it was doing what it was written to do. Help text in
+   this product is often authored as two stacked siblings, an all-English
+   <div> next to an all-Chinese one; the walker finds that shape, stamps
+   `data-lang-block="en"` / `"cn"` on the pair, and a rule injected in
+   `retail-admin.html` hides the inactive side with `display:none!important`.
+   In Chinese a `微信` row IS an all-Chinese div and the `Gzgrocery` row beside
+   it IS an all-English one, so the walker read a list of channels as a column
+   of translation pairs and hid every second one.
+
+   THE EXPENSE BREAKDOWN NEVER HIT THIS, and the reason is worth knowing before
+   anyone "tidies" it: `processBlocks` only ever offers `div, p` to the pairing
+   rule, and every line of that breakdown is a <button>. Its immunity is a side
+   effect of being a control, not a property of breakdowns — so the day one of
+   those becomes a plain row, as these are, it needs this attribute too.
+
+   IT COSTS NOTHING HERE because there is nothing in this subtree for the walker
+   to do: `finChannelLabel` has already chosen the language through `cuT`, and
+   `finRender` re-runs on `onLangChange`, so the labels follow the toggle by
+   being redrawn rather than by being rewritten in place. That is the same
+   reason `data-no-i18n` sits on the dashboard greeting — text assembled
+   language-aware in JS is text the walker must keep its hands off. */
 function finRevBreakdown(rows) {
   if (!rows || !rows.length) return '';
-  return '<div class="fin-breakdown">'
+  return '<div class="fin-breakdown" data-no-i18n>'
     + rows.map(r => '<div class="fin-row">'
         + `<span class="fin-lbl">${escapeHtml(finChannelLabel(r.channel))}</span>`
         + '<span class="fin-sign"></span>'
