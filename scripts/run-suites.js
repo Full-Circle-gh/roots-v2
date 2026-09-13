@@ -101,6 +101,13 @@ const SLOW = new Set([
   'test_mobile_activity.js', 'test_mobile_categories.js', 'test_mobile_club.js',
   'test_mobile_voting.js', 'test_mobile_settings.js', 'test_mobile_sales.js',
   'test_mobile_team.js', 'test_mobile_permissions.js', 'test_mobile_trend.js', 'test_mobile_dots.js',
+  /* §113's probe, listed here for the reason the block comment above gives and
+     test_mobile_live_guards.js repeats: it drives Chromium through
+     scripts/lib/m-probe, so it defines no findChrome() of its own and prints no
+     Chromium skip line, and isSlow() below cannot see the browser in it. Left
+     unlisted it lands in the FAST shard, where REQUIRE_BROWSER is 0 and its
+     whole run would skip and report a tick. */
+  'test_mobile_customers.js',
   'test_mobile_customer_record.js', 'test_mobile_mirrored_order.js',
   'test_mobile_mirrored_order_info.js',
   /* Drives Chromium through scripts/lib/m-probe like the rest of this block,
