@@ -3830,6 +3830,31 @@ async function loadOrdersPage(more){
    columns, folded into one muted line because a phone card cannot spend a row
    on each. The store half is suppressed on a single-store shop, where naming it
    on every row says nothing. */
+/* THE SHIP-BY CELL, WORDED WHERE IT IS PAINTED. This used to be `o.deliv`, a
+   finished string built by deliveryLine() inside mapOrderRow — and mapOrderRow
+   runs ONCE, when the list is fetched. The language toggle calls render() and
+   nothing else, so every ship-by cell on the screen kept the language it was
+   fetched in until something refetched: an operator switching to 中文 got a
+   Chinese app with an English ship-by column down the right edge of every row,
+   and the reverse going back. Not this change's doing and not the batch row's
+   — it has been true of all five plan kinds since the cell existed.
+
+   The fix is the rule this file already states in four places and follows
+   everywhere else: mapDetail carries `placedFull` and ITEM_TUPLE raw, shipByPlan
+   carries its window as facts, earlyShipFacts carries facts and never the
+   sentence, each one commented with the same reason. deliveryLine is a pure
+   function of the row, so the row is what gets carried and the words are said
+   here, on the paint the toggle actually triggers.
+
+   Beside orderMetaLine rather than inline in the row, for the reason that one
+   is a function too: a template literal has nowhere to put the `const`. */
+function delivCell(o){
+  const d=o._row?deliveryLine(o._row):null; if(!d) return '';
+  return `<span style="display:flex;flex-direction:column;align-items:flex-end;flex:none;max-width:52%">
+    <span class="${d.num?'num':''}" style="font-size:13px;color:${DELIV_TONE[d.tone]||'var(--text-secondary)'};max-width:100%;${
+      d.num?'overflow:hidden;text-overflow:ellipsis;white-space:nowrap':'text-align:right'}">${d.text}</span>
+    ${d.sub?`<span style="font-size:11.5px;color:var(--text-secondary);margin-top:1px">${d.sub}</span>`:''}</span>`;
+}
 function orderMetaLine(o){
   const bits=[];
   const many=(state.stores||[]).length>1;
@@ -3838,7 +3863,7 @@ function orderMetaLine(o){
   // (the endpoint counts rows, not units), and the drawer now says products and
   // units apart. One word for one number, across both surfaces.
   if(o.items_n!=null) bits.push(T(o.items_n+(o.items_n===1?' product':' products'), o.items_n+' 款'));
-  if(o.routeNote) bits.push(o.routeNote);
+  if(o.routeNote) bits.push(T(...o.routeNote));
   if(!bits.length) return '';
   return `<div style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${bits.join(' · ')}</div>`;
 }
@@ -3944,7 +3969,7 @@ function screenOrders(){
       <button class="card${ordUnread(o)?' unseen':''}" onclick="APP.cmd('openOrder','${o.id}')" style="display:flex;flex-direction:column;gap:8px;text-align:left;cursor:pointer;padding:16px;color:var(--text-primary)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
           <span style="display:flex;align-items:center;gap:7px;min-width:0;color:var(--text-secondary)">${chIcon(o.ch)}
-            <span class="num" style="font-size:13px">${o.ch==='shop'?T('Shop','门店')+' · ':''}${o.id} · ${o.placed}</span></span>
+            <span class="num" style="font-size:13px">${o.ch==='shop'?T('Shop','门店')+' · ':''}${o.id} · ${fmtDay(o.placedAt)}</span></span>
           <span class="num" style="font-size:18px;font-weight:500;flex:none">${o.total}</span></div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span style="display:flex;align-items:center;gap:8px;min-width:0">
@@ -3972,10 +3997,7 @@ function screenOrders(){
                 at the edge, and the fixed vocabulary of ship-by phrases wraps
                 to a second right-aligned line on the rare occasion it needs
                 one. Same rule as the settings rows. */''}
-          ${o.deliv?`<span style="display:flex;flex-direction:column;align-items:flex-end;flex:none;max-width:52%">
-            <span class="${o.deliv.num?'num':''}" style="font-size:13px;color:${DELIV_TONE[o.deliv.tone]||'var(--text-secondary)'};max-width:100%;${
-              o.deliv.num?'overflow:hidden;text-overflow:ellipsis;white-space:nowrap':'text-align:right'}">${o.deliv.text}</span>
-            ${o.deliv.sub?`<span style="font-size:11.5px;color:var(--text-secondary);margin-top:1px">${o.deliv.sub}</span>`:''}</span>`:''}</div>
+          ${delivCell(o)}</div>
         ${orderMetaLine(o)}
       </button>`).join(''):''}
     ${os.length&&state.ordersTotal!=null?`<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:8px 0 0">
@@ -19641,10 +19663,6 @@ function routingNotePair(reason){
   if(r==='out_of_city') return ['out-of-city warehouse','外地仓发货'];
   return null; // only_store / nearest / unknown — nothing worth showing
 }
-function routingNote(reason){
-  const p=routingNotePair(reason);
-  return p?T(...p):'';
-}
 /* The desktop stacks these under the status pill, and every one of them changes
    what the operator does next: items were added after the slip printed; the
    shipping store is short; the stock has not actually come off yet; a fapiao is
@@ -19769,7 +19787,6 @@ function mapOrderRow(r){
     :(()=>{ const en=[r.ship_city_en||r.ship_city,r.ship_district_en||r.ship_district].filter(Boolean).join(' · ')||'—';
             const cn=[r.ship_city,r.ship_district].filter(Boolean).join(' · ')||'—';
             return [en,cn]; })();
-  const deliv = deliveryLine(r);
   const cl = custLines(r);
   return {
     id:r.order_no||('#'+r.id), _id:r.id,
@@ -19779,7 +19796,12 @@ function mapOrderRow(r){
     // is what the counter actually calls out, and this list showed neither.
     shopCode:(r.shop_order_code!=null&&r.shop_order_code!=='')?String(r.shop_order_code):null,
     // fmtDay, not hhmm: an order from three days ago showed a bare "9:07 AM".
-    total:money(CUR,r.total), placed:fmtDay(r.placed_at),
+    total:money(CUR,r.total),
+    /* THE STAMP, NOT THE WORD FOR IT. `placed: fmtDay(r.placed_at)` froze
+       "Yesterday" / "昨天" — and the date form below it — into the language the
+       list was FETCHED in, where the toggle could not reach it. Carried raw and
+       said by the row, the same as `placedFull` two hundred lines down. */
+    placedAt:r.placed_at||null,
     /* The SAME total as a number. `total` above is already formatted for the
        glass, and a partial refund has to be capped against the figure rather
        than against "¥312.00" — the server caps it too, and a phone that
@@ -19792,9 +19814,12 @@ function mapOrderRow(r){
        in it is not a guard. The list query already returns these three dates:
        the row's own ship-by cell is drawn from them. */
     earlyShip:earlyShipFacts(r),
+    /* THE ROW ITSELF, so the ship-by cell can be worded on the paint the
+       language toggle triggers rather than on the fetch that built this object.
+       delivCell() is the only reader; see the comment above it. */
+    _row:r,
     status:[sk[1],sk[2]], kind, raw:r.status||null, refundStatus:r.refund_status||null, isNew:!r.seen_at,
     ship:Array.isArray(shipCity)?shipCity:[shipCity,shipCity],
-    deliv,
     viewOnly: isMirrorCh(r.channel),
     /* The RAW channel, kept beside the display key `ch`. The drawer's read-only
        tag needs to name the platform an order was mirrored from, and `ch` runs
@@ -19811,7 +19836,12 @@ function mapOrderRow(r){
     // from three days ago showed a bare "9:07 AM" with no date on it.
     items_n: r.item_count!=null?Number(r.item_count):null,
     store: r.store_code?[r.store_name_en||r.store_code, r.store_name_cn||r.store_name_en||r.store_code]:null,
-    routeNote: routingNote(r.routing_reason),
+    /* THE PAIR, not a finished string — same reason as placedAt above. This
+       read routingNote(), a two-line wrapper that did nothing but T() the pair
+       at map time, which is precisely where the language got frozen. Nothing
+       else called it, so it is gone rather than left as a second way to get
+       this wrong; mapDetail's `route` already carried the pair. */
+    routeNote: routingNotePair(r.routing_reason),
     // The Status cell's stack of note lines. Each is a fact about the order that
     // changes what an operator does with it, and none of them were here.
     notes: orderNotes(r),
