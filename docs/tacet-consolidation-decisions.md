@@ -25,6 +25,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 2026-09-13 · v4.256 — **§122 · §117 PART THREE BUILT: GZ GROCERY WEARS THE CHANNEL FRAME, AND THE FRAME IS ONE SET OF RULES RATHER THAN A THIRD COPY OF IT.** §117 left this page named as *"the odd one out"*: its own heading shape, two purpose paragraphs, a bespoke health strip, its own sub-nav, and ~30 lines of inline `<style>`. **THE SURVEY FOUND MORE THAN A STYLE MISMATCH.** `#tab-meituan` and `#tab-eleme` each remap the admin's BASE token family (`--line`, `--text-1`, `--bg-pane` — warm-grey, pre-Tacet) onto the Tacet palette at the top of their blocks; **`#tab-guanyi` never did**, and its inline rules were written against that base family, so this page has been painting its cards, borders and text off-palette next to two pages that were not. The remap is now here, the same list they carry. **THE FRAME IS SHARED BY SELECTOR, NOT COPIED.** 33 rules (pagehead, status, tiles, store lines, tab strip) now name `.gy-` alongside `.mt-`, so a change to one is a change to all — the same additive move §117 part two used on the switch, and for the same reason. Four selectors the join produced that could never match (`#tab-meituan .gy-pagehead`, `.gy-storeline.mt-catline`) were removed rather than left as noise. **WHAT WAS DELIBERATELY NOT DONE, AND WHY IT IS RECORDED RATHER THAN DONE**: Meituan and Eleme still hold **112 near-duplicate rules between them — 34 of the first 36 compared are byte-identical**, the two that differ being accidents (`flex: 1 1 320px` vs `340px`; a restatement of the base `.n` background). Consolidating them is the real end of this drift, and it is a mechanical move of ~112 rules through a 15k-line stylesheet across two live pages **that cannot be visually verified here**: the browser suite lives in the slow shard, which is off by Ash's standing instruction. The session's own @media-nesting scanner got that file's structure wrong on its first pass, which is the evidence for not attempting it blind. **Additive joining carries none of that risk and delivers the same thing for GZ Grocery.** **THE NAME IS THE SHARED TABLE'S NAME**: the heading read *"gzgrocery 同步 · Guanyi Sync"* while the Channel sync page, the dashboard row and the phone all say **GZ Grocery** — three names for one channel, which is what §103 step 5 exists to prevent. `CH_NAME` is the one table and it says GZ Grocery on both sides, so the h2 does too and carries no language pair to drift. **THE TWO PURPOSE PARAGRAPHS ARE GONE** (§1.7 bans them); the one fact in them a reader could not get from the screen — that products match on the SKU inside the Guanyi name — moved verbatim onto the **Mapping** panel, where somebody is actually doing that. **Billing and Mapping stayed on this page**, per Ash: *"it's got nothing to do with syncing products"*. **THE MAPPED TILE IS NOT CALLED SYNCED**, and the test says so: `mappedCount` counts mappings with the switch on, while the Channel sync page's `ok` counts items the channel holds the right number for — one word over two different numbers on two screens is the §103 step 5 defect exactly. **Chinese: nothing composed.** `Mapped · 已映射` and the three freshness phrases are this page's own from the strip that stood here; `Needs attention · 待处理` is `chStateWord('att')`, the one table; `Stock updates waiting · 待推送库存` is the Meituan and Eleme tile whose number means the same thing; `nothing needs you · 无需处理` and the `N 个待处理` / `N 发送中…` shapes are the Channel sync strip's, number in the same slot. A wrong fallback wording (`Need attention`, missing the s that `CH_STATE_WORD` carries) was caught by the suite before it shipped. **Tests:** new `scripts/test_channel_frame.js` — **13 cases**, auto-discovered into the fast shard, all five load-bearing rules confirmed red against a deliberate break; three of its own cases were wrong on first run (a slicer that swept in a neighbouring global `<style>`, two checks matching the explanatory comment rather than the markup) and were fixed rather than loosened. `npm run test:fast` 230 passed, 0 failed; eslint 0 errors; doc-numbering PASS. No route, no schema, no migration, no new capability, and no change to `.gitignore` or CI.**
 
+2026-09-13 · v4.255 — **§121 DECIDED AND BUILT: OPERATIONS IS EIGHT GROUPS, AND THREE PILLS SAY WHAT A LABEL CANNOT — DECIDED BY ASH in two words, *"do option a"*, completing the set.** `docs/tacet-operations-clarity-options.md` now has no open options: **B** shipped as §118, **two of A's four renames** as §119, and **A's grouping and pills** here; only the `Invoices` rename stays declined, for §119's reason. **THE GROUPING IS THE MECHANISM, WHICH IS WHY NO ROW GAINED A SUBTITLE**: every pair that read as one row now sits in a different group from its twin — Purchasing under *Stock coming in* and Ask to buy under *Ask someone else*, Add stock and Ask for stock likewise, Kitchen queue and Ask the kitchen likewise — so position says it and a sentence under all twenty-two would say it twice at four times the strings. **Row order inside a group is the order of the job**, not the old flat order. **TWO GROUPINGS THAT LOOK WRONG AND ARE NOT**: the two receiving rows are TOGETHER, because §119 gave them names that differ and side by side those names are the whole difference; and Expense and Approvals are together with the **PILL as their only separator**, because they are two ends of one feature and under a shared heading Approvals would otherwise read as a second Expense — the suite asserts both halves. **ONE ROW MOVED ON ITS OWN EVIDENCE**: *Ready from the kitchen* sat in *Making things* in the first draft, which reads naturally since all three sound like production, and was wrong — `ROUTE_CAP` gates it on `['restock:request','restock:pick']`, *"the people who RAISE these requests"*, so it is the requester's side and sits with the asks, **wearing no pill**: the three rows above it ask, and this one is the answer coming back. **THREE PILLS, AND NO PILL IS THE DEFAULT** — Ask · 申请 on the three request screens, Approve · 审批 on Approvals, Settings · 设置 on Delivery settings. A row you simply do wears nothing, which is the only thing keeping a pill scarce enough to read, and all three are NEUTRAL: a direction is a fact about the row, not a state needing attention (the tier-pill rule), so Sage, Amber, Brick and Dusk are unspent. Keyed in `ROW_PILL` rather than as a seventh positional element, the shape `QUICK_VERB` already uses. **A GROUP WITH ONE ROW IS ACCEPTED**: a picker sees *Send it out* over a single row and the heading still says what it is for; collapsing back below some row count would change the shape of the screen as permissions change. **RECORDED: AN OR-SHAPED GUARD THAT DID NOT GUARD.** The confusable-pair case first asserted separation *by the grouping OR by the pill* — and since every one of those pairs has a pill on one side, the OR was satisfied by the pill every time and the grouping half never bit: **moving Ask to buy back beside Purchasing passed.** Red-proofing found it; each pair is now named with the mechanism that actually carries it. §119 recorded a label-shaped guard that had stopped guarding, and **this is the same failure wearing an `||`.** **Tests:** new `scripts/test_mobile_ops_groups.js` — **12 checks, reads only, FAST shard and part of the gate**, four of them red-proofed (a pair regrouped, the receiving pair split, Approvals' pill dropped, the pill painted Sage); `test_mobile_ask_strip.js` re-pointed at the eight groups by the FIRST HEADING rather than a group count, so a ninth cannot silently narrow what it counts; `test_mobile_home.js` updated where it asserted the retired `Operations` heading. `npm run test:fast` **231 passed, 0 failed**; nav 100/38, home 153/46 green; eslint 0 errors; doc-numbering PASS. **Eleven strings, every one a LIFT and not one composed** — four headings are two live row labels joined by `与`, and the three pills are each a row label or its stem — declared in `docs/tacet-delivery-vocabulary.md` v1.77 with the rejections, including `出货`, which is live in no UI pair and has a test case guarding that claim. No route, no schema, no migration, no new capability, no CSS file, and no change to `.gitignore` or CI.**
+
 2026-09-13 · v4.254 — **§120 DECIDED: THE QR MENU ASKS THE QUESTIONS THE COUNTER WOULD HAVE ASKED — DECIDED BY ASH, who answered both open questions and then said *"do all as you see fit"*.** Asked whether the QR menu has variant options, the answer was flatly no: it sells a flat row, tap Add and get one unit, and it reads NEITHER of the two choice mechanisms this system already has. **THE SURVEY IS THE VALUABLE HALF and it shrank the job from days to about one:** `options_json` on `retail_order_items` already exists and the web/mini-app checkout already fills it; `lib/feie.js` already prints every chosen option with its question in both languages on both templates; and the till NEVER re-prices a QR order — `recall()` loads it read-only and the settle path only marks it paid — so base-plus-extras needs nothing from the till but a line that shows what was chosen. **TWO RULES DECIDED BY ASH: a sold-out paid extra greys out and the drink still sells (1A), and a required question BLOCKS and names itself (2B).** **NO CHINESE COMPOSED** — `请选择 ` + the question is the storefront's own required-option toast and the mini app's, character for character, and the vocabulary document is not touched. **AND THE PRECEDENT THIS WAS ABOUT TO COPY TURNED OUT TO BE DEAD CODE:** `addon_available` was read by both mini-app surfaces and written nowhere in the repository, so the sold-out-extra guard had never once fired and a shopper could be billed for an extra the counter had run out of. Fixed separately, one PR per change, before this build starts. **NUMBERED §120, NOT §117.** This was drafted and its PR opened as §117 while that number was free; three sections (§117, §118, §119) landed on main from other sessions in the hours it sat open. A number is permanent once it is ON MAIN, so the unmerged one moves — and the doc-numbering check is what caught it.
 
 2026-09-13 · v4.253 — **§119 DECIDED AND BUILT: TWO SCREENS THAT ARRIVE FROM DIFFERENT PLACES DO NOT SHARE A NAME — DECIDED BY ASH in three words, *"yes do it"*, on the evidence §118 had just produced.** Two of option A's four renames are adopted; **its grouping and its three pills remain undecided**, and `Invoices` is deliberately left alone because batch three already folds that row into Orders. **THE DEFECT WAS GREPPED BEFORE IT WAS CALLED CLOSED, and it went four levels deeper than the row it was reported on**: `Receiving` and `Receive delivery` shared `收货` in both row labels, in **both screen titles**, in **three buttons inside the transfer screen** (two back rows and one step-back control, all rendering `T('Receiving','收货')` — the screen calling itself by the other row's name), and in `SUBS.receive`'s `backLabel`. **Eleven sites, one change.** `收货` STAYS WITH THE SUPPLIER FLOW — it is correct there and 48 other uses put it there, so the supplier row changes **in English alone** (`Receive from a supplier`) and only the transfer flow takes a new Chinese label, `调拨收货`, **copied from that screen's own error copy** rather than composed. `Delivery` → `Delivery settings · 配送设置` closes the second, unrelated defect in the same list: zones, holiday mode and a printer, the only configuration screen among twenty-one tasks, which the design canvas had already drawn as an A4 Console. **THE TWO BACK CONTROLS ARE NOT THE SAME CONTROL**: the two back ROWS go to the screen's own list and take its name, while the third goes back one STEP, so it says `Back to the count · 返回清点` — the one composed string, and composed precisely because the screen's name on it would have put one label on two destinations. **§118 NEEDED NO EDIT**: its rule 1 (a question reads its destination's label off the More row) meant the strip picked both new names up for free — and the Chinese render of that strip showing `收货` twice is what turned this rename from an argument into an observation. **A GUARD THAT HAD STOPPED GUARDING**: `test_mobile_nav.js` proved a view-only buyer is not offered the receiving row by asserting the word `Receiving` was absent — which a renamed row satisfies whether or not the row is shown. Re-pointed at the row KEY, as were the two assertions proving the old `/stock` launcher is gone, one of which read the absence of `调拨` — characters the new label contains. **A guard written against a label is a guard a rename can silently retire.** **RECORDED AGAINST THIS SESSION: the fast shard missed a real defect.** `state.askOpen` was read but never declared in the state literal, and the only thing that found it was `test_mobile_screens.js`'s static state-key guard — **in the slow shard, which this repo does not run.** Declared, and `test_mobile_ask_strip.js` gained a red-proofed case asserting it in the FAST shard, where the gate can see it. **Tests:** `test_mobile_ask_strip.js` 10 → **12 checks** (the collision guard INVERTED — it asserted the collision was still open, and now asserts the two flows never share a name in either language, plus the extent); `test_mobile_nav.js` **100 assertions across 38 cases** green with three re-pointed; `test_mobile_receiving.js` 181/45, `test_mobile_home.js` 153/46, `test_mobile_purchasing.js` 48/11 all green. **One composed string, one live pair copied, one lift and two English-only changes**, declared in `docs/tacet-delivery-vocabulary.md` v1.76 with the rejected candidates — including `供应商收货`, which would have moved a Chinese label that was never wrong. No route, no schema, no migration, no new capability, no CSS file, and no change to `.gitignore` or CI.**
@@ -13417,6 +13419,90 @@ looked right and sold oat milk it did not have. The fix answers the question at
 fail without it. The QR menu computes its OWN availability rather than reaching
 for that field, because its stock question is a different one — this shop's
 shelf, not the company's sellable count (§47).
+
+## §121 — OPERATIONS IS EIGHT GROUPS, AND THREE PILLS SAY WHAT A LABEL CANNOT
+
+**DECIDED 2026-09-13 by Ash: OPTION A**, in two words — *"do option a"* — completing the
+set. The whole of `docs/tacet-operations-clarity-options.md` is now answered: **B** shipped
+as §118, **two of A's four renames** as §119, and **A's grouping and pills** here. The one
+part still declined is the `Invoices` rename, for the reason §119 gave.
+
+### The grouping is the mechanism, which is why no row gained a subtitle
+
+One heading over twenty-two rows becomes eight headings: *Take an order · Money and numbers ·
+Send it out · Stock coming in · Making things · Ask someone else · Record and review ·
+Messages and channels*.
+
+**Every pair that read as one row now sits in a different group from its twin** — Purchasing
+under *Stock coming in* and Ask to buy under *Ask someone else*; Add stock and Ask for stock
+likewise; Kitchen queue and Ask the kitchen likewise. Position says it, so a sentence under
+all twenty-two would be saying it a second time at four times the strings. **That is the
+argument the options document made for A over a subtitle, and it is the argument that held.**
+
+**Row order inside a group is the order of the job**, not the old flat order: Purchasing (you
+order it) → the two receipts (it arrives) → Add stock.
+
+### Two groupings that look wrong and are not
+
+**The two receiving rows are TOGETHER.** §119 gave them names that differ, and side by side
+under one heading those two names are the whole difference, readable in one glance. Splitting
+them apart would hide the very contrast the rename bought.
+
+**Expense and Approvals are together too, and the PILL is what separates them.** They are two
+ends of one feature, so a shared heading is correct — but under it, Approvals would read as a
+second Expense. The mark is the only thing telling them apart, which is why the suite asserts
+both halves: shared heading, and a pill on exactly one of them.
+
+### One row moved on its own evidence
+
+**Ready from the kitchen was in *Making things* in the first draft of this grouping — which
+reads naturally, since all three sound like production — and it was wrong.** `ROUTE_CAP`
+gates it on `['restock:request','restock:pick']`, *"the people who RAISE these requests"*, and
+its note there says telling a fulfil-only kitchen operator their own work is waiting is
+telling them about themselves. It is the **requester's** side: how the thing you asked for is
+going. So it sits with the asks, and wears no pill — the three rows above it ask, and this one
+is the answer coming back.
+
+### Three pills, and no pill is the default
+
+- **Ask · 申请** — the three request screens. Each asks somebody else and moves nothing
+  itself, the single most load-bearing fact about them and absent from all three rows before.
+- **Approve · 审批** — Approvals. Somebody else's claim, not your own.
+- **Settings · 设置** — Delivery settings. Not a job at all.
+
+**A row you simply do wears nothing**, which is the only thing keeping a pill scarce enough to
+read; on most rows it is a column. **Always neutral** — a direction is a fact about the row,
+not a state needing attention, the same reason the customer tier pills are neutral. Sage,
+Amber and Brick are not spent here, and Dusk certainly is not: nothing on this screen was
+done by the AI.
+
+**Keyed in `ROW_PILL`, not a seventh element on the row.** A row is
+`[key, icon, en, zh, href?, feat?]`; a seventh positional slot would make every pilled row
+carry two nulls to reach it, and the next addition an eighth. `QUICK_VERB` already keeps this
+shape for the same kind of per-row afterthought.
+
+### A group with one row is accepted
+
+A picker holding only `restock:pick` sees *Send it out* over a single row, and that heading
+still says what the row is for. The alternative — collapsing back to one *Operations* below
+some row count — is a rule that changes the shape of the screen as permissions change, and
+nobody could predict it.
+
+### Recorded: an OR-shaped guard that did not guard
+
+The first version of the confusable-pair case asserted each pair was separated *by the
+grouping **or** by the pill*. **Every one of those pairs has a pill on one side, so the OR was
+satisfied by the pill every time and the grouping half never bit** — moving Ask to buy back
+beside Purchasing passed the suite. Red-proofing found it. Each pair is now named with the
+mechanism that actually carries it. **§119 recorded a label-shaped guard that had stopped
+guarding; this is the same failure wearing an `||`.**
+
+### What is now closed
+
+`docs/tacet-operations-clarity-options.md` has no open options left. Its §5 list of things
+deliberately NOT built — a subtitle on every row, a subtitle naming each twin, an ⓘ per row,
+renaming more than four rows, a drill-down — stands as the record of what was considered and
+declined, and none of it is made more likely by this.
 
 
 ## §122 — GZ GROCERY WEARS THE CHANNEL FRAME (§117 PART THREE)

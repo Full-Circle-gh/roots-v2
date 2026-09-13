@@ -124,7 +124,8 @@ it('state.askOpen is declared in the state literal, not conjured at runtime', ()
      caught it was test_mobile_screens.js's static state-key guard — which lives
      in the slow shard, and this repo does not run the slow shard. A defect
      findable only there is a defect that ships. */
-  const lit = MHTML.slice(MHTML.indexOf('tab:\'home\''), MHTML.indexOf('stack:[], statusF'));
+  /* The literal runs well past `stack:[]`, and askOpen sits beside `quick`
+     some sixty keys in, so the window has to be wide enough to reach it. */
   const wider = MHTML.slice(MHTML.indexOf('tab:\'home\''), MHTML.indexOf('tab:\'home\'') + 6000);
   assert.ok(/\baskOpen\s*:/.test(wider),
     'state.askOpen is read but never declared in the state literal — the slow shard would fail on this');
@@ -155,9 +156,13 @@ it('B moved no row, and the 收货 collision it left open is now CLOSED', () => 
      adopted on its own — so the guard is inverted: what it protects now is that
      the two flows never share a name again, in either language. */
   const groups = MHTML.slice(MHTML.indexOf('const MORE_GROUPS=['), MHTML.indexOf('function moreGroups()'));
-  const ops = groups.slice(groups.indexOf("h:['Operations'"), groups.indexOf("h:['Marketing'"));
+  /* §121 split the one Operations entry into eight, so "the Operations rows"
+     is now everything from the first of them to Marketing. Sliced by the FIRST
+     GROUP'S HEADING rather than by a count of groups, so adding a ninth does
+     not silently narrow what this counts. */
+  const ops = groups.slice(groups.indexOf("h:['Take an order'"), groups.indexOf("h:['Marketing'"));
   assert.strictEqual((ops.match(/\['[a-z]+','[a-z-]+',/g) || []).length, 22,
-    'the Operations list is no longer twenty-two rows — §118 says B moves none of them');
+    'the Operations rows no longer number twenty-two across the eight groups (§121)');
 
   const row = (k) => {
     const m = new RegExp(`\\['${k}','[a-z-]+','([^']+)','([^']+)'`).exec(ops);

@@ -4254,42 +4254,112 @@ const MORE_GROUPS=[
      this file keeps out. The rows stay put on a quiet day for the reason the
      launcher's tiles did: "Nothing to pick" is what tells somebody the tool is
      there before the morning they need it. */
-  {h:['Operations','运营'],rows:[['neworder','file-plus','New order','新建订单'],['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery settings','配送设置'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购'],['receiving','package','Receive from a supplier','收货'],['waste','trash','Waste','损耗'],
-    /* §87 — what somebody spent out of their own pocket for work. It sits in
-       Operations beside Waste on purpose: both are a person recording something
-       small that happened to them during a shift, which somebody else's key
-       later turns into money. */
-    ['expense','banknote','Expense','费用申请'],
-    /* The other end of the same feature, and a SEPARATE ROW because it is a
-       separate job held by separate people: most of the operators who see the
-       row above will never see this one. Gated on `expenses:approve`, which no
-       floor preset holds. */
-    ['approvals','check-check','Approvals','审批'],['till','calculator','Counter till','前台收银','/till'],['kitchenqueue','chef-hat','Kitchen queue','厨房制作队列'],['stockapp','package-plus','Add stock','加库存'],
-    /* §103 — which items each channel holds a wrong number for, and the fix.
-       The phone never rebuilt the desktop's channel tabs; this is the one
-       channel screen it has, and it is the one that says where to look. */
-    ['channelsync','refresh-cw','Channel sync','渠道同步'],
-    /* THE TWO REQUEST SCREENS, IN THIS APP (§48). They had no rows of their
-       own and lived on /stock's launcher; they have rows here now, the launcher
-       emptied, and the Transfers row that reached it went with the last of
-       them. The app itself is deleted (§48 step 4). */
-    ['askkitchen','chef-hat','Ask the kitchen','向厨房下单'],['askstock','package','Ask for stock','申请补货'],
-    /* THE THIRD REQUEST SCREEN (§86), and the only one that spends: the kitchen
-       asks the buyer to BUY a material. Sixth element is a Features switch —
-       `production`, the one that already gates Materials and Recipes on the
-       desktop, because Ash placed this in the production module.
-       `logbatch` below is NOT given the same gate, deliberately: it ships today
-       with no feature check, and adding one here would hide a screen somebody is
-       already using. A new row can be born gated; an old one cannot be gated
-       retroactively inside an unrelated build. */
-    ['askbuy','shopping-cart','Ask to buy','采购申请',null,'production'],
-    ['kitchenready','circle-check','Ready from the kitchen','厨房已完成'],
-    ['receivexfer','truck','Receive from another shop','调拨收货'],['pick','route','Pick','拣货'],
+  /* ══ OPERATIONS, IN EIGHT GROUPS (§121) ═══════════════════════════════════
+     Was one heading over twenty-two rows. Ash chose the grouping after §118's
+     strip shipped; the strip stays where it is, above all of this.
+
+     THE GROUPING IS WHAT DISAMBIGUATES, which is why no row gained a subtitle:
+     every pair that read as one row now sits in a different group from its
+     twin — Purchasing under Stock coming in and Ask to buy under Ask someone
+     else, Add stock and Ask for stock likewise. Position says it, so a sentence
+     under all twenty-two would be saying it twice at four times the strings.
+
+     ROW ORDER INSIDE A GROUP IS THE ORDER OF THE JOB, not the old flat order:
+     Purchasing (you order it) → the two receipts (it arrives) → Add stock.
+
+     A GROUP WITH ONE ROW IS ACCEPTED, deliberately. A picker holding only
+     `restock:pick` sees "Send it out" over a single row, and that heading still
+     says what the row is for. The alternative — collapsing back to one
+     "Operations" below some row count — is a rule that changes the shape of the
+     screen as permissions change, and nobody could predict it. */
+  {h:['Take an order','接单'],rows:[
+    ['neworder','file-plus','New order','新建订单'],
+    ['till','calculator','Counter till','前台收银','/till']]},
+  {h:['Money and numbers','营收与数据'],rows:[
+    ['sales','store','Sales','销售'],
+    ['trend','trending-up','Trend','趋势'],
+    /* Kept as `Invoices · 发票` on purpose. Option A proposed *Issue tax
+       invoices* as an interim and §119 declined it: the design canvas's batch
+       three folds this row into Orders as a filter, and renaming a row that is
+       going away is churn. */
+    ['invoices','receipt','Invoices','发票']]},
+  {h:['Send it out','拣货与配送'],rows:[
+    ['pick','route','Pick','拣货'],
+    /* §119 renamed this. It is zones, holiday mode and the printer — the one
+       configuration screen in a list of tasks — so it wears the Settings pill
+       as well, because a group can say WHERE a row belongs and only the pill
+       can say it is not a job. */
+    ['delivery','truck','Delivery settings','配送设置']]},
+  {h:['Stock coming in','入库'],rows:[
+    ['purchasing','shopping-cart','Purchasing','采购'],
+    /* THE PAIR §119 SEPARATED, now adjacent for the first time. They shared
+       `收货` in both labels, both screen titles and three of the transfer
+       screen's own buttons; side by side under one heading, the two names are
+       the whole difference and can be read in one glance. */
+    ['receiving','package','Receive from a supplier','收货'],
+    ['receivexfer','truck','Receive from another shop','调拨收货'],
+    ['stockapp','package-plus','Add stock','加库存']]},
+  {h:['Making things','生产'],rows:[
+    ['kitchenqueue','chef-hat','Kitchen queue','厨房制作队列'],
     /* LOG A BATCH IS THE ONLY ROW OF THE THREE PRODUCTION SCREENS. `whatmade`
        is never opened from here — it is where the queue and this row both
        arrive, carrying lines with them, and a row that opened it cold would
        open it empty. */
     ['logbatch','clipboard-list','Log a batch','登记批次']]},
+  /* THE THREE REQUEST SCREENS, AND THE ONE GROUP THAT EARNED ITS HEADING MOST.
+     Each asks somebody else to act and moves nothing on its own; each was
+     previously scattered among the rows that DO the thing being asked for.
+     They carry the Ask pill too — the group says it once for the set, the pill
+     says it on the row, and it is the row that gets read from the search index
+     and the Quick-actions picker where no heading follows it. */
+  {h:['Ask someone else','发起申请'],rows:[
+    /* THE TWO REQUEST SCREENS, IN THIS APP (§48). They had no rows of their
+       own and lived on /stock's launcher; they have rows here now, the launcher
+       emptied, and the Transfers row that reached it went with the last of
+       them. The app itself is deleted (§48 step 4). */
+    ['askkitchen','chef-hat','Ask the kitchen','向厨房下单'],
+    ['askstock','package','Ask for stock','申请补货'],
+    /* THE THIRD REQUEST SCREEN (§86), and the only one that spends: the kitchen
+       asks the buyer to BUY a material. Sixth element is a Features switch —
+       `production`, the one that already gates Materials and Recipes on the
+       desktop, because Ash placed this in the production module.
+       `logbatch` above is NOT given the same gate, deliberately: it ships today
+       with no feature check, and adding one here would hide a screen somebody is
+       already using. A new row can be born gated; an old one cannot be gated
+       retroactively inside an unrelated build. */
+    ['askbuy','shopping-cart','Ask to buy','采购申请',null,'production'],
+    /* NOT A KITCHEN TOOL, AND ITS OWN GATE SAYS SO. It sat with Kitchen queue
+       and Log a batch in the first draft of this grouping, which reads
+       naturally — all three sound like production — and is wrong. ROUTE_CAP
+       gates it on `['restock:request','restock:pick']`, "the people who RAISE
+       these requests", and its note there says telling a fulfil-only kitchen
+       operator their own work is waiting is telling them about themselves. So
+       it is the REQUESTER's side: how the thing you asked for is going, still
+       pending or ready to collect. That is this group.
+       NO PILL, deliberately: the three rows above it ask, and this one is the
+       answer coming back. A fourth value for "you get told" would spend the
+       scarcity that makes the other three legible. */
+    ['kitchenready','circle-check','Ready from the kitchen','厨房已完成']]},
+  {h:['Record and review','登记与审批'],rows:[
+    ['waste','trash','Waste','损耗'],
+    /* §87 — what somebody spent out of their own pocket for work. It sits
+       beside Waste on purpose: both are a person recording something small that
+       happened to them during a shift, which somebody else's key later turns
+       into money. */
+    ['expense','banknote','Expense','费用申请'],
+    /* The other end of the same feature, and a SEPARATE ROW because it is a
+       separate job held by separate people: most of the operators who see the
+       row above will never see this one. Gated on `expenses:approve`, which no
+       floor preset holds — and it wears the Approve pill, because "review" in
+       the heading covers the group and only the pill says this row is somebody
+       else's work rather than your own. */
+    ['approvals','check-check','Approvals','审批']]},
+  {h:['Messages and channels','消息与渠道'],rows:[
+    ['inbox','message-square-text','Inbox','消息'],
+    /* §103 — which items each channel holds a wrong number for, and the fix.
+       The phone never rebuilt the desktop's channel tabs; this is the one
+       channel screen it has, and it is the one that says where to look. */
+    ['channelsync','refresh-cw','Channel sync','渠道同步']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
@@ -4315,6 +4385,35 @@ function moreGroups(){
    distinction with no consequence for the person reading it: both rows open a
    tool, both come back. The mark said "this one is different" about a
    difference that had stopped existing. */
+/* ══ THE PILL ON A MORE ROW (§121) ═════════════════════════════════════════
+   The fact a label cannot carry: who a row goes to, or that it is not a job at
+   all. THREE VALUES, and NO PILL IS THE DEFAULT — a row you simply do wears
+   nothing, which is the only thing that keeps a pill scarce enough to read. Put
+   one on all twenty-two and it is a column, not a mark.
+
+   KEYED, NOT A SEVENTH ELEMENT on the row. A row is
+   [key, icon, en, zh, href?, feat?]; a seventh positional slot would mean every
+   pilled row carried two nulls to reach it, and the next addition would be an
+   eighth. This is the shape QUICK_VERB already uses for the same kind of
+   per-row afterthought.
+
+   ALWAYS NEUTRAL. A direction is a fact about the row, not a state needing
+   attention — the same reason the customer tier pills are neutral. Sage and
+   Amber are not spent here, and Dusk certainly is not: nothing on this screen
+   was done by the AI. */
+const ROW_PILL={
+  /* The three request screens. Each asks somebody else and moves nothing
+     itself, which is the single most load-bearing fact about them and was
+     absent from all three rows before this. */
+  askkitchen:['Ask','申请'], askstock:['Ask','申请'], askbuy:['Ask','申请'],
+  /* Somebody else's claim, not your own. Without this the row reads as a
+     second Expense to the few operators who hold both. */
+  approvals:['Approve','审批'],
+  /* Not a job. Zones, holiday mode and a printer — the one configuration
+     screen among twenty-one tasks, which is why §119 renamed it and why the
+     rename alone was not quite enough. */
+  delivery:['Settings','设置'],
+};
 function moreRow(r){
   const label = r[0]==='stockapp' ? stockAppLabel() : [r[2],r[3]];
   /* THE STOCK ROW NO LONGER GOES EITHER WAY. It used to: an operator who only
@@ -4328,7 +4427,7 @@ function moreRow(r){
      `href` stays for the rows that really are elsewhere: /till. */
   const href = r[4]||null;
   const route = r[0]==='stockapp' ? 'stockadd' : r[0];
-  return {key:r[0], icon:r[1], en:label[0], zh:label[1], href,
+  return {key:r[0], icon:r[1], en:label[0], zh:label[1], href, pill:ROW_PILL[r[0]]||null,
           cmd: href ? `APP.cmd('leave','${href}')` : `APP.cmd('push','${route}')`};
 }
 function moreRowsFlat(){ return moreGroups().reduce((a,g)=>a.concat(g.rows),[]); }
@@ -5246,6 +5345,9 @@ function screenMore(){
       <div style="margin:0 16px" class="list">${g.rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
         <button class="row" onclick="${r.cmd}"><span class="rowico">${ic(r.icon)}</span>
         <span style="flex:1;min-width:0;font-size:15px">${T(r.en,r.zh)}</span>
+        ${/* §121. Before the dot, so an arriving-work marker is never pushed off
+             the edge by a pill that says the same thing every time. */''}
+        ${r.pill?`<span class="pill" style="background:var(--surface-raised);color:var(--text-secondary);margin-right:8px">${T(...r.pill)}</span>`:''}
         ${/* Same 6px Sage dot as the tab bar's, on the row that opens the work.
              Never a count: the number lives on the screen it points at. */''}
         ${moreRowDot(r.key)?`<span style="width:6px;height:6px;border-radius:50%;background:var(--sage);flex:none;margin-right:8px"></span>`:''}
