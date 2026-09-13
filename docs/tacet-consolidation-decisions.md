@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.248
+# Tacet shared-core consolidation — decisions record, v4.249
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-13 · v4.249 — **§116 DECIDED AND BUILT: THE OPERATIONS MENU IS ENTERED BY THE JOB, IN THE OPERATOR'S OWN WORDS — DECIDED BY ASH, who chose OPTION B over the recommendation.** The brief: *"it's not clear for any [account] every feature of operation… starting with the name, explanation, etc."* Twenty-two rows under one heading, labelled with bare nouns. `docs/tacet-operations-clarity-options.md` drew two options and recommended **A** (group by the job, three pills, four renames); Ash picked **B** (plain questions above the list), and the argument is kept unedited because a record whose losing option has been tidied away cannot be re-checked. **THE PREDICTED BLOCKER DISSOLVED ON CONTACT.** The options document said B's first row would answer one question with two destinations and called that B's honest limit — and the session opened by telling Ash B therefore *depended* on A's renames. **Both readings were wrong**, and §115 corrects them rather than quietly dropping them: B asks **two** questions — *Something arrived from a supplier* / *from another shop* — each going straight to its screen, so the distinction lives in the words somebody is reading at the moment they need it, and B needs no rename at all. **THE 收货 COLLISION IS THEREFORE STILL OPEN, AND ITS EXTENT IS NOW MEASURED**: `Receiving` and `Receive delivery` share `收货` in both row labels (`m.html:4139`, `:4169`), in **both screen titles** (`:11565`, `:10844`), and the transfer screen labels its own back and count buttons `T('Receiving','收货')` (`:10385`, `:10397`, `:10412`) — the other row's name. A Chinese render of the new strip shows the two questions' second lines reading `收货` and `收货`, which is the argument for A's rename OBSERVED rather than predicted. **FIVE RULES** hold the strip: a question resolves its destination through the More row so a later rename moves both and the strip can never offer a screen the list does not; the gate is the row's presence in `moreRowsFlat()` (already capability-filtered) plus the Features switch presence cannot cover; it collapses and the choice is kept on the phone like the theme and the language, because seven questions above twenty-two rows is a gift to a new account and an imposition on somebody who has known the list for a year; seven questions, rationed to the five confusable clusters plus the two rows that are hard to FIND; and **no icon on a question row**, or the two layers read as one list of twenty-nine. **NOT ONE ROW MOVED** — `MORE_GROUPS` is read here and never rewritten, no row key changed, so `ROUTE_CAP`, `SUBS` and every stored Quick-actions preference are untouched, and **option A is neither adopted nor rejected**. **Chinese:** one string composed (`你需要做什么？`, `你` over `您` on the neighbouring screen's evidence, not a count), one pair taken whole (`需要补货`), one collapse pair copied minus its noun, and six lifts — all declared in `docs/tacet-delivery-vocabulary.md` v1.73 with the rejected candidates beside them, including why `收货` is spent on neither question. **Tests:** new `scripts/test_mobile_ask_strip.js` — **10 checks, reads only, FAST shard and part of the gate**, deliberately not a render pass: browser suites go in the slow shard, which this repo does not run. **Three red-proofed** by restating a row label in the table, adding an icon well, and mounting the strip below the rows — each failed as it should. Its first draft passed a `rowico` it found in an unrelated screen seven hundred lines away, so the slice is bounded to the strip's own source and says so. `npm run test:fast` **224 passed, 0 failed**; eslint 0 errors; doc-numbering PASS. Rendered and read back in both languages and at three capability levels (owner 7 questions, a receiver 2, collapsed 0). **No route, no schema, no migration, no new capability, no CSS file, and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.248 — **§114 DECIDED AND BUILT: A PURCHASE THAT HAS NOT ARRIVED IS TRACKED AS AN ORDER, WHOEVER PAID FOR IT — DECIDED BY ASH, AND IT REVERSES §111 PART THREE.** The case that broke it, in his words: *"an employee use the company money to buy a food processor. it wasn't the person that do purchasing... the item didn't arrive and it need tracking"*. §111 part three had left claims alone because *a claim is money already out of a pocket — there is nothing to order and nothing to receive*; **true of a cook buying ginger, false of an appliance still in transit**, where the money is gone AND the goods are owed. Neither door held it: the claim path has no delivery to track, and the order path sits behind `purchasing:edit`, which the floor presets withhold on purpose. **Ash ruled twice**: the APPROVER raises the order from the claim (so nobody gains a capability), and it applies to the employee's OWN money too (the order tracks the delivery and owns the cost; the debt stays on the claim). **THREE FINDINGS MADE IT CHEAP**: `store_manager` already holds `purchasing:receive`, so the missing half was never the tracking but the CREATION; *paid, not yet arrived* is a state the record already has (`postRetailPOExpenses` posts on Ordered, `Delivered` seeds `qty_received`), so the order is raised at Ordered and never as a draft — a draft posts nothing and the money has already gone; and §111 part one's TYPED LINE is what carries a food processor, which is in no catalogue, so this could not have been built a day earlier. **THE MONEY IS POSTED ONCE**: `postClaim` writes nothing for a claim awaiting its delivery — keyed on `awaiting_delivery` and NOT on `po_id`, because on a first approval the order does not exist yet when it runs, and a `po_id` test would leave the same purchase in the books twice. **REJECT AND VOID ARE REFUSED while an order stands** (§114 part four): the claim has no ledger row of its own to take back, and cancelling the order behind the scenes would reach into a document that may already have been received — the refusal names Cancel order instead. **THE OWED FIGURE COSTS NOTHING**, verified rather than assumed: it reads status + paid_by + settled and never `expense_id`, so an employee who laid out their own money is still owed it and **Mark paid** still settles it. A claim marked *not arrived* must name a shop and a description — goods turn up at a door, and §111 part one refuses a line with no name. **Tests:** new `scripts/test_claim_purchase_order.js` (**47 cases**, both routers real, inventory stubbed but RECORDING), and `test_staff_expenses.js` 75 → **82 cases**, whose file-wide *one table, and it is the claim table* guard is NARROWED rather than dropped — the allowed set is named, the two new tables are pinned to `raiseOrderForClaim`, and a new case proves the SUBMIT path still writes the claim and nothing else, which is the assertion that actually carries §87 part one and which the old regex only implied. `npm run test:fast` 223 passed, 0 failed; eslint 0 errors; doc-numbering PASS. **Three composed strings and one taken whole**, all declared in `docs/tacet-delivery-vocabulary.md` v1.72 with a test case that re-reads each source and fails if a term stops being live. Two migrations (`staff_expenses.awaiting_delivery`, `po_id`), no new route, no new capability, and no change to `.gitignore` or CI.**
 
@@ -12812,3 +12814,77 @@ sets them; a purchase made in a shop by an employee is exactly the case
 **What the buyer is told when an approval raises an order.** It appears in the purchasing list
 like any other Ordered PO. §66 and §69 are the precedent for adding a notification later if
 the day turns out to need one; inventing it now would be inventing the workflow.
+
+## §116 — THE OPERATIONS MENU IS ENTERED BY THE JOB, IN THE OPERATOR'S OWN WORDS
+
+**DECIDED 2026-09-13 by Ash: OPTION B**, chosen from the two in
+`docs/tacet-operations-clarity-options.md`. That document recommended option A
+(grouping the twenty-two rows under eight headings) and named B as a layer to
+build later on evidence; the recommendation was declined in favour of B. The
+argument is kept there unedited, because a decision record whose losing option
+has been tidied away afterwards cannot be re-checked.
+
+**What B is.** A short block at the top of More, above the Operations heading,
+that asks the operator what they need to do in plain words and routes each
+answer to the screen that answers it. Seven questions, each gated on the
+capability its destination is gated on.
+
+**The twenty-two rows do not change.** No row is renamed, regrouped, reordered
+or removed; `MORE_GROUPS` is read, never rewritten. B adds a way IN; it does not
+reorganise what it leads to. An operator who knows the list keeps the list they
+know.
+
+### Why the questions carry the distinction rather than the rows
+
+The options document said B's first row would answer one question with two
+destinations, and that this was B's honest limit. **Built, it is not a limit but
+the shape of the answer**: instead of one "Something arrived" opening a chooser
+whose two entries both read 收货, B asks **two** questions — *Something arrived
+from a supplier* and *Something arrived from another shop* — and each goes
+straight to its screen.
+
+That matters beyond the wording. It means **B has no dependency on option A's
+renames.** The reading in the options document — that B could not be written
+without them — was wrong, and is corrected here rather than silently: the
+distinction lives in the question, which is the one place the operator is
+reading when they have to make it.
+
+**The 收货 collision on the two rows is therefore still open** (options document
+§1). B does not fix it and does not need it fixed. It remains a real defect,
+recorded and unaddressed, and it is a defect whether or not any option ever
+ships — see that document for its full extent, which includes both screen
+titles and three in-screen buttons.
+
+### Rules the strip holds to
+
+1. **A question resolves its destination's label through the More row itself**,
+   never a copy of it. The row's current name is what the question's second line
+   shows, so a later rename moves both, and the strip can never offer a screen
+   the list below it does not — the same "three consumers must agree" discipline
+   `moreGroups()` already enforces for the list, the tab bar and the search.
+2. **A question is gated on the capability its destination is gated on**, by
+   asking `canRoute` about the destination rather than restating a key. A
+   question whose screen would 403 is not a shortcut, it is a trap.
+3. **The strip collapses, and the choice is remembered on the phone** the way
+   the theme and the language are. Questions-first is a gift to a new account and
+   an imposition on an operator who has known the list for a year; seven
+   questions above twenty-two rows pushes the list a screen down, and that
+   operator must be able to put it back for good with one tap.
+4. **Seven questions, and they are rationed.** They cover the five clusters the
+   options document found plus the two rows that are hard to FIND rather than
+   hard to tell apart. A question per row would be a second menu in a worse
+   order, which is the problem, not the fix.
+5. **No icons on a question row.** The rows below carry icons; the questions
+   carry text and their destination. Two layers that look alike read as one
+   list, and then the strip is just twenty-nine rows.
+
+### What is NOT decided here
+
+**Option A is neither adopted nor rejected.** The grouping, the pills and the
+four renames stay on the table in the options document. B was built to sit on
+top of A and does not block it: adopting A later changes the headings and four
+labels beneath the strip, and rule 1 means the questions follow those labels
+without being touched.
+
+**Whether seven is the right seven** is an evidence question. The strip is one
+table, and adding or dropping a question is one line in it.

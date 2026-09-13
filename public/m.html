@@ -4215,6 +4215,91 @@ function moreRow(r){
 }
 function moreRowsFlat(){ return moreGroups().reduce((a,g)=>a.concat(g.rows),[]); }
 
+/* ══ WHAT DO YOU NEED TO DO — the questions above the list (§116) ══════════
+   Ash chose this over grouping the twenty-two rows, and the two are not
+   alternatives: this is a way IN, and MORE_GROUPS is read here and never
+   rewritten. No row is renamed, reordered or removed by any of it.
+
+   A QUESTION RESOLVES ITS DESTINATION THROUGH THE MORE ROW, never a copy of
+   its label. The row's current name is what the second line shows, so a later
+   rename moves both, and this strip can never offer a screen the list below it
+   does not — the discipline moreGroups() already enforces for the list, the tab
+   bar and the search index. It is also why the capability gate is `canRoute` on
+   the DESTINATION rather than a key restated here: a question whose screen
+   would 403 is not a shortcut, it is a trap.
+
+   TWO QUESTIONS FOR ARRIVING GOODS, NOT ONE WITH A CHOOSER. The design doc
+   expected one "Something arrived" opening a pick between two screens, and
+   called that this option's honest limit — but both rows read 收货 today, so
+   that chooser would have asked the operator to tell apart the one pair this
+   strip exists to separate. Asking twice puts the distinction in the words
+   somebody is reading at the moment they need it, and costs nothing: each
+   question goes straight to its screen. (That collision is still a real defect
+   in the rows themselves. This does not fix it and does not depend on it.)
+
+   SEVEN, AND RATIONED. Five clusters where two rows look like one, plus the two
+   rows that are hard to FIND rather than hard to tell apart. A question per row
+   would be a second menu in a worse order. */
+const M_ASK_KEY='tacet-m-ask';
+const ASK_TASKS=[
+  /* Sixth element of a MORE_GROUPS row is a Features gate; here it is the third,
+     and only `askbuy` has one — the same `production` switch its row carries. */
+  ['receiving',   ['Something arrived from a supplier','供应商的货到了']],
+  ['receivexfer', ['Something arrived from another shop','其他地点发来的货到了']],
+  ['askstock',    ['I need more stock here','需要补货']],
+  ['askkitchen',  ['The kitchen needs to make something','需要厨房制作']],
+  ['askbuy',      ['Something needs buying from a supplier','需要向供应商采购'],'production'],
+  ['waste',       ['Something got thrown away','有东西损耗了']],
+  ['expense',     ['I paid for something myself','我个人支付了费用']],
+];
+/* moreRowsFlat() is already capability- and Features-filtered, so a row MISSING
+   from it is a row this operator cannot open — which makes "is it in there" the
+   whole gate, and `canRoute` need not be asked a second time. The Features
+   check stays because a row can be reachable and its module still off. */
+function askTasks(){
+  const rows={}; moreRowsFlat().forEach(r=>{rows[r.key]=r;});
+  return ASK_TASKS.filter(t=>rows[t[0]] && (!t[2]||featOn(t[2])))
+    .map(t=>({q:t[1], dest:rows[t[0]], cmd:rows[t[0]].cmd}));
+}
+/* Read once, then held in state — quickKeys()' pattern, and remembered on this
+   phone the way the theme and the language are. Questions first is a gift to a
+   new account and an imposition on somebody who has known the list for a year:
+   seven questions above twenty-two rows pushes the list a screen down, so one
+   tap must put it back for good. */
+function askOpen(){
+  if(state.askOpen==null){
+    let v=true;
+    try{ if(localStorage.getItem(M_ASK_KEY)==='0') v=false; }catch(e){}
+    state.askOpen=v;
+  }
+  return state.askOpen;
+}
+reg('toggleAsk', ()=>{
+  state.askOpen=!askOpen(); render();
+  try{ localStorage.setItem(M_ASK_KEY, state.askOpen?'1':'0'); }catch(e){}
+});
+/* NO ICON ON A QUESTION ROW. The rows below carry one each; these carry the
+   question and the screen it opens. Two layers that look alike read as one
+   list, and then this is twenty-nine rows instead of seven plus twenty-two —
+   which is why the separator runs full width here and is inset to 62px there. */
+function askStripHtml(){
+  const tasks=askTasks();
+  if(!tasks.length) return '';
+  const open=askOpen();
+  return `<div style="margin-top:14px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:6px 20px">
+      <span class="eyebrow">${T('What do you need to do?','你需要做什么？')}</span>
+      <button onclick="APP.cmd('toggleAsk')" style="background:none;border:none;padding:0;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary);cursor:pointer;flex:none">${
+        open?T('Hide ▴','收起 ▴'):T('Show ▾','查看 ▾')}</button></div>
+    ${open?`<div style="margin:0 16px" class="list">${tasks.map((t,i)=>`${i?'<div class="sep"></div>':''}
+      <button class="row" onclick="${t.cmd}">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <span style="font-size:15px">${T(...t.q)}</span>
+          <span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${T(t.dest.en,t.dest.zh)}</span></span>
+        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div>`:''}
+  </div>`;
+}
+
 /* One source for setup progress, and it is the server's. The card used to
    compute a percentage from a hardcoded list of steps, so every store on earth
    read "50% set up · 3 steps left" whatever it had actually done. */
@@ -5037,6 +5122,7 @@ function screenMore(){
           <span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${T(su.pct+'% set up · '+su.left+' steps left',`已完成 ${su.pct}% · 还差 ${su.left} 步`)}</span>
           <span style="display:block;margin-top:10px;height:4px;border-radius:999px;background:var(--surface-raised)"><span style="display:block;height:4px;width:${su.pct}%;border-radius:999px;background:var(--text-primary)"></span></span></span>
         <span style="color:var(--text-secondary);display:flex;flex:none;align-self:flex-start;margin-top:9px">${ic('chevron-right')}</span></button></div></div>`:''}
+    ${askStripHtml()}
     ${groups.map(g=>`<div style="margin-top:14px">
       ${g.h?`<div class="eyebrow" style="padding:6px 20px">${T(...g.h)}</div>`:''}
       <div style="margin:0 16px" class="list">${g.rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
