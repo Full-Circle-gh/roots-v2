@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.243
+# Tacet shared-core consolidation — decisions record, v4.244
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-13 · v4.244 — **§111 DECIDED, AND ITS FIRST PART BUILT: WHAT IS ORDERED FROM A SUPPLIER BELONGS ON A PURCHASE ORDER, AND A PURCHASE ORDER CAN NOW CARRY A THING THAT IS IN NO CATALOGUE — DECIDED BY ASH.** Asked how to make an ingredient, an office supply or a piece of equipment reach the books as a PO rather than a typed expense *"like any other stuff that ordered (unless the user specifically say it's not)"*. **THE SURVEY FOUND THE RULE COULD NOT BE OBEYED**: `po_line_items` has accepted a line naming neither a product nor a material since it was written — `lineConflict` refuses a line carrying BOTH ids, never one carrying neither, the stock apply and the price write-back both skip it, and the expense poster groups it by its own `expense_category` — but **nothing could produce one**, because the wizard's only way onto an order was a picker over the two catalogues and a search matching nothing ended at *No match*. So the box of gloves went into Finance as a bare ledger row with no supplier, no receiving, no 发票 and nothing to return it against. **Ash ruled three ways**: the goods/not-goods rule is LEARNED FROM THE ANSWER and stored on the category beside `is_operating` (nothing pre-marked — §36's "an empty list cannot offer a wrong option", the rule written after the ¥152,309 mis-filing); a *yes* OPENS THE DRAFT rather than filing one nobody returns to; and **the free-text line ships first, alone**, because nothing else in the section can be obeyed until a PO can carry a chair. **BUILT HERE: part one only.** The picker's LAST row (never the first — offering to invent a second chair above the one you stock is how a catalogue grows duplicates) adds a line with its own name, unit and expense category and no id; `lineUnnamed` refuses a nameless one as `name_required` on create and edit alike, because `name_en` is NOT NULL and `item.name_en || ''` would have saved a quantity and a price with no subject onto the order, the receive screen and the printed sheet. The unit is editable HERE AND NOWHERE ELSE — a material's stays `ingredients.buy_unit` or `firePriceAlertsForPO` silently stops writing prices back. **PARTS TWO AND THREE ARE DECIDED, NOT BUILT**: the question on the expense form, and staff claims left alone because §87's claim is money already out of a pocket. **THE BEHAVIOUR CHANGE IS RECORDED RATHER THAN DISCOVERED**: a PO posts at Ordered, so routing a purchase into a draft moves that money out of the month until the buyer places it. **Tests:** two new suites. `scripts/test_retail_po_typed_line.js`, **33 cases** on `test_retail_po_material_line.js`'s harness — real router, `lib/inventory.js` stubbed but RECORDING, since "never touches stock" is a claim about a call that must not happen; **25 of its 33 pass against the code before this change**, which is the finding restated as a test rather than a weak suite. And `scripts/test_wizard_typed_line.js`, **31 cases** on `test_wizard_line_supplier.js`'s VM sandbox for the half the server cannot see — the row is offered and offered LAST, the line carries no ids and two name halves, a product line and a material line get none of the three typed-only fields, and a category pick LANDS ON THE LINE (a value set from script leaves the input's dirty flag clear, so without `commit` it would die at the next repaint). It cannot load at all against the old code. `npm run test:fast` 219 passed, 0 failed. **No new Chinese** — every label reuses a live pair (`添加`, `无匹配`, `名称`, `分类`, `采购单位`) and the refusal reuses `name_required`'s own sentence from `01-core.js`. No schema, no migration, no new route, no new capability, and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.243 — **`manual` READS `Manual · 手动` ON THE FINANCE CARD, AND DIFFERS FROM THE ORDERS LIST KNOWINGLY — DECIDED BY ASH, reversing v4.242's half of it.** Reported from the Chinese card with the row circled in red: *"翻译有点小问题，manual，中文：手动、人工"*. **v4.242 HAD CHANGED IT TO `Unattributed · 未归属`, AND THAT WAS THIS SESSION'S ERROR RATHER THAN A RULING NOW BEING OVERTURNED.** The reasoning borrowed there — `ordChannelLabel` (`04-orders.js`) records that `manual` is the LEGACY value, no longer selectable, so `手动` claims an operator picked something nobody picked — is sound on its own terms and is NOT withdrawn. What it got wrong was weight: it is **one screen against three**, and the card an owner reads his month's takings on is not the place to try a new word on him. **OF THE TWO WORDS ASH NAMED, `手动` IS THE ONE ALREADY LIVE FOR THIS COLUMN RATHER THAN NEAR IT**: `CU_CHAN_OPTS` (`08-customers.js`) is a channel filter over `retail_orders.channel` itself and offers `['manual', 'Manual', '手动']`; `DASH_CHAN_SHORT` (`03-dashboard.js`) names the channel on an order the same way; `13-activity.js` and `04-orders.js`'s tracking marker both pair `Manual · 手动` too. **`人工` was the other offer and is NOT used**: it is live only inside verification sentences (`请人工核对`, `仍无法识别 · 请重试或人工核对`), never as the name of a channel, so taking it would be minting a label out of a fragment — the composition the standing rule's first preference exists to avoid when a live pair already fits. Nothing composed either way. **THE ORDERS LIST IS DELIBERATELY LEFT ALONE.** Aligning it is a change to a screen nobody reported and is Ash's to ask for; so the two screens now disagree about one value, **knowingly**, and that is recorded in `22-finance.js` beside the map rather than left to be discovered. **Tests:** the provenance case now checks `Manual · 手动` against `08-customers.js`, the filter over this very column, instead of against the orders list. The case that pinned `Unattributed` is replaced by one that pins BOTH SIDES of the divergence — the card reads `手动`, carries neither `未归属` nor `人工`, the pair is still live in `CU_CHAN_OPTS`, AND `ordChannelLabel` still says `Unattributed · 未归属` — so if the orders list ever adopts the same word the case turns red and a session re-reads the note instead of silently folding one into the other. Confirmed red against both rejected spellings. `scripts/test_finance_summary.js` stays at **86 cases**; `npm run test:fast` 216 passed, 0 failed; eslint 0 errors; doc-numbering PASS. No schema, no migration, no new route, no new capability, no new Chinese, no CSS, and no change to `.gitignore` or CI.**
 
@@ -12206,3 +12208,193 @@ and the `.fin-input` regression above.
 changed files. `node scripts/check-doc-numbering.js` PASS. Code, tests and this
 record; no schema, no migration, no new route, no new capability, no new
 Chinese, no CSS, and no change to `.gitignore` or CI.
+
+
+## §111 — WHAT IS ORDERED FROM A SUPPLIER BELONGS ON A PURCHASE ORDER, AND A THING IN NO CATALOGUE IS STILL ORDERED
+
+Ruling (Ash, 2026-09-13), on three questions put to him after a read-only survey of how
+money out reaches the books. The ask, in his own words: *"when adding to expense an order
+of an ingredient, office, equipment or anything other than invoice goods to be delivered
+(not salary rent or transportation for example) it need to be part of the PO like any
+other stuff that ordered (unless the user specifically say it's not)"*.
+
+Three answers, of the options put to him:
+
+* **THE RULE IS LEARNED FROM THE ANSWER, NOT CONFIGURED AND NOT ASSUMED.** The expense form
+  asks on the first money-out row in each category, stores the answer **on that category**
+  beside `is_operating` and `is_active`, and never asks for that category again.
+* **A YES OPENS THE DRAFT.** No ledger row is written; a Draft PO is seeded from what was
+  typed and the Purchasing wizard opens on it, so the buyer finishes the order rather than
+  filing a draft nobody returns to.
+* **THE FREE-TEXT LINE SHIPS FIRST, ALONE.** Nothing else in this section can be obeyed
+  until a purchase order can carry an office chair.
+
+### The finding this rests on, and it is most of the work
+
+**FOUR WRITERS REACH `expense_entries`, AND ONLY TWO OF THEM ARE A PURCHASE ORDER.**
+`postRetailPOExpenses` (`routes/retail-purchasing.js`) and its kitchen twin
+`postPOExpenses` (`routes/purchases.js`) post from a document. `postClaim`
+(`lib/expense-posting.js`) posts an approved staff claim, §87's path. And
+`routes/finance-transactions.js` inserts a row somebody typed, with **no supplier, no
+lines, no receiving, no 发票 to match and nothing to return it against.** That fourth
+writer is the door this section is about.
+
+**THE RULE COULD NOT BE OBEYED, WHICH IS WHY IT WAS BEING BROKEN.** `po_line_items` has
+accepted a line naming neither a product nor a material since it was written —
+`lineConflict` refuses a line carrying BOTH ids, never one carrying neither; the stock
+apply skips it; the price write-back skips it; the expense poster groups it by its own
+`expense_category` like any other line. **Nothing could produce one.** The wizard's only
+way onto an order was a picker over `store_products` and `ingredients`, and a search that
+matched nothing ended at *No match*. So a buyer who wanted to do the right thing with a box
+of gloves had nowhere to put it, and Finance was the only screen that would take it.
+
+**THE TWO DOORS ALREADY SHARE ONE VOCABULARY**, which is what makes the rest of this
+possible rather than a second system beside the first: a PO line's `expense_category` and a
+typed row's `category` both go through `storeCategory(db, …, 'accounting')`, onto the same
+tenant list §87 part two created. The category is the join between what somebody is typing
+and what a PO line would post.
+
+### PART ONE — THE FREE-TEXT LINE (built 2026-09-13)
+
+**A LINE THAT NAMES NEITHER CATALOGUE, TYPED IN THE PICKER.** The picker's last row now
+offers to order what was typed; taking it adds a line carrying its own name, unit, price and
+**expense category**, and no id. It is the last row and never the first — a buyer searching
+"chair" wants the chair they already stock if there is one, and offering to invent a second
+one above it is how a catalogue grows duplicates. *No match* still says so when nothing
+matched.
+
+**IT JOINS NO CATALOGUE, DELIBERATELY.** An id is what makes a line move stock or write a
+price back. This line carries neither, so it does exactly one thing: it puts a named cost on
+an order that can be sent to a supplier, received, matched against a 发票 and posted to the
+books. Making a `store_products` record for an office chair to get the same effect would
+leave a chair on the shelf report forever.
+
+**THE CATEGORY IS THE POINT OF IT.** A product line defaults to `门店进货 Retail stock` and a
+material line takes `ingredients.accounting_category`; a typed line has no master record to
+take one from, so the buyer picks from the tenant's own list. Left blank it falls to the
+poster's `COALESCE` default — stated here rather than discovered later: that is right for a
+shelf and wrong for a chair, and a buyer who skips the field is still no worse off than the
+Finance row this replaces.
+
+**THE NAME IS REFUSED WHEN IT IS ABSENT.** `po_line_items.name_en` is NOT NULL and
+`insertLineItems` satisfied that with `item.name_en || ''`, so a blank line would have saved
+and then appeared on the order, on the receive screen and on the printed sheet as a quantity
+and a price with no subject. `lineUnnamed` refuses it on create and on edit alike, as
+`name_required` — a code `01-core.js` already renders bilingually. **A CATALOGUE LINE IS NOT
+HELD TO THIS**: its name comes off its master record, and a product whose own name is blank
+is that record's problem rather than something to refuse a purchase order over.
+
+**THE UNIT IS EDITABLE HERE AND NOWHERE ELSE.** Nothing but the buyer knows whether the
+gloves are bought by the box or the pair. A MATERIAL line's unit stays `ingredients.buy_unit`
+and does not become editable alongside it: `firePriceAlertsForPO` refuses to write back a
+price whose line unit does not match, so an editable unit there would silently kill the price
+history §86 part four rests on.
+
+### PART TWO — THE QUESTION ON THE EXPENSE FORM (decided, not yet built)
+
+On money out, one question before the row is saved: **is this something ordered from a
+supplier?** *Yes* seeds a Draft PO from the typed values and opens it; *no* writes the typed
+row exactly as today. **The answer is stored on the CATEGORY**, so rent is asked about once,
+ever, and ingredients are asked about once, ever.
+
+**NOTHING IS PRE-MARKED, AND THAT IS §36's RULE HOLDING.** "An empty list cannot offer a
+wrong option" was written after a dropdown of four inherited kitchen categories produced the
+¥152,309 mis-filing. A shipped goods/not-goods default would be that dropdown again, one
+field further in: mark the list wrong and the app nags about rent every month or waves an
+ingredient order through in silence. Learning the flag from the answer has no wrong default
+to ship, and Settings can still flip it where `is_operating` already lives.
+
+### PART THREE — STAFF CLAIMS KEEP THEIR OWN DOOR
+
+§87 is explicit that a claim is money **already out of a pocket**. There is nothing to order
+and nothing to receive: a cook buying ginger at the market made a spot purchase, not an
+order, and routing it through Purchasing would invert the workflow §87 built. The claim path
+is untouched here. If the day comes that it needs covering, the honest shape is attaching an
+approved claim to an **existing** PO, and that is its own decision.
+
+### THE BEHAVIOUR CHANGE THIS ACCEPTS, STATED RATHER THAN DISCOVERED
+
+**A typed row is in the books the moment it is saved; a purchase order posts nothing until
+somebody presses Order** — `postRetailPOExpenses` is postable on `['Ordered','Delivered']`
+and wipes its rows when the PO drops back to Requested. So routing a purchase into a draft
+moves that money out of the month's figures until the buyer places it. That is correct, and
+it is also how a cost goes quietly missing, which is the whole reason Part Two opens the
+draft instead of filing it: the person who typed the cost is standing in front of the order
+that replaced it. Posting early to keep the figure would put money in the books that nobody
+has committed to spend, and that is worse.
+
+### THE CAPABILITY THAT MAKES THIS A NUDGE AND NEVER A REFUSAL
+
+Typing a ledger row is `finance:record`; creating a purchase order is `purchasing:edit`.
+**A bookkeeper may hold the first and not the second.** A hard block on typing a goods
+expense would strand them with a cost in hand, no route to record it, and nothing on screen
+explaining why — the exact failure §36 names when it refuses to gate the add control. Hence
+Ash's own *"unless the user specifically say it's not"*: the question always has a second
+answer, and taking it is never punished.
+
+### Rejected
+
+**A HARD REFUSAL ON THE EXPENSE FORM.** See the capability note above, and §36's rule about
+controls that vanish without saying why.
+
+**A SEEDED "GOODS" FLAG ON THE CATEGORY LIST.** Considered because it is the obvious shape
+and needs no prompting at all. Refused twice over: shipped ON it nags every rent payment
+until somebody configures it, shipped OFF it never fires and the rule quietly does not exist,
+and either way it is a list that offers a wrong option before anybody has answered anything.
+
+**CREATING A CATALOGUE RECORD FOR THE TYPED ITEM.** A desk chair in `store_products` is a
+desk chair on the shelf report, in the low-stock suggestions and in every channel sync that
+reads the catalogue. The line exists precisely so that a one-off purchase does not have to
+become a permanent product.
+
+**MERGING TYPED LINES THAT READ ALIKE.** Two products with one id are one line by
+definition; two typed lines reading "Repair" are two repairs, and folding them would silently
+lose one of the two prices.
+
+### What this does NOT decide
+
+**Whether an approved staff claim can be attached to an existing purchase order.** Part
+three's note is the shape it would take, not a ruling that it will be built.
+
+**What happens to a draft nobody goes back to.** Part two lands the buyer in the draft, which
+is the answer for the moment it is created. A draft ageing surface is a Purchasing question
+and nothing yet asks for one.
+
+**Whether equipment is an operating expense at all.** `categories.is_operating` already
+carries that answer per category and it is the tenant's to give.
+
+### Tests
+
+`scripts/test_retail_po_typed_line.js`, **33 cases**, the sibling of
+`test_retail_po_material_line.js` and on its harness: the real retail router,
+`routes/purchases.js` real, `lib/inventory.js` stubbed but RECORDING — "a typed line never
+touches stock" is a claim about a call that must NOT happen, and an absence is only provable
+against a record of what did.
+
+It asserts that a PO accepts a line naming neither catalogue and keeps its two name halves
+apart; that a nameless one is refused `name_required` with nothing written, that a name of
+spaces is refused too, and that a **product** line with a blank name is still accepted; that
+the same refusal guards an edit and leaves the stored line untouched; that placing the order
+posts the line under **its own** category rather than `门店进货 Retail stock`, and that a
+blank category falls to that default; that receiving records the arrival and calls
+`adjustStock` never; and that a product line on the same order still moves stock, because the
+skip is per LINE.
+
+**IT PASSES 25 OF ITS 33 CASES AGAINST THE CODE BEFORE THIS CHANGE, and that is the finding
+rather than a weak suite**: everything but the name guard was already true of
+`po_line_items`. What was missing was never the storage.
+
+`scripts/test_wizard_typed_line.js`, **31 cases**, is the half the server suite cannot see —
+the door itself. On `test_wizard_line_supplier.js`'s VM sandbox, reading the HTML back out of
+the DOM stub rather than asserting against what we meant to render: that the picker offers
+the row and offers it LAST, that taking it builds a line with no ids and the name split into
+halves, that a typed line gets the three fields only it may have while a product line and a
+material line get none of them, that the category menu is the tenant's own list, and that a
+pick LANDS ON THE LINE — an input's value set from script leaves its dirty flag clear, so
+without `commit` the pick would sit on screen and die at the next repaint. It cannot even
+load against the old code: `puPickTyped` does not exist there.
+
+`npm run test:fast` 219 passed, 0 failed. **No new Chinese**: every label added reuses a live
+pair — `添加`, `无匹配`, `名称`, `分类`, `采购单位`, and `name_required`'s own sentence from
+`01-core.js`. No schema, no migration, no new route, no new capability, and no change to
+`.gitignore` or CI.

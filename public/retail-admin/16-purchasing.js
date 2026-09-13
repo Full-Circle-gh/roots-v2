@@ -98,6 +98,7 @@
   let _pos = [];             // PO header rows
   const _prodCache = {};     // storeId → stock rows (picker + suggestions)
   let _matCache = null;      // materials list (not store-scoped — one cache)
+  let _expCats = null;       // the tenant's accounting categories, for typed lines
   let _hist = {};            // store_product_id → last-paid, for the open PO
   const _supCache = {};      // store_product_id → { suppliers[], last } price list
   let _pickP = null;         // product the supplier popover is open for
@@ -307,6 +308,25 @@
       _matCache = (r.data || []).filter(m => m.is_active);
     }
     return _matCache;
+  }
+  // The tenant's own expense categories, for the category box a TYPED line
+  // carries. Same endpoint the Materials form's Finance-category field reads —
+  // active rows only, names only — rather than a second one beside it, because
+  // a line and a material that disagreed about what the list holds would file
+  // the same purchase under two names. `storeCategory` snaps whatever is typed
+  // onto this list at write either way; the menu only saves retyping it.
+  //
+  // AN EMPTY LIST IS AN ANSWER, not a failure: §36 ships it empty and a tenant
+  // that has not made one gets a plain free-text box, which is what the field
+  // was before the list existed.
+  async function expenseCategories() {
+    if (!_expCats) {
+      try {
+        const r = await api('/api/retail-admin/materials/meta/accounting-categories');
+        _expCats = r.data || [];
+      } catch (_) { return []; }   // the box stays free text; nothing is blocked
+    }
+    return _expCats;
   }
   // The per-product supplier price list (who sells it, what we paid last time).
   // Cached per product; a product never bought before returns { suppliers: [] }.
@@ -1068,6 +1088,12 @@
       </div>`;
     renderLines();
     renderSuggestions();
+    // Warm the category list the typed lines' boxes read. Fire-and-forget and
+    // no repaint: nothing on screen is drawn FROM the list — the menu reads it
+    // when it opens, which is a click away at the earliest. Loaded here rather
+    // than when a typed line is added, so a draft REOPENED with typed lines
+    // already on it has the same menu as the session that created them.
+    expenseCategories();
   }
 
   async function renderSuggestions() {
@@ -1126,10 +1152,48 @@
       const supBlock = `<div class="pu2-supline"><span class="pu2-supchip${supOpen ? ' on' : ''}" onclick="puLineSup(${i})">${supLabel} <span class="swap">▾</span></span></div>`;
       const noteBlock = `<input class="pu2-input pu2-linenote" type="text" value="${esc(it.note || '')}"
         placeholder="${esc(T('Note', '备注'))}" onchange="puLine(${i},'note',this.value)">`;
+      // A TYPED LINE — neither catalogue behind it — is the one line whose name,
+      // unit and expense category are the buyer's to write, because there is no
+      // master record holding them. A product's name comes off `store_products`
+      // and a material's unit MUST stay `ingredients.buy_unit` (the price
+      // write-back refuses a line whose unit does not match it), so neither is
+      // editable here and neither becomes so.
+      const typed = !it.store_product_id && !it.ingredient_id;
+      const nameBlock = typed
+        ? `<input class="pu2-input pu2-linename" type="text" value="${esc([it.name_en, it.name_cn].filter(Boolean).join(' '))}"
+             placeholder="${esc(T('Name', '名称'))}" aria-label="${esc(T('Name', '名称'))}"
+             onchange="puLineName(${i},this.value)">`
+        : `${matBadge(it)}${nameLabel(it)}${it.sku ? `<div class="sub pu2-mono">${esc(it.sku)}</div>` : ''}`;
+      // The category box, and it is the reason a typed line is worth having at
+      // all: it is what decides which line of the Finance breakdown this cost
+      // lands on. Free text with the tenant's own list behind it — the same
+      // shape and the same list as the Materials form's Finance-category field,
+      // and `storeCategory` snaps whatever is typed onto that list on write.
+      // What the box SHOWS is what gets stored, never one language half of it:
+      // saving a half would mint a second spelling of a category that already
+      // exists, which is the exact drift lib/category-text.js exists to stop.
+      const catBlock = typed
+        ? `<span class="pu2-suggestwrap pu2-linecat">
+             <input class="pu2-input" type="text" id="pu2-cat-${i}" value="${esc(it.expense_category || '')}" autocomplete="off"
+               role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="pu2-suggest-menu"
+               placeholder="${esc(T('Category', '分类'))}" aria-label="${esc(T('Category', '分类'))}"
+               onfocus="puSuggestOpen('pu2-cat-${i}','expcats')" oninput="puSuggestOpen('pu2-cat-${i}','expcats')"
+               onkeydown="puSuggestKey(event,'pu2-cat-${i}','expcats')" onblur="puSuggestBlur('pu2-cat-${i}')"
+               onchange="puLine(${i},'expense_category',this.value)">
+             <button type="button" class="pu2-suggestcaret" tabindex="-1" aria-hidden="true"
+               onmousedown="puSuggestToggle(event,'pu2-cat-${i}','expcats')">${I.chevDown}</button>
+           </span>`
+        : '';
+      const unitBlock = typed
+        ? `<select class="pu2-costunit pu2-unitsel" aria-label="${esc(T('Buy unit', '采购单位'))}"
+             onchange="puLine(${i},'unit',this.value)">${
+             Object.keys(PO_UNIT_CN).map(u => `<option value="${esc(u)}"${(it.unit || 'pcs') === u ? ' selected' : ''}>${esc(unitLabel(u))}</option>`).join('')
+           }</select>`
+        : `<span class="pu2-costunit">/${esc(unitLabel(it.unit || 'pcs'))}</span>`;
       return `<tr ondragover="puLineDragOver(event,${i})" ondragleave="puLineDragLeave(event)" ondrop="puLineDrop(event,${i})" ondragend="puLineDragEnd()">
         <td class="pu2-c-grip"><span class="pu2-grip" draggable="true" title="${esc(T('Drag to reorder', '拖动排序'))}" ondragstart="puLineDragStart(event,${i})">⠿</span></td>
-        <td>${matBadge(it)}${nameLabel(it)}${it.sku ? `<div class="sub pu2-mono">${esc(it.sku)}</div>` : ''}
-          ${supBlock}${noteBlock}</td>
+        <td>${nameBlock}
+          ${supBlock}${catBlock}${noteBlock}</td>
         <td class="right pu2-num" style="color:var(--td-text2)">${it.current_stock != null ? it.current_stock : '—'}</td>
         <td>
           <span class="pu2-qty">
@@ -1139,7 +1203,7 @@
           </span>
         </td>
         <td class="right">
-          <span class="pu2-costwrap">${esc(cur())}<input type="number" min="0" step="0.01" class="pu2-cost pu2-num" value="${esc(it.cost_per_unit ?? 0)}" onchange="puLine(${i},'cost_per_unit',this.value)"><span class="pu2-costunit">/${esc(unitLabel(it.unit || 'pcs'))}</span></span>
+          <span class="pu2-costwrap">${esc(cur())}<input type="number" min="0" step="0.01" class="pu2-cost pu2-num" value="${esc(it.cost_per_unit ?? 0)}" onchange="puLine(${i},'cost_per_unit',this.value)">${unitBlock}</span>
           ${lastPaid(it)}
         </td>
         <td class="right pu2-num">${money(lineTotal)}</td>
@@ -1293,7 +1357,8 @@
   window.puPickerInput = function () {
     clearTimeout(_pickT);
     _pickT = setTimeout(async () => {
-      const q = (document.getElementById('pu2-picker')?.value || '').toLowerCase().trim();
+      const qRaw = (document.getElementById('pu2-picker')?.value || '').trim();
+      const q = qRaw.toLowerCase();
       const list = document.getElementById('pu2-picker-list');
       if (!list) return;
       if (!q) { list.style.display = 'none'; return; }
@@ -1307,7 +1372,29 @@
         ...prodHits.map(p => `<div class="pu2-pick" onclick="puPick(${p.product_id})">${nameLabel(p)}<span class="sub pu2-mono">${esc(p.sku || '')} · ${esc(T('stock', '库存'))} ${p.physical_qty}</span></div>`),
         ...matHits.map(m => `<div class="pu2-pick" onclick="puPickMaterial(${m.id})">${matBadge({ ingredient_id: m.id })}${nameLabel(m)}<span class="sub pu2-mono">${esc(m.sku || '')}</span></div>`),
       ];
-      list.innerHTML = rows.length ? rows.join('') : `<div class="pu2-pick muted">${esc(T('No match', '无匹配'))}</div>`;
+      // NOT IN EITHER CATALOGUE IS NOT THE END OF THE SEARCH. A box of gloves, a
+      // desk chair, a deposit on a fridge: things this tenant buys from a
+      // supplier and will never make a product or a material record for. Until
+      // now the list ended at "No match", so the only way to get such a purchase
+      // into the books was to type it straight into Finance as an expense — no
+      // supplier on it, no receiving, no 发票 to match, and nothing to return it
+      // against. The line the order actually needs has always been storable
+      // (`po_line_items` with neither id — see lineUnnamed in
+      // routes/retail-purchasing.js); this row is what produces one.
+      //
+      // IT IS THE LAST ROW, NEVER THE FIRST. A buyer searching "chair" wants the
+      // chair they already stock if there is one; offering to invent a second
+      // one above it is how a catalogue grows duplicates. "No match" still says
+      // so when nothing matched — that is information, and it is what tells the
+      // buyer the row below is the only thing on offer rather than one option
+      // among several.
+      //
+      // The typed text is read off the box by puPickTyped rather than passed
+      // through this attribute: a name with a quote in it would otherwise end
+      // the onclick early, and a name is the one field here that is free text.
+      const typedRow = `<div class="pu2-pick pu2-pick-typed" onclick="puPickTyped()">`
+        + `${esc(T('Add', '添加'))} “${esc(qRaw)}”</div>`;
+      list.innerHTML = (rows.length ? rows.join('') : `<div class="pu2-pick muted">${esc(T('No match', '无匹配'))}</div>`) + typedRow;
       list.style.display = '';
     }, 150);
   };
@@ -1344,6 +1431,62 @@
     const pl = document.getElementById('pu2-picker-list');
     if (pl) pl.style.display = 'none';
     addOrSetMaterialLine(m);
+  };
+
+  // A LINE FOR SOMETHING THAT IS NOT IN A CATALOGUE, AND DELIBERATELY DOES NOT
+  // JOIN ONE. Picking a product or a material carries an id, and that id is what
+  // makes the line move stock or write a price back. This line carries neither,
+  // so it does exactly one thing: it puts a named cost on the order, where it can
+  // be sent to a supplier, received, matched against a 发票 and posted to the
+  // books under its own expense category. That is the whole of what an office
+  // chair needs, and adding it to the product catalogue to get it would leave a
+  // chair on the shelf report forever.
+  //
+  // THE NAME SPLITS THE WAY A SUPPLIER'S DOES. "Desk chair 办公椅" typed as one
+  // string is two halves to every screen here, and supSplit is already the rule
+  // for finding them. A name in one language only goes whole into `name_en` and
+  // leaves `name_cn` empty — NOT into both, which would render as
+  // "Chair · Chair" through nameLabel.
+  function typedNameHalves(text) {
+    const half = supSplit(text);
+    return half.en === half.cn
+      ? { name_en: String(text).trim(), name_cn: null }
+      : { name_en: half.en, name_cn: half.cn };
+  }
+  window.puPickTyped = function () {
+    if (!_edit) return;
+    const pk = document.getElementById('pu2-picker');
+    const text = (pk?.value || '').trim();
+    if (!text) return;
+    if (pk) pk.value = '';
+    const pl = document.getElementById('pu2-picker-list');
+    if (pl) pl.style.display = 'none';
+    // NOT DE-DUPLICATED against the lines already on the order, unlike a product
+    // pick. Two products with one id are one line by definition; two typed lines
+    // reading "Repair" are two repairs, and merging them would silently lose one
+    // of the two prices.
+    _edit.items.push({
+      store_product_id: null, ingredient_id: null,
+      ...typedNameHalves(text), sku: null,
+      qty: 1, unit: 'pcs', cost_per_unit: 0,
+      // EMPTY, NOT 门店进货 Retail stock. That default is right for a product
+      // coming off a shelf and wrong for everything this line exists to carry —
+      // and the poster applies it anyway when the field is left blank
+      // (postRetailPOExpenses' COALESCE), so a buyer who does not pick one is no
+      // worse off than the old typed-into-Finance row, while one who does gets
+      // the cost filed where they meant it.
+      expense_category: '', purchase_channel: '',
+      current_stock: null, supplier_name: _edit.supplier || '', note: '',
+    });
+    _lineSort = null;
+    renderLines();
+  };
+  // Editing a typed line's name re-splits it, so a name corrected from English
+  // into both languages starts showing both.
+  window.puLineName = function (i, text) {
+    if (!_edit || !_edit.items[i]) return;
+    Object.assign(_edit.items[i], typedNameHalves(text));
+    renderLines();
   };
 
   // Add the line if new, or just retarget its supplier + price if it's already
@@ -1670,6 +1813,15 @@
     if (_wstep === 1 && !grabStep1()) return null;
     const body = wizBody();
     if (!body.items.length) { toast(T('Add at least one product', '请先添加商品'), 'err'); return null; }
+    // A TYPED LINE WITH ITS NAME RUBBED OUT. The server refuses this too
+    // (lineUnnamed in routes/retail-purchasing.js — it is the rule, and this is
+    // not a second one beside it): the same code is asked for the same sentence
+    // here, so the buyer is told before the round trip rather than after it.
+    if (body.items.some(it => !it.store_product_id && !it.ingredient_id
+        && !String(it.name_en || '').trim() && !String(it.name_cn || '').trim())) {
+      toast((typeof tdErrorText === 'function') ? tdErrorText('name_required', null) : 'name_required', 'err');
+      return null;
+    }
     let id = _edit.id;
     if (id) await api('/api/retail-admin/purchases/' + id, { method: 'PUT', body });
     else { const r = await api('/api/retail-admin/purchases', { method: 'POST', body }); id = r.id; }
@@ -3895,6 +4047,27 @@
     },
     linesuppliers: {
       rows: () => bookSuggestRows(lineSupExtras()),
+    },
+    // The tenant's expense categories, for a typed line's category box. The
+    // halves are split the way every finance category is split for reading
+    // (catLabel), so the menu shows one language while the VALUE stays the whole
+    // stored string — which is what `commit` writes and what the box shows.
+    //
+    // `commit` is what makes the pick stick. Setting an input's value from script
+    // leaves its dirty flag clear, so the `onchange` that would normally store it
+    // never fires — the value would sit on screen and be lost on the next
+    // repaint. The line is found from the input's own id because the menu is
+    // addressed by field, not by row; `_sugFor` is still set when this runs
+    // (puSuggestPick commits before it closes).
+    expcats: {
+      rows: () => (_expCats || []).map(name => {
+        const half = supSplit(name);
+        return { v: name, en: half.en, cn: half.cn };
+      }),
+      commit: (v) => {
+        const m = /^pu2-cat-(\d+)$/.exec(_sugFor || '');
+        if (m && _edit && _edit.items[+m[1]]) _edit.items[+m[1]].expense_category = v;
+      },
     },
   };
   const puSuggestOpts = key => (PU_SUGGEST_DYN[key] ? PU_SUGGEST_DYN[key].rows() : (PU_SUGGEST[key] || []));
