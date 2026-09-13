@@ -478,6 +478,77 @@ function finCatBody() {
   return FIN_CAT.rows.map(finCatRow).join('');
 }
 
+/* ── The name of a revenue channel ─────────────────────────────────────────
+   EVERY PAIR IS COPIED FROM A LIVE ONE, none composed — the standing rule's
+   first preference, and the cheapest exercise of the 2026-09-06 delegation is
+   not to use it. The sources, all in this same admin surface:
+
+     wechat / web / meituan / eleme / gzgrocery — `csName` (01-core.js), the
+       Sales-page channel control, which is the closest sibling there is: it
+       names these same channels for the same operator two screens over.
+     manual / shop — `DASH_CHAN_SHORT` (03-dashboard.js), which names the
+       channel on an order.
+
+   `Gzgrocery` HAS NO SECOND HALF, and that is how it is live: the wholesale
+   partner's name is the same word in both languages, and `csName` carries it
+   as a bare string rather than a pair for exactly that reason. Pairing it with
+   a transliteration here would be composing one.
+
+   AN UNKNOWN KEY RENDERS AS ITSELF. A channel that starts writing before it is
+   named here gets a line carrying its own key rather than being folded into
+   somebody else's or dropped — the same fallback `payLabel` uses on Reports.
+   The row is inside a total that counted it, so it has to appear; an internal
+   word on screen is a smaller wrong than money with no line under it. */
+function finChannelLabel(key) {
+  return ({
+    wechat:    cuT('WeChat', '微信'),
+    web:       cuT('Web shop', '网页商店'),
+    meituan:   cuT('Meituan', '美团'),
+    eleme:     cuT('Eleme', '饿了么'),
+    gzgrocery: 'Gzgrocery',
+    manual:    cuT('Manual', '手动'),
+    shop:      cuT('Shop', '门店'),
+  })[key] || key;
+}
+
+/* ── The revenue disclosure ────────────────────────────────────────────────
+   The channels behind the top line, heaviest first, as the server ordered them.
+
+   PLAIN ROWS, NOT CONTROLS, AND THAT IS A DECISION RATHER THAN AN UNFINISHED
+   ONE. The expense lines below open because there is an endpoint behind each of
+   them that lists the ledger rows making it up; there is no such read for a
+   channel, and this file's own rule — stated on the expenses row and again on
+   the purchase-order row — is that a chevron which opens onto nothing is a
+   control that lies. So these carry no chevron, take no focus and offer no
+   hover cue: they render exactly as a breakdown line rendered before any of
+   them could be opened. If the orders behind a channel are ever wanted, they
+   get an endpoint first and a chevron second.
+
+   THE FIGURES ARE `finMoney`, whole yuan, like every other line of the
+   staircase and of the expense breakdown beside it. A breakdown line is one of
+   §36's figures; only what opens BELOW one renders to the fen.
+
+   THE MARKUP IS BUILT HERE RATHER THAN THROUGH `finRow`, and that is about
+   colour rather than taste. `finRow` stamps `.fin-input` on every row it makes,
+   and `#tab-finance .fin-row.fin-input .fin-lbl` outweighs
+   `#tab-finance .fin-breakdown .fin-lbl` on specificity — so a channel line
+   drawn that way came out in `--td-text` while the expense lines eight pixels
+   below it sat in `--td-text2`. Two breakdowns on one card in two different
+   greys, with nothing meant by the difference. `finBreakdown` builds its own
+   rows for the same reason; this follows it, down to the empty `.fin-sign`
+   span, which is the middle of the three grid columns the figures line up on
+   and holds the column open with nothing in it. */
+function finRevBreakdown(rows) {
+  if (!rows || !rows.length) return '';
+  return '<div class="fin-breakdown">'
+    + rows.map(r => '<div class="fin-row">'
+        + `<span class="fin-lbl">${escapeHtml(finChannelLabel(r.channel))}</span>`
+        + '<span class="fin-sign"></span>'
+        + `<span class="fin-fig">${escapeHtml(finMoney(r.amount))}</span>`
+        + '</div>').join('')
+    + '</div>';
+}
+
 /** The operating-expense disclosure. Open by default.
 
     EACH LINE IS NOW A CONTROL. `all` is the unfiltered breakdown array, so a row
@@ -567,20 +638,48 @@ function finRender() {
   if (!host || !FIN_DATA) return;
   const d = FIN_DATA;
 
+  const revLabel = cuT('Revenue', '营收');
   const expLabel = cuT('Operating expenses', '营业费用');
   // The disclosure shows the OPERATING half only, because it is the disclosure
   // ON the operating-expenses row: a line inside it that the figure above did
   // not include would be a breakdown that does not add up to its own total.
   const breakdown = finBreakdown(finOperating(d.expense_breakdown), d.expense_breakdown);
   const excluded = finNonOperating(d.expense_breakdown);
+  // The channels behind the top line. Empty on a period with no paid orders,
+  // and on a payload from a server that predates the field — in both cases the
+  // row falls back to the plain one it has always been, which is the same rule
+  // the expenses row below follows and for the same reason.
+  const revBreakdown = finRevBreakdown(d.revenue_breakdown);
 
   host.innerHTML = '<div class="fin-card"><div class="fin-body">'
     // Line 1 — Revenue. Every channel the order record carries, gzgrocery
     // included, wallet top-ups excluded (§36).
-    + finRow(cuT('Revenue', '营收'), finMoney(d.revenue))
+    //
+    // A DISCLOSURE, LIKE THE EXPENSES ROW, AND OPEN LIKE IT. The two are the
+    // card's only figures with something behind them, they are the same kind of
+    // thing — a total and the lines that make it up — and a reader who found
+    // one of them openable and the other not would have to learn which is
+    // which. Open by default for the reason that one is: the breakdown is the
+    // answer to the question the total raises, and a card that hides it behind
+    // a click asks the operator to guess that there is anything there.
+    //
+    // NO MINUS IN THE SIGN COLUMN. Revenue is the step the staircase starts
+    // from, not a deduction from anything above it, so the `<span class=
+    // "fin-sign">` stays empty exactly as `finRow` would have left it.
+    //
+    // A PLAIN ROW WHEN THERE IS NOTHING TO OPEN — a period with no paid orders
+    // has no channels, and a chevron over an empty list is the control that
+    // lies about having content behind it.
+    + (revBreakdown
+      ? '<details class="fin-exp" open><summary>'
+        + `<span class="fin-lbl"><span class="fin-chev">&#9656;</span>${escapeHtml(revLabel)}</span>`
+        + '<span class="fin-sign"></span>'
+        + `<span class="fin-fig">${escapeHtml(finMoney(d.revenue))}</span>`
+        + `</summary>${revBreakdown}</details>`
+      : finRow(revLabel, finMoney(d.revenue)))
     // Tax collected (audit I-03), and ONLY where a shop has charged some: the
     // block is null otherwise, so nothing about this screen changes for a shop
-    // that charges none. It renders directly under revenue because that is
+    // that charges none. It sits with revenue because that is
     // where it lives — on a shop that adds tax at checkout the customer paid it
     // to the shop and the shop owes it on, so it is inside the figure above and
     // is not the merchant's money. Net of what has been handed back with
@@ -592,6 +691,15 @@ function finRender() {
     // subtracts the tax. A "−" would make the column stop adding up, which §36
     // treats as the worst thing a figure on this card can do. It is a note
     // about the line above it, and reads as one.
+    //
+    // IT STAYS OUTSIDE REVENUE'S DISCLOSURE, which now sits between the two.
+    // Inside, it would be a line in a list whose whole contract is that the
+    // lines add up to the figure above them — and this one does not, because it
+    // is already inside it. It would also close with the disclosure, and §36 is
+    // plain that a report showing revenue without showing this is one somebody
+    // pays their own tax out of. So it stays a sibling of the revenue row: under
+    // the channels when they are open, directly under revenue when they are
+    // not, and never hidden by either.
     + (d.tax
       ? finRow(cuT('of which tax', '其中税费'), finMoney(d.tax.net))
       : '')

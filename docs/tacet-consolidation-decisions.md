@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.238
+# Tacet shared-core consolidation — decisions record, v4.239
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-13 · v4.239 — **§110 DECIDED AND BUILT: REVENUE UNFOLDS ONTO THE CHANNELS BEHIND IT, THE WAY OPERATING EXPENSES ALREADY UNFOLDS ONTO ITS CATEGORIES.** Reported from the card with the Summary screenshot attached — Operating expenses open onto eleven category lines, Revenue a single ¥129,246 with nothing under it: *"just like the expenses can unfold and show information, revenue should do the same, it should be able to unfold and show each revenue channel and amount of each."* **THE BREAKDOWN IS THE HEADLINE'S OWN READ WITH A `GROUP BY` ADDED, AND THE HEADLINE IS NOW FOLDED OUT OF IT** rather than summed beside it — the shape `expense_entries` already uses in this same handler, adopted here for the reason stated there: two queries over one set is two places the arithmetic is done, and the day they disagree the card shows a total its own disclosure contradicts. `revenue` is summed in MINOR UNITS across the grouped rows and converted once (`money.fromMinor`), so the lines equal the figure by construction; a test asserts the route holds exactly ONE `SUM(total)`. **THE CHANNEL IS THE ORDER RECORD'S OWN COLUMN**, folded the one way this product folds it — `COALESCE(NULLIF(channel,''),'wechat')`, which is `/api/retail-admin/order-channel-counts`'s expression verbatim and the Sales summary's beside it (both `routes/retail.js`). A mini-app order predating the column carries NULL and every screen that counts channels already reads that as the mini app; a *Not recorded* bucket here would put Finance at odds with the chips on the orders list over the very same rows. Unlike the expense category beneath it, this column is not free text a human typed. **IT IS DELIBERATELY NOT THE SALES PAGE'S SIX BUCKETS.** That page splits counter sales out on `fulfillment_type='counter'` and takes gzgrocery's revenue from `retail_stock_ledger` through `guanyiPickupSales()` — the ledger fold §36 exists to avoid — so borrowing its partition would put a gzgrocery line on this card that is not the one inside the total above it. A till sale carries `channel='manual'` and lands on the Manual line, which is what the order record says it is. **FLAGGED, NOT FIXED:** an operator who wants counter takings on their own line here is asking for a second dimension, and that is a decision, not a tidy-up. **NO DRILL-DOWN, AND THAT IS A DECISION RATHER THAN AN UNFINISHED ONE.** The expense lines open because an endpoint lists the ledger rows behind each; there is no such read for a channel, and this screen's own standing rule — stated on the expenses row and again on the purchase-order row — is that a chevron which opens onto nothing is a control that lies. The channel lines are therefore plain rows: no chevron, no focus, no hover cue. If the orders behind a channel are ever wanted, they get an endpoint first and a chevron second. **A REAL PRESENTATION BUG CAUGHT BEFORE IT SHIPPED**: built through `finRow`, the channel lines came out in `--td-text` while the expense lines eight pixels below sat in `--td-text2`, because `#tab-finance .fin-row.fin-input .fin-lbl` outweighs `#tab-finance .fin-breakdown .fin-lbl` on specificity — two breakdowns on one card in two greys with nothing meant by the difference. The rows are built inline, as `finBreakdown` already builds its own, and a case pins it. **THE TAX LINE STAYS OUTSIDE THE DISCLOSURE**: inside, it would be a line in a list whose whole contract is that the lines add up to the figure above them, and it does not — it is already inside it — and it would close with the disclosure, which §36 forbids in terms. **NO NEW CSS.** `.fin-breakdown` and `details.fin-exp` already style exactly this. **Chinese: nothing composed.** All seven channel names are copied live pairs — `WeChat · 微信`, `Web shop · 网页商店`, `Meituan · 美团`, `Eleme · 饿了么` from `csName` (`01-core.js`), `Manual · 手动` and `Shop · 门店` from `DASH_CHAN_SHORT` (`03-dashboard.js`) — and `Gzgrocery` keeps the bare single-language form it has at its source, because pairing it with a transliteration would be composing one. A case re-reads both source files and fails if a pair stops being live there. An unknown channel key renders as itself rather than being folded or dropped: the row is inside a total that counted it, and an internal word on screen is a smaller wrong than money with no line under it. **Tests:** `scripts/test_finance_summary.js` 67 → **83 cases** — a second fixture for the revenue query (the NULL and empty-string spellings folding onto one WeChat line, gzgrocery's mirror rows, an unknown key, unpaid / refunded / out-of-window orders absent, heaviest first, and the lines summing to the headline exactly), plus the screen half (the disclosure, the plain-row fallback on an empty or absent field, the empty sign column, both disclosures open by default, the live-pair provenance and the `.fin-input` regression). `npm run test:fast` 216 passed, 0 failed; `npx eslint` 0 errors on the three changed files; `node scripts/check-doc-numbering.js` PASS. Code, tests and this record; no schema, no migration, no new route, no new capability, no new Chinese, no CSS, and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.238 — **§109 DECIDED AND BUILT: AN APPROVER CAN SEE THE RECEIPT THEY ARE APPROVING.** Reported live, from a Finance → Approvals screenshot: two waiting claims, one showing its photo, the other reading *Could not read that photo.* Asked in chat and confirmed by Ash: *"make the picture visible."* **THE ROUTE WAS NOT BROKEN — IT WAS ANSWERING A DIFFERENT QUESTION THAN THE ONE THE SCREEN ASKS.** `GET /staff-expenses/:id/receipt` matched `WHERE id = ? AND submitted_by IS ?`, bound to the CALLER's own id — correct for a submitter looking at their own history, and silently wrong for `/pending`'s approver, who is by definition looking at claims `submitted_by` someone else. Every claim on the Approvals screen that was not the approver's own self-submission failed this way; the control (§87-era, `22-finance.js`) already said so on purpose rather than looking broken, which is why nobody had filed it as a crash. **THE FIX SPLITS THE PREDICATE FROM THE GATE, AND REUSES IT.** `requireApprover` already existed (`routes/staff-expenses.js`, gating `/pending` and `/decide` on `req.backendUser.role === 'owner' || req.caps.has('expenses:approve')`) — its body is now `isApprover(req)`, a plain predicate, with `requireApprover` reduced to that predicate turned into a 403. The receipt route asks the same predicate and branches the query on it: an approver's request drops the `submitted_by` filter and matches on `id` alone; anyone else keeps the exact original, narrower query — their own receipts, nobody else's. **THE OWNERSHIP TEST STAYS IN THE QUERY**, as the route's own header comment insists — it is just now one of two queries, chosen by the same fail-closed predicate `/pending` already trusts to decide who sees everybody's spending in the first place. No new capability: an approver already has `expenses:approve`, already sees the amount, the category and the claimant's name for a stranger's claim on `/pending` — the receipt was the one field that predicate did not yet reach. **Chinese: nothing composed.** The failure sentence (`Could not read that photo. · 无法读取该照片。`) is untouched and still fires on a genuinely missing receipt, a dropped connection or a stale id — it is not being removed, only stopped from firing on the one case that was never actually a failure. **Tests:** `scripts/test_staff_expenses.js`'s "the receipt route matches on the OWNER in the query" case is extended rather than replaced — the original submitted_by-scoped query still has to exist in the source, and a new assertion pins the approver branch and the shared `isApprover` predicate. `scripts/test_finance_approvals.js` gains its own case asserting the same. `npm run test:fast` 216 passed, 0 failed (unchanged file count — both new cases land inside existing suites); `npx eslint` 0 errors on the four changed files; `node scripts/check-doc-numbering.js` PASS; `node scripts/check-swallowed-errors.js` unaffected (456/456, unchanged). Code, tests and this record; no schema, no migration, no new route, no new capability, no new Chinese, and no change to `.gitignore` or CI.**
 
@@ -12025,3 +12027,174 @@ cases land inside existing suites). `npx eslint` 0 errors on
 scripts/check-swallowed-errors.js` unaffected — no catch block touched,
 456/456 against the standing budget. No schema, no migration, no new route,
 no new capability, no new Chinese, and no change to `.gitignore` or CI.
+
+## §110 — REVENUE UNFOLDS ONTO THE CHANNELS BEHIND IT
+
+**Decided by Ash, 2026-09-13**, from the Finance → Summary card with the
+screenshot attached: Operating expenses open onto eleven category lines under
+a ¥71,109 total, and Revenue sits above them as a single ¥129,246 with nothing
+behind it. **"just like the expenses can unfold and show information, revenue
+should do the same, it should be able to unfold and show each revenue channel
+and amount of each."**
+
+### The breakdown is the headline's own query, and the headline is folded out of it
+
+`routes/finance-summary.js` summed revenue once and grouped nothing:
+
+```sql
+SELECT COALESCE(SUM(total), 0) AS revenue, COUNT(*) AS orders
+  FROM retail_orders
+ WHERE <PAID> AND <odate> BETWEEN ? AND ?
+```
+
+It now groups, and the top line is the grouped rows added up rather than a
+second sum standing beside them:
+
+```sql
+SELECT COALESCE(NULLIF(channel, ''), 'wechat') AS channel,
+       COALESCE(SUM(total), 0) AS amount, COUNT(*) AS orders
+  FROM retail_orders
+ WHERE <PAID> AND <odate> BETWEEN ? AND ?
+ GROUP BY COALESCE(NULLIF(channel, ''), 'wechat')
+ ORDER BY amount DESC
+```
+
+**This is the shape the operating-expense block in the same handler already
+uses, and it is here for the reason stated there**: two queries over one set
+is two places the arithmetic is done, and the day they disagree the card shows
+a total its own disclosure contradicts. The rows are accumulated in MINOR UNITS
+and converted once (`money.fromMinor`), never by adding REAL yuan and rounding
+at the end — the residue `lib/finance-window.js`'s header records is exactly
+what a running total of REALs accumulates, and here it would accumulate into a
+figure the lines beneath it must equal. A case asserts the route holds **exactly
+one** `SUM(total)`; a second one is the failure this shape exists to prevent.
+
+The payload gains `revenue_breakdown`, one `{ channel, amount, orders }` per
+channel, heaviest first. Nothing else about the endpoint moves.
+
+### The channel is the order record's own column, folded the way this product folds it
+
+`COALESCE(NULLIF(channel, ''), 'wechat')` is not invented here. It is
+`/api/retail-admin/order-channel-counts`'s expression verbatim, and the Sales
+summary's beside it — both in `routes/retail.js`, both reading a mini-app order
+that predates the column (NULL) as the mini app.
+
+**A *Not recorded* bucket here would have been wrong in a way the expense
+breakdown's own null line is not.** That line exists because Finance stores
+expense category as raw free text a human typed, so inventing a name for the
+blank would put a second wrong name on a known-dirty column. `channel` is the
+opposite: it is written by the checkout from a known set, every screen in this
+admin that counts channels already folds the blank onto the mini app, and a
+seventh bucket here would put this card at odds with the chips on the orders
+list over the very same rows.
+
+### It is deliberately NOT the Sales page's six buckets
+
+The Sales page (`/api/retail-admin/sales/summary`) partitions differently, and
+copying it would have broken the one contract this feature has:
+
+* It splits counter sales out on `fulfillment_type='counter'`, a second
+  dimension, not a channel.
+* It takes gzgrocery's revenue from `retail_stock_ledger` through
+  `guanyiPickupSales()`. **Finance reads neither** — that ledger fold is the
+  thing §36 exists to avoid — so a borrowed gzgrocery line would not be the one
+  inside the total above it.
+
+So a till sale, written through the manual-order endpoint with
+`channel='manual'`, lands on the **Manual** line here. That is what the order
+record says it is. The rule is the expense breakdown's rule, applied to the
+other half of the card: **group what the total summed, and do not reshape it on
+the way out.**
+
+**FLAGGED, NOT FIXED.** An operator who wants counter takings on their own line
+on this card is asking for a second dimension inside a one-dimension breakdown.
+That is a decision, not a tidy-up, and it is Ash's. It is not made here.
+
+### No drill-down, and that is a decision rather than an unfinished one
+
+The expense lines open because `GET /finance/summary/category` lists the ledger
+rows behind each of them. There is no such read for a channel, and this screen's
+own standing rule — stated on the expenses row and again on the purchase-order
+row — is that **a chevron which opens onto nothing is a control that lies.** The
+channel lines are therefore plain rows: no chevron, no focus ring, no hover
+cue. If the orders behind a channel are ever wanted, they get an endpoint first
+and a chevron second.
+
+### The tax line stays outside the disclosure
+
+`of which tax` is a sibling of the revenue row, not a line inside it, and now
+renders under the channels when they are open and directly under revenue when
+they are not.
+
+Inside the disclosure it would be wrong twice: it would be a line in a list
+whose whole contract is that the lines add up to the figure above them, and it
+does not — it is already inside that figure — and it would close with the
+disclosure, when §36 is plain that a report showing revenue without showing
+this is one somebody pays their own tax out of.
+
+### A presentation bug caught before it shipped
+
+Built through `finRow`, the channel lines came out in `--td-text` while the
+expense lines eight pixels below them sat in `--td-text2`. `finRow` stamps
+`.fin-input` on every row it makes, and `#tab-finance .fin-row.fin-input
+.fin-lbl` outweighs `#tab-finance .fin-breakdown .fin-lbl` on specificity — two
+breakdowns on one card in two different greys, with nothing meant by the
+difference. `finRevBreakdown` builds its rows inline instead, as `finBreakdown`
+already builds its own, down to the empty `.fin-sign` span that holds the middle
+of the three grid columns the figures line up on. A case pins it, and pins that
+both selectors are still the ones that decide it.
+
+**No new CSS.** `.fin-breakdown` and `details.fin-exp` already style exactly
+this; the revenue row uses the same `<details class="fin-exp" open>` the
+expenses row does, and opens by default for the same reason — the two are the
+same kind of thing, and a reader who found one openable and the other not would
+have to learn which is which.
+
+### Chinese
+
+**Nothing composed.** All seven channel names are copied live pairs, which is
+the standing rule's first preference:
+
+| key | rendered | source |
+| --- | --- | --- |
+| `wechat` | `WeChat · 微信` | `csName`, `01-core.js` |
+| `web` | `Web shop · 网页商店` | `csName`, `01-core.js` |
+| `meituan` | `Meituan · 美团` | `csName`, `01-core.js` |
+| `eleme` | `Eleme · 饿了么` | `csName`, `01-core.js` |
+| `gzgrocery` | `Gzgrocery` | `csName`, `01-core.js` |
+| `manual` | `Manual · 手动` | `DASH_CHAN_SHORT`, `03-dashboard.js` |
+| `shop` | `Shop · 门店` | `DASH_CHAN_SHORT`, `03-dashboard.js` |
+
+`Gzgrocery` keeps the **bare single-language form it has at its source**: the
+wholesale partner's name is the same word in both languages, which is why
+`csName` carries it as a plain string rather than a pair, and pairing it with a
+transliteration here would be composing one. A case re-reads both source files
+and fails if any pair stops being live there, so a rename cannot leave two
+different words for one channel.
+
+**An unknown channel key renders as itself** — the same fallback `payLabel`
+uses on Reports. The row is inside a total that counted it, so it has to appear;
+an internal word on screen is a smaller wrong than money with no line under it.
+
+### Tests
+
+`scripts/test_finance_summary.js` 67 → **83 cases**, in two halves.
+
+The query half runs the **shipped** `revGrouped` SQL, sliced out of the route,
+against its own fixture — separate from §36's worked set, whose totals are
+quoted in the assertions around it and which the NULL and empty-string channels
+this needs would have moved. It asserts the lines sum to the headline exactly,
+that the two blank spellings fold onto one WeChat line, that gzgrocery's line is
+the mirror rows rather than the ledger, that an unknown key survives, that
+unpaid / refunded / out-of-window orders are absent from the channels as they
+are from the total, and that the heaviest channel is first.
+
+The screen half asserts the disclosure and its channel figures, that a channel
+line is not a control, the plain-row fallback on an empty or absent field, the
+empty sign column, both disclosures open by default, the live-pair provenance,
+and the `.fin-input` regression above.
+
+`npm run test:fast` 216 passed, 0 failed. `npx eslint` 0 errors on the three
+changed files. `node scripts/check-doc-numbering.js` PASS. Code, tests and this
+record; no schema, no migration, no new route, no new capability, no new
+Chinese, no CSS, and no change to `.gitignore` or CI.

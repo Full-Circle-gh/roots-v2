@@ -266,6 +266,105 @@ it('NO cutover date is live in the route, the screen, the window lib or the mark
   });
 });
 
+/* ── Revenue's own breakdown ───────────────────────────────────────────────
+   The top line now opens onto the channels behind it, and the whole contract is
+   that it ADDS UP: the disclosure is the headline's own query with a GROUP BY
+   added, so the lines equal the figure by construction rather than by agreement.
+   These read the SHIPPED expression out of the route, so an edit that replaces
+   it with a second sum — the failure this shape exists to prevent — fails here.
+
+   Its own fixture, deliberately. The one above is §36's worked set and its
+   totals are quoted in the assertions around it; the NULL and empty-string
+   channels this needs would move those numbers, and a case about folding two
+   spellings together does not belong inside a case about a timezone boundary. */
+const rdb = new Database(':memory:');
+rdb.exec(`
+  CREATE TABLE retail_orders (
+    id INTEGER PRIMARY KEY, status TEXT, channel TEXT, total REAL,
+    paid_at DATETIME, placed_at DATETIME, replacement_for_order_id INTEGER);
+`);
+[[1, 'paid', 'wechat', 1000], [2, 'paid', 'meituan', 400],
+ // The two spellings of "the mini app wrote no channel". They must land on ONE
+ // line: the payload maps both to the same key and the screen draws both as
+ // WeChat, so two lines would be two identical labels with different figures.
+ [3, 'paid', null, 250], [4, 'paid', '', 50],
+ [5, 'delivered', 'gzgrocery', 500],
+ // Counted by the headline, so it must have a line — even though this file has
+ // never heard of the key.
+ [6, 'paid', 'tiktok', 70],
+ // Neither of these is revenue, so neither may appear as a channel.
+ [7, 'pending_payment', 'wechat', 999], [8, 'refunded', 'wechat', 777],
+].forEach(([id, st, ch, t]) => rdb.prepare(
+  'INSERT INTO retail_orders (id,status,channel,total,paid_at,placed_at) VALUES (?,?,?,?,?,NULL)'
+).run(id, st, ch, t, '2026-08-10 03:00:00'));
+// One outside the window, to prove the group is windowed like the total.
+rdb.prepare("INSERT INTO retail_orders (id,status,channel,total,paid_at,placed_at) VALUES (9,'paid','wechat',5000,'2026-07-02 03:00:00',NULL)").run();
+
+/** The shipped revenue query, with its two predicates resolved. */
+function shippedRevenue() {
+  const m = ROUTE.match(/const revGrouped = db\.prepare\(`([\s\S]*?)`\)/);
+  assert.ok(m, 'the revenue query is no longer where the test reads it');
+  return m[1]
+    .replace(/\$\{PAID\}/g, PAID)
+    .replace(/\$\{odateFor\(sqlDayShiftForShop\(tdb\(\)\)\)\}/g, ODATE);
+}
+const revRows = rdb.prepare(shippedRevenue()).all(FROM, TO);
+
+it('the channel lines ADD UP to the revenue headline — one read, one total', () => {
+  // 1000 + 400 + 250 + 50 + 500 + 70 = 2270.
+  const sum = revRows.reduce((a, r) => a + r.amount, 0);
+  const head = rdb.prepare(
+    `SELECT COALESCE(SUM(total),0) AS r FROM retail_orders WHERE ${PAID} AND ${ODATE} BETWEEN ? AND ?`
+  ).get(FROM, TO).r;
+  assert.strictEqual(sum, 2270);
+  assert.strictEqual(sum, head, 'the breakdown must equal the figure it opens from');
+});
+
+it('the headline is FOLDED OUT of the grouped read, never summed beside it', () => {
+  // The route must hold exactly one SUM(total) over retail_orders. A second one
+  // is a second place the arithmetic is done, and the day the two disagree the
+  // card shows a total its own disclosure contradicts.
+  const sums = ROUTE_CODE.match(/SUM\(total\)/g) || [];
+  assert.strictEqual(sums.length, 1, 'revenue is being summed in more than one place');
+  assert.match(ROUTE_CODE, /const revenue = money\.fromMinor\(revMinor\)/,
+    'the headline must be the grouped read folded up, in minor units');
+});
+
+it('a NULL channel and an EMPTY one are the same line — the mini app', () => {
+  // `COALESCE(NULLIF(channel,''),'wechat')`, which is order-channel-counts'
+  // expression verbatim. Two lines here would be two rows drawing the same word.
+  const wc = revRows.filter(r => r.channel === 'wechat');
+  assert.strictEqual(wc.length, 1, 'the two blank spellings did not fold onto one line');
+  assert.strictEqual(wc[0].amount, 1300, '1000 + 250 + 50');
+  assert.strictEqual(wc[0].orders, 3);
+  assert.ok(!revRows.some(r => r.channel === null || r.channel === ''),
+    'no blank channel may reach the screen as a bucket of its own');
+});
+
+it('gzgrocery gets a line, and it is the MIRROR ROWS — not the stock ledger', () => {
+  // §36: Finance never reads the ledger. The line is the order rows the total
+  // above it summed, which is the only way the two can agree.
+  const gy = revRows.find(r => r.channel === 'gzgrocery');
+  assert.ok(gy, 'gzgrocery is missing from the breakdown it is inside the total of');
+  assert.strictEqual(gy.amount, 500);
+});
+
+it('an unknown channel keeps its own line rather than vanishing from a total', () => {
+  const tt = revRows.find(r => r.channel === 'tiktok');
+  assert.ok(tt && tt.amount === 70, 'a channel this file cannot name was dropped');
+});
+
+it('unpaid, refunded and out-of-window orders are absent from the channels too', () => {
+  assert.ok(!revRows.some(r => r.amount === 999 || r.amount === 777),
+    'the breakdown must carry the headline’s own predicate');
+  assert.strictEqual(revRows.reduce((a, r) => a + r.orders, 0), 6);
+});
+
+it('the heaviest channel is first — the operator is asking which one earned it', () => {
+  const amounts = revRows.map(r => r.amount);
+  assert.deepStrictEqual(amounts, [...amounts].sort((a, b) => b - a), 'ORDER BY amount DESC is gone');
+});
+
 it('an uncategorised expense keeps its own line rather than a minted bucket', () => {
   const nulls = breakdown.filter(r => r.category == null);
   assert.strictEqual(nulls.length, 1);
@@ -308,6 +407,7 @@ new vm.Script(
     .replace(/^'use strict';$/m, '')
   + '\nthis.finRow=finRow; this.finMoney=finMoney; this.finNotRecorded=finNotRecorded;\n  this.finNotRecordedValue=finNotRecordedValue;'
   + '\nthis.finBreakdown=finBreakdown;'
+  + '\nthis.finRevBreakdown=finRevBreakdown; this.finChannelLabel=finChannelLabel;'
   // The drill-down's state is module-local by design — nothing in the shipped
   // file exposes it. This appends a setter to the SOURCE AS EVALUATED IN THE VM,
   // the same trick the exports above already use, so the render can be driven
@@ -408,6 +508,119 @@ it('the terminus says Net, never Contribution', () => {
   const term = CLIENT.slice(CLIENT.indexOf('fin-terminus'));
   assert.ok(/'Net', '净额'/.test(term));
   assert.ok(!/Contribution/.test(term.split('function')[0]));
+});
+
+/* ── The revenue disclosure on screen ──────────────────────────────────────
+   Reported from the card: "just like the expenses can unfold and show
+   information, revenue should do the same". The row is now a <details> with one
+   line per channel inside it. */
+
+const REV_ROWS = [
+  { channel: 'wechat', amount: 1300, orders: 3 },
+  { channel: 'meituan', amount: 400, orders: 1 },
+  { channel: 'gzgrocery', amount: 500, orders: 1 },
+  { channel: 'tiktok', amount: 70, orders: 1 },
+];
+
+it('revenue opens onto its channels, and the lines carry the channel figures', () => {
+  const html = ctx.finRevBreakdown(REV_ROWS);
+  assert.ok(/class="fin-breakdown"/.test(html), 'the breakdown must use the house container');
+  assert.strictEqual((html.match(/class="fin-row/g) || []).length, 4, 'one line per channel');
+  ['WeChat', 'Meituan', 'Gzgrocery'].forEach(name =>
+    assert.ok(html.includes(name), `the ${name} line is missing`));
+  assert.ok(/¥1,300/.test(html) && /¥400/.test(html), 'a channel figure is missing');
+});
+
+it('a channel line is the same grey as an expense line — not finRow\u2019s', () => {
+  // `finRow` stamps .fin-input, and #tab-finance .fin-row.fin-input .fin-lbl
+  // outweighs #tab-finance .fin-breakdown .fin-lbl — so a channel built that way
+  // came out in --td-text while the expense lines below it sat in --td-text2.
+  // Two breakdowns on one card in two greys, with nothing meant by it.
+  const html = ctx.finRevBreakdown(REV_ROWS);
+  assert.ok(!/fin-input/.test(html), 'a channel line must not carry .fin-input');
+  assert.ok(/<div class="fin-row">/.test(html), 'it must be the bare breakdown row');
+  // Both selectors are still the ones that decide it.
+  assert.ok(/#tab-finance \.fin-row\.fin-input \.fin-lbl/.test(CSS)
+    && /#tab-finance \.fin-breakdown \.fin-lbl/.test(CSS),
+    'the two rules this avoids have moved — re-check which one wins');
+  // The middle grid column is held open, or the figures stop lining up.
+  assert.strictEqual((html.match(/<span class="fin-sign"><\/span>/g) || []).length, REV_ROWS.length);
+});
+
+it('a channel line is NOT a control — nothing opens behind one', () => {
+  // This file's own rule, stated on the expenses row and again on the PO row: a
+  // chevron that opens onto nothing is a control that lies. There is no endpoint
+  // behind a channel, so the lines take no chevron and are not buttons.
+  const html = ctx.finRevBreakdown(REV_ROWS);
+  assert.ok(!/<button/.test(html), 'a channel line must not be a button');
+  assert.ok(!/fin-chev/.test(html), 'a chevron here would open onto nothing');
+  assert.ok(!/aria-expanded/.test(html), 'nothing here expands');
+});
+
+it('nothing to disclose renders no disclosure at all', () => {
+  // A period with no paid orders has no channels, and an older payload carries
+  // no field — both fall back to the plain row revenue has always been.
+  assert.strictEqual(ctx.finRevBreakdown([]), '');
+  assert.strictEqual(ctx.finRevBreakdown(undefined), '');
+  const card = CLIENT.slice(CLIENT.indexOf('function finRender'), CLIENT.indexOf('async function finLoad'));
+  assert.ok(/revBreakdown\s*\?[\s\S]*?:\s*finRow\(revLabel/.test(card),
+    'the row must fall back to the plain one when there is nothing behind it');
+});
+
+it('the revenue row keeps an EMPTY sign column — it is the step, not a deduction', () => {
+  // The staircase's signs are arithmetic. Revenue is what the column starts
+  // from, so a minus beside it would stop the card adding up.
+  const card = CLIENT.slice(CLIENT.indexOf('function finRender'), CLIENT.indexOf('async function finLoad'));
+  const rev = card.slice(card.indexOf('revBreakdown'), card.indexOf('d.tax'));
+  assert.ok(/<span class="fin-sign"><\/span>/.test(rev), 'revenue must carry no sign');
+  assert.ok(!/fin-sign">−/.test(rev), 'revenue is not a deduction');
+});
+
+it('revenue opens by default, exactly as the expenses row beside it does', () => {
+  // The two are the same kind of thing — a total and the lines that make it up —
+  // and a reader who found one openable and the other not would have to learn
+  // which is which.
+  const card = CLIENT.slice(CLIENT.indexOf('function finRender'), CLIENT.indexOf('async function finLoad'));
+  assert.strictEqual((card.match(/<details class="fin-exp" open>/g) || []).length, 2,
+    'revenue and operating expenses must both open by default');
+});
+
+it('every channel name is COPIED from a live pair — none composed here', () => {
+  // The standing rule's first preference. csName (01-core.js) names these same
+  // channels on the Sales page; DASH_CHAN_SHORT (03-dashboard.js) names the
+  // channel on an order. Each pair must still be present at its source, so a
+  // rename there cannot leave two different words for one channel.
+  const CORE = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '01-core.js'), 'utf8');
+  const DASH = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '03-dashboard.js'), 'utf8');
+  [["'WeChat', '微信'", CORE], ["'Web shop', '网页商店'", CORE],
+   ["'Meituan', '美团'", CORE], ["'Eleme', '饿了么'", CORE],
+   ["'Manual', '手动'", DASH], ["'Shop', '门店'", DASH]]
+    .forEach(([pair, src]) => {
+      const [en, cn] = pair.split(', ');
+      assert.ok(src.includes(en) && src.includes(cn),
+        `${pair} is no longer live at its source — it would be composed here now`);
+    });
+  // gzgrocery is a bare string at its source too: the partner's name is the same
+  // word in both languages, and pairing it here would be composing one.
+  const fn = CLIENT.slice(CLIENT.indexOf('function finChannelLabel'));
+  assert.ok(/gzgrocery:\s*'Gzgrocery'/.test(fn), 'gzgrocery must not be given an invented pair');
+  assert.ok(CORE.includes("gzgrocery: 'Gzgrocery'"), 'the bare form is no longer live at its source');
+});
+
+it('an unknown channel renders as itself rather than being folded or dropped', () => {
+  // It is inside a total that counted it, so it has to appear. An internal word
+  // on screen is a smaller wrong than money with no line under it.
+  assert.strictEqual(ctx.finChannelLabel('tiktok'), 'tiktok');
+  assert.ok(ctx.finRevBreakdown(REV_ROWS).includes('tiktok'));
+});
+
+it('the channel figures are WHOLE YUAN, like every other line of the staircase', () => {
+  // §36's magnitude decision. Only what opens BELOW a breakdown line renders to
+  // the fen; a breakdown line is one of its figures.
+  const fn = CLIENT.slice(CLIENT.indexOf('function finRevBreakdown'),
+                          CLIENT.indexOf('/** The operating-expense disclosure'));
+  assert.ok(/finMoney\(/.test(fn) && !/finExact\(/.test(fn),
+    'a channel line must use finMoney, not finExact');
 });
 
 // ── The house class and the wiring ─────────────────────────────────────────
