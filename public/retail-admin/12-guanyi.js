@@ -108,18 +108,84 @@
     return `${time}  ${glyph} ${l.store_code}  ${mid}${reason}`.replace(/\s+$/, '');
   }
 
-  // ── Sync health strip (was 4 KPI tiles) ──────────────────────────────────────
-  // Calm one-liner when green; the queue count + dot turn Brass on a push error.
+  /* ── §121 · the page head, in the channel frame ───────────────────────────────
+     Was a bespoke one-line health strip. It is now the same four parts the
+     Meituan and Eleme pages carry, painted the way elRenderHead() paints them:
+     a status line, three tiles, and one line for the product list.
+
+     EVERY WORD HERE IS A LIVE PAIR, none composed. `Mapped · 已映射` and the
+     three freshness phrases are this page's own, from the strip that stood
+     here. `Need attention · 待处理` is chStateWord('att') — the one table the
+     three channel tabs and the Channel sync page all read (§103 step 5).
+     `Stock updates waiting · 待推送库存` is the Meituan and Eleme tile whose
+     number means exactly this one.
+
+     WHAT IS NOT SAID: "synced". `mappedCount` counts mappings with the switch
+     on, which is NOT the same as items the channel holds the right number for —
+     that figure is the Channel sync page's `ok` count. Calling this one Synced
+     would put two different numbers behind one word on two screens, which is
+     the defect §103 step 5 spent a step ending. It is called Mapped, because
+     that is what it counts. */
+  let _gySt = null;      // last /status
+  let _gyLs = null;      // last /listings
+
+  function gyRenderHead() {
+    const st = _gySt || {};
+    const pending = Number(st.queuePending || 0);
+    const errors  = Number(st.queueError || 0);
+
+    const line = document.getElementById('gy-status');
+    if (line) {
+      const bits = [];
+      if (errors)  bits.push(cuT(`${errors} need attention`, `${errors} 个待处理`));
+      if (pending) bits.push(cuT(`${pending} sending…`, `${pending} 发送中…`));
+      if (!bits.length) bits.push(cuT('nothing needs you', '无需处理'));
+      line.innerHTML = errors
+        ? '<span class="att">' + esc(bits[0]) + '</span>' + (bits[1] ? ' · ' + esc(bits[1]) : '')
+        : esc(bits.join(' · '));
+    }
+
+    const tiles = document.getElementById('gy-tiles');
+    if (tiles) {
+      const tile = (k, v, warn) => '<div class="gy-tile"><div class="k">' + esc(k) + '</div>' +
+        '<div class="v' + (warn ? ' att' : '') + '">' + esc(String(v)) + '</div></div>';
+      tiles.innerHTML =
+        tile(cuT('Mapped', '已映射'), st.mappedCount == null ? '—' : st.mappedCount, false) +
+        tile(typeof chStateWord === 'function' ? chStateWord('att') : cuT('Needs attention', '待处理'), errors, errors > 0) +
+        tile(cuT('Stock updates waiting', '待推送库存'), pending, false);
+    }
+
+    /* One line for the product list, not for a store: GZ Grocery has a single
+       store and /status does not name it, so a line pretending to be per-store
+       would be a label with nothing behind it. What the line carries is what an
+       operator actually needs from it — how many listings were read, how fresh
+       that read is, and the button that refreshes it — which is where Eleme
+       puts the same three things. */
+    const lines = document.getElementById('gy-storelines');
+    if (lines) {
+      const ls = _gyLs;
+      const n = ls ? (ls.listings || []).length : null;
+      const fresh = !ls ? '…'
+        : ls.running ? cuT('refreshing…', '刷新中')
+        : ls.job ? (ls.job.completed_at ? gyLocalTime(ls.job.completed_at, false) : cuT('cached', '已缓存'))
+        : cuT('never refreshed', '未刷新');
+      const read = n == null ? '' : cuT(`${n} listings read`, `已读取 ${n} 个商品`);
+      lines.innerHTML =
+        '<div class="gy-storeline"><span class="dot"></span>' +
+        '<span class="nm">' + esc(typeof csChannelName === 'function' ? csChannelName('guanyi') : 'GZ Grocery') + '</span>' +
+        '<span class="st">' + esc([read, fresh].filter(Boolean).join(' · ')) + '</span>' +
+        '<button id="gy-refresh-btn" class="btn btn-sm" onclick="gyRefreshListings()"' +
+        (ls && ls.running ? ' disabled' : '') + '>' +
+        esc(cuT('⟳ Refresh list', '⟳ 刷新')) + '</button></div>';
+    }
+  }
+
   window.gyLoadStatus = async function () {
     try {
       const r = await api('/api/retail-admin/guanyi/status');
-      setText('gy-h-mapped', r.mappedCount);
-      setText('gy-h-queue', r.queuePending);
+      _gySt = r;
       setText('gy-nav-map-amt', r.mappedCount);
-      const qErr = (r.queueError || 0) > 0;
-      document.getElementById('gy-h-queue-f')?.classList.toggle('warn', qErr);
-      document.getElementById('gy-h-dot')?.classList.toggle('warn', qErr);
-      setText('gy-h-state', qErr ? `${r.queueError} queue error · 推送出错` : 'Syncing · 同步中');
+      gyRenderHead();
       // The sync log lives in the Activity tab now; keep the write conditional.
       const log = document.getElementById('gy-log');
       if (log) {
@@ -133,16 +199,11 @@
   window.gyLoadListings = async function (silent) {
     try {
       const r = await api('/api/retail-admin/guanyi/listings');
-      const n = (r.listings || []).length;
-      setText('gy-h-list', n);
-      const job = r.job;
-      // The count already shows in the strip, so the sub is just freshness.
-      const sub = job
-        ? (r.running ? 'refreshing… · 刷新中' : (job.completed_at ? gyLocalTime(job.completed_at, false) : 'cached · 已缓存'))
-        : 'never refreshed · 未刷新';
-      setText('gy-h-listsub', sub);
-      const btn = document.getElementById('gy-refresh-btn');
-      if (btn) btn.disabled = !!r.running;
+      // §121 — the count, the freshness and the Refresh button are one line now,
+      // painted by gyRenderHead() from this response. The disabled state rides
+      // on that paint rather than being poked onto the button afterwards.
+      _gyLs = r;
+      gyRenderHead();
       return r;
     } catch (e) { if (!silent) console.warn('[guanyi] listings', e); }
   };

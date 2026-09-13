@@ -12559,68 +12559,58 @@
   </section>
 
   <section id="tab-guanyi">
-    <h2>gzgrocery 同步 · Guanyi Sync</h2>
-    <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      Mirror your Tianhe stock into gzgrocery's Guanyi ERP. Products are matched by the SKU embedded in the Guanyi name (e.g. "GVF 1-180"). Stock changes auto-reconcile every ~10 s by creating an inbound/outbound document for the difference.
-    </p>
-    <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      将天河库存同步到 gzgrocery 的管易 ERP。通过管易商品名中的货号(如 “GVF 1-180”)匹配商品。库存变动每约 10 秒自动按差额生成入库/出库单进行对账。
-    </p>
+    <!-- ═══ §121 · GZ GROCERY WEARS THE CHANNEL FRAME ═══
+         This page shared nothing with the Meituan and Eleme pages: its own
+         heading shape, two purpose paragraphs, a bespoke health strip, its own
+         sub-nav, and ~30 lines of inline <style> keyed on a different token
+         family (--line / --text-1) from the one the rest of the admin uses
+         (--td-*). §117 called it "the odd one out" and left it for part three.
 
-    <!-- Redesign: the page split into three jobs so it's not one heavy scroll.
-         A calm health strip up top (was 4 hero tiles), then a sub-nav — Overview
-         (daily glance + decisions), Billing (analytics/statement), Mapping (setup).
-         Only one panel is mounted at a time; the heavy 189-row mapping table is
-         deferred until you open Mapping. -->
-    <style>
-      #tab-guanyi .gy-health{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-lg);padding:12px 16px;margin:4px 0 18px}
-      #tab-guanyi .gy-pulse{display:inline-flex;align-items:center;gap:9px;font-weight:600;font-size:14px;color:var(--text-1)}
-      #tab-guanyi .gy-dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(163,180,159,.18)}
-      #tab-guanyi .gy-dot.warn{background:var(--warn);box-shadow:0 0 0 4px rgba(201,149,74,.18)}
-      #tab-guanyi .gy-facts{display:flex;align-items:center;flex-wrap:wrap;color:var(--text-2);font-size:13px}
-      #tab-guanyi .gy-facts .f{padding:0 14px;border-left:1px solid var(--line);white-space:nowrap}
-      #tab-guanyi .gy-facts .f:first-child{border-left:0;padding-left:2px}
-      #tab-guanyi .gy-facts .f b{color:var(--text-1);font-weight:700;font-variant-numeric:tabular-nums}
-      #tab-guanyi .gy-facts .f.warn b{color:var(--warn)}
-      #tab-guanyi .gy-spacer{flex:1}
+         WHAT CHANGED IS THE FRAME, NOT THE PAGE. The three panels below —
+         Overview, Billing, Mapping — are untouched, and Billing and Mapping
+         stay here rather than moving to Channel sync (Ash: "it's got nothing to
+         do with syncing products"). What moved is the head: pagehead + status
+         line, tiles, one store line, sub-tabs — the same four parts, in the same
+         order, off the SAME CSS rules as Meituan and Eleme rather than a third
+         copy of them. See the frame block in retail-admin.css.
 
-      #tab-guanyi .gy-subnav{display:flex;border-bottom:1px solid var(--line);margin-bottom:20px}
-      #tab-guanyi .gy-subnav button{border:0;background:none;font:inherit;font-size:14px;font-weight:600;color:var(--text-3);padding:9px 2px;margin-right:24px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;align-items:center;gap:8px}
-      #tab-guanyi .gy-subnav button.active{color:var(--text-1);border-bottom-color:var(--brass)}
-      #tab-guanyi .gy-subnav button:hover{color:var(--text-1)}
-      #tab-guanyi .gy-subnav .c{font-size:12px;font-weight:600;color:var(--text-4);font-variant-numeric:tabular-nums}
+         THE NAME IS THE SHARED TABLE'S NAME. The heading read "gzgrocery 同步 ·
+         Guanyi Sync" while the Channel sync page, the dashboard row and the
+         phone all call this channel "GZ Grocery" — three names for one channel,
+         which is the thing §103 step 5 spent a step ending. CH_NAME in
+         29-channel-sync.js is the one table and it says GZ Grocery on both
+         sides, so the h2 does too and carries no language pair to drift.
 
-      #tab-guanyi .gy-panel{display:none}
-      #tab-guanyi .gy-panel.active{display:block}
-
-      #tab-guanyi .gy-eyebrow{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--brass);margin:22px 0 12px}
-
-      #tab-guanyi .gy-teaser{display:flex;flex-wrap:wrap;align-items:center;background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden}
-      #tab-guanyi .gy-teaser .cell{padding:15px 20px;border-left:1px solid var(--line);flex:1;min-width:120px}
-      #tab-guanyi .gy-teaser .cell:first-child{border-left:0}
-      #tab-guanyi .gy-teaser .cell .l{font-family:var(--f-mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3)}
-      #tab-guanyi .gy-teaser .cell .v{font-size:24px;font-weight:500;letter-spacing:-.02em;margin-top:4px;color:var(--text-1);font-variant-numeric:tabular-nums}
-      #tab-guanyi .gy-teaser .cell.owe .v{color:var(--brass)}
-      #tab-guanyi .gy-teaser .cell.go{flex:0 0 auto;border-left:0;margin-left:auto}
-    </style>
-
-    <!-- Health strip — calm one-liner when green; number turns Brass on queue error -->
-    <div class="gy-health">
-      <span class="gy-pulse"><span class="gy-dot" id="gy-h-dot"></span><span id="gy-h-state">Syncing · 同步中</span></span>
-      <div class="gy-facts">
-        <span class="f"><b id="gy-h-mapped">—</b> mapped · 已映射</span>
-        <span class="f" id="gy-h-queue-f"><b id="gy-h-queue">—</b> in queue · 待推送</span>
-        <span class="f">list · 商品表 <b id="gy-h-list">—</b> · <span id="gy-h-listsub">…</span></span>
+         THE TWO PURPOSE PARAGRAPHS ARE GONE (§1.7 bans them: they describe what
+         the page is for and read the same every day). The one fact in them a
+         reader cannot get from the screen — that products match on the SKU
+         inside the Guanyi name — now sits on the Mapping panel, where somebody
+         is actually doing that matching. ═══ -->
+    <div class="gy-pagehead">
+      <div class="gy-pagehead-t">
+        <h2 data-no-i18n>GZ Grocery</h2>
+        <p class="gy-status" id="gy-status" data-no-i18n></p>
       </div>
-      <span class="gy-spacer"></span>
-      <button id="gy-refresh-btn" class="btn btn-sm" onclick="gyRefreshListings()" title="Read the live product list from gzgrocery's Guanyi backend (via the sync daemon) and cache it for matching.">⟳ Refresh list · 刷新</button>
     </div>
 
-    <!-- Sub-nav — three jobs, one panel mounted at a time -->
-    <div class="gy-subnav">
-      <button id="gy-nav-overview" class="active" onclick="gySubTab('overview')">Overview · 概览</button>
-      <button id="gy-nav-billing" onclick="gySubTab('billing')">Billing · 对账 <span class="c" id="gy-nav-bill-amt"></span></button>
-      <button id="gy-nav-mapping" onclick="gySubTab('mapping')">Mapping · 映射 <span class="c" id="gy-nav-map-amt"></span></button>
+    <!-- Three tiles, then one line for the store — painted by gyRenderHead()
+         from /guanyi/status and /guanyi/listings, the same shape elRenderHead()
+         paints. The Refresh list action sits on the store line whose freshness
+         it changes, the way Eleme's does. -->
+    <div class="gy-tiles" id="gy-tiles"></div>
+    <div class="gy-storelines" id="gy-storelines"></div>
+
+    <!-- Sub-tabs — three jobs, one panel mounted at a time. Same classes as the
+         Meituan and Eleme tab strips; the counts ride in `.n` pills like theirs
+         instead of this page's own `.c` spans. -->
+    <div class="gy-tabs" role="tablist">
+      <button id="gy-nav-overview" class="gy-tab active" role="tab" onclick="gySubTab('overview')">
+        Overview · 概览</button>
+      <button id="gy-nav-billing" class="gy-tab" role="tab" onclick="gySubTab('billing')">
+        Billing · 对账 <span class="n" id="gy-nav-bill-amt" data-no-i18n></span></button>
+      <button id="gy-nav-mapping" class="gy-tab" role="tab" onclick="gySubTab('mapping')">
+        Mapping · 映射 <span class="n" id="gy-nav-map-amt" data-no-i18n></span></button>
+      <span class="gy-tabs-grow"></span>
     </div>
 
     <!-- OVERVIEW — the daily glance: any pickup to decide + a billing snapshot -->
@@ -12644,6 +12634,18 @@
 
     <!-- MAPPING — setup surface; the 189-row table loads only when this opens -->
     <div class="gy-panel" id="gy-panel-mapping">
+      <!-- §121 — the one fact from the page's two deleted purpose paragraphs
+           that a reader could not get from the screen: HOW a product finds its
+           Guanyi listing. It sits here, on the panel where somebody is doing
+           that matching, rather than at the top of a page they open every day
+           to look at something else. Both halves are lifted verbatim from those
+           paragraphs; nothing is reworded. -->
+      <p class="helper" data-lang-block="en" style="margin: 0 0 var(--s3);">
+        Products are matched by the SKU embedded in the Guanyi name (e.g. "GVF 1-180").
+      </p>
+      <p class="helper" data-lang-block="cn" style="margin: 0 0 var(--s3);">
+        通过管易商品名中的货号(如 “GVF 1-180”)匹配商品。
+      </p>
       <div class="pa-toolbar">
         <input id="gy-search" type="text" data-ph-en="Search products" data-ph-cn="搜索商品" placeholder="Search products" oninput="gyFilterProducts()">
         <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
