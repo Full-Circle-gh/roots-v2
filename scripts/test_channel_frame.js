@@ -235,6 +235,25 @@ check('the mapped tile is not called Synced', () => {
   ok(!/已同步|'Synced'/.test(head), 'the GZ head calls mappedCount "Synced", which is a different number');
 });
 
+// ── 6. the repainted button ──────────────────────────────────────────────────
+section('6 · the store line owns its own button');
+
+/* The Refresh list button now lives inside the store line, which gyRenderHead()
+   repaints on every poll of a running refresh job. Anything that captures the
+   node and writes to it later is writing to a detached element — which is what
+   this page did for one commit, and which only looked correct because each
+   repaint happened to paint the right state anyway. */
+check('nothing holds the Refresh button across a repaint', () => {
+  ok(!/getElementById\('gy-refresh-btn'\)/.test(GY),
+     'something captured the Refresh button again; the render owns its state');
+  ok(/_gyRefreshing/.test(GY), 'the refresh-in-flight flag is gone');
+  const fn = GY.slice(GY.indexOf('window.gyRefreshListings'), GY.indexOf('Auto-match by SKU'));
+  ok(/_gyRefreshing = true;[\s\S]{0,80}gyRenderHead\(\)/.test(fn), 'the click does not repaint into the busy state');
+  ok(/finally \{[\s\S]{0,120}_gyRefreshing = false;[\s\S]{0,60}gyRenderHead\(\)/.test(fn),
+     'the flag is not cleared and repainted when the job ends');
+  ok(!/Refreshing…/.test(GY), 'an English-only busy label is back on the button');
+});
+
 // ── Summary ──────────────────────────────────────────────────────────────────
 console.log(`\n${passed} passed, ${failures.length} failed`);
 if (failures.length) {

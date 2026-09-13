@@ -128,6 +128,7 @@
      that is what it counts. */
   let _gySt = null;      // last /status
   let _gyLs = null;      // last /listings
+  let _gyRefreshing = false;   // a Refresh list click is in flight
 
   function gyRenderHead() {
     const st = _gySt || {};
@@ -165,8 +166,9 @@
     if (lines) {
       const ls = _gyLs;
       const n = ls ? (ls.listings || []).length : null;
-      const fresh = !ls ? '…'
-        : ls.running ? cuT('refreshing…', '刷新中')
+      const busy = _gyRefreshing || !!(ls && ls.running);
+      const fresh = busy ? cuT('refreshing…', '刷新中')
+        : !ls ? '…'
         : ls.job ? (ls.job.completed_at ? gyLocalTime(ls.job.completed_at, false) : cuT('cached', '已缓存'))
         : cuT('never refreshed', '未刷新');
       const read = n == null ? '' : cuT(`${n} listings read`, `已读取 ${n} 个商品`);
@@ -175,7 +177,7 @@
         '<span class="nm">' + esc(typeof csChannelName === 'function' ? csChannelName('guanyi') : 'GZ Grocery') + '</span>' +
         '<span class="st">' + esc([read, fresh].filter(Boolean).join(' · ')) + '</span>' +
         '<button id="gy-refresh-btn" class="btn btn-sm" onclick="gyRefreshListings()"' +
-        (ls && ls.running ? ' disabled' : '') + '>' +
+        (busy ? ' disabled' : '') + '>' +
         esc(cuT('⟳ Refresh list', '⟳ 刷新')) + '</button></div>';
     }
   }
@@ -210,9 +212,18 @@
 
   // Refresh the Guanyi product list via the daemon, polling until the job lands.
   window.gyRefreshListings = async function () {
-    const btn = document.getElementById('gy-refresh-btn');
+    /* §121 — THE BUTTON IS NOT HELD, A FLAG IS. This used to capture the button
+       node and re-enable it in `finally`. The button now lives inside the store
+       line, which gyRenderHead() REPAINTS on every poll below — so the captured
+       node is detached within two seconds and the `finally` re-enabled a dead
+       element. It happened to look right only because each repaint painted the
+       correct state anyway; the day a repaint stopped, the button would have
+       stayed disabled forever. The flag makes the render the single owner, and
+       the disabled text is the line's own bilingual "refreshing…" rather than
+       an English-only label poked onto the node. */
+    _gyRefreshing = true;
+    gyRenderHead();
     try {
-      if (btn) { btn.disabled = true; btn.textContent = '⟳ Refreshing…'; }
       await api('/api/retail-admin/guanyi/listings/refresh', { method: 'POST' });
       // Poll the job up to ~60s.
       for (let i = 0; i < 30; i++) {
@@ -225,7 +236,8 @@
     } catch (e) {
       toast('Refresh failed: ' + e.message, 'error');
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '⟳ Refresh list · 刷新'; }
+      _gyRefreshing = false;
+      gyRenderHead();
     }
   };
 
