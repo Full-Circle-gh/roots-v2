@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.247
+# Tacet shared-core consolidation — decisions record, v4.249
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,7 +23,11 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-13 · v4.247 — **THE CUSTOMER SECTION IS THE WHOLE CUSTOMER SECTION, ON THE PHONE TOO — §115, DECIDED BY ASH: *"customer section on the mobile should be fully functional like the pc version. overview the customer section all functionality and make sure it's all available on mobile also audit that section."*** **The audit found a defect before it found a gap:** the record's four action buttons and the Block under them were drawn for every operator, while `lib/cap-routes.js` gates those writes on `customers:adjust`, `customers:block` and `customers:edit` — and `apiWrite` in `public/m.html` treats a 403 as a lost session, so a `customer_service` or warehouse account tapping Points was **logged out of the app mid-shift**. Every control is gated now, absent rather than disabled, with the guard in the COMMAND as well as the view — the hole §112 found in `teamToggle`. **The other twelve gaps were UI and the data was already arriving:** `GET /customers` returns `note`, `tags` and `tag_vocabulary`, and `GET /customers/:id` is a `SELECT *` already carrying `orders_by_month`, `affiliate.lifetime_*` and `stats.active_sessions`. **No route, no schema, no migration, no new capability.** Tier and channel are multi-select against the endpoint that always took a comma list, the tag filter is the server's own vocabulary, the sort reverses; the record gains tags and the note, the phone number, gender and birthday, every address with add/edit/delete/default, sign out all devices, the three referral controls **and the two states they turn** (which were on no screen, so a shop could stop somebody referring and never see that it had), twelve months of activity and a CSV export at the filters on screen. **Two decisions of 2026-08-22 reversed and said plainly:** the phone number (the endpoint has answered `phone_taken` since its own check went in, and this sheet already carried that refusal's wording) and sign out all devices (the device count is the reason to have the control, not a substitute for it). **Print statement, CSV import and reset-test stay off**, each for a stated reason — the last of the three is not a parity gap at all, since the desktop draws no control for it either. One desktop label deliberately NOT copied: `详细地址` is on two different fields there and the refusal that names it points at the wrong box. **Chinese:** 11 verbatim lifts, 3 arrangements, 38 composed, declared in `docs/tacet-delivery-vocabulary.md` v1.72. **Tests:** new `scripts/test_mobile_customers.js` — 84 assertions across 30 cases over request bodies and both directions of every capability gate; five render cases added to `scripts/test_mobile_screens.js` (456 renders, warm, cold and Chinese); registered in `run-suites.js`'s SLOW set. No CSS file, and no change to `.gitignore` or CI.**
+2026-09-13 · v4.249 — **THE CUSTOMER SECTION IS THE WHOLE CUSTOMER SECTION, ON THE PHONE TOO — §115, DECIDED BY ASH: *"customer section on the mobile should be fully functional like the pc version. overview the customer section all functionality and make sure it's all available on mobile also audit that section."*** **The audit found a defect before it found a gap:** the record's four action buttons and the Block under them were drawn for every operator, while `lib/cap-routes.js` gates those writes on `customers:adjust`, `customers:block` and `customers:edit` — and `apiWrite` in `public/m.html` treats a 403 as a lost session, so a `customer_service` or warehouse account tapping Points was **logged out of the app mid-shift**. Every control is gated now, absent rather than disabled, with the guard in the COMMAND as well as the view — the hole §112 found in `teamToggle`. **The other twelve gaps were UI and the data was already arriving:** `GET /customers` returns `note`, `tags` and `tag_vocabulary`, and `GET /customers/:id` is a `SELECT *` already carrying `orders_by_month`, `affiliate.lifetime_*` and `stats.active_sessions`. **No route, no schema, no migration, no new capability.** Tier and channel are multi-select against the endpoint that always took a comma list, the tag filter is the server's own vocabulary, the sort reverses; the record gains tags and the note, the phone number, gender and birthday, every address with add/edit/delete/default, sign out all devices, the three referral controls **and the two states they turn** (which were on no screen, so a shop could stop somebody referring and never see that it had), twelve months of activity and a CSV export at the filters on screen. **Two decisions of 2026-08-22 reversed and said plainly:** the phone number (the endpoint has answered `phone_taken` since its own check went in, and this sheet already carried that refusal's wording) and sign out all devices (the device count is the reason to have the control, not a substitute for it). **Print statement, CSV import and reset-test stay off**, each for a stated reason — the last of the three is not a parity gap at all, since the desktop draws no control for it either. One desktop label deliberately NOT copied: `详细地址` is on two different fields there and the refusal that names it points at the wrong box. **Chinese:** 11 verbatim lifts, 3 arrangements, 38 composed, declared in `docs/tacet-delivery-vocabulary.md` v1.72. **Tests:** new `scripts/test_mobile_customers.js` — 84 assertions across 30 cases over request bodies and both directions of every capability gate; five render cases added to `scripts/test_mobile_screens.js` (456 renders, warm, cold and Chinese); registered in `run-suites.js`'s SLOW set. No CSS file, and no change to `.gitignore` or CI.**
+
+2026-09-13 · v4.248 — **§114 DECIDED AND BUILT: A PURCHASE THAT HAS NOT ARRIVED IS TRACKED AS AN ORDER, WHOEVER PAID FOR IT — DECIDED BY ASH, AND IT REVERSES §111 PART THREE.** The case that broke it, in his words: *"an employee use the company money to buy a food processor. it wasn't the person that do purchasing... the item didn't arrive and it need tracking"*. §111 part three had left claims alone because *a claim is money already out of a pocket — there is nothing to order and nothing to receive*; **true of a cook buying ginger, false of an appliance still in transit**, where the money is gone AND the goods are owed. Neither door held it: the claim path has no delivery to track, and the order path sits behind `purchasing:edit`, which the floor presets withhold on purpose. **Ash ruled twice**: the APPROVER raises the order from the claim (so nobody gains a capability), and it applies to the employee's OWN money too (the order tracks the delivery and owns the cost; the debt stays on the claim). **THREE FINDINGS MADE IT CHEAP**: `store_manager` already holds `purchasing:receive`, so the missing half was never the tracking but the CREATION; *paid, not yet arrived* is a state the record already has (`postRetailPOExpenses` posts on Ordered, `Delivered` seeds `qty_received`), so the order is raised at Ordered and never as a draft — a draft posts nothing and the money has already gone; and §111 part one's TYPED LINE is what carries a food processor, which is in no catalogue, so this could not have been built a day earlier. **THE MONEY IS POSTED ONCE**: `postClaim` writes nothing for a claim awaiting its delivery — keyed on `awaiting_delivery` and NOT on `po_id`, because on a first approval the order does not exist yet when it runs, and a `po_id` test would leave the same purchase in the books twice. **REJECT AND VOID ARE REFUSED while an order stands** (§114 part four): the claim has no ledger row of its own to take back, and cancelling the order behind the scenes would reach into a document that may already have been received — the refusal names Cancel order instead. **THE OWED FIGURE COSTS NOTHING**, verified rather than assumed: it reads status + paid_by + settled and never `expense_id`, so an employee who laid out their own money is still owed it and **Mark paid** still settles it. A claim marked *not arrived* must name a shop and a description — goods turn up at a door, and §111 part one refuses a line with no name. **Tests:** new `scripts/test_claim_purchase_order.js` (**47 cases**, both routers real, inventory stubbed but RECORDING), and `test_staff_expenses.js` 75 → **82 cases**, whose file-wide *one table, and it is the claim table* guard is NARROWED rather than dropped — the allowed set is named, the two new tables are pinned to `raiseOrderForClaim`, and a new case proves the SUBMIT path still writes the claim and nothing else, which is the assertion that actually carries §87 part one and which the old regex only implied. `npm run test:fast` 223 passed, 0 failed; eslint 0 errors; doc-numbering PASS. **Three composed strings and one taken whole**, all declared in `docs/tacet-delivery-vocabulary.md` v1.72 with a test case that re-reads each source and fails if a term stops being live. Two migrations (`staff_expenses.awaiting_delivery`, `po_id`), no new route, no new capability, and no change to `.gitignore` or CI.**
+
+2026-09-13 · v4.247 — **§113 ADDED: THE KEYBOARD GOES DOWN — REPORTED BY ASH in four words, *"keyboard doesn't go down"*, with the expense claim and Add someone photographed under it.** `public/m.html` has **no `<form>` in it**, so the soft keyboard's action key had nothing to submit; with no `enterkeyhint` on the field Gboard drew that key as **Go** (前往 in the screenshot), which on a formless page does nothing, and no tap anywhere on the screen would take focus off the field either. **The six fields that closed cleanly were rescued one at a time** — `mExpAmt` carries `enterkeyhint="done"` and a blurring `onkeydown` and sits **two rows above** the note field that has neither — which on a file with **fifty inputs** is the shape of a rule that was never made. **Three passes, none of them a list of field ids** (the reasoning `mTyping()` already carries): `kbHints()` writes the Done key onto every typed field on the paint that drew it, leaving the search boxes' own `enterkeyhint="search"` and the dates, files and checkboxes alone; Enter blurs, delegated once, **never in a textarea and never mid-pinyin** (`isComposing` / `keyCode 229` is an operator choosing a candidate, not asking to leave); and a tap that is not on a field puts the keyboard down, **judged at `click` and never at touch-down** — the scrim rule directly above it records what touch-down costs, *"the keyboard closing … reflows the page under a finger already in motion"* — and it stands aside wherever the tap moved focus itself, to another field or through a `<label>`. **No `<input>` in the file was edited**: four functions and two listeners, which is what makes it a rule rather than a fifty-first rescue. **Nothing here opens a keyboard** — `mSearch`'s `autofocus` and the add-stock caret are untouched. **No new UI text, so no Chinese and no vocabulary entry.** **Tests:** new `scripts/test_mobile_keyboard.js` — **47 assertions across 6 cases**, the four functions sliced out of the shipped file and driven against a hand-built DOM, red-proofed by removing the pinyin and `<label>` guards; fast shard, no browser, auto-discovered by `run-suites.js` and aliased `test:mobile-keyboard`. `npm run test:fast` 222/222 green; the sweep re-rendered all 147 screens (441 renders) with the pass running on every paint. Geometry unchanged — its two `sheet:kq-*` header findings are identical on `main`. No CSS file, no route, no schema, and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.246 — **PERMISSIONS ARE MANAGED FROM THE PHONE — §112, DECIDED BY ASH: *"can't manage permission from the mobile version, fix it fully. this feature should be fully functional from mobile."*** `docs/tacet-mobile-parity.md` had ruled Team out in its own words — inviting somebody, assigning a role and setting a per-capability matrix *"is authoring and stays on the desktop"* — and the phone shipped a roster, a deactivate confirm and three sentences pointing at a laptop. **The rule is still right for products and broadcasts and wrong for this: permissions are not authoring.** Somebody starts on Monday, somebody moves from the counter to the kitchen, somebody must not have the books — every one of those happens in the shop, on the day. **`public/m.html` gains four screens** — `teamperson`, `teamperms`, `teaminvite`, `teamrole` — plus a People/Roles switch and the owner's enforcement toggle, covering all six of the desktop tab's write surfaces over the same routes (`POST`/`PUT /api/backend/team`, `POST …/password`, `PUT …/permissions`, the four `/api/backend/roles` verbs, `PUT /api/backend/rbac-enforce`). **No route, no schema, no migration, no new capability** — `team:manage` and `team:permissions` already existed and are kept apart on the phone exactly as the server keeps them apart, absent rather than disabled. **A real guard gap was found and closed before it shipped**: `teamEnforce` was written guarded only by not DRAWING the switch, which `APP.cmd` walks straight past — the same hole `teamToggle` had in 2026-08 — and its own probe caught it. **The capability tree opens one group at a time** rather than printing a hundred toggles into a scroller, stating the same sentence the desktop's collapsed group does. **The dashboard-default table is now duplicated with a GUARD instead of a promise**: the phone's `TM_DASH_DEFAULT` and the desktop's `RL_DASH_LAYOUT_DEFAULT` are compared by `scripts/test_mobile_permissions.js`, which is more than the desktop's own copy of the CSS has ever had. **Chinese:** 134 pairs, **96 lifted verbatim** from the desktop's Team tab and the routes' own refusals, four arrangements that only move a clause naming a device, and **38 composed**, declared in `docs/tacet-delivery-vocabulary.md` v1.70 with the candidates rejected beside them. **Tests:** new `scripts/test_mobile_permissions.js` — **90 assertions across 30 cases**, asserting request bodies, not screens; `scripts/test_mobile_team.js` 29 → **32 assertions**, updated where the read-only decision it encoded was reversed; the sweep renders all four screens warm, cold and in Chinese (**441 renders**); geometry clean at 390px. Registered in `package.json` and in `run-suites.js`'s SLOW set (it drives Chromium). No CSS file, and no change to `.gitignore` or CI.**
 
@@ -12585,6 +12589,231 @@ roster and the emergency switch. The sweep renders all four new screens warm,
 cold and in Chinese.
 
 
+## §113 — THE KEYBOARD GOES DOWN, ON EVERY FIELD, WITHOUT ANYBODY HAVING REMEMBERED THAT FIELD
+
+**Reported by Ash, 2026-09-13**, with two photographs of the phone app and four
+words: ***"keyboard doesn't go down."*** One is the expense claim, note field
+holding `knifes`, the soft keyboard sitting across the bottom of the screen with
+**Submit** behind its top edge. The other is Settings → Team → **Add someone**
+with a password typed in, the keyboard covering the Role picker and **Add them**
+below it. Two unrelated screens, one defect.
+
+### A keyboard follows focus, and the app gave a field no way to lose it
+
+`public/m.html` has **no `<form>` element anywhere in it** — every screen is
+markup plus `oninput` handlers — so the keyboard's action key had nothing to
+submit. With no `enterkeyhint` on the field, Gboard draws that key as **Go**
+(前往 in the screenshot), and Go on a formless page does nothing at all. Nor
+does anything else on the screen put the keyboard away: a tap on a heading, a
+caption or the space between two fields leaves focus exactly where it was.
+
+**The fields that DID close cleanly are the six that were rescued one at a
+time.** `mExpAmt` carries `enterkeyhint="done"` and an `onkeydown` that blurs —
+and it sits **two rows above** the note field in the same form, which has
+neither. `mProdQ`, `mMbQ`, `qsnum-*`, `mbnum-*` and the ask sheet's input have
+the same hand-written pair. Six rescues on a file with **fifty inputs** is the
+shape of a rule that was never made: every field added since has been one more
+field you cannot get out of, and nothing said so.
+
+### The rule: three passes, and not one of them is a list of field ids
+
+Under **PUTTING THE KEYBOARD AWAY** in `public/m.html`, beside the scrim
+gesture rule it borrows its timing from. The reasoning for having no list is
+the one `mTyping()` already carries: this app draws fields in sheets, in forms
+and in pickers, and a list of ids would be one field out of date the day the
+next one lands.
+
+1. **Every typed field asks for a Done key.** `kbHints()` writes
+   `enterkeyhint="done"` onto the inputs that do not declare one, on the paint
+   that drew them — so a field added next year is covered without anybody
+   remembering. Android closes the keyboard on Done by itself; iOS gives a
+   Return that rule 2 finishes. A field that already says what its key is (the
+   search boxes, `enterkeyhint="search"`) keeps it, and anything whose keyboard
+   is not one — a date, a file, a checkbox — is left alone.
+2. **Enter blurs**, delegated once. The six hand-rolled fields keep working;
+   every other field gains it. A `<textarea>` is excluded, because Enter there
+   is a new line, which is the whole reason it is a textarea. **And it is deaf
+   during composition** — `isComposing`, or the `keyCode 229` spelling of the
+   same thing, is a Chinese operator mid-pinyin pressing Enter to choose a
+   candidate, and blurring there would take the word away instead of the
+   keyboard.
+3. **A tap on the page puts it down**, judged at `click` and never at
+   touch-down. The scrim rule directly above it records what a decision taken
+   at touch-down costs: *"the keyboard closing as the input blurs … reflows the
+   page under a finger already in motion"*, and the lift lands where nobody
+   aimed. By `click` the tap has been resolved and the control's own handler
+   has already run, so blurring can take nothing away. It also stays out of the
+   browser's way — where the tap moved focus itself, to another field or
+   through a `<label>` to one, the field it would blur is no longer the focused
+   one and the rule does nothing. A scroll fires no click, so a list dragged
+   with the keyboard up keeps it.
+
+### What this is not
+
+**It is not an autofocus policy.** Nothing here opens a keyboard; all three
+passes only ever close one. The one screen that deliberately opens with the
+keyboard up (`mSearch`, `autofocus`) is untouched, as is the add-stock ruling
+that put a caret in a cell on one tap.
+
+**And no field's markup changed.** Four functions and two listeners were added;
+not one `<input>` in the file was edited, which is what makes this a rule rather
+than a fifty-first rescue.
+
+### What holds it
+
+`scripts/test_mobile_keyboard.js` — **47 assertions across 6 cases**, with the
+four functions sliced out of the shipped `public/m.html` and driven against a
+hand-built DOM, the technique `scripts/test_ask_to_buy_keyboard.js` uses on the
+same file. It fails if Enter starts eating pinyin candidates, if a tap starts
+closing the keyboard a `<label>` had just opened, if a textarea is handed a Done
+key, if the tap rule is ever moved to `pointerdown`/`touchstart`, or if
+`render()` stops asking for the hints. In the fast shard: no browser, 0.1s. The
+sweep (`scripts/test_mobile_screens.js`) re-renders all 147 screens warm, cold
+and in Chinese with the pass running on every paint — 441 renders, no uncaught
+errors.
+## §114 — A PURCHASE THAT HAS NOT ARRIVED IS TRACKED AS AN ORDER, WHOEVER PAID FOR IT
+
+Ruling (Ash, 2026-09-13), on a case that breaks §111 part three: *"an employee use the
+company money to buy a food processor. it wasn't the person that do purchasing. here is an
+example why need a direct PO access for it. the item didn't arrive and it need tracking"*.
+
+Two answers, of the options put to him:
+
+* **THE APPROVER RAISES THE ORDER, FROM THE CLAIM.** The employee records what they bought
+  and says it has not arrived; approving raises an **Ordered** purchase order that owns the
+  money, instead of the claim posting its own ledger row. **Nobody gains a capability.**
+* **IT APPLIES TO THEIR OWN MONEY TOO.** The order tracks the delivery and owns the expense;
+  the debt to the employee stays on the claim, so they are still paid back. Two facts about
+  one purchase, kept apart.
+
+### What §111 part three got wrong, stated plainly
+
+§111 part three left claims alone on the reasoning that a claim is *money already out of a
+pocket — there is nothing to order and nothing to receive*. **That is true of a cook buying
+ginger at the market, which is the case it was written against, and false of anything bought
+that has not arrived yet.** Ash's example is the ordinary shape of the second: an appliance,
+paid for on the company card by somebody who is not the buyer, still in transit. **The money
+is gone AND the goods are owed**, and neither door held it — the claim path has no delivery
+to track, and the order path sits behind `purchasing:edit`, which the floor presets withhold
+on purpose (`store_manager`'s own comment: *"Store managers receive inbound stock but don't
+create POs or edit suppliers"*).
+
+### The three findings that made this cheap
+
+**RECEIVING IS ALREADY IN THAT PERSON'S HANDS.** `store_manager` holds `purchasing:view` and
+`purchasing:receive`. What was missing was never the tracking — it was the CREATION. So this
+section grants no new key to anybody, and the person who bought the thing can tick it in
+himself when it lands.
+
+**"PAID, NOT YET ARRIVED" IS A STATE THE ORDER RECORD ALREADY HAS.**
+`postRetailPOExpenses` posts on `Ordered`; `Delivered` is what seeds `qty_received` and moves
+stock. **An Ordered purchase order IS a purchase whose money has gone and whose goods are
+outstanding.** No new status and no new concept — which is also why the order is raised at
+Ordered and never as a draft: a draft posts nothing, and the money has already left the
+account.
+
+**AND §111 PART ONE IS WHAT CARRIES IT.** A food processor is in no catalogue. Before the
+typed line existed this section could not have been built at all.
+
+### PART ONE — THE EMPLOYEE ANSWERS IT; THE APPROVAL RAISES THE ORDER
+
+One more answer on the claim form: **this has not arrived yet**. It is a single opt-in, not a
+pair of chips, because the overwhelming case is goods in hand and the unticked state is
+exactly today's behaviour — an opt-in cannot make an existing claim mean something new.
+
+**THE EMPLOYEE ANSWERS, THE APPROVER ACTS.** Only the person who bought it knows whether it
+turned up; only the approver may let money into the books. §87's split is unchanged and this
+rides on it rather than beside it.
+
+### PART TWO — THE MONEY IS POSTED ONCE, AND THE ORDER OWNS IT
+
+A claim posts one row keyed on `claim_id`; an order posts rows keyed on `po_id`. **A purchase
+that went through both would be in the books twice**, so exactly one of them posts:
+`postClaim` writes nothing for a claim carrying a `po_id`, and the order's own poster carries
+the cost — under the category the employee chose, on the claim's own date.
+
+**THE LINK IS `staff_expenses.po_id`, AND IT IS ALSO THE IDEMPOTENCE.** Approving a claim
+that already carries one raises no second order.
+
+### PART THREE — OWN MONEY IS STILL OWED, AND THAT COSTS NOTHING
+
+Verified rather than assumed: the owed figure reads
+`status = 'approved' AND paid_by = 'employee' AND COALESCE(settled,0) = 0`
+(`routes/staff-expenses.js`) and **never looks at `expense_id`**. So a claim whose money
+posted through an order still stands under *Owed to your team · 应付团队*, and **Mark paid ·
+标记已付** still settles it — posting nothing, exactly as §87 decided, because the money was
+recorded once already.
+
+### PART FOUR — ONCE AN ORDER STANDS, THE CLAIM IS NOT REVERSED FROM THE CLAIM
+
+Rejecting or voiding an approved claim removes its ledger row (§87, §90). **A claim that
+raised an order has no ledger row of its own to remove**, and quietly cancelling the purchase
+order instead would reach into a document that may already have been received, priced and
+part-delivered. So both are refused while an order stands, and the refusal names the way out:
+**Cancel order**, Purchasing's own reversible exit, which keeps the row and zeroes it.
+
+### PART FIVE — A DELIVERY NEEDS SOMEWHERE TO ARRIVE
+
+`staff_expenses.store_id` is nullable and §87 part three gives NULL a meaning: the cost
+belongs to the business rather than to any one place. **Goods do not have that luxury** — they
+turn up at a door, and the receive path needs the shelf. So a claim marked *not arrived* must
+name a store, and the form asks for one. A tenant with a single store never sees the question.
+
+### Rejected
+
+**A NEW CAPABILITY FOR THE EMPLOYEE** — `purchasing:record-own` or similar. Put to Ash and not
+taken. It would be a second key meaning *may create a purchase order*, sitting beside the one
+that already means that, and the two would have to be kept in agreement forever. The approval
+already carries the authority; nothing needed inventing.
+
+**THE EMPLOYEE RAISING THE ORDER DIRECTLY.** Same reason, plus: the buyer's screen shows
+supplier prices, which is a `money: 'shows'` grant the floor presets withhold.
+
+**LEAVING OWN MONEY OUT, for now.** Considered as the narrower build. Refused because it
+leaves the identical gap one case over — a cook who pays for a mixer out of pocket because the
+card is upstairs — and that is exactly how this gap was found.
+
+**CANCELLING THE ORDER AUTOMATICALLY WHEN A CLAIM IS REJECTED.** See part four.
+
+### What this does NOT decide
+
+**The supplier on the order.** Left blank: the employee may not know what the shop is called,
+and the buyer fills it in. Nothing here guesses one.
+
+### Tests
+
+`scripts/test_claim_purchase_order.js`, **47 cases**, both routers real against a fixture with
+`lib/inventory.js` stubbed but RECORDING — a typed line must never move stock, and an absence
+is only provable against a record of what did. It runs Ash's own case: a ¥1,280 food processor,
+company money, not arrived. It asserts that the claim is refused without a shop and without a
+description; that approving raises an **Ordered** retail order with one typed line carrying the
+name, the whole amount at quantity one and the employee's category, and no invented supplier;
+that **the money is in the books once and the order owns it** — nothing keyed on the claim, one
+row keyed on the order; that approving twice raises one order; that an ordinary claim is
+untouched and still posts its own row; that an own-money purchase is still owed and **Mark
+paid** still settles it while posting nothing; that reject and void are refused while the order
+stands and the refusal names the way out; and that receiving the delivery records the arrival
+and moves no stock.
+
+`scripts/test_staff_expenses.js` 75 → **82 cases**. Its file-wide *one table, and it is the
+claim table* guard is **narrowed rather than dropped**: the allowed set is named, the two new
+tables are pinned to `raiseOrderForClaim`, and a new case proves the SUBMIT path writes the
+claim and nothing else and reaches none of the things a decision does — which is the assertion
+that actually carries §87 part one, and which the file-wide regex only ever implied. The screen
+half asserts the opt-in exists once with no opposite command, that the answer reaches the
+server, that both local refusals match the server's, that the flag does not survive onto the
+next claim, and that the approver is told before deciding and can reach the order after.
+
+A further case re-reads every source the three composed strings were lifted from and fails if
+any of them stops being live, so a rename elsewhere cannot quietly orphan them.
+
+**Whether a 发票 is expected.** The order carries the existing invoice fields and nothing here
+sets them; a purchase made in a shop by an employee is exactly the case
+`no_invoice_expected` was built for, and marking it stays the buyer's call.
+
+**What the buyer is told when an approval raises an order.** It appears in the purchasing list
+like any other Ordered PO. §66 and §69 are the precedent for adding a notification later if
+the day turns out to need one; inventing it now would be inventing the workflow.
 ---
 
 ## §115 — THE CUSTOMER SECTION IS THE WHOLE CUSTOMER SECTION, ON THE PHONE TOO

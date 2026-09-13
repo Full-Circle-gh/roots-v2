@@ -1205,6 +1205,27 @@ addColumn('categories', 'is_active',    'INTEGER DEFAULT 1');
 // pre-marked, because a list that cannot say "I have not been told" has to guess,
 // and a guess on this screen is what the ¥152,309 mis-filing was made of.
 addColumn('categories', 'needs_po',     'INTEGER');
+// ── A claim can be waiting for its goods (§114) ────────────────────────────
+// awaiting_delivery — THE MONEY HAS GONE AND THE GOODS HAVE NOT ARRIVED. §111
+// part three left claims alone because "a claim is money already out of a
+// pocket — there is nothing to order and nothing to receive". True of a cook
+// buying ginger at the market; FALSE of a food processor paid for on the company
+// card and still in transit, which is the case that reversed it. Such a claim
+// raises an Ordered purchase order on approval, and the delivery is then tracked
+// the way every other delivery is.
+//
+// DEFAULT 0, and here a default is right where `categories.needs_po` above
+// refused one: this is not a question anybody is being asked, it is a fact about
+// the purchase, and every claim ever submitted was for goods in hand. The
+// unticked state IS the existing behaviour, so no historical row changes meaning.
+//
+// po_id — THE ORDER THAT NOW OWNS THIS PURCHASE, and the reason it cannot be
+// posted twice. NULL until an approval raises one. No FOREIGN KEY: schema.sql
+// declares staff_expenses and `purchase_orders` is in the same file, but the
+// column is added HERE by ALTER, and SQLite cannot add a column carrying a
+// foreign key to an existing table at all.
+addColumn('staff_expenses', 'awaiting_delivery', 'INTEGER DEFAULT 0');
+addColumn('staff_expenses', 'po_id',             'INTEGER');
 // ── The ledger learns two things (§87 step three) ─────────────────────────
 //
 // claim_id — THE ROW WAS POSTED BY AN APPROVED STAFF CLAIM, and it is the exact

@@ -35,9 +35,13 @@
 'use strict';
 
 const express = require('express');
-const { tdb } = require('../lib/tenant-db');
+const { tdb, currentTenantId } = require('../lib/tenant-db');
 const { fen } = require('../lib/finance-window');
 const { requireRetailAdmin } = require('./retail');
+// §114. The two purchasing primitives a claim-raised order needs — the RPO
+// number and the poster that turns an order into money. Required from the
+// purchasing router rather than copied, so there is one answer to each.
+const { nextRetailPONumber, postRetailPOExpenses } = require('./retail-purchasing');
 const { logActivity } = require('../middleware/auth');
 
 const router = express.Router();
@@ -52,6 +56,12 @@ const ERR = {
   // §90.
   notApprovedVoid: 'only an approved claim can be voided · 仅审批通过的申请可以作废',
   forbiddenVoid:   'this account cannot void expense claims · 此账号无法作废费用申请',
+  // §114 part four. A claim that raised an order has NO ledger row of its own to
+  // remove — the order owns the cost — so the two reversals below have nothing
+  // to undo here, and quietly cancelling the order instead would reach into a
+  // document that may already have been received, priced and part-delivered.
+  // The refusal names the way out rather than merely refusing.
+  onOrder: 'this claim is on a purchase order — cancel that order instead · 该笔已记入采购单 — 请取消该采购单',
 };
 
 /* WHO MAY DECIDE. `lib/cap-routes.js` gates the decide route on
@@ -131,6 +141,10 @@ function listMine(db, userId) {
   return db.prepare(`
     SELECT id, date, amount, category, note, paid_by, store_id, status, settled,
            submitted_at, decided_at,
+           -- §114: whether the goods are still coming, and the order now tracking
+           -- them. The submitter's own list says so too — they are the one who
+           -- said it had not arrived, and the one most likely to ask where it is.
+           awaiting_delivery, po_id,
            CASE WHEN receipt_data IS NULL THEN 0 ELSE 1 END AS has_receipt
       FROM staff_expenses
      WHERE submitted_by IS ?
@@ -165,16 +179,18 @@ router.post('/api/retail-admin/staff-expenses', requireRetailAdmin, express.json
     // let a submitter do.
     const info = db.prepare(`
       INSERT INTO staff_expenses
-        (date, amount, category, note, paid_by, payment_method, store_id, receipt_data, submitted_by)
-      VALUES (?,?,?,?,?,?,?,?,?)`)
+        (date, amount, category, note, paid_by, payment_method, store_id, receipt_data, submitted_by,
+         awaiting_delivery)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`)
       .run(v.date, v.amount, v.category, v.note, v.paidBy, v.method, v.storeId, v.receipt,
-           req.user?.id || null);
+           req.user?.id || null, v.awaitingDelivery ? 1 : 0);
 
     // The amount is logged; the photo is not. An activity row is read in a list
     // and a data URI in one would be unreadable — and the bytes are already in
     // the claim.
     logActivity(req.user?.id || null, req.user?.username || null, 'create', 'staff_expense',
-      info.lastInsertRowid, { amount: v.amount, category: v.category, paid_by: v.paidBy }, req.ip);
+      info.lastInsertRowid, { amount: v.amount, category: v.category, paid_by: v.paidBy,
+                              awaiting_delivery: !!v.awaitingDelivery }, req.ip);
     res.json({ success: true, id: info.lastInsertRowid });
   } catch (e) {
     console.error('[staff-expenses POST]', e.message);
@@ -328,6 +344,9 @@ router.get('/api/retail-admin/staff-expenses/pending', requireRetailAdmin, requi
     const rows = db.prepare(`
       SELECT e.id, e.date, e.amount, e.category, e.note, e.paid_by, e.store_id,
              e.status, e.settled, e.submitted_at, e.decided_at, e.submitted_by,
+             -- §114. The approver needs BOTH: before deciding, that approving
+             -- this one raises an order; after, which order to open.
+             e.awaiting_delivery, e.po_id,
              CASE WHEN e.receipt_data IS NULL THEN 0 ELSE 1 END AS has_receipt
         FROM staff_expenses e
        ORDER BY CASE WHEN e.status = 'submitted' THEN 0 ELSE 1 END,
@@ -413,6 +432,48 @@ router.get('/api/retail-admin/staff-expenses/pending', requireRetailAdmin, requi
 // same person, and a rule forbidding it produces an unusable screen rather than
 // a second approver. **The guard is the record, not the refusal** — the approver
 // is stored on the claim, shown on the row, and logged.
+/* ── §114 — THE ORDER AN APPROVAL RAISES ───────────────────────────────────
+   A claim marked *not arrived* becomes an Ordered purchase order carrying one
+   typed line: what was bought, what it cost, and the category it is filed under.
+
+   ORDERED, NEVER A DRAFT. `postRetailPOExpenses` posts on Ordered and posts
+   nothing for a draft — and the money has already left the account, so a draft
+   would take a real cost out of the books until somebody remembered to place an
+   order for a thing that was already bought.
+
+   THE LINE IS §111 PART ONE'S TYPED LINE, which is why this section could not
+   have been built before it: a food processor is in no catalogue, and until the
+   picker could carry one there was nothing to put on the order.
+
+   NO SUPPLIER. The employee may not know what the shop is called and this does
+   not guess; the buyer fills it in. `supplier_name` on the line is left null for
+   the same reason and inherits the header's nothing.
+
+   Runs on the handle it is given — the decide route's open transaction — so a
+   failure here rolls the approval back with it rather than leaving a claim
+   approved with no order and no ledger row. */
+function raiseOrderForClaim(tx, claim) {
+  const po = tx.prepare(`
+    INSERT INTO purchase_orders
+      (po_number, date, delivery_date, status, supplier, notes, source, scope, store_id, created_by, tenant_id)
+    VALUES (?,?,NULL,'Ordered',NULL,?,'manual','retail',?,NULL,?)`)
+    .run(nextRetailPONumber(tx), claim.date, claim.note || null, claim.store_id,
+         currentTenantId());
+  const poId = po.lastInsertRowid;
+  // ONE UNIT AT THE WHOLE PRICE. A claim records a sum and has no quantity
+  // field, so one at that price is the only reading of it that cannot be wrong —
+  // the same rule §111 part two applies to a cost typed into Finance. The buyer
+  // splits it into real quantities on the order if it was ever more than one
+  // thing.
+  tx.prepare(`
+    INSERT INTO po_line_items
+      (po_id, store_product_id, ingredient_id, name_en, name_cn, sku, qty, unit,
+       cost_per_unit, total_cost, expense_category, supplier_name, sort_order)
+    VALUES (?,NULL,NULL,?,NULL,NULL,1,'pcs',?,?,?,NULL,0)`)
+    .run(poId, claim.note, claim.amount, claim.amount, claim.category || null);
+  return poId;
+}
+
 router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, requireApprover, express.json(), async (req, res) => {
   try {
     const db = tdb();
@@ -429,6 +490,10 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
     // expense out of the books while leaving the payment made. That is the one
     // state this route refuses, and it refuses it rather than warning.
     if (claim.settled) return res.status(409).json({ error: ERR.settled });
+    // §114 part four. The order owns the cost, so there is no ledger row here to
+    // take back — and cancelling the order on a rejection would reach into a
+    // document that may already have been received.
+    if (decision === 'reject' && claim.po_id) return res.status(409).json({ error: ERR.onOrder });
 
     const status = decision === 'approve' ? 'approved' : 'rejected';
     const note = (req.body.note == null || req.body.note === '') ? null : String(req.body.note).slice(0, 500);
@@ -448,6 +513,7 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
     // latency added to a lock this one is holding, for a value the write does
     // not depend on.
     const submittedName = submitterNames([claim.submitted_by]).get(claim.submitted_by) || null;
+    let raisedPoId = null;
 
     // AWAITED (§90's fix). This route was never `async` and never awaited this
     // call, which looked harmless because better-sqlite3 is synchronous — but
@@ -479,15 +545,33 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
       // the shape the suite asserts — a `{ ...fresh }` here would fail it for no
       // behavioural reason at all.
       fresh.submitted_name = submittedName;
+      // §114 — APPROVING A CLAIM WHOSE GOODS HAVE NOT ARRIVED RAISES THE ORDER
+      // THAT WILL TRACK THEM. Inside this transaction so a failure rolls the
+      // approval back with it, and guarded on `po_id` so approving twice raises
+      // one order rather than two.
+      if (fresh.status === 'approved' && fresh.awaiting_delivery && !fresh.po_id) {
+        raisedPoId = raiseOrderForClaim(tx, fresh);
+        tx.prepare('UPDATE staff_expenses SET po_id = ? WHERE id = ?').run(raisedPoId, claim.id);
+      }
+      // Posts NOTHING for a claim awaiting its delivery — the order does, below.
+      // The DELETE inside it still runs, so a claim that had already posted a row
+      // and is now on an order loses it rather than keeping a second copy.
       const expenseId = postClaim(tx, fresh);
       tx.prepare('UPDATE staff_expenses SET expense_id = ? WHERE id = ?').run(expenseId, claim.id);
     });
 
+    // THE ORDER'S MONEY IS POSTED AFTER THE COMMIT, which is where every other
+    // caller of this poster stands (the /status route does exactly this). It is
+    // idempotent — DELETE-then-INSERT keyed on po_id — so a crash between the
+    // two leaves an Ordered order whose next re-post heals it, rather than a
+    // half-written transaction.
+    if (raisedPoId) postRetailPOExpenses(raisedPoId);
+
     logActivity(req.user?.id || null, req.user?.username || null,
       decision === 'approve' ? 'approve' : 'reject', 'staff_expense', claim.id,
-      { amount: fen(claim.amount), category: claim.category, self: claim.submitted_by === decidedBy },
-      req.ip);
-    const after = db.prepare('SELECT status, expense_id FROM staff_expenses WHERE id = ?').get(claim.id);
+      { amount: fen(claim.amount), category: claim.category, self: claim.submitted_by === decidedBy,
+        po_id: raisedPoId }, req.ip);
+    const after = db.prepare('SELECT status, expense_id, po_id FROM staff_expenses WHERE id = ?').get(claim.id);
     res.json({ success: true, data: after });
   } catch (e) {
     console.error('[staff-expenses decide]', e.message);
@@ -522,6 +606,11 @@ router.post('/api/retail-admin/staff-expenses/:id/void', requireRetailAdmin, req
     // rejected one has nothing in the books to take back out, and `/decide`
     // is the route that handles either.
     if (claim.status !== 'approved') return res.status(409).json({ error: ERR.notApprovedVoid });
+    // §114 part four, the same refusal `/decide` makes for the same reason: this
+    // claim has no ledger row of its own — the order it raised owns the cost —
+    // so there is nothing here to take back out, and the way to undo the
+    // purchase is Purchasing's own Cancel order.
+    if (claim.po_id) return res.status(409).json({ error: ERR.onOrder });
     // A SETTLED CLAIM IS FINISHED, for the same reason `/decide` refuses one:
     // the employee has already been paid back outside this system, and voiding
     // it would take the expense out of the books while leaving the payment

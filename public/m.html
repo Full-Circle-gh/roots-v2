@@ -1107,6 +1107,91 @@ document.addEventListener('pointerdown', _scrimDownTrack, true);
 document.addEventListener('touchstart', _scrimDownTrack, true);
 window.APP.scrimClose = (name) => { if(_scrimDownHit && CMD[name]) CMD[name](); };
 
+/* ── PUTTING THE KEYBOARD AWAY ─────────────────────────────────────────────
+   THE COMPLAINT, with two photographs of it: *"keyboard doesn't go down."* One
+   was the expense claim with a note half typed, the other Add someone with a
+   password in it. On both, the soft keyboard covered the button the person had
+   come to press, and nothing on the screen would put it down.
+
+   WHY IT STAYED UP. A keyboard follows FOCUS, and this app gave a field no
+   ordinary way to lose it. There is no <form> in this file, so the keyboard's
+   action key has nothing to submit — and with no `enterkeyhint` on the field
+   Gboard draws that key as **Go**, which on a formless page does nothing at
+   all. The fields that DID close cleanly were the handful written with
+   `enterkeyhint="done"` and an `onkeydown` that blurs: mExpAmt is one, two rows
+   above the note field that has neither. A per-field rescue, on a file with
+   fifty inputs, is the shape of a rule that was never made.
+
+   THREE THINGS, and none of them a list of field ids — the reasoning mTyping()
+   already carries: this app draws fields in sheets, in forms and in pickers,
+   and a list would be one field out of date the day the next one lands.
+
+     1. EVERY TYPED FIELD ASKS FOR A DONE KEY. `enterkeyhint` is written onto
+        the fields that do not declare one, on the paint that draws them, so a
+        field added next year is covered without anybody remembering. Android
+        closes the keyboard on Done by itself; iOS gives a Return that rule 2
+        finishes. Fields that already say what their key is (the search boxes,
+        `enterkeyhint="search"`) are left exactly as they are, and so is
+        anything whose keyboard is not one — a date, a file, a checkbox.
+     2. ENTER BLURS. One delegated listener, so the six fields that hand-rolled
+        this keep working and every other field gains it. A textarea is left
+        out: Enter there is a new line, which is the whole reason it is a
+        textarea. AND IT IS DEAF DURING COMPOSITION — `isComposing` is a
+        Chinese operator mid-pinyin, pressing Enter to choose a candidate, and
+        blurring there would take the word away instead of the keyboard.
+     3. A TAP ON THE PAGE PUTS IT DOWN. Judged at `click`, never at touch-down:
+        the scrim rule above records what a decision taken at touch-down costs —
+        the keyboard closing reflows the page under a finger already in motion
+        and the lift lands where nobody aimed. By `click` the tap has been
+        resolved and the control's own handler has already run, so blurring can
+        take nothing away. It also stays out of the browser's way: where the tap
+        moved focus itself — to another field, or through a <label> to one — the
+        field it would blur is no longer the focused one and the rule does
+        nothing. A scroll is not a tap and fires no click, so a list dragged
+        with the keyboard up keeps it.
+
+   WHAT THIS IS NOT is an autofocus policy. Nothing here opens a keyboard; all
+   three only ever close one. */
+const KB_NOT_TYPED = { file:1, checkbox:1, radio:1, button:1, submit:1, reset:1, image:1,
+                       hidden:1, range:1, color:1, date:1, 'datetime-local':1, month:1,
+                       time:1, week:1 };
+/* The element a soft keyboard belongs to, or null. Asked of an ELEMENT rather
+   than of the document, so one answer serves the tap (which asks about what it
+   hit) and the paint (which asks about every field it drew). */
+function kbField(el){
+  if(!el||!el.tagName) return null;
+  const tag=String(el.tagName).toUpperCase();
+  if(tag==='TEXTAREA') return el;
+  if(tag!=='INPUT') return el.isContentEditable===true?el:null;
+  return KB_NOT_TYPED[String(el.getAttribute('type')||'text').toLowerCase()]?null:el;
+}
+/* 1 · the Done key, written on the paint that drew the field. */
+function kbHints(){
+  if(!app||!app.querySelectorAll) return;
+  const els=app.querySelectorAll('input:not([enterkeyhint])');
+  for(let i=0;i<els.length;i++){ if(kbField(els[i])) els[i].setAttribute('enterkeyhint','done'); }
+}
+/* 2 · Enter blurs. */
+function kbEnterDown(e){
+  if(!e||e.key!=='Enter'||e.altKey||e.ctrlKey||e.metaKey) return;
+  if(e.isComposing||e.keyCode===229) return;       // mid-pinyin: Enter is theirs
+  const el=e.target;
+  if(!el||String(el.tagName).toUpperCase()!=='INPUT'||!kbField(el)) return;
+  if(el.blur) el.blur();
+}
+/* 3 · a tap that is not on a field puts the keyboard down. */
+function kbTapAway(e){
+  const on=kbField(document.activeElement);
+  if(!on) return;                                  // nothing open to close
+  const t=e&&e.target;
+  if(!t||t===on) return;                           // the tap was in the field
+  if(t.closest&&t.closest('label')) return;        // a label hands focus on
+  if(kbField(t)) return;                           // ...and so does another field
+  if(on.blur) on.blur();
+}
+document.addEventListener('keydown', kbEnterDown);
+document.addEventListener('click', kbTapAway);
+
 /* Quick Stock is a separate PWA; reaching it is a navigation, not a push. */
 /* TYPING REPAINTS THE LIST AND NOTHING ELSE — see rqSearch for the defect this
    removes. The armed state.focus goes with the render it existed to survive:
@@ -11390,6 +11475,23 @@ function screenExpense(){
         <button class="chip ${x.paid==='employee'?'on':''}" onclick="APP.cmd('expPaid','employee')">${T('My own money','个人支付')}</button>
         <button class="chip ${x.paid==='company'?'on':''}" onclick="APP.cmd('expPaid','company')">${T('Company','公司')}</button>
       </div>
+      ${/* §114 — HAS IT ARRIVED? A SINGLE OPT-IN, NOT A PAIR OF CHIPS.
+           The overwhelming case is goods already in hand, and unticked is exactly
+           what this form has always meant — so an opt-in cannot make an existing
+           claim say something new, which a pair of chips with a default would.
+
+           Ticking it makes the claim into an ORDER on approval: the shop can
+           then see it is coming, and whoever it arrives to ticks it in. That is
+           the whole of §114, and it is why the shop and the description stop
+           being optional below — goods turn up at a door, and a line on an order
+           with no name is a price with no subject. */''}
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="chip ${x.coming?'on':''}" style="align-self:flex-start"
+          onclick="APP.cmd('expComing')">${T('Not arrived yet','尚未到货')}</button>
+        ${x.coming?`<span style="font-size:13px;color:var(--text-secondary);line-height:1.55">${
+          T('It goes on a purchase order · the shop tracks it until it arrives',
+            '将记入采购单 · 到货前由门店跟进')}</span>`:''}
+      </div>
       ${/* WHY THE ANSWER MATTERS, said once, beside the control that decides it.
            It is the field that turns a cost into a debt, and nobody tapping it
            can be expected to know that from two words. */''}
@@ -11484,7 +11586,7 @@ reg('expAgain', ()=>{ const x=state.exp;
      is how the same taxi gets claimed twice. Who paid and which shop are facts
      about the person, and asking again for every claim in a row is friction for
      nothing. */
-  x.sent=null; x.amount=''; x.note=''; x.photo=null; x.err=''; x.cat='';
+  x.sent=null; x.amount=''; x.note=''; x.photo=null; x.err=''; x.cat=''; x.coming=false;
   x.mineTried=false; render(); });
 
 /* THE PHOTO IS DOWNSCALED ON THE PHONE, and this is the whole of why: a modern
@@ -11516,6 +11618,11 @@ reg('expPhoto', el=>{
   rd.readAsDataURL(f);
 });
 
+/* §114. Turning it OFF leaves the shop and the note exactly as they were — they
+   are ordinary optional fields again, not cleared, because somebody who ticked
+   this by mistake should not lose what they had already typed. */
+reg('expComing', ()=>{ const x=state.exp; x.coming=!x.coming; x.err=''; render(); });
+
 reg('expSend', ()=>{
   const x=state.exp;
   if(x.busy) return;
@@ -11525,10 +11632,19 @@ reg('expSend', ()=>{
      non-number is refused with the reason rather than stripped to the digits
      inside it: "3o" silently becoming 3 writes an amount nobody entered. */
   if(!(n>0)){ x.err=E('Enter an amount above zero.','请输入大于零的金额。'); render(); return; }
+  /* §114 — THE TWO THINGS AN ORDER CANNOT DO WITHOUT, refused here so the person
+     is told beside the control rather than after a round trip. The server refuses
+     both as well (lib/expense-claim.js) and that is the rule; this is the same
+     rule said sooner. Both sentences are the server's own, word for word. */
+  if(x.coming && !x.storeId){
+    x.err=E('Say where it is being delivered.','请选择收货门店。'); render(); return; }
+  if(x.coming && !String(x.note||'').trim()){
+    x.err=E('Give it a name first.','请先填写名称。'); render(); return; }
   x.busy=true; x.err=''; render();
   apiWrite('/staff-expenses',{
     date:expDate(), amount:n, category:x.cat||null, note:x.note||null,
     paid_by:x.paid, store_id:x.storeId||null, receipt_data:x.photo||null,
+    awaiting_delivery:!!x.coming,
   }).then(()=>{
     x.busy=false;
     x.sent={amount:n,cat:x.cat||''};
@@ -16847,7 +16963,12 @@ function sheetCustAddr(){
           ? `<div style="display:flex;align-items:center;gap:10px">
                <span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr([s.province,s.city].filter(Boolean).join(' · '))}</span>
                <button class="btn2" style="width:auto;padding:8px 14px;flex:none" onclick="APP.cmd('caddrUnpickCity')">${T('Change','更改')}</button></div>`
-          : `<input id="mCaddrCityQ" inputmode="search" value="${escAttr(s.cityQ)}" placeholder="${T('Search a city','搜索城市')}"
+          /* enterkeyhint="search", declared, like every other search box in this
+             file. §113's pass writes "done" onto any input that does not say
+             what its key is, which is the right default and the wrong one here:
+             this field's Enter narrows a list rather than finishing a form, and
+             the list is the next thing the thumb goes to. */
+          : `<input id="mCaddrCityQ" inputmode="search" enterkeyhint="search" value="${escAttr(s.cityQ)}" placeholder="${T('Search a city','搜索城市')}"
                oninput="APP.cmd('caddrCityQ',this.value)">
              <div id="mCaddrCityBox">${caddrCityPicks()}</div>`)}
         ${s.city?caddrField(T('District','区'),caddrDistricts()):''}
@@ -17965,6 +18086,10 @@ function render(){
   if(_qkeep){ const b=document.getElementById('mQuickBody'); if(b) b.scrollTop=_qkeep; }
   wireDrag();
   wirePull();
+  /* Every field this paint drew asks for a Done key — see PUTTING THE KEYBOARD
+     AWAY. Here rather than in the markup because the markup is fifty inputs in
+     forty places, and the one that gets forgotten is the one being typed in. */
+  kbHints();
   /* The live rider map is a real map instance, not markup — it is put back into
      the freshly written DOM rather than rebuilt, and torn down when the sheet
      it belongs to is no longer on screen. */
