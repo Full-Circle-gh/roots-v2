@@ -27,6 +27,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 2026-09-13 · v4.250 — **§117 DECIDED: ALL SYNCING GATHERS IN ONE PLACE, AND THE PRODUCTS LIST SAYS NOTHING ABOUT IT. PART ONE BUILT.** Reported by Ash from the desktop products list: *"now on product list page on pc I see channels sync. I don't want that. I need all syncing should gather in one page."* **THE COMBINED PAGE ALREADY EXISTED AND NOBODY COULD FIND IT** — §103's `#tab-channel-sync` was reached by a `btn btn-sm` in the Sales header's corner, beside Get help, which is where an action goes when nobody has decided it is a destination. **FOUR SURFACES ANSWERED ONE QUESTION**: the products list's dot column (§103 step 3), the Channel sync page, the Meituan and Eleme tabs (twins), and GZ Grocery — which shares neither their layout, their sub-nav, nor their vocabulary and carries its own inline `<style>` block. Ash: *"we also need to sync both sections so they will have the same features and same style."* **THE DECISION IS NOT TO RESTYLE THREE PAGES INTO A FOURTH'S LIKENESS.** Three pages kept in step by hand drift, and GZ Grocery is the proof that they already have. **A CHANNEL'S SYNC VIEW BECOMES A STATE OF THE COMBINED PAGE** — same frame, same chips, same search, same list, the channel picker merely narrowing — approved by Ash with **"ok"** to that exact question. Nothing is left to drift because there is nothing left to keep in step. **CHANNEL ADMIN IS NOT SYNC AND DOES NOT MOVE**: credentials, Meituan's Bundles, and GZ Grocery's Billing/Statement stay on their own pages — Ash on Billing: *"it's got nothing to do with syncing products"*. **THE NAME STAYS `Channel sync · 渠道同步`**, against Ash's own *"channel sync manager or something like that"*, and he did not press it: the name is already live on the dashboard's alert row, the phone's nav row (`m.html`), the Sales button this replaces, and throughout §103–§107, and this repo's one-word-per-thing rule is worth more than the word "manager". **PART ONE, BUILT HERE**: the corner button becomes a **sub-nav rendered identically on `#tab-sales` and `#tab-channel-sync`** — same classes, same two buttons, only `active` moves, which is what makes it a sub-nav rather than two one-way links and is how the operator gets back; both stand in on the Sales rail row already (`RAIL_STANDIN`), so the rail does not move underneath the crossing. The products list loses the Channels column, its three dots, its `PA_CH_*` state, and **a fourth read of `/channel-sync` on every catalogue load**; `csOpenProduct` goes with the dots that were its only caller. **THE EDITOR'S CHANNELS CARD STAYS** (§103 step 4) — one product looked at in depth is not a second overview competing with the first, and Ash scoped the removal to *"the products list page"*. **PARTS TWO AND THREE ARE DECIDED AND NOT BUILT**: folding the Meituan and Eleme sync views into the one frame, and GZ Grocery after them; each is its own PR. **The remaining weakness is named rather than fixed here**: the combined page is read-only and every red row still ends in *Open Meituan*, so the operator is told what is wrong on one screen and must go to another to fix it. Part two carries the repair panel to where the problem is shown; that, not layout, is what Ash asked for with *"how to solve the problem easily"*. **No Chinese was composed**: `Channel sync · 渠道同步` is the button this replaces, and `Overview · 概览` is lifted verbatim from the GZ Grocery page's own sub-nav, which is this same control on a channel page — so no `docs/tacet-delivery-vocabulary.md` entry is due. No route, no schema, no migration, no new capability (the sub-nav's Channel sync tab carries the same any-of gate as `TAB_CAP['channel-sync']`), and no change to `.gitignore` or CI.**
 
+2026-09-13 · v4.249 — **THE CUSTOMER SECTION IS THE WHOLE CUSTOMER SECTION, ON THE PHONE TOO — §116, DECIDED BY ASH: *"customer section on the mobile should be fully functional like the pc version. overview the customer section all functionality and make sure it's all available on mobile also audit that section."*** **The audit found a defect before it found a gap:** the record's four action buttons and the Block under them were drawn for every operator, while `lib/cap-routes.js` gates those writes on `customers:adjust`, `customers:block` and `customers:edit` — and `apiWrite` in `public/m.html` treats a 403 as a lost session, so a `customer_service` or warehouse account tapping Points was **logged out of the app mid-shift**. Every control is gated now, absent rather than disabled, with the guard in the COMMAND as well as the view — the hole §112 found in `teamToggle`. **The other twelve gaps were UI and the data was already arriving:** `GET /customers` returns `note`, `tags` and `tag_vocabulary`, and `GET /customers/:id` is a `SELECT *` already carrying `orders_by_month`, `affiliate.lifetime_*` and `stats.active_sessions`. **No route, no schema, no migration, no new capability.** Tier and channel are multi-select against the endpoint that always took a comma list, the tag filter is the server's own vocabulary, the sort reverses; the record gains tags and the note, the phone number, gender and birthday, every address with add/edit/delete/default, sign out all devices, the three referral controls **and the two states they turn** (which were on no screen, so a shop could stop somebody referring and never see that it had), twelve months of activity and a CSV export at the filters on screen. **Two decisions of 2026-08-22 reversed and said plainly:** the phone number (the endpoint has answered `phone_taken` since its own check went in, and this sheet already carried that refusal's wording) and sign out all devices (the device count is the reason to have the control, not a substitute for it). **Print statement, CSV import and reset-test stay off**, each for a stated reason — the last of the three is not a parity gap at all, since the desktop draws no control for it either. One desktop label deliberately NOT copied: `详细地址` is on two different fields there and the refusal that names it points at the wrong box. **Chinese:** 11 verbatim lifts, 3 arrangements, 38 composed, declared in `docs/tacet-delivery-vocabulary.md` v1.72. **Tests:** new `scripts/test_mobile_customers.js` — 84 assertions across 30 cases over request bodies and both directions of every capability gate; five render cases added to `scripts/test_mobile_screens.js` (456 renders, warm, cold and Chinese); registered in `run-suites.js`'s SLOW set. No CSS file, and no change to `.gitignore` or CI.**
+
 2026-09-13 · v4.248 — **§114 DECIDED AND BUILT: A PURCHASE THAT HAS NOT ARRIVED IS TRACKED AS AN ORDER, WHOEVER PAID FOR IT — DECIDED BY ASH, AND IT REVERSES §111 PART THREE.** The case that broke it, in his words: *"an employee use the company money to buy a food processor. it wasn't the person that do purchasing... the item didn't arrive and it need tracking"*. §111 part three had left claims alone because *a claim is money already out of a pocket — there is nothing to order and nothing to receive*; **true of a cook buying ginger, false of an appliance still in transit**, where the money is gone AND the goods are owed. Neither door held it: the claim path has no delivery to track, and the order path sits behind `purchasing:edit`, which the floor presets withhold on purpose. **Ash ruled twice**: the APPROVER raises the order from the claim (so nobody gains a capability), and it applies to the employee's OWN money too (the order tracks the delivery and owns the cost; the debt stays on the claim). **THREE FINDINGS MADE IT CHEAP**: `store_manager` already holds `purchasing:receive`, so the missing half was never the tracking but the CREATION; *paid, not yet arrived* is a state the record already has (`postRetailPOExpenses` posts on Ordered, `Delivered` seeds `qty_received`), so the order is raised at Ordered and never as a draft — a draft posts nothing and the money has already gone; and §111 part one's TYPED LINE is what carries a food processor, which is in no catalogue, so this could not have been built a day earlier. **THE MONEY IS POSTED ONCE**: `postClaim` writes nothing for a claim awaiting its delivery — keyed on `awaiting_delivery` and NOT on `po_id`, because on a first approval the order does not exist yet when it runs, and a `po_id` test would leave the same purchase in the books twice. **REJECT AND VOID ARE REFUSED while an order stands** (§114 part four): the claim has no ledger row of its own to take back, and cancelling the order behind the scenes would reach into a document that may already have been received — the refusal names Cancel order instead. **THE OWED FIGURE COSTS NOTHING**, verified rather than assumed: it reads status + paid_by + settled and never `expense_id`, so an employee who laid out their own money is still owed it and **Mark paid** still settles it. A claim marked *not arrived* must name a shop and a description — goods turn up at a door, and §111 part one refuses a line with no name. **Tests:** new `scripts/test_claim_purchase_order.js` (**47 cases**, both routers real, inventory stubbed but RECORDING), and `test_staff_expenses.js` 75 → **82 cases**, whose file-wide *one table, and it is the claim table* guard is NARROWED rather than dropped — the allowed set is named, the two new tables are pinned to `raiseOrderForClaim`, and a new case proves the SUBMIT path still writes the claim and nothing else, which is the assertion that actually carries §87 part one and which the old regex only implied. `npm run test:fast` 223 passed, 0 failed; eslint 0 errors; doc-numbering PASS. **Three composed strings and one taken whole**, all declared in `docs/tacet-delivery-vocabulary.md` v1.72 with a test case that re-reads each source and fails if a term stops being live. Two migrations (`staff_expenses.awaiting_delivery`, `po_id`), no new route, no new capability, and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.247 — **§113 ADDED: THE KEYBOARD GOES DOWN — REPORTED BY ASH in four words, *"keyboard doesn't go down"*, with the expense claim and Add someone photographed under it.** `public/m.html` has **no `<form>` in it**, so the soft keyboard's action key had nothing to submit; with no `enterkeyhint` on the field Gboard drew that key as **Go** (前往 in the screenshot), which on a formless page does nothing, and no tap anywhere on the screen would take focus off the field either. **The six fields that closed cleanly were rescued one at a time** — `mExpAmt` carries `enterkeyhint="done"` and a blurring `onkeydown` and sits **two rows above** the note field that has neither — which on a file with **fifty inputs** is the shape of a rule that was never made. **Three passes, none of them a list of field ids** (the reasoning `mTyping()` already carries): `kbHints()` writes the Done key onto every typed field on the paint that drew it, leaving the search boxes' own `enterkeyhint="search"` and the dates, files and checkboxes alone; Enter blurs, delegated once, **never in a textarea and never mid-pinyin** (`isComposing` / `keyCode 229` is an operator choosing a candidate, not asking to leave); and a tap that is not on a field puts the keyboard down, **judged at `click` and never at touch-down** — the scrim rule directly above it records what touch-down costs, *"the keyboard closing … reflows the page under a finger already in motion"* — and it stands aside wherever the tap moved focus itself, to another field or through a `<label>`. **No `<input>` in the file was edited**: four functions and two listeners, which is what makes it a rule rather than a fifty-first rescue. **Nothing here opens a keyboard** — `mSearch`'s `autofocus` and the add-stock caret are untouched. **No new UI text, so no Chinese and no vocabulary entry.** **Tests:** new `scripts/test_mobile_keyboard.js` — **47 assertions across 6 cases**, the four functions sliced out of the shipped file and driven against a hand-built DOM, red-proofed by removing the pinyin and `<label>` guards; fast shard, no browser, auto-discovered by `run-suites.js` and aliased `test:mobile-keyboard`. `npm run test:fast` 222/222 green; the sweep re-rendered all 147 screens (441 renders) with the pass running on every paint. Geometry unchanged — its two `sheet:kq-*` header findings are identical on `main`. No CSS file, no route, no schema, and no change to `.gitignore` or CI.**
@@ -12882,6 +12884,133 @@ whose gesture and button disagree.
 this screen; the count is a numeral. The one candidate that would have needed a
 new string — *Kitchen queue · 3 more to make* — was restructured into the name
 plus a numeral instead, which is the preference `CLAUDE.md` states.
+
+---
+
+## §116 — THE CUSTOMER SECTION IS THE WHOLE CUSTOMER SECTION, ON THE PHONE TOO
+
+**Decided by Ash, 2026-09-13**, against the phone build: **"customer section on
+the mobile should be fully functional like the pc version. overview the customer
+section all functionality and make sure it's all available on mobile also audit
+that section."**
+
+§112's shape, one section later, and the same sentence underneath it: the rule
+that keeps authoring on a desktop is still right for a product with options and
+variants in it, and it was never the rule that should have governed this. A
+customer record is not authored. It is read at the counter with the person
+standing there, and the acts on it — fix the flat number, note the allergy, tag
+them wholesale, stop the referral code somebody is abusing, sign the stolen
+phone out — all happen in the shop, on the day.
+
+### The defect this audit found, which is not a parity gap
+
+The record's four action buttons and the Block under them were drawn for
+**every** operator. `lib/cap-routes.js` gates those writes — `customers:adjust`
+for points and wallet, `customers:block` for block, unblock and force-logout,
+`customers:edit` for the rest — and `lib/capabilities.js` hands
+`customer_service`, warehouse and dispatch presets a narrower set than that.
+
+**A refusal here does not fail politely.** `apiWrite` in `public/m.html` treats
+`403` the same as `401` — as a lost session — and sends the browser to
+`/backend/login`. So an operator holding `customers:view` who tapped Points was
+logged out of the app mid-shift, with no message and nothing saved. Every
+control in the section is gated now, absent rather than disabled, **and the
+guard is in the command as well as in the view**: a guard the view enforces is
+one `APP.cmd` walks straight past, which is the hole §112 found in `teamToggle`
+and `teamEnforce`, and the probe asserts both directions.
+
+`apiWrite`'s own 403 handling is left alone deliberately. Changing what a 403
+means to that helper touches every screen in the file and belongs to its own
+brief; what this section can honestly do is stop drawing the controls that
+provoke one. Recorded here so the next pass does not read the gate as the whole
+fix.
+
+### Everything else was UI, and the data was already arriving
+
+**No route, no schema, no migration, no new capability.** `GET /customers`
+already returned `note`, `tags` and `tag_vocabulary`; `GET /customers/:id` is a
+`SELECT *` and already carried `orders_by_month`, `affiliate.lifetime_mode` /
+`lifetime_eligible` / `lifetime_eligible_since` and `stats.active_sessions`. The
+phone was fetching all of it and rendering some of it.
+
+Twelve gaps, closed over the desktop's own endpoints:
+
+| | Was | Now |
+|---|---|---|
+| Tier, channel | single-select against a `tier=a,b` endpoint | multi-select; `All` is the row's clear, not a fourth value |
+| Tags | no filter at all | chips from the server's `tag_vocabulary`, with its counts; the row is absent until somebody has tagged somebody |
+| Sort | no `dir` sent, so Name could only run A→Z | picking the ordering you are on turns it over |
+| Tags + note on the record | nothing rendered | shown and editable, through the same `PATCH` |
+| Profile | name and email | name, email, **phone, gender, birthday** |
+| Add a customer | only inside the order wizard | the roster's own button |
+| Addresses | first three, `city · district · detail`, read-only | all of them with the recipient, the street line and the default marked; add, edit, delete, set default |
+| Sign out all devices | `➖` | on the record |
+| Referring / ongoing share / reissue code | not on the phone at all | three controls, and the two **states** they turn, which were on no screen |
+| Activity | `➖` | twelve columns and the busiest month named |
+| CSV export | `➖` | the server's file, at the filters the screen is showing |
+
+### The two reversals, said plainly
+
+`docs/tacet-mobile-parity.md` recorded both as asked and settled on 2026-08-22,
+so overturning them is a decision and not a tidy-up.
+
+**The phone number.** Held back because records dedupe on it, so a mistyped
+digit one-handed is a merge or a split rather than a typo. That describes a
+SILENT collision, and `PATCH /customers/:id` has not been silent about one since
+its own duplicate check went in: it answers `phone_taken` and writes nothing —
+and this sheet has carried the wording for that refusal all along, with no field
+that could provoke it. What is left is a number typed wrong into an unused slot,
+which is the risk the name and the email already carry. The warning stays as a
+warning rather than as a door.
+
+**Sign out all devices.** Declined on the grounds that the device count is the
+useful part. The count is the reason to have the control, not a substitute for
+it: the sentence that precedes it is "my phone was stolen", said out loud, in
+the shop.
+
+### What stays on the desktop
+
+**Print statement** — `m.html` has no browser-print path at all. Its printer is
+the shop's thermal receipt printer (`POST /orders/:id/print`), and
+`cuPrintStatement` builds a page through `tdPrintTable`, which the phone does
+not load. A statement is a document, and that is a desktop affordance rather
+than a withheld feature.
+
+**CSV import** — bulk authoring, by the rule that still holds for products and
+broadcasts.
+
+**Reset test account** — `POST /customers/:id/reset-test` exists as a route and
+the desktop draws no control for it either, so its absence is not a gap between
+the two surfaces. Recorded so the next audit does not file it as one.
+
+### One desktop label deliberately not copied
+
+`08-customers.js` labels both the street line and the sub-address `详细地址`,
+and its own refusal — `收件人、电话和详细地址都需要填写。` — means the street one
+by it. Two fields under one label, in a form that refuses by naming the label,
+is a refusal pointing at the wrong box. The phone splits them: `街道地址` and
+`楼栋 / 楼层 / 房号`. Everything else on these screens uses the desktop's
+characters unchanged, for §112's reason.
+
+**Chinese:** 11 verbatim lifts, three arrangements that move only a clause
+naming a device, and 38 composed pairs — declared in
+`docs/tacet-delivery-vocabulary.md` v1.72 with the rejected candidates beside
+them.
+
+### What holds it
+
+`scripts/test_mobile_customers.js` — **84 assertions across 30 cases**, over
+request bodies rather than screens: tags save lower-cased and deduped through
+the profile `PATCH`, a new address reads its province off the picked city, an
+edit is a `PUT` to its own id, the ongoing share posts `customerId` to
+`/affiliate/eligible` and not to a customers route, the export's query is built
+by the roster read's own helper so the file and the screen cannot disagree, and
+an operator holding only `customers:view` is offered nothing AND gets nothing
+when each command is called directly. Five render cases join
+`scripts/test_mobile_screens.js` (456 renders, warm, cold and Chinese), one of
+them the view-only record. Registered in `run-suites.js`'s SLOW set, with the
+comment saying why `isSlow()` cannot see the browser in an `m-probe` suite. No
+CSS file, and no change to `.gitignore` or to CI.
 
 
 ## §117 — ALL SYNCING GATHERS IN ONE PLACE, AND THE PRODUCTS LIST SAYS NOTHING ABOUT IT
