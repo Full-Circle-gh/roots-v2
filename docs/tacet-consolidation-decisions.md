@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.249
+# Tacet shared-core consolidation — decisions record, v4.250
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-13 · v4.250 — **§117 DECIDED: THE QR MENU ASKS THE QUESTIONS THE COUNTER WOULD HAVE ASKED — DECIDED BY ASH, who answered both open questions and then said *"do all as you see fit"*.** Asked whether the QR menu has variant options, the answer was flatly no: it sells a flat row, tap Add and get one unit, and it reads NEITHER of the two choice mechanisms this system already has. **THE SURVEY IS THE VALUABLE HALF and it shrank the job from days to about one:** `options_json` on `retail_order_items` already exists and the web/mini-app checkout already fills it; `lib/feie.js` already prints every chosen option with its question in both languages on both templates; and the till NEVER re-prices a QR order — `recall()` loads it read-only and the settle path only marks it paid — so base-plus-extras needs nothing from the till but a line that shows what was chosen. **TWO RULES DECIDED BY ASH: a sold-out paid extra greys out and the drink still sells (1A), and a required question BLOCKS and names itself (2B).** **NO CHINESE COMPOSED** — `请选择 ` + the question is the storefront's own required-option toast and the mini app's, character for character, and the vocabulary document is not touched. **AND THE PRECEDENT THIS WAS ABOUT TO COPY TURNED OUT TO BE DEAD CODE:** `addon_available` was read by both mini-app surfaces and written nowhere in the repository, so the sold-out-extra guard had never once fired and a shopper could be billed for an extra the counter had run out of. Fixed separately, one PR per change, before this build starts.
 
 2026-09-13 · v4.249 — **THE CUSTOMER SECTION IS THE WHOLE CUSTOMER SECTION, ON THE PHONE TOO — §116, DECIDED BY ASH: *"customer section on the mobile should be fully functional like the pc version. overview the customer section all functionality and make sure it's all available on mobile also audit that section."*** **The audit found a defect before it found a gap:** the record's four action buttons and the Block under them were drawn for every operator, while `lib/cap-routes.js` gates those writes on `customers:adjust`, `customers:block` and `customers:edit` — and `apiWrite` in `public/m.html` treats a 403 as a lost session, so a `customer_service` or warehouse account tapping Points was **logged out of the app mid-shift**. Every control is gated now, absent rather than disabled, with the guard in the COMMAND as well as the view — the hole §112 found in `teamToggle`. **The other twelve gaps were UI and the data was already arriving:** `GET /customers` returns `note`, `tags` and `tag_vocabulary`, and `GET /customers/:id` is a `SELECT *` already carrying `orders_by_month`, `affiliate.lifetime_*` and `stats.active_sessions`. **No route, no schema, no migration, no new capability.** Tier and channel are multi-select against the endpoint that always took a comma list, the tag filter is the server's own vocabulary, the sort reverses; the record gains tags and the note, the phone number, gender and birthday, every address with add/edit/delete/default, sign out all devices, the three referral controls **and the two states they turn** (which were on no screen, so a shop could stop somebody referring and never see that it had), twelve months of activity and a CSV export at the filters on screen. **Two decisions of 2026-08-22 reversed and said plainly:** the phone number (the endpoint has answered `phone_taken` since its own check went in, and this sheet already carried that refusal's wording) and sign out all devices (the device count is the reason to have the control, not a substitute for it). **Print statement, CSV import and reset-test stay off**, each for a stated reason — the last of the three is not a parity gap at all, since the desktop draws no control for it either. One desktop label deliberately NOT copied: `详细地址` is on two different fields there and the refusal that names it points at the wrong box. **Chinese:** 11 verbatim lifts, 3 arrangements, 38 composed, declared in `docs/tacet-delivery-vocabulary.md` v1.72. **Tests:** new `scripts/test_mobile_customers.js` — 84 assertions across 30 cases over request bodies and both directions of every capability gate; five render cases added to `scripts/test_mobile_screens.js` (456 renders, warm, cold and Chinese); registered in `run-suites.js`'s SLOW set. No CSS file, and no change to `.gitignore` or CI.**
 
@@ -13007,3 +13009,88 @@ when each command is called directly. Five render cases join
 them the view-only record. Registered in `run-suites.js`'s SLOW set, with the
 comment saying why `isSlow()` cannot see the browser in an `m-probe` suite. No
 CSS file, and no change to `.gitignore` or to CI.
+
+## §117 — THE QR MENU ASKS THE QUESTIONS THE COUNTER WOULD HAVE ASKED
+
+**2026-09-13 · Ash decided. Not yet built.**
+
+**THE GAP.** The public QR menu (`routes/shop-menu.js`, §41/§42/§44/§45/§47) sells a
+flat row: tap Add, get one unit. It reads neither of the two choice mechanisms
+this system already has — variants (`variant_group_id`) and per-product options
+(`retail_product_options` + `retail_product_option_choices`). A customer standing
+at the counter cannot say "half sugar", and a drink sold in three sizes occupies
+three rows of a phone screen, or fewer, depending on what the operator happened
+to list. The web storefront and the mini app have both asked these questions for
+a long time. The QR menu is the one customer surface that does not.
+
+**IT IS BUILT ON OPTIONS, NOT ON VARIANTS, AND THE REASON IS THE SCREEN.** Options
+already carry a price delta, both languages, required/optional, and
+`stock_product_id` — the link from a paid extra back to a real stock item. Every
+part is present. Variants would answer the same question by putting each size on
+its own menu row, which is three lines of a small screen for one drink read by
+somebody who is standing up. The variant path stays where it is (the storefront's
+size switcher, `routes/retail.js`) and is not extended here.
+
+**NOTHING DOWNSTREAM IS BEING BUILT, because two of the three pieces already
+exist.** This is the finding that shrank the work, and it is recorded so nobody
+re-derives it:
+
+1. **Storage.** `retail_order_items.options_json` exists and is described in
+   `database.js` as "chosen option labels + price deltas, for the receipt". The
+   web/mini-app checkout fills it, validating that each choice belongs to the
+   product and snapshotting the QUESTION and both languages so the line still
+   reads "Heat up?: Yes" after the option is edited or deleted. The QR menu's
+   own INSERT simply omits the column. One column, one INSERT.
+2. **The kitchen ticket.** `lib/feie.js` already prints each chosen option on its
+   own line, with its question, in both languages, on both templates. QR orders
+   print on paid (§50, narrowed) through that same path. Nothing to build.
+3. **The till.** The till NEVER re-prices a QR order — `recall()` in
+   `public/till.html` loads it read-only and the settle path only marks it paid,
+   at the total the server already wrote. So a base-plus-extras price needs
+   nothing from the till. One gap only, and it is display: the till's line mapper
+   drops `it.options`, so a cashier settling order 12 reads "Latte x1" and not
+   "Half sugar". The admin detail endpoint already returns the field.
+
+**RULE 1 — A SOLD-OUT PAID EXTRA GREYS OUT; THE DRINK STILL SELLS.** Oat milk runs
+out, the oat-milk choice goes dead, the latte is still a latte and is still
+bought. The opposite reading — the whole product sold out because one optional
+extra is — punishes the customer who did not want the extra. Only a
+stock-LINKED choice can be sold out at all; a free choice (sugar, ice, hot/cold)
+has no stock record and is never affected. A sold-out extra is never billed and
+never written to the order line.
+
+**RULE 2 — A REQUIRED QUESTION BLOCKS, AND SAYS WHICH QUESTION.** Tapping Add with
+a required question unanswered does not add the item; it says
+`Please choose: <question>` / `请选择 <question>`. The alternative — pre-select the
+first choice and never block — was considered and rejected: a silently defaulted
+sugar level is a wrong drink the customer did not order and the counter cannot
+tell was never chosen.
+
+**NO CHINESE IS COMPOSED, and the vocabulary document is not touched.** Every
+string this needs is already live on a customer surface. `请选择 ` + the question
+is the web storefront's own required-option toast (`public/shop.html`) and the
+mini app's (`miniapp/pages/product/product.js`), character for character, in both
+places, for exactly this purpose. Question and choice labels come from the
+tenant's own option records, which carry both languages already. `售罄` for a
+dead choice is the QR menu's own sold-out word, already on the page.
+
+**RULE 3 — TWO SUGAR LEVELS ARE TWO LINES.** The QR page's cart is keyed by
+product id alone. It becomes keyed by product id AND the chosen choice ids, or a
+customer ordering one full-sugar and one half-sugar latte gets two full-sugar
+lattes. This is the fiddliest part of the change and the one most likely to be
+got wrong quietly.
+
+**THE MINI APP'S VERSION OF RULE 1 DID NOT ACTUALLY RUN, and it was fixed
+FIRST, on its own branch, before any of this was built.** `miniapp/pages/product/product.js` and
+`miniapp/pages/add-to-order/add-to-order.js` both compute a choice's sold-out
+state as `!!c.stock_product_id && c.addon_available === false`. **`addon_available`
+is written nowhere in this repository** — two readers, zero writers, confirmed by
+a whole-tree grep. The comparison is therefore never true, the sold-out-extra
+guard never fires, and a shopper can today order and be billed for a paid extra
+that ran out. It is recorded here because it is the precedent this section was
+about to copy, and copying a dead guard would have produced a QR menu that
+looked right and sold oat milk it did not have. The fix answers the question at
+`GET /api/retail/products/:id` and changes no client; four of its six test cases
+fail without it. The QR menu computes its OWN availability rather than reaching
+for that field, because its stock question is a different one — this shop's
+shelf, not the company's sellable count (§47).
