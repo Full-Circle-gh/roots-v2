@@ -4,7 +4,7 @@
  *
  *   node scripts/test_mobile_customers.js
  *
- * §115. Ash: "customer section on the mobile should be fully functional like
+ * §116. Ash: "customer section on the mobile should be fully functional like
  * the pc version." What that turned out to mean, against public/retail-admin/
  * 08-customers.js, was twelve things — three filters that asked a narrower
  * question than the desktop's, six writes the phone had no way to make, two

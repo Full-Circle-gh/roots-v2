@@ -132,13 +132,13 @@ desktop is the right home
 |---|---|
 | Segments with real counts, tier filter | ✅ |
 | Roster with the unopened treatment | ✅ |
-| Record: ordered / orders / avg, points, wallet, recent orders, addresses, diagnostics | ✅ — read-only until §115 |
+| Record: ordered / orders / avg, points, wallet, recent orders, addresses, diagnostics | ✅ — read-only until §116 |
 | Adjust points | ✅ — with the reason the server requires |
 | Top up wallet | ✅ |
 | Block / unblock | ✅ |
 | Message the customer | ✅ — `POST /customers/:id/message`; the desktop then opens the feedback thread, the phone says where the reply will land and refreshes the Inbox |
-| Edit profile, addresses CRUD | ✅ — **§115, 2026-09-13.** Both were `➖` here until then; see *Customers — the whole section (§115)* below |
-| Force logout, CSV export | ✅ — §115 |
+| Edit profile, addresses CRUD | ✅ — **§116, 2026-09-13.** Both were `➖` here until then; see *Customers — the whole section (§116)* below |
+| Force logout, CSV export | ✅ — §116 |
 | Reset test account | ➖ — and **not a parity gap**: `POST /customers/:id/reset-test` exists as a route and the desktop draws no control for it either |
 | Print statement | ➖ — genuinely desktop. `m.html` has no browser-print path at all; the phone's printer is the shop's thermal receipt printer (`POST /orders/:id/print`), and `cuPrintStatement` builds a page through `tdPrintTable`, which the phone does not load |
 | CSV import | ➖ — bulk authoring, by the rule that keeps products and broadcasts on the desktop |
@@ -401,14 +401,14 @@ columns of fact. Reported from production, then swept column by column.
 | **Referrals**: their code, who referred them, who they brought | ✅ |
 | **Last order / last sign-in / devices signed in** | ✅ |
 | Diagnostics | ✅ |
-| Activity chart by month | ✅ — **§115 reversed this.** The line below was right that the figures matter more than the chart, and wrong that they were already there: none of them were. Twelve bare columns and the busiest month named, off `orders_by_month`, which the record had been fetching all along. *(was: a chart is the desktop's affordance; the figures behind it are all on the phone)* |
-| **Tags and the note** | ✅ — §115. Absent from this table until then, and absent from the phone: `note` and `tags` arrive on every record read and nothing rendered them |
+| Activity chart by month | ✅ — **§116 reversed this.** The line below was right that the figures matter more than the chart, and wrong that they were already there: none of them were. Twelve bare columns and the busiest month named, off `orders_by_month`, which the record had been fetching all along. *(was: a chart is the desktop's affordance; the figures behind it are all on the phone)* |
+| **Tags and the note** | ✅ — §116. Absent from this table until then, and absent from the phone: `note` and `tags` arrive on every record read and nothing rendered them |
 | Message, Adjust points, Adjust wallet, Block | ✅ |
-| Edit profile (name, email, **phone, gender, birthday**) | ✅ — **§115 finished this.** The phone number was held back on 2026-08-22 as the key records dedupe on; `PATCH /customers/:id` has refused a duplicate with `phone_taken` since its own check went in, and this sheet already carried the wording for that refusal without any field that could provoke it. Gender and birthday were never in this table and were never on the phone. *(was: the phone number stays a desktop edit)* |
-| Sign out all devices | ✅ — **§115 reversed 2026-08-22's decline.** The count being on the record is the reason to have the control, not a substitute for it: a stolen phone or a shared login is said out loud in the shop |
-| Address add / edit / delete / set default | ✅ — §115. Its own sheet over the record, the same nine fields and four endpoints the desktop's modal uses, and the province read off the picked city rather than typed *(was: decided: desktop)* |
-| **Referring, the ongoing share, reissue code** | ✅ — §115. Never in this table; the three controls `renderAffiliateBlockToggle`, `renderLifetimeEligibility` and `afReissueCode` draw on the desktop drawer and had no phone equivalent |
-| **The four action buttons, gated** | ✅ — §115, and this was a defect rather than a gap. See below |
+| Edit profile (name, email, **phone, gender, birthday**) | ✅ — **§116 finished this.** The phone number was held back on 2026-08-22 as the key records dedupe on; `PATCH /customers/:id` has refused a duplicate with `phone_taken` since its own check went in, and this sheet already carried the wording for that refusal without any field that could provoke it. Gender and birthday were never in this table and were never on the phone. *(was: the phone number stays a desktop edit)* |
+| Sign out all devices | ✅ — **§116 reversed 2026-08-22's decline.** The count being on the record is the reason to have the control, not a substitute for it: a stolen phone or a shared login is said out loud in the shop |
+| Address add / edit / delete / set default | ✅ — §116. Its own sheet over the record, the same nine fields and four endpoints the desktop's modal uses, and the province read off the picked city rather than typed *(was: decided: desktop)* |
+| **Referring, the ongoing share, reissue code** | ✅ — §116. Never in this table; the three controls `renderAffiliateBlockToggle`, `renderLifetimeEligibility` and `afReissueCode` draw on the desktop drawer and had no phone equivalent |
+| **The four action buttons, gated** | ✅ — §116, and this was a defect rather than a gap. See below |
 
 ### Inbox — the second sweep (`07-content-billing.js`)
 
@@ -1242,7 +1242,7 @@ a signpost: the same small lie as a control wired to nothing. Products carries
 the counting. The Quick Stock *feature switch* in Settings is a different thing
 and stays — it decides whether staff can open the `/stock` app at all.
 
-### Customers — the whole section (§115, 2026-09-13)
+### Customers — the whole section (§116, 2026-09-13)
 
 Ash: *"customer section on the mobile should be fully functional like the pc
 version. overview the customer section all functionality and make sure it's all

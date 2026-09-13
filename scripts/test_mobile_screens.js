@@ -232,7 +232,7 @@ function buildCases(src) {
     'sheet:account': "APP.cmd('overflow')",
     'sheet:cust-points': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{nickname:'A',tier_key:'tree',points_balance:120,balance:8},stats:{orders:{}}};render();APP.cmd('adjustPoints')",
     'sheet:cust-block': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{nickname:'A',tier_key:'tree',is_blocked:1},stats:{orders:{}}};render();APP.cmd('toggleBlock')",
-    // ── The customer section's parity build (§115) ────────────────────────
+    // ── The customer section's parity build (§116) ────────────────────────
     // A record carrying every block the desktop's drawer carries: the note and
     // tags, addresses with their two writes, the referral controls, and twelve
     // months of activity. Rendered in one case because they share one sheet and

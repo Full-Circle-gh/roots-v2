@@ -23,7 +23,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-13 · v4.249 — **THE CUSTOMER SECTION IS THE WHOLE CUSTOMER SECTION, ON THE PHONE TOO — §115, DECIDED BY ASH: *"customer section on the mobile should be fully functional like the pc version. overview the customer section all functionality and make sure it's all available on mobile also audit that section."*** **The audit found a defect before it found a gap:** the record's four action buttons and the Block under them were drawn for every operator, while `lib/cap-routes.js` gates those writes on `customers:adjust`, `customers:block` and `customers:edit` — and `apiWrite` in `public/m.html` treats a 403 as a lost session, so a `customer_service` or warehouse account tapping Points was **logged out of the app mid-shift**. Every control is gated now, absent rather than disabled, with the guard in the COMMAND as well as the view — the hole §112 found in `teamToggle`. **The other twelve gaps were UI and the data was already arriving:** `GET /customers` returns `note`, `tags` and `tag_vocabulary`, and `GET /customers/:id` is a `SELECT *` already carrying `orders_by_month`, `affiliate.lifetime_*` and `stats.active_sessions`. **No route, no schema, no migration, no new capability.** Tier and channel are multi-select against the endpoint that always took a comma list, the tag filter is the server's own vocabulary, the sort reverses; the record gains tags and the note, the phone number, gender and birthday, every address with add/edit/delete/default, sign out all devices, the three referral controls **and the two states they turn** (which were on no screen, so a shop could stop somebody referring and never see that it had), twelve months of activity and a CSV export at the filters on screen. **Two decisions of 2026-08-22 reversed and said plainly:** the phone number (the endpoint has answered `phone_taken` since its own check went in, and this sheet already carried that refusal's wording) and sign out all devices (the device count is the reason to have the control, not a substitute for it). **Print statement, CSV import and reset-test stay off**, each for a stated reason — the last of the three is not a parity gap at all, since the desktop draws no control for it either. One desktop label deliberately NOT copied: `详细地址` is on two different fields there and the refusal that names it points at the wrong box. **Chinese:** 11 verbatim lifts, 3 arrangements, 38 composed, declared in `docs/tacet-delivery-vocabulary.md` v1.72. **Tests:** new `scripts/test_mobile_customers.js` — 84 assertions across 30 cases over request bodies and both directions of every capability gate; five render cases added to `scripts/test_mobile_screens.js` (456 renders, warm, cold and Chinese); registered in `run-suites.js`'s SLOW set. No CSS file, and no change to `.gitignore` or CI.**
+2026-09-13 · v4.249 — **THE CUSTOMER SECTION IS THE WHOLE CUSTOMER SECTION, ON THE PHONE TOO — §116, DECIDED BY ASH: *"customer section on the mobile should be fully functional like the pc version. overview the customer section all functionality and make sure it's all available on mobile also audit that section."*** **The audit found a defect before it found a gap:** the record's four action buttons and the Block under them were drawn for every operator, while `lib/cap-routes.js` gates those writes on `customers:adjust`, `customers:block` and `customers:edit` — and `apiWrite` in `public/m.html` treats a 403 as a lost session, so a `customer_service` or warehouse account tapping Points was **logged out of the app mid-shift**. Every control is gated now, absent rather than disabled, with the guard in the COMMAND as well as the view — the hole §112 found in `teamToggle`. **The other twelve gaps were UI and the data was already arriving:** `GET /customers` returns `note`, `tags` and `tag_vocabulary`, and `GET /customers/:id` is a `SELECT *` already carrying `orders_by_month`, `affiliate.lifetime_*` and `stats.active_sessions`. **No route, no schema, no migration, no new capability.** Tier and channel are multi-select against the endpoint that always took a comma list, the tag filter is the server's own vocabulary, the sort reverses; the record gains tags and the note, the phone number, gender and birthday, every address with add/edit/delete/default, sign out all devices, the three referral controls **and the two states they turn** (which were on no screen, so a shop could stop somebody referring and never see that it had), twelve months of activity and a CSV export at the filters on screen. **Two decisions of 2026-08-22 reversed and said plainly:** the phone number (the endpoint has answered `phone_taken` since its own check went in, and this sheet already carried that refusal's wording) and sign out all devices (the device count is the reason to have the control, not a substitute for it). **Print statement, CSV import and reset-test stay off**, each for a stated reason — the last of the three is not a parity gap at all, since the desktop draws no control for it either. One desktop label deliberately NOT copied: `详细地址` is on two different fields there and the refusal that names it points at the wrong box. **Chinese:** 11 verbatim lifts, 3 arrangements, 38 composed, declared in `docs/tacet-delivery-vocabulary.md` v1.72. **Tests:** new `scripts/test_mobile_customers.js` — 84 assertions across 30 cases over request bodies and both directions of every capability gate; five render cases added to `scripts/test_mobile_screens.js` (456 renders, warm, cold and Chinese); registered in `run-suites.js`'s SLOW set. No CSS file, and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.248 — **§114 DECIDED AND BUILT: A PURCHASE THAT HAS NOT ARRIVED IS TRACKED AS AN ORDER, WHOEVER PAID FOR IT — DECIDED BY ASH, AND IT REVERSES §111 PART THREE.** The case that broke it, in his words: *"an employee use the company money to buy a food processor. it wasn't the person that do purchasing... the item didn't arrive and it need tracking"*. §111 part three had left claims alone because *a claim is money already out of a pocket — there is nothing to order and nothing to receive*; **true of a cook buying ginger, false of an appliance still in transit**, where the money is gone AND the goods are owed. Neither door held it: the claim path has no delivery to track, and the order path sits behind `purchasing:edit`, which the floor presets withhold on purpose. **Ash ruled twice**: the APPROVER raises the order from the claim (so nobody gains a capability), and it applies to the employee's OWN money too (the order tracks the delivery and owns the cost; the debt stays on the claim). **THREE FINDINGS MADE IT CHEAP**: `store_manager` already holds `purchasing:receive`, so the missing half was never the tracking but the CREATION; *paid, not yet arrived* is a state the record already has (`postRetailPOExpenses` posts on Ordered, `Delivered` seeds `qty_received`), so the order is raised at Ordered and never as a draft — a draft posts nothing and the money has already gone; and §111 part one's TYPED LINE is what carries a food processor, which is in no catalogue, so this could not have been built a day earlier. **THE MONEY IS POSTED ONCE**: `postClaim` writes nothing for a claim awaiting its delivery — keyed on `awaiting_delivery` and NOT on `po_id`, because on a first approval the order does not exist yet when it runs, and a `po_id` test would leave the same purchase in the books twice. **REJECT AND VOID ARE REFUSED while an order stands** (§114 part four): the claim has no ledger row of its own to take back, and cancelling the order behind the scenes would reach into a document that may already have been received — the refusal names Cancel order instead. **THE OWED FIGURE COSTS NOTHING**, verified rather than assumed: it reads status + paid_by + settled and never `expense_id`, so an employee who laid out their own money is still owed it and **Mark paid** still settles it. A claim marked *not arrived* must name a shop and a description — goods turn up at a door, and §111 part one refuses a line with no name. **Tests:** new `scripts/test_claim_purchase_order.js` (**47 cases**, both routers real, inventory stubbed but RECORDING), and `test_staff_expenses.js` 75 → **82 cases**, whose file-wide *one table, and it is the claim table* guard is NARROWED rather than dropped — the allowed set is named, the two new tables are pinned to `raiseOrderForClaim`, and a new case proves the SUBMIT path still writes the claim and nothing else, which is the assertion that actually carries §87 part one and which the old regex only implied. `npm run test:fast` 223 passed, 0 failed; eslint 0 errors; doc-numbering PASS. **Three composed strings and one taken whole**, all declared in `docs/tacet-delivery-vocabulary.md` v1.72 with a test case that re-reads each source and fails if a term stops being live. Two migrations (`staff_expenses.awaiting_delivery`, `po_id`), no new route, no new capability, and no change to `.gitignore` or CI.**
 
@@ -12814,9 +12814,76 @@ sets them; a purchase made in a shop by an employee is exactly the case
 **What the buyer is told when an approval raises an order.** It appears in the purchasing list
 like any other Ordered PO. §66 and §69 are the precedent for adding a notification later if
 the day turns out to need one; inventing it now would be inventing the workflow.
+
+## §115 — TWO WAYS OFF A KITCHEN JOB, AND NEITHER ONE NAMES THE SCREEN IT IS ALREADY ON
+
+**Reported by Ash, 2026-09-13**, against a photograph of the Kitchen queue with
+`PR-260913-001` open: ***"kit jen quote button is not clear."*** The button is
+the chip directly under the title, and it read **Kitchen queue** — the same two
+words as the `<h1>` six pixels above it. It is a label, or a tab, or the name of
+the screen you are standing on. It is in fact the only door back to the list.
+
+### Why a door was drawn as a label
+
+The order detail is a STATE of the queue screen (`state.kq.orderId`), not a
+route of its own, so the pushed stack knows nothing about it and the head's own
+Back leaves for **More**. The chip was added to cover that, and it inherited the
+screen's name because that is where it goes — which is exactly what makes it
+unreadable as a control: nothing on it says back. No chevron, no verb, and a
+destination it shares with the heading above it.
+
+### The rule: a control is named for where it goes, and no two of them go to the same place
+
+Three things on an open job, three answers:
+
+1. **The title is the job.** `titleOf` on `SUBS.kitchenqueue` returns the
+   request's own number — the list keeps the screen's name, an open job takes
+   the number's. With it, `status` carries the day · lines · purpose line and
+   `cta` carries **Reprint**: the three hooks `pageHead` has always offered,
+   wired the way `SUBS.receivexfer` already wires them for a PO. So the body of
+   an open job is its lines and nothing else, and the first thing to make is the
+   first thing on the glass.
+2. **The head's Back keeps saying More**, and keeps meaning it: out of the
+   kitchen's tool, to the menu it was opened from. No `backLabel`. This was
+   Ash's call over the alternative — a head reading `‹ Kitchen queue` with the
+   number as title — and it is the better one: it leaves the app's global `back`
+   command untouched, and it keeps a one-tap exit from the tool.
+3. **The way back to the LIST is a bar at the foot of the job** (`kqBackBar`),
+   because that is where the hand is. The operator works DOWN the lines and
+   closes the last one at the bottom of the list; top-left is then the furthest
+   point on the glass from the thumb that has just tapped. It carries what is
+   waiting back there — this job excluded, and only on `active`, where waiting
+   means something. A numeral needs no label beside the name of the list it
+   counts, which is how Receiving's own segments already say it
+   (*To receive 4*). The price is ~56px of every job screen; it was drawn at
+   size and accepted before it was built.
+
+### And the phone's own Back was going somewhere else entirely
+
+Found while checking whether the split could work, and shipped with it because
+the two must never disagree: `layers()` — the list that keeps the history stack
+as deep as the app's own layers, so an Android edge swipe closes a layer instead
+of the app — covered orders, customers, products, POs and every sheet, but **not
+an open kitchen job**. A swipe threw the whole screen away and landed on More,
+straight past the list. It is one line, and `kqDropOrder` is now the single
+function both it and the bar call, so the gesture and the button cannot drift.
+
+**`Ready from the kitchen` has the identical shape and the identical gap** —
+`state.kr.orderId` is not a layer either. It is left alone here on purpose: that
+screen's own way out is a different control that this decision has not looked
+at, and fixing half of it silently is how the next session inherits a screen
+whose gesture and button disagree.
+
+### No Chinese was composed
+
+`厨房制作队列`, `重打`, `项` and the purpose words are all live pairs already on
+this screen; the count is a numeral. The one candidate that would have needed a
+new string — *Kitchen queue · 3 more to make* — was restructured into the name
+plus a numeral instead, which is the preference `CLAUDE.md` states.
+
 ---
 
-## §115 — THE CUSTOMER SECTION IS THE WHOLE CUSTOMER SECTION, ON THE PHONE TOO
+## §116 — THE CUSTOMER SECTION IS THE WHOLE CUSTOMER SECTION, ON THE PHONE TOO
 
 **Decided by Ash, 2026-09-13**, against the phone build: **"customer section on
 the mobile should be fully functional like the pc version. overview the customer
