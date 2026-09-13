@@ -23,7 +23,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-13 · v4.249 — **§116 DECIDED AND BUILT: THE OPERATIONS MENU IS ENTERED BY THE JOB, IN THE OPERATOR'S OWN WORDS — DECIDED BY ASH, who chose OPTION B over the recommendation.** The brief: *"it's not clear for any [account] every feature of operation… starting with the name, explanation, etc."* Twenty-two rows under one heading, labelled with bare nouns. `docs/tacet-operations-clarity-options.md` drew two options and recommended **A** (group by the job, three pills, four renames); Ash picked **B** (plain questions above the list), and the argument is kept unedited because a record whose losing option has been tidied away cannot be re-checked. **THE PREDICTED BLOCKER DISSOLVED ON CONTACT.** The options document said B's first row would answer one question with two destinations and called that B's honest limit — and the session opened by telling Ash B therefore *depended* on A's renames. **Both readings were wrong**, and §115 corrects them rather than quietly dropping them: B asks **two** questions — *Something arrived from a supplier* / *from another shop* — each going straight to its screen, so the distinction lives in the words somebody is reading at the moment they need it, and B needs no rename at all. **THE 收货 COLLISION IS THEREFORE STILL OPEN, AND ITS EXTENT IS NOW MEASURED**: `Receiving` and `Receive delivery` share `收货` in both row labels (`m.html:4139`, `:4169`), in **both screen titles** (`:11565`, `:10844`), and the transfer screen labels its own back and count buttons `T('Receiving','收货')` (`:10385`, `:10397`, `:10412`) — the other row's name. A Chinese render of the new strip shows the two questions' second lines reading `收货` and `收货`, which is the argument for A's rename OBSERVED rather than predicted. **FIVE RULES** hold the strip: a question resolves its destination through the More row so a later rename moves both and the strip can never offer a screen the list does not; the gate is the row's presence in `moreRowsFlat()` (already capability-filtered) plus the Features switch presence cannot cover; it collapses and the choice is kept on the phone like the theme and the language, because seven questions above twenty-two rows is a gift to a new account and an imposition on somebody who has known the list for a year; seven questions, rationed to the five confusable clusters plus the two rows that are hard to FIND; and **no icon on a question row**, or the two layers read as one list of twenty-nine. **NOT ONE ROW MOVED** — `MORE_GROUPS` is read here and never rewritten, no row key changed, so `ROUTE_CAP`, `SUBS` and every stored Quick-actions preference are untouched, and **option A is neither adopted nor rejected**. **Chinese:** one string composed (`你需要做什么？`, `你` over `您` on the neighbouring screen's evidence, not a count), one pair taken whole (`需要补货`), one collapse pair copied minus its noun, and six lifts — all declared in `docs/tacet-delivery-vocabulary.md` v1.73 with the rejected candidates beside them, including why `收货` is spent on neither question. **Tests:** new `scripts/test_mobile_ask_strip.js` — **10 checks, reads only, FAST shard and part of the gate**, deliberately not a render pass: browser suites go in the slow shard, which this repo does not run. **Three red-proofed** by restating a row label in the table, adding an icon well, and mounting the strip below the rows — each failed as it should. Its first draft passed a `rowico` it found in an unrelated screen seven hundred lines away, so the slice is bounded to the strip's own source and says so. `npm run test:fast` **224 passed, 0 failed**; eslint 0 errors; doc-numbering PASS. Rendered and read back in both languages and at three capability levels (owner 7 questions, a receiver 2, collapsed 0). **No route, no schema, no migration, no new capability, no CSS file, and no change to `.gitignore` or CI.**
+2026-09-13 · v4.249 — **§116 DECIDED AND BUILT: THE OPERATIONS MENU IS ENTERED BY THE JOB, IN THE OPERATOR'S OWN WORDS — DECIDED BY ASH, who chose OPTION B over the recommendation.** The brief: *"it's not clear for any [account] every feature of operation… starting with the name, explanation, etc."* Twenty-two rows under one heading, labelled with bare nouns. `docs/tacet-operations-clarity-options.md` drew two options and recommended **A** (group by the job, three pills, four renames); Ash picked **B** (plain questions above the list), and the argument is kept unedited because a record whose losing option has been tidied away cannot be re-checked. **THE PREDICTED BLOCKER DISSOLVED ON CONTACT.** The options document said B's first row would answer one question with two destinations and called that B's honest limit — and the session opened by telling Ash B therefore *depended* on A's renames. **Both readings were wrong**, and §115 corrects them rather than quietly dropping them: B asks **two** questions — *Something arrived from a supplier* / *from another shop* — each going straight to its screen, so the distinction lives in the words somebody is reading at the moment they need it, and B needs no rename at all. **THE 收货 COLLISION IS THEREFORE STILL OPEN, AND ITS EXTENT IS NOW MEASURED**: `Receiving` and `Receive delivery` share `收货` in both row labels (`m.html:4139`, `:4169`), in **both screen titles** (`:11565`, `:10844`), and the transfer screen labels its own back and count buttons `T('Receiving','收货')` (`:10385`, `:10397`, `:10412`) — the other row's name. A Chinese render of the new strip shows the two questions' second lines reading `收货` and `收货`, which is the argument for A's rename OBSERVED rather than predicted. **FIVE RULES** hold the strip: a question resolves its destination through the More row so a later rename moves both and the strip can never offer a screen the list does not; the gate is the row's presence in `moreRowsFlat()` (already capability-filtered) plus the Features switch presence cannot cover; it collapses and the choice is kept on the phone like the theme and the language, because seven questions above twenty-two rows is a gift to a new account and an imposition on somebody who has known the list for a year; seven questions, rationed to the five confusable clusters plus the two rows that are hard to FIND; and **no icon on a question row**, or the two layers read as one list of twenty-nine. **NOT ONE ROW MOVED** — `MORE_GROUPS` is read here and never rewritten, no row key changed, so `ROUTE_CAP`, `SUBS` and every stored Quick-actions preference are untouched, and **option A is neither adopted nor rejected**. **Chinese:** one string composed (`你需要做什么？`, `你` over `您` on the neighbouring screen's evidence, not a count), one pair taken whole (`需要补货`), one collapse pair copied minus its noun, and six lifts — all declared in `docs/tacet-delivery-vocabulary.md` v1.73 with the rejected candidates beside them, including why `收货` is spent on neither question. **Tests:** new `scripts/test_mobile_ask_strip.js` — **10 checks, reads only, FAST shard and part of the gate**, deliberately not a render pass: browser suites go in the slow shard, which this repo does not run. **Three red-proofed** by restating a row label in the table, adding an icon well, and mounting the strip below the rows — each failed as it should. Its first draft passed a `rowico` it found in an unrelated screen seven hundred lines away, so the slice is bounded to the strip's own source and says so. `npm run test:fast` **224 passed, 0 failed** on its own branch and **225 passed, 0 failed** after merging origin/main (whose §115 arrived mid-build with 139 lines of `public/m.html` — the merge was automatic and `test_kitchen_queue_back.js` re-run green against it); eslint 0 errors; doc-numbering PASS. Rendered and read back in both languages and at three capability levels (owner 7 questions, a receiver 2, collapsed 0). **No route, no schema, no migration, no new capability, no CSS file, and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.248 — **§114 DECIDED AND BUILT: A PURCHASE THAT HAS NOT ARRIVED IS TRACKED AS AN ORDER, WHOEVER PAID FOR IT — DECIDED BY ASH, AND IT REVERSES §111 PART THREE.** The case that broke it, in his words: *"an employee use the company money to buy a food processor. it wasn't the person that do purchasing... the item didn't arrive and it need tracking"*. §111 part three had left claims alone because *a claim is money already out of a pocket — there is nothing to order and nothing to receive*; **true of a cook buying ginger, false of an appliance still in transit**, where the money is gone AND the goods are owed. Neither door held it: the claim path has no delivery to track, and the order path sits behind `purchasing:edit`, which the floor presets withhold on purpose. **Ash ruled twice**: the APPROVER raises the order from the claim (so nobody gains a capability), and it applies to the employee's OWN money too (the order tracks the delivery and owns the cost; the debt stays on the claim). **THREE FINDINGS MADE IT CHEAP**: `store_manager` already holds `purchasing:receive`, so the missing half was never the tracking but the CREATION; *paid, not yet arrived* is a state the record already has (`postRetailPOExpenses` posts on Ordered, `Delivered` seeds `qty_received`), so the order is raised at Ordered and never as a draft — a draft posts nothing and the money has already gone; and §111 part one's TYPED LINE is what carries a food processor, which is in no catalogue, so this could not have been built a day earlier. **THE MONEY IS POSTED ONCE**: `postClaim` writes nothing for a claim awaiting its delivery — keyed on `awaiting_delivery` and NOT on `po_id`, because on a first approval the order does not exist yet when it runs, and a `po_id` test would leave the same purchase in the books twice. **REJECT AND VOID ARE REFUSED while an order stands** (§114 part four): the claim has no ledger row of its own to take back, and cancelling the order behind the scenes would reach into a document that may already have been received — the refusal names Cancel order instead. **THE OWED FIGURE COSTS NOTHING**, verified rather than assumed: it reads status + paid_by + settled and never `expense_id`, so an employee who laid out their own money is still owed it and **Mark paid** still settles it. A claim marked *not arrived* must name a shop and a description — goods turn up at a door, and §111 part one refuses a line with no name. **Tests:** new `scripts/test_claim_purchase_order.js` (**47 cases**, both routers real, inventory stubbed but RECORDING), and `test_staff_expenses.js` 75 → **82 cases**, whose file-wide *one table, and it is the claim table* guard is NARROWED rather than dropped — the allowed set is named, the two new tables are pinned to `raiseOrderForClaim`, and a new case proves the SUBMIT path still writes the claim and nothing else, which is the assertion that actually carries §87 part one and which the old regex only implied. `npm run test:fast` 223 passed, 0 failed; eslint 0 errors; doc-numbering PASS. **Three composed strings and one taken whole**, all declared in `docs/tacet-delivery-vocabulary.md` v1.72 with a test case that re-reads each source and fails if a term stops being live. Two migrations (`staff_expenses.awaiting_delivery`, `po_id`), no new route, no new capability, and no change to `.gitignore` or CI.**
 
@@ -12814,6 +12814,72 @@ sets them; a purchase made in a shop by an employee is exactly the case
 **What the buyer is told when an approval raises an order.** It appears in the purchasing list
 like any other Ordered PO. §66 and §69 are the precedent for adding a notification later if
 the day turns out to need one; inventing it now would be inventing the workflow.
+
+## §115 — TWO WAYS OFF A KITCHEN JOB, AND NEITHER ONE NAMES THE SCREEN IT IS ALREADY ON
+
+**Reported by Ash, 2026-09-13**, against a photograph of the Kitchen queue with
+`PR-260913-001` open: ***"kit jen quote button is not clear."*** The button is
+the chip directly under the title, and it read **Kitchen queue** — the same two
+words as the `<h1>` six pixels above it. It is a label, or a tab, or the name of
+the screen you are standing on. It is in fact the only door back to the list.
+
+### Why a door was drawn as a label
+
+The order detail is a STATE of the queue screen (`state.kq.orderId`), not a
+route of its own, so the pushed stack knows nothing about it and the head's own
+Back leaves for **More**. The chip was added to cover that, and it inherited the
+screen's name because that is where it goes — which is exactly what makes it
+unreadable as a control: nothing on it says back. No chevron, no verb, and a
+destination it shares with the heading above it.
+
+### The rule: a control is named for where it goes, and no two of them go to the same place
+
+Three things on an open job, three answers:
+
+1. **The title is the job.** `titleOf` on `SUBS.kitchenqueue` returns the
+   request's own number — the list keeps the screen's name, an open job takes
+   the number's. With it, `status` carries the day · lines · purpose line and
+   `cta` carries **Reprint**: the three hooks `pageHead` has always offered,
+   wired the way `SUBS.receivexfer` already wires them for a PO. So the body of
+   an open job is its lines and nothing else, and the first thing to make is the
+   first thing on the glass.
+2. **The head's Back keeps saying More**, and keeps meaning it: out of the
+   kitchen's tool, to the menu it was opened from. No `backLabel`. This was
+   Ash's call over the alternative — a head reading `‹ Kitchen queue` with the
+   number as title — and it is the better one: it leaves the app's global `back`
+   command untouched, and it keeps a one-tap exit from the tool.
+3. **The way back to the LIST is a bar at the foot of the job** (`kqBackBar`),
+   because that is where the hand is. The operator works DOWN the lines and
+   closes the last one at the bottom of the list; top-left is then the furthest
+   point on the glass from the thumb that has just tapped. It carries what is
+   waiting back there — this job excluded, and only on `active`, where waiting
+   means something. A numeral needs no label beside the name of the list it
+   counts, which is how Receiving's own segments already say it
+   (*To receive 4*). The price is ~56px of every job screen; it was drawn at
+   size and accepted before it was built.
+
+### And the phone's own Back was going somewhere else entirely
+
+Found while checking whether the split could work, and shipped with it because
+the two must never disagree: `layers()` — the list that keeps the history stack
+as deep as the app's own layers, so an Android edge swipe closes a layer instead
+of the app — covered orders, customers, products, POs and every sheet, but **not
+an open kitchen job**. A swipe threw the whole screen away and landed on More,
+straight past the list. It is one line, and `kqDropOrder` is now the single
+function both it and the bar call, so the gesture and the button cannot drift.
+
+**`Ready from the kitchen` has the identical shape and the identical gap** —
+`state.kr.orderId` is not a layer either. It is left alone here on purpose: that
+screen's own way out is a different control that this decision has not looked
+at, and fixing half of it silently is how the next session inherits a screen
+whose gesture and button disagree.
+
+### No Chinese was composed
+
+`厨房制作队列`, `重打`, `项` and the purpose words are all live pairs already on
+this screen; the count is a numeral. The one candidate that would have needed a
+new string — *Kitchen queue · 3 more to make* — was restructured into the name
+plus a numeral instead, which is the preference `CLAUDE.md` states.
 
 ## §116 — THE OPERATIONS MENU IS ENTERED BY THE JOB, IN THE OPERATOR'S OWN WORDS
 
