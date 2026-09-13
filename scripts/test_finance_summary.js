@@ -547,6 +547,68 @@ it('a channel line is the same grey as an expense line — not finRow\u2019s', (
   assert.strictEqual((html.match(/<span class="fin-sign"><\/span>/g) || []).length, REV_ROWS.length);
 });
 
+it('the channel rows CANNOT be mistaken for bilingual prose pairs', () => {
+  /* REGRESSION, reported live from the Chinese card: 营收 ¥123,384 over four
+     channels totalling ¥101,498, against the same window in English showing
+     seven that summed to the figure exactly. The missing ¥21,886 was Gzgrocery,
+     wechat_chat and pickup — the three labels with no Chinese in them.
+
+     The i18n walker pairs an all-English <div> with an adjacent all-Chinese one
+     as stacked help text and hides the inactive side with display:none. In
+     Chinese a 微信 row IS all-Chinese and the Gzgrocery row beside it IS
+     all-English, so a list of channels read as a column of translation pairs.
+
+     This drives the SHIPPED predicates out of 10-extras.js rather than copies of
+     them, so it still holds if the heuristic is retuned — and fails if the guard
+     is dropped from the row container. */
+  const EXTRAS = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '10-extras.js'), 'utf8');
+  const grab = (name) => {
+    const m = EXTRAS.match(new RegExp('function ' + name + '\\(el\\)\\s*\\{[\\s\\S]*?return ([^;]+);'));
+    assert.ok(m, name + ' is no longer where this test reads it');
+    return new Function('t', 'return ' + m[1].replace("el.textContent || ''", 't'));
+  };
+  const isCN = grab('isCNBlock'), isEN = grab('isENBlock');
+
+  // The pairing scan only ever offers div/p to the rule, which is the whole
+  // reason the expense lines — <button>s — never hit this. Pin it, so turning
+  // one into a plain row is a red test rather than three vanished figures.
+  assert.ok(EXTRAS.includes("querySelectorAll('div, p')"),
+    'the block-pair scan no longer targets div/p — re-check which rows are exposed');
+  assert.ok(/dataset\.noI18n != null\) return true/.test(EXTRAS),
+    'inSkippedContext no longer honours data-no-i18n — the guard below is inert');
+
+  // The Chinese surface, which is where the rows vanished.
+  const cnCtx = Object.assign({}, ctx, { cuT: (en, cn) => cn, cuLang: () => 'cn' });
+  vm.createContext(cnCtx);
+  new vm.Script(CLIENT.replace(/^'use strict';$/m, '')
+    + '\nthis.finRevBreakdown=finRevBreakdown;').runInContext(cnCtx);
+  const html = cnCtx.finRevBreakdown([
+    { channel: 'wechat', amount: 95524 }, { channel: 'gzgrocery', amount: 17842 },
+    { channel: 'meituan', amount: 5056 }, { channel: 'wechat_chat', amount: 3824 },
+    { channel: 'manual', amount: 777 }, { channel: 'pickup', amount: 220 },
+    { channel: 'eleme', amount: 141 },
+  ]);
+
+  // THE SHAPE THAT MADE THE GUARD NECESSARY IS STILL WHAT RENDERS: adjacent
+  // all-Chinese and all-Latin rows in one parent. If this ever stops being true
+  // the guard is belt-and-braces; while it is true, the guard is the only thing
+  // standing between an operator and a card that does not add up.
+  const texts = [...html.matchAll(/<div class="fin-row">(.*?)<\/div>/g)]
+    .map(m => m[0].replace(/<[^>]*>/g, ''));
+  assert.strictEqual(texts.length, 7, 'one row per channel');
+  assert.ok(texts.some(isCN) && texts.some(isEN),
+    'the collision shape is gone — re-read why this guard exists before removing it');
+
+  // THE GUARD. inSkippedContext walks UP the parents, so one attribute on the
+  // container covers every row inside it.
+  assert.ok(/<div class="fin-breakdown"[^>]*\sdata-no-i18n/.test(html),
+    'the row container must be closed to the walker, or Chinese hides half the channels');
+
+  // And the figures still total what the headline would: 123,384.
+  const total = texts.reduce((a, t) => a + Number((t.match(/¥([\d,]+)/) || [0, '0'])[1].replace(/,/g, '')), 0);
+  assert.strictEqual(total, 123384, 'the rendered rows must carry the whole figure');
+});
+
 it('a channel line is NOT a control — nothing opens behind one', () => {
   // This file's own rule, stated on the expenses row and again on the PO row: a
   // chevron that opens onto nothing is a control that lies. There is no endpoint
