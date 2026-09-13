@@ -41,6 +41,8 @@ const HTML = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.html'), 'ut
 const VOCAB = fs.readFileSync(path.join(ROOT, 'docs', 'tacet-delivery-vocabulary.md'), 'utf8');
 // The orders list owns the staff-keyed origin names; Finance copies them.
 const ORDERS_SRC = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '04-orders.js'), 'utf8');
+// The channel filter over retail_orders.channel — where `manual` is named.
+const CUSTOMERS_SRC = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '08-customers.js'), 'utf8');
 // The predicates moved to lib/finance-window.js so the Summary and Transactions
 // routes share ONE copy — §36's "must not be inherited by copying whichever
 // site is nearest" applied across the Finance module rather than within a file.
@@ -712,6 +714,7 @@ it('every channel name is COPIED from a live pair — none composed here', () =>
   const CORE = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '01-core.js'), 'utf8');
   const ORDERS = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '04-orders.js'), 'utf8');
   const DASH = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '03-dashboard.js'), 'utf8');
+  const CUSTOMERS = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '08-customers.js'), 'utf8');
   const fn = CLIENT.slice(CLIENT.indexOf('function finChannelLabel'),
                           CLIENT.indexOf('/* ── The revenue disclosure'));
 
@@ -722,7 +725,9 @@ it('every channel name is COPIED from a live pair — none composed here', () =>
    // The four origins the New order form writes, plus the legacy value.
    ['Pick up', '到店自取', ORDERS], ['WeChat message', '微信消息', ORDERS],
    ['Wholesale', '批发', ORDERS], ['Other', '其他', ORDERS],
-   ['Unattributed', '未归属', ORDERS],
+   // `manual` is the one the orders list does NOT own — see the case below.
+   // CU_CHAN_OPTS (08-customers.js) is a filter over this very column.
+   ['Manual', '手动', CUSTOMERS],
   ].forEach(([en, cn, src]) => {
     assert.ok(fn.includes("'" + en + "', '" + cn + "'"),
       `the card no longer renders ${en} · ${cn}`);
@@ -746,19 +751,36 @@ it('every channel name is COPIED from a live pair — none composed here', () =>
   });
 });
 
-it('the legacy channel says Unattributed, never Manual', () => {
-  /* A CORRECTION to what this file shipped with. 04-orders.js records that
-     `manual` is the LEGACY value — rows written before the form asked the
-     question, plus every till sale up to §44's 2026-09-07 amendment — and that
-     it is no longer selectable. `手动` claims an operator picked it; `未归属`
-     says what the row actually is. One name, owned by the screen that reasoned
-     about it. */
-  assert.strictEqual(ctx.finChannelLabel('manual'), 'Unattributed');
+it('the legacy channel says Manual · 手动, and differs from the orders list KNOWINGLY', () => {
+  /* DECIDED BY ASH, 2026-09-13, from the Chinese card with the row circled:
+     "翻译有点小问题，manual，中文：手动、人工". Of the two words he named, 手动 is
+     the one already live for THIS COLUMN — CU_CHAN_OPTS (08-customers.js) is a
+     channel filter over retail_orders.channel and offers ['manual','Manual','手动'],
+     and DASH_CHAN_SHORT (03-dashboard.js) names it the same way. 人工 is live
+     only inside verification sentences (请人工核对), never as a channel name.
+
+     ordChannelLabel (04-orders.js) calls the same value `Unattributed · 未归属`,
+     and its reasoning is sound on its own terms — `manual` IS the legacy value,
+     no longer selectable. It is one screen against three, and this card is not
+     the place to try a new word. The orders list is deliberately left alone.
+
+     BOTH SIDES ARE PINNED so a later session reads the note in 22-finance.js
+     rather than "fixing" one into the other. */
+  assert.strictEqual(ctx.finChannelLabel('manual'), 'Manual');
   const fn = CLIENT.slice(CLIENT.indexOf('function finChannelLabel'),
                           CLIENT.indexOf('/* ── The revenue disclosure'));
-  assert.ok(!/'Manual', '手动'/.test(fn), 'the legacy bucket must not read as a chosen origin');
-  assert.ok(ORDERS_SRC.includes("if (c === 'manual')      return cuT('Unattributed', '未归属');"),
-    'the orders list no longer calls it Unattributed — the two screens have drifted');
+  assert.ok(/manual:\s*cuT\('Manual', '手动'\)/.test(fn), 'the card must read Manual · 手动');
+  assert.ok(!/未归属/.test(fn), 'the card no longer carries the orders list word');
+  // 人工 was the other word offered and is NOT used: it is live only as a
+  // fragment inside "verify by hand", never as the name of a channel.
+  assert.ok(!/人工/.test(fn), '人工 is not a channel name anywhere in this product');
+  // The pair is live for this column, not merely near it.
+  assert.ok(CUSTOMERS_SRC.includes("['manual', 'Manual',       '手动']"),
+    'CU_CHAN_OPTS no longer offers Manual · 手动 for this column');
+  // And the divergence is still a divergence — if the orders list ever adopts
+  // the same word this case should be revisited rather than silently passing.
+  assert.ok(ORDERS_SRC.includes("cuT('Unattributed', '未归属')"),
+    'the orders list changed its mind about `manual` — re-read the note in 22-finance.js');
 });
 
 it('an unknown channel renders as itself rather than being folded or dropped', () => {
