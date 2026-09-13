@@ -2402,6 +2402,31 @@ function lineConflict(items) {
   return (items || []).some(item => item.store_product_id && item.ingredient_id);
 }
 
+// A LINE THAT NAMES NEITHER A PRODUCT NOR A MATERIAL IS A TYPED LINE, and it is
+// the whole of what this file had to learn: the box of gloves, the office chair,
+// the thing a tenant buys once and will never put in a catalogue. `po_line_items`
+// has accepted one since it was written — `lineConflict` above rejects a line
+// carrying BOTH ids, never one carrying neither, the stock apply skips it
+// (`if (!l.store_product_id …) continue`), the price write-back skips it
+// (`ingredient_id IS NOT NULL`), and the expense poster groups it by its own
+// `expense_category` like any other line. Nothing could PRODUCE one, because the
+// wizard's only way onto an order was a picker over the two catalogues.
+//
+// THE ONE THING SUCH A LINE MUST CARRY IS A NAME. `name_en` is NOT NULL and
+// `insertLineItems` satisfies that with `item.name_en || ''`, so without this
+// guard a nameless line saves, and then appears on the order, on the receive
+// screen and on the printed sheet as a quantity and a price with no subject.
+// `name_required` is a code 01-core.js already renders bilingually.
+//
+// A CATALOGUE LINE IS NOT CHECKED, deliberately: its name comes off the master
+// record, and a product whose own name is blank is that record's problem to fix
+// rather than something to refuse a purchase order over.
+function lineUnnamed(items) {
+  return (items || []).some(item =>
+    !item.store_product_id && !item.ingredient_id
+    && !String(item.name_en || '').trim() && !String(item.name_cn || '').trim());
+}
+
 function insertLineItems(poId, items, headerSupplier, reuseExisting) {
   const insertItem = tdb().prepare(`INSERT INTO po_line_items
     (po_id, store_product_id, ingredient_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost,
@@ -2493,6 +2518,7 @@ router.post('/api/retail-admin/purchases', requireRetailAdmin, express.json(), (
     return res.status(400).json({ success: false, error: 'store_required' });
   }
   if (lineConflict(items)) return res.status(400).json({ success: false, error: 'line_conflict' });
+  if (lineUnnamed(items)) return res.status(400).json({ success: false, error: 'name_required' });
   try {
     const po_number = nextRetailPONumber();
     const tx = tdb().transaction(() => {
@@ -2530,6 +2556,7 @@ router.put('/api/retail-admin/purchases/:id', requireRetailAdmin, express.json()
     return res.status(400).json({ success: false, error: 'store_required' });
   }
   if (lineConflict(items)) return res.status(400).json({ success: false, error: 'line_conflict' });
+  if (lineUnnamed(items)) return res.status(400).json({ success: false, error: 'name_required' });
   let lineDiff = null;
   const tx = tdb().transaction(() => {
     tdb().prepare(`
