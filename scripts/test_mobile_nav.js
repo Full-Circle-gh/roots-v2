@@ -65,7 +65,7 @@ run('mobile nav', [
   ['a kitchen role gets its two tools as its home, and no bar',
     KITCHEN + "landOnSomethingReachable();render();", [
       ['no tab bar at all', "!document.querySelector('.tabbar')"],
-      ['Receiving is on the home list', `${body}.indexOf('Receiving')>-1`],
+      ['Receiving is on the home list', `${body}.indexOf('Receive from a supplier')>-1`],
       ['so is Add stock', `${body}.indexOf('Add stock')>-1`],
       ['no Home board', `${body}.indexOf('Revenue')===-1`],
       ['no Orders', `${body}.indexOf('Orders')===-1`],
@@ -84,7 +84,7 @@ run('mobile nav', [
   ['it lands on the list, not inside one of the tools',
     KITCHEN + "state.tab='home';landOnSomethingReachable();render();", [
       ['nothing is pushed', "state.stack.length===0"],
-      ['both tools are in reach', `${body}.indexOf('Receiving')>-1 && ${body}.indexOf('Add stock')>-1`],
+      ['both tools are in reach', `${body}.indexOf('Receive from a supplier')>-1 && ${body}.indexOf('Add stock')>-1`],
       ['and the revenue board is not painted', `${body}.indexOf('Revenue')===-1`],
     ]],
   ['a tool comes back to the home by name, never to "More"',
@@ -106,7 +106,7 @@ run('mobile nav', [
     KITCHEN + "landOnSomethingReachable();render();", [
       ['no queue row', `${body}.indexOf('Kitchen queue')===-1`],
       ['the two tools they do hold are untouched',
-       `${body}.indexOf('Receiving')>-1 && ${body}.indexOf('Add stock')>-1`],
+       `${body}.indexOf('Receive from a supplier')>-1 && ${body}.indexOf('Add stock')>-1`],
     ]],
   ['a kitchen role that CAN fulfil gets the queue',
     "state.caps=['quickstock:add','restock:fulfil'];landOnSomethingReachable();render();", [
@@ -164,10 +164,20 @@ run('mobile nav', [
        "!moreRowsFlat().find(function(r){return r.key==='pick'}).href"],
     ]],
 
-  ['a receiver gets Receive delivery, in Chinese',
+  /* §119 RENAMED THIS ROW AND RE-POINTED THE SECOND ASSERTION. It read
+     "no launcher row survives" as `调拨` being absent — true only while no row
+     was NAMED for a transfer. The transfer row is 调拨收货 now, so the absence
+     of a launcher is asserted the way it was always meant: by key, and by no
+     row keeping an href out of this app. Characters cannot carry that claim. */
+  ['a receiver gets the transfer row, in Chinese, under its own name',
     "LANG='cn';state.caps=['restock:receive'];landOnSomethingReachable();render();", [
-      ['收货', `${body}.indexOf('收货')>-1`],
-      ['no launcher row survives', `${body}.indexOf('调拨')===-1`],
+      ['调拨收货', `${body}.indexOf('调拨收货')>-1`],
+      ['and not the supplier row, whose capability this role lacks',
+       "!moreRowsFlat().find(function(r){return r.key==='receiving'})"],
+      ['no launcher row survives',
+       "!moreRowsFlat().find(function(r){return r.key==='transfers'})"],
+      ['and nothing in the list leaves this app for /stock',
+       "!moreRowsFlat().some(function(r){return r.href&&r.href.indexOf('/stock')===0})"],
     ]],
 
   // A kitchen account holds restock:fulfil and NOTHING else in that family,
@@ -293,7 +303,7 @@ run('mobile nav', [
     ]],
 
   ['the jump list cannot offer what the nav hides', KITCHEN + "render();", [
-    ['Receiving is offered', "searchIndex().some(function(x){return x.p[0]==='Receiving'})"],
+    ['the supplier row is offered', "searchIndex().some(function(x){return x.p[0]==='Receive from a supplier'})"],
     ['Coupons is not', "!searchIndex().some(function(x){return x.p[0]==='Coupons'})"],
     ['nor Home', "!searchIndex().some(function(x){return x.p[0]==='Home'})"],
   ]],
@@ -302,7 +312,11 @@ run('mobile nav', [
   ['a buyer who may look but not receive',
     "state.caps=['purchasing:view'];state.tab='more';state.stack=[];render();", [
       ['Purchasing is theirs', `${body}.indexOf('Purchasing')>-1`],
-      ['Receiving is not — its only action would 403', `${body}.indexOf('Receiving')===-1`],
+      /* Asserted by KEY, not by the label. As `indexOf('Receiving')` this went
+         green the moment §119 renamed the row — whether or not the row was
+         still being offered — which is a guard that had stopped guarding. */
+      ['the receiving row is not — its only action would 403',
+       "!moreRowsFlat().find(function(r){return r.key==='receiving'})"],
     ]],
 
   // ── the boot flash ────────────────────────────────────────────────────

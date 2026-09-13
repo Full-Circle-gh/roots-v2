@@ -409,7 +409,7 @@ columns of fact. Reported from production, then swept column by column.
 | Address add / edit / delete / set default | ✅ — §116. Its own sheet over the record, the same nine fields and four endpoints the desktop's modal uses, and the province read off the picked city rather than typed *(was: decided: desktop)* |
 | **Referring, the ongoing share, reissue code** | ✅ — §116. Never in this table; the three controls `renderAffiliateBlockToggle`, `renderLifetimeEligibility` and `afReissueCode` draw on the desktop drawer and had no phone equivalent |
 | **The four action buttons, gated** | ✅ — §116, and this was a defect rather than a gap. See below |
-| **Where the rare controls live** | ✅ — **§117 redrew this.** §116 put them in a footer of five centred sentences, reported as *"not clear"*; four now sit on the rows whose values they change and only Block keeps the foot. The *Referring* row is drawn always as a result, where §116 drew it only once referring had been stopped |
+| **Where the rare controls live** | ✅ — **§121 redrew this.** §116 put them in a footer of five centred sentences, reported as *"not clear"*; four now sit on the rows whose values they change and only Block keeps the foot. The *Referring* row is drawn always as a result, where §116 drew it only once referring had been stopped |
 
 ### Inbox — the second sweep (`07-content-billing.js`)
 
@@ -1291,7 +1291,7 @@ view-only operator sees no control AND the commands themselves send nothing.
 Five render cases join `test_mobile_screens.js`, one of them a view-only record.
 Both are in the slow shard with their siblings and are run per change.
 
-### The foot of the customer record (§117, 2026-09-13)
+### The foot of the customer record (§121, 2026-09-13)
 
 §116 shipped the rare controls as five centred text buttons at the foot of the
 record. Ash, with the block circled: *"this part need to redesign. not clear."*
@@ -1312,5 +1312,5 @@ on.
 Recorded here because it reverses a line this document itself carried: *"a row
 reading 'allowed' on every customer is not information"* was the reason
 *Referring* only appeared once it had been stopped. True of a row that only
-states; false the moment the row is also the switch. §117 in
+states; false the moment the row is also the switch. §121 in
 `docs/tacet-consolidation-decisions.md` has the whole argument.

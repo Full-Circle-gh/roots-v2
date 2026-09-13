@@ -130,7 +130,7 @@ const CASES = [
   ]],
 
   // ── What the record shows ───────────────────────────────────────────────
-  // ── §117: each control on the row whose value it changes ────────────────
+  // ── §121: each control on the row whose value it changes ────────────────
   // The foot was five centred sentences ("not clear"). Four moved onto their
   // own rows; Block kept the foot. These cases are about WHERE a control is,
   // which no render test and no request-body assertion can see.

@@ -20,18 +20,15 @@ const paMoney = n => (typeof acMoney === 'function' ? acMoney(Number(n) || 0) : 
 
 let PA_LOADED = false;
 let PA_PRODUCTS = [];   // server response
-/* §103 step 3 — which channels hold the right number for each product, as the
-   three dots on the row. Verdict only (?compact=1); the reason and the fix live
-   on the Channel sync page and in the editor's own Channels card, both of which
-   read the SAME endpoint, so a dot here and the page it links to cannot
-   disagree.
-
-   PA_CH_ON is the whole gate. A tenant with no channel mappings at all gets no
-   column and no card — an empty column of grey dots on every row is exactly the
-   noise §103 exists to avoid. */
-let PA_CHANNELS = {};        // product_id -> { meituan:'ok', eleme:'none', ... }
-let PA_CH_LIST  = [];        // [{key,label,tab}] in the order the server sends
-let PA_CH_ON    = false;
+/* §117 — THE PRODUCTS LIST SAYS NOTHING ABOUT SYNCING, ON PURPOSE.
+   §103 step 3 put a Channels column here: three dots per row, a fourth read of
+   /channel-sync on every catalogue load, and a second place an operator had to
+   learn what "needs attention" means. Ash, 2026-09-13: "I don't want anything
+   that got to do with syncing at the products list page." Syncing gathers on
+   Sales › Channel sync, which is a tab now rather than a button in a corner.
+   WHAT STAYS is the editor's own Channels card (pdLoadChannels, §103 step 4):
+   that is one product looked at in depth, not a second overview competing with
+   the first. Do not put the column back. */
 let PA_CURRENT = null;  // currently open product (when modal is showing)
 // Per-store stock for the overview table. With 2+ stores the Stock column can
 // edit ONE store at a time (picked via the switcher); 'all' = read-only sum.
@@ -577,7 +574,6 @@ async function paLoad() {
     paRenderKpis(true);   // animated count-up once on load
     paLoadHighlights();   // fills the Going nowhere / On promotion jump tiles
     paLoadStoreStock();   // per-store stock + store list (drives the switcher)
-    paLoadChannels();     // §103 — the three channel dots on each row
   } catch (e) {
     // The operator gets a sentence they can act on; the developer detail goes to
     // the console, where it belongs. It used to print the raw error text — an
@@ -591,71 +587,13 @@ async function paLoad() {
   }
 }
 
-// ── Channel sync dots (§103) ──────────────────────────────────────────────
-// Never blocks the grid: the list is already painted when this lands, and a
-// channel read that fails leaves the rows exactly as they are rather than
-// showing a column of unknowns. Gated on the same any-of the Channel sync tab
-// uses — an operator who cannot open any channel screen is not shown dots that
-// link to one.
-async function paLoadChannels() {
-  if (typeof canTab === 'function' && !canTab('channel-sync')) return;
-  try {
-    const res = await fetch('/api/retail-admin/channel-sync?compact=1', { credentials: 'same-origin' });
-    const j = await res.json();
-    if (!j.success) throw new Error(j.error || 'load_failed');
-    const d = j.data || {};
-    PA_CH_LIST = (d.channels || []).map(c => ({ key: c.key, label: c.label, tab: c.tab, counts: c.counts }));
-    // "Has this tenant got channels at all" — asked of the mappings, not of the
-    // config: a channel switched on but with nothing mapped to it has nothing
-    // to say about any product on this page.
-    PA_CH_ON = PA_CH_LIST.some(c => c.counts && (c.counts.ok + c.counts.att + c.counts.off) > 0);
-    PA_CHANNELS = {};
-    for (const it of (d.items || [])) {
-      const m = {};
-      for (const k of Object.keys(it.channels || {})) m[k] = it.channels[k].k;
-      PA_CHANNELS[it.id] = m;
-    }
-    if (PA_CH_ON) paRender();
-  } catch (e) {
-    console.warn('[products] channel sync', e.message);
-  }
-}
-
-// One product's channel glyphs, or a variant family's worst across its members:
-// the row is one line and the family behind it may be three products, so the
-// dot has to speak for all of them or it would call a family green while one
-// size is wrong. Same precedence the server folds stores with.
-const PA_CH_RANK = { att: 4, ok: 3, off: 2, unk: 1, none: 0 };
-// The channel's short mark and its full name both come from 29-channel-sync.js,
-// which owns the one table: the glyph was 美 / 饿 in BOTH languages (Chinese in
-// the English app), and the server's `label` is English-only (English in the
-// Chinese app). One table fixes both directions and keeps the two screens
-// naming a channel the same way. Falls back to the server's label if that file
-// has not loaded.
+/* §117 — the Channels column, its loader and its dots are gone from this list
+   (see the note at the head of this file). What survived is the one helper the
+   editor's Channels card still needs: the channel's display name, taken from
+   29-channel-sync.js so the editor and the Channel sync page cannot name a
+   channel two ways. Falls back to the server's label if that file has not
+   loaded. */
 const _paChName = (ch) => (typeof csChannelName === 'function' ? csChannelName(ch.key) : ch.label);
-const _paChGlyph = (ch) => (typeof csChannelGlyph === 'function' ? csChannelGlyph(ch.key) : '');
-function _paChannelDots(u) {
-  if (!PA_CH_ON) return '';
-  const ids = u.group ? u.members.map(m => m.id) : [u.p.id];
-  const bits = PA_CH_LIST.map(ch => {
-    let k = 'none';
-    for (const id of ids) {
-      const got = (PA_CHANNELS[id] || {})[ch.key];
-      if (got && PA_CH_RANK[got] > PA_CH_RANK[k]) k = got;
-    }
-    const word = k === 'ok' ? cuT('Synced', '已同步')
-      : k === 'att' ? cuT('Needs attention', '待处理')
-      : k === 'off' ? cuT('Sync off', '已关闭')
-      : k === 'unk' ? cuT('Name not checked', '尚未读取商品')
-      : cuT('Not listed', '未上架');
-    const title = escapeAttr(_paChName(ch) + ' · ' + word);
-    return '<span class="pa-chdot" title="' + title + '"><i class="cs-dot is-' + k + '"></i>'
-      + escapeHtml(_paChGlyph(ch)) + '</span>';
-  }).join('');
-  // Opens the Channel sync page filtered to this product rather than the whole
-  // catalogue — the operator asked about THIS row.
-  return '<span class="pa-chdots" onclick="event.stopPropagation();csOpenProduct(' + u.p.id + ')">' + bits + '</span>';
-}
 
 // ── Per-store stock ───────────────────────────────────────────────────────
 // One fetch of the inventory grid gives us BOTH the active store list (for the
@@ -2522,7 +2460,6 @@ function paRender() {
       + '<col class="pa-c-cat"><col class="pa-c-sku">'
       + Array.from({ length: nStock }, () => '<col class="pa-c-stock">').join('')
       + '<col class="pa-c-price">' + (withCost ? '<col class="pa-c-margin">' : '') + '<col class="pa-c-status">'
-      + (PA_CH_ON ? '<col class="pa-c-channels">' : '')
       + '</colgroup>';
     // Single-line labels, no sub-labels — a header that needs a sentence to be
     // understood is the wrong header (§1.13a). The grip's header is blank: a
@@ -2539,7 +2476,6 @@ function paRender() {
         <th class="pa-c-price">${cuT('Price', '价格')}</th>
         ${withCost ? `<th class="pa-c-margin">${cuT('Margin', '毛利')}</th>` : ''}
         <th class="pa-c-status">${cuT('Status', '状态')}</th>
-        ${PA_CH_ON ? `<th class="pa-c-channels">${cuT('Channels', '渠道')}</th>` : ''}
       </tr></thead>`;
 
     const rows = pageUnits.map((u, ui) => {
@@ -2587,7 +2523,6 @@ function paRender() {
           <td class="pa-c-price">${_paPriceCell(u)}</td>
           ${withCost ? `<td class="pa-c-margin">${_paMarginCell(u)}</td>` : ''}
           <td class="pa-c-status">${_paStatusCell(u)}</td>
-          ${PA_CH_ON ? `<td class="pa-c-channels" data-no-i18n>${_paChannelDots(u)}</td>` : ''}
         </tr>`;
     }).join('');
 
@@ -2644,7 +2579,6 @@ function paRender() {
           <div class="pa-card-name">${escapeHtml(cuT(p.name_en || p.name_cn || '—', p.name_cn || p.name_en || '—'))}</div>
           ${meta ? `<div class="pa-card-meta">${meta}</div>` : ''}
           <div class="pa-card-shop">${_paShopToggle(u)}<span class="pa-card-shop-lbl">${pub ? cuT('On shop', '已上架') : cuT('Off shop', '未上架')}</span></div>
-          ${PA_CH_ON ? `<div class="pa-card-ch">${_paChannelDots(u)}</div>` : ''}
         </div>
       </div>`;
   }).join('');
