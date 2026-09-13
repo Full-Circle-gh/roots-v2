@@ -4,11 +4,11 @@
  *
  *   node scripts/test_mobile_team.js
  *
- * This is the one desktop tab no parity pass had ever looked at: it appears
- * nowhere in docs/tacet-mobile-parity.md, not even as a decided-against row.
- * Inviting somebody and setting a per-capability permission matrix is
- * authoring and stays on the desktop; what belongs on a phone is the roster and
- * the emergency switch — a staffer walks out, a phone goes missing.
+ * The roster and the emergency switch — a staffer walks out, a phone goes
+ * missing. Everything BEHIND a row (one person, their permissions, the roles,
+ * adding somebody) is scripts/test_mobile_permissions.js: §112 put all of it on
+ * the phone, and this file stays what it always was — the list itself, and the
+ * one write that has to be reachable in a hurry.
  *
  * The two rules that make that safe are the SERVER's (routes/backend-team.js):
  * you cannot deactivate yourself, and you cannot leave the shop with no active
@@ -63,8 +63,15 @@ const CASES = [
     // Roles that shape the view but stop nothing at the server is a fact with a
     // consequence, and the desktop is where that switch lives.
     ['unenforced roles are called out',     `txt('content').includes('not enforcing them yet')`],
-    ['inviting is named as desktop work, and says where roles are shaped',
-      `txt('content').includes('set on desktop') && txt('content').includes('Settings → Team → Roles')`],
+    // The roster is now a door rather than a list: every row opens the person
+    // behind it, which is where their role, their store and their permissions
+    // are. §112 — the phone stopped saying "on desktop" about any of it.
+    ['every row opens the person behind it',
+      `document.querySelectorAll('#content .list [onclick*="teamOpen"]').length === 4`],
+    ['and the roles they hold are a tab of their own',
+      `!!document.querySelector('[onclick*="teamTab"]')`],
+    ['nothing is sent to the desktop any more',
+      `!txt('content').includes('on desktop')`],
   ]],
 
   // ── The two rules, stated rather than discovered ────────────────────────
@@ -79,14 +86,19 @@ const CASES = [
       {id:8,username:'ana',displayName:'Ana Wu',role:'admin',isActive:true,isSelf:true,lastLogin:null}];
     APP.cmd('push','team');`, [
     ['said on the row',   `txt('content').includes('the only owner')`],
-    ['and not a control', `document.querySelectorAll('#content .list button').length === 0`],
+    // The row opens them — that is a read, and always allowed. What is not
+    // drawn is the SWITCH on the screen behind it, and the reason is repeated
+    // there rather than left to be discovered as a 400.
+    ['and their screen offers no switch',
+      `(function(){ APP.cmd('teamOpen',9); return !document.querySelector('[onclick*="teamToggle"]'); })()`],
+    ['with the reason on it', `txt('content').includes('the only owner')`],
   ]],
   ['neither of them is a control', STUB + AS_OWNER + TEAM + `APP.cmd('push','team'); APP.cmd('teamToggle',1);`, [
     // Mei is both self AND the only owner. Two reasons, one row, no action.
     ['tapping yourself does nothing', `!sheetText().includes('Switch') && !${sent('/team/')}`],
   ]],
 
-  ['switching somebody off asks first', STUB + AS_OWNER + TEAM + `APP.cmd('push','team'); APP.cmd('teamToggle',2);`, [
+  ['switching somebody off asks first', STUB + AS_OWNER + TEAM + `APP.cmd('push','team'); APP.cmd('teamOpen',2); APP.cmd('teamToggle',2);`, [
     ['it names them',            `sheetText().includes('Switch Lin Hao off?')`],
     ['says they cannot sign in anywhere', `sheetText().includes('cannot sign in on any device')`],
     // The first worry about deactivating somebody mid-shift is whether their
@@ -119,7 +131,7 @@ const CASES = [
 
   ['a shop of one', AS_OWNER + `state.teamTried=true; state.team=[]; APP.cmd('push','team');`, [
     ['says so',          `txt('content').includes('Nobody else yet')`],
-    ['and says where people come from', `txt('content').includes('invited on desktop')`],
+    ['and says what adding one does', `txt('content').includes('can sign in straight away')`],
   ]],
   ['the roster would not load', AS_OWNER + `state.teamTried=true; state.teamErr='Could not load the team.'; APP.cmd('push','team');`, [
     ['says so',            `txt('content').includes('Could not load the team')`],

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.243
+# Tacet shared-core consolidation — decisions record, v4.244
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-13 · v4.244 — **PERMISSIONS ARE MANAGED FROM THE PHONE — §112, DECIDED BY ASH: *"can't manage permission from the mobile version, fix it fully. this feature should be fully functional from mobile."*** `docs/tacet-mobile-parity.md` had ruled Team out in its own words — inviting somebody, assigning a role and setting a per-capability matrix *"is authoring and stays on the desktop"* — and the phone shipped a roster, a deactivate confirm and three sentences pointing at a laptop. **The rule is still right for products and broadcasts and wrong for this: permissions are not authoring.** Somebody starts on Monday, somebody moves from the counter to the kitchen, somebody must not have the books — every one of those happens in the shop, on the day. **`public/m.html` gains four screens** — `teamperson`, `teamperms`, `teaminvite`, `teamrole` — plus a People/Roles switch and the owner's enforcement toggle, covering all six of the desktop tab's write surfaces over the same routes (`POST`/`PUT /api/backend/team`, `POST …/password`, `PUT …/permissions`, the four `/api/backend/roles` verbs, `PUT /api/backend/rbac-enforce`). **No route, no schema, no migration, no new capability** — `team:manage` and `team:permissions` already existed and are kept apart on the phone exactly as the server keeps them apart, absent rather than disabled. **A real guard gap was found and closed before it shipped**: `teamEnforce` was written guarded only by not DRAWING the switch, which `APP.cmd` walks straight past — the same hole `teamToggle` had in 2026-08 — and its own probe caught it. **The capability tree opens one group at a time** rather than printing a hundred toggles into a scroller, stating the same sentence the desktop's collapsed group does. **The dashboard-default table is now duplicated with a GUARD instead of a promise**: the phone's `TM_DASH_DEFAULT` and the desktop's `RL_DASH_LAYOUT_DEFAULT` are compared by `scripts/test_mobile_permissions.js`, which is more than the desktop's own copy of the CSS has ever had. **Chinese:** 134 pairs, **96 lifted verbatim** from the desktop's Team tab and the routes' own refusals, four arrangements that only move a clause naming a device, and **38 composed**, declared in `docs/tacet-delivery-vocabulary.md` v1.70 with the candidates rejected beside them. **Tests:** new `scripts/test_mobile_permissions.js` — **90 assertions across 30 cases**, asserting request bodies, not screens; `scripts/test_mobile_team.js` 29 → **32 assertions**, updated where the read-only decision it encoded was reversed; the sweep renders all four screens warm, cold and in Chinese (**441 renders**); geometry clean at 390px. Registered in `package.json` and in `run-suites.js`'s SLOW set (it drives Chromium). No CSS file, and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.243 — **`manual` READS `Manual · 手动` ON THE FINANCE CARD, AND DIFFERS FROM THE ORDERS LIST KNOWINGLY — DECIDED BY ASH, reversing v4.242's half of it.** Reported from the Chinese card with the row circled in red: *"翻译有点小问题，manual，中文：手动、人工"*. **v4.242 HAD CHANGED IT TO `Unattributed · 未归属`, AND THAT WAS THIS SESSION'S ERROR RATHER THAN A RULING NOW BEING OVERTURNED.** The reasoning borrowed there — `ordChannelLabel` (`04-orders.js`) records that `manual` is the LEGACY value, no longer selectable, so `手动` claims an operator picked something nobody picked — is sound on its own terms and is NOT withdrawn. What it got wrong was weight: it is **one screen against three**, and the card an owner reads his month's takings on is not the place to try a new word on him. **OF THE TWO WORDS ASH NAMED, `手动` IS THE ONE ALREADY LIVE FOR THIS COLUMN RATHER THAN NEAR IT**: `CU_CHAN_OPTS` (`08-customers.js`) is a channel filter over `retail_orders.channel` itself and offers `['manual', 'Manual', '手动']`; `DASH_CHAN_SHORT` (`03-dashboard.js`) names the channel on an order the same way; `13-activity.js` and `04-orders.js`'s tracking marker both pair `Manual · 手动` too. **`人工` was the other offer and is NOT used**: it is live only inside verification sentences (`请人工核对`, `仍无法识别 · 请重试或人工核对`), never as the name of a channel, so taking it would be minting a label out of a fragment — the composition the standing rule's first preference exists to avoid when a live pair already fits. Nothing composed either way. **THE ORDERS LIST IS DELIBERATELY LEFT ALONE.** Aligning it is a change to a screen nobody reported and is Ash's to ask for; so the two screens now disagree about one value, **knowingly**, and that is recorded in `22-finance.js` beside the map rather than left to be discovered. **Tests:** the provenance case now checks `Manual · 手动` against `08-customers.js`, the filter over this very column, instead of against the orders list. The case that pinned `Unattributed` is replaced by one that pins BOTH SIDES of the divergence — the card reads `手动`, carries neither `未归属` nor `人工`, the pair is still live in `CU_CHAN_OPTS`, AND `ordChannelLabel` still says `Unattributed · 未归属` — so if the orders list ever adopts the same word the case turns red and a session re-reads the note instead of silently folding one into the other. Confirmed red against both rejected spellings. `scripts/test_finance_summary.js` stays at **86 cases**; `npm run test:fast` 216 passed, 0 failed; eslint 0 errors; doc-numbering PASS. No schema, no migration, no new route, no new capability, no new Chinese, no CSS, and no change to `.gitignore` or CI.**
 
@@ -12206,3 +12208,120 @@ and the `.fin-input` regression above.
 changed files. `node scripts/check-doc-numbering.js` PASS. Code, tests and this
 record; no schema, no migration, no new route, no new capability, no new
 Chinese, no CSS, and no change to `.gitignore` or CI.
+
+## §112 — PERMISSIONS ARE MANAGED FROM THE PHONE, BECAUSE THE SHOP IS RUN FROM THE PHONE
+
+**Decided by Ash, 2026-09-13**, against the phone build: **"can't manage
+permission from the mobile version, fix it fully. this feature should be fully
+functional from mobile."**
+
+**This section takes §112 and not §111 deliberately.** A concurrent session was
+holding §111 for purchase-order auto-routing when this was written, and the
+numbering rule at the head of this file makes a number a citation target: a gap
+costs nothing, a collision costs a reference that no longer resolves.
+
+### What was there, and why it was a decision rather than an omission
+
+`docs/tacet-mobile-parity.md` ruled Team out in its own words: *"Inviting
+somebody, assigning a role and setting a per-capability permission matrix is
+authoring and stays on the desktop. What the phone gets is the other half —
+WHO HAS ACCESS, and switching one of them off in a hurry."* The phone shipped
+exactly that: a roster, a deactivate confirm, and three sentences pointing at a
+laptop — *"Inviting someone, and what each role reaches, are set on desktop —
+Settings → Team → Roles."*
+
+The rule that produced it is still the right rule for a product with options
+and variants in it: authoring belongs to a keyboard. **What it got wrong is
+that permissions are not authoring.** Nobody writes a role the way they write a
+product description. The acts are: somebody starts on Monday, somebody moves
+from the counter to the kitchen, somebody needs to refund a customer standing
+in front of them, somebody is given the books by mistake and must not have
+them. Every one of those happens IN the shop, on the day, and the answer
+"find a laptop" is a shop that stops while an owner walks to an office.
+
+### The whole desktop tab is on the phone, in the shapes a phone has
+
+Both of the desktop's tabs, all four of its write surfaces, and the same routes:
+
+| Desktop (`02-settings-ops.js`) | Phone (`public/m.html`) | Route |
+|---|---|---|
+| People roster | `screenTeam` → People tab | `GET /api/backend/team` |
+| Invite form + credential box | `teaminvite` | `POST /api/backend/team` |
+| Edit modal (name · role · store · active) | `teamperson` | `PUT /api/backend/team/:id`, `POST …/password` |
+| Per-person matrix + store scope | `teamperms` | `GET`/`PUT /api/backend/team/:id/permissions` |
+| Roles pane (create · edit · delete) | Roles tab → `teamrole` | `GET`/`POST`/`PUT`/`DELETE /api/backend/roles` |
+| Enforcement switch | People tab, owner only | `PUT /api/backend/rbac-enforce` |
+
+**Not a port of the markup — a port of the decisions.** The desktop's pane
+prints a hundred-odd checkboxes into a scroller beside a role list; a phone
+doing that is a column of toggles with no way to see where you are. So the
+capability tree opens ONE GROUP AT A TIME, and the collapsed row states the
+same sentence the desktop's collapsed group states — *"Run the shop · 18 of 30
+on"*. A role is not a pane beside a list, it is a screen the list pushes to. A
+person's role is not a `<select>` in a modal, it is a picker sheet, and picking
+IS the act, so there is no second Save tap for a single field.
+
+**Three things stay word for word, because they are the product's own
+reasoning and not layout**: the blast radius above anything editable (*"2 people
+hold this role. Every change here reaches them on their next screen."*), the
+signed exception marks (`Added` / `Removed`, never one tint for both — the fact
+an exception exists is not the fact of which way it goes), and the Quick Stock
+lockdown's one precondition, said on the switch rather than discovered as a
+refused save.
+
+### The rules did not move, and the phone states three of them early
+
+Every refusal in `routes/backend-team.js` is still the server's, and each is
+rendered in the server's own bilingual words rather than a generic failure:
+you cannot deactivate yourself, you cannot leave the shop with no active owner,
+you cannot edit your own permissions, you cannot grant a role or a capability
+you do not hold, and the owner is always everything. The first three are
+**stated on the row before the tap** — a lock nobody can explain reads as a
+bug, and a switch that springs back has told the operator nothing.
+
+**Writing this surfaced a real gap of the same class the roster had in
+2026-08.** `teamToggle` was once guarded only by not *drawing* the control,
+which `APP.cmd` walks straight past; that was fixed then. `teamEnforce` — new
+here — was written with the same hole and caught by its own probe before it
+shipped: the renderer draws the switch for the owner alone, and the handler now
+checks the roster's `isSelf` row too.
+
+### The two capabilities are kept apart, because the server keeps them apart
+
+`team:manage` adds a person, renames them, moves their role and store, resets a
+password, switches them off. `team:permissions` decides what a person or a role
+REACHES. An operator holding the first and not the second gets every control of
+the first and no door to the second — absent, never disabled, the rule
+`applyCapGates` keeps on the desktop — with one line saying which permission is
+missing. `team:view` alone reads the roster and is offered nothing.
+
+### The dashboard-default table now has a guard instead of a promise
+
+Seeding the dashboard-card ticks for a role with no override needs the table of
+what each board shows today, which lives in `retail-admin.css` and is mirrored
+by hand in `RL_DASH_LAYOUT_DEFAULT`. The phone needs the same five rows, and a
+third hand-kept copy is a copy that drifts — an owner ticking on a phone would
+save a different board than the same tap on a desktop, silently.
+`scripts/test_mobile_permissions.js` reads both files and fails the build if
+they disagree. The desktop's copy has never had that.
+
+### What is NOT on the phone, and why
+
+**Team devices** — every operator's signed-in sessions across the tenant, with
+per-row sign-out — is a separate desktop card reading `/api/backend/sessions/*`
+and is left where it is. It answers a different question (which glass is signed
+in) from the one this section is about (who may do what), and nothing in Ash's
+brief asks for it. Recorded here as a deliberate absence rather than an
+oversight, so the next pass does not have to rediscover it.
+
+### What holds it
+
+`scripts/test_mobile_permissions.js` — 90 assertions across 30 cases, over the
+real routes' request bodies: the role write carries the role, a store-pinned
+role asks for its store in the same breath rather than meeting the route's 400
+afterwards, the matrix save carries the whole on-list plus the scope it was
+read with, a role delete carries its destination, a new role posts `caps:[]`,
+and an operator without each capability is offered nothing AND gets nothing
+when the command is called directly. `scripts/test_mobile_team.js` keeps the
+roster and the emergency switch. The sweep renders all four new screens warm,
+cold and in Chinese.
