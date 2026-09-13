@@ -10120,6 +10120,20 @@
   #tab-sales .td-head { align-items: center; flex-wrap: wrap; }
   .tds-actions { margin-left: auto; display: inline-flex; gap: 8px; }
 
+/* ── §116 · the Sales sub-nav ────────────────────────────────────────────────
+   Overview and Channel sync are two views of one place, so they get a tab strip
+   instead of a button in a corner. The strip is rendered IDENTICALLY on
+   #tab-sales and #tab-channel-sync — that sameness is the whole point, and it
+   is how the operator gets back. Values copied from .mt-tabs / .mt-tab, which
+   is the strip the channel pages already carry: a third tab shape on the one
+   page whose job is to end three different-looking channel pages would be a
+   joke at its own expense. */
+  .sales-subnav { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--td-border); margin: 0 0 20px; }
+  .sales-subtab { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 0; font: 500 13px var(--f-sans); color: var(--td-text2); cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .sales-subtab:hover { color: var(--td-text); }
+  .sales-subtab.active { color: var(--td-text); border-bottom-color: var(--td-text); }
+  .sales-subnav-grow { flex: 1 1 auto; }
+
   /* Buttons inside the tab wear Tacet: quiet outline, ink text; the hub's
      "Set up" (.btn-primary) is the page's one Dusk element. */
   #tab-sales .btn {
@@ -15513,18 +15527,6 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
 #tab-channel-sync .cs-empty { padding: 40px 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
 #tab-channel-sync .cs-foot { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 12px; font-variant-numeric: tabular-nums; }
 
-
-/* ── §103 step 3 · the Channels column on the Products list ──────────────────
-   Three dots and their one-character channel glyph. Grey stays FAINT on
-   purpose: most of the catalogue is deliberately not on every channel, and a
-   "not there" that looks like a warning turns the column into noise inside a
-   week — the same rule the Channel sync page's own grey follows. */
-  #pa-table col.pa-c-channels { width: 9%; }
-  #pa-table td.pa-c-channels, #pa-table th.pa-c-channels { white-space: nowrap; }
-  .pa-chdots { display: inline-flex; gap: 10px; align-items: center; cursor: pointer; }
-  .pa-chdot { display: inline-flex; align-items: center; gap: 4px; font: 400 11.5px var(--f-sans); color: var(--td-text2); letter-spacing: .02em; }
-  .pa-chdots:hover .pa-chdot { color: var(--td-text); }
-  .pa-card-ch { margin-top: 8px; }
 
 /* ── §103 step 4 · the Channels card in the product editor ───────────────────
    One row per channel: the state, what the platform last took, and — only when

@@ -11981,14 +11981,42 @@
     <div class="td-head">
       <h2 style="margin:0">Sales · 销售</h2>
       <span class="tds-actions">
-        <button class="btn btn-sm" type="button" onclick="goTab('channel-sync')" data-cap="meituan:view eleme:view guanyi:view">
-          Channel sync · 渠道同步
-        </button>
+        <!-- §116 — the Channel sync button that stood here is now the sub-nav
+             tab below; it is a destination, not an action. -->
         <button class="btn btn-sm btn-ghost" type="button" onclick="igHelp('general')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" style="width:14px;height:14px"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.5 2.5 0 1 1 3.4 2.3c-.7.3-.9.8-.9 1.4v.5"/><path d="M12 16.8h.01"/></svg>
           Get help · 获取帮助
         </button>
       </span>
+    </div>
+
+    <!-- ═══ §116 · SALES SUB-NAV — the one place all syncing gathers ═══
+         Channel sync was reached by a small `btn btn-sm` in this header's
+         corner, beside Get help, which is where an action goes when nobody has
+         decided it is a destination. It is a destination: it is the only screen
+         that answers "is every channel taking my numbers, and if not, which
+         items and why". So it gets a tab.
+
+         THE STRIP IS RENDERED IDENTICALLY ON BOTH SECTIONS — here and on
+         #tab-channel-sync, same classes, same two buttons, only `active` moves.
+         That is what makes it a sub-nav rather than two one-way links, and it
+         is how the operator gets back. Both tabs stand in on the Sales rail row
+         (01-core.js RAIL_STANDIN), so the rail does not move underneath you
+         when you cross between them.
+
+         The Channel sync button carries the same any-of gate the tab itself has
+         (01-core.js TAB_CAP['channel-sync']); an operator who can open none of
+         the three channel screens is not shown a tab that leads to a page about
+         them. Labels are live pairs, not composed: "Channel sync · 渠道同步" is
+         the button this replaces, the dashboard's alert row and the phone's own
+         nav row; "Overview · 概览" is the Guanyi page's sub-nav, which is this
+         same control on a channel page. ═══ -->
+    <div class="sales-subnav" role="tablist">
+      <button type="button" class="sales-subtab active" role="tab" aria-selected="true"
+              onclick="goTab('sales')">Overview · 概览</button>
+      <button type="button" class="sales-subtab" role="tab" aria-selected="false"
+              onclick="goTab('channel-sync')" data-cap="meituan:view eleme:view guanyi:view">Channel sync · 渠道同步</button>
+      <span class="sales-subnav-grow"></span>
     </div>
 
     <div class="tds-body">
@@ -12257,6 +12285,34 @@
        root is data-no-i18n (the walker would otherwise split the composed
        "Last 18 · 1d ago" style lines). The h2 pair is the only static text. -->
   <section id="tab-channel-sync">
+    <!-- ═══ §116 · SALES SUB-NAV — the one place all syncing gathers ═══
+         Channel sync was reached by a small `btn btn-sm` in this header's
+         corner, beside Get help, which is where an action goes when nobody has
+         decided it is a destination. It is a destination: it is the only screen
+         that answers "is every channel taking my numbers, and if not, which
+         items and why". So it gets a tab.
+
+         THE STRIP IS RENDERED IDENTICALLY ON BOTH SECTIONS — here and on
+         #tab-channel-sync, same classes, same two buttons, only `active` moves.
+         That is what makes it a sub-nav rather than two one-way links, and it
+         is how the operator gets back. Both tabs stand in on the Sales rail row
+         (01-core.js RAIL_STANDIN), so the rail does not move underneath you
+         when you cross between them.
+
+         The Channel sync button carries the same any-of gate the tab itself has
+         (01-core.js TAB_CAP['channel-sync']); an operator who can open none of
+         the three channel screens is not shown a tab that leads to a page about
+         them. Labels are live pairs, not composed: "Channel sync · 渠道同步" is
+         the button this replaces, the dashboard's alert row and the phone's own
+         nav row; "Overview · 概览" is the Guanyi page's sub-nav, which is this
+         same control on a channel page. ═══ -->
+    <div class="sales-subnav" role="tablist">
+      <button type="button" class="sales-subtab" role="tab" aria-selected="false"
+              onclick="goTab('sales')">Overview · 概览</button>
+      <button type="button" class="sales-subtab active" role="tab" aria-selected="true"
+              onclick="goTab('channel-sync')" data-cap="meituan:view eleme:view guanyi:view">Channel sync · 渠道同步</button>
+      <span class="sales-subnav-grow"></span>
+    </div>
     <div class="el-pagehead">
       <div class="el-pagehead-t">
         <h2 data-lang-block="en">Channel sync</h2>

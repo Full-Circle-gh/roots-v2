@@ -24,7 +24,6 @@
   let _loading = null;
   let _langHooked = false;
   let _touched = false;     // has the operator picked a chip themselves
-  let _pendingOpen = null;  // a product a Products-list dot asked us to open
 
   const CH_NAME = { meituan: ['Meituan', '美团'], eleme: ['Eleme', '饿了么'], guanyi: ['GZ Grocery', 'GZ Grocery'] };
   /* THE GLYPH IS A PAIR, NOT A CHARACTER. It was 美 / 饿 / GZ in both
@@ -323,7 +322,6 @@
         return;
       } finally { _loading = null; }
       render();
-      if (_pendingOpen != null) { const pid = _pendingOpen; _pendingOpen = null; _csScrollTo(pid); }
     })();
     return _loading;
   }
@@ -341,19 +339,9 @@
     goTab('channel-sync');
     if (_data) render();
   };
-  /* Opened from a Products-list dot: land on THAT product rather than on the
-     whole catalogue. The chip goes to All items because the operator asked
-     about this row and it may well be a green one, and the row opens itself so
-     the reason is on screen without a second click. */
-  window.csOpenProduct = function (pid) {
-    _touched = true; _filter = 'all'; _channel = ''; _q = ''; _open = Number(pid);
-    goTab('channel-sync');
-    if (_data) { render(); _csScrollTo(Number(pid)); } else { _pendingOpen = Number(pid); }
-  };
-  function _csScrollTo(pid) {
-    const row = document.querySelector('#tab-channel-sync .cs-tbl tr.row[data-pid="' + pid + '"]');
-    if (row && row.scrollIntoView) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  }
+  /* §116 — csOpenProduct is gone with the Products-list dots that were its only
+     caller. Landing on one product from elsewhere is a reasonable thing to want
+     again; if it comes back, it comes back for a caller that exists. */
 
   /* The two sentence-builders, shared with the product editor's Channels card
      (09-products.js pdLoadChannels) so one state cannot be worded two ways on
