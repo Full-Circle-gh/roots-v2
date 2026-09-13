@@ -164,7 +164,7 @@ run('mobile nav', [
        "!moreRowsFlat().find(function(r){return r.key==='pick'}).href"],
     ]],
 
-  /* §118 RENAMED THIS ROW AND RE-POINTED THE SECOND ASSERTION. It read
+  /* §119 RENAMED THIS ROW AND RE-POINTED THE SECOND ASSERTION. It read
      "no launcher row survives" as `调拨` being absent — true only while no row
      was NAMED for a transfer. The transfer row is 调拨收货 now, so the absence
      of a launcher is asserted the way it was always meant: by key, and by no
@@ -313,7 +313,7 @@ run('mobile nav', [
     "state.caps=['purchasing:view'];state.tab='more';state.stack=[];render();", [
       ['Purchasing is theirs', `${body}.indexOf('Purchasing')>-1`],
       /* Asserted by KEY, not by the label. As `indexOf('Receiving')` this went
-         green the moment §118 renamed the row — whether or not the row was
+         green the moment §119 renamed the row — whether or not the row was
          still being offered — which is a guard that had stopped guarding. */
       ['the receiving row is not — its only action would 403',
        "!moreRowsFlat().find(function(r){return r.key==='receiving'})"],

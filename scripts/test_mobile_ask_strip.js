@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * §117 — the Operations menu is entered by the job, in the operator's own words.
+ * §118 — the Operations menu is entered by the job, in the operator's own words.
  *
  *   node scripts/test_mobile_ask_strip.js
  *
@@ -55,7 +55,7 @@ function it(name, fn) {
   catch (e) { console.log(`  ✗ ${name}\n      ${e.message}`); process.exitCode = 1; }
 }
 
-console.log('\n§117 — the questions above the Operations list');
+console.log('\n§118 — the questions above the Operations list');
 
 it('seven questions, and every one names a row MORE_GROUPS actually has', () => {
   const keys = [...TASKS.matchAll(/\['([a-z]+)',\s*\[/g)].map(m => m[1]);
@@ -151,13 +151,13 @@ it('it mounts above the groups and below the setup card', () => {
 
 it('B moved no row, and the 收货 collision it left open is now CLOSED', () => {
   /* When this case was written the collision was open and this assertion was a
-     reminder to re-read §117. §118 closed it — the rename option A proposed,
+     reminder to re-read §118. §119 closed it — the rename option A proposed,
      adopted on its own — so the guard is inverted: what it protects now is that
      the two flows never share a name again, in either language. */
   const groups = MHTML.slice(MHTML.indexOf('const MORE_GROUPS=['), MHTML.indexOf('function moreGroups()'));
   const ops = groups.slice(groups.indexOf("h:['Operations'"), groups.indexOf("h:['Marketing'"));
   assert.strictEqual((ops.match(/\['[a-z]+','[a-z-]+',/g) || []).length, 22,
-    'the Operations list is no longer twenty-two rows — §117 says B moves none of them');
+    'the Operations list is no longer twenty-two rows — §118 says B moves none of them');
 
   const row = (k) => {
     const m = new RegExp(`\\['${k}','[a-z-]+','([^']+)','([^']+)'`).exec(ops);
@@ -194,7 +194,7 @@ it('Delivery says it is settings, because that is what it is', () => {
     'the row and the screen it opens must not disagree');
 });
 
-it('§117 — the terms the composed questions were built from are still live', () => {
+it('§118 — the terms the composed questions were built from are still live', () => {
   /* House rule for a composed pair: say where its Chinese came from and FAIL if
      that source stops being live, so a rename cannot quietly orphan it.
      Declared in docs/tacet-delivery-vocabulary.md v1.75. */
@@ -212,4 +212,4 @@ it('§117 — the terms the composed questions were built from are still live', 
     '收起 / 查看 and the ▴▾ convention are copied from this live collapse pair');
 });
 
-console.log(`\nok — ${n} §117 ask-strip checks.`);
+console.log(`\nok — ${n} §118 ask-strip checks.`);

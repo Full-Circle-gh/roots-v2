@@ -1,10 +1,10 @@
 # The Operations menu — two options, drawn to be chosen between
 
-> **DECIDED 2026-09-13 by Ash: OPTION B** (§117), against this document's own
+> **DECIDED 2026-09-13 by Ash: OPTION B** (§118), against this document's own
 > recommendation of A — §7 is left exactly as written, because a recommendation tidied away
 > after it was declined cannot be re-checked.
 >
-> **Then, on the evidence B produced, TWO OF A'S FOUR RENAMES were adopted (§118):**
+> **Then, on the evidence B produced, TWO OF A'S FOUR RENAMES were adopted (§119):**
 > `Delivery → Delivery settings` and the 收货 collision, closed in all six places §1 lists.
 > `Invoices` is deliberately not renamed — batch three folds that row into Orders.
 > **A's grouping and its three pills remain undecided.**
@@ -12,7 +12,7 @@
 > **§4's "honest limit" was wrong, and so was this session's first reading of it.** B does
 > not answer one question with two destinations: it asks two questions, each going straight
 > to its screen, so B never needed A's renames at all. The claim that it did was made in
-> chat and corrected in §117. What the built strip DID produce is the argument for the
+> chat and corrected in §118. What the built strip DID produce is the argument for the
 > rename as an observation rather than a prediction — in Chinese, both questions' second
 > lines read 收货, because the rows they name were the same word.
 
