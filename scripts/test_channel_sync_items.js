@@ -525,9 +525,10 @@ check('the glyph table is a pair per channel, never one character for both', () 
 check('the Products page takes the channel name from the shared table, not the server label', () => {
   const src = read('public/retail-admin/09-products.js');
   ok(/csChannelName/.test(src), 'the Products page should resolve names through csChannelName');
-  ok(/csChannelGlyph/.test(src), 'and its glyph through csChannelGlyph');
-  // The two display paths that used ch.label directly, and shipped English into
-  // the Chinese app: the dot's tooltip and the editor card's row + button.
+  // The glyph half of this case went with the Channels column (§117) — there is
+  // no glyph on this page any more. Section 11 asserts that removal directly.
+  // The two display paths that used ch.label and shipped English into the
+  // Chinese app: the dot's tooltip (gone) and the editor card's row + button.
   ok(!/escapeHtml\(ch\.label\)/.test(src), 'a channel row still renders the raw English label');
   ok(!/'前往' \+ ch\.label/.test(src), 'the fix button still builds 前往 from the English label');
 });
@@ -838,6 +839,80 @@ check('both clients read the channel’s cause where the server offers one', () 
   ok(/chCauseFor\(/.test(read('public/retail-admin/09-products.js')), 'the product editor does not defer');
   ok(/csCauseFor\(/.test(read('public/m.html')), 'the phone does not defer');
   ok(/ch\.stale\|\|ch\.blocked/.test(read('public/m.html')), 'the phone’s stopped-channel card ignores a block');
+});
+
+
+// ── 11. §117 · all syncing gathers in one place ──────────────────────────────
+//
+// §103 step 3 answered "is this product's number right on this channel?" in
+// four places at once — a dot column on the Products list, this page, the
+// Meituan and Eleme tabs, and GZ Grocery. Ash: "I don't want anything that got
+// to do with syncing at the products list page." These cases hold the two
+// halves of part one: the list says nothing about syncing, and Channel sync is
+// reached by a sub-nav that is the SAME OBJECT on both sections rather than a
+// button in a corner.
+section('11 · §117 · the products list is out of the syncing business');
+
+check('the Products list carries no channel state of its own', () => {
+  const src = read('public/retail-admin/09-products.js');
+  ok(!/paLoadChannels/.test(src), 'the products list is fetching channel state again');
+  ok(!/_paChannelDots|_paChGlyph/.test(src), 'the Channels column dots are back on the list');
+  ok(!/PA_CH_ON|PA_CH_LIST|PA_CHANNELS\b|PA_CH_RANK/.test(src), 'the products list is holding channel state again');
+  ok(!/compact=1/.test(src), 'the per-load /channel-sync?compact=1 read is back on the catalogue path');
+  ok(!/pa-c-channels|pa-chdot|pa-card-ch/.test(src), 'the Channels column markup is back');
+  // The EXPORT, not the word: the note left in its place names it, and a test
+  // that cannot tell a tombstone from the body is a test that has to be fought.
+  ok(!/window\.csOpenProduct\s*=/.test(read('public/retail-admin/29-channel-sync.js')),
+     'csOpenProduct is back without the dots that were its only caller');
+  ok(!/\.pa-chdots?\b|pa-c-channels|\.pa-card-ch\b/.test(read('public/retail-admin.css')),
+     'the Channels column CSS is back');
+});
+
+// WHAT STAYS. The removal was scoped to the LIST. The editor's own Channels
+// card (§103 step 4) is one product looked at in depth, not a second overview,
+// and taking it out with the column would be the opposite mistake.
+check('the product editor keeps its Channels card', () => {
+  const src = read('public/retail-admin/09-products.js');
+  ok(/pdLoadChannels/.test(src), 'the editor no longer reads its product’s channels');
+  ok(/id="pd-channels-card"/.test(read('public/retail-admin.html')), 'the editor’s Channels card is gone from the markup');
+});
+
+// THE SUB-NAV IS ONE OBJECT RENDERED TWICE. That sameness is the mechanism: it
+// is what makes this a sub-nav rather than two one-way links, and it is how the
+// operator gets back from Channel sync. Only `active` and `aria-selected` move.
+check('the Sales sub-nav is identical on Sales and on Channel sync', () => {
+  const html = read('public/retail-admin.html');
+  const strips = html.match(/<div class="sales-subnav"[\s\S]*?<\/div>/g) || [];
+  eq(strips.length, 2, 'the sub-nav should appear on #tab-sales and on #tab-channel-sync');
+  const norm = (x) => x.replace(/\s+/g, ' ')
+                       .replace(/ active"/g, '"')
+                       .replace(/aria-selected="(?:true|false)"/g, 'aria-selected=""');
+  eq(norm(strips[0]), norm(strips[1]), 'the two strips have drifted apart');
+  ok(/goTab\('channel-sync'\)/.test(strips[0]), 'the Sales strip does not reach Channel sync');
+  ok(/goTab\('sales'\)/.test(strips[1]), 'the Channel sync strip does not lead back to Sales');
+  ok(/class="sales-subtab active"/.test(strips[0]), 'the Sales strip does not mark Overview active');
+  ok(/class="sales-subtab active"/.test(strips[1]), 'the Channel sync strip does not mark itself active');
+});
+
+// The gate travels with the tab: TAB_CAP['channel-sync'] is any-of, and an
+// operator who can open none of the three channel screens is not shown a tab
+// that leads to a page about them.
+check('the Channel sync tab carries the same any-of gate the tab itself has', () => {
+  const html = read('public/retail-admin.html');
+  const strips = html.match(/<div class="sales-subnav"[\s\S]*?<\/div>/g) || [];
+  for (const st of strips) {
+    ok(/data-cap="meituan:view eleme:view guanyi:view"/.test(st), 'a strip’s Channel sync tab has no gate');
+  }
+  ok(/'channel-sync':\s*\['meituan:view', 'eleme:view', 'guanyi:view'\]/.test(read('public/retail-admin/01-core.js')),
+     'TAB_CAP no longer states the gate the strip copies');
+});
+
+// The button this replaces must not come back beside it — two doors to one
+// destination is how the corner button went unfound in the first place.
+check('the corner button that used to reach Channel sync is gone', () => {
+  const html = read('public/retail-admin.html');
+  ok(!/class="btn btn-sm" type="button" onclick="goTab\('channel-sync'\)/.test(html),
+     'the Sales header’s Channel sync button is back beside the sub-nav');
 });
 
 // ── Summary ──────────────────────────────────────────────────────────────────
