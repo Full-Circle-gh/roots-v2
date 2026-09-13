@@ -60,10 +60,14 @@ credentials and can't complete either path):
   (refusing to discard uncommitted local changes unless you pass `-Force`),
   then you upload the normal way through WeChat Developer Tools's GUI.
 - **`scripts/upload-miniapp.ps1`** — runs the same sync, then uploads directly
-  via WeChat's own CLI (`miniprogram-ci`), no GUI step at all. Needs a
-  mini-program upload private key (mp.weixin.qq.com → 开发 → 开发管理 →
-  开发设置 → 小程序代码上传密钥) and its robot number — never commit that key;
-  `*.key` is already gitignored.
+  via WeChat's own CLI (`miniprogram-ci`), no GUI step at all. First run
+  installs `miniprogram-ci` into `scripts/miniapp-ci-tool/` (isolated on
+  purpose — it pulls an old Babel 6 toolchain that has nothing to do with the
+  app, so it's kept out of the root `package.json`/lockfile entirely rather
+  than showing up in every session's `npm audit`). Needs a mini-program
+  upload private key (mp.weixin.qq.com → 开发 → 开发管理 → 开发设置 →
+  小程序代码上传密钥) and its robot number — never commit that key; `*.key` is
+  already gitignored.
   ```powershell
   .\scripts\upload-miniapp.ps1 -Version 1.2.3 -KeyPath C:\keys\private.xxx.key -Robot 1 -Desc "what changed"
   ```

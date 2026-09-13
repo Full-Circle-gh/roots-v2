@@ -5,11 +5,17 @@
  * which does `git pull` immediately before this runs, so what gets uploaded is
  * always exactly what's on origin/main.
  *
- * Needs `miniprogram-ci` installed (npm install — it's a devDependency) and a
- * mini-program upload private key, which you generate yourself and this repo
- * never sees: mp.weixin.qq.com → 开发 → 开发管理 → 开发设置 → 小程序代码上传密钥.
- * That console page also assigns the key a "robot" number (1–30) — pass the
- * same number here with --robot.
+ * Needs `miniprogram-ci` installed in scripts/miniapp-ci-tool/ (run
+ * `npm install --prefix scripts/miniapp-ci-tool` once — upload-miniapp.ps1
+ * does this for you automatically) — deliberately NOT a root devDependency.
+ * It pulls an abandoned Babel 6 chain that has nothing to do with this app
+ * and would otherwise show up in every session's and every CI run's own
+ * `npm audit` on this shared repo for a tool only this script ever touches.
+ *
+ * Also needs a mini-program upload private key, which you generate yourself
+ * and this repo never sees: mp.weixin.qq.com → 开发 → 开发管理 → 开发设置 →
+ * 小程序代码上传密钥. That console page also assigns the key a "robot" number
+ * (1–30) — pass the same number here with --robot.
  *
  *   node scripts/upload_miniapp.js --version 1.2.3 --key C:\keys\private.wxba....key --robot 1 [--desc "..."] [--appid wx...]
  *
@@ -78,11 +84,14 @@ async function main() {
     fail('no real appid — pass --appid or fix miniapp/project.config.json');
   }
 
+  // Resolved from its own isolated install, never the root node_modules —
+  // see scripts/miniapp-ci-tool/package.json for why.
+  const toolDir = path.join(__dirname, 'miniapp-ci-tool');
   let ci;
   try {
-    ci = require('miniprogram-ci');
+    ci = require(path.join(toolDir, 'node_modules', 'miniprogram-ci'));
   } catch (e) {
-    fail('miniprogram-ci is not installed. Run "npm install" from the repo root first.');
+    fail(`miniprogram-ci is not installed. Run "npm install --prefix ${toolDir}" first (upload-miniapp.ps1 does this automatically).`);
   }
 
   const desc = args.desc || `Uploaded from ${ROOT} via scripts/upload_miniapp.js`;
