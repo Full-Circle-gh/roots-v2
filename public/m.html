@@ -771,6 +771,12 @@ const state = {
      its error, its in-flight flag, whether it has been asked for, and which
      row is expanded. */
   cs:null, csErr:'', csFilter:'', csLoading:false, csTried:false, csOpen:null,
+  /* §124 — the two the push added. csBusy is 'channel:pid' while ONE write is in
+     flight (one at a time, per screen, exactly as the desktop page does it), and
+     csNote is { pid, text } so a refusal lands on the card that caused it rather
+     than as a toast over a list where nothing says which row it meant — keyed to
+     the PRODUCT, because the card is the product and that is where it is drawn. */
+  csBusy:null, csNote:null,
   mtStatus:null, mtStatusTried:false, mtOffline:false,
   scAff:null, scTried:false,
   tiers:null, tierCounts:null, tiersErr:null, tiersTried:false,
@@ -11246,8 +11252,9 @@ SUBS.kitchenqueue={title:['Kitchen queue','厨房制作队列'],
       k.printing?T('Printing…','打印中…'):T('Reprint','重打')}</button>`; },
   render:()=>screenKitchenQueue()};
 /* §103 — Channel sync. One card per item that needs somebody, three pills
-   across it, the reason in a sentence. Read-only: the repair is a desktop
-   job, and the card says which tab. */
+   across it, the reason in a sentence. §124 — and the push, on the channel's own
+   line, for the four reasons a push clears; the three that need a catalogue
+   picker still name the desktop tab, on the card that needs it. */
 SUBS.channelsync={title:['Channel sync','渠道同步'],render:()=>screenChannelSync()};
 SUBS.whatmade={title:['What you made','登记制作'],render:()=>screenWhatMade()};
 SUBS.logbatch={title:['Log a batch','登记批次'],render:()=>screenLogBatch()};
@@ -12230,7 +12237,65 @@ async function loadChannelSync(){
   state.csLoading=false; state.csTried=true; render();
 }
 reg('csFilter', k=>{ state.csFilter=String(k||'att'); render(); });
-reg('csOpen', id=>{ state.csOpen=state.csOpen===Number(id)?null:Number(id); render(); });
+/* Opening or closing a card is where an operator moves on, so a refusal that
+   belonged to the last one goes with it rather than waiting to be re-read as
+   news the next time that card happens to be opened. */
+reg('csOpen', id=>{ state.csOpen=state.csOpen===Number(id)?null:Number(id); state.csNote=null; render(); });
+/* ══ §124 · WHAT THIS SCREEN CAN REPAIR ITSELF, AND WHAT STILL NEEDS A DESK ══
+   §117 part two gave the desktop Channel sync page two verbs and this screen was
+   written against the version before it: it said "Read-only" at the foot and sent
+   every amber row to a channel tab. For four of the seven reasons that is now the
+   WRONG place — and for push_failed it is the one place that cannot help, because
+   the daemon picks up only `pending` rows (docs/meituan-findings.md #6), which is
+   the defect a push refreshes its way out of.
+
+   THE PUSH IS THE PHONE'S VERB AND THE SWITCH IS NOT. The person who sees a
+   channel holding the wrong number is at the shelf with a phone; the retry is
+   idempotent (a pending row is refreshed, never duplicated — lib/channel-sync-
+   write.js). Turning sync OFF is a lasting change afterwards visible only as a
+   grey chip somebody goes looking for, which is the wrong shape for one hand on a
+   small screen. It stays on the desktop. */
+
+/* The desktop's own condition for drawing Sync now (29-channel-sync.js `actions`),
+   written once here so the two screens cannot drift into offering the verb on
+   different rows: nothing is mapped on `none`, and nothing would be sent on `off`
+   — where the fix is the switch this screen deliberately does not carry. */
+function csCanPush(c){ return !!c && c.k!=='none' && c.k!=='off'; }
+/* The three reasons a push cannot touch: naming a listing and claiming a 规格 need
+   the channel's own catalogue picker, which is where the three channels genuinely
+   differ and is why §117 part two did not build them. On the desktop "Open Meituan"
+   sits beside Sync now on EVERY amber row and costs one click on the machine
+   already in front of you. Here the same thing is a sentence asking somebody to go
+   and find a computer, so it is drawn only where a computer is genuinely required. */
+const CS_DESKTOP_REASONS=['no_name','name_not_found','no_option'];
+function csNeedsDesktop(c){ return !!c && c.k==='att' && CS_DESKTOP_REASONS.indexOf(c.reason)!==-1; }
+/* Both refusals are 409s meaning the same thing — somebody else changed this while
+   you had it open — and both pairs are lifted: the first is 01-core.js's own
+   sentence for these two codes, the second is orderErrorText's default on this
+   file. Nothing here is composed. */
+function csErrText(e){
+  if(e.code==='not_mapped'||e.code==='not_syncing')
+    return T('Somebody else changed this while you had it open — reload and try again.','该记录已被他人修改,请刷新后重试。');
+  return T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
+}
+/* ONE WRITE AT A TIME, per screen, as the desktop page does it. The RELOAD is the
+   feedback: the row's own verdict flips to Sending…, which says more than a toast
+   would and cannot drift out of step with what the server actually did. The path is
+   the desktop's path, character for character, because that exact two-segment shape
+   is what lib/cap-routes.js matches to gate this as {channel}:sync — a path that
+   misses it is a write with no gate at all. */
+reg('csPush', async (chKey,pid)=>{
+  const key=String(chKey)+':'+Number(pid);
+  if(state.csBusy) return;
+  state.csBusy=key; state.csNote=null; render();
+  try{
+    await apiWrite('/channel-sync/'+encodeURIComponent(chKey)+'/products/'+Number(pid)+'/push');
+  }catch(e){
+    if(String(e.message)==='auth') return;   // apiWrite has already left for the login page
+    state.csNote={pid:Number(pid),text:csErrText(e)};
+  }finally{ state.csBusy=null; }
+  await loadChannelSync();                   // loadChannelSync ends in render()
+});
 function csWord(k){
   return k==='ok'?T('Synced','已同步'):k==='att'?T('Needs attention','待处理'):k==='off'?T('Sync off','已关闭')
     :k==='unk'?T('Name not checked','尚未读取商品'):T('Not listed','未上架');
@@ -12396,6 +12461,10 @@ function screenChannelSync(){
       const shelf=Object.values(p.shelf||{}).reduce((a,b)=>a+Number(b||0),0);
       const chans=(d.channels||[]).map(ch=>({ch,c:p.channels[ch.key]||{k:'none',reason:'no_map'}}));
       const bad=chans.filter(x=>x.c.k==='att');
+      /* §124 — the amber channels a PUSH cannot clear, which is the only reason
+         left to send somebody to a computer. `bad` still writes the sentence
+         saying what is wrong; this narrower list writes the one saying where. */
+      const deskBad=chans.filter(x=>csNeedsDesktop(x.c));
       return `<div class="card" style="padding:12px 14px;display:flex;flex-direction:column;gap:8px" onclick="APP.cmd('csOpen',${p.id})">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
           <div style="min-width:0"><div style="font-weight:500;line-height:1.35">${escAttr(name)}</div>
@@ -12412,12 +12481,27 @@ function screenChannelSync(){
                item's failure better than the item can. */
             const said=csCauseFor(x.ch.key,c2,x.ch.blocked||null); if(said) line.push(said);
             else if(c2.error) line.push(T('Push failed','推送失败')+': '+c2.error);
-            return `<div class="num">${escAttr(line.join(' · '))}</div>`;}).join('')}
-          ${bad.length?`<div style="color:var(--text-secondary)">${T('Fix this on the desktop: '+bad.map(x=>csChName(x.ch.key)).join(', ')+' tab.','请在电脑端修复：'+bad.map(x=>csChName(x.ch.key)).join('、')+'页。')}</div>`:''}
+            /* §124 — THE CONTROL SITS ON THE CHANNEL'S OWN LINE (§122: a control
+               belongs on the row whose value it changes). `.rowact` is the house
+               class for exactly that and carries the 44px target and the disabled
+               state; the label is the desktop button's own pair, and Sending… is
+               this screen's own word for a push in flight (csCellWord).
+               GATED CLIENT-SIDE, which the desktop does not need to be: this
+               file's apiWrite sends a 403 to /backend/login exactly as it sends a
+               401, so an ungated button would answer a missing permission by
+               throwing the operator out of the app. mCan's null-caps case means
+               allowed, so the server stays the gate. */
+            const busy=state.csBusy===x.ch.key+':'+p.id;
+            const btn=(csCanPush(c2)&&mCan(x.ch.key+':sync'))
+              ? `<button class="rowact"${busy?' disabled':''} onclick="event.stopPropagation();APP.cmd('csPush','${x.ch.key}',${p.id})">${busy?T('Sending…','发送中…'):T('Sync now','立即同步')}</button>`
+              : '';
+            return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <span class="num" style="min-width:0">${escAttr(line.join(' · '))}</span>${btn}</div>`;}).join('')}
+          ${deskBad.length?`<div style="color:var(--text-secondary)">${T('Fix this on the desktop: '+deskBad.map(x=>csChName(x.ch.key)).join(', ')+' tab.','请在电脑端修复：'+deskBad.map(x=>csChName(x.ch.key)).join('、')+'页。')}</div>`:''}
+          ${(state.csNote&&state.csNote.pid===p.id)?`<div style="color:var(--brick-ink)">${escAttr(state.csNote.text)}</div>`:''}
         </div>`:''}
       </div>`;}).join('')}</div>`
     : `<div style="padding:24px 24px;text-align:center;font-size:14px;color:var(--text-secondary)">${filter==='att'?T('Nothing needs you.','无需处理。'):T('Nothing here.','暂无商品。')}</div>`}
-    <div style="display:flex;align-items:center;gap:12px;background:var(--surface-raised);border-radius:14px;padding:12px 16px;margin:0 16px"><span style="color:var(--text-secondary);display:flex;flex:none">${ic('eye',18)}</span><span style="font-size:13px;color:var(--text-secondary)">${T('Read-only. A mapping is repaired on the desktop’s channel tabs.','只读。商品匹配在电脑端的渠道页修复。')}</span></div>
   </div>`;
 }
 /* ==========================================================================
@@ -17738,8 +17822,11 @@ const ROUTE_CAP={
   kitchenqueue:'restock:fulfil',
   /* §103 CHANNEL SYNC — the cross-channel view of the desktop's three channel
      screens, so it opens for anyone who may open any one of them: the same
-     any-of the desktop's TAB_CAP['channel-sync'] applies. Read-only, so no
-     write capability is needed behind it. */
+     any-of the desktop's TAB_CAP['channel-sync'] applies. §124 gave the screen
+     ONE write and the row gate is unchanged by it on purpose: somebody who may
+     look but not push gets the whole alarm with no button on it, because the
+     screen's purpose is the alarm and not the save. The button carries its own
+     gate, mCan('{channel}:sync'), where it is drawn. */
   channelsync:['meituan:view','eleme:view','guanyi:view'],
   /* THE TWO PRODUCTION SCREENS, on the capability POST /production is gated on
      server-side. `whatmade` is gated even though no row opens it: the queue
