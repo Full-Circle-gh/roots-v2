@@ -1167,16 +1167,6 @@ Page({
   },
 
   closeVariantPicker() { this.setData({ vpShow: false }); },
-  // Tap the chevron on a choice/extra backed by a stock product → open that
-  // product's page. catchtap keeps the row's own tap (select / checkbox)
-  // from also firing. We deliberately DON'T close the sheet: navigateTo keeps
-  // this page alive underneath, so when the customer taps "back" the picker is
-  // still open exactly as they left it (selections intact).
-  onLinkedProduct(e) {
-    const id = e.currentTarget.dataset.id;
-    if (!id) return;
-    wx.navigateTo({ url: '/pages/product/product?id=' + id });
-  },
   vpStop() { /* catchtap on the sheet body so taps don't dismiss it */ },
 
   vpChoose(e) {
