@@ -378,8 +378,20 @@
   }
 
   // Everything below the search box, in one patchable box.
+  //
+  // THE LOADING LINE ONLY WHEN THERE IS NOTHING TO KEEP. This panel is a card
+  // whose height grows with what the search returns, and the search box lives
+  // inside it. Replacing eight rows with a one-line "Loading…" per settled
+  // keystroke collapsed the card to a sliver and snapped it open again when
+  // the answer landed — the box's own border flying up past it and back, and
+  // the listings table below jumping the same distance. That is a flicker on
+  // every letter, and it survived the field itself being left alone.
+  //
+  // Leaving the previous matches up while the next answer is in flight costs a
+  // couple of hundred milliseconds of slightly stale rows. A collapsing panel
+  // costs the operator their place on every keystroke, which is worse.
   function pickList() {
-    if (_pickLoading) return `<div class="shp-note sm">${esc(T('Loading…', '加载中…'))}</div>`;
+    if (_pickLoading && !_pick.length) return `<div class="shp-note sm">${esc(T('Loading…', '加载中…'))}</div>`;
     if (!_pick.length) return `<div class="shp-note sm">${esc(_pickQ ? T('No products match this filter', '没有匹配此筛选条件的产品') : T('No products yet', '还没有商品'))}</div>`;
     return `<ul class="shp-pick-list">` + _pick.map(p => `<li>
         <span class="shp-pick-name">${nameOf(p.name_en, p.name_cn)}</span>
@@ -395,8 +407,15 @@
   // root.
   function renderPickList() {
     const box = document.getElementById('shp-pick-list');
-    if (box) { box.innerHTML = pickList(); if (typeof applyCapGates === 'function') applyCapGates(); return; }
-    paint();
+    if (!box) { paint(); return; }
+    // An identical rewrite still destroys and re-mints every row, and drags a
+    // document-wide capability pass behind it. Typing narrows a list slowly —
+    // the same rows come back often — so comparing first is cheaper than the
+    // churn, and it keeps the DOM still when nothing about it changed.
+    const html = pickList();
+    if (box.innerHTML === html) return;
+    box.innerHTML = html;
+    if (typeof applyCapGates === 'function') applyCapGates();
   }
 
   // The listings table repaints on its own too, so adding a product does not
@@ -527,7 +546,11 @@
   async function fetchPick() {
     if (!_shop) return;
     const seq = ++_pickSeq;
-    _pickLoading = true; renderPickList();
+    // Repaint to the loading state only when there is nothing on screen for it
+    // to replace — see pickList(). With rows up, this render is skipped
+    // entirely and they stay put until the answer arrives.
+    _pickLoading = true;
+    if (!_pick.length) renderPickList();
     try {
       const j = await api('/api/retail-admin/shops/' + _shop.id + '/candidates?q=' + encodeURIComponent(_pickQ));
       if (seq !== _pickSeq) return;   // a later keystroke already asked; this answer is stale

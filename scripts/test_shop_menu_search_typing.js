@@ -239,16 +239,38 @@ function boot() {
   ok(held._focused === focusedAtStart && held._caretSet === caretAtStart,
      'and focus and the caret were never touched — there is nothing to put back');
 
-  console.log('\n3. "Loading…" goes in the results box, never over the field');
+  console.log('\n3. a search in flight leaves the matches already up alone');
+  // The panel is a card that grows with its results and the search box is
+  // inside it. Blanking the rows to a one-line "Loading…" per keystroke
+  // collapsed the card and snapped it open again — a flicker on every letter,
+  // with the field sitting in the middle of it.
   let release;
   state.hold = () => new Promise(r => { release = r; });
+  const listWritesBefore = list()._writes;
   type('oat');
   await sleep(260);                      // debounce fired; the answer is held
-  ok(box() === held, 'the field survives the loading state');
-  ok(list().innerHTML.includes('Loading…'), 'the loading line is in the results box');
+  ok(box() === held, 'the field is untouched, as before');
+  ok(!list().innerHTML.includes('Loading…'), 'no loading line replaces the rows that are up');
+  ok(list().innerHTML.includes('Peanut Butter Duo'), 'the previous matches are still on screen');
+  ok(list()._writes === listWritesBefore, 'the results box was not rewritten at all — the panel cannot change height');
   release();
   await settle();
-  ok(list().innerHTML.includes('Oat Latte'), 'and the answer replaces it there');
+  ok(list().innerHTML.includes('Oat Latte') && !list().innerHTML.includes('Peanut Butter Duo'),
+     'and the answer replaces them once, when it arrives');
+
+  console.log('\n3b. but a search with nothing to keep still says it is working');
+  type('zzzz');                          // matches nothing — empties the list
+  await afterDebounce();
+  ok(list().innerHTML.includes('No products match'), 'an empty answer says so');
+  state.hold = () => new Promise(r => { release = r; });
+  type('oat');
+  await sleep(260);
+  ok(list().innerHTML.includes('Loading…'),
+     'with an empty box there is nothing to preserve, so the loading line is shown');
+  release();
+  await settle();
+  ok(list().innerHTML.includes('Oat Latte'), 'and is replaced by the answer');
+  ok(box() === held, 'the field came through all of that too');
 
   console.log('\n4. a slow answer cannot overwrite a newer one');
   state.hold = () => new Promise(r => { release = r; });
