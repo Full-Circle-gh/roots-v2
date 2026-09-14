@@ -110,4 +110,78 @@ still('the Orders list is inside the backstop, not just the counts beside it', (
     'the guard around refreshOrders() in mLiveTick changed — check it still covers the list AND an open order sheet');
 });
 
+still('no single stalled request can switch the refresh off for good', () => {
+  /* THE COMPLAINT THIS PINS, TAKE THREE. Same words a third time, against a
+     screenshot of Orders taken on a handset with a VPN badge in its status
+     bar. The two fixes above were both about REACH — wire the stream, then
+     widen the backstop to repaint the rows and not just the counts above them
+     — and neither could help, because what had stopped was the machinery.
+
+     Every refresh path holds a latch while it works (state.refreshing by hand,
+     _mLive.busy automatically) and mAutoOK() reads either as "already running".
+     The only release was the Promise.all beneath it, and fetch() has no
+     timeout: a tunnel that drops mid-request leaves its promise pending
+     indefinitely, so the latch never lifts, and from that instant every tick,
+     every nudge and every return to the app refuses in silence. On the hand
+     path state.refreshing ALSO holds the pull gap open with the ring turning
+     and stops wirePull() re-arming, so the gesture out is gone too. The only
+     cure left was a reload — which is the sentence on the ticket, and which an
+     installed app has no button for.
+
+     So every job in every refresh path goes through mSettled(), which gives up
+     on the latch (never on the fetch) after M_JOB_MS. A raw
+     `Promise.resolve(x).catch()` in any of the three is the bug back. */
+  assert.ok(/function mSettled\(/.test(MHTML),
+    'mSettled is gone — a stalled fetch can latch the refresh off again');
+  for (const fn of ['refreshNow', 'mLiveTick', 'mLiveRefreshAll']) {
+    const from = MHTML.indexOf(`function ${fn}(){`);
+    assert.ok(from > 0, `${fn} is gone — re-check what clears the refresh latch`);
+    const body = MHTML.slice(from, MHTML.indexOf('\n}', from));
+    assert.ok(/mSettled\(/.test(body),
+      `${fn} no longer time-boxes its jobs — one hung request switches the refresh off for good`);
+    assert.ok(!/Promise\.resolve\([^)]*\)\.catch/.test(body),
+      `${fn} waits on a raw promise again — that is the latch that never lifted`);
+  }
+  assert.ok(/_mLive\.busy=false/.test(MHTML) && /state\.refreshing=false/.test(MHTML),
+    'a latch is set with nothing shown to clear it');
+});
+
+still('a late answer never paints over a newer one', () => {
+  /* The price of letting the latch go early is that two refreshOrders() can be
+     in the air at once, and an old answer landing second would paint the list
+     backwards — on a list of ARRIVING WORK that reads as an order vanishing.
+     A ticket, not a race: only the newest read may paint. */
+  const from = MHTML.indexOf('async function refreshOrders()');
+  assert.ok(from > 0, 'refreshOrders is gone');
+  const body = MHTML.slice(from, MHTML.indexOf('\n}', MHTML.indexOf('order-status-counts', from)));
+  assert.ok(/const seq=\+\+_ordSeq;/.test(body),
+    'refreshOrders no longer takes a ticket — overlapping reads can paint out of order');
+  assert.ok((body.match(/seq===_ordSeq|seq!==_ordSeq/g) || []).length >= 3,
+    'a paint in refreshOrders is no longer guarded by its ticket — check the detail, the list AND the counts');
+});
+
+still('the backstop re-opens a stream the browser gave up on', () => {
+  /* EventSource retries by itself only until it gives up for good. Before this
+     the only thing that opened a new one was a visibilitychange — the operator
+     putting the phone down and picking it up — which a handset parked on the
+     Orders list all afternoon never gets. */
+  const live = MHTML.slice(MHTML.indexOf('function mLiveTick()'), MHTML.indexOf('function mLiveRefreshAll'));
+  assert.ok(/mLiveConnect\(\)/.test(live),
+    'mLiveTick no longer re-opens the stream — a mid-session drop leaves the 60s backstop carrying it alone, forever');
+  const gate = live.indexOf('if(!mAutoOK()) return;');
+  assert.ok(gate > 0 && gate < live.indexOf('mLiveConnect()'),
+    'mLiveConnect() moved above mAutoOK() in the tick — that gate is also what keeps a confined role off /stream');
+});
+
+still('a deferred nudge is actually spent, not just remembered', () => {
+  /* mLiveNudge\'s own note has always said "the next tick spends it". Nothing
+     read `dirty` but mLiveRefreshAll, which only cleared it — so a nudge
+     refused mid-typing stayed owed forever while the tick beside it did the
+     same work anyway. The tick clears it now, which is what makes that
+     sentence true. */
+  const live = MHTML.slice(MHTML.indexOf('function mLiveTick()'), MHTML.indexOf('function mLiveRefreshAll'));
+  assert.ok(/_mLive\.dirty=false/.test(live),
+    'mLiveTick never spends the nudge it deferred — `dirty` is written and never read');
+});
+
 console.log(`\nok — ${statics} live-refresh wiring checks.`);

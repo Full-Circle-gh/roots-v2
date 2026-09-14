@@ -257,11 +257,16 @@ function serveFrom(rows, opts) {
   // ── §2 · pull-to-refresh refreshes the catalogue ─────────────────────────
   section('§2 · pull-to-refresh re-reads the catalogue');
 
-  const SRC_REFRESH = lift('refreshNow');
+  /* mSettled and its timeout come along because refreshNow no longer waits on
+     a bare promise: every job it starts is time-boxed, so that one hung read
+     cannot hold the refresh latch shut forever (test_mobile_live.js pins the
+     rule). Lifted from the source rather than stubbed, so this box keeps
+     exercising the real wrapper. */
+  const SRC_REFRESH = liftConst('M_JOB_MS') + '\n' + lift('mSettled') + '\n' + lift('refreshNow');
   function refreshBox(catalogueTried, tab) {
     const box = {
       state: { refreshing: false, catalogueTried, tab },
-      forced: [], render() {}, setTimeout,
+      forced: [], render() {}, setTimeout, clearTimeout,
       loadLive: () => Promise.resolve(),
       loadOrdersPage: () => Promise.resolve(),
       loadCustomers: () => Promise.resolve(),
