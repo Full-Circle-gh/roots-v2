@@ -236,6 +236,38 @@ it('the delivery chip is there, and it is the pseudo-status the server knows', (
   assert.ok(/data-status="delayed"/.test(ADMIN), 'no delayed chip on the orders screen');
 });
 
+/** Every value the hidden #orders-status select can actually hold. */
+function statusOptions() {
+  const at = ADMIN.indexOf('<select id="orders-status"');
+  assert.ok(at > 0, 'the hidden status select is gone — setOrderStatus writes into it');
+  const body = ADMIN.slice(at, ADMIN.indexOf('</select>', at));
+  return [...body.matchAll(/<option value="([a-z_]*)"/g)].map((m) => m[1]);
+}
+
+it('EVERY chip on the row is a value the hidden select can hold', () => {
+  // THE CHIP IS ONLY HALF THE WIRING. setOrderStatus writes the chip's
+  // data-status into #orders-status and ordFilterQuery reads it back; a
+  // <select> given a value it has no <option> for takes selectedIndex -1 and
+  // returns '' — so the status param is NOT SENT and the list WIDENS to every
+  // order while the chip sits there lit. Verified in Chromium, not assumed.
+  //
+  // That is what 'delayed' did from the day its chip was added until
+  // 2026-09-14: §98 taught the server the name, the chip row was given the
+  // chip, and this select was never told. Ash, off the live desktop: "need a
+  // call filter doesnt filter anything it shows all orders."
+  //
+  // The general case, deliberately — the same shape as the two above it. A
+  // missing option is silent in exactly the way a missing STATUS_PARAM key and
+  // a missing chip were, and the next status added to that row must fail here
+  // rather than in production.
+  const opts = statusOptions();
+  const chips = [...ADMIN.matchAll(/<div class="status-chip[^>]*data-status="([a-z_]+)"/g)].map((m) => m[1]);
+  assert.ok(chips.length >= 8, 'expected the orders screen to still carry its chip row');
+  const orphan = [...new Set(chips.filter((s2) => !opts.includes(s2)))];
+  assert.deepStrictEqual(orphan, [],
+    `chip(s) whose status #orders-status cannot hold, so the filter silently shows EVERY order: ${orphan}`);
+});
+
 it('the delivery card and its own footer agree on where the alerts live', () => {
   const at = DASH.indexOf("const alerts = ((DASH_OPS.delivery_alerts || {}).count) || 0;");
   assert.ok(at > 0, 'the delivery footer must still read the ops count');
