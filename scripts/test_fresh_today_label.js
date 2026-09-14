@@ -132,6 +132,10 @@ function webCtx(onRun, lang = 'en') {
   const ctx = {
     shopperOnLocalRun: () => onRun,
     oosBackorder: (m) => !!m.oos_preorder,
+    // §127 — the server-flag branch of the real helper. Every fixture in this
+    // file omits the field, so it reads false throughout and the cases below
+    // go on testing the DATE exemption they were written for.
+    oosPreorderLocal: (m) => !!(m && m.oos_preorder_local),
     state: { lang },
     esc: (v) => String(v == null ? '' : v),
   };

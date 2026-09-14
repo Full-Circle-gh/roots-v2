@@ -141,7 +141,7 @@ Page({
       // inside Guangzhou, where the checkout gates today's run on real stock.
       const out = p.ship_from_supplier ? !!p.supplier_paused : (p.stock != null && Number(p.stock) <= 0);
       const preorder = out && !p.ship_from_supplier && !!p.oos_preorder
-        && (!this._onLocalRun || !!p.local_fresh_date);
+        && (!this._onLocalRun || !!p.local_fresh_date || !!p.oos_preorder_local);
       const soldOut = out && !preorder;
       /* §108 — the tile's OWN word, because one `copy.preorder` cannot answer
          three questions:
@@ -245,7 +245,7 @@ Page({
     if (!p) return;
     const out = p.ship_from_supplier ? !!p.supplier_paused : (p.stock != null && Number(p.stock) <= 0);
     const preorder = out && !p.ship_from_supplier && !!p.oos_preorder
-        && (!this._onLocalRun || !!p.local_fresh_date);
+        && (!this._onLocalRun || !!p.local_fresh_date || !!p.oos_preorder_local);
     // …and WHICH word the toast gets, on the same test the tile's own tag uses
     // (§108), so tapping a tile that reads NEXT BATCH cannot answer "pre-order".
     // '' covers a batch made TODAY on the run, which is not a reservation at

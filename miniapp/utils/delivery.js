@@ -5,6 +5,11 @@
 // the 'backorder_gz' policy stays orderable because the parcel leaves after the
 // next batch or restock; an order served off the shelves the local run loads
 // from has nothing behind it, so the checkout refuses it (localPreorderLine).
+//
+// §128 adds the one policy this answer does NOT govern: 'backorder_all' keeps
+// its pre-order ON the run too, because the checkout parks that order undated
+// instead of refusing it. The pages still ask this module the same question —
+// they just OR the server's `oos_preorder_local` flag beside the answer.
 // The shop grid, the PDP and the favourites page used to render the pill from
 // the product flag alone, so a Tianhe customer with a 2 km address was invited
 // to reserve items the checkout would then refuse. Those pages ask this module
