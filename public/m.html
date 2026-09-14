@@ -13927,9 +13927,18 @@ async function loadInbox(){
   }catch(e){}
   try{ const r=await api('/feedback'); const rows=Array.isArray(r)?r:(r&&r.data); if(rows) { DB.feedback=rows.map(mapFeedback); render(); } }catch(e){}
 }
+/* TWO OF THESE CAN NOW BE IN THE AIR AT ONCE. They could not before, because
+   the latch in mAutoOK() held the next tick off until this one answered — the
+   same latch that a stalled request used to hold shut forever, which is why it
+   now lets go after M_JOB_MS whether the read has landed or not. The cost of
+   that is an old answer arriving after a newer one and painting the list
+   backwards, which on a list of ARRIVING WORK would read as an order
+   disappearing. A ticket, not a race: only the most recent read may paint. */
+let _ordSeq=0;
 async function refreshOrders(){
+  const seq=++_ordSeq;
   const id=state.detailId, row=(state.liveOrders||[]).find(o=>o.id===id);
-  if(row&&row._id!=null){ try{ const o=await api('/orders/'+row._id); if(state.detailId===id){ state.liveDetail=mapDetail(o); render(); } }catch(e){} }
+  if(row&&row._id!=null){ try{ const o=await api('/orders/'+row._id); if(seq===_ordSeq&&state.detailId===id){ state.liveDetail=mapDetail(o); render(); } }catch(e){} }
   // Repaint the list the operator is actually looking at — same filters, same
   // depth. Refetching a bare first page would silently drop their filter and
   // every page they had loaded past the first.
@@ -13938,11 +13947,12 @@ async function refreshOrders(){
     const qs=ordersQuery(0).replace(/limit=\d+/,'limit='+Math.min(depth,200));
     const j=await apiRaw('/orders?'+qs);
     const rows=(j&&j.data)||[];
-    if(rows.length||state.ordersView){ state.ordersView=rows.map(mapOrderRow); state.liveOrders=state.ordersView;
+    if(seq!==_ordSeq){ /* a newer read has already painted — this one is history */ }
+    else if(rows.length||state.ordersView){ state.ordersView=rows.map(mapOrderRow); state.liveOrders=state.ordersView;
       const total=j&&j.meta&&j.meta.total; state.ordersTotal=(total!=null)?total:null;
       state.ordersMore=(total!=null)?state.ordersView.length<total:false; render(); }
   }catch(e){}
-  api('/order-status-counts').then(d=>{ if(d){ state.liveStatusCounts=d;
+  api('/order-status-counts').then(d=>{ if(d&&seq===_ordSeq){ state.liveStatusCounts=d;
     state.liveAttn=Object.assign({},state.liveAttn||{},{ship:(d.paid||0)+(d.preparing||0)}); render(); } }).catch(()=>{});
 }
 /* A purchase order is not a customer order. This used to fall back to
@@ -18846,19 +18856,56 @@ function wirePull(){
    Both are best-effort — a refresh that fails leaves what was already on the
    glass, because the alternative is emptying a working screen over a dropped
    connection. */
+/* A REQUEST THAT NEVER ANSWERS USED TO END THE REFRESH FOR GOOD, and "I have
+   to refresh to see updates" has now been filed three times — once against
+   Home, twice against Orders, the last of them from a handset whose status bar
+   carries a VPN badge. The two fixes before this one were both about REACH:
+   wire the stream, then widen the backstop to repaint the rows and not just
+   the counts above them. Neither could help, because the thing that had
+   stopped was the machinery itself.
+
+   Every refresh path here holds a latch while it works — refreshNow sets
+   state.refreshing, the two automatic ones set _mLive.busy — and mAutoOK()
+   reads either as "somebody else is already doing this". The only thing that
+   clears either is the Promise.all beneath it, and fetch() has no timeout. A
+   tunnel that drops mid-request does not error: the socket stops talking and
+   the promise under it is still pending ten minutes later. From that instant
+   the 60s tick refuses every turn, an arriving nudge refuses, and returning to
+   the app refuses — silently, and until the page is reloaded. On the hand path
+   it is worse still: state.refreshing also holds the content open at the pull
+   gap with the ring turning, and wirePull() will not re-arm while it is set,
+   so the gesture that is supposed to be the way out is itself gone. The only
+   cure left was the one thing an installed app has no button for. Which is the
+   sentence on the ticket.
+
+   So no job holds a latch longer than this. The fetch underneath is left to
+   run and still writes its answer into state if it ever lands; the latch
+   simply stops waiting on it, and the next tick tries again on a fresh
+   connection. Twenty seconds is a third of the backstop interval: long enough
+   that an ordinary slow 5G read finishes inside it, short enough that a dead
+   one costs at most one turn. */
+const M_JOB_MS=20000;
+function mSettled(p,ms){
+  return new Promise(res=>{
+    let done=false;
+    const fin=()=>{ if(done) return; done=true; clearTimeout(t); res(); };
+    const t=setTimeout(fin,ms||M_JOB_MS);
+    try{ Promise.resolve(p).then(fin,fin); }catch(e){ fin(); }
+  });
+}
 function refreshNow(){
   if(state.refreshing) return;
   state.refreshing=true; render();
-  const jobs=[Promise.resolve(loadLive()).catch(()=>{})];
-  if(state.tab==='orders') jobs.push(Promise.resolve(loadOrdersPage()).catch(()=>{}));
-  if(state.tab==='customers') jobs.push(Promise.resolve(loadCustomers()).catch(()=>{}));
+  const jobs=[mSettled(loadLive())];
+  if(state.tab==='orders') jobs.push(mSettled(loadOrdersPage()));
+  if(state.tab==='customers') jobs.push(mSettled(loadCustomers()));
   /* The catalogue is this tab's paged list in exactly the same sense, and it
      was the one missing from this list — refresh ran loadLive alone, whose
      fifty-row read then stood in for it. Keyed on `catalogueTried` rather than
      on `state.tab==='products'` because Products is reachable as a pushed
      sub-screen too, and once the catalogue is loaded a refresh from anywhere
      should leave it fresh rather than stale. */
-  if(state.catalogueTried) jobs.push(Promise.resolve(loadCatalogue(true)).catch(()=>{}));
+  if(state.catalogueTried) jobs.push(mSettled(loadCatalogue(true)));
   // A spinner that vanishes in 80ms reads as a glitch, not as work — hold the
   // floor at half a second so the gesture visibly did something.
   const floor=new Promise(r=>setTimeout(r,500));
@@ -18958,14 +19005,32 @@ function mAutoOK(){
    `today` and `presence`, and nothing else on that page. */
 function mLiveTick(){
   if(!mAutoOK()) return;
+  /* AND THE STREAM MAY HAVE DIED WITH THE SCREEN STILL ON. EventSource retries
+     by itself but only until it gives up for good, and onerror lets a
+     given-up stream go — after which the one thing that opened a new one was a
+     visibilitychange, i.e. the operator putting the phone down and picking it
+     up again. A handset parked on the Orders list all afternoon never has that
+     moment, so from the first tunnel blip it ran on this backstop alone. A
+     no-op while the stream is up, so the ordinary tick costs nothing. Placed
+     under mAutoOK's gate rather than above it because that gate is also what
+     keeps a confined role off /stream (see its note) — the timer is stopped
+     while the app is hidden anyway, so nothing is lost by asking here. */
+  mLiveConnect();
+  /* SPEND WHAT WAS OWED. mLiveNudge defers a nudge that lands while a field
+     has focus or a sheet is mid-drag, and its note has always said "the next
+     tick spends it". The next tick did not: nothing read `dirty` but
+     mLiveRefreshAll, which only cleared it. Everything this tick reads is
+     re-read below, so clearing it here is what finally makes that sentence
+     true rather than a second refresh owed forever. */
+  _mLive.dirty=false;
   _mLive.busy=true;
   const jobs=[
-    Promise.resolve(loadToday()).catch(()=>{}),
-    Promise.resolve(loadOps()).catch(()=>{}),
-    api('/order-status-counts').then(d=>{ if(d){ state.liveStatusCounts=d;
-      state.liveAttn=Object.assign({},state.liveAttn||{},{ship:(d.paid||0)+(d.preparing||0)}); } }).catch(()=>{}),
+    mSettled(loadToday()),
+    mSettled(loadOps()),
+    mSettled(api('/order-status-counts').then(d=>{ if(d){ state.liveStatusCounts=d;
+      state.liveAttn=Object.assign({},state.liveAttn||{},{ship:(d.paid||0)+(d.preparing||0)}); } }).catch(()=>{})),
   ];
-  if(state.tab==='orders'||state.detailId!=null) jobs.push(Promise.resolve(refreshOrders()).catch(()=>{}));
+  if(state.tab==='orders'||state.detailId!=null) jobs.push(mSettled(refreshOrders()));
   Promise.all(jobs).then(()=>{ _mLive.busy=false; state.refreshedAt=Date.now(); render(); });
 }
 /* SOMETHING ACTUALLY MOVED — the whole board, the way a pull does it, without
@@ -18982,8 +19047,8 @@ function mLiveTick(){
 function mLiveRefreshAll(){
   if(!mAutoOK()) return;
   _mLive.dirty=false; _mLive.busy=true;
-  const jobs=[Promise.resolve(loadLive()).catch(()=>{})];
-  if(state.tab==='orders'||state.detailId!=null) jobs.push(Promise.resolve(refreshOrders()).catch(()=>{}));
+  const jobs=[mSettled(loadLive())];
+  if(state.tab==='orders'||state.detailId!=null) jobs.push(mSettled(refreshOrders()));
   Promise.all(jobs).then(()=>{ _mLive.busy=false; state.refreshedAt=Date.now(); render(); });
 }
 /* Coalesce a burst into one refresh — a dispatch run moves a dozen orders in a
