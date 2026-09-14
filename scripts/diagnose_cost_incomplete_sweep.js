@@ -321,6 +321,29 @@ for (const r of wouldChange) {
   console.log(`    ${String(r.id).padEnd(4)} | ${J(r.sku).padEnd(10)} | ${state(r.cost_incomplete).padEnd(18)} | ${J(r.unit_cost).padEnd(7)} | ${J(r.name_en)}`);
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// VERDICT · the whole report in twenty lines, printed last
+// ══════════════════════════════════════════════════════════════════════════
+//
+// A run's log is read from the end, and this report is six hundred lines long.
+// Everything below is already stated above; it is repeated here so that the
+// numbers and the blockers can be read without paging through the appendix.
+// Nothing is computed here that is not computed above.
+section('VERDICT');
+console.log(`   active products                  ${active.length}`);
+console.log(`   keepers named / matched          ${KEEP_SKUS.length} / ${found.length}`);
+console.log(`   would be marked                  ${targets.length}   (${wouldChange.length} actually written)`);
+console.log(`   left alone                       ${keptRows.length}`);
+console.log('');
+console.log(`   BLOCKER · keepers matching no row         ${missing.length}${missing.length ? '  → ' + missing.join(', ') : ''}`);
+console.log(`   BLOCKER · keepers matching several rows   ${ambiguous.length}${ambiguous.length ? '  → ' + ambiguous.map(a => a.s).join(', ') : ''}`);
+console.log(`   RULE ON · keeper folded with a marked row ${foldHits}`);
+console.log(`   RULE ON · rows naming a keeper's code     ${textHits}`);
+console.log(`   RULE ON · keepers already tagged 1        ${clearingAKeeper.length}${clearingAKeeper.length ? '  → ' + clearingAKeeper.map(r => r.sku).join(', ') : ''}`);
+console.log(`   RULE ON · active rows with no sku         ${noSku.length}${noSku.length ? '  → ids ' + noSku.map(r => r.id).join(', ') : ''}`);
+console.log('');
+console.log(`   ${missing.length || ambiguous.length ? 'DO NOT APPLY until the blockers above are ruled on.' : 'No blocker: every keeper matched exactly one row.'}`);
+
 console.log('\n' + '═'.repeat(78));
 console.log('Read-only. Nothing was written. Run scripts/oneoff_mark_cost_incomplete.js');
 console.log('via Actions → "One-off prod repair" (dry run first) to act on this plan.\n');
