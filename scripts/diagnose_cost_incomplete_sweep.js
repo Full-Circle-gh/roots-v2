@@ -1,0 +1,256 @@
+#!/usr/bin/env node
+/**
+ * diagnose_cost_incomplete_sweep.js — what a catalogue-wide
+ * "this cost is not complete" sweep would do, before anything is written.
+ *
+ *   Actions → "Read-only prod query" → scripts/diagnose_cost_incomplete_sweep.js
+ *
+ * WHY THIS EXISTS
+ * ---------------
+ * Ash's instruction, 2026-09-14: mark cost_incomplete on every product except
+ * forty named SKUs (lib/cost-complete-keep-list.js). The instruction is an
+ * exception list of forty strings typed by hand, and the three things that can
+ * go wrong with it are invisible from a checkout:
+ *
+ *   1. A named SKU that matches no row — a typo, or a product whose sku is
+ *      spelled differently in the database than on the page it was read from.
+ *      Ticking the catalogue while that one goes unmatched marks a product Ash
+ *      explicitly excluded, and nothing in the write would say so.
+ *   2. A named SKU that matches MORE than one row.
+ *   3. Rows with no sku at all, which no exception list can name. They are
+ *      counted and listed here rather than swept in silently.
+ *
+ * So this prints the full plan: every row that would be ticked, every row that
+ * would be left, every keeper that could not be found, and the near misses for
+ * each one. Nobody should press the apply button on the one-off until the
+ * "COULD NOT BE FOUND" section is empty or has been ruled on.
+ *
+ * READ-ONLY, AND IT PROVES IT. Every database file is opened with
+ * `readonly: true, fileMustExist: true` and a write is attempted and REQUIRED
+ * to fail before a single row is read; a connection that accepts the write
+ * aborts the run with exit 2. There is no UPDATE, DELETE, INSERT, ALTER or
+ * CREATE in this file except that one probe, which exists to be rejected.
+ *
+ * TENANTS ARE LISTED BUT NOT PLANNED FOR. Ash's catalogue is Roots, tenant #1,
+ * in data/roots.db. Other tenant files (lib/tenant-db.js) are separate
+ * businesses whose costs are not Ash's to tag. Each is opened and COUNTED so
+ * the report says out loud how much catalogue this sweep is not touching —
+ * a number nobody can see from the checkout — but no plan is computed for it
+ * and scripts/oneoff_mark_cost_incomplete.js writes to the primary db only.
+ *
+ * EXIT CODES
+ *   0  ran
+ *   2  REFUSED: a connection accepted a write, or no database could be read.
+ */
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+
+const HOME = process.env.ROOTS_HOME || path.join(__dirname, '..');
+const DEPLOY_ROOT = process.env.ROOTS_DEPLOY_ROOT || '/root/roots-v2';
+const DB_PATH = process.env.ROOTS_DB || path.join(DEPLOY_ROOT, 'data', 'roots.db');
+
+const Database = (() => {
+  try { return require(path.join(HOME, 'node_modules', 'better-sqlite3')); }
+  catch (e) { return require(path.join(DEPLOY_ROOT, 'node_modules', 'better-sqlite3')); }
+})();
+
+const { KEEP_SKUS, skuKey, isKeeper } = require(path.join(HOME, 'lib', 'cost-complete-keep-list.js'));
+
+const J = v => (v === null || v === undefined ? 'NULL' : String(v));
+const section = t => console.log('\n' + '═'.repeat(78) + '\n══ ' + t + '\n');
+const sub = t => console.log('\n── ' + t);
+
+// The three states of the tag, spelled the way database.js:5516-5531 does.
+const state = v => (v === null || v === undefined ? 'NULL (unanswered)' : v === 1 ? '1 (incomplete)' : `${v} (complete)`);
+
+function openRo(file) {
+  let db;
+  try { db = new Database(file, { readonly: true, fileMustExist: true }); }
+  catch (e) { console.log('   cannot open: ' + e.message + ' — skipped'); return null; }
+  let proven = false;
+  try { db.exec('CREATE TABLE __ro_probe__ (x)'); }
+  catch (e) { proven = true; console.log('   read-only PROVEN — write rejected: ' + e.message); }
+  if (!proven) {
+    console.error('FATAL: the connection accepted a write on ' + file + '. Aborting.');
+    process.exit(2);
+  }
+  return db;
+}
+
+function tenantFiles() {
+  const list = [];
+  try {
+    const dir = path.join(path.dirname(DB_PATH), 'tenants');
+    for (const f of fs.readdirSync(dir).sort()) if (f.endsWith('.db')) list.push(path.join(dir, f));
+  } catch (e) { /* single tenant */ }
+  return list.filter(f => { try { return fs.statSync(f).isFile(); } catch (e) { return false; } });
+}
+
+console.log('diagnose_cost_incomplete_sweep.js — the plan for a catalogue-wide cost_incomplete sweep');
+console.log('run at (UTC):      ' + new Date().toISOString());
+console.log('primary db:        ' + DB_PATH);
+console.log('keeper SKUs given: ' + KEEP_SKUS.length);
+
+const db = openRo(DB_PATH);
+if (!db) { console.error('FATAL: primary database unreadable. Refusing to report a plan from nothing.'); process.exit(2); }
+
+const hasTable = n => !!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name = ?").get(n);
+if (!hasTable('store_products')) {
+  console.error('FATAL: no store_products table in ' + DB_PATH + '. Wrong database.');
+  process.exit(2);
+}
+const cols = db.pragma('table_info(store_products)').map(c => c.name);
+if (!cols.includes('cost_incomplete')) {
+  console.error('FATAL: store_products has no cost_incomplete column — the migration has not run on this box.');
+  process.exit(2);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 1 · the catalogue as it stands
+// ══════════════════════════════════════════════════════════════════════════
+section('1 · THE CATALOGUE NOW');
+
+const rows = db.prepare(`
+  SELECT id, sku, name_en, name_cn, COALESCE(is_active, 1) AS is_active,
+         COALESCE(is_published, 0) AS is_published, unit_cost, sell_price,
+         cost_incomplete, variant_group_id
+    FROM store_products
+   ORDER BY sku IS NULL, sku, id`).all();
+
+const active = rows.filter(r => r.is_active === 1);
+const inactive = rows.filter(r => r.is_active !== 1);
+const tally = list => ({
+  null_: list.filter(r => r.cost_incomplete === null || r.cost_incomplete === undefined).length,
+  zero: list.filter(r => r.cost_incomplete === 0).length,
+  one: list.filter(r => r.cost_incomplete === 1).length,
+});
+const t = tally(rows), ta = tally(active);
+
+console.log(`   store_products rows           ${rows.length}`);
+console.log(`     active   (is_active = 1)    ${active.length}`);
+console.log(`     inactive (is_active = 0)    ${inactive.length}   ← deleted products; routes/retail.js nulls their sku`);
+console.log(`     published                   ${rows.filter(r => r.is_published === 1).length}`);
+console.log(`\n   cost_incomplete, ALL rows     NULL ${t.null_}   0 ${t.zero}   1 ${t.one}`);
+console.log(`   cost_incomplete, ACTIVE rows  NULL ${ta.null_}   0 ${ta.zero}   1 ${ta.one}`);
+console.log(`\n   rows with NULL/blank sku      ${rows.filter(r => !r.sku).length}  (active: ${active.filter(r => !r.sku).length})`);
+
+// ══════════════════════════════════════════════════════════════════════════
+// 2 · did every keeper land on a row?
+// ══════════════════════════════════════════════════════════════════════════
+section('2 · THE FORTY KEEPERS — DID EACH ONE FIND ITS PRODUCT?');
+
+const byKey = new Map();
+for (const r of rows) {
+  const k = skuKey(r.sku);
+  if (k == null) continue;
+  if (!byKey.has(k)) byKey.set(k, []);
+  byKey.get(k).push(r);
+}
+
+const found = [], missing = [], ambiguous = [];
+for (const s of KEEP_SKUS) {
+  const hits = byKey.get(skuKey(s)) || [];
+  if (!hits.length) missing.push(s);
+  else {
+    found.push({ s, hits });
+    if (hits.length > 1) ambiguous.push({ s, hits });
+  }
+}
+
+sub(`matched: ${found.length} of ${KEEP_SKUS.length}`);
+console.log('    keeper     | id   | act | tag                | name');
+for (const { s, hits } of found) {
+  for (const r of hits) {
+    console.log(`    ${String(s).padEnd(10)} | ${String(r.id).padEnd(4)} | ${r.is_active === 1 ? ' y ' : ' n '} | ${state(r.cost_incomplete).padEnd(18)} | ${J(r.name_en)}`);
+  }
+}
+
+sub(`COULD NOT BE FOUND: ${missing.length}`);
+if (!missing.length) console.log('    (none — every keeper matched a row)');
+for (const s of missing) {
+  console.log(`\n    ${s}  — no row carries this sku.`);
+  // Near misses, so a typo or a different spelling can be ruled on rather than
+  // guessed at: same digits ignoring punctuation, or the sku as a substring.
+  const digits = String(s).replace(/\D/g, '');
+  const near = rows.filter(r => {
+    if (!r.sku) return false;
+    const k = skuKey(r.sku);
+    return k.includes(skuKey(s)) || (digits && String(r.sku).replace(/\D/g, '') === digits);
+  });
+  if (!near.length) console.log('      near misses: (none)');
+  else for (const r of near) console.log(`      near miss: id ${r.id}  sku ${J(r.sku)}  act ${r.is_active}  ${J(r.name_en)}`);
+}
+
+sub(`matched MORE THAN ONE row: ${ambiguous.length}`);
+if (!ambiguous.length) console.log('    (none)');
+for (const { s, hits } of ambiguous) console.log(`    ${s} → ids ${hits.map(r => r.id).join(', ')}`);
+
+// ══════════════════════════════════════════════════════════════════════════
+// 3 · what the sweep would write
+// ══════════════════════════════════════════════════════════════════════════
+section('3 · WHAT THE SWEEP WOULD WRITE (active rows only)');
+
+const keptRows = active.filter(r => isKeeper(r.sku));
+const targets = active.filter(r => !isKeeper(r.sku));
+const wouldChange = targets.filter(r => r.cost_incomplete !== 1);
+const alreadyOne = targets.filter(r => r.cost_incomplete === 1);
+const clearingAKeeper = keptRows.filter(r => r.cost_incomplete === 1);
+
+console.log(`   active rows                          ${active.length}`);
+console.log(`   left alone (a named keeper)          ${keptRows.length}`);
+console.log(`   would be marked cost_incomplete = 1  ${targets.length}`);
+console.log(`     of those, already 1 (no change)    ${alreadyOne.length}`);
+console.log(`     of those, actually written         ${wouldChange.length}`);
+console.log(`\n   keepers currently tagged 1           ${clearingAKeeper.length}   ← see section 4`);
+console.log(`   inactive rows, untouched             ${inactive.length}`);
+
+sub(`the ${wouldChange.length} row(s) that would change`);
+console.log('    id   | sku        | from               | cost    | name');
+for (const r of wouldChange) {
+  console.log(`    ${String(r.id).padEnd(4)} | ${J(r.sku).padEnd(10)} | ${state(r.cost_incomplete).padEnd(18)} | ${J(r.unit_cost).padEnd(7)} | ${J(r.name_en)}`);
+}
+
+sub(`active rows with NO sku — an exception list cannot name these (${active.filter(r => !r.sku).length})`);
+const noSku = active.filter(r => !r.sku);
+if (!noSku.length) console.log('    (none)');
+for (const r of noSku) console.log(`    id ${String(r.id).padEnd(4)}  pub ${r.is_published}  cost ${J(r.unit_cost)}  ${J(r.name_en)} / ${J(r.name_cn)}`);
+
+// ══════════════════════════════════════════════════════════════════════════
+// 4 · the keepers that are already tagged
+// ══════════════════════════════════════════════════════════════════════════
+section('4 · KEEPERS ALREADY TAGGED 1 — A SECOND DECISION, NOT PART OF THE FIRST');
+console.log('   Ash asked for every product EXCEPT these to be marked. That says what to');
+console.log('   do to the others; it does not say whether a keeper carrying an existing');
+console.log('   tag (from the 2026-08 seed, or set by hand) should be CLEARED. The');
+console.log('   one-off leaves them exactly as they are and reports them here, because');
+console.log('   clearing a tag somebody set on purpose is the one move in this sweep that');
+console.log('   cannot be read back off the page afterwards.\n');
+if (!clearingAKeeper.length) console.log('   (none — no keeper carries a tag)');
+for (const r of clearingAKeeper) {
+  console.log(`   id ${String(r.id).padEnd(4)}  sku ${J(r.sku).padEnd(10)}  cost ${J(r.unit_cost).padEnd(7)}  ${J(r.name_en)}`);
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 5 · other tenants, counted and not planned for
+// ══════════════════════════════════════════════════════════════════════════
+section('5 · OTHER TENANT DATABASES — COUNTED, NOT TOUCHED');
+const tenants = tenantFiles();
+if (!tenants.length) console.log('   (no data/tenants/*.db on this box)');
+for (const f of tenants) {
+  console.log('\n   ' + f);
+  const tdb = openRo(f);
+  if (!tdb) continue;
+  try {
+    const n = tdb.prepare('SELECT COUNT(*) AS n FROM store_products WHERE COALESCE(is_active,1) = 1').get().n;
+    const tagged = tdb.prepare('SELECT COUNT(*) AS n FROM store_products WHERE cost_incomplete = 1 AND COALESCE(is_active,1) = 1').get().n;
+    console.log(`      ${n} active product(s), ${tagged} already tagged — this sweep writes none of them`);
+  } catch (e) { console.log('      cannot count: ' + e.message); }
+  tdb.close();
+}
+
+console.log('\n' + '═'.repeat(78));
+console.log('Read-only. Nothing was written. Run scripts/oneoff_mark_cost_incomplete.js');
+console.log('via Actions → "One-off prod repair" (dry run first) to act on this plan.\n');
+db.close();
