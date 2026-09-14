@@ -87,8 +87,20 @@ function request(path, opts = {}, _retried = false) {
   });
 }
 
+// A request that never got an answer FROM THE APPLICATION — it timed out, the
+// radio dropped, DNS failed, or the server was mid-restart (a deploy restarts
+// pm2, see the README) — is worth one immediate retry, and must never be
+// reported to a customer as a verdict about their data. An HTTP/application
+// error (404, 400, a { success: false } body) IS the answer and is not
+// transient. Lives here because this is the file that mints these messages.
+function isTransient(e) {
+  const m = String((e && e.message) || '');
+  return m.indexOf('network_') === 0 || m.indexOf('server_error_') === 0;
+}
+
 module.exports = {
   BASE,
+  isTransient,
   get:    (path, opts = {})       => request(path, { ...opts, method: 'GET' }),
   post:   (path, data, opts = {}) => request(path, { ...opts, method: 'POST', data }),
   put:    (path, data, opts = {}) => request(path, { ...opts, method: 'PUT',  data }),
