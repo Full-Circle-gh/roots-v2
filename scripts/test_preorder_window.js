@@ -467,6 +467,35 @@ section('7 · every channel reads the one publish function (source assertions)')
       assert.ok(/channelPublish\.publishableAt\(/.test(read(f)), f);
     }
   });
+  it('…INCLUDING guanyi-daemon\'s own healer, the third comparison site', () => {
+    /* The one the line above did not name, and the one that was still reading
+       the bare column. §85 taught the enqueue and the two sweeps; autoHeal's
+       step-3 resync compared Guanyi against COALESCE(physical_qty, 0) and was
+       missed. It is wrong in both directions:
+
+         • A batch-made product sold past zero holds a NEGATIVE shelf on purpose
+           (§84 — that shortfall is what the kitchen owes), while what we send
+           Guanyi is floored at 0. So the raw test called every owed product
+           drifted, "healed" it by pushing the same 0 again, and paged the
+           merchant to say so on EVERY session reconnect, for as long as the
+           debt stood. Live on 2026-09-13: 1-225 and 1-310 both reported as
+           0→-1 in two alerts seven hours apart, neither of which changed
+           anything in Guanyi.
+         • With the window open the queue publishes shelf + allowance, so the
+           same bare-shelf test would re-enqueue every batch-made listing AT the
+           shelf — the window-closing failure this section already pins the
+           sweeps against, one file further down. */
+    const gy   = read('scripts/guanyi-daemon.js');
+    const at   = gy.indexOf('function autoHeal');
+    assert.ok(at > 0, 'autoHeal still exists under that name');
+    const body = gy.slice(at, gy.indexOf('\n}', at));
+    assert.ok(/publishableAt\([^)]*channel: 'gzgrocery'/s.test(body),
+      'the resync compares against what we would publish');
+    assert.ok(!/tianhe_qty/.test(body),
+      'and the heal does not read the raw shelf column at all any more');
+    assert.ok(/const window = cadence\.preorderWindow\(/.test(body),
+      'one window read for the whole heal, not one per mapped product');
+  });
   it('the window is read ONCE per sweep and once per order, not per row', () => {
     assert.ok(/const window = cadence\.preorderWindow\(/.test(read('lib/meituan-drift-sweep.js')));
     assert.ok(/const window = cadence\.preorderWindow\(/.test(read('lib/channel-drift-sweep.js')));
