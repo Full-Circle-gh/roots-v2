@@ -61,11 +61,10 @@ function persist(data) {
 }
 
 // A wx.request that never reached the server (timeout, DNS, radio drop) is
-// worth one immediate retry; an HTTP/application error is not.
-function isTransient(e) {
-  const m = String((e && e.message) || '');
-  return m.indexOf('network_') === 0 || m.indexOf('server_error_') === 0;
-}
+// worth one immediate retry; an HTTP/application error is not. The test now
+// lives in utils/api beside the code that mints those messages, so the product
+// page can ask the same question.
+const isTransient = api.isTransient;
 
 function fetchConfig(path, retry = true) {
   return api.get(path).catch((e) => {

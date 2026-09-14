@@ -934,6 +934,26 @@
   letter-spacing: 0.1em;
   border-radius: 999rpx;
 }
+/* Retry — only on the load-failed state, never on "the store removed it".
+   Same pill as the home page's; its 48rpx gap above is made here of the
+   40rpx this page's .empty-sub already carries plus the 8rpx below, so the
+   two screens sit identically. */
+.empty-retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 8rpx;
+  padding: 0 56rpx;
+  height: 84rpx;
+  background: var(--lime);
+  color: var(--ink);
+  font-family: var(--f-toni);
+  font-size: calc(24rpx * var(--font-scale));
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  border-radius: 999rpx;
+}
+.empty-retry-tap { opacity: 0.72; }
 
 /* ─── "Buy together" bundle card ───────────────────────────────────────── */
 .pd-bundle {

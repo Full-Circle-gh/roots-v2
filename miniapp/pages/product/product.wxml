@@ -4,10 +4,23 @@
     <view class="back-glyph">←</view>
   </view>
 
-  <view wx:if="{{notFound}}" class="empty">
-    <view class="empty-title f-bear">{{lang === 'cn' ? '该商品已下架' : 'This product is unavailable'}}</view>
-    <view class="empty-sub">{{lang === 'cn' ? '它已被门店下架或删除。如果它还在您之前的购物车里,请在购物车中移除 — 结算时将无法通过。' : 'It was unpublished or removed by the store. If it is still in your cart from before, remove it there — checkout will reject it.'}}</view>
-    <view class="empty-btn f-toni" bindtap="back">{{lang === 'cn' ? '← 返回商店' : '← Back to shop'}}</view>
+  <!-- Two different empty states, same split as the home page. loadError = the
+       request never got an answer (timeout, radio drop, a 5xx from a server
+       mid-deploy-restart), so this is the connection and NOT a verdict about
+       the product — say so and give them a way to try again. Only a real
+       answer from the server gets the "the store removed it" copy, which a
+       customer must never be shown for a dropped request. -->
+  <view wx:if="{{notFound || loadError}}" class="empty">
+    <block wx:if="{{loadError}}">
+      <view class="empty-title f-bear">{{lang === 'cn' ? '网络连接失败' : 'No connection'}}</view>
+      <view class="empty-sub">{{lang === 'cn' ? '请检查网络后重试。' : 'Check your network and try again.'}}</view>
+      <view class="empty-retry" hover-class="empty-retry-tap" bindtap="retry">{{lang === 'cn' ? '重试' : 'TRY AGAIN'}}</view>
+    </block>
+    <block wx:else>
+      <view class="empty-title f-bear">{{lang === 'cn' ? '该商品已下架' : 'This product is unavailable'}}</view>
+      <view class="empty-sub">{{lang === 'cn' ? '它已被门店下架或删除。如果它还在您之前的购物车里,请在购物车中移除 — 结算时将无法通过。' : 'It was unpublished or removed by the store. If it is still in your cart from before, remove it there — checkout will reject it.'}}</view>
+      <view class="empty-btn f-toni" bindtap="back">{{lang === 'cn' ? '← 返回商店' : '← Back to shop'}}</view>
+    </block>
   </view>
 
   <view wx:elif="{{loading && !product}}" class="loading">

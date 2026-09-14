@@ -9,6 +9,7 @@ const lang     = require('../../utils/lang');
 const cart     = require('../../utils/cart');
 const track    = require('../../utils/track');
 const delivery = require('../../utils/delivery');
+const diag     = require('../../utils/diag');
 
 function absUrl(u) {
   if (!u) return '';
@@ -206,7 +207,8 @@ Page({
     qty: 1,
     lang: 'en',
     loading: true,
-    notFound: false,
+    notFound: false,       // the server ANSWERED: this product is gone
+    loadError: false,      // we never got an answer — network / mid-deploy 5xx
     addBtnLabel: 'ADD TO BASKET',
     soldOut: false,
     preorder: false,       // 0-stock but out-of-city pre-order allowed
@@ -231,7 +233,14 @@ Page({
 
   async onLoad(query) {
     const id = parseInt(query.id, 10);
-    if (!id) { this.setData({ notFound: true, loading: false }); return; }
+    if (!id) {
+      // No id in the query at all — a share card or QR that lost its param.
+      // Nothing was asked of the server, so nothing can be said about the
+      // product; log the raw query so support can see what arrived.
+      try { diag.reportError('product: opened with no id', null, { query }); } catch (e) {}
+      this.setData({ notFound: true, loading: false });
+      return;
+    }
     const app = getApp();
     this.setData({ id, lang: app.globalData.lang });
     await this.refresh();
@@ -247,7 +256,7 @@ Page({
     // On a not-found page there's no product to tick / ping for — skip the
     // background timers so we don't keep hammering /viewing for a dead id
     // (which felt like the app was stuck on a frozen page).
-    if (this.data.notFound) return;
+    if (this.data.notFound || this.data.loadError) return;
     // They may have switched delivery address (the address book is one tap
     // away) — a move into or out of Guangzhou changes whether this product can
     // be pre-ordered, so re-badge before they tap Add.
@@ -357,7 +366,13 @@ Page({
     });
   },
 
-  async refresh() {
+  retry() {
+    if (this.data.loading) return;
+    this.setData({ loadError: false });
+    this.refresh();
+  },
+
+  async refresh(_retried = false) {
     this.setData({ loading: true });
     try {
       // The delivery verdict rides along with the product fetch: a pre-order is
@@ -372,7 +387,28 @@ Page({
       this.recomputeDisplay();
     } catch (e) {
       console.warn('[product] load failed:', e.message);
-      this.setData({ notFound: true, loading: false });
+      // A dropped request is NOT a verdict about the product. Only a real
+      // answer from the server — 404 not_found, or a 4xx like bad_id — means
+      // the thing is gone; a timeout, a radio drop, or a 5xx from a server
+      // mid-deploy-restart means we never asked. Telling a customer their
+      // shop "removed" a product it is still selling is the worse of the two
+      // mistakes, and it is the one this page used to make for every failure.
+      // Same split, and the same copy, as the home page's two empty states.
+      if (api.isTransient(e) && !_retried) {
+        // One immediate retry, exactly as utils/config does for the layout —
+        // a deploy restart is over in seconds and the customer sees nothing.
+        return new Promise((resolve) => {
+          setTimeout(() => this.refresh(true).then(resolve, resolve), 600);
+        });
+      }
+      const gone = e && (e.status === 404 || e.status === 400);
+      // Leave a trail either way: this page reported nothing until now, which
+      // is why a customer's "it says unavailable" could only ever be guessed at.
+      try {
+        diag.reportError('product: load failed', null,
+          { id: this.data.id, why: e && e.message, status: e && e.status, gone });
+      } catch (e2) {}
+      this.setData({ notFound: gone, loadError: !gone, loading: false });
     }
   },
 
