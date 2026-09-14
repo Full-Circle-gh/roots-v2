@@ -266,11 +266,7 @@ console.log(`     of those, actually written         ${wouldChange.length}`);
 console.log(`\n   keepers currently tagged 1           ${clearingAKeeper.length}   ← see section 4`);
 console.log(`   inactive rows, untouched             ${inactive.length}`);
 
-sub(`the ${wouldChange.length} row(s) that would change`);
-console.log('    id   | sku        | from               | cost    | name');
-for (const r of wouldChange) {
-  console.log(`    ${String(r.id).padEnd(4)} | ${J(r.sku).padEnd(10)} | ${state(r.cost_incomplete).padEnd(18)} | ${J(r.unit_cost).padEnd(7)} | ${J(r.name_en)}`);
-}
+console.log(`\n   The ${wouldChange.length} rows are listed in the appendix at the foot of this report.`);
 
 sub(`active rows with NO sku — an exception list cannot name these (${active.filter(r => !r.sku).length})`);
 const noSku = active.filter(r => !r.sku);
@@ -308,6 +304,21 @@ for (const f of tenants) {
     console.log(`      ${n} active product(s), ${tagged} already tagged — this sweep writes none of them`);
   } catch (e) { console.log('      cannot count: ' + e.message); }
   tdb.close();
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// APPENDIX · every row the sweep would change
+// ══════════════════════════════════════════════════════════════════════════
+//
+// LAST ON PURPOSE. This is the longest part of the report and the least
+// decision-bearing — the counts and the four exception sections above are what
+// anyone rules on. A run's log is read from the end, and burying sections 2b
+// through 5 under two hundred rows is how the one section that can stop a
+// sweep goes unread. It cost a re-run to learn that.
+section('APPENDIX · THE ' + wouldChange.length + ' ROW(S) THAT WOULD CHANGE');
+console.log('    id   | sku        | from               | cost    | name');
+for (const r of wouldChange) {
+  console.log(`    ${String(r.id).padEnd(4)} | ${J(r.sku).padEnd(10)} | ${state(r.cost_incomplete).padEnd(18)} | ${J(r.unit_cost).padEnd(7)} | ${J(r.name_en)}`);
 }
 
 console.log('\n' + '═'.repeat(78));
