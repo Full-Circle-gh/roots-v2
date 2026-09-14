@@ -220,16 +220,16 @@ for (const r of active) {
   if (!byGroup.has(g)) byGroup.set(g, []);
   byGroup.get(g).push(r);
 }
-let foldHits = 0;
+const foldPairs = [];
 for (const r of keptRows) {
   if (r.variant_group_id == null || r.variant_group_id === '') continue;
   const sibs = (byGroup.get(String(r.variant_group_id)) || []).filter(s => s.id !== r.id && !isKeeper(s.sku));
   if (!sibs.length) continue;
-  foldHits++;
+  foldPairs.push({ keeper: r, sibs });
   console.log(`\n    keeper ${J(r.sku)} (id ${r.id}, group ${J(r.variant_group_id)}) — ${J(r.name_en)}`);
   for (const s of sibs) console.log(`      sibling WOULD BE MARKED: id ${s.id}  sku ${J(s.sku)}  ${J(s.name_en)}`);
 }
-if (!foldHits) console.log('    (none — no keeper shares a variant group with a row this sweep marks)');
+if (!foldPairs.length) console.log('    (none — no keeper shares a variant group with a row this sweep marks)');
 
 sub("by sku text — rows naming a keeper's code inside their own sku");
 // S(1-220), (3-210) X5, （4-680）+（4-690） — the same goods in another pack. The
@@ -337,7 +337,10 @@ console.log(`   left alone                       ${keptRows.length}`);
 console.log('');
 console.log(`   BLOCKER · keepers matching no row         ${missing.length}${missing.length ? '  → ' + missing.join(', ') : ''}`);
 console.log(`   BLOCKER · keepers matching several rows   ${ambiguous.length}${ambiguous.length ? '  → ' + ambiguous.map(a => a.s).join(', ') : ''}`);
-console.log(`   RULE ON · keeper folded with a marked row ${foldHits}`);
+console.log(`   RULE ON · keeper folded with a marked row ${foldPairs.length}`);
+for (const { keeper, sibs } of foldPairs) {
+  console.log(`      ${J(keeper.sku).padEnd(10)} ← marked sibling(s) ${sibs.map(x => J(x.sku)).join(', ')}`);
+}
 console.log(`   RULE ON · rows naming a keeper's code     ${textHits}`);
 console.log(`   RULE ON · keepers already tagged 1        ${clearingAKeeper.length}${clearingAKeeper.length ? '  → ' + clearingAKeeper.map(r => r.sku).join(', ') : ''}`);
 console.log(`   RULE ON · active rows with no sku         ${noSku.length}${noSku.length ? '  → ids ' + noSku.map(r => r.id).join(', ') : ''}`);
