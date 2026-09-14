@@ -370,6 +370,16 @@ html:not(.settled) .rise{animation:tRise .5s var(--ease-settle) both}
 .cta{width:100%;min-height:44px;padding:12px 16px;border:none;border-radius:8px;background:var(--accent);color:#fff;
   font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;transition:background .2s var(--ease-settle)}
 .cta:hover{background:var(--accent-hover)}.cta:active{background:var(--accent-press)}
+/* THE HEADER'S OWN SLAB, and the reason it is not just .cta with inline sizing
+   repeated five times: the band standardises its controls at 38px — every
+   iconbtn in a header row overrides the 44px class inline to say so — and every
+   filled CTA that landed in a header took the class default of 44 instead. Six
+   pixels, and on the two headers that also carry a status line they were the
+   whole of "tight": the slab stood proud of the title beside it and its painted
+   bottom edge landed 3px off the status line below. A slab is ~70px wide, so at
+   38px tall it is still a larger target than the 38x38 icons it now sits level
+   with. One class, so the next header CTA cannot be born at 44 again. */
+.cta.inhead{width:auto;height:38px;min-height:38px;padding:0 18px;flex:none}
 .scrim{position:absolute;inset:0;background:rgba(17,26,43,.38);animation:tFade .2s ease both}
 .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--surface-card);
   border-top-left-radius:14px;border-top-right-radius:14px;
@@ -8202,7 +8212,7 @@ const SUBS={
      that 403s. */
   waste:{title:['Waste','损耗'],
     cta:()=>mCan('waste:record')
-      ? `<button class="cta" style="width:auto;padding:12px 20px;flex:none" onclick="APP.cmd('wasteNew')">${T('Record','记录')}</button>` : '',
+      ? `<button class="cta inhead" onclick="APP.cmd('wasteNew')">${T('Record','记录')}</button>` : '',
     render:()=>screenWaste()},
   delivery:{title:['Delivery settings','配送设置'],render:()=>screenDelivery()},
   invoices:{title:['Invoices','发票'],render:()=>{
@@ -8348,7 +8358,7 @@ const SUBS={
      empty slot rather than a button the server would refuse. */
   broadcasts:{title:['Broadcasts','广播'],
     cta:()=>mCan('broadcasts:send')
-      ? `<button class="cta" style="width:auto;padding:12px 20px;flex:none" onclick="APP.cmd('push','bcnew')">${T('Write','撰写')}</button>` : '',
+      ? `<button class="cta inhead" onclick="APP.cmd('push','bcnew')">${T('Write','撰写')}</button>` : '',
     render:()=>{
     const list=DB.broadcasts||[];
     const auto=`<button class="row" style="border-radius:14px;background:var(--surface-card);border:1px solid var(--border-default)" onclick="APP.cmd('push','bcauto')">
@@ -8426,7 +8436,7 @@ const SUBS={
   }},
   media:{title:['Media','媒体库'],
     cta:()=>{ const b=state.mediaBusy;
-      return `<button class="cta" style="width:auto;padding:12px 20px;flex:none" ${b?'disabled':''} onclick="APP.cmd('pickMedia')">${
+      return `<button class="cta inhead" ${b?'disabled':''} onclick="APP.cmd('pickMedia')">${
         b?T('Uploading '+b.done+'/'+b.total+'…','上传中 '+b.done+'/'+b.total+'…'):T('Add photos','添加图片')}</button>`; },
     render:()=>{
     const err=state.mediaErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
@@ -16420,7 +16430,7 @@ SUBS.teamrole={title:['Role','角色'],
    who holds neither capability. */
 function tmTeamCta(){
   const t=tmS();
-  const btn=(label,cmd)=>`<button class="cta" style="width:auto;padding:12px 20px;flex:none" onclick="${cmd}">${label}</button>`;
+  const btn=(label,cmd)=>`<button class="cta inhead" onclick="${cmd}">${label}</button>`;
   if(t.tab==='roles') return t.canEdit?btn(T('Add role','新建角色'),"APP.cmd('roleAdd')"):'';
   return TEAM_CAN_MANAGE()?btn(T('Add','添加'),"APP.cmd('teamInvite')"):'';
 }
@@ -16760,9 +16770,16 @@ function screenCustomers(){
      lib/cap-routes.js gates POST /customers on: absent, never disabled, for an
      operator whose save would 403. §112's rule, and the reason it matters here
      is that apiWrite sends a 403 to the login page. */
+  /* 38px, not the class's 44. The band standardises its controls at 38 — every
+     iconbtn in this row overrides the 44px class inline to say so — and the Add
+     slab arrived at 44, which is the whole of what "tight" was. Six pixels:
+     enough that the painted slab stood proud of the title above it and came
+     within 3px of the status line below it, in a row whose other four controls
+     it was meant to sit level with. A slab ~70px wide is a larger target than
+     the 38x38 icons beside it either way. */
   const addCta=mCan('customers:edit')
-    ? `<button class="cta" style="width:auto;padding:12px 20px;flex:none" onclick="APP.cmd('custNew')">${T('Add','添加')}</button>` : '';
-  return `${pageHead({title:T('Customers','顾客'), status:pulse||'', cta:addCta, controls:true})}
+    ? `<button class="cta inhead" onclick="APP.cmd('custNew')">${T('Add','添加')}</button>` : '';
+  return `${pageHead({title:T('Customers','顾客'), status:pulse||'', cta:addCta, ctaFilled:true, controls:true})}
     <div style="padding:14px 16px 12px;display:flex;align-items:center;gap:12px">
       <button onclick="APP.cmd('custSortPick')" style="display:inline-flex;align-items:center;gap:5px;background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-secondary)">${T('Sorted by','排序')} <span style="font-weight:500;color:var(--text-primary)">${custSortLabel()}</span> <span style="color:var(--text-primary)">${custDirDesc()?'↓':'↑'}</span> ${ic('chevron-down',14,2)}</button>
       ${/* Export is the server's own file, at the filters the screen is showing —
@@ -18139,7 +18156,7 @@ function headControls(){
 
    The status line sits BELOW the hairline, in the scroll, so it goes away when
    you scroll and the name of the page is the last thing standing. */
-function pageHead({title, status, cta, back, controls}){
+function pageHead({title, status, cta, ctaFilled, back, controls}){
   const right = (cta||'') + (controls?headControls():'');
   /* 10px of right gutter, not 6 — and headControls no longer pulls itself
      another 6px past that with a negative margin. The account button's TAP
@@ -18171,7 +18188,17 @@ function pageHead({title, status, cta, back, controls}){
     ${/* 3px, not 8. The title and its status line are one thing — a name and
          what it currently amounts to — and they were reading as two stacked
          items. Tight to the title, with the band's own bottom padding giving
-         them room above the rule instead. */''}
+         them room above the rule instead.
+
+         EXCEPT UNDER A FILLED CTA, where 3px is measured off the wrong edge.
+         The title is text: its box stops where the letters do, so 3px below it
+         still reads as air. A Dusk slab's painted edge IS its box edge, and at
+         3px the status line sat all but touching it — the gap that made the
+         Customers head look jammed. 8px clears the slab by the same amount the
+         title's own descender space was already giving it, which puts the
+         status 14px off the title text: still one thing, no longer welded to a
+         block of colour. Icon CTAs (Orders) are text-like — glyph centred in
+         its target, air on every side — so they keep the 3px. */''}
     ${/* IT CARRIES AN ID BECAUSE A SCREEN THAT PATCHES MUST BE ABLE TO REACH IT.
          This line is drawn once, by the full render() that builds the band, and
          a screen whose numbers arrive later repaints its own containers without
@@ -18180,7 +18207,7 @@ function pageHead({title, status, cta, back, controls}){
          delivery" above a tab reading "To receive 3" for exactly that reason:
          both count rcvToReceive(), but only the tab was repainted when the
          answer landed. */''}
-    ${status?`<p id="mHeadStatus" class="num" style="margin:3px 0 0;padding-right:10px;font-size:15px;color:var(--text-secondary);line-height:1.35">${status}</p>`:''}
+    ${status?`<p id="mHeadStatus" class="num" style="margin:${ctaFilled?'8px':'3px'} 0 0;padding-right:10px;font-size:15px;color:var(--text-secondary);line-height:1.35">${status}</p>`:''}
   </div>`;
 }
 /* THE BAR IS FOR OPERATORS WITH SOMEWHERE ELSE TO BE, and for most of them it
@@ -18244,9 +18271,17 @@ function bodyHtml(){
        is the order it is receiving (a number, not a fixed word) and its Back
        goes to Receiving, not More. Every other screen passes neither and reads
        exactly as it always did. */
+    /* ctaFilled is read off the markup rather than declared per screen, because
+       a screen states its CTA and nothing else — asking each of the five to also
+       remember a flag is how Team ends up with the flag and Waste without it.
+       The class IS the fact: .cta is the Dusk slab whose painted edge crowds the
+       status line, .btn2 and .iconbtn are not. Today only Team carries both a
+       slab and a status; the next one that does gets the spacing for free. */
+    const subCta=def.cta?def.cta():'';
     return pageHead({title:def.titleOf?def.titleOf():T(...sub.title),
       back:def.backLabel?def.backLabel():(flatNav()?escAttr(homeTitle()):T('More','更多')),
-      cta:def.cta?def.cta():'', status:def.status?def.status():''}) + def.render();
+      cta:subCta, ctaFilled:/class="cta[ "]/.test(subCta),
+      status:def.status?def.status():''}) + def.render();
   }
   switch(state.tab){
     case 'home': return screenHome();
