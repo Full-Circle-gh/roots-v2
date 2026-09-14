@@ -1,8 +1,9 @@
 /* eslint-disable no-undef */
 // Channel sync — one verdict per item per channel, across Meituan, Eleme and
-// GZ Grocery (§103). Read-only. The three channel tabs stay the repair shop;
-// this page is the alarm, and every red row ends in a button that opens the
-// right tab on the right item.
+// GZ Grocery (§103). §117 part two ended the read-only era: this page carries
+// the two verbs all three channels implement identically underneath — one push
+// and the sync switch — and every red row still ends in a button that opens the
+// right tab on the right item, for the three reasons those two cannot clear.
 //
 // Everything is painted from GET /api/retail-admin/channel-sync, which is
 // lib/channel-sync-items.js — the same read the dashboard's "Channel sync"

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.257
+# Tacet shared-core consolidation — decisions record, v4.258
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-14 · v4.258 — **§124 · THE PHONE CARRIES THE REPAIR §117 PART TWO BUILT, AND STOPS NAMING A TAB THAT CANNOT HELP. REPORTED BY ASH from the phone, holding the screen:** *"the channel sync also need to change according to the new [PC] version of sales channel syncing new version we did today?"* **YES — AND TWO SENTENCES ON THAT SCREEN HAD BEEN FALSE SINCE §117 PART TWO MERGED**: the foot said *"Read-only. A mapping is repaired on the desktop's channel tabs"* and every expanded amber card said *"Fix this on the desktop: Meituan tab."*, while the desktop Channel sync page had just gained a push and a switch that clear four of the seven reasons between them. **THE SCREENSHOT IS THE WORST CASE RATHER THAN A TYPICAL ONE.** Both items on it read *"The last push to Meituan failed"* — `push_failed` — and **the Meituan tab is the one screen that cannot clear it**: the daemon picks up only `pending` rows (`docs/meituan-findings.md` #6), which is the defect §117 part two's push exists to refresh its way out of. The second item is **Black Beans**, the item a session found stuck amber for exactly this on 2026-09-12 and which part two's own record cites. The phone was not merely stale; it was directing the repair away from the only screen that performs it. **THE PHONE GETS THE PUSH AND NOT THE SWITCH**, and the narrower line is deliberate. The push is idempotent (a pending row is refreshed, never duplicated) and the person who sees a wrong number is at the shelf holding a phone; turning sync OFF is a lasting change afterwards visible only as a grey chip somebody goes looking for, which is the wrong shape for one hand on a small screen. **THE VERB IS OFFERED ON THE SAME ROWS AS THE DESKTOP'S** — neither `none` nor `off` — and the suite proves it by SLICING BOTH CONDITIONS OUT OF THE TWO LIVE FILES and running them against one table of eight states, so neither can be edited alone. **THE REFERRAL TO THE DESKTOP IS NARROWER ON THE PHONE, ON PURPOSE**: the desktop's *Open Meituan* costs one click on the machine already in front of you, while the phone's version is a sentence asking somebody to go and find a computer. It now appears only for `no_name` / `name_not_found` / `no_option` — the three that need the channel's own catalogue picker and the three part two deliberately did not build. **The read-only note is DELETED rather than reworded**: the card that needs a desktop already says so on the item it is about (§122's rule applied to an instruction), and a standing line at the foot telling every operator to go to a computer is the §1.7 shape. **THE BUTTON CARRIES A CLIENT-SIDE CAPABILITY GATE WHERE THE DESKTOP NEEDS NONE, AND THE REASON IS SPECIFIC**: this file's `apiWrite` sends a **403 to `/backend/login` exactly as it sends a 401**, so an ungated Sync now answers a missing permission by throwing the operator out of the app. It is drawn through `mCan('{channel}:sync')`, whose null-caps case means allowed — the server is still the gate. The screen's own row gate is unchanged and stays any-of the three `:view` keys: somebody who may look but not push gets the whole alarm with no button on it. **Chinese: nothing composed.** Four pairs, all lifted — `Sync now · 立即同步` is the desktop button's (which took it from `11-meituan.js`), `Sending… · 发送中…` is this screen's own `csCellWord`, the `not_mapped` / `not_syncing` refusal is `01-core.js`'s pair character for character because it is the same fact, and the fallback is `orderErrorText`'s own default on this file. `docs/tacet-delivery-vocabulary.md` is not touched, and a test asserts that §124 wrote nothing into it. **THREE STALE COMMENTS CORRECTED**: `29-channel-sync.js`, `retail-admin.html`'s `#tab-channel-sync` block and the phone's `SUBS.channelsync` all still called the page read-only after part two gave it two verbs. The product editor's Channels card (§103 step 4) is **still** read-only and was left alone. **Tests:** new `scripts/test_mobile_channel_sync_repair.js` — **36 cases**, auto-discovered into the fast shard, five load-bearing rules confirmed red against deliberate breaks (the `off` state re-admitted to the push, the sentence widened back to every amber channel, the `mCan` gate dropped, the path's `/channel-sync` prefix removed, the footer note restored). `npm run test:fast` 233 passed, 0 failed; `npm run lint` 0 errors; doc-numbering PASS. No route, no schema, no migration, no new capability, and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.257 — **§123 · §117 PART THREE BUILT: GZ GROCERY WEARS THE CHANNEL FRAME, AND THE FRAME IS ONE SET OF RULES RATHER THAN A THIRD COPY OF IT.** §117 left this page named as *"the odd one out"*: its own heading shape, two purpose paragraphs, a bespoke health strip, its own sub-nav, and ~30 lines of inline `<style>`. **THE SURVEY FOUND MORE THAN A STYLE MISMATCH.** `#tab-meituan` and `#tab-eleme` each remap the admin's BASE token family (`--line`, `--text-1`, `--bg-pane` — warm-grey, pre-Tacet) onto the Tacet palette at the top of their blocks; **`#tab-guanyi` never did**, and its inline rules were written against that base family, so this page has been painting its cards, borders and text off-palette next to two pages that were not. The remap is now here, the same list they carry. **THE FRAME IS SHARED BY SELECTOR, NOT COPIED.** 33 rules (pagehead, status, tiles, store lines, tab strip) now name `.gy-` alongside `.mt-`, so a change to one is a change to all — the same additive move §117 part two used on the switch, and for the same reason. Four selectors the join produced that could never match (`#tab-meituan .gy-pagehead`, `.gy-storeline.mt-catline`) were removed rather than left as noise. **WHAT WAS DELIBERATELY NOT DONE, AND WHY IT IS RECORDED RATHER THAN DONE**: Meituan and Eleme still hold **112 near-duplicate rules between them — 34 of the first 36 compared are byte-identical**, the two that differ being accidents (`flex: 1 1 320px` vs `340px`; a restatement of the base `.n` background). Consolidating them is the real end of this drift, and it is a mechanical move of ~112 rules through a 15k-line stylesheet across two live pages **that cannot be visually verified here**: the browser suite lives in the slow shard, which is off by Ash's standing instruction. The session's own @media-nesting scanner got that file's structure wrong on its first pass, which is the evidence for not attempting it blind. **Additive joining carries none of that risk and delivers the same thing for GZ Grocery.** **THE NAME IS THE SHARED TABLE'S NAME**: the heading read *"gzgrocery 同步 · Guanyi Sync"* while the Channel sync page, the dashboard row and the phone all say **GZ Grocery** — three names for one channel, which is what §103 step 5 exists to prevent. `CH_NAME` is the one table and it says GZ Grocery on both sides, so the h2 does too and carries no language pair to drift. **THE TWO PURPOSE PARAGRAPHS ARE GONE** (§1.7 bans them); the one fact in them a reader could not get from the screen — that products match on the SKU inside the Guanyi name — moved verbatim onto the **Mapping** panel, where somebody is actually doing that. **Billing and Mapping stayed on this page**, per Ash: *"it's got nothing to do with syncing products"*. **THE MAPPED TILE IS NOT CALLED SYNCED**, and the test says so: `mappedCount` counts mappings with the switch on, while the Channel sync page's `ok` counts items the channel holds the right number for — one word over two different numbers on two screens is the §103 step 5 defect exactly. **Chinese: nothing composed.** `Mapped · 已映射` and the three freshness phrases are this page's own from the strip that stood here; `Needs attention · 待处理` is `chStateWord('att')`, the one table; `Stock updates waiting · 待推送库存` is the Meituan and Eleme tile whose number means the same thing; `nothing needs you · 无需处理` and the `N 个待处理` / `N 发送中…` shapes are the Channel sync strip's, number in the same slot. A wrong fallback wording (`Need attention`, missing the s that `CH_STATE_WORD` carries) was caught by the suite before it shipped. **Tests:** new `scripts/test_channel_frame.js` — **13 cases**, auto-discovered into the fast shard, all five load-bearing rules confirmed red against a deliberate break; three of its own cases were wrong on first run (a slicer that swept in a neighbouring global `<style>`, two checks matching the explanatory comment rather than the markup) and were fixed rather than loosened. `npm run test:fast` 230 passed, 0 failed; eslint 0 errors; doc-numbering PASS. No route, no schema, no migration, no new capability, and no change to `.gitignore` or CI.**
 
@@ -13692,3 +13694,119 @@ page's own, lifted from the strip that stood here. `Needs attention · 待处理
 Meituan and Eleme tile whose number means the same thing.
 `nothing needs you · 无需处理` and the `N 个待处理` / `N 发送中…` shapes are the
 Channel sync strip's own, with the number in the same slot.
+
+## §124 — THE PHONE CARRIES THE REPAIR §117 PART TWO BUILT, AND STOPS NAMING A TAB THAT CANNOT HELP
+
+**2026-09-14 · reported by Ash from the phone, holding the Channel sync screen:
+*"the channel sync also need to change according to the new [PC] version of
+sales channel syncing new version we did today?"* Yes — and two sentences on
+that screen had become false the moment §117 part two merged.**
+
+### What was wrong
+
+§117 part two gave the desktop Channel sync page two verbs of its own, Sync now
+and the sync switch, and between them they clear four of the seven reasons an
+item needs attention: `sync_off` by the switch, `push_failed` / `wrong_number` /
+`never_synced` by the push. The phone's copy of that page was written against
+the version before it and still said so, in two places:
+
+- the foot of the screen — *"Read-only. A mapping is repaired on the desktop's
+  channel tabs."*
+- inside every expanded card with an amber channel on it — *"Fix this on the
+  desktop: Meituan tab."*
+
+**THE SCREENSHOT IS THE PROOF, AND IT IS THE WORST CASE RATHER THAN A TYPICAL
+ONE.** Both items on it read *"The last push to Meituan failed"* — `push_failed`,
+which is now one tap on the desktop Channel sync page. The phone sent the
+operator to the Meituan tab instead, and **the Meituan tab is the one screen
+that cannot clear it**: the daemon picks up only `pending` rows, so an item
+whose last push errored sits there forever (`docs/meituan-findings.md` #6). The
+second of the two items is Black Beans, which is the item a session found stuck
+amber for exactly this on 2026-09-12 and which §117 part two's own record cites.
+The phone was not merely out of date; it was directing the repair away from the
+only screen that performs it.
+
+### The decision
+
+**The phone gets the push, and not the switch.**
+
+The push is the verb the phone is *for*. The person who sees that a channel holds
+the wrong number is standing at the shelf holding a phone, not sitting at a desk,
+and the retry is idempotent: a pending row is refreshed, never duplicated
+(`lib/channel-sync-write.js`), so the worst outcome of a mis-tap is the same push
+happening once.
+
+**The switch stays on the desktop.** Turning sync off for an item is a lasting
+configuration change that afterwards is visible only as a grey *Sync off* chip
+somebody has to go looking for. It is the wrong shape for a control on a small
+screen carried in one hand, and nothing about standing at the shelf makes it
+urgent. This is a narrower line than the desktop's and it is drawn deliberately;
+§117 part two's own argument for offering only two verbs is the same argument,
+one step further along.
+
+### Where the two surfaces agree, and the one place they do not
+
+**The button appears under the desktop's exact condition** — any channel that is
+neither `none` nor `off` — so a row that offers Sync now on the desktop offers it
+on the phone. Its words are the desktop's words (`Sync now · 立即同步`), and it
+posts to the same two-segment path, which is what `lib/cap-routes.js` matches to
+gate it.
+
+**The referral to the desktop is narrower on the phone, on purpose.** The desktop
+draws *Open Meituan* beside Sync now on every amber row, and that costs the
+operator one click on the machine already in front of them. The phone's version of
+that control is a *sentence telling somebody to go and find a computer*. It now
+appears only for the three reasons that genuinely need one — `no_name`,
+`name_not_found`, `no_option`, the three that need the channel's own catalogue
+picker and the three §117 part two deliberately did not build. For the four the
+push clears, the phone offers the push and says nothing about the desktop.
+
+### The read-only note is deleted rather than reworded
+
+The screen is not read-only any more, so the sentence cannot stand as written.
+It is not replaced with a narrower one: the card that needs a desktop already
+says so, on the item it is about, which is §122's rule (*a control belongs on the
+row whose value it changes*) applied to an instruction. A standing line at the
+foot telling every operator to go to a computer, on a screen where most rows no
+longer need one, is the §1.7 shape — text that reads the same every day and
+describes the screen instead of the work.
+
+### The capability gate, and why the phone needs one where the desktop does not
+
+Both writes were already gated server-side through `lib/cap-routes.js` (push →
+`{channel}:sync`), and the desktop draws its buttons without checking. **The
+phone cannot copy that**, and the reason is specific rather than stylistic: the
+phone's `apiWrite` treats **403 exactly as it treats 401 — `location.href =
+'/backend/login'`**. An operator without `{channel}:sync` who taps an ungated
+Sync now is not shown a refusal; they are thrown out of the app they were using.
+So the button is drawn through `mCan(channel + ':sync')`, the phone's own any-of
+helper, whose null-caps case (an older session, permissions unknown) means
+allowed — the server is still the gate, and this is what stops the gate from
+reading as a logout.
+
+The screen's own row gate is unchanged and stays any-of `meituan:view` /
+`eleme:view` / `guanyi:view`: someone who may look but not push still gets the
+whole alarm, with no button on it.
+
+### Chinese
+
+**Nothing composed.** Four pairs, all lifted from live code:
+
+- `Sync now · 立即同步` — the desktop Channel sync page's own button, which took
+  it from `11-meituan.js`.
+- `Sending… · 发送中…` for the button while the write is in flight — this phone
+  screen's own word for a push in flight, from `csCellWord`.
+- the refusal for `not_mapped` / `not_syncing` — `01-core.js`'s pair for those
+  two codes, character for character, because it is the same fact (the list moved
+  under you).
+- the fallback refusal — `orderErrorText`'s own default on this same file.
+
+`docs/tacet-delivery-vocabulary.md` is not touched, because nothing is owed to it.
+
+### What is not done
+
+No route, no schema, no migration, no new capability. The desktop is unchanged
+except for three source comments that still described it as read-only after
+§117 part two gave it two verbs; they are corrected here because this is the
+section that re-reads them. The product editor's Channels card (§103 step 4) is
+**still** read-only and its comment is left alone — it says true things.
