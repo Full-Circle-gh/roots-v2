@@ -7411,13 +7411,23 @@ function renderDelayCase(o, s, delayDays) {
   if (dc && dc.remedy_cost != null) {
     remedyBits.push(cuT(`cost ${ordMoney(dc.remedy_cost)}`, `成本 ${ordMoney(dc.remedy_cost)}`));
   }
+  // THE THIRD ANSWER IS AN OPT-OUT, NOT A THIRD BUTTON (§125). A customer who
+  // opens a late parcel and finds the food fine is owed nothing, and until this
+  // existed the row's only exits were a no-charge order nobody wanted or a
+  // refund that never happened. It is drawn exactly as 'Not claiming' is — a
+  // quiet link with a reason beside it — because it is the same kind of act:
+  // one tap that permanently finishes a track by deciding against it.
   steps.push(remedy
     ? { done: true,
-        label: remedy === 'refund' ? cuT('Refunded', '已退款') : cuT('Replacement sent', '已补发'),
+        label: remedy === 'refund' ? cuT('Refunded', '已退款')
+             : remedy === 'none'   ? cuT('Nothing needed', '无需补发退款')
+                                   : cuT('Replacement sent', '已补发'),
         meta: remedyBits.join(' · ') }
     : { label: cuT('Replacement or refund', '补发或退款'),
+        fields: delayInput(`dcnr-${sid}`, cuT('Reason', '原因')),
         acts: [{ on: `delayReplacement(${oid},${sid},event)`, text: cuT('Send replacement', '补发') },
-               { on: `delayRemedy(${oid},${sid},'refund',event)`, text: cuT('Refunded', '已退款') }] });
+               { on: `delayRemedy(${oid},${sid},'refund',event)`, text: cuT('Refunded', '已退款') }],
+        link: { on: `delayNoRemedy(${oid},${sid},event)`, text: cuT('Nothing needed', '无需补发退款') } });
 
   // 4 — what the carrier finally did. THE AMOUNT IS RECORDED, NOT POSTED: it
   // reaches the books in §98's fourth stage and not before, because a claim is
@@ -7555,6 +7565,15 @@ function delaySettle(orderId, sid, outcome, ev) {
 
 function delayRemedy(orderId, sid, kind, ev) {
   return delayStep(orderId, sid, 'remedy', { kind }, ev);
+}
+
+// The make-whole step's third answer: nothing is owed (§125). It reads its
+// reason the way delayNoClaim reads its own, and the server refuses it without
+// one — the same `reason_required` code, so the refusal is worded once.
+function delayNoRemedy(orderId, sid, ev) {
+  const note = (document.getElementById('dcnr-' + sid)?.value || '').trim();
+  if (!note) { toast(cuT('Give a reason first', '请先填写原因。'), 'err'); return; }
+  return delayStep(orderId, sid, 'remedy', { kind: 'none', note }, ev);
 }
 
 // ── Evidence: read the file here, send a data URI ──────────────────────────

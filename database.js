@@ -4047,11 +4047,14 @@ db.exec(`
     settled_by          TEXT,
     dispute_note        TEXT,     -- required when the state is 'no_claim'
     -- Track 3 — the customer is made whole. A branch taken once: goods back out,
-    -- or money back. The refund arm records only that it happened; the refund
-    -- itself stays on the refund path that already exists.
-    remedy              TEXT,     -- replacement | refund
+    -- money back, or nothing owed. The refund arm records only that it happened;
+    -- the refund itself stays on the refund path that already exists. 'none' is
+    -- §125's third answer — the customer opened a late parcel and the food was
+    -- fine — and it REQUIRES a remedy_note, the way 'no_claim' requires a
+    -- dispute_note. No CHECK constraint here: lib/delay-case.js owns the list.
+    remedy              TEXT,     -- replacement | refund | none
     remedy_at           DATETIME,
-    remedy_note         TEXT,
+    remedy_note         TEXT,     -- required when the remedy is 'none'
     -- Lifecycle
     opened_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
     closed_at           DATETIME,
@@ -4070,7 +4073,8 @@ db.exec(`
     case_id     INTEGER NOT NULL,
     event       TEXT NOT NULL,
       -- opened | customer_told | claim_filed | no_claim | settled
-      -- | remedy_replacement | remedy_refund | closed | reopened | note
+      -- | remedy_replacement | remedy_refund | remedy_none | closed | reopened
+      -- | note
     note        TEXT,
     amount      REAL,      -- the amount this step is about; NULL = not about money
     user_id     INTEGER,
