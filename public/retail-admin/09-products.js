@@ -26,9 +26,9 @@ let PA_PRODUCTS = [];   // server response
    learn what "needs attention" means. Ash, 2026-09-13: "I don't want anything
    that got to do with syncing at the products list page." Syncing gathers on
    Sales › Channel sync, which is a tab now rather than a button in a corner.
-   WHAT STAYS is the editor's own Channels card (pdLoadChannels, §103 step 4):
-   that is one product looked at in depth, not a second overview competing with
-   the first. Do not put the column back. */
+   §126 FINISHED IT: the editor's own Channels card (pdLoadChannels, §103 step 4)
+   is gone too. Ash, 2026-09-14: "I don't want the channel sync on product page."
+   Nothing in this file reads /channel-sync any more. Do not put either back. */
 let PA_CURRENT = null;  // currently open product (when modal is showing)
 // Per-store stock for the overview table. With 2+ stores the Stock column can
 // edit ONE store at a time (picked via the switcher); 'all' = read-only sum.
@@ -587,13 +587,11 @@ async function paLoad() {
   }
 }
 
-/* §117 — the Channels column, its loader and its dots are gone from this list
-   (see the note at the head of this file). What survived is the one helper the
-   editor's Channels card still needs: the channel's display name, taken from
-   29-channel-sync.js so the editor and the Channel sync page cannot name a
-   channel two ways. Falls back to the server's label if that file has not
-   loaded. */
-const _paChName = (ch) => (typeof csChannelName === 'function' ? csChannelName(ch.key) : ch.label);
+/* §117 took the Channels column, its loader and its dots off this list; §126
+   took the editor's Channels card off too (see the note at the head of this
+   file). `_paChName` stood here for that card and went with it — a channel's
+   display name comes from csChannelName in 29-channel-sync.js, for whoever
+   needs one next. */
 
 // ── Per-store stock ───────────────────────────────────────────────────────
 // One fetch of the inventory grid gives us BOTH the active store list (for the
@@ -3086,7 +3084,6 @@ async function pdOpen(id) {
   bpLoad(p ? p.id : null);
   optLoad(p ? p.id : null);
   pdLoadSales(p ? p.id : null);
-  pdLoadChannels(p ? p.id : null);   // §103 step 4
   // Show the docked editor, hide the empty-state placeholder, and mark which
   // row in the list is currently loaded so the operator never loses their place.
   _pdSelectedId = p ? p.id : null;
@@ -3154,76 +3151,13 @@ function pdSalesRangeLabel() {
   return cuT('Sales · last ' + _pdSalesDays + ' days', '销量 · 最近 ' + _pdSalesDays + ' 天');
 }
 
-/* §103 step 4 — this product's three channels, in the editor.
-   Reads the SAME endpoint as the Channel sync page and the Products list dots,
-   narrowed to one product, so nothing here can describe a row differently from
-   the page it links to. Never blocks the editor and never shouts on failure:
-   the card simply stays hidden, because a Channels card that cannot say
-   anything is worse than no card. */
-let _pdChSeq = 0;
-async function pdLoadChannels(id) {
-  const card = document.getElementById('pd-channels-card');
-  const rows = document.getElementById('pd-channels-rows');
-  if (!card || !rows) return;
-  if (id == null || (typeof canTab === 'function' && !canTab('channel-sync'))) { card.style.display = 'none'; return; }
-  const mySeq = ++_pdChSeq;
-  let d;
-  try {
-    const r = await fetch('/api/retail-admin/channel-sync?productId=' + id, { credentials: 'same-origin' });
-    const j = await r.json();
-    if (!j.success) throw new Error(j.error || 'load_failed');
-    d = j.data;
-  } catch (e) { card.style.display = 'none'; return; }
-  if (mySeq !== _pdChSeq) return;          // a newer product superseded this fetch
-  const item = (d.items || [])[0];
-  const chans = d.channels || [];
-  // Nothing mapped anywhere on this tenant → no card at all, same gate the
-  // Products list's own column uses.
-  const anyMapped = chans.some(c => c.counts && (c.counts.ok + c.counts.att + c.counts.off) > 0);
-  if (!item || !anyMapped) { card.style.display = 'none'; return; }
-  card.style.display = '';
-  rows.innerHTML = chans.map(ch => {
-    const c = (item.channels || {})[ch.key] || { k: 'none', reason: 'no_map' };
-    const nm = _paChName(ch);
-    const word = csCellWordFor(ch.key, c);
-    const why = csWhyFor(ch.key, c);
-    const facts = [];
-    if (c.last_pushed_qty != null) {
-      facts.push(cuT('Last', '上次') + ' ' + c.last_pushed_qty + (c.last_pushed_at ? ' · ' + _pdChAgo(c.last_pushed_at) : ''));
-    }
-    if (c.k === 'att' && c.expected != null) facts.push(cuT('shelf says ' + c.expected, '货架为 ' + c.expected));
-    if (c.platform_qty != null) facts.push(cuT(nm + ' holds ' + c.platform_qty, nm + '库存 ' + c.platform_qty));
-    // §105 — the worded cause, or the channel's raw sentence (01-core.js).
-    // §106 — defers to the channel's own live cause where there is one.
-    const err = typeof chCauseFor === 'function' ? chCauseFor(ch.key, c, ch.blocked || null)
-      : (c.error ? cuT('Push failed', '推送失败') + ': ' + c.error : '');
-    // The button sits UNDER the sentence, not beside it. Beside it, in a pane
-    // this narrow, it took a third of the row and wrapped "so Meituan still
-    // shows the previous number" into three-word lines.
-    const go = c.k === 'att'
-      ? '<span class="go"><button type="button" class="btn btn-sm" onclick="csFix(\'' + ch.key + '\',' + item.id + ')">'
-        + escapeHtml(cuT('Open ' + nm, '前往' + nm)) + '</button></span>'
-      : '';
-    return '<div class="pd-ch-row is-' + c.k + '">'
-      + '<span class="nm">' + escapeHtml(nm) + '</span>'
-      + '<span class="bd">'
-      +   '<span class="st"><i class="cs-dot is-' + c.k + '"></i>' + escapeHtml(word) + '</span>'
-      +   (why ? '<span class="why">' + escapeHtml(why) + '</span>' : '')
-      +   (err ? '<span class="facts">' + escapeHtml(err) + '</span>' : '')
-      +   (facts.length ? '<span class="facts">' + escapeHtml(facts.join(' · ')) + '</span>' : '')
-      +   go
-      + '</span></div>';
-  }).join('');
-}
-function _pdChAgo(stamp) {
-  const t = Date.parse(String(stamp || '').replace(' ', 'T') + 'Z');
-  if (!Number.isFinite(t)) return '';
-  const m = Math.max(0, Math.round((Date.now() - t) / 60000));
-  if (m < 60) return cuT(m + ' min ago', m + ' 分钟前');
-  const h = Math.round(m / 60);
-  if (h < 48) return cuT(h + 'h ago', h + ' 小时前');
-  return cuT(Math.round(h / 24) + 'd ago', Math.round(h / 24) + ' 天前');
-}
+/* §126 — the editor's Channels card is gone, and with it pdLoadChannels,
+   _pdChSeq and _pdChAgo. §103 step 4 built it and §117 kept it when the
+   Products list lost its column, on the reading that one product in depth is
+   not a second overview. Ash, 2026-09-14: "I don't want the channel sync on
+   product page." The editor no longer reads /channel-sync at all; Sales ›
+   Channel sync holds every word about syncing, and is the only screen that can
+   repair a mapping rather than only report it. */
 
 async function pdLoadSales(id) {
   _pdSalesId = id;
