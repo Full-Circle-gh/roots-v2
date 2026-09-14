@@ -153,6 +153,66 @@ it('the ids are bound, never interpolated', () => {
   assert.ok(f.params.every(Number.isInteger), 'only integer row ids may be bound');
 });
 
+console.log('\nthe card counts the SET, not the sum of its parts');
+
+/** A local ETA that is already an hour in the past, in the shop's wall-clock. */
+function etaAnHourAgo() {
+  const d = new Date(Date.now() - 3600e3);
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
+/** Order 2 is the overdue Meituan order. Give it the stuck Qingyun rider that a
+ *  Meituan mirror row is in fact fulfilled by, so one order is two sub-types. */
+function withOverlap(db) {
+  db.prepare("INSERT INTO retail_shipments (id,order_id,mode,local_eta) VALUES (20,2,'local',?)").run(etaAnHourAgo());
+  db.prepare("INSERT INTO delivery_jobs VALUES (21,2,20,datetime('now','-2 minutes'))").run();
+  return db;
+}
+
+it('the four sub-types really do overlap — the fixture is not inventing it', () => {
+  const db = withOverlap(fixture());
+  const mt = db.prepare(`SELECT o.id FROM retail_orders o WHERE ${alerts.meituanAlertSql('o')}`).all().map((r) => r.id);
+  const stuck = alerts.localStuckRows(db).map((r) => r.id);
+  assert.ok(mt.includes(2), 'order 2 must still be the overdue Meituan order');
+  assert.ok(stuck.includes(2), 'order 2 must now also be a stuck rider — that is the overlap');
+});
+
+it('an order that is two kinds of trouble at once is ONE call, not two', () => {
+  // THE BUG THIS REPLACES: the card added its four sub-counts together while
+  // the list ORs the same four predicates, so this order was 2 on the card and
+  // 1 in the list the card opens. Ash saw the filter show everything; the next
+  // thing he would have seen, once it filtered, is a number that did not match.
+  const db = withOverlap(fixture());
+  const f = alerts.alertFilter(db, 'o');
+  const rows = db.prepare(`SELECT o.id FROM retail_orders o WHERE ${f.sql} ORDER BY o.id`).all(...f.params);
+
+  const oldWay =
+      db.prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${alerts.carrierAlertSql('o')}`).get().n
+    + db.prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${alerts.airAlertSql('o')}`).get().n
+    + db.prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${alerts.meituanAlertSql('o')}`).get().n
+    + alerts.localStuckRows(db).length;
+
+  assert.strictEqual(alerts.alertCount(db, f), rows.length,
+    'the card must count exactly the rows the list shows');
+  assert.strictEqual(alerts.alertCount(db, f), 4, 'four distinct orders need a call');
+  assert.strictEqual(oldWay, 5, 'the sum of the parts double-counts the overlapping order');
+  assert.notStrictEqual(oldWay, alerts.alertCount(db, f),
+    'if these ever agree the fixture has lost its overlap and this test proves nothing');
+});
+
+it('with no overlap the two ways agree — the fix does not undercount', () => {
+  const db = fixture();
+  const f = alerts.alertFilter(db, 'o');
+  assert.strictEqual(alerts.alertCount(db, f), 4);
+});
+
+it('the filter hands back the stuck ROWS, so the card need not re-read them', () => {
+  const f = alerts.alertFilter(fixture(), 'o');
+  assert.ok(Array.isArray(f.stuck), 'alertFilter must return the stuck rows it already found');
+  assert.ok(f.stuck.length > 0 && f.stuck.every((r) => Number.isInteger(r.id) && r.waiting_since),
+    'a stuck row carries its id and the instant it went overdue');
+});
+
 console.log('\nroutes/retail.js — the orders list filters on that same set');
 
 it('status=delayed asks the shared module, not a lone air-delay EXISTS', () => {
@@ -163,6 +223,20 @@ it('status=delayed asks the shared module, not a lone air-delay EXISTS', () => {
     'the branch must resolve through lib/delivery-alerts, or it is a quarter of its own card');
   assert.ok(!/lateShipmentSql/.test(body),
     'an inline air-delay predicate here is the drift this test exists to stop');
+});
+
+it('the ops card counts the set and never sums its sub-types again', () => {
+  // Anchored on the CARD, not on the first `delivery_alerts = {` in the file —
+  // that one is the empty initialiser three hundred lines earlier.
+  const from = RETAIL.indexOf('const ALERT_WHERE');
+  assert.ok(from > 0, 'the ops card must still build its carrier predicate');
+  const at = RETAIL.indexOf('delivery_alerts = {', from);
+  assert.ok(at > from, 'the ops card must still build delivery_alerts');
+  const body = RETAIL.slice(from, RETAIL.indexOf('};', at));
+  assert.ok(/deliveryAlerts\.alertCount\(/.test(body),
+    'the count must come from alertCount, or it is a sum of overlapping parts again');
+  assert.ok(!/count:\s*\w+Count\s*\+/.test(body),
+    'adding the sub-counts together is the double-count this test exists to stop');
 });
 
 console.log('\npublic/m.html — the phone');
