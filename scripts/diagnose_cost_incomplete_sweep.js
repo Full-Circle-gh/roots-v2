@@ -187,16 +187,76 @@ sub(`matched MORE THAN ONE row: ${ambiguous.length}`);
 if (!ambiguous.length) console.log('    (none)');
 for (const { s, hits } of ambiguous) console.log(`    ${s} → ids ${hits.map(r => r.id).join(', ')}`);
 
-// ══════════════════════════════════════════════════════════════════════════
-// 3 · what the sweep would write
-// ══════════════════════════════════════════════════════════════════════════
-section('3 · WHAT THE SWEEP WOULD WRITE (active rows only)');
-
 const keptRows = active.filter(r => isKeeper(r.sku));
 const targets = active.filter(r => !isKeeper(r.sku));
 const wouldChange = targets.filter(r => r.cost_incomplete !== 1);
 const alreadyOne = targets.filter(r => r.cost_incomplete === 1);
 const clearingAKeeper = keptRows.filter(r => r.cost_incomplete === 1);
+
+// ══════════════════════════════════════════════════════════════════════════
+// 2b · the keepers' siblings — where an exclusion can be undone by the fold
+// ══════════════════════════════════════════════════════════════════════════
+section("2b · KEEPERS' SIBLINGS — THE EXCLUSIONS THE PRODUCTS LIST WOULD UNDO");
+console.log("   The products list does not paint one mark per row. _paCostIncomplete()");
+console.log("   (public/retail-admin/09-products.js) folds a variant family into ONE cell");
+console.log("   and marks it IF ANY MEMBER IS TAGGED — deliberately, because the folded");
+console.log("   figure already has the partial cost inside it.");
+console.log('');
+console.log("   So a keeper sharing a variant_group_id with a row this sweep marks is not");
+console.log("   actually excluded from the page: its own tag stays clear, and its cell");
+console.log("   shows the mark anyway. That is the sweep quietly overriding the list it");
+console.log("   was given, which is the one outcome worth stopping for.");
+console.log('');
+console.log("   The same thing happens by NAME rather than by grouping: a single-unit");
+console.log("   `S(3-251)` or a multipack `(3-210) X5` is the keeper's product in another");
+console.log("   pack. Whether those count as the keeper is Ash's call, not this script's,");
+console.log("   so they are listed and nothing is assumed.");
+
+sub('by variant_group_id — a keeper folded together with a row that WOULD be marked');
+const byGroup = new Map();
+for (const r of active) {
+  if (r.variant_group_id == null || r.variant_group_id === '') continue;
+  const g = String(r.variant_group_id);
+  if (!byGroup.has(g)) byGroup.set(g, []);
+  byGroup.get(g).push(r);
+}
+let foldHits = 0;
+for (const r of keptRows) {
+  if (r.variant_group_id == null || r.variant_group_id === '') continue;
+  const sibs = (byGroup.get(String(r.variant_group_id)) || []).filter(s => s.id !== r.id && !isKeeper(s.sku));
+  if (!sibs.length) continue;
+  foldHits++;
+  console.log(`\n    keeper ${J(r.sku)} (id ${r.id}, group ${J(r.variant_group_id)}) — ${J(r.name_en)}`);
+  for (const s of sibs) console.log(`      sibling WOULD BE MARKED: id ${s.id}  sku ${J(s.sku)}  ${J(s.name_en)}`);
+}
+if (!foldHits) console.log('    (none — no keeper shares a variant group with a row this sweep marks)');
+
+sub("by sku text — rows naming a keeper's code inside their own sku");
+// S(1-220), (3-210) X5, （4-680）+（4-690） — the same goods in another pack. The
+// digits are matched rather than the punctuation: the catalogue spells these
+// with ASCII and full-width brackets interchangeably, and `1-30` must not match
+// inside `1-300`, so each candidate code is bounded by a non-digit or an end.
+const codeIn = (sku, keeper) => {
+  const t = skuKey(sku), k = skuKey(keeper);
+  if (t == null || t === k) return false;
+  const i = t.indexOf(k);
+  if (i < 0) return false;
+  const after = t[i + k.length];
+  return after === undefined || !/[0-9]/.test(after);
+};
+let textHits = 0;
+for (const r of targets) {
+  const named = KEEP_SKUS.filter(k => codeIn(r.sku, k));
+  if (!named.length) continue;
+  textHits++;
+  console.log(`    id ${String(r.id).padEnd(4)}  sku ${J(r.sku).padEnd(18)}  names keeper(s) ${named.join(', ').padEnd(16)}  ${J(r.name_en)}`);
+}
+if (!textHits) console.log('    (none)');
+
+// ══════════════════════════════════════════════════════════════════════════
+// 3 · what the sweep would write
+// ══════════════════════════════════════════════════════════════════════════
+section('3 · WHAT THE SWEEP WOULD WRITE (active rows only)');
 
 console.log(`   active rows                          ${active.length}`);
 console.log(`   left alone (a named keeper)          ${keptRows.length}`);
