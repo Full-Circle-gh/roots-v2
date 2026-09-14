@@ -375,6 +375,115 @@ it('an uncategorised expense keeps its own line rather than a minted bucket', ()
   assert.strictEqual(nulls[0].amount, 50);
 });
 
+// ── The cost read, against a real database ─────────────────────────────────
+// §56 as amended 2026-09-14. THE SQL IS SLICED OUT OF THE LIVE ROUTE AND RUN,
+// never transcribed: §36's whole finding about this family of queries is that
+// copies drift, and a test carrying its own copy of the formula would go on
+// passing after the route's copy was changed. What is asserted here is the
+// arithmetic the screen will actually show.
+console.log('\n2b · the cost read — §36’s traps, on rows that spring them');
+
+const { PAID_O: T_PAID_O, odateFor: T_ODATE } = require(path.join(ROOT, 'lib', 'finance-window'));
+const COST_SQL = (() => {
+  const at = ROUTE.indexOf('const costRow = db.prepare(`');
+  assert.ok(at > 0, 'the cost read must still be a prepared statement in the route');
+  const start = ROUTE.indexOf('`', at) + 1;
+  const end = ROUTE.indexOf('`', start);
+  // The two interpolations are the SHARED predicates. Supplying them here is
+  // what proves the route takes them from lib/finance-window.js rather than
+  // spelling either out — a hand-written `o.status IN (…)` would need no
+  // binding and this slice would still run, so the check below names them.
+  // eslint-disable-next-line no-new-func
+  return new Function('PAID_O', 'odateFor', 'sqlDayShiftForShop', 'tdb',
+    'return `' + ROUTE.slice(start, end) + '`;')(T_PAID_O, T_ODATE, () => '+8 hours', () => null);
+})();
+
+it('the cost read borrows both predicates rather than restating either', () => {
+  const at = ROUTE.indexOf('const costRow = db.prepare(`');
+  const tpl = ROUTE.slice(at, ROUTE.indexOf('.get(from, to)', at));
+  assert.ok(/\$\{PAID_O\}/.test(tpl), 'the allow-list must be the shared one, alias-qualified');
+  assert.ok(/\$\{odateFor\(/.test(tpl), 'the order date must be the shared expression');
+  assert.ok(!/status IN \(/.test(tpl), '§36: the list was re-declared inline four times; not a fifth');
+});
+
+const xdb = new Database(':memory:');
+xdb.exec(`
+  CREATE TABLE retail_orders (
+    id INTEGER PRIMARY KEY, status TEXT, total REAL,
+    paid_at DATETIME, placed_at DATETIME, replacement_for_order_id INTEGER);
+  CREATE TABLE retail_order_items (
+    id INTEGER PRIMARY KEY, order_id INTEGER, qty REAL, line_total REAL,
+    pack_units INTEGER DEFAULT 1, refunded_qty INTEGER DEFAULT 0,
+    unit_cost_at_sale REAL);
+`);
+{
+  const o = xdb.prepare('INSERT INTO retail_orders VALUES (?,?,?,?,NULL,?)');
+  const i = xdb.prepare('INSERT INTO retail_order_items VALUES (?,?,?,?,?,?,?)');
+  //      id  status       total  paid_at                 replacement
+  o.run(1, 'paid', 40, '2026-08-10 03:00:00', 0);
+  i.run(1, 1, 2, 40, 1, 0, 8);          // plain: 8 × 2 × 1 = 16
+  o.run(2, 'delivered', 30, '2026-08-11 03:00:00', 0);
+  i.run(2, 2, 1, 30, 6, 0, 8);          // PACK UNITS: 8 × 1 × 6 = 48
+  o.run(3, 'paid', 40, '2026-08-12 03:00:00', 0);
+  i.run(3, 3, 2, 40, 1, 1, 8);          // ITEMISED REFUND: 8 × (2−1) × 1 = 8
+  o.run(4, 'paid', 20, '2026-08-13 03:00:00', 0);
+  i.run(4, 4, 1, 20, 1, 0, null);       // never costed — revenue only
+  o.run(5, 'cancelled', 999, '2026-08-14 03:00:00', 0);
+  i.run(5, 5, 50, 999, 1, 0, 8);        // excluded by the allow-list
+  o.run(6, 'paid', 0, '2026-08-15 03:00:00', 1);
+  i.run(6, 6, 9, 0, 1, 0, 8);           // §98 replacement — excluded
+}
+const COST = xdb.prepare(COST_SQL).get('2026-08-01', '2026-08-31');
+
+it('the cost half takes the pack multiplier and the revenue half does not', () => {
+  // 16 + 48 + 8 = 72. Had the revenue side taken it too, line_rev would be 230.
+  assert.strictEqual(COST.cogs, 72, '§36 trap 1: cost is per unit, line_total is per line');
+  assert.strictEqual(COST.line_rev, 130, 'revenue must NOT be multiplied by pack_units');
+});
+
+it('an itemised partial refund comes off the cost, as nothing else in the tree does', () => {
+  // Order 3 alone: 8 × (2 − 1) = 8, not 16. §36 trap 2.
+  const one = xdb.prepare(COST_SQL.replace('BETWEEN ? AND ?', "BETWEEN '2026-08-12' AND '2026-08-12'"))
+    .get();
+  assert.strictEqual(one.cogs, 8, 'refunded_qty must be subtracted from the billable quantity');
+});
+
+it('an uncosted line is revenue with no cost, never a zero cost', () => {
+  assert.strictEqual(COST.line_rev - COST.line_rev_costed, 20, 'order 4 is the uncosted ¥20');
+  assert.ok(COST.line_rev_costed < COST.line_rev, 'coverage must be short of 1 here');
+});
+
+it('the excluded orders are excluded on BOTH halves, not just revenue', () => {
+  // A cancelled order or a §98 replacement leaking into cost would shift the
+  // margin without shifting revenue — the hardest kind of wrong to notice.
+  assert.ok(COST.cogs < 72 + 8, 'no cancelled or replacement line may reach the cost sum');
+  assert.strictEqual(COST.line_rev, 130, 'nor the line revenue');
+});
+
+it('a period with lines but NO costed line yields zero costed revenue, and the route reads that as null', () => {
+  // The guard this pins is `costedRev > 0 ? … : null` in the route. Without it
+  // the endpoint answers ¥0.00 for July 2026 — ¥56,792 of real sales — and the
+  // screen publishes a 100% margin for a month whose cost was never captured.
+  const empty = xdb.prepare(COST_SQL).get('2026-08-13', '2026-08-13');
+  assert.strictEqual(empty.line_rev_costed, 0, 'the fixture day carries only the uncosted line');
+  assert.ok(empty.line_rev > 0, 'and it does carry revenue, so this is not an empty period');
+  const at = ROUTE.indexOf('const cogs =');
+  const guard = ROUTE.slice(at, ROUTE.indexOf('\n', at));
+  assert.ok(/costedRev > 0 \? .* : null/.test(guard),
+    'zero costed revenue must yield NULL — "zero claims the goods were free"');
+});
+
+it('coverage is measured in MONEY, not in lines', () => {
+  // By line these are 4 costed of 5; by money ¥110 of ¥130. The figure the
+  // fraction qualifies is money, so the fraction must be money.
+  const at = ROUTE.indexOf('const costCoverage =');
+  const expr = ROUTE.slice(at, ROUTE.indexOf('\n', at));
+  assert.ok(/costedRev \/ lineRev/.test(expr), 'the ratio must be of the two money sums');
+  assert.ok(!/COUNT\(/.test(COST_SQL.slice(COST_SQL.indexOf('line_rev_costed'))),
+    'no line count may stand in for the money share');
+  assert.strictEqual(COST.line_rev_costed, 110);
+});
+
 // ── The screen ─────────────────────────────────────────────────────────────
 console.log('\n3 · the screen — the seventh state, and the locked pairs');
 
@@ -464,13 +573,69 @@ it('the cost rows are UNCONDITIONAL — lifting the floor added no date test', (
     'no capture-date constant may reach the screen');
 });
 
-it('both cost rows are covered, and the sentence is rendered once per card', () => {
+// ── §56 as amended 2026-09-14 — the three states of the two cost rows ───────
+//
+// WHAT THIS TEST REPLACED, AND WHY IT IS NOT A WEAKENING. Until the amendment
+// these two rows read the seventh state unconditionally, and the check here
+// was a regex pinning `finNotRecordedValue()` into the card's own source. That
+// rule is gone by decision, not by drift — but the regex it was written as
+// could only ever have said "still blank", so it is replaced by one that RUNS
+// the renderer against all three states rather than reading it. The amendment
+// removed one rule and added three; the suite gains assertions rather than
+// losing them.
+//
+// THE CONDITION IS THE POINT. §56 as amended lets the figure appear ONLY
+// alongside the share of the period it rests on, so "a figure with no coverage
+// sentence" is the one output that would undo the decision while looking
+// correct. It is asserted directly, twice — once that the sentence is there
+// under partial coverage, once that the ONLY thing that silences it is full
+// coverage.
+it('no costed line keeps the seventh state exactly as it was', () => {
+  const html = ctx.finCostRows({ cost_of_goods: null, gross_profit: null, cost_coverage: 0 });
+  assert.ok(html.includes(ctx.finNotRecordedValue()), 'both rows must still read the not-recorded VALUE');
+  assert.strictEqual((html.match(/Cost of goods|Gross profit/g) || []).length, 2, 'both rows still render');
+  assert.strictEqual((html.match(/This period has no recorded cost data\./g) || []).length, 1,
+    '§1.12: ONE sentence under the pair, not one per row');
+  assert.ok(!/¥|fin-sign">−/.test(html.replace(/Cost of goods|Gross profit/g, '')),
+    'zero claims the goods were free — §36 refused it and §56 kept the refusal');
+});
+
+it('a partly costed period shows the figures AND the share they rest on', () => {
+  // The measured production window: 29.1% of line revenue carried a cost.
+  const html = ctx.finCostRows({ cost_of_goods: 11750, gross_profit: 127941, cost_coverage: 0.291 });
+  assert.ok(/11,750/.test(html), 'cost of goods must render its figure');
+  assert.ok(/127,941/.test(html), 'gross profit must render its figure');
+  assert.ok(!html.includes(ctx.finNotRecordedValue()), 'a row carrying a figure is not the seventh state');
+  assert.ok(/Cost recorded for 29% of this period's revenue/.test(html),
+    'THE CONDITION OF THE AMENDMENT: the figure never appears without its coverage');
+  assert.ok(/the real margin is lower/.test(html),
+    'the DIRECTION is the point — a shortfall can only flatter, never the reverse');
+  assert.ok(!/no recorded cost data/.test(html),
+    'the absence sentence and the shortfall sentence are never both drawn');
+});
+
+it('the percentage FLOORS, so the sentence can never claim more than it has', () => {
+  // 99.6% rounds to 100 and would print a sentence contradicting its own number.
+  const html = ctx.finCostRows({ cost_of_goods: 1, gross_profit: 2, cost_coverage: 0.996 });
+  assert.ok(/99%/.test(html), 'floor, not round');
+  assert.ok(!/100%/.test(html), 'a note that says 100% is a note that argues with itself');
+});
+
+it('full coverage removes the sentence on its own, with nothing to remember', () => {
+  const html = ctx.finCostRows({ cost_of_goods: 40000, gross_profit: 100000, cost_coverage: 1 });
+  assert.ok(/40,000/.test(html) && /100,000/.test(html), 'the figures still render');
+  assert.ok(!/Cost recorded for|no recorded cost data/.test(html),
+    'the caveat expires with the shortfall it describes — it is never deleted by hand');
+});
+
+it('the card draws the cost rows through the one function that knows the states', () => {
   const card = CLIENT.slice(CLIENT.indexOf('function finRender'));
-  assert.ok(/Cost of goods', '销货成本'\), finNotRecordedValue\(\)/.test(card),
-    'cost of goods must read the not-recorded value');
-  assert.ok(/Gross profit', '毛利润'\), finNotRecordedValue\(\)/.test(card),
-    'gross profit must read the not-recorded value');
-  assert.strictEqual((card.match(/finNotRecorded\(\)/g) || []).length, 1);
+  assert.ok(/finCostRows\(d\)/.test(card), 'the staircase must call the state-aware renderer');
+  // The state is the SERVER's (routes/finance-summary.js decides null vs figure).
+  // Re-deriving it here from the coverage number would put one rule in two
+  // places, which is how a screen and its payload come to disagree.
+  assert.ok(!/cost_coverage\s*===\s*0|cost_coverage\s*<=\s*0/.test(CLIENT_CODE),
+    'the screen must not re-derive the no-cost state from the fraction');
 });
 
 it('every rendered pair is copied from the locked vocabulary table', () => {

@@ -16,7 +16,8 @@
 //     with the channels behind it folded out of that same read.
 //   • An operating-expense sum over an arbitrary date range, which the kitchen
 //     route cannot answer.
-//   • Saying nothing at all about cost of goods, because nothing reads it yet.
+//   • A cost of goods over that same window, with the share of the period it
+//     covers — one feature, never a figure alone (§56 as amended).
 //
 // ── WHY REVENUE IS NOT THE DASHBOARD'S ─────────────────────────────────────
 // §36, *Finance does not reuse the dashboard revenue aggregator*. The Reports
@@ -39,12 +40,23 @@
 //     side's exclusion" would drop a channel the dashboard's own headline
 //     includes, by a different road.
 //
-// ── WHAT IS DELIBERATELY ABSENT ────────────────────────────────────────────
-// COST OF GOODS. There is no cost reader, and this file does not become one.
-// `unit_cost_at_sale` is written on all six sale paths and read by nothing;
-// §36 records six ways a reader will silently miscount and binds them on its
-// build. Until that is built, cost is reported as null and the screen renders
-// the §1.12 seventh state. Null, never zero: "zero claims the goods were free".
+// ── COST OF GOODS — PRESENT SINCE §56 WAS AMENDED, AND CONDITIONAL ─────────
+// This file WAS the place that said nothing about cost. §56 (2026-09-07) held
+// both cost rows blank and gated them on §31; §56 as amended 2026-09-14 by Ash
+// lifts that gate **on one condition — the figure never appears without the
+// share of the period it rests on.** So the reader lives here now, and so does
+// `cost_coverage`, and they are one feature rather than a figure with a
+// statistic beside it.
+//
+// §36's six miscount traps bind this build. Two are carried in the line
+// formula (pack units, itemised refunds); three cannot be closed from the line
+// at all (amount-only refunds, options with no cost counterpart, a bundle
+// blanked by one unpriced component). The block that computes it carries each
+// one at the point it bites.
+//
+// STILL NULL, NEVER ZERO, for a period with no costed line: "zero claims the
+// goods were free". The amendment did not touch that and must not be read as
+// having done so.
 //
 // LOCATION. `expense_entries` has NO location column — verified against
 // `schema.sql:229`, which carries id, date, amount, category, description,
@@ -75,9 +87,10 @@ const router = express.Router();
 // routes/finance-transactions.js, and this file adds none of its own.
 //
 //   PAID        the order status ALLOW-list
+//   PAID_O      the same list, alias-qualified, for the cost read's own join
 //   odateFor()  date(COALESCE(paid_at, placed_at), '<the shop's own shift>')
 //   LEDGER_DATE the ledger's own DATE column, which takes no shift
-const { PAID, odateFor, LEDGER_DATE, resolveWindow, fen } = require('../lib/finance-window');
+const { PAID, PAID_O, odateFor, LEDGER_DATE, resolveWindow, fen } = require('../lib/finance-window');
 const { sqlDayShiftForShop } = require('../lib/business-date');
 // Sales tax / VAT (audit I-03). The refunded half is proportional arithmetic
 // this file must not invent a second copy of.
@@ -160,6 +173,104 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
       revOrders += r.orders;
       return { channel: r.channel, amount: fen(r.amount), orders: r.orders };
     });
+
+    // ── Lines 2 and 3 · Cost of goods, and how much of the period it covers ──
+    //
+    // §56 AS AMENDED 2026-09-14 by Ash. These rows were blank from §56 until
+    // that amendment, which lifts the "fill from §31 and nothing else" gate on
+    // one condition: **the figure never appears without the share of the period
+    // it rests on.** The coverage fraction below is not a decoration on the
+    // number, it IS the amendment — a cost drawn from part of a period and
+    // printed alone is the flattering fiction §56 refused, and printing the
+    // fraction beside it is what makes the same arithmetic honest. A reader that
+    // drops `cost_coverage` from this payload has undone a decision, not tidied
+    // a response.
+    //
+    // MEASURED ON PRODUCTION BEFORE IT WAS BUILT, by
+    // scripts/diagnose_cost_coverage.js on 2026-09-14: 29.1% of the last thirty
+    // days' line revenue carried a cost, 56.7% of September's, 2.7% of August's
+    // and none at all of July's. Those are the numbers the amendment was taken
+    // against, and the reason the fraction ships in the same commit as the
+    // figure rather than after it.
+    //
+    // ── THE LINE FORMULA CARRIES TWO OF §36's SIX TRAPS, AND THEY PULL APART ──
+    //
+    //   PACK UNITS. `unit_cost_at_sale` is per SINGLE UNIT; `line_total` beside
+    //   it is per LINE. A Meituan qty of 1 against a 6瓶 listing is six units
+    //   off the shelf with `pack_units` = 6. So the COST half takes the
+    //   multiplier and the REVENUE half must not — §36 records the asymmetry
+    //   explicitly because a reader treating them alike is wrong on one of them,
+    //   and which one is not visible from either expression alone.
+    //
+    //   ITEMISED PARTIAL REFUNDS. `applyRefundedQty` stamps `refunded_qty` and
+    //   stops: status stays `paid`, `qty` is never reduced, `line_total` is
+    //   never reduced, and §36 records that nothing else in the codebase
+    //   subtracts it from any aggregate. This is the first reader that does.
+    //
+    // ── AND THREE IT CANNOT, WHICH IS WHY THE FRACTION IS NOT A COMPLETENESS
+    //    CLAIM ──
+    //
+    //   An AMOUNT-ONLY refund writes nothing to the line at all, so §36's
+    //   "cannot be seen at any level of sophistication" holds here too — 7 such
+    //   orders, ¥328, in the measured window. OPTIONS carry a price delta with
+    //   no cost counterpart. A BUNDLE line goes null when ONE component is
+    //   unpriced, so a null here is not always the plain "never costed" the
+    //   fraction reads it as. `cost_coverage` counts what carries a cost, not
+    //   what carries a RIGHT one; §36's two accuracy findings are untouched by
+    //   anything in this block.
+    //
+    // THE PREDICATE IS THE ONE ABOVE, ALIAS-QUALIFIED. `PAID_O` is the same
+    // allow-list `PAID` is, and taking it from lib/finance-window.js rather than
+    // writing `o.status IN (…)` here is the whole point of §36's finding that
+    // the list was re-declared inline four times: revenue and cost must agree
+    // about which orders exist, or the margin is a ratio of two different
+    // populations.
+    const costRow = db.prepare(`
+      SELECT COALESCE(SUM(CASE WHEN i.unit_cost_at_sale IS NOT NULL
+                  THEN i.unit_cost_at_sale
+                       * (COALESCE(i.qty, 0) - COALESCE(i.refunded_qty, 0))
+                       * COALESCE(i.pack_units, 1)
+                  ELSE 0 END), 0)                                     AS cogs,
+             COALESCE(SUM(COALESCE(i.line_total, 0)), 0)              AS line_rev,
+             COALESCE(SUM(CASE WHEN i.unit_cost_at_sale IS NOT NULL
+                  THEN COALESCE(i.line_total, 0) ELSE 0 END), 0)      AS line_rev_costed
+        FROM retail_order_items i
+        JOIN retail_orders o ON o.id = i.order_id
+       WHERE ${PAID_O} AND ${odateFor(sqlDayShiftForShop(tdb()))} BETWEEN ? AND ?`)
+      .get(from, to) || {};
+
+    // COVERAGE IS MEASURED IN MONEY, NOT IN LINES, and the difference is not
+    // cosmetic: a line count treats a ¥4 sticker and a ¥400 hamper alike, while
+    // the figure this fraction qualifies is money. The two came out close on the
+    // measured window (28.4% by line, 29.1% by money) and there is no reason
+    // they must.
+    //
+    // NULL WHEN THE WINDOW HOLDS NO LINES AT ALL — an empty period has no
+    // fraction to state, which is a different fact from a period whose sales are
+    // wholly uncosted, and the screen must not word the two alike.
+    const lineRev = Number(costRow.line_rev) || 0;
+    const costedRev = Number(costRow.line_rev_costed) || 0;
+    const costCoverage = lineRev > 0 ? costedRev / lineRev : null;
+
+    // ── THE THREE STATES, AND WHY ZERO COVERAGE STILL RENDERS BLANK ──
+    //
+    // NOTHING COSTED → the rows stay null and the screen keeps the treatment it
+    // has had since §56. **The amendment does not reach this case, and letting
+    // it would break the one rule §56 kept from §36 v4.113: zero claims the
+    // goods were free.** July 2026 carries ¥56,792 of line revenue and not one
+    // costed line; a ¥0.00 cost of goods there publishes a 100% margin for a
+    // month whose costs were never captured and never can be. Blank is the
+    // honest answer for that month and stays the honest answer.
+    //
+    // SOME COSTED → figure plus fraction. This is the amendment's case.
+    //
+    // ALL COSTED → figure, and the screen drops the fraction of its own accord.
+    // **That is the amendment's own "and then the note goes away", built as a
+    // consequence of the data rather than as a task somebody has to remember.**
+    // A caveat that must be deleted by hand is the kind this repo's CLAUDE.md
+    // opens by warning about; this one cannot go stale, because nothing keeps it
+    // alive but the shortfall it describes.
+    const cogs = costedRev > 0 ? Number(costRow.cogs) || 0 : null;
 
     // ── Line 4 · Operating expenses ──
     // The kitchen route groups by `substr(date,1,7)`, a calendar-month string,
@@ -305,17 +416,37 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
     }
 
     // ── Lines 2, 3 and 5 ──
-    // cost_of_goods and gross_profit are null and always will be until a cost
-    // reader exists. NULL, not 0, and not omitted from the payload: the screen
-    // must render both rows in the seventh state, and a missing key is
-    // indistinguishable from a failed read.
+    // cost_of_goods and gross_profit are computed above under §56 as amended,
+    // and are NULL — not 0, and never omitted from the payload — for a period
+    // with no costed line at all. A missing key is indistinguishable from a
+    // failed read, and the screen must be able to tell a blank period from a
+    // broken one.
     //
-    // NET IS REVENUE MINUS OPERATING EXPENSES, WITH NO COST TAKEN OFF, and that
-    // is §36's decision rather than an oversight: "Revenue, operating expenses
-    // and net render normally from the data that exists." It follows that net
-    // is HIGHER than the business's real net for every period without cost —
-    // which is exactly what the two Not-recorded rows above it are on the
-    // screen to say. Do not silence them and leave this figure standing alone.
+    // GROSS PROFIT IS THE HEADER REVENUE MINUS THE LINE COST, AND THE TWO ARE
+    // NOT THE SAME MONEY. Revenue above is SUM(retail_orders.total); cost can
+    // only be summed from order LINES, and shipping, order-level discounts and
+    // tax sit on the header and never reach a line. The measured gap on
+    // production runs from +¥18,033 (July) to −¥3,944 (September) — it changes
+    // SIGN, so it is not a fixed adjustment anyone could net out later.
+    //
+    // **THE MISMATCH IS THE AMENDMENT'S, DELIBERATELY, AND IT IS WHY THE
+    // STAIRCASE STAYS A STAIRCASE.** A gross profit computed on the costed
+    // SUBSET would be the truer ratio, and it was put up and rejected on
+    // 2026-09-14 for a structural reason rather than a numerical one: operating
+    // expenses below are the whole business's, so a subset gross profit cannot
+    // be continued into Net, and the card stops being five steps that follow
+    // from one another. §36's *Finance Summary ships without a location filter*
+    // refuses a store filter on exactly this shape — the top line scoped and the
+    // bottom line not — and a subset gross profit is that same failure one row
+    // higher. Recorded so a later reader meets a decision rather than a bug.
+    //
+    // NET IS STILL REVENUE MINUS OPERATING EXPENSES, WITH NO COST TAKEN OFF,
+    // and the amendment does not change it: "Revenue, operating expenses and net
+    // render normally from the data that exists." Cost of goods is NOT
+    // subtracted from net, and must not become so on the strength of the row
+    // above now carrying a figure — a partial cost taken off net would put a
+    // known-incomplete number into the one figure on this card that nothing else
+    // qualifies.
     res.json({
       success: true,
       data: {
@@ -337,8 +468,16 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
         // heard of still gets its line, carrying its own key, rather than being
         // dropped out of a total that counted it.
         revenue_breakdown: revenueBreakdown,
-        cost_of_goods: null,
-        gross_profit: null,
+        cost_of_goods: cogs == null ? null : fen(cogs),
+        gross_profit: cogs == null ? null : fen(revenue - cogs),
+        // THE SHARE OF THE PERIOD THE TWO ROWS ABOVE REST ON, 0…1, or null for
+        // a window holding no order lines. §56 as amended makes this a
+        // CONDITION of those two figures rather than a companion to them: they
+        // were blank precisely because a partial cost printed alone reads as a
+        // whole one. Sent even at 1 — the screen decides what to draw at full
+        // coverage, and a key that vanished when the news was good would make
+        // "complete" and "failed to read" the same payload.
+        cost_coverage: costCoverage,
         operating_expenses: expenses,
         // §87: the money that left the account and is not a cost of running the
         // shop. It is NOT subtracted from net — a drawing is not a business
