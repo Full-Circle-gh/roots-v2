@@ -2434,6 +2434,19 @@
          id, never by position, so they sit outside the filter row rather than
          inside it as display:none flex children. -->
     <input type="hidden" id="orders-channel" value="">
+    <!-- THE HIDDEN MIRROR OF THE CHIP ROW ABOVE, AND IT MUST CARRY EVERY
+         data-status THAT ROW USES. setOrderStatus writes the chip's value here
+         and ordFilterQuery reads it back out; a <select> SILENTLY REFUSES a
+         value it has no <option> for — selectedIndex goes to -1 and .value
+         reads back as '' — so a missing option does not narrow the list to
+         nothing, it DROPS THE STATUS PARAM AND WIDENS TO EVERY ORDER, with the
+         chip still lit. That is what "Needs a call" did from the day its chip
+         was added: §98 taught the server the name, 2026-09-14 gave the row its
+         chip, and this list was never told. Ash, off the live desktop:
+         "need a call filter doesnt filter anything it shows all orders."
+         scripts/test_delivery_alert_route.js now asserts the two agree for
+         EVERY chip, not just this one — the next status added to that row
+         fails at the gate instead of widening in production. -->
     <select id="orders-status" style="display: none">
       <option value="" selected></option>
       <option value="pending_payment"></option>
@@ -2447,6 +2460,9 @@
       <option value="refunded"></option>
       <option value="refunds_open"></option>
       <option value="needs_invoice"></option>
+      <!-- Pseudo-status: the "Delivery needs a call" chip. Resolved by
+           lib/delivery-alerts.js server-side, never a real o.status value. -->
+      <option value="delayed"></option>
     </select>
 
     <!-- Bulk attach tracking modal -->
@@ -5026,10 +5042,11 @@
                 </div>
                 <div id="pd-stock-supplier-note" class="muted" style="display:none;font-weight:400;font-size:12px;line-height:1.5;">No stock tracked — this ships from the supplier and is always available. Manage availability with “Supplier out — pause selling” below. · 不跟踪库存——由供应商直发,始终有货。可用下方的“供应商缺货,暂停销售”控制是否可售。</div>
                 <div id="pd-oos-block" style="border-top:1px solid var(--line-soft);padding-top:10px;">
-                  <div style="font-weight:600;margin-bottom:5px;display:inline-flex;align-items:center;">When out of stock · 缺货时<span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">“Pre-order outside Guangzhou” keeps the product orderable for out-of-city shoppers when stock hits 0 (ships on the next batch / restock); only same-day Guangzhou is blocked. · 广州外顾客在缺货时仍可下单预订,仅广州当日配送会被拦截。</span></span></div>
+                  <div style="font-weight:600;margin-bottom:5px;display:inline-flex;align-items:center;">When out of stock · 缺货时<span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">“Pre-order outside Guangzhou” keeps the product orderable for out-of-city shoppers when stock hits 0 (ships on the next batch / restock); only same-day Guangzhou is blocked. · 广州外顾客在缺货时仍可下单预订,仅广州当日配送会被拦截。 “Pre-order everywhere” drops that last block: Guangzhou same-day shoppers may pre-order too, and their whole order waits and ships together once stock is back — no same-day fee, no delivery window. · “全国可预订”不拦截广州当日:顾客在缺货时仍可下单预订,整单等补货后一并发货。</span></span></div>
                   <select id="pd-oos-policy" aria-label="What happens when this product is out of stock · 缺货时的处理方式" style="width:100%;padding:7px 8px;border:1px solid #d6d1c7;border-radius:7px;font:inherit;">
                     <option value="strict">Sold out everywhere · 全国售罄停售</option>
                     <option value="backorder_gz">Pre-order outside Guangzhou · 广州外可预订（现订现发）</option>
+                    <option value="backorder_all">Pre-order everywhere · 全国可预订（补货后发出）</option>
                   </select>
                 </div>
                 <div id="pd-supplier-block" style="border-top:1px solid var(--line-soft);padding-top:10px;display:none;">
@@ -12624,12 +12641,21 @@
       <!-- gzgrocery pickup inference: flagged drops needing a decision + recent auto-applied -->
       <div id="gy-pickups"></div>
 
-      <div class="gy-eyebrow">Billing snapshot · 对账速览</div>
-      <div class="gy-teaser">
-        <div class="cell owe"><div class="l">They owe you · 欠款</div><div class="v" id="gy-t-owed">—</div></div>
-        <div class="cell"><div class="l">Units ordered · 订货件数</div><div class="v" id="gy-t-units">—</div></div>
-        <div class="cell"><div class="l">Products · 商品数</div><div class="v" id="gy-t-products">—</div></div>
-        <div class="cell go"><button class="btn btn-sm" onclick="gySubTab('billing')">Open billing → · 查看对账</button></div>
+      <!-- §127 — was a 10px uppercase mono eyebrow over a four-cell strip, both
+           written against the pre-Tacet base tokens. It is the frame's own tile
+           row now: same .gy-tiles / .gy-tile the head uses, so the page carries
+           one kind of headline number rather than two. The action sits in the
+           owed tile's `.act` slot, which is where Meituan and Eleme put the
+           button that changes a tile's number. Every word is unchanged. -->
+      <div class="gy-act-h">Billing snapshot · 对账速览</div>
+      <div class="gy-tiles">
+        <div class="gy-tile">
+          <div class="k">They owe you · 欠款</div>
+          <div class="v" id="gy-t-owed">—</div>
+          <div class="act"><button class="btn btn-sm" onclick="gySubTab('billing')">Open billing → · 查看对账</button></div>
+        </div>
+        <div class="gy-tile"><div class="k">Units ordered · 订货件数</div><div class="v" id="gy-t-units">—</div></div>
+        <div class="gy-tile"><div class="k">Products · 商品数</div><div class="v" id="gy-t-products">—</div></div>
       </div>
     </div>
 
@@ -12646,38 +12672,62 @@
            that matching, rather than at the top of a page they open every day
            to look at something else. Both halves are lifted verbatim from those
            paragraphs; nothing is reworded. -->
-      <p class="helper" data-lang-block="en" style="margin: 0 0 var(--s3);">
+      <p class="gy-hint" data-lang-block="en">
         Products are matched by the SKU embedded in the Guanyi name (e.g. "GVF 1-180").
       </p>
-      <p class="helper" data-lang-block="cn" style="margin: 0 0 var(--s3);">
+      <p class="gy-hint" data-lang-block="cn">
         通过管易商品名中的货号(如 “GVF 1-180”)匹配商品。
       </p>
-      <div class="pa-toolbar">
-        <input id="gy-search" type="text" data-ph-en="Search products" data-ph-cn="搜索商品" placeholder="Search products" oninput="gyFilterProducts()">
-        <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
+      <!-- §127 — .pa-toolbar is the Products page's toolbar; borrowing it put a
+           Dusk focus ring and that page's metrics on this one. The controls are
+           this page's own now, on .mt-tools' and .mt-search's measurements. The
+           inline `font-size:13px` label is a class for the same reason. -->
+      <div class="gy-tools">
+        <input id="gy-search" class="gy-search" type="text" data-ph-en="Search products" data-ph-cn="搜索商品" placeholder="Search products" oninput="gyFilterProducts()">
+        <label class="gy-check">
           <input type="checkbox" id="gy-show-unmapped" onchange="gyFilterProducts()"> Show unmapped only · 仅未映射
         </label>
-        <div id="gy-count" class="pa-count"></div>
+        <div id="gy-count" class="gy-count"></div>
         <button class="btn btn-sm" onclick="gyAutoMatch()" title="Bind every Roots product to its Guanyi listing by the SKU embedded in the Guanyi product name.">✨ Auto-match by SKU</button>
-        <button class="btn btn-sm btn-primary" onclick="gyPushAll()">Push all stock now</button>
+        <!-- §1.8 rule 4 — Secondary. §1.7 leaves this page's Dusk slot empty (no
+             create action), and a page with no primary CTA has no filled
+             button: the one Dusk this page spends is the automation badge,
+             which rule 2 exempts from the budget. -->
+        <button class="btn btn-sm" onclick="gyPushAll()">Push all stock now</button>
       </div>
 
-      <div id="gy-products-wrap" style="overflow-x:auto">
-        <table id="gy-products-table" class="data-table" style="min-width:700px;font-size:13px">
+      <!-- `data-table` was a class no rule has ever matched — the table was
+           painted entirely by the global table rules, whose `th` is the retired
+           11px uppercase mono eyebrow. .gy-table carries §1.13a rule 3's band:
+           13px Inter 500 sentence case in Ink on --td-header, padding 10px 12px,
+           Orders the anchor. Rule 1 pins it — 184 rows scroll past and the
+           operator loses which column is which. THAT is why the min-width and
+           the overflow-x wrapper are gone rather than kept: an overflow on ANY
+           ancestor makes the card the scrollport and parks the band on row one
+           (rule 2). table-layout: fixed and §1.19's percentages replace them. -->
+      <div id="gy-products-wrap" class="gy-card">
+        <table id="gy-products-table" class="gy-table">
           <thead>
             <tr>
-              <th style="width:30%">Product · 商品</th>
-              <th style="width:10%;text-align:center">天河 qty · 我方</th>
-              <th style="width:26%">Guanyi match · 管易商品</th>
-              <th style="width:12%;text-align:center">Guanyi qty · Δ</th>
+              <!-- §1.19 — plain percentages summing to 100, and under
+                   table-layout: fixed they are what decides the layout. The
+                   State column was 12%: `Needs attention · 待处理` is the
+                   widest of the four shared state words and it ran straight
+                   under the Sync checkbox. Measured against that phrase, not
+                   guessed — as was 我方, which breaks between its two
+                   characters below about 12%. 25 + 12 + 23 + 11 + 20 + 9 = 100. -->
+              <th style="width:25%">Product · 商品</th>
+              <th style="width:12%;text-align:center">天河 qty · 我方</th>
+              <th style="width:23%">Guanyi match · 管易商品</th>
+              <th style="width:11%;text-align:center">Guanyi qty · Δ</th>
               <!-- §103 step 5: the state, in the same four words the other two
                    channel tabs and the Channel sync page use. -->
-              <th style="width:12%">State · 状态</th>
-              <th style="width:10%;text-align:center">Sync</th>
+              <th style="width:20%">State · 状态</th>
+              <th style="width:9%;text-align:center">Sync</th>
             </tr>
           </thead>
           <tbody id="gy-products-body">
-            <tr><td colspan="5" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
+            <tr><td colspan="6" class="gy-tblmsg">Loading…</td></tr>
           </tbody>
         </table>
       </div>

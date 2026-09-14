@@ -128,20 +128,37 @@
      that is what it counts. */
   let _gySt = null;      // last /status
   let _gyLs = null;      // last /listings
+  let _gyPk = null;      // last /pickups — the head counts its flagged drops
   let _gyRefreshing = false;   // a Refresh list click is in flight
 
   function gyRenderHead() {
     const st = _gySt || {};
     const pending = Number(st.queuePending || 0);
     const errors  = Number(st.queueError || 0);
+    /* §127 — THE TILE COUNTED THE QUEUE AND THE PAGE COUNTED THE DROPS, so the
+       head read "nothing needs you · Needs attention 0" above thirteen pickups
+       waiting for a decision. §1.7's work rule is that the status line reports
+       WORK WAITING; a flagged drop is work waiting on this operator and nothing
+       else on the head knew about it.
+
+       Ash, asked which of three ways to fix it, chose this one: the tile counts
+       BOTH. `Needs attention` means *what is waiting on you on this page*, and
+       what a page holds differs by page — the same way `Mapped` is a different
+       number here and on Meituan. That is not §103 step 5's defect, which was
+       two NAMES for one thing (Mapped vs Synced); this is one name for one
+       meaning. No string changes: the number in the existing `N need attention`
+       shape is just the honest one now, and the status line and the tile agree
+       because they read the same total. */
+    const flagged = ((_gyPk && _gyPk.flagged) || []).length;
+    const attention = errors + flagged;
 
     const line = document.getElementById('gy-status');
     if (line) {
       const bits = [];
-      if (errors)  bits.push(cuT(`${errors} need attention`, `${errors} 个待处理`));
+      if (attention) bits.push(cuT(`${attention} need attention`, `${attention} 个待处理`));
       if (pending) bits.push(cuT(`${pending} sending…`, `${pending} 发送中…`));
       if (!bits.length) bits.push(cuT('nothing needs you', '无需处理'));
-      line.innerHTML = errors
+      line.innerHTML = attention
         ? '<span class="att">' + esc(bits[0]) + '</span>' + (bits[1] ? ' · ' + esc(bits[1]) : '')
         : esc(bits.join(' · '));
     }
@@ -152,7 +169,7 @@
         '<div class="v' + (warn ? ' att' : '') + '">' + esc(String(v)) + '</div></div>';
       tiles.innerHTML =
         tile(cuT('Mapped', '已映射'), st.mappedCount == null ? '—' : st.mappedCount, false) +
-        tile(typeof chStateWord === 'function' ? chStateWord('att') : cuT('Needs attention', '待处理'), errors, errors > 0) +
+        tile(typeof chStateWord === 'function' ? chStateWord('att') : cuT('Needs attention', '待处理'), attention, attention > 0) +
         tile(cuT('Stock updates waiting', '待推送库存'), pending, false);
     }
 
@@ -261,14 +278,14 @@
     // until the Mapping tab is opened. Non-blocking; repaints when it lands.
     chLoadVerdicts('guanyi').then(function () { gyRenderProducts(); });
     const body = document.getElementById('gy-products-body');
-    if (body && !_products.length) body.innerHTML = '<tr><td colspan="6" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>';
+    if (body && !_products.length) body.innerHTML = '<tr><td colspan="6" class="gy-tblmsg">Loading…</td></tr>';
     try {
       const r = await api('/api/retail-admin/guanyi/products');
       _products = r.data || [];
       _storeCode = r.storeCode || '';
       gyRenderProducts();
     } catch (e) {
-      if (body) body.innerHTML = `<tr><td colspan="6" class="muted" style="padding:24px;text-align:center">Error: ${esc(e.message)}</td></tr>`;
+      if (body) body.innerHTML = `<tr><td colspan="6" class="gy-tblmsg">Error: ${esc(e.message)}</td></tr>`;
     }
   };
 
@@ -286,7 +303,7 @@
     });
 
     setText('gy-count', `${rows.length} / ${_products.length}`);
-    if (!rows.length) { body.innerHTML = '<tr><td colspan="6" class="muted" style="padding:24px;text-align:center">No products</td></tr>'; return; }
+    if (!rows.length) { body.innerHTML = '<tr><td colspan="6" class="gy-tblmsg">No products</td></tr>'; return; }
 
     body.innerHTML = rows.map(p => {
       const name = esc([p.name_cn, p.name_en].filter(Boolean).join(' '))
@@ -322,34 +339,40 @@
         + '"><i class="cs-dot is-' + gSt.k + '"></i>' + esc(chWord('guanyi', gSt.k, gSt.reason)) + '</span>';
       if (m) {
         const gqty = sg ? Number(sg.current_qty) : null;
-        gyCell = `<div style="font-size:12px">${esc(m.guanyi_name || '—')}</div>
-          <div class="muted" style="font-size:11px">${esc(m.guanyi_code || '')}
-            <button class="btn btn-sm" style="padding:0 6px;margin-left:6px" onclick="gyUnbind(${p.id})" title="Unbind">✕</button></div>`;
+        gyCell = `<div>${esc(m.guanyi_name || '—')}</div>
+          <div class="sub">${esc(m.guanyi_code || '')}
+            <button class="btn btn-sm unbind" onclick="gyUnbind(${p.id})" title="Unbind">✕</button></div>`;
         gyQty = gqty == null ? '<span class="muted">?</span>' : String(gqty);
         if (gqty != null) {
           const d = ourQty - gqty;
-          delta = d === 0 ? '<span style="color:var(--success)">=</span>'
-            : `<span style="color:${d > 0 ? 'var(--warn)' : 'var(--danger)'}">${d > 0 ? '+' : ''}${d}</span>`;
+          /* §1.10 — IF A COLOUR DOES NOT ENCODE A STATE, DO NOT USE IT. This
+             was Sage for a match, Amber one way and Brick the other. Brick
+             means error, and holding three more than Guanyi is the same state
+             as holding three fewer — "out of step" — so one of the two was
+             always lying. The State column beside it already carries that
+             state, in the shared four words and the shared dot. The delta is
+             the size of the gap, which is information: Graphite. */
+          delta = `<span class="muted">${d === 0 ? '=' : (d > 0 ? '+' : '') + d}</span>`;
         }
         sync = `<label class="toggle-label" title="Enable/disable sync"><input type="checkbox" ${m.sync_enabled ? 'checked' : ''} onchange="gyToggleSync(${p.id}, this.checked)"></label>`;
       } else if (sg) {
-        gyCell = `<div style="font-size:12px">${esc(sg.guanyi_name)}</div>
-          <button class="btn btn-sm" style="padding:1px 8px;margin-top:3px" onclick="gyBind(${p.id}, '${esc(String(sg.sku_id))}')">Bind →</button>`;
+        gyCell = `<div>${esc(sg.guanyi_name)}</div>
+          <div class="sub"><button class="btn btn-sm" onclick="gyBind(${p.id}, '${esc(String(sg.sku_id))}')">Bind →</button></div>`;
         gyQty = sg.current_qty == null ? '<span class="muted">?</span>' : String(sg.current_qty);
-        sync = '<span class="muted" style="font-size:11px">—</span>';
+        sync = '<span class="muted">—</span>';
       } else {
-        gyCell = '<span class="muted" style="font-size:12px">no match</span>';
+        gyCell = '<span class="muted">no match</span>';
         gyQty = '<span class="muted">—</span>';
-        sync = '<span class="muted" style="font-size:11px">—</span>';
+        sync = '<span class="muted">—</span>';
       }
 
       return `<tr>
-        <td>${name}<div class="muted" style="font-size:11px">SKU ${sku}</div></td>
-        <td style="text-align:center;font-weight:600">${ourQty}</td>
+        <td>${name}<div class="sub">SKU ${sku}</div></td>
+        <td class="ctr qty">${ourQty}</td>
         <td>${gyCell}</td>
-        <td style="text-align:center">${gyQty} ${delta}</td>
+        <td class="ctr">${gyQty} ${delta}</td>
         <td data-no-i18n>${stateCell}</td>
-        <td style="text-align:center">${sync}</td>
+        <td class="ctr">${sync}</td>
       </tr>`;
     }).join('');
   }
@@ -402,6 +425,9 @@
   function gyRenderPickups(r) {
     const wrap = document.getElementById('gy-pickups');
     if (!wrap) return;
+    // The head's attention count reads this response, so store it and repaint.
+    _gyPk = r;
+    gyRenderHead();
     const mode = r.mode || 'off';
     const flagged = r.flagged || [];
     const recent = r.recent || [];
@@ -412,51 +438,79 @@
       (cn ? (x.name_cn || x.name_en) : (x.name_en || x.name_cn))
       || x.guanyi_name || ('#' + x.product_id)
     );
-    const psku = (x) => x.product_sku ? `<span class="muted" style="font-size:11px;margin-left:6px">${esc(x.product_sku)}</span>` : '';
+    const psku = (x) => x.product_sku ? `<span class="sku">${esc(x.product_sku)}</span>` : '';
     const when = (t) => gyLocalTime(t, false);
 
-    const modeBadge = mode === 'live'
-      ? '<span style="background:rgba(163,180,159,.14);color:var(--success);border:1px solid rgba(163,180,159,.35);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:600">● LIVE</span>'
-      : mode === 'shadow'
-        ? '<span style="background:var(--bg-elev-1);color:var(--text-3);border:1px solid var(--line);border-radius:10px;padding:1px 8px;font-size:11px" title="Detecting + logging only — not changing stock">◌ shadow</span>'
-        : '<span style="background:var(--bg-elev-1);color:var(--text-3);border:1px solid var(--line);border-radius:10px;padding:1px 8px;font-size:11px">off</span>';
+    /* §127 — WAS THE LOUDEST OBJECT ON A QUIET PAGE. The flagged list was a
+       full amber field (a color-mix wash, an amber border, amber headings and,
+       because #tab-guanyi remaps --brass onto Amber and carried no .btn-primary
+       rule, amber Apply buttons too) sitting under a status line that read
+       "nothing needs you". Amber is now spent where §1.10 spends it: a tinted
+       PILL on the count, and nowhere else.
 
-    let html = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-      <strong style="font-size:14px">Gzgrocery pickups · 提货扣减</strong> ${modeBadge}
-      <span class="muted" style="font-size:12px;margin-left:auto">${sm.appliedEvents24h || 0} applied · ${sm.appliedUnits24h || 0} units (24h)</span>
+       THE BADGE IS DUSK, NOT SAGE. Pickup inference reads Guanyi's stock drift
+       and lowers your shelf without being asked — it is an automation, and
+       §1.10's row for "tacet acted" is --td-dusk-tint plus a breathing dot.
+       Sage was wrong: Sage means all-clear, and this badge is not reporting
+       that anything is clear, only that something is running. §1.8 rule 2
+       exempts automation indicators from the one-Dusk budget, so this is the
+       page's Dusk and it costs the header nothing (§1.7 leaves that slot empty
+       here — there is no create action).
+
+       EVERY BUTTON IS SECONDARY OR GHOST (§1.8 rule 4). There were thirteen
+       filled Apply buttons down the page, one per row. Neither sibling page
+       puts a filled button in a list row at all — Meituan has one, in a
+       toolbar; Eleme has one, at the top — so the row buttons were not even
+       the siblings' pattern, let alone the rulebook's. Apply is Secondary,
+       Ignore is Ghost (§1.8: "Ghost — tertiary, in-row").
+
+       NO NEW STRINGS. `Flagged drops · 待确认` is the head of the sentence that
+       stood here — "13 flagged drop(s) need your decision · 待确认" — with the
+       count lifted out into the pill beside it, where §1.4 puts a count and
+       where this page's own sub-tabs already put one. A numeral needs no label. */
+    const modeBadge = mode === 'live'
+      ? '<span class="gy-pill auto"><i></i>Live</span>'
+      : mode === 'shadow'
+        ? '<span class="gy-pill idle" title="Detecting + logging only — not changing stock">Shadow</span>'
+        : '<span class="gy-pill idle">Off</span>';
+
+    let html = `<div class="gy-act-row">
+      <span class="gy-act-h">Gzgrocery pickups · 提货扣减</span> ${modeBadge}
+      <span class="gy-act-sum">${sm.appliedEvents24h || 0} applied · ${sm.appliedUnits24h || 0} units (24h)</span>
     </div>`;
 
     if (flagged.length) {
-      html += `<div style="border:1px solid var(--warn);background:color-mix(in srgb, var(--warn) 12%, transparent);border-radius:8px;padding:10px 12px;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:600;color:var(--warn);margin-bottom:6px">⚠ ${flagged.length} flagged drop(s) need your decision · 待确认</div>`
+      html += `<div class="gy-card">
+        <div class="gy-cardhead">Flagged drops · 待确认 <span class="gy-npill">${flagged.length}</span></div>`
         + flagged.map(f => {
           const drop = Math.abs(f.drift || 0);
-          return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid color-mix(in srgb, var(--warn) 28%, transparent)">
-            <div style="flex:1;min-width:0">
-              <div style="font-size:13px;color:var(--text-1);font-weight:500">${pname(f)}${psku(f)}</div>
-              <div style="font-size:11px;color:var(--text-3)">Guanyi ${f.baseline_qty}→${f.observed_qty} (drop ${drop}) · your stock now ${f.current_qty} · ${when(f.created_at)}</div>
+          return `<div class="gy-row">
+            <div class="who">
+              <div class="nm">${pname(f)}${psku(f)}</div>
+              <div class="sub">Guanyi ${f.baseline_qty}→${f.observed_qty} (drop ${drop}) · your stock now ${f.current_qty} · ${when(f.created_at)}</div>
             </div>
-            <button class="btn btn-sm btn-primary" onclick="gyApplyPickup(${f.id})" title="Yes, real sale — lower my stock by ${drop}">Apply −${drop}</button>
-            <button class="btn btn-sm" onclick="gyIgnorePickup(${f.id})" title="Glitch — keep my stock, correct Guanyi back up">Ignore</button>
+            <button class="btn btn-sm" onclick="gyApplyPickup(${f.id})" title="Yes, real sale — lower my stock by ${drop}">Apply −${drop}</button>
+            <button class="btn btn-sm btn-ghost" onclick="gyIgnorePickup(${f.id})" title="Glitch — keep my stock, correct Guanyi back up">Ignore</button>
           </div>`;
         }).join('') + `</div>`;
     } else {
-      html += `<div class="muted" style="font-size:12px;margin-bottom:8px">No flagged drops · 无待确认</div>`;
+      html += `<div class="gy-empty">No flagged drops · 无待确认</div>`;
     }
 
     if (recent.length) {
       // Preserve the expanded state across the background poll's re-render —
       // otherwise the section snaps shut every refresh cycle.
       const wasOpen = !!wrap.querySelector('#gy-pickups-recent[open]');
-      html += `<details id="gy-pickups-recent"${wasOpen ? ' open' : ''}><summary style="cursor:pointer;font-size:12px;color:var(--text-3);padding:2px 0">Recent auto-applied pickups (${recent.length}) · 最近自动扣减</summary>
-        <div style="margin-top:6px;font-size:12px;max-height:160px;overflow-y:auto">`
-        + recent.map(x => `<div style="display:flex;gap:8px;padding:2px 0">
-            <span style="color:var(--danger);font-weight:600;width:44px">−${x.inferred_pickup}</span>
-            <span style="flex:1">${pname(x)}${psku(x)}</span>
-            <span class="muted">${when(x.created_at)}</span>
+      html += `<details class="gy-fold" id="gy-pickups-recent"${wasOpen ? ' open' : ''}><summary>Recent auto-applied pickups (${recent.length}) · 最近自动扣减</summary>
+        <div class="gy-foldbody">`
+        + recent.map(x => `<div class="gy-foldrow">
+            <span class="n">−${x.inferred_pickup}</span>
+            <span class="who">${pname(x)}${psku(x)}</span>
+            <span class="when">${when(x.created_at)}</span>
           </div>`).join('')
         + `</div></details>`;
     }
+
     wrap.innerHTML = html;
   }
 
@@ -528,7 +582,7 @@
       gyRenderTeaser(r);
       if (renderPanel && wrap) gyRenderAnalytics(r);
     } catch (e) {
-      if (wrap) wrap.innerHTML = `<div class="muted">Analytics error: ${esc(e.message)}</div>`;
+      if (wrap) wrap.innerHTML = `<div class="gy-empty">Analytics error: ${esc(e.message)}</div>`;
     }
   };
 
@@ -553,21 +607,26 @@
     const per = r.period || 'day';
     const btn = (p, label) => `<button class="btn btn-sm ${per === p ? 'btn-primary' : ''}" onclick="gySetAnaPeriod('${p}')">${label}</button>`;
 
-    const card = (label, val, sub) => `<div style="flex:1;min-width:120px;background:var(--bg-elev-1);border:1px solid var(--line);border-radius:8px;padding:10px 12px">
-      <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">${label}</div>
-      <div style="font-size:20px;font-weight:700;margin-top:2px">${val}</div>${sub ? `<div class="muted" style="font-size:11px">${sub}</div>` : ''}</div>`;
+    /* §127 — the summary cards were 11px uppercase labels over 700-weight
+       numbers in 8px-radius boxes: a fourth card style on a page that already
+       had the frame's tile. They ARE tiles now — the same .gy-tile the head and
+       the billing snapshot use — laid out on .gy-cards rather than .gy-tiles
+       only because there are five of them and the frame's grid is a three-up
+       shared with Meituan. Same for the bars, the fold and the table below:
+       every size here is one the page already had. */
+    const card = (label, val, sub) => `<div class="gy-tile"><div class="k">${label}</div>` +
+      `<div class="v">${val}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
 
-    let html = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-      <span style="font-size:12px" class="muted">Period</span> ${btn('day', 'Day')} ${btn('week', 'Week')} ${btn('month', 'Month')}
-      <span style="margin-left:auto;display:flex;gap:6px;align-items:center">
-        <input type="date" id="gy-ana-from" value="${esc(_gyAna.from)}" onchange="gyAnaSetRange()" style="font-size:12px;padding:2px 4px">
-        <span class="muted">→</span>
-        <input type="date" id="gy-ana-to" value="${esc(_gyAna.to)}" onchange="gyAnaSetRange()" style="font-size:12px;padding:2px 4px">
-        <button class="btn btn-sm" onclick="gyExportStatement()" ${prods.length ? '' : 'disabled'} title="Download itemized statement as CSV">⤓ Statement CSV</button>
-      </span>
+    let html = `<div class="gy-tools">
+      <span class="gy-lb">Period</span> ${btn('day', 'Day')} ${btn('week', 'Week')} ${btn('month', 'Month')}
+      <span class="gy-grow"></span>
+      <input type="date" class="gy-date" id="gy-ana-from" value="${esc(_gyAna.from)}" onchange="gyAnaSetRange()">
+      <span class="gy-lb">→</span>
+      <input type="date" class="gy-date" id="gy-ana-to" value="${esc(_gyAna.to)}" onchange="gyAnaSetRange()">
+      <button class="btn btn-sm" onclick="gyExportStatement()" ${prods.length ? '' : 'disabled'} title="Download itemized statement as CSV">⤓ Statement CSV</button>
     </div>`;
 
-    html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+    html += `<div class="gy-cards">
       ${card('Units ordered', Number(s.units || 0).toLocaleString())}
       ${card('They owe you', yuan(s.owed), 'gzgrocery price')}
       ${card('Retail value', yuan(s.retail))}
@@ -576,37 +635,37 @@
     </div>`;
 
     if (r.unpriced && r.unpriced.length) {
-      html += `<div style="font-size:12px;color:var(--warn);background:color-mix(in srgb, var(--warn) 12%, transparent);border:1px solid var(--warn);border-radius:6px;padding:6px 10px;margin-bottom:10px">
-        ⚠ ${r.unpriced.length} ordered product(s) have no gzgrocery price yet — counted in units but billed at full retail: ${r.unpriced.slice(0, 6).map(u => esc(u.name || ('#' + u.product_id))).join(', ')}${r.unpriced.length > 6 ? '…' : ''}</div>`;
+      html += `<div class="gy-note">⚠ ${r.unpriced.length} ordered product(s) have no gzgrocery price yet — counted in units but billed at full retail: ${r.unpriced.slice(0, 6).map(u => esc(u.name || ('#' + u.product_id))).join(', ')}${r.unpriced.length > 6 ? '…' : ''}</div>`;
     }
 
     if (!prods.length) {
-      html += `<div class="muted" style="padding:18px;text-align:center">No gzgrocery orders in this range yet · 暂无订货<br><span style="font-size:11px">Pickups appear here automatically as gzgrocery sells.</span></div>`;
+      html += `<div class="gy-empty mid">No gzgrocery orders in this range yet · 暂无订货<br>Pickups appear here automatically as gzgrocery sells.</div>`;
       wrap.innerHTML = html; return;
     }
 
     // simple per-bucket bar list
     if (ts.length) {
       const max = Math.max(...ts.map(t => t.owed)) || 1;
-      html += `<details style="margin-bottom:10px"><summary style="cursor:pointer;font-size:12px;color:var(--text-3)">By ${per} (${ts.length})</summary>
-        <div style="margin-top:6px">` + ts.map(t => `<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:1px 0">
-          <span style="width:90px" class="muted">${esc(t.bucket)}</span>
-          <span style="height:10px;background:var(--accent);border-radius:2px;width:${Math.max(2, (t.owed / max) * 200)}px"></span>
-          <span>${yuan(t.owed)}</span><span class="muted">· ${t.units}u</span>
+      html += `<details class="gy-fold"><summary>By ${per} (${ts.length})</summary>
+        <div class="gy-foldbody">` + ts.map(t => `<div class="gy-foldrow">
+          <span class="when" style="width:96px;flex:none">${esc(t.bucket)}</span>
+          <span class="gy-bar" style="width:${Math.max(2, (t.owed / max) * 200)}px"></span>
+          <span>${yuan(t.owed)}</span><span class="when">· ${t.units}u</span>
+          <span class="who"></span>
         </div>`).join('') + `</div></details>`;
     }
 
-    html += `<table class="data-table" style="width:100%;font-size:12px"><thead><tr>
-      <th style="text-align:left">Product</th><th style="text-align:right">Units</th>
-      <th style="text-align:right">Owed</th><th style="text-align:right">Retail</th><th style="text-align:right">Disc</th></tr></thead><tbody>`
+    html += `<div class="gy-card"><table class="gy-table"><thead><tr>
+      <th style="width:40%">Product</th><th class="num" style="width:15%">Units</th>
+      <th class="num" style="width:15%">Owed</th><th class="num" style="width:15%">Retail</th><th class="num" style="width:15%">Disc</th></tr></thead><tbody>`
       + prods.slice(0, 50).map(p => `<tr>
         <td>${esc(p.name || ('#' + p.product_id))} <span class="muted">${esc(p.sku || '')}</span></td>
-        <td style="text-align:right;font-weight:600">${p.units}</td>
-        <td style="text-align:right">${yuan(p.owed)}</td>
-        <td style="text-align:right" class="muted">${yuan(p.retail)}</td>
-        <td style="text-align:right">${p.discount == null ? '<span style="color:var(--text-3)">—</span>' : (p.discount * 100).toFixed(0) + '%'}</td>
-      </tr>`).join('') + `</tbody></table>`;
-    if (prods.length > 50) html += `<div class="muted" style="font-size:11px;margin-top:4px">Showing top 50 of ${prods.length} — full list in the CSV.</div>`;
+        <td class="num qty">${p.units}</td>
+        <td class="num">${yuan(p.owed)}</td>
+        <td class="num muted">${yuan(p.retail)}</td>
+        <td class="num">${p.discount == null ? '<span class="muted">—</span>' : (p.discount * 100).toFixed(0) + '%'}</td>
+      </tr>`).join('') + `</tbody></table></div>`;
+    if (prods.length > 50) html += `<div class="gy-empty">Showing top 50 of ${prods.length} — full list in the CSV.</div>`;
 
     wrap.innerHTML = html;
   }

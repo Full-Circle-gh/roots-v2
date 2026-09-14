@@ -153,6 +153,66 @@ it('the ids are bound, never interpolated', () => {
   assert.ok(f.params.every(Number.isInteger), 'only integer row ids may be bound');
 });
 
+console.log('\nthe card counts the SET, not the sum of its parts');
+
+/** A local ETA that is already an hour in the past, in the shop's wall-clock. */
+function etaAnHourAgo() {
+  const d = new Date(Date.now() - 3600e3);
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+
+/** Order 2 is the overdue Meituan order. Give it the stuck Qingyun rider that a
+ *  Meituan mirror row is in fact fulfilled by, so one order is two sub-types. */
+function withOverlap(db) {
+  db.prepare("INSERT INTO retail_shipments (id,order_id,mode,local_eta) VALUES (20,2,'local',?)").run(etaAnHourAgo());
+  db.prepare("INSERT INTO delivery_jobs VALUES (21,2,20,datetime('now','-2 minutes'))").run();
+  return db;
+}
+
+it('the four sub-types really do overlap — the fixture is not inventing it', () => {
+  const db = withOverlap(fixture());
+  const mt = db.prepare(`SELECT o.id FROM retail_orders o WHERE ${alerts.meituanAlertSql('o')}`).all().map((r) => r.id);
+  const stuck = alerts.localStuckRows(db).map((r) => r.id);
+  assert.ok(mt.includes(2), 'order 2 must still be the overdue Meituan order');
+  assert.ok(stuck.includes(2), 'order 2 must now also be a stuck rider — that is the overlap');
+});
+
+it('an order that is two kinds of trouble at once is ONE call, not two', () => {
+  // THE BUG THIS REPLACES: the card added its four sub-counts together while
+  // the list ORs the same four predicates, so this order was 2 on the card and
+  // 1 in the list the card opens. Ash saw the filter show everything; the next
+  // thing he would have seen, once it filtered, is a number that did not match.
+  const db = withOverlap(fixture());
+  const f = alerts.alertFilter(db, 'o');
+  const rows = db.prepare(`SELECT o.id FROM retail_orders o WHERE ${f.sql} ORDER BY o.id`).all(...f.params);
+
+  const oldWay =
+      db.prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${alerts.carrierAlertSql('o')}`).get().n
+    + db.prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${alerts.airAlertSql('o')}`).get().n
+    + db.prepare(`SELECT COUNT(*) AS n FROM retail_orders o WHERE ${alerts.meituanAlertSql('o')}`).get().n
+    + alerts.localStuckRows(db).length;
+
+  assert.strictEqual(alerts.alertCount(db, f), rows.length,
+    'the card must count exactly the rows the list shows');
+  assert.strictEqual(alerts.alertCount(db, f), 4, 'four distinct orders need a call');
+  assert.strictEqual(oldWay, 5, 'the sum of the parts double-counts the overlapping order');
+  assert.notStrictEqual(oldWay, alerts.alertCount(db, f),
+    'if these ever agree the fixture has lost its overlap and this test proves nothing');
+});
+
+it('with no overlap the two ways agree — the fix does not undercount', () => {
+  const db = fixture();
+  const f = alerts.alertFilter(db, 'o');
+  assert.strictEqual(alerts.alertCount(db, f), 4);
+});
+
+it('the filter hands back the stuck ROWS, so the card need not re-read them', () => {
+  const f = alerts.alertFilter(fixture(), 'o');
+  assert.ok(Array.isArray(f.stuck), 'alertFilter must return the stuck rows it already found');
+  assert.ok(f.stuck.length > 0 && f.stuck.every((r) => Number.isInteger(r.id) && r.waiting_since),
+    'a stuck row carries its id and the instant it went overdue');
+});
+
 console.log('\nroutes/retail.js — the orders list filters on that same set');
 
 it('status=delayed asks the shared module, not a lone air-delay EXISTS', () => {
@@ -163,6 +223,20 @@ it('status=delayed asks the shared module, not a lone air-delay EXISTS', () => {
     'the branch must resolve through lib/delivery-alerts, or it is a quarter of its own card');
   assert.ok(!/lateShipmentSql/.test(body),
     'an inline air-delay predicate here is the drift this test exists to stop');
+});
+
+it('the ops card counts the set and never sums its sub-types again', () => {
+  // Anchored on the CARD, not on the first `delivery_alerts = {` in the file —
+  // that one is the empty initialiser three hundred lines earlier.
+  const from = RETAIL.indexOf('const ALERT_WHERE');
+  assert.ok(from > 0, 'the ops card must still build its carrier predicate');
+  const at = RETAIL.indexOf('delivery_alerts = {', from);
+  assert.ok(at > from, 'the ops card must still build delivery_alerts');
+  const body = RETAIL.slice(from, RETAIL.indexOf('};', at));
+  assert.ok(/deliveryAlerts\.alertCount\(/.test(body),
+    'the count must come from alertCount, or it is a sum of overlapping parts again');
+  assert.ok(!/count:\s*\w+Count\s*\+/.test(body),
+    'adding the sub-counts together is the double-count this test exists to stop');
 });
 
 console.log('\npublic/m.html — the phone');
@@ -234,6 +308,38 @@ it('EVERY status the desktop navigates with has a chip to find', () => {
 
 it('the delivery chip is there, and it is the pseudo-status the server knows', () => {
   assert.ok(/data-status="delayed"/.test(ADMIN), 'no delayed chip on the orders screen');
+});
+
+/** Every value the hidden #orders-status select can actually hold. */
+function statusOptions() {
+  const at = ADMIN.indexOf('<select id="orders-status"');
+  assert.ok(at > 0, 'the hidden status select is gone — setOrderStatus writes into it');
+  const body = ADMIN.slice(at, ADMIN.indexOf('</select>', at));
+  return [...body.matchAll(/<option value="([a-z_]*)"/g)].map((m) => m[1]);
+}
+
+it('EVERY chip on the row is a value the hidden select can hold', () => {
+  // THE CHIP IS ONLY HALF THE WIRING. setOrderStatus writes the chip's
+  // data-status into #orders-status and ordFilterQuery reads it back; a
+  // <select> given a value it has no <option> for takes selectedIndex -1 and
+  // returns '' — so the status param is NOT SENT and the list WIDENS to every
+  // order while the chip sits there lit. Verified in Chromium, not assumed.
+  //
+  // That is what 'delayed' did from the day its chip was added until
+  // 2026-09-14: §98 taught the server the name, the chip row was given the
+  // chip, and this select was never told. Ash, off the live desktop: "need a
+  // call filter doesnt filter anything it shows all orders."
+  //
+  // The general case, deliberately — the same shape as the two above it. A
+  // missing option is silent in exactly the way a missing STATUS_PARAM key and
+  // a missing chip were, and the next status added to that row must fail here
+  // rather than in production.
+  const opts = statusOptions();
+  const chips = [...ADMIN.matchAll(/<div class="status-chip[^>]*data-status="([a-z_]+)"/g)].map((m) => m[1]);
+  assert.ok(chips.length >= 8, 'expected the orders screen to still carry its chip row');
+  const orphan = [...new Set(chips.filter((s2) => !opts.includes(s2)))];
+  assert.deepStrictEqual(orphan, [],
+    `chip(s) whose status #orders-status cannot hold, so the filter silently shows EVERY order: ${orphan}`);
 });
 
 it('the delivery card and its own footer agree on where the alerts live', () => {

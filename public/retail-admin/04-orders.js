@@ -130,7 +130,17 @@ function ordRenderPager() {
 
 function setOrderStatus(chip) {
   const value = chip.dataset.status || '';
-  $('#orders-status').value = value;
+  const sel = $('#orders-status');
+  sel.value = value;
+  // A <select> REFUSES A VALUE IT HAS NO <option> FOR, and refuses it in
+  // silence: selectedIndex goes to -1 and .value reads back ''. ordFilterQuery
+  // then omits the status param altogether, so the list does not narrow to
+  // nothing — IT WIDENS TO EVERY ORDER, with this chip lit as if it had worked.
+  // 'delayed' shipped that way and nobody could see it from the screen. Say so.
+  if (sel.value !== value) {
+    console.warn('[orders] #orders-status has no option for:', value,
+                 '— the status param will not be sent and the list will show everything');
+  }
   $$('#orders-status-chips .status-chip').forEach(el => el.classList.toggle('active', el === chip));
   // Any status chip leaves the drafts view — one way back, the one the operator
   // already knows. Drafts carries no data-status, so it can never arrive here.

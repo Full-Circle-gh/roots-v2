@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.259
+# Tacet shared-core consolidation — decisions record, v4.261
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-14 · v4.261 — **§128 · PRE-ORDER EVERYWHERE: THE OPERATOR MAY OPEN A SOLD-OUT PRODUCT TO THE LOCAL RUN, BY NAME. ASKED BY ASH on the product editor's *When out of stock* control:** *"right now for there is only 'pre order outside guangzhou' i would like to add an option of pre order for everyone"*. **THE EXISTING `always` VALUE IS NOT THAT OPTION AND REUSING IT WOULD HAVE BEEN SILENT DATA LOSS** — it means *supplier-direct, we hold no stock*, auto-applied from `ship_from_supplier`, and setting it on a tracked product turns stock tracking off. So a fourth value, `backorder_all`, on the same unconstrained TEXT column: no schema change, no migration, `effectiveOosPolicy()` is the whitelist. **THE DROPDOWN IS ONE LINE; THE PARK IS THE FEATURE.** Guangzhou same-day was blocked for a reason — the order is picked off the shelf and leaves on today's run, so there is nothing to put in the box — and the honest way to open it is to STOP THE ORDER BEING A SAME-DAY ORDER rather than to pretend the shelf is full. It parks as `awaiting_restock` holding nothing, window cleared, same-day surcharge refunded, promoted by `checkAwaitingRestockForRestock()` when the count covers every line: **the column, the promotion and the Awaiting restock chip the customer's own `wait_for_restock` choice already uses**, so no new fulfilment concept and no new operator screen. **THE ASK ASH ANSWERED, because it changes the build and not just the copy:** in a mixed basket the whole order waits, in-stock items included, and a grocery restock has no date the way a batch does — Ash chose *whole order waits* over an all-pre-order-only rule and over a split shipment. The help text and the product-page note both say so; an operator who sets this is told what it costs before a customer tells them. **ROUTING HAD TO BE TOLD FIRST, and this is the half that would have shipped broken:** `routeOrder` under the stock gate hunts for a store holding the stock, finds none and returns `needs_fallback_confirmation` — the 5-option shortage modal — **before the park ever runs**, so widening the park alone would have offered a pre-order and then demanded a substitute. `preorderAllShort` is computed once, before routing, and relaxes it; pickup is deliberately never relaxed. **THE EXEMPTION IS OPT-IN (`preorderParkOk`), for exactly the reason `freshPreorderOk` is:** only a caller that can carry the consequence may claim it. Checkout can (it parks the order); **the add-on path cannot** — it hangs a line on an order whose day is already fixed and often already paid, with no park to move it into — so it does not pass the flag and keeps refusing, and a test asserts it never learns it. **§80's RULING SURVIVES A PRODUCT CARRYING BOTH SETTINGS.** `parkedForPreorderAll` tests *backorder_all AND not covered by today's batch*, never the policy alone: a batch-made row marked `backorder_all` would otherwise strip the delivery window from a park §80 had just dated, downgrading Ash's ruling for a product whose only crime is two operator settings at once. `isBatchPark` (dated, keeps its window) and `isPreorderPark` (undated, loses it) are mutually exclusive by construction. **ONE NEW FIELD REACHES THE CLIENTS, `oos_preorder_local`, AND IT TRAVELS WITH `oos_preorder` EVERYWHERE — the §80 rule, restated because the same silent failure was available again:** every surface suppresses the pre-order pill on the local run, so without it `backorder_all` would have drawn the dead SOLD OUT the policy exists to remove, and nothing would have thrown. Stamped at all four sites; a test counts the two stamps and fails on a mismatch. On the variant rows it is read BEFORE `delete v.oos_policy`, or it would be silently false for every size. **`backorder_gz` IS UNCHANGED ON EVERY PATH** — still refused on the local run, still drawing SOLD OUT there, still saying nothing in the checkout notice — which is what the `localRunOnly` narrowing in `computePreorderNotice` preserves: the banner and the checkout now agree row by row rather than in bulk. **Chinese: THREE SENTENCES COMPOSED, NO NEW CHARACTERS.** `全国` is the sibling option's own, `可预订` is live in twenty-odd files, `补货后发出` is lifted whole from the storefront's existing out-of-stock note, `整单` and `一并发货` are the checkout notice's; the composition is the assembly and all three are declared in `docs/tacet-delivery-vocabulary.md` **v1.81** with the candidates rejected beside them. The checkout notice needed nothing — its body already described this policy exactly — and is reused character for character. **Tests:** new `scripts/test_preorder_everywhere.js`, auto-discovered into the fast shard, organised around the five load-bearing rules and confirmed red against a deliberate break of each. Three existing suites moved with the code rather than being loosened: `test_fresh_today_batch.js`'s window case now pins *the clearing branch is the two UNDATED parks* and gains a case for the covered-batch regression above; `test_preorder_local.js` slices the new client helper in **as shipped** and gains two cases proving the opt-in rescues `backorder_all` and never `backorder_gz`; `test_fresh_today_label.js` gains the server-flag stub beside `oosBackorder`'s. `npm run test:fast` 237 passed, 0 failed; `npm run lint` 0 errors. **What is not done:** no schema and no migration (the column is TEXT), no change to the Awaiting restock screens or the promotion logic, no split shipment, no change to `.gitignore` or CI, and the mini-app add-on picker is deliberately untouched.**
+
+2026-09-14 · v4.260 — **§127 · GZ GROCERY'S PANEL BODIES JOIN THE HEAD IN THE FRAME — AND THE FRAME IS NOT THE AUTHORITY, THE RULEBOOK IS. REPORTED BY ASH on a screenshot:** *"gzgrocery page should look the same as eleme and meituan"*, then, on the first round: ***"doesnt look like its according to tacet design rules. show me a mock up."*** **THE FIRST ROUND WAS BUILT FROM THE SIBLING PAGES AND THAT WAS THE WRONG SOURCE.** §123 had moved this page's head onto 33 rules shared with `.mt-`, so the obvious next move was to make the three panel bodies match what `#tab-meituan` and `#tab-eleme` do. They were made to match — and Ash was right that the result still was not Tacet, because **what those two pages do is not what `tacet-design-system.md` and `tacet-desktop-patterns.md` say.** Reading the rulebook after the fact turned up six conformance failures the parity pass had faithfully reproduced: **§1.8 rule 4** — thirteen FILLED Apply buttons, one per flagged row, on a page whose header CTA slot is empty and whose every action should therefore be Secondary or Ghost (and neither sibling puts a filled button in a list row at all: Meituan has one in a toolbar, Eleme one at the top — the row buttons were not even *their* pattern); **§1.8 rule 2 + §1.10** — the pickup-inference badge was Sage, but Sage means *all clear* and pickup inference is an **automation**, which §1.10 paints `--td-dusk-tint` + a breathing dot and §1.8 rule 2 exempts from the one-Dusk budget; **§1.3** — 14px table rows, a size not on the six-step scale, copied from Orders' own drift; **§1.4** — 16px between cards and regions where the table says 24 and 32; **§1.10** — the Δ column Sage/Amber/**Brick**, when Brick means *error* and holding three more than Guanyi is the same state as holding three fewer, with the State column beside it already carrying that state; **§1.13a rules 1+2** — 184 rows that scroll under a band that could not pin, because `overflow: hidden` on the card and an `overflow-x` wrapper above it made the card the scrollport. **THE ONE THAT WAS NOT COSMETIC.** §1.7's work rule: *a status line reports WORK WAITING.* This page's read **"nothing needs you"** with thirteen pickups waiting for a decision, and the attention tile read **0** beside it — because both counted only the sync queue and neither had ever been shown the flagged drops. **Offered three fixes, Ash chose (b): the tile counts BOTH.** `Needs attention` means *what is waiting on you on this page*, and what a page holds differs by page, the same way `Mapped` is a different number here and on Meituan — that is one name for one meaning, not §103 step 5's defect, which was two NAMES for one thing. The status line and the tile now read the same total. **A §123 TEST CAUGHT A REAL ONE, AND ANOTHER CAUGHT NOTHING.** The §1.3 CJK line-height pair existed as a separate copy on Meituan and on Eleme and not at all on GZ; writing a fourth for GZ turned case 1 red — the drift arriving as a well-meant parity fix — and the two shared halves are now ONE single-line rule naming all three pages. Conversely, `the numbered phrases are the shapes the other channel screens use` was written as `${errors} 个待处理`: it **named a variable when it meant a slot**, so renaming `errors` to `attention` turned it red while the Chinese it guards had not moved a character. Its own two sibling assertions already matched the number as `${[\w.]+}`; it does now too. **Chinese: nothing composed.** Every string is the string that was there. `Flagged drops · 待确认` is the head of the sentence that stood here — *"13 flagged drop(s) need your decision · 待确认"* — with the count lifted into a pill beside it, where §1.4 puts a count and where this page's own sub-tabs already put one; a numeral needs no label. `LIVE` → `Live` and `shadow`/`off` → `Shadow`/`Off` are §1.6 case changes on English-only labels. **Also fixed:** `colspan="5"` over a six-column table, and column widths rebalanced to 25/12/23/11/20/9 — measured against `Needs attention · 待处理`, the widest of the four shared state words, which at 12% ran under the Sync checkbox. **Tests:** `test_channel_frame.js` grows sections 7 and 8 — **11 new cases, 25 total**, every one confirmed red against a deliberate break. Section 8 asserts the RULEBOOK, not parity: the six-step scale, the Dusk automation badge, no filled button where the Dusk slot is empty, no colour that does not encode a state, the band pinning with no scrollport above it, and the head counting the drops. `npm run test:fast` 236 passed, 0 failed; eslint 0 errors; doc-numbering PASS. Verified by render at 1280px, light and dark, EN and 中文, all three panels. No route, no schema, no migration, no new capability, and no change to `.gitignore` or CI.**
 
 2026-09-14 · v4.259 — **§126 · THE PRODUCT EDITOR STOPS TALKING ABOUT SYNCING. REPORTED BY ASH on a photo of the editor, three green Channels rows above the SKU:** *"I don't want the channel sync on product page."* **THIS REVERSES AN INFERENCE OF MINE, NOT A DECISION OF ASH'S.** §103 step 4 put the Channels card on the editor; §117 then stripped every trace of syncing from the Products **list** and explicitly KEPT the card, arguing *"one product looked at in depth is not a second overview."* Ash's instruction that day named *"the products list page"* and the card survived on a reading of what that meant — the reading is now withdrawn. **REMOVED:** `<section id="pd-channels-card">` and its body from `retail-admin.html`; `pdLoadChannels`, `_pdChSeq`, `_pdChAgo`, the call on the editor's open path, and `_paChName` (which §117 had kept alive ONLY for this card) from `09-products.js`; the `.pd-ch-rows` / `.pd-ch-row` block from `retail-admin.css`. **Nothing in the products module reads `/channel-sync` any more.** Each site carries a note naming §126 and the instruction, so the next reader finds a tombstone rather than a gap. **THE CARD COULD REPORT BUT NOT REPAIR** — its one action was a button that left for the channel's own tab, which makes it a detour with a step in it, and the place it sent you to was already the answer. Sync state is now worded in exactly one place: Sales › Channel sync, a tab since §117, with part two's repair panel and §124's phone copy. **The sentence-builder exports in `29-channel-sync.js` STAY** — the dashboard, `01-core.js`, `11-meituan.js`, `12-guanyi.js` and `14-eleme.js` are still callers; there is simply one fewer screen that could word a state a second way. **THREE TESTS MOVED WITH THE CODE.** `test_channel_sync_items.js`'s *"the product editor keeps its Channels card"* asserted `pdLoadChannels` and the card id were PRESENT; it is now *"the product editor says nothing about syncing"* and asserts their absence plus the helpers, the fetch and the CSS — matching on **definitions and rules rather than the bare word**, the tombstone-proof shape §117's own list check uses, so a note naming what it removed cannot fail the test that removed it. The *"both clients read the channel's cause"* check drops the editor, which no longer shows a cause to defer about. `test_channel_sync_home_row.js` pinned the guarded-`typeof` shape against `09-products.js`'s `_paChName`; its second witness is now `12-guanyi.js`, and the comment says any live caller would do — what it pins is that the shape is shared, not which file shares it. **Chinese: nothing composed** — this change only removes strings, so `docs/tacet-delivery-vocabulary.md` is untouched (still v1.80). **What is not done:** no route change (`/api/retail-admin/channel-sync?productId=` still exists and is still served; the editor simply stopped calling it), no change to the Channel sync page, the phone, the mapping repair or any capability, and the Products list was already clean under §117 and was not touched. `npm run test:fast` 235 passed, 0 failed; `npm run lint` 0 errors; doc-numbering PASS. No schema, no migration, and no change to `.gitignore` or CI.**
 
@@ -13996,3 +14000,227 @@ No route change — `/api/retail-admin/channel-sync?productId=` still exists and
 is still served; the editor simply stopped calling it. No change to the Channel
 sync page, the phone, the mapping repair, `29-channel-sync.js`'s exports, or any
 capability. The Products list was already clean under §117 and was not touched.
+
+## §127 — THE BODIES JOIN THE HEAD, AND THE RULEBOOK BEATS THE SIBLINGS
+
+**Ash, 2026-09-14: *"gzgrocery page should look the same as eleme and meituan"*.**
+Then, on the first round: ***"doesnt look like its according to tacet design
+rules. show me a mock up, english, not dark mode and ill confirm first."***
+
+### The first round was built from the wrong source, and that is the lesson
+
+§123 had put this page's **head** into the channel frame — 33 rules shared with
+`.mt-` — and said so plainly: *"the three panels below are untouched."* So the
+obvious next move was to make the bodies match what `#tab-meituan` and
+`#tab-eleme` do. They were made to match. Ash was still right that the result
+was not Tacet.
+
+**Because what those two pages do is not what the rulebook says.** The parity
+pass faithfully reproduced six conformance failures:
+
+| Rule | What parity produced | What the rule says |
+|---|---|---|
+| §1.8 r4 | 13 filled Apply buttons, one per row | Header CTA slot is empty → everything is Secondary or Ghost |
+| §1.8 r2 · §1.10 | Sage badge on pickup inference | It is an **automation**: Dusk tint + breathing dot, exempt from the budget |
+| §1.3 | 14px table rows | Six steps only — 13 / 15 / 18 / 24 / 30 |
+| §1.4 | 16px between cards and regions | 24px between cards, 32px between regions |
+| §1.10 | Δ column Sage / Amber / **Brick** | Brick means error; ±3 is one state, and State already carries it |
+| §1.13a r1+2 | `overflow` on the card, `overflow-x` above it | 184 rows scroll → the band pins, so **no** ancestor may take an overflow |
+
+**The filled buttons were not even the siblings' pattern.** Meituan has one
+filled button, in a toolbar. Eleme has one, at the top. Neither puts one inside
+a list row. Copying "what the siblings do" produced something neither sibling
+does — which is what copying an *outcome* instead of a *rule* gets you.
+
+**This is §7's lesson pointed at a build rather than at a rule.** The rulebook
+repeatedly records rules that named a mechanism when they meant an outcome.
+This round named a *reference page* when it meant a *standard*.
+
+### The one that was not cosmetic
+
+§1.7's work rule: **a status line reports work waiting.** This page's read
+**"nothing needs you"** while thirteen pickups sat below it waiting for a
+decision, and the attention tile read **0** beside it. Both counted the sync
+queue; neither had ever been shown the flagged drops.
+
+Three fixes were put to Ash:
+
+- **(a)** leave the tiles, say it in the status line
+- **(b)** the tile counts both — reads 13, in amber
+- **(c)** rename this page's tile so it is honest about what it counts
+
+**Ash chose (b).** `Needs attention` means *what is waiting on you on this
+page*. What a page holds differs by page — `Mapped` is already a different
+number here and on Meituan. **That is one name for one meaning, not §103 step
+5's defect**, which was two *names* for one thing (Mapped vs Synced). The
+status line and the tile read the same total, computed once.
+
+### The Dusk
+
+Pickup inference reads Guanyi's stock drift and lowers your shelf without being
+asked. §1.10's row for **"tacet acted"** is `--td-dusk-tint` + a breathing dot,
+and §1.8 rule 2 exempts automation indicators from the one-Dusk budget. §1.7
+leaves this page's header CTA slot empty — there is no create action — so
+nothing competes for it. **This badge is the page's Dusk, and it is the only
+Dusk on it.**
+
+Asked whether the *Recent auto-applied pickups* lines should each carry a dot
+too: **no.** One badge says the automation is live; twenty dots inside a
+collapsed fold spend the calmest colour in the system on something nobody has
+open.
+
+### One test caught a real one; one caught nothing
+
+**Caught a real one.** The §1.3 CJK line-height pair existed as a separate copy
+on Meituan and on Eleme and **not at all** on GZ. Writing a fourth copy for GZ
+turned case 1 red — *"`.gy-storeline` has a rule of its own"* — which is the
+drift that case exists to catch, arriving disguised as a parity fix. The two
+shared halves are now ONE single-line rule naming all three pages; Meituan keeps
+the two selectors genuinely its own.
+
+**Caught nothing.** `the numbered phrases are the shapes the other channel
+screens use` asserted `${errors} 个待处理`. It **named a variable when it meant a
+slot** — renaming `errors` to `attention` turned it red while the Chinese it
+guards had not moved a character. Its own two sibling assertions, two lines
+above, already matched the number as `${[\w.]+}`. It does now too, and it still
+goes red when the *phrase* changes (verified).
+
+### Chinese
+
+**Nothing composed.** Every string is the string that was there.
+`Flagged drops · 待确认` is the head of the sentence that stood here —
+*"13 flagged drop(s) need your decision · 待确认"* — with the count lifted into
+the pill beside it, where §1.4 puts a count and where this page's own sub-tabs
+already put one. **A numeral needs no label.** `LIVE` → `Live`, `shadow` → `Shadow`,
+`off` → `Off` are §1.6 case changes on English-only labels.
+`docs/tacet-delivery-vocabulary.md` gains no entry.
+
+### What was deliberately NOT done
+
+- **The tables were not remade into lists.** Meituan and Eleme became lists
+  because their rows each carry a control. A mapping grid and a statement have
+  columns that must line up; they keep `<table>` and take §1.13a rule 3's band.
+- **`Push all stock now` did not move onto a tile.** Eleme puts that action on
+  the tile whose number it changes, and the same move is available here. It is
+  a relocation rather than a restyle, and was not asked for. Recorded, not done.
+- **The 112 near-duplicate Meituan/Eleme rules §123 recorded are still there.**
+
+### Fixed in passing
+
+`colspan="5"` over a six-column table. Column widths rebalanced to
+**25 / 12 / 23 / 11 / 20 / 9** (§1.19, summing to 100) — measured against
+`Needs attention · 待处理`, the widest of the four shared state words, which at
+12% ran under the Sync checkbox; and `我方`, which breaks between its two
+characters below about 12%.
+
+### Tests
+
+`test_channel_frame.js` grows **sections 7 and 8 — 11 new cases, 25 total.**
+Section 7 is vocabulary (the retired eyebrow, borrowed toolbars, inline styles,
+the amber wash). **Section 8 asserts the RULEBOOK rather than parity**, which is
+the correction this round is about: the six-step scale, the Dusk automation
+badge with its reduced-motion twin, no filled button where the Dusk slot is
+empty, no colour that does not encode a state, the band pinning with no
+scrollport above it, and the head counting the drops. Every one of the eleven
+was confirmed red against a deliberate break.
+
+`npm run test:fast` 236 passed, 0 failed. eslint 0 errors. doc-numbering PASS.
+Verified by render at 1280px, light and dark, EN and 中文, all three panels. No
+route, no schema, no migration, no new capability, and no change to
+`.gitignore` or CI.
+
+## §128 — PRE-ORDER EVERYWHERE, AND THE PARK THAT MAKES IT HONEST
+
+**Asked by Ash**, on the product editor's *When out of stock* control: *"right
+now for there is only 'pre order outside guangzhou' i would like to add an
+option of pre order for everyone"*.
+
+### The decision
+
+A fourth value on `oos_policy`, **`backorder_all`**: once stock hits 0 every
+shopper may pre-order, same-day Guangzhou included. The two existing modes are
+untouched.
+
+| value | who may order past zero | the order that results |
+|---|---|---|
+| `strict` (default) | nobody | refused everywhere |
+| `backorder_gz` | out-of-city only | ships on the next batch / restock |
+| **`backorder_all`** | **everyone** | **parks `awaiting_restock`, undated** |
+| `always` | everyone, stock ignored | supplier-direct; NOT an operator choice |
+
+**`always` was not reused, and the reason is worth keeping.** It means *we hold
+no inventory, the supplier does*, and `effectiveOosPolicy()` applies it
+automatically from `ship_from_supplier`. Setting it on a tracked product to get
+"orderable when empty" would turn stock tracking off for that product with
+nothing said. It is not in the dropdown and must not be put there.
+
+### Why Guangzhou was blocked, and what actually changes
+
+Not arbitrary: a same-day Guangzhou order is picked off the shop shelf and
+leaves on today's run, so a sold-out line has nothing behind it. An out-of-city
+parcel leaves later on the batch/restock cadence, which is why `backorder_gz`
+is safe for it.
+
+The option is therefore **not** "sell it anyway". It changes what the order is:
+no reservation, no delivery window, no same-day surcharge, status
+`awaiting_restock`, promoted by `checkAwaitingRestockForRestock()` when the
+shipping store's count covers every line. That is the column, the promotion and
+the chip the customer's own `wait_for_restock` choice already uses — the two
+differ only in how the order got there, a policy the operator set versus a modal
+the customer answered.
+
+### The one question Ash decided
+
+A mixed basket. The park is **order-level**, so a Guangzhou shopper who adds one
+pre-order item to a basket of in-stock items has the whole order wait — and
+unlike a batch meal, a grocery restock has no date to name.
+
+**Ash chose: the whole order waits.** Rejected: allowing the pre-order only when
+the basket is entirely pre-order (the + button would appear and disappear
+depending on what else is in the basket, a rule invisible to the shopper), and
+splitting the shipment (a second parcel and a split order — meaningfully more
+work in fulfilment and in the order screens, for a case nobody has yet reported).
+
+Because the cost is real, it is **written on the control**: the help text and the
+product-page note both say the whole order ships together once stock is back.
+
+### Four rules this record exists to keep
+
+1. **Routing is told before it goes looking.** `routeOrder` under the stock gate
+   would return `needs_fallback_confirmation` — the 5-option shortage modal —
+   *before* the park runs, so the shopper would be offered a pre-order and then
+   asked to pick a substitute. `preorderAllShort` is computed once, ahead of
+   routing, and relaxes it. **Pickup is never relaxed**: collecting in person
+   means the item is on the shelf.
+2. **The exemption is opt-in (`preorderParkOk`)**, for the reason
+   `freshPreorderOk` is: only a caller that can carry the consequence may claim
+   it. Checkout parks the order and passes it. **The add-on path does not** — it
+   attaches a line to an order whose day is already fixed and often already
+   paid, with no park to move it into — so it keeps refusing. Anything written
+   later inherits the refusal by default, which is the point of the default.
+3. **A line today's batch covers stays dated.** `parkedForPreorderAll` tests
+   *`backorder_all` AND not in `batchCoveredIds`*, never the policy alone.
+   Read off the policy, a batch-made row also marked `backorder_all` would strip
+   the window from a park §80 had just dated. `isBatchPark` and `isPreorderPark`
+   are mutually exclusive by construction.
+4. **`oos_preorder_local` travels with `oos_preorder`, everywhere.** This is
+   §80's rule restated because the identical silent failure was available again:
+   every client suppresses the pre-order pill on the local run, so a route that
+   stamps one flag and not the other draws the dead SOLD OUT this policy exists
+   to remove, and nothing throws. A test counts both stamps and fails on a
+   mismatch. On variant rows the policy is read **before** `delete v.oos_policy`.
+
+### What `backorder_gz` still does
+
+Unchanged on every path: refused on the local run, drawing SOLD OUT there, and
+silent in the checkout notice. `computePreorderNotice`'s local-run test became a
+**narrowing** rather than an early return, so the banner and the checkout agree
+row by row — a `backorder_all` row speaks, a `backorder_gz` row beside it does
+not.
+
+### Not done
+
+No schema and no migration (`oos_policy` is TEXT and unconstrained). No change
+to the Awaiting restock screens or the promotion logic. No split shipment. No
+change to `.gitignore` or CI. The mini-app add-on picker is untouched, and
+deliberately knows nothing of the new flag.

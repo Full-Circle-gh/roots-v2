@@ -58,7 +58,7 @@ function _stockState(p, onLocalRun) {
   const stock = p.stock == null ? null : Number(p.stock);
   const out = p.ship_from_supplier ? !!p.supplier_paused : (stock != null && stock <= 0);
   const preorder = out && !p.ship_from_supplier && !!p.oos_preorder
-        && (!onLocalRun || !!p.local_fresh_date);
+        && (!onLocalRun || !!p.local_fresh_date || !!p.oos_preorder_local);
   /* §80 follow-up — is the batch behind this row TODAY'S? Returned BESIDE
      `preorder` and never folded into it: `preorder` is what keeps the card
      ALIVE (soldOut is its inverse), so turning it off to silence a band would
