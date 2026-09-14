@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.259
+# Tacet shared-core consolidation — decisions record, v4.260
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-14 · v4.260 — **§127 · GZ GROCERY'S PANEL BODIES JOIN THE HEAD IN THE CHANNEL FRAME (§123 PART TWO). REPORTED BY ASH on a screenshot of the page:** *"gzgrocery page should look the same as eleme and meituan"*. **§123 PUT THE HEAD IN THE FRAME AND STOPPED THERE, AND THE RECORD SAYS SO** — it moved pagehead, status, tiles, store line and sub-tabs onto 33 shared `.gy-`/`.mt-` rules and left the three panels under them untouched. That left one page speaking two languages at once: a Tacet head above bodies still written in the admin's pre-Tacet vocabulary — 10px uppercase mono eyebrows, 700-weight numbers on 6px radii, `.pa-toolbar` borrowed from the Products page (which brought that page's Dusk focus ring with it), `.helper` at 11px, and a `data-table` class **no rule in the stylesheet has ever matched**, so both tables were painted by the global `table` rules whose `th` is the retired 11px uppercase eyebrow. **THE ONE VISIBLE FROM THE DOOR WAS A MISSING RULE, NOT A STYLE.** `#tab-guanyi` remaps `--brass` onto Amber (§123 added that remap); the base `.btn-primary` is BUILT on `--brass`; and `#tab-meituan` and `#tab-eleme` each carry a `.btn-primary` → Ink rule to answer exactly that, which `#tab-guanyi` did not. So every primary button on this page came out amber — including the **Apply −N** button that CLEARS a flagged pickup, which read as the warning rather than the way out of it, on a page whose own status line said *"nothing needs you"*. **AMBER IS AN ACCENT, NOT A FIELD.** The flagged-drop list was a full `color-mix` amber wash with an amber border, amber headings and those amber buttons on it — the loudest object on the screen. It is a plain bordered `--td-surface` card now, one `.gy-row` per decision on the store line's own measurements, with amber on the count line that says how many and nowhere else, which is where `.mt-status` and the tiles already spend it. **THE BILLING SNAPSHOT AND THE FIVE SUMMARY CARDS ARE TILES** — `.gy-tile`, the frame's own, so the page carries one kind of headline number rather than three; the *Open billing* button sits in the owed tile's `.act` slot, where Meituan and Eleme put the button that changes a tile's number. The five sit on `.gy-cards` and NOT on a `.gy-tiles` variant: `.gy-tiles` is a frame class shared by selector with Meituan, and a five-up variant of it would be a rule of GZ's own on a frame class — the exact thing §123's test exists to catch. **THE TEST CAUGHT ONE ANYWAY, AND WAS RIGHT TO.** The §1.3 CJK line-height pair (`.mt-status` / `.mt-storeline .st`) existed as a separate copy on Meituan and on Eleme and not at all on GZ; writing a fourth copy for GZ turned case 1 red. The two shared halves are now ONE single-line rule naming all three pages, and Meituan keeps only the two selectors that are genuinely its own (a dialog body and a store card). **Chinese: nothing composed, nothing reworded, nothing dropped.** Every string on the page is the string that was there — this change moves no text. **Also fixed in passing:** the Mapping table's placeholder rows spanned `colspan="5"` over a six-column table, and the `天河 qty · 我方` column at 10% broke 我方 between its two characters once the band grew from 11px to 13px (13% now). **Tests:** `scripts/test_channel_frame.js` grows a section 7 — 5 new cases, 19 total, each confirmed red against a deliberate break (the missing `.btn-primary`, a returned `.gy-eyebrow`, an inline `font-size` in a renderer, the `color-mix` wash, a raw hex in the body block). The renderer is read comment-stripped, as the markup already was, so a tombstone naming what was removed cannot fail the case that removed it. `npm run test:fast` 236 passed, 0 failed; eslint 0 errors. Verified by render at 1280px in light and dark, EN and 中文, across all three panels. No route, no schema, no migration, no new capability, and no change to `.gitignore` or CI.**
 
 2026-09-14 · v4.259 — **§126 · THE PRODUCT EDITOR STOPS TALKING ABOUT SYNCING. REPORTED BY ASH on a photo of the editor, three green Channels rows above the SKU:** *"I don't want the channel sync on product page."* **THIS REVERSES AN INFERENCE OF MINE, NOT A DECISION OF ASH'S.** §103 step 4 put the Channels card on the editor; §117 then stripped every trace of syncing from the Products **list** and explicitly KEPT the card, arguing *"one product looked at in depth is not a second overview."* Ash's instruction that day named *"the products list page"* and the card survived on a reading of what that meant — the reading is now withdrawn. **REMOVED:** `<section id="pd-channels-card">` and its body from `retail-admin.html`; `pdLoadChannels`, `_pdChSeq`, `_pdChAgo`, the call on the editor's open path, and `_paChName` (which §117 had kept alive ONLY for this card) from `09-products.js`; the `.pd-ch-rows` / `.pd-ch-row` block from `retail-admin.css`. **Nothing in the products module reads `/channel-sync` any more.** Each site carries a note naming §126 and the instruction, so the next reader finds a tombstone rather than a gap. **THE CARD COULD REPORT BUT NOT REPAIR** — its one action was a button that left for the channel's own tab, which makes it a detour with a step in it, and the place it sent you to was already the answer. Sync state is now worded in exactly one place: Sales › Channel sync, a tab since §117, with part two's repair panel and §124's phone copy. **The sentence-builder exports in `29-channel-sync.js` STAY** — the dashboard, `01-core.js`, `11-meituan.js`, `12-guanyi.js` and `14-eleme.js` are still callers; there is simply one fewer screen that could word a state a second way. **THREE TESTS MOVED WITH THE CODE.** `test_channel_sync_items.js`'s *"the product editor keeps its Channels card"* asserted `pdLoadChannels` and the card id were PRESENT; it is now *"the product editor says nothing about syncing"* and asserts their absence plus the helpers, the fetch and the CSS — matching on **definitions and rules rather than the bare word**, the tombstone-proof shape §117's own list check uses, so a note naming what it removed cannot fail the test that removed it. The *"both clients read the channel's cause"* check drops the editor, which no longer shows a cause to defer about. `test_channel_sync_home_row.js` pinned the guarded-`typeof` shape against `09-products.js`'s `_paChName`; its second witness is now `12-guanyi.js`, and the comment says any live caller would do — what it pins is that the shape is shared, not which file shares it. **Chinese: nothing composed** — this change only removes strings, so `docs/tacet-delivery-vocabulary.md` is untouched (still v1.80). **What is not done:** no route change (`/api/retail-admin/channel-sync?productId=` still exists and is still served; the editor simply stopped calling it), no change to the Channel sync page, the phone, the mapping repair or any capability, and the Products list was already clean under §117 and was not touched. `npm run test:fast` 235 passed, 0 failed; `npm run lint` 0 errors; doc-numbering PASS. No schema, no migration, and no change to `.gitignore` or CI.**
 
@@ -13996,3 +13998,103 @@ No route change — `/api/retail-admin/channel-sync?productId=` still exists and
 is still served; the editor simply stopped calling it. No change to the Channel
 sync page, the phone, the mapping repair, `29-channel-sync.js`'s exports, or any
 capability. The Products list was already clean under §117 and was not touched.
+
+## §127 — GZ GROCERY'S PANEL BODIES JOIN THE HEAD IN THE FRAME (§123 PART TWO)
+
+**Ash, 2026-09-14, on a screenshot of the page: *"gzgrocery page should look
+the same as eleme and meituan"*.** Decided and built the same day.
+
+### What §123 left
+
+§123's own record is explicit that it moved the HEAD: *"WHAT CHANGED IS THE
+FRAME, NOT THE PAGE. The three panels below — Overview, Billing, Mapping — are
+untouched."* That was the right scope for that change. It is also why the page
+still did not look like its siblings: a Tacet head sat above three panels
+written in the admin's pre-Tacet vocabulary, and the join between them was
+visible from across the room.
+
+What was under the head, by name:
+
+| Was | Is |
+|---|---|
+| `.gy-eyebrow` — 11px 700 uppercase mono in `--brass` | `.gy-act-h`, joined to `.mt-act-h` / `.el-act-h`: 500 18px, sentence case, Ink |
+| `.gy-teaser` — a four-cell strip, 10px mono labels over 24px numbers | `.gy-tiles` + `.gy-tile`, the frame's own tile row |
+| Five summary cards, 11px uppercase over 20px/700 on an 8px radius | Five `.gy-tile`s on `.gy-cards` |
+| The flagged list: a `color-mix` amber field, amber border, amber text | `.gy-card` + one `.gy-row` per decision; amber on the count line only |
+| `.pa-toolbar` / `.pa-count` — the Products page's toolbar | `.gy-tools` / `.gy-search` / `.gy-count`, on `.mt-tools`' measurements |
+| `.helper` — 11px on `--text-4` | `.gy-hint` — 13px/1.6 on `--td-text2`, what `.mt-hint` is |
+| `class="data-table"` — matched by no rule in the stylesheet | `.gy-table`, with the §1.13a band: 13px/500 Ink on `--td-header` |
+| ~40 `style="font-size:…;color:…"` attributes in the renderers | classes; the renderers now set geometry inline and nothing else |
+
+### The one that was visible from the door was a missing rule
+
+`#tab-guanyi` remaps `--brass` onto Amber — §123 added that remap, and it is
+correct: it is what makes Amber mean "warning" on this page. But the base
+`.btn-primary` is BUILT on `--brass`. `#tab-meituan` and `#tab-eleme` each
+carry a `.btn-primary` → Ink rule to answer exactly that, and each says so in a
+comment. `#tab-guanyi` carried the remap and not the answer.
+
+So every primary button on the page came out amber, including the **Apply −N**
+button that CLEARS a flagged pickup. The control that resolves a warning was
+painted as one, on a page whose own status line read *"nothing needs you"*. The
+three rules cannot be shared by selector — each is scoped to its own tab — so
+the test asserts all three exist rather than trying to join them.
+
+### Amber is an accent, not a field
+
+The flagged-drop list was the loudest object on the screen: a `color-mix` amber
+wash, an amber border, amber headings, amber buttons. It is a plain bordered
+`--td-surface` card now, 14px radius like every other card here, one `.gy-row`
+per decision built on the store line's measurements (16px/24px, 16px gap, a
+rule between). Amber survives on the one line that says how many are waiting —
+which is exactly where `.mt-status` and the attention tile already spend it.
+
+### What was deliberately NOT done
+
+**The tables were not remade into lists.** Meituan and Eleme moved to a list +
+panel in 2026-08-24 because their rows carried a control each. These two do
+not: a mapping grid and a statement both have columns that must line up down
+the page. They keep `<table>` and take the §1.13a band on `th` instead, which
+is the product-wide table rule and what Orders uses.
+
+**The 112 near-duplicate Meituan/Eleme rules §123 recorded are still there.**
+That consolidation is still the mechanical, un-verifiable move §123 described,
+and nothing here needed it.
+
+### The test caught a real one
+
+§1.3's CJK line-height pair (`.mt-status`, `.mt-storeline .st`) existed as a
+separate copy on Meituan and on Eleme and not at all on GZ. Writing a fourth
+copy for GZ turned case 1 of `test_channel_frame.js` red — *"`.gy-storeline`
+has a rule of its own, not shared with Meituan"* — which is precisely the drift
+that case exists to catch, arriving as a well-meant parity fix. The two shared
+halves are now ONE single-line rule naming all three pages; Meituan keeps the
+two selectors that are genuinely its own (a dialog body, a store card).
+
+### Chinese
+
+**Nothing composed, nothing reworded, nothing dropped.** Every string on the
+page after this change is the string that was on it before. This change moves
+no text, so `docs/tacet-delivery-vocabulary.md` gains no entry.
+
+### Fixed in passing
+
+The Mapping table's placeholder rows spanned `colspan="5"` over a six-column
+table, so *Loading…* and *No products* sat short of the last column. And
+`天河 qty · 我方` at 10% broke 我方 between its two characters once the band
+grew from 11px to 13px; the column is 13% now, taken from Product and Guanyi
+match.
+
+### Tests
+
+`scripts/test_channel_frame.js` grows a section 7 — five cases, 19 total. Each
+was confirmed red against a deliberate break: the `.btn-primary` rule deleted,
+a `.gy-eyebrow` returned to the stylesheet, an inline `font-size` put back in a
+renderer, the `color-mix` wash restored, a raw hex written into the body block.
+The renderer is read comment-stripped (`GY_LIVE`), the way the markup already
+was — a test that cannot tell a tombstone from a body gets fought, not fixed,
+and the first run of case 4 failed on its own explanatory comment.
+
+`npm run test:fast` 236 passed, 0 failed. eslint 0 errors. Verified by render
+at 1280px in light and dark, EN and 中文, across all three panels. No route, no
+schema, no migration, no new capability, and no change to `.gitignore` or CI.

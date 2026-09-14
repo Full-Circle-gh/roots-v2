@@ -26,6 +26,16 @@
 //      "GZ Grocery" — three names for one channel (§103 step 5).
 //   6. Nothing on the new head composes Chinese: every pair is asserted to be
 //      live somewhere it was lifted from.
+//
+// §127 added a seventh, about the three PANEL BODIES under that head:
+//
+//   7. The bodies speak the frame's vocabulary too. §123 stopped at the head,
+//      which left a Tacet head over three panels still written in the admin's
+//      pre-Tacet one — 10px uppercase mono eyebrows, 700-weight numbers, 6px
+//      radii, borrowed toolbars from other pages, and an amber-washed flagged
+//      list whose Apply buttons came out amber because the token remap points
+//      --brass at Amber and this page, unlike its two siblings, carried no
+//      .btn-primary rule to answer it.
 
 const fs = require('fs');
 const path = require('path');
@@ -48,6 +58,11 @@ function section(t) { console.log(`\n${t}`); }
 const CSS  = read('public/retail-admin.css');
 const HTML = read('public/retail-admin.html');
 const GY   = read('public/retail-admin/12-guanyi.js');
+/* The same file with its comments stripped. The §127 cases below assert
+   that a thing is ABSENT and the tombstone comment explaining why names it;
+   a test that cannot tell a tombstone from a body gets fought, not fixed —
+   the reason SECTION_LIVE exists for the markup, applied to the renderer. */
+const GY_LIVE = GY.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 
 /* The stretch of markup that is the GZ Grocery page — to its OWN closing tag,
    not to the next <section>. A global wizard <style> block sits between the
@@ -252,6 +267,78 @@ check('nothing holds the Refresh button across a repaint', () => {
   ok(/finally \{[\s\S]{0,120}_gyRefreshing = false;[\s\S]{0,60}gyRenderHead\(\)/.test(fn),
      'the flag is not cleared and repainted when the job ends');
   ok(!/Refreshing…/.test(GY), 'an English-only busy label is back on the button');
+});
+
+// ── 7. §127 · the panel bodies speak the frame's vocabulary ──────────────────
+section('7 · the panel bodies are in the frame’s vocabulary');
+
+/* THE ONE THAT WAS VISIBLE FROM THE DOOR. #tab-guanyi remaps --brass onto
+   Amber (it must: that is what makes Amber mean "warning" here). The base
+   .btn-primary is BUILT on --brass, so without an answering rule every primary
+   button on the page comes out amber — including the Apply button that CLEARS
+   a flagged drop, which then looked like the warning rather than the way out
+   of it. #tab-meituan and #tab-eleme each carry this rule for exactly this
+   reason; the three cannot share one because each is scoped to its own tab. */
+check('a primary button on this page is Ink, not the remapped Amber', () => {
+  for (const tab of ['meituan', 'eleme', 'guanyi']) {
+    const re = new RegExp('#tab-' + tab + ' \\.btn-primary \\{([^}]*)\\}');
+    const m = CSS.match(re);
+    ok(m, `#tab-${tab} remaps --brass onto Amber but has no .btn-primary rule`);
+    ok(/background:\s*var\(--td-text\)/.test(m[1]),
+       `#tab-${tab}'s primary button is not Ink: ${m[1].trim()}`);
+  }
+});
+
+/* The retired vocabulary, by name. Each of these was on the page and is the
+   reason it read as a different product from Meituan and Eleme. */
+check('the pre-Tacet body vocabulary is gone', () => {
+  for (const dead of ['gy-eyebrow', 'gy-teaser']) {
+    ok(!CSS.includes(dead), `${dead} is back in the stylesheet`);
+    ok(!SECTION_LIVE.includes(dead), `${dead} is back in the markup`);
+  }
+  // Two classes borrowed from OTHER pages: .pa-toolbar is the Products page's
+  // toolbar (it brought that page's Dusk focus ring with it) and .helper is the
+  // 11px pre-Tacet hint. .data-table was never styled by any rule at all.
+  for (const borrowed of ['pa-toolbar', 'pa-count', 'data-table', 'class="helper"']) {
+    ok(!SECTION_LIVE.includes(borrowed), `${borrowed} is back inside #tab-guanyi`);
+  }
+  ok(!GY_LIVE.includes('data-table'), 'data-table is back in 12-guanyi.js');
+});
+
+/* The panels are painted by 12-guanyi.js, so "styled from the stylesheet"
+   (case 2) only half-holds while the renderers still carry a stylesheet of
+   their own in style="" attributes. Sizes and colours are the two that drift;
+   a width on a bar or a min-width on a table is geometry and stays. */
+check('the panel renderers set no font or colour inline', () => {
+  const body = GY_LIVE.slice(GY_LIVE.indexOf('function gyRenderPickups'));
+  for (const prop of ['font-size', 'font-weight', 'color:', 'background:', 'border-radius']) {
+    const hit = body.split('\n').find(l => l.includes('style="') && l.includes(prop));
+    ok(!hit, `an inline ${prop} is back in a panel renderer: ${String(hit).trim().slice(0, 100)}`);
+  }
+});
+
+/* Amber is an accent, not a field. The flagged card was a color-mix wash with
+   an amber border, amber headings and amber buttons on it — under a status
+   line that said "nothing needs you". It is a plain card now, with amber on
+   the one line that says how many, which is where .mt-status spends it. */
+check('the flagged-drop card is a card, not an amber field', () => {
+  ok(!/color-mix/.test(GY_LIVE), 'the color-mix amber wash is back on the flagged list');
+  const card = CSS.match(/#tab-guanyi \.gy-card \{([^}]*)\}/);
+  ok(card, 'there is no .gy-card rule');
+  ok(/var\(--td-surface\)/.test(card[1]) && /var\(--td-border\)/.test(card[1]),
+     'the card is not a bordered --td-surface like every other card here');
+  ok(/border-radius:\s*14px/.test(card[1]), 'the card radius is not the frame’s 14px');
+});
+
+/* Every colour the bodies name must be a --td-* token or one of the four the
+   remap block defines. A raw hex here is a colour that exists in one theme. */
+check('the body rules name tokens, never raw colour', () => {
+  const start = CSS.indexOf('#tab-guanyi .btn-primary');
+  const end = CSS.indexOf('/* ── §103 · Channel sync');
+  ok(start > -1 && end > start, 'the GZ Grocery body block moved or is gone');
+  const block = CSS.slice(start, end);
+  const hexes = block.match(/#[0-9a-fA-F]{3,8}\b/g) || [];
+  eq(hexes.filter(h => !/^#tab/.test(h)), [], 'raw colours in the GZ Grocery body block');
 });
 
 // ── Summary ──────────────────────────────────────────────────────────────────
