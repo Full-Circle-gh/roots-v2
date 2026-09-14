@@ -16402,9 +16402,6 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // three this card counts, because the orders list has to filter on exactly
     // the same set — see that file's header for what went wrong when it didn't.
     const ALERT_WHERE = deliveryAlerts.carrierAlertSql('o');
-    const daCount = tdb().prepare(`
-      SELECT COUNT(*) AS n FROM retail_orders o WHERE ${ALERT_WHERE}
-    `).get().n;
     const daItems = tdb().prepare(`
       SELECT o.id, o.order_no, o.tracking_status, o.tracking_scenario,
              o.tracking_carrier, o.tracking_number, o.tracking_synced_at,
@@ -16427,9 +16424,6 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // contacted the customer. Same clear drops the list badge, keeping the two
     // views in lock-step.
     const AIR_DELAY_EXISTS = deliveryAlerts.airAlertSql('o');
-    const airCount = tdb().prepare(`
-      SELECT COUNT(*) AS n FROM retail_orders o WHERE ${AIR_DELAY_EXISTS}
-    `).get().n;
     // The age this row states is how long the CUSTOMER has been living with a
     // late cold-chain parcel, so it counts from the air leg's dispatched_at —
     // not tracking_synced_at, which only says when we last heard from the
@@ -16472,9 +16466,6 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // self-ship pipeline (which Meituan never touches) is unaffected. Times are UTC
     // both sides (channel_eta / channel_status_at stored UTC; datetime('now') UTC).
     const MT_ALERT_WHERE = deliveryAlerts.meituanAlertSql('o');
-    const mtCount = tdb().prepare(`
-      SELECT COUNT(*) AS n FROM retail_orders o WHERE ${MT_ALERT_WHERE}
-    `).get().n;
     // The honest age for an overdue Meituan order is how far past the promised
     // time it is, so `waiting_since` is channel_eta — the clock the WHERE above
     // already tests. channel_status_at only says when the platform last touched
@@ -16499,13 +16490,18 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // lib/delivery-alerts.js's localStuckRows so the orders list can select
     // exactly these orders; read the why there rather than a copy of it here.
     //
-    // COUNTED WHOLE, SHOWN AS A PAGE. `localStuckAll` is every one of them and
-    // is what the count adds up; the preview slice below is only what the card
-    // draws. These used to be the same already-sliced array, so a shop with
-    // nine stuck riders and a preview of eight had a card that said eight —
-    // the one number on this card that was not exact.
-    const localStuckAll = deliveryAlerts.localStuckRows(tdb());
-    const localStuck = localStuckAll.slice(0, previewLimit);
+    // COUNTED WHOLE, SHOWN AS A PAGE. The filter below carries every one of
+    // them and is what the count reads; the preview slice here is only what the
+    // card draws. These used to be the same already-sliced array, so a shop
+    // with nine stuck riders and a preview of eight had a card that said eight.
+    //
+    // ONE READ, NOT TWO. The rows come back off the filter rather than from a
+    // second localStuckRows call, so the live rider table is read once per
+    // request — two reads milliseconds apart can disagree about a rider who has
+    // just picked up, and then the count and the preview describe different
+    // moments.
+    const daFilter = deliveryAlerts.alertFilter(tdb(), 'o');
+    const localStuck = daFilter.stuck.slice(0, previewLimit);
 
     // `waiting_since` is the one field the Needs-you row ages from, and each
     // sub-type earns it from its OWN clock — see each query above. The carrier
@@ -16514,8 +16510,18 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // has waited. Ageing off it would reset to "2m" on every poll of a parcel
     // that has been stuck for days, so it deliberately ships with NO
     // waiting_since and the card states the problem instead of a duration.
+    //
+    // THE COUNT IS A COUNT OF THE SET, NEVER A SUM OF THE FOUR SUB-TYPES. They
+    // OVERLAP, and the list ORs them — so an order that is two kinds of trouble
+    // at once was two on this card and one in the list it opens. The card said
+    // 3 and opened a list of 2. The commonest incident on the card is exactly
+    // that shape: a Meituan order past its promised time whose Qingyun rider
+    // never picked it up is both the Meituan overdue case and the stuck-rider
+    // case — one order, one phone call. See lib/delivery-alerts.js's
+    // alertCount for the rest of the why.
+    const alertTotal = deliveryAlerts.alertCount(tdb(), daFilter);
     delivery_alerts = {
-      count: daCount + airCount + mtCount + localStuckAll.length,
+      count: alertTotal,
       items: daItems.map(r => ({
         id:               r.id,
         order_no:         r.order_no,
@@ -16545,7 +16551,18 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         local_stuck: 1,
         waiting_since: r.waiting_since,
         buyer:       r.buyer,
-      }))),
+      })))
+      // ONE ROW PER ORDER, for the same reason the count is one number per
+      // order: the four previews above are drawn from four OVERLAPPING sets, so
+      // the order whose Meituan ETA blew AND whose rider never came appeared
+      // twice — the same order number listed against two reasons, on a card
+      // whose whole job is to say how much work there is. Whichever sub-type
+      // saw it first keeps it, so the order above is the precedence: a
+      // carrier-reported problem, then a late cold-chain parcel, then a
+      // platform overdue, then our own rider. The drawer carries the full
+      // picture when the row is opened; the card only has to be honest about
+      // how many calls there are to make.
+      .filter((r, i, all) => all.findIndex(x => x.id === r.id) === i),
     };
 
     // Fapiao worklist — un-issued invoice requests, oldest debt first. Feeds
