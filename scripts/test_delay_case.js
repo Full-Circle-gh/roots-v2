@@ -468,6 +468,23 @@ it('no file hand-writes the lateness rule any more', () => {
   }
 });
 
+it('both surfaces render the blockers this file computes', () => {
+  // §98 has returned `blockers` on every case since it was written and NEITHER
+  // SCREEN DREW THEM: both printed "close once every step above is done", which
+  // sends the operator back to re-read a list the server has already read. The
+  // codes are worded per surface, deliberately — this file's own `blockers()`
+  // header says why — so what is asserted here is that each surface reads them
+  // at all, not how it words them.
+  for (const f of ['public/retail-admin/04-orders.js', 'public/m.html']) {
+    const src = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+    assert.ok(/\.blockers\b/.test(src),
+      `${f} never reads dc.blockers — the refusal cannot say what it is waiting for`);
+    for (const code of ['customer_not_told', 'customer_not_made_whole', 'dispute_open']) {
+      assert.ok(src.includes(code), `${f} has no wording for blocker ${code}`);
+    }
+  }
+});
+
 console.log('\n  driver: better-sqlite3\n');
 if (fails.length) {
   console.log(`  ${pass} passed, ${fails.length} failed`);

@@ -14321,96 +14321,200 @@ function mDcDays(iso){
   const s=String(iso).replace(' ','T'); const t=Date.parse(s.endsWith('Z')?s:s+'Z');
   return isFinite(t)?Math.max(0,Math.floor((Date.now()-t)/86400000)):0;
 }
-function mDcRow(state_,label,detail,controls){
-  const mark=state_==='done'?'✓':state_==='wait'?'◷':state_==='na'?'–':'○';
-  const tone=state_==='done'?'var(--sage-ink,#5a7d5a)':state_==='wait'?'var(--brick-ink)':'var(--text-secondary)';
-  return `<div style="display:grid;grid-template-columns:16px 1fr;gap:9px;align-items:start;padding:9px 0;border-top:1px solid var(--hairline)">
-    <span style="color:${tone};font-weight:600">${mark}</span>
-    <div style="min-width:0;display:flex;flex-direction:column;gap:5px">
-      <span style="font-size:13.5px;font-weight:${state_==='done'?500:400}">${label}</span>
-      ${detail?`<span style="font-size:12px;color:var(--text-secondary);line-height:1.45">${detail}</span>`:''}
-      ${controls||''}</div></div>`;
+/* ── HOW THIS PANEL IS DRAWN, AND WHY IT CHANGED (2026-09-14) ─────────────
+   The steps, the payload and the close rule are §98's, and none of them moved:
+   `can_close` and `blockers` are still computed in lib/delay-case.js and only
+   rendered here. WHAT CHANGED IS WEIGHT.
+
+   The panel was one brick block — brick tint, brick ink, all four steps at full
+   strength with their buttons open, INCLUDING THE ONES ALREADY DONE. A finished
+   phone call shouted as loudly as the claim nobody had filed, and brick meant
+   nothing because everything on screen was brick. Asked from the phone, looking
+   at exactly that: "can make a better design?"
+
+   Three rules, and they are the whole change:
+     · BRICK LIVES IN THE HEADER STRIP. The body is an ordinary card, the way
+       every other block on this sheet is. The alarm still lands in one glance;
+       the work under it is now readable.
+     · A DONE STEP IS ONE QUIET LINE — tick, label, who and when. Nothing that
+       is finished asks to be read twice.
+     · EXACTLY ONE PRIMARY BUTTON, ever: the first step still to do, or 'Mark
+       handled' once there is no such step. A later step that can legitimately
+       be taken out of order — the carrier rings while the remedy is still open
+       — keeps its controls on its own grey line, so nothing is out of reach and
+       nothing but the next thing shouts.
+
+   And the footer NAMES WHAT IS MISSING. `dc.blockers` has carried those codes
+   since §98 and no surface ever drew them; "close once every step above is
+   done" made the operator re-scan a list the server had already read. */
+
+/* The blocker codes, worded. lib/delay-case.js returns codes and says why in
+   its own header: the wording belongs to each surface, as every other refusal
+   in this product does. These three are the desktop's step labels, shortened to
+   the noun each one is. */
+const M_DC_BLOCKER={
+  customer_not_told:['Tell the customer','联系客户'],
+  customer_not_made_whole:['Replacement or refund','补发或退款'],
+  dispute_open:['Carrier settled','承运商赔偿'],
+};
+/* A step that is finished. */
+function mDcDone(label,meta){
+  return `<div style="display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--hairline)">
+    <span style="flex:none;display:flex;color:var(--sage-ink);margin-top:2px">${ic('check',14,2.25)}</span>
+    <span style="font-size:13.5px;min-width:0;flex:1">${label}</span>
+    ${meta?`<span class="num" style="flex:none;text-align:right;font-size:12px;color:var(--text-secondary)">${meta}</span>`:''}</div>`;
 }
-function mDcBtn(cmd,arg,text){
-  return `<button class="btn2" style="width:auto;padding:6px 12px;flex:none;font-size:12.5px" onclick="APP.cmd('${cmd}',${arg})">${text}</button>`;
+/* THE NEXT STEP. The only thing in the panel lifted onto a surface of its own,
+   and the only one holding a filled button. */
+function mDcNext(label,detail,controls){
+  return `<div style="margin:10px 0;padding:12px;border-radius:11px;background:var(--surface-card);border:1px solid var(--border-default)">
+    <span style="display:block;font-size:10.5px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--text-secondary)">${T('Next','下一步')}</span>
+    <span style="display:block;font-size:15px;font-weight:600;color:var(--text-primary);margin:5px 0 ${detail?'5px':'10px'}">${label}</span>
+    ${detail?`<div style="font-size:12.5px;color:var(--text-secondary);line-height:1.45;margin-bottom:10px">${detail}</div>`:''}
+    ${controls}</div>`;
+}
+/* A step that is not next: one grey line. `aside` says what it waits on when
+   there is nothing to press; `controls` carry it when there is. */
+function mDcLater(label,aside,controls){
+  /* CONTROLS GO ON THEIR OWN LINE, NOT ON THE ROW. Two buttons and a label
+     sharing 390px crushed 'Replacement or refund' into three stacked words with
+     the buttons sitting on top of it — measured on an iPhone 14's width, which
+     is the narrowest this app supports and therefore the one that decides. */
+  return `<div style="padding:9px 0;border-top:1px solid var(--hairline);color:var(--text-secondary)">
+    <div style="display:flex;gap:9px;align-items:center">
+      <span style="flex:none;width:14px;text-align:center">○</span>
+      <span style="font-size:13.5px;flex:1;min-width:0">${label}</span>
+      ${aside?`<span style="flex:none;font-size:12px">${aside}</span>`:''}</div>
+    ${controls?`<div style="margin:9px 0 2px 23px">${controls}</div>`:''}</div>`;
+}
+/* One control. `kind` is the whole hierarchy: 'cta' for the single primary,
+   'btn' for an alternative beside it, 'link' for an opt-out that must not look
+   like the main road. 'Not claiming' was a button identical to 'Claim filed' —
+   two taps apart in weight, and one of them permanently ends the claim. */
+function mDcBtn(cmd,arg,text,kind){
+  if(kind==='link') return `<button class="rowact" onclick="APP.cmd('${cmd}',${arg})">${text}</button>`;
+  if(kind==='cta')  return `<button class="cta" style="width:auto;padding:0 18px;flex:none" onclick="APP.cmd('${cmd}',${arg})">${text}</button>`;
+  return `<button class="btn2" style="width:auto;padding:0 14px;min-height:38px;flex:none;font-size:13px" onclick="APP.cmd('${cmd}',${arg})">${text}</button>`;
+}
+/* The controls of one step, laid out. The FIRST action is the primary and only
+   where the step is the next one; everywhere else everything is quiet. */
+function mDcActs(step,isNext){
+  const acts=(step.acts||[]).map((a,i)=>mDcBtn(a.cmd,a.arg,a.text,isNext&&i===0?'cta':'btn'));
+  if(step.link) acts.push(mDcBtn(step.link.cmd,step.link.arg,step.link.text,'link'));
+  if(!acts.length) return '';
+  return `<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">${acts.join('')}</div>`;
 }
 function delayCaseCard(o,sp){
   const dc=sp.dcase||null, sid=Number(sp.id);
   const told=!!(dc&&dc.customer_told_at);
   const ds=(dc&&dc.dispute_state)||'none';
   const remedy=(dc&&dc.remedy)||null;
-  const rowSty=`display:flex;gap:7px;flex-wrap:wrap;align-items:center`;
 
-  const s1=told
-    ? mDcRow('done',T('Customer told','已联系客户'),
-        escAttr((dc.customer_told_by||'')+' · '+String(dc.customer_told_at||'').slice(0,16)))
-    : mDcRow('todo',T('Tell the customer — fresh items may not be safe','联系客户 — 生鲜可能已不安全'),
-        T('Perishable / fresh items may no longer be safe — advise them not to consume.','生鲜/易腐产品可能已不安全，请告知客户勿食用。'),
-        `<div style="${rowSty}">${mDcBtn('dcTold',sid,T('Customer told','已联系客户'))}</div>`);
+  /* The four steps, described rather than drawn — what each one is called,
+     whether it is finished, and what may be pressed on it. Which of them gets
+     the primary is decided once, below, instead of four times in four places. */
+  const steps=[];
+  steps.push(told
+    ? {done:true,label:T('Customer told','已联系客户'),
+       meta:escAttr((dc.customer_told_by||'')+' · '+String(dc.customer_told_at||'').slice(5,16))}
+    : {label:T('Tell the customer','联系客户'),
+       detail:T('Perishable / fresh items may no longer be safe — advise them not to consume.','生鲜/易腐产品可能已不安全，请告知客户勿食用。'),
+       acts:[{cmd:'dcTold',arg:sid,text:T('Customer told','已联系客户')}]});
 
-  let s2;
   if(ds==='none'){
-    s2=mDcRow('todo',T('Claim the delay off the carrier','向承运商申请延误赔偿'),'',
-      `<div style="${rowSty}">${mDcBtn('dcClaim',sid,T('Claim filed','已申请延误赔偿'))}${mDcBtn('dcNoClaim',sid,T('Not claiming','不申请赔偿'))}</div>`);
+    steps.push({label:T('Claim the delay off the carrier','向承运商申请延误赔偿'),
+      acts:[{cmd:'dcClaim',arg:sid,text:T('Claim filed','已申请延误赔偿')}],
+      link:{cmd:'dcNoClaim',arg:sid,text:T('Not claiming','不申请赔偿')}});
   } else if(ds==='no_claim'){
-    s2=mDcRow('done',T('Not claiming','不申请赔偿'),escAttr(dc.dispute_note||''));
+    steps.push({done:true,label:T('Not claiming','不申请赔偿'),meta:escAttr(dc.dispute_note||'')});
   } else {
     const bits=[]; if(dc.dispute_ref) bits.push(escAttr(dc.dispute_ref));
     if(dc.dispute_claimed!=null) bits.push(money(CUR,dc.dispute_claimed));
-    s2=mDcRow('done',T('Claim filed with the carrier','已申请延误赔偿'),bits.join(' · '));
+    steps.push({done:true,label:T('Claim filed with the carrier','已申请延误赔偿'),meta:bits.join(' · ')});
   }
-
-  /* The evidence sent to the carrier. Sits under the claim because that is what
-     it is for, and never gates the close — plenty of claims settle on a call. */
-  const files=(dc&&dc.files)||[];
-  const ev=`<div style="display:grid;grid-template-columns:16px 1fr;gap:9px;align-items:start;padding:9px 0;border-top:1px solid var(--hairline)">
-    <span style="color:var(--text-secondary)">${files.length?'▣':'▢'}</span>
-    <div style="min-width:0;display:flex;flex-direction:column;gap:6px">
-      <span style="font-size:13.5px">${T('Evidence','凭证')}${files.length?' · '+files.length:''}</span>
-      ${files.length?`<div style="display:flex;gap:6px;flex-wrap:wrap">${files.map(f=>
-        `<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--hairline);border-radius:8px;padding:3px 8px;font-size:12px">
-           <a href="#" onclick="APP.cmd('dcViewEv',${sid},${Number(f.id)});return false" style="color:inherit;text-decoration:none">${escAttr(f.label||T('View','查看'))}</a>
-           <a href="#" onclick="APP.cmd('dcDelEv',${sid},${Number(f.id)});return false" style="color:var(--text-secondary);text-decoration:none">×</a>
-         </span>`).join('')}</div>`:''}
-      <label class="btn2" style="width:auto;padding:6px 12px;flex:none;font-size:12.5px;display:inline-flex;align-items:center;justify-content:center">
-        ${T('Add photo','添加照片')}
-        <input type="file" accept="image/*" style="display:none" onchange="APP.cmd('dcPhoto',${sid},this)">
-      </label>
-    </div></div>`;
 
   const rb=[];
-  if(dc&&dc.remedy_at) rb.push(escAttr(String(dc.remedy_at).slice(0,16)));
+  if(dc&&dc.remedy_at) rb.push(escAttr(String(dc.remedy_at).slice(5,16)));
   if(dc&&dc.remedy_note) rb.push(escAttr(dc.remedy_note));
   if(dc&&dc.remedy_cost!=null) rb.push(T('cost ','成本 ')+money(CUR,dc.remedy_cost));
-  const s3=remedy
-    ? mDcRow('done',remedy==='refund'?T('Refunded','已退款'):T('Replacement sent','已补发'),rb.join(' · '))
-    : mDcRow('todo',T('Replacement or refund','补发或退款'),'',
-        `<div style="${rowSty}">${mDcBtn('dcReplacement',sid,T('Send replacement','补发'))}${mDcBtn('dcRemedy',`${sid},'refund'`,T('Refunded','已退款'))}</div>`);
+  steps.push(remedy
+    ? {done:true,label:remedy==='refund'?T('Refunded','已退款'):T('Replacement sent','已补发'),meta:rb.join(' · ')}
+    : {label:T('Replacement or refund','补发或退款'),
+       acts:[{cmd:'dcReplacement',arg:sid,text:T('Send replacement','补发')},
+             {cmd:'dcRemedy',arg:`${sid},'refund'`,text:T('Refunded','已退款')}]});
 
-  let s4;
   if(ds==='no_claim'){
-    s4=mDcRow('na',T('Carrier settled','承运商赔偿'),'');
+    steps.push({done:true,label:T('Carrier settled','承运商赔偿'),meta:'–'});
   } else if(ds==='filed'){
     const w=mDcDays(dc.dispute_filed_at);
-    s4=mDcRow('wait',T('Carrier settled','承运商赔偿'),
-      T('Waiting on carrier · '+w+' day'+(w===1?'':'s'),'等待承运商 · '+w+' 天'),
-      `<div style="${rowSty}">${mDcBtn('dcSettle',`${sid},'paid'`,T('Carrier paid','已赔偿'))}${mDcBtn('dcSettle',`${sid},'rejected'`,T('Rejected','已拒绝'))}${mDcBtn('dcSettle',`${sid},'withdrawn'`,T('Withdrawn','已撤销'))}</div>`);
+    steps.push({label:T('Carrier settled','承运商赔偿'),
+      detail:T('Waiting on carrier · '+w+' day'+(w===1?'':'s'),'等待承运商 · '+w+' 天'),
+      aside:T(w+' day'+(w===1?'':'s'),w+' 天'),
+      acts:[{cmd:'dcSettle',arg:`${sid},'paid'`,text:T('Carrier paid','已赔偿')},
+            {cmd:'dcSettle',arg:`${sid},'rejected'`,text:T('Rejected','已拒绝')},
+            {cmd:'dcSettle',arg:`${sid},'withdrawn'`,text:T('Withdrawn','已撤销')}]});
   } else if(M_DC_TERMINAL.indexOf(ds)>=0){
-    const lbl=ds==='paid'?T('Carrier paid','已赔偿'):ds==='rejected'?T('Carrier rejected the claim','承运商已拒绝'):T('Claim withdrawn','已撤销申请');
-    s4=mDcRow('done',lbl,dc.dispute_received!=null?money(CUR,dc.dispute_received):escAttr(dc.dispute_note||''));
+    steps.push({done:true,label:ds==='paid'?T('Carrier paid','已赔偿'):ds==='rejected'?T('Carrier rejected the claim','承运商已拒绝'):T('Claim withdrawn','已撤销申请'),
+      meta:dc.dispute_received!=null?money(CUR,dc.dispute_received):escAttr(dc.dispute_note||'')});
   } else {
-    s4=mDcRow('todo',T('Carrier settled','承运商赔偿'),'');
+    /* Nothing has been filed, so there is no answer to record. The row states
+       that rather than offering three buttons that cannot mean anything yet. */
+    steps.push({label:T('Carrier settled','承运商赔偿'),waits:true,aside:T('after the claim','申请赔偿后')});
   }
 
-  const canClose=!!(dc&&dc.can_close);
-  const foot=canClose
-    ? `<button class="btn2" style="width:100%;color:var(--brick-ink);border-color:var(--brick-ink)" ${state.parcelBusy===('air'+sid)?'disabled':''} onclick="APP.cmd('clearAirDelay',${sid})">${state.parcelBusy===('air'+sid)?T('Saving…','处理中…'):T('Mark handled','标记已处理')}</button>`
-    : `<span style="font-size:12px;color:var(--text-secondary);font-style:italic">${T('Close once every step above is done.','以上步骤全部完成后方可关闭。')}</span>`;
+  /* The evidence sent to the carrier. It hangs under the claim because that is
+     what it is for, and it NEVER gates the close — §98 decided that, and it is
+     why it is a line here and not the full-width button it had become, which
+     made the one optional step the largest control on the sheet. */
+  const files=(dc&&dc.files)||[];
+  const ev=`<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:9px 0;border-top:1px solid var(--hairline)">
+    <span style="flex:none;width:14px;text-align:center;color:var(--text-secondary)">${files.length?'▣':'▢'}</span>
+    <span style="font-size:13px;color:var(--text-secondary)">${T('Evidence','凭证')}</span>
+    ${files.map(f=>`<span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-default);border-radius:8px;padding:3px 8px;font-size:12px">
+       <a href="#" onclick="APP.cmd('dcViewEv',${sid},${Number(f.id)});return false" style="color:inherit;text-decoration:none">${escAttr(f.label||T('View','查看'))}</a>
+       <a href="#" onclick="APP.cmd('dcDelEv',${sid},${Number(f.id)});return false" style="color:var(--text-secondary);text-decoration:none">×</a></span>`).join('')}
+    <label class="rowact" style="margin-left:auto">${files.length?T('Add','添加'):T('Add photo','添加照片')}
+      <input type="file" accept="image/*" style="display:none" onchange="APP.cmd('dcPhoto',${sid},this)"></label></div>`;
 
-  return `<div style="display:flex;flex-direction:column;gap:2px;padding:12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink)">
-    <span style="display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500">${ic('triangle-alert',16)}${T('Delivery delayed','配送延误')}</span>
-    ${s1}${s2}${ev}${s3}${s4}
-    <div style="margin-top:10px;padding-top:9px;border-top:1px solid var(--hairline)">${foot}</div></div>`;
+  /* One step is promoted, and it is the first unfinished one that can actually
+     be acted on. The rest stay lines. */
+  let promoted=false;
+  const body=steps.map((st,i)=>{
+    let html;
+    if(st.done){ html=mDcDone(st.label,st.meta); }
+    else if(!promoted&&!st.waits){ promoted=true; html=mDcNext(st.label,st.detail,mDcActs(st,true)); }
+    else { html=mDcLater(st.label,st.aside,mDcActs(st,false)); }
+    return i===1?html+ev:html;   // evidence belongs to the claim, whatever state it is in
+  }).join('');
+
+  /* ✓ 2/4. A tick and two numerals need no word in either language, which is
+     also why they cost the vocabulary nothing. A case that will not claim has
+     three steps, not four — counting a step marked n/a as outstanding forever
+     is how a progress figure stops being believed. */
+  const naSettle=ds==='no_claim';
+  const total=naSettle?3:4;
+  const doneN=(told?1:0)+(ds!=='none'?1:0)+(remedy?1:0)+((!naSettle&&M_DC_TERMINAL.indexOf(ds)>=0)?1:0);
+
+  const canClose=!!(dc&&dc.can_close);
+  const blk=((dc&&dc.blockers)||[]).map(k=>M_DC_BLOCKER[k]).filter(Boolean).map(p=>T(...p));
+  const busy=state.parcelBusy===('air'+sid);
+  const foot=canClose
+    ? `<button class="cta" ${busy?'disabled':''} onclick="APP.cmd('clearAirDelay',${sid})">${busy?T('Saving…','处理中…'):T('Mark handled','标记已处理')}</button>`
+    : blk.length
+      ? `<span style="font-size:12.5px;color:var(--text-secondary)">${T('to do','待办')}: ${blk.join(' · ')}</span>`
+      : `<span style="font-size:12px;color:var(--text-secondary);font-style:italic">${T('Close once every step above is done.','以上步骤全部完成后方可关闭。')}</span>`;
+
+  /* THE PANEL SITS INSIDE THE TRACKING CARD, which is already white — so the
+     body takes the raised surface and the one promoted step is the white block
+     on it. Drawn the other way round, the step that matters is the one surface
+     you cannot see. */
+  return `<div style="border:1px solid var(--border-default);border-radius:12px;background:var(--surface-raised);overflow:hidden">
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--brick-tint);color:var(--brick-ink)">
+      <span style="display:flex;flex:none">${ic('triangle-alert',16)}</span>
+      <span style="font-size:13.5px;font-weight:600">${T('Delivery delayed','配送延误')}</span>
+      <span class="num" style="margin-left:auto;font-size:12px">✓ ${doneN}/${total}</span></div>
+    <div style="padding:2px 12px 12px">${body}</div>
+    <div style="padding:11px 12px;border-top:1px solid var(--hairline)">${foot}</div></div>`;
 }
 function trackingCard(o,sp,label){
   const t=sp.trk;
@@ -14429,10 +14533,18 @@ function trackingCard(o,sp,label){
     <span class="num" style="flex:none;min-width:74px;color:var(--text-secondary)">${escAttr(evTime(ev.time))}</span>
     <span style="flex:1;min-width:0">${escAttr(LANG==='en'?(ev.description_en||ev.description_cn||''):(ev.description_cn||ev.description_en||''))}${ev.location?`<span style="color:var(--text-secondary)"> · ${escAttr(ev.location)}</span>`:''}</span></div>`;
   const reuse=t&&t.reuse_warning;
+  /* HOW LATE IT WAS, BESIDE WHAT IT DID. The carrier's own status is the truth
+     about the parcel and stays exactly as the carrier words it — but printed
+     alone it read "Delivered" directly above a panel headed "Delivery delayed",
+     which is a screen arguing with itself. The desktop has carried the lateness
+     in its heading since §98; the phone had nowhere saying it at all. */
+  const lateFor=(sp.airCleared==null&&sp.lateDays>0)?sp.lateDays:0;
   return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
       <span class="eyebrow">${label?label:T('Tracking','物流')}</span>
-      ${st?`<span style="font-size:13px;font-weight:500;color:${DELIV_TONE[tone]}">${st}</span>`:''}</div>
+      ${st||lateFor?`<span style="display:flex;align-items:center;gap:7px;flex:none">
+        ${st?`<span style="font-size:13px;font-weight:500;color:${DELIV_TONE[tone]}">${st}</span>`:''}
+        ${lateFor?`<span style="font-size:11.5px;padding:2px 8px;border-radius:999px;background:var(--brick-tint);color:var(--brick-ink)">${T(lateFor+' day'+(lateFor===1?'':'s')+' late','晚到 '+lateFor+' 天')}</span>`:''}</span>`:''}</div>
     ${sp.airCleared==null&&(sp.lateDays>0)?delayCaseCard(o,sp):''}
     ${sp.airCleared?`<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-secondary)">${ic('check',14)}${T('Air delay handled'+(sp.airClearedBy?' · '+sp.airClearedBy:''),'空运延误已处理'+(sp.airClearedBy?' · '+sp.airClearedBy:''))}</div>`:''}
     ${reuse?`<div style="padding:10px 12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:12.5px;line-height:1.5">${

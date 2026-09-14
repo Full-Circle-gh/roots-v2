@@ -92,6 +92,12 @@ const QUARANTINE = {};
    shard — where REQUIRE_BROWSER is 0, so it would have skipped its render pass
    and reported a tick, which is the exact failure this runner exists to stop. */
 const SLOW = new Set([
+  // test_mobile_delay_panel.js drives Chromium through lib/m-probe, which does
+  // not define findChrome() of its own — so isSlow() below cannot see the
+  // browser in it and would leave it in the FAST shard, where REQUIRE_BROWSER
+  // is 0 and a missing browser reports a tick. Named here for exactly the
+  // reason the paragraph above gives for test_mobile_order_from_record.js.
+  'test_mobile_delay_panel.js',
   'test_mobile_screens.js', 'test_mobile_geometry.js', 'test_mobile_receiving.js',
   'test_mobile_waste.js', 'test_mobile_scroll.js', 'test_mobile_rider.js',
   'test_mobile_pwa.js', 'test_mobile_i18n_names.js', 'test_mobile_nav.js',
