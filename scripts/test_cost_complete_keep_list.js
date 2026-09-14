@@ -174,9 +174,19 @@ check('a keeper, and the same goods in another pack, are left alone', () => {
   assert.strictEqual(tagOf('（4-680）+（4-690）'), null, 'bundle naming two keepers');
 });
 
-check('a keeper that already carried the tag keeps it — the sweep clears nothing', () => {
-  assert.strictEqual(tagOf('1-90'), 1);
-  assert.strictEqual(tagOf('1-370'), 1);
+check('the two Ash answered complete are lowered to 0, not to NULL', () => {
+  // 0 is "answered: this cost holds everything it should" (database.js:5516).
+  // NULL would throw the answer away and leave them looking unreached.
+  assert.strictEqual(tagOf('1-90'), 0);
+  assert.strictEqual(tagOf('1-370'), 0);
+});
+
+check('no OTHER keeper is lowered — 38 of the 40 keep whatever they held', () => {
+  const db = new Database(dbFile, { readonly: true });
+  const zeroed = db.prepare(
+    'SELECT sku FROM store_products WHERE cost_incomplete = 0').all().map(r => r.sku);
+  db.close();
+  assert.deepStrictEqual(zeroed.sort(), ['1-370', '1-90']);
 });
 
 check('a deleted product is not touched', () => {
@@ -187,7 +197,7 @@ check('a deleted product is not touched', () => {
 });
 
 const again = runSweep(true);
-check('running it twice is a no-op the second time', () => {
+check('running it twice is a no-op the second time — the clear does not re-fire', () => {
   assert.strictEqual(again.code, 0, again.out);
   assert.ok(/Nothing to do/.test(again.out), again.out);
 });

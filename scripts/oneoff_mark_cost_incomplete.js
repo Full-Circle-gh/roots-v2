@@ -21,12 +21,16 @@
  * cost and changing it is not an edit to the product.
  *
  * ── WHAT IT REFUSES TO TOUCH ──────────────────────────────────────────────
- * THE KEEPERS' OWN TAGS, IN EITHER DIRECTION. Two of the forty (1-370, 1-90)
- * already carry a 1 from the 2026-08 seed. Ash said what to do to the OTHER
- * products; he did not say to clear these. Clearing a tag somebody set on
- * purpose is the one move here that cannot be read back off the page
- * afterwards, so it is left for him to make in the editor, and this script
- * names them in its output every run.
+ * THIRTY-EIGHT OF THE FORTY KEEPERS, IN EITHER DIRECTION. They are not marked,
+ * and whatever they hold now they keep. NULL on a keeper means nobody has
+ * ruled on that cost, and this script is not the thing that rules.
+ *
+ * The exception is the two Ash answered for directly on 2026-09-14 — 1-90 and
+ * 1-370, both ticked by the 2026-08 seed — which are set to 0, "answered: this
+ * cost holds everything it should". That is a SECOND write, in the same
+ * transaction, listed separately in the output and in CLEAR_SKUS beside its
+ * reasoning. It is the only place this script lowers a tag rather than raising
+ * one, and it happens only for a sku named there.
  *
  * DELETED PRODUCTS. is_active = 0. routes/retail.js nulls their sku on delete,
  * so an exception list could not name them even if anyone wanted to, and a tag
@@ -89,7 +93,7 @@ const Database = (() => {
 })();
 
 const {
-  KEEP_SKUS, KEEP_SIBLINGS, skuKey, isKeeper, namesKeeper,
+  KEEP_SKUS, KEEP_SIBLINGS, CLEAR_SKUS, skuKey, isKeeper, namesKeeper, isCleared,
 } = require(path.join(HOME, 'lib', 'cost-complete-keep-list.js'));
 
 const dbPath = process.env.ROOTS_DB || path.join(__dirname, '..', 'data', 'roots.db');
@@ -166,7 +170,13 @@ const sparedBecause = (r) => {
 const spared = active.filter(r => sparedBecause(r));
 const targets = active.filter(r => !sparedBecause(r));
 const toWrite = targets.filter(r => r.cost_incomplete !== 1);
-const keptTagged = spared.filter(r => r.cost_incomplete === 1);
+// The two Ash answered complete. Only rows that are spared AND named in
+// CLEAR_SKUS, and only where the stored value is not already 0 — so a second
+// run finds nothing to lower.
+const toClear = spared.filter(r => isCleared(r.sku) && r.cost_incomplete !== 0);
+// Spared rows that keep a 1 they already had: everything tagged, less the ones
+// being cleared. This is what the after-count is checked against.
+const keptTagged = spared.filter(r => r.cost_incomplete === 1 && !isCleared(r.sku));
 
 console.log(`\nactive products                 ${active.length}`);
 console.log(`spared                          ${spared.length}`);
@@ -185,18 +195,22 @@ if (KEEP_SIBLINGS) {
   for (const r of sibs) console.log(`   id ${String(r.id).padEnd(4)} sku ${J(r.sku).padEnd(20)} ${J(r.name_en)}`);
 }
 
-console.log(`\nspared products that ALREADY carry the tag — left exactly as they are (${keptTagged.length}):`);
+console.log(`\nCLEARED to 0 — Ash answered these complete (${toClear.length} of ${CLEAR_SKUS.length} named):`);
+if (!toClear.length) console.log('   (none — already 0)');
+for (const r of toClear) console.log(`   id ${String(r.id).padEnd(4)} sku ${J(r.sku).padEnd(20)} ${state(r.cost_incomplete)} -> 0   ${J(r.name_en)}`);
+
+console.log(`\nspared products keeping a tag they already had (${keptTagged.length}):`);
 if (!keptTagged.length) console.log('   (none)');
 for (const r of keptTagged) console.log(`   id ${String(r.id).padEnd(4)} sku ${J(r.sku).padEnd(20)} ${J(r.name_en)}`);
 
-if (!toWrite.length) {
+if (!toWrite.length && !toClear.length) {
   console.log('\nNothing to do — every product that should carry the tag already does.\n');
   db.close();
   process.exit(0);
 }
 
 if (!WRITE) {
-  console.log(`\n── the ${toWrite.length} row(s) that would change ──`);
+  console.log(`\n── the ${toWrite.length} row(s) that would be MARKED ──`);
   console.log('   id   | sku                  | from | cost    | name');
   for (const r of toWrite) {
     console.log(`   ${String(r.id).padEnd(4)} | ${J(r.sku).padEnd(20)} | ${state(r.cost_incomplete).padEnd(4)} | ${J(r.unit_cost).padEnd(7)} | ${J(r.name_en)}`);
@@ -207,31 +221,37 @@ if (!WRITE) {
 }
 
 // ── the write ─────────────────────────────────────────────────────────────
-const ids = toWrite.map(r => r.id);
-// Every target ends up at 1, AND the spared rows that already held one keep
-// it — this script clears nothing. Counting only the targets predicted 5 where
-// the table would truthfully hold 7, and the transaction below rolled the whole
-// write back on the mismatch. That is the check working; the arithmetic it was
-// checking against was the thing that was wrong.
+const markIds = toWrite.map(r => r.id);
+const clearIds = toClear.map(r => r.id);
+// After the write, the active rows holding 1 are the targets plus the spared
+// rows that already held one and are not being cleared. Counting the targets
+// alone predicted five where the table would truthfully hold seven, and the
+// transaction rolled the whole write back on the mismatch. That is this check
+// working; the arithmetic it was checking against was the thing that was wrong.
 const expectedAfter = targets.length + keptTagged.length;
 
 const apply = db.transaction(() => {
-  const upd = db.prepare('UPDATE store_products SET cost_incomplete = 1 WHERE id = ?');
+  const mark = db.prepare('UPDATE store_products SET cost_incomplete = 1 WHERE id = ?');
+  const clear = db.prepare('UPDATE store_products SET cost_incomplete = 0 WHERE id = ?');
   let n = 0;
-  for (const id of ids) n += upd.run(id).changes;
+  for (const id of markIds) n += mark.run(id).changes;
+  let c = 0;
+  for (const id of clearIds) c += clear.run(id).changes;
   // Re-counted inside the transaction: a write that touched a different number
   // of rows than the plan named is not a write anybody should keep.
   const after = db.prepare(
     'SELECT COUNT(*) AS n FROM store_products WHERE COALESCE(is_active,1) = 1 AND cost_incomplete = 1').get().n;
-  if (n !== ids.length) throw new Error(`updated ${n} row(s), planned ${ids.length}`);
+  if (n !== markIds.length) throw new Error(`marked ${n} row(s), planned ${markIds.length}`);
+  if (c !== clearIds.length) throw new Error(`cleared ${c} row(s), planned ${clearIds.length}`);
   if (after !== expectedAfter) throw new Error(`after the write ${after} active row(s) carry the tag, planned ${expectedAfter}`);
-  return { n, after };
+  return { n, c, after };
 });
 
 try {
-  const { n, after } = apply();
-  console.log(`\nWROTE ${n} row(s). ${after} active product(s) now carry "this cost is not complete".`);
-  console.log(`${spared.length} spared, of which ${keptTagged.length} already carried the tag and were left alone.\n`);
+  const { n, c, after } = apply();
+  console.log(`\nMARKED ${n} row(s), CLEARED ${c} to 0.`);
+  console.log(`${after} active product(s) now carry "this cost is not complete".`);
+  console.log(`${spared.length} spared.\n`);
 } catch (e) {
   console.error('\nABORTED and ROLLED BACK: ' + e.message);
   console.error('Nothing was written.\n');

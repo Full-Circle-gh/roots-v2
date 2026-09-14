@@ -56,7 +56,7 @@ const Database = (() => {
   catch (e) { return require(path.join(DEPLOY_ROOT, 'node_modules', 'better-sqlite3')); }
 })();
 
-const { KEEP_SKUS, skuKey, isKeeper } = require(path.join(HOME, 'lib', 'cost-complete-keep-list.js'));
+const { KEEP_SKUS, skuKey, isKeeper, isCleared } = require(path.join(HOME, 'lib', 'cost-complete-keep-list.js'));
 
 const J = v => (v === null || v === undefined ? 'NULL' : String(v));
 const section = t => console.log('\n' + '═'.repeat(78) + '\n══ ' + t + '\n');
@@ -276,13 +276,18 @@ for (const r of noSku) console.log(`    id ${String(r.id).padEnd(4)}  pub ${r.is
 // ══════════════════════════════════════════════════════════════════════════
 // 4 · the keepers that are already tagged
 // ══════════════════════════════════════════════════════════════════════════
-section('4 · KEEPERS ALREADY TAGGED 1 — A SECOND DECISION, NOT PART OF THE FIRST');
-console.log('   Ash asked for every product EXCEPT these to be marked. That says what to');
-console.log('   do to the others; it does not say whether a keeper carrying an existing');
-console.log('   tag (from the 2026-08 seed, or set by hand) should be CLEARED. The');
-console.log('   one-off leaves them exactly as they are and reports them here, because');
-console.log('   clearing a tag somebody set on purpose is the one move in this sweep that');
-console.log('   cannot be read back off the page afterwards.\n');
+section('4 · KEEPERS ALREADY TAGGED 1 — A SECOND DECISION, SINCE ANSWERED');
+console.log('   Ash asked for every product EXCEPT the forty to be marked. That says what');
+console.log('   to do to the others; it did not say whether a keeper carrying an existing');
+console.log('   tag (from the 2026-08 seed, or set by hand) should be CLEARED. Asked');
+console.log('   directly on 2026-09-14 he answered for the two below: "1-90 and 1-370');
+console.log('   price are complete."');
+console.log('');
+console.log('   So the one-off LOWERS those two to 0 — "answered: this cost holds');
+console.log('   everything it should" — and not to NULL, which would throw the answer');
+console.log('   away. The names are in CLEAR_SKUS in lib/cost-complete-keep-list.js; any');
+console.log('   keeper listed here and NOT named there keeps whatever it holds, because');
+console.log('   nobody has ruled on it.\n');
 if (!clearingAKeeper.length) console.log('   (none — no keeper carries a tag)');
 for (const r of clearingAKeeper) {
   console.log(`   id ${String(r.id).padEnd(4)}  sku ${J(r.sku).padEnd(10)}  cost ${J(r.unit_cost).padEnd(7)}  ${J(r.name_en)}`);
@@ -342,7 +347,10 @@ for (const { keeper, sibs } of foldPairs) {
   console.log(`      ${J(keeper.sku).padEnd(10)} ← marked sibling(s) ${sibs.map(x => J(x.sku)).join(', ')}`);
 }
 console.log(`   RULE ON · rows naming a keeper's code     ${textHits}`);
-console.log(`   RULE ON · keepers already tagged 1        ${clearingAKeeper.length}${clearingAKeeper.length ? '  → ' + clearingAKeeper.map(r => r.sku).join(', ') : ''}`);
+const answered = clearingAKeeper.filter(r => isCleared(r.sku));
+const unanswered = clearingAKeeper.filter(r => !isCleared(r.sku));
+console.log(`   ANSWERED · keepers tagged 1, cleared to 0 ${answered.length}${answered.length ? '  → ' + answered.map(r => r.sku).join(', ') : ''}`);
+console.log(`   RULE ON  · keepers tagged 1, left as-is   ${unanswered.length}${unanswered.length ? '  → ' + unanswered.map(r => r.sku).join(', ') : ''}`);
 console.log(`   RULE ON · active rows with no sku         ${noSku.length}${noSku.length ? '  → ids ' + noSku.map(r => r.id).join(', ') : ''}`);
 console.log('');
 console.log(`   ${missing.length || ambiguous.length ? 'DO NOT APPLY until the blockers above are ruled on.' : 'No blocker: every keeper matched exactly one row.'}`);
