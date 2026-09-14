@@ -274,6 +274,74 @@ function finNotRecorded() {
   ))}</p>`;
 }
 
+/* ── The shortfall behind a cost figure that IS shown ───────────────────────
+   §56 as amended 2026-09-14 by Ash. The two rows below may now carry a figure,
+   **on the condition that the figure never appears without the share of the
+   period it rests on.** This sentence is that condition, so it is not
+   decoration: removing it does not tidy the card, it undoes the decision the
+   figure ships under.
+
+   It says THE REAL MARGIN IS LOWER rather than merely naming the fraction,
+   because the direction is the whole point and it is not obvious from a
+   percentage. Cost missing from a period can only push the margin UP, never
+   down — the shortfall always flatters, which is the direction that gets acted
+   on. `public/retail-admin/09-products.js`'s `_paMarginWarn` says exactly this
+   about exactly this failure one level down, on a single product's margin drawn
+   from an incomplete cost; this is that sentence at period scale and its
+   Chinese half is lifted from it character for character.
+
+   FLOOR, NOT ROUND, on the percentage. A window at 99.6% would round to "100%"
+   and print a sentence that contradicts its own number in the same breath. The
+   figure must never claim more coverage than there is, and floor is the only
+   direction that cannot.
+
+   DISTINCT FROM `finNotRecorded()` ABOVE, which is the §1.12 seventh state for
+   a period with NO cost at all. That one explains an absence; this one
+   qualifies a presence. They are never both drawn — see `finCostRows`. */
+function finCoverageNote(cov) {
+  const p = Math.floor(cov * 100);
+  return `<p class="td-notrec">${escapeHtml(cuT(
+    `Cost recorded for ${p}% of this period's revenue — the real margin is lower.`,
+    `此期间 ${p}% 的营收已记录成本 —— 实际毛利更低。`
+  ))}</p>`;
+}
+
+/* ── Lines 2 and 3, in whichever of their three states the period is in ─────
+   THE SERVER DECIDES WHICH, AND THIS FUNCTION ONLY DRAWS IT. `cost_of_goods`
+   is null for a period no line of which carried a cost, and that is a decision
+   taken against the data (routes/finance-summary.js) rather than a rendering
+   choice. Re-deriving the state here from `cost_coverage === 0` would put the
+   rule in two places, which is how the screen and the payload come to disagree
+   about what a period is.
+
+   NO COST AT ALL → exactly what these rows have shown since §56: label kept,
+   the seventh state as a VALUE, no dash, one sentence under the pair. **The
+   amendment does not reach this case and must not be extended to it.** July
+   2026 carries ¥56,792 of line revenue and not one costed line; a ¥0.00 here
+   would publish a 100% margin for a month whose cost was never captured and
+   never can be, which is the "zero claims the goods were free" §36 refused and
+   §56 kept.
+
+   SOME COST → the figures, with the shortfall stated beneath them.
+
+   ALL COST → the figures, and nothing beneath them. **This is the amendment's
+   own "and then the note goes away", and it happens because the shortfall it
+   describes is gone, not because anybody remembered to delete it.** A caveat
+   that has to be removed by hand is the kind this repo's CLAUDE.md opens by
+   warning about; this one cannot outlive its subject. */
+function finCostRows(d) {
+  const cogs = d ? d.cost_of_goods : null;
+  const cov = (d && typeof d.cost_coverage === 'number') ? d.cost_coverage : null;
+  if (cogs == null) {
+    return finRow(cuT('Cost of goods', '销货成本'), finNotRecordedValue(), { less: true, notrec: true })
+      + finRow(cuT('Gross profit', '毛利润'), finNotRecordedValue(), { concl: true, notrec: true })
+      + finNotRecorded();
+  }
+  return finRow(cuT('Cost of goods', '销货成本'), finMoney(cogs), { less: true })
+    + finRow(cuT('Gross profit', '毛利润'), finMoney(d.gross_profit), { concl: true })
+    + (cov != null && cov < 1 ? finCoverageNote(cov) : '');
+}
+
 /* The two halves of the breakdown (§87 part two).
 
    `is_operating` arrives on every row. A row from a server that predates the
@@ -805,11 +873,13 @@ function finRender() {
     + (d.tax
       ? finRow(cuT('of which tax', '其中税费'), finMoney(d.tax.net))
       : '')
-    // Lines 2 and 3 — the two the mockup could not have. Labels kept, figures
-    // absent, no dash, and one sentence under the pair.
-    + finRow(cuT('Cost of goods', '销货成本'), finNotRecordedValue(), { less: true, notrec: true })
-    + finRow(cuT('Gross profit', '毛利润'), finNotRecordedValue(), { concl: true, notrec: true })
-    + finNotRecorded()
+    // Lines 2 and 3 — the two the mockup could not have, and the two §56 as
+    // amended 2026-09-14 lets carry a figure. Three states, decided by the
+    // server and never re-derived here: no costed line at all keeps the
+    // treatment these rows have always had, some coverage shows the figures
+    // with the shortfall stated under them, and full coverage shows the figures
+    // with nothing under them at all.
+    + finCostRows(d)
     // The landing — what makes the card read as steps rather than five rows.
     + '<div class="fin-tread"></div>'
     // Line 4 — the hand-entered half. A disclosure when there is something to

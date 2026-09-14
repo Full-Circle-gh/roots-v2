@@ -668,7 +668,15 @@ async function place(taxCfg, body) {
     // expense_entries is declared in schema.sql rather than database.js, so it
     // is added from its own source — the real DDL either way, never a hand-typed
     // shape that could drift from the one the report reads.
-    const db = openTablesDb(DB_SRC, ['retail_orders', 'retail_stores']);
+    // `retail_order_items` rides along because §56 as amended made the report a
+    // COST reader: the summary now sums `unit_cost_at_sale` off the order lines
+    // for its cost-of-goods row and its coverage fraction. Nothing in this
+    // section is about cost — the fixture inserts no items at all, so coverage
+    // comes back null and the two cost rows stay blank exactly as they did —
+    // but the endpoint cannot answer at all without the table, and a tax test
+    // that fell over on a missing join would report a tax defect that is not
+    // one. From the real DDL for the same reason everything else here is.
+    const db = openTablesDb(DB_SRC, ['retail_orders', 'retail_stores', 'retail_order_items']);
     // `categories` rides along with `expense_entries` because the report reads
     // both: §87 gave the tenant an expense-category list carrying an
     // operating / non-operating flag, and the summary resolves every expense
