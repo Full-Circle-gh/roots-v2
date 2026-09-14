@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.259
+# Tacet shared-core consolidation — decisions record, v4.261
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-14 · v4.261 — **§128 · PRE-ORDER EVERYWHERE: THE OPERATOR MAY OPEN A SOLD-OUT PRODUCT TO THE LOCAL RUN, BY NAME. ASKED BY ASH on the product editor's *When out of stock* control:** *"right now for there is only 'pre order outside guangzhou' i would like to add an option of pre order for everyone"*. **THE EXISTING `always` VALUE IS NOT THAT OPTION AND REUSING IT WOULD HAVE BEEN SILENT DATA LOSS** — it means *supplier-direct, we hold no stock*, auto-applied from `ship_from_supplier`, and setting it on a tracked product turns stock tracking off. So a fourth value, `backorder_all`, on the same unconstrained TEXT column: no schema change, no migration, `effectiveOosPolicy()` is the whitelist. **THE DROPDOWN IS ONE LINE; THE PARK IS THE FEATURE.** Guangzhou same-day was blocked for a reason — the order is picked off the shelf and leaves on today's run, so there is nothing to put in the box — and the honest way to open it is to STOP THE ORDER BEING A SAME-DAY ORDER rather than to pretend the shelf is full. It parks as `awaiting_restock` holding nothing, window cleared, same-day surcharge refunded, promoted by `checkAwaitingRestockForRestock()` when the count covers every line: **the column, the promotion and the Awaiting restock chip the customer's own `wait_for_restock` choice already uses**, so no new fulfilment concept and no new operator screen. **THE ASK ASH ANSWERED, because it changes the build and not just the copy:** in a mixed basket the whole order waits, in-stock items included, and a grocery restock has no date the way a batch does — Ash chose *whole order waits* over an all-pre-order-only rule and over a split shipment. The help text and the product-page note both say so; an operator who sets this is told what it costs before a customer tells them. **ROUTING HAD TO BE TOLD FIRST, and this is the half that would have shipped broken:** `routeOrder` under the stock gate hunts for a store holding the stock, finds none and returns `needs_fallback_confirmation` — the 5-option shortage modal — **before the park ever runs**, so widening the park alone would have offered a pre-order and then demanded a substitute. `preorderAllShort` is computed once, before routing, and relaxes it; pickup is deliberately never relaxed. **THE EXEMPTION IS OPT-IN (`preorderParkOk`), for exactly the reason `freshPreorderOk` is:** only a caller that can carry the consequence may claim it. Checkout can (it parks the order); **the add-on path cannot** — it hangs a line on an order whose day is already fixed and often already paid, with no park to move it into — so it does not pass the flag and keeps refusing, and a test asserts it never learns it. **§80's RULING SURVIVES A PRODUCT CARRYING BOTH SETTINGS.** `parkedForPreorderAll` tests *backorder_all AND not covered by today's batch*, never the policy alone: a batch-made row marked `backorder_all` would otherwise strip the delivery window from a park §80 had just dated, downgrading Ash's ruling for a product whose only crime is two operator settings at once. `isBatchPark` (dated, keeps its window) and `isPreorderPark` (undated, loses it) are mutually exclusive by construction. **ONE NEW FIELD REACHES THE CLIENTS, `oos_preorder_local`, AND IT TRAVELS WITH `oos_preorder` EVERYWHERE — the §80 rule, restated because the same silent failure was available again:** every surface suppresses the pre-order pill on the local run, so without it `backorder_all` would have drawn the dead SOLD OUT the policy exists to remove, and nothing would have thrown. Stamped at all four sites; a test counts the two stamps and fails on a mismatch. On the variant rows it is read BEFORE `delete v.oos_policy`, or it would be silently false for every size. **`backorder_gz` IS UNCHANGED ON EVERY PATH** — still refused on the local run, still drawing SOLD OUT there, still saying nothing in the checkout notice — which is what the `localRunOnly` narrowing in `computePreorderNotice` preserves: the banner and the checkout now agree row by row rather than in bulk. **Chinese: THREE SENTENCES COMPOSED, NO NEW CHARACTERS.** `全国` is the sibling option's own, `可预订` is live in twenty-odd files, `补货后发出` is lifted whole from the storefront's existing out-of-stock note, `整单` and `一并发货` are the checkout notice's; the composition is the assembly and all three are declared in `docs/tacet-delivery-vocabulary.md` **v1.81** with the candidates rejected beside them. The checkout notice needed nothing — its body already described this policy exactly — and is reused character for character. **Tests:** new `scripts/test_preorder_everywhere.js`, auto-discovered into the fast shard, organised around the five load-bearing rules and confirmed red against a deliberate break of each. Three existing suites moved with the code rather than being loosened: `test_fresh_today_batch.js`'s window case now pins *the clearing branch is the two UNDATED parks* and gains a case for the covered-batch regression above; `test_preorder_local.js` slices the new client helper in **as shipped** and gains two cases proving the opt-in rescues `backorder_all` and never `backorder_gz`; `test_fresh_today_label.js` gains the server-flag stub beside `oosBackorder`'s. `npm run test:fast` 236 passed, 0 failed; `npm run lint` 0 errors. **What is not done:** no schema and no migration (the column is TEXT), no change to the Awaiting restock screens or the promotion logic, no split shipment, no change to `.gitignore` or CI, and the mini-app add-on picker is deliberately untouched.**
 
 2026-09-14 · v4.259 — **§126 · THE PRODUCT EDITOR STOPS TALKING ABOUT SYNCING. REPORTED BY ASH on a photo of the editor, three green Channels rows above the SKU:** *"I don't want the channel sync on product page."* **THIS REVERSES AN INFERENCE OF MINE, NOT A DECISION OF ASH'S.** §103 step 4 put the Channels card on the editor; §117 then stripped every trace of syncing from the Products **list** and explicitly KEPT the card, arguing *"one product looked at in depth is not a second overview."* Ash's instruction that day named *"the products list page"* and the card survived on a reading of what that meant — the reading is now withdrawn. **REMOVED:** `<section id="pd-channels-card">` and its body from `retail-admin.html`; `pdLoadChannels`, `_pdChSeq`, `_pdChAgo`, the call on the editor's open path, and `_paChName` (which §117 had kept alive ONLY for this card) from `09-products.js`; the `.pd-ch-rows` / `.pd-ch-row` block from `retail-admin.css`. **Nothing in the products module reads `/channel-sync` any more.** Each site carries a note naming §126 and the instruction, so the next reader finds a tombstone rather than a gap. **THE CARD COULD REPORT BUT NOT REPAIR** — its one action was a button that left for the channel's own tab, which makes it a detour with a step in it, and the place it sent you to was already the answer. Sync state is now worded in exactly one place: Sales › Channel sync, a tab since §117, with part two's repair panel and §124's phone copy. **The sentence-builder exports in `29-channel-sync.js` STAY** — the dashboard, `01-core.js`, `11-meituan.js`, `12-guanyi.js` and `14-eleme.js` are still callers; there is simply one fewer screen that could word a state a second way. **THREE TESTS MOVED WITH THE CODE.** `test_channel_sync_items.js`'s *"the product editor keeps its Channels card"* asserted `pdLoadChannels` and the card id were PRESENT; it is now *"the product editor says nothing about syncing"* and asserts their absence plus the helpers, the fetch and the CSS — matching on **definitions and rules rather than the bare word**, the tombstone-proof shape §117's own list check uses, so a note naming what it removed cannot fail the test that removed it. The *"both clients read the channel's cause"* check drops the editor, which no longer shows a cause to defer about. `test_channel_sync_home_row.js` pinned the guarded-`typeof` shape against `09-products.js`'s `_paChName`; its second witness is now `12-guanyi.js`, and the comment says any live caller would do — what it pins is that the shape is shared, not which file shares it. **Chinese: nothing composed** — this change only removes strings, so `docs/tacet-delivery-vocabulary.md` is untouched (still v1.80). **What is not done:** no route change (`/api/retail-admin/channel-sync?productId=` still exists and is still served; the editor simply stopped calling it), no change to the Channel sync page, the phone, the mapping repair or any capability, and the Products list was already clean under §117 and was not touched. `npm run test:fast` 235 passed, 0 failed; `npm run lint` 0 errors; doc-numbering PASS. No schema, no migration, and no change to `.gitignore` or CI.**
 
@@ -13996,3 +13998,99 @@ No route change — `/api/retail-admin/channel-sync?productId=` still exists and
 is still served; the editor simply stopped calling it. No change to the Channel
 sync page, the phone, the mapping repair, `29-channel-sync.js`'s exports, or any
 capability. The Products list was already clean under §117 and was not touched.
+
+## §128 — PRE-ORDER EVERYWHERE, AND THE PARK THAT MAKES IT HONEST
+
+**Asked by Ash**, on the product editor's *When out of stock* control: *"right
+now for there is only 'pre order outside guangzhou' i would like to add an
+option of pre order for everyone"*.
+
+### The decision
+
+A fourth value on `oos_policy`, **`backorder_all`**: once stock hits 0 every
+shopper may pre-order, same-day Guangzhou included. The two existing modes are
+untouched.
+
+| value | who may order past zero | the order that results |
+|---|---|---|
+| `strict` (default) | nobody | refused everywhere |
+| `backorder_gz` | out-of-city only | ships on the next batch / restock |
+| **`backorder_all`** | **everyone** | **parks `awaiting_restock`, undated** |
+| `always` | everyone, stock ignored | supplier-direct; NOT an operator choice |
+
+**`always` was not reused, and the reason is worth keeping.** It means *we hold
+no inventory, the supplier does*, and `effectiveOosPolicy()` applies it
+automatically from `ship_from_supplier`. Setting it on a tracked product to get
+"orderable when empty" would turn stock tracking off for that product with
+nothing said. It is not in the dropdown and must not be put there.
+
+### Why Guangzhou was blocked, and what actually changes
+
+Not arbitrary: a same-day Guangzhou order is picked off the shop shelf and
+leaves on today's run, so a sold-out line has nothing behind it. An out-of-city
+parcel leaves later on the batch/restock cadence, which is why `backorder_gz`
+is safe for it.
+
+The option is therefore **not** "sell it anyway". It changes what the order is:
+no reservation, no delivery window, no same-day surcharge, status
+`awaiting_restock`, promoted by `checkAwaitingRestockForRestock()` when the
+shipping store's count covers every line. That is the column, the promotion and
+the chip the customer's own `wait_for_restock` choice already uses — the two
+differ only in how the order got there, a policy the operator set versus a modal
+the customer answered.
+
+### The one question Ash decided
+
+A mixed basket. The park is **order-level**, so a Guangzhou shopper who adds one
+pre-order item to a basket of in-stock items has the whole order wait — and
+unlike a batch meal, a grocery restock has no date to name.
+
+**Ash chose: the whole order waits.** Rejected: allowing the pre-order only when
+the basket is entirely pre-order (the + button would appear and disappear
+depending on what else is in the basket, a rule invisible to the shopper), and
+splitting the shipment (a second parcel and a split order — meaningfully more
+work in fulfilment and in the order screens, for a case nobody has yet reported).
+
+Because the cost is real, it is **written on the control**: the help text and the
+product-page note both say the whole order ships together once stock is back.
+
+### Four rules this record exists to keep
+
+1. **Routing is told before it goes looking.** `routeOrder` under the stock gate
+   would return `needs_fallback_confirmation` — the 5-option shortage modal —
+   *before* the park runs, so the shopper would be offered a pre-order and then
+   asked to pick a substitute. `preorderAllShort` is computed once, ahead of
+   routing, and relaxes it. **Pickup is never relaxed**: collecting in person
+   means the item is on the shelf.
+2. **The exemption is opt-in (`preorderParkOk`)**, for the reason
+   `freshPreorderOk` is: only a caller that can carry the consequence may claim
+   it. Checkout parks the order and passes it. **The add-on path does not** — it
+   attaches a line to an order whose day is already fixed and often already
+   paid, with no park to move it into — so it keeps refusing. Anything written
+   later inherits the refusal by default, which is the point of the default.
+3. **A line today's batch covers stays dated.** `parkedForPreorderAll` tests
+   *`backorder_all` AND not in `batchCoveredIds`*, never the policy alone.
+   Read off the policy, a batch-made row also marked `backorder_all` would strip
+   the window from a park §80 had just dated. `isBatchPark` and `isPreorderPark`
+   are mutually exclusive by construction.
+4. **`oos_preorder_local` travels with `oos_preorder`, everywhere.** This is
+   §80's rule restated because the identical silent failure was available again:
+   every client suppresses the pre-order pill on the local run, so a route that
+   stamps one flag and not the other draws the dead SOLD OUT this policy exists
+   to remove, and nothing throws. A test counts both stamps and fails on a
+   mismatch. On variant rows the policy is read **before** `delete v.oos_policy`.
+
+### What `backorder_gz` still does
+
+Unchanged on every path: refused on the local run, drawing SOLD OUT there, and
+silent in the checkout notice. `computePreorderNotice`'s local-run test became a
+**narrowing** rather than an early return, so the banner and the checkout agree
+row by row — a `backorder_all` row speaks, a `backorder_gz` row beside it does
+not.
+
+### Not done
+
+No schema and no migration (`oos_policy` is TEXT and unconstrained). No change
+to the Awaiting restock screens or the promotion logic. No split shipment. No
+change to `.gitignore` or CI. The mini-app add-on picker is untouched, and
+deliberately knows nothing of the new flag.

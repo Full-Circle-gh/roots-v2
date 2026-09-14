@@ -21,8 +21,10 @@ function absUrl(u) {
 // Out of stock, and left orderable by the operator (`oos_preorder`). For a
 // shopper on the same-day local run that only holds when the kitchen has dated
 // the next batch — otherwise the run is served off a shelf with nothing on it.
+// §128 adds the second exemption, and it is not a date: 'backorder_all' is the operator opening the run outright, so the row survives with no batch behind it. The checkout parks that order undated, which is what makes the live + button honest.
 function _reservable(m, onLocalRun) {
-  return !!(m && m.oos_preorder) && (!onLocalRun || !!(m && m.local_fresh_date));
+  return !!(m && m.oos_preorder)
+    && (!onLocalRun || !!(m && m.local_fresh_date) || !!(m && m.oos_preorder_local));
 }
 
 // §108 — WHICH WORD such a row gets, and the ONE place this page decides it.
@@ -1124,7 +1126,7 @@ Page({
       // badge; only a hard-out size shows the dead SOLD OUT pill. A same-city
       // shopper is never offered the reservation (see recomputeDisplay).
       const orderable = out && !m.ship_from_supplier && !!m.oos_preorder
-        && (!this._onLocalRun || !!m.local_fresh_date);
+        && (!this._onLocalRun || !!m.local_fresh_date || !!m.oos_preorder_local);
       /* §108, per SIZE — the same two states the hero badge above resolves, and
          read off the same fields, so one size sheet cannot disagree with the
          page it opened from. A fresh size not yet made says NEXT BATCH whoever

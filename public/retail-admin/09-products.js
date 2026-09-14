@@ -5713,7 +5713,8 @@ function pdCollectBody() {
     // Supplier-direct items are always available (stock ignored); the dropdown
     // is hidden for them, so force the policy rather than read the stale select.
     oos_policy: ckd('pd-ship-from-supplier') ? 'always'
-              : (g('pd-oos-policy') === 'backorder_gz' ? 'backorder_gz' : 'strict'),
+              : (g('pd-oos-policy') === 'backorder_gz'  ? 'backorder_gz'
+              :  g('pd-oos-policy') === 'backorder_all' ? 'backorder_all' : 'strict'),
     ship_from_supplier: ckd('pd-ship-from-supplier'),
     supplier_paused: ckd('pd-supplier-paused'),
     // Always sent, both ways: clearing the tag is as much a statement as

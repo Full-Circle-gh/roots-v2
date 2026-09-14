@@ -3870,7 +3870,14 @@ addColumn('products', 'is_batch_made', 'INTEGER DEFAULT 0');
 //            现订现发 / SHIPS SOON, or 下批现做 / NEXT BATCH for batch meals);
 //            only same-day Guangzhou stays hard-blocked. This generalises the
 //            legacy is_batch_made rule to any product the operator chooses.
+//   'backorder_all'         → §128: EVERY shopper may pre-order, same-day
+//            Guangzhou included. The order cannot ship off today's shelf, so it
+//            parks as 'awaiting_restock' with its delivery window cleared and
+//            its same-day surcharge refunded, and is promoted to 'paid' by
+//            checkAwaitingRestockForRestock() when the count covers it.
 // NULL is treated as 'strict' UNLESS is_batch_made=1 (legacy back-compat).
+// The column is TEXT and unconstrained, so a new mode needs no migration —
+// effectiveOosPolicy() in routes/retail.js is the whitelist.
 addColumn('products', 'oos_policy', 'TEXT');
 
 // Promised production + arrival dates stamped on outside-GZ orders that hold
@@ -5441,6 +5448,9 @@ try {
   // 'strict' (default/NULL) = sold-out blocks ordering in every region;
   // 'backorder_gz' = out-of-city shoppers may still pre-order, only same-day
   // Guangzhou stays hard-blocked;
+  // 'backorder_all' = §128: everyone may pre-order, same-day Guangzhou too —
+  //   the resulting order parks as 'awaiting_restock' rather than riding a van
+  //   that cannot be loaded;
   // 'always' = stock is ignored entirely — always orderable in every region,
   //   never SOLD OUT. Used for supplier-direct items (ship_from_supplier=1),
   //   where we hold no inventory: the supplier is the source of truth. The only
