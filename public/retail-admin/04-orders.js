@@ -7252,37 +7252,112 @@ function delayDaysSince(iso) {
   return Math.max(0, Math.floor((Date.now() - t) / 86400000));
 }
 
-// One row of the checklist. `state` picks the mark, which is the only thing
-// carrying status at a glance — a tick, a clock, or an empty box.
-function delayStepRow(state, label, detail, controls) {
-  const mark = state === 'done' ? '✓' : state === 'wait' ? '◷' : state === 'na' ? '–' : '○';
-  const tone = state === 'done' ? 'var(--sage, #5a7d5a)'
-             : state === 'wait' ? 'var(--warn, #b4842a)'
-             : 'var(--text-3)';
+// ── HOW THIS PANEL IS DRAWN, AND WHY IT CHANGED (2026-09-14) ───────────────
+// The steps, the payload and the close rule are §98's and none of them moved:
+// `dc.can_close` and `dc.blockers` are computed in lib/delay-case.js and only
+// rendered here, so the screen and the server cannot come to disagree.
+// WHAT CHANGED IS WEIGHT. The block was drawn in danger from edge to edge with
+// all four steps open at full strength — the DONE ones included — so a phone
+// call already made shouted as loudly as the claim nobody had filed. Three
+// rules now hold, and the phone holds the same three:
+//   · the alarm colour lives in the header strip, the body is an ordinary pane;
+//   · a done step is one quiet line — tick, label, who and when;
+//   · exactly ONE primary button exists: the first step still to do, or
+//     'Mark handled' once there is none. A later step that can legitimately be
+//     taken out of order keeps quiet controls on its own line, so nothing is
+//     out of reach and nothing else competes.
+// And the footer NAMES what is missing instead of asking the operator to read
+// the list again — those codes have been on the payload since §98 unrendered.
+
+// The blocker codes, worded. lib/delay-case.js returns codes and says in its
+// own header why: a sentence built there would be a third place the wording
+// lives. Each of these is this screen's own step label, shortened to its noun.
+const DELAY_BLOCKER = {
+  customer_not_told:       ['Tell the customer', '联系客户'],
+  customer_not_made_whole: ['Replacement or refund', '补发或退款'],
+  dispute_open:            ['Carrier settled', '承运商赔偿'],
+};
+
+// A step that is finished: a tick, what it was, and who closed it.
+function delayDone(label, meta) {
   return `
-    <div style="display:grid; grid-template-columns:16px 1fr; gap:9px; align-items:start;
-                padding:8px 0; border-top:1px solid var(--line-soft);">
-      <span style="color:${tone}; font-weight:700; line-height:1.4;">${mark}</span>
-      <div style="min-width:0; display:flex; flex-direction:column; gap:4px;">
-        <div style="font-weight:${state === 'done' ? 600 : 500}; color:${state === 'todo' ? 'var(--text-2)' : 'var(--text-1)'};">${label}</div>
-        ${detail ? `<div style="font-size:11.5px; color:var(--text-3); line-height:1.45;">${detail}</div>` : ''}
-        ${controls || ''}
-      </div>
+    <div style="display:flex; gap:9px; align-items:flex-start; padding:8px 0; border-top:1px solid var(--line-soft);">
+      <span style="color:var(--success, #A3B49F); font-weight:700; line-height:1.4; flex:none;">✓</span>
+      <div style="flex:1; min-width:0; color:var(--text-1);">${label}</div>
+      ${meta ? `<div style="flex:none; font-size:11.5px; color:var(--text-3); text-align:right;">${meta}</div>` : ''}
     </div>`;
 }
 
-function delayBtn(onclick, text, primary) {
+// THE NEXT STEP — the only thing lifted onto a pane of its own, and the only
+// one carrying a filled button.
+function delayNext(label, detail, controls) {
+  return `
+    <div style="margin:9px 0; padding:11px 12px; border:1px solid var(--line); border-radius:var(--r-md,8px);
+                background:var(--bg-pane, #fff);">
+      <div style="font-size:9.5px; font-weight:700; letter-spacing:.11em; text-transform:uppercase; color:var(--text-3);">
+        ${cuT('Next', '下一步')}</div>
+      <div style="font-size:13.5px; font-weight:700; color:var(--text-1); margin:4px 0 ${detail ? '4px' : '8px'};">${label}</div>
+      ${detail ? `<div style="font-size:11.5px; color:var(--text-3); line-height:1.45; margin-bottom:8px;">${detail}</div>` : ''}
+      ${controls}
+    </div>`;
+}
+
+// A step that is not next: one quiet line.
+function delayLater(label, aside, controls) {
+  // Controls sit UNDER the row, not on it. The drawer is wider than the phone
+  // and would usually get away with one line, but the two surfaces drawing the
+  // same step differently is how §98's two halves drifted the first time.
+  return `
+    <div style="padding:8px 0; border-top:1px solid var(--line-soft); color:var(--text-3);">
+      <div style="display:flex; gap:9px; align-items:center;">
+        <span style="flex:none; width:12px; text-align:center;">○</span>
+        <div style="flex:1; min-width:0;">${label}</div>
+        ${aside ? `<span style="flex:none; font-size:11.5px;">${aside}</span>` : ''}
+      </div>
+      ${controls ? `<div style="margin:7px 0 2px 21px;">${controls}</div>` : ''}
+    </div>`;
+}
+
+// One control. `kind` is the whole hierarchy: 'cta' for the single primary,
+// 'btn' for an alternative beside it, 'link' for an opt-out that must not look
+// like the main road — 'Not claiming' was a button identical to 'Claim filed',
+// and it permanently ends the claim track.
+function delayBtn(onclick, text, kind) {
+  if (kind === 'link') {
+    return `<button type="button" onclick="${onclick}"
+      style="font:inherit; font-size:11.5px; font-weight:600; cursor:pointer; padding:4px 2px; border:0;
+             background:none; color:var(--text-2); text-decoration:underline; text-underline-offset:3px;
+             text-decoration-color:var(--line-strong);">${text}</button>`;
+  }
+  const cta = kind === 'cta';
   return `<button type="button" onclick="${onclick}"
-    style="font:inherit; font-size:11.5px; font-weight:600; cursor:pointer; padding:4px 10px;
-           border:1px solid ${primary ? 'var(--danger, #e8556a)' : 'var(--line)'}; border-radius:var(--r-sm,5px);
-           background:transparent; color:${primary ? 'var(--danger, #e8556a)' : 'var(--text-2)'};">${text}</button>`;
+    style="font:inherit; font-size:11.5px; font-weight:600; cursor:pointer; padding:5px 12px;
+           border:1px solid ${cta ? 'var(--accent, #58606E)' : 'var(--line)'}; border-radius:var(--r-sm,5px);
+           background:${cta ? 'var(--accent, #58606E)' : 'transparent'};
+           color:${cta ? 'var(--accent-ink, #fff)' : 'var(--text-2)'};">${text}</button>`;
 }
 
 function delayInput(id, ph, extra) {
   return `<input id="${id}" type="text" placeholder="${escapeHtml(ph)}" ${extra || ''}
     style="font:inherit; font-size:11.5px; padding:4px 7px; border:1px solid var(--line);
-           border-radius:var(--r-sm,5px); background:var(--surface-1, #fff); color:var(--text-1);
+           border-radius:var(--r-sm,5px); background:var(--bg-input, #fff); color:var(--text-1);
            min-width:0; width:100%; max-width:150px;">`;
+}
+
+// The controls of one step. The first action is filled ONLY where the step is
+// the next one; everywhere else every control is quiet.
+function delayActs(step, isNext) {
+  const acts = (step.acts || []).map((a, i) => delayBtn(a.on, a.text, isNext && i === 0 ? 'cta' : 'btn'));
+  if (step.link) acts.push(delayBtn(step.link.on, step.link.text, 'link'));
+  if (!acts.length && !step.fields) return '';
+  // THE FIELDS GO WHEREVER THE BUTTONS GO, promoted or not. delaySettle reads
+  // `dcrec-<id>` and delayNoClaim reads `dcwhy-<id>`; a step drawn with its
+  // buttons but without its inputs answers the press with "enter an amount
+  // first" over a row that has nowhere to enter it. A control and the field it
+  // reads are one thing and do not get separated by a layout decision.
+  return `
+    ${step.fields ? `<div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:7px;">${step.fields}</div>` : ''}
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">${acts.join('')}</div>`;
 }
 
 function renderDelayCase(o, s, delayDays) {
@@ -7293,131 +7368,153 @@ function renderDelayCase(o, s, delayDays) {
   const ds     = (dc && dc.dispute_state) || 'none';
   const remedy = (dc && dc.remedy) || null;
   const canClose = !!(dc && dc.can_close);
-  const row = `display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:3px;`;
+
+  // The four steps, DESCRIBED rather than drawn — what each is called, whether
+  // it is finished, and what may be pressed on it. Which one carries the
+  // primary is then decided once, below, instead of four times in four places.
+  const steps = [];
 
   // 1 — the customer knows. The only step that existed before, and the reason
   // the whole alert used to vanish after one phone call.
-  const step1 = told
-    ? delayStepRow('done', cuT('Customer told', '已联系客户'),
-        `${escapeHtml(dc.customer_told_by || '')} · ${escapeHtml(String(dc.customer_told_at || '').slice(0, 16))}`)
-    : delayStepRow('todo', cuT('Tell the customer — fresh items may not be safe', '联系客户 — 生鲜可能已不安全'),
-        cuT('Perishable / fresh items may no longer be safe — advise them <u>not to consume</u>.', '生鲜/易腐产品可能已不安全，请告知客户<u>勿食用</u>。'),
-        `<div style="${row}">${delayBtn(`delayStep(${oid},${sid},'customer_told',{},event)`, cuT('Customer told', '已联系客户'))}</div>`);
+  steps.push(told
+    ? { done: true, label: cuT('Customer told', '已联系客户'),
+        meta: `${escapeHtml(dc.customer_told_by || '')} · ${escapeHtml(String(dc.customer_told_at || '').slice(0, 16))}` }
+    : { label: cuT('Tell the customer', '联系客户'),
+        detail: cuT('Perishable / fresh items may no longer be safe — advise them <u>not to consume</u>.', '生鲜/易腐产品可能已不安全，请告知客户<u>勿食用</u>。'),
+        acts: [{ on: `delayStep(${oid},${sid},'customer_told',{},event)`, text: cuT('Customer told', '已联系客户') }] });
 
   // 2 — the claim. NOT CLAIMING IS A REAL ANSWER and finishes the track: on a
   // small spoil nobody files anything, and the case still has to be closeable.
-  let step2;
   if (ds === 'none') {
-    step2 = delayStepRow('todo', cuT('Claim the delay off the carrier', '向承运商申请延误赔偿'), '',
-      `<div style="${row}">
-         ${delayInput(`dcref-${sid}`, cuT('Claim number', '赔偿单号'))}
-         ${delayInput(`dcamt-${sid}`, cuT('Amount claimed', '申请金额'), 'inputmode="decimal"')}
-         ${delayBtn(`delayFileClaim(${oid},${sid},'${escapeHtml(String(s.tracking_carrier || ''))}',event)`, cuT('Claim filed', '已申请延误赔偿'), true)}
-       </div>
-       <div style="${row}">
-         ${delayInput(`dcwhy-${sid}`, cuT('Why not claiming', '不申请的原因'))}
-         ${delayBtn(`delayNoClaim(${oid},${sid},event)`, cuT('Not claiming', '不申请赔偿'))}
-       </div>`);
+    steps.push({
+      label: cuT('Claim the delay off the carrier', '向承运商申请延误赔偿'),
+      fields: `${delayInput(`dcref-${sid}`, cuT('Claim number', '赔偿单号'))}
+               ${delayInput(`dcamt-${sid}`, cuT('Amount claimed', '申请金额'), 'inputmode="decimal"')}
+               ${delayInput(`dcwhy-${sid}`, cuT('Why not claiming', '不申请的原因'))}`,
+      acts: [{ on: `delayFileClaim(${oid},${sid},'${escapeHtml(String(s.tracking_carrier || ''))}',event)`, text: cuT('Claim filed', '已申请延误赔偿') }],
+      link: { on: `delayNoClaim(${oid},${sid},event)`, text: cuT('Not claiming', '不申请赔偿') },
+    });
   } else if (ds === 'no_claim') {
-    step2 = delayStepRow('done', cuT('Not claiming', '不申请赔偿'), escapeHtml(dc.dispute_note || ''));
+    steps.push({ done: true, label: cuT('Not claiming', '不申请赔偿'), meta: escapeHtml(dc.dispute_note || '') });
   } else {
     const bits = [];
-    if (dc.dispute_ref)     bits.push(escapeHtml(dc.dispute_ref));
+    if (dc.dispute_ref)             bits.push(escapeHtml(dc.dispute_ref));
     if (dc.dispute_claimed != null) bits.push(ordMoney(dc.dispute_claimed));
-    step2 = delayStepRow('done', cuT('Claim filed with the carrier', '已申请延误赔偿'), bits.join(' · '));
+    steps.push({ done: true, label: cuT('Claim filed with the carrier', '已申请延误赔偿'), meta: bits.join(' · ') });
   }
-
-  // The evidence sent to the carrier. It hangs under the claim because that is
-  // what it is for, and it NEVER gates the close: a case with no photographs is
-  // finishable, since plenty are settled on a phone call.
-  const files = (dc && dc.files) || [];
-  const evidence = `
-    <div style="display:grid; grid-template-columns:16px 1fr; gap:9px; align-items:start;
-                padding:8px 0; border-top:1px solid var(--line-soft);">
-      <span style="color:var(--text-3); line-height:1.4;">${files.length ? '▣' : '▢'}</span>
-      <div style="min-width:0; display:flex; flex-direction:column; gap:5px;">
-        <div style="color:var(--text-2);">${cuT('Evidence', '凭证')}${files.length ? ` · ${files.length}` : ''}</div>
-        ${files.length ? `<div style="display:flex; gap:6px; flex-wrap:wrap;">${
-          files.map(f => `<span style="display:inline-flex; align-items:center; gap:5px;
-                 border:1px solid var(--line); border-radius:var(--r-sm,5px); padding:2px 6px; font-size:11px;">
-            <a href="#" onclick="delayViewEvidence(${oid},${sid},${Number(f.id)},event);return false;"
-               style="color:var(--text-1); text-decoration:none;">${escapeHtml(f.label || cuT('View', '查看'))}</a>
-            <a href="#" onclick="delayRemoveEvidence(${oid},${sid},${Number(f.id)},event);return false;"
-               style="color:var(--text-3); text-decoration:none;" title="${cuT('Remove', '删除')}">×</a>
-          </span>`).join('')}</div>` : ''}
-        <div style="${row}">
-          <input type="file" accept="image/*" id="dcev-${sid}" style="display:none;"
-                 onchange="delayAddEvidence(${oid},${sid},this)">
-          ${delayBtn(`document.getElementById('dcev-${sid}').click()`, cuT('Add photo', '添加照片'))}
-        </div>
-      </div>
-    </div>`;
 
   // 3 — the customer is made whole. A branch, taken once. The refund arm is a
   // record that it happened; the refund itself stays on the path it always had.
-  // Done: the replacement's own order number and what it cost us — the figure
-  // the carrier's payment gets set against, further down.
   const remedyBits = [];
   if (dc && dc.remedy_at)   remedyBits.push(escapeHtml(String(dc.remedy_at).slice(0, 16)));
   if (dc && dc.remedy_note) remedyBits.push(escapeHtml(dc.remedy_note));
   if (dc && dc.remedy_cost != null) {
     remedyBits.push(cuT(`cost ${ordMoney(dc.remedy_cost)}`, `成本 ${ordMoney(dc.remedy_cost)}`));
   }
-  const step3 = remedy
-    ? delayStepRow('done',
-        remedy === 'refund' ? cuT('Refunded', '已退款') : cuT('Replacement sent', '已补发'),
-        remedyBits.join(' · '))
-    : delayStepRow('todo', cuT('Replacement or refund', '补发或退款'), '',
-        `<div style="${row}">
-           ${delayBtn(`delayReplacement(${oid},${sid},event)`, cuT('Send replacement', '补发'), true)}
-           ${delayBtn(`delayRemedy(${oid},${sid},'refund',event)`, cuT('Refunded', '已退款'))}
-         </div>`);
+  steps.push(remedy
+    ? { done: true,
+        label: remedy === 'refund' ? cuT('Refunded', '已退款') : cuT('Replacement sent', '已补发'),
+        meta: remedyBits.join(' · ') }
+    : { label: cuT('Replacement or refund', '补发或退款'),
+        acts: [{ on: `delayReplacement(${oid},${sid},event)`, text: cuT('Send replacement', '补发') },
+               { on: `delayRemedy(${oid},${sid},'refund',event)`, text: cuT('Refunded', '已退款') }] });
 
   // 4 — what the carrier finally did. THE AMOUNT IS RECORDED, NOT POSTED: it
   // reaches the books in §98's fourth stage and not before, because a claim is
   // not income for having been filed (§87).
-  let step4;
   if (ds === 'no_claim') {
-    step4 = delayStepRow('na', cuT('Carrier settled', '承运商赔偿'), '');
+    steps.push({ done: true, label: cuT('Carrier settled', '承运商赔偿'), meta: '–' });
   } else if (ds === 'filed') {
     const waited = delayDaysSince(dc.dispute_filed_at);
-    step4 = delayStepRow('wait', cuT('Carrier settled', '承运商赔偿'),
-      cuT(`Waiting on carrier · ${waited} day${waited === 1 ? '' : 's'}`, `等待承运商 · ${waited} 天`),
-      `<div style="${row}">
-         ${delayInput(`dcrec-${sid}`, cuT('Amount received', '收到金额'), 'inputmode="decimal"')}
-         ${delayBtn(`delaySettle(${oid},${sid},'paid',event)`, cuT('Carrier paid', '已赔偿'), true)}
-         ${delayBtn(`delaySettle(${oid},${sid},'rejected',event)`, cuT('Rejected', '已拒绝'))}
-         ${delayBtn(`delaySettle(${oid},${sid},'withdrawn',event)`, cuT('Withdrawn', '已撤销'))}
-       </div>`);
+    steps.push({
+      label: cuT('Carrier settled', '承运商赔偿'),
+      detail: cuT(`Waiting on carrier · ${waited} day${waited === 1 ? '' : 's'}`, `等待承运商 · ${waited} 天`),
+      aside: cuT(`${waited} day${waited === 1 ? '' : 's'}`, `${waited} 天`),
+      fields: delayInput(`dcrec-${sid}`, cuT('Amount received', '收到金额'), 'inputmode="decimal"'),
+      acts: [{ on: `delaySettle(${oid},${sid},'paid',event)`, text: cuT('Carrier paid', '已赔偿') },
+             { on: `delaySettle(${oid},${sid},'rejected',event)`, text: cuT('Rejected', '已拒绝') },
+             { on: `delaySettle(${oid},${sid},'withdrawn',event)`, text: cuT('Withdrawn', '已撤销') }],
+    });
   } else if (DELAY_TERMINAL.includes(ds)) {
     const label = ds === 'paid'     ? cuT('Carrier paid', '已赔偿')
                 : ds === 'rejected' ? cuT('Carrier rejected the claim', '承运商已拒绝')
                                     : cuT('Claim withdrawn', '已撤销申请');
-    step4 = delayStepRow('done', label,
-      dc.dispute_received != null ? ordMoney(dc.dispute_received) : escapeHtml(dc.dispute_note || ''));
+    steps.push({ done: true, label,
+      meta: dc.dispute_received != null ? ordMoney(dc.dispute_received) : escapeHtml(dc.dispute_note || '') });
   } else {
-    step4 = delayStepRow('todo', cuT('Carrier settled', '承运商赔偿'), '');
+    // Nothing filed, so there is no answer to record yet. The line says so
+    // rather than offering three buttons that cannot mean anything.
+    steps.push({ label: cuT('Carrier settled', '承运商赔偿'), waits: true,
+                 aside: cuT('after the claim', '申请赔偿后') });
   }
 
+  // The evidence sent to the carrier. It hangs under the claim because that is
+  // what it is for, and it NEVER gates the close: a case with no photographs is
+  // finishable, since plenty are settled on a phone call. Which is exactly why
+  // it is a line and not the large button it had become — the one step that
+  // decides nothing was the most prominent control in the box.
+  const files = (dc && dc.files) || [];
+  const evidence = `
+    <div style="display:flex; gap:9px; align-items:center; flex-wrap:wrap; padding:8px 0; border-top:1px solid var(--line-soft);">
+      <span style="flex:none; width:12px; text-align:center; color:var(--text-3);">${files.length ? '▣' : '▢'}</span>
+      <span style="color:var(--text-3);">${cuT('Evidence', '凭证')}</span>
+      ${files.map(f => `<span style="display:inline-flex; align-items:center; gap:5px;
+             border:1px solid var(--line); border-radius:var(--r-sm,5px); padding:2px 6px; font-size:11px;">
+        <a href="#" onclick="delayViewEvidence(${oid},${sid},${Number(f.id)},event);return false;"
+           style="color:var(--text-1); text-decoration:none;">${escapeHtml(f.label || cuT('View', '查看'))}</a>
+        <a href="#" onclick="delayRemoveEvidence(${oid},${sid},${Number(f.id)},event);return false;"
+           style="color:var(--text-3); text-decoration:none;" title="${cuT('Remove', '删除')}">×</a>
+      </span>`).join('')}
+      <input type="file" accept="image/*" id="dcev-${sid}" style="display:none;"
+             onchange="delayAddEvidence(${oid},${sid},this)">
+      <span style="margin-left:auto;">${delayBtn(`document.getElementById('dcev-${sid}').click()`,
+        files.length ? cuT('Add', '添加') : cuT('Add photo', '添加照片'), 'link')}</span>
+    </div>`;
+
+  // One step is promoted: the first unfinished one that can actually be acted
+  // on. Everything else is a line.
+  let promoted = false;
+  const body = steps.map((st, i) => {
+    let html;
+    if (st.done)                      html = delayDone(st.label, st.meta);
+    else if (!promoted && !st.waits) { promoted = true; html = delayNext(st.label, st.detail, delayActs(st, true)); }
+    else                              html = delayLater(st.label, st.aside, delayActs(st, false));
+    return i === 1 ? html + evidence : html;   // evidence belongs to the claim, in whatever state it is
+  }).join('');
+
+  // ✓ 2/4. A tick and two numerals need no word in either language. A case that
+  // will not claim has THREE steps, not four — counting a step marked n/a as
+  // outstanding forever is how a progress figure stops being believed.
+  const naSettle = ds === 'no_claim';
+  const total = naSettle ? 3 : 4;
+  const doneN = (told ? 1 : 0) + (ds !== 'none' ? 1 : 0) + (remedy ? 1 : 0)
+              + ((!naSettle && DELAY_TERMINAL.includes(ds)) ? 1 : 0);
+
   // The close button is the one that has always been here. It is refused while
-  // the dispute is open — server-side too, so the phone cannot slip past it.
+  // the dispute is open — server-side too, so the phone cannot slip past it —
+  // and the refusal now says which steps it is waiting on.
+  const blockers = ((dc && dc.blockers) || [])
+    .map(k => DELAY_BLOCKER[k]).filter(Boolean).map(pair => cuT(pair[0], pair[1]));
   const foot = canClose
-    ? delayBtn(`clearAirDelay(${oid}, event)`, cuT('Mark handled', '标记已处理'), true)
-    : `<span style="font-size:11.5px; color:var(--text-3); font-style:italic;">${
-        cuT('Close once every step above is done.', '以上步骤全部完成后方可关闭。')}</span>`;
+    ? delayBtn(`clearAirDelay(${oid}, event)`, cuT('Mark handled', '标记已处理'), 'cta')
+    : blockers.length
+      ? `<span style="font-size:11.5px; color:var(--text-3);">${cuT('to do', '待办')}: ${blockers.join(' · ')}</span>`
+      : `<span style="font-size:11.5px; color:var(--text-3); font-style:italic;">${
+          cuT('Close once every step above is done.', '以上步骤全部完成后方可关闭。')}</span>`;
 
   return `
-    <div style="padding:12px 14px; margin-bottom:12px;
-                background: var(--danger-soft, rgba(232,85,106,.14)); border:1px solid var(--danger, #e8556a);
-                border-radius: var(--r-md, 6px); font-size:12.5px; line-height:1.5;">
-      <div style="display:flex; gap:9px; align-items:flex-start;">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; color:var(--danger, #e8556a);"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-        <div style="font-weight:700; font-size:13px; color: var(--danger, #e8556a); text-transform:uppercase; letter-spacing:.04em;">
+    <div style="margin-bottom:12px; border:1px solid var(--line); border-radius:var(--r-md, 6px);
+                overflow:hidden; font-size:12.5px; line-height:1.5; background:var(--bg-elev-1, #F6F3EC);">
+      <div style="display:flex; gap:8px; align-items:center; padding:8px 12px;
+                  background:var(--danger-soft, rgba(180,83,62,.12)); color:var(--danger, #B4533E);">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        <div style="font-weight:700; font-size:12.5px; letter-spacing:.02em;">
           ${cuT(`Delivery delayed — arrived ${delayDays} day${delayDays > 1 ? 's' : ''} late`, `配送延误 — 晚到 ${delayDays} 天`)}
         </div>
+        <div style="margin-left:auto; flex:none; font-size:11.5px;">✓ ${doneN}/${total}</div>
       </div>
-      <div style="margin-top:6px;">${step1}${step2}${evidence}${step3}${step4}</div>
-      <div style="margin-top:10px; padding-top:9px; border-top:1px solid var(--line-soft);">${foot}</div>
+      <div style="padding:2px 12px 10px;">${body}</div>
+      <div style="padding:9px 12px; border-top:1px solid var(--line-soft);">${foot}</div>
     </div>`;
 }
 
