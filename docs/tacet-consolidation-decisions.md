@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.256
+# Tacet shared-core consolidation — decisions record, v4.257
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-13 · v4.257 — **§123 · §117 PART THREE BUILT: GZ GROCERY WEARS THE CHANNEL FRAME, AND THE FRAME IS ONE SET OF RULES RATHER THAN A THIRD COPY OF IT.** §117 left this page named as *"the odd one out"*: its own heading shape, two purpose paragraphs, a bespoke health strip, its own sub-nav, and ~30 lines of inline `<style>`. **THE SURVEY FOUND MORE THAN A STYLE MISMATCH.** `#tab-meituan` and `#tab-eleme` each remap the admin's BASE token family (`--line`, `--text-1`, `--bg-pane` — warm-grey, pre-Tacet) onto the Tacet palette at the top of their blocks; **`#tab-guanyi` never did**, and its inline rules were written against that base family, so this page has been painting its cards, borders and text off-palette next to two pages that were not. The remap is now here, the same list they carry. **THE FRAME IS SHARED BY SELECTOR, NOT COPIED.** 33 rules (pagehead, status, tiles, store lines, tab strip) now name `.gy-` alongside `.mt-`, so a change to one is a change to all — the same additive move §117 part two used on the switch, and for the same reason. Four selectors the join produced that could never match (`#tab-meituan .gy-pagehead`, `.gy-storeline.mt-catline`) were removed rather than left as noise. **WHAT WAS DELIBERATELY NOT DONE, AND WHY IT IS RECORDED RATHER THAN DONE**: Meituan and Eleme still hold **112 near-duplicate rules between them — 34 of the first 36 compared are byte-identical**, the two that differ being accidents (`flex: 1 1 320px` vs `340px`; a restatement of the base `.n` background). Consolidating them is the real end of this drift, and it is a mechanical move of ~112 rules through a 15k-line stylesheet across two live pages **that cannot be visually verified here**: the browser suite lives in the slow shard, which is off by Ash's standing instruction. The session's own @media-nesting scanner got that file's structure wrong on its first pass, which is the evidence for not attempting it blind. **Additive joining carries none of that risk and delivers the same thing for GZ Grocery.** **THE NAME IS THE SHARED TABLE'S NAME**: the heading read *"gzgrocery 同步 · Guanyi Sync"* while the Channel sync page, the dashboard row and the phone all say **GZ Grocery** — three names for one channel, which is what §103 step 5 exists to prevent. `CH_NAME` is the one table and it says GZ Grocery on both sides, so the h2 does too and carries no language pair to drift. **THE TWO PURPOSE PARAGRAPHS ARE GONE** (§1.7 bans them); the one fact in them a reader could not get from the screen — that products match on the SKU inside the Guanyi name — moved verbatim onto the **Mapping** panel, where somebody is actually doing that. **Billing and Mapping stayed on this page**, per Ash: *"it's got nothing to do with syncing products"*. **THE MAPPED TILE IS NOT CALLED SYNCED**, and the test says so: `mappedCount` counts mappings with the switch on, while the Channel sync page's `ok` counts items the channel holds the right number for — one word over two different numbers on two screens is the §103 step 5 defect exactly. **Chinese: nothing composed.** `Mapped · 已映射` and the three freshness phrases are this page's own from the strip that stood here; `Needs attention · 待处理` is `chStateWord('att')`, the one table; `Stock updates waiting · 待推送库存` is the Meituan and Eleme tile whose number means the same thing; `nothing needs you · 无需处理` and the `N 个待处理` / `N 发送中…` shapes are the Channel sync strip's, number in the same slot. A wrong fallback wording (`Need attention`, missing the s that `CH_STATE_WORD` carries) was caught by the suite before it shipped. **Tests:** new `scripts/test_channel_frame.js` — **13 cases**, auto-discovered into the fast shard, all five load-bearing rules confirmed red against a deliberate break; three of its own cases were wrong on first run (a slicer that swept in a neighbouring global `<style>`, two checks matching the explanatory comment rather than the markup) and were fixed rather than loosened. `npm run test:fast` 230 passed, 0 failed; eslint 0 errors; doc-numbering PASS. No route, no schema, no migration, no new capability, and no change to `.gitignore` or CI.**
 
 2026-09-13 · v4.256 — **A SWITCH BELONGS ON THE ROW WHOSE VALUE IT CHANGES — §122, REPORTED BY ASH against §116's own record, with the block circled: *"this part need to redesign. not clear."*** Five centred sentences at the foot of the customer record, with no container, no icons, nothing saying they could be pressed, labels that were clauses rather than verbs, and Brick TEXT where §5 gives destructive a Brick OUTLINE — so Block, which locks a person out, read at the same weight as Reissue, which is undone in one tap. **The fault that was not styling:** the block was the desktop's More menu lifted whole, and four of its five controls act on facts already on screen a few rows up. **Three mockups were put up and Ash chose Option B** (`design-handoff/customer-actions/`): each control now sits on the row whose value it changes — Their code · Reissue, Referring · Stop, Ongoing share · Allow, Signed in on 2 devices · Sign out — through `custRowAct`, which renders `custRow`'s exact shape when no control is passed, and **that null is where the capability gate lands**: an operator who may not write is passed no control and the row goes on stating its fact. **Block keeps the foot alone**, as a Brick outline: it is the only thing there that takes something away from a person, and it has no fact-row to sit on. Unblock is NOT dressed as destructive — it gives something back. **The open question is settled by the choice:** §116 drew the Referring row only once referring had been STOPPED; a switch that materialises the first time you use it is worse than the drawer it replaced, so the row is always drawn now (Active / Stopped), gated on the affiliate FEATURE rather than the flag. The ongoing share keeps its narrower 'selected'-mode condition, which is about meaning rather than about carrying a control. **Tests:** 84 → **103 assertions across 37 cases**, asserting WHERE a control is — each switch resolves to the list carrying its own fact, labels are at most two words, the foot holds exactly one button, and every `.rowact` measures 44px or more. **Chinese:** one composed pair (`有效`), four trims and one lift, v1.75; every long label survives on the confirm its verb opens. No route, no schema, no migration, no capability change, no CI or .gitignore change.**
 
@@ -13604,3 +13606,89 @@ confirmation cannot drift.
 
 No route, no schema, no migration, no capability change, and no change to
 `.gitignore` or CI.
+
+
+## §123 — GZ GROCERY WEARS THE CHANNEL FRAME (§117 PART THREE)
+
+**2026-09-13 · built. Closes §117, which named this page the odd one out and left
+it for a PR of its own.**
+
+### What was wrong
+
+Three channel pages, three page frames. Meituan and Eleme are near-twins;
+GZ Grocery shared nothing with them — its own heading shape, two purpose
+paragraphs, a bespoke one-line health strip, its own sub-nav, and about thirty
+lines of inline `<style>` inside the section.
+
+**And a defect nobody had reported.** `#tab-meituan` and `#tab-eleme` each open
+their CSS block by remapping the admin's base token family — `--line`,
+`--text-1`, `--bg-pane`, warm-grey and pre-Tacet — onto the Tacet palette.
+`#tab-guanyi` never did, and its inline rules were written against that base
+family. This page has been painting its cards, borders and text off-palette,
+next to two pages that were not.
+
+### What was built
+
+- **The frame is shared by selector.** 33 rules — pagehead, status line, tiles,
+  store lines, tab strip — now name `.gy-` alongside `.mt-`. One declaration,
+  three pages. The same additive move §117 part two used on the sync switch.
+- **The token remap**, the same list Meituan and Eleme carry.
+- **The head is the frame's head**, in the frame's order: pagehead + status line
+  → three tiles → one line for the product list → sub-tabs. The three panels
+  below (Overview, Billing, Mapping) are untouched.
+- **The Refresh list action moved onto the line whose freshness it changes**,
+  where Eleme puts the same control.
+- **The inline `<style>` block is gone.** What survived it — the three-panel
+  body, the billing teaser, the eyebrow — moved to `retail-admin.css`.
+
+### One name for one channel
+
+The heading read **"gzgrocery 同步 · Guanyi Sync"** while the Channel sync page,
+the dashboard row and the phone all say **GZ Grocery**. Three names for one
+channel is what §103 step 5 spent a step ending. `CH_NAME` is the one table; it
+says GZ Grocery on both sides, so the h2 does too — and carries no language pair
+that could drift.
+
+### The word that is deliberately not used
+
+**The mapped tile is not called Synced.** `mappedCount` counts mappings with the
+switch on. The Channel sync page's `ok` counts items the channel holds the right
+number for. They are different numbers, and putting one word over both on two
+screens is the §103 step 5 defect exactly. The tile says Mapped, because that is
+what it counts. A test asserts it.
+
+### The purpose paragraphs
+
+Gone — §1.7 bans them; they describe what a page is for and read the same every
+day. The one fact in them a reader could not get from the screen (products match
+on the SKU inside the Guanyi name) moved **verbatim** onto the Mapping panel,
+where somebody is doing that matching, rather than sitting above a page they
+open daily to look at something else.
+
+### What is NOT done, and why it is written down instead
+
+**Meituan and Eleme still hold 112 near-duplicate rules between them.** Of the
+first 36 compared, **34 are byte-identical**; the two that differ are accidents
+— `flex: 1 1 320px` against `340px`, and a restatement of a background the base
+rule already sets. Consolidating them is the real end of this drift.
+
+**It was not attempted, and the reason is not squeamishness.** It is a
+mechanical move of ~112 rules through a 15k-line stylesheet, across two live
+pages, **with no way to verify the result visually**: the browser suite that
+would catch a regression lives in the slow shard, which is off by Ash's standing
+instruction and is not a session's to switch back on. This session's own
+@media-nesting scanner mis-read that file's structure on its first pass — which
+is the evidence, not a hunch. Additive joining carries none of that risk and
+gives GZ Grocery the identical frame today.
+
+**When it is done it needs a browser pass**, and that is a decision about the
+slow shard, which is Ash's.
+
+### Chinese
+
+**Nothing composed.** `Mapped · 已映射` and the three freshness phrases are this
+page's own, lifted from the strip that stood here. `Needs attention · 待处理` is
+`chStateWord('att')` — the one table. `Stock updates waiting · 待推送库存` is the
+Meituan and Eleme tile whose number means the same thing.
+`nothing needs you · 无需处理` and the `N 个待处理` / `N 发送中…` shapes are the
+Channel sync strip's own, with the number in the same slot.
