@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.258
+# Tacet shared-core consolidation — decisions record, v4.259
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-14 · v4.259 — **§126 · THE PRODUCT EDITOR STOPS TALKING ABOUT SYNCING. REPORTED BY ASH on a photo of the editor, three green Channels rows above the SKU:** *"I don't want the channel sync on product page."* **THIS REVERSES AN INFERENCE OF MINE, NOT A DECISION OF ASH'S.** §103 step 4 put the Channels card on the editor; §117 then stripped every trace of syncing from the Products **list** and explicitly KEPT the card, arguing *"one product looked at in depth is not a second overview."* Ash's instruction that day named *"the products list page"* and the card survived on a reading of what that meant — the reading is now withdrawn. **REMOVED:** `<section id="pd-channels-card">` and its body from `retail-admin.html`; `pdLoadChannels`, `_pdChSeq`, `_pdChAgo`, the call on the editor's open path, and `_paChName` (which §117 had kept alive ONLY for this card) from `09-products.js`; the `.pd-ch-rows` / `.pd-ch-row` block from `retail-admin.css`. **Nothing in the products module reads `/channel-sync` any more.** Each site carries a note naming §126 and the instruction, so the next reader finds a tombstone rather than a gap. **THE CARD COULD REPORT BUT NOT REPAIR** — its one action was a button that left for the channel's own tab, which makes it a detour with a step in it, and the place it sent you to was already the answer. Sync state is now worded in exactly one place: Sales › Channel sync, a tab since §117, with part two's repair panel and §124's phone copy. **The sentence-builder exports in `29-channel-sync.js` STAY** — the dashboard, `01-core.js`, `11-meituan.js`, `12-guanyi.js` and `14-eleme.js` are still callers; there is simply one fewer screen that could word a state a second way. **THREE TESTS MOVED WITH THE CODE.** `test_channel_sync_items.js`'s *"the product editor keeps its Channels card"* asserted `pdLoadChannels` and the card id were PRESENT; it is now *"the product editor says nothing about syncing"* and asserts their absence plus the helpers, the fetch and the CSS — matching on **definitions and rules rather than the bare word**, the tombstone-proof shape §117's own list check uses, so a note naming what it removed cannot fail the test that removed it. The *"both clients read the channel's cause"* check drops the editor, which no longer shows a cause to defer about. `test_channel_sync_home_row.js` pinned the guarded-`typeof` shape against `09-products.js`'s `_paChName`; its second witness is now `12-guanyi.js`, and the comment says any live caller would do — what it pins is that the shape is shared, not which file shares it. **Chinese: nothing composed** — this change only removes strings, so `docs/tacet-delivery-vocabulary.md` is untouched (still v1.80). **What is not done:** no route change (`/api/retail-admin/channel-sync?productId=` still exists and is still served; the editor simply stopped calling it), no change to the Channel sync page, the phone, the mapping repair or any capability, and the Products list was already clean under §117 and was not touched. `npm run test:fast` 235 passed, 0 failed; `npm run lint` 0 errors; doc-numbering PASS. No schema, no migration, and no change to `.gitignore` or CI.**
 
 2026-09-14 · v4.258 — **§124 · THE PHONE CARRIES THE REPAIR §117 PART TWO BUILT, AND STOPS NAMING A TAB THAT CANNOT HELP. REPORTED BY ASH from the phone, holding the screen:** *"the channel sync also need to change according to the new [PC] version of sales channel syncing new version we did today?"* **YES — AND TWO SENTENCES ON THAT SCREEN HAD BEEN FALSE SINCE §117 PART TWO MERGED**: the foot said *"Read-only. A mapping is repaired on the desktop's channel tabs"* and every expanded amber card said *"Fix this on the desktop: Meituan tab."*, while the desktop Channel sync page had just gained a push and a switch that clear four of the seven reasons between them. **THE SCREENSHOT IS THE WORST CASE RATHER THAN A TYPICAL ONE.** Both items on it read *"The last push to Meituan failed"* — `push_failed` — and **the Meituan tab is the one screen that cannot clear it**: the daemon picks up only `pending` rows (`docs/meituan-findings.md` #6), which is the defect §117 part two's push exists to refresh its way out of. The second item is **Black Beans**, the item a session found stuck amber for exactly this on 2026-09-12 and which part two's own record cites. The phone was not merely stale; it was directing the repair away from the only screen that performs it. **THE PHONE GETS THE PUSH AND NOT THE SWITCH**, and the narrower line is deliberate. The push is idempotent (a pending row is refreshed, never duplicated) and the person who sees a wrong number is at the shelf holding a phone; turning sync OFF is a lasting change afterwards visible only as a grey chip somebody goes looking for, which is the wrong shape for one hand on a small screen. **THE VERB IS OFFERED ON THE SAME ROWS AS THE DESKTOP'S** — neither `none` nor `off` — and the suite proves it by SLICING BOTH CONDITIONS OUT OF THE TWO LIVE FILES and running them against one table of eight states, so neither can be edited alone. **THE REFERRAL TO THE DESKTOP IS NARROWER ON THE PHONE, ON PURPOSE**: the desktop's *Open Meituan* costs one click on the machine already in front of you, while the phone's version is a sentence asking somebody to go and find a computer. It now appears only for `no_name` / `name_not_found` / `no_option` — the three that need the channel's own catalogue picker and the three part two deliberately did not build. **The read-only note is DELETED rather than reworded**: the card that needs a desktop already says so on the item it is about (§122's rule applied to an instruction), and a standing line at the foot telling every operator to go to a computer is the §1.7 shape. **THE BUTTON CARRIES A CLIENT-SIDE CAPABILITY GATE WHERE THE DESKTOP NEEDS NONE, AND THE REASON IS SPECIFIC**: this file's `apiWrite` sends a **403 to `/backend/login` exactly as it sends a 401**, so an ungated Sync now answers a missing permission by throwing the operator out of the app. It is drawn through `mCan('{channel}:sync')`, whose null-caps case means allowed — the server is still the gate. The screen's own row gate is unchanged and stays any-of the three `:view` keys: somebody who may look but not push gets the whole alarm with no button on it. **Chinese: nothing composed.** Four pairs, all lifted — `Sync now · 立即同步` is the desktop button's (which took it from `11-meituan.js`), `Sending… · 发送中…` is this screen's own `csCellWord`, the `not_mapped` / `not_syncing` refusal is `01-core.js`'s pair character for character because it is the same fact, and the fallback is `orderErrorText`'s own default on this file. `docs/tacet-delivery-vocabulary.md` is not touched, and a test asserts that §124 wrote nothing into it. **THREE STALE COMMENTS CORRECTED**: `29-channel-sync.js`, `retail-admin.html`'s `#tab-channel-sync` block and the phone's `SUBS.channelsync` all still called the page read-only after part two gave it two verbs. The product editor's Channels card (§103 step 4) is **still** read-only and was left alone. **Tests:** new `scripts/test_mobile_channel_sync_repair.js` — **36 cases**, auto-discovered into the fast shard, five load-bearing rules confirmed red against deliberate breaks (the `off` state re-admitted to the push, the sentence widened back to every amber channel, the `mCan` gate dropped, the path's `/channel-sync` prefix removed, the footer note restored). `npm run test:fast` 233 passed, 0 failed; `npm run lint` 0 errors; doc-numbering PASS. No route, no schema, no migration, no new capability, and no change to `.gitignore` or CI.**
 
@@ -13917,3 +13919,80 @@ No route change (the step endpoint is transport and validates nothing itself),
 no migration, no capability, no change to the close rule, the blocker codes, the
 progress figure or the footer wording. The footer's `待办: 补发或退款` is
 unchanged and now simply stops appearing on the cases that are finished.
+
+---
+
+## §126 — THE PRODUCT EDITOR STOPS TALKING ABOUT SYNCING (§117 FINISHED)
+
+**Ash, 2026-09-14, on a photo of the editor's Channels card: *"I don't want the
+channel sync on product page."*** Decided and built the same day.
+
+### What this reverses
+
+§103 step 4 put a Channels card at the top of the product editor: one row per
+channel, the state, what the platform last took, and an *Open Meituan* button on
+a row that needed repair. §117 then stripped every trace of syncing from the
+Products **list** — the column, the dots, `paLoadChannels`, the per-load
+`/channel-sync?compact=1` read — and explicitly **kept** this card, on the
+reading that *"one product looked at in depth is not a second overview
+competing with the first."*
+
+**That reading was mine, not Ash's.** §117 recorded Ash's instruction as *"the
+products list page"* and drew the line there; the card survived on an inference
+about what the instruction meant. This section removes the inference. The
+scope Ash gave now covers the editor too, and the editor is the page the photo
+was taken of.
+
+### What was removed
+
+- `public/retail-admin.html` — `<section id="pd-channels-card">` and its body.
+- `public/retail-admin/09-products.js` — `pdLoadChannels`, `_pdChSeq`,
+  `_pdChAgo`, the call from the editor's open path, and `_paChName`, which
+  §117 had kept alive *only* because this card needed it. Nothing in the
+  products module reads `/channel-sync` any more.
+- `public/retail-admin.css` — the `.pd-ch-rows` / `.pd-ch-row` block.
+
+Each site carries a note naming §126 and the instruction, so the next reader
+finds a tombstone rather than a gap.
+
+### Why this is the right shape, and not a loss
+
+**The card could report but not repair.** Its one action was a button that left
+for the channel's own tab. A screen that can only say *something is wrong, go
+elsewhere* is a detour with a step in it, and the place it sent you to is the
+place that was already the answer.
+
+**Sync state is now worded in exactly one place.** Sales › Channel sync — a tab
+since §117, with the repair panel §117 part two built and the phone's copy from
+§124. The sentence-builders in `29-channel-sync.js` exist so two screens cannot
+word one state two ways; with the editor gone there is one fewer screen that
+could. The exports stay: the dashboard, `01-core.js`, `11-meituan.js`,
+`12-guanyi.js` and `14-eleme.js` are still callers.
+
+**The editor gets its opening back.** The card sat above Basics and was the
+first thing on the page for every product on a tenant with any channel mapped
+— including, as in the photo, three green rows saying nothing had gone wrong.
+Three quiet lines are not free when they are the first three.
+
+### The test moved with the code
+
+`scripts/test_channel_sync_items.js` carried a check named *"the product editor
+keeps its Channels card"*, asserting `pdLoadChannels` and `id="pd-channels-card"`
+were **present**. It is now *"the product editor says nothing about syncing"* and
+asserts their absence, plus the helpers, the fetch and the CSS — the same
+tombstone-proof shape §117's own list check uses, matching on the exports rather
+than the word so a note naming what was removed cannot fail the test that
+removed it.
+
+### Chinese
+
+**None composed.** This change only removes strings. `Channels · 渠道` and the
+card's `cuT` pairs go with the card; no live string changed meaning, so
+`docs/tacet-delivery-vocabulary.md` is unchanged.
+
+### What is not done
+
+No route change — `/api/retail-admin/channel-sync?productId=` still exists and
+is still served; the editor simply stopped calling it. No change to the Channel
+sync page, the phone, the mapping repair, `29-channel-sync.js`'s exports, or any
+capability. The Products list was already clean under §117 and was not touched.
