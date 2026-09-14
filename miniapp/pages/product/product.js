@@ -1141,9 +1141,6 @@ Page({
       const soldOut = out && !orderable;
       return {
         id: m.id,
-        // Link to this size's own product page — unless it's the one we're
-        // already viewing (no point linking a row back to the current page).
-        linkId: Number(m.id) === Number(this.data.id) ? 0 : m.id,
         label: lang.pickVariantLabel(m.variant_label, m.variant_label_cn, L) || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
         weight: (m.size || '').toString().trim(),
         price: eff > 0 ? money(eff) : '',
@@ -1170,9 +1167,8 @@ Page({
   },
 
   closeVariantPicker() { this.setData({ vpShow: false }); },
-  // Tap the chevron on any picker row that links a real product (a sibling
-  // size, or a choice/extra backed by a stock product) → open that product's
-  // page. catchtap keeps the row's own tap (add-to-cart / select / checkbox)
+  // Tap the chevron on a choice/extra backed by a stock product → open that
+  // product's page. catchtap keeps the row's own tap (select / checkbox)
   // from also firing. We deliberately DON'T close the sheet: navigateTo keeps
   // this page alive underneath, so when the customer taps "back" the picker is
   // still open exactly as they left it (selections intact).
