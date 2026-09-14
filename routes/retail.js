@@ -1095,10 +1095,16 @@ const RETAIL_PRODUCT_COLS = `
 `;
 
 // Effective out-of-stock policy for a catalog row, resolving the legacy
-// is_batch_made flag and NULL defaults to one of two concrete modes:
-//   'strict'       → not orderable in ANY region once stock ≤ 0 (default).
-//   'backorder_gz' → out-of-city shoppers may still pre-order; only same-day
-//                    Guangzhou stays hard-blocked.
+// is_batch_made flag and NULL defaults to one of three concrete modes:
+//   'strict'        → not orderable in ANY region once stock ≤ 0 (default).
+//   'backorder_gz'  → out-of-city shoppers may still pre-order; only same-day
+//                     Guangzhou stays hard-blocked.
+//   'backorder_all' → §128: EVERY shopper may pre-order, same-day Guangzhou
+//                     included. The order that results cannot ship off the
+//                     shelf, so it PARKS as 'awaiting_restock' with its
+//                     delivery window cleared — see the pre-order park in
+//                     POST /orders. The difference from 'backorder_gz' is one
+//                     question only: may the local run sell past zero.
 // An explicit oos_policy always wins; a blank policy falls back to the legacy
 // rule (batch meals = backorder, everything else = strict) so nothing that
 // relied on is_batch_made regresses before operators opt products in.
@@ -1110,8 +1116,26 @@ function effectiveOosPolicy(p) {
   // the order gate, not here.
   if (p && p.ship_from_supplier) return 'always';
   const pol = (p && p.oos_policy) || '';
-  if (pol === 'always' || pol === 'backorder_gz' || pol === 'strict') return pol;
+  if (pol === 'always' || pol === 'backorder_gz' || pol === 'backorder_all' || pol === 'strict') return pol;
   return (p && p.is_batch_made) ? 'backorder_gz' : 'strict';
+}
+
+// Does this policy keep a sold-out row ORDERABLE for the shoppers it covers?
+// The two backorder modes differ in WHO they cover, never in whether the row
+// survives zero, so every "may this be pre-ordered at all" test reads this and
+// the region question is asked separately (isLocalRunPreorder below). Written
+// as a function rather than spelled out at each site because there are eleven
+// of them: a twelfth that forgets the new mode reads as a dead SOLD OUT with
+// nothing thrown, which is the failure §80 spent three rounds chasing.
+function isPreorderPolicy(pol) {
+  return pol === 'backorder_gz' || pol === 'backorder_all';
+}
+
+// …and the region half: may a shopper ON THE SAME-DAY LOCAL RUN pre-order it?
+// Only 'backorder_all' says yes. 'backorder_gz' is refused for them by
+// localPreorderLine, which is why the clients draw a dead SOLD OUT there.
+function isLocalRunPreorder(pol) {
+  return pol === 'backorder_all';
 }
 
 // The other half of that offer, and it has to travel with it: WHICH DAY the
@@ -1196,7 +1220,17 @@ function decorateFreshBatch(rows) {
 // own date compared against the batch, which is more than this line-level gate
 // is handed.) A grocery line keeps the refusal everywhere: no schedule names
 // its restock, so the premise still holds for it.
-function localPreorderLine(lines, address, { scheduledShipDistrict = false, freshPreorderOk = false } = {}) {
+//
+// `preorderParkOk` is §128's exemption and is opt-in for EXACTLY the reason
+// freshPreorderOk is: only a caller that can carry the consequence may claim
+// it. A 'backorder_all' line is honest at CHECKOUT because the order it makes
+// parks undated (awaiting_restock, window cleared, surcharge refunded). The
+// ADD-ON path can offer none of that — it hangs a line on an order whose day
+// is already fixed and often already paid, with no park to move it to — so it
+// does not pass the flag and keeps refusing, exactly as it does for a fresh
+// meal. Defaulting to off is what makes a caller that has never heard of this
+// policy behave correctly without being edited.
+function localPreorderLine(lines, address, { scheduledShipDistrict = false, freshPreorderOk = false, preorderParkOk = false } = {}) {
   if (!inventory.isGuangzhouAddress(address)) return null;
   if (scheduledShipDistrict) return null;
   // With no schedule configured there is no date, nothing is exempt, and every
@@ -1204,7 +1238,17 @@ function localPreorderLine(lines, address, { scheduledShipDistrict = false, fres
   const freshDate = freshPreorderOk ? nextFreshBatchDate() : null;
   return (lines || []).find(r => {
     if (!r || !r.product) return false;
-    if (effectiveOosPolicy(r.product) !== 'backorder_gz') return false;
+    // 'backorder_all' is EXEMPT BY NAME, and only for a caller that opted in.
+    // The operator has said the local run may sell it past zero; at checkout
+    // the order that results parks as 'awaiting_restock' with no window rather
+    // than riding today's van, so the premise this rule refuses on — "there is
+    // nothing behind a sold-out backorder line for a shopper served off the
+    // shelves" — is answered rather than ignored. Spelled out rather than left
+    // to fall off the end of the test, because a silent skip here reads
+    // identically to a forgotten case.
+    const pol = effectiveOosPolicy(r.product);
+    if (!isPreorderPolicy(pol)) return false;
+    if (preorderParkOk && isLocalRunPreorder(pol)) return false;
     if (freshDate && r.product.is_batch_made) return false;
     const avail = r.product.real_stock == null ? null : Number(r.product.real_stock);
     return avail != null && avail < r.qty;
@@ -2051,7 +2095,16 @@ router.get('/api/retail/products', (req, res) => {
   // shoppers, so the shop grid + its quick-add size picker can show "PRE-ORDER"
   // instead of a dead "SOLD OUT" without re-implementing the policy fallback
   // (oos_policy → legacy is_batch_made) on every client.
-  for (const r of rows) r.oos_preorder = effectiveOosPolicy(r) === 'backorder_gz';
+  for (const r of rows) {
+    const pol = effectiveOosPolicy(r);
+    r.oos_preorder = isPreorderPolicy(pol);
+    // §128's companion flag, and it travels with oos_preorder EVERYWHERE that
+    // one is stamped — same rule, same reason, as local_fresh_date above. The
+    // clients all suppress the pre-order pill on the local run; without this
+    // they would suppress it for 'backorder_all' too and draw the dead SOLD
+    // OUT the policy exists to remove.
+    r.oos_preorder_local = isLocalRunPreorder(pol);
+  }
   // The day a sold-out FRESH row is next made. Present only on batch-made rows,
   // and only while a schedule exists. It is what lets a Guangzhou shopper — for
   // whom oos_preorder alone means "sold out", since the local run has no
@@ -2916,18 +2969,25 @@ router.get('/api/retail/products/:id', (req, res) => {
       // Whether an out-of-stock size may still be pre-ordered (out-of-city only;
       // the order gate re-checks the address). Lets the storefront offer
       // "Pre-order" instead of a dead "SOLD OUT" on a backorder_gz size.
-      const vPre = effectiveOosPolicy(v) === 'backorder_gz';
+      const vPol = effectiveOosPolicy(v);
+      const vPre = isPreorderPolicy(vPol);
+      const vPreLocal = isLocalRunPreorder(vPol);
       delete v.oos_policy;
       delete v.is_batch_made;
       const dec = flashsales.decorateProduct(v, nowMs);
       dec.oos_preorder = vPre;
+      // Read BEFORE the delete above, like vPre — the size rows ship without
+      // oos_policy, so a client that wanted to tell the two backorder modes
+      // apart could not, and §128 needs it to.
+      dec.oos_preorder_local = vPreLocal;
       return dec;
     });
   } else {
     product.variants = [];
   }
-  // Same pre-order flag for the single (non-variant) product hero.
-  product.oos_preorder = effectiveOosPolicy(product) === 'backorder_gz';
+  // Same pre-order flags for the single (non-variant) product hero.
+  product.oos_preorder = isPreorderPolicy(effectiveOosPolicy(product));
+  product.oos_preorder_local = isLocalRunPreorder(effectiveOosPolicy(product));
   // …and the same fresh-batch day the grid ships, for the same reason — the
   // hero AND every sibling size, because the size picker labels each row on
   // its own and a size the hero never mentions still has to know its day.
@@ -10689,6 +10749,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     // enforces that floor against whatever slot actually arrived.
     const localPre = localPreorderLine(mutatedItems, address, {
       scheduledShipDistrict, freshPreorderOk: true,
+      // …and the caller that can park a §128 pre-order, for the same reason.
+      preorderParkOk: true,
     });
     if (localPre) {
       return res.status(409).json({
@@ -10746,6 +10808,26 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // scheduled-for-later delivery.
   const stockGate = isPickup ? true : inventory.requiresStockGate({ address, deliverySlotId, now: orderNow, tz: orderTz });
 
+  // §128 — a sold-out 'backorder_all' line makes this order a PRE-ORDER even
+  // under the stock gate, and routing has to be told before it goes looking.
+  //
+  // WHY THIS EXISTS AT ALL. routeOrder with the gate on hunts for a store that
+  // holds the stock; there is none, so it returns needs_fallback_confirmation
+  // and the shopper meets the 5-option shortage modal — for an item the
+  // operator has just finished promising them they could pre-order. The modal
+  // fires BEFORE the pre-order park below ever runs, so widening the park
+  // alone would have changed nothing a customer could see.
+  //
+  // Pickup is deliberately NOT exempted: a customer collecting in person
+  // expects the item on the shelf, which is the same reason pickup always
+  // gates stock even on a scheduled day.
+  const preorderAllShort = !isPickup && resolved.some((r) => {
+    if (!r || !r.product) return false;
+    if (!isLocalRunPreorder(effectiveOosPolicy(r.product))) return false;
+    const avail = r.product.real_stock == null ? null : Number(r.product.real_stock);
+    return avail != null && avail < r.qty;      // NULL (untracked/bundle) is not short
+  });
+
   // routed_by_distance: 1 = store chosen by real GPS distance, 0 = coarse
   // fallback (no address coords), null = N/A (pickup / out-of-city pin / etc.).
   let fulfillingStore, routingReason, routedByDistance = null;
@@ -10774,7 +10856,10 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       items: expandStockLines(mutatedItems),   // bundles → component demand
       channel: 'wechat',
       acceptFallback,
-      ignoreStock: !stockGate,
+      // §128: a cart holding a short 'backorder_all' line routes relaxed for
+      // the same reason an out-of-city cart does — the parcel leaves later, so
+      // "who has it right now" is the wrong question to refuse on.
+      ignoreStock: !stockGate || preorderAllShort,
       ignoreOrderIds: ownPendingOrderIds,       // don't let their own unpaid hold reroute them
     });
     if (routing.error === 'no_active_store') {
@@ -10927,12 +11012,13 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   //   • No stock-backed option add-on. Those hang off a line rather than
   //     carrying one of their own, so the release would neither check nor
   //     deduct them — where the ordinary paid path does both.
-  //   • Every short line is a backorder line. This is also what keeps a
-  //     supplier-direct line out: it holds no stock of ours, so it has no row,
-  //     so it reads short on every order it is on — and its effective policy is
-  //     'always', not 'backorder_gz'. Parking on it would be waiting for a
-  //     count nobody is ever going to write. ('strict' cannot reach here at
-  //     all; the hard out-of-stock gate refused it far above.)
+  //   • Every short line is a backorder line — 'backorder_gz' or, since §128,
+  //     'backorder_all'. This is also what keeps a supplier-direct line out: it
+  //     holds no stock of ours, so it has no row, so it reads short on every
+  //     order it is on — and its effective policy is 'always', which is neither
+  //     of them. Parking on it would be waiting for a count nobody is ever
+  //     going to write. ('strict' cannot reach here at all; the hard
+  //     out-of-stock gate refused it far above.)
   // Anything failing a guard is left exactly as it was: paid, and decremented
   // at payment as before.
 
@@ -11029,7 +11115,16 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
      shortage EITHER, for the same reason one step smaller: the batch lands
      before the customer's window. Every other guard is unchanged and still
      applies to both — no bundle, no stock-backed add-on, backorder lines only. */
-  if (!isPickup && !isWaitFlow && fulfillingStore && (!stockGate || batchCoveredIds.size)
+  /* §128 adds the THIRD arm, and it is the one the customer asked for: a
+     same-day Guangzhou order whose short lines the operator marked
+     'backorder_all'. There is no batch and no restock date behind it — that is
+     exactly why the window is cleared below rather than kept — so it parks on
+     the POLICY alone where §80's arm parks on a dated batch. Left as a separate
+     arm rather than folded into the guard so the cheap early-out still holds
+     for every order that has no such line on it. */
+  let parkedForPreorderAll = false;
+  if (!isPickup && !isWaitFlow && fulfillingStore
+      && (!stockGate || batchCoveredIds.size || preorderAllShort)
       && !cartHasBundle && !hasStockedAddon && !awaitingRestockPids) {
     const need = new Map();
     const productById = new Map();
@@ -11042,12 +11137,25 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       .filter(([pid, qty]) => inventory.getAvailable(fulfillingStore.id, pid, 'wechat').available < qty)
       .map(([pid]) => pid);
     const parkable = shortHere.length
-      && shortHere.every(pid => effectiveOosPolicy(productById.get(pid)) === 'backorder_gz')
-      // With the gate ON, EVERY short line must be one today's batch covers.
-      // One uncovered line and we do not park silently: that order genuinely is
-      // short, analyzeShortage said so, and the customer met the modal.
-      && (!stockGate || shortHere.every(pid => batchCoveredIds.has(pid)));
-    if (parkable) awaitingRestockPids = shortHere;
+      && shortHere.every(pid => isPreorderPolicy(effectiveOosPolicy(productById.get(pid))))
+      // With the gate ON, EVERY short line must be one today's batch covers —
+      // or, since §128, one the operator opened to the local run by name. One
+      // line that is neither and we do not park silently: that order genuinely
+      // is short, analyzeShortage said so, and the customer met the modal.
+      && (!stockGate || shortHere.every(pid => batchCoveredIds.has(pid)
+            || isLocalRunPreorder(effectiveOosPolicy(productById.get(pid)))));
+    if (parkable) {
+      awaitingRestockPids = shortHere;
+      // Any short line that is UNDATED makes the whole park undated: the order
+      // ships complete, so the line nobody can put a day on decides the day.
+      // A 'backorder_all' row that today's batch DOES cover is not one of them
+      // — §80 dated it, it lands inside the window the customer picked, and
+      // stripping that window would downgrade a batch park for no reason. So
+      // the test is "backorder_all AND not covered", never the policy alone.
+      parkedForPreorderAll = shortHere.some(
+        pid => !batchCoveredIds.has(pid)
+          && isLocalRunPreorder(effectiveOosPolicy(productById.get(pid))));
+    }
   }
   /* Parked because a batch is coming, not because the customer asked to wait.
      The difference the order actually feels is the delivery window: isWaitFlow
@@ -11055,7 +11163,16 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
      lands), and this must not, because the whole point is that the batch lands
      before the window the customer chose. It shares the other half — no
      reservation, since there is nothing on the shelf to hold. */
-  const isBatchPark = !isWaitFlow && stockGate && !!awaitingRestockPids;
+  const isBatchPark = !isWaitFlow && stockGate && !!awaitingRestockPids && !parkedForPreorderAll;
+  /* §128's park, and it is the OTHER half of the comment above: a 'backorder_all'
+     line has no batch and no restock date behind it, so keeping the window
+     would promise a van that cannot be loaded. It behaves like the customer's
+     own wait_for_restock in all three ways that matter — window cleared,
+     same-day surcharge refunded, no reservation taken — and differs only in
+     how the order got here: a policy the operator set, not a modal the
+     customer answered. Same column, same promotion, same Awaiting restock chip
+     as both of them. */
+  const isPreorderPark = !isWaitFlow && stockGate && !!awaitingRestockPids && parkedForPreorderAll;
   const batchDecision = earliestBatchMakeDate({
     zone,
     productIds: resolved.map((r) => r.product.id),
@@ -11120,7 +11237,12 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     // already confirmed the trade-off via a modal in the mini-app
     // (fbWaitForRestock) before this POST fires. Same-day surcharge is
     // refunded by clearing it here since we can't promise same-day.
-    if (isWaitFlow) {
+    // §128 joins on the same line rather than beside it: a pre-order park is
+    // undated for the identical reason ("that window can't be honored if
+    // restock lands after 18:00"), so it gets the identical treatment. The
+    // surcharge refund matters most — a same-day fee on an order that is not
+    // going out same-day is money taken for a service not rendered.
+    if (isWaitFlow || isPreorderPark) {
       scheduledFor      = null;
       sameDaySurcharge  = 0;
       slotLabel         = 'Ships when restocked';
@@ -11141,7 +11263,11 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // order-level states rather than slot shapes and resolveDeliverySlot has no
   // way to know them. Everything else is its answer.
   const slotKind = isPickup ? 'pickup'
-    : isWaitFlow ? 'restock'
+    // §128: a pre-order park is an order-level state exactly as the wait flow
+    // is, and for the same downstream readers — planShipments must not put an
+    // undated order on a same-city rider drop, and isQingyunSameCityToday must
+    // not enter it into the rider queue at all.
+    : (isWaitFlow || isPreorderPark) ? 'restock'
     : resolvedSlotKind;
 
   // Same-day surcharge is added to the shipping line so totals reconcile
@@ -11538,7 +11664,11 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     // is parked holding NOTHING, and there is nothing on the shelf to hold. The
     // batch is reserved and deducted by checkAwaitingRestockForRestock when the
     // cook records it, which is the one moment the stock actually exists.
-    if (!isWaitFlow && !isBatchPark && (stockGate || strictItems.length)) {
+    // §128: isPreorderPark skips the reservation for the third time on the same
+    // grounds — the order is parked holding NOTHING, and there is nothing on
+    // the shelf to hold. checkAwaitingRestockForRestock reserves and deducts
+    // when the count actually covers it, which is the one moment stock exists.
+    if (!isWaitFlow && !isBatchPark && !isPreorderPark && (stockGate || strictItems.length)) {
       inventory.reserveForOrder({
         storeId: fulfillingStore.id,
         orderId,
@@ -22441,12 +22571,13 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   }
   if ('tags' in body) { sets.push('tags = ?'); params.push(sanitizeProductBadge(body.tags)); }
   if ('is_batch_made' in body) { sets.push('is_batch_made = ?'); params.push(body.is_batch_made ? 1 : 0); }
-  // Out-of-stock policy: only the two known modes persist; anything else (incl.
+  // Out-of-stock policy: only the known modes persist; anything else (incl.
   // the default) stores NULL → effectiveOosPolicy() treats it as 'strict'.
   if ('oos_policy' in body) {
-    const pol = body.oos_policy === 'always'       ? 'always'
-              : body.oos_policy === 'backorder_gz' ? 'backorder_gz'
-              : body.oos_policy === 'strict'       ? 'strict' : null;
+    const pol = body.oos_policy === 'always'        ? 'always'
+              : body.oos_policy === 'backorder_gz'  ? 'backorder_gz'
+              : body.oos_policy === 'backorder_all' ? 'backorder_all'
+              : body.oos_policy === 'strict'        ? 'strict' : null;
     sets.push('oos_policy = ?'); params.push(pol);
   }
   if ('ship_from_supplier' in body) { sets.push('ship_from_supplier = ?'); params.push(body.ship_from_supplier ? 1 : 0); }
@@ -33228,7 +33359,8 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind, opts = {}) 
 
 // Customer-facing "Ships soon / pre-order" notice for an order that holds a
 // GENERIC sold-out item the operator left orderable as backorder (oos_policy
-// 'backorder_gz') — NOT a batch meal (those get computeBatchNotice, with dates).
+// 'backorder_gz', or 'backorder_all' since §128) — NOT a batch meal (those get
+// computeBatchNotice, with dates).
 // It only fires when the order is genuinely a pre-order: the relaxed, non-(GZ
 // same-day) path where requiresStockGate is false and a sold-out backorder item
 // is allowed through to ship on the next restock. (GZ same-day gates stock hard,
@@ -33287,9 +33419,18 @@ function computePreorderNotice(zone, address, productIds, slotId, slotKind) {
   // so they keep the notice, exactly as they did before this gate existed.
   // Out-of-city is untouched throughout. (slotId is retained in the signature,
   // like zone, for the call site.)
+  //
+  // §128 TURNS THE EARLY RETURN INTO A NARROWING, and that is the whole change
+  // here. The paragraph above is still true of 'backorder_gz' — the gate does
+  // refuse that line on the local run, so the banner would still be advertising
+  // a checkout about to say no. It is NOT true of 'backorder_all': the gate
+  // lets that one through by name, so a local-run shopper who is sold a
+  // pre-order must be TOLD it is one. Returning null here would have left them
+  // the one shopper who pre-orders in silence.
+  let localRunOnly = false;
   if (inventory.isGuangzhouAddress(address)) {
     const scheduledShipDistrict = inventory.isOptInSameDayDistrict(address) && slotKind !== 'today';
-    if (!scheduledShipDistrict) return null;
+    if (!scheduledShipDistrict) localRunOnly = true;
   }
   const ids = [...new Set((productIds || []).map((n) => parseInt(n, 10)).filter(Boolean))];
   if (!ids.length) return null;
@@ -33301,7 +33442,12 @@ function computePreorderNotice(zone, address, productIds, slotId, slotKind) {
   ).all(...ids);
   const items = rows.filter((r) => {
     if (r.is_batch_made) return false;                       // meals → computeBatchNotice
-    if (effectiveOosPolicy(r) !== 'backorder_gz') return false;
+    const pol = effectiveOosPolicy(r);
+    if (!isPreorderPolicy(pol)) return false;
+    // On the local run only the rows the gate actually admits may speak. A
+    // 'backorder_gz' row beside them is still refused there and still says
+    // nothing — the banner and the checkout agree row by row, not in bulk.
+    if (localRunOnly && !isLocalRunPreorder(pol)) return false;
     const st = r.real_stock == null ? null : Number(r.real_stock);
     return st != null && st <= 0;                            // genuinely sold out
   }).map((r) => ({ id: r.id, name_en: r.name_en, name_cn: r.name_cn }));
@@ -37128,7 +37274,16 @@ router.get('/api/retail/favorites', requireRetailAuth, (req, res) => {
     .map(r => lazifyProductImage(r, baseUrl));
   // Pre-order flag (see the shop list above): a sold-out favourite on the
   // backorder_gz policy stays quick-addable instead of reading as dead stock.
-  for (const r of rows) r.oos_preorder = effectiveOosPolicy(r) === 'backorder_gz';
+  for (const r of rows) {
+    const pol = effectiveOosPolicy(r);
+    r.oos_preorder = isPreorderPolicy(pol);
+    // §128's companion flag, and it travels with oos_preorder EVERYWHERE that
+    // one is stamped — same rule, same reason, as local_fresh_date above. The
+    // clients all suppress the pre-order pill on the local run; without this
+    // they would suppress it for 'backorder_all' too and draw the dead SOLD
+    // OUT the policy exists to remove.
+    r.oos_preorder_local = isLocalRunPreorder(pol);
+  }
   // …and the day that reservation is for, which this route never sent. Without
   // it the favourites page's own guard (`!onLocalRun || local_fresh_date`) read
   // every sold-out favourite as dead for a Guangzhou shopper — SOLD OUT and no

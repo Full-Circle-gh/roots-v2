@@ -277,9 +277,13 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
       'no routing decision may read delivery_slot_kind off the request body');
     // The persisted column takes the server's resolved kind too — pickup and
     // restock excepted, which are order-level states no slot can express.
-    assert.ok(/const slotKind = isPickup \? 'pickup'\s*\n\s*: isWaitFlow \? 'restock'\s*\n\s*: resolvedSlotKind;/.test(retailSrc),
+    // §128 puts isPreorderPark beside isWaitFlow here — a second order-level
+    // state no slot can express, for the same downstream readers (planShipments
+    // and isQingyunSameCityToday both key off this column). Matched against the
+    // comment-stripped source so the prose explaining it cannot satisfy it.
+    assert.ok(/const slotKind = isPickup \? 'pickup'\s*:\s*\(isWaitFlow \|\| isPreorderPark\) \? 'restock'\s*:\s*resolvedSlotKind;/.test(retailCode),
       'delivery_slot_kind is stored from resolveDeliverySlot, not from the body');
-    assert.ok(/localPreorderLine\(mutatedItems, address, \{\s*\n\s*scheduledShipDistrict, freshPreorderOk: true,\s*\n\s*\}\)/.test(retailSrc),
+    assert.ok(/localPreorderLine\(mutatedItems, address, \{\s*scheduledShipDistrict, freshPreorderOk: true,\s*preorderParkOk: true,\s*\}\)/.test(retailCode),
       'and the gate is handed that one verdict');
     // The out-of-city store pin was the second consumer of that local flag. It
     // moved into fulfillingStoreFor() so the checkout quote and the reschedule
@@ -368,6 +372,27 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
       assert.ok(localPreorderLine([line({ oos_policy: null, is_batch_made: 1 })], GZ, { freshPreorderOk: true }));
     });
   });
+  it('§128 — backorder_all is REFUSED unless the caller can park the order', () => {
+    /* The opt-in is the whole safety of this policy. A caller that has never
+       heard of it — the add-on path today, anything added later — must get the
+       original refusal, because admitting the line without parking the order
+       promises a van that cannot be loaded. So the default is a refusal and
+       the exemption is something a caller asks for by name. */
+    assert.ok(localPreorderLine([line({ oos_policy: 'backorder_all' })], GZ),
+      'no opt-in → refused, exactly as backorder_gz is');
+    assert.strictEqual(
+      localPreorderLine([line({ oos_policy: 'backorder_all' })], GZ, { preorderParkOk: true }), null,
+      'checkout opts in and the line is admitted');
+  });
+  it('§128 — the opt-in rescues ONLY backorder_all, never backorder_gz', () => {
+    // The flag is not a master key: 'backorder_gz' means "not the local run"
+    // and stays refused at checkout however the caller asks.
+    assert.ok(localPreorderLine([line({ oos_policy: 'backorder_gz' })], GZ, { preorderParkOk: true }),
+      'backorder_gz is still refused on the run with the flag set');
+    assert.strictEqual(
+      localPreorderLine([line({ oos_policy: 'backorder_all', real_stock: 5 })], GZ, { preorderParkOk: true }), null,
+      'and an in-stock line was never this gate\'s business either');
+  });
   it('a blank policy without the batch flag resolves to strict, so not here', () => {
     assert.strictEqual(localPreorderLine([line({ oos_policy: null })], GZ), null);
   });
@@ -382,14 +407,22 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
   });
 
   it('the gate is wired into the order path, on the final line set', () => {
-    assert.ok(/const localPre = localPreorderLine\(mutatedItems, address, \{\s*\n\s*scheduledShipDistrict, freshPreorderOk: true,\s*\n\s*\}\);/.test(retailSrc),
+    const retailCode2 = retailSrc.replace(/^\s*\/\/.*$/gm, '');
+    assert.ok(/const localPre = localPreorderLine\(mutatedItems, address, \{\s*scheduledShipDistrict, freshPreorderOk: true,\s*preorderParkOk: true,\s*\}\);/.test(retailCode2),
       'runs on mutatedItems, so cancel_missing / replace_missing still work');
     // Checkout is the ONLY caller that may claim the fresh-meal exemption,
     // because it is the only one that floors the delivery day onto the batch.
     // The add-on path attaches to an order whose day is already fixed.
+    //
+    // §128's exemption is opt-in for the SAME reason and the add-on path is
+    // excluded from it for the same reason: a 'backorder_all' line is honest at
+    // checkout only because the order parks undated, and an add-on has no park
+    // to move an already-placed (often already-paid) order into.
     const addonCall = retailSrc.slice(retailSrc.indexOf('// 2. Local pre-order gate'));
     assert.ok(!/freshPreorderOk/.test(addonCall.slice(0, 900)),
       'the add-on path does not opt in');
+    assert.ok(!/preorderParkOk/.test(addonCall.slice(0, 900)),
+      'and it does not opt into the pre-order park either');
     assert.ok(/if \(!isPickup && fallbackChoice !== 'wait_for_restock'\) \{/.test(retailSrc),
       'pickup and the explicit wait-for-restock choice stay exempt');
     // The error must be one the checkout UI already handles — the same code a
@@ -398,7 +431,7 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
     assert.ok(/error: 'insufficient_stock'/.test(block.slice(0, 400)), 'reuses insufficient_stock');
   });
   it('the gate reuses the one matcher, and adds no second one', () => {
-    assert.ok(/function localPreorderLine\(lines, address, \{ scheduledShipDistrict = false, freshPreorderOk = false \} = \{\}\) \{\s*\n\s*if \(!inventory\.isGuangzhouAddress\(address\)\) return null;\s*\n\s*if \(scheduledShipDistrict\) return null;/.test(retailSrc),
+    assert.ok(/function localPreorderLine\(lines, address, \{ scheduledShipDistrict = false, freshPreorderOk = false, preorderParkOk = false \} = \{\}\) \{\s*\n\s*if \(!inventory\.isGuangzhouAddress\(address\)\) return null;\s*\n\s*if \(scheduledShipDistrict\) return null;/.test(retailSrc),
       'Guangzhou comes from lib/inventory, like stampSameCity, then the run narrows it');
     // Every same-city verdict in this file defers to lib/inventory — no local
     // copy of the 广州 matcher anywhere, including inside the new gate.
@@ -615,7 +648,11 @@ console.log('\nweb storefront — stockState / slStock');
   const sandbox = { state: { lang: 'en', customer: null }, console };
   vm.createContext(sandbox);
   vm.runInContext(
-    [grab('oosBackorder'), grab('shopperOnLocalRun'), grab('stockState'), grab('slStock')].join('\n'),
+    // §128's oosPreorderLocal is sliced in AS SHIPPED, like the four beside it:
+    // stockState and slStock both call it now, and a stub here would let the
+    // page and this suite disagree about the one question it answers.
+    [grab('oosBackorder'), grab('oosPreorderLocal'), grab('shopperOnLocalRun'),
+      grab('stockState'), grab('slStock')].join('\n'),
     sandbox,
   );
   // signIn(true) = an address on the same-day local run (core Guangzhou);

@@ -4874,7 +4874,7 @@ function slEff(p){const r=Number(p.price??p.sell_price)||0;const e=Number(p.effe
 function slStock(m){
   const stock=m.stock==null?null:Number(m.stock);
   const out=m.ship_from_supplier?!!m.supplier_paused:(stock!=null&&stock<=0);
-  const pre=out&&!m.ship_from_supplier&&(m.oos_preorder!=null?!!m.oos_preorder:oosBackorder(m))&&(!shopperOnLocalRun()||!!m.local_fresh_date);
+  const pre=out&&!m.ship_from_supplier&&(m.oos_preorder!=null?!!m.oos_preorder:oosBackorder(m))&&(!shopperOnLocalRun()||!!m.local_fresh_date||oosPreorderLocal(m));
   /* §80 follow-up — `pre` is what keeps this row ALIVE (soldOut is its
      inverse), so a row whose batch is TODAY'S must keep it and lose only the
      WORD. Returned beside, never folded in: flipping `pre` off to silence a
@@ -4950,7 +4950,9 @@ function slToRows(products){
       // A dated fresh size keeps the group orderable on the run — same rule the
       // desktop card above applies, and the mini app's _stockState.
       const anyFresh=members.some(m=>!!m.local_fresh_date);
-      nextBatch=allOut&&anyBack&&(!onLocalRun||anyFresh);outOfStock=allOut&&!nextBatch;
+      // …and so does one size the operator opened to the run outright (§128).
+      const anyPreLocal=members.some(m=>oosPreorderLocal(m));
+      nextBatch=allOut&&anyBack&&(!onLocalRun||anyFresh||anyPreLocal);outOfStock=allOut&&!nextBatch;
       // §80 follow-up — silent only when every size still orderable is made
       // TODAY. One size waiting on a later batch is a promise the card must name.
       batchToday=nextBatch&&onLocalRun&&members.filter(m=>!!m.local_fresh_date).length>0
@@ -4959,7 +4961,7 @@ function slToRows(products){
     }else{
       const sn=p.stock==null?null:Number(p.stock);
       const out=sn!=null&&sn<=0;
-      nextBatch=out&&oosBackorder(p)&&(!onLocalRun||!!p.local_fresh_date);outOfStock=out&&!nextBatch;
+      nextBatch=out&&oosBackorder(p)&&(!onLocalRun||!!p.local_fresh_date||oosPreorderLocal(p));outOfStock=out&&!nextBatch;
       batchToday=nextBatch&&onLocalRun&&!!p.local_fresh_today;
       soldUnits=Number(p.units_sold||p.sold_count||0);
       price=eff>0?slMoney(eff):'—';
@@ -5398,9 +5400,26 @@ function slOpenVp(repId,members){
 // false → strict, sold out everywhere. Blank policy falls back to is_batch_made.
 function oosBackorder(p){
   const pol=(p&&p.oos_policy)||'';
-  if(pol==='backorder_gz')return true;
+  if(pol==='backorder_gz'||pol==='backorder_all')return true;
   if(pol==='strict')return false;
   return !!(p&&p.is_batch_made);
+}
+// §128 — may a shopper ON THE LOCAL RUN pre-order this sold-out row? Only the
+// 'backorder_all' policy says yes, and only the SERVER can answer for a size:
+// GET /products/:id deletes oos_policy off the variant rows, so the stamped
+// flag is the real source and the policy read is the fallback for an older
+// payload, exactly as oosBackorder() is the fallback for oos_preorder.
+//
+// This is the one exemption that is NOT about a date. The fresh carve-out
+// beside it (local_fresh_date) keeps a row alive because we know the day the
+// kitchen makes it; this one keeps a row alive because the operator accepted
+// that the order waits for a day nobody knows. Both end in a working + button,
+// and they must not be collapsed into one test — the checkout treats them
+// differently (a fresh order keeps its window, a pre-order park loses it).
+function oosPreorderLocal(p){
+  if(!p)return false;
+  if(p.oos_preorder_local!=null)return !!p.oos_preorder_local;
+  return ((p&&p.oos_policy)||'')==='backorder_all';
 }
 // Would this shopper's order ride the same-day local run? A pre-order
 // ("SHIPS SOON" / "NEXT BATCH") is for orders we SHIP: the parcel leaves after
@@ -5467,8 +5486,14 @@ function stockState(p){
      NEXT BATCH, and an out-of-city shopper keeps SHIPS SOON.
      The server answers "is it today" (§82) — never this browser's clock. */
   const freshToday=(vs&&vs.length>1)?vs.some(v=>!!v.local_fresh_today):!!p.local_fresh_today;
+  /* §128 — the operator's outright opening of the run, which is neither of the
+     two cases below: no batch, no date, so it can never be "today's" and it is
+     never localFresh. It simply survives onRun, and the pre-order park at
+     checkout is what makes that honest. Read off the hero or any size, the
+     same follow-the-sizes rule `fresh` uses one line up. */
+  const preLocal=(vs&&vs.length>1)?vs.some(v=>oosPreorderLocal(v)):oosPreorderLocal(p);
   if(oosBackorder(p)&&onRun&&fresh&&freshToday) return {oos:false,soldOut:false,localFresh:false,badge:''};
-  if(oosBackorder(p)&&(!onRun||fresh)) return {oos:true,soldOut:false,localFresh:onRun&&fresh,
+  if(oosBackorder(p)&&(!onRun||fresh||preLocal)) return {oos:true,soldOut:false,localFresh:onRun&&fresh,preLocal,
     badge:p.is_batch_made?(state.lang==='cn'?'下批现做':'NEXT BATCH'):(state.lang==='cn'?'现订现发':'SHIPS SOON')};
   return {oos:true,soldOut:true,localFresh:false,badge:state.lang==='cn'?'售罄':'SOLD OUT'};
 }
@@ -5562,7 +5587,9 @@ async function renderProduct(id){
           ${was>0?`<span class="price-was">${money(was)}</span><span class="flash-tag">${state.lang==='cn'?'限时':'Flash'}</span>`:''}
           ${ss.oos?`<span class="pd-oos-tag${ss.soldOut?' sold':' soon'}">${ss.badge}</span>`:''}
         </div>
-        ${ss.oos&&!ss.soldOut&&!ss.localFresh?`<div class="pd-oos-note">${state.lang==='cn'?'当前缺货，外地可预订，下批/补货后发出。':'Out of stock now — orderable outside Guangzhou; ships on the next batch / restock.'}</div>`:''}
+        ${ss.oos&&!ss.soldOut&&!ss.localFresh?`<div class="pd-oos-note">${ss.preLocal
+          ? (state.lang==='cn'?'当前缺货，可预订，整单等补货后一并发货。':'Out of stock now — pre-order; your whole order ships together once it’s back in stock.')
+          : (state.lang==='cn'?'当前缺货，外地可预订，下批/补货后发出。':'Out of stock now — orderable outside Guangzhou; ships on the next batch / restock.')}</div>`:''}
         ${rc>0?`<div class="rating"><span class="stars">${'★'.repeat(Math.round(avg))}<span class="off">${'★'.repeat(5-Math.round(avg))}</span></span>${avg.toFixed(1)} · ${rc} ${state.lang==='cn'?'条评价':'reviews'}</div>`:''}
         <div class="pd-buy">
           ${ss.soldOut
