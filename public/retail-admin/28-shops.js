@@ -94,6 +94,15 @@
   let _pick = [];
   let _pickLoading = false;
   let _pickTimer = null;
+  // Every candidate search takes a ticket. One request goes out per settled
+  // keystroke and they do not come back in order — without this a slow answer
+  // for "pea" repaints over the answer for "peanut" and the list stops
+  // agreeing with the box. Same guard as the till's customer search
+  // (public/till.html custSearch) and the Materials list's _loadSeq.
+  let _pickSeq = 0;
+  // Set when the picker is OPENED and consumed by the next paint. It is the
+  // only time anything focuses the search field from code — see paint().
+  let _pickFocus = false;
   let _busy = new Set();  // listing ids with a write in flight
 
   const root = () => document.getElementById('shp-root');
@@ -205,8 +214,36 @@
     }
     el.innerHTML = head() + (_shop ? body() : noShop());
     if (typeof applyCapGates === 'function') applyCapGates();   // the data-cap buttons just painted
-    const q = el.querySelector('#shp-pick-q');
-    if (q && _pickerOpen) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+    // FOCUS ON OPEN, AND NOWHERE ELSE. This used to run on every paint, and a
+    // search fired two of them, so the caret was dragged to the end of the
+    // value a fifth of a second after every pause — a term being corrected in
+    // the middle threw you to the end of it. Nothing repaints this field
+    // during a search now (see picker()), so the one moment it still needs
+    // focusing from code is the click that opened the panel.
+    if (_pickFocus) {
+      _pickFocus = false;
+      const q = el.querySelector('#shp-pick-q');
+      if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); }
+    }
+    bindPickComposition();
+  }
+
+  // THE ONE EVENT THAT CANNOT BE WIRED IN THE MARKUP. Composition events are
+  // not in GlobalEventHandlers, so `oncompositionend="…"` as an attribute is
+  // not a handler at all — the browser ignores it in silence.
+  //
+  // WHY IT IS NOT OPTIONAL HERE. Committing a pinyin candidate fires `input`
+  // with isComposing STILL TRUE, carrying the finished characters, and only
+  // THEN compositionend. shpPickSearch() skips composing events, so without
+  // this listener the search would never run for a Chinese term at all — and
+  // half this catalogue is named in Chinese. Bound on the element the paint
+  // just minted, and only there: a fresh element each time means no listener
+  // is ever attached twice.
+  function bindPickComposition() {
+    const q = document.getElementById('shp-pick-q');
+    if (q && typeof q.addEventListener === 'function') {
+      q.addEventListener('compositionend', () => { window.shpPickSearch(q.value); });
+    }
   }
 
   // §1.7a: back link IS the eyebrow · title · at most two exits, one Dusk.
@@ -283,7 +320,7 @@
   }
 
   function body() {
-    return details() + (_pickerOpen ? picker() : '') + table();
+    return details() + (_pickerOpen ? picker() : '') + `<div id="shp-table-box">${table()}</div>`;
   }
 
   // The shop's own fields: two optional display names and the active switch.
@@ -309,23 +346,66 @@
 
   // The Add product picker — an in-flow panel above the table, not a modal:
   // its height grows with what the search returns (§1.13 question 2).
+  //
+  // THE FIELD IS PAINTED ONCE AND THEN LEFT ALONE. It used to be re-emitted by
+  // the page-wide paint() that fetchPick() called twice per search — once to
+  // show "Loading…" and once to show the answer — so the <input> the operator
+  // was typing into was destroyed and rebuilt, twice, a fifth of a second
+  // after every pause. paint() handed focus and the caret back by hand, always
+  // to the END of the value, which is why the box blinked, why the caret
+  // jumped out of a term being corrected, and why a keystroke that landed on
+  // the dying element never reached _pickQ — the search then ran on a term
+  // nobody typed. For Chinese it was worse than a blink: a composition cannot
+  // be handed back, because the browser drops the candidate window with the
+  // element that owned it, so the field died before a character was committed.
+  //
+  // Only #shp-pick-list is repainted by a search now (renderPickList), and the
+  // <input> is never touched — nothing to restore, no caret to guess at, no
+  // composition to lose. The same split the Materials list carries
+  // (18-materials.js paintList) and the till's customer picker
+  // (public/till.html renderCustPicker).
   function picker() {
-    let list;
-    if (_pickLoading) list = `<div class="shp-note sm">${esc(T('Loading…', '加载中…'))}</div>`;
-    else if (!_pick.length) list = `<div class="shp-note sm">${esc(_pickQ ? T('No products match this filter', '没有匹配此筛选条件的产品') : T('No products yet', '还没有商品'))}</div>`;
-    else list = `<ul class="shp-pick-list">` + _pick.map(p => `<li>
+    return `<div class="shp-picker">
+      <div class="shp-pick-row">
+        ${/* The event goes to shpPickSearch() beside the value: an IME's
+              half-typed pinyin arrives as input events too, and searching on
+              it is searching for something the operator has not typed yet. */''}
+        <input class="shp-in" id="shp-pick-q" value="${esc(_pickQ)}" placeholder="${esc(T('Search a product to add…', '搜索商品以添加…'))}" oninput="shpPickSearch(this.value, event)">
+        <button type="button" class="shp-btn ghost sm" onclick="shpPickerToggle()">${esc(T('Cancel', '取消'))}</button>
+      </div>
+      <div id="shp-pick-list">${pickList()}</div>
+    </div>`;
+  }
+
+  // Everything below the search box, in one patchable box.
+  function pickList() {
+    if (_pickLoading) return `<div class="shp-note sm">${esc(T('Loading…', '加载中…'))}</div>`;
+    if (!_pick.length) return `<div class="shp-note sm">${esc(_pickQ ? T('No products match this filter', '没有匹配此筛选条件的产品') : T('No products yet', '还没有商品'))}</div>`;
+    return `<ul class="shp-pick-list">` + _pick.map(p => `<li>
         <span class="shp-pick-name">${nameOf(p.name_en, p.name_cn)}</span>
         <span class="shp-pick-sku">${esc(p.sku || '')}</span>
         <span class="shp-pick-price">${esc(money(p.sell_price))}</span>
         <button type="button" class="shp-btn sm" data-cap="stores:edit" onclick="shpAdd(${p.id}, this)">${esc(T('+ Add product', '+ 添加商品'))}</button>
       </li>`).join('') + `</ul>`;
-    return `<div class="shp-picker">
-      <div class="shp-pick-row">
-        <input class="shp-in" id="shp-pick-q" value="${esc(_pickQ)}" placeholder="${esc(T('Search a product to add…', '搜索商品以添加…'))}" oninput="shpPickSearch(this.value)">
-        <button type="button" class="shp-btn ghost sm" onclick="shpPickerToggle()">${esc(T('Cancel', '取消'))}</button>
-      </div>
-      ${list}
-    </div>`;
+  }
+
+  // What a search repaints, and the whole of it. Falls back to the page paint
+  // only when the panel is not on screen — which is never during a search, and
+  // always on the first one after something outside this module cleared the
+  // root.
+  function renderPickList() {
+    const box = document.getElementById('shp-pick-list');
+    if (box) { box.innerHTML = pickList(); if (typeof applyCapGates === 'function') applyCapGates(); return; }
+    paint();
+  }
+
+  // The listings table repaints on its own too, so adding a product does not
+  // take the search field down with it — the operator is mid-flow, adding the
+  // next one.
+  function renderTable() {
+    const box = document.getElementById('shp-table-box');
+    if (box) { box.innerHTML = table(); if (typeof applyCapGates === 'function') applyCapGates(); return; }
+    paint();
   }
 
   /* Table — §1.19: fixed layout, classed cols, percentages summing to 100.
@@ -425,23 +505,38 @@
 
   window.shpPickerToggle = function () {
     _pickerOpen = !_pickerOpen;
-    if (_pickerOpen) { _pickQ = ''; fetchPick(); } else paint();
+    if (_pickerOpen) { _pickQ = ''; _pick = []; _pickLoading = true; _pickFocus = true; paint(); fetchPick(); }
+    else paint();
   };
-  window.shpPickSearch = function (v) {
+  // TYPING IS NOT A SEARCH TERM UNTIL THE IME SAYS IT IS.
+  //
+  // A Chinese keyboard fires an input event per LETTER while the candidate
+  // window is open — "s", "sh", "sha" — none of which the operator typed or
+  // would search for, and none of which matches a catalogue stored in
+  // characters. This used to take each one as a term: four requests and four
+  // repaints for one character. `event.isComposing` is true for exactly those
+  // events and false everywhere else, including on a plain English keyboard.
+  // The compositionend listener above carries the committed characters and is
+  // what actually starts the search.
+  window.shpPickSearch = function (v, ev) {
+    if (ev && ev.isComposing) return;
     _pickQ = v;
     clearTimeout(_pickTimer);
     _pickTimer = setTimeout(fetchPick, 220);
   };
   async function fetchPick() {
     if (!_shop) return;
-    _pickLoading = true; paint();
-    const q = _pickQ;
+    const seq = ++_pickSeq;
+    _pickLoading = true; renderPickList();
     try {
-      const j = await api('/api/retail-admin/shops/' + _shop.id + '/candidates?q=' + encodeURIComponent(q));
-      if (q !== _pickQ) return;     // a newer search is already in flight
+      const j = await api('/api/retail-admin/shops/' + _shop.id + '/candidates?q=' + encodeURIComponent(_pickQ));
+      if (seq !== _pickSeq) return;   // a later keystroke already asked; this answer is stale
       _pick = j.data || [];
-    } catch (e) { _pick = []; toast(errText(e, 'load_failed'), 'err'); }
-    _pickLoading = false; paint();
+    } catch (e) {
+      if (seq !== _pickSeq) return;
+      _pick = []; toast(errText(e, 'load_failed'), 'err');
+    }
+    _pickLoading = false; renderPickList();
   }
 
   window.shpAdd = async function (productId, btn) {
@@ -451,7 +546,10 @@
       const j = await api('/api/retail-admin/shops/' + _shop.id + '/listings', { method: 'POST', body: { store_product_id: productId } });
       _rows.push(j.data);
       _pick = _pick.filter(p => p.id !== productId);
-      paint();
+      // The list and the table, not the page: adding is the middle of a search,
+      // and a page paint here would rebuild the field the operator is about to
+      // type the next product into.
+      renderPickList(); renderTable();
     } catch (e) {
       if (btn) { btn.disabled = false; btn.textContent = T('+ Add product', '+ 添加商品'); }
       toast(errText(e, 'save_failed'), 'err');
@@ -464,7 +562,7 @@
     const r = _rows.find(x => x.id === id);
     if (!r || !_shop) return;
     const was = r.is_available;
-    r.is_available = on ? 1 : 0; _busy.add(id); paint();
+    r.is_available = on ? 1 : 0; _busy.add(id); renderTable();
     try {
       const j = await api('/api/retail-admin/shops/' + _shop.id + '/listings/' + id, { method: 'PATCH', body: { is_available: on ? 1 : 0 } });
       Object.assign(r, j.data);
@@ -472,7 +570,7 @@
       r.is_available = was;
       toast(errText(e, 'save_failed'), 'err');
     }
-    _busy.delete(id); paint();
+    _busy.delete(id); renderTable();
   };
 
   // price · fulfilment_mode · sort_position — one PATCH per change, the control
@@ -482,13 +580,13 @@
     const r = _rows.find(x => x.id === id);
     if (!r || !_shop) return;
     const val = input.value;
-    _busy.add(id); paint();
+    _busy.add(id); renderTable();
     try {
       const j = await api('/api/retail-admin/shops/' + _shop.id + '/listings/' + id, { method: 'PATCH', body: { [field]: val } });
       Object.assign(r, j.data);
       if (field === 'sort_position') _rows.sort((a, b) => (a.sort_position - b.sort_position) || (a.id - b.id));
     } catch (e) { toast(errText(e, 'save_failed'), 'err'); }
-    _busy.delete(id); paint();
+    _busy.delete(id); renderTable();
   };
 
   // No confirm: a listing is a join, and adding the product back restores it.
@@ -501,7 +599,7 @@
       _rows = _rows.filter(x => x.id !== id);
       if (_pickerOpen) fetchPick();
     } catch (e) { toast(errText(e, 'save_failed'), 'err'); }
-    _busy.delete(id); paint();
+    _busy.delete(id); renderTable();
   };
 
   // Keep reload reachable for a future poller; unused today.
