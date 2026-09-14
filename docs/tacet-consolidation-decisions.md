@@ -13810,3 +13810,110 @@ except for three source comments that still described it as read-only after
 §117 part two gave it two verbs; they are corrected here because this is the
 section that re-reads them. The product editor's Channels card (§103 step 4) is
 **still** read-only and its comment is left alone — it says true things.
+
+
+## §125 — A LATE PARCEL WHOSE CUSTOMER IS OWED NOTHING HAS TO BE CLOSEABLE
+
+Ash, against a live case, with the panel's make-whole step open on screen:
+*"客人确认食品状态良好，无需补发，也无需退款"* — the customer confirmed the food
+arrived in good condition, no replacement, no refund.
+
+### The case that had no exit
+
+`lib/delay-case.js` held two legal remedies:
+
+```js
+const REMEDIES = Object.freeze(['replacement', 'refund']);
+
+function blockers(c) {
+  ...
+  if (!c.remedy) out.push('customer_not_made_whole');
+}
+```
+
+A parcel arrives a day late, the customer opens it, and the food is fine. The
+case is real — the carrier was still late, and may still owe us — but nobody is
+owed goods or money. The step had no answer for that, so the operator had three
+ways out and **every one of them was wrong**:
+
+1. **Send replacement.** Raises a no-charge order, takes real stock off the
+   shelf, and ships food nobody asked for.
+2. **Refunded.** Records money going back that never went back. The remedy
+   track is read as a record of what was done for the customer; this makes it a
+   record of something that did not happen.
+3. **Leave it.** `customer_not_made_whole` stays on the case for ever. The
+   footer reads `待办: 补发或退款`, the order keeps its badge, and the dashboard's
+   delivery card keeps a row that will never be worked.
+
+The third is what an honest operator actually does, and it is the one that costs
+the most: **an alert card whose whole job is to list outstanding work accumulates
+work that is finished.** §98 exists because a late parcel stopped being watched
+after one phone call; a card nobody believes fails the same way, more slowly.
+
+### The answer was already in the file, one track up
+
+`no_claim` is the dispute track's third state, and this file's own §98 header
+argues for it in words that transfer without a change:
+
+> `none` is deliberately NOT terminal. An operator who never touches the dispute
+> track leaves the case open, which is correct — not deciding is not the same as
+> deciding not to claim. Deciding not to claim is `no_claim`, it needs a reason
+> typed, and it finishes the track in one tap.
+
+Not deciding is not the same as deciding nothing is owed. So the make-whole
+track gets the same third answer, built the same way:
+
+- **`remedy = 'none'`**, a third member of `REMEDIES`.
+- **A typed reason is required** — `reason_required`, the same code `no_claim`
+  throws and the same one `01-core.js` already words. Refused in
+  `lib/delay-case.js`, not on the screen, so both surfaces and any future one
+  inherit the refusal.
+- **Drawn as an opt-out, not a third button.** A quiet underlined action beside
+  the two things you can do, because it permanently ends a track — §98's own
+  argument for why `不申请赔偿` stopped being a button.
+- **A distinct event**, `remedy_none`, so a timeline read months later tells
+  *nothing was owed* from *goods went back out*.
+
+`blockers()` is untouched. It asks whether the make-whole track was **answered**,
+and all three answers answer it.
+
+### Why not simply drop the remedy blocker
+
+It was considered and it is wrong. Making `remedy` optional in `blockers()`
+would close this case and every case — including the one where the customer's
+food spoiled and nobody did anything about it, which is the exact failure §98
+was built to catch. The requirement is not that something be given; it is that
+the question be answered on the record. A third answer keeps the requirement and
+removes the dead end. **Removing the blocker would remove the requirement and
+keep nothing.**
+
+### No schema change
+
+`remedy` is `TEXT` with no CHECK constraint, so the new value needs no migration
+and no `addColumn`. `database.js`'s comments are corrected on both the column
+and the event list — the list of legal values lives in `lib/delay-case.js` and
+the schema comment must not read as a second, staler copy of it.
+
+### Nothing reaches the ledger
+
+`lib/delay-case-posting.js` never reads `remedy`; only `dispute_received` posts,
+in §98 stage four, under §87's rule that a claim is not income for having been
+filed. A remedy of `none` moves no money and writes no row, which is what makes
+it safe to add to a live feature mid-flight.
+
+### Chinese
+
+**One composed pair**, `无需补发退款` / *Nothing needed*, declared in
+`docs/tacet-delivery-vocabulary.md` v1.80 with its rejected candidates. Every
+character is already on the row: `补发` and `退款` are that step's own two
+buttons and `无需` is live in more than twenty files.
+
+The reason field costs nothing — `原因`, `必填` and `请先填写原因。` are the three
+strings the claim track's opt-out already asks with, taken verbatim.
+
+### What is not done
+
+No route change (the step endpoint is transport and validates nothing itself),
+no migration, no capability, no change to the close rule, the blocker codes, the
+progress figure or the footer wording. The footer's `待办: 补发或退款` is
+unchanged and now simply stops appearing on the cases that are finished.

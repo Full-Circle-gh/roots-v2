@@ -179,6 +179,59 @@ it('not claiming finishes the dispute track, so a small spoil can be closed', ()
   assert.strictEqual(dc.canClose(c), true);
 });
 
+// ── 5b. Nothing is owed, and that is also a real answer (§125) ─────────────
+// The case that had no exit: a late parcel arrives, the customer opens it, the
+// food is fine. No goods go back out and no money goes back, but the make-whole
+// step still had to be answered or `customer_not_made_whole` sat on the case
+// for good — so the operator's only ways out were a no-charge replacement
+// order nobody wanted or a refund that never happened.
+it('nothing needed finishes the make-whole track without goods or money', () => {
+  const db = fresh();
+  step(db, 'customer_told');
+  const c = step(db, 'remedy', { kind: 'none', note: 'customer confirmed the food was fine' });
+  assert.strictEqual(c.remedy, 'none');
+  assert.strictEqual(c.remedy_note, 'customer confirmed the food was fine');
+  assert.ok(c.remedy_at, 'and it is stamped like any other answer');
+  assert.ok(!dc.blockers(c).includes('customer_not_made_whole'),
+    'the make-whole step is ANSWERED — the question is not whether anything was given');
+});
+
+it('nothing needed requires a typed reason, exactly as not claiming does', () => {
+  const db = fresh();
+  assert.throws(() => step(db, 'remedy', { kind: 'none' }), e => e.code === 'reason_required');
+  assert.throws(() => step(db, 'remedy', { kind: 'none', note: '   ' }),
+    e => e.code === 'reason_required');
+  // And the case is untouched by the refusal.
+  assert.strictEqual(dc.readCase(db, 55).remedy, null);
+});
+
+it('the other two answers still need no reason — they evidence themselves', () => {
+  const db = fresh();
+  assert.doesNotThrow(() => step(db, 'remedy', { kind: 'replacement' }));
+  assert.doesNotThrow(() => step(db, 'remedy', { kind: 'refund' }));
+});
+
+it('the screenshot case closes: told, not claiming, nothing owed', () => {
+  // The live case this was found on. Every track answered, nothing given, and
+  // before §125 the footer read `to do: Replacement or refund` for ever.
+  const db = fresh();
+  step(db, 'customer_told');
+  step(db, 'no_claim', { note: 'customer confirmed the food arrived in good condition' });
+  const c = step(db, 'remedy', { kind: 'none', note: 'customer confirmed the food arrived in good condition' });
+  assert.deepStrictEqual(dc.blockers(c), []);
+  assert.strictEqual(dc.canClose(c), true);
+  const r = dc.closeCase(db, { orderId: 100, shipmentId: 55, actor: ACTOR });
+  assert.strictEqual(r.ok, true);
+  assert.ok(r.case.closed_at);
+});
+
+it('nothing needed leaves its own event, tellable from a replacement or a refund', () => {
+  const db = fresh();
+  step(db, 'remedy', { kind: 'none', note: 'food was fine' });
+  const c = dc.readCase(db, 55);
+  assert.deepStrictEqual(dc.caseEvents(db, c.id).map(e => e.event), ['opened', 'remedy_none']);
+});
+
 // ── 6. The settlement, and the figure that makes it worth recording ────────
 it('a paid outcome cannot be recorded without the amount', () => {
   const db = fresh();
@@ -482,6 +535,30 @@ it('both surfaces render the blockers this file computes', () => {
     for (const code of ['customer_not_told', 'customer_not_made_whole', 'dispute_open']) {
       assert.ok(src.includes(code), `${f} has no wording for blocker ${code}`);
     }
+  }
+});
+
+it('both surfaces offer the third answer, and neither offers it as a button', () => {
+  // §125. The reason this is asserted on the SOURCE rather than on the rule is
+  // that the rule cannot go wrong quietly — a screen can. A surface that gains
+  // `none` as a third filled button has undone §98's one-primary hierarchy, and
+  // a surface that never gains it at all leaves its operators the dead end this
+  // section exists to remove, with the other surface looking fine.
+  for (const f of ['public/retail-admin/04-orders.js', 'public/m.html']) {
+    const src = fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+    assert.ok(src.includes('无需补发退款'),
+      `${f} has no way to say nothing was owed — the make-whole step is a dead end there`);
+    assert.ok(/kind:\s*'none'|kind:'none'/.test(src),
+      `${f} never sends remedy kind 'none'`);
+    // It rides `link`, which both renderers draw quietly; `acts` is where the
+    // buttons live and is where it must NOT be. Matched by looking back from the
+    // label rather than forward from `link:` — the desktop's control carries a
+    // `${...}` interpolation, so anything of the [^}]* shape stops short of it.
+    const drawnAsLink = src.split('无需补发退款')
+      .slice(0, -1)
+      .some(before => /\blink\s*:\s*\{[^;]*$/.test(before.slice(-200)));
+    assert.ok(drawnAsLink,
+      `${f} draws 'nothing needed' outside link:{} — an opt-out that ends a track is not a button`);
   }
 });
 

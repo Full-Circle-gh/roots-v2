@@ -1633,6 +1633,18 @@ reg('dcNoClaim', sid=>{
     run:v=>dcStep(sid,'no_claim',{note:v.note||''})};
   render();
 });
+/* §125. The make-whole step's third answer, asked the way dcNoClaim asks its
+   own — a sheet with one required field. The reason is not decoration: the
+   server refuses `none` without it, with the same `reason_required` the claim
+   track uses, so the refusal is worded in one place. */
+reg('dcNoRemedy', sid=>{
+  state.ask={title:T('Nothing needed','无需补发退款'),
+    fields:[{id:'note',label:T('Reason','原因'),placeholder:T('Required','必填'),multiline:true}],
+    validate:v=>(v.note||'').trim()?null:T('Give a reason first.','请先填写原因。'),
+    confirmLabel:T('Nothing needed','无需补发退款'),
+    run:v=>dcStep(sid,'remedy',{kind:'none',note:v.note||''})};
+  render();
+});
 reg('dcSettle', (sid,outcome)=>{
   if(outcome!=='paid'){ dcStep(sid,'settled',{outcome}); return; }
   state.ask={title:T('Carrier paid','已赔偿'),
@@ -14437,11 +14449,18 @@ function delayCaseCard(o,sp){
   if(dc&&dc.remedy_at) rb.push(escAttr(String(dc.remedy_at).slice(5,16)));
   if(dc&&dc.remedy_note) rb.push(escAttr(dc.remedy_note));
   if(dc&&dc.remedy_cost!=null) rb.push(T('cost ','成本 ')+money(CUR,dc.remedy_cost));
+  /* THE THIRD ANSWER IS A LINK, NOT A THIRD BUTTON (§125). The customer opened
+     a late parcel and the food was fine, so nothing is owed — before this the
+     row's only exits were a no-charge order nobody wanted or a refund that
+     never happened, and the step held the case open for good. Drawn as 'Not
+     claiming' is, because it is the same act: one tap that ends a track by
+     deciding against it. */
   steps.push(remedy
-    ? {done:true,label:remedy==='refund'?T('Refunded','已退款'):T('Replacement sent','已补发'),meta:rb.join(' · ')}
+    ? {done:true,label:remedy==='refund'?T('Refunded','已退款'):remedy==='none'?T('Nothing needed','无需补发退款'):T('Replacement sent','已补发'),meta:rb.join(' · ')}
     : {label:T('Replacement or refund','补发或退款'),
        acts:[{cmd:'dcReplacement',arg:sid,text:T('Send replacement','补发')},
-             {cmd:'dcRemedy',arg:`${sid},'refund'`,text:T('Refunded','已退款')}]});
+             {cmd:'dcRemedy',arg:`${sid},'refund'`,text:T('Refunded','已退款')}],
+       link:{cmd:'dcNoRemedy',arg:sid,text:T('Nothing needed','无需补发退款')}});
 
   if(ds==='no_claim'){
     steps.push({done:true,label:T('Carrier settled','承运商赔偿'),meta:'–'});
