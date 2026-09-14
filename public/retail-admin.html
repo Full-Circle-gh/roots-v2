@@ -2434,6 +2434,19 @@
          id, never by position, so they sit outside the filter row rather than
          inside it as display:none flex children. -->
     <input type="hidden" id="orders-channel" value="">
+    <!-- THE HIDDEN MIRROR OF THE CHIP ROW ABOVE, AND IT MUST CARRY EVERY
+         data-status THAT ROW USES. setOrderStatus writes the chip's value here
+         and ordFilterQuery reads it back out; a <select> SILENTLY REFUSES a
+         value it has no <option> for — selectedIndex goes to -1 and .value
+         reads back as '' — so a missing option does not narrow the list to
+         nothing, it DROPS THE STATUS PARAM AND WIDENS TO EVERY ORDER, with the
+         chip still lit. That is what "Needs a call" did from the day its chip
+         was added: §98 taught the server the name, 2026-09-14 gave the row its
+         chip, and this list was never told. Ash, off the live desktop:
+         "need a call filter doesnt filter anything it shows all orders."
+         scripts/test_delivery_alert_route.js now asserts the two agree for
+         EVERY chip, not just this one — the next status added to that row
+         fails at the gate instead of widening in production. -->
     <select id="orders-status" style="display: none">
       <option value="" selected></option>
       <option value="pending_payment"></option>
@@ -2447,6 +2460,9 @@
       <option value="refunded"></option>
       <option value="refunds_open"></option>
       <option value="needs_invoice"></option>
+      <!-- Pseudo-status: the "Delivery needs a call" chip. Resolved by
+           lib/delivery-alerts.js server-side, never a real o.status value. -->
+      <option value="delayed"></option>
     </select>
 
     <!-- Bulk attach tracking modal -->
