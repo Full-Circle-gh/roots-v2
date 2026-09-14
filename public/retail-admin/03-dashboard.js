@@ -2494,7 +2494,14 @@ function tdSecGoHtml(label, run, iconOnly) {
 function tdSecOpenOrders(status) {
   dashJumpTab('orders');
   const chip = document.querySelector(`#orders-status-chips .status-chip[data-status="${status}"]`);
-  if (chip && typeof setOrderStatus === 'function' && !chip.classList.contains('active')) setOrderStatus(chip);
+  // A STATUS WITH NO CHIP IS A BUG, AND IT USED TO BE A SILENT ONE. This
+  // function's whole job is to narrow the list, and it narrows by FINDING the
+  // chip — so a card wired to a status no chip carries jumped to Orders and
+  // left whatever filter was already there, which reads as "the card sent me to
+  // everything" rather than as anything broken. That is exactly what 'delayed'
+  // did from §98 until 2026-09-14. Say so rather than doing nothing quietly.
+  if (!chip) { console.warn('[dashboard] no orders chip for status:', status); return; }
+  if (typeof setOrderStatus === 'function' && !chip.classList.contains('active')) setOrderStatus(chip);
 }
 
 function tdSecPaint() {
@@ -2648,8 +2655,12 @@ function tdSecPaint() {
     const alerts = ((DASH_OPS.delivery_alerts || {}).count) || 0;
     delFoot.innerHTML = alerts === 0
       ? `<span class="td-sec-dot is-clear"></span>${escapeHtml(cuT('Every delivery is on track.', '配送一切正常。'))}`
-      : `<span class="td-sec-dot"></span><button type="button" class="td-sec-link" onclick="tdSecOpenOrders('dispatched')">${escapeHtml(cuT(`${alerts} ${alerts === 1 ? 'delivery needs' : 'deliveries need'} a call`, `${alerts} 单配送需要联系`))}</button>`;
-    delFoot.innerHTML += tdSecGoHtml(cuT('Open delivery', '前往配送'), "tdSecOpenOrders('dispatched')");
+      // 'delayed', not 'dispatched' — these two lines are the same card's own
+      // footer and were still sending people to the Dispatched tab long after
+      // the attention card beside them stopped, so one half of this screen
+      // disagreed with the other about where the alerts live.
+      : `<span class="td-sec-dot"></span><button type="button" class="td-sec-link" onclick="tdSecOpenOrders('delayed')">${escapeHtml(cuT(`${alerts} ${alerts === 1 ? 'delivery needs' : 'deliveries need'} a call`, `${alerts} 单配送需要联系`))}</button>`;
+    delFoot.innerHTML += tdSecGoHtml(cuT('Open delivery', '前往配送'), "tdSecOpenOrders('delayed')");
   }
 }
 

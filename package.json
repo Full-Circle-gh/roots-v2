@@ -18,6 +18,7 @@
     "test:csv-import": "node scripts/test_csv_import.js",
     "test:delivery-districts": "node scripts/test_delivery_districts.js",
     "test:rider-call": "node scripts/test_rider_call.js",
+    "test:delivery-alert-route": "node scripts/test_delivery_alert_route.js",
     "test:alert-audience": "node scripts/test_alert_audience.js",
     "test:new-merchant-locale": "node scripts/test_new_merchant_locale.js",
     "test:signin-code": "node scripts/test_signin_code_delivery.js",

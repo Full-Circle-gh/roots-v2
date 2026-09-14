@@ -2316,6 +2316,19 @@
       <div class="status-chip st-rider_pickup"           data-status="rider_pickup"     onclick="setOrderStatus(this)" title="Meituan rider on the way to collect — have it ready · 美团骑手正来取货,请备好"><span class="dot"></span>Rider coming<span class="chip-ct alert" id="oc-rider_pickup"></span></div>
       <div class="status-chip st-dispatched"             data-status="dispatched"       onclick="setOrderStatus(this)"><span class="dot"></span>Dispatched<span class="chip-ct" id="oc-dispatched"></span></div>
       <div class="status-chip st-delivered"              data-status="delivered"        onclick="setOrderStatus(this)"><span class="dot"></span>Delivered</div>
+      <!-- Where "Delivery needs a call" lands. A pseudo-status, resolved by
+           lib/delivery-alerts.js: the carrier reported a problem, a cold-chain
+           parcel arrived late, a Meituan order blew past its ETA, or one of our
+           own riders never picked up. It cuts ACROSS the chips either side of it
+           — a late air parcel is Delivered, a stuck rider is Dispatched — which
+           is why it is its own chip and not a narrowing of one of theirs.
+           THE CHIP HAD TO EXIST FOR THE CARD TO WORK AT ALL: tdSecOpenOrders
+           finds the chip by data-status and does nothing when there is none, so
+           from §98 until 2026-09-14 "Open delivery" jumped to Orders and applied
+           no filter whatsoever. No count badge: the orders-counts endpoint has
+           never carried this pseudo-status, and a badge with nothing behind it
+           is the thing the Delivered chip above already refuses to draw. -->
+      <div class="status-chip st-dispatched"             data-status="delayed"          onclick="setOrderStatus(this)" title="The carrier, the platform or our own rider has left someone waiting · 配送需要跟进"><span class="dot"></span>Needs a call</div>
       <div class="status-chip st-awaiting_restock"       data-status="awaiting_restock" onclick="setOrderStatus(this)" title="Paid orders waiting for stock to arrive · 待补货订单"><span class="dot"></span>Awaiting restock<span class="chip-ct alert" id="oc-awaiting_restock"></span></div>
       <div class="status-chip st-cancelled"              data-status="cancelled"        onclick="setOrderStatus(this)"><span class="dot"></span>Cancelled</div>
       <div class="status-chip st-refunded"               data-status="refunded"         onclick="setOrderStatus(this)"><span class="dot"></span>Refunded</div>
