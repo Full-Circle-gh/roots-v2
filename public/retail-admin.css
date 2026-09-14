@@ -6136,10 +6136,17 @@
      Chinese — html[data-ui-lang] is the only honest signal for that; detecting
      a CJK run per node would need markup this page does not emit. */
   html[data-ui-lang="cn"] #tab-meituan { line-height: 1.7; }
-  html[data-ui-lang="cn"] #tab-meituan .mt-status,
-  html[data-ui-lang="cn"] #tab-meituan .mt-storeline .st,
   html[data-ui-lang="cn"] #tab-meituan .mt-store .sstate,
   html[data-ui-lang="cn"] .mt-dlg .mt-dlg-bd { line-height: 1.7; }
+  /* §127 — the status line and the store line are the FRAME's, so their CJK
+     line-height is one rule for all three channel pages, on one line so the
+     frame test can read it. Meituan and Eleme each had their own copy of this
+     exact declaration; GZ Grocery had none, which is the drift §123's test
+     exists to catch — it failed the moment a fourth copy was written for GZ,
+     and it was right to. The two selectors above are Meituan's alone (a dialog
+     and a store card neither other page has) and stay here. */
+  html[data-ui-lang="cn"] #tab-meituan .mt-status, html[data-ui-lang="cn"] #tab-eleme .el-status, html[data-ui-lang="cn"] #tab-guanyi .gy-status { line-height: 1.7; }
+  html[data-ui-lang="cn"] #tab-meituan .mt-storeline .st, html[data-ui-lang="cn"] #tab-eleme .el-storeline .st, html[data-ui-lang="cn"] #tab-guanyi .gy-storeline .st { line-height: 1.7; }
 
   /* ── Header (§1.7): title, status line, one Dusk CTA. No fourth element. ── */
   .mt-pagehead, .gy-pagehead { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 32px; }
@@ -6490,7 +6497,7 @@
   }
   /* ── Views ──────────────────────────────────────────────────────────────── */
   .mt-view[hidden] { display: none; }
-  .mt-act-h { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0 0 16px; }
+  .mt-act-h, .gy-act-h { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0 0 16px; }
   .mt-act-h + .mt-log { margin-bottom: 32px; }
   .mt-log { font: 400 13px/1.7 var(--f-sans); max-height: 264px; overflow: auto; border: 1px solid var(--td-border); border-radius: 14px; padding: 16px 24px; background: var(--td-surface); color: var(--td-text2); font-variant-numeric: tabular-nums; }
   .mt-log .t { color: var(--td-text2); }
@@ -6753,10 +6760,10 @@
   .el-search { flex: 1 1 280px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
   .el-search::placeholder { color: var(--td-text2); }
 
-  /* §1.3: body is lh 1.6, 1.7 for CJK runs — half of every label here is 中文. */
+  /* §1.3: body is lh 1.6, 1.7 for CJK runs — half of every label here is 中文.
+     The .el-status and .el-storeline halves moved up into the joined frame
+     rule beside Meituan's and GZ Grocery's (§127); this sets the page. */
   html[data-ui-lang="cn"] #tab-eleme { line-height: 1.7; }
-  html[data-ui-lang="cn"] #tab-eleme .el-status,
-  html[data-ui-lang="cn"] #tab-eleme .el-storeline .st { line-height: 1.7; }
 
   .el-tabs { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--td-border); margin: 0 0 16px; }
   .el-tab { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 0; font: 500 13px var(--f-sans); color: var(--td-text2); cursor: pointer; display: flex; align-items: center; gap: 8px; }
@@ -15476,21 +15483,148 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
   --danger:      var(--td-brick-ink);
 }
 
+/* Base .btn-primary is built on --brass, which the remap above points at Amber
+   — so without this every primary button on this page comes out amber and
+   Amber stops meaning "warning". It is why the flagged-drop Apply buttons read
+   as warnings rather than as the action that clears one. A strong in-page
+   action is Ink. Identical to the rule #tab-meituan and #tab-eleme each carry
+   for the same reason; it cannot be shared by selector because the three are
+   scoped to different tabs. */
+#tab-guanyi .btn-primary { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+#tab-guanyi .btn-primary:hover { background: var(--td-text); border-color: var(--td-text); opacity: .88; }
+
 /* One panel mounted at a time — the 189-row Mapping table stays unbuilt until
    its tab is opened (12-guanyi.js gySubTab). */
 #tab-guanyi .gy-panel { display: none; }
 #tab-guanyi .gy-panel.active { display: block; }
 
-#tab-guanyi .gy-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--brass); margin: 22px 0 12px; }
+/* ── §127 · the panel bodies, in the same vocabulary as the frame ────────────
+   §123 put GZ Grocery's HEAD in the channel frame and stopped there, which
+   left the page speaking two languages at once: a Tacet head above three
+   panels still written in the admin's pre-Tacet vocabulary — 10px uppercase
+   mono eyebrows, 700-weight numbers, 6px radii, amber-washed cards and a
+   primary button the remap had turned amber. The parts below are the panel
+   bodies said the way Meituan and Eleme say the same things.
 
-/* The billing snapshot on Overview: a row of cells, the owed figure in amber. */
-#tab-guanyi .gy-teaser { display: flex; flex-wrap: wrap; align-items: center; background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
-#tab-guanyi .gy-teaser .cell { padding: 15px 20px; border-left: 1px solid var(--line); flex: 1; min-width: 120px; }
-#tab-guanyi .gy-teaser .cell:first-child { border-left: 0; }
-#tab-guanyi .gy-teaser .cell .l { font-family: var(--f-mono); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
-#tab-guanyi .gy-teaser .cell .v { font-size: 24px; font-weight: 500; letter-spacing: -.02em; margin-top: 4px; color: var(--text-1); font-variant-numeric: tabular-nums; }
-#tab-guanyi .gy-teaser .cell.owe .v { color: var(--brass); }
-#tab-guanyi .gy-teaser .cell.go { flex: 0 0 auto; border-left: 0; margin-left: auto; }
+   THE SCALE IS THEIRS, NOT A NEW ONE. Section head 500 18px (.mt-act-h);
+   card 1px border + 14px radius on --td-surface (.mt-card); a row inside a
+   card 16px/24px with a 16px gap and a rule between (.mt-storeline); body 15px,
+   secondary 13px --td-text2; controls 15px on an 8px radius (.mt-search);
+   pills 999px. Nothing here invents a size.
+
+   AMBER IS AN ACCENT, NOT A WASH. The flagged-drop card was a full
+   color-mix amber field with amber text and amber buttons on it — the loudest
+   object on a page whose own status line said "nothing needs you". It is now
+   a plain card like every other card, with amber on the count line that says
+   how many and on that line alone, which is how .mt-status and the tiles
+   already spend amber. */
+
+/* Section head — one declaration with Meituan's and Eleme's. */
+#tab-guanyi .gy-act-row { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin: 0 0 16px; }
+#tab-guanyi .gy-act-row .gy-act-h { margin: 0; }
+#tab-guanyi .gy-act-row .gy-act-sum { margin-left: auto; font: 400 13px var(--f-sans); color: var(--td-text2); font-variant-numeric: tabular-nums; }
+
+/* The pickup-inference mode, as a pill. §1.10's row for "tacet acted" is
+   --td-dusk-tint plus a breathing dot, and pickup inference IS an automation:
+   it reads Guanyi's drift and lowers the shelf without being asked. It was
+   Sage, which means all-clear and is not what this badge reports. §1.8 rule 2
+   exempts automation indicators from the one-Dusk budget — and §1.7 leaves
+   this page's header CTA slot empty anyway, so nothing is competing for it. */
+#tab-guanyi .gy-pill { display: inline-flex; align-items: center; gap: 6px; font: 400 13px var(--f-sans); border-radius: 999px; padding: 2px 12px; white-space: nowrap; }
+#tab-guanyi .gy-pill.auto { background: var(--td-dusk-tint); color: var(--td-dusk); }
+#tab-guanyi .gy-pill.auto i { width: 6px; height: 6px; border-radius: 999px; background: var(--td-dusk); flex: none; animation: gy-breathe 2.4s ease-in-out infinite; }
+#tab-guanyi .gy-pill.idle { background: var(--td-raised); color: var(--td-text2); }
+/* 1 → .45 → 1 over 2.4s — the product-wide breathing dot (§1.5). */
+@keyframes gy-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { #tab-guanyi .gy-pill.auto i { animation: none; } }
+
+/* The count beside a card head. Amber tint + amber ink is §1.10's "needs
+   attention" pair, and a pill is §5's shape for it — the same object the
+   sub-tab strip's .n already is, one level in. */
+#tab-guanyi .gy-npill { font: 400 13px var(--f-sans); border-radius: 999px; padding: 0 8px; background: var(--td-amber-tint); color: var(--td-amber-ink); font-variant-numeric: tabular-nums; }
+
+/* A card, and a row inside one. These take .mt-card's and .mt-storeline's
+   shapes but are NOT joined to their rules: .gy-card carries a margin those do
+   not, and .gy-row is a decision line rather than a store line — joining two
+   things that only look alike today is how the next change to one silently
+   lands on the other. .gy-act-h above IS joined, because it is the same
+   object, word for word. */
+/* §1.13a rule 2 — the card clips with clip-path, NOT overflow. overflow in
+   either axis makes the card a scroll container, and a sticky band pins to its
+   nearest scrollport: the column header would park itself on row one instead of
+   under the topbar. clip-path rounds the corners without creating one. */
+#tab-guanyi .gy-card { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; clip-path: inset(0 round 14px); margin-bottom: 32px; }
+#tab-guanyi .gy-cardhead { display: flex; align-items: center; gap: 16px; padding: 16px 24px; border-bottom: 1px solid var(--td-border); font: 500 15px var(--f-sans); color: var(--td-text); }
+#tab-guanyi .gy-row { display: flex; align-items: center; gap: 16px; padding: 16px 24px; flex-wrap: wrap; }
+#tab-guanyi .gy-row + .gy-row { border-top: 1px solid var(--td-border); }
+#tab-guanyi .gy-row .who { flex: 1 1 240px; min-width: 0; }
+#tab-guanyi .gy-row .nm { font: 400 15px var(--f-sans); color: var(--td-text); }
+#tab-guanyi .gy-row .sku, #tab-guanyi .gy-foldrow .sku { font: 400 13px var(--f-sans); color: var(--td-text2); margin-left: 8px; font-variant-numeric: tabular-nums; }
+#tab-guanyi .gy-row .sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 4px; font-variant-numeric: tabular-nums; }
+
+/* Nothing to decide is a fact, not a warning: it reads like the status line. */
+#tab-guanyi .gy-empty { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); margin: 0 0 16px; }
+#tab-guanyi .gy-empty.mid { text-align: center; padding: 24px; }
+
+/* An amber notice — the one shape the admin already uses for this (.onw-note
+   .amber on Orders): tinted ground, amber ink, no border shouting round it. */
+#tab-guanyi .gy-note { background: var(--td-amber-tint); color: var(--td-amber-ink); border-radius: 14px; padding: 16px 24px; font: 400 13px/1.6 var(--f-sans); margin: 0 0 24px; }
+
+/* A fold. Its summary is a 13px secondary line, like every other one here. */
+#tab-guanyi .gy-fold { margin: 0 0 32px; }
+#tab-guanyi .gy-fold > summary { cursor: pointer; font: 400 13px var(--f-sans); color: var(--td-text2); padding: 4px 0; }
+#tab-guanyi .gy-fold > summary:hover { color: var(--td-text); }
+#tab-guanyi .gy-foldbody { margin-top: 8px; max-height: 264px; overflow: auto; }
+#tab-guanyi .gy-foldrow { display: flex; align-items: center; gap: 16px; font: 400 13px/1.7 var(--f-sans); color: var(--td-text); padding: 4px 0; font-variant-numeric: tabular-nums; }
+#tab-guanyi .gy-foldrow .n { flex: none; width: 48px; color: var(--td-text2); }
+#tab-guanyi .gy-foldrow .who { flex: 1; min-width: 0; }
+#tab-guanyi .gy-foldrow .when { color: var(--td-text2); }
+#tab-guanyi .gy-bar { height: 8px; border-radius: 999px; background: var(--td-sage); flex: none; }
+
+/* The billing cards. NOT .gy-tiles: that class is the head's three-up grid and
+   is shared by selector with Meituan, so a five-card variant of it would be a
+   rule of GZ's own on a frame class — the thing §123's test exists to catch.
+   The cards inside are .gy-tile, unchanged, so the tile itself stays shared. */
+#tab-guanyi .gy-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(176px, 1fr)); gap: 24px; margin-bottom: 32px; }
+
+/* Toolbar + controls, on .mt-tools' and .mt-search's measurements. Scoped to
+   #tab-guanyi rather than joined: this toolbar carries a date pair and a
+   checkbox neither of those pages has. */
+#tab-guanyi .gy-tools { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+#tab-guanyi .gy-tools .gy-grow { flex: 1 1 auto; }
+#tab-guanyi .gy-lb { font: 400 13px var(--f-sans); color: var(--td-text2); white-space: nowrap; }
+#tab-guanyi .gy-search { flex: 1 1 280px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
+#tab-guanyi .gy-search::placeholder { color: var(--td-text2); }
+#tab-guanyi .gy-date { font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 6px 10px; min-width: 150px; box-sizing: border-box; }
+#tab-guanyi .gy-check { display: flex; align-items: center; gap: 8px; font: 400 13px var(--f-sans); color: var(--td-text2); white-space: nowrap; cursor: pointer; }
+#tab-guanyi .gy-count { font: 400 13px var(--f-sans); color: var(--td-text2); font-variant-numeric: tabular-nums; }
+#tab-guanyi .gy-hint { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin: 0 0 16px; }
+
+/* The two tables. The global th (css:5685) is the retired 11px uppercase mono
+   eyebrow; Meituan and Eleme replaced theirs with a 500 13px sentence-case
+   band when they became lists (.mt-lhead). These are still tables — a mapping
+   grid and a statement both have columns that must line up — so the band is
+   restated here on th rather than the pages being remade into lists. */
+/* §1.19 — plain percentages summing to 100 under table-layout: fixed. Fixed
+   layout is what lets the band pin: the alternative was a min-width and an
+   overflow-x wrapper, and an overflow on any ancestor un-pins the band. */
+#tab-guanyi .gy-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+#tab-guanyi .gy-table th { position: sticky; top: 56px; z-index: 5; font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; text-align: left; color: var(--td-text); background: var(--td-header); border-bottom: 1px solid var(--td-border); padding: 10px 12px; }
+#tab-guanyi .gy-table td { font: 400 15px var(--f-sans); color: var(--td-text); border-bottom: 1px solid var(--td-border); padding: 10px 12px; vertical-align: middle; }
+#tab-guanyi .gy-table tbody tr:last-child td { border-bottom: 0; }
+#tab-guanyi .gy-table tbody tr:hover { background: var(--td-raised); }
+#tab-guanyi .gy-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+#tab-guanyi .gy-table .muted { color: var(--td-text2); }
+#tab-guanyi .gy-table .gy-tblmsg { padding: 24px; text-align: center; color: var(--td-text2); }
+#tab-guanyi .gy-table .sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 2px; font-variant-numeric: tabular-nums; }
+#tab-guanyi .gy-table .ctr { text-align: center; font-variant-numeric: tabular-nums; }
+#tab-guanyi .gy-table .qty { font-weight: 500; }
+#tab-guanyi .gy-table .unbind { padding: 0 8px; margin-left: 8px; }
+
+/* §1.3: body is lh 1.6, 1.7 for CJK runs — half of every label here is 中文.
+   The .gy-status and .gy-storeline halves are frame parts and live in the
+   joined rule beside Meituan's and Eleme's; this sets the page. */
+html[data-ui-lang="cn"] #tab-guanyi { line-height: 1.7; }
 
 /* ── §103 · Channel sync — one verdict per item per channel ──────────────────
    The page head, tiles and chips reuse the Eleme page's classes (.el-pagehead,

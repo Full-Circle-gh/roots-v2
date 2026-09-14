@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.260
+# Tacet shared-core consolidation — decisions record, v4.261
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,7 +23,11 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-14 · v4.260 — **§56 AMENDED AND BUILT: THE TWO COST ROWS CARRY A FIGURE, ON THE CONDITION THAT THE FIGURE NEVER APPEARS WITHOUT THE SHARE OF THE PERIOD IT RESTS ON — DECIDED by Ash.** §56 (2026-09-07) held `cost_of_goods` and `gross_profit` null and gated them on §31: *"when §31 lands, these two rows fill from it and nothing else."* **§31's storage HAS since landed** — `product_build_lines` exists, `computeProductBuildCost()` reads it and `applyProductBuildCosts()` feeds `store_products.unit_cost` from it — so whether the gate was open became a question about the DATA, and nobody had looked. **IT WAS MEASURED BEFORE IT WAS DECIDED, which is the part worth copying.** `scripts/diagnose_cost_coverage.js` (new, read-only, run through `ro-query.yml` on 2026-09-14 against the live database) answered three questions: **29.1% of the last thirty days' line revenue carried a cost, 56.7% of September's, 2.7% of August's and 0% of July's**; 97 of 251 active products carry a `unit_cost` and 43 a §31 build list; and of the costed lines, 13.5% sit on a product flagged `cost_incomplete`. **The margin the screen WOULD have printed unqualified was 91.6% on a food business**, and the month-on-month shape was worse than the level: 97.9% in August against 86.4% in September, an 11-point "decline" that is nothing but coverage arriving. **TWO DESIGNS WERE PUT UP AND ASH CHOSE THE FIRST:** (A) whole revenue minus partial cost, with the shortfall stated beside the figure; (B) cost and margin on the costed SUBSET only, as a separate card. **Ash: *"version a"*.** B was the truer ratio and is recorded as rejected on a structural ground rather than a numerical one — **operating expenses are the whole business's, so a subset gross profit cannot be continued into Net**, and the card stops being five steps that follow from one another; §36's *Finance Summary ships without a location filter* refuses a store filter on exactly that shape, the top line scoped and the bottom line not. **THE CONDITION IS THE AMENDMENT.** `cost_coverage` is not a statistic beside the figure — the rows were blank precisely because a partial cost printed alone reads as a whole one, so a payload or a screen that drops it has undone the decision rather than tidied a response. **THREE STATES, AND THE FIRST IS §56 UNCHANGED.** No costed line at all → both rows keep the §1.12 seventh state they have had since §56, because **a `¥0.00` there would publish a 100% margin for July's ¥56,792 of real sales**; some coverage → the figures with the shortfall beneath them; full coverage → the figures and nothing beneath them. **The third state is Ash's own *"once we fix manually everything you will remove that note"*, built as a consequence of the data rather than a task anybody has to remember** — the note cannot outlive the shortfall it describes, which is the failure mode `CLAUDE.md` opens by warning about. **TWO OF §36's SIX TRAPS ARE CARRIED IN THE LINE FORMULA AND THREE CANNOT BE.** Pack units (`unit_cost_at_sale` is per unit, `line_total` per line — the cost half takes the multiplier and the revenue half must not) and itemised partial refunds (`qty − refunded_qty`; §36 records that nothing else in the codebase subtracts it, and this is the first reader that does). **Not closed, and recorded rather than glossed:** an amount-only refund writes nothing to the line at all (7 orders, ¥328, in the measured window), options carry a price delta with no cost counterpart, and a bundle line goes null when ONE component is unpriced — so `cost_coverage` counts what carries a cost, never what carries a RIGHT one, and §36's two accuracy findings are untouched. **A THIRD REVENUE FINDING ARRIVED WITH THE MEASUREMENT AND IS RECORDED AS A KNOWN MISMATCH:** the Summary's revenue is `SUM(retail_orders.total)` while cost can only be summed from order LINES, and shipping, order-level discounts and tax sit on the header and never reach a line — **the gap runs from +¥18,033 (July) to −¥3,944 (September) and CHANGES SIGN**, so it is not an adjustment anyone can net out later. Gross profit is header revenue minus line cost, deliberately, for the same staircase reason B was rejected. **NET IS UNCHANGED and cost is still NOT subtracted from it** — a partial cost taken off net would put a known-incomplete number into the one figure on the card that nothing else qualifies. **The predicates are the shared ones**: `PAID_O` and `odateFor()` from `lib/finance-window.js`, never spelled out here, because revenue and cost must agree about which orders exist or the margin is a ratio of two different populations — §36's finding that the allow-list was re-declared inline four times is the reason, and a test asserts no fifth. **Tests:** `scripts/test_finance_summary.js` 85 → **97**, gaining a new section `2b` that **SLICES THE COST SQL OUT OF THE LIVE ROUTE AND RUNS IT** rather than transcribing it, against rows that spring each trap — a `pack_units` 6 line, an itemised partial refund, an uncosted line, a cancelled order and a §98 replacement. **Four breaks were confirmed red**: the coverage note removed, `floor` changed to `round`, the zero-coverage guard dropped, and the revenue half given the pack multiplier. **One of those four — the zero-coverage guard — passed green on the first attempt and exposed a real hole**, which is why section `2b` exists at all; the screen-level test had been handed a null rather than deriving it. **Chinese:** ONE composed pair, `此期间 {n}% 的营收已记录成本 —— 实际毛利更低。`, assembled wholly from live pieces — `此期间` and `已记录成本` from this card's own `noCostRecorded`, `营收` from its own revenue label, and `—— 实际毛利更低。` verbatim from `09-products.js:1647`, which says the same thing about a single product's margin drawn from an incomplete cost. Declared with three rejections in `docs/tacet-delivery-vocabulary.md` v1.81. **NOT DONE, and named so it is not assumed:** no backfill (§36 refuses it and the reason stands), no cost derived from ingredient purchases in the window (§56 rejected it and that rejection is untouched), nothing for `sales_entries` market and till sales, and **product 3's ¥990 `unit_cost` is NOT repaired here** — Ash reports the material at ¥54.85/kg, so the stored figure is roughly 18kg of material in a per-unit field, which is §36's own no-conversion-step finding with a source price against it; it is a manual correction in the product editor and it distorts 17% of the measured cost of goods until it is made. No schema, no migration, no new capability, and no change to `.gitignore` or CI.**
+2026-09-14 · v4.261 — **§56 AMENDED AND BUILT: THE TWO COST ROWS CARRY A FIGURE, ON THE CONDITION THAT THE FIGURE NEVER APPEARS WITHOUT THE SHARE OF THE PERIOD IT RESTS ON — DECIDED by Ash.** §56 (2026-09-07) held `cost_of_goods` and `gross_profit` null and gated them on §31: *"when §31 lands, these two rows fill from it and nothing else."* **§31's storage HAS since landed** — `product_build_lines` exists, `computeProductBuildCost()` reads it and `applyProductBuildCosts()` feeds `store_products.unit_cost` from it — so whether the gate was open became a question about the DATA, and nobody had looked. **IT WAS MEASURED BEFORE IT WAS DECIDED, which is the part worth copying.** `scripts/diagnose_cost_coverage.js` (new, read-only, run through `ro-query.yml` on 2026-09-14 against the live database) answered three questions: **29.1% of the last thirty days' line revenue carried a cost, 56.7% of September's, 2.7% of August's and 0% of July's**; 97 of 251 active products carry a `unit_cost` and 43 a §31 build list; and of the costed lines, 13.5% sit on a product flagged `cost_incomplete`. **The margin the screen WOULD have printed unqualified was 91.6% on a food business**, and the month-on-month shape was worse than the level: 97.9% in August against 86.4% in September, an 11-point "decline" that is nothing but coverage arriving. **TWO DESIGNS WERE PUT UP AND ASH CHOSE THE FIRST:** (A) whole revenue minus partial cost, with the shortfall stated beside the figure; (B) cost and margin on the costed SUBSET only, as a separate card. **Ash: *"version a"*.** B was the truer ratio and is recorded as rejected on a structural ground rather than a numerical one — **operating expenses are the whole business's, so a subset gross profit cannot be continued into Net**, and the card stops being five steps that follow from one another; §36's *Finance Summary ships without a location filter* refuses a store filter on exactly that shape, the top line scoped and the bottom line not. **THE CONDITION IS THE AMENDMENT.** `cost_coverage` is not a statistic beside the figure — the rows were blank precisely because a partial cost printed alone reads as a whole one, so a payload or a screen that drops it has undone the decision rather than tidied a response. **THREE STATES, AND THE FIRST IS §56 UNCHANGED.** No costed line at all → both rows keep the §1.12 seventh state they have had since §56, because **a `¥0.00` there would publish a 100% margin for July's ¥56,792 of real sales**; some coverage → the figures with the shortfall beneath them; full coverage → the figures and nothing beneath them. **The third state is Ash's own *"once we fix manually everything you will remove that note"*, built as a consequence of the data rather than a task anybody has to remember** — the note cannot outlive the shortfall it describes, which is the failure mode `CLAUDE.md` opens by warning about. **TWO OF §36's SIX TRAPS ARE CARRIED IN THE LINE FORMULA AND THREE CANNOT BE.** Pack units (`unit_cost_at_sale` is per unit, `line_total` per line — the cost half takes the multiplier and the revenue half must not) and itemised partial refunds (`qty − refunded_qty`; §36 records that nothing else in the codebase subtracts it, and this is the first reader that does). **Not closed, and recorded rather than glossed:** an amount-only refund writes nothing to the line at all (7 orders, ¥328, in the measured window), options carry a price delta with no cost counterpart, and a bundle line goes null when ONE component is unpriced — so `cost_coverage` counts what carries a cost, never what carries a RIGHT one, and §36's two accuracy findings are untouched. **A THIRD REVENUE FINDING ARRIVED WITH THE MEASUREMENT AND IS RECORDED AS A KNOWN MISMATCH:** the Summary's revenue is `SUM(retail_orders.total)` while cost can only be summed from order LINES, and shipping, order-level discounts and tax sit on the header and never reach a line — **the gap runs from +¥18,033 (July) to −¥3,944 (September) and CHANGES SIGN**, so it is not an adjustment anyone can net out later. Gross profit is header revenue minus line cost, deliberately, for the same staircase reason B was rejected. **NET IS UNCHANGED and cost is still NOT subtracted from it** — a partial cost taken off net would put a known-incomplete number into the one figure on the card that nothing else qualifies. **The predicates are the shared ones**: `PAID_O` and `odateFor()` from `lib/finance-window.js`, never spelled out here, because revenue and cost must agree about which orders exist or the margin is a ratio of two different populations — §36's finding that the allow-list was re-declared inline four times is the reason, and a test asserts no fifth. **Tests:** `scripts/test_finance_summary.js` 85 → **97**, gaining a new section `2b` that **SLICES THE COST SQL OUT OF THE LIVE ROUTE AND RUNS IT** rather than transcribing it, against rows that spring each trap — a `pack_units` 6 line, an itemised partial refund, an uncosted line, a cancelled order and a §98 replacement. **Four breaks were confirmed red**: the coverage note removed, `floor` changed to `round`, the zero-coverage guard dropped, and the revenue half given the pack multiplier. **One of those four — the zero-coverage guard — passed green on the first attempt and exposed a real hole**, which is why section `2b` exists at all; the screen-level test had been handed a null rather than deriving it. **Chinese:** ONE composed pair, `此期间 {n}% 的营收已记录成本 —— 实际毛利更低。`, assembled wholly from live pieces — `此期间` and `已记录成本` from this card's own `noCostRecorded`, `营收` from its own revenue label, and `—— 实际毛利更低。` verbatim from `09-products.js:1647`, which says the same thing about a single product's margin drawn from an incomplete cost. Declared with three rejections in `docs/tacet-delivery-vocabulary.md` v1.81. **NOT DONE, and named so it is not assumed:** no backfill (§36 refuses it and the reason stands), no cost derived from ingredient purchases in the window (§56 rejected it and that rejection is untouched), nothing for `sales_entries` market and till sales, and **product 3's ¥990 `unit_cost` is NOT repaired here** — Ash reports the material at ¥54.85/kg, so the stored figure is roughly 18kg of material in a per-unit field, which is §36's own no-conversion-step finding with a source price against it; it is a manual correction in the product editor and it distorts 17% of the measured cost of goods until it is made. No schema, no migration, no new capability, and no change to `.gitignore` or CI.**
+
+**RENUMBERED FROM v4.260 TO v4.261 ON MERGE, 2026-09-14.** This entry was written as v4.260 on an unmerged branch while PR #577 was writing §127 as v4.260 on another. #577 merged first, so its number stands and this one takes the next — the same resolution this file recorded for the two branches that each defined a §39, and for the §46 that became §47. **Nothing was renumbered to make room and no entry moved.** No section number is involved: this amends §56 in place and adds no section.
+
+2026-09-14 · v4.260 — **§127 · GZ GROCERY'S PANEL BODIES JOIN THE HEAD IN THE FRAME — AND THE FRAME IS NOT THE AUTHORITY, THE RULEBOOK IS. REPORTED BY ASH on a screenshot:** *"gzgrocery page should look the same as eleme and meituan"*, then, on the first round: ***"doesnt look like its according to tacet design rules. show me a mock up."*** **THE FIRST ROUND WAS BUILT FROM THE SIBLING PAGES AND THAT WAS THE WRONG SOURCE.** §123 had moved this page's head onto 33 rules shared with `.mt-`, so the obvious next move was to make the three panel bodies match what `#tab-meituan` and `#tab-eleme` do. They were made to match — and Ash was right that the result still was not Tacet, because **what those two pages do is not what `tacet-design-system.md` and `tacet-desktop-patterns.md` say.** Reading the rulebook after the fact turned up six conformance failures the parity pass had faithfully reproduced: **§1.8 rule 4** — thirteen FILLED Apply buttons, one per flagged row, on a page whose header CTA slot is empty and whose every action should therefore be Secondary or Ghost (and neither sibling puts a filled button in a list row at all: Meituan has one in a toolbar, Eleme one at the top — the row buttons were not even *their* pattern); **§1.8 rule 2 + §1.10** — the pickup-inference badge was Sage, but Sage means *all clear* and pickup inference is an **automation**, which §1.10 paints `--td-dusk-tint` + a breathing dot and §1.8 rule 2 exempts from the one-Dusk budget; **§1.3** — 14px table rows, a size not on the six-step scale, copied from Orders' own drift; **§1.4** — 16px between cards and regions where the table says 24 and 32; **§1.10** — the Δ column Sage/Amber/**Brick**, when Brick means *error* and holding three more than Guanyi is the same state as holding three fewer, with the State column beside it already carrying that state; **§1.13a rules 1+2** — 184 rows that scroll under a band that could not pin, because `overflow: hidden` on the card and an `overflow-x` wrapper above it made the card the scrollport. **THE ONE THAT WAS NOT COSMETIC.** §1.7's work rule: *a status line reports WORK WAITING.* This page's read **"nothing needs you"** with thirteen pickups waiting for a decision, and the attention tile read **0** beside it — because both counted only the sync queue and neither had ever been shown the flagged drops. **Offered three fixes, Ash chose (b): the tile counts BOTH.** `Needs attention` means *what is waiting on you on this page*, and what a page holds differs by page, the same way `Mapped` is a different number here and on Meituan — that is one name for one meaning, not §103 step 5's defect, which was two NAMES for one thing. The status line and the tile now read the same total. **A §123 TEST CAUGHT A REAL ONE, AND ANOTHER CAUGHT NOTHING.** The §1.3 CJK line-height pair existed as a separate copy on Meituan and on Eleme and not at all on GZ; writing a fourth for GZ turned case 1 red — the drift arriving as a well-meant parity fix — and the two shared halves are now ONE single-line rule naming all three pages. Conversely, `the numbered phrases are the shapes the other channel screens use` was written as `${errors} 个待处理`: it **named a variable when it meant a slot**, so renaming `errors` to `attention` turned it red while the Chinese it guards had not moved a character. Its own two sibling assertions already matched the number as `${[\w.]+}`; it does now too. **Chinese: nothing composed.** Every string is the string that was there. `Flagged drops · 待确认` is the head of the sentence that stood here — *"13 flagged drop(s) need your decision · 待确认"* — with the count lifted into a pill beside it, where §1.4 puts a count and where this page's own sub-tabs already put one; a numeral needs no label. `LIVE` → `Live` and `shadow`/`off` → `Shadow`/`Off` are §1.6 case changes on English-only labels. **Also fixed:** `colspan="5"` over a six-column table, and column widths rebalanced to 25/12/23/11/20/9 — measured against `Needs attention · 待处理`, the widest of the four shared state words, which at 12% ran under the Sync checkbox. **Tests:** `test_channel_frame.js` grows sections 7 and 8 — **11 new cases, 25 total**, every one confirmed red against a deliberate break. Section 8 asserts the RULEBOOK, not parity: the six-step scale, the Dusk automation badge, no filled button where the Dusk slot is empty, no colour that does not encode a state, the band pinning with no scrollport above it, and the head counting the drops. `npm run test:fast` 236 passed, 0 failed; eslint 0 errors; doc-numbering PASS. Verified by render at 1280px, light and dark, EN and 中文, all three panels. No route, no schema, no migration, no new capability, and no change to `.gitignore` or CI.**
 
 2026-09-14 · v4.259 — **§126 · THE PRODUCT EDITOR STOPS TALKING ABOUT SYNCING. REPORTED BY ASH on a photo of the editor, three green Channels rows above the SKU:** *"I don't want the channel sync on product page."* **THIS REVERSES AN INFERENCE OF MINE, NOT A DECISION OF ASH'S.** §103 step 4 put the Channels card on the editor; §117 then stripped every trace of syncing from the Products **list** and explicitly KEPT the card, arguing *"one product looked at in depth is not a second overview."* Ash's instruction that day named *"the products list page"* and the card survived on a reading of what that meant — the reading is now withdrawn. **REMOVED:** `<section id="pd-channels-card">` and its body from `retail-admin.html`; `pdLoadChannels`, `_pdChSeq`, `_pdChAgo`, the call on the editor's open path, and `_paChName` (which §117 had kept alive ONLY for this card) from `09-products.js`; the `.pd-ch-rows` / `.pd-ch-row` block from `retail-admin.css`. **Nothing in the products module reads `/channel-sync` any more.** Each site carries a note naming §126 and the instruction, so the next reader finds a tombstone rather than a gap. **THE CARD COULD REPORT BUT NOT REPAIR** — its one action was a button that left for the channel's own tab, which makes it a detour with a step in it, and the place it sent you to was already the answer. Sync state is now worded in exactly one place: Sales › Channel sync, a tab since §117, with part two's repair panel and §124's phone copy. **The sentence-builder exports in `29-channel-sync.js` STAY** — the dashboard, `01-core.js`, `11-meituan.js`, `12-guanyi.js` and `14-eleme.js` are still callers; there is simply one fewer screen that could word a state a second way. **THREE TESTS MOVED WITH THE CODE.** `test_channel_sync_items.js`'s *"the product editor keeps its Channels card"* asserted `pdLoadChannels` and the card id were PRESENT; it is now *"the product editor says nothing about syncing"* and asserts their absence plus the helpers, the fetch and the CSS — matching on **definitions and rules rather than the bare word**, the tombstone-proof shape §117's own list check uses, so a note naming what it removed cannot fail the test that removed it. The *"both clients read the channel's cause"* check drops the editor, which no longer shows a cause to defer about. `test_channel_sync_home_row.js` pinned the guarded-`typeof` shape against `09-products.js`'s `_paChName`; its second witness is now `12-guanyi.js`, and the comment says any live caller would do — what it pins is that the shape is shared, not which file shares it. **Chinese: nothing composed** — this change only removes strings, so `docs/tacet-delivery-vocabulary.md` is untouched (still v1.80). **What is not done:** no route change (`/api/retail-admin/channel-sync?productId=` still exists and is still served; the editor simply stopped calling it), no change to the Channel sync page, the phone, the mapping repair or any capability, and the Products list was already clean under §117 and was not touched. `npm run test:fast` 235 passed, 0 failed; `npm run lint` 0 errors; doc-numbering PASS. No schema, no migration, and no change to `.gitignore` or CI.**
 
@@ -14022,3 +14026,131 @@ No route change — `/api/retail-admin/channel-sync?productId=` still exists and
 is still served; the editor simply stopped calling it. No change to the Channel
 sync page, the phone, the mapping repair, `29-channel-sync.js`'s exports, or any
 capability. The Products list was already clean under §117 and was not touched.
+
+## §127 — THE BODIES JOIN THE HEAD, AND THE RULEBOOK BEATS THE SIBLINGS
+
+**Ash, 2026-09-14: *"gzgrocery page should look the same as eleme and meituan"*.**
+Then, on the first round: ***"doesnt look like its according to tacet design
+rules. show me a mock up, english, not dark mode and ill confirm first."***
+
+### The first round was built from the wrong source, and that is the lesson
+
+§123 had put this page's **head** into the channel frame — 33 rules shared with
+`.mt-` — and said so plainly: *"the three panels below are untouched."* So the
+obvious next move was to make the bodies match what `#tab-meituan` and
+`#tab-eleme` do. They were made to match. Ash was still right that the result
+was not Tacet.
+
+**Because what those two pages do is not what the rulebook says.** The parity
+pass faithfully reproduced six conformance failures:
+
+| Rule | What parity produced | What the rule says |
+|---|---|---|
+| §1.8 r4 | 13 filled Apply buttons, one per row | Header CTA slot is empty → everything is Secondary or Ghost |
+| §1.8 r2 · §1.10 | Sage badge on pickup inference | It is an **automation**: Dusk tint + breathing dot, exempt from the budget |
+| §1.3 | 14px table rows | Six steps only — 13 / 15 / 18 / 24 / 30 |
+| §1.4 | 16px between cards and regions | 24px between cards, 32px between regions |
+| §1.10 | Δ column Sage / Amber / **Brick** | Brick means error; ±3 is one state, and State already carries it |
+| §1.13a r1+2 | `overflow` on the card, `overflow-x` above it | 184 rows scroll → the band pins, so **no** ancestor may take an overflow |
+
+**The filled buttons were not even the siblings' pattern.** Meituan has one
+filled button, in a toolbar. Eleme has one, at the top. Neither puts one inside
+a list row. Copying "what the siblings do" produced something neither sibling
+does — which is what copying an *outcome* instead of a *rule* gets you.
+
+**This is §7's lesson pointed at a build rather than at a rule.** The rulebook
+repeatedly records rules that named a mechanism when they meant an outcome.
+This round named a *reference page* when it meant a *standard*.
+
+### The one that was not cosmetic
+
+§1.7's work rule: **a status line reports work waiting.** This page's read
+**"nothing needs you"** while thirteen pickups sat below it waiting for a
+decision, and the attention tile read **0** beside it. Both counted the sync
+queue; neither had ever been shown the flagged drops.
+
+Three fixes were put to Ash:
+
+- **(a)** leave the tiles, say it in the status line
+- **(b)** the tile counts both — reads 13, in amber
+- **(c)** rename this page's tile so it is honest about what it counts
+
+**Ash chose (b).** `Needs attention` means *what is waiting on you on this
+page*. What a page holds differs by page — `Mapped` is already a different
+number here and on Meituan. **That is one name for one meaning, not §103 step
+5's defect**, which was two *names* for one thing (Mapped vs Synced). The
+status line and the tile read the same total, computed once.
+
+### The Dusk
+
+Pickup inference reads Guanyi's stock drift and lowers your shelf without being
+asked. §1.10's row for **"tacet acted"** is `--td-dusk-tint` + a breathing dot,
+and §1.8 rule 2 exempts automation indicators from the one-Dusk budget. §1.7
+leaves this page's header CTA slot empty — there is no create action — so
+nothing competes for it. **This badge is the page's Dusk, and it is the only
+Dusk on it.**
+
+Asked whether the *Recent auto-applied pickups* lines should each carry a dot
+too: **no.** One badge says the automation is live; twenty dots inside a
+collapsed fold spend the calmest colour in the system on something nobody has
+open.
+
+### One test caught a real one; one caught nothing
+
+**Caught a real one.** The §1.3 CJK line-height pair existed as a separate copy
+on Meituan and on Eleme and **not at all** on GZ. Writing a fourth copy for GZ
+turned case 1 red — *"`.gy-storeline` has a rule of its own"* — which is the
+drift that case exists to catch, arriving disguised as a parity fix. The two
+shared halves are now ONE single-line rule naming all three pages; Meituan keeps
+the two selectors genuinely its own.
+
+**Caught nothing.** `the numbered phrases are the shapes the other channel
+screens use` asserted `${errors} 个待处理`. It **named a variable when it meant a
+slot** — renaming `errors` to `attention` turned it red while the Chinese it
+guards had not moved a character. Its own two sibling assertions, two lines
+above, already matched the number as `${[\w.]+}`. It does now too, and it still
+goes red when the *phrase* changes (verified).
+
+### Chinese
+
+**Nothing composed.** Every string is the string that was there.
+`Flagged drops · 待确认` is the head of the sentence that stood here —
+*"13 flagged drop(s) need your decision · 待确认"* — with the count lifted into
+the pill beside it, where §1.4 puts a count and where this page's own sub-tabs
+already put one. **A numeral needs no label.** `LIVE` → `Live`, `shadow` → `Shadow`,
+`off` → `Off` are §1.6 case changes on English-only labels.
+`docs/tacet-delivery-vocabulary.md` gains no entry.
+
+### What was deliberately NOT done
+
+- **The tables were not remade into lists.** Meituan and Eleme became lists
+  because their rows each carry a control. A mapping grid and a statement have
+  columns that must line up; they keep `<table>` and take §1.13a rule 3's band.
+- **`Push all stock now` did not move onto a tile.** Eleme puts that action on
+  the tile whose number it changes, and the same move is available here. It is
+  a relocation rather than a restyle, and was not asked for. Recorded, not done.
+- **The 112 near-duplicate Meituan/Eleme rules §123 recorded are still there.**
+
+### Fixed in passing
+
+`colspan="5"` over a six-column table. Column widths rebalanced to
+**25 / 12 / 23 / 11 / 20 / 9** (§1.19, summing to 100) — measured against
+`Needs attention · 待处理`, the widest of the four shared state words, which at
+12% ran under the Sync checkbox; and `我方`, which breaks between its two
+characters below about 12%.
+
+### Tests
+
+`test_channel_frame.js` grows **sections 7 and 8 — 11 new cases, 25 total.**
+Section 7 is vocabulary (the retired eyebrow, borrowed toolbars, inline styles,
+the amber wash). **Section 8 asserts the RULEBOOK rather than parity**, which is
+the correction this round is about: the six-step scale, the Dusk automation
+badge with its reduced-motion twin, no filled button where the Dusk slot is
+empty, no colour that does not encode a state, the band pinning with no
+scrollport above it, and the head counting the drops. Every one of the eleven
+was confirmed red against a deliberate break.
+
+`npm run test:fast` 236 passed, 0 failed. eslint 0 errors. doc-numbering PASS.
+Verified by render at 1280px, light and dark, EN and 中文, all three panels. No
+route, no schema, no migration, no new capability, and no change to
+`.gitignore` or CI.
