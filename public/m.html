@@ -3826,8 +3826,16 @@ function screenHome(){
 /* The chips used to filter the fifty rows that happened to be loaded, which is
    why "Delivered 15" could show three. Every filter is the server's now, and the
    list says how much of the set it is showing. */
+/* `delayed` IS A KEY HERE BECAUSE A MISSING ONE IS SILENT. An unlisted filter
+   falls to '' — the status param is simply not sent — so the screen loads EVERY
+   order rather than failing. That is what "Delivery needs a call" did from §98
+   until 2026-09-14: the card navigated with 'delayed', this map had never heard
+   of it, and the tap landed on the unfiltered Orders list with no chip lit.
+   It is not a chip in `sc` below (see ordersHeader) — it is a pseudo-status the
+   server resolves, and nothing but that card ever sets it. */
 const STATUS_PARAM={all:'',paid:'paid',preparing:'preparing',dispatched:'dispatched',
-  delivered:'delivered',restock:'awaiting_restock',refund:'refunds_open',pending:'pending_payment'};
+  delivered:'delivered',restock:'awaiting_restock',refund:'refunds_open',pending:'pending_payment',
+  delayed:'delayed'};
 const CHANNEL_PARAM={all:'',miniapp:'wechat',web:'web',meituan:'meituan',gzgrocery:'gzgrocery',manual:'manual',shop:'shop'};
 const ORDERS_PAGE=25;
 function ordersQuery(offset){
@@ -3943,6 +3951,13 @@ function ordersHeader(){
      not either. */
   return `<div style="padding:14px 0 16px">
     ${state.orderQ?`<div style="padding:0 16px 8px"><button onclick="APP.cmd('clearOrderSearch')" class="chip on" style="max-width:100%"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T('Search','搜索')}: ${state.orderQ}</span>${ic('x',14,2)}</button></div>`:''}
+    ${/* THE DELIVERY FILTER SAYS ITS OWN NAME, like the search chip above it and
+          for the same reason: `delayed` is a pseudo-status with no chip in the
+          row below, so without this the screen showed a narrowed list with
+          nothing lit and no way back but the Orders tab. Same live pair the card
+          that sets it carries — this names one thing and must not name it twice.
+          Clears to All, which is the only status this can have come from. */''}
+    ${state.statusF==='delayed'?`<div style="padding:0 16px 8px"><button onclick="APP.cmd('statusF','all')" class="chip on" style="max-width:100%"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T('Delivery needs a call','配送需要跟进')}</span>${ic('x',14,2)}</button></div>`:''}
     ${chipRow(sc,state.statusF,'statusF')}<div style="height:8px"></div>${chipRow(cc,state.channelF,'channelF')}
     ${stores.length>1?`<div style="height:8px"></div>${chipRow(st,state.storeF,'storeF')}`:''}</div>`;
 }
@@ -13533,8 +13548,20 @@ function opsFires(){
   const items=k=>(o[k]&&o[k].items)||[];
   /* 'delayed', not 'dispatched'. The Dispatched tab cannot contain these — the
      alert is about a parcel that has already been DELIVERED, late — so the card
-     used to count one set of orders and open a screen showing another. */
-  add(c('delivery_alerts'),'brick','truck',T('Delivery needs a call','配送需要跟进'),c('delivery_alerts'),items('delivery_alerts'),'',"APP.cmd('ordersGo','delayed')");
+     used to count one set of orders and open a screen showing another.
+     ONE ALERT OPENS THE ORDER ITSELF, not a list with one row in it. The pill
+     already says there is exactly one, so a list is a screen that repeats the
+     number and asks for a second tap to reach the thing the card is about —
+     "it doesn't take me to the delivery directly", which is how Ash put it on
+     2026-09-14. Two or more still open the filtered list: then the list IS the
+     information, and which one to ring first is a judgement.
+     Guarded on the item actually being there. `count` is exact while `items` is
+     a preview, so the two agree at 1 by construction — but a payload that ever
+     disagreed would otherwise open a sheet onto nothing. */
+  const daIt=items('delivery_alerts');
+  const daGo=(c('delivery_alerts')===1&&daIt.length===1&&daIt[0]&&daIt[0].id!=null)
+    ?"APP.cmd('openDeliveryAlert')":"APP.cmd('ordersGo','delayed')";
+  add(c('delivery_alerts'),'brick','truck',T('Delivery needs a call','配送需要跟进'),c('delivery_alerts'),daIt,'',daGo);
   add(c('payment_mismatch'),'brick','banknote',T("Payment doesn't match",'付款金额不符'),c('payment_mismatch'),items('payment_mismatch'),'',"APP.cmd('ordersGo','pending')");
   // The brick fire's sibling: a proof IS on file, it was not rejected, and the
   // order is still unpaid — verified with auto-flip off, unreadable, or never
@@ -20706,6 +20733,47 @@ reg('openCustOrder', i=>{
   }).catch(e=>{
     // A redirect to the login page is already under way — an error painted over
     // a screen that is leaving is noise nobody can act on.
+    if(String(e.message)==='auth'||state.detailId!==no) return;
+    state.orderErr=T('This order could not be opened. Close and try again.',
+                     '无法打开该订单，请关闭后重试。');
+    render();
+  });
+});
+
+/* THE ONE DELIVERY THAT NEEDS A CALL, opened straight from Home.
+   Same shape as openCustOrder above — the order is very often not in whatever
+   page of the Orders list this app happens to have loaded (an air-delayed one
+   is `delivered`, which is not even the default view), so there is no row to
+   fall back on and the sheet is built from the read alone, with detailFetch
+   holding the screen while it is in flight.
+   It takes NO argument. The order number would have to survive being written
+   into a JS string literal inside an HTML attribute, and the id is already on
+   the snapshot this card was drawn from — so the command reads it back from
+   there rather than being handed it through the DOM.
+   orderOverCust stays FALSE, which is the one way this differs from its
+   sibling: nothing is underneath this sheet but Home, and setting it would
+   push the next customer record under a sheet that is not there. */
+reg('openDeliveryAlert', ()=>{
+  const it=((state.ops&&state.ops.delivery_alerts&&state.ops.delivery_alerts.items)||[])[0];
+  if(!it||it.id==null) return;
+  const no=it.order_no||('#'+it.id);
+  /* The read stamps seen_at server-side exactly as a tap on the list does, so
+     clear the row's dot in BOTH lists — the drawer reads one and the dot the
+     other. Without this an order first opened from Home kept its dot until the
+     next reload, having already been seen. */
+  [state.ordersView,state.liveOrders].forEach(list=>{
+    if(Array.isArray(list)){ const row=list.find(o=>o._id===it.id); if(row) row.isNew=false; }
+  });
+  state.detailId=no; state.drag=0; state.liveDetail=null; state.detailMounted=false;
+  state.detailActions=false; state.orderErr=null; state.orderBusy=null;
+  state.orderOverCust=false; state.detailFetch=true;
+  render();
+  state.detailMounted=true;
+  api('/orders/'+it.id).then(o=>{
+    if(state.detailId!==no) return;
+    const d=mapDetail(o);
+    state.liveDetail=d; state.detailId=d.id; state.detailFetch=false; render();
+  }).catch(e=>{
     if(String(e.message)==='auth'||state.detailId!==no) return;
     state.orderErr=T('This order could not be opened. Close and try again.',
                      '无法打开该订单，请关闭后重试。');

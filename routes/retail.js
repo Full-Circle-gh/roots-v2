@@ -47,6 +47,10 @@ const phoneCn = require('../lib/phone-cn');
 const tracking = require('../lib/tracking');
 const delayCase = require('../lib/delay-case');
 const { postDelayCase } = require('../lib/delay-case-posting');
+// Which orders "Delivery needs a call" is about. Read by BOTH the dashboard
+// card (below) and the orders list's `status=delayed` filter, so the number on
+// the card and the length of the list it opens are one fact.
+const deliveryAlerts = require('../lib/delivery-alerts');
 // The order-status allow-list every revenue figure in this file is gated on.
 // It lived here as eleven hand-written copies of one string until 2026-09-11;
 // lib/finance-window.js had already declared itself the one place that decides
@@ -16263,9 +16267,11 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // locker drop-offs are NOT problems, so they're excluded here (they still
     // show as info in the orders list cell). Only dispatched orders qualify —
     // a delivered/cancelled order's stale flags are history, not a live alert.
-    const ALERT_WHERE = `o.status = 'dispatched'
-         AND ( o.tracking_status IN ('exception','returning','returned')
-            OR o.tracking_scenario = 'no_contact' )`;
+    //
+    // THE PREDICATE ITSELF LIVES IN lib/delivery-alerts.js, with the other
+    // three this card counts, because the orders list has to filter on exactly
+    // the same set — see that file's header for what went wrong when it didn't.
+    const ALERT_WHERE = deliveryAlerts.carrierAlertSql('o');
     const daCount = tdb().prepare(`
       SELECT COUNT(*) AS n FROM retail_orders o WHERE ${ALERT_WHERE}
     `).get().n;
@@ -16290,11 +16296,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // it handled (air_delay_cleared_at) — set from the drawer once they've
     // contacted the customer. Same clear drops the list badge, keeping the two
     // views in lock-step.
-    const AIR_DELAY_EXISTS = `EXISTS (
-        SELECT 1 FROM retail_shipments sha
-         WHERE sha.order_id = o.id
-           AND ${delayCase.lateShipmentSql('sha')}
-           AND sha.air_delay_cleared_at IS NULL)`;
+    const AIR_DELAY_EXISTS = deliveryAlerts.airAlertSql('o');
     const airCount = tdb().prepare(`
       SELECT COUNT(*) AS n FROM retail_orders o WHERE ${AIR_DELAY_EXISTS}
     `).get().n;
@@ -16339,13 +16341,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // here to keep this card about delivery, not billing. Channel-scoped, so the
     // self-ship pipeline (which Meituan never touches) is unaffected. Times are UTC
     // both sides (channel_eta / channel_status_at stored UTC; datetime('now') UTC).
-    const MT_ALERT_WHERE = `o.channel = 'meituan' AND o.status = 'dispatched'
-         AND (
-            (o.channel_eta IS NOT NULL AND o.channel_eta != ''
-                 AND datetime(o.channel_eta, '+2 hour') <= datetime('now'))
-         OR ((o.channel_eta IS NULL OR o.channel_eta = '')
-                 AND datetime(COALESCE(o.channel_status_at, o.placed_at), '+3 hour') <= datetime('now'))
-         )`;
+    const MT_ALERT_WHERE = deliveryAlerts.meituanAlertSql('o');
     const mtCount = tdb().prepare(`
       SELECT COUNT(*) AS n FROM retail_orders o WHERE ${MT_ALERT_WHERE}
     `).get().n;
@@ -16367,66 +16363,19 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
        ORDER BY waiting_since ASC LIMIT ?
     `).all(previewLimit);
 
-    // Same-city (青云 Qingyun rider) — our own local deliveries carry NO waybill
-    // and NO tracking_status; the live rider stage lives in delivery_jobs. Two
-    // sweeps already close the happy paths: the drop-off signal flips it delivered
-    // on order_status 50, and autoDeliverLocalEtaForTenant() closes it on
-    // local_eta+grace WHEN there's no live tracking. The gap neither sweep touches
-    // is a LIVE-tracked order stuck BEFORE pickup — a rider was requested but none
-    // grabbed it (order_status < 30), so nothing carries it AND the ETA sweep
-    // defers to the fresh tracking. Those sit on 'dispatched' silently. We surface
-    // one once its promised local ETA has passed: the customer is waiting and no
-    // rider is on the way. ETA parsing mirrors the sweep exactly (same-day "HH:MM"
-    // read as Beijing wall-clock; future-scheduled orders skipped) so the two
-    // agree on when an order is overdue. delivery_jobs is always present (created
-    // at boot), but guard anyway so a query hiccup never nukes the other cards.
-    let localStuck = [];
-    try {
-      const LOCAL_STUCK_GRACE_MIN = 15;
-      const localRows = tdb().prepare(`
-        SELECT o.id, o.order_no, o.scheduled_for,
-               (SELECT sh.local_eta FROM retail_shipments sh
-                 WHERE sh.order_id = o.id AND sh.mode = 'local'
-                   AND sh.local_eta IS NOT NULL AND sh.local_eta != ''
-                 ORDER BY sh.id ASC LIMIT 1) AS local_eta,
-               (SELECT j.order_status FROM delivery_jobs j
-                 WHERE j.retail_order_id = o.id AND j.order_status IS NOT NULL
-                   AND j.updated_at > datetime('now','-30 minutes')
-                 ORDER BY j.updated_at DESC LIMIT 1) AS job_os,
-               COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), NULLIF(TRIM(o.recipient_phone), ''), NULLIF(TRIM(c.phone), '')) AS buyer
-          FROM retail_orders o
-          LEFT JOIN retail_customers c ON c.id = o.customer_id
-         WHERE o.fulfillment_type = 'delivery' AND o.status = 'dispatched'
-      `).all();
-      const nowD = new Date();
-      localStuck = localRows.map(r => {
-        // Must have a FRESH live Qingyun job that hasn't reached pickup (os < 30) —
-        // i.e. still finding / awaiting a rider. An in-transit rider (os >= 30) is
-        // on the way and resolves on drop-off, so it's not "stuck".
-        if (r.job_os == null || r.job_os >= 30) return null;
-        const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(r.local_eta || '').trim());
-        if (!m) return null;
-        if (r.scheduled_for) {
-          const sched = new Date(r.scheduled_for);
-          if (!isNaN(sched.getTime()) &&
-              new Date(sched.getFullYear(), sched.getMonth(), sched.getDate()).getTime() >
-              new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime()) {
-            return null;   // scheduled for a later day — not overdue today
-          }
-        }
-        const eta = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), +m[1], +m[2], 0, 0);
-        if (nowD.getTime() <= eta.getTime() + LOCAL_STUCK_GRACE_MIN * 60_000) return null;
-        // The row's age is "how long past the promised time", so it ages from the
-        // resolved ETA — the very instant this filter just judged it late by. Ship
-        // that instant rather than the bare "HH:MM", so the client never has to
-        // re-resolve a wall-clock string against its own timezone. Deliberately the
-        // SAME Date the test above used: if the two ever drifted, a row could appear
-        // while claiming it wasn't late yet.
-        return { ...r, waiting_since: eta.toISOString() };
-      }).filter(Boolean).slice(0, previewLimit);
-    } catch (e) {
-      if (!/no such column|no such table/i.test(e.message)) throw e;   // pre-migration tenant → skip
-    }
+    // Same-city (青云 Qingyun rider) — one of our own local deliveries stuck
+    // BEFORE pickup, which is the gap neither closing sweep touches. The rule,
+    // and the wall-clock arithmetic a bare "HH:MM" local ETA needs, are in
+    // lib/delivery-alerts.js's localStuckRows so the orders list can select
+    // exactly these orders; read the why there rather than a copy of it here.
+    //
+    // COUNTED WHOLE, SHOWN AS A PAGE. `localStuckAll` is every one of them and
+    // is what the count adds up; the preview slice below is only what the card
+    // draws. These used to be the same already-sliced array, so a shop with
+    // nine stuck riders and a preview of eight had a card that said eight —
+    // the one number on this card that was not exact.
+    const localStuckAll = deliveryAlerts.localStuckRows(tdb());
+    const localStuck = localStuckAll.slice(0, previewLimit);
 
     // `waiting_since` is the one field the Needs-you row ages from, and each
     // sub-type earns it from its OWN clock — see each query above. The carrier
@@ -16436,7 +16385,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // that has been stuck for days, so it deliberately ships with NO
     // waiting_since and the card states the problem instead of a duration.
     delivery_alerts = {
-      count: daCount + airCount + mtCount + localStuck.length,
+      count: daCount + airCount + mtCount + localStuckAll.length,
       items: daItems.map(r => ({
         id:               r.id,
         order_no:         r.order_no,
@@ -25137,13 +25086,15 @@ function buildOrderFilter(query) {
     // one set of orders and the screen it opened showed a different one, which
     // is exactly what Ash reported off the live phone on 2026-09-11.
     //
-    // The same predicate the card itself counts, so the number on the card and
-    // the length of this list are the same fact rather than two queries that
-    // have to agree.
-    filterSql += ` AND EXISTS (SELECT 1 FROM retail_shipments sha
-                      WHERE sha.order_id = o.id
-                        AND ${delayCase.lateShipmentSql('sha')}
-                        AND sha.air_delay_cleared_at IS NULL)`;
+    // ALL FOUR SUB-TYPES, NOT ONE. This filter was written as the air-delay
+    // EXISTS alone while the card was already counting four things, so it was
+    // only ever a quarter of its own card: a shop whose alert was a Meituan
+    // order well past its ETA had a card reading 1 and a list reading none.
+    // Ash reported that off the live phone on 2026-09-14. Both halves read
+    // lib/delivery-alerts.js now, which is the whole reason that file exists.
+    const da = deliveryAlerts.alertFilter(tdb(), 'o');
+    filterSql += ` AND ${da.sql}`;
+    params.push(...da.params);
   } else if (status === 'paid') {
     // The "Paid / to-ship" tab is a worklist, not a strict status filter: a
     // multi-parcel order that's had only SOME parcels shipped flips to
