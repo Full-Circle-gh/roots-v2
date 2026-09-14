@@ -563,16 +563,39 @@ section('9 · the modal does not fire, and the window survives');
     assert.ok(/coveredProductIds: freshLinesCoveredToday\(/.test(src), 'the quote hands it down');
   });
   it('the order parks without reserving — there is nothing on the shelf to hold', () => {
-    assert.ok(/if \(!isWaitFlow && !isBatchPark && \(stockGate \|\| strictItems\.length\)\) \{/.test(src));
+    // §128 adds isPreorderPark to the same skip, on the same grounds: a parked
+    // order holds nothing, so there is nothing to reserve.
+    assert.ok(/if \(!isWaitFlow && !isBatchPark && !isPreorderPark && \(stockGate \|\| strictItems\.length\)\) \{/.test(src));
   });
   it('…and KEEPS the window, which is the whole of Ash\'s ruling', () => {
     // isWaitFlow clears scheduled_for. isBatchPark must not appear in that
     // branch at all, or the window the batch was going to fill is thrown away.
+    //
+    // §128 PUTS A SECOND FLAG IN THE BRANCH AND THE RULE IS UNCHANGED, which
+    // is why this case keeps its teeth: a §128 pre-order park is UNDATED and
+    // must lose the window, a batch park is DATED and must keep it. The
+    // assertion below is therefore still "isBatchPark is not here", now with a
+    // named companion beside it rather than a bare isWaitFlow.
     const at = src.indexOf("slotLabel         = 'Ships when restocked';");
     assert.ok(at > -1);
     const branch = src.slice(at - 300, at + 60);
-    assert.ok(/if \(isWaitFlow\) \{/.test(branch), 'the clearing branch is isWaitFlow only');
+    assert.ok(/if \(isWaitFlow \|\| isPreorderPark\) \{/.test(branch),
+      'the clearing branch is the two UNDATED parks and nothing else');
     assert.ok(!/isBatchPark/.test(branch), 'a batch park must never reach the slot-clearing branch');
+  });
+  it('…and a batch line today\'s cook covers never makes the park undated', () => {
+    /* THE REGRESSION §128 COULD EASILY HAVE SHIPPED. A product can be both
+       batch-made AND 'backorder_all'. If the undated flag were read off the
+       POLICY alone, such a line would strip the window from a park §80 had
+       just dated — downgrading Ash's ruling for a product whose only crime is
+       carrying two operator settings at once. The covered check is what stops
+       it, so it is pinned here rather than left to read as incidental. */
+    const at = src.indexOf('parkedForPreorderAll = shortHere.some(');
+    assert.ok(at > -1, 'the pre-order park flag must exist');
+    const body = src.slice(at, at + 200);
+    assert.ok(/!batchCoveredIds\.has\(pid\)/.test(body),
+      'a line today\'s batch covers is dated and must not strip the window');
+    assert.ok(/isLocalRunPreorder\(/.test(body), 'and the policy half is asked by name');
   });
   it('the quote reads one clock, declared before anything uses it', () => {
     // The first wiring put the covered-lines call ABOVE `const quoteNow`, which
