@@ -432,8 +432,10 @@
      caller. Landing on one product from elsewhere is a reasonable thing to want
      again; if it comes back, it comes back for a caller that exists. */
 
-  /* The two sentence-builders, shared with the product editor's Channels card
-     (09-products.js pdLoadChannels) so one state cannot be worded two ways on
+  /* The two sentence-builders, and the two name helpers beside them. §126 took
+     the product editor's Channels card away, so the editor is no longer among
+     the callers; the dashboard, 01-core, 11-meituan, 12-guanyi and 14-eleme
+     still are, and the point holds — one state cannot be worded two ways on
      two screens. `label` lets the caller pass the channel's display name
      without reaching into this module's own table. */
   window.csChannelName = function (ch) { return chName(ch); };

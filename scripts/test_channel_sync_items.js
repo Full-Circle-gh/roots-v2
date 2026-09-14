@@ -834,9 +834,11 @@ check('the Meituan tab and the Channel sync page ask the SAME question', () => {
   ok(!/const MT_CLEARING/.test(src), 'the route still carries its own clearing list');
 });
 
+// §126 dropped the product editor from this list: it no longer shows a channel
+// cause at all, so there is nothing there to defer. The two that remain are the
+// two screens that still word one.
 check('both clients read the channel’s cause where the server offers one', () => {
   ok(/chCauseFor\(/.test(read('public/retail-admin/29-channel-sync.js')), 'the Channel sync page does not defer');
-  ok(/chCauseFor\(/.test(read('public/retail-admin/09-products.js')), 'the product editor does not defer');
   ok(/csCauseFor\(/.test(read('public/m.html')), 'the phone does not defer');
   ok(/ch\.stale\|\|ch\.blocked/.test(read('public/m.html')), 'the phone’s stopped-channel card ignores a block');
 });
@@ -868,13 +870,25 @@ check('the Products list carries no channel state of its own', () => {
      'the Channels column CSS is back');
 });
 
-// WHAT STAYS. The removal was scoped to the LIST. The editor's own Channels
-// card (§103 step 4) is one product looked at in depth, not a second overview,
-// and taking it out with the column would be the opposite mistake.
-check('the product editor keeps its Channels card', () => {
+// §126 REVERSED WHAT §117 KEPT. §117 scoped the removal to the LIST and argued
+// the editor's own card was one product in depth rather than a second overview.
+// Ash, 2026-09-14: "I don't want the channel sync on product page." So now the
+// editor says nothing about syncing either, and this check guards the whole of
+// it — the loader, the markup, the CSS, and the display-name helper that existed
+// only to feed the card.
+check('the product editor says nothing about syncing', () => {
   const src = read('public/retail-admin/09-products.js');
-  ok(/pdLoadChannels/.test(src), 'the editor no longer reads its product’s channels');
-  ok(/id="pd-channels-card"/.test(read('public/retail-admin.html')), 'the editor’s Channels card is gone from the markup');
+  // The EXPORTS, not the word: the notes left in their place name them.
+  ok(!/async function pdLoadChannels|pdLoadChannels\(/.test(src), 'the editor is reading its product’s channels again');
+  ok(!/let _pdChSeq|function _pdChAgo|const _paChName/.test(src), 'the Channels card’s helpers are back in the products module');
+  ok(!/channel-sync\?productId/.test(src), 'the editor is fetching /channel-sync again');
+  ok(!/id="pd-channels-card"|pd-channels-rows/.test(read('public/retail-admin.html')),
+     'the editor’s Channels card is back in the markup');
+  // A RULE, not the word: the note left in its place names the selectors it
+  // removed, and a test that cannot tell a tombstone from the body is a test
+  // that has to be fought. A rule opens its block on the same line here.
+  ok(!/\.pd-ch-(?:rows?|empty)[^{}\n]*\{/.test(read('public/retail-admin.css')),
+     'the Channels card CSS is back');
 });
 
 // THE SUB-NAV IS ONE OBJECT RENDERED TWICE. That sameness is the mechanism: it

@@ -371,12 +371,16 @@ check('…and falls back to its own pair when that module has not loaded', () =>
   ok(/美团 未同步/.test(rowOf(runDesk(ops, 'cn')[0]).line), 'the fallback is bilingual too');
 });
 
-check('…guarded by typeof, the same way 09-products.js guards its own call', () => {
-  // A bare reference to an undefined global throws; the Products page settled
-  // that pattern in §103's bilingual fix and this must not invent a second one.
+check('…guarded by typeof, the same way 12-guanyi.js guards its own call', () => {
+  // A bare reference to an undefined global throws; §103's bilingual fix settled
+  // that pattern and this must not invent a second one. The second witness WAS
+  // 09-products.js, whose `_paChName` went with the Channels card in §126; the
+  // GZ Grocery tab names the same channel the same guarded way, so it is the
+  // witness now. Any live caller of csChannelName would do — what this pins is
+  // that the shape is shared, not which file happens to share it.
   ok(/typeof csChannelName === 'function'/.test(DESK_BLOCK), 'unguarded reference');
-  const products = fs.readFileSync(path.join(ROOT, 'public/retail-admin/09-products.js'), 'utf8');
-  ok(/typeof csChannelName === 'function'/.test(products), 'the pattern being matched has moved');
+  const guanyi = fs.readFileSync(path.join(ROOT, 'public/retail-admin/12-guanyi.js'), 'utf8');
+  ok(/typeof csChannelName === 'function'/.test(guanyi), 'the pattern being matched has moved');
 });
 
 // ── The chip ────────────────────────────────────────────────────────────────
