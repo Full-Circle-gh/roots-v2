@@ -14369,12 +14369,31 @@ const M_DC_BLOCKER={
   customer_not_made_whole:['Replacement or refund','补发或退款'],
   dispute_open:['Carrier settled','承运商赔偿'],
 };
-/* A step that is finished. */
-function mDcDone(label,meta){
+/* A step that is finished — tick, what it was, and what closed it.
+   A STAMP AND A SENTENCE ARE NOT THE SAME THING AND DO NOT SHARE A SLOT. Both
+   used to arrive as one `meta` pinned right at flex:none, so a note somebody
+   typed could not shrink: it ran off the card's right edge while the label
+   beside it was crushed to a few pixels wide and painted its own letters out
+   over the top of it. TC000667 showed 'Nothing needed' and its note printed on
+   top of each other. So `meta` is now only the stamp — who, when, how much, all
+   of them short and bounded — and `note` is free text, which gets its own line
+   under the label where a sentence has room to wrap.
+
+   AND THE STAMP YIELDS FIRST. Narrow the row far enough — a 260px card, which
+   is narrower than any phone this app runs on — and two items sharing one line
+   both shrink, so the LABEL's box went under the width of its own word and the
+   word printed outside it. Shrink 8 against the label's 1 spends the squeeze on
+   the stamp, which has spaces to wrap at; `overflow-wrap:anywhere` on both is
+   the backstop under that. Nothing in this row may ever overlap again. */
+function mDcDone(label,meta,note){
   return `<div style="display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--hairline)">
     <span style="flex:none;display:flex;color:var(--sage-ink);margin-top:2px">${ic('check',14,2.25)}</span>
-    <span style="font-size:13.5px;min-width:0;flex:1">${label}</span>
-    ${meta?`<span class="num" style="flex:none;text-align:right;font-size:12px;color:var(--text-secondary)">${meta}</span>`:''}</div>`;
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;gap:10px;align-items:baseline">
+        <span style="font-size:13.5px;flex:1 1 auto;min-width:0;overflow-wrap:anywhere">${label}</span>
+        ${meta?`<span class="num" style="flex:0 8 auto;min-width:0;text-align:right;font-size:12px;color:var(--text-secondary);overflow-wrap:anywhere">${meta}</span>`:''}</div>
+      ${note?`<div style="font-size:12px;line-height:1.45;margin-top:3px;color:var(--text-secondary);overflow-wrap:anywhere">${note}</div>`:''}
+    </div></div>`;
 }
 /* THE NEXT STEP. The only thing in the panel lifted onto a surface of its own,
    and the only one holding a filled button. */
@@ -14438,17 +14457,19 @@ function delayCaseCard(o,sp){
       acts:[{cmd:'dcClaim',arg:sid,text:T('Claim filed','已申请延误赔偿')}],
       link:{cmd:'dcNoClaim',arg:sid,text:T('Not claiming','不申请赔偿')}});
   } else if(ds==='no_claim'){
-    steps.push({done:true,label:T('Not claiming','不申请赔偿'),meta:escAttr(dc.dispute_note||'')});
+    steps.push({done:true,label:T('Not claiming','不申请赔偿'),note:escAttr(dc.dispute_note||'')});
   } else {
     const bits=[]; if(dc.dispute_ref) bits.push(escAttr(dc.dispute_ref));
     if(dc.dispute_claimed!=null) bits.push(money(CUR,dc.dispute_claimed));
     steps.push({done:true,label:T('Claim filed with the carrier','已申请延误赔偿'),meta:bits.join(' · ')});
   }
 
+  /* When it was done and what it cost are the stamp; why is a sentence, and
+     goes where sentences go. */
   const rb=[];
   if(dc&&dc.remedy_at) rb.push(escAttr(String(dc.remedy_at).slice(5,16)));
-  if(dc&&dc.remedy_note) rb.push(escAttr(dc.remedy_note));
   if(dc&&dc.remedy_cost!=null) rb.push(T('cost ','成本 ')+money(CUR,dc.remedy_cost));
+  const rnote=(dc&&dc.remedy_note)?escAttr(dc.remedy_note):'';
   /* THE THIRD ANSWER IS A LINK, NOT A THIRD BUTTON (§125). The customer opened
      a late parcel and the food was fine, so nothing is owed — before this the
      row's only exits were a no-charge order nobody wanted or a refund that
@@ -14456,7 +14477,7 @@ function delayCaseCard(o,sp){
      claiming' is, because it is the same act: one tap that ends a track by
      deciding against it. */
   steps.push(remedy
-    ? {done:true,label:remedy==='refund'?T('Refunded','已退款'):remedy==='none'?T('Nothing needed','无需补发退款'):T('Replacement sent','已补发'),meta:rb.join(' · ')}
+    ? {done:true,label:remedy==='refund'?T('Refunded','已退款'):remedy==='none'?T('Nothing needed','无需补发退款'):T('Replacement sent','已补发'),meta:rb.join(' · '),note:rnote}
     : {label:T('Replacement or refund','补发或退款'),
        acts:[{cmd:'dcReplacement',arg:sid,text:T('Send replacement','补发')},
              {cmd:'dcRemedy',arg:`${sid},'refund'`,text:T('Refunded','已退款')}],
@@ -14474,7 +14495,8 @@ function delayCaseCard(o,sp){
             {cmd:'dcSettle',arg:`${sid},'withdrawn'`,text:T('Withdrawn','已撤销')}]});
   } else if(M_DC_TERMINAL.indexOf(ds)>=0){
     steps.push({done:true,label:ds==='paid'?T('Carrier paid','已赔偿'):ds==='rejected'?T('Carrier rejected the claim','承运商已拒绝'):T('Claim withdrawn','已撤销申请'),
-      meta:dc.dispute_received!=null?money(CUR,dc.dispute_received):escAttr(dc.dispute_note||'')});
+      meta:dc.dispute_received!=null?money(CUR,dc.dispute_received):'',
+      note:dc.dispute_received!=null?'':escAttr(dc.dispute_note||'')});
   } else {
     /* Nothing has been filed, so there is no answer to record. The row states
        that rather than offering three buttons that cannot mean anything yet. */
@@ -14500,7 +14522,7 @@ function delayCaseCard(o,sp){
   let promoted=false;
   const body=steps.map((st,i)=>{
     let html;
-    if(st.done){ html=mDcDone(st.label,st.meta); }
+    if(st.done){ html=mDcDone(st.label,st.meta,st.note); }
     else if(!promoted&&!st.waits){ promoted=true; html=mDcNext(st.label,st.detail,mDcActs(st,true)); }
     else { html=mDcLater(st.label,st.aside,mDcActs(st,false)); }
     return i===1?html+ev:html;   // evidence belongs to the claim, whatever state it is in

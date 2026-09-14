@@ -53,6 +53,63 @@ const NO_CLAIM = SP({
   remedy: 'refund', remedy_at: '2026-09-13 10:00', files: [],
 });
 
+// TC000667, as it actually was on 2026-09-14. Both finished steps carry a
+// SENTENCE rather than a stamp — one typed in Chinese, one in English — which
+// is the shape that broke the row: `meta` was pinned at flex:none, so it could
+// not shrink, ran off the card's right edge, and printed on top of a label that
+// had been crushed onto two lines to make room for it.
+const NOTED = SP({
+  can_close: true, blockers: [],
+  customer_told_at: '2026-09-14 07:34', customer_told_by: 'warehouse',
+  dispute_state: 'no_claim', dispute_note: '客人收到包裹确认食品状态良好',
+  remedy: 'none', remedy_at: '2026-09-14 09:03',
+  remedy_note: 'customer said that package is in good condition', files: [],
+});
+
+// The panel, measured at the width it is actually drawn at. A phone is 390px
+// and the sheet's padding takes 30 of them, so 330 is the card. Nothing here
+// reads the markup: both faults this guards against are geometry, and a string
+// assertion answered "yes" to the broken screen.
+const MEASURE = `
+  window.BOX = document.createElement('div');
+  BOX.style.cssText = 'position:fixed;left:0;top:0;width:330px;z-index:99;background:#fff';
+  document.body.appendChild(BOX);
+  window.draw = function(sp, w){
+    BOX.style.width = (w || 330) + 'px';
+    BOX.innerHTML = delayCaseCard({id:1}, sp);
+    window.LEAVES = [].slice.call(BOX.querySelectorAll('*')).filter(function(e){
+      if (e.children.length || !(e.textContent||'').trim()) return false;
+      var r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0;
+    });
+  };
+  // What sticks out past the card's own right edge. One pixel of slack: a
+  // fractional rect is not a layout fault.
+  window.spill = function(){
+    var edge = BOX.getBoundingClientRect().right;
+    return LEAVES.filter(function(e){ return e.getBoundingClientRect().right > edge + 1; })
+                 .map(function(e){ return e.textContent.trim().slice(0,18); });
+  };
+  // WHAT PAINTS OUTSIDE ITS OWN BOX — the fault a rectangle cannot show you.
+  // A flex item with min-width:0 shrinks past its own text: the box measures
+  // 13px, the word in it is still 51px, and those 38px print over whatever the
+  // neighbour put there. Every rect involved still reads as perfectly tidy.
+  window.crush = function(){
+    return LEAVES.filter(function(e){ return e.scrollWidth > e.clientWidth + 1; })
+                 .map(function(e){ return e.textContent.trim().slice(0,18)
+                   + ' [' + e.clientWidth + 'px box / ' + e.scrollWidth + 'px text]'; });
+  };
+  // What is printed on top of what. Two text boxes may touch; they may not
+  // share space.
+  window.overprint = function(){
+    var bad = [];
+    for (var i=0;i<LEAVES.length;i++) for (var j=i+1;j<LEAVES.length;j++){
+      var a = LEAVES[i].getBoundingClientRect(), b = LEAVES[j].getBoundingClientRect();
+      if (a.left < b.right-1 && b.left < a.right-1 && a.top < b.bottom-1 && b.top < a.bottom-1)
+        bad.push(LEAVES[i].textContent.trim().slice(0,14)+' over '+LEAVES[j].textContent.trim().slice(0,14));
+    }
+    return bad;
+  };`;
+
 // How many times a snippet occurs. `class="cta"` is the filled button and there
 // is never more than one of it.
 const count = 'function count(h,s){return h.split(s).length-1}';
@@ -92,6 +149,34 @@ run('mobile delay panel', [
    [['three steps, not four', 'H.indexOf("3/3") > 0'],
     ['exactly one primary button', 'count(H,\'class="cta"\') === 1'],
     ['the reason is shown', 'H.indexOf("value too small") > 0']]],
+
+  ['a typed note never lands on top of its own label',
+   `${MEASURE}; draw(${NOTED});`,
+   [['nothing is printed over anything else', 'overprint().length === 0'],
+    ['no line is squeezed narrower than its own text', 'crush().length === 0'],
+    ['nothing runs off the right edge of the card', 'spill().length === 0'],
+    ['the note is still on screen in full',
+     'BOX.innerText.indexOf("customer said that package is in good condition") > 0'],
+    ['and so is the Chinese one', 'BOX.innerText.indexOf("客人收到包裹确认食品状态良好") > 0'],
+    ['a short stamp stays beside its label, one line',
+     'BOX.innerText.indexOf("warehouse · 09-14 07:34") > 0 && '
+     + 'BOX.innerText.split("\\n").filter(function(l){return l.indexOf("Customer told") >= 0}).length === 1']]],
+
+  ['the stamp-only panel is laid out too — the common case, measured',
+   `${MEASURE}; draw(${DONE});`,
+   [['nothing is printed over anything else', 'overprint().length === 0'],
+    ['no line is squeezed narrower than its own text', 'crush().length === 0'],
+    ['nothing runs off the right edge of the card', 'spill().length === 0']]],
+
+  // 330 is the phone this app is built for. A narrower card is not a screen
+  // anybody has — it is the same panel inside a mirrored-parcel list, a split
+  // pane, a future surface — and the row has to survive it, because the way it
+  // failed at 330 was by having no answer to being narrow.
+  ['and it holds at a width narrower than any phone',
+   `${MEASURE}; draw(${NOTED}, 260);`,
+   [['nothing is printed over anything else', 'overprint().length === 0'],
+    ['no line is squeezed narrower than its own text', 'crush().length === 0'],
+    ['nothing runs off the right edge of the card', 'spill().length === 0']]],
 
   ['the parcel header says how late it was',
    `window.H = trackingCard({id:1}, Object.assign(${SP(null)}, {trk:{number:'JDVC1',status_label_en:'Delivered',status_code:'delivered',events:[]}}), 'Parcel 1');`,

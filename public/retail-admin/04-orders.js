@@ -7278,13 +7278,32 @@ const DELAY_BLOCKER = {
   dispute_open:            ['Carrier settled', '承运商赔偿'],
 };
 
-// A step that is finished: a tick, what it was, and who closed it.
-function delayDone(label, meta) {
+// A step that is finished: a tick, what it was, and what closed it.
+// A STAMP AND A SENTENCE ARE NOT THE SAME THING AND DO NOT SHARE A SLOT. Both
+// used to arrive as one `meta` pinned right at flex:none, so a note somebody
+// typed could not shrink — it ran past the right edge while the label beside it
+// was crushed to a few pixels wide and painted its own letters out over the top
+// of it. The phone showed it first (TC000667: 'Nothing needed' and its note on
+// top of each other) and this drawer has the same slot with more width to hide
+// the fault in — at the 480px it is allowed to narrow to, it crushes the same
+// way — so both surfaces were fixed together. `meta` is the stamp only: who,
+// when, how much, all short and bounded. `note` is free text and gets its own
+// line under the label, where a sentence has room to wrap. AND THE STAMP YIELDS
+// FIRST: narrow the row far enough and two items sharing a line both shrink, so
+// the label's box went under the width of its own word and the word printed
+// outside it. Shrink 8 against the label's 1 spends the squeeze on the stamp,
+// which has spaces to wrap at; overflow-wrap on both is the backstop under that.
+function delayDone(label, meta, note) {
   return `
     <div style="display:flex; gap:9px; align-items:flex-start; padding:8px 0; border-top:1px solid var(--line-soft);">
       <span style="color:var(--success, #A3B49F); font-weight:700; line-height:1.4; flex:none;">✓</span>
-      <div style="flex:1; min-width:0; color:var(--text-1);">${label}</div>
-      ${meta ? `<div style="flex:none; font-size:11.5px; color:var(--text-3); text-align:right;">${meta}</div>` : ''}
+      <div style="flex:1; min-width:0; color:var(--text-1);">
+        <div style="display:flex; gap:10px; align-items:baseline;">
+          <div style="flex:1 1 auto; min-width:0; overflow-wrap:anywhere;">${label}</div>
+          ${meta ? `<div style="flex:0 8 auto; min-width:0; text-align:right; font-size:11.5px; color:var(--text-3); overflow-wrap:anywhere;">${meta}</div>` : ''}
+        </div>
+        ${note ? `<div style="font-size:11.5px; line-height:1.45; margin-top:3px; color:var(--text-3); overflow-wrap:anywhere;">${note}</div>` : ''}
+      </div>
     </div>`;
 }
 
@@ -7395,7 +7414,7 @@ function renderDelayCase(o, s, delayDays) {
       link: { on: `delayNoClaim(${oid},${sid},event)`, text: cuT('Not claiming', '不申请赔偿') },
     });
   } else if (ds === 'no_claim') {
-    steps.push({ done: true, label: cuT('Not claiming', '不申请赔偿'), meta: escapeHtml(dc.dispute_note || '') });
+    steps.push({ done: true, label: cuT('Not claiming', '不申请赔偿'), note: escapeHtml(dc.dispute_note || '') });
   } else {
     const bits = [];
     if (dc.dispute_ref)             bits.push(escapeHtml(dc.dispute_ref));
@@ -7405,12 +7424,14 @@ function renderDelayCase(o, s, delayDays) {
 
   // 3 — the customer is made whole. A branch, taken once. The refund arm is a
   // record that it happened; the refund itself stays on the path it always had.
+  // When it was done and what it cost are the stamp; why is a sentence, and
+  // goes where sentences go — its own line under the label.
   const remedyBits = [];
   if (dc && dc.remedy_at)   remedyBits.push(escapeHtml(String(dc.remedy_at).slice(0, 16)));
-  if (dc && dc.remedy_note) remedyBits.push(escapeHtml(dc.remedy_note));
   if (dc && dc.remedy_cost != null) {
     remedyBits.push(cuT(`cost ${ordMoney(dc.remedy_cost)}`, `成本 ${ordMoney(dc.remedy_cost)}`));
   }
+  const remedyNote = (dc && dc.remedy_note) ? escapeHtml(dc.remedy_note) : '';
   // THE THIRD ANSWER IS AN OPT-OUT, NOT A THIRD BUTTON (§125). A customer who
   // opens a late parcel and finds the food fine is owed nothing, and until this
   // existed the row's only exits were a no-charge order nobody wanted or a
@@ -7422,7 +7443,7 @@ function renderDelayCase(o, s, delayDays) {
         label: remedy === 'refund' ? cuT('Refunded', '已退款')
              : remedy === 'none'   ? cuT('Nothing needed', '无需补发退款')
                                    : cuT('Replacement sent', '已补发'),
-        meta: remedyBits.join(' · ') }
+        meta: remedyBits.join(' · '), note: remedyNote }
     : { label: cuT('Replacement or refund', '补发或退款'),
         fields: delayInput(`dcnr-${sid}`, cuT('Reason', '原因')),
         acts: [{ on: `delayReplacement(${oid},${sid},event)`, text: cuT('Send replacement', '补发') },
@@ -7449,8 +7470,10 @@ function renderDelayCase(o, s, delayDays) {
     const label = ds === 'paid'     ? cuT('Carrier paid', '已赔偿')
                 : ds === 'rejected' ? cuT('Carrier rejected the claim', '承运商已拒绝')
                                     : cuT('Claim withdrawn', '已撤销申请');
+    // An amount is a stamp; a refusal written out is a sentence.
     steps.push({ done: true, label,
-      meta: dc.dispute_received != null ? ordMoney(dc.dispute_received) : escapeHtml(dc.dispute_note || '') });
+      meta: dc.dispute_received != null ? ordMoney(dc.dispute_received) : '',
+      note: dc.dispute_received != null ? '' : escapeHtml(dc.dispute_note || '') });
   } else {
     // Nothing filed, so there is no answer to record yet. The line says so
     // rather than offering three buttons that cannot mean anything.
@@ -7486,7 +7509,7 @@ function renderDelayCase(o, s, delayDays) {
   let promoted = false;
   const body = steps.map((st, i) => {
     let html;
-    if (st.done)                      html = delayDone(st.label, st.meta);
+    if (st.done)                      html = delayDone(st.label, st.meta, st.note);
     else if (!promoted && !st.waits) { promoted = true; html = delayNext(st.label, st.detail, delayActs(st, true)); }
     else                              html = delayLater(st.label, st.aside, delayActs(st, false));
     return i === 1 ? html + evidence : html;   // evidence belongs to the claim, in whatever state it is
