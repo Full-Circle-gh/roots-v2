@@ -59,6 +59,7 @@ const db = tdb();
 const LOC_A = 9811;   // gets a shop
 const LOC_B = 9812;   // stays a plain location — the §41 "unchanged" case
 const P1 = 9911, P2 = 9912, P3 = 9913;
+const P4 = 9914;   // never listed — the fixture the candidate SEARCH is run against
 
 let failures = 0;
 function check(label, fn) {
@@ -73,7 +74,7 @@ async function checkAsync(label, fn) {
 function cleanup() {
   db.prepare('DELETE FROM shop_listings WHERE shop_id IN (SELECT id FROM shops WHERE location_id IN (?, ?))').run(LOC_A, LOC_B);
   db.prepare('DELETE FROM shops WHERE location_id IN (?, ?)').run(LOC_A, LOC_B);
-  db.prepare('DELETE FROM store_products WHERE id IN (?, ?, ?)').run(P1, P2, P3);
+  db.prepare('DELETE FROM store_products WHERE id IN (?, ?, ?, ?)').run(P1, P2, P3, P4);
   db.prepare('DELETE FROM retail_stores WHERE id IN (?, ?)').run(LOC_A, LOC_B);
 }
 cleanup();
@@ -87,6 +88,10 @@ db.prepare(`INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, i
             VALUES (?, 'Fixture granola', '测试格兰诺拉', '__T-9912', 48.5, 1, 1)`).run(P2);
 db.prepare(`INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, is_active, is_published)
             VALUES (?, 'Fixture retired', '测试已下架', '__T-9913', 10, 0, 0)`).run(P3);
+// Two words in the name, an authored keyword and a tagline — the three things
+// the candidate search has to reach. Never listed, so it is always a candidate.
+db.prepare(`INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, is_active, is_published, keywords_en, tagline_en)
+            VALUES (?, 'Fixture Peanut Butter Duo', '测试花生酱双拼', '__T-9914', 68, 1, 1, 'spreadable', 'Fixture slogan')`).run(P4);
 
 // Column set of the tables the till reads, captured now so the end of the run
 // can prove the migration added nothing to them.
@@ -252,6 +257,33 @@ function call(method, url, body) {
       assert.ok(!ids.includes(P3), 'an inactive product is not a candidate');
       r = await call('GET', `/api/retail-admin/shops/${shopA.id}/candidates?q=测试燕麦`);
       assert.strictEqual(r.json.data.length, 0, 'P1 is listed, so a CN search for it finds nothing');
+    });
+    // The picker's search is the OPERATOR'S way to find a product, and it was
+    // one raw LIKE on the whole typed string against name and SKU only. So the
+    // two most ordinary things a person does at a search box — type the words
+    // in the order they think of them, and leave a space behind — returned
+    // nothing, and looked exactly like "the product isn't there".
+    await checkAsync('every word must match, but in any order and any spacing', async () => {
+      const find = async q => (await call('GET', `/api/retail-admin/shops/${shopA.id}/candidates?q=${encodeURIComponent(q)}`))
+        .json.data.map(x => x.id);
+      assert.ok((await find('peanut butter')).includes(P4), 'the words as written');
+      assert.ok((await find('butter peanut')).includes(P4), 'the words the other way round');
+      assert.ok((await find('peanut  butter')).includes(P4), 'a doubled space between them');
+      assert.ok((await find('  peanut butter  ')).includes(P4), 'a space left at either end');
+      assert.ok((await find('duo peanut')).includes(P4), 'the first and last words, nothing between');
+      assert.ok(!(await find('peanut marmalade')).includes(P4), 'a word that matches nothing still rules the row out');
+    });
+    await checkAsync('the keywords and the tagline are searched, as the storefront searches them', async () => {
+      const find = async q => (await call('GET', `/api/retail-admin/shops/${shopA.id}/candidates?q=${encodeURIComponent(q)}`))
+        .json.data.map(x => x.id);
+      assert.ok((await find('spreadable')).includes(P4), 'the authored keyword');
+      assert.ok((await find('slogan')).includes(P4), 'the tagline');
+      assert.ok((await find('测试花生酱')).includes(P4), 'and the Chinese name');
+    });
+    await checkAsync('a wildcard typed into the box is a literal, not a wildcard', async () => {
+      const r = await call('GET', `/api/retail-admin/shops/${shopA.id}/candidates?q=${encodeURIComponent('%')}`);
+      assert.strictEqual(r.status, 200);
+      assert.ok(!r.json.data.some(x => x.id === P4), 'a bare % matches nothing, rather than everything');
     });
     await checkAsync('reorder rewrites sort_position in the order given', async () => {
       const before = (await call('GET', `/api/retail-admin/shops/${shopA.id}`)).json.data.listings.map(x => x.id);

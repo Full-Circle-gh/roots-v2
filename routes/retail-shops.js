@@ -202,18 +202,34 @@ router.patch('/api/retail-admin/shops/:id', requireRetailAdmin, requireStoresEdi
 // ─── Listings ───────────────────────────────────────────────────────────
 
 // Products that could be added: active store_products not already on this
-// menu. Searched by either name or SKU, capped so the picker never becomes the
-// whole catalogue.
+// menu, capped so the picker never becomes the whole catalogue.
+//
+// THE SEARCH IS THE STOREFRONT'S, and deliberately so: a product the shopper
+// can find in the shop must be findable by the operator putting it ON a shop.
+// Two things were missing, both already settled in routes/retail.js on
+// GET /api/retail/products, and both of which read as "the search is broken":
+//
+//  1. IT WAS ONE RAW LIKE ON THE WHOLE STRING. So "peanut butter" matched only
+//     a name carrying those words in that order with exactly one space between
+//     them — a trailing space, a doubled space, or the two words the other way
+//     round returned nothing at all. Tokenised now: split on whitespace, every
+//     token must hit one of the columns, word order irrelevant.
+//  2. IT LOOKED AT name/sku ONLY. The authored keywords (the green "search
+//     terms" subtitle) and the taglines are what make a Chinese-only 咖啡豆
+//     findable by typing "coffee", and vice versa. They are in now.
 router.get('/api/retail-admin/shops/:id/candidates', requireRetailAdmin, (req, res) => {
   const id = intParam(req.params.id);
   if (!id || !getShop(id)) return bad(res, 404, 'not_found');
-  const q = String(req.query.q || '').trim();
+  const SEARCH_COLS = ['name_en', 'name_cn', 'sku', 'keywords_en', 'keywords_cn', 'tagline_en', 'tagline_cn'];
+  const terms = String(req.query.q || '').trim().split(/\s+/).filter(Boolean);
   const params = [id];
   let where = '';
-  if (q) {
-    const like = '%' + q.replace(/[%_]/g, ch => '\\' + ch) + '%';
-    where = " AND (p.name_en LIKE ? ESCAPE '\\' OR p.name_cn LIKE ? ESCAPE '\\' OR p.sku LIKE ? ESCAPE '\\')";
-    params.push(like, like, like);
+  for (const t of terms) {
+    where += ' AND (' + SEARCH_COLS.map(c => `p.${c} LIKE ? ESCAPE '\\'`).join(' OR ') + ')';
+    // The backslash is escaped too — without it a term containing one leaves a
+    // dangling escape at the end of the pattern.
+    const like = '%' + t.replace(/[%_\\]/g, ch => '\\' + ch) + '%';
+    for (let i = 0; i < SEARCH_COLS.length; i++) params.push(like);
   }
   const rows = tdb().prepare(`
     SELECT p.id, p.name_en, p.name_cn, p.sku, p.sell_price, COALESCE(p.is_published, 0) AS is_published
