@@ -203,6 +203,19 @@ console.log(`\nspared products keeping a tag they already had (${keptTagged.leng
 if (!keptTagged.length) console.log('   (none)');
 for (const r of keptTagged) console.log(`   id ${String(r.id).padEnd(4)} sku ${J(r.sku).padEnd(20)} ${J(r.name_en)}`);
 
+// ── The plan in six lines, printed AFTER the row listing ────────────────────
+// A run's log is read from the end and the listing below runs to two hundred
+// rows, so the counts that say whether the run did the right thing would
+// otherwise sit above all of them. Nothing is computed here.
+function verdict() {
+  console.log('\n── VERDICT ──');
+  console.log(`   active products     ${active.length}`);
+  console.log(`   spared              ${spared.length}   (${spared.filter(r => isKeeper(r.sku)).length} named, ${spared.length - spared.filter(r => isKeeper(r.sku)).length} another pack of one)`);
+  console.log(`   marked 1            ${toWrite.length}`);
+  console.log(`   cleared to 0        ${toClear.length}   ${toClear.map(r => r.sku).join(', ')}`);
+  console.log(`   untouched (deleted) ${rows.length - active.length}`);
+}
+
 if (!toWrite.length && !toClear.length) {
   console.log('\nNothing to do — every product that should carry the tag already does.\n');
   db.close();
@@ -215,6 +228,7 @@ if (!WRITE) {
   for (const r of toWrite) {
     console.log(`   ${String(r.id).padEnd(4)} | ${J(r.sku).padEnd(20)} | ${state(r.cost_incomplete).padEnd(4)} | ${J(r.unit_cost).padEnd(7)} | ${J(r.name_en)}`);
   }
+  verdict();
   console.log('\nDRY RUN — nothing was written. Re-run with apply=true to write.\n');
   db.close();
   process.exit(0);
@@ -249,9 +263,9 @@ const apply = db.transaction(() => {
 
 try {
   const { n, c, after } = apply();
-  console.log(`\nMARKED ${n} row(s), CLEARED ${c} to 0.`);
-  console.log(`${after} active product(s) now carry "this cost is not complete".`);
-  console.log(`${spared.length} spared.\n`);
+  verdict();
+  console.log(`\n   WROTE: marked ${n}, cleared ${c}.`);
+  console.log(`   ${after} active product(s) now carry "this cost is not complete".\n`);
 } catch (e) {
   console.error('\nABORTED and ROLLED BACK: ' + e.message);
   console.error('Nothing was written.\n');
