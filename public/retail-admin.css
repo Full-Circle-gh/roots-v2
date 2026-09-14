@@ -6142,13 +6142,13 @@
   html[data-ui-lang="cn"] .mt-dlg .mt-dlg-bd { line-height: 1.7; }
 
   /* ── Header (§1.7): title, status line, one Dusk CTA. No fourth element. ── */
-  .mt-pagehead { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 32px; }
-  .mt-pagehead-t { min-width: 0; flex: 1 1 320px; }
+  .mt-pagehead, .gy-pagehead { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 32px; }
+  .mt-pagehead-t, .gy-pagehead-t { min-width: 0; flex: 1 1 320px; }
   /* text-transform must be reset: the global h2 (css:973) is the retired
      uppercase eyebrow, and the `font:` shorthand does not clear it. */
-  .mt-pagehead h2 { font: 500 24px/1.3 var(--f-sans); letter-spacing: -.01em; text-transform: none; color: var(--td-text); margin: 0; }
-  .mt-status { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); margin: 4px 0 0; font-variant-numeric: tabular-nums; }
-  .mt-status .att { color: var(--td-amber-ink); }
+  .mt-pagehead h2, .gy-pagehead h2 { font: 500 24px/1.3 var(--f-sans); letter-spacing: -.01em; text-transform: none; color: var(--td-text); margin: 0; }
+  .mt-status, .gy-status { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); margin: 4px 0 0; font-variant-numeric: tabular-nums; }
+  .mt-status .att, .gy-status .att { color: var(--td-amber-ink); }
   /* ⚠️ Must out-specify #tab-meituan .btn-primary above. That rule is (1,1,0)
      and a two-class selector is only (0,2,0), so the Ink treatment was winning
      and the page's one Dusk element rendered navy. */
@@ -6156,26 +6156,26 @@
   #tab-meituan .mt-pagehead .btn-primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); opacity: 1; }
 
   /* ── Tile row — Orders' opening shape ───────────────────────────────────── */
-  .mt-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 32px; }
-  .mt-tile { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; padding: 24px; }
-  .mt-tile .k { font: 400 13px var(--f-sans); color: var(--td-text2); }
-  .mt-tile .v { font: 500 30px/1.2 var(--f-sans); letter-spacing: -.02em; margin-top: 8px; color: var(--td-text); font-variant-numeric: tabular-nums; }
-  .mt-tile .v.att { color: var(--td-amber-ink); }
-  .mt-tile .s { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .mt-tiles, .gy-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 32px; }
+  .mt-tile, .gy-tile { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; padding: 24px; }
+  .mt-tile .k, .gy-tile .k { font: 400 13px var(--f-sans); color: var(--td-text2); }
+  .mt-tile .v, .gy-tile .v { font: 500 30px/1.2 var(--f-sans); letter-spacing: -.02em; margin-top: 8px; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .mt-tile .v.att, .gy-tile .v.att { color: var(--td-amber-ink); }
+  .mt-tile .s, .gy-tile .s { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 8px; font-variant-numeric: tabular-nums; }
   @media (max-width: 900px) { .mt-tiles { grid-template-columns: 1fr; } }
 
   /* ── One line per store. Not the old cards: a dot, a name, a state, the one
      action that unblocks it, and the store's own switch. A store that needs a
      person turns amber; the rest stay quiet. */
-  .mt-storelines, .el-storelines { display: flex; flex-direction: column; margin-bottom: 32px; border: 1px solid var(--td-border); border-radius: 14px; background: var(--td-surface); }
-  .mt-storeline, .el-storeline { display: flex; align-items: center; gap: 16px; padding: 16px 24px; flex-wrap: wrap; }
-  .mt-storeline + .mt-storeline, .el-storeline + .el-storeline { border-top: 1px solid var(--td-border); }
-  .mt-storeline .dot, .el-storeline .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--td-sage); flex: none; }
-  .mt-storeline.att .dot, .el-storeline.att .dot { background: var(--td-amber); }
-  .mt-storeline.off .dot, .el-storeline.off .dot { background: var(--td-text2); }
-  .mt-storeline .nm, .el-storeline .nm { font: 500 15px var(--f-sans); color: var(--td-text); }
-  .mt-storeline .st, .el-storeline .st { font: 400 15px var(--f-sans); color: var(--td-text2); flex: 1 1 240px; min-width: 0; }
-  .mt-storeline.att .st, .el-storeline.att .st { color: var(--td-amber-ink); }
+  .mt-storelines, .el-storelines, .gy-storelines { display: flex; flex-direction: column; margin-bottom: 32px; border: 1px solid var(--td-border); border-radius: 14px; background: var(--td-surface); }
+  .mt-storeline, .el-storeline, .gy-storeline { display: flex; align-items: center; gap: 16px; padding: 16px 24px; flex-wrap: wrap; }
+  .mt-storeline + .mt-storeline, .el-storeline + .el-storeline, .gy-storeline + .gy-storeline { border-top: 1px solid var(--td-border); }
+  .mt-storeline .dot, .el-storeline .dot, .gy-storeline .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--td-sage); flex: none; }
+  .mt-storeline.att .dot, .el-storeline.att .dot, .gy-storeline.att .dot { background: var(--td-amber); }
+  .mt-storeline.off .dot, .el-storeline.off .dot, .gy-storeline.off .dot { background: var(--td-text2); }
+  .mt-storeline .nm, .el-storeline .nm, .gy-storeline .nm { font: 500 15px var(--f-sans); color: var(--td-text); }
+  .mt-storeline .st, .el-storeline .st, .gy-storeline .st { font: 400 15px var(--f-sans); color: var(--td-text2); flex: 1 1 240px; min-width: 0; }
+  .mt-storeline.att .st, .el-storeline.att .st, .gy-storeline.att .st { color: var(--td-amber-ink); }
   /* When the daemon starts syncing this store. It sits ON the store's own line
      because that is the row the operator reads its sync state off - and because
      the answer to "why was stock stale for the 9am pre-orders" is set here. The
@@ -6202,17 +6202,17 @@
   .mt-storeline.mt-catline .st { font-variant-numeric: tabular-nums; }
 
   /* Sync now / Push all stock lives on the tile whose number it changes. */
-  .mt-tile .act, .el-tile .act { margin-top: 16px; }
+  .mt-tile .act, .el-tile .act, .gy-tile .act { margin-top: 16px; }
 
   /* ── Sub-tabs ───────────────────────────────────────────────────────────── */
-  .mt-tabs { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--td-border); margin: 0 0 16px; }
-  .mt-tab { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 0; font: 500 13px var(--f-sans); color: var(--td-text2); cursor: pointer; display: flex; align-items: center; gap: 8px; }
-  .mt-tab:hover { color: var(--td-text); }
-  .mt-tab.active { color: var(--td-text); border-bottom-color: var(--td-text); }
-  .mt-tab .n { font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border-radius: 999px; padding: 0 8px; font-variant-numeric: tabular-nums; }
-  .mt-tab .n:empty { display: none; }
-  .mt-tab.active .n { color: var(--td-text); }
-  .mt-tabs-grow { flex: 1 1 auto; }
+  .mt-tabs, .gy-tabs { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--td-border); margin: 0 0 16px; }
+  .mt-tab, .gy-tab { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 0; font: 500 13px var(--f-sans); color: var(--td-text2); cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .mt-tab:hover, .gy-tab:hover { color: var(--td-text); }
+  .mt-tab.active, .gy-tab.active { color: var(--td-text); border-bottom-color: var(--td-text); }
+  .mt-tab .n, .gy-tab .n { font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border-radius: 999px; padding: 0 8px; font-variant-numeric: tabular-nums; }
+  .mt-tab .n:empty, .gy-tab .n:empty { display: none; }
+  .mt-tab.active .n, .gy-tab.active .n { color: var(--td-text); }
+  .mt-tabs-grow, .gy-tabs-grow { flex: 1 1 auto; }
 
   /* ── Chip filters — Orders' filter row ──────────────────────────────────── */
   .mt-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
@@ -15443,6 +15443,54 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
   #tab-shop-menu .shp-head { flex-direction: column; }
   #tab-shop-menu .shp-head-r { padding-top: 0; }
 }
+
+/* ── §123 · GZ Grocery — the frame is shared, these three rules are not ──────
+   The page's head (pagehead, status, tiles, store line, sub-tabs) is painted by
+   the frame rules further up, which now name `.gy-` alongside `.mt-` and `.el-`
+   — one declaration for all three channel pages, so a change to one is a change
+   to all three and there is nothing left to drift. What is here is the part
+   that is genuinely GZ Grocery's: the three-panel body (Overview, Billing,
+   Mapping), which the other two channels have no equivalent of.
+
+   THE TOKEN REMAP IS A FIX, NOT A MOVE. These rules used to live in an inline
+   <style> block inside #tab-guanyi and were written against the admin's BASE
+   token family (--line, --text-1, --bg-pane), which pre-dates Tacet and is
+   warm-grey. #tab-meituan and #tab-eleme each remap that family onto the Tacet
+   palette at the top of their own blocks; #tab-guanyi never did, so this page
+   has been painting its cards, borders and text off-palette next to two pages
+   that were not. The remap below is the same list they carry. */
+#tab-guanyi {
+  --bg-pane:     var(--td-surface);
+  --bg-elev-1:   var(--td-raised);
+  --bg-elev-2:   var(--td-raised);
+  --line:        var(--td-border);
+  --line-soft:   var(--td-border);
+  --line-strong: var(--td-border);
+  --text-1:      var(--td-text);
+  --text-2:      var(--td-text);
+  --text-3:      var(--td-text2);
+  --text-4:      var(--td-text2);
+  --accent:      var(--td-sage-ink);
+  --brass:       var(--td-amber);
+  --brass-hi:    var(--td-amber);
+  --danger:      var(--td-brick-ink);
+}
+
+/* One panel mounted at a time — the 189-row Mapping table stays unbuilt until
+   its tab is opened (12-guanyi.js gySubTab). */
+#tab-guanyi .gy-panel { display: none; }
+#tab-guanyi .gy-panel.active { display: block; }
+
+#tab-guanyi .gy-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--brass); margin: 22px 0 12px; }
+
+/* The billing snapshot on Overview: a row of cells, the owed figure in amber. */
+#tab-guanyi .gy-teaser { display: flex; flex-wrap: wrap; align-items: center; background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+#tab-guanyi .gy-teaser .cell { padding: 15px 20px; border-left: 1px solid var(--line); flex: 1; min-width: 120px; }
+#tab-guanyi .gy-teaser .cell:first-child { border-left: 0; }
+#tab-guanyi .gy-teaser .cell .l { font-family: var(--f-mono); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+#tab-guanyi .gy-teaser .cell .v { font-size: 24px; font-weight: 500; letter-spacing: -.02em; margin-top: 4px; color: var(--text-1); font-variant-numeric: tabular-nums; }
+#tab-guanyi .gy-teaser .cell.owe .v { color: var(--brass); }
+#tab-guanyi .gy-teaser .cell.go { flex: 0 0 auto; border-left: 0; margin-left: auto; }
 
 /* ── §103 · Channel sync — one verdict per item per channel ──────────────────
    The page head, tiles and chips reuse the Eleme page's classes (.el-pagehead,
