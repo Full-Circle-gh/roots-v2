@@ -36,6 +36,12 @@
 //      list whose Apply buttons came out amber because the token remap points
 //      --brass at Amber and this page, unlike its two siblings, carried no
 //      .btn-primary rule to answer it.
+//
+//   8. The bodies obey the RULEBOOK, not the sibling pages. The first §127
+//      round was built by copying what #tab-meituan and #tab-eleme do, which
+//      is not the same thing as what tacet-design-system.md and
+//      tacet-desktop-patterns.md say — and where they differ, the rulebook
+//      wins. Four cases below are §1.x conformance, not parity.
 
 const fs = require('fs');
 const path = require('path');
@@ -236,8 +242,16 @@ check('the numbered phrases are the shapes the other channel screens use', () =>
   const cs = read('public/retail-admin/29-channel-sync.js');
   ok(/\$\{[\w.]+\} 个待处理/.test(cs), 'the Channel sync page no longer carries the 待处理 shape');
   ok(/\$\{[\w.]+\} 发送中…/.test(cs),  'the Channel sync page no longer carries the 发送中 shape');
-  ok(/\$\{errors\} 个待处理/.test(GY), 'the GZ status line minted its own 待处理 phrasing');
-  ok(/\$\{pending\} 发送中…/.test(GY), 'the GZ status line minted its own 发送中 phrasing');
+  /* §127 — THESE TWO NAMED A VARIABLE WHEN THEY MEANT A SLOT. They were
+     written as `${errors}` and `${pending}`, so renaming `errors` to
+     `attention` (the count now includes the flagged drops) turned the case red
+     while the Chinese it guards had not moved a character. The two assertions
+     directly above already match the number as `${[\w.]+}` — the number is
+     whatever fills the slot; what must not drift is the PHRASE. Matched the
+     same way here now, which is what the comment at the top of this case says
+     it is checking. */
+  ok(/\$\{[\w.]+\} 个待处理/.test(GY), 'the GZ status line minted its own 待处理 phrasing');
+  ok(/\$\{[\w.]+\} 发送中…/.test(GY), 'the GZ status line minted its own 发送中 phrasing');
 });
 
 // THE WORD THAT IS DELIBERATELY NOT USED. `mappedCount` counts mappings with
@@ -268,6 +282,15 @@ check('nothing holds the Refresh button across a repaint', () => {
      'the flag is not cleared and repainted when the job ends');
   ok(!/Refreshing…/.test(GY), 'an English-only busy label is back on the button');
 });
+
+/* The stylesheet's GZ Grocery body block, bounded by its own first rule and the
+   §103 section that follows it. Several cases below read it whole. */
+function gyBodyBlock() {
+  const start = CSS.indexOf('#tab-guanyi .btn-primary');
+  const end = CSS.indexOf('/* ── §103 · Channel sync');
+  ok(start > -1 && end > start, 'the GZ Grocery body block moved or is gone');
+  return CSS.slice(start, end);
+}
 
 // ── 7. §127 · the panel bodies speak the frame's vocabulary ──────────────────
 section('7 · the panel bodies are in the frame’s vocabulary');
@@ -333,12 +356,104 @@ check('the flagged-drop card is a card, not an amber field', () => {
 /* Every colour the bodies name must be a --td-* token or one of the four the
    remap block defines. A raw hex here is a colour that exists in one theme. */
 check('the body rules name tokens, never raw colour', () => {
-  const start = CSS.indexOf('#tab-guanyi .btn-primary');
-  const end = CSS.indexOf('/* ── §103 · Channel sync');
-  ok(start > -1 && end > start, 'the GZ Grocery body block moved or is gone');
-  const block = CSS.slice(start, end);
+  const block = gyBodyBlock();
   const hexes = block.match(/#[0-9a-fA-F]{3,8}\b/g) || [];
   eq(hexes.filter(h => !/^#tab/.test(h)), [], 'raw colours in the GZ Grocery body block');
+});
+
+// ── 8. §127 · the bodies obey the rulebook, not the sibling pages ────────────
+section('8 · the bodies obey the rulebook');
+
+/* §1.3 — THE SCALE IS SIX STEPS AND ANY SIZE OFF IT IS DRIFT: page title 24,
+   section title 18, metric 30, body 15, caption 13. The first round shipped
+   14px table rows, taken from Orders' own drift rather than from the table. */
+check('every size in the body block is on the six-step scale', () => {
+  const block = gyBodyBlock();
+  const sizes = [...new Set((block.match(/font(?:-size)?:[^;]*?\d+(?:\.\d+)?px/g) || [])
+    .map(m => m.match(/(\d+(?:\.\d+)?)px/)[1]))];
+  const off = sizes.filter(v => !['13', '15', '18', '24', '30'].includes(v));
+  eq(off, [], 'sizes off the §1.3 scale');
+});
+
+/* §1.8 rule 2 + §1.10 — pickup inference reads Guanyi's drift and lowers the
+   shelf unasked. That is an automation, and its badge is --td-dusk-tint plus a
+   breathing dot. It shipped Sage, which means ALL CLEAR and is not what the
+   badge reports. §1.7 leaves this page's header CTA slot empty (no create
+   action), so nothing competes for the Dusk. */
+check('the automation badge is Dusk with a breathing dot, not Sage', () => {
+  const block = gyBodyBlock();
+  const auto = block.match(/#tab-guanyi \.gy-pill\.auto \{([^}]*)\}/);
+  ok(auto, 'there is no .gy-pill.auto rule');
+  ok(/--td-dusk-tint/.test(auto[1]), `the automation badge is not Dusk-tinted: ${auto[1].trim()}`);
+  ok(!/--td-sage/.test(block.slice(block.indexOf('.gy-pill'), block.indexOf('.gy-npill'))),
+     'the mode badge is painted Sage again — Sage means all clear, not "running"');
+  ok(/@keyframes gy-breathe/.test(block), 'the breathing dot stopped breathing');
+  ok(/prefers-reduced-motion[\s\S]{0,120}gy-pill\.auto i[\s\S]{0,40}animation: none/.test(block),
+     'the breathing dot ignores prefers-reduced-motion (§1.5)');
+});
+
+/* §1.8 rule 4 — this page's header CTA slot is empty, so every action on it is
+   Secondary or Ghost. Thirteen FILLED Apply buttons shipped, one per row —
+   which is not even the sibling pages' pattern: Meituan has one filled button,
+   in a toolbar; Eleme has one, at the top; neither puts one in a list row.
+   .btn-primary survives on this page for exactly one thing, the Billing period
+   selector, where Ink is an active SELECTION and correct (§1.8's closing line:
+   "Dusk = the AI acts, or the page's one primary action. Ink = the operator's
+   current selection. They are never swapped."). */
+check('no filled button on a page whose Dusk slot is empty', () => {
+  const rows = GY_LIVE.slice(GY_LIVE.indexOf('flagged.map'), GY_LIVE.indexOf('No flagged drops'));
+  ok(!/btn-primary/.test(rows), 'a filled Apply button is back in the flagged rows');
+  ok(/onclick="gyApplyPickup[^"]*"[^>]*>Apply/.test(rows.replace(/\n\s*/g, ' ')) ||
+     /class="btn btn-sm"[\s\S]{0,120}gyApplyPickup/.test(rows), 'Apply is not a Secondary button');
+  ok(/btn-ghost[\s\S]{0,120}gyIgnorePickup/.test(rows), 'Ignore is not Ghost (§1.8: tertiary, in-row)');
+  ok(!/btn-primary[^>]*gyPushAll/.test(SECTION_LIVE.replace(/\n\s*/g, ' ')),
+     'Push all stock now is filled again');
+  // The one legitimate survivor, named so a later pass does not "clean" it.
+  ok(/per === p \? 'btn-primary'/.test(GY_LIVE),
+     'the Billing period selector lost its active-selection Ink');
+});
+
+/* §1.10 — IF A COLOUR DOES NOT ENCODE A STATE, DO NOT USE IT. The Δ column was
+   Sage for a match, Amber one way and Brick the other. Brick means error, and
+   holding three more than Guanyi is the same state as holding three fewer, so
+   one of the two was always lying — while the State column beside it already
+   carried that state in the shared four words and the shared dot. */
+check('no colour in the body block that does not encode a state', () => {
+  const block = gyBodyBlock();
+  ok(!/--td-brick/.test(block), 'Brick is back in the body block; Brick means error');
+  ok(!/class="(up|down|ok)"/.test(GY_LIVE), 'the delta paints itself by direction again');
+});
+
+/* §1.13a rules 1 + 2 — 184 rows scroll, so the band pins; and the band can only
+   pin if NO ancestor takes an overflow in either axis, which is why the card
+   clips with clip-path and the min-width + overflow-x wrapper are gone. */
+check('the mapping band pins, and nothing above it is a scrollport', () => {
+  const block = gyBodyBlock();
+  const card = block.match(/#tab-guanyi \.gy-card \{([^}]*)\}/);
+  ok(card, 'there is no .gy-card rule');
+  ok(/clip-path:\s*inset\(0 round 14px\)/.test(card[1]), 'the card no longer clips with clip-path');
+  ok(!/overflow/.test(card[1]), `an overflow is back on the card, which un-pins the band: ${card[1].trim()}`);
+  const th = block.match(/#tab-guanyi \.gy-table th \{([^}]*)\}/);
+  ok(th && /position:\s*sticky/.test(th[1]) && /top:\s*56px/.test(th[1]), 'the band does not pin at the topbar height');
+  ok(!/gy-tablewrap/.test(block + SECTION_LIVE + GY_LIVE), 'the overflow-x wrapper is back above the band');
+  ok(!/min-width:\s*700px/.test(SECTION_LIVE), 'the min-width that forced that wrapper is back');
+});
+
+/* §1.7's work rule — the status line reports WORK WAITING. It read "nothing
+   needs you" above thirteen pickups waiting for a decision, and the attention
+   tile read 0 beside it, because both counted only the sync queue. Ash chose
+   (of three options) to have them count both. The two must read the SAME total
+   or the head disagrees with itself. */
+check('the head counts the flagged drops, not just the queue', () => {
+  const head = GY_LIVE.slice(GY_LIVE.indexOf('function gyRenderHead'), GY_LIVE.indexOf('window.gyLoadStatus'));
+  ok(/_gyPk/.test(head), 'the head cannot see the pickups response');
+  ok(/const attention = errors \+ flagged/.test(head), 'the attention total is not errors + flagged drops');
+  ok(/need attention/.test(head) && !/\$\{errors\} need attention/.test(head),
+     'the status line still counts only the queue errors');
+  ok(/chStateWord\('att'\)[\s\S]{0,140}attention, attention > 0/.test(head),
+     'the attention tile still counts only the queue errors');
+  ok(/_gyPk = r;[\s\S]{0,60}gyRenderHead\(\)/.test(GY_LIVE),
+     'loading the pickups does not repaint the head that reads them');
 });
 
 // ── Summary ──────────────────────────────────────────────────────────────────

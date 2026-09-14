@@ -12672,29 +12672,41 @@
         </label>
         <div id="gy-count" class="gy-count"></div>
         <button class="btn btn-sm" onclick="gyAutoMatch()" title="Bind every Roots product to its Guanyi listing by the SKU embedded in the Guanyi product name.">✨ Auto-match by SKU</button>
-        <button class="btn btn-sm btn-primary" onclick="gyPushAll()">Push all stock now</button>
+        <!-- §1.8 rule 4 — Secondary. §1.7 leaves this page's Dusk slot empty (no
+             create action), and a page with no primary CTA has no filled
+             button: the one Dusk this page spends is the automation badge,
+             which rule 2 exempts from the budget. -->
+        <button class="btn btn-sm" onclick="gyPushAll()">Push all stock now</button>
       </div>
 
       <!-- `data-table` was a class no rule has ever matched — the table was
            painted entirely by the global table rules, whose `th` is the retired
-           11px uppercase mono eyebrow. .gy-table restates the 500 13px
-           sentence-case band Meituan and Eleme moved to, and the card around it
-           is the same bordered 14px surface every other card here is. -->
-      <div id="gy-products-wrap" class="gy-card gy-tablewrap">
-        <table id="gy-products-table" class="gy-table" style="min-width:700px">
+           11px uppercase mono eyebrow. .gy-table carries §1.13a rule 3's band:
+           13px Inter 500 sentence case in Ink on --td-header, padding 10px 12px,
+           Orders the anchor. Rule 1 pins it — 184 rows scroll past and the
+           operator loses which column is which. THAT is why the min-width and
+           the overflow-x wrapper are gone rather than kept: an overflow on ANY
+           ancestor makes the card the scrollport and parks the band on row one
+           (rule 2). table-layout: fixed and §1.19's percentages replace them. -->
+      <div id="gy-products-wrap" class="gy-card">
+        <table id="gy-products-table" class="gy-table">
           <thead>
             <tr>
-              <th style="width:28%">Product · 商品</th>
-              <!-- 13%, not 10%: the band is 13px sentence-case now rather than
-                   11px uppercase, and 我方 was breaking between its two
-                   characters in the narrower column. -->
-              <th style="width:13%;text-align:center">天河 qty · 我方</th>
-              <th style="width:25%">Guanyi match · 管易商品</th>
-              <th style="width:12%;text-align:center">Guanyi qty · Δ</th>
+              <!-- §1.19 — plain percentages summing to 100, and under
+                   table-layout: fixed they are what decides the layout. The
+                   State column was 12%: `Needs attention · 待处理` is the
+                   widest of the four shared state words and it ran straight
+                   under the Sync checkbox. Measured against that phrase, not
+                   guessed — as was 我方, which breaks between its two
+                   characters below about 12%. 25 + 12 + 23 + 11 + 20 + 9 = 100. -->
+              <th style="width:25%">Product · 商品</th>
+              <th style="width:12%;text-align:center">天河 qty · 我方</th>
+              <th style="width:23%">Guanyi match · 管易商品</th>
+              <th style="width:11%;text-align:center">Guanyi qty · Δ</th>
               <!-- §103 step 5: the state, in the same four words the other two
                    channel tabs and the Channel sync page use. -->
-              <th style="width:12%">State · 状态</th>
-              <th style="width:10%;text-align:center">Sync</th>
+              <th style="width:20%">State · 状态</th>
+              <th style="width:9%;text-align:center">Sync</th>
             </tr>
           </thead>
           <tbody id="gy-products-body">

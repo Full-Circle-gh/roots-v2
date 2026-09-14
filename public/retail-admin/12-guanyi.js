@@ -128,20 +128,37 @@
      that is what it counts. */
   let _gySt = null;      // last /status
   let _gyLs = null;      // last /listings
+  let _gyPk = null;      // last /pickups — the head counts its flagged drops
   let _gyRefreshing = false;   // a Refresh list click is in flight
 
   function gyRenderHead() {
     const st = _gySt || {};
     const pending = Number(st.queuePending || 0);
     const errors  = Number(st.queueError || 0);
+    /* §127 — THE TILE COUNTED THE QUEUE AND THE PAGE COUNTED THE DROPS, so the
+       head read "nothing needs you · Needs attention 0" above thirteen pickups
+       waiting for a decision. §1.7's work rule is that the status line reports
+       WORK WAITING; a flagged drop is work waiting on this operator and nothing
+       else on the head knew about it.
+
+       Ash, asked which of three ways to fix it, chose this one: the tile counts
+       BOTH. `Needs attention` means *what is waiting on you on this page*, and
+       what a page holds differs by page — the same way `Mapped` is a different
+       number here and on Meituan. That is not §103 step 5's defect, which was
+       two NAMES for one thing (Mapped vs Synced); this is one name for one
+       meaning. No string changes: the number in the existing `N need attention`
+       shape is just the honest one now, and the status line and the tile agree
+       because they read the same total. */
+    const flagged = ((_gyPk && _gyPk.flagged) || []).length;
+    const attention = errors + flagged;
 
     const line = document.getElementById('gy-status');
     if (line) {
       const bits = [];
-      if (errors)  bits.push(cuT(`${errors} need attention`, `${errors} 个待处理`));
+      if (attention) bits.push(cuT(`${attention} need attention`, `${attention} 个待处理`));
       if (pending) bits.push(cuT(`${pending} sending…`, `${pending} 发送中…`));
       if (!bits.length) bits.push(cuT('nothing needs you', '无需处理'));
-      line.innerHTML = errors
+      line.innerHTML = attention
         ? '<span class="att">' + esc(bits[0]) + '</span>' + (bits[1] ? ' · ' + esc(bits[1]) : '')
         : esc(bits.join(' · '));
     }
@@ -152,7 +169,7 @@
         '<div class="v' + (warn ? ' att' : '') + '">' + esc(String(v)) + '</div></div>';
       tiles.innerHTML =
         tile(cuT('Mapped', '已映射'), st.mappedCount == null ? '—' : st.mappedCount, false) +
-        tile(typeof chStateWord === 'function' ? chStateWord('att') : cuT('Needs attention', '待处理'), errors, errors > 0) +
+        tile(typeof chStateWord === 'function' ? chStateWord('att') : cuT('Needs attention', '待处理'), attention, attention > 0) +
         tile(cuT('Stock updates waiting', '待推送库存'), pending, false);
     }
 
@@ -328,11 +345,14 @@
         gyQty = gqty == null ? '<span class="muted">?</span>' : String(gqty);
         if (gqty != null) {
           const d = ourQty - gqty;
-          /* --warn resolves to raw Amber, which is the FILL token: as text on
-             paper it is the one colour on this page that fails contrast. The
-             ink twin is what every other amber word here uses. */
-          delta = d === 0 ? '<span class="ok">=</span>'
-            : `<span class="${d > 0 ? 'up' : 'down'}">${d > 0 ? '+' : ''}${d}</span>`;
+          /* §1.10 — IF A COLOUR DOES NOT ENCODE A STATE, DO NOT USE IT. This
+             was Sage for a match, Amber one way and Brick the other. Brick
+             means error, and holding three more than Guanyi is the same state
+             as holding three fewer — "out of step" — so one of the two was
+             always lying. The State column beside it already carries that
+             state, in the shared four words and the shared dot. The delta is
+             the size of the gap, which is information: Graphite. */
+          delta = `<span class="muted">${d === 0 ? '=' : (d > 0 ? '+' : '') + d}</span>`;
         }
         sync = `<label class="toggle-label" title="Enable/disable sync"><input type="checkbox" ${m.sync_enabled ? 'checked' : ''} onchange="gyToggleSync(${p.id}, this.checked)"></label>`;
       } else if (sg) {
@@ -405,6 +425,9 @@
   function gyRenderPickups(r) {
     const wrap = document.getElementById('gy-pickups');
     if (!wrap) return;
+    // The head's attention count reads this response, so store it and repaint.
+    _gyPk = r;
+    gyRenderHead();
     const mode = r.mode || 'off';
     const flagged = r.flagged || [];
     const recent = r.recent || [];
@@ -422,14 +445,34 @@
        full amber field (a color-mix wash, an amber border, amber headings and,
        because #tab-guanyi remaps --brass onto Amber and carried no .btn-primary
        rule, amber Apply buttons too) sitting under a status line that read
-       "nothing needs you". Amber is now spent where Meituan and Eleme spend it:
-       on the count that says how many, and nowhere else. The card, the rows and
-       the type are the shapes the rest of this page uses. Not one word changed. */
+       "nothing needs you". Amber is now spent where §1.10 spends it: a tinted
+       PILL on the count, and nowhere else.
+
+       THE BADGE IS DUSK, NOT SAGE. Pickup inference reads Guanyi's stock drift
+       and lowers your shelf without being asked — it is an automation, and
+       §1.10's row for "tacet acted" is --td-dusk-tint plus a breathing dot.
+       Sage was wrong: Sage means all-clear, and this badge is not reporting
+       that anything is clear, only that something is running. §1.8 rule 2
+       exempts automation indicators from the one-Dusk budget, so this is the
+       page's Dusk and it costs the header nothing (§1.7 leaves that slot empty
+       here — there is no create action).
+
+       EVERY BUTTON IS SECONDARY OR GHOST (§1.8 rule 4). There were thirteen
+       filled Apply buttons down the page, one per row. Neither sibling page
+       puts a filled button in a list row at all — Meituan has one, in a
+       toolbar; Eleme has one, at the top — so the row buttons were not even
+       the siblings' pattern, let alone the rulebook's. Apply is Secondary,
+       Ignore is Ghost (§1.8: "Ghost — tertiary, in-row").
+
+       NO NEW STRINGS. `Flagged drops · 待确认` is the head of the sentence that
+       stood here — "13 flagged drop(s) need your decision · 待确认" — with the
+       count lifted out into the pill beside it, where §1.4 puts a count and
+       where this page's own sub-tabs already put one. A numeral needs no label. */
     const modeBadge = mode === 'live'
-      ? '<span class="gy-pill live">● LIVE</span>'
+      ? '<span class="gy-pill auto"><i></i>Live</span>'
       : mode === 'shadow'
-        ? '<span class="gy-pill idle" title="Detecting + logging only — not changing stock">◌ shadow</span>'
-        : '<span class="gy-pill idle">off</span>';
+        ? '<span class="gy-pill idle" title="Detecting + logging only — not changing stock">Shadow</span>'
+        : '<span class="gy-pill idle">Off</span>';
 
     let html = `<div class="gy-act-row">
       <span class="gy-act-h">Gzgrocery pickups · 提货扣减</span> ${modeBadge}
@@ -438,7 +481,7 @@
 
     if (flagged.length) {
       html += `<div class="gy-card">
-        <div class="gy-cardhead att">⚠ ${flagged.length} flagged drop(s) need your decision · 待确认</div>`
+        <div class="gy-cardhead">Flagged drops · 待确认 <span class="gy-npill">${flagged.length}</span></div>`
         + flagged.map(f => {
           const drop = Math.abs(f.drift || 0);
           return `<div class="gy-row">
@@ -446,8 +489,8 @@
               <div class="nm">${pname(f)}${psku(f)}</div>
               <div class="sub">Guanyi ${f.baseline_qty}→${f.observed_qty} (drop ${drop}) · your stock now ${f.current_qty} · ${when(f.created_at)}</div>
             </div>
-            <button class="btn btn-sm btn-primary" onclick="gyApplyPickup(${f.id})" title="Yes, real sale — lower my stock by ${drop}">Apply −${drop}</button>
-            <button class="btn btn-sm" onclick="gyIgnorePickup(${f.id})" title="Glitch — keep my stock, correct Guanyi back up">Ignore</button>
+            <button class="btn btn-sm" onclick="gyApplyPickup(${f.id})" title="Yes, real sale — lower my stock by ${drop}">Apply −${drop}</button>
+            <button class="btn btn-sm btn-ghost" onclick="gyIgnorePickup(${f.id})" title="Glitch — keep my stock, correct Guanyi back up">Ignore</button>
           </div>`;
         }).join('') + `</div>`;
     } else {
@@ -612,9 +655,9 @@
         </div>`).join('') + `</div></details>`;
     }
 
-    html += `<div class="gy-card gy-tablewrap"><table class="gy-table"><thead><tr>
-      <th>Product</th><th class="num">Units</th>
-      <th class="num">Owed</th><th class="num">Retail</th><th class="num">Disc</th></tr></thead><tbody>`
+    html += `<div class="gy-card"><table class="gy-table"><thead><tr>
+      <th style="width:40%">Product</th><th class="num" style="width:15%">Units</th>
+      <th class="num" style="width:15%">Owed</th><th class="num" style="width:15%">Retail</th><th class="num" style="width:15%">Disc</th></tr></thead><tbody>`
       + prods.slice(0, 50).map(p => `<tr>
         <td>${esc(p.name || ('#' + p.product_id))} <span class="muted">${esc(p.sku || '')}</span></td>
         <td class="num qty">${p.units}</td>

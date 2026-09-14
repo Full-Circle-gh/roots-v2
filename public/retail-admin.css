@@ -15524,10 +15524,24 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
 #tab-guanyi .gy-act-row .gy-act-h { margin: 0; }
 #tab-guanyi .gy-act-row .gy-act-sum { margin-left: auto; font: 400 13px var(--f-sans); color: var(--td-text2); font-variant-numeric: tabular-nums; }
 
-/* The pickup-inference mode, as a pill. Sage = running, muted = not. */
-#tab-guanyi .gy-pill { font: 400 13px var(--f-sans); border-radius: 999px; padding: 2px 12px; white-space: nowrap; }
-#tab-guanyi .gy-pill.live { background: var(--td-sage-tint); color: var(--td-sage-ink); }
+/* The pickup-inference mode, as a pill. §1.10's row for "tacet acted" is
+   --td-dusk-tint plus a breathing dot, and pickup inference IS an automation:
+   it reads Guanyi's drift and lowers the shelf without being asked. It was
+   Sage, which means all-clear and is not what this badge reports. §1.8 rule 2
+   exempts automation indicators from the one-Dusk budget — and §1.7 leaves
+   this page's header CTA slot empty anyway, so nothing is competing for it. */
+#tab-guanyi .gy-pill { display: inline-flex; align-items: center; gap: 6px; font: 400 13px var(--f-sans); border-radius: 999px; padding: 2px 12px; white-space: nowrap; }
+#tab-guanyi .gy-pill.auto { background: var(--td-dusk-tint); color: var(--td-dusk); }
+#tab-guanyi .gy-pill.auto i { width: 6px; height: 6px; border-radius: 999px; background: var(--td-dusk); flex: none; animation: gy-breathe 2.4s ease-in-out infinite; }
 #tab-guanyi .gy-pill.idle { background: var(--td-raised); color: var(--td-text2); }
+/* 1 → .45 → 1 over 2.4s — the product-wide breathing dot (§1.5). */
+@keyframes gy-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { #tab-guanyi .gy-pill.auto i { animation: none; } }
+
+/* The count beside a card head. Amber tint + amber ink is §1.10's "needs
+   attention" pair, and a pill is §5's shape for it — the same object the
+   sub-tab strip's .n already is, one level in. */
+#tab-guanyi .gy-npill { font: 400 13px var(--f-sans); border-radius: 999px; padding: 0 8px; background: var(--td-amber-tint); color: var(--td-amber-ink); font-variant-numeric: tabular-nums; }
 
 /* A card, and a row inside one. These take .mt-card's and .mt-storeline's
    shapes but are NOT joined to their rules: .gy-card carries a margin those do
@@ -15535,9 +15549,12 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
    things that only look alike today is how the next change to one silently
    lands on the other. .gy-act-h above IS joined, because it is the same
    object, word for word. */
-#tab-guanyi .gy-card { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; overflow: hidden; margin-bottom: 16px; }
+/* §1.13a rule 2 — the card clips with clip-path, NOT overflow. overflow in
+   either axis makes the card a scroll container, and a sticky band pins to its
+   nearest scrollport: the column header would park itself on row one instead of
+   under the topbar. clip-path rounds the corners without creating one. */
+#tab-guanyi .gy-card { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; clip-path: inset(0 round 14px); margin-bottom: 32px; }
 #tab-guanyi .gy-cardhead { display: flex; align-items: center; gap: 16px; padding: 16px 24px; border-bottom: 1px solid var(--td-border); font: 500 15px var(--f-sans); color: var(--td-text); }
-#tab-guanyi .gy-cardhead.att { color: var(--td-amber-ink); }
 #tab-guanyi .gy-row { display: flex; align-items: center; gap: 16px; padding: 16px 24px; flex-wrap: wrap; }
 #tab-guanyi .gy-row + .gy-row { border-top: 1px solid var(--td-border); }
 #tab-guanyi .gy-row .who { flex: 1 1 240px; min-width: 0; }
@@ -15551,7 +15568,7 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
 
 /* An amber notice — the one shape the admin already uses for this (.onw-note
    .amber on Orders): tinted ground, amber ink, no border shouting round it. */
-#tab-guanyi .gy-note { background: var(--td-amber-tint); color: var(--td-amber-ink); border-radius: 14px; padding: 16px 24px; font: 400 13px/1.6 var(--f-sans); margin: 0 0 16px; }
+#tab-guanyi .gy-note { background: var(--td-amber-tint); color: var(--td-amber-ink); border-radius: 14px; padding: 16px 24px; font: 400 13px/1.6 var(--f-sans); margin: 0 0 24px; }
 
 /* A fold. Its summary is a 13px secondary line, like every other one here. */
 #tab-guanyi .gy-fold { margin: 0 0 32px; }
@@ -15568,7 +15585,7 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
    is shared by selector with Meituan, so a five-card variant of it would be a
    rule of GZ's own on a frame class — the thing §123's test exists to catch.
    The cards inside are .gy-tile, unchanged, so the tile itself stays shared. */
-#tab-guanyi .gy-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(176px, 1fr)); gap: 16px; margin-bottom: 32px; }
+#tab-guanyi .gy-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(176px, 1fr)); gap: 24px; margin-bottom: 32px; }
 
 /* Toolbar + controls, on .mt-tools' and .mt-search's measurements. Scoped to
    #tab-guanyi rather than joined: this toolbar carries a date pair and a
@@ -15588,9 +15605,12 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
    band when they became lists (.mt-lhead). These are still tables — a mapping
    grid and a statement both have columns that must line up — so the band is
    restated here on th rather than the pages being remade into lists. */
-#tab-guanyi .gy-table { width: 100%; border-collapse: collapse; }
-#tab-guanyi .gy-table th { font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; text-align: left; color: var(--td-text); background: var(--td-header); border-bottom: 1px solid var(--td-border); padding: 10px 12px; }
-#tab-guanyi .gy-table td { font: 400 14px var(--f-sans); color: var(--td-text); border-bottom: 1px solid var(--td-border); padding: 10px 12px; vertical-align: middle; }
+/* §1.19 — plain percentages summing to 100 under table-layout: fixed. Fixed
+   layout is what lets the band pin: the alternative was a min-width and an
+   overflow-x wrapper, and an overflow on any ancestor un-pins the band. */
+#tab-guanyi .gy-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+#tab-guanyi .gy-table th { position: sticky; top: 56px; z-index: 5; font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; text-align: left; color: var(--td-text); background: var(--td-header); border-bottom: 1px solid var(--td-border); padding: 10px 12px; }
+#tab-guanyi .gy-table td { font: 400 15px var(--f-sans); color: var(--td-text); border-bottom: 1px solid var(--td-border); padding: 10px 12px; vertical-align: middle; }
 #tab-guanyi .gy-table tbody tr:last-child td { border-bottom: 0; }
 #tab-guanyi .gy-table tbody tr:hover { background: var(--td-raised); }
 #tab-guanyi .gy-table .num { text-align: right; font-variant-numeric: tabular-nums; }
@@ -15599,11 +15619,7 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
 #tab-guanyi .gy-table .sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 2px; font-variant-numeric: tabular-nums; }
 #tab-guanyi .gy-table .ctr { text-align: center; font-variant-numeric: tabular-nums; }
 #tab-guanyi .gy-table .qty { font-weight: 500; }
-#tab-guanyi .gy-table .ok { color: var(--td-sage-ink); }
-#tab-guanyi .gy-table .up { color: var(--td-amber-ink); }
-#tab-guanyi .gy-table .down { color: var(--td-brick-ink); }
 #tab-guanyi .gy-table .unbind { padding: 0 8px; margin-left: 8px; }
-#tab-guanyi .gy-tablewrap { overflow-x: auto; }
 
 /* §1.3: body is lh 1.6, 1.7 for CJK runs — half of every label here is 中文.
    The .gy-status and .gy-storeline halves are frame parts and live in the
