@@ -696,10 +696,92 @@ function _paStockMirror(productId, storeId, qty) {
   if (p) p.effective_stock = Object.values(PA_STOCK[pid]).reduce((s, v) => s + (Number(v) || 0), 0);
 }
 
+/* ── A REFUSAL THE OPERATOR CAN ANSWER ─────────────────────────────────────
+   Two of the stock PATCH's 400s are QUESTIONS, not errors, and both are
+   answered by resending the same write with one extra word:
+
+     recount_clears_debt      §84 — the shelf is below zero. That negative is
+                              the only record that units were sold which were
+                              never made, and the kitchen cooks against it.
+                              Typing the true count over it is a correct
+                              reading of the room that silently discards the
+                              claim. The word is `clears_debt`.
+     recount_reason_required  §46 — a kitchen-mode count has gone DOWN, which
+                              can only mean it was counted wrong; anything lost
+                              or spoiled belongs to whoever records waste. The
+                              word is `miscount`.
+
+   Neither had a way to be answered from the admin at all. The grid sent no
+   acknowledgement and never asked for one, so a shelf sitting at −18 could not
+   be saved from this screen by any value: the box refuses a negative and the
+   server refuses everything above it. The operator read
+   `HTTP 400 · recount_clears_debt` and had nowhere to go.
+
+   ONE PLACE FOR BOTH GRIDS. The overview list and the product editor's store
+   matrix ask with the same words, so the same refusal does not grow two
+   vocabularies.
+
+   THE SENTENCES ARE BILINGUAL HERE, NOT FROM THE SERVER. The route's `message`
+   is English-only — good English, and the right thing for a log or a support
+   ticket, but this is what a Guangzhou shop operator reads at the shelf. Where
+   the kitchen app already says this exact thing, its pair is lifted verbatim so
+   the two screens name the same number with the same words; see
+   docs/tacet-delivery-vocabulary.md, "Setting a count over a debt".
+
+   Returns the word to resend with, or null when the operator backed out. */
+function _paCanAskRecount(code) {
+  return typeof askConfirm === 'function'
+    && (code === 'recount_clears_debt' || code === 'recount_reason_required');
+}
+async function _paAskRecountReason(code, body, shelfQty, typedQty) {
+  if (code === 'recount_clears_debt') {
+    // `owed` is the server's own figure. Fall back to the shelf we last read
+    // only if it is missing — the two agree, and the server's is the fresher.
+    const owed = Math.abs(Number(body && body.owed)) || Math.abs(Number(shelfQty) || 0);
+    const ok = await askConfirm({
+      title: cuT(`Customer orders waiting — ${owed}`, `有客户订单等待 — ${owed}`),
+      body: cuT(
+        `This shelf is at ${shelfQty} because ${owed} were sold that were never made. `
+        + 'That number is what the kitchen cooks against, and saving a count here sets it '
+        + 'to zero. To add stock, record a batch instead.',
+        `在架 ${shelfQty},因为有 ${owed} 件已售出但从未制作。`
+        + '这个数字是厨房的待制作依据,在此保存数量会将其清零。若要增加库存,请改用“加库存”。'),
+      confirm: cuT('Clear it and save', '清零并保存'),
+      cancel: cuT('Keep it', '保留'),
+      danger: true,
+    });
+    return ok === true ? 'clears_debt' : null;
+  }
+  if (code === 'recount_reason_required') {
+    // Every string in this arm is already live on the phone's §46 fork sheet
+    // (public/m.html) for the same question — lifted whole, punctuation
+    // included, rather than minted a second time.
+    const ok = await askConfirm({
+      title: cuT('The count has gone down', '数量变少了'),
+      body: cuT(`Shelf says ${shelfQty}, you counted ${typedQty}.`,
+                `在架 ${shelfQty}，你数的是 ${typedQty}。`),
+      confirm: cuT(`I counted wrong — save ${typedQty}`, `数错了——保存 ${typedQty}`),
+      cancel: cuT('Something is missing or spoiled', '少了或坏了'),
+    });
+    if (ok === true) return 'miscount';
+    // Only the CANCEL BUTTON is the "missing or spoiled" answer. Escape and the
+    // scrim resolve null — a dismissal, which has not said anything — and must
+    // not put words in the operator's mouth.
+    if (ok === false) {
+      toast(cuT('The count stays as it is. Tell whoever records waste.',
+                '数量保持不变。请告诉负责记录损耗的人。'));
+    }
+    return null;
+  }
+  return null;
+}
+
 // Save an edited per-store count. Writes via the inventory PATCH endpoint (which
 // records a ledger row), then keeps the local maps + effective_stock in sync so
 // the KPI tiles and grid badges stay honest without a full reload.
-async function paSaveStoreStock(productId, storeId, raw, el) {
+// `recountReason` is set only on the retry that follows an answered refusal
+// (_paAskRecountReason) — never by the onchange handler.
+async function paSaveStoreStock(productId, storeId, raw, el, recountReason) {
   // A COUNT THIS BOX CANNOT READ IS NOT ZERO. `parseInt(raw) || 0` turned an
   // emptied box, a stray letter and a bad paste all into 0 and saved it — the
   // shelf was emptied by a slip of the hand, with a green tick to say so. Now
@@ -723,7 +805,7 @@ async function paSaveStoreStock(productId, storeId, raw, el) {
     const res = await fetch(`/api/retail-admin/stores/${storeId}/stock/${productId}`, {
       method: 'PATCH', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ physical_qty: qty }),
+      body: JSON.stringify({ physical_qty: qty, ...(recountReason ? { recount_reason: recountReason } : {}) }),
     });
     // The endpoint always answers JSON; a body we can't parse means an HTTP error
     // (500/502/504, or a login-redirect HTML page) reached us. Read the body as
@@ -733,8 +815,27 @@ async function paSaveStoreStock(productId, storeId, raw, el) {
     const text = await res.text();
     let j = null; try { j = JSON.parse(text); } catch (_) { /* non-JSON body */ }
     if (!res.ok || !j || !j.success) {
-      const detail = (j && j.error) || (text || '').trim().slice(0, 160) || `HTTP ${res.status}`;
-      throw new Error(`HTTP ${res.status} · ${detail}`);
+      const code = (j && j.error) || 'bad_response';
+      // THE TWO REFUSALS THAT ARE QUESTIONS GET ASKED, not reported. Only once:
+      // `recountReason` is already set on the retry, so a server that refuses
+      // the answered write says so instead of reopening the dialog.
+      if (!recountReason && _paCanAskRecount(code)) {
+        const word = await _paAskRecountReason(code, j, _paStoreQty(productId, storeId), qty);
+        if (word) return paSaveStoreStock(productId, storeId, qty, el, word);
+        el.value = _paStoreQty(productId, storeId);
+        el.classList.remove('is-err', 'is-saved');
+        return;
+      }
+      // WHAT THE SHOPKEEPER READS IS A SENTENCE, NOT A CODE (audit A-09). This
+      // call site is a raw fetch rather than api(), so it never reached
+      // tdErrorText: it built its toast from `j.error` alone and threw away the
+      // server's own `message` — which is how a §84 refusal arrived on the shop
+      // floor as "HTTP 400 · recount_clears_debt". The code is not lost; it goes
+      // on the toast's title attribute, to be quoted to support.
+      const err = new Error(tdErrorText(code, j && j.message)
+        || (text || '').trim().slice(0, 160) || `HTTP ${res.status}`);
+      err.code = code;
+      throw err;
     }
     if (!PA_STOCK[productId]) PA_STOCK[productId] = {};
     PA_STOCK[productId][storeId] = qty;
@@ -750,8 +851,14 @@ async function paSaveStoreStock(productId, storeId, raw, el) {
     if (p) p.effective_stock = Object.values(PA_STOCK[productId] || {}).reduce((s, v) => s + (Number(v) || 0), 0);
     paRenderKpis(false);
   } catch (e) {
+    // A REFUSED WRITE PUTS THE SHELF'S OWN NUMBER BACK. The typed value used to
+    // stay in the box after a 400, so a refusal looked like a save to anyone who
+    // glanced at the row afterwards — and under a §84 refusal the number it was
+    // covering is a negative somebody is owed.
+    el.value = _paStoreQty(productId, storeId);
     el.classList.add('is-err');
-    toast(cuT('Couldn’t save stock — ', '库存保存失败 — ') + e.message, 'err');
+    toast(cuT('Couldn’t save stock — ', '库存保存失败 — ') + (e.message || ''), 'err',
+          e.code ? { title: e.code } : undefined);
   } finally {
     el.disabled = false;
   }
@@ -2844,11 +2951,16 @@ function pdSyncMatrixLabels() {
   if (changed) pdRenderStockMatrix(box, PD_STOCK_DATA);
 }
 // Live-update a row's Total cell as the operator types (no save needed to see it).
+/* A SHELF BELOW ZERO IS PART OF THE TOTAL (§84). Both live sums floored each
+   cell at 0 while pdSyncVariantTotals, which builds the same figure from the
+   server's answer, does not — so a variant sitting at −18 in one shop and 40 in
+   another loaded as 22 and jumped to 40 the moment any cell was touched. The
+   floor is gone from both, and the two agree again. */
 function pdMatrixRecalc(inp) {
   const box = document.getElementById('pd-store-stocks'); if (!box) return;
   const vid = inp.dataset.variantId;
   const sum = Array.from(box.querySelectorAll('input[data-variant-id="' + vid + '"]'))
-    .reduce((a, i) => a + (Math.max(0, parseInt(i.value, 10) || 0)), 0);
+    .reduce((a, i) => a + (parseInt(i.value, 10) || 0), 0);
   const cell = box.querySelector('td.mtot[data-tot="' + vid + '"]');
   if (cell) cell.textContent = sum;
   pdRenderOnHand();   // the headline follows the cell being typed into
@@ -2871,17 +2983,32 @@ function pdSyncVariantTotals(d) {
 // Auto-save a single stock cell on blur (only if it changed) — mirrors the old
 // "Save stock" button's per-cell PATCH, so each store's physical_qty lands with
 // its ledger row. Blur debounces naturally (one save per cell you leave).
-async function pdMatrixCellSave(inp) {
+// `recountReason` is set only on the retry after an answered refusal, exactly as
+// in paSaveStoreStock — the onblur handler never passes it.
+async function pdMatrixCellSave(inp, recountReason) {
   if (!inp || String(inp.value) === String(inp.dataset.orig)) return;
-  const qty = Math.max(0, parseInt(inp.value, 10) || 0);
-  const pid = inp.dataset.variantId, sid = inp.dataset.storeId;
   const msg = document.getElementById('pd-store-stocks-msg');
+  // A COUNT THIS BOX CANNOT READ IS NOT ZERO — the same rule paSaveStoreStock
+  // states at length, which this twin of it never got. `Math.max(0, parseInt(x,
+  // 10) || 0)` read an emptied box, a stray letter and a bad paste alike as 0,
+  // and wrote "this shelf is empty" with a "Saved" beside it.
+  const txt = String(inp.value == null ? '' : inp.value).trim();
+  const qty = txt === '' ? NaN : Number(txt);
+  if (!Number.isInteger(qty) || qty < 0) {
+    inp.value = inp.dataset.orig || '0';
+    pdMatrixSyncTotals();
+    if (msg) msg.textContent = '';
+    toast(cuT('Enter the number on the shelf — a whole number, 0 or more.',
+              '请输入货架上的数量 — 0 或以上的整数。'), 'err');
+    return;
+  }
+  const pid = inp.dataset.variantId, sid = inp.dataset.storeId;
   if (msg) msg.textContent = cuT('Saving…', '保存中…');
   try {
     const r = await fetch('/api/retail-admin/stores/' + sid + '/stock/' + pid, {
       method: 'PATCH', credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ physical_qty: qty, reason: 'manual' }),
+      body: JSON.stringify({ physical_qty: qty, reason: 'manual', ...(recountReason ? { recount_reason: recountReason } : {}) }),
     });
     const j = await r.json().catch(() => ({}));
     if (r.ok && j && j.success !== false) {
@@ -2889,11 +3016,28 @@ async function pdMatrixCellSave(inp) {
       if (msg) msg.textContent = cuT('Saved', '已保存');
       _paStockMirror(pid, sid, qty);
       pdMatrixSyncTotals();
-    } else {
-      if (msg) msg.textContent = '';
-      toast(cuT('Stock save failed', '库存保存失败'), 'err');
+      return;
     }
+    const code = j.error || 'bad_response';
+    if (!recountReason && _paCanAskRecount(code)) {
+      const shelf = Number(inp.dataset.orig);
+      const word = await _paAskRecountReason(code, j, Number.isFinite(shelf) ? shelf : 0, qty);
+      if (word) return pdMatrixCellSave(inp, word);
+      inp.value = inp.dataset.orig || '0';
+      pdMatrixSyncTotals();
+      if (msg) msg.textContent = '';
+      return;
+    }
+    // Said "Stock save failed" and nothing else, whatever the server answered
+    // — the shopkeeper's half of the same audit A-09 gap as the list grid.
+    inp.value = inp.dataset.orig || '0';
+    pdMatrixSyncTotals();
+    if (msg) msg.textContent = '';
+    toast(cuT('Stock save failed — ', '库存保存失败 — ') + tdErrorText(code, j.message),
+          'err', { title: code });
   } catch (e) {
+    inp.value = inp.dataset.orig || '0';
+    pdMatrixSyncTotals();
     if (msg) msg.textContent = '';
     toast(cuT('Stock save failed', '库存保存失败'), 'err');
   }
@@ -2904,7 +3048,7 @@ function pdMatrixSyncTotals() {
   const box = document.getElementById('pd-store-stocks'); if (!box) return;
   const inputs = Array.from(box.querySelectorAll('input[data-store-id]'));
   const totals = {};
-  inputs.forEach(i => { const v = i.dataset.variantId; totals[v] = (totals[v] || 0) + Math.max(0, parseInt(i.value, 10) || 0); });
+  inputs.forEach(i => { const v = i.dataset.variantId; totals[v] = (totals[v] || 0) + (parseInt(i.value, 10) || 0); });
   VA_STORE_TOTALS = totals;
   (VA_MEMBERS || []).forEach(m => { if (totals[m.id] != null) m.stock = totals[m.id]; });
   if (document.getElementById('pd-variants') && VA_ID != null) vaRender();

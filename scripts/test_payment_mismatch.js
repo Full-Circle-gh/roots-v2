@@ -662,6 +662,8 @@ const AP_SRC = [
 ].join('\n');
 const validateAlipayProof = vm.runInNewContext(
   `(() => { ${AP_SRC}\nreturn validateAlipayProof; })()`, { Date, Number, String, Math });
+const parseBeijingTime = vm.runInNewContext(
+  `(() => { ${AP_SRC}\nreturn parseBeijingTime; })()`, { Date, Number, String, Math });
 
 // One shop, one order, one clean screenshot — each case below changes the ONE
 // thing under test. Payee is configured (so the check runs) and the time window
@@ -725,6 +727,126 @@ it('the tolerance is a constant, and it is ¥2', () => {
   // where the decision gets re-made rather than drifting.
   assert.ok(/const ALIPAY_SHORT_OK_CNY = 2\.00;/.test(RETAIL_JS),
     'the shortfall rule moved or changed value — say so in the commit');
+});
+
+console.log('\n12 · the clock rule that decides who waits');
+
+// ── Reading a time off a screenshot ───────────────────────────────────────
+// Every instant below is fixed, so a suite that is green today is green next
+// year. BJ() writes a Beijing wall-clock time; REF is the reference instant the
+// freshness window is measured from — the moment the customer uploaded.
+const BJ = (s) => Date.parse(s.replace(' ', 'T') + '+08:00');
+const REF = BJ('2026-09-15 14:00:07');
+const WINDOWED = { payeeMatch: 'Govegan', proofAgeMin: 0, timeWindowMin: 120 };
+const atRef = (over, ref = REF) =>
+  validateAlipayProof({ total: 243.50 }, proofFor(243.00, over), WINDOWED, ref);
+
+it('a bare afternoon clock is the afternoon, not twelve hours earlier (TC000731)', () => {
+  // The order this rule was written for. The screenshot printed no transaction
+  // time, so the check fell back to the status bar, where a phone on a 12-hour
+  // clock showed 13:59 as "1:59". Read as 01:59 it aged the payment 721 minutes
+  // — 12h01m — and failed a 120-minute window on a payment made a minute before.
+  assert.strictEqual(parseBeijingTime('1:59', REF), BJ('2026-09-15 13:59'),
+    'a bare clock must resolve to the reading nearest the upload');
+  const v = atRef({ status_bar_time: '1:59' });
+  assert.strictEqual(v.verdict, 'match', 'TC000731 must clear on its own evidence');
+  assert.strictEqual(v.checks.time, true);
+  assert.strictEqual(v.shortBy, 0.5, 'the ¥0.50 gap is still reported, not hidden');
+});
+
+it('a bare clock near midnight belongs to yesterday, not tomorrow', () => {
+  // 23:50 uploaded at 00:05 is fifteen minutes old, not twenty-three hours away.
+  const midnight = BJ('2026-09-16 00:05');
+  assert.strictEqual(parseBeijingTime('11:50', midnight), BJ('2026-09-15 23:50'));
+  assert.strictEqual(parseBeijingTime('23:50', midnight), BJ('2026-09-15 23:50'));
+});
+
+it('a meridiem on the screen is obeyed, in either language', () => {
+  // Each is read a few minutes after it was written, the way a receipt is.
+  const after = (mmss) => BJ('2026-09-15 ' + mmss);
+  assert.strictEqual(parseBeijingTime('下午 6:00', after('18:05')), BJ('2026-09-15 18:00'));
+  assert.strictEqual(parseBeijingTime('上午 6:00', after('06:05')), BJ('2026-09-15 06:00'));
+  assert.strictEqual(parseBeijingTime('6:00 PM', after('18:05')), BJ('2026-09-15 18:00'));
+  assert.strictEqual(parseBeijingTime('晚上 11:30', after('23:35')), BJ('2026-09-15 23:30'));
+  // Noon and midnight are the two the +12 rule gets wrong if written naively.
+  assert.strictEqual(parseBeijingTime('12:30 PM', after('12:35')), BJ('2026-09-15 12:30'));
+  assert.strictEqual(parseBeijingTime('12:30 AM', after('00:35')), BJ('2026-09-15 00:30'));
+});
+
+it('a 24-hour clock is left alone', () => {
+  assert.strictEqual(parseBeijingTime('13:59', REF), BJ('2026-09-15 13:59'));
+  assert.strictEqual(parseBeijingTime('00:30', BJ('2026-09-15 00:35')), BJ('2026-09-15 00:30'));
+});
+
+it('no reading ever lands after the upload', () => {
+  // Money cannot move after the screenshot of it was sent. An evening clock read
+  // at lunchtime is last night's, not tonight's — both fail the window, but only
+  // one of them is a statement the shop can act on.
+  assert.strictEqual(parseBeijingTime('下午 6:00', REF), BJ('2026-09-14 18:00'));
+  assert.strictEqual(parseBeijingTime('12:30 AM', REF), BJ('2026-09-15 00:30'));
+  for (const s of ['1:59', '9:30', '下午 6:00', '23:50', '12:30 AM']) {
+    assert.ok(parseBeijingTime(s, REF) <= REF + 10 * 60000, `${s} resolved into the future`);
+  }
+});
+
+it('a printed transaction time is taken literally, date and all', () => {
+  // The unambiguous shape: nothing here is resolved to anything nearer.
+  assert.strictEqual(parseBeijingTime('2026-09-14 06:00:07', REF), BJ('2026-09-14 06:00'));
+  assert.strictEqual(parseBeijingTime('2026-09-15 下午 6:00', REF), BJ('2026-09-15 18:00'));
+});
+
+it('the window still bites a genuinely old receipt', () => {
+  // Nearest-reading resolution is for clocks that carry no date. A printed
+  // transaction time eight hours back is eight hours back, and still fails.
+  const v = atRef({ paid_at: '2026-09-15 06:00' });
+  assert.strictEqual(v.verdict, 'mismatch');
+  assert.strictEqual(v.checks.time, false);
+  assert.ok(/payment time 480min ago is outside the 120min window/.test(v.reasons.join('；')),
+    'a printed time that failed must still be named as a payment time');
+});
+
+it('a stale phone clock is called a phone clock, not a payment time', () => {
+  // What the card said about TC000731 for as long as it sat there. A status bar
+  // is a device clock; a failure that measured one must not claim otherwise.
+  const v = atRef({ status_bar_time: '9:30' });
+  assert.strictEqual(v.verdict, 'mismatch');
+  assert.ok(/printed no payment time/.test(v.reasons.join('；')),
+    'the reason must say the screenshot carried no payment time');
+  assert.ok(!/^payment time/.test(v.reasons.join('；')),
+    'a phone clock must never be reported as the payment time');
+});
+
+it('an unreadable time is still a hold, not a pass', () => {
+  // Unchanged by this fix, and stated so it stays a decision rather than drift:
+  // no clock at all on the screen means the freshness check cannot clear it.
+  const v = atRef({ status_bar_time: null, paid_at: null });
+  assert.strictEqual(v.checks.time, false);
+  assert.strictEqual(v.verdict, 'mismatch');
+});
+
+it('the proof card never calls the upload stamp a payment time', () => {
+  // TC000731 read "Paid at 2026-09-15 06:00:07" — the UPLOAD stamp, raw UTC,
+  // for a payment made at 13:59 Beijing. The card is the one place staff look
+  // to decide a held order, so the label has to be true.
+  const card = sliceBlock(ORDERS_JS, 'function renderAlipayProof(o)');
+  assert.ok(!/const paidAt = [^\n]*alipay_proof_at/.test(card),
+    'the payment-time row fell back to the upload stamp again');
+  assert.ok(/const uploadedAt = o\.alipay_proof_at \? formatDate\(/.test(card),
+    'the upload stamp must go through formatDate — it is UTC in the database');
+  assert.ok(/cuT\('Uploaded', '上传于'\)/.test(card),
+    'the upload row lost its label');
+});
+
+it('a mismatch can be read again, so a fixed check can reach a stuck order', () => {
+  // A verdict is recorded once, by whatever the checks understood that day. With
+  // the re-read offered only on a failed READ, an order held by a bug in the
+  // checks stayed held after the bug was fixed — which is exactly TC000731.
+  const card = sliceBlock(ORDERS_JS, 'function renderAlipayProof(o)');
+  const mismatch = card.slice(card.indexOf("v === 'mismatch'"), card.indexOf("v === 'error'"));
+  assert.ok(/rerunAlipayOcr\(\$\{o\.id\}/.test(mismatch),
+    'a mismatched proof must offer a re-read');
+  assert.ok(/ap-reasons/.test(mismatch),
+    'the re-read button must not have displaced the reasons');
 });
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
