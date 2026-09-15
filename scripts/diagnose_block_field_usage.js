@@ -60,8 +60,27 @@ try {
 // one buildXForm per block type, so the offered set is readable from source.
 // Reading it from source rather than hardcoding a list means a field added
 // tomorrow shows up here as NEVER USED instead of silently not being counted.
+// WHERE cms.html ACTUALLY IS WHEN THIS RUNS ON THE BOX. The "Read-only prod
+// query" workflow stages the script plus lib/, routes/ and middleware/ into a
+// /tmp directory and sets ROOTS_HOME to it — public/ is NOT copied, so reading
+// it from HOME throws ENOENT and takes the whole report down with it. The
+// installed tree beside the database is the better source anyway: it is the
+// code the office is actually using, not a checkout of a branch.
+function cmsSource() {
+  const candidates = [
+    path.join(HOME, 'public/cms.html'),                       // a normal checkout
+    path.join(path.dirname(DB_PATH), '..', 'public/cms.html'), // the live install
+  ];
+  for (const f of candidates) {
+    try { return { src: fs.readFileSync(f, 'utf8'), from: f }; } catch { /* next */ }
+  }
+  return null;
+}
+
 function offeredByMiniApp() {
-  const src = fs.readFileSync(path.join(HOME, 'public/cms.html'), 'utf8');
+  const found = cmsSource();
+  if (!found) return null;
+  const src = found.src;
   const out = {};
   for (const m of src.matchAll(/case '([a-z_]+)':\s*(build\w+Form)\(/g)) {
     const [, type, fn] = m;
@@ -170,9 +189,18 @@ function report(title, tallies, offered, note) {
   }
 }
 
+const found = cmsSource();
+const offered = found ? offeredByMiniApp() : null;
 report('MINI APP PAGES  (public/cms.html)',
-  miniApp, offeredByMiniApp(),
-  `  read from ${layoutKeys} layout key(s) in storefront_config — published and draft`);
+  miniApp, offered,
+  `  read from ${layoutKeys} layout key(s) in storefront_config — published and draft\n` +
+  (found
+    ? `  offered-field list read from ${found.from}`
+    : `  cms.html NOT FOUND — offered-field list unavailable, so a field the editor
+` +
+      `  offers and nobody has used cannot be distinguished from one that does not
+` +
+      `  exist. USED fields are still counted and are still the useful half.`));
 report('PRODUCT PAGES  (public/product-editor.html)',
   product, null,
   `  read from ${productRows} product(s) carrying description_blocks\n` +
