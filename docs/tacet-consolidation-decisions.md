@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.263
+# Tacet shared-core consolidation — decisions record, v4.264
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-15 · v4.264 — **§129 · THE QR MENU GETS THE MINI APP'S PRODUCT PAGE, AND TWO OF §120's OWN DECISIONS ARE REVERSED TO GET IT — DECIDED BY ASH across four reports in one sitting, each one looking at the live menu on a phone.** The picker restyle (v4.263) closed the gap in how the option sheet LOOKS; these close the gap in what the surface IS. **§120 DECIDED A SHEET AND NOT A PAGE**, showing only what a person needs to decide *"whether they can eat it"* — ingredients, allergens, nutrition — and **DELIBERATELY NOT the marketing paragraph**. Ash, reading a product on the live menu: *"i cant see the description ... only the picture ingridents allerges"*, then *"why its even doing a pop up for a product, i want a complete page, same as the mini app."* **§120 ALSO DECIDED FLATLY NO VARIANTS**, each size its own menu row, on the reasoning that variants cost three lines of a small screen for one drink. Ash, on a screenshot of two identical photographs both captioned Almond Butter at ¥50 and ¥76: *"those are 2 variant on the mini app. under the same page. on the qrcode menu its 2 seperate products. i wsnt it to be like the mini app. choose variant inside the product page."* **BOTH REVERSALS ARE HIS AND BOTH WERE DECIDED ON EVIDENCE THE ORIGINAL DECISION DID NOT HAVE**: the original reasoned about a drink sold in three sizes taking three rows, and what actually shipped was two rows that were visually IDENTICAL — same photo, same name, no size shown anywhere — which does not read as a choice at all but as a duplicate listing. **THE READ CAME FIRST, TWICE, AND BOTH TIMES IT MOVED THE ANSWER.** `diagnose_qr_menu_option_types.js` proved the two-breads report was the DATA (`type='multi'`) and not the tick handler, which turned a bug report into a legibility fix. `diagnose_qr_menu_detail_blocks.js` proved the missing description was PRESENT and dropped — all 7 listed products carry a `hero_intro`, 250 across the catalogue — rather than absent, which is the difference between building a renderer and filing a content task. **THE PAGE IS THE SHEET PROMOTED, NOT A SECOND SYSTEM.** `#dsheet` keeps its element, its open path, its template-clone and its enlarge; it gains full-screen chrome, a hero, the prose blocks and a sticky buy bar. A parallel page would have been a second renderer for one product and the two would have drifted. **AND IT IS NOT A NAVIGATION, WHICH IS THE ONE CONSTRAINT THAT DECIDED THE ARCHITECTURE:** §44 puts the basket in memory and nowhere else — no cookie, no localStorage, stated in the source — so a real page load would empty the basket of every customer who looked at a product. The page is a full-screen view with `history.pushState`, so the URL moves and the phone's Back works while nothing reloads. **THE SIZE IS CHOSEN IN A SHEET FROM THE BUTTON, NOT INLINE ON THE PAGE**, which is the mini app's own arrangement and its own recorded reason: *"not inline — so the choice is unmissable like the size picker."* Collapsing follows the mini app's grid rule exactly — group by `variant_group_id`, representative is the group owner where it is listed, members ordered by the operator's `variant_sort`. **NO CHINESE COMPOSED.**
 
 2026-09-15 · v4.263 — **§120 AMENDED AND BUILT: THE QR MENU'S PICKER IS THE MINI APP'S PICKER, DOWN TO THE CORNER RADIUS — ASKED BY ASH on two screenshots side by side, the live QR sheet and the live mini-app sheet:** *"#1 is what we have now live on qr code store menu. #2 is the mini app live. i want #1 to look like #2, exact same style."* The picker §120 shipped borrowed the QR menu's own furniture — squared rows, a 2px ink rule, a transparent ground, a plain 14px question, a lime button — and read as a different control from the one the same customer meets in the mini app. It now wears `miniapp/pages/product/product.wxss`'s `.op-*` block, converted from rpx at a 390px phone: a 12.5px uppercase letterspaced olive question, 7px-cornered answer rows on a near-white card at 16px, an ink-ground ticked row, and an ink confirm button. **THE HEADING BECAME TWO LINES**, which is the one structural change: the mini app's title is the same four words every time (`Choose your options` / `选择选项`) with the product named under it in olive, where the QR sheet had been putting the product name in the title. **NO CHINESE COMPOSED AND THE VOCABULARY DOCUMENT IS NOT TOUCHED** — the pair is `miniapp/pages/product/product.js`'s own `opTitle`, character for character, which is preference 1 (copy a live pair) and not a composition. **THE REQUIRED MARKER IS NOW AN ASTERISK, REVERSING A §120 DECISION THAT RESTED ON A MISREADING.** The note in the stylesheet said there would be no marker on two grounds: no live English/中文 pair for the word *required*, and the mini app marks nothing either. The second was simply false — `product.wxml` has rendered `is_required ? ' *' : ''` inside `.op-q` for as long as that sheet has existed. The first survives, and is why the marker is a glyph rather than a word: an asterisk needs no pair. It is emitted OUTSIDE `bi()`'s two spans, because it is the same mark in both languages and because the suite reads the question out of `.og-q .l-en`. **Rule 2B is untouched:** Add still blocks and still names the question. **AND THE REDRAW FOUND A LIVE BUG IT HAD TO FIX TO PROCEED: THE TICKED ANSWER HAS BEEN INVISIBLE SINCE §120 SHIPPED.** `.oc.on` asked for `color:var(--paper)`, and `--paper` is not a token this page has ever had — `lib/brand-theme.js`'s `themeToCssVars` emits `--oat`, `--ink`, `--forest`, `--lime`, `--olive` and the two faces, and nothing else. An unresolvable `var()` is invalid at computed-value time, which for an inherited property means `inherit`, so the row took `--ink` from `.oc` and drew ink on ink: **the answer a customer had just chosen was the one answer they could no longer read.** It is `--oat` now, the pair `.ichip.lead` already uses against the same ground. Every existing check still passes — all 37 of `test_shop_menu_render.js`'s browser checks including §120's nine, `test_shop_menu_options.js`'s 20, and `test_shop_menu.js` — and the sheet was driven in a real browser in both languages to confirm the ticked row is legible.
 
@@ -14267,3 +14269,66 @@ No schema and no migration (`oos_policy` is TEXT and unconstrained). No change
 to the Awaiting restock screens or the promotion logic. No split shipment. No
 change to `.gitignore` or CI. The mini-app add-on picker is untouched, and
 deliberately knows nothing of the new flag.
+
+
+## §129 — THE QR MENU GETS THE MINI APP'S PRODUCT PAGE
+
+**2026-09-15 · Ash decided, on four reports from a live phone in one sitting.**
+
+**WHAT CHANGED AND WHY IT IS A REVERSAL, NOT A REFINEMENT.** §120 built the QR
+menu's product surface as a bottom sheet carrying ingredients, allergens and
+nutrition, and recorded in the source that it was *"deliberately NOT the
+marketing paragraph, the claims, the usage tiles or the tagline: a person
+standing at a counter is deciding whether they can eat it."* §120 also recorded
+that the menu reads **options, not variants**, on the reasoning that a drink
+sold in three sizes would otherwise occupy three rows of a small screen. Both
+are now reversed by the same authority that set them.
+
+**THE EVIDENCE THE ORIGINAL DECISION DID NOT HAVE.** The variant reasoning
+imagined three rows that a customer could at least tell apart. What shipped was
+two cards with the SAME photograph and the SAME name — Almond Butter, ¥50 and
+¥76 — with the size rendered nowhere, because the listing query never read
+`variant_label`. That is not a choice presented badly; it is a duplicate
+listing. The description reasoning assumed the counter reader wants only safety
+information; the person who owns the shop, reading his own menu, wanted the
+paragraph he had written.
+
+**WHAT IS BUILT.**
+
+1. **The sheet is promoted to a page**, not replaced by one. `#dsheet` keeps its
+   element, its `open(card)` path, its `<template data-dt>` clone and its
+   photo-enlarge. It gains full-screen layout, a hero image, the prose blocks
+   and a sticky buy bar. A second renderer for one product would have drifted
+   from the first.
+
+2. **It is a view, not a navigation, and §44 is why.** The basket lives in
+   memory and nowhere else — no cookie, no localStorage, stated in the source
+   at the point of declaration. A real page load would empty the basket of
+   every customer who opened a product. The page uses `history.pushState`, so
+   the URL moves and the phone's Back button closes it, and nothing reloads.
+
+3. **Variants collapse by `variant_group_id`**, by the mini app's own grid
+   rule: representative is the group owner where it is listed, otherwise the
+   lowest `variant_sort`; members are ordered by the operator's drag-to-reorder
+   `variant_sort`. **A group collapses only when two or more of its members are
+   actually listed on that shop** — an operator who lists one size has a plain
+   product, not a picker with one answer in it.
+
+4. **The size is chosen in a sheet opened from the button, not inline.** The
+   mini app's product page does the same and records the reason: *"not inline
+   — so the choice is unmissable like the size picker."* The button reads
+   CHOOSE A SIZE rather than a price when a product has siblings, as the app's
+   does.
+
+**WHAT IS NOT CHANGED.** §120's option rules stand untouched: 1A (a sold-out
+paid extra greys out and the product still sells) and 2B (a required question
+blocks and names itself). The option picker remains a sheet, which is what the
+mini app does and what v4.263 restyled it to match. §47's availability rule is
+unchanged. No Chinese is composed.
+
+**THE TWO DATA FAULTS FOUND ALONGSIDE ARE NOT FIXED HERE** and are recorded so
+they are not lost: option group #1346 on Garlic Dill Sour Cream Toast is typed
+`multi` when its question is *"Choose your bread"*, and its Chinese question
+reads 加点配料? (*"Add extras?"*), copied from the Apple Pie Overnight Oats
+question. Both are production data and belong to the operator, not to a
+session.

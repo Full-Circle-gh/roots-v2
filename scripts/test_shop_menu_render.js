@@ -75,6 +75,14 @@ const P_OK = 9971, P_OUT = 9972;
 // answers promises. The extra is never listed on the menu — it is a thing on a
 // shelf, not a thing on sale here — so it needs no listing row, only stock.
 const P_ASK = 9991, A_EXT = 9992;
+/* §129's sizes. TWO SIBLINGS IN ONE GROUP, and the group id IS the first one's
+   product id — that is what makes it the group OWNER, which is the member the
+   collapse picks as the card. The second is listed with a HIGHER price and a
+   LOWER variant_sort, so the checks can tell "the operator's order" apart from
+   "cheapest first" and from "lowest id first"; three orderings that agree on a
+   tidy fixture prove nothing about which one the code actually used. */
+const P_V1 = 9995, P_V2 = 9996;
+const EN_VAR = 'Render fixture jar';
 const EN_ASK = 'Render fixture asker';
 // Filler rows, in a second category, so the rendered page is taller than a
 // phone. See seed() for why a page that does not scroll cannot test a rail.
@@ -111,6 +119,7 @@ function cleanup() {
   ).run(P_ASK);
   db.prepare('DELETE FROM retail_product_options WHERE product_id = ?').run(P_ASK);
   db.prepare('DELETE FROM store_products WHERE id IN (?, ?)').run(P_ASK, A_EXT);
+  db.prepare('DELETE FROM store_products WHERE id IN (?, ?)').run(P_V1, P_V2);
   db.prepare('DELETE FROM store_products WHERE id IN (?, ?)').run(P_OK, P_OUT);
   db.prepare(`DELETE FROM store_products WHERE id IN (${FILLER.map(() => '?').join(',')})`).run(...FILLER);
   db.prepare('DELETE FROM retail_stores WHERE id = ?').run(LOC);
@@ -193,6 +202,17 @@ function seed() {
     VALUES (?, ?, ?, ?, ?, 1, 1, 'Drinks')`);
   askProd.run(P_ASK, EN_ASK, '测试提问饮品', '__R-73', 40);
   askProd.run(A_EXT, 'Render fixture extra', '测试加料', '__R-74', 3);
+  /* §129 — two sizes of one product, which the menu drew as two cards until
+     Ash reported it. Both carry the SAME name, as the real pair did: the size
+     lives in variant_label and nowhere else, which is precisely why two
+     identical-looking cards appeared. The larger one is deliberately second in
+     the operator's order and first by price. */
+  const varProd = db.prepare(`INSERT INTO store_products
+    (id, name_en, name_cn, sku, sell_price, is_active, is_published, top_category,
+     variant_group_id, variant_label, variant_label_cn, variant_sort, description_blocks)
+    VALUES (?, ?, ?, ?, ?, 1, 1, 'Drinks', ?, ?, ?, ?, ?)`);
+  varProd.run(P_V1, EN_VAR, '测试规格罐', '__R-75', 50, P_V1, '250g', '250克', 0, BLOCKS);
+  varProd.run(P_V2, EN_VAR, '测试规格罐', '__R-76', 76, P_V1, '500g', '500克', 1, null);
   db.prepare('INSERT INTO shops (location_id, public_code, is_active) VALUES (?, ?, 1)').run(LOC, CODE);
   const shopId = db.prepare('SELECT id FROM shops WHERE location_id = ?').get(LOC).id;
   const add = db.prepare(`INSERT INTO shop_listings
@@ -202,6 +222,11 @@ function seed() {
   add.run(shopId, P_OUT, 18, 0, 1);   // switched off → the sold-out badge
   add.run(shopId, P_ASK, 40, 1, 2);   // §120 — the drink that asks
   FILLER.forEach((id, i) => add.run(shopId, id, 20 + i, 1, 3 + i));
+  // The small jar sells; the large one is switched OFF, so the picker has a
+  // dead size to grey and the card still has a live one to sell (§120 rule 1A's
+  // shape, applied to sizes).
+  add.run(shopId, P_V1, 50, 1, 20);
+  add.run(shopId, P_V2, 76, 0, 21);
 
   /* ── §120's questions ───────────────────────────────────────────────────
      Shaped so the picker's four behaviours can each be driven from a browser:
@@ -499,6 +524,17 @@ function boxOf(text) {
         await page.waitForTimeout(260);
       }
 
+      /* CLOSING PUTS NOTHING BACK AND TAKES NOTHING AWAY. §129 gave the page a
+         history entry so the phone's Back button closes it, and closing by the
+         × pops that entry — which hands the browser an opportunity to "restore"
+         the offset it recorded for the menu, namely the top. This caught it
+         doing exactly that (400 -> 0) before history.scrollRestoration was set
+         to manual. A customer half way down a long menu must come back to where
+         they were, not to the start of it. */
+      const afterClose = await page.evaluate(() => window.scrollY);
+      assert.strictEqual(afterClose, before,
+        `closing the page moved the menu: ${before} -> ${afterClose}`);
+
       // AND THE SCROLL IS GIVEN BACK. A lock that never releases is a menu
       // nobody can browse after their first tap — worse than the bug it fixes.
       await page.mouse.move(195, 300);
@@ -534,10 +570,30 @@ function boxOf(text) {
       assert.strictEqual(m.chips[0].lead, true, 'the lead ingredient is not marked');
       assert.strictEqual(m.chips[1].lead, false, 'every chip is marked as the lead');
       assert.ok(/92/.test(m.chips[0].t), 'a stated percentage was dropped');
-      // The blocks also hold a marketing paragraph, a claim and a usage tile.
-      // §44's sheet is for deciding whether you can eat something.
-      for (const leak of ['marketing paragraph', 'Neutral enough', 'Spoon it over oats']) {
-        assert.ok(!m.text.includes(leak), `the sheet leaked a block it should not draw: ${leak}`);
+      /* THE PROSE IS DRAWN NOW, AND THIS ASSERTION USED TO SAY THE OPPOSITE.
+         §120 read two blocks and recorded that the surface was "deliberately
+         NOT the marketing paragraph": a person standing at a counter is
+         deciding whether they can eat it, and this loop asserted the paragraph,
+         the claim and the usage tile never reached the screen.
+
+         §129 REVERSED THAT, decided by Ash reading his own live menu — "i cant
+         see the description ... only the picture ingridents allerges" — and a
+         read of the production database settled that the text was PRESENT and
+         being dropped rather than missing: all seven listed products carry a
+         hero_intro, 250 across the catalogue. The old expectation is kept here
+         in words rather than deleted, because the next reader will otherwise
+         find a test that seems never to have had an opinion. */
+      assert.ok(m.text.includes('marketing paragraph'),
+        'the page dropped the office\'s own paragraph, which is what §129 exists to show');
+      /* AND THE STRUCTURED BLOCKS ARE STILL NOT DRAWN, which is not an oversight
+         surviving from §120 but a line §129 drew on purpose. `why` is a list of
+         claims and `how_to_use` is a set of tiles; neither is a paragraph, and a
+         reader that claimed them without reading their shapes would return
+         nothing for them forever while looking like it had them. They come back
+         when they get their own rendering, not before. */
+      for (const notYet of ['Neutral enough', 'Spoon it over oats']) {
+        assert.ok(!m.text.includes(notYet),
+          `a structured block was drawn as if it were a paragraph: ${notYet}`);
       }
       assert.deepStrictEqual(m.rows, ['p', 'c', ''], `nutrition rows classified wrong: ${m.rows}`);
       assert.ok(/\d/.test(m.price), `no price on the sheet: ${JSON.stringify(m.price)}`);
@@ -808,7 +864,12 @@ function boxOf(text) {
       assert.ok(m.total > m.withDt,
         'every card is tappable, so the factless case is not being excluded');
       assert.strictEqual(m.withDt, m.withTpl, 'a card is tappable but carries no sheet body');
-      assert.strictEqual(m.withDt, 2, `only the two real products carry blocks: ${JSON.stringify(m)}`);
+      // THREE, not two, since §129: the two original products with blocks, plus
+      // the sized jar — which carries blocks of its own AND would have to open
+      // regardless, because a collapsed card whose picker could not be reached
+      // is a size nobody can buy. The eight filler rows still carry nothing and
+      // still do not respond, which is what this check is for.
+      assert.strictEqual(m.withDt, 3, `only the products with something to say: ${JSON.stringify(m)}`);
     });
 
     await check('IN ENGLISH, NOTHING CHINESE IS ON SCREEN — anywhere in the sheet', async () => {
@@ -1964,6 +2025,214 @@ function boxOf(text) {
       const labels = saved.map(a => a.map(x => x.label).join(','));
       assert.ok(labels.some(l => /Full sugar/.test(l)) && labels.some(l => /Half sugar/.test(l)),
         `both configurations should be on the order: ${JSON.stringify(labels)}`);
+    });
+
+    /* ── §129 — THE SIZES, AND THE PAGE THEY ARE CHOSEN ON ─────────────────
+       Reported by Ash on a screenshot of the live menu, two identical
+       photographs both captioned Almond Butter at two different prices: *"those
+       are 2 variant on the mini app. under the same page. on the qrcode menu
+       its 2 seperate products."* §120 had decided flatly against variants here,
+       reasoning that a drink in three sizes would cost three rows of a small
+       screen; what shipped was two rows a customer could not tell apart,
+       because the size lived in variant_label and the menu never read it. */
+    /* BOTH STORES, AND THE LANGUAGE ONE IS sessionStorage. The orders this
+       phone has placed live in localStorage; the language choice lives in
+       sessionStorage under its own key. Clearing only the first leaves the 中文
+       chosen by the language checks above still in force, and every assertion
+       below that reads innerText — which respects the CSS language switch —
+       then reads the Chinese half and fails saying the heading was 选择规格.
+       Cost one round. */
+    await page.goto(`http://127.0.0.1:${PORT}/s/${CODE}?lang=en`, { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      try { localStorage.clear(); } catch (e) { /* private mode */ }
+      try { sessionStorage.clear(); } catch (e) { /* private mode */ }
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+
+    const cardsNamed = (name) => page.evaluate((n) => Array.from(document.querySelectorAll('.it'))
+      .filter(c => ((c.querySelector('.t .l-en') || {}).textContent || '') === n).length, name);
+
+    await check('§129 two sizes are ONE card, not two', async () => {
+      assert.strictEqual(await cardsNamed(EN_VAR), 1,
+        'the siblings are still drawn as separate products');
+    });
+
+    await check('§129 the card shows the OWNER, and carries every size with it', async () => {
+      const m = await page.evaluate((n) => {
+        const card = Array.from(document.querySelectorAll('.it'))
+          .find(c => ((c.querySelector('.t .l-en') || {}).textContent || '') === n);
+        if (!card) return null;
+        return {
+          price: (card.querySelector('.pr') || {}).textContent.trim(),
+          offersSizes: !!card.querySelector('.pf .add[data-sizes]'),
+          // The + must NOT be a plain add: tapping it has to ask which size.
+          plainAdd: !!card.querySelector('.pf .add[data-add]'),
+          hidden: Array.from(card.querySelectorAll('.vadds .add')).map(b => ({
+            id: b.getAttribute('data-add'),
+            label: b.getAttribute('data-vl-en'),
+            out: b.getAttribute('data-out') === '1',
+          })),
+          // and nothing in that set is reachable by a thumb
+          vaddsBox: (() => { const v = card.querySelector('.vadds'); if (!v) return null;
+            const r = v.getBoundingClientRect(); return { w: r.width, h: r.height }; })(),
+        };
+      }, EN_VAR);
+      assert.ok(m, 'the collapsed card is not on the page at all');
+      // THE REPRESENTATIVE IS THE GROUP OWNER, not the cheapest and not the
+      // first row: the fixture's owner is also the cheaper one, so the price is
+      // checked against the LABEL ORDER below rather than treated as proof.
+      assert.ok(m.offersSizes, 'the + on a sized card does not offer the sizes');
+      assert.ok(!m.plainAdd, 'the + on a sized card would add one size silently');
+      assert.deepStrictEqual(m.hidden.map(h => h.label), ['250g', '500g'],
+        `the sizes are not in the operator's variant_sort order: ${JSON.stringify(m.hidden)}`);
+      assert.deepStrictEqual(m.hidden.map(h => h.out), [false, true],
+        'the switched-off size is not marked sold out');
+      assert.ok(m.vaddsBox && m.vaddsBox.w === 0 && m.vaddsBox.h === 0,
+        `the sizes' own buttons are on screen: ${JSON.stringify(m.vaddsBox)}`);
+    });
+
+    await check('§129 the + asks WHICH SIZE, and adds nothing until one is chosen', async () => {
+      await page.evaluate((n) => {
+        const card = Array.from(document.querySelectorAll('.it'))
+          .find(c => ((c.querySelector('.t .l-en') || {}).textContent || '') === n);
+        card.querySelector('.pf .add').click();
+      }, EN_VAR);
+      const st = await page.evaluate(() => ({
+        open: !document.getElementById('sheet').hidden,
+        title: document.getElementById('sheetT').innerText.replace(/\s+/g, ' ').trim(),
+        rows: Array.from(document.querySelectorAll('.oc[data-vpick]')).map(b => ({
+          label: (b.querySelector('.oc-l .l-en') || {}).textContent || '',
+          side: (b.querySelector('.oc-d .l-en') || b.querySelector('.oc-d') || {}).textContent || '',
+          disabled: !!b.disabled,
+        })),
+        barHidden: !!(document.getElementById('cbar') || {}).hidden,
+      }));
+      assert.ok(st.open, 'the size picker did not open');
+      assert.match(st.title, /Choose a size/, `the heading was: ${JSON.stringify(st.title)}`);
+      assert.deepStrictEqual(st.rows.map(r => r.label), ['250g', '500g'], JSON.stringify(st.rows));
+      // RULE 1A's SHAPE, APPLIED TO SIZES: the dead one is drawn and says so,
+      // and the live one still sells. Omitting it would leave a customer
+      // wondering whether the big jar exists.
+      assert.ok(!st.rows[0].disabled, 'the live size cannot be chosen');
+      assert.ok(st.rows[1].disabled, 'the switched-off size is still choosable');
+      assert.match(st.rows[1].side, /Sold out/, `a dead size shows a price: ${st.rows[1].side}`);
+      assert.ok(st.rows[0].side.replace(/[^0-9]/g, '').length > 0, 'a live size shows no price');
+      assert.ok(st.barHidden, 'the jar went into the basket before a size was chosen');
+    });
+
+    await check('§129 choosing a size adds THAT size, at THAT price', async () => {
+      await page.evaluate(() => {
+        Array.from(document.querySelectorAll('.oc[data-vpick]'))
+          .find(b => !b.disabled).click();
+      });
+      await page.waitForTimeout(260);
+      const st = await page.evaluate(() => ({
+        sheetHidden: !!document.getElementById('sheet').hidden,
+        count: (document.getElementById('cbarN') || {}).textContent.trim(),
+        total: (document.getElementById('cbarV') || {}).textContent.trim(),
+      }));
+      assert.ok(st.sheetHidden, 'the picker stayed open after a size was chosen');
+      assert.strictEqual(st.count, '1', `basket count: ${st.count}`);
+      // The 250g is 50 and the 500g is 76. Adding the small one and finding 76
+      // would mean the representative's row was added rather than the choice.
+      assert.ok(/50/.test(st.total) && !/76/.test(st.total),
+        `the basket took the wrong size's price: ${st.total}`);
+    });
+
+    await check('§129 the product PAGE opens full-screen and carries the office\'s words', async () => {
+      await page.evaluate((n) => {
+        const card = Array.from(document.querySelectorAll('.it'))
+          .find(c => ((c.querySelector('.t .l-en') || {}).textContent || '') === n);
+        card.click();
+      }, EN_VAR);
+      await page.waitForTimeout(300);
+      const m = await page.evaluate(() => {
+        const p = document.querySelector('#dsheet .sheet-p');
+        const r = p.getBoundingClientRect();
+        const hero = document.querySelector('#dsheetB .dt-ph');
+        const hr = hero ? hero.getBoundingClientRect() : null;
+        const btn = document.getElementById('dAdd');
+        return {
+          open: !document.getElementById('dsheet').hidden,
+          // A PAGE FILLS THE SCREEN. A bottom sheet does not, and that is the
+          // difference Ash asked for — measured, not inferred from a class.
+          fillsHeight: r.height >= window.innerHeight - 1,
+          top: Math.round(r.top),
+          heroFullWidth: hr ? Math.round(hr.width) : 0,
+          viewport: window.innerWidth,
+          scrimShown: getComputedStyle(document.getElementById('dsheetBg')).display !== 'none',
+          label: btn.innerText.replace(/\s+/g, ' ').trim(),
+          priceShown: !document.getElementById('dPr').hidden,
+          text: document.getElementById('dsheetB').innerText,
+        };
+      });
+      assert.ok(m.open, 'the product page did not open');
+      assert.ok(m.fillsHeight, `the page is still a bottom sheet: height vs viewport ${m.top}`);
+      assert.strictEqual(m.top, 0, `the page does not start at the top of the screen: ${m.top}`);
+      assert.strictEqual(m.heroFullWidth, m.viewport,
+        `the hero is not full-bleed: ${m.heroFullWidth} of ${m.viewport}`);
+      assert.ok(!m.scrimShown, 'a page is dimming something behind it');
+      // THE BUTTON SAYS WHICH OF THE TWO THINGS IT DOES, and a sized product
+      // carries no price on it because there are two.
+      assert.match(m.label, /CHOOSE A SIZE/, `the buy button said: ${JSON.stringify(m.label)}`);
+      assert.ok(!m.priceShown, 'a product with two prices is showing one of them');
+      assert.ok(m.text.includes('marketing paragraph'),
+        'the page dropped the office\'s own paragraph');
+    });
+
+    /* SWITCHING LANGUAGE WITH A SHEET OPEN MUST NOT UNLOCK THE MENU. Found
+       while chasing a different failure: the toggle assigned the root's whole
+       class attribute (d.className = 'lang-' + l), which wiped every other
+       class on it — including the .sh-lock that stops the menu scrolling behind
+       an open sheet. A customer who opened their basket and then tapped 中 got
+       a page that scrolled underneath it again, silently.
+
+       BOTH HALVES ARE ASSERTED, because a fix that kept the lock by no longer
+       switching the language would pass a check that only looked at one. */
+    await check('switching language keeps BOTH the language and the scroll lock', async () => {
+      await page.evaluate(() => {
+        try { sessionStorage.clear(); } catch (e) { /* private mode refuses; the reload below then keeps whatever language was set, and the assertions here read classes rather than text */ }
+      });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.evaluate(() => document.getElementById('cbarOpen').click());
+      await page.waitForTimeout(260);
+      const locked = await page.evaluate(() =>
+        document.documentElement.classList.contains('sh-lock'));
+      assert.ok(locked, 'the basket opened without locking the menu behind it');
+
+      await page.evaluate(() => document.querySelector('[data-lang="cn"]').click());
+      const after = await page.evaluate(() => ({
+        cls: document.documentElement.className,
+        locked: document.documentElement.classList.contains('sh-lock'),
+        cn: document.documentElement.classList.contains('lang-cn'),
+      }));
+      assert.ok(after.cn, `the toggle stopped switching language: ${after.cls}`);
+      assert.ok(after.locked,
+        `switching language unlocked the menu behind the open sheet: ${after.cls}`);
+
+      // Put it back the way the checks after this one expect to find it.
+      await page.evaluate(() => document.querySelector('[data-lang="en"]').click());
+      await page.evaluate(() => document.getElementById('sheetX').click());
+      await page.waitForTimeout(260);
+    });
+
+    await check('§129 the phone\'s BACK button closes the page, and keeps the basket', async () => {
+      const before = await page.evaluate(() => (document.getElementById('cbarN') || {}).textContent.trim());
+      await page.goBack();
+      await page.waitForTimeout(320);
+      const st = await page.evaluate(() => ({
+        pageHidden: !!document.getElementById('dsheet').hidden,
+        onMenu: !!document.querySelector('.it'),
+        count: (document.getElementById('cbarN') || {}).textContent.trim(),
+      }));
+      assert.ok(st.pageHidden, 'Back did not close the product page');
+      assert.ok(st.onMenu, 'Back left the menu entirely');
+      /* THE BASKET SURVIVES, WHICH IS THE WHOLE REASON THIS IS pushState AND NOT
+         A NAVIGATION. §44 keeps the basket in memory and nowhere else, so a real
+         page load for every product a customer opened would empty it. If this
+         assertion ever fails, the page has become a navigation. */
+      assert.strictEqual(st.count, before,
+        `the basket was emptied by looking at a product: ${before} -> ${st.count}`);
     });
 
     await check('a shop with no listings still puts its empty state on screen', async () => {

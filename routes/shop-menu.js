@@ -402,7 +402,8 @@ function attachOptions(shop, listings) {
 //               opposite view for its own reasons and the two are meant to
 //               differ; neither is to be changed to match the other.
 function buildMenu(shop) {
-  const listings = tdb().prepare(`
+  // §129 reassigns this once, below, when variant siblings collapse.
+  let listings = tdb().prepare(`
     SELECT sl.id, sl.store_product_id, sl.price, sl.fulfilment_mode, sl.is_available,
            sl.sort_position, p.name_en, p.name_cn, p.top_category, p.subcategory, p.updated_at,
            -- WHAT THE DETAIL SHEET READS, and nothing more. The office's own
@@ -419,6 +420,16 @@ function buildMenu(shop) {
            -- this sheet read both and would have asserted an allergen nobody
            -- declared.
            p.description_blocks, p.nutrition,
+           -- §129 — THE SIZES, WHICH §120 DECIDED NOT TO READ AND ASH REVERSED.
+           -- Variants are independent product rows linked by variant_group_id,
+           -- and an operator lists each one separately. Without variant_label
+           -- the menu drew two cards with the same photograph and the same
+           -- name at two different prices, and the size written nowhere: not a
+           -- choice
+           -- presented badly, a duplicate listing. variant_sort is the
+           -- operator's own drag-to-reorder position in the back office and is
+           -- what orders the picker.
+           p.variant_group_id, p.variant_label, p.variant_label_cn, p.variant_sort,
            -- Does a photo EXIST for this product? Mirrors resolveProductImage,
            -- including its variant-sibling fallback, so the two never disagree.
            -- Asked here because the alternative is an <img> pointing at a route
@@ -452,6 +463,52 @@ function buildMenu(shop) {
   }
 
   attachOptions(shop, listings);
+
+  /* §129 · SIBLINGS COLLAPSE INTO ONE CARD, by the mini app's own grid rule
+     (miniapp/pages/shop/shop.js _collapseVariants): group by variant_group_id,
+     the representative is the group owner where it is listed and otherwise the
+     lowest variant_sort, and the members keep the operator's order.
+
+     ONLY WHEN TWO OR MORE ARE ACTUALLY LISTED ON THIS SHOP. A group whose other
+     sizes the operator did not put on this menu is not a group here — it is a
+     plain product, and giving it a picker with one answer in it would be asking
+     a question that has no second side. This is why the grouping is done over
+     `listings` and never over the catalogue.
+
+     THE MEMBERS ARE THE WHOLE ROWS, not a trimmed summary, because each sibling
+     carries its OWN price, its OWN availability and its OWN options: a 250g jar
+     can be sold out while the 500g is not, and choosing a size has to add THAT
+     product at THAT price and then ask THAT product's questions. An earlier
+     shape carried {id,label,price} and could not have done the last of those.
+
+     SOLD OUT ONLY WHEN EVERY SIZE IS. One size being out is what the picker
+     greys, not what removes the card — the same relation §120's rule 1A has
+     between a dead extra and the drink it belongs to. */
+  const vGroups = new Map();
+  for (const r of listings) {
+    if (!r.variant_group_id) continue;
+    if (!vGroups.has(r.variant_group_id)) vGroups.set(r.variant_group_id, []);
+    vGroups.get(r.variant_group_id).push(r);
+  }
+  const vSeen = new Set();
+  const collapsed = [];
+  for (const r of listings) {
+    const gid = r.variant_group_id;
+    const members = gid ? vGroups.get(gid) : null;
+    if (!members || members.length < 2) { collapsed.push(r); continue; }
+    if (vSeen.has(gid)) continue;
+    vSeen.add(gid);
+    const sorted = members.slice().sort((a, b) =>
+      ((a.variant_sort == null ? 0 : a.variant_sort) - (b.variant_sort == null ? 0 : b.variant_sort)) ||
+      String(a.variant_label || '').localeCompare(String(b.variant_label || '')) ||
+      (a.store_product_id - b.store_product_id));
+    const rep = sorted.find(m => m.store_product_id === gid) || sorted[0];
+    collapsed.push(Object.assign({}, rep, {
+      variants: sorted,
+      sold_out: sorted.every(m => m.sold_out),
+    }));
+  }
+  listings = collapsed;
 
   // TWO LEVELS, because that is what the shop already is. The tenant's own
   // category tree gives the rail its top categories and each section its
@@ -581,7 +638,63 @@ img{display:block;max-width:100%}
 .dt-ph.empty{cursor:default}
 .dt-hd{flex:1;min-width:0}
 .dt-nm{font-family:var(--f-bear);font-size:19px;line-height:1.15;overflow-wrap:anywhere}
-.dt-k{font-family:var(--f-bear);font-size:9.5px;letter-spacing:.17em;
+
+/* ── §129 · IT IS A PAGE, NOT A SHEET ──
+   Ash, on the live menu: *"why its even doing a pop up for a product, i want a
+   complete page, same as the mini app."* §120 chose Layout B — a small square
+   photo with the name beside it — and recorded the weakness it was accepting:
+   "a shrunk photo stops selling, and the enlarge is what buys it back." A page
+   does not have to accept it. The photo goes full width at the top, the name
+   goes large underneath, and the enlarge stays for the customer who wants it.
+
+   THE SAME ELEMENT IS PROMOTED RATHER THAN REPLACED. #dsheet keeps its markup,
+   its open path and its template clone; these rules change what it looks like
+   and nothing about what it is, so one renderer still draws one product. A
+   second full-page renderer beside the sheet would have drifted from it.
+
+   THE SCRIM IS GONE because a page has nothing behind it to dim, and the panel
+   takes the whole height. z-index is BELOW the basket's: the option picker and
+   the size picker are sheets that open OVER this page, and at equal z-index the
+   later element in the document wins — which is this one. */
+#dsheet{align-items:stretch;z-index:38}
+#dsheet .sheet-bg{display:none}
+#dsheet .sheet-p{height:100%;max-height:none;border-top:0}
+#dsheet .sheet-h{padding-top:calc(12px + env(safe-area-inset-top))}
+/* FULL-BLEED, OUT THROUGH THE SCROLLER'S OWN PADDING. .sheet-b pads 4px 14px
+   for text; the hero is the one thing that should touch both edges. */
+#dsheetB .dt-top{display:block}
+#dsheetB .dt-ph{display:block;width:calc(100% + 28px);height:auto;
+  margin:-4px -14px 0;aspect-ratio:1/1;border:0;border-bottom:2px solid var(--ink)}
+#dsheetB .dt-ph.empty{aspect-ratio:auto;height:0;border-bottom:0}
+#dsheetB .dt-hd{padding-top:15px}
+/* THE LINE BOXES ARE WHOLE PIXELS, and that is not fussiness. 26px at 1.08 is
+   28.08px, and 14px at 1.55 is 21.7px; a name that wraps to two lines then
+   puts everything below it on a fractional offset, and the allergen chip's ink
+   lands half a pixel off the middle of its pill. The suite measures that ink
+   in a screenshot and caught it at 0.875px against a 0.75px tolerance — the
+   same check whose own header records six CI failures nobody could explain.
+   Stated in px rather than a ratio so it cannot drift back. */
+#dsheetB .dt-nm{font-size:26px;line-height:28px}
+
+/* The office's own paragraph. No heading over it — it names itself, and a
+   label invented to sit above it would be a composed string for nothing. The
+   kicker, where the office wrote one, wears the same olive kicker .dt-k does. */
+.dt-p{margin-top:15px}
+.dt-pk{font-family:var(--f-bear);font-size:9.5px;letter-spacing:.17em;
+  text-transform:uppercase;color:var(--olive);margin-bottom:5px}
+.dt-pb{font-size:14px;line-height:22px;overflow-wrap:anywhere}
+
+/* The sizes' own add buttons. Never seen, never reachable by a thumb; the size
+   picker clicks them so that §120's single add path stays single. */
+.vadds{display:none}
+/* line-height IS STATED, AND IN PIXELS. Left to its normal value this kicker
+   computes 13.766px, and every box under it — the chip cloud, the allergen card, each
+   chip — then starts on a fraction of a pixel and its text rasterises half
+   blurred. It survived until §129 only because the fraction happened to land
+   somewhere the measurement tolerated; the page changed what is above it and
+   the same chip went 0.875px off the middle of its pill against a 0.75px
+   allowance. Whole numbers here and on .ichip make the whole column integral. */
+.dt-k{font-family:var(--f-bear);font-size:9.5px;line-height:14px;letter-spacing:.17em;
   text-transform:uppercase;color:var(--olive);margin:18px 0 7px}
 
 /* THE INGREDIENT CLOUD — the mini app's ingredients_chips, in this page's ink.
@@ -590,7 +703,7 @@ img{display:block;max-width:100%}
    what the product is mostly made of before reading the list. */
 .ichips{display:flex;flex-wrap:wrap;gap:6px}
 .ichip{border:1.5px solid var(--ink);border-radius:999px;padding:5px 11px;
-  font-size:12.5px;line-height:1.35}
+  font-size:12.5px;line-height:17px}
 .ichip.lead{background:var(--ink);color:var(--oat);border-color:var(--ink)}
 .ichip .pct{font-variant-numeric:tabular-nums;opacity:.7;font-size:11px}
 
@@ -610,9 +723,12 @@ img{display:block;max-width:100%}
    collision this card was always one long chip away from. */
 .arow{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0}
 .arow+.arow{border-top:1px dashed rgba(0,0,0,.14)}
+/* 9.5px at 1.35 is 12.825px, and the chips under it then start on a fraction
+   of a pixel — the last box in this column that was not a whole number. See
+   .dt-k for what that costs and how it was measured. */
 .alab{flex:none;max-width:100%;text-align:center;font-family:var(--f-bear);
   font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--olive);
-  line-height:1.35}
+  line-height:13px}
 .achips{width:100%;min-width:0;display:flex;flex-wrap:wrap;justify-content:center;gap:5px}
 /* Class selectors rather than a child combinator: no angle bracket may appear
    in this stylesheet, and the combinator's own character is one — the rule is
@@ -1050,6 +1166,15 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
    drops that width and shrinks to fit the row beside the price instead of
    filling it, so the tot's own gap actually shows between them. */
 .tot .dadd{width:auto;margin-top:0;padding:11px 20px}
+/* §129: WITH NO PRICE BESIDE IT, THE BUTTON TAKES THE ROW. A product with two
+   sizes carries two prices, so the page shows neither and the button says
+   CHOOSE A SIZE instead — which leaves it sitting alone against the left edge
+   of a full-width bar, reading as a small control somebody forgot to stretch.
+   flex rather than width:100%, because width:100% is the exact thing that
+   caused the price and the button to touch in the first place (see above): it
+   sets the flex-basis to the whole row and the gap collapses. This only ever
+   applies when there is nothing to keep a gap from. */
+.tot.solo .dadd{flex:1}
 .nm-l{display:block;font-size:12px;line-height:1.2;letter-spacing:.04em;
   color:var(--olive);text-transform:uppercase;margin-bottom:6px}
 .nm-i{width:100%;border:2px solid var(--ink);background:rgba(255,255,255,.72);
@@ -1399,7 +1524,15 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var b=e.target.closest?e.target.closest('[data-lang]'):null;if(!b)return;` +
   `var l=b.getAttribute('data-lang');if(l!=='en'&&l!=='cn')return;` +
   `try{sessionStorage.setItem(K,l)}catch(x){/* private mode throws; the toggle still works, it just will not persist */}` +
-  `var d=document.documentElement;d.className='lang-'+l;` +
+  /* classList, NOT className. Assigning the whole class attribute here wiped
+     every OTHER class the root was carrying, and §129 gave it one that matters:
+     .sh-lock, the scroll lock that stops the menu moving behind an open sheet.
+     Switching language with the basket up would have silently unlocked the page
+     underneath it. The lock's own code was careful about this in the other
+     direction — it adds with classList precisely so it cannot clobber .lang-* —
+     and this line was the same hazard pointing the other way. */
+  `var d=document.documentElement;` +
+  `d.classList.remove('lang-en','lang-cn');d.classList.add('lang-'+l);` +
   `d.setAttribute('lang',l==='cn'?'zh-CN':'en');` +
   `var n=document.querySelectorAll('[data-lang]');` +
   `for(var i=0;i<n.length;i++){var on=n[i].getAttribute('data-lang')===l;` +
@@ -1466,9 +1599,38 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var sh=document.getElementById('dsheet');if(!sh)return;` +
   `var body=document.getElementById('dsheetB'),ttl=document.getElementById('dsheetT'),` +
   `pr=document.getElementById('dPr'),add=document.getElementById('dAdd'),` +
+  `addA=document.querySelector('#dAdd .dadd-a'),addS=document.querySelector('#dAdd .dadd-s'),` +
   `big=document.getElementById('big'),bigImg=document.getElementById('bigImg');` +
   `var openPid=null;` +
-  `var close=function(){shClose(sh);openPid=null};` +
+  /* §129 · THE PHONE'S BACK BUTTON CLOSES THE PAGE, and it is pushState that
+     makes that possible without making it a navigation. §44 puts the basket in
+     memory and nowhere else — no cookie, no storage — so a real page load for
+     every product a customer looked at would empty their basket. pushState
+     moves the history entry without reloading anything, so Back is wired to the
+     gesture the customer already has and the basket survives.
+
+     ONE ENTRY AT A TIME, tracked by `pushed`. Closing by the × pops the entry
+     it pushed, so Back afterwards leaves the menu rather than re-opening the
+     page the customer just dismissed; closing by Back has already popped it and
+     must not pop a second time, which would walk them off the menu entirely.
+     A browser that refuses pushState (file://, a locked-down web view) throws,
+     and the page still opens and closes by its own × — the try is not
+     decoration. */
+  /* SCROLL RESTORATION IS TURNED OFF, and skipping this undoes the lock's own
+     promise. The history entry the page pushes belongs to a menu that was
+     scrolled somewhere; going back to it makes the browser restore the offset
+     IT recorded for that entry, which is where the page was when it first
+     loaded — the top. So closing a product would fire the customer back to the
+     start of the menu they were half way down. Measured: the suite's own lock
+     check caught it returning to 0. Setting it manual leaves the offset alone,
+     which is what the whole overflow lock exists to do. */
+  `try{if('scrollRestoration' in history)history.scrollRestoration='manual'}` +
+  `catch(e){/* a web view that will not let this be set keeps its own restoration; the page still opens and closes, it may just put the menu back at the top */}` +
+  `var pushed=false;` +
+  `var close=function(fromPop){shClose(sh);openPid=null;` +
+  `if(pushed){pushed=false;if(!fromPop){try{history.back()}` +
+  `catch(e){/* a web view that refused the pushState above has nothing to go back to; the page is already closed, and the only cost is one dead history entry */}}}};` +
+  `window.addEventListener('popstate',function(){if(!sh.hidden)close(true)},false);` +
   `var open=function(card){` +
   `var t=card.querySelector('template[data-dt]');if(!t)return;` +
   `openPid=card.getAttribute('data-open');` +
@@ -1481,6 +1643,19 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // A sold-out product still opens — a customer may want to know what was in
   // the thing they cannot have — but it cannot be added from here.
   `var out=card.className.indexOf('out')>=0;add.hidden=out;` +
+  /* THE BUTTON SAYS WHAT THE TAP WILL DO, and for a product with sizes that is
+     not "add" and carries no price — there are two. CHOOSE A SIZE, and the
+     price line is emptied rather than showing one of them, which is the mini
+     app's own arrangement (its add-btn takes a `no-price` modifier for exactly
+     this case). Read off the card's own + , so the page and the grid cannot
+     disagree about which kind of product this is. */
+  `var vb=card.querySelector('.add[data-sizes]');` +
+  `if(addA)addA.hidden=!!vb;if(addS)addS.hidden=!vb;` +
+  `pr.hidden=!!vb;` +
+  // classList, not className: the same lesson the language toggle had to learn.
+  `if(add.parentElement)add.parentElement.classList.toggle('solo',!!vb);` +
+  `if(!pushed){try{history.pushState({dt:1},'');pushed=true}` +
+  `catch(e){pushed=false/* file:// and some locked-down web views refuse pushState; the page then opens and closes by its own close button, which is how it worked before Back was wired up */}}` +
   `shOpen(sh);body.scrollTop=0};` +
   `document.addEventListener('click',function(e){` +
   `var z=e.target.closest?e.target.closest('.dt-ph[data-big]'):null;` +
@@ -1502,8 +1677,8 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `document.getElementById('bigX').addEventListener('click',function(e){` +
   `e.stopPropagation();shut()},false);` +
   `big.addEventListener('click',shut,false);` +
-  `document.getElementById('dsheetX').addEventListener('click',close,false);` +
-  `document.getElementById('dsheetBg').addEventListener('click',close,false);` +
+  `document.getElementById('dsheetX').addEventListener('click',function(){close()},false);` +
+  `document.getElementById('dsheetBg').addEventListener('click',function(){close()},false);` +
   `document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;` +
   `if(!big.hidden){shut();return}close()},false);` +
   // Keyboard: a card is role=button and focusable, so it answers Enter/Space.
@@ -1513,9 +1688,23 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `if(card){e.preventDefault();open(card)}},false);` +
   // Adding from the sheet routes through the card's own + , so there is one
   // add path and the basket cannot learn a second way to be wrong.
+  /* Adding from the page routes through the card's own + , so there is one
+     add path and the basket cannot learn a second way to be wrong.
+     §129: THE PAGE STAYS OPEN IF THAT TAP OPENED A SHEET. A product with sizes
+     or questions has not been added yet — the picker is now over this page and
+     closing the page under it would pull the product's own words out from
+     behind the question being asked about them. Asked of the sheet afterwards
+     rather than predicted from the attributes, for the same reason the size
+     rows ask: a second reading of the same flag is a second chance to be wrong.
+     The card's + for a sized product carries data-sizes and no data-add, so it
+     is looked up by either. */
   `add.addEventListener('click',function(){if(!openPid)return;` +
-  `var b=document.querySelector('.add[data-add="'+openPid+'"]');if(b)b.click();` +
-  `close()},false);` +
+  `var card=document.querySelector('.it[data-open=\"'+openPid+'\"]');` +
+  `var b=card?card.querySelector('.pf .add'):null;` +
+  `if(!b)b=document.querySelector('.add[data-add=\"'+openPid+'\"]');` +
+  `if(b)b.click();` +
+  `var os=document.getElementById('sheet');` +
+  `if(!os||os.hidden)close()},false);` +
   `})();` +
   // ── THE BASKET ──────────────────────────────────────────────────────────
   //
@@ -1642,7 +1831,12 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // sets opTitle to '选择选项' / 'Choose your options' when its sheet opens.
   // The vocabulary document is not touched, for the same reason §120's
   // '请选择 ' above did not touch it — nothing here is new.
-  `L_OPTS=${JSON.stringify(bi('Choose your options', '选择选项'))};` +
+  `L_OPTS=${JSON.stringify(bi('Choose your options', '选择选项'))},` +
+  // §129's two, and both are live pairs rather than compositions: the sheet
+  // heading and the button label are miniapp/pages/product/product.js's own
+  // ('选择规格' / 'Choose a size', and '选择规格' / 'CHOOSE A SIZE'), and
+  // public/shop.html carries the identical pair for the same two controls.
+  `L_SIZE=${JSON.stringify(bi('Choose a size', '选择规格'))};` +
   // THE TENANT'S CURRENCY, ALL THREE PARTS OF IT, read off the bar's own data
   // attributes rather than baked in here: this script is built once at module
   // load and the currency is resolved per request (§0 — no currency literal in
@@ -1822,6 +2016,45 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   /* The button carries the running price, so the cost of an extra is read
      where it is chosen rather than discovered in the basket. */
   `oAdd.innerHTML=L_ADD+' \u00b7 '+money(pkPrice())};` +
+  /* §129 · THE SIZE PICKER — a third face of this panel, after the basket and
+     the option picker, and built out of the option picker's own furniture: the
+     same .og block, the same .oc rows, the same ink ground on the one that is
+     chosen. A customer who has answered a question on this menu has already
+     learned how to read it.
+
+     IT IS BUILT FROM THE CARD'S HIDDEN BUTTONS, NOT FROM A SECOND JSON BLOB.
+     Every size already rides on the card as a real .add button carrying its id,
+     its price, whether it asks questions and whether it is sold out — so the
+     picker reads the same source the basket does, and there is nothing to keep
+     in step. A sold-out size is DRAWN, greyed and refused rather than omitted:
+     the same answer §120 rule 1A gives a dead extra, for the same reason.
+
+     NO FOOT. The option picker's foot carries a running price because ticking
+     an extra changes it; choosing a size IS the decision, so the tap acts and
+     a button to confirm it would be a second tap for nothing. */
+  `var openSizes=function(b){var card=b.closest?b.closest('.it'):null;if(!card)return;` +
+  `var btns=card.querySelectorAll('.vadds .add');if(!btns.length)return;` +
+  `var h='<div class=\"og\">';` +
+  `for(var i=0;i<btns.length;i++){var m=btns[i];` +
+  `var out=m.getAttribute('data-out')==='1';` +
+  // A size with no label typed against it still has to be choosable, so it
+  // falls back to the product's own name rather than drawing an empty row, and
+  // a label typed in only one language falls back to the other rather than
+  // leaving that language's span empty. bi() escapes both halves — these
+  // strings are the office's and come back out of an attribute.
+  `var le=m.getAttribute('data-vl-en')||'',lc=m.getAttribute('data-vl-cn')||'';` +
+  `if(!le&&!lc){le=m.getAttribute('data-en')||'';lc=m.getAttribute('data-cn')||''}` +
+  `var lab=bi(le||lc,lc||le);` +
+  `h+='<button type=\"button\" class=\"oc'+(out?' out':'')+'\"'+(out?' disabled':'')+` +
+  `' data-vpick=\"'+m.getAttribute('data-add')+'\">'+` +
+  `'<span class=\"oc-l\">'+lab+'</span>'+` +
+  `'<span class=\"oc-d\">'+(out?L_OUT:money(parseFloat(m.getAttribute('data-p'))||0))+'</span>'+` +
+  `'</button>'}` +
+  `h+='</div>';` +
+  `pk=null;oErr.hidden=true;foot.hidden=true;optFoot.hidden=true;errEl.hidden=true;` +
+  `ttl.innerHTML=L_SIZE;` +
+  `nmEl.innerHTML=bi(b.getAttribute('data-en')||'',b.getAttribute('data-cn')||'');` +
+  `nmEl.hidden=false;body.innerHTML=h;shOpen(sheet);body.scrollTop=0};` +
   `var openPicker=function(b){var pid=parseInt(b.getAttribute('data-add'),10);` +
   `var o=optsFor(pid);` +
   /* NO QUESTIONS AFTER ALL — the flag and the template disagree, which can
@@ -1860,7 +2093,12 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      has — one tap, one unit, the photo flies into the bar — because most of a
      menu has no questions and making every product cost a sheet would be a
      tax on the common case. */
-  `var add=function(b){var pid=parseInt(b.getAttribute('data-add'),10);` +
+  `var add=function(b){` +
+  // §129: THREE OUTCOMES NOW, and the card said which before it was tapped.
+  // A product with sizes offers them; one with questions asks them; the rest
+  // still add in one tap, because most of a menu is the last case.
+  `if(b.getAttribute('data-sizes')==='1'){openSizes(b);return}` +
+  `var pid=parseInt(b.getAttribute('data-add'),10);` +
   `if(b.getAttribute('data-ask')==='1'){openPicker(b);return}` +
   `addLine(pid,parseFloat(b.getAttribute('data-p'))||0,` +
   `b.getAttribute('data-en'),b.getAttribute('data-cn'),[])};` +
@@ -1902,6 +2140,27 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      tapping the one that is already on: that would be an empty required
      question the customer did not ask for, and they have no way to see they
      caused it. */
+  /* §129 · CHOOSING A SIZE. The row carries the sibling's product id and
+     nothing else: the click goes to that sibling's own hidden + , which is the
+     single add path §120 built, so the price, the name and whether this size
+     asks questions all come from the one place that already knows them.
+
+     WHAT HAPPENS NEXT IS NOT DECIDED HERE. That + either drops the line into
+     the basket or opens the option picker over this same panel, and which one
+     is the button's business. So the size face is cleared FIRST and the sheet
+     is closed only if nothing re-opened it — asked of the sheet afterwards
+     rather than predicted from data-ask, because predicting it would be a
+     second reading of the same flag and the two would disagree the first time
+     one moved. */
+  `var vp=e.target.closest?e.target.closest('.oc[data-vpick]'):null;` +
+  `if(vp){if(vp.disabled)return;` +
+  `var vid=vp.getAttribute('data-vpick');` +
+  `var real=document.querySelector('.vadds .add[data-add=\"'+vid+'\"]');` +
+  `if(!real)return;` +
+  `body.innerHTML='';nmEl.hidden=true;nmEl.innerHTML='';` +
+  `shClose(sheet);` +
+  `real.click();` +
+  `return}` +
   `var oc=e.target.closest?e.target.closest('.oc'):null;` +
   `if(oc&&pk){if(oc.disabled)return;` +
   `var gid=parseInt(oc.getAttribute('data-og'),10);` +
@@ -1917,7 +2176,13 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   /* The flight is for a product that went STRAIGHT into the basket. One that
      opens a picker has not been added yet, and a photo sailing into the bar
      before the customer has answered anything would be telling them a lie. */
-  `if(b){var asked=b.getAttribute('data-ask')==='1';add(b);if(!asked)fly(b);return}` +
+  // §129 widens "has not been added yet" to cover a card that offers sizes:
+  // the flight is for a product that went STRAIGHT into the basket, and one
+  // whose sizes are still being chosen is no more added than one whose
+  // questions are. The size row's own tap clicks the sibling's real + , which
+  // comes back through here and flies then, once, from the same card.
+  `if(b){var asked=b.getAttribute('data-ask')==='1'||b.getAttribute('data-sizes')==='1';` +
+  `add(b);if(!asked)fly(b);return}` +
   `var d=e.target.getAttribute&&e.target.getAttribute('data-d');` +
   `if(d){if(cart[d]){cart[d].qty--;if(cart[d].qty<1)delete cart[d]}` +
   `paintBar();paintSheet();closeIfEmpty();return}` +
@@ -2134,9 +2399,18 @@ function detailBody(it, code) {
   const ing = blockRead.ingredientsOf(it.description_blocks);
   const alg = blockRead.allergensOf(it.description_blocks);
   const nut = nutritionRows(it.nutrition);
+  // §129 — the paragraph the office wrote, which §120 read and threw away.
+  const prose = blockRead.proseOf(it.description_blocks);
   const L = blockRead.LABELS;
 
-  if (!ing && !alg && !nut) return '';
+  /* §120's RULE SURVIVES §129, WIDENED TWICE. A product with nothing to say
+     still does not open: a page carrying a photo and a name the card already
+     shows is the same empty panel the sheet refused, and a card that does not
+     respond is better than one that opens onto nothing. What counts as
+     something to say now includes the office's prose — the reason this section
+     exists — and having more than one size, because a collapsed card whose
+     picker could not be reached would be a size nobody can buy. */
+  if (!ing && !alg && !nut && !prose.length && !(it.variants && it.variants.length > 1)) return '';
 
   // WHICH CHIPS CARRY A RESERVED HALF-BOX AT ONE END. A CJK bracket occupies a
   // full character cell wherever it sits, so one at either end of a chip's text
@@ -2195,6 +2469,18 @@ function detailBody(it, code) {
         : `<div class="dt-ph empty"></div>`) +
       `<div class="dt-hd"><div class="dt-nm">${bi(it.name_en, it.name_cn)}</div></div>` +
     `</div>` +
+    /* THE PROSE SITS FIRST, UNDER THE NAME, because that is where the office
+       put it and where the mini app draws it: a customer reads what the thing
+       IS before reading what is in it. The kicker is the office's own short
+       line above the paragraph and is drawn in the same olive kicker the
+       INGREDIENTS heading wears — no new furniture, and no label invented for
+       a paragraph that names itself. */
+    prose.map(b =>
+      `<div class="dt-p">` +
+      ((b.kicker_en || b.kicker_cn)
+        ? `<div class="dt-pk">${bi(b.kicker_en || b.kicker_cn, b.kicker_cn || b.kicker_en)}</div>` : '') +
+      `<div class="dt-pb">${bi(b.body_en || b.body_cn, b.body_cn || b.body_en)}</div>` +
+      `</div>`).join('') +
     (chips ? `<div class="dt-k">${bi(L.ingredients.en, L.ingredients.cn)}</div>` +
              `<div class="ichips">${chips}</div>` : '') +
     algCard +
@@ -2403,21 +2689,52 @@ router.get('/s/:shopCode', (req, res) => {
     // script needs to know which before the tap — `data-ask` is that flag, so
     // the decision is made from the DOM rather than by looking the product up
     // in a map that may not have been built yet.
-    const add = it.sold_out ? '' :
-      `<button type="button" class="add" data-add="${it.store_product_id}"` +
-      ` data-p="${esc(String(Number(it.price) || 0))}"` +
-      (it.options ? ` data-ask="1"` : '') +
-      ` data-en="${esc(it.name_en || '')}" data-cn="${esc(it.name_cn || '')}"` +
-      ` aria-label="${esc(it.name_en || it.name_cn || '')}">+</button>`;
+    /* ONE ADD BUTTON PER PURCHASABLE THING, and for a collapsed card that means
+       one per size, hidden. §120 built a single add path on purpose — the sheet
+       adds by clicking the card's own + , so the basket cannot learn a second
+       way to be wrong — and §129's size picker keeps it: choosing a size clicks
+       that sibling's own button. The alternative was a second addLine caller
+       that would have had to re-derive the price, the name and whether that
+       size asks questions, which is three chances to disagree with the first.
+       A SOLD-OUT SIZE STILL GETS ITS BUTTON, because the picker has to draw it
+       greyed and say so (§120 rule 1A's shape); it is inside a [hidden]
+       wrapper, so no thumb can reach it and the picker refuses it anyway. */
+    const addBtn = (m, extra) =>
+      `<button type="button" class="add" data-add="${m.store_product_id}"` +
+      ` data-p="${esc(String(Number(m.price) || 0))}"` +
+      (m.options ? ` data-ask="1"` : '') +
+      (m.sold_out ? ` data-out="1"` : '') +
+      ` data-en="${esc(m.name_en || '')}" data-cn="${esc(m.name_cn || '')}"` +
+      ` data-vl-en="${esc(m.variant_label || '')}" data-vl-cn="${esc(m.variant_label_cn || m.variant_label || '')}"` +
+      (extra || '') +
+      ` aria-label="${esc(m.name_en || m.name_cn || '')}">+</button>`;
+    const vs = it.variants && it.variants.length > 1 ? it.variants : null;
+    // A collapsed card's visible + does NOT add anything: it offers the sizes,
+    // exactly as the mini app's grid does. data-sizes is the flag, read from
+    // the DOM before the tap for the same reason data-ask is.
+    const add = it.sold_out ? '' : (vs
+      ? `<button type="button" class="add" data-sizes="1"` +
+        ` data-en="${esc(it.name_en || '')}" data-cn="${esc(it.name_cn || '')}"` +
+        ` aria-label="${esc(it.name_en || it.name_cn || '')}">+</button>`
+      : addBtn(it));
+    const vadds = vs
+      ? `<div class="vadds" hidden>${vs.map(m => addBtn(m)).join('')}</div>`
+      : '';
     // THE QUESTIONS RIDE WITH THE CARD, as JSON in a <template>, for the same
     // reason the detail sheet's body does: this page renders in ONE response
     // and a fetch-then-render picker would put a blank sheet in front of a
     // customer who has just tapped. Escaped with the page's own esc(), and read
     // back through .content.textContent, which decodes it — so a product named
     // with an & or a < cannot close the template early.
-    const optJson = it.options
-      ? `<template data-op="${it.store_product_id}">${esc(JSON.stringify(it.options))}</template>`
+    /* ONE TEMPLATE PER PURCHASABLE THING, for the same reason as the buttons.
+       §129: a collapsed card is several products, and each size carries its
+       OWN questions — a 250g jar can ask something the 500g does not. Emitting
+       only the representative's would mean choosing the other size and being
+       asked the representative's questions, or none at all. */
+    const optTpl = (m) => m.options
+      ? `<template data-op="${m.store_product_id}">${esc(JSON.stringify(m.options))}</template>`
       : '';
+    const optJson = vs ? vs.map(optTpl).join('') : optTpl(it);
     // TAPPABLE ONLY WHERE THERE IS SOMETHING TO READ. A product with no
     // ingredients, no nutrition and no allergen flags opens a sheet saying
     // nothing, which is worse than a card that does not respond — so the whole
@@ -2426,6 +2743,7 @@ router.get('/s/:shopCode', (req, res) => {
     const tap = detail
       ? ` data-open="${it.store_product_id}" role="button" tabindex="0"` : '';
     return `<div class="it${it.sold_out ? ' out' : ''}${detail ? ' has-dt' : ''}"${tap}>` +
+      vadds +
       (detail ? `<template data-dt="${it.store_product_id}">${detail}</template>` : '') +
       optJson +
       `<div class="ph">${photo}` +
@@ -2488,7 +2806,19 @@ router.get('/s/:shopCode', (req, res) => {
         `<div class="sheet-b" id="dsheetB"></div>` +
         `<div class="sheet-f">` +
           `<div class="tot"><span id="dPr"></span>` +
-          `<button type="button" class="place dadd" id="dAdd">${bi('ADD TO BASKET', '加入购物车')}</button>` +
+          /* BOTH LABELS SHIP, AND THE SCRIPT SWAPS WHICH IS SHOWN (§129). The
+             button says ADD TO BASKET for a plain product and CHOOSE A SIZE for
+             one with siblings — the mini app's own two states for this control.
+             They are rendered here rather than assigned from a constant for a
+             reason that cost a round: the script's label constants live inside
+             the BASKET's closure, and this button is driven from the product
+             page's, which cannot see them. Rendering the pair server-side also
+             keeps both languages in the DOM, so the page's CSS switch goes on
+             working on a label the script changed. */
+          `<button type="button" class="place dadd" id="dAdd">` +
+            `<span class="dadd-a">${bi('ADD TO BASKET', '加入购物车')}</span>` +
+            `<span class="dadd-s" hidden>${bi('CHOOSE A SIZE', '选择规格')}</span>` +
+          `</button>` +
           `</div>` +
         `</div>` +
       `</div>` +
