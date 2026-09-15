@@ -316,7 +316,7 @@ Page({
       priceFromLabel:    L === 'cn' ? '价格' : '¥',
       oosLabel:          L === 'cn' ? '售罄' : 'SOLD OUT',
       preLabel:          L === 'cn' ? '可预订' : 'PRE-ORDER',
-      ...this._emptyCopy(L, this.data.loadError),
+      ...this._emptyCopy(L, this.data.loadError, this._isNarrowed()),
       dietaryFilters: DIETARY_FILTERS.map(f => ({ ...f, label: L === 'cn' ? f.cn : f.en })),
       badgeFilters:   BADGE_FILTERS.map(b   => ({ ...b, label: L === 'cn' ? b.cn : b.en })),
     });
@@ -459,7 +459,7 @@ Page({
       this.setData({
         loading: false,
         loadError: true,
-        ...this._emptyCopy(this.data.lang, true),
+        ...this._emptyCopy(this.data.lang, true, this._isNarrowed()),
       });
     }
   },
@@ -477,7 +477,7 @@ Page({
   // catalogue lines are this page's own, and the three network lines are the
   // home page's (home.wxml). Nothing is composed, so
   // docs/tacet-delivery-vocabulary.md has nothing to declare.
-  _emptyCopy(L, loadError) {
+  _emptyCopy(L, loadError, narrowed) {
     if (loadError) {
       return {
         emptyTitle: L === 'cn' ? '网络连接失败' : 'No connection',
@@ -485,11 +485,40 @@ Page({
         emptyRetry: L === 'cn' ? '重试' : 'TRY AGAIN',
       };
     }
+    // Narrowed to nothing. The catalogue is fine and the request was fine — she
+    // typed or tapped her way to a set with no members, so neither of the other
+    // two sentences is true. Telling her to publish products is the same lie
+    // the network case was, just reached by a search box.
+    //
+    // No subtitle and no button, deliberately: the copy below is lifted whole
+    // from pages/faq/faq.wxml, which already shows it to customers under the
+    // same .empty-title, and there is no live pair for "clear the filters" to
+    // copy. The control that got her here — the chip, the search box — is still
+    // on screen above the pane, so the way out is visible without minting one.
+    if (narrowed) {
+      return {
+        emptyTitle: L === 'cn' ? '没有匹配。' : 'No matches.',
+        emptySub:   '',
+        emptyRetry: '',
+      };
+    }
     return {
       emptyTitle: L === 'cn' ? '暂无商品' : 'No products yet.',
       emptySub:   L === 'cn' ? '请在管理后台发布商品' : 'Publish products in the Roots admin to see them here.',
       emptyRetry: '',
     };
+  },
+
+  // Is anything narrowing the catalogue right now? Kept beside the filters it
+  // reads so a new filter that forgets this line shows the wrong empty pane —
+  // the failure mode this whole function exists to prevent. The drill state is
+  // NOT here on purpose: it narrows visibleSections, never `sections`, so it
+  // can't produce the empty pane.
+  _isNarrowed() {
+    const d = this.data;
+    return !!(d.query || d.activeDietary || d.activeBadge
+              || Number(d.priceMin) > 0 || Number(d.priceMax) > 0
+              || d.inStockOnly || d.hideOutOfStock);
   },
 
   // Empty-pane retry button. Mirrors the home page's: a customer tapping it
@@ -545,7 +574,7 @@ Page({
       totalCount,
       drillTop, drillLabel, subTabs,
       loadError,
-      ...this._emptyCopy(L, loadError),
+      ...this._emptyCopy(L, loadError, this._isNarrowed()),
       loading: false,
     });
     // Measure offsets for the active mode (sub anchors when drilled, top
