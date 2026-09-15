@@ -683,7 +683,14 @@ function renderAlipayProof(o) {
     footer = `<div class="ap-note"><span class="ap-dot"></span>${cuT('Read & matched automatically', '已自动识别并核对')}</div>`;
   } else if (v === 'mismatch') {
     pill = `<span class="ap-pill mismatch">${AP_ICON.warn}${cuT("Doesn't match — check first", '不一致 · 请先核实')}</span>`;
-    if (reasons.length) footer = `<div class="ap-reasons">${reasons.map(escapeHtml).join('；')}</div>`;
+    // Re-read is offered here too, not just on a failed read. A verdict is
+    // recorded once, by whatever the checks understood on the day — so TC000731,
+    // held by the 12-hour-clock misread fixed alongside this, had no way back:
+    // the fix shipped and the order kept showing the old reason forever. The
+    // endpoint measures freshness from the ORIGINAL upload, re-applies the reuse
+    // guard, and will not flip an order that has already moved past pending.
+    const reasonHtml = reasons.length ? `<div class="ap-reasons">${reasons.map(escapeHtml).join('；')}</div>` : '';
+    footer = `${reasonHtml}<div style="margin-top:12px;"><button class="btn btn-sm" onclick="rerunAlipayOcr(${o.id}, this)">${cuT('Try reading again', '重新识别')}</button></div>`;
   } else if (v === 'error') {
     pill = `<span class="ap-pill unread">${AP_ICON.info}${cuT("Couldn't read it", '无法识别')}</span>`;
     footer = `<div style="margin-top:12px;"><button class="btn btn-sm" onclick="rerunAlipayOcr(${o.id}, this)">${cuT('Try reading again', '重新识别')}</button></div>`;

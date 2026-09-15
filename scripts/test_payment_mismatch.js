@@ -837,6 +837,18 @@ it('the proof card never calls the upload stamp a payment time', () => {
     'the upload row lost its label');
 });
 
+it('a mismatch can be read again, so a fixed check can reach a stuck order', () => {
+  // A verdict is recorded once, by whatever the checks understood that day. With
+  // the re-read offered only on a failed READ, an order held by a bug in the
+  // checks stayed held after the bug was fixed — which is exactly TC000731.
+  const card = sliceBlock(ORDERS_JS, 'function renderAlipayProof(o)');
+  const mismatch = card.slice(card.indexOf("v === 'mismatch'"), card.indexOf("v === 'error'"));
+  assert.ok(/rerunAlipayOcr\(\$\{o\.id\}/.test(mismatch),
+    'a mismatched proof must offer a re-read');
+  assert.ok(/ap-reasons/.test(mismatch),
+    'the re-read button must not have displaced the reasons');
+});
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
 
