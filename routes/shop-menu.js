@@ -2221,10 +2221,35 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      and heard another at the till.
      Caught by the render suite, which adds a paid extra and then measures the
      basket line. */
+  `var pid=pk.pid;` +
   `addLine(pk.pid,pkPrice(),pk.en,pk.cn,pkChosen());` +
-  /* Back to the basket, which is the face that shows what has just been added.
-     The picker's own foot goes with it. */
-  `pkClose();errEl.hidden=true;foot.hidden=false;paintSheet()},false);` +
+  /* BACK TO WHERE THEY WERE, NOT ON TO THE CHECKOUT. §120 flipped this panel to
+     the BASKET face after the questions were answered, on the reasoning that it
+     is "the face that shows what has just been added". Reported by Ash from the
+     live menu, ticking an extra on a salad: *"when i click add to basket it goes
+     to chekcut instead going back to main menu."*
+
+     HE IS RIGHT, AND THE TELL IS THAT NOTHING ELSE ON THIS MENU BEHAVES THAT
+     WAY. Tapping + on a product with no questions adds it and leaves the
+     customer exactly where they were, browsing, with the photo thrown into the
+     bar. §129's size picker does the same. Only the question path ended
+     somewhere else — and where it ended was a form asking for a name and a
+     tender, which tells a customer who has just chosen a sugar level that they
+     have finished shopping. A basket of one is the common case for that screen
+     and it is the wrong one.
+
+     THE CONFIRMATION WAS NEVER MISSING. The bar already carries the count and
+     the running total, and the flight is what says WHICH product went in. Both
+     are the same answer the plain + gives, so this path now gives it too: the
+     photo flies here rather than at the tap that opened the picker, because
+     that is the moment the line actually exists. §120's own note beside the
+     flight said so — "a photo sailing into the bar before the customer has
+     answered anything would be telling them a lie" — and this is the other
+     side of that sentence.
+
+     The basket is one tap away on the bar, where it was before any of this. */
+  `pkClose();errEl.hidden=true;shClose(sheet);` +
+  `var fb=document.querySelector('.add[data-add=\"'+pid+'\"]');if(fb)fly(fb)},false);` +
   /* Closing the panel from the picker must not leave the picker's foot behind
      for the basket to wear. */
   `var close=function(){pkClose();shClose(sheet)};` +

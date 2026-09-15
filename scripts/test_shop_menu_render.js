@@ -1967,8 +1967,35 @@ function boxOf(text) {
       await tick('Soy');                                   // back on
     });
 
-    await check('§120 answering it adds ONE line, named with what was chosen', async () => {
+    /* ANSWERING PUTS THE CUSTOMER BACK ON THE MENU, AND THIS ASSERTION USED TO
+       SAY THE OPPOSITE. §120 flipped the panel to the BASKET face here, on the
+       reasoning that it is "the face that shows what has just been added", and
+       this check asserted exactly that (`basketFoot && !pickerFoot`).
+
+       Reported by Ash from the live menu, ticking an extra on a salad: "when i
+       click add to basket it goes to chekcut instead going back to main menu."
+       Nothing else on this menu behaves that way — a plain + adds and leaves
+       you browsing, and §129's size picker does the same — so the question path
+       was the only one that ended on a form asking for a name and a tender. */
+    await check('§120 answering it adds the line and puts the MENU back, not the checkout', async () => {
       await page.click('#oAdd');
+      await page.waitForTimeout(260);
+      const after = await page.evaluate(() => ({
+        sheetHidden: !!document.getElementById('sheet').hidden,
+        onMenu: !!document.querySelector('.it'),
+        count: (document.getElementById('cbarN') || {}).textContent.trim(),
+        barHidden: !!(document.getElementById('cbar') || {}).hidden,
+      }));
+      assert.ok(after.sheetHidden, 'answering the questions left the panel open on the checkout');
+      assert.ok(after.onMenu, 'the menu is not behind it');
+      // THE CONFIRMATION IS THE BAR, which is the same answer the plain + gives.
+      assert.ok(!after.barHidden, 'nothing on screen says anything was added');
+      assert.strictEqual(after.count, '1', `basket count: ${after.count}`);
+    });
+
+    await check('§120 ...and the line it added is named with what was chosen', async () => {
+      await page.evaluate(() => document.getElementById('cbarOpen').click());
+      await page.waitForTimeout(260);
       const st = await page.evaluate(() => ({
         lines: Array.from(document.querySelectorAll('#sheetB .ln')).map(l => ({
           title: (l.querySelector('.ln-t .l-en') || {}).textContent || '',
@@ -1982,11 +2009,14 @@ function boxOf(text) {
       assert.deepStrictEqual(st.lines[0].opts, ['Sugar level: Full sugar', 'Milk: Soy'],
         `the basket line does not say what was chosen: ${JSON.stringify(st.lines[0].opts)}`);
       assert.match(st.lines[0].price, /42/, `base plus extra: "${st.lines[0].price}"`);
-      assert.ok(st.basketFoot && !st.pickerFoot, 'the sheet stayed on the picker after adding');
+      // And the basket really is wearing its OWN foot, not the picker's.
+      assert.ok(st.basketFoot && !st.pickerFoot, 'the basket is wearing the picker\'s foot');
     });
 
     await check('§120 TWO SUGAR LEVELS OF ONE DRINK ARE TWO LINES', async () => {
+      // The basket was opened by the check above; close it to get at the cards.
       await page.evaluate(() => document.getElementById('sheetX').click());
+      await page.waitForTimeout(260);
       await page.evaluate((name) => {
         const card = Array.from(document.querySelectorAll('.it'))
           .find(c => (c.querySelector('.t .l-en') || {}).textContent === name);
@@ -1995,6 +2025,10 @@ function boxOf(text) {
       await tick('Half sugar');
       await tick('Soy');                                   // drop the default
       await page.click('#oAdd');
+      await page.waitForTimeout(260);
+      // The picker now closes onto the menu, so the basket is opened to read it.
+      await page.evaluate(() => document.getElementById('cbarOpen').click());
+      await page.waitForTimeout(260);
       const lines = await page.evaluate(() => Array.from(document.querySelectorAll('#sheetB .ln'))
         .map(l => Array.from(l.querySelectorAll('.ln-o .l-en')).map(o => o.textContent).join(' / ')));
       assert.strictEqual(lines.length, 2,
