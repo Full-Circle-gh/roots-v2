@@ -2931,7 +2931,12 @@ function detailBody(it, code, listed) {
        retail_products.nutrition is a separate column from the nutrition_facts
        block and most products use one or the other; a product carrying both
        would otherwise print its table twice under the same heading. */
-    (nut && !blocks.some(b => b.type === 'nutrition_facts')
+    /* …and only when the office did not write a nutrition BLOCK at all. The
+       question is put to the unfiltered source (blockRead.hasNutritionBlock),
+       not to `blocks`: a nutrition block the office has switched off for this
+       page is absent from `blocks`, and reading the absence as "no block" is
+       how a hidden table would have printed here anyway, out of the column. */
+    (nut && !blockRead.hasNutritionBlock(it.description_blocks)
       ? nutCard({ en: 'Nutrition', cn: '营养成分' },
                 { en: nut.basis_en || '', cn: nut.basis_cn || '' },
                 nutRows(nut.rows.map(r => ({

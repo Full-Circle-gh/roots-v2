@@ -862,6 +862,25 @@
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
   .pa-block-row.active .pbr-num { background: var(--accent); color: #E8E5DC; }
+  /* A section switched off for the QR menu. The row stays full strength —
+     it is live on the mini app, which is the page being composed — and carries
+     one struck-through eye. Only the eye is dimmed, so the mark reads as a
+     note about one surface rather than as a disabled row. */
+  .pa-block-row .pbr-qr {
+    width: 15px; height: 15px; flex-shrink: 0; color: var(--td-amber, #C9954A);
+  }
+  .pa-block-row .pbr-qr svg { width: 100%; height: 100%; display: block; }
+
+  /* "Shows on" — the per-block channel switch in the inspector. */
+  .pa-ch-row {
+    display: flex; align-items: flex-start; gap: 10px; cursor: pointer;
+    padding: 2px 0;
+  }
+  .pa-ch-row input { margin-top: 2px; flex-shrink: 0; }
+  .pa-ch-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .pa-ch-t { font-size: 13px; color: var(--text-1); }
+  .pa-ch-s { font-size: 11px; line-height: 1.45; }
+  .pa-ch-note { margin: 10px 0 2px; font-size: 11px; line-height: 1.5; }
   /* Drag-to-reorder: a grip cue that fades in on hover, plus a lime drop
      line above/below the target row. Mirrors the mini-app editor. */
   .pa-block-row { cursor: grab; }
@@ -1997,6 +2016,49 @@ function paInspToggle(btn) {
   if (key) paInspectorOpen[key] = nowOpen;
 }
 
+// WHERE A BLOCK SHOWS — appended to every block's inspector.
+//
+// THE MINI APP IS THE PAGE THE OFFICE IS COMPOSING and is never switched off
+// here: it reads description_blocks whole, and a control that could blank a
+// section there would make this editor's own preview a lie. The QR menu
+// (routes/shop-menu.js, the /s/:shopCode page) is the one surface a section can
+// be dropped from, because it is read standing at a till in a few seconds
+// rather than browsed — which is the whole reason this control exists.
+//
+// OFF IS NOT DELETE. The block keeps its words, its order and its colours; one
+// reader skips it. Turning it back on restores the section exactly as written,
+// which is what makes this safe to try on a live product.
+//
+// The web storefront (public/shop.html) is deliberately NOT here. It renders
+// the same stack as the mini app and nobody has asked for it to differ; a third
+// switch nobody uses is a third thing to keep correct.
+function _paChannelEditorHtml(b) {
+  const off = !!(b && b.hide_qr);
+  return `<label class="pa-ch-row">
+      <input data-bkey="hide_qr" type="checkbox" ${off ? '' : 'checked'} onchange="paChannelFlip(this)">
+      <span class="pa-ch-txt">
+        <span class="pa-ch-t" data-no-i18n><span data-lang-block="en">QR menu</span><span data-lang-block="cn">二维码菜单</span></span>
+        <span class="pa-ch-s helper" data-no-i18n><span data-lang-block="en">The page customers scan in the shop.</span><span data-lang-block="cn">顾客在店内扫码打开的页面。</span></span>
+      </span>
+    </label>
+    <p class="helper pa-ch-note" data-no-i18n>
+      <span data-lang-block="en">Off hides this section on the QR menu only. The mini app is unchanged, and nothing is deleted — it is still there when you turn it back on.</span>
+      <span data-lang-block="cn">关闭后仅在二维码菜单隐藏,小程序不变。内容不会删除,重新开启后仍在。</span>
+    </p>`;
+}
+// The checkbox reads "shows on the QR menu"; the stored flag is its
+// opposite ("hidden there"). paBlocksSyncFromDOM copies a checkbox's own
+// checked state into the block, so the inversion is done here, on change,
+// before any sync can read it.
+function paChannelFlip(el) {
+  const mount = document.getElementById('pa-block-editor-mount'); if (!mount) return;
+  const card = mount.querySelector('[data-blockid]'); if (!card) return;
+  const b = (window._paBlocks || []).find(x => x.id === card.getAttribute('data-blockid'));
+  if (!b) return;
+  if (el.checked) delete b.hide_qr; else b.hide_qr = true;
+  paRenderTabs();
+}
+
 // Colour-picker section appended to every applicable block's inspector.
 function _paColorEditorHtml(b) {
   // big_stat / stat_callout don't use the bg/fg/accent slots — they carry a
@@ -2669,11 +2731,21 @@ function peMount(p) {
   window._paBlocks = Array.isArray(p.description_blocks)
     ? p.description_blocks.map(b => ({ ...b, id: b.id || paBlocksGenId() }))
     : [];
-  // Nutrition lives in its own products.nutrition column, not in
-  // description_blocks. Synthesise it back into the block list so it edits
-  // like any other section; paBlocksCollect/paCollectNutrition split it back
-  // out to the column on save.
-  if (p.nutrition && typeof p.nutrition === 'object' &&
+  // NUTRITION IS A BLOCK LIKE ANY OTHER — it just has a second home.
+  //
+  // It is saved INTO description_blocks (paBlocksCollect keeps it, as the AI
+  // compose path in retail-admin/09-products.js always has) AND mirrored to the
+  // products.nutrition column, because a mini app build that has not been
+  // republished still draws its separate panel from that column. All three
+  // surfaces prefer the block and suppress the column's panel when one exists,
+  // so the mirror can never print the table twice.
+  //
+  // The line below is what makes it a normal block: the column is synthesised
+  // back into the stack ONLY when the stack has no nutrition block of its own.
+  // Without that guard a product saved by this editor would come back carrying
+  // two nutrition sections, one from each home.
+  if (!window._paBlocks.some(b => b && b.type === 'nutrition_facts') &&
+      p.nutrition && typeof p.nutrition === 'object' &&
       (p.nutrition.basis_en || p.nutrition.basis_cn || (p.nutrition.rows || []).length)) {
     window._paBlocks.push({
       id: paBlocksGenId(),
@@ -3313,10 +3385,18 @@ function paArrRemove(blockId, key, idx) {
 function paBlocksCollect() {
   paBlocksSyncFromDOM();
   const out = (window._paBlocks || []).filter(b => {
-    // Nutrition is persisted to its own column (paCollectNutrition), never
-    // into description_blocks — so the live mini-app never sees an unknown
-    // block type it can't render.
-    if (b.type === 'nutrition_facts') return false;
+    // hide_qr is a per-block channel flag (see paChannelEditorHtml). It is only
+    // ever stored when it is ON: a false written onto every block the office
+    // happened to open would put a field nobody set into every product's JSON,
+    // and an absent flag already means "shows everywhere".
+    if (!b.hide_qr) delete b.hide_qr; else b.hide_qr = true;
+    // Nutrition STAYS in description_blocks — it is a block like any other and
+    // all three surfaces render the type. paCollectNutrition additionally
+    // mirrors it to the products.nutrition column for mini app builds that
+    // predate the block; see peMount for why that cannot double-print.
+    if (b.type === 'nutrition_facts')
+                                     return (b.rows || []).some(r => r.label_en || r.label_cn || r.value)
+                                            || !!(b.basis_en || b.basis_cn);
     if (b.type === 'hero_intro')     return !!(b.body_en || b.body_cn || b.highlight_en || b.highlight_cn || b.kicker_en || b.kicker_cn);
     if (b.type === 'stat_callout' || b.type === 'big_stat')
                                      return !!(b.stat || b.what_en || b.what_cn || b.claim_en || b.claim_cn);
@@ -3429,12 +3509,17 @@ function paRenderTabs() {
     const tName  = (PA_TYPE_NAME[b.type] || { en: b.type, cn: '' });
     const sub    = _paBlockSubLabel(b);
     const active = b.id === PA_SELECTED_BLOCK_ID ? ' active' : '';
-    return `<div class="pa-block-row${active}" draggable="true" data-blockid="${b.id}" data-idx="${i}" onclick="paBlocksSelect('${b.id}')" title="${escapeAttr(tName.en + (tName.cn ? ' · ' + tName.cn : ''))}">
+    // A section switched off for the QR menu is marked in the stack, not only
+    // in its own inspector — otherwise "which of these nine does the till page
+    // show?" costs nine clicks to answer.
+    const offQr  = b.hide_qr ? ' pbr-offqr' : '';
+    return `<div class="pa-block-row${active}${offQr}" draggable="true" data-blockid="${b.id}" data-idx="${i}" onclick="paBlocksSelect('${b.id}')" title="${escapeAttr(tName.en + (tName.cn ? ' · ' + tName.cn : ''))}">
       <div class="pbr-icon">${icon}</div>
       <div class="pbr-info">
         <div class="pbr-name" data-no-i18n><span data-lang-block="en">${escapeHtml(tName.en)}</span><span data-lang-block="cn">${escapeHtml(tName.cn || tName.en)}</span></div>
         ${sub ? `<div class="pbr-sub">${escapeHtml(sub)}</div>` : ''}
       </div>
+      ${b.hide_qr ? `<div class="pbr-qr" title="Hidden on the QR menu · 二维码菜单已隐藏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg></div>` : ''}
       <div class="pbr-grip" title="Drag to reorder · 拖动排序">⋮⋮</div>
       <div class="pbr-num">${i + 1}</div>
     </div>`;
@@ -3871,7 +3956,8 @@ function paRenderSelectedEditor() {
   const colorInner = _paColorEditorHtml(b);
   const body =
     paInspSec(b.type + ':content', paBiTitle('Content', '内容'), _paBlockEditorBody(b), { open: true })
-    + (colorInner ? paInspSec(b.type + ':colours', paBiTitle('Colours', '颜色'), colorInner) : '');
+    + (colorInner ? paInspSec(b.type + ':colours', paBiTitle('Colours', '颜色'), colorInner) : '')
+    + paInspSec(b.type + ':shows', paBiTitle('Where to show', '显示位置'), _paChannelEditorHtml(b));
   mount.innerHTML = `
     <div class="pa-inspector-head" data-blockid="${b.id}">
       <div class="pa-inspector-head-left">
