@@ -2055,6 +2055,20 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_deleted_records_when ON deleted_records(restored_at, deleted_at);
 
+  -- The high-water mark of each purchase-order number series (PO-, RPO-).
+  --
+  -- A number, once issued, is never issued again. MAX over the live rows is not
+  -- enough on its own: delete the highest order and the live max falls back, so
+  -- the next order reissues a number a DELETED-BUT-RESTORABLE order still holds
+  -- (lib/recycle.js keeps it sixty days and restores it under its original
+  -- number, and there is no unique index on po_number to catch the clash).
+  -- This row is written every time a number goes out and is never lowered, so
+  -- the series also survives the recycle copy being swept. See lib/po-number.js.
+  CREATE TABLE IF NOT EXISTS po_number_highwater (
+    series TEXT PRIMARY KEY,   -- 'PO-' or 'RPO-'
+    last_n INTEGER NOT NULL    -- highest number ever issued in that series
+  );
+
   -- A named set of filters, pinned to the screen it belongs to (audit E-08).
   --
   -- "Unpaid orders from the Web channel at the Tianhe shop" had to be rebuilt

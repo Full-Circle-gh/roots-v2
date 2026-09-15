@@ -46,6 +46,7 @@ const money = require('../lib/money');
 const { storeCategory } = require('../lib/category-text');
 // What was deleted, kept so it can be put back (audit E-07).
 const recycle = require('../lib/recycle');
+const { nextRetailPONumber: nextRetailPO } = require('../lib/po-number');
 const { logActivity } = require('../middleware/auth');
 const { requireRetailAdmin } = require('./retail');
 // Materials Phase 1b (§28 addendum item 2): a retail PO line can carry
@@ -90,19 +91,22 @@ const router = express.Router();
 const PO_STATUSES = new Set(['Requested', 'Ordered', 'Delivered', 'Cancelled']);
 const VALID_INVOICE = new Set(['not_received', 'received', 'no_invoice']);
 
-// Next RPO number from the highest existing suffix (not a row count, so a
-// deleted PO can never cause a UNIQUE collision on po_number).
+// The next RPO number.
 // `handle` is optional and exists for ONE caller: §114's claim-raised order,
 // which numbers its PO inside an open transaction and must do it on that
 // transaction's handle. Everything in this file calls it with nothing and gets
 // tdb(), exactly as before. Taking the handle rather than letting the claim
 // path carry its own copy of this query is the point — two places deciding what
 // the next RPO number is would eventually disagree about it.
+//
+// THE NUMBER ITSELF IS NOW lib/po-number.js, SHARED WITH THE KITCHEN SERIES.
+// It used to be MAX over the live RPO- rows, which reissues the number of a
+// deleted draft — and a deleted draft is restorable for sixty days, under its
+// original number, so the reissue ends as two orders sharing one number. Read
+// that file's header before changing what a number is; this stays here as the
+// name the rest of the file already calls.
 function nextRetailPONumber(handle) {
-  const row = (handle || tdb()).prepare(
-    "SELECT MAX(CAST(SUBSTR(po_number, 5) AS INTEGER)) AS n FROM purchase_orders WHERE po_number LIKE 'RPO-%'"
-  ).get();
-  return 'RPO-' + String((row?.n || 0) + 1).padStart(4, '0');
+  return nextRetailPO(handle || tdb());
 }
 
 function getRetailPO(id) {
