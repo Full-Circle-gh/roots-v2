@@ -1,0 +1,23 @@
+{
+  "name": "Tacet Back office · 后台",
+  "short_name": "Back office",
+  "id": "/retail-admin",
+  "description": "The full store back office — orders, products, customers and the day's numbers.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "background_color": "#FBF9F4",
+  "theme_color": "#E8E5DC",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["business", "productivity"],
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "/tacet-icon-192.png",          "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/tacet-icon-512.png",          "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/tacet-icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/tacet-icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "/tacet-icon.svg",              "sizes": "any",     "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

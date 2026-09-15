@@ -1052,6 +1052,42 @@ app.get('/stock', (req, res) => {
 app.get('/till-manifest.webmanifest', (req, res) => {
   res.type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'till-manifest.webmanifest'));
 });
+/* The BACK OFFICE's own install manifest — the desktop admin as an app.
+   ------------------------------------------------------------------------
+   Reported from a shop tablet: the installed "Tacet" app showed the phone
+   companion, letterboxed into a portrait column on a landscape screen, and
+   there was no way to make it show the desktop back office. There could not
+   be: that app's manifest is m-manifest.webmanifest, whose start_url is '/m'
+   and whose orientation is 'portrait'. '/m' IS Tacet Mobile — no device
+   detection is involved — so no server change could ever have re-pointed it.
+   retail-admin.html linked no manifest at all, so the back office was not
+   installable by anything. This is the app that was missing.
+
+   START_URL IS '/', NOT '/retail-admin', and that is not a shortcut. A PWA's
+   start_url has to be reachable WITHOUT a redirect (the same note sits above
+   /m-manifest.webmanifest), and app.get('/retail-admin') above is a pure
+   302 forwarder to this host's root — the back office's only non-redirecting
+   address is '/' on STORE_HOST, which is the one host it is ever served from.
+
+   ID IS '/retail-admin' — an identity string, which never has to be a
+   navigable URL. It cannot be left to default, because the default is the
+   start_url and public/manifest.webmanifest ('Roots Kitchen Management',
+   §78-retired but still installed on staff devices) already answers to '/'.
+   Two apps sharing an id is one app overwriting the other on a home screen.
+
+   NO 'orientation' KEY, deliberately. That is the whole difference from the
+   phone app: portrait there is right for a phone and is exactly what put blue
+   bars down both sides of a tablet. Omitted means any, so the window is
+   whatever shape the screen is.
+
+   SCOPE IS '/' like Tacet Mobile's, not the tight '/till' the counter uses.
+   The back office signs out to /backend/login and opens /backend/* pages, and
+   a scope that stopped at the shell would drop the operator into a browser tab
+   mid-session — an installed app that leaks back into a browser is worse than
+   no installed app. */
+app.get('/admin-manifest.webmanifest', (req, res) => {
+  res.type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'admin-manifest.webmanifest'));
+});
 app.get('/stock-manifest.webmanifest', (req, res) => {
   res.type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'stock-manifest.webmanifest'));
 });

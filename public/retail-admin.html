@@ -10,6 +10,18 @@
      non-branded (Tacet) tenant keeps its icon rather than a blank one. -->
 <link rel="icon" id="favlink" href="/tacet-favicon.svg">
 <link rel="apple-touch-icon" id="favlink-apple" href="/favicon-32.png">
+<!-- INSTALLABLE AS AN APP. The manifest names it "Back office" rather than
+     "Tacet" so it is not a second identical icon beside the phone companion,
+     and it sets NO orientation — the portrait lock in m-manifest is right for a
+     phone and is what letterboxed a landscape tablet. See the route comment on
+     /admin-manifest.webmanifest for why start_url is '/' and id is not.
+     Tenant branding does not reach this, on the same settled rule as the tab
+     title and favicon: the admin's identity is always Tacet (applyBrand, and
+     the 2026-07-16 note beside it). -->
+<link rel="manifest" href="/admin-manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Back office">
 <script>
   // Apply theme BEFORE first paint to prevent flash. Reads saved choice
   // first; otherwise honours the OS preference. Toggle logic lives at the
@@ -1197,6 +1209,17 @@
         <span class="acct-val" id="acctThemeVal"></span>
       </button>
       <!-- New-order sound moved to Profile → Notifications (2026-07-14). -->
+      <!-- Install app — the back office as its own window, no tabs and no
+           address bar. HIDDEN until the browser fires beforeinstallprompt, and
+           gone once it is installed: a row that cannot do anything is worse
+           than no row. Lives here because this menu is already where the
+           device-level choices are (Appearance, and Profile → Notifications'
+           "Push to this device"), rather than in a banner across a screen
+           somebody works in all day. -->
+      <button class="acct-item acct-gap" id="acctInstall" type="button" role="menuitem" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+        <span>Install app · 安装应用</span>
+      </button>
       <button class="acct-item acct-danger acct-gap" id="acctSignout" type="button" role="menuitem">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         <span>Sign out · 退出登录</span>
@@ -13899,6 +13922,7 @@
 <script src="/assets/retail-admin/26-print.js"></script>
 <script src="/assets/retail-admin/28-shops.js"></script>
 <script src="/assets/retail-admin/29-channel-sync.js"></script>
+<script src="/assets/retail-admin/30-install.js"></script>
 <script src="/assets/retail-admin/27-keyboard.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
