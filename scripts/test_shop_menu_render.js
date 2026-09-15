@@ -1083,6 +1083,10 @@ function boxOf(text) {
         statN: (document.querySelector('.pb-stat-n') || {}).textContent,
         statDots: document.querySelectorAll('.pb-stat-d').length,
         heads: Array.from(document.querySelectorAll('.pb-h-l .l-en')).map(e => e.textContent),
+        whyHead: ((document.querySelector('.pb-why-h .l-en') || {}).textContent || '').trim(),
+        tags: document.querySelectorAll('.pb-h-r').length,
+        whySize:  parseFloat(getComputedStyle(document.querySelector('.pb-why-h')).fontSize),
+        headSize: parseFloat(getComputedStyle(document.querySelector('.pb-h-l')).fontSize),
       }));
       assert.deepStrictEqual(m.specK, ['Product type', 'Net weight', 'Origin'], JSON.stringify(m.specK));
       assert.deepStrictEqual(m.specV, ['Cultured', '250 g', 'Guangzhou'], JSON.stringify(m.specV));
@@ -1092,11 +1096,34 @@ function boxOf(text) {
       assert.strictEqual(m.whyC.length, 2, 'a claim was dropped');
       assert.strictEqual(m.statN.trim(), '92', `the stat figure: ${m.statN}`);
       assert.strictEqual(m.statDots, 2, 'the slab lost its anchoring dots');
-      // The headings are the mini app's own words, not invented here.
-      assert.ok(m.heads.includes('Why people choose it'), JSON.stringify(m.heads));
+      /* The headings are the mini app's own words, not invented here — AND each
+         one sits at the WEIGHT the component gives it, which is the half this
+         check used to leave open. product-blocks.wxml heads .pb-why with a
+         22rpx kicker (.pb-why-head-l) and heads every other block, the
+         ingredient cloud included, with the 52rpx .pb-section-h3. This page had
+         those two exactly swapped — the why block wore the big shared heading
+         and the ingredients wore a small .dt-k kicker — so asserting only that
+         the words are present passed while the page read nothing like the mini
+         app. Both halves are pinned now. */
+      assert.strictEqual(m.whyHead, 'Why people choose it',
+        `the why block's heading is not the component's kicker: ${m.whyHead}`);
+      assert.ok(!m.heads.includes('Why people choose it'),
+        `the why block is wearing the big headline again: ${JSON.stringify(m.heads)}`);
+      assert.ok(m.heads.includes('Ingredients'), JSON.stringify(m.heads));
       assert.ok(m.heads.includes('How to use'), JSON.stringify(m.heads));
       assert.ok(m.heads.includes('Storage'), JSON.stringify(m.heads));
       assert.ok(m.heads.includes('Questions'), JSON.stringify(m.heads));
+      /* AND NO HEADING CARRIES A COUNT. product-blocks.wxss styles
+         .pb-section-tag and product-blocks.wxml never renders it, so the
+         "3 moments" / "6 steps" line beside three of these headings was on this
+         page and on no other surface. */
+      assert.strictEqual(m.tags, 0,
+        'a heading is carrying a count the mini app does not draw');
+      // 22rpx and 52rpx at this page's 390px phone: .52 x 22 = 11.4, x 52 = 27.
+      assert.ok(Math.abs(m.whySize - 11.4) < 0.6,
+        `the why kicker is ${m.whySize}px, want 11.4 (22rpx x .52)`);
+      assert.ok(Math.abs(m.headSize - 27) < 0.6,
+        `a block heading is ${m.headSize}px, want 27 (52rpx x .52)`);
     });
 
     await check('§132 A RASHER OF BACON DOES NOT REACH A PLANT-BASED MENU', async () => {
@@ -2596,6 +2623,9 @@ function boxOf(text) {
           k: r.className.replace('nr', '').trim(),
         })),
         band: document.querySelectorAll('#dsheetB .pb-band img').length,
+        ttl:  parseFloat(getComputedStyle(document.querySelector('#dsheetB .nut-ttl')).fontSize),
+        rowL: parseFloat(getComputedStyle(document.querySelector('#dsheetB .nr-l')).fontSize),
+        rowR: parseFloat(getComputedStyle(document.querySelector('#dsheetB .nr-r')).fontSize),
       }));
       // ONE card. A product carrying both a block and a column would otherwise
       // print its table twice under the same heading.
@@ -2603,6 +2633,20 @@ function boxOf(text) {
       assert.deepStrictEqual(m.rows.map(r => r.l), ['Energy', 'Saturated'], JSON.stringify(m.rows));
       // And the block's rows classify the same way the column's do.
       assert.deepStrictEqual(m.rows.map(r => r.k), ['p', 'c'], JSON.stringify(m.rows));
+      /* THIS CARD CARRIES THE APP'S --font-scale AND EVERY BLOCK ABOVE IT DOES
+         NOT, which is the one thing about it that is easy to lose and was lost.
+         miniapp/pages/product/product.wxss writes these sizes as
+         calc(Nrpx * var(--font-scale)) — app.wxss sets that scale to 1.15 — so
+         the conversion is rpx x 1.15 x .52 here and rpx x .52 everywhere else
+         on this page. The first pass applied .52 alone and the whole nutrition
+         panel stood 13% smaller than the same panel in the mini app while the
+         blocks above it matched. 40rpx -> 23.9px, 27rpx -> 16.1px. */
+      assert.ok(Math.abs(m.ttl - 23.9) < 0.6,
+        `nutrition title is ${m.ttl}px, want 23.9 (40rpx x 1.15 x .52)`);
+      assert.ok(Math.abs(m.rowL - 16.1) < 0.6,
+        `nutrition row label is ${m.rowL}px, want 16.1 (27rpx x 1.15 x .52)`);
+      assert.ok(Math.abs(m.rowR - 23.9) < 0.6,
+        `nutrition row value is ${m.rowR}px, want 23.9 (40rpx x 1.15 x .52)`);
       assert.strictEqual(m.band, 1, 'the image band did not render');
     });
 
