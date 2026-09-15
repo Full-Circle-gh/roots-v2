@@ -151,8 +151,17 @@ function seed() {
       { k_en: 'Net weight', k_cn: '净含量', v_en: '250 g', v_cn: '250 克' },
       { k_en: 'Origin', k_cn: '产地', v_en: 'Guangzhou', v_cn: '广州' },
     ] },
+    /* THE BODY HAS A BLANK LINE IN IT AND A HIGHLIGHT PHRASE INSIDE IT. Both
+       are what the office actually writes and both were being dropped: the
+       blank line because .dt-pb had no white-space:pre-line, and the phrase
+       because the reader treated `highlight` only as a kicker fallback and
+       never marked it inline. The Chinese body deliberately does NOT contain
+       its phrase, so the per-language fork is exercised in both directions. */
     { type: 'hero_intro', kicker_en: 'The story', kicker_cn: '故事',
-      body_en: 'A marketing paragraph nobody at a counter wants.' },
+      body_en: 'A marketing paragraph, straightforward and satisfying, nobody at a counter wants.\n\nA second paragraph after a blank line.',
+      body_cn: '一段没人想读的文案。\n\n空行之后的第二段。',
+      highlight_en: 'straightforward and satisfying',
+      highlight_cn: '这句话不在正文里' },
     /* THE EDITOR'S OWN SHAPE, rows[{claim_en,claim_cn}]. The earlier fixture
        said `claims:`, which is neither of the two shapes the office actually
        saves — so it was dropped by the reader and the check that asserted it
@@ -1019,6 +1028,49 @@ function boxOf(text) {
         ['spec', 'hero', 'why', 'stat', 'ingredients', 'allergens', 'how', 'storage',
          'quote', 'recipe', 'pairings', 'faq', 'notes'],
         `the page re-ordered the office's blocks: ${JSON.stringify(order)}`);
+    });
+
+    await check('\u00a7132 the highlight phrase is MARKED INLINE, not turned into a kicker', async () => {
+      /* Reported by Ash against the editor's own preview, which draws the lime
+         slab: *"it doesnt show the yellw mark on the live version."* The
+         component's rule is a FORK, not a fallback \u2014 a phrase found in the body
+         is marked inline and draws no kicker; only a phrase that is NOT in the
+         body becomes the kicker. The first build kept the fallback and dropped
+         the marking, so the slab appeared on no product at all. */
+      const m = await page.evaluate(() => {
+        const en = document.querySelector('.dt-pb .l-en');
+        const cn = document.querySelector('.dt-pb .l-cn');
+        const hl = en ? en.querySelector('.pb-hl') : null;
+        const cs = hl ? getComputedStyle(hl) : null;
+        return {
+          hlText: hl ? hl.textContent : null,
+          hlBg: cs ? cs.backgroundColor : null,
+          hlBox: hl ? (() => { const r = hl.getBoundingClientRect(); return r.width > 0 && r.height > 0; })() : false,
+          // The Chinese phrase is NOT in the Chinese body, so that half must
+          // carry no slab at all — the fork is resolved per language.
+          cnHl: cn ? cn.querySelectorAll('.pb-hl').length : -1,
+          kicker: (document.querySelector('.dt-pk .l-en') || {}).textContent || '',
+          preLine: (() => { const b = document.querySelector('.dt-pb');
+            return b ? getComputedStyle(b).whiteSpace : ''; })(),
+          enText: en ? en.textContent : '',
+        };
+      });
+      assert.strictEqual(m.hlText, 'straightforward and satisfying',
+        `the phrase was not marked inline: ${JSON.stringify(m.hlText)}`);
+      assert.ok(m.hlBox, 'the slab is in the markup but has no box on screen');
+      // Drawn on the brand's lime, not left as plain text.
+      assert.ok(/^rgba?\(/.test(m.hlBg) && m.hlBg !== 'rgba(0, 0, 0, 0)',
+        `the slab has no ground: ${m.hlBg}`);
+      assert.strictEqual(m.cnHl, 0,
+        'the Chinese half drew a slab for a phrase that is not in its body');
+      // The EXPLICIT kicker still wins, and the phrase did not become one.
+      assert.strictEqual(m.kicker, 'The story', `kicker: ${JSON.stringify(m.kicker)}`);
+      /* AND THE BLANK LINE SURVIVES. The office writes paragraphs with blank
+         lines between them; without pre-line every description ran together
+         into one block on the live page. */
+      assert.strictEqual(m.preLine, 'pre-line',
+        `the paragraph breaks the office wrote are being collapsed: ${m.preLine}`);
+      assert.ok(/\n\s*\n/.test(m.enText), 'the blank line was stripped before it could render');
     });
 
     await check('§132 the spec strip, the claims and the big stat carry their content', async () => {

@@ -1040,9 +1040,9 @@
             <select class="pu2-input" id="pu2-w-store">${storeOptions(e.store_id)}</select>
           </label>
           <label class="pu2-f">
-            <span class="lbl">${esc(T('Expected arrival', '预计到货'))}</span>
-            <input class="pu2-input" type="date" id="pu2-w-delivery" value="${esc(e.delivery_date || '')}">
-            <span class="hint">${esc(T('We’ll flag the order if this date passes.', '超过该日期后,订单会被标记逾期。'))}</span>
+            <span class="lbl">${esc(T('Order date', '下单日期'))}</span>
+            <input class="pu2-input" type="date" id="pu2-w-date" value="${esc(e.date || '')}">
+            <span class="hint">${esc(T('Items can arrive on different days.', '每件商品的到货时间可能不同。'))}</span>
           </label>
           <label class="pu2-f">
             <span class="lbl">${esc(T('Note', '备注'))}</span>
@@ -1078,7 +1078,12 @@
       _edit.supplier = hit ? hit.v : '';
     }
     if (g('pu2-w-store'))    _edit.store_id = parseInt(g('pu2-w-store').value, 10) || _edit.store_id;
-    if (g('pu2-w-delivery')) _edit.delivery_date = g('pu2-w-delivery').value || '';
+    // A DATE BOX CLEARED BY HAND DOES NOT CLEAR THE ORDER DATE. The server
+    // refuses a create with no date (`date_required`) and its update keeps the
+    // one already stored, so an empty box here would either fail the save or
+    // silently disagree with what is in the database. Falling back to the
+    // order's own date, and then to today, is what the two ends already do.
+    if (g('pu2-w-date'))     _edit.date = g('pu2-w-date').value || _edit.date || todayShop();
     if (g('pu2-w-notes'))    _edit.notes = g('pu2-w-notes').value || '';
     return true;
   }
@@ -1098,7 +1103,7 @@
       <div class="pu2-card pu2-wizcard pu2-recap">
         <span>${esc(T('Supplier', '供应商'))}: <b>${esc(e.supplier || T('none', '不指定'))}</b></span>
         <span>${esc(T('Deliver to', '收货'))}: <b>${esc(storeName)}</b></span>
-        <span>${esc(T('Expected', '预计'))}: <b class="pu2-num">${esc(e.delivery_date || '—')}</b></span>
+        <span>${esc(T('Placed', '下单'))}: <b class="pu2-num">${esc(e.date || '—')}</b></span>
         <button class="pu2-link" onclick="puWizStep(1)">${esc(T('Change', '修改'))}</button>
       </div>
 
@@ -1825,7 +1830,7 @@
           ${e.items.length} ${esc(T('products', '商品'))} · ${units} ${esc(T('units', '件'))} · <b class="pu2-num">${money(total)}</b>
           — ${esc(T('from', '来自'))} <b>${esc(e.supplier || T('no supplier', '不指定供应商'))}</b>,
           ${esc(T('to', '送至'))} <b>${esc(storeName)}</b>,
-          ${esc(T('expected', '预计'))} <b class="pu2-num">${esc(e.delivery_date || '—')}</b>.
+          ${esc(T('placed', '下单'))} <b class="pu2-num">${esc(e.date || '—')}</b>.
         </div>
         ${empty ? `<p class="pu2-warnline">${esc(T('Add at least one product before placing the order.', '下单前请至少添加一件商品。'))}</p>` : `
         <div class="pu2-autonote">
