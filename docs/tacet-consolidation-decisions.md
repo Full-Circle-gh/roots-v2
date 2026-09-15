@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.269
+# Tacet shared-core consolidation — decisions record, v4.270
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-15 · v4.270 — **§133 · A SCREENSHOT WITH NO CLOCK ON IT IS A COULDN'T-VERIFY, NOT A HOLD — DECIDED BY ASH on being shown the gap and asked whether to close it:** *"ok fix it."* **THE GAP WAS BETWEEN THE CHECK'S COMMENT AND THE CHECK'S CODE.** The head of the freshness check in `validateAlipayProof` has read *"An unreadable timestamp is a 'couldn't verify', not evidence the payment is wrong"* since the day it was written; the code under it set `checks.time = false`, which `hardPass` reads as a failed check, which holds the order. Nobody chose that — it is what the branch happened to do. **WHAT BROUGHT IT INTO VIEW** was the sibling fix shipped the same day (PR #606): a 12-hour phone clock was being read as the morning, so every afternoon payment looked twelve hours stale. With the parse fixed a device clock now almost always lands inside the window, which left "no clock ANYWHERE on the screenshot" as the only remaining way this check holds an otherwise-clean order — worth deciding rather than leaving as a leftover. **WHAT IS DECIDED:** window live, no readable time in any of the three places it can appear (printed transaction time, raw time text, phone status bar), every other hard check passing → `checks.time = null` (**not checked**) rather than `false` (**failed**), verdict **match**, auto-flip fires if the operator has it on. A time that IS readable is measured against the window exactly as before. **WHAT IS GIVEN UP, STATED RATHER THAN DISCOVERED LATER:** the window was the only check that looked at WHEN, so a genuine receipt to this shop for this amount, paid long ago and never uploaded here before, will now confirm — the reuse guard cannot catch it, because its key is the image hash and txn id *within this system* and such a receipt has nothing to collide with. Narrow, and the price of not holding paying customers over a cropped screenshot. **WHAT STILL GUARDS THE MONEY:** the success screen, the amount within §130's ¥2, the payee list, the image/txn reuse guard, the operator's auto-flip toggle, and the refusal to re-flip an order past `pending_payment` — five of six checks untouched. **THE CONDITION IS "ONLY THE CLOCK"** and a test holds it: beside a wrong payee, a non-success screen, or a shortfall past ¥2, it is still a mismatch — the same sentence §130 had to write, for the same reason. **FORGIVEN, NEVER HIDDEN:** the verdict returns `timeUnread`, persisted as `time_unread`, and the proof card prints a **Paid at** row saying the time could not be read; printing no row was considered and rejected, because it would make "verified with a timestamp" and "verified without one" identical on screen. **NO CHINESE COMPOSED** — both halves of the row are live pairs off this same card (`Paid at` / `付款时间` from the row above, `无法识别` from its own pill); `docs/tacet-delivery-vocabulary.md` untouched. The case that asserted the old behaviour is rewritten rather than deleted, so the reversal is legible in the diff. No schema, no migration, no change to `.gitignore` or CI.
 
 2026-09-15 · v4.269 — **§132 CORRECTED: THE HIGHLIGHT PHRASE IS MARKED INLINE, AND THE OFFICE'S PARAGRAPH BREAKS SURVIVE — REPORTED BY ASH against the product editor's own preview, which draws the lime slab the live page did not:** *"it doesnt show the yellw mark on the live version."* **THE COMPONENT'S RULE IS A FORK, NOT A FALLBACK, AND §132 IMPLEMENTED ONLY HALF OF IT.** `hero_intro` carries a `highlight` phrase with two jobs: if the phrase IS FOUND inside the body it is wrapped inline on a lime slab and NO kicker is drawn from it; only when it is not found does it become the kicker instead. The first build kept the fallback and dropped the marking, so a phrase the office had placed inside its own paragraph — which is the ordinary case, and the one the editor previews — rendered as plain text and the slab appeared on no product at all. **THE FORK IS NOW RESOLVED PER LANGUAGE**, which the component never has to do because it picks a language first: here both halves travel, so an office that typed the phrase into the English body but not the Chinese gets the slab in English and the kicker in Chinese, each half answering for its own text. **AND A SECOND, QUIETER LOSS CAME OUT WITH IT: `white-space:pre-line` WAS MISSING.** The office writes descriptions with blank lines between paragraphs and the component's `.pb-hero-body` has always honoured them; without it every description on the counter menu ran together into one block, which is what customers have been reading since §129 first drew the paragraph. Both are one line of CSS and neither was visible without comparing against the editor. **The kicker also gained the component's short forest rule before it** — `.pb-hero-kicker`'s own 19px bar — which distinguishes the one kicker that introduces a paragraph from the olive ones that label a list. `box-decoration-break:clone` on the slab keeps its padding on both halves when the phrase wraps across a line, without which the second line loses its left padding and the slab reads as torn. **NO CHINESE COMPOSED.** `test_shop_menu_render.js` 59 → **60**; the new check asserts the slab has a real box and a real ground, that the Chinese half draws none for a phrase absent from its body, that the explicit kicker still wins, and that the blank line survives — proven non-vacuous by collapsing the fork, which fails with "the phrase was not marked inline: null". `test:fast` 242/242. No schema, no migration, no change to `.gitignore` or CI.
 
@@ -14563,3 +14565,81 @@ added here reads classes and structure, or compares case-insensitively.
 
 **NO CHINESE COMPOSED.** Every heading is the component's own string and a test
 asserts each is still in its source.
+## §133 — A SCREENSHOT WITH NO CLOCK ON IT IS A COULDN'T-VERIFY, NOT A HOLD
+
+**2026-09-15 · Ash decided, on being shown the gap and asked whether to close it:**
+*"ok fix it."*
+
+**THE GAP WAS BETWEEN THE CHECK'S COMMENT AND THE CHECK'S CODE, and it had been
+there since the check was written.** The head of the freshness check in
+`validateAlipayProof` reads: *"An unreadable timestamp is a 'couldn't verify',
+not evidence the payment is wrong."* The code under that sentence set
+`checks.time = false`, which `hardPass` reads as a failed check, which produces
+**mismatch** and holds the order. The comment described one rule and the code
+enforced another. Nobody chose the second one; it is what the branch happened to
+do.
+
+**WHAT ELSE BROUGHT IT INTO VIEW.** §132's sibling fix (PR #606, the same day)
+found that a 12-hour phone clock was being read as the morning, so afternoon
+payments looked twelve hours stale. Fixing the parse means a device clock now
+almost always lands inside the window — which leaves "no clock ANYWHERE on the
+screenshot" as the only remaining way this check holds an order that is otherwise
+clean. That case was worth deciding rather than leaving as a leftover.
+
+**WHAT IS DECIDED.** The freshness window is live, the screenshot carries no
+readable time in any of the three places it can appear — printed transaction
+time, raw time text, phone status bar — and every other hard check passes →
+`checks.time = null` (**not checked**) rather than `false` (**failed**), the
+verdict is **match**, and the auto-flip marks it paid if the operator has that
+on. A time that IS readable is measured against the window exactly as before, and
+a payment outside it is still a mismatch.
+
+**WHAT IS GIVEN UP, STATED HERE RATHER THAN DISCOVERED LATER.** The window was
+the only check that looked at WHEN. Removing it for the no-clock case means a
+genuine receipt — to this shop, for this amount, on a real success screen — that
+was paid long ago and has never been uploaded to this system before will now
+confirm. The reuse guard does not catch it, because the reuse guard's key is the
+image hash and the txn id **within this system**: a receipt from a payment that
+never passed through an order here has nothing to collide with. That is the trade.
+It is narrow — it needs a real payment to this shop's own 收钱码 for very close to
+this order's total — and it is the price of not holding paying customers over a
+cropped screenshot.
+
+**WHAT STILL GUARDS THE MONEY, so the surface is not overstated.** The success
+screen, the amount (within §130's ¥2), the payee against the configured list, the
+image-hash and txn-id reuse guard in `ocrVerifyAlipayProof`, the operator's
+auto-flip toggle, and the refusal to re-flip an order that has moved past
+`pending_payment`. Five of the six checks are untouched by this decision.
+
+**THE CONDITION IS "ONLY THE CLOCK", AND A TEST HOLDS IT.** A missing clock
+forgives the clock and nothing else: beside a payee that was never ours, a
+non-success screen, or a shortfall past ¥2, the verdict is still mismatch. This
+is the same sentence §130 had to write about the ¥2 gap, for the same reason —
+it is the half of a tolerance that a later simplification quietly drops.
+
+**FORGIVEN, NEVER HIDDEN — §130's RULE, APPLIED TO A CHECK THAT WAS SKIPPED.**
+The verdict returns `timeUnread`; `ocrVerifyAlipayProof` persists it as
+`time_unread` in `alipay_ocr_json`; the proof card prints a **Paid at** row whose
+value says the time could not be read. The alternative considered and rejected
+was to print no row at all: a missing row reads as a field nobody thought about,
+and it would make "verified with a timestamp" and "verified without one"
+identical on screen for the person standing in front of a confirmed order.
+
+**NO CHINESE COMPOSED.** Both halves of the new row are live pairs lifted from
+this same card — the label from the row above it (`Paid at` / `付款时间`) and the
+value from its own "Couldn't read it" pill (`无法识别`), character for character.
+That is preference 1, and `docs/tacet-delivery-vocabulary.md` is untouched.
+
+**TESTS.** `scripts/test_payment_mismatch.js` section 12. The case that asserted
+the old behaviour is rewritten rather than deleted, so the reversal is legible in
+the diff: it now asserts `checks.time === null`, verdict `match`, `timeUnread`
+true, and no reason — a check that was not made is not a complaint. Three more
+hold the edges: a missing clock forgives only the clock, a readable clock is
+still measured against the window, and the card still says when a confirmation
+rested on no time.
+
+**NOT DONE, so it is not assumed.** No change to the window value or either
+setting that feeds it, the reuse guard, the payee list, the ¥2 rule, the
+stale-pending sweep, or what the dashboard counts. `timeWindowMin` still does its
+double duty as the auto-cancel deadline for Alipay orders nobody paid. No schema,
+no migration, and no change to `.gitignore` or CI.
