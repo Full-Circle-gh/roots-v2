@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.272
+# Tacet shared-core consolidation — decisions record, v4.273
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-15 · v4.273 — **§136 · A SHORTAGE FOUND AFTER THE MONEY LANDED HAS SOMEWHERE TO GO — DECIDED BY ASH, having been told §134 could not rescue the orders it had already happened to:** *"build all and automatically deploy to live."* **'awaiting_restock' COULD ONLY EVER BE REACHED BY THE CHECKOUT** — the customer answered the shortage modal, or §80/§128/§134's park caught a short pre-order line. `STATUS_TRANSITIONS` offered no step from 'paid', so a picker who reached the shelf and found nothing could only prepare an order that cannot be picked, or cancel and refund a customer who would rather wait. TC000735 is the live case: §134 stops it recurring and could do nothing for the order itself. **WHAT IS DECIDED:** `paid → awaiting_restock`, the only backwards step in that table, driven by a **Hold for restock · 等待补货** button in the order drawer. Safe backwards because the two states differ in what the OFFICE is told, not in what the customer paid or what the shelf holds: no money moves, no stock moves, and 'awaiting_restock' already steps forward to exactly what 'paid' does ('preparing', 'cancelled'), so nothing downstream gains a path it lacked. `col` is null — no `awaiting_restock_at` column, no schema, no migration; the activity log records who moved it. **THE PIDS ARE COMPUTED, NEVER TAKEN FROM THE OPERATOR.** They are reporting a shelf; which SKUs that means is a fact about the shelf. Asking would invite a park on a product that is not short (never released) or one the order does not need (released by an irrelevant restock). **AND THE GUARD IS THE POINT, because a careless park is STRICTLY WORSE than the bug it fixes** — an order stranded in a queue whose whole promise is that orders leave it by themselves. Refused, order untouched, when: the order has no fulfilling store; some product it needs has no stock row there (a supplier-direct line, or one never stocked here — the release demands `av.exists` for every product, so such an order could never clear, and the refusal NAMES the item); or nothing is actually short (parking would strand it until somebody happened to adjust one of its products). **THE HALF THAT BREAKS SILENTLY, and the reason this is not a one-line table edit:** an order parked from 'paid' has ALREADY taken its stock — that decrement is why TC000735's shelf read -1 — so a release that deducted again would take the same units twice and put the count straight back under. `checkAwaitingRestockForRestock` now reads `orderCommittedPids` (the ledger, exactly as `commitUnreservedOrder` reads it) and skips DEDUCTING what the order already took, while still CHECKING it: the order's units are already off the count, so a shelf that covers it again is a shelf standing at what it needs, and skipping the check would release the order the instant it was parked. A checkout RESERVATION is deliberately not enough to count as taken — a courier order reserves its 'strict' lines and parks anyway, holding stock it has not taken, and those must still be deducted on release. For every checkout-parked order that set is empty and nothing changes. **`orderStockNeed` AND `orderCommittedPids` ARE EXPORTED SO THE PARK AND THE RELEASE READ ONE VIEW** — a precondition that disagreed with the release is exactly how an order gets stranded. **NOT IN THE BULK BAR, deliberately:** that bar is forward steps on the fulfilment track, and each park needs its own shortage check and can be refused for its own reason. **NO CHINESE COMPOSED** — 等待补货 is lifted verbatim from this same file's awaiting-restock card (`cuT('Waiting on stock', '等待补货')`), so the button and the card it produces say the same word; `docs/tacet-delivery-vocabulary.md` v1.89 records the lift and the three rejected candidates. **THE DELIVERY WINDOW IS NOT TOUCHED** — §128's park clears it because there is no date behind a pre-order, but an operator parking a settled order may be parking it for an afternoon, and silently rewriting a date the customer was promised is a different decision. New suite `scripts/test_manual_restock_park.js` **14/14**, the double-deduct case proven non-vacuous by disabling the skip; `test:fast` 245 → **246**; lint 0 errors. No schema, no migration, and no change to `.gitignore` or CI. **Numbered §136 rather than §135: a parallel branch claimed §135 and v4.272 while this one was in flight, and section numbers are permanent — this appends rather than renumbering theirs.**
 
 2026-09-15 · v4.272 — **§135 · A SECTION CAN BE TAKEN OFF THE QR MENU WITHOUT LEAVING THE APP — DECIDED BY ASH:** *“on the main menu qr, product description — there are products that i dont want all blocks available. i want less blocks. however in the mini app i want to keep it the same as now.”* **ONE ARRAY, THREE SURFACES.** `description_blocks` is authored once and rendered by the mini app, the QR menu (`lib/product-blocks-read.js` → `routes/shop-menu.js`) and the web storefront; there was no way to say *this section, but not there*. **WHAT IS DECIDED:** a block may carry `hide_qr: true`; `pageBlocks()` skips it and NOTHING else in the repo reads it, so the mini app and the web storefront — which render by block TYPE and ignore unknown fields — are untouched by a trim, without either of them changing by a line. **DEFAULT IS ON, AND THAT IS NOT A DETAIL:** an absent flag shows. A whitelist was rejected because it would have blanked the whole existing catalogue on the QR menu the day it shipped; a `false` is never persisted either. **THE WEB STOREFRONT IS DELIBERATELY NOT IN THIS** — Ash named two surfaces, `public/shop.html` is a third, and a switch nobody uses is a third thing to keep correct. **OFF IS NOT DELETE:** the block keeps its words, its order and its colours, and the editor says so. **THE FALLBACK WAS THE TRAP:** the QR menu prints the `nutrition` COLUMN when no `nutrition_facts` BLOCK said it (§132), and a hidden block is absent from the filtered list — so asking it would have printed the very table the operator switched off. The question goes to `blockRead.hasNutritionBlock()`, which reads the UNFILTERED source. §120's refusal to open a sheet on nothing is unchanged and now has one more way to be reached. **THE SECOND HALF OF THE SAME BRIEF** — *“need to fix nutrition label so it will be part of the block same as any other blocks”* — makes the hand editor keep `nutrition_facts` in `description_blocks`, as the AI compose path in `public/retail-admin/09-products.js` always has; the mirror to the `products.nutrition` column STAYS for mini app builds that predate the block, and `peMount` synthesises the column back into the stack only when the stack has no nutrition block of its own, so nothing double-prints. **NO MIGRATION AND NONE NEEDED** — column-only products keep rendering through the fallback until somebody saves them. **IN THE EDITOR (Option A, chosen by Ash from three mockups):** a third fold, *Where to show · 显示位置*, beside Content and Colours, plus a struck-through eye on a switched-off row in the section list. Options B (both surfaces previewed side by side) and C (a sections × surfaces matrix) are recorded in §134 for whoever reworks the editor. **THE SKIN IS NOT IN THIS** — the editor still wears the older IBM Plex / Tea-Green layer while `retail-admin.css` carries a live `--td-*` Tacet layer; that is a separate PR. **CHINESE:** three composed strings and two verbatim lifts, declared in `docs/tacet-delivery-vocabulary.md` v1.88 with the candidates rejected. **TESTS:** seven checks in `scripts/test_product_blocks_read.js` and two end-to-end in `scripts/test_shop_menu_render.js`. No schema, no migration, no change to the mini app, the web storefront, `.gitignore` or CI.
 2026-09-15 · v4.271 — **§134 · A PAID EXTRA IS STOCK, NOT A REASON TO STOP COUNTING — DECIDED BY ASH on being shown why order TC000735 sat in Paid with a sold-out pre-order line on it:** *"fix it."* **THE PARK HAD AN ARM NOBODY WOULD HAVE CHOSEN.** §80/§128's pre-order park ran inside a guard that included `!hasStockedAddon` — a cart holding a paid extra with its own inventory refused to park AT ALL. The worry behind it was real: the shortage map inside the block was built from ORDER LINES only, so an add-on's shortage was invisible to it and parking on that count would promise a restock on stock nobody had looked at. But the cure threw out the order with the problem. **WHAT IT COST, MEASURED ON PRODUCTION rather than reasoned about:** a read-only query against the live row shows TC000735 (Tianhe, wechat, courier for the next day, so the stock gate was off — the exact case §80 parks) carrying Whole-Wheat Pita at `oos_policy = backorder_gz` with `physical_qty` **-1**, `awaiting_restock_pids` **null**, `fallback_choice` **null**. The pita was already at zero since 11 Sep; this order took it below. The only thing standing between that order and the Awaiting restock queue was a ¥27 cracker attached to the Zhoug beside it. **WHAT IS DECIDED:** the demand the park judges is every order line PLUS every stock-backed add-on chosen on one, one add-on per unit of its line — the same qty rule `expandStockLines` uses and the same one the reserve, commit and routing paths have always used. The arm goes because the hole it covered is filled. A short add-on that is pre-orderable parks the order; a short add-on that is 'strict' refuses it, exactly as a strict LINE does. **AND THE OTHER END MOVED WITH IT, or the fix would have been half of one:** `checkAwaitingRestockForRestock` in `lib/inventory.js` decided release from `retail_order_items` alone, so an order parked ON an add-on would have cleared while the very item it waited for was still missing, and handed back stock it never deducted. It now builds the same map from the lines and their `options_json`, checks availability against it, and takes stock from it — one reservation and one ledger row per PRODUCT, where a cart repeating a product across two lines used to write two (the sum is unchanged). **WHAT IS DELIBERATELY NOT CHANGED, and both are load-bearing.** `cartHasBundle` stays: a bundle parks on COMPONENT ids that match no order line, and the drawer's card and its per-parcel "Held — N lines waiting" pill both key on line `product_id`. And SUPPLIER-DIRECT LINES ARE STILL COUNTED WHOLE — `expandStockLines` drops them, correctly, for reserving, which is exactly why the park does not call it: the release demands `av.exists` for every line, a supplier-direct line has no stock row and never will, so parking such an order would park it forever. The first draft of this change did call `expandStockLines` and `scripts/test_preorder_park.js` caught it. **WHAT THIS DOES NOT FIX, said plainly:** TC000735 itself. `STATUS_TRANSITIONS` has no `paid → awaiting_restock` step, so an order already settled cannot be moved into the queue by anyone; that order is prepare-when-it-lands or cancel-and-refund, and the missing manual step is a separate question. **NO CHINESE COMPOSED** — no new customer-facing or operator-facing string; `docs/tacet-delivery-vocabulary.md` untouched. `scripts/test_preorder_park.js` 16 → **20**, the new cases proven non-vacuous by the fact that they fail on the old guard; `test:fast` **245/245**; lint 0 errors. No schema, no migration, and no change to `.gitignore` or CI.
@@ -14863,3 +14865,117 @@ that has both.
 the mini app, the web storefront, `.gitignore` or CI. No per-product "short menu"
 flag. No control over section ORDER per surface — the order is the office's, once,
 for everybody.
+
+## §136 — A SHORTAGE FOUND AFTER THE MONEY LANDED HAS SOMEWHERE TO GO
+
+**2026-09-15 · Ash decided, having been told §134 fixes the next order and can
+do nothing for the one that prompted it:**
+*"build all and automatically deploy to live."*
+
+**WHAT WAS MISSING.** `awaiting_restock` could only ever be reached by the
+CHECKOUT: the customer answered the shortage modal (`wait_for_restock`), or
+§80 / §128 / §134's park caught a short pre-order line at order time. A shortage
+discovered AFTER the money landed — the picker reaches the shelf and the item is
+not there, a count was wrong, a channel order took the last one an hour ago — had
+nowhere to go. `STATUS_TRANSITIONS` offered no step from `paid`, so the two ways
+out were to prepare an order that cannot be picked, or to cancel and refund a
+customer who would rather wait. TC000735 is the live case and the reason this
+section exists: §134 stops that order being created again and can do nothing
+whatever for the order itself.
+
+**WHAT IS DECIDED.** `paid → awaiting_restock`, the only backwards step in that
+table, offered as **Hold for restock · 等待补货** in the order drawer's
+transition row.
+
+**WHY BACKWARDS IS SAFE HERE** and is not a hole in a forward-only machine: the
+two states differ in what the OFFICE is told, not in what the customer has paid
+or what the shelf holds. No money moves. No stock moves. And `awaiting_restock`
+already steps forward to exactly what `paid` steps forward to — `preparing` and
+`cancelled` — so nothing downstream gains a path it did not already have. `col`
+is null because there is no `awaiting_restock_at` column and this adds no schema;
+the activity log records who moved it and when.
+
+**THE PRODUCT LIST IS COMPUTED, NEVER TAKEN FROM THE OPERATOR.** They are telling
+us the shelf is short; WHICH SKUs that means is a fact about the shelf, not a
+judgement, and `awaiting_restock_pids` is not decoration —
+`checkAwaitingRestockForRestock` only looks at an order when a product in that
+list is restocked. Asking the operator to pick would invite a park on a product
+that is not short (never released) or on one the order does not need (released by
+a restock of something irrelevant).
+
+**THE GUARD IS THE POINT, because a careless park is STRICTLY WORSE than the
+problem it solves** — an order stranded in a queue whose whole promise is that
+orders leave it by themselves. The move is refused, with the order left exactly
+where it was, when:
+
+1. **the order has no fulfilling store** — there is no shelf for it to wait on;
+2. **some product it needs has no stock row at that store** — a supplier-direct
+   line, or one simply never stocked there. The release demands `av.exists` for
+   every product, so such an order could never clear. This is the same hazard the
+   checkout park refuses by counting supplier-direct lines whole (§134), named
+   here in the operator's own terms, and **the refusal names the item** so they
+   know which one;
+3. **nothing is actually short** — parking then would hold an order that had no
+   reason to be in the queue, until somebody happened to adjust one of its
+   products.
+
+**THE HALF THAT BREAKS SILENTLY, and the reason this was not a one-line edit to a
+table.** An order parked from `paid` HAS ALREADY TAKEN ITS STOCK.
+`prepareCommitUnreservedOrder` decremented it at settlement, and on a shelf that
+could not cover it that decrement is precisely why the count reads negative —
+TC000735's pita at **-1**. A release that deducted again would take the same
+units twice and put the count straight back under, which is the fault the park
+exists to make visible.
+
+So `checkAwaitingRestockForRestock` now reads `orderCommittedPids` — the ledger,
+exactly as `commitUnreservedOrder` reads it — and **skips DEDUCTING what the
+order already took, while still CHECKING it.** Both halves are deliberate:
+
+* skipping the deduction is what stops the double-take;
+* keeping the check is what makes the park mean anything. The order's units are
+  already off the count, so a shelf that can cover it again is a shelf standing
+  at or above what this order needs — exactly what the check asks. Skipping it
+  would release the order the instant it was parked, which is the opposite of
+  what the operator clicked.
+
+**A CHECKOUT RESERVATION IS DELIBERATELY NOT ENOUGH to count as taken.** A
+courier order reserves its `strict` lines at checkout and parks anyway, holding
+stock it has not taken; those lines must still be deducted when it is released,
+and the existing suite asserts exactly that. Only a written `order*` ledger row
+means the shelf has already paid. For every checkout-parked order the set is
+empty and every line below reads as it did before.
+
+**ONE VIEW, TWO CALLERS.** `orderStockNeed` and `orderCommittedPids` are exported
+from `lib/inventory.js` and read by both the release and the park's
+preconditions. A precondition that disagreed with the release is exactly how an
+order gets stranded, and two inline copies of the same map is how they come to
+disagree.
+
+**NOT IN THE BULK BAR, and that is a choice rather than an omission.** That bar
+is explicitly forward steps on the fulfilment track; each park needs its own
+shortage check against its own store and can be refused for its own reason, none
+of which a bulk confirmation could state honestly.
+
+**NO CHINESE COMPOSED.** 等待补货 is lifted verbatim from this same file's
+awaiting-restock card (`cuT('Waiting on stock', '等待补货')`), so the button and
+the card it produces say the same word; it is also the live pair behind the
+status chip, the mini app and the web store. The English is restructured to read
+as an action, which is what the rule asks for before minting.
+`docs/tacet-delivery-vocabulary.md` v1.88 records the lift.
+
+**THE DELIVERY WINDOW IS NOT TOUCHED, said here rather than discovered later.**
+§128's park clears the window because there is no date behind a pre-order. An
+operator parking a settled order may be parking it for an afternoon, and silently
+rewriting a date the customer was promised is a different decision from making
+the order visible. The status, the card and the pill all say it is waiting; the
+date stays the operator's to change.
+
+**HOW IT IS HELD.** New suite `scripts/test_manual_restock_park.js`, **14/14**,
+against the real route over HTTP and a real database: the reported shape parks
+and records the computed pid, parking moves no stock, a partial restock does not
+release it, a covering restock does — **and does not take the stock a second
+time**, which is proven non-vacuous by disabling the skip and watching it fail.
+Plus an add-on-only shortage parking on the add-on, all three refusals with the
+order left untouched, and the forward step still working from the parked state.
+`test:fast` 245 → **246**, lint 0 errors. No schema, no migration, and no change
+to `.gitignore` or CI.
