@@ -84,6 +84,14 @@ insLine.run(1, 700, 'Kitchen Hat',         'J-59', 4, 'pc',     14,  56);   // c
 insLine.run(1, 571, 'Drinking Water',      'F-26', 5, 'g',      2,   10);   // case 8 — someone invoiced the water
 insIng.run(801, 'Chickpeas',          null,    'C-90', 'g',   'kg',     1, null, null, 0.012, 12);
 insLine.run(1, 801, 'Chickpeas',           'C-90', 3, '',       14,  42);   // case 9 — unit left blank
+// case 10 (§140) — counted contents. A roll of 1000 labels, used one label at a
+// time: the recipe unit is pcs, so every earlier case here says "do not divide"
+// and this row is the exception, because it says outright how many pieces a
+// roll holds. Its stored cost starts at the WRONG number on purpose — ¥9.27,
+// the whole roll's price, which is what this write-back put there before the
+// contents pair could be counted.
+insIng.run(57, 'Label Paper', '包装标签贴纸', 'J-57', 'pcs', 'pcs', 1, 1000, 'pcs', 9.27, 9.27);
+insLine.run(1, 57, 'Label Paper', 'J-57', 2, 'pcs', 9.27, 18.54);
 
 const before = fixture.prepare('SELECT id,sku,unit,buy_unit,cost_per_unit,buy_price FROM ingredients ORDER BY id').all();
 
@@ -176,6 +184,18 @@ console.log(`  C-90 cost_per_unit → ${chick.cost_per_unit}   buy_price → ${c
 check('cost untouched',  chick.cost_per_unit, 0.012);
 check('price untouched', chick.buy_price,     12);
 check('skip reason', (result.skips.find(s => s.sku === 'C-90') || {}).reason, 'unit_mismatch');
+
+console.log('\n── Case 10: a roll of 1000 labels, priced per label (§140) ──────');
+// THE LOOP THIS CLOSES. Every PO for this material re-derived the cost from the
+// roll price and stored ¥9.27 a label; two such rows sit in the live cost
+// history for J-57. The pack contents now divide it, and the invoice price is
+// still the roll's — buy_price is what the supplier charges and what the ±5%
+// alert compares against, so it must NOT become the per-label figure.
+const label = byId(after, 57);
+console.log(`  J-57 cost_per_unit → ${label.cost_per_unit}   buy_price → ${label.buy_price}`);
+check('J-57 cost_per_unit', +label.cost_per_unit.toFixed(9), 0.00927);
+check('J-57 buy_price stays the roll price', label.buy_price, 9.27);
+check('J-57 not skipped', result.skips.some(s => s.sku === 'J-57'), false);
 
 console.log('\n── Price history (append-only, one row per priced line) ─────────');
 for (const h of fixture.prepare('SELECT ingredient_id,price,buy_unit,source FROM ingredient_price_history ORDER BY id').all()) {

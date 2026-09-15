@@ -13214,6 +13214,10 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     border-top: 1px solid var(--td-border); font-size: 13.5px; color: var(--td-text2); }
   #tab-materials-record .mat-costline b { font-size: 17px; font-weight: 600; color: var(--td-text); margin-left: 6px; }
   #tab-materials-record .mat-costwhy { color: var(--td-amber-ink); }
+  /* The division that produced the figure beside it — ¥9.27 ÷ 1000. Numerals
+     only, so it carries no copy and needs no Chinese, and quiet enough to read
+     as a check on the fields above rather than a second headline. */
+  #tab-materials-record .mat-costcalc { margin-left: 10px; font-size: 12px; color: var(--td-text2); }
 
   /* Under the SKU field: the code the tenant's numbering rules would issue, or
      — once something is typed — whether what was typed fits that category's
