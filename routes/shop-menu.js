@@ -741,11 +741,28 @@ img{display:block;max-width:100%}
 /* 03 · WHY — a numbered claim per row. The FIRST rule is ink and the rest are
    hairlines, which is the component's own weighting: the list starts at a real
    edge and the rows inside it are only separated. */
+/* THE HEADING IS A KICKER HERE AND A HEADLINE NOWHERE ELSE, and that is the
+   component's own distinction rather than a size picked on this page: .pb-why
+   is the ONE block whose head is 22rpx uppercase (.pb-why-head-l) while every
+   other block's is the 52rpx .pb-section-h3. The list names itself quietly and
+   the claims under it carry the weight. This page had the two exactly swapped
+   -- the why block wore the big shared .pb-h headline and the ingredient cloud
+   wore a small .dt-k kicker -- so a customer comparing the menu against the
+   mini app read a different page. Reported by Ash against the live menu.
+   Whole-pixel line-height for the reason .dt-k states at length. */
+.pb-why-h{font-family:var(--f-bear);font-size:11.4px;line-height:15px;
+  letter-spacing:.22em;text-transform:uppercase;color:var(--olive);
+  margin:21px 0 15px;overflow-wrap:anywhere}
 .pb-why-r{display:grid;grid-template-columns:37px 1fr;gap:14px;align-items:baseline;
   padding:14px 0;border-top:1px solid rgba(0,0,0,.08)}
 .pb-why-r.first{border-top:2px solid var(--ink)}
 .pb-why-n{font-family:var(--f-bear);font-size:33px;line-height:28px}
-.pb-why-c{font-size:16px;line-height:22px;overflow-wrap:anywhere}
+/* THE CLAIM IS THE COMPONENT'S f-toni, WHICH IS f-bear HERE -- the substitution
+   this sheet makes everywhere else and had missed only here, so the claim fell
+   through to the body face and read as prose. .pb-faq-q is the precedent: a
+   whole sentence in f-toni wears f-bear on this page too. 32rpx x .52. */
+.pb-why-c{font-family:var(--f-bear);font-size:16.5px;line-height:22px;
+  overflow-wrap:anywhere}
 
 /* 06 · HOW TO USE — a tile grid whose gridlines ARE the background showing
    through a 1px gap, which is how the component draws it too. */
@@ -1002,26 +1019,34 @@ img{display:block;max-width:100%}
 .anone{font-size:12px;color:var(--olive);font-style:italic}
 
 /* .nut-card from miniapp/pages/product/product.wxss, converted at the same
-   390px phone (rpx x .52) the rest of this file uses. */
+   390px phone (rpx x .52) the rest of this file uses.
+   EVERY FONT SIZE IN THIS CARD IS ALSO x1.15, AND THE PADDINGS ARE NOT. That
+   is not a nicety: the app declares --font-scale: 1.15 in app.wxss and this is
+   the one card whose source writes its sizes as calc(Nrpx * var(--font-scale))
+   rather than as bare rpx. The first conversion applied .52 alone and dropped
+   the scale, so the whole nutrition panel stood 13% smaller than the same panel
+   in the mini app while every block above it matched. The scale multiplies font
+   sizes only -- app.wxss says so -- so the borders, the padding and the indent
+   stay at plain rpx x .52. */
 .nut{border:1px solid var(--ink);padding:14.5px 14.5px 9px;margin-top:14px}
 .nut-top{display:flex;justify-content:space-between;align-items:flex-end;
   padding-bottom:9px;margin-bottom:4px;border-bottom:2px solid var(--ink)}
-.nut-ttl{font-family:var(--f-bear);font-size:21px;line-height:1}
-.nut-bs{font-style:italic;font-size:11.4px;color:rgba(0,0,0,.6);
+.nut-ttl{font-family:var(--f-bear);font-size:23.9px;line-height:1}
+.nut-bs{font-style:italic;font-size:13.1px;color:rgba(0,0,0,.6);
   text-align:right;line-height:1.3}
 .nr{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
   padding:8.3px 0;border-bottom:1px solid rgba(0,0,0,.12)}
 .nr:last-child{border-bottom:0}
-.nr-l{font-family:var(--f-bear);font-size:14px;letter-spacing:.01em;
+.nr-l{font-family:var(--f-bear);font-size:16.1px;letter-spacing:.01em;
   text-transform:uppercase}
-.nr-r{font-family:var(--f-bear);font-size:21px;line-height:1;
+.nr-r{font-family:var(--f-bear);font-size:23.9px;line-height:1;
   font-variant-numeric:tabular-nums;white-space:nowrap}
 .nr.p .nr-l{font-weight:600}
 .nr.c{padding:5.2px 0 5.2px 23px;border-bottom:1px dashed rgba(0,0,0,.12)}
-.nr.c .nr-l{font-family:var(--f-aleo);font-style:italic;font-size:13px;
+.nr.c .nr-l{font-family:var(--f-aleo);font-style:italic;font-size:15px;
   color:rgba(0,0,0,.6);text-transform:none;letter-spacing:0}
 .nr.c .nr-l::before{content:'—';margin-right:6px;color:rgba(0,0,0,.3);font-style:normal}
-.nr.c .nr-r{font-size:16.6px;color:rgba(0,0,0,.6)}
+.nr.c .nr-r{font-size:19.1px;color:rgba(0,0,0,.6)}
 
 /* The enlarge. A plain full-screen ground with the photo centred — no chrome,
    because the only thing to do here is look and then dismiss. */
@@ -2665,7 +2690,14 @@ function detailBody(it, code, listed) {
   const trimmed = (t) => (/^[（【《「『〔｛]/.test(t) ? ' tl' : '') +
                          (/[）】》」』〕｝]$/.test(t) ? ' tr' : '');
 
-  // The heading two-thirds of these blocks share, with its optional count.
+  // The heading two-thirds of these blocks share.
+  //
+  // NOTHING PASSES A COUNT, AND THE PARAMETER STAYS. product-blocks.wxss
+  // carries .pb-section-tag but product-blocks.wxml never renders it — it is
+  // dead style in the component — so the "3 MOMENTS" / "6 STEPS" / "keep it
+  // right" line beside three of these headings was on this page and on no other
+  // surface. blockRead still builds the tags and .pb-h-r is still styled below,
+  // so putting one back is passing it again at the call site and nothing else.
   const head = (h, tag) => `<div class="pb-h"><div class="pb-h-l">${p2(h)}</div>` +
     (tag ? `<div class="pb-h-r">${p2(tag)}</div>` : '') + `</div>`;
 
@@ -2737,18 +2769,25 @@ function detailBody(it, code, listed) {
         `</div>`;
     }
     if (b.type === 'why') {
-      return head(b.head) + b.rows.map((r, i) =>
+      /* NOT head(): the component gives this one block a 22rpx kicker where
+         every other head is the 52rpx headline. See .pb-why-h. */
+      return `<div class="pb-why-h">${p2(b.head)}</div>` + b.rows.map((r, i) =>
         `<div class="pb-why-r${i === 0 ? ' first' : ''}">` +
         `<div class="pb-why-n">${esc(String(i + 1).padStart(2, '0'))}</div>` +
         `<div class="pb-why-c">${p2(r)}</div></div>`).join('');
     }
     if (b.type === 'ingredients_chips' || b.type === 'ingredients_line') {
-      return `<div class="dt-k">${bi(L.ingredients.en, L.ingredients.cn)}</div>` +
+      /* THE SAME HEADLINE EVERY OTHER BLOCK WEARS. The component heads both
+         ingredient blocks with .pb-section-h3 — the big one — and this page
+         had them under .dt-k, the small kicker it uses for a field label.
+         Paired with the why block above, the two were swapped. The words are
+         the component's own headLabel, already in blockRead.LABELS. */
+      return head(L.ingredients) +
         `<div class="ichips">${chipCloud(b.items)}</div>`;
     }
     if (b.type === 'allergen_card') return algCard(b.card);
     if (b.type === 'how_to_use') {
-      return head(b.head, b.tag) +
+      return head(b.head) +
         `<div class="pb-how${b.cols === 4 ? ' c4' : ''}">` + b.tiles.map(t =>
           `<div class="pb-how-t">` +
           (t.icon ? `<div class="pb-how-i">${esc(t.icon)}</div>` : '') +
@@ -2764,7 +2803,7 @@ function detailBody(it, code, listed) {
         ((c.num.en || c.num.cn) ? `<div class="pb-store-n${c.long ? ' long' : ''}">${p2(c.num)}</div>` : '') +
         ((c.unit.en || c.unit.cn) ? `<div class="pb-store-u">${p2(c.unit)}</div>` : '') +
         `</div>`;
-      return head(b.head, b.tag) +
+      return head(b.head) +
         `<div class="pb-store">${card(b.left)}${card(b.right)}</div>` +
         ((b.note.en || b.note.cn) ? `<div class="pb-store-note">${p2(b.note)}</div>` : '');
     }
@@ -2807,7 +2846,7 @@ function detailBody(it, code, listed) {
         `</div>`;
     }
     if (b.type === 'recipe_steps') {
-      return head(b.head, b.tag) + b.steps.map((st, i) =>
+      return head(b.head) + b.steps.map((st, i) =>
         `<div class="pb-step${i === 0 ? ' first' : ''}">` +
         `<div class="pb-step-n">${esc(String(i + 1).padStart(2, '0'))}</div>` +
         `<div class="pb-step-b"><div class="pb-step-t">${p2(st.text)}</div>` +
