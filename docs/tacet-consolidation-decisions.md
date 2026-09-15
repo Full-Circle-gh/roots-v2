@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.279
+# Tacet shared-core consolidation — decisions record, v4.280
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,6 +23,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
+2026-09-15 · v4.280 — **§143 · THE FILE NAME IS THE WHOLE OF THE PERMISSION, SO A TEST HOLDS IT — found while running the block-field usage report against production.** `.github/workflows/ro-query.yml` will run ANY `scripts/diagnose_*.js` against the LIVE database and its only gate is that file-name shape; the workflow's header promises such a file opens SQLite `readonly: true` and PROVES it by attempting a write. **That promise lived in a comment and in each author's care, which is not a mechanism — and it had been broken twice.** `diagnose_hide_qr_flags.js` (written by this session earlier the same day) opened the database through `require('../database.js')`, the APPLICATION'S READ-WRITE handle; it failed on the box as MODULE_NOT_FOUND because the workflow stubs `database.js`, **so the mistake surfaced as a path error rather than as what it was.** `diagnose_variant_descriptions.js` opened `data/roots.db` with no options at all. Both fixed. **ENFORCED:** `readonly: true` on every open of the LIVE database. **COUNTED, NOT ENFORCED:** the run-time probe, which 13 of 58 live-opening scripts predate — failing those would make the gate red on a main that is not unsafe, and a suite red for a reason nobody intends to fix is one people learn to ignore. **THE CHECKER CRIED WOLF TWICE BEFORE IT WAS RIGHT, and all three ways are recorded:** it failed seven file/HTTP diagnostics that open no database; it failed three seam audits that open a writable SCRATCH database on purpose (so the question is not “is it readonly” but “is this the LIVE database”); and then it failed five CORRECT scripts because `/new Database\([^)]*\)/` cannot see past the `)` closing `path.join(...)` and never saw the options object. The scan now balances parentheses — **a checker that cries wolf is one whose next real finding gets waved through.** **THE USAGE REPORT THAT STARTED IT**, `diagnose_block_field_usage.js`, also lands: its first production run found **30 of 78 fields in the product page editor never filled in by anybody across 260 products** (`accent_color`/`bg_color`/`fg_color` on all ten types offering them). Deleting them was proposed and **Ash declined**, on the reading that nobody using a control buried in a closed fold is not the same as nobody wanting it — recorded so it is not re-derived or re-opened. **TESTS:** `test_diagnostics_are_read_only.js`, four checks in the fast shard, reading the workflow itself so it fails loudly if the gate is renamed. Proved by mutation. No change to `ro-query.yml` or `oneoff.yml`, no probe added to the 13, no field deleted, no schema, and no change to `.gitignore` or CI.
 2026-09-15 · v4.279 — **§142 · AN INVERTED CONTROL CANNOT RIDE A SYNC THAT MEANS “THE FIELD EQUALS THE INPUT” — REPORTED BY ASH against §135, shipped the same day:** *“i cant really click hide/unhide the same block, i have to click on one block to hide and another block to unhide.”* **IT WAS WORSE THAN THE SYMPTOM AND IT REACHED THE DATABASE.** No click was needed: `paBlocksSyncFromDOM()` copies `b[dataset.bkey] = el.checked` verbatim, and the QR switch is INVERTED — ticked means SHOWN — so wiring it in with `data-bkey` wrote `hide_qr = true` for a VISIBLE block. The change handler had the inversion right and was clobbered a moment later, because that sync runs on every selection, every live preview, inside `peSerializeState()` (the unsaved-changes fingerprint, which runs ON LOAD) and inside `paBlocksCollect()` — which is how it reached the save. Measured against the shipped build: open a product, touch nothing, block 1 comes back flagged hidden. **THE RULE:** an inverted control carries NO `data-bkey`. Not a second inversion inside the sync — that mechanism is general, and a special case in it rearms the same trap for the next inverted control. `paSetHideQr()` is the only writer now. **THE EYE ON THE ROW IS A BUTTON**, because §135 drew it only once a block was already hidden — a mark you cannot click to hide with, which is what Ash reached for and did not find. Now on every row, with `stopPropagation` so it does not also open the block, and it moves the inspector's switch in place so the two cannot disagree. **WHAT REACHED LIVE DATA:** between deploy #2067 and this fix, opening a product and saving flagged the selected block. `scripts/diagnose_hide_qr_flags.js` is READ-ONLY and sorts by the accident's fingerprint — the fault always landed on block 1, always alone. **A blanket clear was rejected:** it would undo the real ones set deliberately in the same window, and the flag cannot tell them apart. **TESTS:** `scripts/test_product_editor_hide_qr.js`, nine checks in the FAST shard, guarding the invariant rather than the symptom — including that no OTHER checkbox in that sync is inverted (`lead` and `alt` both are honest; `alt`'s label says “Inverted” about how its card is painted, not its polarity, written down because that is what a later reader trips over). Proved by mutation. A Chromium pass proves more and would land in the slow shard, which is not run, so a suite that never runs was not written; the browser pass was run by hand against this change and against the shipped code before it. No repair of existing rows, no change to what the flag means to the QR menu, no change to `paBlocksSyncFromDOM` itself, no schema, and no change to `.gitignore` or CI.
 2026-09-15 · v4.278 — **§141 · ONE PRIMARY ACTION, ONE COLOUR, ON EVERY SCREEN — FOUND BY SURVEY while looking for something else.** Asked to put `public/cms.html` onto Tacet after §139 did the product editor, this session checked first and found the premise wrong: **the mini app editor was ALREADY on Tacet**, and got there before the product editor did — all fifteen of its light-theme colours match `retail-admin.css` value for value. The recommendation to reskin it came from a stale comment and should not have been made without looking; recorded so nobody re-opens it. **WHAT THE SURVEY FOUND INSTEAD:** `cms.html` pointed `--brass` — its name for the one primary action — at **Dusk**, so Publish was purple there while the same button is Ink in the product editor and on Customers. One operator, three screens, purple meaning two things. **Dusk does not mean “important”; it means “Tacet did this for you”**, and publishing your own work is the merchant acting — which `retail-admin.css` states beside the Customers modal in as many words. `--brass` now points at Ink, and the old reasoning is KEPT in the file beside the reversal rather than deleted. **THE DARK ROOM HAD TO INVERT WITH IT, and this was nearly the bug:** `cms.html` is light-first, its dark block restates `--accent` but never restated `--brass` — which did not matter while `--brass` was Dusk, a colour that holds in both themes. Ink does not, and an Ink button on an Ink ground is an invisible one. The dark block now restates it as Paper and `.btn-primary` takes its label from `--accent-ink` rather than a literal `#FFFFFF`. **What still wears Dusk there is no button:** focus rings (exempt by name), the drop-zone marker, and the selected-block ring — that last one drawn OVER the customer's page where Ink would vanish on a dark brand block, so it is deliberately left alone. **THE RULEBOOK PASS:** 48 chrome rules setting uppercase and 43 setting a weight above 500 are now sentence case at 400/500; four labels typed in capitals in the MARKUP are recased, which is a case change to an existing English string and composes nothing. **Two traps recorded rather than rediscovered:** the `font:` shorthand sets a weight without writing `font-weight` (it hid five rules from the first sweep), and `.phone-preview-*` is the “Preview on phone” MODAL, not the device mock, so the preview fence needs a negative lookahead. **THE NAMES ARE NOT UNIFIED, DELIBERATELY** — renaming `--tacet-*` to `--td-*` would touch some six hundred rules to change nothing a reader can see; the VALUES must agree and a mapping table in the test says which name means which. **TESTS:** `scripts/test_tacet_one_palette.js`, eleven checks closing the triangle `test_product_editor_tacet.js` opened, asserting BOTH sides of the fence — the chrome checks would pass trivially if the preview had been swept along, so it also requires that at least twenty preview rules still set caps or a heavy weight. Proved by mutation: four deliberate breakages each fail the check meant to catch them. No reskin, no rename, no change to `.block-wrap.selected`, no layout, no JS, no route, no schema, and no change to `.gitignore` or CI.
 2026-09-15 · v4.277 — **§140 · A PACK CAN HOLD A COUNT, NOT ONLY A WEIGHT — DECIDED BY ASH,** shown why J-57 Label Paper costs ¥9.27 a sticker and what the three ways out were: *“ok fix it properly”* — the third, the one that changes the model rather than working around it. **THE SHAPE THAT COULD NOT BE SAID.** `lib/ingredient-cost.js` keys on the RECIPE unit: g/ml divides, pcs/bag/bottle/box does not, because a recipe calling for one bag consumes one bag whatever is inside it (2026-08-17, 29 live rows). A roll of 1000 labels bought for ¥9.27 and used one label at a time is per-piece by that rule, so the derivation returned the ROLL price and every label cost a thousand times what it cost. The contents pair beside it — `pack_contents_qty` + `pack_contents_unit` — could have said so, and offered only g/kg/ml/L. **WHAT IS DECIDED:** `pcs` joins that dropdown, and a per-piece recipe unit whose pack contents are COUNTED divides by `buy_pack_size × pieces`, the same formula shape the weight path uses. **NOTHING INFERS IT, which is the load-bearing half:** only `pack_contents_unit` normalising to 'pcs' opens the divisor, nothing in the word 'box' or 'roll' says how many are in one, and no row in the catalogue carries 'pcs' there today — the UI never offered it and no import writes it — so the 29 rows that depend on the pack price being the unit cost cannot acquire a divisor by accident. A count of zero, or contents in grams, behaves exactly as before. **A ZERO PACK SIZE IS REFUSED, not waved through on a divisor of 1** — the same requirement the weight path makes, because a divisor of 1 invented here would store the roll price, which is the bug. **THE EDITOR NOW PRINTS THE DIVISION** (`¥9.27 ÷ 1000`), numerals only and no label, because `buy_pack_size` carried a different meaning before the `pack_size_semantics_v2` migration and that migration could only normalise rows whose buy unit was a MEASURE — a pcs-bought row can still sit on a stale 1000 nobody has been asked about, and printed it reads as an absurd divisor instead of a quietly wrong cost. **AND THE FIGURE IS SHOWN TO THE PLACES IT NEEDS:** `acMoney()` renders two, so ¥0.00927 read as ¥0.01 — eight percent out — and ¥0.0316 a gram read as ¥0.03. `unitMoney()` in `18-materials.js` gives four places below a jiao and five below a fen, on the record line and the list column; nothing at or above ¥0.10 changes shape, and it is local to this screen rather than a change to `acMoney()`. **NO MIGRATION AND NONE WANTED** — an affected row is fixed by filling in its contents, and the save re-derives and fires the recipe recompute. **THE PO WRITE-BACK NEEDED NO CHANGE AND IS WHERE THE LOOP WAS:** it already runs the one derivation, so the ¥9.27-per-label rows it wrote on every order (two of them in J-57's live cost history) stop; `buy_price` stays the ROLL price, because it is what the supplier charges and what the ±5% alert compares against. **NO CHINESE COMPOSED** — `pcs` is a unit token beside `g` and `kg`, the arithmetic line is numerals, and `docs/tacet-delivery-vocabulary.md` is untouched. **TESTS:** new `scripts/test_material_piece_pack.js`, 18 cases in three parts — the rule, the editor wiring, and a guard band over the four shapes §140 promised not to touch — proven non-vacuous (six fail when the divisor is removed); `scripts/test_price_writeback.js` gains case 10, the same material through a real PO against a real database, 9 → 10 cases. `test:fast` 251 → **252/252**; lint 0 errors; the bilingual-banner gate passes. No schema, no migration, and no change to `.gitignore` or CI.
@@ -15473,3 +15474,73 @@ ways. The harness stubs the admin API and is deliberately not committed.
 `lib/product-blocks-read.js`, `routes/shop-menu.js` or what the flag means to
 the QR menu. No change to `paBlocksSyncFromDOM` itself. No schema, no migration,
 and no change to `.gitignore` or CI.
+
+## §143 — THE FILE NAME IS THE WHOLE OF THE PERMISSION, SO A TEST HOLDS IT
+
+**Found while running the block-field usage report against production,
+2026-09-15.** `.github/workflows/ro-query.yml` — "Read-only prod query" — will
+run ANY file matching `scripts/diagnose_*.js` against the LIVE database, and its
+only gate is that file-name shape. The workflow's own header promises what such
+a file does: *"The script it runs opens SQLite with `readonly: true` and PROVES
+that on the connection by attempting a write and aborting if the write is
+accepted."* **That promise lived in a comment and in each author's care, which
+is not a mechanism.**
+
+**IT HAD BEEN BROKEN TWICE.** `scripts/diagnose_hide_qr_flags.js`, written by
+this session earlier the same day, opened the database through
+`require('../database.js')` — the APPLICATION'S handle, opened READ-WRITE. It
+never wrote anything, and it failed on the box for an unrelated reason: the
+workflow stages the named script alone in `/tmp` and stubs `database.js`, so the
+require threw `MODULE_NOT_FOUND`. **The mistake surfaced as a path error rather
+than as what it was**, which is exactly the argument for a test.
+`scripts/diagnose_variant_descriptions.js` opened `data/roots.db` with no
+options at all, so read-write by default. Both are fixed.
+
+**WHAT IS ENFORCED, AND WHAT IS ONLY COUNTED.** `readonly: true` on every open
+of the LIVE database is the load-bearing rule and fails the suite. The run-time
+probe — attempting a write and aborting if it succeeds — is what turns that flag
+into a fact, and 13 of the 58 scripts that open the live database predate the
+promise. **Failing those would make the gate red on a main that is not actually
+unsafe, and a suite that is red for a reason nobody intends to fix is a suite
+people learn to ignore.** So the probe is counted and the shortfall named, where
+the number is visible and can be driven down, and asked of new work at review.
+
+**THE CHECKER CRIED WOLF TWICE BEFORE IT WAS RIGHT, and both are recorded
+because each is a way this kind of test goes wrong:**
+
+1. **It failed seven file-and-HTTP diagnostics** that never open SQLite at all —
+   they read the deployed tree, a diff, a server response. There is nothing for
+   those to be read-only about.
+2. **It failed three seam audits that open a writable SCRATCH database on
+   purpose** (`s.db`, `scratch.db` in a temp directory) — writing to a throwaway
+   is the whole point of auditing the database seam. The question asked of each
+   `new Database(...)` is therefore not *"is it readonly"* but *"is this the LIVE
+   database"*, keyed on `DB_PATH`, `ROOTS_DB` or a literal `roots.db`.
+3. **And then it failed five CORRECT scripts because of its own regex.**
+   `/new Database\([^)]*\)/` cannot see past the `)` that closes
+   `path.join(...)`, so on
+   `new Database(path.join(__dirname, '..', 'data', 'roots.db'), { readonly: true })`
+   it matched only as far as `'roots.db')` and never saw the options object. The
+   scan now balances parentheses. **A checker that cries wolf is one whose next
+   real finding gets waved through**, which is why this is worth twelve lines
+   and a paragraph.
+
+**THE USAGE REPORT THAT STARTED IT** is `scripts/diagnose_block_field_usage.js`,
+also landing here: per block type, every field the editor offers against how
+many placed blocks carry a non-empty value. Its first production run found **30
+of 78 fields in the product page editor never filled in by anybody across 260
+products** — `accent_color`, `bg_color` and `fg_color` on all ten block types
+that offer them. **Deleting them was proposed and Ash declined**, on the reading
+that nobody using a control buried in a closed fold is not the same as nobody
+wanting it. Recorded so the finding is not re-derived and the decision is not
+re-opened.
+
+**TESTS.** `scripts/test_diagnostics_are_read_only.js`, four checks in the FAST
+shard, reading the workflow itself so it fails loudly if the gate is ever
+renamed out from under it. Proved by mutation: dropping `readonly: true` from a
+live open, and borrowing the application handle, each fail the check meant to
+catch them.
+
+**NOT DONE, so it is not assumed.** No change to `ro-query.yml` or to
+`oneoff.yml`. No probe added to the 13 scripts that lack one. No field deleted
+from either editor. No schema, no migration, and no change to `.gitignore` or CI.
