@@ -362,6 +362,15 @@
     font-size: 13px; color: var(--text-2); font-family: inherit;
     transition: background var(--t-fast) ease, color var(--t-fast) ease;
   }
+  /* AN AUTHOR `display` BEATS THE UA SHEET'S [hidden] { display: none }, so the
+     rule above makes `hidden` do nothing to a row in this menu. Without this
+     line the Install app row — hidden until a browser offers the install —
+     showed on every screen and did nothing when tapped, because the click
+     handler correctly found no install event behind it. Reported from a tablet.
+     The same trap is handled the same way at #cu-drawer .cu-noteline[hidden]
+     and .chd-pop[hidden]; there is no global guard in this stylesheet, so any
+     new `display`-carrying class that means to use `hidden` needs its own. */
+  .acct-item[hidden] { display: none; }
   .acct-item svg { width: 16px; height: 16px; flex: none; opacity: .8; }
   .acct-item:hover { background: var(--bg-elev-1); color: var(--text-1); }
   .acct-danger { color: var(--danger); }
