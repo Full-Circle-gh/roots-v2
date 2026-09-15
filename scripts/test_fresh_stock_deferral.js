@@ -449,6 +449,51 @@ if (!missing.length) {
   atFulfilment(whole);
   check('Mark dispatched on the ORDER takes the fresh line whatever its parcel',
     qty(SALAD2), -1);
+
+  /* ── 16. §137 — A WALK-IN CANNOT LEAVE THE SHELF OWING ANYTHING ────────
+     Run against the real commit rather than asserted over its source: the
+     failure this fixes was ARITHMETIC, and a regex over the function would have
+     passed on the broken version. The shape lives in test_batch_owed.js §9d;
+     the numbers live here.
+
+     WRAP2 is batch-made — the exact kind of product whose negative the kitchen's
+     owed block reads as units to cook.
+
+     THE SHELF IS PINNED RATHER THAN INHERITED. Earlier cases in this block move
+     WRAP2, so a fixture that assumed 0 here read whatever they left; the first
+     draft did exactly that and asserted a correction of 3 against a shelf of 1.
+     Naming the starting count makes the arithmetic below checkable by eye. */
+  db.prepare('UPDATE retail_store_stock SET physical_qty = 0 WHERE store_id = ? AND product_id = ?')
+    .run(STORE, WRAP2);
+  const counterSale = mkOrder('counter', [[WRAP2, 3]], { channel: 'shop' });
+  atFulfilment(counterSale);
+  // Three left in a customer's hand, so three were on the shelf: the record was
+  // short by three and is now right, rather than owing three that are not owed.
+  check('§137: a till sale that outruns the record lands the shelf at zero',
+    qty(WRAP2), 0);
+  // TWO ROWS, NOT ONE NETTED FIGURE. The sale really happened and the correction
+  // really happened; a ledger showing only the difference would answer a
+  // different question than the one asked of it.
+  const counterRows = db.prepare(
+    'SELECT reason, delta FROM retail_stock_ledger WHERE ref_id = ? AND product_id = ? ORDER BY id'
+  ).all(counterSale, WRAP2);
+  check('…and says so in two rows: the sale, then the correction',
+    counterRows.map((r) => `${r.reason}:${r.delta}`), ['order_prepare:-3', 'counter_miscount:3']);
+
+  /* THE OTHER SIDE OF THE SAME COIN, and the case that proves §137 did not
+     travel. A DELIVERY that outruns the shelf leaves the negative: those units
+     were sold and never held, somebody is waiting for them, and the kitchen is
+     supposed to read it. */
+  // No reset needed, and that IS the setup: the correction above left WRAP2 at
+  // exactly 0, which is where the previous case started.
+  const post = mkOrder('delivery', [[WRAP2, 2]]);
+  atFulfilment(post);
+  check('…while a delivery that outruns it still leaves the honest negative',
+    qty(WRAP2), -2);
+  const postRows = db.prepare(
+    "SELECT COUNT(*) AS n FROM retail_stock_ledger WHERE ref_id = ? AND reason = 'counter_miscount'"
+  ).get(post).n;
+  check('…and writes no correction for it', postRows, 0);
 }
 
 // ── The rule as it is spelled at the two call sites ─────────────────────────
