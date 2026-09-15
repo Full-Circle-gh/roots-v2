@@ -816,12 +816,50 @@ it('a stale phone clock is called a phone clock, not a payment time', () => {
     'a phone clock must never be reported as the payment time');
 });
 
-it('an unreadable time is still a hold, not a pass', () => {
-  // Unchanged by this fix, and stated so it stays a decision rather than drift:
-  // no clock at all on the screen means the freshness check cannot clear it.
+it('a screenshot with no clock on it is a couldn’t-verify, not a hold (§133)', () => {
+  // AMENDED by Ash, 2026-09-15. This case asserted the opposite until §133: no
+  // clock anywhere on the screen failed hard and held the order. The check's own
+  // comment had called an unreadable timestamp a "couldn't verify" since the day
+  // it was written, and only the code disagreed.
   const v = atRef({ status_bar_time: null, paid_at: null });
-  assert.strictEqual(v.checks.time, false);
+  assert.strictEqual(v.checks.time, null, 'unreadable is null (not checked), never false (failed)');
+  assert.strictEqual(v.verdict, 'match');
+  assert.strictEqual(v.timeUnread, true, 'the verdict must carry that no time was read');
+  assert.strictEqual(v.reasons.length, 0, 'a check that was not made is not a complaint');
+});
+
+it('a missing clock forgives only the clock (§133)', () => {
+  // The whole condition. §130 had to state the same thing about the ¥2 gap, and
+  // for the same reason: the half a later simplification quietly drops is the
+  // half that says what is NOT forgiven.
+  const wrongPayee = atRef({ status_bar_time: null, paid_at: null, payee: '另一家店', payee_full: '' });
+  assert.strictEqual(wrongPayee.verdict, 'mismatch', 'a payee that was never ours is still a mismatch');
+  const notSuccess = atRef({ status_bar_time: null, paid_at: null, success: false });
+  assert.strictEqual(notSuccess.verdict, 'mismatch', 'a non-success screen is never forgiven');
+  const short = validateAlipayProof({ total: 100 }, proofFor(97.99, { status_bar_time: null, paid_at: null }), WINDOWED, REF);
+  assert.strictEqual(short.verdict, 'mismatch', '¥2.01 short is still a mismatch with no clock');
+});
+
+it('a clock that IS readable is still measured against the window (§133)', () => {
+  // §133 relaxes "no clock at all". It does not relax the window itself: a
+  // screenshot that shows a time still has to be inside it.
+  const v = atRef({ paid_at: '2026-09-15 06:00' });
   assert.strictEqual(v.verdict, 'mismatch');
+  assert.strictEqual(v.checks.time, false);
+  assert.strictEqual(v.timeUnread, false, 'a time that was read is not an unread time');
+});
+
+it('the card shows a confirmation that rested on no clock (§133)', () => {
+  // Forgiven, never hidden — the rule §130 set for the ¥2 gap, applied to the
+  // check that was skipped. A row that simply vanished would make "verified with
+  // a timestamp" and "verified without one" identical on screen.
+  const card = sliceBlock(ORDERS_JS, 'function renderAlipayProof(o)');
+  assert.ok(/else if \(d\.time_unread\)/.test(card),
+    'the card must say when no payment time could be read');
+  assert.ok(/cuT\("Couldn't read it", '无法识别'\)/.test(card),
+    'the value must reuse the live pair, not a newly composed string');
+  assert.ok(/v\.timeUnread \? \{ time_unread: true \}/.test(RETAIL_JS),
+    'the flag must be persisted, or the card can never show it');
 });
 
 it('the proof card never calls the upload stamp a payment time', () => {
