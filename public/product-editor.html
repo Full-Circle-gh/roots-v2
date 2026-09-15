@@ -485,6 +485,22 @@
   }
   .pe-badge.pub { background: var(--td-sage-tint); color: var(--td-sage-ink); border-color: var(--td-sage); }
   .pe-badge.draft { background: var(--td-amber-tint); color: var(--td-amber-ink); border-color: var(--td-amber); }
+  /* The online-store pill is a BUTTON now (it publishes), so it has to drop the
+     button defaults the span never had. The QR pill beside it is flat and
+     unpressable: it reports where the product already is and is not a control —
+     nothing here can add a product to a shop menu, that is the shop screen. */
+  button.pe-badge {
+    font: inherit; font-size: 10px; font-weight: 500; line-height: 1.6;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    transition: border-color .12s ease, background .12s ease;
+  }
+  button.pe-badge:hover { border-color: var(--line-strong); }
+  button.pe-badge:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
+  button.pe-badge[disabled] { cursor: default; opacity: .55; }
+  .pe-badge.pe-badge-flat { display: inline-flex; align-items: center; gap: 6px; cursor: default; }
+  /* The key reads as a quiet label, the value as the answer. */
+  .pe-badge .pe-badge-k { opacity: .72; font-weight: 400; }
+  .pe-badge .pe-badge-v { font-weight: 500; }
   /* Left-pane Product picker (the in-editor "which product" section). */
   .pe-prod-search {
     width: 100%; margin: 0 0 8px;
@@ -928,6 +944,17 @@
     width: 15px; height: 15px; flex-shrink: 0; color: var(--td-amber, #C9954A);
   }
   .pa-block-row .pbr-qr svg { width: 100%; height: 100%; display: block; }
+  /* A section that carries words and would still be dropped by the save.
+     Brick rather than the QR mark's amber, because this is not a note about
+     one surface — it is work that is about to not exist. The row's left edge
+     carries the same colour so the mark is findable while scrolling a stack of
+     fifteen, and survives the row's own active/hover states (which paint the
+     background, never this border). */
+  .pa-block-row.pbr-unsaved { box-shadow: inset 2px 0 0 var(--td-brick, #B4533E); }
+  .pa-block-row .pbr-unsaved-ic {
+    width: 15px; height: 15px; flex-shrink: 0; color: var(--td-brick-ink, #D07A66);
+  }
+  .pa-block-row .pbr-unsaved-ic svg { width: 100%; height: 100%; display: block; }
 
   /* "Shows on" — the per-block channel switch in the inspector. */
   .pa-ch-row {
@@ -1471,7 +1498,8 @@
         <span id="pe-name">Loading… · 加载中…</span>
         <svg class="pe-switcher-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
-      <span id="pe-badge" class="pe-badge" style="display:none"></span>
+      <button type="button" id="pe-badge" class="pe-badge" style="display:none" onclick="peTogglePublish()"></button>
+      <span id="pe-shops-badge" class="pe-badge pe-badge-flat" style="display:none"></span>
       <div id="pe-switcher-panel" class="pe-switcher-panel" hidden>
         <input id="pe-switcher-search" class="pe-switcher-search" type="text" oninput="peRenderSwitcherList()" onkeydown="peSwitcherKeydown(event)" autocomplete="off" spellcheck="false">
         <div id="pe-switcher-list" class="pe-switcher-list" data-no-i18n></div>
@@ -1704,9 +1732,19 @@ async function peExitToPages() {
 }
 // Close the editor tab. Opened via window.open() from retail-admin, so
 // window.close() works; fall back to navigating back if the browser blocks it.
-function peClose() {
+// ASKS FIRST when there are unsaved edits — peExitToPages and peSwitchProduct
+// both did and this one did not, so the button sitting next to Save was the one
+// exit that dropped the work without a word. Same question, same two strings.
+async function peClose() {
   // Embedded as a backend tab — nothing to close; the parent owns navigation.
   if (window.self !== window.top) return;
+  if (peIsDirty() && !(await askConfirm({
+    title: cuT('You have unsaved changes that will be lost. Leave anyway?', '有未保存的更改将会丢失,仍要离开吗?'),
+    confirmLabel: cuT('Leave', '离开'),
+  }))) {
+    return;
+  }
+  peLeaveIntentionally();
   window.close();
   // If still here a tick later, the tab wasn't script-opened — go back.
   setTimeout(() => {
@@ -1728,9 +1766,15 @@ function peAuthBail() {
 // Editor switch — jump to the Mini App (pages) editor, saving first if the
 // current product has unsaved edits so nothing is lost.
 async function fcGotoMiniApp() {
+  // paSaveEdit never throws — it catches its own failure and toasts it — so a
+  // try/catch around it always fell through to the navigation below and the
+  // edits went with the page. Read its verdict instead: on a failed save STAY,
+  // with its own 'Save failed · 保存失败' toast already on screen.
   if (typeof peIsDirty === 'function' && peIsDirty()) {
-    try { await paSaveEdit(); } catch {}
+    const saved = await paSaveEdit();
+    if (!saved) return;
   }
+  peLeaveIntentionally();
   window.location.href = '/cms';
 }
 
@@ -2237,7 +2281,8 @@ async function peBoot() {
       fetch('/api/retail-admin/products/' + id, { credentials: 'same-origin', cache: 'no-store' }),
       fetch('/api/retail-admin/products',       { credentials: 'same-origin', cache: 'no-store' }),
     ]);
-    if (fullRes.status === 401 || fullRes.status === 403) { peAuthBail(); return; }
+    if (fullRes.status === 401 || fullRes.status === 403 ||
+        listRes.status === 401 || listRes.status === 403) { peAuthBail(); return; }
     const jFull = await fullRes.json();
     if (!jFull.success) {
       if (fullRes.status === 404) { peFatal('Product #' + id + ' not found · 未找到产品'); return; }
@@ -2317,17 +2362,17 @@ function peRenderPickerList() {
   if (q) rows = rows.filter(p =>
     ((p.name_en || '') + ' ' + (p.name_cn || '') + ' ' + (p.sku || '')).toLowerCase().includes(q));
   if (!rows.length) {
-    list.innerHTML = '<div class="pe-switcher-empty">' + (cuLang() === 'cn' ? '没有匹配的产品。' : 'No products match.') + '</div>';
+    list.innerHTML = '<div class="pe-switcher-empty">' + cuT('No products match.', '没有匹配的产品。') + '</div>';
     return;
   }
   list.innerHTML = rows.map(p => {
     const pub  = p.is_published === 1;
     const name = escapeHtml(p.name_en || '—') + (p.name_cn ? ' <small>' + escapeHtml(p.name_cn) + '</small>' : '');
     const badge = pub
-      ? '<span class="pe-switcher-item-badge pub">' + (cuLang() === 'cn' ? '已上架' : 'Live') + '</span>'
-      : '<span class="pe-switcher-item-badge">' + (cuLang() === 'cn' ? '草稿' : 'Draft') + '</span>';
+      ? '<span class="pe-switcher-item-badge pub">' + cuT('Live', '已上架') + '</span>'
+      : '<span class="pe-switcher-item-badge">' + cuT('Hidden', '未上架') + '</span>';
     return '<button type="button" class="pe-switcher-item" data-id="' + p.id +
-      '" onclick="location.href=\'/product-editor?id=' + p.id + '\'">' +
+      '" onclick="peLeaveIntentionally();location.href=\'/product-editor?id=' + p.id + '\'">' +
       '<span class="pe-switcher-item-name">' + name + '</span>' + badge + '</button>';
   }).join('');
 }
@@ -2368,7 +2413,7 @@ function peRenderProdPicker() {
     ((p.name_en || '') + ' ' + (p.name_cn || '') + ' ' + (p.sku || '')).toLowerCase().includes(q));
   if (!rows.length) {
     list.innerHTML = '<div class="pe-switcher-empty">' +
-      cuT('No products match. · 没有匹配的产品。', 'No products match. · 没有匹配的产品。') + '</div>';
+      cuT('No products match.', '没有匹配的产品。') + '</div>';
     return;
   }
   list.innerHTML = rows.map(p => {
@@ -2381,7 +2426,7 @@ function peRenderProdPicker() {
       (p.name_cn ? ' <small>' + escapeHtml(p.name_cn) + '</small>' : '') + vcount;
     const badge = pub
       ? '<span class="pe-switcher-item-badge pub">' + cuT('Live', '已上架') + '</span>'
-      : '<span class="pe-switcher-item-badge">' + cuT('Draft', '草稿') + '</span>';
+      : '<span class="pe-switcher-item-badge">' + cuT('Hidden', '未上架') + '</span>';
     return '<button type="button" class="pe-switcher-item' + (cur ? ' current' : '') +
       '" data-id="' + p.id + '" onclick="peSwitchProduct(' + p.id + ')">' +
       '<span class="pe-switcher-item-name">' + name + '</span>' + badge + '</button>';
@@ -2409,7 +2454,7 @@ function peOpenSwitcher() {
   btn.setAttribute('aria-expanded', 'true');
   if (search) {
     search.value = '';
-    search.placeholder = cuT('Search products… · 搜索产品…', 'Search products… · 搜索产品…');
+    search.placeholder = cuT('Search products…', '搜索产品…');
   }
   _peSwitcherActive = -1;
   peRenderSwitcherList();
@@ -2455,7 +2500,7 @@ function peRenderSwitcherList() {
   const rows = _peSwitcherFiltered();
   if (!rows.length) {
     list.innerHTML = '<div class="pe-switcher-empty">' +
-      cuT('No products match. · 没有匹配的产品。', 'No products match. · 没有匹配的产品。') + '</div>';
+      cuT('No products match.', '没有匹配的产品。') + '</div>';
     return;
   }
   list.innerHTML = rows.map((p, i) => {
@@ -2468,7 +2513,7 @@ function peRenderSwitcherList() {
       (p.name_cn ? ' <small>' + escapeHtml(p.name_cn) + '</small>' : '') + vcount;
     const badge = pub
       ? '<span class="pe-switcher-item-badge pub">' + cuT('Live', '已上架') + '</span>'
-      : '<span class="pe-switcher-item-badge">' + cuT('Draft', '草稿') + '</span>';
+      : '<span class="pe-switcher-item-badge">' + cuT('Hidden', '未上架') + '</span>';
     return '<button type="button" class="pe-switcher-item' + (cur ? ' current' : '') +
       '" data-idx="' + i + '" data-id="' + p.id + '" onclick="peSwitchProduct(' + p.id + ')">' +
       '<span class="pe-switcher-item-name">' + name + '</span>' + badge + '</button>';
@@ -2476,9 +2521,12 @@ function peRenderSwitcherList() {
 }
 async function peSwitchProduct(id) {
   id = Number(id);
+  if (!Number.isFinite(id) || id <= 0) return;
   if (PA_CURRENT && id === PA_CURRENT.id) { peCloseSwitcher(); return; }
-  const p = PA_ALL_PRODUCTS.find(x => x.id === id);
-  if (!p) return;
+  // The cached list can be stale (another tab published, renamed or archived a
+  // row since this page loaded). A bare `return` here meant a click that did
+  // nothing at all and said nothing either; the fetch below is the authority,
+  // so fall through to it and let a real 404 answer through peFatal.
   if (peIsDirty() && !(await askConfirm({
     title: cuT('You have unsaved changes that will be lost. Switch product anyway?', '有未保存的更改将会丢失,仍要切换产品吗?'),
     confirmLabel: cuT('Switch product', '切换产品'),
@@ -2500,6 +2548,8 @@ async function peSwitchProduct(id) {
     }
   } catch (e) {}
   // Fall back to a full reload (peBoot does the full fetch) if the fetch failed.
+  // The discard question was already asked and answered above.
+  peLeaveIntentionally();
   location.href = '/product-editor?id=' + id;
 }
 // Arrow-key navigation inside the switcher search box.
@@ -2700,7 +2750,7 @@ function peSmartApply() {
 // canvas, so saved or hand-edited sections are never clobbered — once the page
 // has blocks, auto-fill stays out of the way. The result is left UNSAVED so the
 // operator reviews and commits it deliberately.
-let _peAutoFilledFor = null;   // product id we've already auto-filled this session
+const _peAutoFilledFor = new Set();   // product ids already auto-filled this session
 function _peStripToText(html) {
   let s = String(html == null ? '' : html);
   if (!s.trim()) return '';
@@ -2711,7 +2761,7 @@ function _peStripToText(html) {
     .replace(/\n{3,}/g, '\n\n').split('\n').map(l => l.trim()).join('\n').trim();
 }
 async function peAutoFillFromKitchen(p) {
-  if (!p || _peAutoFilledFor === p.id) return;
+  if (!p || _peAutoFilledFor.has(p.id)) return;
   // A saved design (the product of earlier work) locks auto-fill out.
   if (Array.isArray(p.description_blocks) && p.description_blocks.length) return;
   const textEn = _peStripToText(p.description_en);
@@ -2722,7 +2772,7 @@ async function peAutoFillFromKitchen(p) {
   // bilingual page for the operator to review.
   if (!textEn && !textCn) return;
   const translate = !(textEn && textCn);
-  _peAutoFilledFor = p.id;
+  _peAutoFilledFor.add(p.id);
   toast(cuT('Auto-filling sections from the kitchen description… · 正在根据厨房描述生成板块…', '正在根据厨房描述生成板块…'));
   try {
     const r = await fetch('/api/retail-admin/ai/compose-blocks', {
@@ -2771,10 +2821,8 @@ function peMount(p) {
   PA_CURRENT = p;
   document.title = (p.name_en || 'Product') + ' · Editor · Roots';
   document.getElementById('pe-name').textContent = (p.name_en || '—') + (p.name_cn ? ' · ' + p.name_cn : '');
-  const badge = document.getElementById('pe-badge');
-  badge.style.display = '';
-  if (p.is_published === 1) { badge.textContent = '✓ Published · 已上架'; badge.className = 'pe-badge pub'; }
-  else { badge.textContent = 'Draft · 草稿'; badge.className = 'pe-badge draft'; }
+  peRenderBadges();
+  peLoadShopListings(p.id);   // async — repaints the QR pill when it arrives
 
   document.getElementById('pa-edit-keywords-en').value = p.keywords_en || '';
   document.getElementById('pa-edit-keywords-cn').value = p.keywords_cn || '';
@@ -2787,7 +2835,7 @@ function peMount(p) {
 
   window._paTemplate = p.page_template || null;
   window._paBlocks = Array.isArray(p.description_blocks)
-    ? p.description_blocks.map(b => ({ ...b, id: b.id || paBlocksGenId() }))
+    ? p.description_blocks.map(b => ({ ...b, id: paSafeBlockId(b && b.id) }))
     : [];
   // NUTRITION IS A BLOCK LIKE ANY OTHER — it just has a second home.
   //
@@ -2857,6 +2905,145 @@ function peMount(p) {
   // already carries both EN + CN descriptions, compose the sections off that
   // copy automatically (fire-and-forget — it leaves the page dirty for review).
   peAutoFillFromKitchen(p);
+}
+
+// ── WHERE THIS PRODUCT IS, AND THE ONE OF THOSE PLACES THIS PAGE CAN CHANGE ──
+//
+// THE BADGE SAID "Draft · 草稿" ABOUT A PRODUCT SELLING AT A COUNTER. It was
+// reading is_published, which gates the ONLINE STORE and nothing else. The QR
+// menu gates on a shop listing instead — deliberately, ruled 2026-09-06, §42
+// and the note at routes/shop-menu.js's photo route: a product on a counter
+// menu must not be blocked because nobody also chose to sell it on the website.
+// Both facts were true at once and the badge printed one of them in a word that
+// means "nobody can see this". So it names the surface it speaks for now, and
+// the other surface gets a pill of its own.
+//
+// THE FIRST PILL IS ALSO THE MISSING CONTROL. There was no way to publish from
+// this editor at all — you composed the page here and then went back to the
+// catalogue to make it real. It flips the same is_published the catalogue's
+// shop switch flips, across the whole variant family, exactly as
+// public/retail-admin/09-products.js paToggleShop does: a 250g live and a 500g
+// hidden is a shelf with a hole in it, and neither screen should be able to
+// make one by accident.
+//
+// THE SECOND PILL IS NOT A CONTROL. Adding a product to a shop menu is the shop
+// screen's job and prices and fulfilment mode are decided there; this reports.
+// It is drawn only for a tenant that HAS shops — a zero on every product of a
+// business that never set the module up is noise, not information.
+let PE_SHOPS = null;          // { tenant_has_shops, shops:[] } once fetched, else null
+let _peShopsFor = null;       // the product id PE_SHOPS answers for
+let _pePublishBusy = false;
+
+// Every row this product publishes with. A lone product is its own family.
+function peFamilyIds() {
+  if (!PA_CURRENT) return [];
+  if (!PA_CURRENT.variant_group_id) return [PA_CURRENT.id];
+  const ids = PA_ALL_PRODUCTS
+    .filter(x => x.variant_group_id === PA_CURRENT.variant_group_id)
+    .map(x => x.id);
+  return ids.length ? ids : [PA_CURRENT.id];
+}
+// Bilingual pill content. data-no-i18n keeps the text-node splitter off it and
+// the data-lang-block pair does the switching, which is how every other fused
+// label on this page stays out of the splitter's way.
+function _peBadgePair(kEn, kCn, vEn, vCn) {
+  const pair = (en, cn) => `<span data-lang-block="en">${escapeHtml(en)}</span><span data-lang-block="cn">${escapeHtml(cn)}</span>`;
+  return `<span class="pe-badge-k">${pair(kEn, kCn)}</span><span class="pe-badge-v">${pair(vEn, vCn)}</span>`;
+}
+function peRenderBadges() {
+  const badge = document.getElementById('pe-badge');
+  if (!badge || !PA_CURRENT) return;
+  const pub = PA_CURRENT.is_published === 1;
+  badge.style.display = '';
+  badge.disabled = _pePublishBusy;
+  badge.className = 'pe-badge ' + (pub ? 'pub' : 'draft');
+  badge.setAttribute('aria-pressed', pub ? 'true' : 'false');
+  // "Online store · 线上商城" is the settings screen's own name for this
+  // surface; "Live/已上架" and "Hidden/未上架" are the catalogue's own pair for
+  // this exact flag. Nothing here is composed.
+  badge.innerHTML = _peBadgePair('Online store', '线上商城', pub ? 'Live' : 'Hidden', pub ? '已上架' : '未上架');
+  badge.title = cuT(
+    pub ? 'In the online store — click to hide' : 'Hidden from the online store — click to publish',
+    pub ? '线上商城 · 已上架 — 点按下架'          : '线上商城 · 未上架 — 点按上架');
+
+  const shopsEl = document.getElementById('pe-shops-badge');
+  if (!shopsEl) return;
+  // Undrawn until the fetch lands, and for a tenant with no shops at all.
+  if (!PE_SHOPS || !PE_SHOPS.tenant_has_shops) { shopsEl.style.display = 'none'; return; }
+  // A listing only reaches a customer when the shop and its location are both
+  // on, which is what the menu route itself requires.
+  const n = (PE_SHOPS.shops || []).filter(x => x.reachable).length;
+  shopsEl.style.display = '';
+  // "QR menu · 二维码菜单" is this page's own pair, from the per-block channel
+  // switch. The count is a numeral and needs no label on either side.
+  shopsEl.innerHTML = _peBadgePair('QR menu', '二维码菜单', String(n), String(n));
+  shopsEl.title = (PE_SHOPS.shops || [])
+    .filter(x => x.reachable)
+    .map(x => x.display_name_en || x.location_name_en || x.public_code)
+    .join(', ');
+}
+async function peLoadShopListings(id) {
+  if (_peShopsFor === id && PE_SHOPS) { peRenderBadges(); return; }
+  PE_SHOPS = null; _peShopsFor = id;
+  peRenderBadges();
+  try {
+    const r = await fetch('/api/retail-admin/products/' + id + '/shops',
+      { credentials: 'same-origin', cache: 'no-store' });
+    if (!r.ok) return;                       // reported by the pill staying away
+    const j = await r.json().catch(() => ({}));
+    if (!j || !j.success || _peShopsFor !== id) return;   // a switch overtook us
+    PE_SHOPS = j.data;
+    peRenderBadges();
+  } catch (e) { /* the pill simply does not appear — it is a report, not a gate */ }
+}
+// Publish or hide the whole variant family, the flag the storefront filters on.
+async function peTogglePublish() {
+  if (!PA_CURRENT || _pePublishBusy) return;
+  const turningOn = PA_CURRENT.is_published !== 1;
+  // PUBLISHING MEANS WHAT YOU ARE LOOKING AT. is_published is a flag, not
+  // content, so a publish with unsaved edits would put the LAST SAVED page in
+  // front of customers while this screen shows a newer one. Save first, and
+  // abandon the publish if that save fails — paSaveEdit has already said why.
+  // Hiding needs no such care: taking a page down never shows the wrong one.
+  if (turningOn && peIsDirty()) {
+    const saved = await paSaveEdit();
+    if (!saved) return;
+  }
+  const ids = peFamilyIds();
+  const val = turningOn ? 1 : 0;
+  const apply = (v) => {
+    PA_CURRENT.is_published = v;
+    ids.forEach(pid => {
+      const i = PA_ALL_PRODUCTS.findIndex(x => x.id === pid);
+      if (i >= 0) PA_ALL_PRODUCTS[i].is_published = v;
+    });
+    peRenderBadges();
+    peRenderProdPicker();
+    if (!document.getElementById('pe-switcher-panel').hidden) peRenderSwitcherList();
+  };
+  _pePublishBusy = true;
+  apply(val);                     // optimistic, like the catalogue's own switch
+  try {
+    for (const pid of ids) {
+      const r = await fetch('/api/retail-admin/products/' + pid, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ is_published: val }),
+      });
+      if (r.status === 401 || r.status === 403) { peAuthBail(); return; }
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success) throw new Error(j.error || 'publish_failed');
+    }
+    toast(cuT(val ? 'In the online store ✓' : 'Hidden from the online store ✓',
+              val ? '线上商城 · 已上架 ✓'      : '线上商城 · 已下架 ✓'));
+  } catch (e) {
+    apply(val ? 0 : 1);           // the switch must never lie about the live state
+    toast(cuT('Could not update availability — ', '无法更新上架状态 — ') + (e.message || e), 'err');
+  } finally {
+    _pePublishBusy = false;
+    peRenderBadges();
+  }
 }
 
 // Switch the inspector between the selected-block form and page-level
@@ -2989,8 +3176,12 @@ function _paSampleScreen(sample, withColophon) {
 }
 // Card thumbnail: a true scaled-down render of the page top in the template's
 // skin. JS (paFitThumbs) scales the fixed 390px render to the card width.
+// A template id also lands in a CSS class name, where anything outside
+// [a-z0-9_-] can close the attribute. paOpenTemplatePreview and paRenderPreview
+// already stripped it this way; the card and its thumbnail did not.
+function paTplClass(id) { return String(id || '').replace(/[^a-z0-9_-]/gi, ''); }
 function paThumbHtml(id) {
-  return `<div class="pa-thumb-scale"><div class="pa-prev-screen pa-thumb-screen pa-tpl-${id}">${_paSampleScreen(PA_THUMB_SAMPLE, false)}</div></div>`;
+  return `<div class="pa-thumb-scale"><div class="pa-prev-screen pa-thumb-screen pa-tpl-${paTplClass(id)}">${_paSampleScreen(PA_THUMB_SAMPLE, false)}</div></div>`;
 }
 // Click-to-open full preview: render the COMPLETE sample page in `id`'s skin into
 // the lightbox so an operator can see the whole template before applying it.
@@ -2999,15 +3190,21 @@ function paOpenTemplatePreview(id) {
   const overlay = document.getElementById('pe-tplprev-overlay'); if (!overlay) return;
   const screen  = document.getElementById('pe-tplprev-screen');
   [...screen.classList].forEach(c => { if (c.indexOf('pa-tpl-') === 0) screen.classList.remove(c); });
-  screen.classList.add('pa-tpl-' + id.replace(/[^a-z0-9_-]/gi, ''));
+  screen.classList.add('pa-tpl-' + paTplClass(id));
   screen.innerHTML = _paSampleScreen(PA_PREVIEW_SAMPLE, true);
   document.getElementById('pe-tplprev-title').innerHTML =
     `<span data-lang-block="en">${escapeHtml(tpl.label_en)}</span><span data-lang-block="cn">${escapeHtml(tpl.label_cn)}</span>`;
   const useBtn = document.getElementById('pe-tplprev-use');
-  const isCur  = id === window._paTemplate && (window._paBlocks || []).length;
+  const isCur  = !!(id === window._paTemplate && (window._paBlocks || []).length);
+  // An imported template can arrive with no block stack at all. Say so with the
+  // count pair the chooser card already uses, and refuse the click here rather
+  // than in paApplyTemplate, where a bare return is a button that does nothing.
+  const nBlocks = (tpl.blocks || []).length;
   useBtn.dataset.tpl = id;
-  useBtn.disabled = !!isCur;
-  useBtn.innerHTML = isCur
+  useBtn.disabled = isCur || !nBlocks;
+  useBtn.innerHTML = !nBlocks
+    ? `<span data-lang-block="en">0 blocks</span><span data-lang-block="cn">0 个板块</span>`
+    : isCur
     ? `<span data-lang-block="en">✓ Current template</span><span data-lang-block="cn">✓ 当前模板</span>`
     : `<span data-lang-block="en">Use this template</span><span data-lang-block="cn">套用此模板</span>`;
   overlay.hidden = false;
@@ -3080,7 +3277,11 @@ async function paHandleImportFile(input) {
 }
 async function paDeleteCustomTemplate(ev, id) {
   ev.stopPropagation();
-  if (!(await askConfirm({ title: 'Remove this template? Products already built from it keep their blocks. · 删除此模板?已套用的产品保留其板块。', confirmLabel: 'Remove template', danger: true }))) return;
+  if (!(await askConfirm({
+    titleEn: 'Remove this template? Products already built from it keep their blocks.',
+    titleCn: '删除此模板?已套用的产品保留其板块。',
+    confirmEn: 'Remove', confirmCn: '删除', danger: true,
+  }))) return;
   try {
     const r = await fetch('/api/retail-admin/page-templates/' + encodeURIComponent(id), {
       method: 'DELETE', credentials: 'same-origin',
@@ -3108,12 +3309,16 @@ function paRenderPresets() {
       ? `<span class="pa-preset-custom-tag" data-no-i18n>${paBiTitle('Custom', '自定义')}</span>` : '';
     const delBtn = p.custom
       ? `<span class="pa-preset-del" role="button" tabindex="0" title="Remove · 删除" data-no-i18n
-           onclick="paDeleteCustomTemplate(event, '${p.id}')"
-           onkeydown="if(event.key==='Enter'||event.key===' ')paDeleteCustomTemplate(event,'${p.id}')">✕</span>` : '';
+           data-tpl="${escapeAttr(p.id)}"
+           onclick="paDeleteCustomTemplate(event, this.dataset.tpl)"
+           onkeydown="if(event.key==='Enter'||event.key===' ')paDeleteCustomTemplate(event,this.dataset.tpl)">✕</span>` : '';
+    // An imported template need not carry descriptions; joining two undefineds
+    // put the literal "undefined · undefined" in the card's tooltip.
+    const desc = [p.desc_en, p.desc_cn].map(x => (x || '').trim()).filter(Boolean).join(' · ');
     return `
-    <button type="button" class="pa-preset-card${active ? ' active' : ''}" onclick="paOpenTemplatePreview('${p.id}')" title="${escapeHtml(p.desc_en + ' · ' + p.desc_cn)}">
+    <button type="button" class="pa-preset-card${active ? ' active' : ''}" data-tpl="${escapeAttr(p.id)}" onclick="paOpenTemplatePreview(this.dataset.tpl)"${desc ? ` title="${escapeAttr(desc)}"` : ''}>
       ${customTag}${delBtn}
-      <div class="pa-preset-thumb pa-tpl-${p.id}">${paThumbHtml(p.id)}</div>
+      <div class="pa-preset-thumb pa-tpl-${paTplClass(p.id)}">${paThumbHtml(p.id)}</div>
       <div class="pa-preset-meta">
         <span class="pa-preset-card-label" data-no-i18n>${paBiTitle(escapeHtml(p.label_en), escapeHtml(p.label_cn))}</span>
         <span class="pa-preset-card-count" data-no-i18n>${count}</span>
@@ -3124,6 +3329,11 @@ function paRenderPresets() {
 }
 async function paApplyTemplate(id) {
   const tpl = PA_TEMPLATES.find(p => p.id === id); if (!tpl) return;
+  // paRenderPresets counts these defensively as (p.blocks || []); applying one
+  // did not, so an imported template with no stack threw on .map and the click
+  // did nothing at all. The preview's Use button is disabled for these too, so
+  // this is the backstop rather than the message — see paOpenTemplatePreview.
+  if (!Array.isArray(tpl.blocks) || !tpl.blocks.length) return;
   // Re-picking the template the page is already built from would needlessly
   // wipe the operator's edits — no-op instead.
   if (id === window._paTemplate && (window._paBlocks || []).length) {
@@ -3133,9 +3343,10 @@ async function paApplyTemplate(id) {
   const existing = (window._paBlocks || []).length;
   if (existing > 0) {
     const ok = await askConfirm({
-      title: 'Switch template? · 切换模板?',
-      body: 'It will REPLACE the ' + existing + ' block(s) currently on this product. · 将替换当前产品上的 ' + existing + ' 个板块,无法撤销。',
-      confirmLabel: 'Switch template',
+      titleEn: 'Switch template?', titleCn: '切换模板?',
+      bodyEn: 'It will REPLACE the ' + existing + ' block(s) currently on this product.',
+      bodyCn: '将替换当前产品上的 ' + existing + ' 个板块,无法撤销。',
+      confirmEn: 'Switch template', confirmCn: '切换模板',
       danger: true,
     });
     if (!ok) return;
@@ -3153,10 +3364,18 @@ function paRenderAll() {
   paRenderSelectedEditor();
   paRenderPreview();
 }
+// Typing path. The block state and the section-list labels stay immediate —
+// they are cheap, and peIsDirty/paSaveEdit both read the state, so it must never
+// lag the caret. The phone preview is the expensive half: a full innerHTML
+// rebuild of the whole page, which ALSO wakes the i18n MutationObserver into a
+// fresh walk of everything it just built. Per keystroke that is a lot of work to
+// throw away 40ms later; one frame behind the caret reads as live.
+let _paPreviewTimer = null;
 function paLivePreview() {
   paBlocksSyncFromDOM();
-  paRenderPreview();
   paRefreshTabLabels();
+  clearTimeout(_paPreviewTimer);
+  _paPreviewTimer = setTimeout(paRenderPreview, 90);
 }
 
 // ── Inline emoji picker for tile / card Icon fields ──
@@ -3245,6 +3464,9 @@ async function paSaveEdit() {
   const btn = document.getElementById('pe-save-btn');
   const status = document.getElementById('pe-save-status');
   btn.disabled = true; status.textContent = 'Saving… · 保存中…';
+  // Counted BEFORE the PATCH, off the same predicate the collect uses, because
+  // afterwards there is nothing left to count: these never reach the body.
+  const unsavable = paUnsavableBlocks().length;
   const body = peCollectBody();
   try {
     const r = await fetch('/api/retail-admin/products/' + PA_CURRENT.id, {
@@ -3263,10 +3485,23 @@ async function paSaveEdit() {
     if (idx !== -1) PA_ALL_PRODUCTS[idx] = { ...PA_ALL_PRODUCTS[idx], ...j.data };
     PA_SAVED_SNAPSHOT = peSerializeState();
     status.textContent = 'Saved ✓ · 已保存 ' + tdWhen(new Date(), 'time');
-    toast('Saved ✓ · 已保存');
+    // A section that was written into but is not finished enough to show is not
+    // saved, and used to be reported as "Saved ✓" like everything else — so a
+    // question typed into an FAQ with no answer beside it was gone on the next
+    // load and nothing had ever said so. Say it, in the colour of a problem,
+    // and leave the marker in the stack pointing at which ones.
+    if (unsavable) {
+      toast(cuT(
+        'Saved ✓ — ' + unsavable + ' section' + (unsavable === 1 ? '' : 's') + ' not saved yet',
+        '已保存 ✓ — ' + unsavable + ' 个板块尚未保存'), 'err');
+    } else {
+      toast('Saved ✓ · 已保存');
+    }
+    return true;
   } catch (e) {
     status.textContent = '';
     toast('Save failed · 保存失败: ' + e.message, 'err');
+    return false;
   } finally {
     btn.disabled = false;
   }
@@ -3274,6 +3509,13 @@ async function paSaveEdit() {
 
 // ── Block editor core ──
 function paBlocksGenId() { return 'b' + Math.random().toString(36).slice(2, 9); }
+// A block id is interpolated into onclick= handlers, CSS selectors and data
+// attributes all over this file. Generated ids are [a-z0-9] by construction;
+// ids arriving from description_blocks JSON are whatever was stored there.
+// Anything that is not a plain handle gets a fresh one at the door.
+function paSafeBlockId(id) {
+  return /^[A-Za-z0-9_-]{1,64}$/.test(String(id || '')) ? String(id) : paBlocksGenId();
+}
 
 function paBlocksPopulatePicker() {
   const pick = document.getElementById('pa-blocks-picker');
@@ -3316,7 +3558,10 @@ function paBlocksAdd(type) {
   }, 30);
 }
 async function paBlocksRemove(id) {
-  if (!(await askConfirm({ title: 'Delete this section? · 删除此板块?', confirmLabel: 'Delete section', danger: true }))) return;
+  if (!(await askConfirm({
+    titleEn: 'Delete this section?', titleCn: '删除此板块?',
+    confirmEn: 'Delete section', confirmCn: '删除板块', danger: true,
+  }))) return;
   paBlocksSyncFromDOM();
   const arr = window._paBlocks || [];
   const i = arr.findIndex(b => b.id === id);
@@ -3440,14 +3685,21 @@ function paArrRemove(blockId, key, idx) {
   b[key].splice(idx, 1);
   paRenderAll();
 }
-function paBlocksCollect() {
-  paBlocksSyncFromDOM();
-  const out = (window._paBlocks || []).filter(b => {
-    // hide_qr is a per-block channel flag (see paChannelEditorHtml). It is only
-    // ever stored when it is ON: a false written onto every block the office
-    // happened to open would put a field nobody set into every product's JSON,
-    // and an absent flag already means "shows everywhere".
-    if (!b.hide_qr) delete b.hide_qr; else b.hide_qr = true;
+// WHETHER THIS SECTION SURVIVES THE SAVE.
+//
+// Lifted out of paBlocksCollect so the section list can ask the SAME question
+// the save asks. It used to live only inside the filter, which is how a section
+// carrying half a sentence could be dropped on save under a green "Saved ✓" and
+// be gone on the next load: nothing anywhere else could tell it was doomed.
+// One predicate, two readers — they cannot drift.
+//
+// The rule itself is unchanged and stays strict: a section with nothing in it
+// is noise, and an EMPTY section shown to a customer is worse than no section.
+// What changes is that the office can now see which ones those are, before
+// pressing Save rather than after (paRenderTabs marks them, paSaveEdit counts
+// them).
+function _paBlockWillSave(b) {
+    if (!b) return false;
     // Nutrition STAYS in description_blocks — it is a block like any other and
     // all three surfaces render the type. paCollectNutrition additionally
     // mirrors it to the products.nutrition column for mini app builds that
@@ -3465,8 +3717,12 @@ function paBlocksCollect() {
                                      return (b.items || []).some(it => it.name_en || it.name_cn);
     if (b.type === 'how_to_use')     return (b.tiles || []).some(t => t.label_en || t.label_cn || t.icon);
     if (b.type === 'storage_box')    {
-      const hasCard = c => c && (c.head_en || c.head_cn || c.num_en || c.num_cn || c.num || c.unit_en || c.unit_cn);
-      return hasCard(b.left) || hasCard(b.right) || b.note_en || b.note_cn;
+      const hasCard = c => !!(c && (c.head_en || c.head_cn || c.num_en || c.num_cn || c.num || c.unit_en || c.unit_cn));
+      // Coerced: every other branch answers a boolean, and this one answered the
+      // first truthy FIELD ('Unopened'). Inside a .filter() that read the same,
+      // which is why it survived — but the predicate has two callers now and a
+      // caller comparing it to true would have been wrong about storage boxes.
+      return hasCard(b.left) || hasCard(b.right) || !!(b.note_en || b.note_cn);
     }
     if (b.type === 'notes_callout')  return !!(b.text_en || b.text_cn);
     if (b.type === 'pull_quote')     return !!(b.text_en || b.text_cn || b.who_en || b.who_cn);
@@ -3475,6 +3731,38 @@ function paBlocksCollect() {
     if (b.type === 'pairings')       return (b.items || []).some(it => it.id);
     if (b.type === 'faq')            return (b.items || []).some(it => (it.q_en || it.q_cn) && (it.a_en || it.a_cn));
     return true;
+}
+// Does this section carry ANY words? The difference between a block somebody
+// added and never touched — noise, drop it without a word — and one somebody
+// wrote into that is not finished enough to show. Only the second is worth
+// interrupting for, which is why the marker is not simply "will not save".
+//
+// Keys that are settings rather than words are skipped: the colour tokens, the
+// slab colour, the image ratio, the channel flag, the type and the id. An icon
+// is a glyph, not a sentence, and every type whose completeness test counts an
+// icon already keeps the block on that basis alone.
+const _PA_NOT_WORDS = new Set(['id', 'type', 'bg', 'bg_color', 'fg_color', 'accent_color',
+                               'ratio', 'hide_qr', 'icon', 'lead', 'alt']);
+function _paBlockHasWords(v, key) {
+  if (typeof v === 'string') return !_PA_NOT_WORDS.has(key) && v.trim() !== '';
+  if (Array.isArray(v)) return v.some(x => _paBlockHasWords(x, key));
+  if (v && typeof v === 'object') return Object.keys(v).some(k => _paBlockHasWords(v[k], k));
+  return false;
+}
+// The sections that carry words and would still be dropped — what the marker
+// marks and what the save toast counts.
+function paUnsavableBlocks() {
+  return (window._paBlocks || []).filter(b => !_paBlockWillSave(b) && _paBlockHasWords(b));
+}
+function paBlocksCollect() {
+  paBlocksSyncFromDOM();
+  const out = (window._paBlocks || []).filter(b => {
+    // hide_qr is a per-block channel flag (see paChannelEditorHtml). It is only
+    // ever stored when it is ON: a false written onto every block the office
+    // happened to open would put a field nobody set into every product's JSON,
+    // and an absent flag already means "shows everywhere".
+    if (!b.hide_qr) delete b.hide_qr; else b.hide_qr = true;
+    return _paBlockWillSave(b);
   });
   return out.length ? out : null;
 }
@@ -3571,12 +3859,19 @@ function paRenderTabs() {
     // in its own inspector — otherwise "which of these nine does the till page
     // show?" costs nine clicks to answer.
     const offQr  = b.hide_qr ? ' pbr-offqr' : '';
-    return `<div class="pa-block-row${active}${offQr}" draggable="true" data-blockid="${b.id}" data-idx="${i}" onclick="paBlocksSelect('${b.id}')" title="${escapeAttr(tName.en + (tName.cn ? ' · ' + tName.cn : ''))}">
+    // A section with words in it that the save would still drop. Marked here,
+    // in the stack, for the same reason hide_qr is: the alternative is opening
+    // every section to find out which one is about to disappear. The words are
+    // the page's own live pair — this is the state 09-products calls
+    // "Not saved yet · 尚未保存" of a product that has never been written.
+    const unsaved = (!_paBlockWillSave(b) && _paBlockHasWords(b)) ? ' pbr-unsaved' : '';
+    return `<div class="pa-block-row${active}${offQr}${unsaved}" draggable="true" data-blockid="${b.id}" data-idx="${i}" onclick="paBlocksSelect('${b.id}')" title="${escapeAttr(tName.en + (tName.cn ? ' · ' + tName.cn : ''))}">
       <div class="pbr-icon">${icon}</div>
       <div class="pbr-info">
         <div class="pbr-name" data-no-i18n><span data-lang-block="en">${escapeHtml(tName.en)}</span><span data-lang-block="cn">${escapeHtml(tName.cn || tName.en)}</span></div>
         ${sub ? `<div class="pbr-sub">${escapeHtml(sub)}</div>` : ''}
       </div>
+      ${unsaved ? `<div class="pbr-unsaved-ic" title="Not saved yet · 尚未保存"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16.5" x2="12.01" y2="16.5"/></svg></div>` : ''}
       ${b.hide_qr ? `<div class="pbr-qr" title="Hidden on the QR menu · 二维码菜单已隐藏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg></div>` : ''}
       <div class="pbr-grip" title="Drag to reorder · 拖动排序">⋮⋮</div>
       <div class="pbr-num">${i + 1}</div>
@@ -3589,6 +3884,15 @@ function paRefreshTabLabels() {
   blocks.forEach(b => {
     const row = document.querySelector(`.pa-block-row[data-blockid="${b.id}"]`);
     if (!row) return;
+    // The typing path repaints labels without rebuilding the stack, so the
+    // unsavable marker has to be re-decided here too — otherwise it stays on
+    // the row for the rest of the session after the missing answer is typed,
+    // and the office learns to ignore it.
+    const unsavable = !_paBlockWillSave(b) && _paBlockHasWords(b);
+    row.classList.toggle('pbr-unsaved', unsavable);
+    const icon = row.querySelector('.pbr-unsaved-ic');
+    if (unsavable && !icon) paRenderTabs();
+    else if (!unsavable && icon) icon.remove();
     const subEl = row.querySelector('.pbr-sub');
     const sub = _paBlockSubLabel(b);
     if (sub) {
@@ -3896,8 +4200,7 @@ function paPairAdd(blockId, productId) {
   if (b.items.some(it => it.id === id)) return;
   const p = PA_ALL_PRODUCTS.find(x => x.id === id) || {};
   b.items.push({ id, name_en: p.name_en || '', name_cn: p.name_cn || '' });
-  paRenderAll();
-  paLivePreview();
+  paRenderAll();   // ends in paRenderPreview — a paLivePreview here repainted it twice
 }
 function paPairRemove(blockId, idx) {
   paBlocksSyncFromDOM();
@@ -3905,7 +4208,6 @@ function paPairRemove(blockId, idx) {
   if (!Array.isArray(b.items)) return;
   b.items.splice(idx, 1);
   paRenderAll();
-  paLivePreview();
 }
 // Upload a lifestyle photo for an image_band block. Reuses the shared media
 // endpoint (stores in retail_media, returns a stable /api/retail/media/:id
@@ -3971,20 +4273,28 @@ async function paImageBandUpload(input, blockId) {
     const fd = new FormData();
     fd.append('file', file);
     const res = await fetch('/api/retail-admin/media/upload', { method: 'POST', credentials: 'same-origin', body: fd });
-    const j = await res.json();
-    if (!j.success) {
+    // A lost session here used to read as a plain "Upload failed", leaving the
+    // operator re-picking the same file against a dead cookie. Bounce, as every
+    // other authenticated call on this page does.
+    if (res.status === 401 || res.status === 403) { peAuthBail(); return; }
+    // A proxy-level rejection (413, a gateway error page) answers HTML, and an
+    // unguarded .json() threw on it — landing in the catch below with a parser
+    // message instead of the reason.
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || !j.success) {
       const msg = j.error === 'too_large' ? cuT('Image too large.', '图片过大。')
                 : j.error === 'not_an_image' ? cuT('That file is not an image.', '该文件不是图片。')
                 : cuT('Upload failed.', '上传失败。');
-      toast(msg, 'error');
+      // 'error' is not a kind toast() knows — it tests for 'err' — so both of
+      // these failures painted in the success colour.
+      toast(msg, 'err');
       return;
     }
     b.url = j.data.url;
     paRenderAll();
-    paLivePreview();
     toast(cuT('Image added.', '图片已添加。'));
   } catch (e) {
-    toast(cuT('Upload failed.', '上传失败。'), 'error');
+    toast(cuT('Upload failed.', '上传失败。'), 'err');
   }
 }
 function paImageBandClear(blockId) {
@@ -3993,7 +4303,6 @@ function paImageBandClear(blockId) {
   if (!b) return;
   b.url = '';
   paRenderAll();
-  paLivePreview();
 }
 function paRenderSelectedEditor() {
   const mount = document.getElementById('pa-block-editor-mount'); if (!mount) return;
@@ -4237,6 +4546,9 @@ function _paSyncPreviewLangToggle() {
     b.classList.toggle('active', b.dataset.plang === _paPreviewLang));
 }
 function paRenderPreview() {
+  // Drops any render paLivePreview had queued — a direct call is always the
+  // fresher one, and letting the timer fire afterwards paints the same page twice.
+  clearTimeout(_paPreviewTimer);
   const screen = document.getElementById('pa-preview-screen'); if (!screen || !PA_CURRENT) return;
   const p = PA_CURRENT;
   // Per-template visual skin — the preview screen carries a pa-tpl-<id> class so
@@ -4284,13 +4596,33 @@ function paRenderPreview() {
       </div>
       ${blocksHtml || (!keywords && !tagline ? `<div class="pa-prev-empty">${_paPreviewLang === 'cn' ? '还没有板块,点上方“添加板块”开始排版。' : 'No designer sections yet. Add one to compose the page.'}</div>` : '')}
       <div class="pa-prev-colophon">
-        <img class="pa-prev-colophon-img" src="/assets/brand/ip-${colResChar}.jpg" alt="">
+        <img class="pa-prev-colophon-img" src="/assets/brand/ip-${encodeURIComponent(colResChar)}.jpg" alt="" onerror="this.style.display='none'">
         <div class="pa-prev-colophon-tagline">${escapeHtml(colResTag)}</div>
         <div class="pa-prev-colophon-meta"><span class="pa-prev-colophon-rule"></span><span>Roots · ESTD 2017</span><span class="pa-prev-colophon-rule"></span></div>
         ${colIsAuto ? '<div class="pa-prev-colophon-auto">auto · 自动</div>' : ''}
       </div>
     </div>`;
 }
+
+// LEAVING WITH UNSAVED WORK.
+//
+// The editor's own exits — Close, switch product, switch editor — each ask
+// their own question and then set this flag, so the browser does not ask the
+// same thing twice on the navigation that follows.
+//
+// Everything else that can take the page away (the tab's close button, reload,
+// Back, a typed URL) is not ours to intercept, and until now took the unsaved
+// design with it silently. beforeunload is the one hook browsers give for that;
+// the wording is the browser's own, in the reader's own language, and cannot be
+// set from here — which is also why no string is needed.
+let _peLeaving = false;
+function peLeaveIntentionally() { _peLeaving = true; }
+window.addEventListener('beforeunload', (e) => {
+  if (_peLeaving || !peIsDirty()) return;
+  e.preventDefault();
+  e.returnValue = '';   // Chrome/Safari still require this to show the prompt
+  return '';
+});
 
 // Ctrl/Cmd+S → save; Escape closes the smart-paste modal / product switcher
 window.addEventListener('keydown', (e) => {
@@ -4369,6 +4701,15 @@ window.addEventListener('resize', () => {
     textNode.__i18nDone = true;
     textNode.nodeValue = _lang === 'cn' ? cnFull : enFull;
     _reg.push({ node: textNode, en: enFull, cn: cnFull });
+    // The registry holds one entry per translated text node so applyLang can
+    // rewrite them in place. applyLang drops the detached ones — but only when
+    // somebody toggles the language, and the phone preview is rebuilt on every
+    // edit, so in a long editing session the list grew without bound over nodes
+    // that left the document minutes ago. Sweep once it gets long.
+    if (_reg.length > 4000) pruneReg();
+  }
+  function pruneReg() {
+    for (let i = _reg.length - 1; i >= 0; i--) if (!_reg[i].node.isConnected) _reg.splice(i, 1);
   }
   function processSubtree(root) {
     if (!root) return;
@@ -4394,6 +4735,9 @@ window.addEventListener('resize', () => {
     processSubtree(document.body);
     try { localStorage.setItem(LANG_KEY, lang); } catch {}
     updateBtn();
+    // The badges carry one cuT() string in a title attribute, which no amount of
+    // text-node rewriting can reach.
+    try { if (typeof peRenderBadges === 'function') peRenderBadges(); } catch (e) {}
   }
   function updateBtn() {
     document.querySelectorAll('#lang-toggle button[data-lang]').forEach(b =>
