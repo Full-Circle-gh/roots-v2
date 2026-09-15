@@ -3300,6 +3300,17 @@
   .pa-bulkbar-sel {
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     margin: 0 0 var(--s3); padding: 9px 12px;
+    /* position+z-index lifts the whole bar — and the field menus that drop out
+       of it — above the list that follows it in the DOM. Two things below
+       conspire without it: paBulkRise keeps a transform under fill-mode:both,
+       so the bar is itself a stacking context and a menu's z-index:60 cannot
+       climb out of it; and .pa-listcard's clip-path makes the table another
+       one, a LATER sibling, so the whole card — sticky header band, rows and
+       all — paints over an open menu. Neither is a mistake on its own, which
+       is why this reads as a menu rendering behind the table. 8 clears the
+       band's 5 and stays under the fixed topbar's 12, which the bar still
+       scrolls beneath. Same fix, same reason as .db-dd-bar on the dashboard. */
+    position: relative; z-index: 8;
     background: var(--td-raised); border: 1px solid var(--td-border);
     border-radius: 12px; box-shadow: 0 6px 22px rgba(0, 0, 0, .22);
     font-family: var(--f-sans); font-size: 12px;
