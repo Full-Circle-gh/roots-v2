@@ -121,8 +121,18 @@ console.log('\nG · a shelf our own commit took below zero');
   check('names the shop it happened in', till.includes('天河店'), till);
   check('the balance prints with its own sign, per line',
     till.includes('剩余 -3') && till.includes('Beet Salad -1'), till);
-  check('says somebody is owed, in Chinese', till.includes('有客户订单等待'), till);
-  check('…and in English', till.includes('are now owed'), till);
+  // A COUNTER SALE OWES NOBODY, and this is the case the first version got
+  // wrong. The goods left in the customer's hand and the money is in the till;
+  // the negative says the RECORD was short, not that anyone is waiting. The two
+  // readings have opposite remedies — "owed" sends somebody to re-order stock
+  // that is not missing, where the truth sends them to recount a shelf.
+  check('a till sale is reported as a miscount, in Chinese',
+    till.includes('可能是数错了'), till);
+  check('…and in English', till.includes('likely counted wrong'), till);
+  check('a till sale NEVER claims a customer is waiting',
+    !till.includes('有客户订单等待') && !till.includes('are now owed'), till);
+  check('the English reads as one sentence, with no stray space before the comma',
+    !/ ,/.test(till), till);
   // THE ONE THING THIS MUST NEVER SAY. The platform alert's wording is "已按 0
   // 计" / "clamped at 0" because the platform ingest refuses the shelf. Ours
   // wrote the negative deliberately; borrowing that sentence would report a
@@ -143,6 +153,16 @@ console.log('\nG · a shelf our own commit took below zero');
     lines: [{ name: '越式豆腐卷', nameEn: 'Tofu Roll', balance: -18 }],
   });
   check('a delivery is named by its channel', web.includes('网店') && web.includes('Web store'), web);
+  // …and a DELIVERY genuinely does owe: the customer is waiting and somebody has
+  // to make or re-order the units. Same alert, the other cause.
+  check('a delivery says somebody is owed, in Chinese',
+    web.includes('有客户订单等待'), web);
+  check('…and in English', web.includes('are now owed'), web);
+  check('a delivery is NOT reported as a miscount',
+    !web.includes('可能是数错了') && !web.includes('counted wrong'), web);
+  check('both causes keep the same shape around the clause that differs',
+    web.includes('库存已为负数') && till.includes('库存已为负数')
+      && web.includes('请检查') && till.includes('请检查'), web);
   const wechat = belowZeroText({
     orderNo: 'ORD-1044', lines: [{ nameEn: 'Anything', balance: -1 }],
   });

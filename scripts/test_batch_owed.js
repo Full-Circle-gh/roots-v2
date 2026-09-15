@@ -457,7 +457,19 @@ section('9c · the debt is said out loud, not only written down');
   it('a walk-in is named as the till rather than as whatever channel the row carries', () => {
     assert.ok(/fulfillment_type FROM retail_orders/.test(inv),
       'the commit reads the fulfilment so the alert can say which door it was');
-    assert.ok(/fulfilment === 'counter' \? 'counter'/.test(rep));
+    // Asserted through the rendered text rather than the ternary that produces
+    // it: the previous version of this case pinned the exact expression and
+    // went red the moment that line was refactored, which taught nothing.
+    const { belowZeroText } = require(path.join(ROOT, 'lib/channel-line-report'));
+    const till = belowZeroText({
+      channel: 'web', fulfilment: 'counter', orderNo: 'X', storeName: 'S',
+      lines: [{ nameEn: 'Anything', balance: -1 }],
+    });
+    assert.ok(/Counter till/.test(till) && !/Web store/.test(till),
+      'the fulfilment wins over the channel column on a walk-in');
+    // …and the cause follows the same fork: a till sale owes nobody.
+    assert.ok(!/are now owed/.test(till) && /likely counted wrong/.test(till),
+      'a counter sale is reported as a miscount, not as a debt');
   });
   it('it does NOT borrow the platform sentence — ours did not clamp', () => {
     const at = rep.indexOf('function belowZeroText');
