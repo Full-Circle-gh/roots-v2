@@ -873,9 +873,30 @@ img{display:block;max-width:100%}
 .pb-faq .pb-faq-m .l-minus{display:none}
 .pb-faq[open] .pb-faq-m .l-minus{display:inline}
 .pb-faq-a{padding:0 0 15px;font-size:14px;line-height:22px;overflow-wrap:anywhere}
-.dt-pk{font-family:var(--f-bear);font-size:9.5px;letter-spacing:.17em;
-  text-transform:uppercase;color:var(--olive);margin-bottom:5px}
-.dt-pb{font-size:14px;line-height:22px;overflow-wrap:anywhere}
+/* THE KICKER WEARS A SHORT RULE, which is the mini app's own .pb-hero-kicker:
+   a 19px bar in --forest before the words, with the words themselves in that
+   same forest rather than the olive every other kicker on this page uses. It
+   is the one kicker that introduces a paragraph rather than labelling a list,
+   and the component distinguishes them exactly this way. */
+.dt-pk{display:flex;align-items:center;gap:10px;font-family:var(--f-bear);
+  font-size:9.5px;line-height:12px;letter-spacing:.17em;text-transform:uppercase;
+  color:var(--forest);margin-bottom:8px}
+.dt-pk::before{content:"";flex:none;display:block;width:19px;height:1px;
+  background:var(--forest)}
+/* white-space:pre-line IS LOAD-BEARING AND WAS MISSING. The office writes the
+   paragraph with blank lines in it and the editor honours them; without this
+   every paragraph of a description ran together into one block on the live
+   page, which is what a customer was reading. The component's .pb-hero-body
+   has carried it all along. */
+.dt-pb{font-size:14px;line-height:22px;overflow-wrap:anywhere;white-space:pre-line}
+/* The inline ink-pull: one phrase mid-paragraph, set in the display face on a
+   lime slab. box-decoration-break:clone is what keeps the slab's padding on
+   BOTH halves when the phrase wraps across a line — without it the second line
+   loses its left padding and the slab reads as torn. */
+.pb-hl{font-family:var(--f-bear);font-style:normal;font-size:17.5px;line-height:1;
+  letter-spacing:-.005em;background:var(--lime);color:var(--ink);
+  padding:.06em .18em;
+  -webkit-box-decoration-break:clone;box-decoration-break:clone}
 
 /* The sizes' own add buttons. Never seen, never reachable by a thumb; the size
    picker clicks them so that §120's single add path stays single. */
@@ -2698,9 +2719,21 @@ function detailBody(it, code, listed) {
         `<div class="pb-spec-v">${p2(c.v)}</div></div>`).join('') + `</div>`;
     }
     if (b.type === 'hero_intro') {
+      /* THE HIGHLIGHT PHRASE IS MARKED INLINE, WHICH IS WHY THIS CANNOT USE
+         bi(). bi() escapes a whole string and wraps it in the two language
+         spans; the phrase needs markup INSIDE one of those spans, so each
+         language's segments are assembled here and each piece escaped on its
+         own. Reported by Ash against the editor's preview: the slab was drawn
+         there and nowhere on the live page. */
+      const run = (segs) => segs.map(x => x.hl
+        ? `<span class="pb-hl">${esc(x.text)}</span>` : esc(x.text)).join('');
+      const bodyHtml = (b.segs && (b.segs.en.length || b.segs.cn.length))
+        ? `<span class="l-en">${run(b.segs.en.length ? b.segs.en : b.segs.cn)}</span>` +
+          `<span class="l-cn">${run(b.segs.cn.length ? b.segs.cn : b.segs.en)}</span>`
+        : '';
       return `<div class="dt-p">` +
         ((b.kicker.en || b.kicker.cn) ? `<div class="dt-pk">${p2(b.kicker)}</div>` : '') +
-        ((b.body.en || b.body.cn) ? `<div class="dt-pb">${p2(b.body)}</div>` : '') +
+        (bodyHtml ? `<div class="dt-pb">${bodyHtml}</div>` : '') +
         `</div>`;
     }
     if (b.type === 'why') {
