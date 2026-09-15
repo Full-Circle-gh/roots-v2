@@ -131,6 +131,7 @@
     "test:addon-available": "node scripts/test_addon_available.js",
     "test:fresh-stock-deferral": "node scripts/test_fresh_stock_deferral.js",
     "test:cost-incomplete": "node scripts/test_cost_incomplete_flag.js",
+    "test:product-duplicate": "node scripts/test_product_duplicate_fields.js",
     "test:sync-start": "node scripts/test_sync_start_time.js",
     "test:unit-mismatch": "node scripts/test_recipe_unit_mismatch_warnings.js",
     "test:recipe-yield": "node scripts/test_recipe_yield_auto.js",

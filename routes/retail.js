@@ -23446,12 +23446,35 @@ router.delete('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) =
   res.json({ success: true });
 });
 
-// Duplicate a product. Copies all commercial fields (name, description, photos,
-// price, compare-at, page design, etc.) into a NEW product. SKU gets a fresh
-// minted DRAFT-XXXXX (every product — incl. a variant sibling — needs its own
-// unique code; leaving it NULL left wizard/editor variants with a blank SKU),
-// stock reset to 0, and it starts hidden (is_published=0) so a half-edited copy
-// never leaks into the shop. body: { as_variant, label }.
+// Duplicate a product. Copies the WHOLE authoring surface — every field the
+// product editor can set — into a NEW product: names, description, photos,
+// price, cost, page design, the product facts bag (origin / ingredients / …),
+// the "Suggested add-ons" upsell, the "Bundle — sold as one" recipe + stock
+// mode, and the customer-choice Options with their choices.
+//
+// IT USED TO COPY A SUBSET, AND A SUBSET IS WORSE THAN NOTHING HERE. The
+// operator cannot see what was dropped: the copy opens with Options empty,
+// "Not a bundle", no add-ons and a blank Origin / Ingredients, all of which
+// read exactly like a product that never had them. The editor then autosaves
+// that emptiness back, so the loss is permanent by the time anyone notices.
+// Any column added to the editor must be added here too.
+//
+// NOT copied, on purpose:
+//   sku            — freshly minted DRAFT-XXXXX (every product, incl. a variant
+//                    sibling, needs its own unique code; leaving it NULL left
+//                    wizard/editor variants with a blank SKU).
+//   barcode        — a barcode names ONE product; two rows sharing one breaks
+//                    scanning at the till.
+//   stock_qty      — 0. Nothing has been counted for the copy yet.
+//   is_published   — starts hidden, so a half-edited copy never leaks into the shop.
+//   flash_*        — a copy does not inherit a live flash-sale window.
+//   recipe_id      — linking a recipe fires a cost recompute (see the link
+//                    endpoint above); a plain INSERT would leave the copy linked
+//                    with a cost nothing ever computed. The operator links it.
+//   variant siblings — the other sizes in a variant GROUP are separate product
+//                    rows; a plain duplicate lands standalone (see as_variant).
+//
+// body: { as_variant, label }.
 // as_variant also joins the copy to the source's variant group (creating one,
 // owned by the source, if it doesn't have one yet) with the given label —
 // the smooth path for "same product, different size".
@@ -23460,11 +23483,16 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
   if (catalogMode(req) === 'upstream') return res.status(423).json({ success: false, error: 'catalog_locked' });
   const id = parseInt(req.params.id, 10);
   const src = tdb().prepare(
-    `SELECT name_en, name_cn, category, weight, sell_price, compare_at_price,
-            ship_modes, description_en, description_cn, description_format, image_data, images,
-            keywords_en, keywords_cn, tagline_en, tagline_cn, free_of, tags, nutrition,
-            description_blocks, use_block_design, colophon_character, colophon_tagline_en, colophon_tagline_cn,
-            variant_group_id, sort_order
+    `SELECT name_en, name_cn, category, top_category, subcategory, weight, sell_price, compare_at_price,
+            unit_cost, cost_incomplete, low_stock_threshold, ship_modes,
+            description_en, description_cn, description_format, image_data, images, image_url,
+            keywords_en, keywords_cn, tagline_en, tagline_cn, free_of, tags, nutrition, notes,
+            description_blocks, use_block_design, page_template, product_facts,
+            colophon_character, colophon_tagline_en, colophon_tagline_cn,
+            bundle, bundle_items, bundle_mode,
+            status, is_batch_made, oos_policy, ship_from_supplier, supplier_paused, no_coupon_on_flash,
+            is_market, is_restock_only,
+            variant_group_id, variant_noun_en, variant_noun_cn, sort_order
        FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1`
   ).get(id);
   if (!src) return res.status(404).json({ success: false, error: 'not_found' });
@@ -23483,42 +23511,104 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
     }
     const info = tdb().prepare(
       `INSERT INTO store_products
-         (name_en, name_cn, sku, category, weight, sell_price, compare_at_price, stock_qty, ship_modes,
-          description_en, description_cn, description_format, image_data, images, image_aspect,
-          keywords_en, keywords_cn, tagline_en, tagline_cn, free_of, tags, nutrition,
-          description_blocks, use_block_design, colophon_character, colophon_tagline_en, colophon_tagline_cn,
-          variant_group_id, variant_label, sort_order, is_published, is_active, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
+         (name_en, name_cn, sku, category, top_category, subcategory, weight, sell_price, compare_at_price,
+          unit_cost, cost_incomplete, low_stock_threshold, stock_qty, ship_modes,
+          description_en, description_cn, description_format, image_data, images, image_url, image_aspect,
+          keywords_en, keywords_cn, tagline_en, tagline_cn, free_of, tags, nutrition, notes,
+          description_blocks, use_block_design, page_template, product_facts,
+          colophon_character, colophon_tagline_en, colophon_tagline_cn,
+          bundle, bundle_items, bundle_mode,
+          status, is_batch_made, oos_policy, ship_from_supplier, supplier_paused, no_coupon_on_flash,
+          is_market, is_restock_only,
+          variant_group_id, variant_label, variant_label_cn, variant_noun_en, variant_noun_cn, sort_order,
+          is_published, is_active, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+               0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
-      src.name_en, src.name_cn, generateRetailSku(), src.category, src.weight, src.sell_price, src.compare_at_price, 0, src.ship_modes,
-      src.description_en, src.description_cn, src.description_format, src.image_data, src.images, imageAspect(src.image_data),
-      src.keywords_en, src.keywords_cn, src.tagline_en, src.tagline_cn, src.free_of, src.tags, src.nutrition,
-      src.description_blocks, src.use_block_design, src.colophon_character, src.colophon_tagline_en, src.colophon_tagline_cn,
-      asVariant ? groupId : null, asVariant ? label : null, src.sort_order
+      src.name_en, src.name_cn, generateRetailSku(), src.category, src.top_category, src.subcategory, src.weight, src.sell_price, src.compare_at_price,
+      src.unit_cost, src.cost_incomplete, src.low_stock_threshold, 0, src.ship_modes,
+      src.description_en, src.description_cn, src.description_format, src.image_data, src.images, src.image_url, imageAspect(src.image_data),
+      src.keywords_en, src.keywords_cn, src.tagline_en, src.tagline_cn, src.free_of, src.tags, src.nutrition, src.notes,
+      src.description_blocks, src.use_block_design, src.page_template, src.product_facts,
+      src.colophon_character, src.colophon_tagline_en, src.colophon_tagline_cn,
+      src.bundle, src.bundle_items, src.bundle_mode,
+      src.status, src.is_batch_made, src.oos_policy, src.ship_from_supplier, src.supplier_paused, src.no_coupon_on_flash,
+      src.is_market, src.is_restock_only,
+      // The variant tag belongs to THIS copy (the label the operator just typed);
+      // the axis noun ("size", "flavour") belongs to the GROUP, so it only rides
+      // along when the copy actually joins one. A standalone copy carrying a
+      // group's noun would be dead data.
+      asVariant ? groupId : null, asVariant ? label : null, null,
+      asVariant ? src.variant_noun_en : null, asVariant ? src.variant_noun_cn : null, src.sort_order
     );
-    return info.lastInsertRowid;
+    const copyId = info.lastInsertRowid;
+
+    // Customer-choice Options live in their own two tables, not on the product
+    // row, so they need copying by hand. Same transaction as the INSERT: a copy
+    // that exists without its options is the silent half-copy this whole
+    // endpoint is meant to stop. Choice.stock_product_id points at a real add-on
+    // product and is carried through unchanged — the copy draws that extra from
+    // the same stock the source did.
+    const srcOpts = tdb().prepare(
+      `SELECT id, question_en, question_cn, type, is_required, sort_order
+         FROM retail_product_options WHERE product_id = ? ORDER BY sort_order ASC, id ASC`
+    ).all(id);
+    if (srcOpts.length) {
+      const insOpt = tdb().prepare(
+        `INSERT INTO retail_product_options (product_id, question_en, question_cn, type, is_required, sort_order)
+         VALUES (?,?,?,?,?,?)`
+      );
+      const getChoices = tdb().prepare(
+        `SELECT label_en, label_cn, price_delta, is_default, stock_product_id, sort_order
+           FROM retail_product_option_choices WHERE option_id = ? ORDER BY sort_order ASC, id ASC`
+      );
+      const insChoice = tdb().prepare(
+        `INSERT INTO retail_product_option_choices (option_id, label_en, label_cn, price_delta, is_default, stock_product_id, sort_order)
+         VALUES (?,?,?,?,?,?,?)`
+      );
+      for (const o of srcOpts) {
+        const newOptId = insOpt.run(copyId, o.question_en, o.question_cn, o.type, o.is_required, o.sort_order).lastInsertRowid;
+        for (const c of getChoices.all(o.id)) {
+          insChoice.run(newOptId, c.label_en, c.label_cn, c.price_delta, c.is_default, c.stock_product_id, c.sort_order);
+        }
+      }
+    }
+    return copyId;
   })();
 
   logActivity(req.user.id, req.user.username, 'duplicate', 'product_retail', newId, { from: id, as_variant: asVariant }, req.ip);
 
+  // Return the SAME shape the PATCH handler returns. The editor opens the copy
+  // straight from this response (pdOpen on the row it just unshifted into its
+  // list cache), and its next autosave sends back whatever the bundle/add-on
+  // sections were loaded with — so a response missing `bundle` / `bundle_items`
+  // would have the editor clear the very columns we just copied.
   const row = tdb().prepare(
-    `SELECT id, name_en, name_cn, sku, category, weight AS size, sell_price, compare_at_price, stock_qty, ship_modes,
+    `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price,
+            unit_cost, cost_incomplete, stock_qty, low_stock_threshold, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition,
-            variant_group_id, variant_label,
+            bundle, bundle_items, bundle_mode, tags,
+            is_batch_made, oos_policy, ship_from_supplier, supplier_paused, page_template,
+            variant_group_id, variant_label, variant_label_cn, variant_noun_en, variant_noun_cn,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM store_products WHERE id = ?`
   ).get(newId);
   if (row && typeof row.description_blocks === 'string' && row.description_blocks) {
     try { row.description_blocks = JSON.parse(row.description_blocks); } catch { row.description_blocks = null; }
   } else { row.description_blocks = null; }
-  if (row) row.product_facts = parseFactsCol(row.product_facts);
+  if (row && typeof row.bundle === 'string' && row.bundle.trim()) {
+    try { row.bundle = JSON.parse(row.bundle); } catch { row.bundle = null; }
+  } else { row.bundle = null; }
+  if (row) { row.bundle_items = resolveBundleComponents(row.bundle_items); row.is_bundle = row.bundle_items.length > 0; }
+  applyBundleCost(row);      // a bundle's cost is its components' — see the helper
   if (row && typeof row.nutrition === 'string' && row.nutrition.trim()) {
     try { const n = JSON.parse(row.nutrition); row.nutrition = (n && (n.basis_en || n.basis_cn || (n.rows || []).length)) ? n : null; } catch { row.nutrition = null; }
   } else { row.nutrition = null; }
-  row.product_facts = parseFactsCol(row.product_facts);
-  res.json({ success: true, data: row });
+  if (row) row.product_facts = parseFactsCol(row.product_facts);
+  if (row) row.options = loadProductOptions(newId);
+  res.json({ success: true, data: stripProductCosts(req, row) });
 });
 
 // ─── Flash sales (秒杀) admin ─────────────────────────────────────────────
