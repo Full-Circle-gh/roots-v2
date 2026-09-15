@@ -35,7 +35,10 @@
   font-family: var(--f-toni);
 }
 .status-pending_payment { background: rgba(255,175,96,0.18); color: #c66800; border-color: rgba(255,175,96,0.4); }
-.status-paid            { background: rgba(178,207,237,0.2);  color: #2456a3; border-color: rgba(178,207,237,0.5); }
+/* See the note on the same pair in pages/orders/orders.wxss — a restock
+   park is a paid order and is coloured as one; only the label differs. */
+.status-paid,
+.status-awaiting_restock { background: rgba(178,207,237,0.2);  color: #2456a3; border-color: rgba(178,207,237,0.5); }
 .status-preparing       { background: rgba(242,202,108,0.2);  color: #7f5800; border-color: rgba(242,202,108,0.5); }
 .status-dispatched      { background: rgba(123,189,59,0.18);  color: #3a6817; border-color: rgba(123,189,59,0.4); }
 .status-delivered       { background: rgba(54,83,41,0.92);    color: #fff;    border-color: var(--forest); }
