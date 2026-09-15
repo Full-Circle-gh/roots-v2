@@ -486,7 +486,7 @@ section('9c · the debt is said out loud, not only written down');
     // the ordinary case, which is precisely the noise that buries a real one.
     assert.ok(/COALESCE\(p\.is_batch_made, 0\) = 1/.test(fs.readFileSync(path.join(ROOT, 'lib/batch-owed.js'), 'utf8')),
       'the owed block still covers what the kitchen cooks');
-    // §136 SPLIT THIS BY PATH, and the split is the point rather than a
+    // §137 SPLIT THIS BY PATH, and the split is the point rather than a
     // loosening. On a DELIVERY the owed block still carries batch-made debt, so
     // the alert stays off it. On a COUNTER sale the shelf is corrected to zero,
     // nothing negative survives for the owed block to read, and the alert is the
@@ -506,14 +506,14 @@ section('9c · the debt is said out loud, not only written down');
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-/* 9d · §136 — A WALK-IN CANNOT LEAVE THE SHELF OWING ANYTHING.
+/* 9d · §137 — A WALK-IN CANNOT LEAVE THE SHELF OWING ANYTHING.
 
    The owed block reads `physical_qty < 0` and calls all of it owed. A counter
    sale that lands below zero is not a debt: the units left in the customer's
    hand, so the shelf HELD them and the record was short. Read as a debt it
    became a cooking instruction, and three wraps were made for nobody.
 
-   Decided by Ash 2026-09-15 ("b"), recorded as §136 before the code.
+   Decided by Ash 2026-09-15 ("b"), recorded as §137 before the code.
 
    These run against the REAL commit, not its source: the failure was arithmetic
    and a regex over the function would not have caught it. */
@@ -538,7 +538,7 @@ section('9d · a counter sale corrects the record instead of owing against it');
     const mt = fs.readFileSync(path.join(ROOT, 'routes/meituan-internal.js'), 'utf8');
     const el = fs.readFileSync(path.join(ROOT, 'routes/eleme-internal.js'), 'utf8');
     assert.ok(!/newPhysicalQty:\s*Math\.max\(0,/.test(mt) && !/newPhysicalQty:\s*Math\.max\(0,/.test(el),
-      '§136 is about one door; it must not have travelled');
+      '§137 is about one door; it must not have travelled');
   });
   it('the miscount still reaches somebody — the alert speaks for made items here', () => {
     // Correcting the shelf removes the kitchen's (wrong) signal, so the alert

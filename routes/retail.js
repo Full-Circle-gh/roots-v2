@@ -30668,6 +30668,27 @@ const STATUS_TRANSITIONS = {
   // waited), but prepareCommitUnreservedOrder() below deducts it on the way into
   // preparing — same path as out-of-GZ / scheduled orders — so this can't oversell.
   preparing:  { col: 'preparing_at',  prev: ['paid', 'awaiting_restock'] },
+  /* §136 — THE STEP BACK, and it is the only one in this table. Until now
+     'awaiting_restock' could only be reached by the CHECKOUT: the customer
+     answered the shortage modal, or §80/§128's park caught a short pre-order
+     line. A shortage noticed after the money landed — the picker reaches the
+     shelf and the item is not there, or a count was wrong — had nowhere to go.
+     The order sat in 'paid' looking like every other order waiting to be
+     picked, and the only ways out were to prepare it (the item is not there) or
+     to cancel and refund a customer who would rather wait.
+
+     WHY IT IS SAFE TO GO BACKWARDS HERE where this table is otherwise
+     forward-only: the two states differ in what the office is told, not in what
+     the customer has paid or what the shelf holds. No money moves, no stock
+     moves, and 'awaiting_restock' already steps forward to exactly what 'paid'
+     steps forward to — 'preparing' and 'cancelled' — so nothing downstream gains
+     a path it did not have. `col` is null because there is no
+     awaiting_restock_at column and this change adds no schema; the activity log
+     records who moved it and when.
+
+     WHAT GUARDS IT is not in this table but at the route, which refuses the park
+     unless the order can actually come back: see the §136 block there. */
+  awaiting_restock: { col: null, prev: ['paid'] },
   dispatched: { col: 'dispatched_at', prev: ['preparing', 'paid'] },
   delivered:  { col: 'delivered_at',  prev: ['dispatched'] },
   // awaiting_restock cancels refund the (already-paid) customer; there's no
@@ -30975,9 +30996,74 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     }
   }
 
+  /* §136 — PARKING A PAID ORDER ON A RESTOCK, AND THE THREE WAYS IT IS REFUSED.
+     An order parks on `awaiting_restock_pids`, and that column is not decoration:
+     inventory.checkAwaitingRestockForRestock only looks at an order when a
+     product IN THAT LIST is restocked, and only releases it when every product
+     it needs is covered. So a park written carelessly is not a smaller problem
+     than the one it solves — it is an order that never comes back, in a queue
+     whose whole promise is that orders leave it by themselves.
+
+     The list is COMPUTED, never taken from the operator. They are telling us the
+     shelf is short; which SKUs that means is a fact about the shelf, and asking
+     them to pick would invite a park on a product that is not short (never
+     released) or one the order does not need (released by a restock of something
+     irrelevant).
+
+     Read through inventory.orderStockNeed — the same view the release uses, so
+     what is checked here is what is checked there. Refused when:
+       1. the order has no fulfilling store, so there is no shelf to wait on;
+       2. some product it needs has no stock row at that store — a supplier-direct
+          line, or one never stocked here. The release demands `av.exists` for
+          every product, so such an order could never clear. This is the same
+          hazard the checkout park refuses by counting supplier lines whole
+          (§134), named here in the operator's own terms;
+       3. nothing is actually short. Parking then would strand the order until
+          somebody happened to adjust one of its products — the queue would hold
+          an order that had no reason to be in it. */
+  let manualParkPids = null;
+  if (status === 'awaiting_restock') {
+    const full = tdb().prepare('SELECT id, store_id FROM retail_orders WHERE id = ?').get(id);
+    if (!full || !full.store_id) {
+      return res.status(409).json({
+        success: false, error: 'no_fulfilling_store',
+        message: 'This order has no fulfilling store, so there is no shelf for it to wait on.',
+      });
+    }
+    const need = inventory.orderStockNeed(id);
+    const notStocked = [], short = [];
+    for (const [pid, qty] of need.entries()) {
+      const av = inventory.getAvailable(full.store_id, pid, 'wechat');
+      if (!av.exists) { notStocked.push(pid); continue; }
+      if (av.available < qty) short.push(pid);
+    }
+    if (notStocked.length) {
+      const names = tdb().prepare(
+        `SELECT id, name_en, name_cn FROM store_products WHERE id IN (${notStocked.map(() => '?').join(',')})`
+      ).all(...notStocked);
+      return res.status(409).json({
+        success: false, error: 'line_not_stocked_here',
+        product_ids: notStocked,
+        products: names,
+        message: 'This order holds an item that is not stocked at its store, so it could never be released from the restock queue automatically. Prepare it or cancel it instead.',
+      });
+    }
+    if (!short.length) {
+      return res.status(409).json({
+        success: false, error: 'nothing_short',
+        message: 'Every item on this order is covered at its store right now, so there is nothing for it to wait on.',
+      });
+    }
+    manualParkPids = short;
+  }
+
   const sets = ['status = ?', 'updated_at = CURRENT_TIMESTAMP'];
   const params = [status];
   if (def.col) { sets.push(`${def.col} = CURRENT_TIMESTAMP`); }
+  /* The park's whole content. Written in the same UPDATE as the status so the
+     two can never disagree — an 'awaiting_restock' row with no pids is an order
+     the release will never even look at. */
+  if (manualParkPids) { sets.push('awaiting_restock_pids = ?'); params.push(JSON.stringify(manualParkPids)); }
   // Manual "Mark paid": record HOW it was paid (cash / bank transfer / off-app
   // WeChat or Alipay / other) so the dashboard can attribute revenue to a real
   // tender. Overwrites the checkout-chosen method because this reflects how the

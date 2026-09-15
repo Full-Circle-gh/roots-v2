@@ -3450,7 +3450,17 @@ function formatDateOnly(v) {
 // column AND inside the open-order drawer's footer transition buttons.
 const NEXT_STATUS = {
   pending_payment: [['paid', 'Mark paid · 标记已付款'], ['cancelled', 'Cancel · 取消']],
-  paid:            [['preparing', 'Start preparing · 开始备货'], ['dispatched', 'Mark dispatched · 标记已发货'], ['refunded', 'Refund · 退款'], ['cancelled', 'Cancel + refund · 取消并退款']],
+  /* §136 — 'Hold for restock' is the step BACK, and the only one in this table.
+     The picker reaches the shelf, the item is not there, and until now the two
+     ways out were to prepare an order that cannot be picked or to refund a
+     customer who would rather wait. The server computes WHICH products the order
+     waits on — the operator is reporting a shelf, not choosing SKUs — and
+     refuses the move when the order could never come back from the queue
+     (no store, a line not stocked there, or nothing actually short); the drawer
+     shows whatever it says. 中文 is the live pair off this file's own
+     awaiting-restock card (`cuT('Waiting on stock', '等待补货')`), reused
+     verbatim so the button and the card it produces say the same word. */
+  paid:            [['preparing', 'Start preparing · 开始备货'], ['awaiting_restock', 'Hold for restock · 等待补货'], ['dispatched', 'Mark dispatched · 标记已发货'], ['refunded', 'Refund · 退款'], ['cancelled', 'Cancel + refund · 取消并退款']],
   preparing:       [['dispatched', 'Mark dispatched · 标记已发货'], ['refunded', 'Refund · 退款'], ['cancelled', 'Cancel + refund · 取消并退款']],
   // Meituan-only, read-only mirror: the platform (not our staff) advances a
   // "Rider coming" order to Dispatched once the rider picks up, so there are no

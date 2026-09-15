@@ -450,7 +450,7 @@ if (!missing.length) {
   check('Mark dispatched on the ORDER takes the fresh line whatever its parcel',
     qty(SALAD2), -1);
 
-  /* ── 16. §136 — A WALK-IN CANNOT LEAVE THE SHELF OWING ANYTHING ────────
+  /* ── 16. §137 — A WALK-IN CANNOT LEAVE THE SHELF OWING ANYTHING ────────
      Run against the real commit rather than asserted over its source: the
      failure this fixes was ARITHMETIC, and a regex over the function would have
      passed on the broken version. The shape lives in test_batch_owed.js §9d;
@@ -469,7 +469,7 @@ if (!missing.length) {
   atFulfilment(counterSale);
   // Three left in a customer's hand, so three were on the shelf: the record was
   // short by three and is now right, rather than owing three that are not owed.
-  check('§136: a till sale that outruns the record lands the shelf at zero',
+  check('§137: a till sale that outruns the record lands the shelf at zero',
     qty(WRAP2), 0);
   // TWO ROWS, NOT ONE NETTED FIGURE. The sale really happened and the correction
   // really happened; a ledger showing only the difference would answer a
@@ -480,7 +480,7 @@ if (!missing.length) {
   check('…and says so in two rows: the sale, then the correction',
     counterRows.map((r) => `${r.reason}:${r.delta}`), ['order_prepare:-3', 'counter_miscount:3']);
 
-  /* THE OTHER SIDE OF THE SAME COIN, and the case that proves §136 did not
+  /* THE OTHER SIDE OF THE SAME COIN, and the case that proves §137 did not
      travel. A DELIVERY that outruns the shelf leaves the negative: those units
      were sold and never held, somebody is waiting for them, and the kitchen is
      supposed to read it. */
