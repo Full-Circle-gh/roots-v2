@@ -1212,12 +1212,18 @@
     .oc-pickup{font-family:var(--bf-toni);font-size:10px;font-weight:700;letter-spacing:.04em;padding:4px 10px;border-radius:999px;background:rgba(123,189,59,.14);color:#3a6817;border:1.5px solid rgba(123,189,59,.35);}
     .oc-st{font-family:var(--bf-toni);font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:4px 11px;border-radius:999px;border:1.5px solid;}
     .oc-st.st-pending_payment{background:rgba(255,175,96,.18);color:#c66800;border-color:rgba(255,175,96,.4);}
-    .oc-st.st-paid{background:rgba(178,207,237,.2);color:#2456a3;border-color:rgba(178,207,237,.5);}
+    /* A restock park is a PAID order, the same decision the mini app makes in
+       miniapp/pages/orders/orders.wxss. It shipped grouped with .st-refunded
+       below, which painted a customer's paid order in the REFUND red while
+       they were waiting on stock — the one reading a shopper must not be given
+       about an order nobody has refunded. The label beside the pill already
+       says 'Awaiting restock / 等待补货', so the reason it is held is not lost. */
+    .oc-st.st-paid,.oc-st.st-awaiting_restock{background:rgba(178,207,237,.2);color:#2456a3;border-color:rgba(178,207,237,.5);}
     .oc-st.st-preparing{background:rgba(242,202,108,.2);color:#7f5800;border-color:rgba(242,202,108,.5);}
     .oc-st.st-dispatched{background:rgba(123,189,59,.18);color:#3a6817;border-color:rgba(123,189,59,.4);}
     .oc-st.st-delivered{background:rgba(54,83,41,.92);color:#fff;border-color:var(--forest);}
     .oc-st.st-cancelled{background:rgba(0,0,0,.06);color:var(--olive);border-color:rgba(0,0,0,.18);}
-    .oc-st.st-refunded,.oc-st.st-awaiting_restock{background:rgba(233,97,116,.18);color:#9c1f33;border-color:rgba(233,97,116,.4);}
+    .oc-st.st-refunded{background:rgba(233,97,116,.18);color:#9c1f33;border-color:rgba(233,97,116,.4);}
     .oc-body{display:flex;gap:14px;align-items:center;}
     .oc-thumbs{display:flex;gap:6px;flex:1;align-items:center;min-width:0;}
     .oc-th{width:46px;height:46px;flex:0 0 auto;border-radius:0;background:var(--oat);border:2px solid var(--ink);overflow:hidden;}
