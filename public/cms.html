@@ -124,8 +124,24 @@
     --accent:     var(--tacet-ink);
     --accent-hi:  #263149;
     --accent-ink: var(--tacet-paper);   /* what sits ON --accent */
-    --brass:      var(--tacet-dusk);
-    --brass-hi:   #5F58A0;
+    /* --brass IS THE ONE PRIMARY ACTION, AND IT IS INK — NOT DUSK.
+       It pointed at Dusk, which made Publish/Save purple here while the same
+       button is Ink in the product editor and on the Customers tab. One
+       operator, three screens, and purple meant two different things.
+
+       Dusk is the AI's colour: "Tacet did this for you." Saving your own work
+       is the MERCHANT acting, which is exactly the case retail-admin.css spells
+       out beside the Customers modal — *"Primary is INK, not Dusk — a modal's
+       primary is the merchant acting"* — and the rulebook's own line that
+       ordinary operator controls are "Ink or Secondary, NEVER Dusk".
+
+       What still wears Dusk on this page, and why, is listed beside
+       --tacet-dusk above: focus rings (exempt by name), the selected-block ring
+       (drawn OVER the customer's page, where Ink would vanish on a dark brand
+       block), and the drop-zone marker. All transient affordances; none of them
+       a button. */
+    --brass:      var(--tacet-ink);
+    --brass-hi:   #263149;
     --chrome-bg:  #FFFFFF;
     --chrome-fg:  var(--tacet-ink);
     --danger:      var(--tacet-brick);
@@ -205,6 +221,10 @@
     --accent:     var(--tacet-paper);
     --accent-hi:  #FFFFFF;
     --accent-ink: var(--tacet-ink);
+    /* The primary action inverts with it. Ink on an Ink room is an invisible
+       button, and the light half of a theme is not the whole of it. */
+    --brass:      var(--tacet-paper);
+    --brass-hi:   #FFFFFF;
     --chrome-bg:  #18233A;
     --chrome-fg:  var(--tacet-paper);
 
@@ -282,13 +302,13 @@
   }
   .brand {
     display: flex; align-items: center; gap: var(--s3);
-    font-weight: 600; font-size: 13px; letter-spacing: -.005em; color: var(--text-1);
+    font-weight: 500; font-size: 13px; letter-spacing: -.005em; color: var(--text-1);
   }
   .brand-mark {
     width: 28px; height: 28px; border-radius: var(--r-md);
     background: transparent;
     display: flex; align-items: center; justify-content: center;
-    color: var(--chrome-fg); font-weight: 700; font-size: 13px;
+    color: var(--chrome-fg); font-weight: 500; font-size: 13px;
   }
   .brand .divider { width: 1px; height: 16px; background: var(--line); margin: 0 4px; }
   .brand .sub { color: var(--text-3); font-weight: 500; }
@@ -365,8 +385,8 @@
   }
   .design-pickers .theme-menu .sw { max-width: 28px; }
   .page-picker:hover { background: var(--bg-elev-2); border-color: var(--line-strong); }
-  .page-picker .label { color: var(--text-3); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; margin-right: 2px; }
-  .page-picker .name { color: var(--text-1); font-weight: 600; }
+  .page-picker .label { color: var(--text-3); font-size: 11px; letter-spacing: 0; text-transform: none; margin-right: 2px; }
+  .page-picker .name { color: var(--text-1); font-weight: 500; }
   .page-picker .chev { width: 12px; height: 12px; color: var(--text-3); }
   .page-menu {
     position: absolute; top: 100%; left: 0; margin-top: 6px;
@@ -398,7 +418,7 @@
     margin-left: 8px;
     background: var(--accent);
     color: var(--accent-ink);
-    font-size: 10px; font-weight: 600; line-height: 1;
+    font-size: 10px; font-weight: 500; line-height: 1;
     border-radius: 999px;
     vertical-align: -3px;
   }
@@ -416,7 +436,7 @@
   .page-menu .pm-layout { padding: 6px 8px 4px; }
   .page-menu .pm-layout-label {
     font: 500 11px var(--f-sans);
-    letter-spacing: .08em; text-transform: uppercase;
+    letter-spacing: 0; text-transform: none;
     color: var(--text-3); margin-bottom: 7px;
   }
   .page-menu .pm-layout-seg {
@@ -461,7 +481,7 @@
     box-shadow: inset 0 0 0 1px rgba(255,255,255,.15);
     flex-shrink: 0;
   }
-  .theme-picker .label { color: var(--text-3); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+  .theme-picker .label { color: var(--text-3); font-size: 11px; letter-spacing: 0; text-transform: none; }
   .theme-picker .chev { width: 12px; height: 12px; color: var(--text-3); }
   .theme-menu {
     position: absolute; top: 100%; left: 0; margin-top: 6px;
@@ -477,7 +497,7 @@
   .theme-menu.open { display: block; animation: fade-in var(--t-fast) var(--ease-out); }
   .theme-menu h4 {
     margin: 0 0 8px;
-    font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none;
     color: var(--text-3);
   }
   .theme-menu .swatches {
@@ -562,7 +582,7 @@
   }
   .design-check-picker .swatch {
     display: inline-flex; align-items: center; justify-content: center;
-    font-size: 11px; font-weight: 700; color: var(--text-2);
+    font-size: 11px; font-weight: 500; color: var(--text-2);
     background: var(--bg-elev-2);
     border-radius: 4px;
   }
@@ -571,7 +591,7 @@
     margin-left: auto; margin-right: 4px;
     min-width: 16px; height: 16px; padding: 0 6px;
     border-radius: 999px;
-    font-size: 10px; font-weight: 600; line-height: 16px; text-align: center;
+    font-size: 10px; font-weight: 500; line-height: 16px; text-align: center;
     font-variant-numeric: tabular-nums;
   }
   .design-check-picker .dc-badge.critical { background: var(--tacet-brick-tint); color: var(--tacet-brick); }
@@ -583,7 +603,7 @@
     font-size: 11px; color: var(--text-3);
   }
   .design-check-menu .dc-summary .pill {
-    padding: 1px 7px; border-radius: 9px; font-weight: 600; font-size: 10.5px;
+    padding: 1px 7px; border-radius: 9px; font-weight: 500; font-size: 10.5px;
   }
   .design-check-menu .dc-summary .pill.critical { background: var(--tacet-brick-tint); color: var(--tacet-brick); }
   .design-check-menu .dc-summary .pill.warn     { background: var(--tacet-amber-tint); color: var(--tacet-amber-ink); }
@@ -605,7 +625,7 @@
   .design-check-menu .dc-finding .dot.info     { background: var(--tacet-graphite); }
   .design-check-menu .dc-finding .dc-body { flex: 1; min-width: 0; }
   .design-check-menu .dc-finding .title {
-    font-size: 12px; font-weight: 600; color: var(--text-1); line-height: 1.3;
+    font-size: 12px; font-weight: 500; color: var(--text-1); line-height: 1.3;
   }
   .design-check-menu .dc-finding .msg {
     font-size: 11.5px; color: var(--text-2); line-height: 1.4; margin-top: 3px;
@@ -664,7 +684,7 @@
     border-top: 1px solid rgba(17,26,43,.08);
   }
   .tabbar-menu .theme-card .preview span { width: 6px; height: 6px; border-radius: 50%; }
-  .tabbar-menu .theme-card .name { font-size: 10px; color: var(--text-2); font-weight: 600; }
+  .tabbar-menu .theme-card .name { font-size: 10px; color: var(--text-2); font-weight: 500; }
   /* Icon-style preview: single representative glyph (home) centred */
   .tabbar-menu .icon-card .preview {
     display: flex; align-items: center; justify-content: center; height: 28px;
@@ -682,8 +702,8 @@
   }
   .tabbar-menu .color-cell { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
   .tabbar-menu .color-cell label {
-    font-size: 10px; color: var(--text-3); letter-spacing: .04em; text-transform: uppercase;
-    font-weight: 600;
+    font-size: 10px; color: var(--text-3); letter-spacing: 0; text-transform: none;
+    font-weight: 500;
   }
   .tabbar-menu .color-cell .pair {
     position: relative;
@@ -764,7 +784,7 @@
   .tabbar-menu .upload-cell .thumb img,
   .tabbar-menu .upload-cell .thumb svg { width: 26px; height: 26px; object-fit: contain; }
   .tabbar-menu .upload-cell .lbl {
-    font-size: 9.5px; color: var(--text-3); text-transform: uppercase; letter-spacing: .05em;
+    font-size: 9.5px; color: var(--text-3); text-transform: none; letter-spacing: 0;
   }
   .tabbar-menu .upload-cell .clear-x {
     position: absolute; top: 2px; right: 2px;
@@ -835,7 +855,7 @@
   /* Primary — Dusk fill, white text. Exactly one lives on this screen and
      it is Publish. Do not reach for this class again. */
   .btn-primary {
-    background: var(--brass); color: #FFFFFF;
+    background: var(--brass); color: var(--accent-ink);
     border-color: var(--brass); font-weight: 500;
   }
   .btn-primary:hover { background: var(--brass-hi); border-color: var(--brass-hi); }
@@ -873,9 +893,9 @@
   .pane-section + .pane-section { border-top: 1px solid var(--line-soft); }
   .pane-section h3 {
     font-size: 11px;
-    font-weight: 600;
-    letter-spacing: .08em;
-    text-transform: uppercase;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
     color: var(--text-3);
     margin-bottom: var(--s3);
   }
@@ -915,7 +935,7 @@
      fades in on hover. The whole row is still the drag target. */
   .palette-item .palette-grip {
     color: var(--text-4);
-    font: 700 13px var(--f-sans);
+    font: 500 13px var(--f-sans);
     letter-spacing: -1px; line-height: 1;
     opacity: 0;
     transition: opacity var(--t-fast) ease, color var(--t-fast) ease;
@@ -1100,7 +1120,7 @@
   .preview-menu-pop button:hover { background: var(--bg-elev-1); }
   .preview-menu-pop button svg { margin-top: 2px; flex-shrink: 0; color: var(--text-3); }
   .preview-menu-pop button:hover svg { color: var(--text-1); }
-  .preview-menu-pop .pm-title { font-size: 12px; font-weight: 600; }
+  .preview-menu-pop .pm-title { font-size: 12px; font-weight: 500; }
   .preview-menu-pop .pm-sub   { font-size: 10.5px; color: var(--text-3); margin-top: 2px; line-height: 1.35; }
 
   /* The Tweaks popover was retired — its lone remaining control (the layout
@@ -1130,7 +1150,7 @@
     gap: 12px; padding: 16px 18px;
     border-bottom: 1px solid var(--line-soft);
   }
-  .phone-preview-head h3 { margin: 0; font-size: 15px; font-weight: 600; color: var(--text-1); }
+  .phone-preview-head h3 { margin: 0; font-size: 15px; font-weight: 500; color: var(--text-1); }
   .phone-preview-head .muted { font-size: 12px; margin-top: 4px; color: var(--text-2); }
   .phone-preview-body { padding: 18px; }
   .phone-preview-qr { display: flex; flex-direction: column; align-items: center; margin-bottom: 16px; }
@@ -1145,7 +1165,7 @@
     margin-bottom: 16px;
     font-size: 13px; color: var(--text-1); line-height: 1.5;
   }
-  .pp-lead b { color: var(--text-1); font-weight: 600; }
+  .pp-lead b { color: var(--text-1); font-weight: 500; }
   .pp-lead .pp-lead-sub { color: var(--text-2); font-size: 11.5px; margin-top: 4px; }
   /* Numbered step list — each step is a bordered row with a circled
      number on the left. Way easier to follow than a wall of inline
@@ -1178,8 +1198,8 @@
   }
   .pp-steps b { color: var(--text-1); }
   .phone-preview-devtools .kicker {
-    font: 700 10px var(--f-sans); letter-spacing: .08em;
-    text-transform: uppercase; color: var(--text-3);
+    font: 500 11px var(--f-sans); letter-spacing: 0;
+    color: var(--text-3);
     margin-bottom: 8px;
   }
   .phone-preview-devtools .path-row {
@@ -1253,7 +1273,7 @@
     background: transparent;
     border: 0;
     padding: 4px 12px;
-    font: 600 11px var(--f-sans);
+    font: 500 11px var(--f-sans);
     letter-spacing: .04em;
     color: var(--text-3);
     border-radius: 999px;
@@ -1339,7 +1359,7 @@
   .link-status.linked .dot { background: var(--tacet-sage); }
   .link-status.unlinked .dot { background: var(--tacet-amber); }
   .link-status .msg { flex: 1; min-width: 0; color: var(--text-2); }
-  .link-status .msg b { color: var(--text-1); font-weight: 600; }
+  .link-status .msg b { color: var(--text-1); font-weight: 500; }
   .link-status .msg .target {
     font-family: var(--f-mono); font-size: 11px;
     color: var(--text-2);
@@ -1486,7 +1506,7 @@
   .block-toolbar .label {
     display: flex; align-items: center;
     padding: 0 8px;
-    font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+    font-size: 10px; font-weight: 500; letter-spacing: 0; text-transform: none;
     color: rgba(251, 249, 244, .55);
     font-family: var(--f-sans);
   }
@@ -1552,7 +1572,7 @@
   }
   .inspector-head .type-row .icon svg { width: 13px; height: 13px; }
   .inspector-head .type {
-    font-size: 13px; font-weight: 600; color: var(--text-1);
+    font-size: 13px; font-weight: 500; color: var(--text-1);
     text-transform: capitalize;
   }
 
@@ -1573,8 +1593,8 @@
   .field { margin-bottom: var(--s4); }
   .field label {
     display: flex; align-items: center;
-    font-size: 11px; font-weight: 600;
-    letter-spacing: .04em; text-transform: uppercase;
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 0; text-transform: none;
     color: var(--text-3);
     margin-bottom: 6px;
   }
@@ -1691,7 +1711,7 @@
   }
   .cs-opt:hover { background: var(--bg-elev-1); }
   .cs-opt.is-sel { background: var(--bg-elev-1); }
-  .cs-opt.is-sel .cs-label { font-weight: 600; }
+  .cs-opt.is-sel .cs-label { font-weight: 500; }
 
   /* Multi-select chips */
   .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
@@ -1794,20 +1814,20 @@
   }
   .product-picker .item .price-fallback em {
     font-style: normal;
-    font-size: 9px; font-weight: 700; letter-spacing: .08em;
+    font-size: 9px; font-weight: 500; letter-spacing: 0;
     padding: 1px 4px;
     background: rgba(255, 255, 255, .05);
     border-radius: 2px;
     color: var(--text-3);
     margin-left: 2px;
-    text-transform: uppercase;
+    text-transform: none;
   }
   .product-picker .item .price-missing {
-    color: var(--danger); font-weight: 600;
+    color: var(--danger); font-weight: 500;
   }
   .product-picker .item .draft-tag {
     display: inline-block;
-    font-size: 9px; font-weight: 600; letter-spacing: .08em;
+    font-size: 9px; font-weight: 500; letter-spacing: 0;
     padding: 1px 6px; margin-left: 4px;
     background: var(--tacet-amber-tint);
     color: var(--tacet-amber-ink);
@@ -1843,8 +1863,8 @@
     border-radius: 999px; font-size: 12px;
   }
   .target-picker .tp-chip-kind {
-    font-size: 9px; font-weight: 600; letter-spacing: .08em;
-    text-transform: uppercase; color: var(--text-3); flex-shrink: 0;
+    font-size: 9px; font-weight: 500; letter-spacing: 0;
+    text-transform: none; color: var(--text-3); flex-shrink: 0;
   }
   .target-picker .tp-chip-label {
     color: var(--text-1);
@@ -1859,7 +1879,7 @@
   .target-picker .tp-chip-clear:hover { background: var(--danger); color: var(--tacet-paper); }
   .target-picker .tp-group {
     padding: 6px 12px;
-    font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    font-size: 10px; font-weight: 500; letter-spacing: 0; text-transform: none;
     color: var(--text-3); background: var(--bg-pane);
     border-bottom: 1px solid var(--line-soft);
     position: sticky; top: 0; z-index: 1;
@@ -1867,7 +1887,7 @@
   .target-picker .item .thumb svg { width: 16px; height: 16px; }
   .target-picker .tp-tag {
     display: inline-block;
-    font-size: 9px; font-weight: 600; letter-spacing: .08em;
+    font-size: 9px; font-weight: 500; letter-spacing: 0;
     padding: 1px 6px; margin-left: 4px;
     background: var(--bg-elev-2); color: var(--text-2);
     border-radius: 999px; vertical-align: 1px;
@@ -1902,7 +1922,7 @@
     padding: 0 10px;
     background: var(--bg-elev-1);
     color: var(--text-3);
-    font-size: 10px; font-weight: 700; letter-spacing: .08em;
+    font-size: 10px; font-weight: 500; letter-spacing: 0;
     border-right: 1px solid var(--line);
     display: flex; align-items: center;
     min-width: 38px;
@@ -1989,8 +2009,8 @@
     border-top: 1px solid var(--line-soft);
   }
   .chrome-section .chrome-head {
-    font-size: 11px; font-weight: 700; letter-spacing: .06em;
-    text-transform: uppercase; opacity: .55; margin-bottom: var(--s3);
+    font-size: 11px; font-weight: 500; letter-spacing: 0;
+    text-transform: none; opacity: .55; margin-bottom: var(--s3);
   }
 
   /* Collapsible inspector sections — group a block's edit fields (Style &
@@ -2008,7 +2028,7 @@
     padding: 14px 0 12px; margin: 0;
   }
   .insp-sec-title {
-    font: 700 11px var(--f-sans); letter-spacing: .06em; text-transform: uppercase;
+    font: 500 11px var(--f-sans); letter-spacing: 0; text-transform: none;
     color: var(--text-3); transition: color var(--t-fast) ease;
   }
   .insp-sec-head:hover .insp-sec-title { color: var(--text-1); }
@@ -2037,7 +2057,7 @@
   }
   .insp-sec-badge { font-size: 11px; color: var(--text-3); flex-shrink: 0; }
   .insp-sub-grp {
-    font: 700 11px var(--f-sans); letter-spacing: .06em; text-transform: uppercase;
+    font: 500 11px var(--f-sans); letter-spacing: 0; text-transform: none;
     color: var(--text-3); margin: var(--s4) 0 var(--s2);
   }
   .insp-sub-grp:first-child { margin-top: 0; }
@@ -2066,7 +2086,7 @@
   }
   .insp-status svg { width: 15px; height: 15px; color: var(--text-3); flex-shrink: 0; margin-top: 1px; }
   .insp-status p { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--text-2); }
-  .insp-status b { color: var(--text-1); font-weight: 600; }
+  .insp-status b { color: var(--text-1); font-weight: 500; }
 
   /* Two-option segmented toggle — for a field with exactly two clearly-named
      choices (Hero's Full/Split layout), so the choice is visible without
@@ -4515,7 +4535,7 @@
     border-bottom: 1px solid var(--line-soft);
     display: flex; align-items: center; justify-content: space-between;
   }
-  .modal-head .title { font-size: 14px; font-weight: 600; }
+  .modal-head .title { font-size: 14px; font-weight: 500; }
   .modal-body { padding: var(--s5); overflow-y: auto; flex: 1; }
   .modal-foot {
     padding: var(--s3) var(--s5);
@@ -4543,7 +4563,7 @@
   }
   #tb-modal .group-card:last-child { margin-bottom: 0; }
   #tb-modal .group-card-head { margin-bottom: var(--s4); }
-  #tb-modal .group-card-head h3 { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+  #tb-modal .group-card-head h3 { font-size: 14px; font-weight: 500; margin: 0 0 4px; }
   #tb-modal .group-card-head .muted { font-size: 12px; line-height: 1.55; color: var(--text-3); }
   #tb-modal .opt-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(112px, 1fr)); }
   #tb-modal .opt {
@@ -4559,7 +4579,7 @@
   #tb-modal .opt.active { border-color: var(--tacet-dusk); background: var(--tacet-dusk-tint); box-shadow: none; }
   #tb-modal .opt.active .opt-screen { transform: translateY(-1px); }
   #tb-modal .opt-screen { position: relative; height: 96px; background: var(--bg-elev-2); border-radius: var(--r-sm); margin-bottom: 6px; overflow: hidden; transition: transform var(--t-fast) var(--ease-out); }
-  #tb-modal .opt-label { font-size: 11px; font-weight: 600; color: var(--text-1); text-align: center; }
+  #tb-modal .opt-label { font-size: 11px; font-weight: 500; color: var(--text-1); text-align: center; }
   #tb-modal .opt-sub { font-size: 10px; color: var(--text-3); text-align: center; margin-top: 2px; line-height: 1.4; }
   #tb-modal .ms-bar  { position: absolute; left: 4px; right: 4px; top: 4px; height: 8px; border-radius: 2px; }
   #tb-modal .ms-hero { position: absolute; left: 4px; right: 4px; top: 16px; height: 22px; background: var(--text-4); border-radius: 3px; }
@@ -4568,7 +4588,7 @@
   #tb-modal .ms-tab span { width: 6px; height: 6px; background: var(--text-3); border-radius: 1px; }
   #tb-modal .ms-tab span.active { background: var(--accent); }
   #tb-modal .picker-source { display: none; }
-  #tb-modal label.stacked { display: block; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px; }
+  #tb-modal label.stacked { display: block; font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--text-3); margin-bottom: 6px; }
   #tb-modal .field { margin-bottom: var(--s4); }
   #tb-modal .pd-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
@@ -4606,8 +4626,8 @@
     box-shadow: var(--sh-3);
   }
   .help-card h3 {
-    font-size: 11px; font-weight: 600; letter-spacing: .12em;
-    text-transform: uppercase; color: var(--text-3);
+    font-size: 11px; font-weight: 500; letter-spacing: 0;
+    text-transform: none; color: var(--text-3);
     margin-bottom: var(--s5);
   }
   .help-card table { width: 100%; }
@@ -4626,7 +4646,7 @@
   .help-card .close {
     color: var(--text-3); font-size: 11px;
     cursor: pointer; margin-top: var(--s5); text-align: right;
-    text-transform: uppercase; letter-spacing: .08em;
+    text-transform: none; letter-spacing: 0;
   }
   .help-card .close:hover { color: var(--text-1); }
 
@@ -4722,13 +4742,20 @@
     letter-spacing: 0;
     color: var(--text-3);
   }
-  /* Publish — the single Dusk primary action. The one place the AI's
-     colour is spent on a button, because publishing is the deliberate act
-     the whole screen leads to. */
+  /* Publish — the single primary action, and it is INK.
+     REVERSED 2026-09-15, and the old reasoning is kept here rather than
+     deleted so the change is legible: this read *"the single Dusk primary
+     action ... because publishing is the deliberate act the whole screen leads
+     to"*. True about the act, wrong about the colour. Dusk does not mean
+     "important"; it means "Tacet did this for you", and publishing is the
+     merchant acting. The same button was already Ink in the product editor and
+     on the Customers tab, so purple here meant two different things to one
+     operator. The label is the theme's paper, never a literal white — the fill
+     inverts to Paper on the dark room. */
   .btn-primary {
     background: var(--brass);
     border-color: var(--brass);
-    color: #FFFFFF;
+    color: var(--accent-ink);
   }
   .btn-primary:hover { background: var(--brass-hi); border-color: var(--brass-hi); }
   /* Save state — a bare Sage / Amber dot; unsaved work breathes once,
@@ -4747,8 +4774,8 @@
   .pane-section h3 {
     font-family: var(--f-sans);
     font-size: 11px;
-    font-weight: 600;
-    letter-spacing: .08em;
+    font-weight: 500;
+    letter-spacing: 0;
     color: var(--text-3);
   }
 
@@ -4906,7 +4933,7 @@
     padding: 12px 16px 0;
   }
   html[data-layout="canvas"] .pane.left.cf-open .cf-drawer-head { display: flex; }
-  .cf-drawer-head .t { font-size: 13.5px; font-weight: 600; }
+  .cf-drawer-head .t { font-size: 13.5px; font-weight: 500; }
   .cf-drawer-head .x {
     margin-left: auto; border: 0; background: none; color: var(--text-3);
     cursor: pointer; padding: 3px; border-radius: 6px; display: flex;
@@ -4969,7 +4996,7 @@
        action, not a design knob. The visual pickers (BACKGROUND / TAB BAR)
        moved into the left pane above the Blocks list. -->
   <div class="page-picker" id="page-picker">
-    <span class="label"><span class="i18n-en">PAGE</span><span class="i18n-cn">页面</span></span>
+    <span class="label"><span class="i18n-en">Page</span><span class="i18n-cn">页面</span></span>
     <span class="name" id="page-picker-name">Home</span>
     <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
     <div class="page-menu" id="page-menu"></div>
@@ -5030,13 +5057,13 @@
       <div class="design-pickers">
         <div class="theme-picker" id="theme-picker">
           <span class="swatch" id="theme-picker-swatch" aria-hidden="true"></span>
-          <span class="label"><span class="i18n-en">BACKGROUND</span><span class="i18n-cn">背景</span></span>
+          <span class="label"><span class="i18n-en">Background</span><span class="i18n-cn">背景</span></span>
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           <div class="theme-menu" id="theme-menu"></div>
         </div>
         <div class="theme-picker tabbar-picker" id="tabbar-picker">
           <span class="swatch" id="tabbar-picker-swatch" aria-hidden="true"></span>
-          <span class="label"><span class="i18n-en">TAB BAR</span><span class="i18n-cn">标签栏</span></span>
+          <span class="label"><span class="i18n-en">Tab bar</span><span class="i18n-cn">标签栏</span></span>
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           <div class="theme-menu tabbar-menu" id="tabbar-menu"></div>
         </div>
@@ -5046,7 +5073,7 @@
              Recomputes every time the menu opens so the count badge stays fresh. -->
         <div class="theme-picker design-check-picker" id="design-check-picker">
           <span class="swatch" id="design-check-swatch" aria-hidden="true">✓</span>
-          <span class="label"><span class="i18n-en">DESIGN CHECK</span><span class="i18n-cn">设计检查</span></span>
+          <span class="label"><span class="i18n-en">Design check</span><span class="i18n-cn">设计检查</span></span>
           <span class="dc-badge" id="design-check-badge" hidden></span>
           <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
           <div class="theme-menu design-check-menu" id="design-check-menu"></div>
@@ -15530,7 +15557,7 @@ document.addEventListener('keydown', (e) => {
     background: transparent;
     border: 0;
     padding: 4px 12px;
-    font: 600 11px var(--f-sans);
+    font: 500 11px var(--f-sans);
     letter-spacing: .04em;
     color: var(--text-3, #aeaba2);
     border-radius: 999px;
