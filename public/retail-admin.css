@@ -15414,6 +15414,30 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
 #tab-shop-menu .shp-pick-sku { font-size: 13px; color: var(--td-text2); }
 #tab-shop-menu .shp-pick-price { font-variant-numeric: tabular-nums; color: var(--td-text2); }
 
+/* ── menu filter (the row above the table; painted outside #shp-table-box so
+   a keystroke never repaints the field it came from — see 28-shops.js) ────── */
+#tab-shop-menu .shp-filter { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+/* An author display wins over the UA sheet's [hidden] rule, so the bar would
+   stay on screen after the last listing was removed without this. */
+#tab-shop-menu .shp-filter[hidden] { display: none; }
+#tab-shop-menu .shp-filter .shp-in { flex: 1; max-width: 420px; }
+/* Bare numerals, no label — reads the same in both languages, and it is empty
+   whenever nothing is filtered, so a full menu shows nothing here at all. */
+#tab-shop-menu .shp-filter-n {
+  font: 400 13px/1.4 var(--f-sans); color: var(--td-text2);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+/* The webkit clear affordance is the reason there is no Clear button beside
+   the field; it is invisible against a dark surface without this. */
+#tab-shop-menu .shp-filter .shp-in::-webkit-search-cancel-button {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; cursor: pointer; opacity: .5;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M4 4l8 8M12 4l-8 8' stroke='black' stroke-width='2' stroke-linecap='round' fill='none'/></svg>") center/contain no-repeat;
+          mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M4 4l8 8M12 4l-8 8' stroke='black' stroke-width='2' stroke-linecap='round' fill='none'/></svg>") center/contain no-repeat;
+}
+#tab-shop-menu .shp-filter .shp-in::-webkit-search-cancel-button:hover { opacity: 1; }
+
 /* ── table (§1.19 — fixed layout, classed cols, percentages summing to 100;
    the measurement table is in 28-shops.js beside the markup) ──────────────── */
 #tab-shop-menu .shp-tablewrap { overflow-x: auto; }
@@ -15477,6 +15501,7 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
   #tab-shop-menu .shp-details { grid-template-columns: 1fr; }
   #tab-shop-menu .shp-head { flex-direction: column; }
   #tab-shop-menu .shp-head-r { padding-top: 0; }
+  #tab-shop-menu .shp-filter .shp-in { max-width: none; }
 }
 
 /* ── §123 · GZ Grocery — the frame is shared, these three rules are not ──────

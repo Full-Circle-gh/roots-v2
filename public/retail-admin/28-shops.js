@@ -46,7 +46,11 @@
    the mode column, 现做 / 备货 as the modes) or a pair already shipping in this
    admin, reused verbatim: 价格, 上架 / 已上架 / 未上架, 排序, 门店, 销售, 产品,
    + 添加商品, 搜索商品以添加…, 移除, 取消, 保存中…, 添加中…, 返回, 加载中…, 重试,
-   已停用, 未开通, 还没有商品, 中文名, 英文名(可选), 已保存. FOUR LABELS WERE
+   已停用, 未开通, 还没有商品, 中文名, 英文名(可选), 已保存, 按名称或货号搜索…
+   (the menu filter's placeholder, lifted verbatim from 07-content-billing.js
+   fsc-psearch and 09-products.js pw-copy-q, where the pair already ships).
+   The filter's match count is bare numerals — "8 / 47" — and carries no label
+   in either language, so it needed no string at all. FOUR LABELS WERE
    RESTRUCTURED TO FIT A LIVE PAIR rather than minted: the create action is the
    Board's own "Set up · 设置" under its "Not set up · 未开通" state; the shop
    switch carries the state word "On · 已开启" / "Off · 已停用" and no label of
@@ -103,6 +107,13 @@
   // Set when the picker is OPENED and consumed by the next paint. It is the
   // only time anything focuses the search field from code — see paint().
   let _pickFocus = false;
+  // THE MENU FILTER. A term the operator types to narrow the table below — a
+  // local filter over _rows, not a request: the whole menu is already loaded,
+  // and a shop's listings are tens to low hundreds. Nothing is fetched, so
+  // there is no debounce and no sequence ticket; the keystroke and the redraw
+  // are the same frame. It never touches _rows, only what table() draws from
+  // them, so every write below still finds its row by id while a filter is up.
+  let _menuQ = '';
   let _busy = new Set();  // listing ids with a write in flight
 
   const root = () => document.getElementById('shp-root');
@@ -244,6 +255,15 @@
     if (q && typeof q.addEventListener === 'function') {
       q.addEventListener('compositionend', () => { window.shpPickSearch(q.value); });
     }
+    // The menu filter needs the same listener for the same reason: half this
+    // catalogue is named in Chinese, and the input event that carries the
+    // committed characters still has isComposing set, so shpMenuFilter() drops
+    // it. Without this, a pinyin term would narrow nothing. Bound on the
+    // element this paint just minted, so no listener is ever attached twice.
+    const m = document.getElementById('shp-menu-q');
+    if (m && typeof m.addEventListener === 'function') {
+      m.addEventListener('compositionend', () => { window.shpMenuFilter(m.value); });
+    }
   }
 
   // §1.7a: back link IS the eyebrow · title · at most two exits, one Dusk.
@@ -320,7 +340,55 @@
   }
 
   function body() {
-    return details() + (_pickerOpen ? picker() : '') + `<div id="shp-table-box">${table()}</div>`;
+    return details() + (_pickerOpen ? picker() : '') + filterBar() + `<div id="shp-table-box">${table()}</div>`;
+  }
+
+  // Does this listing answer the term? Name in either language, or the SKU —
+  // the three things the row actually shows, so a match is always visible in
+  // the row it lands on. Case-folded; a Chinese term is unaffected by that and
+  // an English one should not care which way the catalogue happens to be typed.
+  function hit(r) {
+    if (!_menuQ) return true;
+    const q = _menuQ.trim().toLowerCase();
+    if (!q) return true;
+    return (String(r.name_en || '') + ' ' + String(r.name_cn || '') + ' ' + String(r.sku || ''))
+      .toLowerCase().includes(q);
+  }
+  const shown = () => _rows.filter(hit);
+
+  // THE FILTER SITS OUTSIDE #shp-table-box, AND THAT IS THE WHOLE DESIGN.
+  // Filtering repaints the table, and this file has already paid once for a
+  // search field that lived inside what its own keystrokes repainted (see
+  // picker(), at length): the <input> is destroyed mid-word, the caret is
+  // guessed at, and an IME composition dies before a character is committed.
+  // Painted here, the field is never inside anything a filter redraws —
+  // renderTable() replaces the table box beneath it and leaves this alone.
+  //
+  // THE COUNT IS BARE NUMERALS ON PURPOSE. "8 / 47" needs no label and so no
+  // Chinese: it reads the same in both languages, and CLAUDE.md's rule is that
+  // a numeral often needs no label at all. It is emptied when nothing is
+  // filtered, so a full menu shows no count to read.
+  //
+  // type="search" carries the browser's own clear affordance, which is why
+  // there is no Clear button beside it — the catalogue's photo picker
+  // (09-products.js pd-lib-q) takes the same route.
+  //
+  // "Search by name or SKU… · 按名称或货号搜索…" is LIFTED VERBATIM from the
+  // pairs already shipping in this admin (07-content-billing.js fsc-psearch,
+  // 09-products.js pw-copy-q). Nothing here is composed.
+  function filterBar() {
+    const off = _rows.length ? '' : ' hidden';
+    return `<div class="shp-filter" id="shp-filter"${off}>
+      <input class="shp-in" id="shp-menu-q" type="search" autocomplete="off" value="${esc(_menuQ)}"
+             placeholder="${esc(T('Search by name or SKU…', '按名称或货号搜索…'))}"
+             aria-label="${esc(T('Search by name or SKU…', '按名称或货号搜索…'))}"
+             oninput="shpMenuFilter(this.value, event)">
+      <span class="shp-filter-n" id="shp-filter-n">${filterCount()}</span>
+    </div>`;
+  }
+  function filterCount() {
+    if (!_menuQ.trim() || !_rows.length) return '';
+    return esc(shown().length + ' / ' + _rows.length);
   }
 
   // The shop's own fields: two optional display names and the active switch.
@@ -427,7 +495,19 @@
   // next one.
   function renderTable() {
     const box = document.getElementById('shp-table-box');
-    if (box) { box.innerHTML = table(); if (typeof applyCapGates === 'function') applyCapGates(); return; }
+    if (box) {
+      box.innerHTML = table(); if (typeof applyCapGates === 'function') applyCapGates();
+      // The filter bar is NOT repainted — the operator may be typing in it.
+      // Only its two mutable bits are written: the count, and whether the bar
+      // is there at all once the last listing has been removed. Writing the
+      // <span> rather than the row is what keeps the <input> and its caret,
+      // and any open IME candidate window, alive through a redraw.
+      const n = document.getElementById('shp-filter-n');
+      if (n) n.textContent = filterCount();
+      const bar = document.getElementById('shp-filter');
+      if (bar) bar.hidden = !_rows.length;
+      return;
+    }
     paint();
   }
 
@@ -446,7 +526,16 @@
     if (!_rows.length) {
       return `<div class="shp-empty"><div class="shp-empty-t">${esc(T('No products yet', '还没有商品'))}</div></div>`;
     }
-    const rows = _rows.map(r => {
+    const list = shown();
+    // A filter that matches nothing says so in the catalogue's own words,
+    // already live in this file for the picker. It is NOT the "No products
+    // yet" line above: the menu has products, this term simply found none of
+    // them, and telling the operator the menu is empty would be a lie they
+    // would go and act on.
+    if (!list.length) {
+      return `<div class="shp-empty"><div class="shp-empty-t">${esc(T('No products match this filter', '没有匹配此筛选条件的产品'))}</div></div>`;
+    }
+    const rows = list.map(r => {
       const busy = _busy.has(r.id);
       const dis = (busy || RO()) ? ' disabled' : '';
       const on = r.is_available === 1;
@@ -531,6 +620,23 @@
     if (_pickerOpen) { _pickQ = ''; _pick = []; _pickLoading = true; _pickFocus = true; paint(); fetchPick(); }
     else paint();
   };
+  // THE MENU FILTER — narrows the listings table over what is already loaded.
+  // It takes the SAME IME RULE as the picker search below, for the same reason
+  // spelled out there: a half-typed pinyin syllable is not a term the operator
+  // has typed, and the compositionend listener in bindPickComposition() is what
+  // carries the committed characters in.
+  //
+  // What it does NOT take is the debounce or the sequence ticket. Those exist
+  // to tame a REQUEST — one per settled keystroke, answers that come back out
+  // of order. Nothing is fetched here, so there is no request to race and no
+  // stale answer to guard against; the keystroke and the redraw are the same
+  // frame, and a delay would only make the table lag the box.
+  window.shpMenuFilter = function (v, ev) {
+    if (ev && ev.isComposing) return;
+    _menuQ = v;
+    renderTable();
+  };
+
   // TYPING IS NOT A SEARCH TERM UNTIL THE IME SAYS IT IS.
   //
   // A Chinese keyboard fires an input event per LETTER while the candidate
