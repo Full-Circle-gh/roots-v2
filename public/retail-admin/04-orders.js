@@ -640,7 +640,15 @@ function renderAlipayProof(o) {
   let d = {}; try { d = o.alipay_ocr_json ? JSON.parse(o.alipay_ocr_json) : {}; } catch {}
   const v = o.alipay_ocr_verdict;
   const reasons = Array.isArray(d.reasons) ? d.reasons : [];
-  const paidAt = d.paid_at || d.raw_time_text || o.alipay_proof_at || '';
+  // Only a time the RECEIPT printed may be called a payment time. This fell back
+  // to alipay_proof_at — the UPLOAD stamp, straight out of SQLite in UTC and not
+  // in GZ_LOCAL_TS_FIELDS — so order TC000731 read "Paid at 2026-09-15 06:00:07"
+  // for a payment made at 13:59 Beijing and uploaded at 14:00. Eight hours of
+  // timezone underneath a label that was never true, on the one card staff open
+  // to work out why an order is being held. The upload gets its own row, in the
+  // shop's clock like every other time on this screen.
+  const paidAt = d.paid_at || d.raw_time_text || '';
+  const uploadedAt = o.alipay_proof_at ? formatDate(o.alipay_proof_at) : '';
 
   // What the AI read, one row each — only the fields it actually found.
   const facts = [];
@@ -653,6 +661,7 @@ function renderAlipayProof(o) {
   if (payeeShown) facts.push(`<li><span class="k">${cuT('Paid to', '收款方')}</span><span class="v" data-no-i18n>${escapeHtml(payeeShown)}</span></li>`);
   if (payeeAlt) facts.push(`<li><span class="k">${cuT('Account name', '收款方全称')}</span><span class="v" data-no-i18n>${escapeHtml(payeeAlt)}</span></li>`);
   if (paidAt) facts.push(`<li><span class="k">${cuT('Paid at', '付款时间')}</span><span class="v" data-no-i18n>${escapeHtml(paidAt)}</span></li>`);
+  if (uploadedAt) facts.push(`<li><span class="k">${cuT('Uploaded', '上传于')}</span><span class="v" data-no-i18n>${escapeHtml(uploadedAt)}</span></li>`);
   if (d.txn_id) facts.push(`<li><span class="k">${cuT('Txn', '流水号')}</span><span class="v">${copyChip(d.txn_id, 'Txn ID')}</span></li>`);
 
   // A gap the server forgave (short by no more than its ¥2 rule) is stated in
@@ -674,7 +683,14 @@ function renderAlipayProof(o) {
     footer = `<div class="ap-note"><span class="ap-dot"></span>${cuT('Read & matched automatically', '已自动识别并核对')}</div>`;
   } else if (v === 'mismatch') {
     pill = `<span class="ap-pill mismatch">${AP_ICON.warn}${cuT("Doesn't match — check first", '不一致 · 请先核实')}</span>`;
-    if (reasons.length) footer = `<div class="ap-reasons">${reasons.map(escapeHtml).join('；')}</div>`;
+    // Re-read is offered here too, not just on a failed read. A verdict is
+    // recorded once, by whatever the checks understood on the day — so TC000731,
+    // held by the 12-hour-clock misread fixed alongside this, had no way back:
+    // the fix shipped and the order kept showing the old reason forever. The
+    // endpoint measures freshness from the ORIGINAL upload, re-applies the reuse
+    // guard, and will not flip an order that has already moved past pending.
+    const reasonHtml = reasons.length ? `<div class="ap-reasons">${reasons.map(escapeHtml).join('；')}</div>` : '';
+    footer = `${reasonHtml}<div style="margin-top:12px;"><button class="btn btn-sm" onclick="rerunAlipayOcr(${o.id}, this)">${cuT('Try reading again', '重新识别')}</button></div>`;
   } else if (v === 'error') {
     pill = `<span class="ap-pill unread">${AP_ICON.info}${cuT("Couldn't read it", '无法识别')}</span>`;
     footer = `<div style="margin-top:12px;"><button class="btn btn-sm" onclick="rerunAlipayOcr(${o.id}, this)">${cuT('Try reading again', '重新识别')}</button></div>`;

@@ -3971,24 +3971,87 @@ function getAlipayManual() {
   } catch { return null; }
 }
 
-// Parse an Alipay screenshot time string ("YYYY-MM-DD HH:MM", Beijing) → epoch
-// ms, or null if unreadable. Bare "HH:MM" is assumed to be today (Beijing).
-function parseBeijingTime(s) {
+// Read a time off an Alipay screenshot as a Beijing instant (epoch ms), or null
+// if there is no clock in the string at all.
+//
+// Three shapes arrive, in descending order of how much they actually pin down:
+//   "2026-09-15 18:00"   a printed transaction time — full date, nothing to guess
+//   "下午 6:00"           a clock carrying a meridiem — fixed within a day
+//   "1:59"               a bare clock, usually the phone's status bar — AMBIGUOUS
+//
+// The third shape is what broke order TC000731 on 2026-09-15. The screenshot
+// printed no transaction time, so the check fell back to the status bar, where a
+// phone on a 12-hour clock renders 13:59 as "1:59". Reading that as 01:59 put
+// the payment twelve hours and one minute before it happened and failed the
+// 120-minute freshness window on a payment made sixty seconds earlier.
+//
+// Nothing in "1:59" says morning. Assuming it does is not strictness, it is a
+// coin flip that lands wrong every afternoon. So an ambiguous clock resolves to
+// the MOST RECENT reading that is not in the future: a receipt is screenshotted
+// and sent within minutes of paying, and money cannot move after the screenshot
+// of it was uploaded. This parse was never the defence against an old
+// screenshot — that is the image-hash and txn-id reuse guard in
+// ocrVerifyAlipayProof, which no clock reading can talk its way past.
+//
+// refMs is the instant to resolve against — the upload, same reference the
+// freshness window is measured from. Defaults to now.
+function parseBeijingTime(s, refMs) {
   if (!s) return null;
-  let m = /(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})/.exec(s);
+  const txt = String(s);
+  const ref = Number.isFinite(refMs) ? refMs : Date.now();
+  // Meridiem words an Alipay screen or a phone status bar can carry. 中午 is
+  // deliberately absent: "中午12:30" would read right under the PM rule but
+  // "中午11:50" would become 23:50, so noon is left to the resolver below.
+  const am = /上午|早上|早晨|凌晨|\bam\b|\ba\.m\./i.test(txt);
+  const pm = /下午|晚上|傍晚|夜间|\bpm\b|\bp\.m\./i.test(txt);
+  // 12am is hour 0, 12pm is hour 12, every other pm hour is +12. An hour past
+  // 12 is already a 24-hour clock and passes through untouched.
+  const applyMeridiem = (h) => (am && h === 12 ? 0 : pm && h < 12 ? h + 12 : h);
+  const at = (ymd, h, mi) => Date.parse(`${ymd}T${String(h).padStart(2, '0')}:${mi}:00+08:00`);
+
+  // 1. A printed transaction time. The date is on the screen, so only the hour
+  // can need a meridiem applied. The clock is matched on whatever FOLLOWS the
+  // date rather than pinned right behind it, because "2026-09-15 下午6:00" puts
+  // two characters in between — and a pattern that insists on abutting drops the
+  // date it just read and falls through to the guesswork below.
+  let m = /(\d{4})-(\d{1,2})-(\d{1,2})/.exec(txt);
   if (m) {
-    const [_, y, mo, d, h, mi] = m;
-    const t = Date.parse(`${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}T${String(h).padStart(2,'0')}:${mi}:00+08:00`);
-    return Number.isFinite(t) ? t : null;
+    const clock = /(\d{1,2}):(\d{2})/.exec(txt.slice(m.index + m[0].length));
+    if (clock) {
+      const ymd = `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}`;
+      const t = at(ymd, applyMeridiem(Number(clock[1])), clock[2]);
+      return Number.isFinite(t) ? t : null;
+    }
   }
-  m = /(\d{1,2}):(\d{2})/.exec(s);
-  if (m) {
-    const nowBj = new Date(Date.now() + 8 * 3600 * 1000);
-    const ymd = nowBj.toISOString().slice(0, 10);
-    const t = Date.parse(`${ymd}T${String(m[1]).padStart(2,'0')}:${m[2]}:00+08:00`);
-    return Number.isFinite(t) ? t : null;
+
+  // 2. A bare clock. With a meridiem the hour is fixed and only the DAY is open;
+  // without one both are, so every reading gets built and the most recent one
+  // that is not in the future wins. Money cannot move after the screenshot of it
+  // was uploaded, so a forward reading is always the wrong one — beyond the few
+  // minutes of device-clock drift the freshness check itself already tolerates.
+  // The day sweep is what carries a 23:50 payment uploaded at 00:05: yesterday's
+  // reading is the honest one, and it is the only one that is not in the future.
+  m = /(\d{1,2}):(\d{2})/.exec(txt);
+  if (!m) return null;
+  const h = Number(m[1]), mi = m[2];
+  const hours = am || pm ? [applyMeridiem(h)]
+    : (h >= 1 && h <= 12) ? [h % 12, (h % 12) + 12]   // 12:30 → 00:30 or 12:30
+    : [h];                                            // 0:xx and 13:00+ are 24-hour already
+  const SKEW_MS = 10 * 60000;
+  let past = null, future = null;
+  for (let day = -1; day <= 1; day++) {
+    const ymd = new Date(ref + 8 * 3600 * 1000 + day * 86400000).toISOString().slice(0, 10);
+    for (const hh of hours) {
+      const t = at(ymd, hh, mi);
+      if (!Number.isFinite(t)) continue;
+      if (t - ref <= SKEW_MS) { if (past == null || t > past) past = t; }
+      else if (future == null || t < future) future = t;
+    }
   }
-  return null;
+  // Every reading in the future means a device clock running ahead by more than
+  // the skew. Hand back the nearest one rather than null: it is a real reading,
+  // and the freshness check is the right place to reject it, with a reason.
+  return past != null ? past : future;
 }
 
 // One Alipay 收钱码 legitimately shows TWO different names depending on which
@@ -4075,18 +4138,27 @@ function validateAlipayProof(order, ocr, manual, refMs) {
   // → fall back to timeWindowMin, so an existing install behaves as it always did.
   const win = Number(manual.proofAgeMin || 0) || Number(manual.timeWindowMin || 0);
   if (win > 0) {
-    // Prefer a printed transaction time; fall back to the phone's status-bar
+    // Prefer a time the RECEIPT printed; fall back to the phone's status-bar
     // clock (HH:MM) when the success screen shows no timestamp of its own. The
     // device clock is a fine freshness signal for a screenshot taken right after
-    // paying — parseBeijingTime treats a bare HH:MM as today (Beijing).
-    const t = parseBeijingTime(ocr.paid_at || ocr.raw_time_text || ocr.status_bar_time);
+    // paying, but it is a clock and not a transaction — so which of the two we
+    // read is carried, and a failure names the one it actually measured.
+    const ref = Number.isFinite(refMs) ? refMs : Date.now();
+    const stamp = ocr.paid_at || ocr.raw_time_text;
+    const t = parseBeijingTime(stamp || ocr.status_bar_time, ref);
     if (t == null) {
       checks.time = false;
       if (checks.success && checks.amount && checks.payee !== false) reasons.push("couldn't read the payment time on the screenshot");
     } else {
-      const ageMin = ((Number.isFinite(refMs) ? refMs : Date.now()) - t) / 60000;
+      const ageMin = (ref - t) / 60000;
       checks.time = ageMin >= -10 && ageMin <= win;   // allow 10min clock skew
-      if (!checks.time) reasons.push(`payment time ${Math.round(ageMin)}min ago is outside the ${win}min window`);
+      if (!checks.time) {
+        // Saying "payment time" of a status-bar clock is how TC000731 read as a
+        // 12-hour-old payment to everyone who looked at it. Name the source.
+        reasons.push(stamp
+          ? `payment time ${Math.round(ageMin)}min ago is outside the ${win}min window`
+          : `the screenshot printed no payment time; its phone clock reads ${Math.round(ageMin)}min ago, outside the ${win}min window`);
+      }
     }
   } else { checks.time = null; }
 
