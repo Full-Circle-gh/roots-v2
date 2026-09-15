@@ -7940,9 +7940,18 @@
       <div class="drawer-foot" style="flex-direction:column;align-items:stretch;gap:8px">
         <textarea id="fb-reply-input" class="fb-reply-input" rows="3"
           data-ph-en="Write a reply…" data-ph-cn="输入回复…" placeholder="Write a reply…" maxlength="4000"></textarea>
-        <div style="display:flex;justify-content:flex-end;gap:8px">
-          <button class="btn" onclick="closeDrawer('#fb-drawer')">Close · 关闭</button>
-          <button class="btn btn-primary" id="fb-reply-send" onclick="sendFeedbackReply()">Send reply · 发送回复</button>
+        <!-- Marking handled sits on the LEFT, away from Send, and is not a
+             primary button. It is the quiet exit from a thread that needs no
+             answer, not a second way to finish one — and a mis-click that puts
+             nothing in front of a customer is still a mis-click worth making
+             hard. Its label and its handler both flip once the thread is
+             handled, so the same slot offers the way back. -->
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+          <button class="btn btn-sm" id="fb-handled" onclick="toggleFeedbackHandled()" hidden></button>
+          <div style="display:flex;justify-content:flex-end;gap:8px;margin-left:auto">
+            <button class="btn" onclick="closeDrawer('#fb-drawer')">Close · 关闭</button>
+            <button class="btn btn-primary" id="fb-reply-send" onclick="sendFeedbackReply()">Send reply · 发送回复</button>
+          </div>
         </div>
       </div>
     </aside>

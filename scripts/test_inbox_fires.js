@@ -121,9 +121,16 @@ const RV_COUNT_SQL = rvSql('const rvCount = tdb().prepare(');
 const RV_LOW_SQL = rvSql('const rvLow = tdb().prepare(');
 const RV_ITEMS_SQL = rvSql('const rvItems = tdb().prepare(');
 
+// Same discipline on the feedback side: ONE shared clause
+// (FEEDBACK_WAITING_SQL, over FEEDBACK_SEEN_SQL) plus the queries that wrap it,
+// all evaluated from the shipped source. The dashboard's fire and the admin
+// list's needs_reply flag both read this clause, so a change to it has to move
+// both — which is exactly what used to go wrong when they were hand-copied.
+const FB_SEEN_SRC    = sliceStatement(RETAIL_JS, 'const FEEDBACK_SEEN_SQL =');
+const FB_SHARED_SRC  = sliceStatement(RETAIL_JS, 'const FEEDBACK_WAITING_SQL =');
 const FB_WAITING_SRC = sliceStatement(RETAIL_JS, 'const FB_WAITING =');
 const fbSql = (anchor) => vm.runInNewContext(
-  `(() => { ${FB_WAITING_SRC} return ${sliceTemplate(RETAIL_JS, anchor)}; })()`, {});
+  `(() => { ${FB_SEEN_SRC} ${FB_SHARED_SRC} ${FB_WAITING_SRC} return ${sliceTemplate(RETAIL_JS, anchor)}; })()`, {});
 const FB_COUNT_SQL = fbSql('const fbCount = tdb().prepare(');
 const FB_ITEMS_SQL = fbSql('const fbItems = tdb().prepare(');
 
@@ -172,7 +179,7 @@ function seedThread(db, row = {}) {
     // live insert path does; null on a thread staff opened until the customer
     // writes back.
     last_customer_msg_at: undefined,
-    last_admin_msg_at: null, admin_read_at: null, ...row,
+    last_admin_msg_at: null, admin_read_at: null, handled_at: null, ...row,
   };
   if (r.last_customer_msg_at === undefined) {
     r.last_customer_msg_at = r.initiated_by === 'customer' ? r.created_at : null;
@@ -180,10 +187,10 @@ function seedThread(db, row = {}) {
   const n = ++fseq;
   db.prepare(`INSERT INTO retail_feedback
       (id, customer_id, customer_name, message, created_at, initiated_by, kind,
-       last_customer_msg_at, last_admin_msg_at, admin_read_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+       last_customer_msg_at, last_admin_msg_at, admin_read_at, handled_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(n, n, 'Customer ' + n, r.message, r.created_at, r.initiated_by, r.kind,
-      r.last_customer_msg_at, r.last_admin_msg_at, r.admin_read_at);
+      r.last_customer_msg_at, r.last_admin_msg_at, r.admin_read_at, r.handled_at);
   return n;
 }
 const fbCount = (db) => db.prepare(FB_COUNT_SQL).get().n;
@@ -360,6 +367,82 @@ it('a customer follow-up after that read puts it back', () => {
     last_customer_msg_at: '2026-08-22 11:00:00',
   });
   assert.deepStrictEqual(fbIds(db), [id]);
+});
+
+// ── Marked handled: the decision, and its limits ──────────────────────────
+// Reading a thread already took it off this card, which is most of why the
+// column exists: the Inbox list prints the customer's message inline, so an
+// operator reads it THERE, judges it needs no answer, and never opens the
+// drawer that would have stamped it read. handled_at is that judgement, made on
+// purpose and logged, from the row where it is actually made.
+//
+// The tests that matter are the ones about what it does NOT do. It is not a
+// mute: the next message from that customer is newer than the stamp and the
+// thread comes straight back. That property is the whole reason the clause
+// compares against the LATER of the two stamps instead of testing
+// `handled_at IS NULL`, and it is one character away from being lost.
+
+it('a thread marked handled leaves the queue with nothing sent', () => {
+  const db = freshDb();
+  seedThread(db, { handled_at: '2026-08-22 09:00:00' });
+  assert.deepStrictEqual(fbIds(db), []);
+});
+
+it('handled on its own is enough — it does not need the read stamp too', () => {
+  // The row action never opens the thread, so on that path handled_at can be
+  // the only stamp there is. If the clause required admin_read_at as well, the
+  // button on the list would appear to do nothing.
+  const db = freshDb();
+  seedThread(db, { admin_read_at: null, handled_at: '2026-08-22 09:00:00' });
+  assert.strictEqual(fbCount(db), 0);
+});
+
+it('a customer writing again after that puts it straight back', () => {
+  // Marking handled says "nothing further from us on what has been said". It
+  // must never mean "stop listening to this person".
+  const db = freshDb();
+  const id = seedThread(db, {
+    admin_read_at: '2026-08-22 09:00:00',
+    handled_at: '2026-08-22 09:00:00',
+    last_customer_msg_at: '2026-08-22 11:00:00',
+  });
+  assert.deepStrictEqual(fbIds(db), [id]);
+});
+
+it('and it ages from that new turn, not from the one that was handled', () => {
+  const db = freshDb();
+  seedThread(db, {
+    created_at: '2026-08-20 08:00:00',
+    admin_read_at: '2026-08-22 09:00:00',
+    handled_at: '2026-08-22 09:00:00',
+    last_customer_msg_at: '2026-08-22 11:00:00',
+  });
+  assert.strictEqual(fbItems(db)[0].waiting_since, '2026-08-22 11:00:00');
+});
+
+it('putting one back — both stamps cleared — returns it to the queue', () => {
+  // What POST /unhandle writes. Clearing handled_at alone would leave
+  // admin_read_at holding the thread out, and the Put back button would look
+  // broken for the one reason hardest to guess at.
+  const db = freshDb();
+  const id = seedThread(db, { admin_read_at: null, handled_at: null });
+  assert.deepStrictEqual(fbIds(db), [id]);
+});
+
+it('the undo endpoint clears the read stamp too, not just handled_at', () => {
+  const route = sliceBlock(RETAIL_JS, "router.post('/api/retail-admin/feedback/:id/unhandle'");
+  assert.ok(/handled_at\s*=\s*NULL/.test(route), 'unhandle does not clear handled_at');
+  assert.ok(/admin_read_at\s*=\s*NULL/.test(route),
+    'unhandle leaves admin_read_at set, so the thread stays out of the queue');
+});
+
+it('marking handled sends the customer nothing', () => {
+  // The line between this and the reply box. A reply drops an in-app
+  // notification with a push behind it; clearing a worklist must not.
+  const route = sliceBlock(RETAIL_JS, "router.post('/api/retail-admin/feedback/:id/handled'");
+  assert.ok(!/notifyCustomer/.test(route), 'marking handled is notifying the customer');
+  assert.ok(!/retail_feedback_messages/.test(route), 'marking handled is writing a message turn');
+  assert.ok(/logActivity/.test(route), 'the decision is not being recorded against anyone');
 });
 
 it('a thread STAFF started, which the customer has not answered, is NOT a fire', () => {

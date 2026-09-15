@@ -2431,6 +2431,31 @@ addColumn('retail_feedback', 'initiated_by',     "TEXT DEFAULT 'customer'");
 addColumn('retail_feedback', 'root_author_name', 'TEXT');
 addColumn('retail_feedback', 'kind',             "TEXT DEFAULT 'bug'");
 
+// The operator READ this thread and decided it needs no answer — a duplicate, a
+// thank-you, something already settled by phone. The thread leaves the "waiting
+// on us" queue and NOTHING is sent to the customer.
+//
+// It needs its own column rather than reusing admin_read_at, even though both
+// clear the same queue, because they are not the same statement. admin_read_at
+// is "somebody opened this", which is why merely reading a thread already takes
+// it off the dashboard today. That is too easy to do by accident and too easy
+// to do without deciding anything: the Inbox list prints the customer's message
+// inline, so an operator can read the whole thing, judge it needs no reply, and
+// never open the drawer that would stamp it. handled_at is a decision, made on
+// purpose, with a name and a time against it in the activity log.
+//
+// Deliberately NOT a one-way door. A customer's next message is newer than this
+// stamp, and the waiting clause compares against the later of the two stamps —
+// so a follow-up reopens a handled thread exactly as it reopens a read one.
+// Marking handled says "nothing further from us on what has been said", never
+// "stop listening to this person".
+//
+// Mirrors retail_reviews.dismissed_at above, which exists for the same reason
+// on the same kind of queue. The column names differ because the two actions
+// differ: a dismissed review leaves a public queue nobody replied in, a handled
+// thread is a private conversation somebody decided was finished.
+addColumn('retail_feedback', 'handled_at', 'DATETIME');
+
 // Customer-initiated refund requests with multi-step processing workflow.
 // States on retail_orders.refund_status:
 //   null | pending | reviewing | approved | paid | rejected | withdrawn
