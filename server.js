@@ -705,6 +705,40 @@ function retailAdminShell() {
   return _retailAdminHtmlCache;
 }
 
+/* IS THIS A PHONE? — the one answer, because it used to be two.
+   ------------------------------------------------------------------------
+   Two places choose a phone shell over a desktop one: the backend
+   (serveRetailAdmin, below) and the storefront editor (/cms). Both carried
+   their own copy of the same user-agent test, which is how one of them would
+   have been fixed and the other left behind.
+
+   A TABLET IS NOT A PHONE, and the token `Android` cannot tell them apart:
+   it is in every Android user-agent there is. Chrome, Firefox, Samsung
+   Internet and Edge all put `Mobile` in an Android PHONE's user-agent and
+   leave it out of a TABLET's, and that token is the only thing in the whole
+   string that separates the two. Both copies tested for `Android`, so both
+   caught tablets — and a shop tablet in landscape was served the one-column
+   phone companion with empty margins either side of it, with no route to the
+   desktop back office short of knowing `?desktop=1` by heart. Reported from a
+   counter tablet: Back out of the till landed on the phone app.
+
+   `Mobile` now carries Android on its own, and it carries the rest too —
+   iPhone, iPod and Windows Phone all ship it. They stay named anyway: this
+   function is read to find out what counts as a phone, and a list that says so
+   is worth more than a regex that happens to cover them.
+
+   iPad needs no case. iPadOS 13+ Safari sends a Macintosh user-agent by
+   default, so an iPad has always reached the desktop shell — which is the
+   right answer for a tablet and is exactly what this restores for Android.
+
+   WeChat's in-app browser (MicroMessenger) counts as a phone wherever it runs:
+   it is a phone-shaped webview, and both callers said so before this did. */
+function isPhoneUA(ua) {
+  const s = String(ua || '');
+  if (/MicroMessenger/i.test(s)) return true;
+  return /Mobile|iPhone|iPod|Windows Phone/i.test(s);
+}
+
 // Serve the Mini App Backend (retail-admin) shell. Page self-auths via
 // /api/auth/me. Shared by the /retail-admin path and the store.* subdomain root.
 function serveRetailAdmin(req, res) {
@@ -729,13 +763,12 @@ function serveRetailAdmin(req, res) {
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.set('Pragma', 'no-cache');
   // Phones get Tacet Mobile — the monitoring-first companion — as THE backend on
-  // mobile; desktop keeps the full admin. `?desktop=1` forces the desktop shell
-  // (same escape hatch as /cms). WeChat's in-app browser (MicroMessenger) counts
-  // as mobile. The companion self-auths against /api/retail-admin/* just like the
+  // a phone; every larger screen, TABLETS INCLUDED, keeps the full admin. What
+  // counts as a phone is isPhoneUA above, and the tablet half of that is the bug
+  // it was written for. `?desktop=1` forces the desktop shell (same escape hatch
+  // as /cms). The companion self-auths against /api/retail-admin/* just like the
   // desktop shell, so the session/suspended gate above still applies first.
-  const ua = req.get('user-agent') || '';
-  const isMobile = /Android|iPhone|iPod|Windows Phone|Mobile|MicroMessenger/i.test(ua);
-  if (isMobile && req.query.desktop !== '1') {
+  if (isPhoneUA(req.get('user-agent')) && req.query.desktop !== '1') {
     return res.sendFile(path.join(__dirname, 'public', 'm.html'));
   }
   // Serve the shell with per-deploy versioned asset URLs so a deploy's new JS/CSS
@@ -864,14 +897,13 @@ app.get('/product-editor', (req, res) => {
 // re-downloading the whole shell when nothing changed (server answers 304).
 app.get('/cms', (req, res) => {
   res.set('Cache-Control', 'no-cache');
-  // Phones get the touch-first mobile editor; everything else gets the full
-  // desktop editor. `?desktop=1` forces desktop (used by the mobile shell's
-  // embedded preview iframe and the "Open on desktop" link). WeChat's in-app
-  // browser reports as MicroMessenger, so it counts as mobile.
-  const ua = req.get('user-agent') || '';
-  const isMobile = /Android|iPhone|iPod|Windows Phone|Mobile|MicroMessenger/i.test(ua);
+  // Phones get the touch-first mobile editor; everything else — tablets and
+  // desktops alike — gets the full desktop editor. What counts as a phone is
+  // isPhoneUA, shared with the backend shell above. `?desktop=1` forces desktop
+  // (used by the mobile shell's embedded preview iframe and the "Open on
+  // desktop" link).
   const wantsDesktop = req.query.desktop === '1';
-  const file = (isMobile && !wantsDesktop) ? 'cms-mobile.html' : 'cms.html';
+  const file = (isPhoneUA(req.get('user-agent')) && !wantsDesktop) ? 'cms-mobile.html' : 'cms.html';
   res.sendFile(path.join(__dirname, 'public', file));
 });
 
