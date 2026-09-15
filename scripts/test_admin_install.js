@@ -144,6 +144,26 @@ ok("the module never reloads the page — this shell is full of unsaved work",
 ok("and it does not listen for the worker's 'sw-updated', which is how /m earns its reload",
   MODULE_JS.indexOf('sw-updated') === -1);
 
+// ── 5. `hidden` has to actually hide ─────────────────────────────────────
+console.log('\nthe row actually disappears');
+const CSS = read('public', 'retail-admin.css');
+/* THE BUG THIS SECTION EXISTS FOR, reported from a tablet: the row showed on
+   every screen and did nothing when tapped.
+
+   An author `display` beats the UA stylesheet's [hidden] { display: none }, and
+   .acct-item carries `display: flex`. So `row.hidden = true` set the attribute
+   and changed nothing on screen: the row was always visible, and the click
+   handler correctly did nothing because there was no install event behind it.
+
+   This stylesheet has NO global [hidden] guard — every case is handled on its
+   own (.chd-pop[hidden], .ovp[hidden], #cu-drawer .cu-noteline[hidden]), which
+   is exactly why a new one is easy to miss. A test that reads the `hidden`
+   PROPERTY cannot catch this; only the stylesheet can say. */
+ok('.acct-item is given a display, which is what defeats [hidden]',
+  /\.acct-item\s*\{[^}]*display\s*:/.test(CSS));
+ok('so .acct-item[hidden] puts it back — without this the row is never hidden',
+  /\.acct-item\[hidden\]\s*\{[^}]*display\s*:\s*none/.test(CSS));
+
 console.log('');
 if (bad.length) {
   console.log(bad.length + ' failed of ' + (pass + bad.length) + ':');
