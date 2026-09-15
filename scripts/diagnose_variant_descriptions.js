@@ -24,7 +24,10 @@ function flag(name, def) { const i = argv.indexOf(name); return i >= 0 && argv[i
 const NAME = flag('--name', null);
 const GROUP = flag('--group', null) != null ? parseInt(flag('--group', null), 10) : null;
 
-const db = new Database(path.join(__dirname, '..', 'data', 'roots.db'));
+// READ-ONLY. The "Read-only prod query" workflow will run any
+// scripts/diagnose_*.js against the live database and its only gate is that
+// file name, so a writable handle here is a promise this file was not keeping.
+const db = new Database(path.join(__dirname, '..', 'data', 'roots.db'), { readonly: true });
 
 function blockCount(json) { try { const a = JSON.parse(json); return Array.isArray(a) ? a.length : 0; } catch { return 0; } }
 

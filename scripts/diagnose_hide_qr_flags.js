@@ -18,8 +18,27 @@
 //   node scripts/diagnose_hide_qr_flags.js
 'use strict';
 
+// OPENED READ-ONLY, AND IT PROVES IT. The first version of this file did
+// `require('../database.js')`, which is the APPLICATION'S handle and is opened
+// READ-WRITE. That is wrong twice over: the "Read-only prod query" workflow
+// trusts every scripts/diagnose_*.js to be read-only by convention, and a
+// diagnostic holding a writable handle to the live database is one keystroke
+// from being a repair script nobody reviewed. It also could not run there at
+// all — the workflow stages the script alone in /tmp and stubs database.js —
+// so the mistake surfaced as MODULE_NOT_FOUND rather than as what it was.
 const path = require('path');
-const db = require(path.join(__dirname, '..', 'database.js'));
+const HOME = process.env.ROOTS_HOME || path.join(__dirname, '..');
+const DB_PATH = process.env.ROOTS_DB || '/root/roots-v2/data/roots.db';
+const Database = require(`${HOME}/node_modules/better-sqlite3`);
+
+const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
+try {
+  db.exec('CREATE TABLE __ro_probe__ (x)');
+  console.log('WARNING: this handle accepted a write. Stopping rather than reading live data.');
+  process.exit(1);
+} catch (e) {
+  console.log('read-only proven — write rejected: ' + String(e.message).split('\n')[0] + '\n');
+}
 
 const rows = db.prepare(`
   SELECT id, name_en, name_cn, description_blocks, updated_at
