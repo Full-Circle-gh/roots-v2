@@ -13121,7 +13121,22 @@ router.get('/api/retail/orders', requireRetailAuth, (req, res) => {
                     placed_at, paid_at, dispatched_at, delivered_at
                FROM retail_orders WHERE customer_id = ?`;
   const params = [req.customer.id];
-  if (status) { sql += ' AND status = ?'; params.push(status); }
+  // The customer's Paid chip means "paid for". 'awaiting_restock' is a PAID
+  // order parked until the line it waits on is back on the shelf: the money
+  // has moved, lib/batch-owed.js treats it as goods owed, and
+  // lib/finance-window.js already counts it among the paid statuses. Matching
+  // `status = 'paid'` exactly left those orders under no chip at all — the
+  // shopper could find them only under All, which reads as "I paid and my
+  // order went nowhere". Inside the bucket each one keeps its own
+  // 'Awaiting stock / 等待补货' pill, so the reason it is held is still on the
+  // card. Deliberately NOT lib/finance-window.js's five-status PAID predicate:
+  // that one answers "what does Finance count" and would drag preparing,
+  // dispatched and delivered into the Paid chip.
+  if (status === 'paid') {
+    sql += " AND status IN ('paid','awaiting_restock')";
+  } else if (status) {
+    sql += ' AND status = ?'; params.push(status);
+  }
   sql += ' ORDER BY placed_at DESC LIMIT ? OFFSET ?';
   params.push(limit, offset);
 
@@ -13198,7 +13213,9 @@ router.get('/api/retail/invoices', requireRetailAuth, (req, res) => {
 });
 
 // Counts by status — powers the Me-tab bucket icons (Unpaid / Pending /
-// Preparing / Sent / Review). `pending` = paid but not yet acknowledged;
+// Preparing / Sent / Review). `pending` = paid but not yet acknowledged,
+// which includes 'awaiting_restock' (a paid order parked on a restock) for
+// the reason given at GET /api/retail/orders above;
 // `preparing` = kitchen is actively preparing. `to_ship` is kept for back-
 // compat (= pending + preparing). `to_review` = delivered orders that the
 // customer hasn't yet reviewed, `total` = lifetime order count.
@@ -13208,6 +13225,10 @@ router.get('/api/retail/orders/stats', requireRetailAuth, (req, res) => {
   ).all(req.customer.id);
   const counts = {};
   for (const b of buckets) counts[b.status] = b.n;
+  // The same widening the list above applies, and it has to stay the same or
+  // the badge and the list it opens disagree — a badge of 1 opening a screen
+  // with two orders on it is worse than no badge.
+  const paidCount = (counts.paid || 0) + (counts.awaiting_restock || 0);
   const totalRow = tdb().prepare(
     'SELECT COUNT(*) AS n FROM retail_orders WHERE customer_id = ?'
   ).get(req.customer.id);
@@ -13229,9 +13250,9 @@ router.get('/api/retail/orders/stats', requireRetailAuth, (req, res) => {
     success: true,
     data: {
       unpaid:    counts.pending_payment || 0,
-      pending:   counts.paid || 0,
+      pending:   paidCount,
       preparing: counts.preparing || 0,
-      to_ship:   (counts.paid || 0) + (counts.preparing || 0),
+      to_ship:   paidCount + (counts.preparing || 0),
       shipped:   counts.dispatched || 0,
       to_review: toReviewRow.n || 0,
       // After-sales = anything with an active refund process OR fully refunded.

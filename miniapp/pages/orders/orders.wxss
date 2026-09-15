@@ -79,7 +79,13 @@
   border: 2rpx solid;
 }
 .status-pending_payment { background: rgba(255, 175, 96, 0.18); color: #c66800; border-color: rgba(255, 175, 96, 0.4); }
-.status-paid            { background: rgba(178, 207, 237, 0.2);  color: #2456a3; border-color: rgba(178, 207, 237, 0.5); }
+/* A paid order parked on a restock wears the Paid colours, because it IS a
+   paid order — and the Paid chip now lists it. What differs is the label,
+   'Awaiting stock / 等待补货', which is where the reason belongs. Without a
+   rule of its own the pill fell through to the bare .status-pill: no
+   background and a currentColor border, which read as no status at all. */
+.status-paid,
+.status-awaiting_restock { background: rgba(178, 207, 237, 0.2);  color: #2456a3; border-color: rgba(178, 207, 237, 0.5); }
 .status-preparing       { background: rgba(242, 202, 108, 0.2);  color: #7f5800; border-color: rgba(242, 202, 108, 0.5); }
 .status-dispatched      { background: rgba(123, 189, 59, 0.18);  color: #3a6817; border-color: rgba(123, 189, 59, 0.4); }
 .status-delivered       { background: rgba(54, 83, 41, 0.92);    color: #fff;    border-color: var(--forest); }
