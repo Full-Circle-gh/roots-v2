@@ -15,7 +15,7 @@
 
 'use strict';
 
-const { isOptionLine, classifyLines, alertText } = require('../lib/channel-line-report');
+const { isOptionLine, classifyLines, alertText, belowZeroText } = require('../lib/channel-line-report');
 
 let failures = 0;
 const check = (name, cond, detail) => {
@@ -96,6 +96,62 @@ console.log('\nF · the alert text');
   });
   check('meituan names itself', mt.includes('美团外卖') && mt.includes('Meituan'), mt);
   check('an alert with no oversell omits that half', !mt.includes('库存不足'), mt);
+}
+
+// ── G · our own channels, which said nothing at all ───────────────────────
+// The mini app, the web store and the counter till take a shelf below zero
+// through lib/inventory.js's two commits, which do not clamp and must not —
+// §84's negative is the only record that units are owed. Until 2026-09-15 they
+// raised no alert of any kind, while Meituan and Eleme had raised one since
+// 2026-09-08. These cases are about the DIFFERENCE between the two sentences:
+// a platform line was refused the shelf, ours took it and left a debt.
+console.log('\nG · a shelf our own commit took below zero');
+{
+  const none = belowZeroText({ channel: 'web', orderNo: 'ORD-1', lines: [] });
+  check('a commit that stayed at or above zero says nothing', none === null, String(none));
+
+  const till = belowZeroText({
+    channel: 'shop', fulfilment: 'counter', orderNo: 'ORD-1042', storeName: '天河店',
+    lines: [{ name: '青辣椒酱', nameEn: 'Zhoug', balance: -3 },
+            { name: '甜菜根沙拉', nameEn: 'Beet Salad', balance: -1 }],
+  });
+  check('carries the order number', till.includes('ORD-1042'), till);
+  check('a walk-in is named as the till, not as its channel',
+    till.includes('前台收银') && till.includes('Counter till'), till);
+  check('names the shop it happened in', till.includes('天河店'), till);
+  check('the balance prints with its own sign, per line',
+    till.includes('剩余 -3') && till.includes('Beet Salad -1'), till);
+  check('says somebody is owed, in Chinese', till.includes('有客户订单等待'), till);
+  check('…and in English', till.includes('are now owed'), till);
+  // THE ONE THING THIS MUST NEVER SAY. The platform alert's wording is "已按 0
+  // 计" / "clamped at 0" because the platform ingest refuses the shelf. Ours
+  // wrote the negative deliberately; borrowing that sentence would report a
+  // completed deduction as a refused one.
+  check('never claims the line was clamped',
+    !till.includes('已按 0 计') && !till.includes('clamped'), till);
+  check('is two lines, 中文 then English', till.split('\n').length === 2, JSON.stringify(till));
+
+  // Each half names the product in its OWN language — alertText cannot, because
+  // its names arrive from a platform payload with no Chinese copy to prefer.
+  const cnLine = till.split('\n')[0], enLine = till.split('\n')[1];
+  check('the 中文 half uses the Chinese name', cnLine.includes('青辣椒酱'), cnLine);
+  check('the English half uses the English name',
+    enLine.includes('Zhoug') && !enLine.includes('青辣椒酱'), enLine);
+
+  const web = belowZeroText({
+    channel: 'web', fulfilment: 'delivery', orderNo: 'ORD-1043', storeName: '越秀区',
+    lines: [{ name: '越式豆腐卷', nameEn: 'Tofu Roll', balance: -18 }],
+  });
+  check('a delivery is named by its channel', web.includes('网店') && web.includes('Web store'), web);
+  const wechat = belowZeroText({
+    orderNo: 'ORD-1044', lines: [{ nameEn: 'Anything', balance: -1 }],
+  });
+  check('an absent channel reads as the mini app, as the column default does',
+    wechat.includes('微信'), wechat);
+  const odd = belowZeroText({
+    channel: 'not_a_channel', orderNo: 'ORD-1045', lines: [{ nameEn: 'Anything', balance: -1 }],
+  });
+  check('an unknown channel still alerts rather than throwing', !!odd, String(odd));
 }
 
 console.log(failures ? `\n${failures} check(s) failed\n` : '\nall checks passed\n');
