@@ -772,9 +772,36 @@ img{display:block;max-width:100%}
 .cbar-l{flex:1;text-align:left;letter-spacing:.04em}
 .cbar-v{flex:none;font-variant-numeric:tabular-nums}
 
+/* ── the menu does not move behind a sheet ──
+   REPORTED BY ASH 2026-09-15, with a product sheet open over the menu:
+   *"i can scroll the menu itself behind the pop up ... scrolling of the menu
+   should be block if there is a pop up product info."* There was no lock of
+   any kind. shOpen and shClose only ever toggled [hidden] and the animation
+   class, so every sheet this page has — the product details, the basket, the
+   picker, the placed order — has been a panel laid over a page that still
+   scrolled under the thumb.
+
+   THE LOCK IS overflow ON THE ROOT, NOT position:fixed ON THE BODY. The
+   fixed-body trick is the one usually reached for and it is wrong here: it
+   takes the document out of flow, which drops the scroll offset to the top of
+   the page, and this page has a STICKY header that would visibly jump away
+   the instant a customer tapped a card. Setting overflow on the root keeps
+   the offset and moves nothing; scripts/test_shop_menu_render.js measures
+   exactly that, because a lock that scrolls the page to the top on open would
+   be a worse bug than the one it fixes.
+
+   .sh-lock IS ADDED WITH classList AND NEVER BY ASSIGNING className. The root
+   element also carries .lang-en / .lang-cn, which is the switch the whole
+   bilingual page hangs off; overwriting it here would show both languages at
+   once on every sheet. */
+html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
 .sheet{position:fixed;inset:0;z-index:40;display:flex;align-items:flex-end}
 .sheet[hidden]{display:none}
-.sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.42)}
+/* THE SCRIM EATS THE TOUCH. touch-action:none is what stops a finger dragged
+   across the dimmed menu from scrolling it: the overflow lock below is what
+   browsers obey, and this is what iOS obeys. Both, because this page is opened
+   inside WeChat on both platforms and they fail differently. */
+.sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.42);touch-action:none}
 .sheet-p{position:relative;width:100%;max-height:86vh;max-height:86dvh;
   display:flex;flex-direction:column;background:var(--oat);
   border-top:2px solid var(--ink)}
@@ -855,7 +882,12 @@ img{display:block;max-width:100%}
 .xb2{transform:rotate(-45deg)}
 .sheet-x .xb{width:14px;margin-left:-7px;margin-top:-1px}
 .big-x .xb{width:20px;margin-left:-10px;margin-top:-1px}
-.sheet-b{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 14px}
+/* overscroll-behavior:contain STOPS THE CHAIN. Without it, scrolling a sheet
+   that has reached its own end hands the gesture to the page underneath, so a
+   customer reading to the bottom of an ingredient list finds the menu moving
+   behind it. The sheet's own list still scrolls; only the handover is refused. */
+.sheet-b{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:4px 14px;
+  overscroll-behavior:contain}
 .sheet-f{flex:none;padding:12px 14px calc(12px + env(safe-area-inset-bottom));
   border-top:2px solid var(--ink)}
 
@@ -1404,12 +1436,24 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // nor the wait: the panel is simply gone, which is what they asked for.
   `var shRM=function(){try{return window.matchMedia('(prefers-reduced-motion:reduce)').matches}` +
   `catch(x){return false}};` +
+  /* IS ANY SHEET STILL UP? Asked of the DOM rather than kept in a counter,
+     because a counter is a second source of truth for something the [hidden]
+     attribute already says, and the two drift the first time a sheet is closed
+     by a path that forgot to decrement. A sheet on its way out carries the
+     'closing' class and does NOT count: the page is free to scroll again the
+     moment the customer has dismissed it, not 160ms later. */
+  `var shAnyUp=function(){var n=document.querySelectorAll('.sheet');` +
+  `for(var i=0;i<n.length;i++){var e=n[i];` +
+  `if(!e.hidden&&e.className.indexOf('closing')<0)return true}return false};` +
+  /* classList, NOT className — the root carries the language switch. */
+  `var shSync=function(){var r=document.documentElement;` +
+  `if(shAnyUp())r.classList.add('sh-lock');else r.classList.remove('sh-lock')};` +
   `var shOpen=function(el){if(el.shT){clearTimeout(el.shT);el.shT=null}` +
-  `el.className='sheet';el.hidden=false};` +
+  `el.className='sheet';el.hidden=false;shSync()};` +
   `var shClose=function(el){if(el.hidden)return;` +
   `if(el.shT){clearTimeout(el.shT);el.shT=null}` +
-  `if(shRM()){el.hidden=true;el.className='sheet';return}` +
-  `el.className='sheet closing';` +
+  `if(shRM()){el.hidden=true;el.className='sheet';shSync();return}` +
+  `el.className='sheet closing';shSync();` +
   `el.shT=setTimeout(function(){el.shT=null;el.hidden=true;el.className='sheet'},160)};` +
 
   // ── THE PRODUCT SHEET ───────────────────────────────────────────────────
