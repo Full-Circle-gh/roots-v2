@@ -194,6 +194,36 @@ button{font:inherit;color:inherit;margin:0}
   border:1px solid var(--td-border);background:transparent;color:var(--td-text2);
   font-size:13px;font-weight:500;
 }
+/* THE INSTALL CONTROL, kept after the strip below is dismissed. Icon only, for
+   the reason the back chevron is: this row already carries the store picker and
+   the language, and a word here would be the fourth. The word IS on the
+   control — as its aria-label — for anyone who cannot see the arrow.
+   "Add" on its own was the obvious label and is the wrong one: this screen's
+   other verb-less Add puts a PRODUCT in the basket. */
+.hbtn-ic{display:inline-flex;align-items:center;justify-content:center;padding:0}
+.hbtn-ic svg{width:20px;height:20px}
+
+/* THE ASK. A strip under the header, not a banner over the till: the grid and
+   the order rail both stay whole, and the row it pushes down costs 44px on a
+   screen that has them.
+   It is shown ONCE — dismissing it, or installing, writes INSTALL_KEY and it
+   does not come back. The header button above is where it lives afterwards, so
+   a dismissal is not a decision the cashier can never take back. */
+.t-install{
+  flex:none;display:flex;align-items:center;gap:12px;padding:8px 16px;
+  background:var(--td-dusk-tint);border-bottom:1px solid var(--td-border);
+}
+.t-install .ic{flex:none;display:flex;color:var(--td-dusk)}
+.t-install .ic svg{width:20px;height:20px}
+.t-install .msg{flex:1;min-width:0;font-size:13px;line-height:1.35;color:var(--td-text)}
+.t-install .go{
+  flex:none;min-height:36px;padding:0 14px;border:0;border-radius:var(--r-control);
+  background:var(--td-dusk);color:#fff;font-family:inherit;font-size:13px;font-weight:500;
+}
+.t-install .off{
+  flex:none;width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+  background:transparent;border:0;color:var(--td-text2);font-size:20px;line-height:1;
+}
 .t-body{flex:1;display:flex;min-height:0}
 
 /* ---- left: entry ---- */
@@ -814,7 +844,19 @@ button{font:inherit;color:inherit;margin:0}
     <span class="t-dot"></span>
     <button class="t-store" id="hd-store" type="button" data-store></button>
     <span class="t-sp"></span>
+    <button class="hbtn hbtn-ic" id="hd-install" type="button" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+    </button>
     <button class="hbtn" id="hd-lang" type="button"></button>
+  </div>
+  <!-- The ask. Drawn only where the browser has told us it can honour it — see
+       the install block in the script, which is also where the button above
+       gets its label. -->
+  <div class="t-install" id="inst-bar" hidden>
+    <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg></span>
+    <span class="msg" id="inst-msg"></span>
+    <button class="go" id="inst-go" type="button"></button>
+    <button class="off" id="inst-off" type="button">&times;</button>
   </div>
   <div class="t-body">
     <div class="t-entry">
@@ -982,7 +1024,22 @@ button{font:inherit;color:inherit;margin:0}
     // dropping the leading "forbidden — ", which is an API word: the cashier is
     // reading a screen, not a status code. Nothing else is touched, and the
     // Chinese half is byte-for-byte the one already shipped.
-    noPermission: ['POS permission required', '无收银权限']
+    noPermission: ['POS permission required', '无收银权限'],
+    /* install — getting the till OFF the browser tab it is in.
+       Every row here is a live pair from public/m.html's own install strip,
+       quoted whole. Nothing is composed and no character is minted: the phone
+       companion has been asking this same question, in these same words, since
+       it shipped, and a cashier who has seen it on their phone meets the same
+       sentence at the counter.
+       "Tacet" rather than "Counter" in the strip is deliberate and is what
+       makes the quote exact — the till IS Tacet, installed, and the manifest
+       titles the installed window "Counter" anyway (till-manifest.webmanifest
+       short_name), so the name on the dock is right either way. */
+    installAsk:   ['Keep Tacet on your home screen — full screen, no browser.',
+                   '把 Tacet 添加到主屏幕 — 全屏，无浏览器。'],   // m.html:19221
+    installAdd:   ['Add', '添加'],                     // m.html:19223
+    installOff:   ['Dismiss', '忽略'],                 // m.html:19224
+    installHere:  ['Add to home screen', '添加到主屏幕']   // m.html:12808
   };
   function T(k) { var p = STRINGS[k]; return cuT(p[0], p[1]); }
 
@@ -1192,6 +1249,111 @@ button{font:inherit;color:inherit;margin:0}
 
   /* ---- boot ------------------------------------------------------------ */
   function boot(msg) { $('boot').hidden = false; $('app').hidden = true; $('boot-msg').innerHTML = msg; }
+
+  /* ====================================================================
+     GETTING THE TILL OUT OF THE BROWSER TAB.
+
+     Reported as: the counter runs in a browser, with tabs and an address bar
+     over it, and nothing ever offers to make it an app. The manifest was
+     already right — /till-manifest.webmanifest names it, ships the four
+     icons, and asks for standalone landscape — and the head already carries
+     the apple-* tags iOS reads. THE MISSING HALF WAS A SERVICE WORKER:
+     Chrome and Edge will not offer to install an app that has none, whatever
+     its manifest says, so beforeinstallprompt never fired and the omnibox
+     install button never appeared. That registration is at the foot of this
+     file and is the load-bearing change; everything here is the ask.
+
+     TWO PLATFORMS, and only one of them is code.
+
+     Chrome/Edge (desktop AND the Android tablets the counter runs on) fire
+     beforeinstallprompt once the app qualifies. Holding onto that event is
+     the ONLY way to raise the install dialog later — it cannot be conjured —
+     so it is caught and kept.
+
+     Safari fires nothing and offers no API, and needs none: the apple-* tags
+     in the head are the whole iOS path and Share -> Add to Home Screen has
+     always worked from them. Nothing is drawn there rather than drawing a
+     control that cannot do anything.
+     ==================================================================== */
+  var INSTALL_KEY = 'tacet-till-install-off';
+  /* Chrome's event, kept. Null means either it has not fired yet or it has
+     been spent — prompt() may be called once per event, and Chrome issues a
+     fresh one on the next load if the app is still not installed. */
+  var installEvent = null;
+  var installAsked = false;
+  try { installAsked = localStorage.getItem(INSTALL_KEY) === '1'; } catch (e) {}
+
+  /* Already an app? Then there is nothing to offer. matchMedia is the
+     browser's own answer for Chrome/Edge; navigator.standalone is the only
+     one iOS gives. */
+  function isInstalled() {
+    try {
+      return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+          || window.navigator.standalone === true;
+    } catch (e) { return false; }
+  }
+
+  /* Drawn from render(), and ALSO called on its own from the event handlers
+     below: beforeinstallprompt can land before the boot reads come back, and
+     render() does not run until they do. Guarded on the nodes existing so the
+     early call is a no-op rather than a throw. */
+  function renderInstall() {
+    var btn = $('hd-install'), bar = $('inst-bar');
+    if (!btn || !bar) return;
+    var can = !!installEvent && !isInstalled();
+    btn.hidden = !can;
+    btn.setAttribute('aria-label', T('installHere'));
+    bar.hidden = !can || installAsked;
+    if (!bar.hidden) {
+      $('inst-msg').textContent = T('installAsk');
+      $('inst-go').textContent = T('installAdd');
+      $('inst-off').setAttribute('aria-label', T('installOff'));
+    }
+  }
+
+  /* Stop asking from the top of the screen. NOT "never": the header control
+     stays for as long as the browser will still honour it, so a cashier who
+     waved the strip away on a busy morning has somewhere to go later. */
+  function installDismiss() {
+    installAsked = true;
+    try { localStorage.setItem(INSTALL_KEY, '1'); } catch (e) {}
+    renderInstall();
+  }
+
+  function installAsk() {
+    if (!installEvent) return;
+    var e = installEvent;
+    // Spent the moment it is raised, and the strip goes with it — the native
+    // dialog is the question now, and two askings on one screen is one too
+    // many.
+    installEvent = null;
+    renderInstall();
+    try {
+      e.prompt();
+      if (e.userChoice && e.userChoice.then) {
+        e.userChoice.then(function (r) {
+          if (!r || r.outcome !== 'accepted') installDismiss();
+        }, function () {});
+      }
+    } catch (err) {}
+  }
+
+  window.addEventListener('beforeinstallprompt', function (e) {
+    // Chrome's own mini-infobar is not ours to place — on a landscape till it
+    // lands across the bottom of the order rail, over Mark paid.
+    e.preventDefault();
+    installEvent = e;
+    renderInstall();
+  });
+  window.addEventListener('appinstalled', function () {
+    installEvent = null;
+    installAsked = true;
+    try { localStorage.setItem(INSTALL_KEY, '1'); } catch (e) {}
+    renderInstall();
+    // No confirmation is drawn: on a desktop the app window opens over this
+    // one and on Android the system says so itself. A toast here would be the
+    // third thing telling a cashier the same news.
+  });
 
   function start() {
     document.documentElement.setAttribute('data-theme', 'light');
@@ -1560,6 +1722,7 @@ button{font:inherit;color:inherit;margin:0}
     renderCustPicker();
     renderLeave();
     $('hd-lang').textContent = _lang === 'cn' ? 'EN' : '中文';
+    renderInstall();
     var qi = $('q');
     qi.placeholder = T('searchAdd');
     $('q-clr').hidden = !S.q;
@@ -2733,8 +2896,52 @@ button{font:inherit;color:inherit;margin:0}
     $('pay').addEventListener('click', goSettle);
     $('bar-pay').addEventListener('click', goSettle);
     $('hd-lang').addEventListener('click', function () { setLang(_lang === 'cn' ? 'en' : 'cn'); });
+    $('hd-install').addEventListener('click', installAsk);
+    $('inst-go').addEventListener('click', installAsk);
+    $('inst-off').addEventListener('click', installDismiss);
     $('q').addEventListener('input', function (e) { S.q = e.target.value || ''; $('q-clr').hidden = !S.q; renderGrid(); });
     $('q-clr').addEventListener('click', function () { S.q = ''; $('q').value = ''; $('q-clr').hidden = true; renderGrid(); });
+  }
+
+  /* ====================================================================
+     THE SERVICE WORKER.
+
+     THIS IS WHY THE TILL CAN BE INSTALLED AT ALL. Chrome and Edge require a
+     registered service worker with a fetch handler before they will fire
+     beforeinstallprompt or show the omnibox install button — the manifest
+     alone has never been enough — so /till had every other qualification and
+     was still, permanently, a browser tab.
+
+     /sw.js is the one shared worker for this origin; /m registers the same
+     file at the same scope. Scope '/' covers this page's '/till' start_url,
+     which is what Chrome checks. It is network-first for HTML, so an
+     installed till is never pinned to a cached build, and the Cache-Control:
+     no-store on the /till route still reaches the network on every load.
+
+     NOTHING LISTENS FOR 'sw-updated' HERE, AND NOTHING SHOULD. The worker
+     posts it to every client on activate and /m answers by reloading when it
+     is safe to. A till must not: a basket lives in S.lines and nowhere else,
+     so a reload behind a cashier with eight lines rung up throws the sale on
+     the floor. The till picks up a new build the next time it is opened,
+     which for a counter is every morning.
+
+     Registered outside the boot chain deliberately — a till that cannot read
+     its stores should still be installable, and the operator who fixes it
+     will want it as an app either way.
+
+     isSecureContext rather than a protocol check: it is the browser's own
+     answer to the question a service worker asks, and it already knows the
+     exceptions a string comparison forgets (localhost and 127.0.0.1 count, an
+     http:// LAN address does not). */
+  if ('serviceWorker' in navigator && window.isSecureContext) {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function (reg) {
+      // An installed till can go a week without a navigation and browsers
+      // throttle the automatic update check to about a day. Check when it
+      // comes back to the foreground instead — same as /m and kitchen.html.
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') { try { reg.update(); } catch (e) {} }
+      });
+    }).catch(function () {});
   }
 
   start();
