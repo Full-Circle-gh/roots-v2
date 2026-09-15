@@ -176,6 +176,8 @@
         <view wx:elif="{{!sections.length}}" class="empty empty-inline">
           <view class="empty-title f-bear">{{emptyTitle}}</view>
           <view class="empty-sub">{{emptySub}}</view>
+          <view wx:if="{{emptyRetry}}" class="empty-retry" hover-class="empty-retry-tap"
+                bindtap="retry">{{emptyRetry}}</view>
         </view>
 
         <block wx:else>
@@ -283,6 +285,8 @@
     <view wx:elif="{{!sections.length}}" class="empty">
       <view class="empty-title f-bear">{{emptyTitle}}</view>
       <view class="empty-sub">{{emptySub}}</view>
+      <view wx:if="{{emptyRetry}}" class="empty-retry" hover-class="empty-retry-tap"
+            bindtap="retry">{{emptyRetry}}</view>
     </view>
 
     <view wx:else>
