@@ -60,6 +60,15 @@ const LOC_A = 9811;   // gets a shop
 const LOC_B = 9812;   // stays a plain location — the §41 "unchanged" case
 const P1 = 9911, P2 = 9912, P3 = 9913;
 const P4 = 9914;   // never listed — the fixture the candidate SEARCH is run against
+// Sixty more, none of them listed, for the one thing a smaller fixture cannot
+// show: that an EMPTY box returns every addable product and not the first
+// fifty of them. Sixty is the smallest number that fails against a LIMIT 50.
+const BULK_FROM = 9920, BULK_N = 60;
+const BULK_IDS = Array.from({ length: BULK_N }, (_, i) => BULK_FROM + i);
+// A product with no English name — the column is NOT NULL, so in this
+// catalogue that means the empty string. It has to sort by the name the picker
+// prints, not sit in a nameless block at the head of the list.
+const P_CN = 9990;
 
 let failures = 0;
 function check(label, fn) {
@@ -75,6 +84,7 @@ function cleanup() {
   db.prepare('DELETE FROM shop_listings WHERE shop_id IN (SELECT id FROM shops WHERE location_id IN (?, ?))').run(LOC_A, LOC_B);
   db.prepare('DELETE FROM shops WHERE location_id IN (?, ?)').run(LOC_A, LOC_B);
   db.prepare('DELETE FROM store_products WHERE id IN (?, ?, ?, ?)').run(P1, P2, P3, P4);
+  db.prepare(`DELETE FROM store_products WHERE id IN (${BULK_IDS.join(',')}, ${P_CN})`).run();
   db.prepare('DELETE FROM retail_stores WHERE id IN (?, ?)').run(LOC_A, LOC_B);
 }
 cleanup();
@@ -92,6 +102,19 @@ db.prepare(`INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, i
 // the candidate search has to reach. Never listed, so it is always a candidate.
 db.prepare(`INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, is_active, is_published, keywords_en, tagline_en)
             VALUES (?, 'Fixture Peanut Butter Duo', '测试花生酱双拼', '__T-9914', 68, 1, 1, 'spreadable', 'Fixture slogan')`).run(P4);
+{
+  const ins = db.prepare(`INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, is_active, is_published)
+                          VALUES (?, ?, ?, ?, ?, 1, 1)`);
+  // Numbered so their alphabetical order is known, and named from the far end
+  // of the alphabet so a cap that kept the first fifty of the WHOLE catalogue
+  // would drop them rather than happen to keep them.
+  BULK_IDS.forEach((id, i) => {
+    const n = String(i).padStart(2, '0');
+    ins.run(id, `Zz fixture bulk ${n}`, `测试批量${n}`, `__T-${id}`, 5 + i);
+  });
+  db.prepare(`INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, is_active, is_published)
+              VALUES (?, '', '测试无英文名', '__T-9990', 12, 1, 1)`).run(P_CN);
+}
 
 // Column set of the tables the till reads, captured now so the end of the run
 // can prove the migration added nothing to them.
@@ -284,6 +307,35 @@ function call(method, url, body) {
       const r = await call('GET', `/api/retail-admin/shops/${shopA.id}/candidates?q=${encodeURIComponent('%')}`);
       assert.strictEqual(r.status, 200);
       assert.ok(!r.json.data.some(x => x.id === P4), 'a bare % matches nothing, rather than everything');
+    });
+    // AN EMPTY BOX IS THE WHOLE ADDABLE CATALOGUE. It used to be the first
+    // fifty products in alphabetical order, with nothing on screen saying so,
+    // which is why a catalogue of several hundred read as one that stopped in
+    // the B's — and why the products missing from it read as the out-of-stock
+    // ones being filtered out. Nothing here has ever looked at stock; the cap
+    // was the whole of it.
+    await checkAsync('an empty query returns every addable product, not the first fifty', async () => {
+      const r = await call('GET', `/api/retail-admin/shops/${shopA.id}/candidates?q=`);
+      assert.strictEqual(r.status, 200);
+      const ids = new Set(r.json.data.map(x => x.id));
+      const missing = BULK_IDS.filter(id => !ids.has(id));
+      assert.strictEqual(missing.length, 0, `${missing.length} of ${BULK_N} bulk fixtures missing — ${missing.slice(0, 5).join(',')}`);
+      assert.ok(ids.has(P4), 'and the searchable fixture is in the unfiltered list too');
+      assert.ok(!ids.has(P3), 'an inactive product is still not a candidate');
+    });
+    await checkAsync('stock is not a filter — a product with none is still a candidate', async () => {
+      db.prepare('UPDATE store_products SET stock_qty = 0 WHERE id = ?').run(BULK_IDS[0]);
+      const r = await call('GET', `/api/retail-admin/shops/${shopA.id}/candidates?q=`);
+      assert.ok(r.json.data.some(x => x.id === BULK_IDS[0]), 'a zero-stock product is addable to a menu');
+    });
+    await checkAsync('the list is ordered by the name the picker prints', async () => {
+      const r = await call('GET', `/api/retail-admin/shops/${shopA.id}/candidates?q=`);
+      const rows = r.json.data;
+      const shown = rows.map(x => (x.name_en || '') || (x.name_cn || ''));
+      const sorted = shown.slice().sort((a, b) => a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0);
+      assert.deepStrictEqual(shown, sorted, 'rows come back in shown-name order');
+      const at = rows.findIndex(x => x.id === P_CN);
+      assert.ok(at > 0, 'a product with no English name sorts by its Chinese name, not to the head of the list');
     });
     await checkAsync('reorder rewrites sort_position in the order given', async () => {
       const before = (await call('GET', `/api/retail-admin/shops/${shopA.id}`)).json.data.listings.map(x => x.id);

@@ -345,7 +345,11 @@
   }
 
   // The Add product picker — an in-flow panel above the table, not a modal:
-  // its height grows with what the search returns (§1.13 question 2).
+  // its height grows with what the search returns (§1.13 question 2), up to
+  // the ceiling #shp-pick-list carries in retail-admin.css. The ceiling is
+  // there because an empty box now returns the whole addable catalogue rather
+  // than the first fifty of it, and unbounded growth on several hundred rows
+  // pushes the menu table off the screen.
   //
   // THE FIELD IS PAINTED ONCE AND THEN LEFT ALONE. It used to be re-emitted by
   // the page-wide paint() that fetchPick() called twice per search — once to
