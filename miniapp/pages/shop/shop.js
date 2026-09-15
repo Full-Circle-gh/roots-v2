@@ -77,6 +77,15 @@ function _stockState(p, onLocalRun) {
   return { out, preorder, today, kind, soldOut: out && !preorder, stock };
 }
 
+// How long a catalogue fetch waits before the page gives up and says so.
+// Shorter than utils/api's 12s default ON PURPOSE, and only for the two browse
+// reads below: a customer staring at grey placeholders has already decided the
+// shop is broken long before twelve seconds are up, and the pane she lands on
+// now offers her a retry, so giving up early costs her nothing and buys back
+// four seconds of it. Checkout and every write keep the longer default — a
+// slow payment must not be cut off to make a list feel quick.
+const BROWSE_TIMEOUT_MS = 8000;
+
 const DIETARY_FILTERS = [
   { key: 'gluten', en: 'GLUTEN FREE', cn: '无麸质' },
   { key: 'nuts',   en: 'NUT FREE',    cn: '无坚果' },
@@ -197,6 +206,13 @@ Page({
     listTitle: 'CATEGORIES',
     emptyTitle: 'No products yet.',
     emptySub: 'Publish products in the Roots admin to see them here.',
+    // Label for the empty pane's retry button. Non-empty ONLY while that pane
+    // is reporting a failed request, so the button can never appear under the
+    // operator copy, where there is nothing to retry.
+    emptyRetry: '',
+    // True when the last refresh could not reach the catalogue at all — see
+    // _emptyCopy for why the empty pane has to tell the two cases apart.
+    loadError: false,
     sortLabels: SORT_OPTIONS.map(o => o.en),
     sortLabel: SORT_OPTIONS[0].en,
     inStockLabel: 'IN STOCK',
@@ -300,8 +316,7 @@ Page({
       priceFromLabel:    L === 'cn' ? '价格' : '¥',
       oosLabel:          L === 'cn' ? '售罄' : 'SOLD OUT',
       preLabel:          L === 'cn' ? '可预订' : 'PRE-ORDER',
-      emptyTitle:        L === 'cn' ? '暂无商品' : 'No products yet.',
-      emptySub:          L === 'cn' ? '请在管理后台发布商品' : 'Publish products in the Roots admin to see them here.',
+      ...this._emptyCopy(L, this.data.loadError),
       dietaryFilters: DIETARY_FILTERS.map(f => ({ ...f, label: L === 'cn' ? f.cn : f.en })),
       badgeFilters:   BADGE_FILTERS.map(b   => ({ ...b, label: L === 'cn' ? b.cn : b.en })),
     });
@@ -383,9 +398,29 @@ Page({
       if (sortVal)                  params.push('sort=' + sortVal);
       const qs = '?' + params.join('&');
 
+      // A dropped request is not an empty catalogue, and the empty pane has to
+      // be able to say which of the two happened.
+      //
+      // BOTH reads count, which is not obvious and was nearly got wrong here.
+      // The tree looks like a grouping aid the page could do without — but
+      // _buildSections walks the TREE and indexes products into it, so a
+      // product whose top_category matches no top is dropped, and only a
+      // product with no top_category at all survives in "Other". Lose the tree
+      // and a catalogue that arrived intact renders as nothing: the same blank
+      // pane, by a different route. From the customer's seat the two are one
+      // event, so they get one verdict.
+      //
+      // Deliberately NOT retried here, unlike the product page and the config
+      // fetch. This pull is the whole catalogue — 500 rows — and the customer
+      // who needs this branch is by definition the one on the worst connection;
+      // a second automatic attempt doubles her wait on grey. She gets the retry
+      // as a button instead: same recovery, her timing, and it tells her
+      // something is happening.
+      let loadError = false;
+      const dropped = () => { loadError = true; return []; };
       const [prods, treeResp] = await Promise.all([
-        api.get('/api/retail/products' + qs).catch(() => []),
-        api.get('/api/retail/category-tree').catch(() => []),
+        api.get('/api/retail/products' + qs, { timeout: BROWSE_TIMEOUT_MS }).catch(dropped),
+        api.get('/api/retail/category-tree', { timeout: BROWSE_TIMEOUT_MS }).catch(dropped),
       ]);
 
       let raw = (Array.isArray(prods) ? prods : prods?.data || []);
@@ -416,17 +451,61 @@ Page({
       }
 
       this._tree = (Array.isArray(treeResp) ? treeResp : treeResp?.data || []);
-      this._renderRows(raw);
+      this._renderRows(raw, loadError);
     } catch (e) {
       console.warn('[shop] refresh failed:', e.message);
-      this.setData({ loading: false });
+      // Nothing rendered, so the pane about to show is the empty one. Say the
+      // request failed rather than let it read as a bare catalogue.
+      this.setData({
+        loading: false,
+        loadError: true,
+        ...this._emptyCopy(this.data.lang, true),
+      });
     }
+  },
+
+  // The empty pane says two different things and the difference is the whole
+  // point of this function. A catalogue with nothing in it is an operator's job
+  // — "publish products in the Roots admin" — while a request that never landed
+  // is the customer's network. Showing the operator sentence for a dropped
+  // request tells a customer the shop is empty when it is full, and instructs
+  // her to go and publish products in an admin she cannot open. That is what a
+  // customer on a weak cross-border connection used to be shown here; it reads
+  // as "they have nothing to sell", and she closes the app instead of retrying.
+  //
+  // Every string is copied character-for-character from a live pair: the two
+  // catalogue lines are this page's own, and the three network lines are the
+  // home page's (home.wxml). Nothing is composed, so
+  // docs/tacet-delivery-vocabulary.md has nothing to declare.
+  _emptyCopy(L, loadError) {
+    if (loadError) {
+      return {
+        emptyTitle: L === 'cn' ? '网络连接失败' : 'No connection',
+        emptySub:   L === 'cn' ? '请检查网络后重试。' : 'Check your network and try again.',
+        emptyRetry: L === 'cn' ? '重试' : 'TRY AGAIN',
+      };
+    }
+    return {
+      emptyTitle: L === 'cn' ? '暂无商品' : 'No products yet.',
+      emptySub:   L === 'cn' ? '请在管理后台发布商品' : 'Publish products in the Roots admin to see them here.',
+      emptyRetry: '',
+    };
+  },
+
+  // Empty-pane retry button. Mirrors the home page's: a customer tapping it
+  // means now, so it goes straight back out rather than trusting any cache.
+  retry() {
+    if (this.data.loading) return;
+    this.refresh();
   },
 
   // Turn the last-fetched rows into the rendered sections. Split out of
   // refresh() so a late-arriving delivery verdict (_syncDelivery) can re-render
   // the same rows — the PRE-ORDER pills depend on it — without a second fetch.
-  _renderRows(raw) {
+  // loadError defaults to the standing verdict so the re-render _syncDelivery
+  // fires (which passes rows it already holds, never a fresh fetch) cannot
+  // silently clear it.
+  _renderRows(raw, loadError = this.data.loadError) {
     const L = this.data.lang;
     const tree = this._tree || [];
 
@@ -465,6 +544,8 @@ Page({
       categories,
       totalCount,
       drillTop, drillLabel, subTabs,
+      loadError,
+      ...this._emptyCopy(L, loadError),
       loading: false,
     });
     // Measure offsets for the active mode (sub anchors when drilled, top

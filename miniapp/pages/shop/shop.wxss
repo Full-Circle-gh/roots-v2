@@ -339,6 +339,24 @@
 .empty { padding: 200rpx 44rpx 0; text-align: center; }
 .empty-title { font-size: calc(56rpx * var(--font-scale)); font-weight: 500; margin-bottom: 16rpx; }
 .empty-sub { color: var(--olive); font-size: calc(26rpx * var(--font-scale)); line-height: 1.5; }
+/* Retry button for the empty pane's failed-request face. Copied from
+   home.wxss so the two network-error states are the same control. */
+.empty-retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 48rpx;
+  padding: 0 56rpx;
+  height: 84rpx;
+  background: var(--lime);
+  color: var(--ink);
+  font-family: var(--f-toni);
+  font-size: calc(24rpx * var(--font-scale));
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  border-radius: 999rpx;
+}
+.empty-retry-tap { opacity: 0.72; }
 
 /* ─── Gallery (1-col editorial) ──────────────────────────────────── */
 .gallery { padding: 0 44rpx; }
