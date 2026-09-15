@@ -655,6 +655,17 @@ function renderAlipayProof(o) {
   if (paidAt) facts.push(`<li><span class="k">${cuT('Paid at', '付款时间')}</span><span class="v" data-no-i18n>${escapeHtml(paidAt)}</span></li>`);
   if (d.txn_id) facts.push(`<li><span class="k">${cuT('Txn', '流水号')}</span><span class="v">${copyChip(d.txn_id, 'Txn ID')}</span></li>`);
 
+  // A gap the server forgave (short by no more than its ¥2 rule) is stated in
+  // full rather than smoothed over: the card says what arrived and what the
+  // order came to, and lets whoever is looking decide if it matters. Same pair
+  // of numbers, same comma, as the dashboard's payment-mismatch fire
+  // (03-dashboard.js) — one phrasing for one fact.
+  const shortBy = Number(d.short_by || 0);
+  const gapLine = (v === 'match' && shortBy > 0 && o.total != null)
+    ? `<div class="ap-hint">${cuT(`paid ${acMoney(d.amount)}, order ${acMoney(o.total)}`,
+        `已付 ${acMoney(d.amount)},订单 ${acMoney(o.total)}`)}</div>`
+    : '';
+
   // One pill for the verdict.
   let pill, footer = '';
   if (v === 'match') {
@@ -687,6 +698,7 @@ function renderAlipayProof(o) {
         </div>
       </div>
       ${facts.length ? `<ul class="ap-facts">${facts.join('')}</ul>` : ''}
+      ${gapLine}
       ${footer}
       ${hint}
     </div>
