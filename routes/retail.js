@@ -11202,15 +11202,72 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
      than the raw one. Nothing between its old home and here reads
      awaitingRestockPids — the next reader is the INSERT — so the block runs at
      the same moment in the order's life, with two more facts in hand. */
-  const hasStockedAddon = mutatedItems.some(r => (r.options || []).some(o => o.stock_product_id));
+  /* §134 — THE ADD-ON WAS NEVER A REASON TO SKIP. IT WAS A COLUMN NOBODY ADDED UP.
+     `hasStockedAddon` used to be an arm of the guard below: a cart holding a
+     paid extra that carries its own inventory refused to park at all. The worry
+     behind it was real — the demand map inside the block was built from ORDER
+     LINES only, so an add-on's shortage was invisible to it, and parking on a
+     count that never saw the add-on would promise a restock on stock nobody had
+     looked at. But the cure threw out the order as well: every cart with a paid
+     extra on it, sold-out pre-order line and all.
+
+     TC000735 is what that cost. A Whole-Wheat Pita at zero, oos_policy
+     backorder_gz, Guangzhou courier for the next day — the exact order §80
+     parks — and it parked on nothing, because the Zhoug beside it carried a
+     ¥27 cracker. It settled as 'paid', took the Tianhe shelf to -1, and 'paid'
+     has no transition back to 'awaiting_restock', so no operator could correct
+     it afterwards either.
+
+     So the map below is the fix: the demand this order puts on the shelf, every
+     ORDER LINE plus every stock-backed add-on chosen on one. The arm goes
+     because the hole it was covering is filled, not because the hole stopped
+     mattering — short and pre-orderable parks the order, short and strict still
+     refuses it, whether the short thing is a line or an extra.
+
+     WHY THIS IS NOT expandStockLines, WHICH COMPUTES ALMOST THIS. That function
+     is the reserve/commit/routing count, and it DROPS supplier-direct lines —
+     correctly, for reserving, since they hold no inventory of ours. The park
+     needs them counted. The promotion in lib/inventory.js walks
+     `retail_order_items` and demands `av.exists` for every line before it
+     releases an order; a supplier-direct line has no `retail_store_stock` row
+     and never will, so an order holding one could never satisfy it and parking
+     such an order would park it FOREVER. Counting it here is what refuses the
+     park: it reads short, and effectiveOosPolicy gives it 'always', which is not
+     a pre-order policy. The first draft of §134 did call expandStockLines and
+     scripts/test_preorder_park.js failed it on precisely that case.
+
+     The add-on qty rule IS expandStockLines' rule, deliberately: one add-on per
+     unit of the line it rides on.
+
+     WHAT DOES NOT CHANGE: `cartHasBundle` stays an arm of the guard. A bundle
+     parks on COMPONENT ids that match no order line, and the drawer's card and
+     its per-parcel "Held — N lines waiting" pill both key on line product_id.
+     That is a separate question with its own answer and it is not this one. */
+  const parkNeed = new Map();
+  const parkProductById = new Map();
+  for (const r of mutatedItems) {
+    if (!r.product) continue;
+    parkNeed.set(r.product.id, (parkNeed.get(r.product.id) || 0) + r.qty);
+    parkProductById.set(r.product.id, r.product);
+    for (const opt of (r.options || [])) {
+      if (!opt || !opt.stock_product_id) continue;
+      const pid = parseInt(opt.stock_product_id, 10);
+      if (!pid) continue;
+      parkNeed.set(pid, (parkNeed.get(pid) || 0) + r.qty);
+    }
+  }
   /* §80 — the fresh lines today's batch reaches before the customer's window
      closes. Empty on every other day, hour, cart and slot, which is what keeps
      the guard below reading exactly as it did for every order that is not this
-     one. */
+     one.
+     §134 widens what it is ASKED about, never what it answers: the products the
+     park will judge, add-ons included, so a batch-made add-on can be recognised
+     as covered rather than silently failing the covered test and refusing a
+     park §80 intends. */
   const batchCoveredIds = isPickup ? new Set() : freshLinesCoveredToday({
     zone,
     deliverySlotId,
-    productIds: mutatedItems.map((r) => r.product && r.product.id).filter(Boolean),
+    productIds: [...parkNeed.keys()],
     now: orderNow,
     tz: orderTz,
   });
@@ -11220,7 +11277,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
      then. §80 adds the same-day Guangzhou morning where the shortage is not a
      shortage EITHER, for the same reason one step smaller: the batch lands
      before the customer's window. Every other guard is unchanged and still
-     applies to both — no bundle, no stock-backed add-on, backorder lines only. */
+     applies to both — no bundle, backorder lines only. (The add-on arm is gone
+     as of §134; an add-on is counted now rather than ducked.) */
   /* §128 adds the THIRD arm, and it is the one the customer asked for: a
      same-day Guangzhou order whose short lines the operator marked
      'backorder_all'. There is no batch and no restock date behind it — that is
@@ -11231,13 +11289,24 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   let parkedForPreorderAll = false;
   if (!isPickup && !isWaitFlow && fulfillingStore
       && (!stockGate || batchCoveredIds.size || preorderAllShort)
-      && !cartHasBundle && !hasStockedAddon && !awaitingRestockPids) {
-    const need = new Map();
-    const productById = new Map();
-    for (const r of mutatedItems) {
-      if (!r.product) continue;
-      need.set(r.product.id, (need.get(r.product.id) || 0) + r.qty);
-      productById.set(r.product.id, r.product);
+      && !cartHasBundle && !awaitingRestockPids) {
+    const need = parkNeed;
+    const productById = parkProductById;
+    /* A stock-backed add-on is not an order line, so its policy row is not in
+       hand — `mutatedItems` carries the Zhoug, not the cracker it rides on.
+       Fetch the rows the add-ons introduced, in one statement rather than per
+       pid. A pid with NO row left absent is deliberate: effectiveOosPolicy of
+       undefined reads 'strict', which refuses the park. When we cannot say what
+       the operator allowed for an item, not parking is the safe direction — it
+       leaves the order exactly where today's code leaves it. */
+    const unknownPids = [...need.keys()].filter((pid) => !productById.has(pid));
+    if (unknownPids.length) {
+      const ph = unknownPids.map(() => '?').join(',');
+      for (const row of tdb().prepare(
+        `SELECT id, oos_policy, is_batch_made, ship_from_supplier
+           FROM store_products WHERE id IN (${ph})`).all(...unknownPids)) {
+        productById.set(row.id, row);
+      }
     }
     const shortHere = [...need.entries()]
       .filter(([pid, qty]) => inventory.getAvailable(fulfillingStore.id, pid, 'wechat').available < qty)

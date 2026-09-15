@@ -66,6 +66,11 @@ const P_PRE2    = 9812;         // a second one, to prove every short pid is rec
 const P_SHELF   = 9813;         // plain pantry line, plenty on the shelf
 const P_SUPPLIER = 9814;        // supplier-direct: no stock of ours, ever
 const P_BUNDLE  = 9815;         // a bundle whose components include the pre-order
+const P_EXTRA   = 9816;         // a stock-backed PAID ADD-ON, deep on the shelf
+const P_EXTRA_OUT = 9817;       // the same, but sold out and 'strict'
+const OPT       = 9851;         // "Add extras?" on the pantry line
+const CH_EXTRA  = 9861;         // …answered with the in-stock extra
+const CH_OUT    = 9862;         // …answered with the sold-out one
 const ZONE_SH   = 9821;         // a Shanghai 'city' zone — courier, never same-day
 const CUSTOMER  = 9831;
 const ADDRESS   = 9841;
@@ -96,8 +101,10 @@ function cleanup() {
     try { db.prepare(`DELETE FROM retail_stock_ledger WHERE ref_table = 'retail_orders' AND ref_id IN (${ph})`).run(...oids); } catch {}
     db.prepare(`DELETE FROM retail_orders WHERE id IN (${ph})`).run(...oids);
   }
-  const pids = [P_PRE, P_PRE2, P_SHELF, P_SUPPLIER, P_BUNDLE];
+  const pids = [P_PRE, P_PRE2, P_SHELF, P_SUPPLIER, P_BUNDLE, P_EXTRA, P_EXTRA_OUT];
   const pph  = pids.map(() => '?').join(',');
+  try { db.prepare('DELETE FROM retail_product_option_choices WHERE option_id = ?').run(OPT); } catch {}
+  try { db.prepare('DELETE FROM retail_product_options WHERE id = ?').run(OPT); } catch {}
   try { db.prepare('DELETE FROM retail_checkout_quotes WHERE customer_id = ?').run(CUSTOMER); } catch {}
   db.prepare('DELETE FROM retail_auth_tokens        WHERE customer_id = ?').run(CUSTOMER);
   db.prepare('DELETE FROM retail_customer_addresses WHERE customer_id = ?').run(CUSTOMER);
@@ -139,6 +146,22 @@ function seed() {
   prod.run(P_BUNDLE,   'Breakfast Box',   '早餐礼盒', 'pp-5', 99, '900g', 0, 'backorder_gz', 0);
   db.prepare('UPDATE store_products SET bundle_items = ? WHERE id = ?')
     .run(JSON.stringify([{ id: P_PRE, qty: 1 }, { id: P_SHELF, qty: 1 }]), P_BUNDLE);
+  // §134's fixture: a PAID EXTRA with its own inventory, hung off the pantry
+  // line. This is the shape of the order that prompted the change — the extra
+  // is in stock and has nothing to do with the sold-out line beside it.
+  prod.run(P_EXTRA,     'Crisp Crackers',  '薄脆饼',   'pp-6', 27, '100g', 0, 'strict', 0);
+  prod.run(P_EXTRA_OUT, 'Seed Crackers',   '籽薄脆',   'pp-7', 29, '100g', 0, 'strict', 0);
+  db.prepare(
+    `INSERT INTO retail_product_options (id, product_id, question_en, question_cn, type, is_required, sort_order)
+     VALUES (?,?,?,?,'multi',0,0)`
+  ).run(OPT, P_SHELF, 'Add extras?', '加点配料?');
+  const choice = db.prepare(
+    `INSERT INTO retail_product_option_choices
+       (id, option_id, label_en, label_cn, price_delta, stock_product_id, sort_order)
+     VALUES (?,?,?,?,?,?,?)`
+  );
+  choice.run(CH_EXTRA, OPT, 'Crisp Crackers (1 pack)', '薄脆饼(1包)', 27, P_EXTRA,     0);
+  choice.run(CH_OUT,   OPT, 'Seed Crackers (1 pack)',  '籽薄脆(1包)', 29, P_EXTRA_OUT, 1);
 
   db.prepare(
     `INSERT INTO retail_customers (id, nickname, phone, openid, is_blocked, lifetime_spend, points_balance)
@@ -167,6 +190,8 @@ function seed() {
     stock.run(s.id, P_PRE,   0);
     stock.run(s.id, P_PRE2,  0);
     stock.run(s.id, P_SHELF, 40);
+    stock.run(s.id, P_EXTRA, 30);
+    stock.run(s.id, P_EXTRA_OUT, 0);
   }
 }
 
@@ -292,6 +317,8 @@ function emptyShelves(pid) {
     // test a guard against parking. Every active store, since routing picks
     // the shop, not this test.
     emptyShelves(P_PRE);
+
+    emptyShelves(P_PRE);
     const c = await placeAndPay([{ product_id: P_PRE, qty: 1 }, { product_id: P_SUPPLIER, qty: 1 }]);
     it('an order carrying an untracked (supplier-direct) line is NOT parked', () => {
       assert(c.order, `order refused: ${JSON.stringify(c.created.body)}`);
@@ -333,6 +360,54 @@ function emptyShelves(pid) {
         reason: 'purchase_receipt', note: 'test_preorder_park',
       });
       assert.strictEqual(loadOrder(d.order.id).status, 'paid');
+    });
+
+    /* §134 — THE ORDER THAT PROMPTED THE CHANGE, and it goes LAST on purpose:
+       it parks, and a parked order at this store competes for the next restock
+       of P_PRE with any order parked after it. Placed earlier it would eat the
+       unit the release case above is waiting for.
+
+       TC000735: a sold-out backorder_gz line, and beside it an in-stock pantry
+       line carrying a paid extra that has its own inventory. Until §134 the mere
+       PRESENCE of that extra dropped the whole park block — `hasStockedAddon`
+       was an arm of the guard — so the order settled as 'paid', took the shelf
+       below zero, and no status anywhere said it was waiting on something. The
+       pita in the report is this Buckwheat Bread; the ¥27 cracker is this
+       cracker. */
+    emptyShelves(P_PRE);
+    const addon = await placeAndPay([
+      { product_id: P_PRE,   qty: 1 },
+      { product_id: P_SHELF, qty: 1, choices: [CH_EXTRA] },
+    ]);
+    it('a paid extra on another line no longer stops the park', () => {
+      assert(addon.order, `order refused: ${JSON.stringify(addon.created.body)}`);
+      assert.strictEqual(addon.order.status, 'awaiting_restock');
+      assert.deepStrictEqual(JSON.parse(addon.order.awaiting_restock_pids), [P_PRE]);
+    });
+    it('the in-stock extra is not taken while the order waits',
+      () => assert.strictEqual(shelf(addon.order.store_id, P_EXTRA), 30));
+    it('the sold-out line is not driven negative by it',
+      () => assert.strictEqual(shelf(addon.order.store_id, P_PRE), 0));
+
+    /* The other half — and the answer is stronger than "does not park". A
+       'strict' extra at zero is refused OUTRIGHT, before any money moves: the
+       checkout reserve path builds `strictItems` through expandStockLines, which
+       folds add-ons in, so reserveForOrder throws insufficient_stock naming the
+       EXTRA's product id. That gate predates §134 and is untouched by it. It is
+       asserted here because §134 is what makes the surrounding order parkable:
+       without this case, a later change could quietly start parking an order on
+       a sold-out strict extra and nothing would notice. */
+    emptyShelves(P_PRE);
+    const strictExtra = await placeAndPay([
+      { product_id: P_PRE,   qty: 1 },
+      { product_id: P_SHELF, qty: 1, choices: [CH_OUT] },
+    ]);
+    it("a sold-out 'strict' extra is refused at checkout, not parked", () => {
+      assert.strictEqual(strictExtra.order, null,
+        `expected a refusal, got an order: ${JSON.stringify(strictExtra.created.body)}`);
+      assert.strictEqual(strictExtra.created.status, 409);
+      assert.strictEqual(strictExtra.created.body?.error, 'insufficient_stock');
+      assert.strictEqual(strictExtra.created.body?.product_id, P_EXTRA_OUT);
     });
   } finally {
     server.close();
