@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,400&display=swap" rel="stylesheet">
 <script>
   // Apply theme before first paint (mirror of retail-admin.html).
   (function () {
@@ -37,70 +38,129 @@
   @font-face { font-family: 'DF Yuan';      src: url('/assets/fonts/DFYuanW5.ttf')       format('truetype'); font-weight: 500; font-display: swap; }
   @font-face { font-family: 'DF Yuan';      src: url('/assets/fonts/DFYuanW7.ttf')       format('truetype'); font-weight: 700; font-display: swap; }
 
-  /* ── DESIGN TOKENS (mirror of /cms + retail-admin) ── */
+  /* ── DESIGN TOKENS — TACET (docs/tacet-design-system.md v1.3) ──────────────
+     This page used to carry its own palette (Ink Charcoal, Tea Green, Aged
+     Brass, IBM Plex) from before the product had a design system. It is now
+     the same Tacet layer retail-admin.css defines in its --td-* block, with
+     IDENTICAL VALUES: Paper/Ink/Graphite, Dusk for the AI alone, Sage for
+     all-clear, Amber for attention, Brick for errors, Inter 400/500.
+
+     THE OLD NAMES SURVIVE ON PURPOSE. --bg-app, --accent, --brass and the rest
+     are referenced by some four hundred rules further down this file; renaming
+     them would have been a four-hundred-line diff in which a real mistake could
+     hide. They are remapped here instead, one place, where the mapping can be
+     read and argued with. Each one says what it became.
+
+     WHAT IS NOT THEMED BY THIS BLOCK, and must never be: the phone preview
+     (.pa-prev-*). That is the CUSTOMER'S page in the CUSTOMER'S brand — lime,
+     forest, olive, oat — and the office is here to look at it. Tacet is the
+     chrome around it, not a coat of paint over it. Its colours are written as
+     literal hex further down and stay that way. */
   :root {
-    /* Tacet palette · dark-mode-first. Tea = active/selected/live,
-       Brass = primary action (Save/language/Block) + attention. */
-    --bg-app:     #12161A;   /* Ink Charcoal */
-    --bg-pane:    #1A1F24;
-    --bg-elev-1:  #1F252B;
-    --bg-elev-2:  #262E35;
-    --bg-input:   #12161A;
-    --bg-overlay: rgba(8, 10, 12, .72);
-    --line-soft:  rgba(232, 229, 220, .06);
-    --line:       rgba(232, 229, 220, .10);
-    --line-strong: rgba(232, 229, 220, .16);
-    --ring:       rgba(107, 142, 111, .40);   /* Tea focus */
-    --text-1:     #E8E5DC;   /* Deeper Paper */
-    --text-2:     #AEABA2;
-    --text-3:     #7d7a72;
-    --text-4:     #56544f;
-    --accent:     #6B8E6F;   /* Tea Green */
-    --accent-hi:  #7BA07F;
-    --accent-ink: #12161A;
-    --brass:      #B08D4A;   /* Aged Brass */
-    --brass-hi:   #C29B54;
-    --danger:     #e8556a;
-    --danger-soft: rgba(232, 85, 106, .14);
-    --warn:       #B08D4A;
-    --success:    #6B8E6F;
+    /* Tacet's own tokens, dark first (this page can be switched to dark, and
+       the admin's dark is the Tacet dark). Copied value-for-value from
+       public/retail-admin.css so the two never drift. */
+    --td-surface:    #18233A;
+    --td-raised:     #1E2A44;
+    --td-border:     #2A3550;
+    --td-header:     #364058;
+    --td-text:       #FBF9F4;
+    --td-text2:      #9AA3B2;
+    --td-paper:      #111A2B;
+    --td-dusk:       #6E67AF;
+    --td-dusk-hi:    #7E77BF;
+    --td-dusk-tint:  #262A4A;
+    --td-sage:       #A3B49F;
+    --td-sage-tint:  #1E2C26;
+    --td-sage-ink:   #A3B49F;
+    --td-amber:      #C9954A;
+    --td-amber-tint: #33290F;
+    --td-amber-ink:  #C9954A;
+    --td-brick:      #B4533E;
+    --td-brick-tint: #351B14;
+    --td-brick-ink:  #D07A66;
+
+    /* The page's own names, remapped. */
+    --bg-app:     var(--td-paper);     /* was Ink Charcoal  */
+    --bg-pane:    var(--td-surface);
+    --bg-elev-1:  var(--td-raised);
+    --bg-elev-2:  #26324E;
+    --bg-input:   var(--td-surface);
+    --bg-overlay: rgba(9, 14, 24, .72);
+    --line-soft:  rgba(251, 249, 244, .07);
+    --line:       var(--td-border);
+    --line-strong: #3C496B;
+    /* A FOCUS RING IS EXEMPT FROM THE ONE-DUSK RULE and always has been —
+       retail-admin.css says so beside the Customers modal and asks not to have
+       it re-litigated into Ink. A ring makes no claim; it is the browser
+       showing where the keyboard is. */
+    --ring:       var(--td-dusk);
+    --text-1:     var(--td-text);
+    --text-2:     var(--td-text2);
+    --text-3:     #6E7890;
+    --text-4:     #525C74;
+    /* --accent WAS Tea Green and MEANT "selected / active / live". Tacet has no
+       such hue: a selected thing is filled with the theme's own ink and the
+       label flips to paper, which is what .pa-chip.is-on and the Orders
+       checkbox already do in retail-admin.css. Live/published is a separate
+       idea and is Sage, below — the two were one colour here and should not
+       have been. */
+    --accent:     var(--td-text);
+    --accent-hi:  var(--td-text);
+    --accent-ink: var(--td-paper);
+    /* --brass WAS Aged Brass and carried two jobs at once: the primary action
+       and attention. Tacet splits them. The primary action is Ink (a merchant
+       acting, never Dusk — Dusk means Tacet did it); attention is Amber, and
+       lives on --warn below. */
+    --brass:      var(--td-text);
+    --brass-hi:   var(--td-text);
+    --danger:     var(--td-brick-ink);
+    --danger-soft: var(--td-brick-tint);
+    --warn:       var(--td-amber);
+    --success:    var(--td-sage-ink);
     --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s7: 32px;
-    --r-sm: 4px; --r-md: 6px; --r-lg: 10px; --r-xl: 14px;
-    --sh-1: 0 1px 2px rgba(0, 0, 0, .25);
-    --sh-2: 0 4px 16px rgba(0, 0, 0, .25);
-    --sh-3: 0 24px 60px rgba(0, 0, 0, .5);
-    --f-sans:  'IBM Plex Sans', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+    /* Tacet: 8px controls, 14px cards, pill badges. */
+    --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --r-xl: 14px;
+    /* "At most one soft ambient shadow. No layered shadows." --sh-2 is that
+       shadow; --sh-1 is a hairline lift for a chip and --sh-3 the one a modal
+       needs to sit off the page at all. */
+    --sh-1: 0 1px 2px rgba(0, 0, 0, .28);
+    --sh-2: 0 4px 16px rgba(0, 0, 0, .28);
+    --sh-3: 0 24px 64px rgba(0, 0, 0, .46);
+    /* Inter for the product's hands. IBM Plex Sans SC stays behind it because
+       Inter carries no Chinese, and every label on this page is bilingual. */
+    --f-sans:  'Inter', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+    --f-brand: 'Fraunces', Georgia, serif;
     --f-mono:  'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
     --ease-out: cubic-bezier(.16, 1, .3, 1);
     --t-fast: 120ms;
     --t-med:  220ms;
   }
   :root[data-theme="light"] {
-    --bg-app:     #E8E5DC;   /* Deeper Paper */
-    --bg-pane:    #FFFFFF;
-    --bg-elev-1:  #F1EEE7;
-    --bg-elev-2:  #E3DFD5;
-    --bg-input:   #FFFFFF;
-    --bg-overlay: rgba(18, 22, 26, .46);
-    --line-soft:   rgba(18, 22, 26, .07);
-    --line:        rgba(18, 22, 26, .12);
-    --line-strong: rgba(18, 22, 26, .20);
-    --ring:        rgba(107, 142, 111, .40);   /* Tea focus */
-    --text-1: #12161A;
-    --text-2: #43413a;
-    --text-3: #6a675c;
-    --text-4: #9a978c;
-    --accent:     #6B8E6F;
-    --accent-hi:  #5E7E62;
-    --accent-ink: #12161A;
-    --brass:      #B08D4A;
-    --brass-hi:   #9D7C3F;
-    --warn:       #B08D4A;
-    --success:    #6B8E6F;
-    --danger-soft: rgba(232, 85, 106, .11);
-    --sh-1: 0 1px 3px rgba(40, 30, 5, .10);
-    --sh-2: 0 6px 18px rgba(40, 30, 5, .12);
-    --sh-3: 0 24px 60px rgba(40, 30, 5, .24);
+    --td-surface:    #FFFFFF;
+    --td-raised:     #F6F3EC;
+    --td-border:     #E4E0D5;
+    --td-header:     #DAD5C6;
+    --td-text:       #111A2B;
+    --td-text2:      #58606E;
+    --td-paper:      #FBF9F4;
+    --td-dusk-tint:  #EEEDF6;
+    --td-sage-tint:  #EDF1EC;
+    --td-sage-ink:   #4A6249;
+    --td-amber-tint: #F7EEDE;
+    --td-amber-ink:  #8A6425;
+    --td-brick-tint: #F6E7E3;
+    --td-brick-ink:  #B4533E;
+
+    --bg-elev-2:  #EFEBE1;
+    --bg-overlay: rgba(17, 26, 43, .40);
+    --line-soft:   rgba(17, 26, 43, .06);
+    --line-strong: #D0CABA;
+    --text-3: #7C8290;
+    --text-4: #A9ADB6;
+    --sh-1: 0 1px 2px rgba(17, 26, 43, .05);
+    --sh-2: 0 4px 16px rgba(17, 26, 43, .04);
+    --sh-3: 0 24px 64px rgba(17, 26, 43, .18);
   }
   :root[data-theme="light"] body { color-scheme: light; }
   :root[data-theme="light"] select { color-scheme: light; }
@@ -138,14 +198,14 @@
   /* Primary action (Save) = Aged Brass; Tea is reserved for selection/live. */
   .btn-primary {
     background: var(--brass); color: var(--accent-ink);
-    border-color: var(--brass); font-weight: 600;
+    border-color: var(--brass); font-weight: 500;
   }
   .btn-primary:hover { background: var(--brass-hi); border-color: var(--brass-hi); }
   .btn-ghost {
     background: transparent; border-color: transparent; color: var(--text-2);
   }
   .btn-ghost:hover { background: var(--bg-elev-1); color: var(--text-1); border-color: transparent; }
-  .btn.danger { color: var(--danger); border-color: rgba(232, 85, 106, .35); }
+  .btn.danger { color: var(--td-brick-ink); border-color: var(--td-brick); background: transparent; }
   .btn.danger:hover { background: var(--danger-soft); }
   .btn-sm { padding: 4px 10px; font-size: 12px; }
 
@@ -162,8 +222,8 @@
     transition: border-color var(--t-fast) ease, box-shadow var(--t-fast) ease;
   }
   input:focus, select:focus, textarea:focus {
-    border-color: rgba(107, 142, 111, .45);
-    box-shadow: 0 0 0 3px var(--ring);
+    border-color: var(--td-dusk);
+    box-shadow: 0 0 0 3px var(--td-dusk-tint);
   }
   input:hover:not(:focus), select:hover:not(:focus), textarea:hover:not(:focus) {
     border-color: var(--line-strong);
@@ -181,8 +241,8 @@
   option { background: var(--bg-input); color: var(--text-1); }
   label.stacked {
     display: block;
-    font-size: 11px; font-weight: 600;
-    letter-spacing: .06em; text-transform: uppercase;
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 0; text-transform: none;
     color: var(--text-3);
     margin-bottom: 6px;
   }
@@ -199,14 +259,14 @@
     transition: border-color var(--t-fast) ease, box-shadow var(--t-fast) ease;
   }
   .txt-pair-row:focus-within {
-    border-color: rgba(107, 142, 111, .45);
-    box-shadow: 0 0 0 3px var(--ring);
+    border-color: var(--td-dusk);
+    box-shadow: 0 0 0 3px var(--td-dusk-tint);
   }
   .txt-pair-row .lang-tag {
     padding: 0 10px;
     background: var(--bg-elev-1);
     color: var(--text-3);
-    font-size: 10px; font-weight: 700; letter-spacing: .08em;
+    font-size: 10px; font-weight: 500; letter-spacing: 0;
     border-right: 1px solid var(--line);
     display: flex; align-items: center;
     min-width: 38px;
@@ -253,9 +313,9 @@
   .pe-brand-mark svg { width: 22px; height: 22px; display: block; }
   /* FULL CIRCLE wordmark + brass middot + muted "Product Editor" sub —
      same lockup as the other backend pages. */
-  .pe-wordmark { font-family: var(--f-sans); font-weight: 700; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--text-1); }
-  .pe-brass-dot { color: var(--brass); font-weight: 700; }
-  .pe-brand-name { font-family: var(--f-mono); font-weight: 500; font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--text-3); }
+  .pe-wordmark { font-family: var(--f-sans); font-weight: 500; font-size: 12px; letter-spacing: .04em; color: var(--text-1); }
+  .pe-brass-dot { color: var(--brass); font-weight: 500; }
+  .pe-brand-name { font-family: var(--f-sans); font-weight: 500; font-size: 10px; letter-spacing: 0; text-transform: none; color: var(--text-3); }
   .pe-brand-divider { width: 1px; height: 16px; background: var(--line); }
   /* Editor switch — segmented toggle that jumps between the Mini App Editor and
      the Product Page Editor (this page). Theme-following, unlike the CMS chrome. */
@@ -266,8 +326,8 @@
   }
   .pe-brand .fcsw-seg {
     display: inline-flex; align-items: center; gap: 6px;
-    font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em;
-    text-transform: uppercase; font-weight: 600;
+    font-family: var(--f-sans); font-size: 10px; letter-spacing: 0;
+    text-transform: none; font-weight: 500;
     color: var(--text-3); background: transparent;
     border: 1px solid transparent; border-radius: 6px;
     padding: 5px 9px; cursor: pointer; white-space: nowrap;
@@ -303,7 +363,7 @@
   .is-embedded .pe-back-pages svg { width: 15px; height: 15px; flex: none; }
   .pe-topbar-title { display: flex; align-items: center; gap: var(--s3); min-width: 0; flex: 1; position: relative; }
   #pe-name {
-    font-size: 15px; font-weight: 600; color: var(--text-1);
+    font-size: 15px; font-weight: 500; color: var(--text-1);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   /* ── Product switcher (click the title to jump to another product) ── */
@@ -345,22 +405,23 @@
   .pe-switcher-item-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pe-switcher-item-name small { color: var(--text-3); font-weight: 400; }
   .pe-switcher-item-badge {
-    flex-shrink: 0; font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+    flex-shrink: 0; font-size: 9px; font-weight: 500; letter-spacing: 0; text-transform: none;
     padding: 2px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--text-3);
   }
-  .pe-switcher-item-badge.pub { background: rgba(107, 142, 111, .14); color: var(--accent-hi); border-color: rgba(107, 142, 111, .35); }
+  .pe-switcher-item-badge.pub { background: var(--td-sage-tint); color: var(--td-sage-ink); border-color: var(--td-sage); }
   .pe-switcher-empty { padding: 16px; text-align: center; color: var(--text-3); font-size: 12px; }
 
   /* ── Smart paste (AI text → sections) ── */
   .pe-smart-btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
-    font-size: 11px; font-weight: 600;
+    font-size: 11px; font-weight: 500;
     padding: 6px 8px; border-radius: var(--r-md);
     border: 1px dashed var(--line-strong); background: transparent; color: var(--text-2);
     cursor: pointer; transition: background var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease;
   }
-  .pe-smart-btn:hover { background: rgba(176, 141, 74, .08); border-color: var(--brass); color: var(--text-1); }
-  .pe-smart-btn svg { width: 14px; height: 14px; color: var(--brass); flex-shrink: 0; }
+  .pe-smart-btn { border-color: var(--td-dusk); color: var(--td-dusk); }
+  .pe-smart-btn:hover { background: var(--td-dusk-tint); border-color: var(--td-dusk-hi); color: var(--td-dusk-hi); }
+  .pe-smart-btn svg { width: 14px; height: 14px; color: var(--td-dusk); flex-shrink: 0; }
   .pe-modal-overlay {
     position: fixed; inset: 0; z-index: 80;
     background: var(--bg-overlay);
@@ -374,7 +435,7 @@
     padding: var(--s5); display: flex; flex-direction: column; gap: var(--s4);
   }
   .pe-modal-head { display: flex; align-items: center; justify-content: space-between; }
-  .pe-modal-title { font-size: 15px; font-weight: 600; color: var(--text-1); }
+  .pe-modal-title { font-size: 15px; font-weight: 500; color: var(--text-1); }
   .pe-modal-x { padding: 4px 9px; }
   /* Full template preview lightbox — head + foot stay put, the phone scrolls. */
   .pe-tplprev-modal { width: auto; max-width: 460px; max-height: 90vh; gap: var(--s3); }
@@ -387,7 +448,7 @@
   .pe-smart-fields { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); margin: var(--s3) 0; }
   @media (max-width: 560px) { .pe-smart-fields { grid-template-columns: 1fr; } }
   .pe-smart-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-  .pe-smart-label { font-size: 11px; font-weight: 600; letter-spacing: .04em; color: var(--text-3); }
+  .pe-smart-label { font-size: 11px; font-weight: 500; letter-spacing: 0; color: var(--text-3); }
   .pe-smart-text {
     width: 100%; min-height: 170px; resize: vertical;
     padding: 12px; font: 13px var(--f-sans); line-height: 1.6;
@@ -409,21 +470,21 @@
   }
   .pe-smart-prev-glyph { font-size: 15px; line-height: 1.5; flex-shrink: 0; }
   .pe-smart-prev-body { min-width: 0; flex: 1; }
-  .pe-smart-prev-name { font-size: 13px; font-weight: 600; color: var(--text-1); }
+  .pe-smart-prev-name { font-size: 13px; font-weight: 500; color: var(--text-1); }
   .pe-smart-prev-sub { font-size: 11px; color: var(--text-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* Cold-start picker (shown in #pe-loading when opened with no ?id). */
   .pe-picker { width: min(460px, 90vw); display: flex; flex-direction: column; gap: 14px; }
-  .pe-picker-title { font-size: 18px; font-weight: 600; color: var(--text-1); margin: 0; }
+  .pe-picker-title { font-size: 18px; font-weight: 500; color: var(--text-1); margin: 0; }
   .pe-picker-sub { font-size: 12px; color: var(--text-3); margin: 0; line-height: 1.55; }
   .pe-badge {
     flex-shrink: 0;
-    font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    font-size: 10px; font-weight: 500; letter-spacing: 0; text-transform: none;
     padding: 3px 9px; border-radius: 999px;
     border: 1px solid var(--line);
     background: var(--bg-elev-1); color: var(--text-3);
   }
-  .pe-badge.pub { background: rgba(107, 142, 111, .14); color: var(--accent-hi); border-color: rgba(107, 142, 111, .35); }
-  .pe-badge.draft { background: rgba(176, 141, 74, .14); color: var(--brass); border-color: rgba(176, 141, 74, .35); }
+  .pe-badge.pub { background: var(--td-sage-tint); color: var(--td-sage-ink); border-color: var(--td-sage); }
+  .pe-badge.draft { background: var(--td-amber-tint); color: var(--td-amber-ink); border-color: var(--td-amber); }
   /* Left-pane Product picker (the in-editor "which product" section). */
   .pe-prod-search {
     width: 100%; margin: 0 0 8px;
@@ -446,7 +507,7 @@
   }
   .pe-canvas-empty[hidden] { display: none; }
   .pe-canvas-empty svg { width: 40px; height: 40px; color: var(--line-strong); }
-  .pe-canvas-empty-title { font-size: 15px; font-weight: 600; color: var(--text-1); }
+  .pe-canvas-empty-title { font-size: 15px; font-weight: 500; color: var(--text-1); }
   .pe-canvas-empty-sub { font-size: 12px; line-height: 1.55; max-width: 280px; }
   .pe-topbar-actions { display: flex; align-items: center; gap: var(--s2); flex-shrink: 0; }
   #pe-save-status { font-size: 11px; color: var(--text-3); margin-right: 4px; }
@@ -461,7 +522,7 @@
   .lang-toggle button {
     background: transparent; border: 0;
     padding: 4px 12px; border-radius: 999px;
-    font: 600 11px var(--f-sans); letter-spacing: .04em;
+    font: 600 11px var(--f-sans); letter-spacing: 0;
     color: var(--text-3); cursor: pointer;
     transition: color var(--t-fast) ease, background var(--t-fast) ease;
   }
@@ -524,8 +585,8 @@
     flex-shrink: 0;
   }
   .pa-edit-palette-title {
-    font-size: 10px; font-weight: 600;
-    letter-spacing: .12em; text-transform: uppercase;
+    font-size: 10px; font-weight: 500;
+    letter-spacing: 0; text-transform: none;
     color: var(--text-3);
   }
   .pa-edit-palette-scroll {
@@ -538,9 +599,6 @@
   .pa-edit-canvas {
     position: relative;
     background: var(--bg-app);
-    background-image:
-      radial-gradient(ellipse at top, rgba(107, 142, 111, .04), transparent 55%),
-      radial-gradient(ellipse at bottom, rgba(54, 83, 41, .05), transparent 55%);
     overflow-y: auto;
     overflow-x: auto;
     display: flex;
@@ -588,7 +646,7 @@
     flex: 1; border: 0; background: transparent;
     color: var(--text-3);
     padding: 6px 12px; border-radius: 999px;
-    font: 600 11px var(--f-sans); letter-spacing: .04em;
+    font: 600 11px var(--f-sans); letter-spacing: 0;
     cursor: pointer;
     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
     transition: background var(--t-fast) ease, color var(--t-fast) ease;
@@ -600,9 +658,9 @@
   .pe-left-scroll { flex: 1; overflow-y: auto; min-height: 0; }
   .pe-left-group { padding: var(--s3) var(--s3) var(--s2); }
   .pe-left-grouptitle {
-    font-family: var(--f-mono);
+    font-family: var(--f-sans);
     font-size: 10px; font-weight: 500;
-    letter-spacing: .3em; text-transform: uppercase;
+    letter-spacing: 0; text-transform: none;
     color: var(--brass); padding: 2px 2px var(--s2);
   }
   .pa-left-acc {
@@ -657,8 +715,8 @@
   }
   .pa-colophon-details { margin-top: var(--s3); }
   .pa-colophon-details summary {
-    font-size: 10px; font-weight: 600;
-    letter-spacing: .12em; text-transform: uppercase;
+    font-size: 10px; font-weight: 500;
+    letter-spacing: 0; text-transform: none;
     color: var(--text-3); cursor: pointer;
     padding: 6px 0 4px; user-select: none;
     list-style: none; display: flex; align-items: center; gap: 6px;
@@ -686,8 +744,8 @@
     margin-bottom: var(--s4);
   }
   .pa-chrome-title {
-    font-size: 10px; font-weight: 600;
-    letter-spacing: .12em; text-transform: uppercase;
+    font-size: 10px; font-weight: 500;
+    letter-spacing: 0; text-transform: none;
     color: var(--text-3); margin-bottom: var(--s2);
   }
   .pa-chrome-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s2) var(--s3); }
@@ -718,7 +776,7 @@
   .pa-colophon-tile-label {
     position: absolute; bottom: 0; left: 0; right: 0;
     background: rgba(0,0,0,0.55); color: #fff;
-    font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase;
+    font-size: 9px; letter-spacing: 0; text-transform: none;
     padding: 2px 4px; text-align: center; line-height: 1.2;
   }
 
@@ -735,8 +793,8 @@
     gap: var(--s3); flex-wrap: wrap; margin-bottom: var(--s3);
   }
   .pa-presets-title {
-    font-size: 11px; font-weight: 600;
-    letter-spacing: .12em; text-transform: uppercase; color: var(--text-3);
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 0; text-transform: none; color: var(--text-3);
   }
   .pa-presets-hint { margin: 0; }
   .pa-presets-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
@@ -756,8 +814,8 @@
   .pa-preset-custom-tag {
     position: absolute; top: 6px; left: 6px; z-index: 2;
     padding: 2px 7px; border-radius: 999px;
-    font-size: 9px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-    background: var(--accent); color: #fff;
+    font-size: 9px; font-weight: 500; letter-spacing: 0; text-transform: none;
+    background: var(--accent); color: var(--accent-ink);
   }
   .pa-preset-del {
     position: absolute; top: 6px; right: 6px; z-index: 2;
@@ -774,9 +832,9 @@
   .pa-preset-card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
   .pa-preset-card.active .pa-preset-thumb { background: var(--bg-elev-1); }
   .pa-preset-meta { padding: var(--s3) var(--s4) calc(var(--s3) + 1px); display: flex; flex-direction: column; gap: 3px; }
-  .pa-preset-card-label { font-size: 13px; font-weight: 600; color: var(--text-1); line-height: 1.3; }
-  .pa-preset-card-count { font-size: 10px; letter-spacing: .04em; color: var(--text-3); }
-  .pa-preset-card.active .pa-preset-card-count { color: var(--accent); font-weight: 700; }
+  .pa-preset-card-label { font-size: 13px; font-weight: 500; color: var(--text-1); line-height: 1.3; }
+  .pa-preset-card-count { font-size: 10px; letter-spacing: 0; color: var(--text-3); }
+  .pa-preset-card.active .pa-preset-card-count { color: var(--accent); font-weight: 500; }
 
   /* Template thumbnail = a true, scaled-down render of the real product page in
      that template's skin (paThumbHtml). Both templates seed the same blocks —
@@ -823,24 +881,24 @@
   .pa-block-row {
     display: flex; align-items: center; gap: var(--s3);
     padding: 10px 12px;
-    background: var(--bg-elev-1);
-    border: 1px solid var(--line-soft);
+    background: var(--td-surface);
+    border: 1px solid var(--line);
     border-radius: var(--r-md);
     cursor: pointer;
     transition: border-color var(--t-fast), background var(--t-fast), transform var(--t-fast);
     user-select: none;
   }
-  .pa-block-row:hover { background: var(--bg-elev-2); border-color: var(--line-strong); transform: translateY(-1px); }
-  .pa-block-row.active { background: var(--bg-elev-2); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+  .pa-block-row:hover { background: var(--td-raised); border-color: var(--line-strong); transform: translateY(-1px); }
+  .pa-block-row.active { background: var(--td-raised); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
   .pa-block-row .pbr-icon {
     width: 32px; height: 32px;
-    background: rgba(107, 142, 111, .08);
+    background: var(--td-raised);
     border-radius: var(--r-md);
     display: flex; align-items: center; justify-content: center;
-    color: var(--accent); flex-shrink: 0;
+    color: var(--text-2); flex-shrink: 0;
   }
   .pa-block-row .pbr-icon svg { width: 18px; height: 18px; }
-  .pa-block-row.active .pbr-icon { background: rgba(107, 142, 111, .16); }
+  .pa-block-row.active .pbr-icon { background: var(--td-paper); color: var(--text-1); }
   .pa-block-row .pbr-info { flex: 1; min-width: 0; }
   .pa-block-row .pbr-name {
     font-size: 13px; font-weight: 500; color: var(--text-1);
@@ -858,10 +916,10 @@
   .pa-block-row .pbr-num {
     width: 16px; height: 16px; border-radius: 50%;
     background: var(--bg-elev-2); color: var(--text-3);
-    font-size: 9px; font-weight: 700;
+    font-size: 9px; font-weight: 500;
     display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   }
-  .pa-block-row.active .pbr-num { background: var(--accent); color: #E8E5DC; }
+  .pa-block-row.active .pbr-num { background: var(--accent); color: var(--accent-ink); }
   /* A section switched off for the QR menu. The row stays full strength —
      it is live on the mini app, which is the page being composed — and carries
      one struck-through eye. Only the eye is dimmed, so the mark reads as a
@@ -911,7 +969,7 @@
   .pa-inspector-head-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .pa-inspector-icon {
     width: 24px; height: 24px;
-    background: rgba(107, 142, 111, .1);
+    background: var(--td-raised);
     border-radius: var(--r-sm);
     display: flex; align-items: center; justify-content: center;
     color: var(--accent); flex-shrink: 0;
@@ -926,7 +984,7 @@
     border-radius: var(--r-sm); cursor: pointer; font-size: 16px;
     color: var(--text-2); line-height: 1;
   }
-  .pe-emoji-btn:hover { background: rgba(107, 142, 111, .1); border-color: var(--accent); }
+  .pe-emoji-btn:hover { background: var(--td-raised); border-color: var(--line-strong); }
   .pe-emoji-pop {
     position: fixed; z-index: 9999;
     width: 252px; max-height: 248px; overflow-y: auto;
@@ -939,25 +997,25 @@
     border: 0; background: transparent; cursor: pointer;
     font-size: 18px; line-height: 1; padding: 5px 0; border-radius: 6px;
   }
-  .pe-emoji-pop button:hover { background: rgba(107, 142, 111, .16); }
+  .pe-emoji-pop button:hover { background: var(--td-raised); }
   .pe-emoji-pop .pe-emoji-clear {
     grid-column: 1 / -1; font-size: 12px; color: var(--text-3);
     padding: 6px 0; border-top: 1px solid var(--line-soft); margin-top: 4px;
   }
   .pa-inspector-title {
-    font-size: 13px; font-weight: 600; color: var(--text-1);
+    font-size: 13px; font-weight: 500; color: var(--text-1);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .pa-inspector-sub { font-size: 11px; color: var(--text-3); white-space: nowrap; }
   .pa-inspector-actions { display: flex; gap: 4px; flex-shrink: 0; }
   .pa-inspector-actions .btn { padding: 6px; }
   .pa-inspector-actions .btn svg { width: 15px; height: 15px; }
-  .pa-inspector-actions .btn.danger { color: var(--danger); border-color: rgba(232, 85, 106, .35); }
+  .pa-inspector-actions .btn.danger { color: var(--td-brick-ink); border-color: var(--td-brick); background: transparent; }
   .pa-inspector-actions .btn.danger:hover { background: var(--danger-soft); }
   .pa-inspector-body { padding: var(--s4) var(--s5) var(--s7); }
   .pa-edit-section-title {
-    font-size: 10px; font-weight: 600; letter-spacing: .1em;
-    text-transform: uppercase; color: var(--text-3);
+    font-size: 10px; font-weight: 500; letter-spacing: 0;
+    text-transform: none; color: var(--text-3);
   }
   /* Collapsible inspector folds (Content / Colours) — mirrors the Mini App
      Editor's section folding so a long block form folds away. The head is a
@@ -973,7 +1031,7 @@
     padding: 14px 0 12px; margin: 0; font: inherit;
   }
   .insp-sec-title {
-    font: 700 11px var(--f-sans); letter-spacing: .06em; text-transform: uppercase;
+    font: 700 11px var(--f-sans); letter-spacing: 0; text-transform: none;
     color: var(--text-3); transition: color var(--t-fast) ease;
   }
   .insp-sec-head:hover .insp-sec-title { color: var(--text-1); }
@@ -1042,7 +1100,7 @@
   }
   .cs-opt:hover { background: var(--bg-elev-1); }
   .cs-opt.is-sel { background: var(--bg-elev-1); }
-  .cs-opt.is-sel .cs-label { font-weight: 600; }
+  .cs-opt.is-sel .cs-label { font-weight: 500; }
   .pa-edit-grid-2 .field input,
   .pa-edit-grid-2 .field select,
   .pa-edit-grid-2 .field textarea { width: 100%; }

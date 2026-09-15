@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.275
+# Tacet shared-core consolidation — decisions record, v4.276
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,6 +23,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
+2026-09-15 · v4.276 — **§139 · THE PRODUCT EDITOR WEARS TACET, AND THE PREVIEW INSIDE IT DOES NOT — ASKED FOR BY ASH:** *“need a new mock up of the product editor, right now it doesnt look like part of tacet.”* Three directions were drawn; Ash chose **Option A** — the layout stands, the skin changes. **WHAT IT WAS WEARING:** a palette of its own (Ink Charcoal, Tea Green for selection, Aged Brass for the primary action, IBM Plex) minted before this product had a design system, while `retail-admin.css` has carried the Tacet `--td-*` layer since 2026-07-26. It was the last large surface speaking the older language. **THE OLD TOKEN NAMES SURVIVE, REMAPPED IN ONE PLACE** — some four hundred rules reference them, and renaming them would have been a four-hundred-line diff in which a real mistake could hide. **WHAT THE REMAP DECIDES:** selection is Ink rather than a hue (Tea Green had meant selected, active AND live at once); live is Sage and draft is Amber, two statements that were one hue apart; the primary action is Ink, never Dusk; **Dusk is spent once, on Smart paste**, the only control here that hands work to the model, with the focus ring exempt by name; and `--bg-elev-2` is NOT `--td-header` — the first draft mapped it there and every hovered row read as a table's column-header band. **TYPOGRAPHY:** Inter 400/500, sentence case, no tracking on small labels; thirty-two chrome rules were shouting and the badges already carried sentence-case copy. IBM Plex Sans SC stays loaded behind Inter because Inter carries no Chinese and every label here is bilingual. **THE PHONE PREVIEW IS NOT TOUCHED, AND THAT IS THE LOAD-BEARING PART:** it renders the CUSTOMER'S page in the CUSTOMER'S brand, and a session reaching one rule too far would have the office approving a page that does not exist. Every `.pa-prev-*` rule keeps its literal hex and is fenced off from the tokens BY TEST. **NO COPY CHANGED AND NO CHINESE WAS COMPOSED** — `docs/tacet-delivery-vocabulary.md` untouched. **TESTS:** `scripts/test_product_editor_tacet.js`, eleven checks; the load-bearing one holds every `--td-*` the editor declares against `retail-admin.css` value for value, the same second-implementation-of-one-contract shape `test_product_blocks_read.js` holds against the mini app — and it caught a real drift on its first run. Verified by looking too: a throwaway Chromium harness drove both themes, the Templates pane, the open rail accordions and the Smart paste modal; not committed, because it stubs the admin API and would rot into a test that proves nothing. `test:fast` 250/250. No layout change, no JS, no markup, no route, no schema, and no change to `.gitignore` or CI.
 2026-09-15 · v4.275 — **§138 · WHAT THE CUSTOMER WAS TOLD IS PART OF THE ORDER — DECIDED BY ASH:** *“b and all four”*, the second half of that answer. **THE QUESTION:** the checkout shows one of four notices when something is sold out; three weeks later *“you told me it would arrive on the 20th”* had to be answerable from the order. **WHAT WAS ALREADY THERE, AND IT INVERTED THE RECOMMENDATION PUT TO ASH:** the two DATED notices already land on the order — `computeBatchNotice` and `computeLocalFreshNotice` both stamp `promised_ship_date` and `promised_delivery_date` in the best-effort block after the write. The argument for “all four” was that the dated ones matter most, and those were the ones already recorded; the real gap was the other two, which is what the session that first reported it had said. **WHAT IS DECIDED:** `preorder_pids` (the ids sold as a pre-order) and `moved_from_store` (the shop that WOULD have served this address if nothing were closed, written only when it differs from the shop that took the order) complete the set. **RECOMPUTED ON THE SERVER, NOT ECHOED BY THE CLIENT** — a record meant to settle a dispute is worth nothing if the other party supplied it; both run off the same locals the order was built on. **THE MOVE IS A FACT, NOT THE NOTICE:** `computeStoreMoveNotice` returns null when the operator has not written its copy — right for a banner, wrong for an audit trail, because the order moved either way and the silence was ours — so the write asks `inventory.routeIgnoringClosures` directly. `routing_reason` could not answer it, because `routeOrder` drops closed stores BEFORE it ranks. **BEST-EFFORT, OUTSIDE THE ORDER TRANSACTION:** a record ABOUT an order must never cost us the order. **AND IT IS READ** — both print in the order drawer beside `rerouteShortNote`; a column nobody can read is not an audit trail. **NOT DONE:** no retrospective fill (older orders carry NULL, which is honest), no change to what the customer sees, the dated pair untouched, and no change to `.gitignore` or CI. **CHINESE:** one composed pair, declared in `docs/tacet-delivery-vocabulary.md` v1.90 with the candidates rejected; the pre-order label is the checkout notice's own kicker lifted verbatim.
 
 
@@ -15119,3 +15120,92 @@ way it does. A column nobody can read is not an audit trail.
   keep their existing writers and their existing meaning.
 - **No change to `.gitignore`, CI, or anything governing how sessions and builds
   work.**
+
+## §139 — THE PRODUCT EDITOR WEARS TACET, AND THE PREVIEW INSIDE IT DOES NOT
+
+**Asked for by Ash, 2026-09-15:** *"need a new mock up of the product editor,
+right now it doesnt look like part of tacet."* Three directions were drawn and
+Ash chose **Option A**: the layout stands, the skin changes.
+
+**WHAT IT WAS WEARING.** `public/product-editor.html` carried a palette of its
+own — Ink Charcoal `#12161A`, Tea Green `#6B8E6F` for selection, Aged Brass
+`#B08D4A` for the primary action, IBM Plex throughout — minted before this
+product had a design system. `public/retail-admin.css` has carried the Tacet
+`--td-*` layer since 2026-07-26, and the Customers and Dashboard tabs consume
+it. The editor was the last large surface still speaking the older language, and
+an operator moving between the two tabs crossed a border.
+
+**THE OLD TOKEN NAMES SURVIVE, REMAPPED IN ONE PLACE.** `--bg-app`, `--accent`,
+`--brass` and the rest are referenced by some four hundred rules in that file.
+Renaming them would have been a four-hundred-line diff in which a real mistake
+could hide; they are remapped at the `:root` block instead, each with a line
+saying what it became. The visible diff is the token block plus about thirty
+rules, not the stylesheet.
+
+**WHAT THE REMAP DECIDES, because the old palette had conflated them:**
+
+- **Selection is Ink, not a hue.** Tea Green meant "selected / active / live" —
+  three ideas in one colour. A selected row is now filled with the theme's own
+  ink and its label flips to paper, which is what `.pa-chip.is-on` and the
+  Orders checkbox already do in `retail-admin.css`.
+- **Live is Sage, draft is Amber.** Two different statements that were one hue
+  apart. Sage is the all-clear; Amber is attention.
+- **The primary action is Ink.** Aged Brass carried the primary action AND
+  attention at once. Tacet splits them: Save is Ink (the merchant acting),
+  attention is Amber. The Customers modal note is explicit that a primary is
+  never Dusk.
+- **Dusk is spent once, on Smart paste.** It is the only control on this screen
+  that hands work to the model, and Dusk means *Tacet did this for you*. The
+  focus ring is also Dusk and does not count against the one-per-screen rule —
+  `retail-admin.css` exempts rings by name and asks not to have it re-litigated.
+- **`--bg-elev-2` is NOT `--td-header`.** The first draft mapped it there and
+  every hovered row read as a table's column-header band. It gets its own step
+  between raised and border; the hierarchy note beside `--td-header` is explicit
+  that these must not converge.
+
+**TYPOGRAPHY.** Inter 400/500, sentence case, no tracking on small labels — the
+rulebook allows no uppercase anywhere and nothing heavier than 500. Thirty-two
+chrome rules were shouting; the badges already carried sentence-case copy
+(`Draft · 草稿`) and it was the stylesheet uppercasing them. **IBM Plex Sans SC
+stays loaded behind Inter**: Inter carries no Chinese and every label on this
+page is bilingual. The tenant wordmark stays a wordmark, at 500 and normal
+tracking rather than 700 at `.18em`.
+
+**THE PHONE PREVIEW IS NOT TOUCHED, AND THIS IS THE LOAD-BEARING PART.** The
+frame in the middle of the editor renders the CUSTOMER'S product page in the
+CUSTOMER'S brand — lime `#CCD900`, forest `#365329`, olive, oat. Tacet is the
+chrome around it, never a coat of paint over it. A session restyling the chrome
+and reaching one rule too far would repaint the thing the office is here to look
+at, and the office would then be approving a page that does not exist. Every
+`.pa-prev-*` rule keeps its literal hex and is fenced off from the `--td-*`
+tokens by test.
+
+**NO GRADIENTS.** The canvas had two radial washes of the old green. Two
+gradients remain and both are drawings rather than surfaces: the fade over a
+template thumbnail (a picture of the customer's page) and the diagonal slash
+over a checkerboard that means "no colour" in the swatch picker.
+
+**NO COPY CHANGED AND NO CHINESE WAS COMPOSED.** This is a stylesheet; every
+string on the page is the one that was there yesterday.
+`docs/tacet-delivery-vocabulary.md` is untouched.
+
+**TESTS.** `scripts/test_product_editor_tacet.js`, eleven checks in four
+sections. The one that matters most holds the two Tacet layers together: every
+`--td-*` the editor declares must match `public/retail-admin.css` value for
+value, which is the same second-implementation-of-one-contract shape that
+`scripts/test_product_blocks_read.js` holds against the mini app. It caught a
+real drift on the first run — a light-mode `--td-dusk-hi` invented here that the
+admin does not have. The rest hold the rulebook (no uppercase, no weight above
+500, no gradients, Dusk spent at most twice and only on the AI) and the fence
+around the preview. `npm run test:fast` 250/250.
+
+**VERIFIED BY LOOKING, not only by assertion.** A throwaway harness served
+`public/` with a stubbed admin API and drove Chromium through the editor at
+1440×900 in both themes, plus the Templates pane, the open left-rail accordions
+and the Smart paste modal. It is not committed — it stubs an API rather than
+running one, so it would rot into a test that proves nothing.
+
+**NOT DONE, so it is not assumed.** No layout change — Option A was chosen
+precisely because nothing moves. No change to the mini app editor
+(`public/cms.html`), which wears the same older palette and is the obvious next
+one. No JS, no markup, no route, no schema, and no change to `.gitignore` or CI.
