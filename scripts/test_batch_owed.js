@@ -344,6 +344,78 @@ section('9 · the two doors out of a negative');
   });
 }
 
+// ═════════════════════════════════════════════════════════════════════════
+/* 9b · THE REFUSAL HAS A DOOR ON THE ADMIN SIDE.
+
+   A guard nobody can answer is a dead end, and that is what this one was from
+   the Products grid. The refusal itself was right; what reached the shop floor
+   was `HTTP 400 · recount_clears_debt` in a red toast, with no way to proceed
+   from that screen by ANY value — the box refuses a negative and the server
+   refuses everything above it.
+
+   Reported from the floor, 2026-09-15, as a screenshot of that toast and the
+   question "what this error means?".
+
+   These cases are the SHAPE of the door, not its prose: that the grid can send
+   the word at all, that it never sends it unasked, and that the operator is
+   told what clearing the debt costs before being asked to clear it. */
+section('9b · the admin can answer the refusal');
+{
+  const pa = fs.readFileSync(path.join(ROOT, 'public/retail-admin/09-products.js'), 'utf8');
+
+  it('the grid can send the acknowledgement at all', () => {
+    assert.ok(/recount_reason: recountReason/.test(pa),
+      'the PATCH body carries recount_reason once one has been given');
+    assert.ok(/\? 'clears_debt' : null/.test(pa), 'and §84\'s word is what it sends');
+    assert.ok(/return 'miscount'/.test(pa), '…and §46\'s word is the other answer, still its own');
+  });
+  it('…and never unasked — the acknowledgement is the operator\'s, not the grid\'s', () => {
+    // Every write starts with recountReason undefined; only the retry that
+    // follows an answered dialog carries it. A default value or a literal in
+    // the body would make the guard unreachable, which is worse than the dead
+    // end it replaces.
+    assert.ok(/async function paSaveStoreStock\(productId, storeId, raw, el, recountReason\)/.test(pa));
+    assert.ok(!/recountReason\s*=\s*'/.test(pa), 'no default value for the acknowledgement');
+    assert.ok(/paSaveStoreStock\(\$\{u\.p\.id\}, \$\{PA_STORE\}, this\.value, this\)/.test(pa),
+      'the onchange handler passes four arguments, never five');
+  });
+  it('the dialog names the debt before it offers to clear it', () => {
+    const at = pa.indexOf("if (code === 'recount_clears_debt')");
+    assert.ok(at > -1, 'the clears_debt arm exists');
+    const arm = pa.slice(at, at + 1600);
+    assert.ok(/body && body\.owed/.test(arm), "it reads the server's own owed figure");
+    assert.ok(/were sold that were never made/.test(arm), 'and says what the number means');
+    assert.ok(/danger: true/.test(arm), 'and asks as a destructive action');
+  });
+  it('a missing dialog library falls through to the toast, never to silence', () => {
+    // _paCanAskRecount is the only gate. If tacet-dialogs.js did not load, the
+    // refusal must still be REPORTED — a dead end with no message is what was
+    // being fixed, and a dead end with no message and no toast is worse.
+    assert.ok(/typeof askConfirm === 'function'\s*\n?\s*&&/.test(pa),
+      'the dialog is checked for before the branch is taken, not inside it');
+  });
+  it('both stock grids go through the one dialog, so one refusal grows one vocabulary', () => {
+    assert.ok((pa.match(/_paAskRecountReason\(/g) || []).length >= 3,
+      'defined once, called from the list grid and from the editor matrix');
+    assert.ok(/pdMatrixCellSave\(inp, word\)/.test(pa), 'the editor matrix retries too');
+  });
+  it("a refused write puts the shelf's own number back in the box", () => {
+    // The typed value staying put is how a refusal comes to look like a save,
+    // and under this refusal it is covering a negative somebody is owed.
+    assert.ok(/el\.value = _paStoreQty\(productId, storeId\);/.test(pa));
+  });
+  it('the toast reads as a sentence and keeps the code for support', () => {
+    assert.ok(/tdErrorText\(code, j && j\.message\)/.test(pa),
+      "the server's own words, not the bare error code");
+    assert.ok(/e\.code \? \{ title: e\.code \} : undefined/.test(pa),
+      'the code goes on the toast title — quotable, but not what is read');
+  });
+  it("a negative shelf is part of the editor's live totals (§84)", () => {
+    assert.ok(!/Math\.max\(0, parseInt\(i\.value/.test(pa),
+      'neither live sum floors a cell at zero; pdSyncVariantTotals never did');
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 section('10 · the module stays a stock question (§80\'s line, held)');
 {
