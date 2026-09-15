@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.272
+# Tacet shared-core consolidation — decisions record, v4.273
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -20,6 +20,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+
+
+2026-09-15 · v4.273 — **§136 · A SALE MADE OVER THE COUNTER IS PROOF THE STOCK WAS THERE — DECIDED BY ASH, shown the two shapes in plain words and asked which:** *“b and all four”* (the “all four” half is a separate change). **THE FAILURE, as it reaches the shop.** The record says 0 green wraps at 天河店; there are in fact three, miscounted last week. A walk-in buys all three — real wraps, real money — and the record reads −3. Next morning 制作队列 says `有客户订单等待 · 青酱卷 3`, because `lib/batch-owed.js` sums `physical_qty < 0` for batch-made products and calls all of it owed. Three wraps are made for nobody and go in the bin. **A NEGATIVE HAS TWO CAUSES WITH OPPOSITE REMEDIES:** a DEBT (three sold that were never held → make or re-order them) and a MISCOUNT (three were on the shelf and the record was short → count the shelf). §84 established the first and is untouched; the owed block cannot tell them apart because it reads the balance and never asks how it got there. **WHAT IS DECIDED:** a counter sale that lands the shelf below zero corrects itself to zero, in the same transaction, with a second ledger row (`counter_miscount`) recording the lift — two rows, not one netted figure, because the sale really happened and the correction really happened. The reasoning is arithmetic rather than policy: if three wraps physically left in a customer's hand, the shelf held three, so §84's “sold and never held” is disproved by the sale having happened. The negative was the error; the correction is the truth. **THE CONFLICT WITH §39 RULINGS 1 AND 7 IS STATED, NOT GLOSSED:** those removed floors for the CHANNEL INGESTS, where a negative is the only record that Meituan or Eleme sold what we did not have — real units owed to a waiting customer. The ingests, the delta path and every non-counter commit still write the honest negative, and the tests hold it; the claim here is about this one door only. **AND THE MISCOUNT IS NOT SILENCED,** which is the other half: correcting the shelf removes the kitchen's signal, and the kitchen's signal was the wrong one. The merchant alert already says `可能是数错了` / *so it was likely counted wrong* on this path, naming the product and how far the record was short; it previously skipped batch-made products because the owed block carried them, and on the counter path it no longer does, so the exclusion is lifted THERE and only there. Supplier-direct stays excluded on both paths — no inventory of ours, so no count to be wrong. **NOT DONE, so it is not assumed:** no gate on the till (a walk-in holding the item is still never refused, which is what makes this necessary rather than avoidable); no change to the delivery path (a web or mini-app order that outruns the shelf still leaves the negative and still reports `有客户订单等待`, because those units genuinely are owed); no retrospective repair of negatives already on the shelf; no schema change and no migration (`counter_miscount` is a value in the existing `reason` column); no change to `.gitignore`, CI, or anything governing how sessions and builds work. **NO CHINESE COMPOSED** — no new string; `docs/tacet-delivery-vocabulary.md` untouched.
 
 
 
@@ -14863,3 +14867,76 @@ that has both.
 the mini app, the web storefront, `.gitignore` or CI. No per-product "short menu"
 flag. No control over section ORDER per surface — the order is the office's, once,
 for everybody.
+
+## §136 — A SALE MADE OVER THE COUNTER IS PROOF THE STOCK WAS THERE
+
+**Decided by Ash, 2026-09-15.** Shown the two shapes in plain words and asked
+which: *"b and all four"*. **B** is this section. The "all four" half is a
+different change and has its own section.
+
+**THE FAILURE, as it reaches the shop.** The record says 0 green wraps at
+天河店. There are in fact three on the shelf — somebody counted wrong last
+week. A walk-in buys all three. Real wraps, real money, and the record now reads
+−3.
+
+Next morning the kitchen opens 制作队列 and reads `有客户订单等待 · 青酱卷 3`,
+because `lib/batch-owed.js` sums `physical_qty < 0` for batch-made products and
+calls all of it owed. So three wraps are made for nobody, and they go in the bin
+at the end of their shelf life.
+
+**WHY THE NUMBER LIED.** A negative shelf has two causes and they have opposite
+remedies:
+
+| cause | what −3 means | the repair |
+|---|---|---|
+| a debt | three were sold that were never held | make or re-order them |
+| a miscount | three were on the shelf and the record was short | count the shelf |
+
+§84 established the first and is untouched. The second is what a counter sale
+produces, and the owed block cannot tell them apart because it reads the balance
+and never asks how it got there.
+
+**THE DECISION.** A counter sale that lands the shelf below zero corrects itself
+to zero, in the same transaction, with a second ledger row (`counter_miscount`)
+recording the lift. Two rows, not one netted figure: the sale really happened
+and the correction really happened.
+
+The reasoning is arithmetic rather than policy. If three wraps physically left
+the shelf in a customer's hand, the shelf held three. §84's negative asserts
+"sold and never held", and a face-to-face sale disproves that by having
+happened. So the correction is not a clamp over an inconvenient truth — it is
+the truth, and the negative was the error.
+
+**THIS IS A FLOOR, AND §39 RULINGS 1 AND 7 REMOVED FLOORS ON PURPOSE. The
+conflict is stated rather than glossed.** Those removals were for the CHANNEL
+INGESTS, where a negative is the only record that Meituan or Eleme sold what we
+did not have — real units owed to a real customer who is waiting. Nothing here
+weakens that. The ingests, the delta path, and every non-counter commit still
+write the honest negative, and the tests hold it. What is claimed is narrower
+and is about this one door only.
+
+**AND THE MISCOUNT IS NOT SILENCED, WHICH IS THE OTHER HALF.** Correcting the
+shelf removes the kitchen's signal, and the kitchen's signal was the wrong one.
+The right one is the merchant alert shipped the same day (§135's
+sibling work, `lib/channel-line-report.js`): a counter sale below zero already
+says `可能是数错了` / *so it was likely counted wrong*, naming the product and
+how far the record was short. That alert previously skipped batch-made products,
+on the ground that the owed block carried them; on the counter path it no longer
+does, so the exclusion is lifted THERE and only there. Supplier-direct stays
+excluded on both paths — no inventory of ours, so no count to be wrong.
+
+**NOT DONE, so it is not assumed.**
+
+- **No gate on the till.** A walk-in holding the item is still never refused
+  because a row disagrees with the room. That is what makes this whole section
+  necessary rather than avoidable.
+- **No change to the delivery path.** A web or mini-app order that outruns the
+  shelf still leaves the negative, and still reports `有客户订单等待`. Those
+  units genuinely are owed.
+- **No retrospective repair.** Negatives already on the shelf from past counter
+  sales are left alone; a recount is the operator's, and §84's own refusal
+  dialog now asks about it properly.
+- **No schema change and no migration.** `counter_miscount` is a value in the
+  existing `reason` column.
+- **No change to `.gitignore`, CI, or anything governing how sessions and builds
+  work.**

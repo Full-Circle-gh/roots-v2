@@ -486,8 +486,13 @@ section('9c · the debt is said out loud, not only written down');
     // the ordinary case, which is precisely the noise that buries a real one.
     assert.ok(/COALESCE\(p\.is_batch_made, 0\) = 1/.test(fs.readFileSync(path.join(ROOT, 'lib/batch-owed.js'), 'utf8')),
       'the owed block still covers what the kitchen cooks');
-    assert.ok(/Number\(p\.is_batch_made\) === 1 \|\| Number\(p\.ship_from_supplier\) === 1/.test(inv),
-      'and the alert covers only what it does not');
+    // §136 SPLIT THIS BY PATH, and the split is the point rather than a
+    // loosening. On a DELIVERY the owed block still carries batch-made debt, so
+    // the alert stays off it. On a COUNTER sale the shelf is corrected to zero,
+    // nothing negative survives for the owed block to read, and the alert is the
+    // only thing left — so there it speaks for every product it touches.
+    assert.ok(/if \(!isCounterSale && Number\(p\.is_batch_made\) === 1\) continue;/.test(inv),
+      'on a delivery the alert still covers only what the owed block does not');
   });
   it('a product the commit could not find is skipped, not reported as "?"', () => {
     assert.ok(/if \(!p\) continue;/.test(inv));
@@ -497,6 +502,57 @@ section('9c · the debt is said out loud, not only written down');
   it('no new log table — the ledger already holds the durable record', () => {
     assert.ok(!/CREATE TABLE/i.test(rep));
     assert.ok(/balance_after/.test(inv), 'the negative balance is written to retail_stock_ledger as before');
+  });
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+/* 9d · §136 — A WALK-IN CANNOT LEAVE THE SHELF OWING ANYTHING.
+
+   The owed block reads `physical_qty < 0` and calls all of it owed. A counter
+   sale that lands below zero is not a debt: the units left in the customer's
+   hand, so the shelf HELD them and the record was short. Read as a debt it
+   became a cooking instruction, and three wraps were made for nobody.
+
+   Decided by Ash 2026-09-15 ("b"), recorded as §136 before the code.
+
+   These run against the REAL commit, not its source: the failure was arithmetic
+   and a regex over the function would not have caught it. */
+section('9d · a counter sale corrects the record instead of owing against it');
+{
+  const inv = fs.readFileSync(path.join(ROOT, 'lib/inventory.js'), 'utf8');
+
+  it('the till path corrects to zero and says why, in a SECOND row', () => {
+    assert.ok(/'counter_miscount', 'retail_orders'/.test(inv),
+      'the lift has its own reason, distinguishable from the sale');
+    assert.ok(/'order_prepare', 'retail_orders'/.test(inv),
+      '…and the sale keeps the reason it always had');
+    assert.ok(/insLed\.run\([\s\S]{0,200}?fixLed\.run\(/.test(inv),
+      'the sale is written first and the correction after it — never one netted figure');
+  });
+  it('…and only for a walk-in', () => {
+    assert.ok(/const isCounterSale = String\(o\.fulfillment_type \|\| ''\) === 'counter';/.test(inv));
+    assert.ok(/if \(isCounterSale && bal < 0\) \{/.test(inv),
+      'a delivery that outruns the shelf still leaves the honest negative');
+  });
+  it('the channel ingests keep their unclamped write (§39 rulings 1 and 7)', () => {
+    const mt = fs.readFileSync(path.join(ROOT, 'routes/meituan-internal.js'), 'utf8');
+    const el = fs.readFileSync(path.join(ROOT, 'routes/eleme-internal.js'), 'utf8');
+    assert.ok(!/newPhysicalQty:\s*Math\.max\(0,/.test(mt) && !/newPhysicalQty:\s*Math\.max\(0,/.test(el),
+      '§136 is about one door; it must not have travelled');
+  });
+  it('the miscount still reaches somebody — the alert speaks for made items here', () => {
+    // Correcting the shelf removes the kitchen's (wrong) signal, so the alert
+    // is the only thing left carrying a counter miscount. Skipping batch-made
+    // on this path would make it silent.
+    assert.ok(/if \(!isCounterSale && Number\(p\.is_batch_made\) === 1\) continue;/.test(inv));
+    assert.ok(/if \(Number\(p\.ship_from_supplier\) === 1\) continue;/.test(inv),
+      'supplier-direct stays excluded on both paths — no inventory of ours to be wrong about');
+  });
+  it('…and the figure reported is how far the record was WRONG, not the fixed zero', () => {
+    const at = inv.indexOf('if (bal < 0) belowZero.push(');
+    const fix = inv.indexOf('if (isCounterSale && bal < 0) {');
+    assert.ok(at > -1 && fix > -1 && at < fix,
+      'the balance is collected before the correction overwrites it');
   });
 }
 
