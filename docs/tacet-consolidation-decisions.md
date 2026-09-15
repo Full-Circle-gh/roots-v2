@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.267
+# Tacet shared-core consolidation — decisions record, v4.268
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-15 · v4.268 — **§132 · THE QR MENU DRAWS EVERY BLOCK THE OFFICE WROTE, IN THE ORDER IT WROTE THEM — ASKED BY ASH, having seen the page draw only the paragraph:** *"i want you to build the blocks of the product description same as the mini app."* §120 read TWO block types, §129 added the paragraph and the note, and this reads all thirteen: the spec strip, the numbered claims, the big-stat slab, the usage tiles, the paired storage cards, the pull quote, the image band, the method steps, the cross-sell row, the questions and the nutrition block, alongside the four already there. **THE ORDER IS THE OFFICE'S NOW, AND THAT IS THE STRUCTURAL CHANGE.** §129 rendered a fixed template — prose, then ingredients, then allergens, then nutrition — which is why a spec strip written first still appeared nowhere; the page now walks `description_blocks` and draws what it finds where it finds it. **THE READER IS A SECOND IMPLEMENTATION AND DIFFERS FROM THE COMPONENT IN ONE WAY THAT GOVERNS THE WHOLE FILE:** the mini app takes a language and calls `_pick(en, cn, L)` on every field, returning one; this page ships BOTH and lets CSS choose, so nothing may be picked in the reader and every field comes back as a pair. **THE BRAND-SAFETY TABLE IS COPIED ENTRY FOR ENTRY AND A TEST PARSES IT OUT OF THE COMPONENT'S SOURCE TO PROVE IT.** `PB_ICON_FIX` swaps a rasher of bacon, a fish and a wedge of cheese for plants — the office picks icons from a general-purpose set and this is a plant-based brand — and a reader that copied every other line and dropped that one would put meat on the menu of a shop that does not sell it. **PAIRINGS ARE FILTERED TO WHAT THIS SHOP ACTUALLY LISTS**, because the tile's photo comes from this menu's own image route and that route gates on `shop_listings`: an unlisted cross-sell would draw a broken frame beside a name. **THE QUESTIONS ARE A NATIVE `details`/`summary` RATHER THAN THE COMPONENT'S TAP HANDLER** — they open with no script at all, answer a keyboard and are read correctly aloud, which the accordion could not claim. **NO CHINESE COMPOSED:** every heading (`为什么选它`, `用法`, `储存`, `做法`, `搭配推荐`, `常见问题`, `保鲜方法`) is the component's own string and a test asserts each is still in its source. **AND THE OLD TEST THAT SAID THESE BLOCKS WERE NOT DRAWN WAS PASSING FOR THE WRONG REASON** — it looked for `'Spoon it over oats'` in `innerText` while the tile label is `text-transform:uppercase`, and `innerText` returns TRANSFORMED text, so it matched against a string that could never appear whether the block rendered or not; it had been green over a page already drawing the tile. Its fixture also used a `claims:` key that is neither shape the office saves. Both are fixed, and every new check reads classes and structure rather than transformed text. **Two layout faults fixed while building:** the cross-sell tile borrowed the menu card's `.ph`, which carries a 4/5 ratio and an `img` at `height:100%`, so inside a stretched flex row a 104px tile grew a 250px photograph; and a closed `details` is no longer `display:none` in Chrome but `content-visibility`, so a rect-based visibility check called a properly closed question "still showing its answer" — `checkVisibility` knows the difference. `test_product_blocks_read.js` 24 → **32**, `test_shop_menu_render.js` 51 → **59**, `test:fast` 241/241. Non-vacuous proofs recorded for the icon swap and the pairings filter. No schema, no migration, no change to `.gitignore` or CI.
 
 2026-09-15 · v4.267 — **§129 AMENDED: ANSWERING THE QUESTIONS PUTS THE CUSTOMER BACK ON THE MENU, NOT ON THE CHECKOUT — REPORTED BY ASH from the live menu, ticking a paid extra on a Quinoa Salad:** *"when i click add to basket it goes to chekcut instead going back to main menu."* §120 built the option picker to flip this panel to the BASKET face once the questions were answered, and said why in the source: it is *"the face that shows what has just been added"*. **THE TELL IS THAT NOTHING ELSE ON THIS MENU BEHAVES THAT WAY.** Tapping + on a product with no questions adds it and leaves the customer browsing, with the photo thrown into the bar; §129's size picker does the same. Only the question path ended somewhere else — and where it ended was a form asking for a name and a tender, which tells somebody who has just chosen a sugar level that they have finished shopping. A basket of one is the common case for that screen and it is the wrong one. **THE CONFIRMATION WAS NEVER MISSING and is now given the same way the other two paths give it:** the bar already carries the count and the running total, and the flight is what says WHICH product went in. The photo now flies at the moment the line actually exists rather than at the tap that opened the picker — which is the other side of §120's own note beside the flight, *"a photo sailing into the bar before the customer has answered anything would be telling them a lie"*. The basket stays one tap away on the bar, where it always was. **Opened from the PRODUCT PAGE the picker closes onto the page**, not the menu, which is the mini app's behaviour and means a customer adding two of something is not thrown out of the product to do it. **The check that asserted the old behaviour (`basketFoot && !pickerFoot` immediately after Add) is rewritten rather than deleted, and keeps the old expectation in words** — it now asserts the panel CLOSES onto the menu with the bar showing one item, and a second check opens the basket and reads the line, so what the line says is still held. Proven non-vacuous: with the fix reverted the new check fails with *"answering the questions left the panel open on the checkout"*. `test_shop_menu_render.js` 49/49, `test:fast` 241/241. No schema, no migration, no Chinese composed, no change to `.gitignore` or CI.
 
@@ -14497,3 +14499,57 @@ guarantee without failing.
 Reviews queue, which ships this same control: 标记为已处理, 放回待处理,
 已处理 — 未回复, 已放回待处理, and the two error lines. A control that is a copy
 of one that already shipped does not need new vocabulary.
+
+
+## §132 — EVERY BLOCK THE OFFICE WROTE, IN THE ORDER IT WROTE THEM
+
+**2026-09-15 · Ash asked, having seen the page draw only the paragraph:** *"i
+want you to build the blocks of the product description same as the mini app."*
+
+**WHAT WAS MISSING.** §120 read two block types, §129 added the paragraph and the
+note, and eleven more sat in `description_blocks` unread — the spec strip, the
+numbered claims, the stat slab, the usage tiles, the storage cards, the quote,
+the image band, the method steps, the cross-sell row, the questions and the
+nutrition block. §129 also rendered them in a FIXED order, so a spec strip the
+office wrote first would have appeared last if it had appeared at all.
+
+**THE ORDER IS THE OFFICE'S.** The page walks the array and draws what it finds
+where it finds it. This is the structural half of the change and the half that
+makes the rest legible: "same as the mini app" is a sequence before it is a set
+of visuals.
+
+**ONE DIFFERENCE FROM THE COMPONENT GOVERNS THE WHOLE READER.** The mini app
+takes a language and calls `_pick(en, cn, L)` on every field, returning one
+language. This page ships BOTH and lets CSS choose — that is how every other
+string on the counter menu works — so nothing may be picked in the reader.
+Every field comes back as a pair, and a block carrying only one language keeps
+the other empty rather than borrowing across, because `bi()` decides what a
+missing half does and the reader must not decide it first.
+
+**THE ICON TABLE IS NOT OPTIONAL AND IS PROVEN, NOT ASSERTED.** `PB_ICON_FIX`
+swaps bacon, fish and cheese for plants; the office picks icons from a
+general-purpose set and this is a plant-based brand. A test parses the table out
+of the component's own source and compares it entry for entry, because a swap
+list that drifts silently puts meat on the menu of a shop that does not sell it.
+
+**PAIRINGS ARE FILTERED TO WHAT THIS SHOP LISTS.** The tile's photo comes from
+this menu's image route and that route gates on `shop_listings`, so a cross-sell
+the operator has not put on this menu would draw a broken frame beside a name.
+The tiles do not navigate: the QR menu has no product URLs to navigate to, and a
+tile that looks tappable and is not would be worse than one that plainly is not.
+
+**THE QUESTIONS ARE NATIVE `details`/`summary`**, not the component's tap
+handler. They open with no script at all, answer a keyboard and are read
+correctly aloud. The first opens, as it does there.
+
+**THE OLD TEST WAS GREEN FOR THE WRONG REASON, and that is the finding worth
+keeping.** §129 left a check asserting the structured blocks were NOT drawn. It
+looked for `'Spoon it over oats'` in `innerText` while the tile label is
+`text-transform:uppercase` — and `innerText` returns TRANSFORMED text, so it was
+matching a string that could never appear whether the block rendered or not. Its
+fixture also used a `claims:` key that is neither shape the office saves. The
+check was passing over a page that was already drawing the tile. Every check
+added here reads classes and structure, or compares case-insensitively.
+
+**NO CHINESE COMPOSED.** Every heading is the component's own string and a test
+asserts each is still in its source.

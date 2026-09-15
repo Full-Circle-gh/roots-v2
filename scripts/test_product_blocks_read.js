@@ -69,6 +69,88 @@ check('the FIELD names are the ones it reads', () => {
     assert.ok(MINI.includes(f), `the mini app no longer reads ${f} — the shape has moved`);
   }
 });
+/* §132 — THE WHOLE BLOCK SET, AND THE DRIFT GUARD THAT MATTERS MOST HERE.
+   pageBlocks() is a second implementation of the component's normaliser for
+   thirteen types rather than two, so there is thirteen times as much to go
+   quietly out of step. Everything below is held against the component's own
+   source: the type names, the field names, the headings and the icon table. */
+section('\u00a7132 — every block the office wrote');
+check('every PAGE block type is one the mini app renders', () => {
+  const TYPES = ['spec_strip', 'hero_intro', 'why', 'ingredients_chips', 'ingredients_line',
+    'allergen_card', 'how_to_use', 'storage_box', 'notes_callout', 'big_stat', 'stat_callout',
+    'pull_quote', 'image_band', 'recipe_steps', 'pairings', 'faq', 'nutrition_facts'];
+  for (const t of TYPES) {
+    assert.ok(MINI.includes(`'${t}'`), `the mini app no longer knows the type ${t}`);
+  }
+});
+check('every FIELD pageBlocks reads is one the mini app reads', () => {
+  for (const f of ['k_en', 'k_cn', 'v_en', 'v_cn', 'highlight_en', 'rows_en', 'rows_cn',
+    'claim_en', 'claim_cn', 'tiles', 'label_en', 'sub_en', 'head_en', 'num_en', 'unit_en',
+    'note_en', 'stat', 'what_en', 'who_en', 'caption_en', 'ratio', 'steps', 'time_en',
+    'title_en', 'q_en', 'a_en', 'basis_en', 'value', 'alt', 'icon']) {
+    assert.ok(MINI.includes(f), `the mini app no longer reads ${f} — the shape has moved`);
+  }
+});
+check('the HEADINGS are the mini app\'s own words, not composed here', () => {
+  const H = R.HEADS;
+  for (const k of Object.keys(H)) {
+    assert.ok(MINI.includes(`'${H[k].en}'`), `"${H[k].en}" is not the mini app's wording`);
+    assert.ok(MINI.includes(`'${H[k].cn}'`), `"${H[k].cn}" is not the mini app's wording`);
+  }
+});
+/* THE ICON TABLE IS THE ONE COPY THAT IS NOT OPTIONAL. The office picks icons
+   from a general-purpose set and this is a plant-based brand; a swap table that
+   drifts puts a rasher of bacon on the menu of a shop that does not sell it. */
+check('the non-vegan icon swaps match the mini app ENTRY FOR ENTRY', () => {
+  const mini = {};
+  const block = /const PB_ICON_FIX = \{([\s\S]*?)\};/.exec(MINI);
+  assert.ok(block, 'the mini app no longer has PB_ICON_FIX at all');
+  const re = /'([^']+)'\s*:\s*'([^']+)'/g;
+  let m;
+  while ((m = re.exec(block[1]))) mini[m[1]] = m[2];
+  assert.ok(Object.keys(mini).length >= 15, `only ${Object.keys(mini).length} swaps parsed`);
+  assert.deepStrictEqual(R.ICON_FIX, mini,
+    'the icon swap table has drifted from the mini app\'s');
+});
+check('the blocks come back in the office\'s order, and empty ones are dropped', () => {
+  const got = R.pageBlocks(JSON.stringify([
+    { type: 'notes_callout', text_en: 'Last in the array.' },
+    { type: 'why', rows: [] },
+    { type: 'spec_strip', cells: [{ k_en: 'Origin', v_en: 'Guangzhou' }] },
+    { type: 'storage_box' },
+    { type: 'faq', items: [{ q_en: 'Q?' }] },
+  ]));
+  assert.deepStrictEqual(got.map(b => b.type), ['notes_callout', 'spec_strip'],
+    `order or emptiness handling is wrong: ${JSON.stringify(got.map(b => b.type))}`);
+});
+check('BOTH why shapes are understood — the editor\'s and the legacy one', () => {
+  const modern = R.pageBlocks(JSON.stringify([
+    { type: 'why', rows: [{ claim_en: 'A', claim_cn: '\u7532' }] }]))[0];
+  const legacy = R.pageBlocks(JSON.stringify([
+    { type: 'why', rows_en: 'A\nB', rows_cn: '\u7532\n\u4e59' }]))[0];
+  assert.deepStrictEqual(modern.rows, [{ en: 'A', cn: '\u7532' }]);
+  assert.deepStrictEqual(legacy.rows, [{ en: 'A', cn: '\u7532' }, { en: 'B', cn: '\u4e59' }],
+    'the legacy newline shape was dropped, which is half the catalogue');
+});
+check('a storage card promotes a lone phrase and strips a repeated scale', () => {
+  const b = R.pageBlocks(JSON.stringify([{ type: 'storage_box',
+    left: { num_en: '0\u20134\u00b0', unit_en: '\u00b0C at all times' },
+    right: { unit_en: 'Cool, dry place' } }]))[0];
+  assert.strictEqual(b.left.unit.en, 'at all times',
+    `the caption still repeats the figure's own scale: ${JSON.stringify(b.left.unit)}`);
+  assert.strictEqual(b.right.num.en, 'Cool, dry place',
+    'a lone phrase was left in the caption slot, where it renders as tiny type');
+  assert.ok(b.right.long, 'the promoted phrase kept the hero numeral size and would clip');
+  assert.ok(!b.left.long, 'a short figure was treated as a phrase');
+});
+check('NOTHING IS PICKED — both languages survive every block', () => {
+  const b = R.pageBlocks(JSON.stringify([
+    { type: 'pull_quote', text_en: 'EN', text_cn: '\u4e2d' }]))[0];
+  assert.strictEqual(b.text.en, 'EN');
+  assert.strictEqual(b.text.cn, '\u4e2d',
+    'a language was chosen in the reader; this page ships both and lets CSS decide');
+});
+
 section('§129 — the product\'s own words');
 check('the prose blocks come back in the office\'s own order', () => {
   const blocks = [

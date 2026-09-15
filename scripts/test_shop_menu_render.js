@@ -142,8 +142,28 @@ function seed() {
   // percentage, and an allergen card whose CONTAINS and MAY CONTAIN differ —
   // which is the distinction the whole card exists for.
   const BLOCKS = JSON.stringify([
-    { type: 'hero_intro', body_en: 'A marketing paragraph nobody at a counter wants.' },
-    { type: 'why', claims: [{ claim_en: 'Neutral enough to go sweet or savory.' }] },
+    /* §132 — THE ORDER OF THIS ARRAY IS PART OF THE FIXTURE. The page renders
+       blocks in the office's order, so spec_strip first and notes last is what
+       the checks below assert against; shuffling these lines changes what they
+       mean. */
+    { type: 'spec_strip', cells: [
+      { k_en: 'Product type', k_cn: '产品类型', v_en: 'Cultured', v_cn: '发酵' },
+      { k_en: 'Net weight', k_cn: '净含量', v_en: '250 g', v_cn: '250 克' },
+      { k_en: 'Origin', k_cn: '产地', v_en: 'Guangzhou', v_cn: '广州' },
+    ] },
+    { type: 'hero_intro', kicker_en: 'The story', kicker_cn: '故事',
+      body_en: 'A marketing paragraph nobody at a counter wants.' },
+    /* THE EDITOR'S OWN SHAPE, rows[{claim_en,claim_cn}]. The earlier fixture
+       said `claims:`, which is neither of the two shapes the office actually
+       saves — so it was dropped by the reader and the check that asserted it
+       was not drawn passed for a reason that had nothing to do with the rule
+       it was testing. The legacy rows_en shape is covered on the jar below. */
+    { type: 'why', rows: [
+      { claim_en: 'Neutral enough to go sweet or savory.', claim_cn: '甜咸皆宜。' },
+      { claim_en: 'Nothing on the label you cannot say.', claim_cn: '配料表没有生僻字。' },
+    ] },
+    { type: 'big_stat', stat: '92', claim_en: 'percent coconut', claim_cn: '椰子含量',
+      sub_en: 'and the rest is culture.', sub_cn: '其余是菌种。' },
     { type: 'ingredients_chips', items: [
       { name_en: 'Coconut milk', name_cn: '椰奶', pct: 92, lead: true },
       { name_en: 'Natural starch', name_cn: '天然淀粉' },
@@ -157,7 +177,61 @@ function seed() {
       // is the office's own pair, read off the live menu, not composed here.
       contains_en: 'Gluten (oats)', contains_cn: '麸质（燕麦）',
       may_contain_en: 'Soy, Nuts, Gluten', may_contain_cn: '大豆、坚果、麸质' },
-    { type: 'how_to_use', tiles: [{ label_en: 'Spoon it over oats' }] },
+    /* ONE TILE CARRIES A RASHER OF BACON, and that is the point of it. The
+       office picks icons from a general-purpose set and this is a plant-based
+       brand, so the component keeps a swap table; a reader that copied every
+       other line and dropped that one would put meat on the menu of a shop
+       that does not sell it. 🥓 must come out as 🌱. */
+    { type: 'how_to_use', tiles: [
+      { icon: '🥓', label_en: 'Spoon it over oats', label_cn: '拌进燕麦',
+        sub_en: 'breakfast', sub_cn: '早餐' },
+      { icon: '🥘', label_en: 'Stir through soup', label_cn: '拌入汤里' },
+      { label_en: 'Straight from the tub', label_cn: '直接吃' },
+    ] },
+    /* THE RIGHT-HAND CARD HAS NO FIGURE, only a phrase, which is the case the
+       component promotes into the hero slot; and the left-hand caption repeats
+       the scale the figure already carries, which it strips. Both behaviours
+       are asserted below, because both are silent when they stop working. */
+    { type: 'storage_box',
+      left:  { icon: '❄️', head_en: 'Fridge', head_cn: '冷藏',
+               num_en: '0–4°', num_cn: '0–4°', unit_en: '°C at all times', unit_cn: '℃ 全程' },
+      right: { alt: true, head_en: 'Once open', head_cn: '开封后',
+               unit_en: 'Cool, dry place', unit_cn: '阴凉干燥处' },
+      note_en: 'Best within three days.', note_cn: '三天内食用最佳。' },
+    { type: 'pull_quote', text_en: 'We took the junk out.', text_cn: '我们把添加剂拿掉了。',
+      who_en: 'The kitchen', who_cn: '厨房' },
+    { type: 'recipe_steps', steps: [
+      { text_en: 'Warm the pan.', text_cn: '热锅。', time_en: '2 min', time_cn: '2 分钟' },
+      { text_en: 'Fold it through.', text_cn: '拌匀。' },
+    ] },
+    /* ONE PAIRING IS ON THIS MENU AND ONE IS NOT. The tile's photo comes from
+       the menu's own image route, which gates on shop_listings — so an unlisted
+       pairing would draw a broken frame. The filter is asserted below. */
+    { type: 'pairings', items: [
+      { id: 9972, name_en: 'Render fixture bun', name_cn: '测试渲染面包' },
+      { id: 9992, name_en: 'Render fixture extra', name_cn: '测试加料' },
+    ] },
+    { type: 'faq', items: [
+      { q_en: 'Is it pasteurised?', q_cn: '经过巴氏杀菌吗？',
+        a_en: 'No, the cultures are live.', a_cn: '没有，菌种是活的。' },
+      { q_en: 'Can I freeze it?', q_cn: '可以冷冻吗？',
+        a_en: 'You can, but it splits.', a_cn: '可以，但会分层。' },
+    ] },
+    { type: 'notes_callout', text_en: 'Natural separation is normal — stir first.',
+      text_cn: '天然分层属正常现象，食用前搅拌。' },
+  ]);
+  /* THE JAR'S OWN BLOCKS — the legacy `why` shape (rows_en as newline-separated
+     text, which older saves use) and a nutrition_facts BLOCK, which is a
+     different thing from the nutrition COLUMN and must not print twice beside
+     it. The jar has no nutrition column, so this is the block path alone. */
+  const BLOCKS_JAR = JSON.stringify([
+    { type: 'why', rows_en: 'Keeps for months.\nTravels well.', rows_cn: '可存数月。\n便于携带。' },
+    { type: 'nutrition_facts', basis_en: 'per 100 g', basis_cn: '每100克', rows: [
+      { label_en: 'Energy', label_cn: '能量', value: '598 kcal' },
+      { label_en: 'Saturated', label_cn: '饱和脂肪', value: '3.1 g' },
+    ] },
+    { type: 'image_band', ratio: 'wide', url: '/s/PLACEHOLDER/i/9971?w=1000',
+      caption_en: 'Milled the slow way.', caption_cn: '慢工细磨。' },
   ]);
   const NUTR = JSON.stringify({
     basis_en: 'per 100 g', basis_cn: '每100克',
@@ -211,7 +285,7 @@ function seed() {
     (id, name_en, name_cn, sku, sell_price, is_active, is_published, top_category,
      variant_group_id, variant_label, variant_label_cn, variant_sort, description_blocks)
     VALUES (?, ?, ?, ?, ?, 1, 1, 'Drinks', ?, ?, ?, ?, ?)`);
-  varProd.run(P_V1, EN_VAR, '测试规格罐', '__R-75', 50, P_V1, '250g', '250克', 0, BLOCKS);
+  varProd.run(P_V1, EN_VAR, '测试规格罐', '__R-75', 50, P_V1, '250g', '250克', 0, BLOCKS_JAR);
   varProd.run(P_V2, EN_VAR, '测试规格罐', '__R-76', 76, P_V1, '500g', '500克', 1, null);
   db.prepare('INSERT INTO shops (location_id, public_code, is_active) VALUES (?, ?, 1)').run(LOC, CODE);
   const shopId = db.prepare('SELECT id FROM shops WHERE location_id = ?').get(LOC).id;
@@ -585,16 +659,19 @@ function boxOf(text) {
          find a test that seems never to have had an opinion. */
       assert.ok(m.text.includes('marketing paragraph'),
         'the page dropped the office\'s own paragraph, which is what §129 exists to show');
-      /* AND THE STRUCTURED BLOCKS ARE STILL NOT DRAWN, which is not an oversight
-         surviving from §120 but a line §129 drew on purpose. `why` is a list of
-         claims and `how_to_use` is a set of tiles; neither is a paragraph, and a
-         reader that claimed them without reading their shapes would return
-         nothing for them forever while looking like it had them. They come back
-         when they get their own rendering, not before. */
-      for (const notYet of ['Neutral enough', 'Spoon it over oats']) {
-        assert.ok(!m.text.includes(notYet),
-          `a structured block was drawn as if it were a paragraph: ${notYet}`);
-      }
+      /* THE STRUCTURED BLOCKS ARE DRAWN NOW (§132), AND THIS LOOP USED TO ASSERT
+         THEY WERE NOT. §129 read two block types and said so; Ash then asked for
+         the rest — "i want you to build the blocks of the product description
+         same as the mini app" — so `why`, the tiles, the storage cards and the
+         rest each got their own rendering.
+
+         THE OLD ASSERTION WAS ALSO PASSING FOR THE WRONG REASON, and that is
+         worth keeping in the record. It looked for 'Spoon it over oats' in
+         innerText while the tile label is text-transform:uppercase — innerText
+         returns TRANSFORMED text, so it was matching against a string that
+         could never appear whether the block rendered or not. It went green on
+         a page that was already drawing the tile. Every check below therefore
+         reads classes and structure, or compares case-insensitively. */
       assert.deepStrictEqual(m.rows, ['p', 'c', ''], `nutrition rows classified wrong: ${m.rows}`);
       assert.ok(/\d/.test(m.price), `no price on the sheet: ${JSON.stringify(m.price)}`);
     });
@@ -904,6 +981,191 @@ function boxOf(text) {
       assert.strictEqual(m.sheet, true, 'the sheet stayed open over the basket bar');
       await page.reload({ waitUntil: 'domcontentloaded' });
     });
+
+    /* ── §132 — EVERY BLOCK THE OFFICE WROTE ──────────────────────────────
+       Ash: *"i want you to build the blocks of the product description same as
+       the mini app."* §129 drew the paragraph and the note; these are the other
+       eleven. Read off the OPEN PAGE rather than the template, because a block
+       that parses and does not lay out is the failure that matters — which is
+       why the page is opened here rather than assumed to still be open from an
+       earlier check. It was assumed once and every assertion below read an
+       empty panel and failed saying the blocks had been re-ordered to nothing. */
+    await page.evaluate(() => { const x = document.getElementById('dsheetX'); if (x) x.click(); });
+    await page.waitForTimeout(260);
+    await page.evaluate(() => document.querySelector('.it:not(.out)[data-open]').click());
+    await page.waitForTimeout(300);
+
+    await check('§132 the blocks are drawn IN THE OFFICE\'S ORDER, not a fixed one', async () => {
+      const order = await page.evaluate(() => {
+        const b = document.getElementById('dsheetB');
+        const want = { 'pb-spec': 'spec', 'dt-p': 'hero', 'pb-why-r': 'why', 'pb-stat': 'stat',
+          'ichips': 'ingredients', 'acard': 'allergens', 'pb-how': 'how', 'pb-store': 'storage',
+          'pb-qt': 'quote', 'pb-step': 'recipe', 'pb-pair': 'pairings', 'pb-faq': 'faq',
+          'pb-note': 'notes' };
+        const seen = [];
+        b.querySelectorAll('*').forEach(el => {
+          for (const cls of Object.keys(want)) {
+            if (el.classList.contains(cls) && seen[seen.length - 1] !== want[cls]) {
+              if (!seen.includes(want[cls])) seen.push(want[cls]);
+            }
+          }
+        });
+        return seen;
+      });
+      /* THE FIXTURE'S OWN ORDER. §129 rendered a fixed template — prose, then
+         ingredients, then allergens — so the spec strip appearing FIRST and the
+         note LAST is the whole of what changed structurally. */
+      assert.deepStrictEqual(order,
+        ['spec', 'hero', 'why', 'stat', 'ingredients', 'allergens', 'how', 'storage',
+         'quote', 'recipe', 'pairings', 'faq', 'notes'],
+        `the page re-ordered the office's blocks: ${JSON.stringify(order)}`);
+    });
+
+    await check('§132 the spec strip, the claims and the big stat carry their content', async () => {
+      const m = await page.evaluate(() => ({
+        specK: Array.from(document.querySelectorAll('.pb-spec-k .l-en')).map(e => e.textContent),
+        specV: Array.from(document.querySelectorAll('.pb-spec-v .l-en')).map(e => e.textContent),
+        whyN: Array.from(document.querySelectorAll('.pb-why-n')).map(e => e.textContent.trim()),
+        whyFirst: !!document.querySelector('.pb-why-r.first'),
+        whyC: Array.from(document.querySelectorAll('.pb-why-c .l-en')).map(e => e.textContent),
+        statN: (document.querySelector('.pb-stat-n') || {}).textContent,
+        statDots: document.querySelectorAll('.pb-stat-d').length,
+        heads: Array.from(document.querySelectorAll('.pb-h-l .l-en')).map(e => e.textContent),
+      }));
+      assert.deepStrictEqual(m.specK, ['Product type', 'Net weight', 'Origin'], JSON.stringify(m.specK));
+      assert.deepStrictEqual(m.specV, ['Cultured', '250 g', 'Guangzhou'], JSON.stringify(m.specV));
+      // NUMBERED 01, 02 — zero-padded, as the component numbers them.
+      assert.deepStrictEqual(m.whyN, ['01', '02'], `claim numbering: ${JSON.stringify(m.whyN)}`);
+      assert.ok(m.whyFirst, 'the first claim row does not carry the heavier rule');
+      assert.strictEqual(m.whyC.length, 2, 'a claim was dropped');
+      assert.strictEqual(m.statN.trim(), '92', `the stat figure: ${m.statN}`);
+      assert.strictEqual(m.statDots, 2, 'the slab lost its anchoring dots');
+      // The headings are the mini app's own words, not invented here.
+      assert.ok(m.heads.includes('Why people choose it'), JSON.stringify(m.heads));
+      assert.ok(m.heads.includes('How to use'), JSON.stringify(m.heads));
+      assert.ok(m.heads.includes('Storage'), JSON.stringify(m.heads));
+      assert.ok(m.heads.includes('Questions'), JSON.stringify(m.heads));
+    });
+
+    await check('§132 A RASHER OF BACON DOES NOT REACH A PLANT-BASED MENU', async () => {
+      /* The office picks icons from a general-purpose set; the component keeps
+         a swap table for exactly this, and a reader that copied everything else
+         and dropped that one line would put meat on the menu of a shop that
+         does not sell it. The fixture tile carries 🥓 on purpose. */
+      const icons = await page.evaluate(() =>
+        Array.from(document.querySelectorAll('.pb-how-i')).map(e => e.textContent.trim()));
+      assert.ok(icons.length >= 2, `tiles lost their icons: ${JSON.stringify(icons)}`);
+      assert.ok(!icons.includes('🥓'), `a rasher of bacon is on the menu: ${JSON.stringify(icons)}`);
+      assert.ok(icons.includes('🌱'), `the swap did not happen: ${JSON.stringify(icons)}`);
+    });
+
+    await check('§132 the storage card promotes a lone phrase and drops a repeated scale', async () => {
+      const m = await page.evaluate(() => {
+        const cards = Array.from(document.querySelectorAll('.pb-store-c'));
+        return cards.map(c => ({
+          alt: c.classList.contains('alt'),
+          num: ((c.querySelector('.pb-store-n .l-en') || {}).textContent || '').trim(),
+          long: !!(c.querySelector('.pb-store-n') || {}).classList?.contains('long'),
+          unit: ((c.querySelector('.pb-store-u .l-en') || {}).textContent || '').trim(),
+        }));
+      });
+      assert.strictEqual(m.length, 2, `two cards expected: ${JSON.stringify(m)}`);
+      // LEFT: a real figure, and the caption no longer repeats the degree scale
+      // the figure already carries ("°C at all times" -> "at all times").
+      assert.strictEqual(m[0].num, '0–4°', JSON.stringify(m[0]));
+      assert.strictEqual(m[0].unit, 'at all times',
+        `the caption still repeats the scale the figure carries: ${JSON.stringify(m[0])}`);
+      assert.ok(!m[0].long, 'a short figure was treated as a phrase');
+      // RIGHT: no figure at all, so the phrase is promoted out of the caption
+      // into the hero slot and drops to a wrapping size.
+      assert.strictEqual(m[1].num, 'Cool, dry place',
+        `a lone phrase was left in caption type: ${JSON.stringify(m[1])}`);
+      assert.ok(m[1].long, 'the promoted phrase kept the hero numeral size and would clip');
+      assert.ok(m[1].alt, 'the inverted card lost its inversion');
+    });
+
+    await check('§132 the quote carries its own marks in BOTH languages', async () => {
+      /* A CSS ::before would put one pair around the element and both halves
+         would share it, so the hidden language's marks would hang beside the
+         visible language's text. Each half carries its own. */
+      const m = await page.evaluate(() => ({
+        en: ((document.querySelector('.pb-qt-p .l-en') || {}).textContent || ''),
+        cn: ((document.querySelector('.pb-qt-p .l-cn') || {}).textContent || ''),
+        who: ((document.querySelector('.pb-qt-w .l-en') || {}).textContent || ''),
+      }));
+      assert.ok(/^\u201C.*\u201D$/.test(m.en), `the English quote is unmarked: ${JSON.stringify(m.en)}`);
+      assert.ok(/^\u201C.*\u201D$/.test(m.cn), `the Chinese quote is unmarked: ${JSON.stringify(m.cn)}`);
+      assert.strictEqual(m.who, 'The kitchen');
+    });
+
+    await check('§132 a recipe step is numbered and its timing is a pill', async () => {
+      const m = await page.evaluate(() => ({
+        n: Array.from(document.querySelectorAll('.pb-step-n')).map(e => e.textContent.trim()),
+        first: !!document.querySelector('.pb-step.first'),
+        times: Array.from(document.querySelectorAll('.pb-step-time .l-en')).map(e => e.textContent),
+      }));
+      assert.deepStrictEqual(m.n, ['01', '02'], JSON.stringify(m.n));
+      assert.ok(m.first, 'the first step does not carry the heavier rule');
+      // Only the step that HAS a time gets a pill — the second one has none.
+      assert.deepStrictEqual(m.times, ['2 min'], `timing pills: ${JSON.stringify(m.times)}`);
+    });
+
+    await check('§132 a pairing this shop does NOT list is dropped, not drawn broken', async () => {
+      /* The tile's photo comes from the menu's own image route and that route
+         gates on shop_listings, so an unlisted pairing renders a broken frame
+         beside a name. The fixture names one listed product and one that is
+         stock-only and appears on no menu. */
+      const m = await page.evaluate(() => ({
+        names: Array.from(document.querySelectorAll('.pb-pair-n .l-en')).map(e => e.textContent),
+        srcs: Array.from(document.querySelectorAll('.pb-pair-t img')).map(e => e.getAttribute('src')),
+      }));
+      assert.deepStrictEqual(m.names, ['Render fixture bun'],
+        `an unlisted pairing reached the page: ${JSON.stringify(m.names)}`);
+      assert.strictEqual(m.srcs.length, 1);
+      assert.ok(/\/i\/9972\?/.test(m.srcs[0]), `the tile points somewhere odd: ${m.srcs[0]}`);
+    });
+
+    await check('§132 the questions open and close with NO script at all', async () => {
+      /* details/summary rather than a tap handler: it works with JavaScript
+         off, answers a keyboard, and is read correctly aloud. The first one
+         opens, as it does in the mini app. */
+      const before = await page.evaluate(() => {
+        const d = Array.from(document.querySelectorAll('.pb-faq'));
+        return { tags: d.map(x => x.tagName), open: d.map(x => x.open) };
+      });
+      assert.deepStrictEqual(before.tags, ['DETAILS', 'DETAILS'],
+        `the accordion is not a native disclosure: ${JSON.stringify(before.tags)}`);
+      assert.deepStrictEqual(before.open, [true, false],
+        `the first question should open and the rest should not: ${JSON.stringify(before.open)}`);
+      /* AND THE ANSWER REALLY IS HIDDEN UNTIL IT IS OPENED, asked through
+         checkVisibility rather than a bounding box. Chrome no longer hides a
+         closed disclosure with display:none — it uses content-visibility, so
+         the subtree keeps a box and a rect-based check calls a properly closed
+         question "still showing its answer". checkVisibility is the API that
+         knows the difference; the rect stays as a fallback for a browser that
+         has not got it. */
+      const shut = await page.evaluate(() => {
+        const a = document.querySelectorAll('.pb-faq')[1].querySelector('.pb-faq-a');
+        if (typeof a.checkVisibility === 'function') {
+          return !a.checkVisibility({ contentVisibilityAuto: true, visibilityProperty: true });
+        }
+        const r = a.getBoundingClientRect();
+        return r.width === 0 && r.height === 0;
+      });
+      assert.ok(shut, 'a closed question is still showing its answer');
+      const after = await page.evaluate(() => {
+        const d = document.querySelectorAll('.pb-faq')[1];
+        d.querySelector('summary').click();
+        const a = d.querySelector('.pb-faq-a').getBoundingClientRect();
+        return { open: d.open, shown: a.height > 0 };
+      });
+      assert.ok(after.open && after.shown, 'tapping a question did not reveal its answer');
+    });
+
+    // PUT THE PAGE BACK. The §132 checks above opened it and every check after
+    // them reaches for a card, which an open full-screen page covers.
+    await page.evaluate(() => document.getElementById('dsheetX').click());
+    await page.waitForTimeout(280);
 
     await check('a product with nothing to say is NOT tappable', async () => {
       // The filler rows carry no blocks, no nutrition and no allergen card. A
@@ -2264,8 +2526,32 @@ function boxOf(text) {
       // carries no price on it because there are two.
       assert.match(m.label, /CHOOSE A SIZE/, `the buy button said: ${JSON.stringify(m.label)}`);
       assert.ok(!m.priceShown, 'a product with two prices is showing one of them');
-      assert.ok(m.text.includes('marketing paragraph'),
-        'the page dropped the office\'s own paragraph');
+      /* §132 — THE JAR CARRIES ITS OWN BLOCKS, deliberately different from the
+         latte's: the LEGACY `why` shape (rows_en as newline-separated text,
+         which older saves use) and a nutrition_facts BLOCK, which is a separate
+         thing from the nutrition COLUMN. Both paths need a product that
+         exercises them, and the latte exercises the modern shapes. */
+      assert.ok(/Keeps for months/i.test(m.text),
+        `the legacy why shape was dropped: ${JSON.stringify(m.text.slice(0, 200))}`);
+      assert.ok(/Travels well/i.test(m.text), 'the second legacy claim was dropped');
+    });
+
+    await check('§132 a nutrition_facts BLOCK prints, and the column does not print beside it', async () => {
+      const m = await page.evaluate(() => ({
+        cards: document.querySelectorAll('#dsheetB .nut').length,
+        rows: Array.from(document.querySelectorAll('#dsheetB .nr')).map(r => ({
+          l: (r.querySelector('.nr-l .l-en') || {}).textContent || '',
+          k: r.className.replace('nr', '').trim(),
+        })),
+        band: document.querySelectorAll('#dsheetB .pb-band img').length,
+      }));
+      // ONE card. A product carrying both a block and a column would otherwise
+      // print its table twice under the same heading.
+      assert.strictEqual(m.cards, 1, `nutrition printed ${m.cards} times`);
+      assert.deepStrictEqual(m.rows.map(r => r.l), ['Energy', 'Saturated'], JSON.stringify(m.rows));
+      // And the block's rows classify the same way the column's do.
+      assert.deepStrictEqual(m.rows.map(r => r.k), ['p', 'c'], JSON.stringify(m.rows));
+      assert.strictEqual(m.band, 1, 'the image band did not render');
     });
 
     /* SWITCHING LANGUAGE WITH A SHEET OPEN MUST NOT UNLOCK THE MENU. Found
