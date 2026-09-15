@@ -58,6 +58,44 @@ function chanIcon(channel) {
   return CHAN_ICON[c] || '';
 }
 
+/* ANOTHER PAGE OF THIS APP — a new tab in a browser, this window when the back
+   office is INSTALLED.
+   ------------------------------------------------------------------------
+   Reported from the shop tablet: the rail's Counter till opened the till under
+   a grey bar reading "Counter · store.rootskitchenchina.com" with an ✕ and a
+   ⋮, and nothing on the tablet turned it off. That bar is Edge's in-app
+   browser, and it is not a setting anybody can switch: an installed app has no
+   tab strip, so `window.open(url, '_blank')` has nowhere to put a tab and the
+   browser falls back to that view. Its ✕ does not dismiss the bar — it closes
+   the page underneath and drops the operator back where they started.
+
+   Navigating this window instead costs nothing and removes the bar entirely:
+   every URL passed here is inside the installed app's scope ('/' — see
+   public/admin-manifest.webmanifest), so it opens as part of the app. A real
+   browser tab keeps the behaviour it had, because a desk with a mouse wants
+   the till beside the back office rather than on top of it.
+
+   TESTED POSITIVELY, one mode at a time, rather than `not (display-mode:
+   browser)`: a browser that has never heard of the query answers `false` to
+   every media query it cannot parse, and the negated form would read that
+   false as "installed" and swallow every new tab in the product. This form
+   fails the other way — unknown means browser, which is what it was. All four
+   modes are asked because admin-manifest's display_override lists minimal-ui
+   alongside standalone and both are equally tabless; navigator.standalone is
+   the only answer iOS gives at all. */
+const APP_DISPLAY_MODES = ['standalone', 'minimal-ui', 'fullscreen', 'window-controls-overlay'];
+function isInstalledApp() {
+  try {
+    if (window.navigator.standalone === true) return true;
+    if (!window.matchMedia) return false;
+    return APP_DISPLAY_MODES.some(m => window.matchMedia('(display-mode: ' + m + ')').matches);
+  } catch (e) { return false; }
+}
+function openAppPage(url) {
+  if (isInstalledApp()) { location.href = url; return; }
+  window.open(url, '_blank', 'noopener');
+}
+
 // `opts` is a NUMBER for every existing caller (a duration in ms) and may also
 // be an object: { ms, title }. `title` puts the machine-readable reason on the
 // element's title attribute — an operator can hover it to quote the exact code
@@ -1188,7 +1226,7 @@ async function salesWireSetup() {
     // Configure — the same treatment gzgrocery gets. Configure opens the till
     // itself, because that IS the channel: there is nothing else to point an
     // operator at.
-    ps: { kind: 'pos',            open: () => window.open('/till?from=dashboard', '_blank', 'noopener'), alwaysConfigure: true },
+    ps: { kind: 'pos',            open: () => openAppPage('/till?from=dashboard'), alwaysConfigure: true },
     // jd / qy cards moved to the Delivery tab's card hub (2026-07-03).
   };
   const cardByKey = (key) => {

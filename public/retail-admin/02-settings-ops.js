@@ -1609,8 +1609,9 @@ async function loadIntegrationsStatus() {
     }
     // 1f) Counter till. Hand-indexed for the same reason as New order: the walk
     // above only sees `.tabs [data-tab]` buttons and the till's rail row
-    // deliberately has no data-tab (it opens its own PWA in a new tab, so there
-    // is no section here to switch to). The launcher pass at (2) below would
+    // deliberately has no data-tab (it opens its own PWA — a new tab from a
+    // browser, this window from the installed app; either way there is no
+    // section here to switch to). The launcher pass at (2) below would
     // not catch it either — that one only scans `.tabs-popover`, and this row
     // sits at the rail's top level beside Sales.
     // Gated on the pair the till actually needs: the cap that opens the screen
@@ -1801,7 +1802,7 @@ async function loadIntegrationsStatus() {
   function go(it) {
     if (!it) return;
     close();
-    if (it.openUrl) { window.open(it.openUrl, '_blank', 'noopener'); return; }
+    if (it.openUrl) { openAppPage(it.openUrl); return; }
     // Rail-less sub-page (1e above) — its opener owns the whole takeover dance.
     if (it.ordNew) { if (typeof ordNewOpen === 'function') ordNewOpen(); return; }
     // Live records → open the matching editor / detail drawer.
