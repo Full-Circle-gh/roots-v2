@@ -366,5 +366,90 @@ check('one predicate, two readers — the list and the save cannot disagree', ()
     'the per-type tests are back inside the filter, where nothing else can ask them');
 });
 
+// ── 8. The badge speaks for one surface and names it ────────────────────
+section('The badge, and the publish control it never had');
+
+check('nothing on the page calls this product a draft any more', () => {
+  // "Draft · 草稿" claims nobody can see the product. A shop listing can have it
+  // on a counter menu while is_published is 0 — the two gates are separate by
+  // ruling (§42) — so the word was wrong on exactly the products it mattered on.
+  const code = SRC.replace(/\/\/[^\n]*/g, '');   // the decision is recorded in comments
+  assert.ok(!/'草稿'/.test(code), "the Draft badge is back somewhere in the page's code");
+  assert.ok(/cuT\('Hidden', '未上架'\)/.test(code),
+    "the catalogue's own pair for this flag is not being used");
+});
+
+check('the online-store pill says WHICH surface, in live strings only', () => {
+  const b = anchored('peRenderBadges');
+  assert.ok(/_peBadgePair\('Online store', '线上商城'/.test(b),
+    'the pill does not name the surface it speaks for');
+  assert.ok(/'Live' : 'Hidden'/.test(b) && /'已上架' : '未上架'/.test(b),
+    'the state is not the catalogue pair');
+  // 已上架线上商城 would be a phrase MINTED by sticking two live terms together.
+  // The middot joins them instead, which is what 09-products.js already does.
+  assert.ok(!/已上架线上商城|未上架线上商城|已下架线上商城/.test(SRC),
+    'a compound Chinese phrase was minted out of two live terms — join them with · instead');
+});
+
+check('the badge is a control, and it publishes the whole variant family', () => {
+  assert.ok(/<button type="button" id="pe-badge"[^>]*onclick="peTogglePublish\(\)"/.test(SRC),
+    'the badge is not pressable — the editor still has no way to publish');
+  const t = anchored('peTogglePublish');
+  assert.ok(/peFamilyIds\(\)/.test(t), 'publishing one size leaves its siblings behind');
+  const f = anchored('peFamilyIds');
+  assert.ok(/variant_group_id/.test(f), 'the family is not resolved by variant group');
+  assert.ok(/is_published: val/.test(t), 'the toggle does not write the flag the storefront filters on');
+});
+
+check('publishing saves first, and abandons the publish if that save failed', () => {
+  const t = anchored('peTogglePublish');
+  assert.ok(/turningOn && peIsDirty\(\)/.test(t),
+    'publishing with unsaved edits puts the LAST SAVED page in front of customers');
+  assert.ok(/const saved = await paSaveEdit\(\);\s*\n\s*if \(!saved\) return;/.test(t),
+    'the publish goes ahead on a failed save');
+  assert.ok(t.indexOf('turningOn &&') > 0 && /turningOn && peIsDirty/.test(t),
+    'hiding a page needs no save — taking it down never shows the wrong one');
+});
+
+check('a failed publish puts the switch back rather than lying', () => {
+  const t = anchored('peTogglePublish');
+  assert.ok(/apply\(val \? 0 : 1\)/.test(t), 'a failed PATCH leaves the pill claiming the wrong state');
+  assert.ok(/peAuthBail\(\)/.test(t), 'a lost session during publish is not handled');
+});
+
+check('the QR pill reports and never pretends to be a control', () => {
+  const b = anchored('peRenderBadges');
+  assert.ok(/_peBadgePair\('QR menu', '二维码菜单'/.test(b),
+    "the second pill does not use this page's own QR-menu pair");
+  assert.ok(/tenant_has_shops/.test(b),
+    'a business with no shops still gets a "QR menu 0" on every product');
+  assert.ok(/filter\(x => x\.reachable\)/.test(b),
+    'a listing at a switched-off shop is counted as somewhere a customer can see it');
+  assert.ok(/<span id="pe-shops-badge"/.test(SRC) && !/id="pe-shops-badge"[^>]*onclick/.test(SRC),
+    'the QR pill is clickable — adding a product to a menu is the shop screen\'s job');
+});
+
+check('the editor asks the shops route and never names the table', () => {
+  assert.ok(/\/api\/retail-admin\/products\/' \+ id \+ '\/shops'/.test(anchored('peLoadShopListings')),
+    'peLoadShopListings does not call the route');
+  // scripts/test_shop_listings.js walks public/ for this name. A reader here
+  // would have widened a containment guard that is deliberately narrow.
+  assert.ok(!/shop_listings/.test(SRC),
+    'the editor names shop_listings — that widens the containment allowlist for nothing');
+});
+
+check('a slow answer for a product you already switched away from is dropped', () => {
+  const b = anchored('peLoadShopListings');
+  assert.ok(/_peShopsFor !== id/.test(b),
+    'an in-flight fetch can paint the previous product\'s shop count onto this one');
+});
+
+check('the tooltip is repainted when the language changes', () => {
+  // It is the one bilingual string on the badge that lives in an attribute,
+  // which the text-node rewriter cannot reach.
+  assert.ok(/typeof peRenderBadges === 'function'\) peRenderBadges\(\)/.test(SRC),
+    'switching language leaves the badge tooltip in the old one');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

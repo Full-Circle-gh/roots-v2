@@ -411,5 +411,83 @@ router.get('/api/retail-admin/shops/:id/qr.png', requireRetailAdmin, (req, res) 
   res.send(png);
 });
 
+// ─── Which shop menus carry one product ─────────────────────────────────
+//
+// THE QUESTION THE PRODUCT PAGE EDITOR COULD NOT ASK. Every route above is
+// shop-first — give me a shop, here are its products — because that is how the
+// menu is composed. The editor arrives from the other side, holding one product
+// and needing to know where a customer can already see it, and answering that
+// by walking every shop's listings is N requests to count to three.
+//
+// IT LIVES IN THIS FILE ON PURPOSE. shop_listings is read here and in the
+// public menu and nowhere else, a containment scripts/test_shop_listings.js
+// holds by walking routes/, lib/, middleware/ and public/ for the table's name.
+// A reader in the editor's own file would have widened that allowlist; a reader
+// here widens nothing. The editor fetches this route and never names the table.
+//
+// IT ANSWERS FOR THE WHOLE VARIANT FAMILY, because the menu does. The QR page
+// collapses siblings into one card (routes/shop-menu.js, §129), so a 250g jar
+// listed at a shop puts the family on that menu — and the editor, which also
+// collapses variants in its switcher, would otherwise report "on no menu" while
+// standing on the 500g of something a customer is looking at.
+//
+// tenant_has_shops is a separate fact from an empty list, and both are said.
+// No shops at all means the module was never set up and the editor should not
+// draw the count; shops that exist but do not carry this product is a zero
+// worth showing, and is exactly the state that made a Draft badge confusing.
+router.get('/api/retail-admin/products/:id/shops', requireRetailAdmin, (req, res) => {
+  const id = intParam(req.params.id);
+  if (!id) return bad(res, 404, 'not_found');
+  const product = tdb().prepare(
+    'SELECT id, variant_group_id FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1'
+  ).get(id);
+  if (!product) return bad(res, 404, 'not_found');
+
+  const family = product.variant_group_id
+    ? tdb().prepare(
+        'SELECT id FROM store_products WHERE variant_group_id = ? AND COALESCE(is_active, 1) = 1'
+      ).all(product.variant_group_id).map(r => r.id)
+    : [id];
+  const ids = family.length ? family : [id];
+  const ph = ids.map(() => '?').join(',');
+
+  const tenantHasShops = tdb().prepare('SELECT COUNT(*) AS n FROM shops').get().n > 0;
+  const rows = tdb().prepare(`
+    SELECT s.id AS shop_id, s.public_code,
+           s.display_name_en, s.display_name_cn,
+           s.is_active AS shop_is_active,
+           l.name_en AS location_name_en, l.name_cn AS location_name_cn,
+           COALESCE(l.is_active, 1) AS location_is_active,
+           MAX(CASE WHEN sl.store_product_id = ? THEN 1 ELSE 0 END) AS lists_this_product,
+           MAX(sl.is_available) AS is_available
+      FROM shop_listings sl
+      JOIN shops s         ON s.id = sl.shop_id
+      JOIN retail_stores l ON l.id = s.location_id
+     WHERE sl.store_product_id IN (${ph})
+     GROUP BY s.id
+     ORDER BY l.sort_order ASC, s.id ASC
+  `).all(id, ...ids);
+
+  ok(res, {
+    tenant_has_shops: tenantHasShops,
+    // A scan reaches the menu only when the shop AND its location are both on —
+    // the /s/:shopCode page answers its empty page otherwise — so "a customer
+    // can see this" is not the same count as "a listing exists".
+    shops: rows.map(r => ({
+      shop_id: r.shop_id,
+      public_code: r.public_code,
+      display_name_en: r.display_name_en,
+      display_name_cn: r.display_name_cn,
+      location_name_en: r.location_name_en,
+      location_name_cn: r.location_name_cn,
+      reachable: !!(r.shop_is_active && r.location_is_active),
+      // false when only a SIBLING size is listed here — the family is on this
+      // menu, this exact row is not, and the two are different answers.
+      lists_this_product: !!r.lists_this_product,
+      is_available: !!r.is_available,
+    })),
+  });
+});
+
 module.exports = router;
 module.exports.FULFILMENT_MODES = FULFILMENT_MODES;

@@ -69,6 +69,14 @@ const BULK_IDS = Array.from({ length: BULK_N }, (_, i) => BULK_FROM + i);
 // catalogue that means the empty string. It has to sort by the name the picker
 // prints, not sit in a nameless block at the head of the list.
 const P_CN = 9990;
+// A variant family: two sizes of one product, sharing a group. ONE of them is
+// listed at shop A. The QR menu collapses siblings into a single card (§129),
+// so the family is on that menu — and the product editor, which collapses them
+// the same way, has to be told so while standing on the size that is NOT listed.
+const V1 = 9995, V2 = 9996, VGROUP = 9995;
+// A product with no listing anywhere, to tell "this tenant has no shops" apart
+// from "this tenant has shops and none of them carry this".
+const P_UNLISTED = 9997;
 
 let failures = 0;
 function check(label, fn) {
@@ -85,6 +93,7 @@ function cleanup() {
   db.prepare('DELETE FROM shops WHERE location_id IN (?, ?)').run(LOC_A, LOC_B);
   db.prepare('DELETE FROM store_products WHERE id IN (?, ?, ?, ?)').run(P1, P2, P3, P4);
   db.prepare(`DELETE FROM store_products WHERE id IN (${BULK_IDS.join(',')}, ${P_CN})`).run();
+  db.prepare('DELETE FROM store_products WHERE id IN (?, ?, ?)').run(V1, V2, P_UNLISTED);
   db.prepare('DELETE FROM retail_stores WHERE id IN (?, ?)').run(LOC_A, LOC_B);
 }
 cleanup();
@@ -102,6 +111,12 @@ db.prepare(`INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, i
 // the candidate search has to reach. Never listed, so it is always a candidate.
 db.prepare(`INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, is_active, is_published, keywords_en, tagline_en)
             VALUES (?, 'Fixture Peanut Butter Duo', '测试花生酱双拼', '__T-9914', 68, 1, 1, 'spreadable', 'Fixture slogan')`).run(P4);
+db.prepare(`INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, is_active, is_published, variant_group_id, variant_label)
+            VALUES (?, 'Fixture jar', '测试罐装', '__T-9995', 30, 1, 1, ?, '250g')`).run(V1, VGROUP);
+db.prepare(`INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, is_active, is_published, variant_group_id, variant_label)
+            VALUES (?, 'Fixture jar', '测试罐装', '__T-9996', 50, 1, 0, ?, '500g')`).run(V2, VGROUP);
+db.prepare(`INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, is_active, is_published)
+            VALUES (?, 'Fixture never listed', '测试从未上架', '__T-9997', 12, 1, 1)`).run(P_UNLISTED);
 {
   const ins = db.prepare(`INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, is_active, is_published)
                           VALUES (?, ?, ?, ?, ?, 1, 1)`);
@@ -351,6 +366,65 @@ function call(method, url, body) {
       assert.strictEqual(r.status, 404);
       r = await call('POST', `/api/retail-admin/shops/${shopA.id}/listings`, { store_product_id: P1 });
       assert.strictEqual(r.status, 201);
+    });
+
+    console.log('\nWhich menus carry one product — the question from the other side');
+    await checkAsync('a product listed nowhere comes back empty, and says shops exist', async () => {
+      const r = await call('GET', `/api/retail-admin/products/${P_UNLISTED}/shops`);
+      assert.strictEqual(r.status, 200);
+      assert.deepStrictEqual(r.json.data.shops, [], 'a product on no menu must report no menus');
+      // The distinction the editor draws its pill on: an empty list from a
+      // tenant that HAS shops is information (nobody put this on a counter);
+      // an empty list from one that never set the module up is noise.
+      assert.strictEqual(r.json.data.tenant_has_shops, true);
+    });
+    await checkAsync('a listed product names the shop that carries it', async () => {
+      await call('POST', `/api/retail-admin/shops/${shopA.id}/listings`, { store_product_id: V1 });
+      const r = await call('GET', `/api/retail-admin/products/${V1}/shops`);
+      assert.strictEqual(r.status, 200);
+      const rows = r.json.data.shops;
+      assert.strictEqual(rows.length, 1, 'expected exactly the one shop that lists it');
+      assert.strictEqual(rows[0].shop_id, shopA.id);
+      assert.strictEqual(rows[0].lists_this_product, true);
+      assert.strictEqual(rows[0].reachable, true, 'an active shop at an active location is reachable');
+    });
+    await checkAsync('the SIBLING size is on that menu too, and knows it is the sibling', async () => {
+      // V2 has no listing of its own. The menu collapses the family into one
+      // card, so a customer at shop A is looking at this product — and an
+      // editor answering "on no menu" here would be wrong about the shelf.
+      const r = await call('GET', `/api/retail-admin/products/${V2}/shops`);
+      assert.strictEqual(r.status, 200);
+      const rows = r.json.data.shops;
+      assert.strictEqual(rows.length, 1, 'the family is on this menu — the sibling must report it');
+      assert.strictEqual(rows[0].shop_id, shopA.id);
+      assert.strictEqual(rows[0].lists_this_product, false,
+        'THIS row is not listed; only its sibling is, and the two are different answers');
+    });
+    await checkAsync('a shop switched off is returned but not reachable', async () => {
+      await call('PATCH', `/api/retail-admin/shops/${shopA.id}`, { is_active: 0 });
+      const r = await call('GET', `/api/retail-admin/products/${V1}/shops`);
+      assert.strictEqual(r.json.data.shops.length, 1, 'the listing still exists and is still reported');
+      assert.strictEqual(r.json.data.shops[0].reachable, false,
+        'a scan of a switched-off shop reaches the empty page — it must not be counted as live');
+      await call('PATCH', `/api/retail-admin/shops/${shopA.id}`, { is_active: 1 });
+    });
+    await checkAsync('an archived or unknown product is 404, not an empty list', async () => {
+      let r = await call('GET', `/api/retail-admin/products/${P3}/shops`);   // is_active = 0
+      assert.strictEqual(r.status, 404, 'an archived product must not answer as "on no menu"');
+      r = await call('GET', '/api/retail-admin/products/99999999/shops');
+      assert.strictEqual(r.status, 404);
+      r = await call('GET', '/api/retail-admin/products/not-a-number/shops');
+      assert.strictEqual(r.status, 404);
+    });
+    await checkAsync('reading it needs no stores:edit — it reports, it never writes', async () => {
+      CAPS = new Set(['stores:view']);
+      const r = await call('GET', `/api/retail-admin/products/${V1}/shops`);
+      assert.strictEqual(r.status, 200, 'a read-only operator must still see where a product is');
+      CAPS = null;
+      // Left as it was found, so the containment check below is unaffected.
+      const lid = (await call('GET', `/api/retail-admin/shops/${shopA.id}`)).json.data.listings
+        .find(l => l.store_product_id === V1).id;
+      await call('DELETE', `/api/retail-admin/shops/${shopA.id}/listings/${lid}`);
     });
 
     console.log('\nThe gate — writes need stores:edit for a backend operator');

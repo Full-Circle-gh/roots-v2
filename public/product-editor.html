@@ -485,6 +485,22 @@
   }
   .pe-badge.pub { background: var(--td-sage-tint); color: var(--td-sage-ink); border-color: var(--td-sage); }
   .pe-badge.draft { background: var(--td-amber-tint); color: var(--td-amber-ink); border-color: var(--td-amber); }
+  /* The online-store pill is a BUTTON now (it publishes), so it has to drop the
+     button defaults the span never had. The QR pill beside it is flat and
+     unpressable: it reports where the product already is and is not a control —
+     nothing here can add a product to a shop menu, that is the shop screen. */
+  button.pe-badge {
+    font: inherit; font-size: 10px; font-weight: 500; line-height: 1.6;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+    transition: border-color .12s ease, background .12s ease;
+  }
+  button.pe-badge:hover { border-color: var(--line-strong); }
+  button.pe-badge:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--ring); }
+  button.pe-badge[disabled] { cursor: default; opacity: .55; }
+  .pe-badge.pe-badge-flat { display: inline-flex; align-items: center; gap: 6px; cursor: default; }
+  /* The key reads as a quiet label, the value as the answer. */
+  .pe-badge .pe-badge-k { opacity: .72; font-weight: 400; }
+  .pe-badge .pe-badge-v { font-weight: 500; }
   /* Left-pane Product picker (the in-editor "which product" section). */
   .pe-prod-search {
     width: 100%; margin: 0 0 8px;
@@ -1482,7 +1498,8 @@
         <span id="pe-name">Loading… · 加载中…</span>
         <svg class="pe-switcher-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
-      <span id="pe-badge" class="pe-badge" style="display:none"></span>
+      <button type="button" id="pe-badge" class="pe-badge" style="display:none" onclick="peTogglePublish()"></button>
+      <span id="pe-shops-badge" class="pe-badge pe-badge-flat" style="display:none"></span>
       <div id="pe-switcher-panel" class="pe-switcher-panel" hidden>
         <input id="pe-switcher-search" class="pe-switcher-search" type="text" oninput="peRenderSwitcherList()" onkeydown="peSwitcherKeydown(event)" autocomplete="off" spellcheck="false">
         <div id="pe-switcher-list" class="pe-switcher-list" data-no-i18n></div>
@@ -2353,7 +2370,7 @@ function peRenderPickerList() {
     const name = escapeHtml(p.name_en || '—') + (p.name_cn ? ' <small>' + escapeHtml(p.name_cn) + '</small>' : '');
     const badge = pub
       ? '<span class="pe-switcher-item-badge pub">' + cuT('Live', '已上架') + '</span>'
-      : '<span class="pe-switcher-item-badge">' + cuT('Draft', '草稿') + '</span>';
+      : '<span class="pe-switcher-item-badge">' + cuT('Hidden', '未上架') + '</span>';
     return '<button type="button" class="pe-switcher-item" data-id="' + p.id +
       '" onclick="peLeaveIntentionally();location.href=\'/product-editor?id=' + p.id + '\'">' +
       '<span class="pe-switcher-item-name">' + name + '</span>' + badge + '</button>';
@@ -2409,7 +2426,7 @@ function peRenderProdPicker() {
       (p.name_cn ? ' <small>' + escapeHtml(p.name_cn) + '</small>' : '') + vcount;
     const badge = pub
       ? '<span class="pe-switcher-item-badge pub">' + cuT('Live', '已上架') + '</span>'
-      : '<span class="pe-switcher-item-badge">' + cuT('Draft', '草稿') + '</span>';
+      : '<span class="pe-switcher-item-badge">' + cuT('Hidden', '未上架') + '</span>';
     return '<button type="button" class="pe-switcher-item' + (cur ? ' current' : '') +
       '" data-id="' + p.id + '" onclick="peSwitchProduct(' + p.id + ')">' +
       '<span class="pe-switcher-item-name">' + name + '</span>' + badge + '</button>';
@@ -2496,7 +2513,7 @@ function peRenderSwitcherList() {
       (p.name_cn ? ' <small>' + escapeHtml(p.name_cn) + '</small>' : '') + vcount;
     const badge = pub
       ? '<span class="pe-switcher-item-badge pub">' + cuT('Live', '已上架') + '</span>'
-      : '<span class="pe-switcher-item-badge">' + cuT('Draft', '草稿') + '</span>';
+      : '<span class="pe-switcher-item-badge">' + cuT('Hidden', '未上架') + '</span>';
     return '<button type="button" class="pe-switcher-item' + (cur ? ' current' : '') +
       '" data-idx="' + i + '" data-id="' + p.id + '" onclick="peSwitchProduct(' + p.id + ')">' +
       '<span class="pe-switcher-item-name">' + name + '</span>' + badge + '</button>';
@@ -2804,10 +2821,8 @@ function peMount(p) {
   PA_CURRENT = p;
   document.title = (p.name_en || 'Product') + ' · Editor · Roots';
   document.getElementById('pe-name').textContent = (p.name_en || '—') + (p.name_cn ? ' · ' + p.name_cn : '');
-  const badge = document.getElementById('pe-badge');
-  badge.style.display = '';
-  if (p.is_published === 1) { badge.textContent = '✓ Published · 已上架'; badge.className = 'pe-badge pub'; }
-  else { badge.textContent = 'Draft · 草稿'; badge.className = 'pe-badge draft'; }
+  peRenderBadges();
+  peLoadShopListings(p.id);   // async — repaints the QR pill when it arrives
 
   document.getElementById('pa-edit-keywords-en').value = p.keywords_en || '';
   document.getElementById('pa-edit-keywords-cn').value = p.keywords_cn || '';
@@ -2890,6 +2905,145 @@ function peMount(p) {
   // already carries both EN + CN descriptions, compose the sections off that
   // copy automatically (fire-and-forget — it leaves the page dirty for review).
   peAutoFillFromKitchen(p);
+}
+
+// ── WHERE THIS PRODUCT IS, AND THE ONE OF THOSE PLACES THIS PAGE CAN CHANGE ──
+//
+// THE BADGE SAID "Draft · 草稿" ABOUT A PRODUCT SELLING AT A COUNTER. It was
+// reading is_published, which gates the ONLINE STORE and nothing else. The QR
+// menu gates on a shop listing instead — deliberately, ruled 2026-09-06, §42
+// and the note at routes/shop-menu.js's photo route: a product on a counter
+// menu must not be blocked because nobody also chose to sell it on the website.
+// Both facts were true at once and the badge printed one of them in a word that
+// means "nobody can see this". So it names the surface it speaks for now, and
+// the other surface gets a pill of its own.
+//
+// THE FIRST PILL IS ALSO THE MISSING CONTROL. There was no way to publish from
+// this editor at all — you composed the page here and then went back to the
+// catalogue to make it real. It flips the same is_published the catalogue's
+// shop switch flips, across the whole variant family, exactly as
+// public/retail-admin/09-products.js paToggleShop does: a 250g live and a 500g
+// hidden is a shelf with a hole in it, and neither screen should be able to
+// make one by accident.
+//
+// THE SECOND PILL IS NOT A CONTROL. Adding a product to a shop menu is the shop
+// screen's job and prices and fulfilment mode are decided there; this reports.
+// It is drawn only for a tenant that HAS shops — a zero on every product of a
+// business that never set the module up is noise, not information.
+let PE_SHOPS = null;          // { tenant_has_shops, shops:[] } once fetched, else null
+let _peShopsFor = null;       // the product id PE_SHOPS answers for
+let _pePublishBusy = false;
+
+// Every row this product publishes with. A lone product is its own family.
+function peFamilyIds() {
+  if (!PA_CURRENT) return [];
+  if (!PA_CURRENT.variant_group_id) return [PA_CURRENT.id];
+  const ids = PA_ALL_PRODUCTS
+    .filter(x => x.variant_group_id === PA_CURRENT.variant_group_id)
+    .map(x => x.id);
+  return ids.length ? ids : [PA_CURRENT.id];
+}
+// Bilingual pill content. data-no-i18n keeps the text-node splitter off it and
+// the data-lang-block pair does the switching, which is how every other fused
+// label on this page stays out of the splitter's way.
+function _peBadgePair(kEn, kCn, vEn, vCn) {
+  const pair = (en, cn) => `<span data-lang-block="en">${escapeHtml(en)}</span><span data-lang-block="cn">${escapeHtml(cn)}</span>`;
+  return `<span class="pe-badge-k">${pair(kEn, kCn)}</span><span class="pe-badge-v">${pair(vEn, vCn)}</span>`;
+}
+function peRenderBadges() {
+  const badge = document.getElementById('pe-badge');
+  if (!badge || !PA_CURRENT) return;
+  const pub = PA_CURRENT.is_published === 1;
+  badge.style.display = '';
+  badge.disabled = _pePublishBusy;
+  badge.className = 'pe-badge ' + (pub ? 'pub' : 'draft');
+  badge.setAttribute('aria-pressed', pub ? 'true' : 'false');
+  // "Online store · 线上商城" is the settings screen's own name for this
+  // surface; "Live/已上架" and "Hidden/未上架" are the catalogue's own pair for
+  // this exact flag. Nothing here is composed.
+  badge.innerHTML = _peBadgePair('Online store', '线上商城', pub ? 'Live' : 'Hidden', pub ? '已上架' : '未上架');
+  badge.title = cuT(
+    pub ? 'In the online store — click to hide' : 'Hidden from the online store — click to publish',
+    pub ? '线上商城 · 已上架 — 点按下架'          : '线上商城 · 未上架 — 点按上架');
+
+  const shopsEl = document.getElementById('pe-shops-badge');
+  if (!shopsEl) return;
+  // Undrawn until the fetch lands, and for a tenant with no shops at all.
+  if (!PE_SHOPS || !PE_SHOPS.tenant_has_shops) { shopsEl.style.display = 'none'; return; }
+  // A listing only reaches a customer when the shop and its location are both
+  // on, which is what the menu route itself requires.
+  const n = (PE_SHOPS.shops || []).filter(x => x.reachable).length;
+  shopsEl.style.display = '';
+  // "QR menu · 二维码菜单" is this page's own pair, from the per-block channel
+  // switch. The count is a numeral and needs no label on either side.
+  shopsEl.innerHTML = _peBadgePair('QR menu', '二维码菜单', String(n), String(n));
+  shopsEl.title = (PE_SHOPS.shops || [])
+    .filter(x => x.reachable)
+    .map(x => x.display_name_en || x.location_name_en || x.public_code)
+    .join(', ');
+}
+async function peLoadShopListings(id) {
+  if (_peShopsFor === id && PE_SHOPS) { peRenderBadges(); return; }
+  PE_SHOPS = null; _peShopsFor = id;
+  peRenderBadges();
+  try {
+    const r = await fetch('/api/retail-admin/products/' + id + '/shops',
+      { credentials: 'same-origin', cache: 'no-store' });
+    if (!r.ok) return;                       // reported by the pill staying away
+    const j = await r.json().catch(() => ({}));
+    if (!j || !j.success || _peShopsFor !== id) return;   // a switch overtook us
+    PE_SHOPS = j.data;
+    peRenderBadges();
+  } catch (e) { /* the pill simply does not appear — it is a report, not a gate */ }
+}
+// Publish or hide the whole variant family, the flag the storefront filters on.
+async function peTogglePublish() {
+  if (!PA_CURRENT || _pePublishBusy) return;
+  const turningOn = PA_CURRENT.is_published !== 1;
+  // PUBLISHING MEANS WHAT YOU ARE LOOKING AT. is_published is a flag, not
+  // content, so a publish with unsaved edits would put the LAST SAVED page in
+  // front of customers while this screen shows a newer one. Save first, and
+  // abandon the publish if that save fails — paSaveEdit has already said why.
+  // Hiding needs no such care: taking a page down never shows the wrong one.
+  if (turningOn && peIsDirty()) {
+    const saved = await paSaveEdit();
+    if (!saved) return;
+  }
+  const ids = peFamilyIds();
+  const val = turningOn ? 1 : 0;
+  const apply = (v) => {
+    PA_CURRENT.is_published = v;
+    ids.forEach(pid => {
+      const i = PA_ALL_PRODUCTS.findIndex(x => x.id === pid);
+      if (i >= 0) PA_ALL_PRODUCTS[i].is_published = v;
+    });
+    peRenderBadges();
+    peRenderProdPicker();
+    if (!document.getElementById('pe-switcher-panel').hidden) peRenderSwitcherList();
+  };
+  _pePublishBusy = true;
+  apply(val);                     // optimistic, like the catalogue's own switch
+  try {
+    for (const pid of ids) {
+      const r = await fetch('/api/retail-admin/products/' + pid, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ is_published: val }),
+      });
+      if (r.status === 401 || r.status === 403) { peAuthBail(); return; }
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.success) throw new Error(j.error || 'publish_failed');
+    }
+    toast(cuT(val ? 'In the online store ✓' : 'Hidden from the online store ✓',
+              val ? '线上商城 · 已上架 ✓'      : '线上商城 · 已下架 ✓'));
+  } catch (e) {
+    apply(val ? 0 : 1);           // the switch must never lie about the live state
+    toast(cuT('Could not update availability — ', '无法更新上架状态 — ') + (e.message || e), 'err');
+  } finally {
+    _pePublishBusy = false;
+    peRenderBadges();
+  }
 }
 
 // Switch the inspector between the selected-block form and page-level
@@ -4581,6 +4735,9 @@ window.addEventListener('resize', () => {
     processSubtree(document.body);
     try { localStorage.setItem(LANG_KEY, lang); } catch {}
     updateBtn();
+    // The badges carry one cuT() string in a title attribute, which no amount of
+    // text-node rewriting can reach.
+    try { if (typeof peRenderBadges === 'function') peRenderBadges(); } catch (e) {}
   }
   function updateBtn() {
     document.querySelectorAll('#lang-toggle button[data-lang]').forEach(b =>
