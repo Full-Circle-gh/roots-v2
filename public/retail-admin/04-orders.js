@@ -2649,6 +2649,51 @@ function rerouteShortNote(o) {
     + `<div style="display:flex; flex-direction:column; gap:7px;">${rows}</div>`
     + `</div>`;
 }
+/* §138 — WHAT THIS CUSTOMER WAS TOLD AT CHECKOUT, for the two notices that
+   carry no date. The dated pair is already on the order as promised_ship_date /
+   promised_delivery_date and prints in the drawer's Arrives line; these two had
+   nowhere to be written until now, so an order could not afterwards say whether
+   it had been sold as a pre-order or moved shop because one was shut.
+
+   Same shape as rerouteShortNote above and drawn beside it, because the question
+   is the same one: why does this order look the way it does. */
+function preorderSoldNote(o) {
+  let pids = [];
+  // A column we cannot parse is the same as an order that was never told
+  // anything: this note draws nothing and the rest of the drawer is unaffected.
+  // Failing loudly here would cost the whole drawer for a decorative line.
+  try { pids = JSON.parse(o.preorder_pids || '[]') || []; } catch (e) { pids = []; }
+  if (!pids.length) return '';
+  const byId = new Map((o.items || []).map(it => [it.product_id, it]));
+  const rows = pids.map(pid => {
+    const it = byId.get(pid);
+    const nm = it ? orderItemNames(it).primary : ('#' + pid);
+    return `<div style="display:flex; align-items:center; gap:8px; min-width:0;">`
+      + (it ? itemThumb(it) : `<span class="oi-thumb is-empty" aria-hidden="true"></span>`)
+      + `<span style="min-width:0;"><span style="display:block; font-weight:600; font-size:13px; color: var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(nm)}</span>`
+      + (it ? itemSkuHtml(it) : '')
+      + `</span></div>`;
+  }).join('');
+  // `Pre-order · 预订` is the checkout notice's OWN kicker pair
+  // (computePreorderNotice in routes/retail.js), lifted verbatim — the drawer and
+  // the screen the customer read name it the same way.
+  return `<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--line-soft);">`
+    + `<div style="display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; color: var(--text-2); margin-bottom:8px;">`
+    +   `<span style="width:6px; height:6px; border-radius:50%; background: var(--text-3); flex:none;"></span>`
+    +   `${cuT('Pre-order', '预订')}</div>`
+    + `<div style="display:flex; flex-direction:column; gap:7px;">${rows}</div>`
+    + `</div>`;
+}
+// The shop this address would have been served by if nothing were closed. Set
+// only when it differs from the store that took the order — so the presence of
+// the value IS the fact, and there is nothing to compare here.
+function movedFromNote(o) {
+  const code = String(o.moved_from_store || '').trim();
+  if (!code) return '';
+  return `<div style="margin-top:10px; font-size:12px; color: var(--text-2);">`
+    + `${cuT('Rerouted, shop was closed', '改派 · 门店已关闭')} · `
+    + `<b>${escapeHtml(code)}</b></div>`;
+}
 // Warning line for orders whose shipping store can't currently cover every item
 // (set at checkout on out-of-city / scheduled-later orders that skipped the
 // stock gate — see fulfillment_short_pids). Names the short items so the office
@@ -6586,6 +6631,8 @@ function renderOpenOrder(o) {
               <div class="val"><b>${escapeHtml(o.store_name_en || o.store_code)}</b></div>
               <div class="sub">${escapeHtml(o.store_name_cn || '')}${routingNote(o.routing_reason) ? ' · ' + routingNote(o.routing_reason) : ''}${(o.channel && o.channel.toLowerCase() !== 'wechat') ? ' · ' + escapeHtml(o.channel) : ''}</div>
               ${rerouteShortNote(o)}
+              ${preorderSoldNote(o)}
+              ${movedFromNote(o)}
               ${o.routed_by_distance === 0 ? `<div class="sub" style="color: var(--warn); font-weight: 600;">⚠ ${cuT('routed by area — address not locatable, verify store','按区域派单 · 地址无法定位,请核对门店')}</div>` : ''}
             </div>` : ''}
           </div>

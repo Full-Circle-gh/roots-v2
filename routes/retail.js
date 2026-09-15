@@ -12031,6 +12031,56 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     } catch (e) { console.warn('[reroute short pids]', e.message); }
   }
 
+  /* §138 — WHAT THE CUSTOMER WAS TOLD, for the two notices that had nowhere to
+     be written. The checkout shows four, and the two DATED ones already land on
+     the order: computeBatchNotice and computeLocalFreshNotice stamp
+     promised_ship_date / promised_delivery_date a few lines above. The two
+     without a date were computed for the quote, shown, and dropped — so an
+     order could not afterwards say whether it had been sold as a pre-order, or
+     whether it had moved shop because one was shut.
+
+     RECOMPUTED HERE, NOT ECHOED BY THE CLIENT. A record meant to settle a
+     dispute is worth nothing if the other party supplied it. These run off the
+     same locals the order itself was built on, microseconds after the write.
+
+     BEST-EFFORT, OUTSIDE THE ORDER TRANSACTION, and the whole block is wrapped:
+     this is a record ABOUT an order and must never be able to cost us the
+     order. Same discipline as the two stamps above and the reroute pids below. */
+  try {
+    const preorderNotice = computePreorderNotice(
+      zone, address, noticeProductIds(body.items), deliverySlotId, slotKind,
+    );
+    const preorderPids = preorderNotice
+      ? (preorderNotice.items || []).map((i) => i.id).filter(Boolean)
+      : [];
+    if (preorderPids.length) {
+      tdb().prepare('UPDATE retail_orders SET preorder_pids = ? WHERE id = ?')
+        .run(JSON.stringify(preorderPids), orderId);
+    }
+  } catch (e) { console.warn('[preorder pids]', e.message); }
+
+  /* THE MOVE IS RECORDED AS A FACT, NOT AS THE NOTICE. computeStoreMoveNotice
+     returns null when the operator has not written the copy for it
+     (storefront_config `notice.store_move.*`) — correct for a banner, and wrong
+     for an audit trail, because the order moved either way and the silence was
+     ours. So this asks routeIgnoringClosures directly, which is the same
+     question the notice asks first, and writes the answer when it differs from
+     the store that actually took the order.
+
+     Guangzhou-only, matching the notice's own gate: outside it, routing is not
+     a nearest-shop decision and "would have been" names nothing. */
+  if (!isPickup && fulfillingStore) {
+    try {
+      if (inventory.isGuangzhouAddress(address) && !inventory.isOptInSameDayDistrict(address)) {
+        const wouldBe = await inventory.routeIgnoringClosures(address);
+        if (wouldBe && wouldBe.code && wouldBe.code !== fulfillingStore.code) {
+          tdb().prepare('UPDATE retail_orders SET moved_from_store = ? WHERE id = ?')
+            .run(wouldBe.code, orderId);
+        }
+      }
+    } catch (e) { console.warn('[moved from store]', e.message); }
+  }
+
   // Auto-cancel this customer's now-superseded unpaid orders — the ones whose
   // held stock this new order just took over (same customer, overlapping item,
   // still pending_payment). Frees the redundant holds and reverses any
@@ -25816,6 +25866,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     -- differently from a live ETA (same clock time, different job).
                     o.channel_preorder_at,
                     o.fulfillment_short_pids, o.reroute_short_pids,
+                    o.preorder_pids, o.moved_from_store,
                     (SELECT COUNT(*) FROM retail_order_addons ad
                        WHERE ad.order_id = o.id AND ad.status = 'success') AS addon_count,
                     o.scheduled_for, o.delivery_slot_label, o.delivery_slot_kind,
