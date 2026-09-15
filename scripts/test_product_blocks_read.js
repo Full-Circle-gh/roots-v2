@@ -289,5 +289,59 @@ for (const [label, input] of [
   });
 }
 
+section('A block the office switched off for the counter menu');
+// ONE FLAG, ONE SURFACE. hide_qr is read HERE and nowhere else: the mini app
+// and the web storefront render the same array through their own components
+// and ignore a field they do not know, which is what makes a trim on this page
+// invisible to them. These checks are the whole guarantee — nothing else in
+// the repo notices if the flag starts being honoured (or ignored) elsewhere.
+const HIDDEN = [
+  { type: 'hero_intro', body_en: 'Brewed slowly', body_cn: '慢慢酿' },
+  { type: 'why', rows: [{ claim_en: 'Live cultures' }], hide_qr: true },
+  { type: 'faq', items: [{ q_en: 'How long?', a_en: 'Three weeks.' }] },
+];
+check('it is dropped from the counter menu, and its neighbours are not', () => {
+  assert.deepStrictEqual(R.pageBlocks(HIDDEN).map(b => b.type), ['hero_intro', 'faq'],
+    'hiding one section took another with it, or failed to hide anything');
+});
+check('the same array read as JSON behaves identically', () => {
+  assert.deepStrictEqual(R.pageBlocks(JSON.stringify(HIDDEN)).map(b => b.type),
+    ['hero_intro', 'faq'], 'the flag is honoured for an array and not for the stored string');
+});
+check('an absent flag means shows — no product has to be re-ticked', () => {
+  const plain = [{ type: 'why', rows: [{ claim_en: 'Live cultures' }] }];
+  assert.strictEqual(R.pageBlocks(plain).length, 1,
+    'a catalogue that predates the flag would have gone blank at the counter');
+});
+check('hide_qr: false is not hiding — only a true hides', () => {
+  const off = [{ type: 'why', rows: [{ claim_en: 'Live cultures' }], hide_qr: false }];
+  assert.strictEqual(R.pageBlocks(off).length, 1);
+});
+check('THE WORDS ARE NOT DELETED — the block is untouched in the source', () => {
+  R.pageBlocks(HIDDEN);
+  assert.deepStrictEqual(HIDDEN[1].rows, [{ claim_en: 'Live cultures' }],
+    'reading the page for one surface edited what the office wrote');
+});
+
+section('A hidden nutrition block does not come back out of the column');
+// THE FALLBACK IS THE TRAP. routes/shop-menu.js prints retail_products.nutrition
+// when no nutrition BLOCK said it — and a block just switched off is absent
+// from pageBlocks(), so asking the filtered list would read "no block" and
+// print the very table the office had hidden. hasNutritionBlock answers from
+// the unfiltered source, which is the only reason the switch works on that one
+// block type.
+check('hasNutritionBlock sees a block that pageBlocks has dropped', () => {
+  const nut = [{ type: 'nutrition_facts', basis_en: 'Per 100ml',
+                 rows: [{ label_en: 'Energy', value: '98kJ' }], hide_qr: true }];
+  assert.strictEqual(R.pageBlocks(nut).length, 0, 'the hidden table still rendered');
+  assert.strictEqual(R.hasNutritionBlock(nut), true,
+    'the column fallback would print the table the office just hid');
+});
+check('...and says no when the office wrote no nutrition block at all', () => {
+  assert.strictEqual(R.hasNutritionBlock([{ type: 'why', rows: [] }]), false);
+  assert.strictEqual(R.hasNutritionBlock(null), false);
+  assert.strictEqual(R.hasNutritionBlock('{oops'), false);
+});
+
 console.log(fail ? `\n${fail} check(s) failed\n` : `\nAll ${pass} checks passed\n`);
 process.exit(fail ? 1 : 0);

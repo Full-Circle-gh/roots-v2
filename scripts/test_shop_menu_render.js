@@ -228,6 +228,39 @@ function seed() {
     ] },
     { type: 'notes_callout', text_en: 'Natural separation is normal — stir first.',
       text_cn: '天然分层属正常现象，食用前搅拌。' },
+    /* TWO BLOCKS THE OFFICE SWITCHED OFF FOR THE COUNTER MENU (hide_qr). They
+       are on the latte and not the jar because the latte is the product that
+       also carries a nutrition COLUMN, which is the half of this that is easy
+       to get wrong: dropping a hidden nutrition_facts block leaves the reader
+       looking at a page with no nutrition block on it, and the column fallback
+       would then print the very table the office had just hidden.
+       routes/shop-menu.js asks blockRead.hasNutritionBlock of the UNFILTERED
+       source for exactly this reason. Both halves are asserted below. */
+    /* A BLOCK THE OFFICE SWITCHED OFF FOR THE COUNTER MENU (hide_qr). It sits
+       last so the order check above is unaffected, and it is a pull_quote
+       because the latte already carries a VISIBLE one — a reader that honoured
+       the flag by hiding the wrong quote, or by hiding both, is caught by the
+       quote assertions further down still finding the first one. */
+    { type: 'pull_quote', hide_qr: true,
+      text_en: 'The best thing in the fridge.', text_cn: '冰箱里最好吃的。',
+      who_en: 'A regular', who_cn: '老顾客' },
+  ]);
+  /* THE BUN CARRIES THE OTHER HALF: a nutrition_facts block that is switched
+     off, ON A PRODUCT THAT ALSO HAS A NUTRITION COLUMN. That pairing is the
+     trap. Dropping the hidden block leaves the page with no nutrition block on
+     it, and routes/shop-menu.js prints the column whenever no block said it —
+     so a reader asking the FILTERED list would read "no block" and print the
+     very table the office had just hidden. It asks
+     blockRead.hasNutritionBlock of the unfiltered source instead, and this is
+     the only fixture that notices if that ever changes back.
+
+     It is the bun and not the latte because the latte's column-fed nutrition
+     card is measured by the font-scale probe below; hiding it there would have
+     broken a check about something else entirely. */
+  const BLOCKS_OUT = JSON.stringify([
+    ...JSON.parse(BLOCKS),
+    { type: 'nutrition_facts', hide_qr: true, basis_en: 'per 100 g', basis_cn: '每100克',
+      rows: [{ label_en: 'Energy', label_cn: '能量', value: '612 kcal' }] },
   ]);
   /* THE JAR'S OWN BLOCKS — the legacy `why` shape (rows_en as newline-separated
      text, which older saves use) and a nutrition_facts BLOCK, which is a
@@ -251,7 +284,7 @@ function seed() {
     ],
   });
   prod.run(P_OK, EN_OK, CN_OK, '__R-71', 33, BLOCKS, NUTR, PIXEL);
-  prod.run(P_OUT, EN_OUT, CN_OUT, '__R-72', 18, BLOCKS, NUTR, PIXEL);
+  prod.run(P_OUT, EN_OUT, CN_OUT, '__R-72', 18, BLOCKS_OUT, NUTR, PIXEL);
   // A SECOND CATEGORY AND ENOUGH ROWS THAT THE PAGE ACTUALLY SCROLLS. With the
   // two products above, a phone viewport holds the whole menu and window.scrollY
   // never leaves 0 — on which a rail that scrolls away and a rail that holds
@@ -1028,6 +1061,24 @@ function boxOf(text) {
         ['spec', 'hero', 'why', 'stat', 'ingredients', 'allergens', 'how', 'storage',
          'quote', 'recipe', 'pairings', 'faq', 'notes'],
         `the page re-ordered the office's blocks: ${JSON.stringify(order)}`);
+    });
+
+    await check('a section switched off for the counter menu is not on it', async () => {
+      /* ONE FLAG, ONE SURFACE. The office keeps the words — the block is still
+         in description_blocks, still in its place, still rendered by the mini
+         app and the web storefront — and this page alone skips it. What is
+         asserted is both halves: the hidden quote is gone AND the visible one
+         beside it is untouched, because a reader that hid the whole type would
+         pass a check that only looked for the absent one. */
+      const m = await page.evaluate(() => ({
+        quotes: Array.from(document.querySelectorAll('#dsheetB .pb-qt-p .l-en'))
+          .map(e => e.textContent.trim()),
+        text: document.getElementById('dsheetB').innerText,
+      }));
+      assert.ok(!/best thing in the fridge/i.test(m.text),
+        'a section the office switched off for the counter menu is on it');
+      assert.deepStrictEqual(m.quotes, ['\u201cWe took the junk out.\u201d'],
+        `hiding one quote took the other with it: ${JSON.stringify(m.quotes)}`);
     });
 
     await check('\u00a7132 the highlight phrase is MARKED INLINE, not turned into a kicker', async () => {
@@ -2648,6 +2699,36 @@ function boxOf(text) {
       assert.ok(Math.abs(m.rowR - 23.9) < 0.6,
         `nutrition row value is ${m.rowR}px, want 23.9 (40rpx x 1.15 x .52)`);
       assert.strictEqual(m.band, 1, 'the image band did not render');
+    });
+
+    await check('a HIDDEN nutrition block does not come back out of the column', async () => {
+      /* The bun carries both: a nutrition COLUMN and a nutrition_facts BLOCK
+         the office switched off. The block is skipped, and the column must NOT
+         step into the gap it leaves — that fallback exists for a product whose
+         office never wrote a nutrition block, not for one who wrote it and
+         took it off this page. Getting this wrong prints the exact table the
+         operator hid, which is worse than the feature not existing. */
+      await page.evaluate(() => { const x = document.getElementById('dsheetX'); if (x) x.click(); });
+      await page.waitForTimeout(260);
+      const opened = await page.evaluate((n) => {
+        const card = Array.from(document.querySelectorAll('.it[data-open]'))
+          .find(c => ((c.querySelector('.t .l-en') || {}).textContent || '') === n);
+        if (!card) return false;
+        card.click();
+        return true;
+      }, EN_OUT);
+      assert.ok(opened, 'the sold-out product has no detail page to read');
+      await page.waitForTimeout(320);
+      const m = await page.evaluate(() => ({
+        cards: document.querySelectorAll('#dsheetB .nut').length,
+        text: document.getElementById('dsheetB').innerText,
+      }));
+      assert.strictEqual(m.cards, 0,
+        'the nutrition column printed the table the office had hidden');
+      assert.ok(!/612 kcal/.test(m.text), 'the hidden nutrition rows are on the page');
+      // The rest of the bun's page is untouched — hiding one section is not
+      // hiding the product.
+      assert.ok(/Coconut milk/i.test(m.text), 'hiding nutrition emptied the whole page');
     });
 
     /* SWITCHING LANGUAGE WITH A SHEET OPEN MUST NOT UNLOCK THE MENU. Found
