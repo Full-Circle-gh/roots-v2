@@ -2514,7 +2514,15 @@ function renderCoPreorder(d){
     <div><div class="copo-t">${esc(t||'')}</div><div class="copo-m">${esc(m||'')}</div></div>
     <button class="copo-more" id="copoMore">${state.lang==='cn'?'详情':'Details'}</button></div>`;
   $('#copoMore').addEventListener('click',coPreorderPopup);
-  if(!co.preorderSeen){ co.preorderSeen=true; coPreorderPopup(); }
+  // YIELD TO A MODAL THAT IS ALREADY UP, exactly as the two notices below this
+  // one do. batch_notice renders immediately before this and opens itself, and
+  // a cart CAN raise both: the server computes them independently, and only
+  // preorder/local_fresh are complements (routes/retail.js). So a basket with a
+  // batch-made dish and a sold-out backorder extra opened two overlays, the
+  // second burying the first. The mini app has guarded this since it shipped
+  // (miniapp/pages/checkout/checkout.js, `batchAutoShowing`); this client had
+  // the helper and used it on only two of its four notices.
+  if(!co.preorderSeen&&!coNoticePopupOpen()){ co.preorderSeen=true; coPreorderPopup(); }
 }
 function coPreorderPopup(){
   const n=co.quote&&co.quote.preorder_notice; if(!n)return;
@@ -2580,7 +2588,11 @@ function renderCoBatch(d){
     <div><div class="cob-t">${esc(t||'')}</div><div class="cob-m">${esc(m||'')}</div></div>
     <button class="cob-more" id="cobMore">${state.lang==='cn'?'详情':'Details'}</button></div>`;
   $('#cobMore').addEventListener('click',coBatchPopup);
-  if(!co.batchSeen){ co.batchSeen=true; coBatchPopup(); }
+  // Same guard. This one renders FIRST in the pass, so today it is the notice
+  // that wins and nothing is on screen when it asks — but a renderer added
+  // above it, or a reorder of that one line, would otherwise stack silently.
+  // The guard is what makes the order of the render pass not matter.
+  if(!co.batchSeen&&!coNoticePopupOpen()){ co.batchSeen=true; coBatchPopup(); }
 }
 function coBatchPopup(){
   const n=co.quote&&co.quote.batch_notice; if(!n)return;
