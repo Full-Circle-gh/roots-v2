@@ -2705,6 +2705,67 @@ function boxOf(text) {
         `the basket was emptied by looking at a product: ${before} -> ${st.count}`);
     });
 
+    await check('§132 the office\'s blocks scale with the phone and the chrome does not', async () => {
+      /* rpx IS screen-width/750, so the mini app draws its product page about
+         6% larger on a 412px Android than on a 390px one. This page was
+         converted at a 390px phone and stood still, which is what Ash was
+         looking at: "fix the scale". Every length under §132 is now
+         calc(N * var(--u)) with --u: 100vw/390.
+
+         THREE THINGS ARE ASSERTED TOGETHER because each one is a way the change
+         could be wrong on its own:
+           the blocks track the width ratio exactly — the point of it;
+           the menu card and the sheet's own title do NOT — .grid is
+             public/shop.html's card in CSS pixels and the note over it records
+             two rounds of "it is too big" from treating rpx as its truth;
+           nothing scrolls sideways — the three full-bleed slabs pull out
+             through .sheet-b's fixed 14px padding, so a scaled -14 overhangs
+             it at every width above 390 and the page rocks horizontally. That
+             one was found by measuring, not by reading. */
+      const probe = async (w) => {
+        const c2 = await browser.newContext({ viewport: { width: w, height: 844 } });
+        const pg = await c2.newPage();
+        await pg.goto(`http://127.0.0.1:${PORT}/s/${CODE}?lang=en`, { waitUntil: 'domcontentloaded' });
+        await pg.evaluate(() => document.querySelector('.it:not(.out)[data-open]').click());
+        await pg.waitForTimeout(320);
+        const m = await pg.evaluate(() => {
+          const fs = (q) => { const e = document.querySelector(q);
+            return e ? parseFloat(getComputedStyle(e).fontSize) : null; };
+          const slab = document.querySelector('.pb-stat');
+          const doc = document.documentElement;
+          return {
+            head: fs('.pb-h-l'), kicker: fs('.pb-why-h'), nut: fs('.nut-ttl'),
+            card: fs('.t'), sheetTitle: fs('#dsheetB .dt-nm'),
+            slabW: slab ? Math.round(slab.getBoundingClientRect().width) : null,
+            overflow: doc.scrollWidth - doc.clientWidth,
+          };
+        });
+        await c2.close();
+        return m;
+      };
+      const a = await probe(390), b = await probe(412);
+      // The reference phone still renders exactly what it rendered before the
+      // scale moved: --u is 1px at 390, so these are the file's own numbers.
+      assert.ok(Math.abs(a.head - 27) < 0.2, `390px heading: ${a.head}`);
+      assert.ok(Math.abs(a.kicker - 11.4) < 0.2, `390px why kicker: ${a.kicker}`);
+      assert.ok(Math.abs(a.nut - 23.9) < 0.2, `390px nutrition title: ${a.nut}`);
+      const want = 412 / 390;
+      for (const k of ['head', 'kicker', 'nut']) {
+        const got = b[k] / a[k];
+        assert.ok(Math.abs(got - want) < 0.01,
+          `${k} scaled ${got.toFixed(4)} from 390 to 412, want ${want.toFixed(4)}`);
+      }
+      assert.strictEqual(b.card, a.card,
+        `the menu card's name scaled with the viewport (${a.card} -> ${b.card}); .grid is the website's card in CSS pixels and must not`);
+      assert.strictEqual(b.sheetTitle, a.sheetTitle,
+        `the sheet's own title scaled (${a.sheetTitle} -> ${b.sheetTitle}); it is chrome, not one of the office's blocks`);
+      // Full-bleed stays exactly full-bleed, and neither width rocks sideways.
+      assert.strictEqual(a.slabW, 390, `the slab is not full-bleed at 390: ${a.slabW}`);
+      assert.strictEqual(b.slabW, 412, `the slab is not full-bleed at 412: ${b.slabW}`);
+      assert.strictEqual(a.overflow, 0, `the page scrolls sideways at 390 by ${a.overflow}px`);
+      assert.strictEqual(b.overflow, 0, `the page scrolls sideways at 412 by ${b.overflow}px`);
+    });
+
     await check('a shop with no listings still puts its empty state on screen', async () => {
       const shopId = db.prepare('SELECT id FROM shops WHERE location_id = ?').get(LOC).id;
       db.prepare('DELETE FROM shop_listings WHERE shop_id = ?').run(shopId);

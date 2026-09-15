@@ -618,7 +618,40 @@ function styles(vars, faces) {
   // here needs, and it costs "->" in a comment, which is how it was tripped: an
   // arrow in a note about rpx conversion went red as a security failure.
   return `${cssSafe(faces)}
-:root{${cssSafe(vars)};--barh:58px;--cbarh:0px}
+:root{${cssSafe(vars)};--barh:58px;--cbarh:0px;--u:calc(100vw / 390)}
+/* THE OFFICE'S BLOCKS SCALE WITH THE PHONE, BECAUSE THE MINI APP'S DO.
+   Every length under §132 below is written calc(N * var(--u)), where N is the
+   number this file already held and --u is 1px on the 390px phone the whole
+   conversion was measured at. So at 390 the blocks render byte-identical to
+   what they rendered before, and on any other phone they track the mini app
+   instead of standing still: rpx IS screen-width/750, so a 412px Android draws
+   the app's product page about 6% larger than a 390px one and drew this page at
+   exactly the same size as a 390px one. Ash, on the live menu: "fix the scale".
+
+   ONLY THE BLOCKS. The menu grid card is NOT converted from rpx and must not
+   be — it is public/shop.html's .sl-* card copied in CSS pixels, and the note
+   over .grid records two rounds of "it is too big" that came from treating an
+   rpx conversion as its truth. The bar, the basket, the sheet chrome and the
+   product name are the same: measured for a browser, and left alone.
+
+   THE THREE FULL-BLEED SLABS KEEP A FIXED -14px, and .pb-band-cap a fixed 14px
+   gutter, because both are measured against .sheet-b's own padding rather than
+   against the component. Scaling them overhangs that padding on every phone
+   wider than 390 and the page scrolls sideways. Hairline borders, the 999px
+   pills and the how-to-use grid's 1px gridline stay fixed for the same kind of
+   reason: they are a browser's units, not the design's.
+
+   CAPPED AT 430px, the widest phone. Above that this is somebody looking at a
+   QR menu on a desktop, and an uncapped 100vw/390 would draw them a poster.
+
+   WHAT THIS COSTS, stated because the file states it everywhere else: the
+   whole-pixel line boxes .dt-k and .alab argue for are whole only at 390 now.
+   Off it the blocks land on fractions, which is what the mini app and
+   public/shop/product-blocks.css (--u: 100vw/750) have always done. The chip
+   centring those notes were really protecting is a ratio — line-height:normal
+   and the CJK bracket trim — and survives any scale. Reverting is this one
+   declaration: set --u to 1px and the file is back to a fixed 390px phone. */
+@media (min-width:430px){:root{--u:1.1px}}
 *{margin:0;padding:0;box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body{background:var(--oat);color:var(--ink);font-family:var(--f-aleo);
@@ -721,21 +754,21 @@ img{display:block;max-width:100%}
 
 /* The heading two-thirds of these blocks share. */
 .pb-h{display:flex;justify-content:space-between;align-items:flex-end;
-  margin:26px 0 19px;gap:10px}
-.pb-h-l{font-family:var(--f-bear);font-size:27px;line-height:1;overflow-wrap:anywhere}
-.pb-h-r{flex:none;font-family:var(--f-bear);font-size:10px;letter-spacing:.22em;
-  text-transform:uppercase;color:var(--olive);padding-bottom:3px}
+  margin:calc(26 * var(--u)) 0 calc(19 * var(--u));gap:calc(10 * var(--u))}
+.pb-h-l{font-family:var(--f-bear);font-size:calc(27 * var(--u));line-height:1;overflow-wrap:anywhere}
+.pb-h-r{flex:none;font-family:var(--f-bear);font-size:calc(10 * var(--u));letter-spacing:.22em;
+  text-transform:uppercase;color:var(--olive);padding-bottom:calc(3 * var(--u))}
 
 /* 01 · SPEC STRIP — three cells divided by hairlines. */
-.pb-spec{display:grid;grid-template-columns:1fr 1fr 1fr;margin-top:15px;
+.pb-spec{display:grid;grid-template-columns:1fr 1fr 1fr;margin-top:calc(15 * var(--u));
   border-top:1px solid rgba(0,0,0,.08);border-bottom:1px solid rgba(0,0,0,.08)}
-.pb-spec-c{padding:15px 10px 17px;display:flex;flex-direction:column;gap:6px;
+.pb-spec-c{padding:calc(15 * var(--u)) calc(10 * var(--u)) calc(17 * var(--u));display:flex;flex-direction:column;gap:calc(6 * var(--u));
   border-right:1px solid rgba(0,0,0,.08);min-width:0}
 .pb-spec-c:last-child{border-right:0}
-.pb-spec-k{font-family:var(--f-bear);font-size:9.5px;line-height:12px;
+.pb-spec-k{font-family:var(--f-bear);font-size:calc(9.5 * var(--u));line-height:calc(12 * var(--u));
   letter-spacing:.22em;text-transform:uppercase;color:var(--olive);
   overflow-wrap:anywhere}
-.pb-spec-v{font-family:var(--f-bear);font-size:15.5px;line-height:18px;
+.pb-spec-v{font-family:var(--f-bear);font-size:calc(15.5 * var(--u));line-height:calc(18 * var(--u));
   overflow-wrap:anywhere}
 
 /* 03 · WHY — a numbered claim per row. The FIRST rule is ink and the rest are
@@ -750,18 +783,18 @@ img{display:block;max-width:100%}
    wore a small .dt-k kicker -- so a customer comparing the menu against the
    mini app read a different page. Reported by Ash against the live menu.
    Whole-pixel line-height for the reason .dt-k states at length. */
-.pb-why-h{font-family:var(--f-bear);font-size:11.4px;line-height:15px;
+.pb-why-h{font-family:var(--f-bear);font-size:calc(11.4 * var(--u));line-height:calc(15 * var(--u));
   letter-spacing:.22em;text-transform:uppercase;color:var(--olive);
-  margin:21px 0 15px;overflow-wrap:anywhere}
-.pb-why-r{display:grid;grid-template-columns:37px 1fr;gap:14px;align-items:baseline;
-  padding:14px 0;border-top:1px solid rgba(0,0,0,.08)}
+  margin:calc(21 * var(--u)) 0 calc(15 * var(--u));overflow-wrap:anywhere}
+.pb-why-r{display:grid;grid-template-columns:calc(37 * var(--u)) 1fr;gap:calc(14 * var(--u));align-items:baseline;
+  padding:calc(14 * var(--u)) 0;border-top:1px solid rgba(0,0,0,.08)}
 .pb-why-r.first{border-top:2px solid var(--ink)}
-.pb-why-n{font-family:var(--f-bear);font-size:33px;line-height:28px}
+.pb-why-n{font-family:var(--f-bear);font-size:calc(33 * var(--u));line-height:calc(28 * var(--u))}
 /* THE CLAIM IS THE COMPONENT'S f-toni, WHICH IS f-bear HERE -- the substitution
    this sheet makes everywhere else and had missed only here, so the claim fell
    through to the body face and read as prose. .pb-faq-q is the precedent: a
    whole sentence in f-toni wears f-bear on this page too. 32rpx x .52. */
-.pb-why-c{font-family:var(--f-bear);font-size:16.5px;line-height:22px;
+.pb-why-c{font-family:var(--f-bear);font-size:calc(16.5 * var(--u));line-height:calc(22 * var(--u));
   overflow-wrap:anywhere}
 
 /* 06 · HOW TO USE — a tile grid whose gridlines ARE the background showing
@@ -769,71 +802,71 @@ img{display:block;max-width:100%}
 .pb-how{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;
   background:rgba(0,0,0,.08);border:1px solid rgba(0,0,0,.08)}
 .pb-how.c4{grid-template-columns:repeat(4,1fr)}
-.pb-how-t{background:var(--oat);padding:19px 6px 17px;text-align:center;
-  display:flex;flex-direction:column;gap:8px;align-items:center;
-  justify-content:center;min-height:79px;min-width:0}
-.pb-how-i{font-size:25px;line-height:25px}
-.pb-how-l{font-family:var(--f-bear);font-size:12.5px;line-height:15px;
+.pb-how-t{background:var(--oat);padding:calc(19 * var(--u)) calc(6 * var(--u)) calc(17 * var(--u));text-align:center;
+  display:flex;flex-direction:column;gap:calc(8 * var(--u));align-items:center;
+  justify-content:center;min-height:calc(79 * var(--u));min-width:0}
+.pb-how-i{font-size:calc(25 * var(--u));line-height:calc(25 * var(--u))}
+.pb-how-l{font-family:var(--f-bear);font-size:calc(12.5 * var(--u));line-height:calc(15 * var(--u));
   letter-spacing:.14em;text-transform:uppercase;overflow-wrap:anywhere}
-.pb-how-s{font-style:italic;font-size:12.5px;line-height:16px;color:var(--olive);
-  margin-top:-4px;overflow-wrap:anywhere}
+.pb-how-s{font-style:italic;font-size:calc(12.5 * var(--u));line-height:calc(16 * var(--u));color:var(--olive);
+  margin-top:calc(-4 * var(--u));overflow-wrap:anywhere}
 
 /* 07 · STORAGE — two cards, one optionally inverted, with a hero figure.
    min-width:0 on the cards is load-bearing and the component says why: a grid
    item refuses to shrink below its widest unbreakable child, which is what let
    a long figure push past the card edge and clip. */
-.pb-store{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.pb-store-c{border:1px solid var(--ink);padding:19px 16px 18px;position:relative;
-  display:flex;flex-direction:column;gap:9px;min-height:146px;min-width:0;
+.pb-store{display:grid;grid-template-columns:1fr 1fr;gap:calc(10 * var(--u))}
+.pb-store-c{border:1px solid var(--ink);padding:calc(19 * var(--u)) calc(16 * var(--u)) calc(18 * var(--u));position:relative;
+  display:flex;flex-direction:column;gap:calc(9 * var(--u));min-height:calc(146 * var(--u));min-width:0;
   overflow:hidden}
 .pb-store-c.alt{background:var(--ink);color:var(--oat)}
-.pb-store-i{position:absolute;top:12px;right:12px;font-size:19px;line-height:19px}
-.pb-store-h{font-family:var(--f-bear);font-size:11.5px;line-height:14px;
+.pb-store-i{position:absolute;top:calc(12 * var(--u));right:calc(12 * var(--u));font-size:calc(19 * var(--u));line-height:calc(19 * var(--u))}
+.pb-store-h{font-family:var(--f-bear);font-size:calc(11.5 * var(--u));line-height:calc(14 * var(--u));
   letter-spacing:.22em;text-transform:uppercase;overflow-wrap:anywhere}
-.pb-store-n{font-family:var(--f-bear);font-size:50px;line-height:48px;margin-top:auto;
+.pb-store-n{font-family:var(--f-bear);font-size:calc(50 * var(--u));line-height:calc(48 * var(--u));margin-top:auto;
   overflow-wrap:break-word;word-break:break-word}
-.pb-store-n.long{font-size:24px;line-height:27px}
-.pb-store-u{font-family:var(--f-bear);font-size:12.5px;line-height:19px;
+.pb-store-n.long{font-size:calc(24 * var(--u));line-height:calc(27 * var(--u))}
+.pb-store-u{font-family:var(--f-bear);font-size:calc(12.5 * var(--u));line-height:calc(19 * var(--u));
   letter-spacing:.16em;text-transform:uppercase;overflow-wrap:anywhere}
-.pb-store-note{margin-top:12px;font-style:italic;font-size:12.5px;line-height:18px;
+.pb-store-note{margin-top:calc(12 * var(--u));font-style:italic;font-size:calc(12.5 * var(--u));line-height:calc(18 * var(--u));
   color:var(--olive);text-align:right;overflow-wrap:anywhere}
 
 /* 09 · NOTES — an olive asterisk, never a bullet, and italic. The mark is a
    real span rather than a ::before so it can be read back and measured. */
-.pb-note{margin-top:24px;display:flex;gap:8px;font-style:italic;font-size:13px;
-  line-height:20px;color:var(--olive)}
+.pb-note{margin-top:calc(24 * var(--u));display:flex;gap:calc(8 * var(--u));font-style:italic;font-size:calc(13 * var(--u));
+  line-height:calc(20 * var(--u));color:var(--olive)}
 .pb-note-m{flex:none;font-style:normal}
 .pb-note-t{min-width:0;overflow-wrap:anywhere}
 
 /* +1 · BIG STAT — a full-bleed lime slab with a very large figure and two
    dots anchoring it. Real spans, same reason as the sheet's own drawn cross. */
-.pb-stat{margin:26px -14px;padding:40px 23px 42px;background:var(--lime);
+.pb-stat{margin:calc(26 * var(--u)) -14px;padding:calc(40 * var(--u)) calc(23 * var(--u)) calc(42 * var(--u));background:var(--lime);
   color:var(--ink);text-align:center;position:relative;overflow:hidden}
-.pb-stat-n{font-family:var(--f-bear);font-size:114px;line-height:97px;
+.pb-stat-n{font-family:var(--f-bear);font-size:calc(114 * var(--u));line-height:calc(97 * var(--u));
   letter-spacing:-.02em;overflow-wrap:anywhere}
-.pb-stat-w{font-family:var(--f-bear);font-size:11.5px;line-height:15px;
-  letter-spacing:.32em;text-transform:uppercase;margin-top:10px;
+.pb-stat-w{font-family:var(--f-bear);font-size:calc(11.5 * var(--u));line-height:calc(15 * var(--u));
+  letter-spacing:.32em;text-transform:uppercase;margin-top:calc(10 * var(--u));
   overflow-wrap:anywhere}
-.pb-stat-c{font-style:italic;font-size:14.5px;line-height:20px;margin-top:6px;
+.pb-stat-c{font-style:italic;font-size:calc(14.5 * var(--u));line-height:calc(20 * var(--u));margin-top:calc(6 * var(--u));
   overflow-wrap:anywhere}
-.pb-stat-d{position:absolute;top:50%;margin-top:-31px;font-family:var(--f-bear);
-  font-size:62px;line-height:62px}
-.pb-stat-d1{left:14px}
-.pb-stat-d2{right:14px}
+.pb-stat-d{position:absolute;top:50%;margin-top:calc(-31 * var(--u));font-family:var(--f-bear);
+  font-size:calc(62 * var(--u));line-height:calc(62 * var(--u))}
+.pb-stat-d1{left:calc(14 * var(--u))}
+.pb-stat-d2{right:calc(14 * var(--u))}
 
 /* +2 · PULL QUOTE — a quieter ground, no border. The curly quotes are drawn
    around the text by the renderer rather than by CSS content, so both halves of
    the bilingual pair carry their own and neither shows through the other. */
-.pb-qt{margin:26px -14px;padding:25px 23px 27px;background:rgba(0,0,0,.04)}
-.pb-qt-p{font-style:italic;font-size:15.5px;line-height:23px;overflow-wrap:anywhere}
-.pb-qt-w{margin-top:10px;font-family:var(--f-bear);font-size:10px;
+.pb-qt{margin:calc(26 * var(--u)) -14px;padding:calc(25 * var(--u)) calc(23 * var(--u)) calc(27 * var(--u));background:rgba(0,0,0,.04)}
+.pb-qt-p{font-style:italic;font-size:calc(15.5 * var(--u));line-height:calc(23 * var(--u));overflow-wrap:anywhere}
+.pb-qt-w{margin-top:calc(10 * var(--u));font-family:var(--f-bear);font-size:calc(10 * var(--u));
   letter-spacing:.22em;text-transform:uppercase;color:var(--olive);
   overflow-wrap:anywhere}
 
 /* +3 · IMAGE BAND — full-bleed, cropped to the shape the office chose.
    aspect-ratio rather than the component's fixed heights, because this page is
    not fixed at 750rpx and a height in px would crop differently on every phone. */
-.pb-band{margin:26px -14px 0}
+.pb-band{margin:calc(26 * var(--u)) -14px 0}
 .pb-band img{display:block;width:100%;height:100%;object-fit:cover}
 .pb-band-f{width:100%}
 .pb-band.wide .pb-band-f{aspect-ratio:16/9}
@@ -841,20 +874,20 @@ img{display:block;max-width:100%}
 .pb-band.tall .pb-band-f{aspect-ratio:4/5}
 .pb-band.natural .pb-band-f{aspect-ratio:auto}
 .pb-band.natural img{height:auto}
-.pb-band-cap{padding:8px 14px 0;font-style:italic;font-size:12.5px;line-height:19px;
+.pb-band-cap{padding:calc(8 * var(--u)) 14px 0;font-style:italic;font-size:calc(12.5 * var(--u));line-height:calc(19 * var(--u));
   color:var(--olive);overflow-wrap:anywhere}
 
 /* +4 · RECIPE STEPS — an olive numeral rail, and a timing pill where the
    office gave one. */
-.pb-step{display:grid;grid-template-columns:37px 1fr;gap:14px;padding:14px 0;
+.pb-step{display:grid;grid-template-columns:calc(37 * var(--u)) 1fr;gap:calc(14 * var(--u));padding:calc(14 * var(--u)) 0;
   border-top:1px solid rgba(0,0,0,.08)}
 .pb-step.first{border-top:2px solid var(--ink)}
-.pb-step-n{font-family:var(--f-bear);font-size:29px;line-height:26px;color:var(--olive)}
-.pb-step-b{display:flex;flex-direction:column;align-items:flex-start;gap:7px;min-width:0}
-.pb-step-t{font-size:14.5px;line-height:22px;overflow-wrap:anywhere}
-.pb-step-time{font-family:var(--f-bear);font-size:11.5px;line-height:14px;
+.pb-step-n{font-family:var(--f-bear);font-size:calc(29 * var(--u));line-height:calc(26 * var(--u));color:var(--olive)}
+.pb-step-b{display:flex;flex-direction:column;align-items:flex-start;gap:calc(7 * var(--u));min-width:0}
+.pb-step-t{font-size:calc(14.5 * var(--u));line-height:calc(22 * var(--u));overflow-wrap:anywhere}
+.pb-step-time{font-family:var(--f-bear);font-size:calc(11.5 * var(--u));line-height:calc(14 * var(--u));
   letter-spacing:.18em;text-transform:uppercase;color:var(--olive);
-  background:rgba(204,217,0,.28);padding:3px 9px;border-radius:999px}
+  background:rgba(204,217,0,.28);padding:calc(3 * var(--u)) calc(9 * var(--u));border-radius:999px}
 
 /* +5 · GOES WELL WITH — a row that scrolls sideways. overscroll-behavior-x
    keeps that gesture off the page behind it, the same containment the sheet's
@@ -865,13 +898,13 @@ img{display:block;max-width:100%}
    item the frame grew to the tallest tile in the row and the photo grew with
    it — a 104px tile with a 250px picture in it. A cross-sell thumbnail is a
    square of its own and now says so. */
-.pb-pair{display:flex;align-items:flex-start;gap:10px;overflow-x:auto;
-  overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;padding-bottom:4px}
-.pb-pair-t{flex:none;width:104px}
-.pb-pair-f{width:104px;height:104px;border-radius:10px;overflow:hidden;
+.pb-pair{display:flex;align-items:flex-start;gap:calc(10 * var(--u));overflow-x:auto;
+  overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;padding-bottom:calc(4 * var(--u))}
+.pb-pair-t{flex:none;width:calc(104 * var(--u))}
+.pb-pair-f{width:calc(104 * var(--u));height:calc(104 * var(--u));border-radius:calc(10 * var(--u));overflow:hidden;
   background:rgba(0,0,0,.08)}
 .pb-pair-f img{width:100%;height:100%;object-fit:cover;display:block}
-.pb-pair-n{margin-top:7px;font-family:var(--f-bear);font-size:13px;line-height:17px;
+.pb-pair-n{margin-top:calc(7 * var(--u));font-family:var(--f-bear);font-size:calc(13 * var(--u));line-height:calc(17 * var(--u));
   overflow-wrap:anywhere}
 
 /* +6 · QUESTIONS — real details/summary, so it opens with no script at all and
@@ -880,37 +913,37 @@ img{display:block;max-width:100%}
 .pb-faq{border-top:2px solid var(--ink)}
 .pb-faq+.pb-faq{border-top:1px solid rgba(0,0,0,.08)}
 .pb-faq summary{display:flex;justify-content:space-between;align-items:center;
-  gap:12px;padding:15px 0;cursor:pointer;list-style:none}
+  gap:calc(12 * var(--u));padding:calc(15 * var(--u)) 0;cursor:pointer;list-style:none}
 .pb-faq summary::-webkit-details-marker{display:none}
-.pb-faq-q{flex:1;min-width:0;font-family:var(--f-bear);font-size:14px;line-height:19px;
+.pb-faq-q{flex:1;min-width:0;font-family:var(--f-bear);font-size:calc(14 * var(--u));line-height:calc(19 * var(--u));
   overflow-wrap:anywhere}
-.pb-faq-m{flex:none;font-family:var(--f-bear);font-size:23px;line-height:23px;
+.pb-faq-m{flex:none;font-family:var(--f-bear);font-size:calc(23 * var(--u));line-height:calc(23 * var(--u));
   color:var(--olive)}
 .pb-faq[open] .pb-faq-m .l-plus{display:none}
 .pb-faq .pb-faq-m .l-minus{display:none}
 .pb-faq[open] .pb-faq-m .l-minus{display:inline}
-.pb-faq-a{padding:0 0 15px;font-size:14px;line-height:22px;overflow-wrap:anywhere}
+.pb-faq-a{padding:0 0 calc(15 * var(--u));font-size:calc(14 * var(--u));line-height:calc(22 * var(--u));overflow-wrap:anywhere}
 /* THE KICKER WEARS A SHORT RULE, which is the mini app's own .pb-hero-kicker:
    a 19px bar in --forest before the words, with the words themselves in that
    same forest rather than the olive every other kicker on this page uses. It
    is the one kicker that introduces a paragraph rather than labelling a list,
    and the component distinguishes them exactly this way. */
-.dt-pk{display:flex;align-items:center;gap:10px;font-family:var(--f-bear);
-  font-size:9.5px;line-height:12px;letter-spacing:.17em;text-transform:uppercase;
-  color:var(--forest);margin-bottom:8px}
-.dt-pk::before{content:"";flex:none;display:block;width:19px;height:1px;
+.dt-pk{display:flex;align-items:center;gap:calc(10 * var(--u));font-family:var(--f-bear);
+  font-size:calc(9.5 * var(--u));line-height:calc(12 * var(--u));letter-spacing:.17em;text-transform:uppercase;
+  color:var(--forest);margin-bottom:calc(8 * var(--u))}
+.dt-pk::before{content:"";flex:none;display:block;width:calc(19 * var(--u));height:calc(1 * var(--u));
   background:var(--forest)}
 /* white-space:pre-line IS LOAD-BEARING AND WAS MISSING. The office writes the
    paragraph with blank lines in it and the editor honours them; without this
    every paragraph of a description ran together into one block on the live
    page, which is what a customer was reading. The component's .pb-hero-body
    has carried it all along. */
-.dt-pb{font-size:14px;line-height:22px;overflow-wrap:anywhere;white-space:pre-line}
+.dt-pb{font-size:calc(14 * var(--u));line-height:calc(22 * var(--u));overflow-wrap:anywhere;white-space:pre-line}
 /* The inline ink-pull: one phrase mid-paragraph, set in the display face on a
    lime slab. box-decoration-break:clone is what keeps the slab's padding on
    BOTH halves when the phrase wraps across a line — without it the second line
    loses its left padding and the slab reads as torn. */
-.pb-hl{font-family:var(--f-bear);font-style:normal;font-size:17.5px;line-height:1;
+.pb-hl{font-family:var(--f-bear);font-style:normal;font-size:calc(17.5 * var(--u));line-height:1;
   letter-spacing:-.005em;background:var(--lime);color:var(--ink);
   padding:.06em .18em;
   -webkit-box-decoration-break:clone;box-decoration-break:clone}
@@ -925,26 +958,26 @@ img{display:block;max-width:100%}
    somewhere the measurement tolerated; the page changed what is above it and
    the same chip went 0.875px off the middle of its pill against a 0.75px
    allowance. Whole numbers here and on .ichip make the whole column integral. */
-.dt-k{font-family:var(--f-bear);font-size:9.5px;line-height:14px;letter-spacing:.17em;
-  text-transform:uppercase;color:var(--olive);margin:18px 0 7px}
+.dt-k{font-family:var(--f-bear);font-size:calc(9.5 * var(--u));line-height:calc(14 * var(--u));letter-spacing:.17em;
+  text-transform:uppercase;color:var(--olive);margin:calc(18 * var(--u)) 0 calc(7 * var(--u))}
 
 /* THE INGREDIENT CLOUD — the mini app's ingredients_chips, in this page's ink.
    The hero ingredient is FILLED and the rest outlined, which is the one thing
    the block's lead flag carries and the reason it exists: a customer reads
    what the product is mostly made of before reading the list. */
-.ichips{display:flex;flex-wrap:wrap;gap:6px}
-.ichip{border:1.5px solid var(--ink);border-radius:999px;padding:5px 11px;
-  font-size:12.5px;line-height:17px}
+.ichips{display:flex;flex-wrap:wrap;gap:calc(6 * var(--u))}
+.ichip{border:1.5px solid var(--ink);border-radius:999px;padding:calc(5 * var(--u)) calc(11 * var(--u));
+  font-size:calc(12.5 * var(--u));line-height:calc(17 * var(--u))}
 .ichip.lead{background:var(--ink);color:var(--oat);border-color:var(--ink)}
-.ichip .pct{font-variant-numeric:tabular-nums;opacity:.7;font-size:11px}
+.ichip .pct{font-variant-numeric:tabular-nums;opacity:.7;font-size:calc(11 * var(--u))}
 
 /* THE ALLERGEN CARD — contains and may-contain as separate rows, never merged.
    One says what is in the food; the other says what the line it was made on
    also handles, and somebody avoiding an allergen needs to know which is
    which. The two chip styles differ for the same reason. */
-.acard{border:1px solid var(--ink);padding:12px;margin-top:18px}
-.atitle{font-family:var(--f-bear);font-size:16px;line-height:1;
-  padding-bottom:9px;border-bottom:2px solid var(--ink);margin-bottom:10px}
+.acard{border:1px solid var(--ink);padding:calc(12 * var(--u));margin-top:calc(18 * var(--u))}
+.atitle{font-family:var(--f-bear);font-size:calc(16 * var(--u));line-height:1;
+  padding-bottom:calc(9 * var(--u));border-bottom:2px solid var(--ink);margin-bottom:calc(10 * var(--u))}
 /* THE LABEL SITS ABOVE ITS CHIPS, AND BOTH CENTRE ON THE CARD. Centring them
    beside a fixed 96px label only centred them in what the label left over, so
    a short label like CONTAINS pushed its chip well right of the card's middle
@@ -952,15 +985,15 @@ img{display:block;max-width:100%}
    the label on its own line there is no leftover column to be centred in: the
    chips have the card's full width and the card's own middle. It also ends the
    collision this card was always one long chip away from. */
-.arow{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0}
+.arow{display:flex;flex-direction:column;align-items:center;gap:calc(6 * var(--u));padding:calc(8 * var(--u)) 0}
 .arow+.arow{border-top:1px dashed rgba(0,0,0,.14)}
 /* 9.5px at 1.35 is 12.825px, and the chips under it then start on a fraction
    of a pixel — the last box in this column that was not a whole number. See
    .dt-k for what that costs and how it was measured. */
 .alab{flex:none;max-width:100%;text-align:center;font-family:var(--f-bear);
-  font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--olive);
-  line-height:13px}
-.achips{width:100%;min-width:0;display:flex;flex-wrap:wrap;justify-content:center;gap:5px}
+  font-size:calc(9.5 * var(--u));letter-spacing:.1em;text-transform:uppercase;color:var(--olive);
+  line-height:calc(13 * var(--u))}
+.achips{width:100%;min-width:0;display:flex;flex-wrap:wrap;justify-content:center;gap:calc(5 * var(--u))}
 /* Class selectors rather than a child combinator: no angle bracket may appear
    in this stylesheet, and the combinator's own character is one — the rule is
    stated at the head of the file and this is where its cost is paid. Naming it
@@ -995,7 +1028,7 @@ img{display:block;max-width:100%}
    has a FIXED 24px height and the line box had to stop disagreeing with it.
    Here the pill takes its height FROM the line box, so the font's own figure is
    the one that balances. */
-.achip{border-radius:999px;padding:4px 10px;font-size:11.5px;line-height:normal;
+.achip{border-radius:999px;padding:calc(4 * var(--u)) calc(10 * var(--u));font-size:calc(11.5 * var(--u));line-height:normal;
   font-family:var(--f-bear);letter-spacing:.03em}
 /* A FULL-WIDTH CLOSING BRACKET RESERVES A WHOLE CHARACTER BOX AND DRAWS ITS INK
    IN THE LEFT HALF OF IT. So a chip reading 麸质（燕麦） carries about two thirds
@@ -1010,13 +1043,13 @@ img{display:block;max-width:100%}
    face, which implements neither.
    Two thirds of an em rather than a half: half leaves a pixel, three quarters
    overshoots, and the measurement says .67 lands it dead centre. */
-.achip.tr{padding-right:calc(10px - .67em)}
-.achip.tl{padding-left:calc(10px - .67em)}
+.achip.tr{padding-right:calc(10 * var(--u) - .67em)}
+.achip.tl{padding-left:calc(10 * var(--u) - .67em)}
 /* CONTAINS reads louder than MAY CONTAIN, and neither borrows the page's lime:
    lime is this menu's "yes, add it" colour and an allergen is not that. */
 .achip.has{background:var(--ink);color:var(--oat)}
 .achip.may{background:transparent;color:var(--olive);border:1.5px dashed var(--olive)}
-.anone{font-size:12px;color:var(--olive);font-style:italic}
+.anone{font-size:calc(12 * var(--u));color:var(--olive);font-style:italic}
 
 /* .nut-card from miniapp/pages/product/product.wxss, converted at the same
    390px phone (rpx x .52) the rest of this file uses.
@@ -1028,25 +1061,25 @@ img{display:block;max-width:100%}
    in the mini app while every block above it matched. The scale multiplies font
    sizes only -- app.wxss says so -- so the borders, the padding and the indent
    stay at plain rpx x .52. */
-.nut{border:1px solid var(--ink);padding:14.5px 14.5px 9px;margin-top:14px}
+.nut{border:1px solid var(--ink);padding:calc(14.5 * var(--u)) calc(14.5 * var(--u)) calc(9 * var(--u));margin-top:calc(14 * var(--u))}
 .nut-top{display:flex;justify-content:space-between;align-items:flex-end;
-  padding-bottom:9px;margin-bottom:4px;border-bottom:2px solid var(--ink)}
-.nut-ttl{font-family:var(--f-bear);font-size:23.9px;line-height:1}
-.nut-bs{font-style:italic;font-size:13.1px;color:rgba(0,0,0,.6);
+  padding-bottom:calc(9 * var(--u));margin-bottom:calc(4 * var(--u));border-bottom:2px solid var(--ink)}
+.nut-ttl{font-family:var(--f-bear);font-size:calc(23.9 * var(--u));line-height:1}
+.nut-bs{font-style:italic;font-size:calc(13.1 * var(--u));color:rgba(0,0,0,.6);
   text-align:right;line-height:1.3}
-.nr{display:flex;justify-content:space-between;align-items:baseline;gap:10px;
-  padding:8.3px 0;border-bottom:1px solid rgba(0,0,0,.12)}
+.nr{display:flex;justify-content:space-between;align-items:baseline;gap:calc(10 * var(--u));
+  padding:calc(8.3 * var(--u)) 0;border-bottom:1px solid rgba(0,0,0,.12)}
 .nr:last-child{border-bottom:0}
-.nr-l{font-family:var(--f-bear);font-size:16.1px;letter-spacing:.01em;
+.nr-l{font-family:var(--f-bear);font-size:calc(16.1 * var(--u));letter-spacing:.01em;
   text-transform:uppercase}
-.nr-r{font-family:var(--f-bear);font-size:23.9px;line-height:1;
+.nr-r{font-family:var(--f-bear);font-size:calc(23.9 * var(--u));line-height:1;
   font-variant-numeric:tabular-nums;white-space:nowrap}
 .nr.p .nr-l{font-weight:600}
-.nr.c{padding:5.2px 0 5.2px 23px;border-bottom:1px dashed rgba(0,0,0,.12)}
-.nr.c .nr-l{font-family:var(--f-aleo);font-style:italic;font-size:15px;
+.nr.c{padding:calc(5.2 * var(--u)) 0 calc(5.2 * var(--u)) calc(23 * var(--u));border-bottom:1px dashed rgba(0,0,0,.12)}
+.nr.c .nr-l{font-family:var(--f-aleo);font-style:italic;font-size:calc(15 * var(--u));
   color:rgba(0,0,0,.6);text-transform:none;letter-spacing:0}
-.nr.c .nr-l::before{content:'—';margin-right:6px;color:rgba(0,0,0,.3);font-style:normal}
-.nr.c .nr-r{font-size:19.1px;color:rgba(0,0,0,.6)}
+.nr.c .nr-l::before{content:'—';margin-right:calc(6 * var(--u));color:rgba(0,0,0,.3);font-style:normal}
+.nr.c .nr-r{font-size:calc(19.1 * var(--u));color:rgba(0,0,0,.6)}
 
 /* The enlarge. A plain full-screen ground with the photo centred — no chrome,
    because the only thing to do here is look and then dismiss. */
