@@ -928,6 +928,17 @@
     width: 15px; height: 15px; flex-shrink: 0; color: var(--td-amber, #C9954A);
   }
   .pa-block-row .pbr-qr svg { width: 100%; height: 100%; display: block; }
+  /* A section that carries words and would still be dropped by the save.
+     Brick rather than the QR mark's amber, because this is not a note about
+     one surface — it is work that is about to not exist. The row's left edge
+     carries the same colour so the mark is findable while scrolling a stack of
+     fifteen, and survives the row's own active/hover states (which paint the
+     background, never this border). */
+  .pa-block-row.pbr-unsaved { box-shadow: inset 2px 0 0 var(--td-brick, #B4533E); }
+  .pa-block-row .pbr-unsaved-ic {
+    width: 15px; height: 15px; flex-shrink: 0; color: var(--td-brick-ink, #D07A66);
+  }
+  .pa-block-row .pbr-unsaved-ic svg { width: 100%; height: 100%; display: block; }
 
   /* "Shows on" — the per-block channel switch in the inspector. */
   .pa-ch-row {
@@ -3299,6 +3310,9 @@ async function paSaveEdit() {
   const btn = document.getElementById('pe-save-btn');
   const status = document.getElementById('pe-save-status');
   btn.disabled = true; status.textContent = 'Saving… · 保存中…';
+  // Counted BEFORE the PATCH, off the same predicate the collect uses, because
+  // afterwards there is nothing left to count: these never reach the body.
+  const unsavable = paUnsavableBlocks().length;
   const body = peCollectBody();
   try {
     const r = await fetch('/api/retail-admin/products/' + PA_CURRENT.id, {
@@ -3317,7 +3331,18 @@ async function paSaveEdit() {
     if (idx !== -1) PA_ALL_PRODUCTS[idx] = { ...PA_ALL_PRODUCTS[idx], ...j.data };
     PA_SAVED_SNAPSHOT = peSerializeState();
     status.textContent = 'Saved ✓ · 已保存 ' + tdWhen(new Date(), 'time');
-    toast('Saved ✓ · 已保存');
+    // A section that was written into but is not finished enough to show is not
+    // saved, and used to be reported as "Saved ✓" like everything else — so a
+    // question typed into an FAQ with no answer beside it was gone on the next
+    // load and nothing had ever said so. Say it, in the colour of a problem,
+    // and leave the marker in the stack pointing at which ones.
+    if (unsavable) {
+      toast(cuT(
+        'Saved ✓ — ' + unsavable + ' section' + (unsavable === 1 ? '' : 's') + ' not saved yet',
+        '已保存 ✓ — ' + unsavable + ' 个板块尚未保存'), 'err');
+    } else {
+      toast('Saved ✓ · 已保存');
+    }
     return true;
   } catch (e) {
     status.textContent = '';
@@ -3506,14 +3531,21 @@ function paArrRemove(blockId, key, idx) {
   b[key].splice(idx, 1);
   paRenderAll();
 }
-function paBlocksCollect() {
-  paBlocksSyncFromDOM();
-  const out = (window._paBlocks || []).filter(b => {
-    // hide_qr is a per-block channel flag (see paChannelEditorHtml). It is only
-    // ever stored when it is ON: a false written onto every block the office
-    // happened to open would put a field nobody set into every product's JSON,
-    // and an absent flag already means "shows everywhere".
-    if (!b.hide_qr) delete b.hide_qr; else b.hide_qr = true;
+// WHETHER THIS SECTION SURVIVES THE SAVE.
+//
+// Lifted out of paBlocksCollect so the section list can ask the SAME question
+// the save asks. It used to live only inside the filter, which is how a section
+// carrying half a sentence could be dropped on save under a green "Saved ✓" and
+// be gone on the next load: nothing anywhere else could tell it was doomed.
+// One predicate, two readers — they cannot drift.
+//
+// The rule itself is unchanged and stays strict: a section with nothing in it
+// is noise, and an EMPTY section shown to a customer is worse than no section.
+// What changes is that the office can now see which ones those are, before
+// pressing Save rather than after (paRenderTabs marks them, paSaveEdit counts
+// them).
+function _paBlockWillSave(b) {
+    if (!b) return false;
     // Nutrition STAYS in description_blocks — it is a block like any other and
     // all three surfaces render the type. paCollectNutrition additionally
     // mirrors it to the products.nutrition column for mini app builds that
@@ -3531,8 +3563,12 @@ function paBlocksCollect() {
                                      return (b.items || []).some(it => it.name_en || it.name_cn);
     if (b.type === 'how_to_use')     return (b.tiles || []).some(t => t.label_en || t.label_cn || t.icon);
     if (b.type === 'storage_box')    {
-      const hasCard = c => c && (c.head_en || c.head_cn || c.num_en || c.num_cn || c.num || c.unit_en || c.unit_cn);
-      return hasCard(b.left) || hasCard(b.right) || b.note_en || b.note_cn;
+      const hasCard = c => !!(c && (c.head_en || c.head_cn || c.num_en || c.num_cn || c.num || c.unit_en || c.unit_cn));
+      // Coerced: every other branch answers a boolean, and this one answered the
+      // first truthy FIELD ('Unopened'). Inside a .filter() that read the same,
+      // which is why it survived — but the predicate has two callers now and a
+      // caller comparing it to true would have been wrong about storage boxes.
+      return hasCard(b.left) || hasCard(b.right) || !!(b.note_en || b.note_cn);
     }
     if (b.type === 'notes_callout')  return !!(b.text_en || b.text_cn);
     if (b.type === 'pull_quote')     return !!(b.text_en || b.text_cn || b.who_en || b.who_cn);
@@ -3541,6 +3577,38 @@ function paBlocksCollect() {
     if (b.type === 'pairings')       return (b.items || []).some(it => it.id);
     if (b.type === 'faq')            return (b.items || []).some(it => (it.q_en || it.q_cn) && (it.a_en || it.a_cn));
     return true;
+}
+// Does this section carry ANY words? The difference between a block somebody
+// added and never touched — noise, drop it without a word — and one somebody
+// wrote into that is not finished enough to show. Only the second is worth
+// interrupting for, which is why the marker is not simply "will not save".
+//
+// Keys that are settings rather than words are skipped: the colour tokens, the
+// slab colour, the image ratio, the channel flag, the type and the id. An icon
+// is a glyph, not a sentence, and every type whose completeness test counts an
+// icon already keeps the block on that basis alone.
+const _PA_NOT_WORDS = new Set(['id', 'type', 'bg', 'bg_color', 'fg_color', 'accent_color',
+                               'ratio', 'hide_qr', 'icon', 'lead', 'alt']);
+function _paBlockHasWords(v, key) {
+  if (typeof v === 'string') return !_PA_NOT_WORDS.has(key) && v.trim() !== '';
+  if (Array.isArray(v)) return v.some(x => _paBlockHasWords(x, key));
+  if (v && typeof v === 'object') return Object.keys(v).some(k => _paBlockHasWords(v[k], k));
+  return false;
+}
+// The sections that carry words and would still be dropped — what the marker
+// marks and what the save toast counts.
+function paUnsavableBlocks() {
+  return (window._paBlocks || []).filter(b => !_paBlockWillSave(b) && _paBlockHasWords(b));
+}
+function paBlocksCollect() {
+  paBlocksSyncFromDOM();
+  const out = (window._paBlocks || []).filter(b => {
+    // hide_qr is a per-block channel flag (see paChannelEditorHtml). It is only
+    // ever stored when it is ON: a false written onto every block the office
+    // happened to open would put a field nobody set into every product's JSON,
+    // and an absent flag already means "shows everywhere".
+    if (!b.hide_qr) delete b.hide_qr; else b.hide_qr = true;
+    return _paBlockWillSave(b);
   });
   return out.length ? out : null;
 }
@@ -3637,12 +3705,19 @@ function paRenderTabs() {
     // in its own inspector — otherwise "which of these nine does the till page
     // show?" costs nine clicks to answer.
     const offQr  = b.hide_qr ? ' pbr-offqr' : '';
-    return `<div class="pa-block-row${active}${offQr}" draggable="true" data-blockid="${b.id}" data-idx="${i}" onclick="paBlocksSelect('${b.id}')" title="${escapeAttr(tName.en + (tName.cn ? ' · ' + tName.cn : ''))}">
+    // A section with words in it that the save would still drop. Marked here,
+    // in the stack, for the same reason hide_qr is: the alternative is opening
+    // every section to find out which one is about to disappear. The words are
+    // the page's own live pair — this is the state 09-products calls
+    // "Not saved yet · 尚未保存" of a product that has never been written.
+    const unsaved = (!_paBlockWillSave(b) && _paBlockHasWords(b)) ? ' pbr-unsaved' : '';
+    return `<div class="pa-block-row${active}${offQr}${unsaved}" draggable="true" data-blockid="${b.id}" data-idx="${i}" onclick="paBlocksSelect('${b.id}')" title="${escapeAttr(tName.en + (tName.cn ? ' · ' + tName.cn : ''))}">
       <div class="pbr-icon">${icon}</div>
       <div class="pbr-info">
         <div class="pbr-name" data-no-i18n><span data-lang-block="en">${escapeHtml(tName.en)}</span><span data-lang-block="cn">${escapeHtml(tName.cn || tName.en)}</span></div>
         ${sub ? `<div class="pbr-sub">${escapeHtml(sub)}</div>` : ''}
       </div>
+      ${unsaved ? `<div class="pbr-unsaved-ic" title="Not saved yet · 尚未保存"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16.5" x2="12.01" y2="16.5"/></svg></div>` : ''}
       ${b.hide_qr ? `<div class="pbr-qr" title="Hidden on the QR menu · 二维码菜单已隐藏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg></div>` : ''}
       <div class="pbr-grip" title="Drag to reorder · 拖动排序">⋮⋮</div>
       <div class="pbr-num">${i + 1}</div>
@@ -3655,6 +3730,15 @@ function paRefreshTabLabels() {
   blocks.forEach(b => {
     const row = document.querySelector(`.pa-block-row[data-blockid="${b.id}"]`);
     if (!row) return;
+    // The typing path repaints labels without rebuilding the stack, so the
+    // unsavable marker has to be re-decided here too — otherwise it stays on
+    // the row for the rest of the session after the missing answer is typed,
+    // and the office learns to ignore it.
+    const unsavable = !_paBlockWillSave(b) && _paBlockHasWords(b);
+    row.classList.toggle('pbr-unsaved', unsavable);
+    const icon = row.querySelector('.pbr-unsaved-ic');
+    if (unsavable && !icon) paRenderTabs();
+    else if (!unsavable && icon) icon.remove();
     const subEl = row.querySelector('.pbr-sub');
     const sub = _paBlockSubLabel(b);
     if (sub) {

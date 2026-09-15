@@ -248,5 +248,123 @@ check('the colophon portrait hides itself when the asset is missing', () => {
     'the character key goes into a src attribute unescaped');
 });
 
+// ── 7. The save predicate, RUN rather than read ─────────────────────────
+//
+// Everything above is a source assertion because the page needs a DOM. This
+// section does not: _paBlockWillSave and _paBlockHasWords are pure functions of
+// one block object, so they are lifted out of the page and CALLED. A grep can
+// only say the predicate is still spelled the same; these say what it decides.
+section('What the save actually keeps (functions executed, not grepped)');
+
+const PRED = (() => {
+  const parts = ['_paBlockWillSave', '_paBlockHasWords'].map(anchored);
+  const constRe = /const _PA_NOT_WORDS = new Set\(\[[\s\S]*?\]\);/;
+  const m = constRe.exec(SRC);
+  assert.ok(m, '_PA_NOT_WORDS not found — the predicate moved');
+  return new Function(`${m[0]}\n${parts.join('\n')}\nreturn { _paBlockWillSave, _paBlockHasWords };`)();
+})();
+const willSave = PRED._paBlockWillSave;
+const hasWords = PRED._paBlockHasWords;
+// What the stack marks and the save toast counts: written into, still dropped.
+const marked = (b) => !willSave(b) && hasWords(b);
+
+check('an untouched section is dropped, and is NOT worth interrupting for', () => {
+  const blank = { id: 'b1', type: 'hero_intro', kicker_en: '', kicker_cn: '', body_en: '',
+                  body_cn: '', highlight_en: '', highlight_cn: '' };
+  assert.strictEqual(willSave(blank), false, 'an empty hero_intro should not be persisted');
+  assert.strictEqual(marked(blank), false, 'a section nobody typed into must not be flagged — it is noise');
+});
+
+check('a question with no answer is flagged, not silently binned', () => {
+  const faq = { id: 'b2', type: 'faq', title_en: '', title_cn: '',
+                items: [{ q_en: 'Is it spicy?', q_cn: '', a_en: '', a_cn: '' }] };
+  assert.strictEqual(willSave(faq), false, 'the completeness rule is unchanged: half an FAQ is not shown');
+  assert.strictEqual(marked(faq), true, 'the words typed into it must be flagged before the save drops them');
+});
+
+check('a complete question is kept', () => {
+  const faq = { id: 'b3', type: 'faq',
+                items: [{ q_en: 'Is it spicy?', q_cn: '', a_en: 'Mild.', a_cn: '' }] };
+  assert.strictEqual(willSave(faq), true);
+  assert.strictEqual(marked(faq), false);
+});
+
+check('the other four ways to lose words are all flagged', () => {
+  const cases = {
+    'image band with a caption but no photo':
+      { id: 'c1', type: 'image_band', url: '', caption_en: 'Stone-ground in Yunnan', ratio: 'wide' },
+    'recipe steps with a title and no steps':
+      { id: 'c2', type: 'recipe_steps', title_en: 'How we make it', steps: [{ text_en: '', text_cn: '' }] },
+    'cross-sell with a title and no products':
+      { id: 'c3', type: 'pairings', title_en: 'Goes well with', items: [] },
+    'a usage tile with a note but no label':
+      { id: 'c4', type: 'how_to_use', tiles: [{ icon: '', label_en: '', label_cn: '', sub_en: 'over warm oats', sub_cn: '' }] },
+  };
+  for (const [what, b] of Object.entries(cases)) {
+    assert.strictEqual(willSave(b), false, `${what}: the rule changed — re-read this test`);
+    assert.strictEqual(marked(b), true, `${what}: written into, dropped, and NOT flagged`);
+  }
+});
+
+check('a setting is not a word — colours and flags never flag a row', () => {
+  for (const b of [
+    { id: 'd1', type: 'hero_intro', body_en: '', bg_color: 'lime-leaf', fg_color: 'ink', accent_color: 'berry-punch' },
+    { id: 'd2', type: 'hero_intro', body_en: '', hide_qr: true },
+    { id: 'd3', type: 'image_band', url: '', ratio: 'wide', caption_en: '' },
+    { id: 'd4', type: 'how_to_use', tiles: [{ icon: '', label_en: '', sub_en: '' }] },
+  ]) {
+    assert.strictEqual(marked(b), false,
+      `a block carrying only settings was flagged as unsaved work: ${JSON.stringify(b)}`);
+  }
+});
+
+check('the seeded sections a template lays down are all saved as-is', () => {
+  // Every make()/template default that ships with prefilled copy must pass, or
+  // adding one from the dropdown would flag itself the moment it appeared.
+  const seeded = [
+    { id: 'e1', type: 'spec_strip', cells: [{ k_en: 'Type', k_cn: '类型', v_en: '', v_cn: '' }] },
+    { id: 'e2', type: 'storage_box',
+      left:  { icon: '🌡', head_en: 'Unopened', head_cn: '未开封', num_en: 'Cool & dry' },
+      right: { icon: '❄', head_en: 'After opening', head_cn: '开封后', num_en: 'Refrigerate' },
+      note_en: 'Stir before each use.', note_cn: '每次使用前请搅拌。' },
+    { id: 'e3', type: 'nutrition_facts', basis_en: 'Per 100g', basis_cn: '每100克',
+      rows: [{ label_en: 'Energy', label_cn: '能量', value: '' }] },
+  ];
+  for (const b of seeded) {
+    assert.strictEqual(willSave(b), true, `a freshly added ${b.type} would be dropped on the first save`);
+    assert.strictEqual(marked(b), false, `a freshly added ${b.type} flags itself as unfinished`);
+  }
+});
+
+check('an unknown block type is kept rather than quietly discarded', () => {
+  assert.strictEqual(willSave({ id: 'f1', type: 'something_new', text_en: 'hi' }), true,
+    'a type this build does not know must survive a round-trip, not be deleted by it');
+});
+
+check('the marker is recomputed on the typing path, not only on a full rebuild', () => {
+  const b = anchored('paRefreshTabLabels');
+  assert.ok(/_paBlockWillSave\(b\)/.test(b) && /_paBlockHasWords\(b\)/.test(b),
+    'paRefreshTabLabels repaints labels per keystroke but leaves the marker stale');
+  assert.ok(/classList\.toggle\('pbr-unsaved'/.test(b), 'the row class is never cleared once set');
+});
+
+check('the save reports the count in the failure colour, from the same predicate', () => {
+  const b = anchored('paSaveEdit');
+  assert.ok(/paUnsavableBlocks\(\)\.length/.test(b),
+    'paSaveEdit does not count what it is about to drop');
+  assert.ok(/'err'\);/.test(b.slice(b.indexOf('unsavable'))),
+    'a save that dropped written-in sections still reports in the success colour');
+  assert.ok(b.indexOf('const unsavable') < b.indexOf('peCollectBody()'),
+    'counted after collect, when there is nothing left to count');
+});
+
+check('one predicate, two readers — the list and the save cannot disagree', () => {
+  const collect = anchored('paBlocksCollect');
+  assert.ok(/return _paBlockWillSave\(b\);/.test(collect),
+    'paBlocksCollect carries its own copy of the rule again');
+  assert.ok(!/b\.type === 'faq'/.test(collect),
+    'the per-type tests are back inside the filter, where nothing else can ask them');
+});
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
