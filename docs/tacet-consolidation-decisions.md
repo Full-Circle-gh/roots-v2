@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.274
+# Tacet shared-core consolidation — decisions record, v4.275
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -20,6 +20,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+
+
+2026-09-15 · v4.275 — **§138 · WHAT THE CUSTOMER WAS TOLD IS PART OF THE ORDER — DECIDED BY ASH:** *“b and all four”*, the second half of that answer. **THE QUESTION:** the checkout shows one of four notices when something is sold out; three weeks later *“you told me it would arrive on the 20th”* had to be answerable from the order. **WHAT WAS ALREADY THERE, AND IT INVERTED THE RECOMMENDATION PUT TO ASH:** the two DATED notices already land on the order — `computeBatchNotice` and `computeLocalFreshNotice` both stamp `promised_ship_date` and `promised_delivery_date` in the best-effort block after the write. The argument for “all four” was that the dated ones matter most, and those were the ones already recorded; the real gap was the other two, which is what the session that first reported it had said. **WHAT IS DECIDED:** `preorder_pids` (the ids sold as a pre-order) and `moved_from_store` (the shop that WOULD have served this address if nothing were closed, written only when it differs from the shop that took the order) complete the set. **RECOMPUTED ON THE SERVER, NOT ECHOED BY THE CLIENT** — a record meant to settle a dispute is worth nothing if the other party supplied it; both run off the same locals the order was built on. **THE MOVE IS A FACT, NOT THE NOTICE:** `computeStoreMoveNotice` returns null when the operator has not written its copy — right for a banner, wrong for an audit trail, because the order moved either way and the silence was ours — so the write asks `inventory.routeIgnoringClosures` directly. `routing_reason` could not answer it, because `routeOrder` drops closed stores BEFORE it ranks. **BEST-EFFORT, OUTSIDE THE ORDER TRANSACTION:** a record ABOUT an order must never cost us the order. **AND IT IS READ** — both print in the order drawer beside `rerouteShortNote`; a column nobody can read is not an audit trail. **NOT DONE:** no retrospective fill (older orders carry NULL, which is honest), no change to what the customer sees, the dated pair untouched, and no change to `.gitignore` or CI. **CHINESE:** one composed pair, declared in `docs/tacet-delivery-vocabulary.md` v1.90 with the candidates rejected; the pre-order label is the checkout notice's own kicker lifted verbatim.
 
 
 
@@ -15054,5 +15058,64 @@ excluded on both paths — no inventory of ours, so no count to be wrong.
   dialog now asks about it properly.
 - **No schema change and no migration.** `counter_miscount` is a value in the
   existing `reason` column.
+- **No change to `.gitignore`, CI, or anything governing how sessions and builds
+  work.**
+
+## §138 — WHAT THE CUSTOMER WAS TOLD IS PART OF THE ORDER
+
+**Decided by Ash, 2026-09-15:** *"b and all four"* — the second half of that
+answer. The first is §137.
+
+**THE QUESTION IT ANSWERS.** A customer orders something we are sold out of. The
+checkout tells them one of four things. Three weeks later: *"you told me it
+would arrive on the 20th."* The order shows what they bought and what they paid,
+and until now could not always say what they were shown.
+
+**WHAT WAS ALREADY THERE, AND IT IS MORE THAN WAS ASSUMED.** The two notices
+that carry a DATE already land on the order. `computeBatchNotice` (courier) and
+`computeLocalFreshNotice` (local run) both stamp `promised_ship_date` and
+`promised_delivery_date` in the best-effort block after the order is written.
+**This was discovered while building, and it inverted the recommendation that
+had been put to Ash** — the argument for "all four" was that the dated ones
+matter most, and the dated ones were the ones already recorded. The real gap was
+the other two, which is what the session that first reported it had said.
+
+**WHAT IS DECIDED.** The two dateless notices are recorded too, completing the
+set:
+
+| column | what it holds |
+|---|---|
+| `preorder_pids` | the product ids sold as a pre-order on this order |
+| `moved_from_store` | the store code that WOULD have served this address if nothing were closed — written only when it differs from the store that took the order |
+
+**RECOMPUTED ON THE SERVER, NOT ECHOED BY THE CLIENT.** A record meant to settle
+a dispute is worth nothing if the other party supplied it. Both run off the same
+locals the order itself was built on, microseconds after the write.
+
+**THE MOVE IS RECORDED AS A FACT, NOT AS THE NOTICE, and that is the one place
+this deliberately does not mirror the checkout.** `computeStoreMoveNotice`
+returns null when the operator has not written the copy for it
+(`storefront_config` `notice.store_move.*`) — correct for a banner, and wrong
+for an audit trail, because the order moved either way and the silence was ours.
+So the write asks `inventory.routeIgnoringClosures` directly, which is the same
+question the notice asks first. `routing_reason` could not answer it: `routeOrder`
+drops closed stores BEFORE it ranks, so its answer can never say what the
+closure changed.
+
+**BEST-EFFORT, OUTSIDE THE ORDER TRANSACTION.** A record ABOUT an order must
+never be able to cost us the order. Same discipline as the two date stamps above
+it and the reroute pids below it.
+
+**AND IT IS READ.** Both print in the order drawer beside `rerouteShortNote`,
+which answers the same question in the same shape: why does this order look the
+way it does. A column nobody can read is not an audit trail.
+
+**NOT DONE, so it is not assumed.**
+
+- **No retrospective fill.** Orders placed before this carry NULL, which is
+  honest: we do not know what they were shown.
+- **No change to what the customer sees.** This is a record, not a notice.
+- **The dated pair is untouched.** `promised_ship_date` / `promised_delivery_date`
+  keep their existing writers and their existing meaning.
 - **No change to `.gitignore`, CI, or anything governing how sessions and builds
   work.**
