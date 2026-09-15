@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.271
+# Tacet shared-core consolidation — decisions record, v4.272
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,7 +23,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-15 · v4.271 — **§134 · A SECTION CAN BE TAKEN OFF THE QR MENU WITHOUT LEAVING THE APP — DECIDED BY ASH:** *“on the main menu qr, product description — there are products that i dont want all blocks available. i want less blocks. however in the mini app i want to keep it the same as now.”* **ONE ARRAY, THREE SURFACES.** `description_blocks` is authored once and rendered by the mini app, the QR menu (`lib/product-blocks-read.js` → `routes/shop-menu.js`) and the web storefront; there was no way to say *this section, but not there*. **WHAT IS DECIDED:** a block may carry `hide_qr: true`; `pageBlocks()` skips it and NOTHING else in the repo reads it, so the mini app and the web storefront — which render by block TYPE and ignore unknown fields — are untouched by a trim, without either of them changing by a line. **DEFAULT IS ON, AND THAT IS NOT A DETAIL:** an absent flag shows. A whitelist was rejected because it would have blanked the whole existing catalogue on the QR menu the day it shipped; a `false` is never persisted either. **THE WEB STOREFRONT IS DELIBERATELY NOT IN THIS** — Ash named two surfaces, `public/shop.html` is a third, and a switch nobody uses is a third thing to keep correct. **OFF IS NOT DELETE:** the block keeps its words, its order and its colours, and the editor says so. **THE FALLBACK WAS THE TRAP:** the QR menu prints the `nutrition` COLUMN when no `nutrition_facts` BLOCK said it (§132), and a hidden block is absent from the filtered list — so asking it would have printed the very table the operator switched off. The question goes to `blockRead.hasNutritionBlock()`, which reads the UNFILTERED source. §120's refusal to open a sheet on nothing is unchanged and now has one more way to be reached. **THE SECOND HALF OF THE SAME BRIEF** — *“need to fix nutrition label so it will be part of the block same as any other blocks”* — makes the hand editor keep `nutrition_facts` in `description_blocks`, as the AI compose path in `public/retail-admin/09-products.js` always has; the mirror to the `products.nutrition` column STAYS for mini app builds that predate the block, and `peMount` synthesises the column back into the stack only when the stack has no nutrition block of its own, so nothing double-prints. **NO MIGRATION AND NONE NEEDED** — column-only products keep rendering through the fallback until somebody saves them. **IN THE EDITOR (Option A, chosen by Ash from three mockups):** a third fold, *Where to show · 显示位置*, beside Content and Colours, plus a struck-through eye on a switched-off row in the section list. Options B (both surfaces previewed side by side) and C (a sections × surfaces matrix) are recorded in §134 for whoever reworks the editor. **THE SKIN IS NOT IN THIS** — the editor still wears the older IBM Plex / Tea-Green layer while `retail-admin.css` carries a live `--td-*` Tacet layer; that is a separate PR. **CHINESE:** three composed strings and two verbatim lifts, declared in `docs/tacet-delivery-vocabulary.md` v1.87 with the candidates rejected. **TESTS:** seven checks in `scripts/test_product_blocks_read.js` and two end-to-end in `scripts/test_shop_menu_render.js`. No schema, no migration, no change to the mini app, the web storefront, `.gitignore` or CI.
+2026-09-15 · v4.272 — **§135 · A SECTION CAN BE TAKEN OFF THE QR MENU WITHOUT LEAVING THE APP — DECIDED BY ASH:** *“on the main menu qr, product description — there are products that i dont want all blocks available. i want less blocks. however in the mini app i want to keep it the same as now.”* **ONE ARRAY, THREE SURFACES.** `description_blocks` is authored once and rendered by the mini app, the QR menu (`lib/product-blocks-read.js` → `routes/shop-menu.js`) and the web storefront; there was no way to say *this section, but not there*. **WHAT IS DECIDED:** a block may carry `hide_qr: true`; `pageBlocks()` skips it and NOTHING else in the repo reads it, so the mini app and the web storefront — which render by block TYPE and ignore unknown fields — are untouched by a trim, without either of them changing by a line. **DEFAULT IS ON, AND THAT IS NOT A DETAIL:** an absent flag shows. A whitelist was rejected because it would have blanked the whole existing catalogue on the QR menu the day it shipped; a `false` is never persisted either. **THE WEB STOREFRONT IS DELIBERATELY NOT IN THIS** — Ash named two surfaces, `public/shop.html` is a third, and a switch nobody uses is a third thing to keep correct. **OFF IS NOT DELETE:** the block keeps its words, its order and its colours, and the editor says so. **THE FALLBACK WAS THE TRAP:** the QR menu prints the `nutrition` COLUMN when no `nutrition_facts` BLOCK said it (§132), and a hidden block is absent from the filtered list — so asking it would have printed the very table the operator switched off. The question goes to `blockRead.hasNutritionBlock()`, which reads the UNFILTERED source. §120's refusal to open a sheet on nothing is unchanged and now has one more way to be reached. **THE SECOND HALF OF THE SAME BRIEF** — *“need to fix nutrition label so it will be part of the block same as any other blocks”* — makes the hand editor keep `nutrition_facts` in `description_blocks`, as the AI compose path in `public/retail-admin/09-products.js` always has; the mirror to the `products.nutrition` column STAYS for mini app builds that predate the block, and `peMount` synthesises the column back into the stack only when the stack has no nutrition block of its own, so nothing double-prints. **NO MIGRATION AND NONE NEEDED** — column-only products keep rendering through the fallback until somebody saves them. **IN THE EDITOR (Option A, chosen by Ash from three mockups):** a third fold, *Where to show · 显示位置*, beside Content and Colours, plus a struck-through eye on a switched-off row in the section list. Options B (both surfaces previewed side by side) and C (a sections × surfaces matrix) are recorded in §134 for whoever reworks the editor. **THE SKIN IS NOT IN THIS** — the editor still wears the older IBM Plex / Tea-Green layer while `retail-admin.css` carries a live `--td-*` Tacet layer; that is a separate PR. **CHINESE:** three composed strings and two verbatim lifts, declared in `docs/tacet-delivery-vocabulary.md` v1.87 with the candidates rejected. **TESTS:** seven checks in `scripts/test_product_blocks_read.js` and two end-to-end in `scripts/test_shop_menu_render.js`. No schema, no migration, no change to the mini app, the web storefront, `.gitignore` or CI.
+2026-09-15 · v4.271 — **§134 · A PAID EXTRA IS STOCK, NOT A REASON TO STOP COUNTING — DECIDED BY ASH on being shown why order TC000735 sat in Paid with a sold-out pre-order line on it:** *"fix it."* **THE PARK HAD AN ARM NOBODY WOULD HAVE CHOSEN.** §80/§128's pre-order park ran inside a guard that included `!hasStockedAddon` — a cart holding a paid extra with its own inventory refused to park AT ALL. The worry behind it was real: the shortage map inside the block was built from ORDER LINES only, so an add-on's shortage was invisible to it and parking on that count would promise a restock on stock nobody had looked at. But the cure threw out the order with the problem. **WHAT IT COST, MEASURED ON PRODUCTION rather than reasoned about:** a read-only query against the live row shows TC000735 (Tianhe, wechat, courier for the next day, so the stock gate was off — the exact case §80 parks) carrying Whole-Wheat Pita at `oos_policy = backorder_gz` with `physical_qty` **-1**, `awaiting_restock_pids` **null**, `fallback_choice` **null**. The pita was already at zero since 11 Sep; this order took it below. The only thing standing between that order and the Awaiting restock queue was a ¥27 cracker attached to the Zhoug beside it. **WHAT IS DECIDED:** the demand the park judges is every order line PLUS every stock-backed add-on chosen on one, one add-on per unit of its line — the same qty rule `expandStockLines` uses and the same one the reserve, commit and routing paths have always used. The arm goes because the hole it covered is filled. A short add-on that is pre-orderable parks the order; a short add-on that is 'strict' refuses it, exactly as a strict LINE does. **AND THE OTHER END MOVED WITH IT, or the fix would have been half of one:** `checkAwaitingRestockForRestock` in `lib/inventory.js` decided release from `retail_order_items` alone, so an order parked ON an add-on would have cleared while the very item it waited for was still missing, and handed back stock it never deducted. It now builds the same map from the lines and their `options_json`, checks availability against it, and takes stock from it — one reservation and one ledger row per PRODUCT, where a cart repeating a product across two lines used to write two (the sum is unchanged). **WHAT IS DELIBERATELY NOT CHANGED, and both are load-bearing.** `cartHasBundle` stays: a bundle parks on COMPONENT ids that match no order line, and the drawer's card and its per-parcel "Held — N lines waiting" pill both key on line `product_id`. And SUPPLIER-DIRECT LINES ARE STILL COUNTED WHOLE — `expandStockLines` drops them, correctly, for reserving, which is exactly why the park does not call it: the release demands `av.exists` for every line, a supplier-direct line has no stock row and never will, so parking such an order would park it forever. The first draft of this change did call `expandStockLines` and `scripts/test_preorder_park.js` caught it. **WHAT THIS DOES NOT FIX, said plainly:** TC000735 itself. `STATUS_TRANSITIONS` has no `paid → awaiting_restock` step, so an order already settled cannot be moved into the queue by anyone; that order is prepare-when-it-lands or cancel-and-refund, and the missing manual step is a separate question. **NO CHINESE COMPOSED** — no new customer-facing or operator-facing string; `docs/tacet-delivery-vocabulary.md` untouched. `scripts/test_preorder_park.js` 16 → **20**, the new cases proven non-vacuous by the fact that they fail on the old guard; `test:fast` **245/245**; lint 0 errors. No schema, no migration, and no change to `.gitignore` or CI.
+
 2026-09-15 · v4.270 — **§133 · A SCREENSHOT WITH NO CLOCK ON IT IS A COULDN'T-VERIFY, NOT A HOLD — DECIDED BY ASH on being shown the gap and asked whether to close it:** *"ok fix it."* **THE GAP WAS BETWEEN THE CHECK'S COMMENT AND THE CHECK'S CODE.** The head of the freshness check in `validateAlipayProof` has read *"An unreadable timestamp is a 'couldn't verify', not evidence the payment is wrong"* since the day it was written; the code under it set `checks.time = false`, which `hardPass` reads as a failed check, which holds the order. Nobody chose that — it is what the branch happened to do. **WHAT BROUGHT IT INTO VIEW** was the sibling fix shipped the same day (PR #606): a 12-hour phone clock was being read as the morning, so every afternoon payment looked twelve hours stale. With the parse fixed a device clock now almost always lands inside the window, which left "no clock ANYWHERE on the screenshot" as the only remaining way this check holds an otherwise-clean order — worth deciding rather than leaving as a leftover. **WHAT IS DECIDED:** window live, no readable time in any of the three places it can appear (printed transaction time, raw time text, phone status bar), every other hard check passing → `checks.time = null` (**not checked**) rather than `false` (**failed**), verdict **match**, auto-flip fires if the operator has it on. A time that IS readable is measured against the window exactly as before. **WHAT IS GIVEN UP, STATED RATHER THAN DISCOVERED LATER:** the window was the only check that looked at WHEN, so a genuine receipt to this shop for this amount, paid long ago and never uploaded here before, will now confirm — the reuse guard cannot catch it, because its key is the image hash and txn id *within this system* and such a receipt has nothing to collide with. Narrow, and the price of not holding paying customers over a cropped screenshot. **WHAT STILL GUARDS THE MONEY:** the success screen, the amount within §130's ¥2, the payee list, the image/txn reuse guard, the operator's auto-flip toggle, and the refusal to re-flip an order past `pending_payment` — five of six checks untouched. **THE CONDITION IS "ONLY THE CLOCK"** and a test holds it: beside a wrong payee, a non-success screen, or a shortfall past ¥2, it is still a mismatch — the same sentence §130 had to write, for the same reason. **FORGIVEN, NEVER HIDDEN:** the verdict returns `timeUnread`, persisted as `time_unread`, and the proof card prints a **Paid at** row saying the time could not be read; printing no row was considered and rejected, because it would make "verified with a timestamp" and "verified without one" identical on screen. **NO CHINESE COMPOSED** — both halves of the row are live pairs off this same card (`Paid at` / `付款时间` from the row above, `无法识别` from its own pill); `docs/tacet-delivery-vocabulary.md` untouched. The case that asserted the old behaviour is rewritten rather than deleted, so the reversal is legible in the diff. No schema, no migration, no change to `.gitignore` or CI.
 
 2026-09-15 · v4.269 — **§132 CORRECTED: THE HIGHLIGHT PHRASE IS MARKED INLINE, AND THE OFFICE'S PARAGRAPH BREAKS SURVIVE — REPORTED BY ASH against the product editor's own preview, which draws the lime slab the live page did not:** *"it doesnt show the yellw mark on the live version."* **THE COMPONENT'S RULE IS A FORK, NOT A FALLBACK, AND §132 IMPLEMENTED ONLY HALF OF IT.** `hero_intro` carries a `highlight` phrase with two jobs: if the phrase IS FOUND inside the body it is wrapped inline on a lime slab and NO kicker is drawn from it; only when it is not found does it become the kicker instead. The first build kept the fallback and dropped the marking, so a phrase the office had placed inside its own paragraph — which is the ordinary case, and the one the editor previews — rendered as plain text and the slab appeared on no product at all. **THE FORK IS NOW RESOLVED PER LANGUAGE**, which the component never has to do because it picks a language first: here both halves travel, so an office that typed the phrase into the English body but not the Chinese gets the slab in English and the kicker in Chinese, each half answering for its own text. **AND A SECOND, QUIETER LOSS CAME OUT WITH IT: `white-space:pre-line` WAS MISSING.** The office writes descriptions with blank lines between paragraphs and the component's `.pb-hero-body` has always honoured them; without it every description on the counter menu ran together into one block, which is what customers have been reading since §129 first drew the paragraph. Both are one line of CSS and neither was visible without comparing against the editor. **The kicker also gained the component's short forest rule before it** — `.pb-hero-kicker`'s own 19px bar — which distinguishes the one kicker that introduces a paragraph from the olive ones that label a list. `box-decoration-break:clone` on the slab keeps its padding on both halves when the phrase wraps across a line, without which the second line loses its left padding and the slab reads as torn. **NO CHINESE COMPOSED.** `test_shop_menu_render.js` 59 → **60**; the new check asserts the slab has a real box and a real ground, that the Chinese half draws none for a phrase absent from its body, that the explicit kicker still wins, and that the blank line survives — proven non-vacuous by collapsing the fork, which fails with "the phrase was not marked inline: null". `test:fast` 242/242. No schema, no migration, no change to `.gitignore` or CI.
@@ -14645,7 +14647,116 @@ stale-pending sweep, or what the dashboard counts. `timeWindowMin` still does it
 double duty as the auto-cancel deadline for Alipay orders nobody paid. No schema,
 no migration, and no change to `.gitignore` or CI.
 
-## §134 — A SECTION CAN BE TAKEN OFF THE QR MENU WITHOUT LEAVING THE APP
+
+## §134 — A PAID EXTRA IS STOCK, NOT A REASON TO STOP COUNTING
+
+**2026-09-15 · Ash decided, on being shown why order TC000735 sat in Paid with a
+sold-out pre-order line on it:**
+*"fix it."*
+
+**THE REPORT.** *"why this order is not under waiting for restock? pita is out of
+stock and can do pre order."* Then, once the mechanism was explained: *"i give
+permission to sell pita with stock negative pre order waiting for stock. the
+customer did order, thats not the problem, the problem is that the order is not
+under 'waiting for stock' status."* That sentence is the scope of this section.
+Selling past zero was working as intended. Where the resulting order went was not.
+
+**WHAT THE LIVE ROW SAYS**, read through the Read-only prod query workflow rather
+than reasoned about. Order #1918 / TC000735, store Tianhe, channel `wechat`,
+`fulfillment_type` delivery, `delivery_slot_kind` express for the next day — so
+`requiresStockGate` is false, which is precisely the case §80's park exists for.
+`status` **paid**. `awaiting_restock_pids` **null**. `fallback_choice` **null**.
+Its three lines: Whole-Wheat Pita (`oos_policy` **backorder_gz**, so pre-orderable,
+`physical_qty` **-1** at Tianhe), Zhoug (44 on the shelf), Tortilla Chips (15).
+The pita had been at zero since 11 September, when a gzgrocery order took it 3→0;
+this order's own `order_prepare` took it to -1. One short line, and it was
+pre-orderable. The order should have parked and did not.
+
+**WHY IT DID NOT, and it has nothing to do with the pita.** The Zhoug line
+carries a chosen option — *"Add extras?: Whole-Wheat Crisp Crackers (1 pack)"* —
+whose choice row holds `stock_product_id = 96`. The park in `routes/retail.js`
+ran inside a guard carrying `!hasStockedAddon`, so the presence of that extra
+dropped the entire block before the pita was ever looked at.
+
+**THE ARM WAS NOT ARBITRARY, which is why it is replaced rather than deleted.**
+The shortage map inside the block was built from ORDER LINES only. An add-on's
+demand was invisible to it, so parking a cart that held one would have promised a
+restock computed from a count that had not looked at every item leaving the shelf.
+Refusing to park was the safe answer available at the time. It was also the wrong
+one for every cart whose extra was fine and whose line was not.
+
+**WHAT IS DECIDED.** The demand the park judges is every order line **plus** every
+stock-backed add-on chosen on one, at one add-on per unit of the line it rides on
+— the same rule `expandStockLines` applies and the same one the reserve, commit
+and routing paths have used all along. An add-on is then a line like any other:
+
+* short and on a pre-order policy → the order parks, and the add-on's product id
+  is recorded in `awaiting_restock_pids` beside any short line;
+* short and `strict` → the park is refused, exactly as a short strict LINE
+  refuses it;
+* an id with no product row → read as `strict` through
+  `effectiveOosPolicy(undefined)`, so it refuses. When we cannot say what the
+  operator allowed for an item, not parking is the safe direction, and it leaves
+  the order where the old code left it.
+
+`freshLinesCoveredToday` is asked about the same set, so a batch-made add-on can
+be recognised as covered rather than silently failing the covered test and
+refusing a park §80 intends.
+
+**AND THE OTHER END MOVED WITH IT, or this would have been half a fix.**
+`checkAwaitingRestockForRestock` in `lib/inventory.js` is where a parked order
+comes back, and it decided release from `retail_order_items` alone. Once an order
+can be parked ON an add-on, that function would clear it for release while the
+very item it was waiting for was still missing, and hand back stock it had never
+deducted. It now builds the same lines-plus-`options_json` map, checks
+availability against it, and takes stock from it. Taking from the map rather than
+the rows also means what is deducted is exactly what was verified a line earlier,
+and writes **one** reservation and **one** ledger row per product where a cart
+repeating a product across two lines used to write two — the same total, and a row
+the ledger reads back without ambiguity.
+
+**WHAT IS DELIBERATELY NOT CHANGED, and both are load-bearing.**
+
+`cartHasBundle` **stays an arm of the guard.** `expandStockLines` would expand a
+bundle happily, but a bundle parks on COMPONENT ids that match no order line, and
+both the drawer's Awaiting-restock card and its per-parcel *"Held — N lines
+waiting"* pill key on line `product_id`. That is a separate question with its own
+answer and this is not it.
+
+**Supplier-direct lines are still counted WHOLE**, and this is why the park does
+not simply call `expandStockLines`. That function drops them — correctly, for
+reserving, since they hold no inventory of ours. But the release above demands
+`av.exists` for every line, a supplier-direct line has no `retail_store_stock`
+row and never will, so an order holding one could never satisfy it: parking such
+an order would park it forever. Counting it is what refuses the park, through
+`effectiveOosPolicy` returning `always`, which is not a pre-order policy. **The
+first draft of this change did call `expandStockLines` and
+`scripts/test_preorder_park.js` failed it on exactly that case** — the control
+was already written, which is the whole return on having written it.
+
+**WHAT THIS DOES NOT FIX, said here rather than discovered later.** Order
+TC000735 itself. `STATUS_TRANSITIONS` offers no `paid → awaiting_restock` step,
+so an order that has already settled cannot be moved into the queue by any
+operator; TC000735 is prepare-it-when-the-pita-lands or cancel-and-refund. Whether
+that manual step should exist is a separate decision and is not taken here.
+
+**NO CHINESE COMPOSED.** This change mints no customer-facing or operator-facing
+string; the Awaiting-restock card, its pill and the status chip are the ones §80
+and §128 already shipped. `docs/tacet-delivery-vocabulary.md` is untouched.
+
+**HOW IT IS HELD.** `scripts/test_preorder_park.js` 16 → **20**: a sold-out
+pre-order line beside an in-stock paid extra now parks and records only the short
+line; the extra is not taken while the order waits; the short line is not driven
+negative; and a sold-out `strict` extra is refused at checkout outright — 409
+`insufficient_stock` naming the EXTRA's product id, from the pre-existing
+`strictItems` reserve gate, which is a stronger answer than "does not park" and is
+asserted so that no later change can quietly start parking on one. The new cases
+are placed LAST in the suite on purpose: a parked order competes for the next
+restock at that store, and placed earlier they ate the unit an existing release
+case was waiting for. `test:fast` **245/245**, lint 0 errors. No schema, no
+migration, and no change to `.gitignore` or CI.
+
+## §135 — A SECTION CAN BE TAKEN OFF THE QR MENU WITHOUT LEAVING THE APP
 
 **Decided by Ash, 2026-09-15, in one sentence:** *"on the main menu qr, product
 description — there are products that i dont want all blocks available. i want
