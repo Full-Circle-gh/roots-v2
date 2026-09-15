@@ -816,6 +816,60 @@ function boxOf(text) {
         `the fixture chip no longer ends in a full-width bracket: ${cnText}`);
     });
 
+    /* THE HERO IS SERVED AT HERO SIZE, AND THE CARD IS STILL SERVED A THUMBNAIL.
+       §129 made the photo full-bleed across the top of the product page and left
+       the card's 320px thumbnail URL on it — 320 real pixels stretched across a
+       390px viewport, which is 1170 device pixels on a 3x phone. Reported by
+       Ash: "quality of picture once open to productpage is low resulution".
+
+       ALL THREE HALVES ARE ASSERTED and the last two are what keep the fix
+       honest: raising the hero is trivial, raising the CARD with it would make
+       every menu heavy, and letting the hero and the enlarge ask for different
+       widths would download the same photograph twice. */
+    await check('the page hero asks for a HERO render, the card still asks for a thumbnail', async () => {
+      const m = await page.evaluate(() => {
+        const hero = document.querySelector('#dsheetB .dt-ph img');
+        const card = document.querySelector('.it .ph img');
+        const wOf = (el) => {
+          if (!el) return null;
+          const g = /[?&]w=(\d+)/.exec(el.getAttribute('src') || '');
+          return g ? Number(g[1]) : null;
+        };
+        return { hero: wOf(hero), card: wOf(card), heroSrc: hero ? hero.getAttribute('src') : '' };
+      });
+      assert.ok(m.hero && m.hero >= 900,
+        `the page hero is still being served a thumbnail: w=${m.hero}`);
+      assert.strictEqual(m.card, 320,
+        `the menu grid's own thumbnails changed size with the hero: w=${m.card}`);
+      assert.ok(m.hero > m.card, 'the hero is no larger than the card thumbnail');
+    });
+
+    await check('the enlarge re-uses the hero\'s exact URL, so it costs nothing', async () => {
+      const m = await page.evaluate(async () => {
+        const hero = document.querySelector('#dsheetB .dt-ph img').getAttribute('src');
+        document.querySelector('#dsheetB .dt-ph[data-big]').click();
+        await new Promise(r => setTimeout(r, 60));
+        const big = document.getElementById('bigImg').getAttribute('src');
+        document.getElementById('big').click();
+        await new Promise(r => setTimeout(r, 60));
+        return { hero, big };
+      });
+      /* SAME WIDTH AND SAME VERSION. The image route caches per width and the
+         browser caches per URL, so two different widths would be two renders,
+         two downloads and two cache entries of one photograph. Compared on the
+         query rather than the whole string because the hero is written with a
+         root-relative path and the enlarge builds its own from location. */
+      const q = (u) => {
+        const g = /\/i\/(\d+)\?(.*)$/.exec(u);
+        if (!g) return null;
+        const p2 = new URLSearchParams(g[2]);
+        return `${g[1]}|w=${p2.get('w')}|v=${p2.get('v')}`;
+      };
+      assert.ok(q(m.hero), `the hero points somewhere odd: ${m.hero}`);
+      assert.strictEqual(q(m.big), q(m.hero),
+        `the enlarge asks for a different render than the hero already loaded:\n  hero ${m.hero}\n  big  ${m.big}`);
+    });
+
     await check('tapping the photo enlarges it, and asks for a BIGGER render', async () => {
       const src = await page.evaluate(async () => {
         document.querySelector('#dsheetB .dt-ph[data-big]').click();
