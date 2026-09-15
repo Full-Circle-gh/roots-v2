@@ -112,6 +112,22 @@ const SHOP_CHANNEL = 'shop';
 
 // Menu photo width. One size, because there is one layout and it is a phone.
 const MENU_THUMB_W = 320;
+/* THE PAGE'S HERO IS NOT A THUMBNAIL, AND IT WAS BEING SERVED ONE. §129 made the
+   photo full-bleed across the top of the product page and kept the card's own
+   MENU_THUMB_W on it — 320px stretched across a 390px viewport, which on a phone
+   at 3x is 320 real pixels filling 1170, and reads exactly as blurred as that
+   sounds. Reported by Ash: "quality of picture once open to productpage is low
+   resulution". 320 is still right for the CARD, which is about 170px wide.
+
+   IT IS THE SAME NUMBER THE ENLARGE ASKS FOR, DELIBERATELY. The image route
+   caches per width and the browser caches per URL, so a hero at 900 and an
+   enlarge at 1000 would be two renders, two downloads and two cache entries of
+   one photograph. Sharing the width makes tapping the hero to enlarge a cache
+   hit that costs nothing, and it is why both now read this constant instead of
+   each carrying its own literal. The route caps at 1200 and resizes
+   withoutEnlargement, so a smaller original is served at its own size rather
+   than upscaled into softness. */
+const HERO_W = 1000;
 
 // ─── small helpers ──────────────────────────────────────────────────────
 
@@ -1665,7 +1681,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   // \\/ NOT \/ — this is inside a template literal, where \/ collapses to a bare
   // slash and the emitted JS reads `replace(//$/` , which is a line comment that
   // swallows the whole rest of the script. Cost the entire page's behaviour once.
-  `bigImg.src=location.pathname.replace(/\\/$/,'')+'/i/'+pid+'?v='+encodeURIComponent(v)+'&w=1000';` +
+  `bigImg.src=location.pathname.replace(/\\/$/,'')+'/i/'+pid+'?v='+encodeURIComponent(v)+'&w=${HERO_W}';` +
   `big.hidden=false;return}` +
   `var card=e.target.closest?e.target.closest('.it[data-open]'):null;` +
   // A tap on the card's own + adds; it must not also open the sheet behind it.
@@ -2489,7 +2505,7 @@ function detailBody(it, code) {
         ? `<button type="button" class="dt-ph" data-big="${it.store_product_id}"` +
           ` data-v="${esc(it.updated_at || '')}" aria-label="${esc('Enlarge 放大')}">` +
           `<img src="/s/${esc(code)}/i/${it.store_product_id}` +
-          `?v=${encodeURIComponent(it.updated_at || '')}&w=${MENU_THUMB_W}" alt="" loading="lazy" decoding="async">` +
+          `?v=${encodeURIComponent(it.updated_at || '')}&w=${HERO_W}" alt="" loading="lazy" decoding="async">` +
           `</button>`
         : `<div class="dt-ph empty"></div>`) +
       `<div class="dt-hd"><div class="dt-nm">${bi(it.name_en, it.name_cn)}</div></div>` +
