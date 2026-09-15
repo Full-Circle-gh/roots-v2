@@ -36,6 +36,14 @@
  *   5. THE LABEL STILL SAYS WHY. Sharing the Paid colours must not cost the
  *      shopper the reason the order is held: the chip text stays
  *      'Awaiting stock / 等待补货'.
+ *   6. 🔴 AND NOT THE REFUND RED. The web storefront went further than saying
+ *      nothing: public/shop.html grouped the status with .st-refunded, so a
+ *      shopper waiting on stock saw their paid order painted as a refund.
+ *      Asserted as its own case, because a future palette edit that re-groups
+ *      the selectors would restore exactly that reading in silence.
+ *
+ * Both customer surfaces are covered — the mini app and the web storefront —
+ * because they share the routes above and must not drift on what Paid means.
  *
  * The routes below are the REAL express routes, mounted and called over HTTP
  * against a real sqlite database, so what is printed is observed.
@@ -182,6 +190,27 @@ const nos = (body) => (body?.data || [])
     it('the chip still tells the shopper WHY the order is held', () => {
       assert.match(js, /awaiting_restock:\s*'Awaiting stock'/);
       assert.match(js, /awaiting_restock:\s*'等待补货'/);
+    });
+
+    console.log('\nThe web storefront — the same order, the same meaning\n');
+
+    const shop = fs.readFileSync(path.join(ROOT, 'public', 'shop.html'), 'utf8');
+    it('shop.html paints the pill with .st-paid', () => {
+      assert.match(shop, /\.oc-st\.st-paid,\.oc-st\.st-awaiting_restock\{/,
+        'the two must share one declaration, or they drift apart on the next palette change');
+    });
+    it('🔴 and NOT with .st-refunded — a paid order is not a refund', () => {
+      // The SELECTOR LIST the status actually sits in, not a loose search of
+      // the file: prose above the rule mentions .st-refunded on purpose, and a
+      // regex that spans comments reports the explanation as the defect.
+      const rule = shop.match(/([^{}\n]*\.st-awaiting_restock[^{}\n]*)\{/);
+      assert.ok(rule, 'no rule for .st-awaiting_restock at all');
+      assert.ok(!rule[1].includes('.st-refunded'),
+        `grouped with the refund red again — a shopper waiting on stock is told their order was refunded:\n      ${rule[1].trim()}`);
+      assert.ok(rule[1].includes('.st-paid'), `expected it grouped with .st-paid:\n      ${rule[1].trim()}`);
+    });
+    it('shop.html still names the status', () => {
+      assert.match(shop, /awaiting_restock:\s*cn\?'等待补货':'Awaiting restock'/);
     });
   } finally {
     server.close();
