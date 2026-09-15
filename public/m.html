@@ -7742,6 +7742,20 @@ function rcvLine(it){
   const reasons=(on&&sh>0)?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px">${
     RCV_REASONS.map(r=>`<button class="chip${v.reason===r.key?' on':''}" style="justify-content:center;padding:0 10px"
       onclick="APP.cmd('recvReason','${it.id}|${r.key}')">${T(r.en,r.zh)}</button>`).join('')}</div>`:'';
+  /* THE BUYER'S NOTE ON THE LINE, which is the size of the thing being counted
+     as often as it is anything else — "2.5kg", "blue tin", "the newer batch".
+     The desktop has carried it on the order since lines could hold one
+     (16-purchasing.js, pu2-linenoteview); the phone showed the name, the SKU
+     and the ordered quantity and stopped, so a line reading "1 bag" was the
+     same line whether the bag was 2.5kg or 500g. The receiver at the door is
+     the one person who can tell those apart, and this was the one screen that
+     did not let them.
+     Above the answer, not below it: it is read BEFORE the count, not after.
+     Dimmed with the rest of an unanswered line and never truncated — a note cut
+     at one line is a note that may have said the opposite. */
+  const lineNote=String(it.note||'').trim();
+  const noteRow=lineNote?`<span style="font-size:12.5px;line-height:1.45;color:var(--text-secondary);margin-top:4px;white-space:pre-wrap">${
+    T('Note','备注')}: ${escAttr(lineNote)}</span>`:'';
   /* An unanswered line is DIMMED, not hidden and not disabled: it has to stay
      readable while the eye runs down the order looking for the one product
      that came, and it is one tap from being answered. */
@@ -7749,7 +7763,8 @@ function rcvLine(it){
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px${on?'':';opacity:.72'}">
       <span style="display:flex;flex-direction:column;min-width:0">
         <span style="font-size:15.5px;font-weight:500">${escAttr(rcvName(it))}</span>
-        ${it.sku?`<span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(it.sku)}</span>`:''}</span>
+        ${it.sku?`<span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(it.sku)}</span>`:''}
+        ${noteRow}</span>
       <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary);padding-top:2px">${T('ordered','订购')} ${rcvFmt(ord)} ${escAttr(it.unit||'')}</span></div>
     ${answer}${qty}${dmg}${note}${reasons}${undo}</div>`;
 }
@@ -7834,6 +7849,35 @@ function screenReceive(){
      which of the two states the screen is in. */
   const missing=rcvMissingReasons();
   const items=rcvItems(), answered=rcvAnswered();
+  /* WHEN THIS ORDER WAS PLACED. The header carries the PO number and how far
+     through the count is, and neither dates it: two orders a fortnight apart
+     read identically on this screen, and the receiver holding a delivery note
+     at the door is matching against the date on the paperwork.
+     `date` is the day the order was placed — the day the desktop calls
+     "Ordered · 下单" (sheetPO) and the day a supplier's paperwork carries. It
+     is not a created-at timestamp and must not be printed as one: fmtDateOnly
+     is the day word the rest of this file uses for a DATE with no clock in it,
+     which is why today here reads Today rather than a midnight nobody set.
+     THE SUPPLIER STAYS OFF, which is not an oversight: this screen dropped the
+     supplier headings on purpose (rcvLine's neighbours, and the case
+     "the supplier is not on the line" in scripts/test_mobile_receiving.js) —
+     at the door the box in your hands is matched to a line by its name, and who
+     to chase afterwards is Purchasing's question. A date is the opposite: it is
+     how you know this is the right order before you count anything.
+     One muted line, not a card: it labels the screen, it is not work on it. */
+  const meta=[
+    po.date?T('Ordered','下单')+' '+escAttr(fmtDateOnly(po.date)):'',
+    po.delivery_date?T('Arrives','到货')+' '+escAttr(fmtDateOnly(po.delivery_date)):'',
+  ].filter(Boolean).join(' · ');
+  const metaRow=meta?`<div style="padding:0 2px;font-size:12.5px;line-height:1.5;color:var(--text-secondary)">${meta}</div>`:'';
+  /* THE ORDER-LEVEL NOTE, whose field on the desktop is captioned "Anything the
+     receiver should know" (16-purchasing.js, pu2-w-notes) — and which the
+     receiver was the only person in the building not shown it. A note the buyer
+     wrote for this screen has to reach this screen. */
+  const poNote=String(po.notes||'').trim();
+  const poNoteCard=poNote?`<div class="card" style="padding:12px 14px;display:flex;align-items:flex-start;gap:10px">
+    <span style="flex:none;color:var(--text-secondary);display:flex;margin-top:1px">${ic('info',16)}</span>
+    <span style="flex:1;min-width:0;font-size:13.5px;line-height:1.5;white-space:pre-wrap">${escAttr(poNote)}</span></div>`:'';
   /* ONE TAP FOR THE ORDINARY DELIVERY, and it answers every line rather than
      skipping them. Hidden once every line is spoken for — a control whose whole
      job is already done is clutter on a screen read at a doorway. */
@@ -7879,7 +7923,9 @@ function screenReceive(){
   const done=`<button class="btn2" style="width:100%" onclick="APP.cmd('recvBackToList')">${
     T('Back to deliveries','返回收货')}</button>`;
   return `<div style="padding:14px 16px 28px;display:flex;flex-direction:column;gap:14px">
+    ${metaRow}
     ${rcvLocation()}
+    ${poNoteCard}
     ${allBtn}
     ${lines}
     ${rcvSummary()}

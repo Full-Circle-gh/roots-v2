@@ -118,6 +118,33 @@ const OPEN_FRAC = `state.recvId=4; state.recvPo=${PO_FRAC}; state.recvStore=1;
 // has to say so first — one tap per supplier, exactly as the door does it.
 const OPEN_FRAC_ALL = OPEN_FRAC + `APP.cmd('recvAllArrived');`;
 
+// WHAT THE BUYER WROTE DOWN, which is what the receiver was not being shown.
+// Straight from the report: a line ordered as "1 bag" whose note says 2.5kg,
+// on an order placed on a day the screen never named. The desktop had all
+// three — the line note, the order note, the ordered date — and the phone had
+// none of them, so the person actually counting the boxes was the only one
+// working without them. The dates are fixed rather than relative because
+// fmtDateOnly says Today/Yesterday/Tomorrow against the shop's clock and a
+// fixed date is the one case that reads the same on every run.
+const PO_NOTES = JSON.stringify({
+  id: 5, po_number: 'RPO-0005', supplier: 'Jufu Bakery', status: 'Ordered',
+  date: '2026-08-21', delivery_date: '2026-08-24',
+  notes: 'Ring the bell at the loading bay — the side door is locked after 9.',
+  store_id: 1, receiving_store_id: 1, store_name_en: 'Tianhe', store_name_cn: '天河',
+  store_locked: false, stores: [{ id: 1, name_en: 'Tianhe', name_cn: '天河' }],
+  items: [
+    { id: 31, name_en: 'Sliced Almonds', name_cn: '杏仁片（蓝钻）', sku: 'C-8', qty: 1, unit: 'bag',
+      supplier_name: 'Jufu Bakery', note: '2.5kg' },
+    { id: 32, name_en: 'Caster sugar', name_cn: '细砂糖', sku: 'C-9', qty: 4, unit: 'bag',
+      supplier_name: 'Jufu Bakery', note: '' },
+  ],
+});
+const OPEN_NOTES = `state.recvId=5; state.recvPo=${PO_NOTES}; state.recvStore=1;
+  state.recvVals=(function(){ var v={};
+    state.recvPo.items.forEach(function(it){ v[it.id]={on:false,recv:rcvRound(+it.qty),
+      dmg:0,reason:null,was:{recv:null,dmg:0,reason:null}}; }); return v; })();
+  state.stack=[{route:'receive',title:SUBS.receive.title}]; render();`;
+
 const CASES = [
   ['the receive screen', OPEN, [
     ['the order is the title',            `txt('content').includes('RPO-0003')`],
@@ -723,6 +750,41 @@ const CASES = [
      state.rcvToQ=''; APP.cmd('push','receiving');`, [
     ['has left the list',        `rcvToReceive().length === 0`],
     ['and does not linger on it', `!txt('content').includes('RPO-0003')`],
+  ]],
+
+  // THE THREE THINGS THE DESKTOP KNEW AND THE DOOR DID NOT.
+  ['what the buyer wrote down reaches the door', OPEN_NOTES, [
+    ['the line note is on the line it belongs to', `txt('content').includes('2.5kg')`],
+    // Labelled, because a bare "2.5kg" under a line ordered in bags is one more
+    // number on a screen already carrying two.
+    ['and it is labelled as a note',      `/Note:\\s*2\\.5kg/.test(txt('content'))`],
+    // The note must not be mistaken for the count. 1 bag is what was ordered.
+    ['it does not become the ordered quantity', `txt('content').includes('ordered 1 bag')`],
+    ['a line with no note gets no empty label',
+      `(txt('content').match(/Note:/g) || []).length === 1`],
+    ['the order is dated',                `txt('content').includes('Ordered Aug 21')`],
+    ['and says when it is due',           `txt('content').includes('Arrives Aug 24')`],
+    // The order-level note field is captioned "Anything the receiver should
+    // know" on the desktop, and the receiver is exactly who was not shown it.
+    ['the order note reaches the receiver', `txt('content').includes('loading bay')`],
+    // Still true with a supplier on the order: the rule the first case states.
+    ['the supplier stays off the screen', `!txt('content').includes('Jufu Bakery')`],
+  ]],
+
+  // The note is read BEFORE the count, so it lives on the open card; a line
+  // answered as ordered folds away and the note folds with it. What must not
+  // happen is losing it — reopening the row brings it back.
+  ['a note folds with its line and comes back with it',
+    OPEN_NOTES + `APP.cmd('recvArrived','31');`, [
+    ['answered as ordered, the row folds', `!txt('content').includes('2.5kg')`],
+    ['and reopening it shows the note again',
+      `(function(){ APP.cmd('recvOpenLine','31'); return txt('content').includes('2.5kg'); })()`],
+  ]],
+
+  // An order with no dates on it prints no dangling labels.
+  ['an undated order says nothing rather than half a sentence', OPEN, [
+    ['no empty Ordered label', `!txt('content').includes('Ordered ')`],
+    ['no empty Arrives label', `!txt('content').includes('Arrives')`],
   ]],
 
   ['a product nothing is bringing', `state.rcvToTried=true; state.rcvSeg='toreceive';
