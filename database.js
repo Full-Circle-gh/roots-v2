@@ -4382,6 +4382,15 @@ addColumn('retail_orders', 'fulfillment_short_pids',  'TEXT');
 // diagnostic — turns an opaque "改派(缺货)" into "short at nearest: X, Y" in the
 // order drawer. NULL for orders that weren't rerouted for stock.
 addColumn('retail_orders', 'reroute_short_pids',  'TEXT');
+// §138 — what the customer was TOLD at checkout, for the two notices that
+// carry no date and so had nowhere to be written. The dated pair already lands
+// in promised_ship_date / promised_delivery_date above; these complete the set.
+//   preorder_pids     the product ids sold as a pre-order on this order
+//   moved_from_store  the store code that WOULD have served this address if
+//                     nothing were closed — set only when it differs from the
+//                     store that took the order, i.e. only when it moved
+addColumn('retail_orders', 'preorder_pids',      'TEXT');
+addColumn('retail_orders', 'moved_from_store',   'TEXT');
 // Fulfillment path: 'delivery' (default — ship to customer address) or
 // 'pickup' (customer collects from a chosen store, no address/shipping fee).
 // For pickup orders store_id holds the customer-chosen store, scheduled_for +
