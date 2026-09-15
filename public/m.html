@@ -2991,6 +2991,37 @@ function revWrite(r,visible){
     render();
   });
 }
+/* Mark a feedback thread handled, or put it back. NOTHING IS SENT either way —
+   that is what separates it from Reply, and why it does not ask first: the
+   worst case is a row back in a list, undone by the button that replaces this
+   one. Hiding a review asks because hiding changes what customers see; this
+   changes only what WE see.
+
+   Repaints Home's ops snapshot on success. The "Feedback to answer" row up there
+   counts the same queue, so it is wrong the moment this lands, and a front door
+   still naming work that was just finished is the complaint this whole control
+   was built to answer. */
+reg('toggleFeedbackHandled', key=>{
+  const r=DB.feedback.find(x=>revKey(x)===key);
+  if(!r||r.id==null||state.revBusy) return;
+  const on=!r.handled;
+  state.revBusy=revKey(r); state.revErr=null; render();
+  apiWrite('/feedback/'+r.id+'/'+(on?'handled':'unhandle')).then(()=>{
+    r.handled=on; r.needsReply=!on;
+    /* The pill has to move with it, or the card says "Needs reply" next to a
+       button offering to put it back. Same words the desktop list uses. */
+    r.status=on?['Handled — no reply sent','已处理 — 未回复']:['Needs reply','待回复'];
+    r.kind=on?'clear':'success';
+    state.revBusy=null; render();
+    showToast(on?T('Handled — no reply sent','已处理 — 未回复'):T('Back in the queue','已放回待处理'));
+    if(typeof loadOps==='function') loadOps();
+  }).catch(e=>{
+    state.revBusy=null;
+    if(String(e.message)==='auth') return;
+    state.revErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    render();
+  });
+});
 reg('closeReply', ()=>{ state.reply=null; state.thread=null; render(); });
 
 /* The create sheet is gone, and so is every command behind it. It offered a
@@ -4120,6 +4151,17 @@ function screenInbox(){
         <span style="font-size:12px;color:var(--text-secondary)">${T(...r.time)}${r.opened?' · '+T('opened '+T(...r.opened),'发起于 '+T(...r.opened)):''}</span>
         <span style="display:flex;align-items:center;gap:8px;flex:none">
           ${r.stream==='review'&&r.id!=null?smallBtn(busy?T('Saving…','保存中…'):(hidden?T('Restore','恢复'):T('Hide','隐藏')),`APP.cmd('toggleReviewVisible','${k}')`,busy):''}
+          ${/* Nothing goes to the customer either way, which is the whole point:
+                the only other way to clear this thread off the front door was to
+                write to someone who is owed nothing. Sits to the LEFT of Reply
+                and stays a plain small button — the quiet exit, not a second
+                way to finish. Absent on a thread that is neither waiting nor
+                handled: it has already been answered and there is nothing here
+                to say about it. */''}
+          ${r.stream==='feedback'&&r.id!=null&&(r.needsReply||r.handled)
+            ? smallBtn(busy?T('Saving…','保存中…'):(r.handled?T('Put back','放回待处理'):T('Mark as handled','标记为已处理')),
+                       `APP.cmd('toggleFeedbackHandled','${k}')`,busy)
+            : ''}
           ${smallBtn(r.reply?T('Edit reply','编辑回复'):T('Reply','回复'),`APP.cmd('openReply','${k}')`,false)}
         </span></div></div>`;
   };
@@ -20868,9 +20910,14 @@ function mapFeedback(r){
     : (r.last_author_name||T('Store','商家'));
   return {key:'fb:'+r.id, id:r.id, stream:'feedback',
     cust:[r.customer_name||r.nickname||'Customer',r.customer_name||r.nickname||'顾客'],
-    // needs_reply covers a brand-new report AND an unanswered follow-up.
-    status:r.needs_reply?['Needs reply','待回复']:(r.replied?['Replied','已回复']:['Open','待处理']),
-    kind:r.needs_reply?'success':(r.replied?'clear':'success'),
+    // needs_reply covers a brand-new report AND an unanswered follow-up. Handled
+    // ranks below both: a thread somebody answered says "Replied" even if it was
+    // also marked handled, and a customer follow-up on a handled thread is
+    // waiting again and says so.
+    status:r.needs_reply?['Needs reply','待回复']
+      :(r.replied?['Replied','已回复']
+      :(r.handled?['Handled — no reply sent','已处理 — 未回复']:['Open','待处理'])),
+    kind:r.needs_reply?'success':(r.replied?'clear':(r.handled?'clear':'success')),
     // The newest turn is the body; the root survives as one clipped line of
     // context once there are replies and it has scrolled out of view.
     text:[(r.last_body||r.message||''),(r.last_body||r.message||'')],
@@ -20879,6 +20926,14 @@ function mapFeedback(r){
     // A message the shop sent first is not a bug report, and a shared inbox
     // that cannot tell them apart is unreadable.
     isMessage:r.kind==='message',
+    /* Whether this thread is still work, and whether somebody decided it is
+       not. The row's footer button is built out of these two: in the queue →
+       offer the way out, marked handled → offer the way back, otherwise no
+       button at all. The phone needs its own copy of the decision for the same
+       reason the desktop list does — the card prints the customer's message, so
+       this is where an operator reads it and decides, and a decision made here
+       has to be recordable here. */
+    needsReply:!!r.needs_reply, handled:!!r.handled,
     page:r.page_context||null, appVersion:r.app_version||null,
     photos:(()=>{ let ph=r.photos; if(typeof ph==='string'){ try{ ph=JSON.parse(ph||'[]'); }catch(e){ ph=[]; } }
       return Array.isArray(ph)&&ph.length?ph:null; })(),
