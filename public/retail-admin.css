@@ -15385,6 +15385,14 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
 }
 #tab-shop-menu .shp-pick-row { display: flex; gap: 8px; align-items: center; }
 #tab-shop-menu .shp-pick-row .shp-in { flex: 1; }
+/* An empty box is the whole addable catalogue (routes/retail-shops.js
+   candidates), which is hundreds of rows, and the panel it sits in grows with
+   what the search returns. Without a ceiling here that growth is the PAGE's:
+   the menu table below gets pushed a screen and a half down and the search box
+   the operator is typing into scrolls off the top of its own panel. The list
+   takes its own scrollbar instead, so the card stays a card and the field
+   stays put; the right-hand padding keeps that scrollbar off the Add buttons. */
+#tab-shop-menu #shp-pick-list { max-height: 52vh; overflow-y: auto; padding-right: 4px; }
 #tab-shop-menu .shp-pick-list { list-style: none; margin: 12px 0 0; padding: 0; }
 #tab-shop-menu .shp-pick-list li {
   display: grid; grid-template-columns: 1fr auto auto auto; gap: 16px; align-items: center;
