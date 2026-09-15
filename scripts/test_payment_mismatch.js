@@ -824,6 +824,19 @@ it('an unreadable time is still a hold, not a pass', () => {
   assert.strictEqual(v.verdict, 'mismatch');
 });
 
+it('the proof card never calls the upload stamp a payment time', () => {
+  // TC000731 read "Paid at 2026-09-15 06:00:07" — the UPLOAD stamp, raw UTC,
+  // for a payment made at 13:59 Beijing. The card is the one place staff look
+  // to decide a held order, so the label has to be true.
+  const card = sliceBlock(ORDERS_JS, 'function renderAlipayProof(o)');
+  assert.ok(!/const paidAt = [^\n]*alipay_proof_at/.test(card),
+    'the payment-time row fell back to the upload stamp again');
+  assert.ok(/const uploadedAt = o\.alipay_proof_at \? formatDate\(/.test(card),
+    'the upload stamp must go through formatDate — it is UTC in the database');
+  assert.ok(/cuT\('Uploaded', '上传于'\)/.test(card),
+    'the upload row lost its label');
+});
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
 
