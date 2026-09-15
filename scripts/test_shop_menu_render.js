@@ -456,6 +456,60 @@ function boxOf(text) {
     // database by routes/shop-menu.js, not by a stub. A cart tested by reading
     // its markup would prove the buttons EXIST and nothing about what they do.
     // ─── The product sheet, driven ────────────────────────────────────────
+    /* THE MENU DOES NOT MOVE BEHIND A SHEET, AND DOES NOT JUMP WHEN ONE OPENS.
+       Reported by Ash 2026-09-15: "i can scroll the menu itself behind the pop
+       up." There was no lock of any kind on this page.
+
+       BOTH HALVES ARE ASSERTED AND THE SECOND CONSTRAINS THE FIX. Locking with
+       position:fixed on the body passes the first half and fails this one — it
+       takes the document out of flow and drops the scroll offset to zero, which
+       on a page with a sticky header is a visible jump the moment a customer
+       taps a card. Measured, because which lock was used is exactly what the
+       stylesheet cannot tell you.
+
+       THE PUSH IS A REAL WHEEL EVENT, NOT window.scrollTo. overflow:hidden
+       removes the USER's scrolling mechanism; per spec the box stays
+       programmatically scrollable, so scrollTo() moves the page whether the
+       lock is there or not and an assertion built on it fails against a
+       working fix. Cost one round here. */
+    await check('the menu is FROZEN behind a sheet, and does not jump when it opens', async () => {
+      // THE CARD IS CLICKED THROUGH THE DOM, NOT page.click: Playwright scrolls
+      // an element into view before clicking it, which moves the page by itself
+      // and would make this check measure the harness. Cost one round too.
+      await page.evaluate(() => window.scrollTo(0, 400));
+      const before = await page.evaluate(() => window.scrollY);
+      assert.ok(before > 100, `the fixture page does not scroll, so this check proves nothing: ${before}`);
+      try {
+        await page.evaluate(() => document.querySelector('.it:not(.out)[data-open]').click());
+        const onOpen = await page.evaluate(() => window.scrollY);
+        assert.strictEqual(onOpen, before,
+          `opening the sheet moved the menu under it: ${before} -> ${onOpen}`);
+
+        await page.mouse.move(195, 300);
+        await page.mouse.wheel(0, 400);
+        await page.waitForTimeout(120);
+        const afterPush = await page.evaluate(() => window.scrollY);
+        assert.strictEqual(afterPush, before,
+          `the menu scrolled behind an open sheet: ${before} -> ${afterPush}`);
+      } finally {
+        // ALWAYS PUT THE PAGE BACK. A sheet left open by a failing assertion
+        // covers every card, and the next dozen checks fail on a timeout that
+        // says nothing about what they were testing.
+        await page.evaluate(() => document.getElementById('dsheetX').click());
+        await page.waitForTimeout(260);
+      }
+
+      // AND THE SCROLL IS GIVEN BACK. A lock that never releases is a menu
+      // nobody can browse after their first tap — worse than the bug it fixes.
+      await page.mouse.move(195, 300);
+      await page.mouse.wheel(0, 200);
+      await page.waitForTimeout(120);
+      const released = await page.evaluate(() => window.scrollY);
+      assert.ok(released > before,
+        `the page never got its scroll back after the sheet closed: ${before} -> ${released}`);
+      await page.evaluate(() => window.scrollTo(0, 0));
+    });
+
     await check('tapping a card opens its ingredients, allergens and nutrition', async () => {
       await page.evaluate(() => window.scrollTo(0, 0));
       await page.click(`.it:not(.out)[data-open]`);
