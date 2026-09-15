@@ -941,9 +941,23 @@
      one struck-through eye. Only the eye is dimmed, so the mark reads as a
      note about one surface rather than as a disabled row. */
   .pa-block-row .pbr-qr {
-    width: 15px; height: 15px; flex-shrink: 0; color: var(--td-amber, #C9954A);
+    width: 24px; height: 24px; flex-shrink: 0; padding: 4px;
+    display: grid; place-items: center;
+    border: 0; border-radius: var(--r-sm); background: none; cursor: pointer;
+    /* Quiet until wanted: a section that shows everywhere needs no comment, so
+       the open eye sits at the weight of a hint and comes forward on hover. */
+    color: var(--text-4);
+    opacity: 0;
+    transition: opacity var(--t-fast) ease, color var(--t-fast) ease, background var(--t-fast) ease;
   }
-  .pa-block-row .pbr-qr svg { width: 100%; height: 100%; display: block; }
+  .pa-block-row:hover .pbr-qr, .pa-block-row .pbr-qr:focus-visible { opacity: 1; }
+  .pa-block-row .pbr-qr:hover { color: var(--text-1); background: var(--bg-elev-2); }
+  .pa-block-row .pbr-qr:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 1px; }
+  /* Switched off: always visible, and amber, because now there IS something to
+     say about this row and it must be readable without hovering it. */
+  .pa-block-row .pbr-qr.is-off { opacity: 1; color: var(--td-amber, #C9954A); }
+  .pa-block-row .pbr-qr.is-off:hover { color: var(--td-amber-ink, #8A6425); }
+  .pa-block-row .pbr-qr svg { width: 15px; height: 15px; display: block; }
   /* A section that carries words and would still be dropped by the save.
      Brick rather than the QR mark's amber, because this is not a note about
      one surface — it is work that is about to not exist. The row's left edge
@@ -2137,7 +2151,7 @@ function paInspToggle(btn) {
 function _paChannelEditorHtml(b) {
   const off = !!(b && b.hide_qr);
   return `<label class="pa-ch-row">
-      <input data-bkey="hide_qr" type="checkbox" ${off ? '' : 'checked'} onchange="paChannelFlip(this)">
+      <input type="checkbox" ${off ? '' : 'checked'} onchange="paChannelFlip(this)">
       <span class="pa-ch-txt">
         <span class="pa-ch-t" data-no-i18n><span data-lang-block="en">QR menu</span><span data-lang-block="cn">二维码菜单</span></span>
         <span class="pa-ch-s helper" data-no-i18n><span data-lang-block="en">The page customers scan in the shop.</span><span data-lang-block="cn">顾客在店内扫码打开的页面。</span></span>
@@ -2148,17 +2162,42 @@ function _paChannelEditorHtml(b) {
       <span data-lang-block="cn">关闭后仅在二维码菜单隐藏,小程序不变。内容不会删除,重新开启后仍在。</span>
     </p>`;
 }
-// The checkbox reads "shows on the QR menu"; the stored flag is its
-// opposite ("hidden there"). paBlocksSyncFromDOM copies a checkbox's own
-// checked state into the block, so the inversion is done here, on change,
-// before any sync can read it.
+// THE CHECKBOX READS "SHOWS", THE STORED FLAG READS "HIDDEN" — and that
+// inversion is why this control carries no data-bkey. See the note above.
+// This is the only writer of hide_qr from the inspector.
 function paChannelFlip(el) {
   const mount = document.getElementById('pa-block-editor-mount'); if (!mount) return;
   const card = mount.querySelector('[data-blockid]'); if (!card) return;
-  const b = (window._paBlocks || []).find(x => x.id === card.getAttribute('data-blockid'));
+  paSetHideQr(card.getAttribute('data-blockid'), !el.checked);
+}
+
+// THE ONE PLACE hide_qr IS WRITTEN. Both the row's eye and the inspector's
+// switch come through here, so the two can never disagree about a block, and
+// adding a third way in later cannot reintroduce a second opinion.
+function paSetHideQr(id, hidden, fromRow) {
+  paBlocksSyncFromDOM();
+  const b = (window._paBlocks || []).find(x => x.id === id);
   if (!b) return;
-  if (el.checked) delete b.hide_qr; else b.hide_qr = true;
+  if (hidden) b.hide_qr = true; else delete b.hide_qr;
   paRenderTabs();
+  /* Clicking the eye on the row that is OPEN must move the inspector's switch
+     too, or the two controls sit side by side disagreeing. The checkbox is set
+     in place rather than by re-rendering the inspector, because a re-render
+     would discard whatever the office is part-way through typing in the fields
+     above it. */
+  if (fromRow && id === PA_SELECTED_BLOCK_ID) {
+    const box = document.querySelector('#pa-block-editor-mount .pa-ch-row input[type="checkbox"]');
+    if (box) box.checked = !hidden;
+  }
+}
+
+// The row's eye. Stops the click reaching the row, which would otherwise select
+// the block as well — the office asked to hide one, not to open it.
+function paRowHideQr(ev, id) {
+  ev.stopPropagation();
+  const b = (window._paBlocks || []).find(x => x.id === id);
+  if (!b) return;
+  paSetHideQr(id, !b.hide_qr, true);
 }
 
 // Colour-picker section appended to every applicable block's inspector.
@@ -3872,7 +3911,12 @@ function paRenderTabs() {
         ${sub ? `<div class="pbr-sub">${escapeHtml(sub)}</div>` : ''}
       </div>
       ${unsaved ? `<div class="pbr-unsaved-ic" title="Not saved yet · 尚未保存"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16.5" x2="12.01" y2="16.5"/></svg></div>` : ''}
-      ${b.hide_qr ? `<div class="pbr-qr" title="Hidden on the QR menu · 二维码菜单已隐藏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg></div>` : ''}
+      <button type="button" class="pbr-qr${b.hide_qr ? ' is-off' : ''}"
+        onclick="paRowHideQr(event, '${b.id}')"
+        aria-pressed="${b.hide_qr ? 'true' : 'false'}"
+        title="${b.hide_qr ? escapeAttr('Hidden on the QR menu — click to show · 二维码菜单已隐藏,点击显示') : escapeAttr('Shows on the QR menu — click to hide · 在二维码菜单显示,点击隐藏')}">${b.hide_qr
+          ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+          : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`}</button>
       <div class="pbr-grip" title="Drag to reorder · 拖动排序">⋮⋮</div>
       <div class="pbr-num">${i + 1}</div>
     </div>`;
