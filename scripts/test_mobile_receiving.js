@@ -708,6 +708,32 @@ const CASES = [
     ['and the matching product is named on the row', `txt('content').includes('Mint')`],
   ]],
 
+  // TWO ORDERS TO ONE SUPPLIER, one row apart. Without a date on the row they
+  // are the same order twice as far as the reader is concerned: same supplier,
+  // same store, same line count, and only one of them carries a promised
+  // arrival. The ordered date is the fact that is always there.
+  ['the list dates the orders it lists', `state.rcvToTried=true; state.rcvSeg='toreceive';
+     state.rcvTo=[{id:34,po_number:'RPO-0034',supplier:'Jufu Bakery',status:'Ordered',line_count:14,
+       received_lines:0,store_name_en:'Tianhe',store_name_cn:'天河',
+       date:'2026-08-21',delivery_date:'2026-08-24'},
+       {id:29,po_number:'RPO-0029',supplier:'Jufu Bakery',status:'Ordered',line_count:14,
+       received_lines:0,store_name_en:'Tianhe',store_name_cn:'天河',date:'2026-08-07'}];
+     state.rcvToQ=''; APP.cmd('push','receiving');`, [
+    ['the newer order is dated',   `txt('content').includes('ordered Aug 21')`],
+    ['the older one is too',       `txt('content').includes('ordered Aug 7')`],
+    ['the promised arrival stays', `txt('content').includes('arrives Aug 24')`],
+    // The row it was added to used to end in an ellipsis. A fourth fact on a
+    // clipped line is a fact nobody reads, so the line wraps now — and the
+    // proof is that the LAST segment is still on the glass, not that the
+    // string exists in the DOM.
+    ['and nothing on the row is clipped away',
+      `[...document.querySelectorAll('#content .row .num')].every(function(e){
+         return e.scrollWidth <= e.clientWidth + 1; })`],
+    // An order with no promised arrival still dates cleanly — no dangling word.
+    ['an order with no arrival date says only what it knows',
+      `!/arrives\\s*·/.test(txt('content')) && !/arrives\\s*$/m.test(txt('content'))`],
+  ]],
+
   // THE BAND AND THE TAB COUNT THE SAME FUNCTION, so they must never print
   // different numbers. Both read rcvToReceive(); the band is drawn once by the
   // render() that builds the head, and the tab is repainted by rcvPatch() when

@@ -8126,7 +8126,20 @@ function rcvToBodyHtml(){
           <span style="display:flex;align-items:baseline;gap:8px">
             <span class="num" style="font-size:15px;font-weight:500;flex:none">${escAttr(p.po_number||('#'+p.id))}</span>
             <span style="font-size:15px;min-width:0;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(p.supplier||T('No supplier','未指定供应商'))}</span></span>
-          <span class="num" style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${
+          ${/* WRAPS RATHER THAN CLIPS, now that there is a fourth fact on it.
+                This was one nowrap line ending in an ellipsis, which was safe
+                while it held three short things and is not safe with a date
+                added: at 390px "Tianhe · 4 lines · ordered Aug 21 · arrives
+                Aug 24" runs past the column, and an ellipsis would eat the
+                arrival date — the one the row is sorted and chased by.
+                Breaking is allowed at the separators ONLY: each segment is its
+                own nowrap span, so "ordered Aug 21" can move to the next line
+                but can never be split across two. Done with spans rather than
+                by stuffing the segments with non-breaking spaces — that also
+                holds them together, and it puts U+00A0 into the row's TEXT,
+                where every reader of it downstream (a search, an assertion, a
+                copy-paste) then has to know to expect it. */''}
+          <span class="num" style="font-size:12.5px;line-height:1.5;color:var(--text-secondary)">${
             [poStore(p),
              /* A part-received order counts what is LEFT, not what it holds:
                 the reason it is in this list is the products still to come. */
@@ -8134,7 +8147,16 @@ function rcvToBodyHtml(){
                ? (LANG==='en'?((p.line_count-p.received_lines)+' of '+p.line_count+' still to come')
                              :('还有 '+(p.line_count-p.received_lines)+'/'+p.line_count+' 项待收'))
                : (p.line_count||0)+' '+T('lines','项'),
-             p.delivery_date?T('arrives','到货')+' '+fmtDateOnly(p.delivery_date):''].filter(Boolean).join(' · ')}</span>
+             /* WHEN IT WAS ORDERED, for the same reason the receive screen
+                gained it: two orders to one supplier are one row apart here and
+                otherwise read identically. It goes before the arrival date
+                because that is the order the two happen in, and `date` is
+                always set where delivery_date is often not — so this is the
+                fact that is actually there to tell them apart. */
+             p.date?T('ordered','下单')+' '+fmtDateOnly(p.date):'',
+             p.delivery_date?T('arrives','到货')+' '+fmtDateOnly(p.delivery_date):'']
+              .filter(Boolean)
+              .map(s=>`<span style="white-space:nowrap">${escAttr(s)}</span>`).join(' · ')}</span>
           ${rcvMatched(p)}
           <span style="display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">${
             rcvPartial(p)?pill('restock',T('Part arrived','部分到货')):poPill(p)}</span></span>
