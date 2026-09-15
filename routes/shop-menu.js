@@ -696,6 +696,183 @@ img{display:block;max-width:100%}
    label invented to sit above it would be a composed string for nothing. The
    kicker, where the office wrote one, wears the same olive kicker .dt-k does. */
 .dt-p{margin-top:15px}
+
+/* ===== §132 · THE REST OF THE OFFICE'S BLOCKS =====================
+   Ash: *"i want you to build the blocks of the product description same as the
+   mini app."* §129 drew two of them — the paragraph and the note — and left the
+   other eleven on the floor.
+
+   CONVERTED FROM miniapp/components/product-blocks/product-blocks.wxss AT A
+   390px PHONE, which is the same rpx-times-0.52 this page used for the option
+   picker. Three substitutions run through all of it, and they are the ones this
+   page has always made:
+     f-toni and f-gothic are not tokens here    -- both become --f-bear, which
+       is what every uppercase kicker on this page already wears.
+     --ink-12 (the app's hairline)              -- rgba(0,0,0,.08), this sheet's
+       own hairline, used by .ln and .og.
+     --ink-60 (the app's muted ink)             -- var(--olive), this page's.
+   Nothing else is reinterpreted: the paddings, the grids, the huge numerals and
+   the rules between rows are the component's, scaled.
+
+   BLOCKS THAT BLEED DO IT THROUGH .sheet-b's OWN PADDING. The scroller pads
+   4px 14px for text; the slab, the quote and the photo band are full-width in
+   the mini app and stay full-width here, which is what the negative margin is
+   for — the same trick the hero already uses. */
+
+/* The heading two-thirds of these blocks share. */
+.pb-h{display:flex;justify-content:space-between;align-items:flex-end;
+  margin:26px 0 19px;gap:10px}
+.pb-h-l{font-family:var(--f-bear);font-size:27px;line-height:1;overflow-wrap:anywhere}
+.pb-h-r{flex:none;font-family:var(--f-bear);font-size:10px;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--olive);padding-bottom:3px}
+
+/* 01 · SPEC STRIP — three cells divided by hairlines. */
+.pb-spec{display:grid;grid-template-columns:1fr 1fr 1fr;margin-top:15px;
+  border-top:1px solid rgba(0,0,0,.08);border-bottom:1px solid rgba(0,0,0,.08)}
+.pb-spec-c{padding:15px 10px 17px;display:flex;flex-direction:column;gap:6px;
+  border-right:1px solid rgba(0,0,0,.08);min-width:0}
+.pb-spec-c:last-child{border-right:0}
+.pb-spec-k{font-family:var(--f-bear);font-size:9.5px;line-height:12px;
+  letter-spacing:.22em;text-transform:uppercase;color:var(--olive);
+  overflow-wrap:anywhere}
+.pb-spec-v{font-family:var(--f-bear);font-size:15.5px;line-height:18px;
+  overflow-wrap:anywhere}
+
+/* 03 · WHY — a numbered claim per row. The FIRST rule is ink and the rest are
+   hairlines, which is the component's own weighting: the list starts at a real
+   edge and the rows inside it are only separated. */
+.pb-why-r{display:grid;grid-template-columns:37px 1fr;gap:14px;align-items:baseline;
+  padding:14px 0;border-top:1px solid rgba(0,0,0,.08)}
+.pb-why-r.first{border-top:2px solid var(--ink)}
+.pb-why-n{font-family:var(--f-bear);font-size:33px;line-height:28px}
+.pb-why-c{font-size:16px;line-height:22px;overflow-wrap:anywhere}
+
+/* 06 · HOW TO USE — a tile grid whose gridlines ARE the background showing
+   through a 1px gap, which is how the component draws it too. */
+.pb-how{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;
+  background:rgba(0,0,0,.08);border:1px solid rgba(0,0,0,.08)}
+.pb-how.c4{grid-template-columns:repeat(4,1fr)}
+.pb-how-t{background:var(--oat);padding:19px 6px 17px;text-align:center;
+  display:flex;flex-direction:column;gap:8px;align-items:center;
+  justify-content:center;min-height:79px;min-width:0}
+.pb-how-i{font-size:25px;line-height:25px}
+.pb-how-l{font-family:var(--f-bear);font-size:12.5px;line-height:15px;
+  letter-spacing:.14em;text-transform:uppercase;overflow-wrap:anywhere}
+.pb-how-s{font-style:italic;font-size:12.5px;line-height:16px;color:var(--olive);
+  margin-top:-4px;overflow-wrap:anywhere}
+
+/* 07 · STORAGE — two cards, one optionally inverted, with a hero figure.
+   min-width:0 on the cards is load-bearing and the component says why: a grid
+   item refuses to shrink below its widest unbreakable child, which is what let
+   a long figure push past the card edge and clip. */
+.pb-store{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pb-store-c{border:1px solid var(--ink);padding:19px 16px 18px;position:relative;
+  display:flex;flex-direction:column;gap:9px;min-height:146px;min-width:0;
+  overflow:hidden}
+.pb-store-c.alt{background:var(--ink);color:var(--oat)}
+.pb-store-i{position:absolute;top:12px;right:12px;font-size:19px;line-height:19px}
+.pb-store-h{font-family:var(--f-bear);font-size:11.5px;line-height:14px;
+  letter-spacing:.22em;text-transform:uppercase;overflow-wrap:anywhere}
+.pb-store-n{font-family:var(--f-bear);font-size:50px;line-height:48px;margin-top:auto;
+  overflow-wrap:break-word;word-break:break-word}
+.pb-store-n.long{font-size:24px;line-height:27px}
+.pb-store-u{font-family:var(--f-bear);font-size:12.5px;line-height:19px;
+  letter-spacing:.16em;text-transform:uppercase;overflow-wrap:anywhere}
+.pb-store-note{margin-top:12px;font-style:italic;font-size:12.5px;line-height:18px;
+  color:var(--olive);text-align:right;overflow-wrap:anywhere}
+
+/* 09 · NOTES — an olive asterisk, never a bullet, and italic. The mark is a
+   real span rather than a ::before so it can be read back and measured. */
+.pb-note{margin-top:24px;display:flex;gap:8px;font-style:italic;font-size:13px;
+  line-height:20px;color:var(--olive)}
+.pb-note-m{flex:none;font-style:normal}
+.pb-note-t{min-width:0;overflow-wrap:anywhere}
+
+/* +1 · BIG STAT — a full-bleed lime slab with a very large figure and two
+   dots anchoring it. Real spans, same reason as the sheet's own drawn cross. */
+.pb-stat{margin:26px -14px;padding:40px 23px 42px;background:var(--lime);
+  color:var(--ink);text-align:center;position:relative;overflow:hidden}
+.pb-stat-n{font-family:var(--f-bear);font-size:114px;line-height:97px;
+  letter-spacing:-.02em;overflow-wrap:anywhere}
+.pb-stat-w{font-family:var(--f-bear);font-size:11.5px;line-height:15px;
+  letter-spacing:.32em;text-transform:uppercase;margin-top:10px;
+  overflow-wrap:anywhere}
+.pb-stat-c{font-style:italic;font-size:14.5px;line-height:20px;margin-top:6px;
+  overflow-wrap:anywhere}
+.pb-stat-d{position:absolute;top:50%;margin-top:-31px;font-family:var(--f-bear);
+  font-size:62px;line-height:62px}
+.pb-stat-d1{left:14px}
+.pb-stat-d2{right:14px}
+
+/* +2 · PULL QUOTE — a quieter ground, no border. The curly quotes are drawn
+   around the text by the renderer rather than by CSS content, so both halves of
+   the bilingual pair carry their own and neither shows through the other. */
+.pb-qt{margin:26px -14px;padding:25px 23px 27px;background:rgba(0,0,0,.04)}
+.pb-qt-p{font-style:italic;font-size:15.5px;line-height:23px;overflow-wrap:anywhere}
+.pb-qt-w{margin-top:10px;font-family:var(--f-bear);font-size:10px;
+  letter-spacing:.22em;text-transform:uppercase;color:var(--olive);
+  overflow-wrap:anywhere}
+
+/* +3 · IMAGE BAND — full-bleed, cropped to the shape the office chose.
+   aspect-ratio rather than the component's fixed heights, because this page is
+   not fixed at 750rpx and a height in px would crop differently on every phone. */
+.pb-band{margin:26px -14px 0}
+.pb-band img{display:block;width:100%;height:100%;object-fit:cover}
+.pb-band-f{width:100%}
+.pb-band.wide .pb-band-f{aspect-ratio:16/9}
+.pb-band.square .pb-band-f{aspect-ratio:1/1}
+.pb-band.tall .pb-band-f{aspect-ratio:4/5}
+.pb-band.natural .pb-band-f{aspect-ratio:auto}
+.pb-band.natural img{height:auto}
+.pb-band-cap{padding:8px 14px 0;font-style:italic;font-size:12.5px;line-height:19px;
+  color:var(--olive);overflow-wrap:anywhere}
+
+/* +4 · RECIPE STEPS — an olive numeral rail, and a timing pill where the
+   office gave one. */
+.pb-step{display:grid;grid-template-columns:37px 1fr;gap:14px;padding:14px 0;
+  border-top:1px solid rgba(0,0,0,.08)}
+.pb-step.first{border-top:2px solid var(--ink)}
+.pb-step-n{font-family:var(--f-bear);font-size:29px;line-height:26px;color:var(--olive)}
+.pb-step-b{display:flex;flex-direction:column;align-items:flex-start;gap:7px;min-width:0}
+.pb-step-t{font-size:14.5px;line-height:22px;overflow-wrap:anywhere}
+.pb-step-time{font-family:var(--f-bear);font-size:11.5px;line-height:14px;
+  letter-spacing:.18em;text-transform:uppercase;color:var(--olive);
+  background:rgba(204,217,0,.28);padding:3px 9px;border-radius:999px}
+
+/* +5 · GOES WELL WITH — a row that scrolls sideways. overscroll-behavior-x
+   keeps that gesture off the page behind it, the same containment the sheet's
+   own scroller uses. */
+/* align-items:flex-start, AND THE TILE HAS ITS OWN FRAME RATHER THAN THE MENU
+   CARD'S .ph. Borrowing .ph looked like reuse and was coupling: it carries the
+   grid card's 4/5 ratio and an img at height:100%, so inside a stretched flex
+   item the frame grew to the tallest tile in the row and the photo grew with
+   it — a 104px tile with a 250px picture in it. A cross-sell thumbnail is a
+   square of its own and now says so. */
+.pb-pair{display:flex;align-items:flex-start;gap:10px;overflow-x:auto;
+  overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+.pb-pair-t{flex:none;width:104px}
+.pb-pair-f{width:104px;height:104px;border-radius:10px;overflow:hidden;
+  background:rgba(0,0,0,.08)}
+.pb-pair-f img{width:100%;height:100%;object-fit:cover;display:block}
+.pb-pair-n{margin-top:7px;font-family:var(--f-bear);font-size:13px;line-height:17px;
+  overflow-wrap:anywhere}
+
+/* +6 · QUESTIONS — real details/summary, so it opens with no script at all and
+   answers a keyboard. The component's accordion needs a tap handler; this does
+   not, and a customer with JavaScript off can still read every answer. */
+.pb-faq{border-top:2px solid var(--ink)}
+.pb-faq+.pb-faq{border-top:1px solid rgba(0,0,0,.08)}
+.pb-faq summary{display:flex;justify-content:space-between;align-items:center;
+  gap:12px;padding:15px 0;cursor:pointer;list-style:none}
+.pb-faq summary::-webkit-details-marker{display:none}
+.pb-faq-q{flex:1;min-width:0;font-family:var(--f-bear);font-size:14px;line-height:19px;
+  overflow-wrap:anywhere}
+.pb-faq-m{flex:none;font-family:var(--f-bear);font-size:23px;line-height:23px;
+  color:var(--olive)}
+.pb-faq[open] .pb-faq-m .l-plus{display:none}
+.pb-faq .pb-faq-m .l-minus{display:none}
+.pb-faq[open] .pb-faq-m .l-minus{display:inline}
+.pb-faq-a{padding:0 0 15px;font-size:14px;line-height:22px;overflow-wrap:anywhere}
 .dt-pk{font-family:var(--f-bear);font-size:9.5px;letter-spacing:.17em;
   text-transform:uppercase;color:var(--olive);margin-bottom:5px}
 .dt-pb{font-size:14px;line-height:22px;overflow-wrap:anywhere}
@@ -2436,22 +2613,28 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
 // The sheet's body for one product. Returns '' when the product has nothing to
 // say — the caller then renders no sheet at all and the card stays untappable,
 // because an empty panel is worse than a card that does not respond.
-function detailBody(it, code) {
-  const ing = blockRead.ingredientsOf(it.description_blocks);
-  const alg = blockRead.allergensOf(it.description_blocks);
+function detailBody(it, code, listed) {
+  /* §132 — EVERY BLOCK THE OFFICE WROTE, IN THE ORDER IT WROTE THEM.
+     §120 read two block types, §129 added the paragraph and the note, and this
+     reads all thirteen. The order is no longer this function's: it was a fixed
+     prose-then-ingredients-then-allergens template, and it is now whatever the
+     office laid out in the editor, which is what "same as the mini app" means
+     before any single block is drawn. */
+  const blocks = blockRead.pageBlocks(it.description_blocks);
   const nut = nutritionRows(it.nutrition);
-  // §129 — the paragraph the office wrote, which §120 read and threw away.
-  const prose = blockRead.proseOf(it.description_blocks);
   const L = blockRead.LABELS;
 
-  /* §120's RULE SURVIVES §129, WIDENED TWICE. A product with nothing to say
-     still does not open: a page carrying a photo and a name the card already
-     shows is the same empty panel the sheet refused, and a card that does not
-     respond is better than one that opens onto nothing. What counts as
-     something to say now includes the office's prose — the reason this section
-     exists — and having more than one size, because a collapsed card whose
-     picker could not be reached would be a size nobody can buy. */
-  if (!ing && !alg && !nut && !prose.length && !(it.variants && it.variants.length > 1)) return '';
+  /* §120's RULE SURVIVES, WIDENED TWICE. A product with nothing to say still
+     does not open: a page carrying a photo and a name the card already shows is
+     the same empty panel the sheet refused, and a card that does not respond is
+     better than one that opens onto nothing. What counts as something to say is
+     now any block at all, plus having more than one size — a collapsed card
+     whose picker could not be reached would be a size nobody can buy. */
+  if (!blocks.length && !nut && !(it.variants && it.variants.length > 1)) return '';
+
+  // A bilingual pair where ONE language may be missing: the other stands in,
+  // because a blank half reads as a fault rather than as an omission.
+  const p2 = (x) => bi(x.en || x.cn, x.cn || x.en);
 
   // WHICH CHIPS CARRY A RESERVED HALF-BOX AT ONE END. A CJK bracket occupies a
   // full character cell wherever it sits, so one at either end of a chip's text
@@ -2461,14 +2644,18 @@ function detailBody(it, code) {
   const trimmed = (t) => (/^[（【《「『〔｛]/.test(t) ? ' tl' : '') +
                          (/[）】》」』〕｝]$/.test(t) ? ' tr' : '');
 
+  // The heading two-thirds of these blocks share, with its optional count.
+  const head = (h, tag) => `<div class="pb-h"><div class="pb-h-l">${p2(h)}</div>` +
+    (tag ? `<div class="pb-h-r">${p2(tag)}</div>` : '') + `</div>`;
+
   // THE HERO INGREDIENT IS FILLED, THE REST OUTLINED — the mini app's own chip
   // cloud, where `lead` marks the one the product is mostly made of. A pct the
   // office stated rides on the chip; most have none and that is normal.
-  const chips = ing ? ing.items.map(x => {
+  const chipCloud = (items) => items.map(x => {
     const pct = x.pct == null ? '' : ` <span class="pct">${esc(String(x.pct))}%</span>`;
     return `<span class="ichip${x.lead ? ' lead' : ''}">` +
       bi(x.name_en || x.name_cn, x.name_cn || x.name_en) + pct + `</span>`;
-  }).join('') : '';
+  }).join('');
 
   // CONTAINS AND MAY-CONTAIN ARE TWO DIFFERENT STATEMENTS and are never merged.
   // The first is what is in the food; the second is what the line it was made
@@ -2483,22 +2670,146 @@ function detailBody(it, code) {
       `<div class="achips"><span class="l-en chipset">${one(en)}</span>` +
       `<span class="l-cn chipset">${one(cn.length ? cn : en)}</span></div></div>`;
   };
-  const algCard = alg
-    ? `<div class="acard"><div class="atitle">${bi(L.allergens.en, L.allergens.cn)}</div>` +
-      (algRow(L.contains, alg.contains_en, alg.contains_cn, 'has') ||
-        // "None declared" is the mini app's own empty state for this row, and it
-        // is a statement rather than a blank: the office looked and found none.
-        `<div class="arow"><div class="alab">${bi(L.contains.en, L.contains.cn)}</div>` +
-        `<div class="achips"><span class="anone">${bi(L.none.en, L.none.cn)}</span></div></div>`) +
-      algRow(L.mayContain, alg.may_en, alg.may_cn, 'may') +
-      `</div>`
-    : '';
+  const algCard = (a) =>
+    `<div class="acard"><div class="atitle">${bi(L.allergens.en, L.allergens.cn)}</div>` +
+    (algRow(L.contains, a.contains_en, a.contains_cn, 'has') ||
+      // "None declared" is the mini app's own empty state for this row, and it
+      // is a statement rather than a blank: the office looked and found none.
+      `<div class="arow"><div class="alab">${bi(L.contains.en, L.contains.cn)}</div>` +
+      `<div class="achips"><span class="anone">${bi(L.none.en, L.none.cn)}</span></div></div>`) +
+    algRow(L.mayContain, a.may_en, a.may_cn, 'may') +
+    `</div>`;
 
-  const rows = nut ? nut.rows.map(r => {
+  const nutCard = (title, basis, rows) =>
+    `<div class="nut"><div class="nut-top"><div class="nut-ttl">${p2(title)}</div>` +
+    (basis && (basis.en || basis.cn) ? `<div class="nut-bs">${p2(basis)}</div>` : '') +
+    `</div>${rows}</div>`;
+
+  const nutRows = (rows) => rows.map(r => {
     const k = r.kind === 'parent' ? ' p' : (r.kind === 'child' ? ' c' : '');
-    return `<div class="nr${k}"><span class="nr-l">${bi(r.label_en, r.label_cn)}</span>` +
+    return `<div class="nr${k}"><span class="nr-l">${p2(r.label)}</span>` +
       `<span class="nr-r">${esc(r.value)}</span></div>`;
-  }).join('') : '';
+  }).join('');
+
+  const one = (b) => {
+    if (b.type === 'spec_strip') {
+      return `<div class="pb-spec">` + b.cells.slice(0, 3).map(c =>
+        `<div class="pb-spec-c"><div class="pb-spec-k">${p2(c.k)}</div>` +
+        `<div class="pb-spec-v">${p2(c.v)}</div></div>`).join('') + `</div>`;
+    }
+    if (b.type === 'hero_intro') {
+      return `<div class="dt-p">` +
+        ((b.kicker.en || b.kicker.cn) ? `<div class="dt-pk">${p2(b.kicker)}</div>` : '') +
+        ((b.body.en || b.body.cn) ? `<div class="dt-pb">${p2(b.body)}</div>` : '') +
+        `</div>`;
+    }
+    if (b.type === 'why') {
+      return head(b.head) + b.rows.map((r, i) =>
+        `<div class="pb-why-r${i === 0 ? ' first' : ''}">` +
+        `<div class="pb-why-n">${esc(String(i + 1).padStart(2, '0'))}</div>` +
+        `<div class="pb-why-c">${p2(r)}</div></div>`).join('');
+    }
+    if (b.type === 'ingredients_chips' || b.type === 'ingredients_line') {
+      return `<div class="dt-k">${bi(L.ingredients.en, L.ingredients.cn)}</div>` +
+        `<div class="ichips">${chipCloud(b.items)}</div>`;
+    }
+    if (b.type === 'allergen_card') return algCard(b.card);
+    if (b.type === 'how_to_use') {
+      return head(b.head, b.tag) +
+        `<div class="pb-how${b.cols === 4 ? ' c4' : ''}">` + b.tiles.map(t =>
+          `<div class="pb-how-t">` +
+          (t.icon ? `<div class="pb-how-i">${esc(t.icon)}</div>` : '') +
+          ((t.lbl.en || t.lbl.cn) ? `<div class="pb-how-l">${p2(t.lbl)}</div>` : '') +
+          ((t.sub.en || t.sub.cn) ? `<div class="pb-how-s">${p2(t.sub)}</div>` : '') +
+          `</div>`).join('') + `</div>`;
+    }
+    if (b.type === 'storage_box') {
+      const card = (c) => !c ? '' :
+        `<div class="pb-store-c${c.alt ? ' alt' : ''}">` +
+        (c.icon ? `<div class="pb-store-i">${esc(c.icon)}</div>` : '') +
+        ((c.head.en || c.head.cn) ? `<div class="pb-store-h">${p2(c.head)}</div>` : '') +
+        ((c.num.en || c.num.cn) ? `<div class="pb-store-n${c.long ? ' long' : ''}">${p2(c.num)}</div>` : '') +
+        ((c.unit.en || c.unit.cn) ? `<div class="pb-store-u">${p2(c.unit)}</div>` : '') +
+        `</div>`;
+      return head(b.head, b.tag) +
+        `<div class="pb-store">${card(b.left)}${card(b.right)}</div>` +
+        ((b.note.en || b.note.cn) ? `<div class="pb-store-note">${p2(b.note)}</div>` : '');
+    }
+    if (b.type === 'notes_callout') {
+      // The asterisk is a real span, not a ::before, so the suite can see it.
+      return `<div class="pb-note"><span class="pb-note-m">✱</span>` +
+        `<span class="pb-note-t">${p2(b.text)}</span></div>`;
+    }
+    if (b.type === 'big_stat') {
+      return `<div class="pb-stat">` +
+        `<span class="pb-stat-d pb-stat-d1">·</span>` +
+        `<span class="pb-stat-d pb-stat-d2">·</span>` +
+        (b.stat ? `<div class="pb-stat-n">${esc(b.stat)}</div>` : '') +
+        ((b.what.en || b.what.cn) ? `<div class="pb-stat-w">${p2(b.what)}</div>` : '') +
+        ((b.claim.en || b.claim.cn) ? `<div class="pb-stat-c">${p2(b.claim)}</div>` : '') +
+        `</div>`;
+    }
+    if (b.type === 'pull_quote') {
+      // THE QUOTES ARE DRAWN AROUND EACH LANGUAGE SEPARATELY. A CSS ::before
+      // would put one pair around the element and both halves would share it —
+      // so the hidden language's quote marks would hang beside the visible
+      // language's text.
+      const q = (v) => v ? '“' + v + '”' : '';
+      return `<div class="pb-qt">` +
+        ((b.text.en || b.text.cn)
+          ? `<div class="pb-qt-p">${bi(q(b.text.en || b.text.cn), q(b.text.cn || b.text.en))}</div>` : '') +
+        ((b.who.en || b.who.cn) ? `<div class="pb-qt-w">${p2(b.who)}</div>` : '') +
+        `</div>`;
+    }
+    if (b.type === 'image_band') {
+      // THE OFFICE'S OWN URL, AND ONLY AN ABSOLUTE OR ROOT-RELATIVE ONE. This
+      // is the single block whose content is a link rather than text, so it is
+      // the single place a stored value could point anywhere; anything that is
+      // not plainly this site's or a data: URI is dropped rather than rendered.
+      const u = String(b.url || '');
+      if (!/^(https:\/\/|\/(?!\/)|data:image\/)/i.test(u)) return '';
+      return `<div class="pb-band ${esc(b.ratio)}"><div class="pb-band-f">` +
+        `<img src="${esc(u)}" alt="" loading="lazy" decoding="async"></div>` +
+        ((b.caption.en || b.caption.cn) ? `<div class="pb-band-cap">${p2(b.caption)}</div>` : '') +
+        `</div>`;
+    }
+    if (b.type === 'recipe_steps') {
+      return head(b.head, b.tag) + b.steps.map((st, i) =>
+        `<div class="pb-step${i === 0 ? ' first' : ''}">` +
+        `<div class="pb-step-n">${esc(String(i + 1).padStart(2, '0'))}</div>` +
+        `<div class="pb-step-b"><div class="pb-step-t">${p2(st.text)}</div>` +
+        ((st.time.en || st.time.cn) ? `<div class="pb-step-time">${p2(st.time)}</div>` : '') +
+        `</div></div>`).join('');
+    }
+    if (b.type === 'pairings') {
+      /* ONLY PRODUCTS THIS SHOP ACTUALLY LISTS. The tile's photo comes from
+         this menu's own image route, and that route gates on shop_listings —
+         so a pairing the operator has not put on this menu would render as a
+         broken frame beside a name. Filtered rather than 404-ing, and the
+         block disappears when nothing survives. The tiles do not navigate:
+         the QR menu has no product URLs to navigate to, and a tile that looks
+         tappable and is not would be worse than one that plainly is not. */
+      const live = b.items.filter(x => listed && listed.has(x.id));
+      if (!live.length) return '';
+      return head(b.head) + `<div class="pb-pair">` + live.map(x =>
+        `<div class="pb-pair-t"><div class="pb-pair-f">` +
+        `<img src="/s/${esc(code)}/i/${x.id}?w=${MENU_THUMB_W}" alt="" loading="lazy" decoding="async">` +
+        `</div><div class="pb-pair-n">${p2(x.name)}</div></div>`).join('') + `</div>`;
+    }
+    if (b.type === 'faq') {
+      /* details/summary, NOT a tap handler. The mini app's accordion needs
+         script; this opens with none at all, answers a keyboard, and is read
+         correctly aloud. The first question opens, as it does there. */
+      return head(b.head) + b.items.map((q, i) =>
+        `<details class="pb-faq"${i === 0 ? ' open' : ''}>` +
+        `<summary><span class="pb-faq-q">${p2(q.q)}</span>` +
+        `<span class="pb-faq-m"><span class="l-plus">+</span>` +
+        `<span class="l-minus">–</span></span></summary>` +
+        `<div class="pb-faq-a">${p2(q.a)}</div></details>`).join('');
+    }
+    if (b.type === 'nutrition_facts') return nutCard(b.head, b.basis, nutRows(b.rows));
+    return '';
+  };
 
   return `<div class="dt-top">` +
       (it.has_photo
@@ -2510,28 +2821,20 @@ function detailBody(it, code) {
         : `<div class="dt-ph empty"></div>`) +
       `<div class="dt-hd"><div class="dt-nm">${bi(it.name_en, it.name_cn)}</div></div>` +
     `</div>` +
-    /* THE PROSE SITS FIRST, UNDER THE NAME, because that is where the office
-       put it and where the mini app draws it: a customer reads what the thing
-       IS before reading what is in it. The kicker is the office's own short
-       line above the paragraph and is drawn in the same olive kicker the
-       INGREDIENTS heading wears — no new furniture, and no label invented for
-       a paragraph that names itself. */
-    prose.map(b =>
-      `<div class="dt-p">` +
-      ((b.kicker_en || b.kicker_cn)
-        ? `<div class="dt-pk">${bi(b.kicker_en || b.kicker_cn, b.kicker_cn || b.kicker_en)}</div>` : '') +
-      `<div class="dt-pb">${bi(b.body_en || b.body_cn, b.body_cn || b.body_en)}</div>` +
-      `</div>`).join('') +
-    (chips ? `<div class="dt-k">${bi(L.ingredients.en, L.ingredients.cn)}</div>` +
-             `<div class="ichips">${chips}</div>` : '') +
-    algCard +
-    (nut ? `<div class="nut">` +
-             `<div class="nut-top"><div class="nut-ttl">${bi('Nutrition', '营养成分')}</div>` +
-             ((nut.basis_en || nut.basis_cn)
-               ? `<div class="nut-bs">${bi(nut.basis_en || nut.basis_cn, nut.basis_cn || nut.basis_en)}</div>` : '') +
-             `</div>${rows}</div>` : '');
+    blocks.map(one).join('') +
+    /* THE NUTRITION COLUMN COMES LAST, AND ONLY WHEN NO BLOCK ALREADY SAID IT.
+       retail_products.nutrition is a separate column from the nutrition_facts
+       block and most products use one or the other; a product carrying both
+       would otherwise print its table twice under the same heading. */
+    (nut && !blocks.some(b => b.type === 'nutrition_facts')
+      ? nutCard({ en: 'Nutrition', cn: '营养成分' },
+                { en: nut.basis_en || '', cn: nut.basis_cn || '' },
+                nutRows(nut.rows.map(r => ({
+                  label: { en: r.label_en || '', cn: r.label_cn || '' },
+                  value: r.value, kind: r.kind,
+                }))))
+      : '');
 }
-
 // EN / 中 — the storefront's own toggle labels, reused verbatim.
 function toggle(lang) {
   return `<div class="lang">` +
@@ -2683,6 +2986,23 @@ router.get('/s/:shopCode', (req, res) => {
   const cur = normalizeCurrency(cfg('currency', null));
   const name = shopName(shop);
   const groups = buildMenu(shop);
+  /* §132 — WHAT THIS SHOP ACTUALLY LISTS, for the pairings block alone. Its
+     tiles draw their photo from this menu's own image route, and that route
+     gates on shop_listings: a pairing the operator has not put on THIS menu
+     would render as a broken frame beside a name. Built once from the menu that
+     was just assembled rather than queried again, so the two can never disagree
+     about what is on it — including the variant siblings, which the collapse
+     folds into one card but which remain separately listed and separately
+     servable. */
+  const listed = new Set();
+  for (const c of groups) {
+    for (const sec of c.sections) {
+      for (const r of sec.items) {
+        listed.add(r.store_product_id);
+        if (r.variants) for (const m of r.variants) listed.add(m.store_product_id);
+      }
+    }
+  }
   const wxPay = oaReady();
   const brand = brandText();
 
@@ -2780,7 +3100,7 @@ router.get('/s/:shopCode', (req, res) => {
     // ingredients, no nutrition and no allergen flags opens a sheet saying
     // nothing, which is worse than a card that does not respond — so the whole
     // detail apparatus is absent for it rather than empty.
-    const detail = detailBody(it, code);
+    const detail = detailBody(it, code, listed);
     const tap = detail
       ? ` data-open="${it.store_product_id}" role="button" tabindex="0"` : '';
     return `<div class="it${it.sold_out ? ' out' : ''}${detail ? ' has-dt' : ''}"${tap}>` +
