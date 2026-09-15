@@ -4007,9 +4007,18 @@ function normPayee(s) {
   return String(s || '').replace(/[\s*·・.。,，、()（）【】\[\]]/g, '').toLowerCase();
 }
 
+// How far under the order total an Alipay payment may land and still count as
+// paid (¥, inclusive). Ash, 2026-09-15: "when the gap difference is 0-2 rmb,
+// confirm the payment if that's the only mismatch". Deliberately a constant and
+// not an operator setting — it is a rule about what Alipay does to a transfer,
+// not a per-shop preference, and a knob here is a knob somebody widens to ¥20.
+const ALIPAY_SHORT_OK_CNY = 2.00;
+
 // Validate a Vision-AI reading of an uploaded payment screenshot against the
-// order. Returns { verdict: 'match'|'mismatch', reasons: [...], checks: {...} }.
-// HARD checks (all must pass for 'match'): success screen, amount == order total,
+// order. Returns { verdict: 'match'|'mismatch', reasons: [...], checks: {...},
+// shortBy: <¥ forgiven, 0 when there is no gap> }.
+// HARD checks (all must pass for 'match'): success screen, amount covering the
+// order total (or short of it by no more than ALIPAY_SHORT_OK_CNY),
 // payee contains the configured substring (when set), and payment time within
 // the window (when set). The txn-id reuse check is applied by the caller (needs
 // a cross-order query). A screenshot is forgeable, so 'match' only *permits* an
@@ -4025,15 +4034,24 @@ function validateAlipayProof(order, ocr, manual, refMs) {
   // 1. success screen
   checks.success = !!ocr.success;
   if (!ocr.success) reasons.push('not a successful-payment screen');
-  // 2. amount covers the order total (to the fen). Alipay can add a card /
-  // cross-border processing surcharge on top of what we charged, so the
-  // customer is debited MORE than the order total (e.g. ¥241.54 paid for a
-  // ¥234.50 order). A higher amount still fully covers the order, so accept
-  // anything at or above the total; only a SHORT (or unreadable) amount fails.
+  // 2. amount covers the order total (to the fen), or falls short by no more
+  // than ALIPAY_SHORT_OK_CNY. Alipay can add a card / cross-border processing
+  // surcharge on top of what we charged, so the customer is debited MORE than
+  // the order total (e.g. ¥241.54 paid for a ¥234.50 order). A higher amount
+  // still fully covers the order, so anything at or above the total passes.
+  // The other direction is Ash's rule of 2026-09-15: a shortfall of a yuan or
+  // two is a rounding or a fee taken off the transfer, not a customer trying to
+  // underpay, and holding the order over it costs the shop more than the gap.
+  // Forgiven, never hidden — shortBy rides on the verdict and the proof card
+  // states what was actually paid beside what the order came to.
   const want = Number(order.total).toFixed(2);
   const got = ocr.amount == null ? null : Number(ocr.amount).toFixed(2);
-  checks.amount = got != null && Number(got) >= Number(want) - 0.005;
+  const short = got == null ? null : Number((Number(want) - Number(got)).toFixed(2));
+  checks.amount = got != null && short <= ALIPAY_SHORT_OK_CNY + 0.005;
   if (!checks.amount) reasons.push(`amount ${got == null ? 'unreadable' : '¥' + got} < expected ¥${want}`);
+  // Only a forgiven gap is worth carrying: an exact or over payment has none,
+  // and a rejected one is already named in reasons.
+  const shortBy = checks.amount && short > 0.005 ? short : 0;
   // 3. payee matches one of the configured names (skip if not configured). Both
   // names the screenshot can carry are candidates — the display name and the
   // registered 收款方全称 — so either screen passes on one setting.
@@ -4073,7 +4091,7 @@ function validateAlipayProof(order, ocr, manual, refMs) {
   } else { checks.time = null; }
 
   const hardPass = checks.success && checks.amount && checks.payee !== false && checks.time !== false;
-  return { verdict: hardPass ? 'match' : 'mismatch', reasons, checks };
+  return { verdict: hardPass ? 'match' : 'mismatch', reasons, checks, shortBy };
 }
 
 // Accept a key as either a ready PEM (with BEGIN/END lines) or as bare base64
@@ -5562,7 +5580,7 @@ async function ocrVerifyAlipayProof(order, img, imgHash, manual, refMs) {
     if (reused) { verdict = 'mismatch'; v.verdict = 'mismatch'; v.reasons.push(`this ${dupImg ? 'screenshot' : 'transaction'} was already used on order #${reused.id}`); }
     tdb().prepare(
       "UPDATE retail_orders SET alipay_ocr_verdict = ?, alipay_ocr_json = ?, alipay_txn_id = ? WHERE id = ?"
-    ).run(verdict, JSON.stringify({ ...ocr, reasons: v.reasons, checks: v.checks }), ocr.txn_id || null, order.id);
+    ).run(verdict, JSON.stringify({ ...ocr, reasons: v.reasons, checks: v.checks, ...(v.shortBy ? { short_by: v.shortBy } : {}) }), ocr.txn_id || null, order.id);
 
     // Auto-flip ONLY when the operator enabled it AND every guard passed: a full
     // match (amount + payee + recent time), not a reused screenshot/txn, and the
