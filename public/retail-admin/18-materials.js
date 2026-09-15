@@ -29,6 +29,17 @@
   const money = n => (typeof acMoney === 'function'
     ? acMoney(Number(n) || 0)
     : '¥' + (typeof fmt === 'function' ? fmt(Number(n) || 0) : (Number(n) || 0).toFixed(2)));
+  // THE SAME MONEY, BUT A COST PER UNIT IS NOT A PRICE. acMoney() shows two
+  // places, which is right for everything a customer or a supplier is charged
+  // and wrong for the figure this screen derives: a label at ¥0.00927 and a
+  // label at ¥0.01 are eight percent apart, and sesame at ¥0.0316 a gram reads
+  // as ¥0.03. The extra places appear ONLY below a fen, where two would round
+  // the number away — above that nothing on this screen changes shape.
+  const unitMoney = (n) => {
+    const v = Math.abs(Number(n) || 0);
+    if (v === 0 || v >= 0.1 || typeof acMoney !== 'function') return money(n);
+    return acMoney(Number(n) || 0, v >= 0.01 ? 4 : 5);
+  };
   // A missing value reads as a dash, never as zero or an empty cell — the
   // catalogue has real gaps (blank finance category, unrecorded pack contents)
   // and hiding them is how they stay unfixed.
@@ -456,7 +467,7 @@
       const cpu = Number(m.cost_per_unit) || 0;
       const cpuTxt = m.free_by_design
         ? esc(T('free', '免费'))
-        : (cpu > 0 ? `${money(cpu)}<span class="mat-per">/${esc(m.unit || '')}</span>` : '—');
+        : (cpu > 0 ? `${unitMoney(cpu)}<span class="mat-per">/${esc(m.unit || '')}</span>` : '—');
       return `
         <tr onclick="matRecordOpen(${m.id})">
           <td>
@@ -1050,8 +1061,13 @@
             </div>
             <div id="mat-pack-row" class="mat-fgrid" ${isContainer(m.buy_unit) ? '' : 'hidden'}>
               ${field(T('Contents per pack', '每包内容量'), input('pack_contents_qty', m.pack_contents_qty, 'type="number" min="0" step="any"', 'matPreviewCost()'))}
+              ${/* 'pcs' is the newest of these and the only one that is not a
+                    measure (§140): a roll holds 1000 labels, and until it was
+                    here there was no way to say so — the material was costed at
+                    the price of the whole roll. Last in the list because the
+                    four measures are what most rows want. */''}
               ${field(T('Contents unit', '内容量单位'),
-                       select('pack_contents_unit', m.pack_contents_unit, [['', '—']].concat(['g', 'kg', 'ml', 'L'].map(u => [u, u])), 'matPreviewCost()'),
+                       select('pack_contents_unit', m.pack_contents_unit, [['', '—']].concat(['g', 'kg', 'ml', 'L', 'pcs'].map(u => [u, u])), 'matPreviewCost()'),
                        T('A box or bottle has no size of its own — say what’s inside, or the cost can’t be worked out.', '箱/瓶本身没有容量 — 需填写内容量,否则无法折算成本。'))}
             </div>
             <label class="mat-check mat-freebox">
@@ -1153,7 +1169,17 @@
       return `<span class="mat-costwhy">${esc(why)}</span>`;
     }
     if (d.reason === 'free_by_design') return `<b>${esc(T('Free by design', '按设计免费'))}</b>`;
-    return `<span>${esc(T('Cost per unit', '单位成本'))}</span> <b>${money(d.cpu)}<span class="mat-per">/${esc(draft.unit || '')}</span></b>`;
+    const line = `<span>${esc(T('Cost per unit', '单位成本'))}</span> <b>${unitMoney(d.cpu)}<span class="mat-per">/${esc(draft.unit || '')}</span></b>`;
+    // THE ARITHMETIC, IN NUMERALS AND NOTHING ELSE — no label, so there is no
+    // string here and nothing to translate. It is here because `buy_pack_size`
+    // carried a different meaning before the pack_size_semantics_v2 migration
+    // (database.js) and that migration could only normalise the rows whose buy
+    // unit was a measure: a pcs-bought row can still be sitting on a stale 1000
+    // it was never asked about. Printed, a stale pack size reads as an absurd
+    // divisor the moment somebody fills the contents in; unprinted, it reads as
+    // a cost that is merely a bit small.
+    if (!(d.divisor > 1)) return line;
+    return line + ` <span class="mat-costcalc mat-num">${money(draft.buy_price)} ÷ ${+Number(d.divisor).toFixed(3)}</span>`;
   }
 
   window.matPreviewCost = function () {

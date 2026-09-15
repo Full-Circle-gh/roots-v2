@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.276
+# Tacet shared-core consolidation — decisions record, v4.277
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-15 · v4.277 — **§140 · A PACK CAN HOLD A COUNT, NOT ONLY A WEIGHT — DECIDED BY ASH,** shown why J-57 Label Paper costs ¥9.27 a sticker and what the three ways out were: *“ok fix it properly”* — the third, the one that changes the model rather than working around it. **THE SHAPE THAT COULD NOT BE SAID.** `lib/ingredient-cost.js` keys on the RECIPE unit: g/ml divides, pcs/bag/bottle/box does not, because a recipe calling for one bag consumes one bag whatever is inside it (2026-08-17, 29 live rows). A roll of 1000 labels bought for ¥9.27 and used one label at a time is per-piece by that rule, so the derivation returned the ROLL price and every label cost a thousand times what it cost. The contents pair beside it — `pack_contents_qty` + `pack_contents_unit` — could have said so, and offered only g/kg/ml/L. **WHAT IS DECIDED:** `pcs` joins that dropdown, and a per-piece recipe unit whose pack contents are COUNTED divides by `buy_pack_size × pieces`, the same formula shape the weight path uses. **NOTHING INFERS IT, which is the load-bearing half:** only `pack_contents_unit` normalising to 'pcs' opens the divisor, nothing in the word 'box' or 'roll' says how many are in one, and no row in the catalogue carries 'pcs' there today — the UI never offered it and no import writes it — so the 29 rows that depend on the pack price being the unit cost cannot acquire a divisor by accident. A count of zero, or contents in grams, behaves exactly as before. **A ZERO PACK SIZE IS REFUSED, not waved through on a divisor of 1** — the same requirement the weight path makes, because a divisor of 1 invented here would store the roll price, which is the bug. **THE EDITOR NOW PRINTS THE DIVISION** (`¥9.27 ÷ 1000`), numerals only and no label, because `buy_pack_size` carried a different meaning before the `pack_size_semantics_v2` migration and that migration could only normalise rows whose buy unit was a MEASURE — a pcs-bought row can still sit on a stale 1000 nobody has been asked about, and printed it reads as an absurd divisor instead of a quietly wrong cost. **AND THE FIGURE IS SHOWN TO THE PLACES IT NEEDS:** `acMoney()` renders two, so ¥0.00927 read as ¥0.01 — eight percent out — and ¥0.0316 a gram read as ¥0.03. `unitMoney()` in `18-materials.js` gives four places below a jiao and five below a fen, on the record line and the list column; nothing at or above ¥0.10 changes shape, and it is local to this screen rather than a change to `acMoney()`. **NO MIGRATION AND NONE WANTED** — an affected row is fixed by filling in its contents, and the save re-derives and fires the recipe recompute. **THE PO WRITE-BACK NEEDED NO CHANGE AND IS WHERE THE LOOP WAS:** it already runs the one derivation, so the ¥9.27-per-label rows it wrote on every order (two of them in J-57's live cost history) stop; `buy_price` stays the ROLL price, because it is what the supplier charges and what the ±5% alert compares against. **NO CHINESE COMPOSED** — `pcs` is a unit token beside `g` and `kg`, the arithmetic line is numerals, and `docs/tacet-delivery-vocabulary.md` is untouched. **TESTS:** new `scripts/test_material_piece_pack.js`, 18 cases in three parts — the rule, the editor wiring, and a guard band over the four shapes §140 promised not to touch — proven non-vacuous (six fail when the divisor is removed); `scripts/test_price_writeback.js` gains case 10, the same material through a real PO against a real database, 9 → 10 cases. `test:fast` 251 → **252/252**; lint 0 errors; the bilingual-banner gate passes. No schema, no migration, and no change to `.gitignore` or CI.
 
 2026-09-15 · v4.276 — **§139 · THE PRODUCT EDITOR WEARS TACET, AND THE PREVIEW INSIDE IT DOES NOT — ASKED FOR BY ASH:** *“need a new mock up of the product editor, right now it doesnt look like part of tacet.”* Three directions were drawn; Ash chose **Option A** — the layout stands, the skin changes. **WHAT IT WAS WEARING:** a palette of its own (Ink Charcoal, Tea Green for selection, Aged Brass for the primary action, IBM Plex) minted before this product had a design system, while `retail-admin.css` has carried the Tacet `--td-*` layer since 2026-07-26. It was the last large surface speaking the older language. **THE OLD TOKEN NAMES SURVIVE, REMAPPED IN ONE PLACE** — some four hundred rules reference them, and renaming them would have been a four-hundred-line diff in which a real mistake could hide. **WHAT THE REMAP DECIDES:** selection is Ink rather than a hue (Tea Green had meant selected, active AND live at once); live is Sage and draft is Amber, two statements that were one hue apart; the primary action is Ink, never Dusk; **Dusk is spent once, on Smart paste**, the only control here that hands work to the model, with the focus ring exempt by name; and `--bg-elev-2` is NOT `--td-header` — the first draft mapped it there and every hovered row read as a table's column-header band. **TYPOGRAPHY:** Inter 400/500, sentence case, no tracking on small labels; thirty-two chrome rules were shouting and the badges already carried sentence-case copy. IBM Plex Sans SC stays loaded behind Inter because Inter carries no Chinese and every label here is bilingual. **THE PHONE PREVIEW IS NOT TOUCHED, AND THAT IS THE LOAD-BEARING PART:** it renders the CUSTOMER'S page in the CUSTOMER'S brand, and a session reaching one rule too far would have the office approving a page that does not exist. Every `.pa-prev-*` rule keeps its literal hex and is fenced off from the tokens BY TEST. **NO COPY CHANGED AND NO CHINESE WAS COMPOSED** — `docs/tacet-delivery-vocabulary.md` untouched. **TESTS:** `scripts/test_product_editor_tacet.js`, eleven checks; the load-bearing one holds every `--td-*` the editor declares against `retail-admin.css` value for value, the same second-implementation-of-one-contract shape `test_product_blocks_read.js` holds against the mini app — and it caught a real drift on its first run. Verified by looking too: a throwaway Chromium harness drove both themes, the Templates pane, the open rail accordions and the Smart paste modal; not committed, because it stubs the admin API and would rot into a test that proves nothing. `test:fast` 250/250. No layout change, no JS, no markup, no route, no schema, and no change to `.gitignore` or CI.
 2026-09-15 · v4.275 — **§138 · WHAT THE CUSTOMER WAS TOLD IS PART OF THE ORDER — DECIDED BY ASH:** *“b and all four”*, the second half of that answer. **THE QUESTION:** the checkout shows one of four notices when something is sold out; three weeks later *“you told me it would arrive on the 20th”* had to be answerable from the order. **WHAT WAS ALREADY THERE, AND IT INVERTED THE RECOMMENDATION PUT TO ASH:** the two DATED notices already land on the order — `computeBatchNotice` and `computeLocalFreshNotice` both stamp `promised_ship_date` and `promised_delivery_date` in the best-effort block after the write. The argument for “all four” was that the dated ones matter most, and those were the ones already recorded; the real gap was the other two, which is what the session that first reported it had said. **WHAT IS DECIDED:** `preorder_pids` (the ids sold as a pre-order) and `moved_from_store` (the shop that WOULD have served this address if nothing were closed, written only when it differs from the shop that took the order) complete the set. **RECOMPUTED ON THE SERVER, NOT ECHOED BY THE CLIENT** — a record meant to settle a dispute is worth nothing if the other party supplied it; both run off the same locals the order was built on. **THE MOVE IS A FACT, NOT THE NOTICE:** `computeStoreMoveNotice` returns null when the operator has not written its copy — right for a banner, wrong for an audit trail, because the order moved either way and the silence was ours — so the write asks `inventory.routeIgnoringClosures` directly. `routing_reason` could not answer it, because `routeOrder` drops closed stores BEFORE it ranks. **BEST-EFFORT, OUTSIDE THE ORDER TRANSACTION:** a record ABOUT an order must never cost us the order. **AND IT IS READ** — both print in the order drawer beside `rerouteShortNote`; a column nobody can read is not an audit trail. **NOT DONE:** no retrospective fill (older orders carry NULL, which is honest), no change to what the customer sees, the dated pair untouched, and no change to `.gitignore` or CI. **CHINESE:** one composed pair, declared in `docs/tacet-delivery-vocabulary.md` v1.90 with the candidates rejected; the pre-order label is the checkout notice's own kicker lifted verbatim.
@@ -15209,3 +15211,93 @@ running one, so it would rot into a test that proves nothing.
 precisely because nothing moves. No change to the mini app editor
 (`public/cms.html`), which wears the same older palette and is the obvious next
 one. No JS, no markup, no route, no schema, and no change to `.gitignore` or CI.
+
+
+## §140 — A PACK CAN HOLD A COUNT, NOT ONLY A WEIGHT
+
+**Decided by Ash, 2026-09-15,** shown the editor's own screenshot of J-57 Label
+Paper reading **Cost per unit ¥9.27/pcs** for a roll of 1000 stickers, and the
+three ways out — buy them in labels on the PO, lie about the unit and call a
+label a gram, or change the model: *“ok fix it properly”*.
+
+**THE SHAPE THAT COULD NOT BE SAID.** `lib/ingredient-cost.js` keys its whole
+decision on the RECIPE unit (2026-08-17): `g` and `ml` divide the pack price
+down, `pcs` / `bag` / `bottle` / `box` do not, because a recipe calling for one
+bag consumes one bag whatever weight is inside it — 29 live rows depend on that
+and it is still right. A roll of labels is per-piece by that rule, so the
+derivation handed back the price of the whole roll and every label on every
+product carried ¥9.27 of cost instead of ¥0.00927. The two fields that could
+have said otherwise, `pack_contents_qty` and `pack_contents_unit`, were built
+for weight and volume and their dropdown offered only g / kg / ml / L.
+
+**WHAT IS DECIDED.** `pcs` joins that dropdown, and a per-piece recipe unit
+whose pack contents are COUNTED divides:
+
+```
+cost per unit = buy_price / (buy_pack_size × pack_contents_qty)
+```
+
+the same formula shape the weight path already uses, so the two fields mean one
+thing in both. A roll: buy unit `pcs`, packs per order `1`, buy price `9.27`,
+contents per pack `1000`, contents unit `pcs` → **¥0.00927 a label**.
+
+**NOTHING INFERS IT, AND THAT IS THE LOAD-BEARING HALF.** Only
+`pack_contents_unit` normalising to `pcs` opens the divisor. There is no table
+to fall back on — nothing about the word *box* says how many labels are in one
+— and no row in the catalogue carries `pcs` there today, because the UI never
+offered it and no import writes it. So the 29 per-piece rows cannot acquire a
+divisor by accident; they acquire one when a person types the count, and not
+before. Contents recorded in GRAMS on a per-piece row keep meaning what they
+have always meant: a ¥28 bag of tortilla chips used one bag at a time still
+costs ¥28, and dividing by 300 would still be wrong.
+
+**A ZERO PACK SIZE IS REFUSED, NOT WAVED THROUGH ON A DIVISOR OF 1.** The same
+requirement the weight path makes, for the reason the module was written: a
+divisor invented here stores the roll price as the label price, which is the
+bug. `readBody()` in `routes/retail-materials.js` stores 1 for a blank, so this
+is unreachable from the editor and is left for an import that does not.
+
+**THE EDITOR PRINTS THE DIVISION.** Beside the figure, in numerals and nothing
+else — `¥9.27 ÷ 1000` — so it carries no copy and needs no Chinese.
+`buy_pack_size` meant *grams per buy unit* before the `pack_size_semantics_v2`
+migration in `database.js`, and that migration could only normalise rows whose
+buy unit was a MEASURE (kg, L, lb, oz). A pcs-bought row can still be sitting
+on a stale 1000 nobody has ever been asked about — J-57 was, in the screenshot
+that started this. Printed, a stale pack size reads as an absurd divisor the
+moment somebody fills in the contents; unprinted, it reads as a cost that is
+merely a bit small, which is the failure that does not get noticed.
+
+**AND THE FIGURE IS SHOWN TO THE PLACES IT NEEDS.** `acMoney()` renders two
+decimals — right for everything a customer or a supplier is charged, wrong for
+a derived per-unit cost: ¥0.00927 read as ¥0.01, eight percent out, and sesame
+at ¥0.0316 a gram had been reading ¥0.03 since long before this. `unitMoney()`
+in `public/retail-admin/18-materials.js` gives four places below a jiao and five
+below a fen, on the record line and the list column. Nothing at or above ¥0.10
+changes shape, and it is deliberately local to this screen rather than a change
+to `acMoney()`, which every other screen reads.
+
+**NO MIGRATION, AND NONE WANTED.** A material is fixed by filling in its
+contents; the save re-derives through the same `costFor()` and fires the recipe
+recompute, so the recipes carrying it follow. Nothing is rewritten under
+anybody's feet.
+
+**THE PO WRITE-BACK NEEDED NO CHANGE, AND IT IS WHERE THE LOOP WAS.**
+`firePriceAlertsForPO` already runs the one derivation, so the ¥9.27-per-label
+row it wrote on every order — two of them sit in J-57's live cost history —
+stops by itself. `buy_price` still stores the ROLL price: it is what the
+supplier charges, and it is what the ±5% price alert compares the next invoice
+against.
+
+**NO CHINESE COMPOSED.** `pcs` is a unit token standing beside `g` and `kg`, the
+arithmetic line is numerals, and no label changed.
+`docs/tacet-delivery-vocabulary.md` is untouched.
+
+**TESTS.** New `scripts/test_material_piece_pack.js`, 18 cases in three parts:
+the rule, run through the shipped derivation rather than a copy of it; the
+editor wiring, asserted at source; and a guard band over the four shapes this
+section promises not to touch. Proven non-vacuous — six cases fail when the
+divisor is removed. `scripts/test_price_writeback.js` gains case 10, which
+drives the same material through a real PO against a real database and holds
+both halves: the cost divides, the buy price does not. `test:fast` 251 →
+**252/252**, lint 0 errors, bilingual-banner gate passes. No schema, no
+migration, and no change to `.gitignore` or CI.
