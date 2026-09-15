@@ -205,6 +205,11 @@ if (!missing.length) {
     const tdb = () => db;
     const enqueueChannelSync = (storeId, productId) => syncCalls.push(storeId + ':' + productId);
     const _bumpStockLive = () => {};
+    // The below-zero merchant alert, stubbed for the same reason
+    // enqueueChannelSync and _bumpStockLive above are: it is an outbound side
+    // effect, not the arithmetic this suite is about, and the real one opens a
+    // database and a webhook. Its wiring is held by test_batch_owed.js §9c.
+    const _reportBelowZero = () => {};
     ${INV_FNS.map((n) => invSrc[n]).join('\n')}
     return { ${INV_FNS.join(', ')} };
   `)(db, syncCalls);

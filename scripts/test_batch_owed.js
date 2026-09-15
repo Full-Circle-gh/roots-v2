@@ -416,6 +416,78 @@ section('9b · the admin can answer the refusal');
   });
 }
 
+// ═════════════════════════════════════════════════════════════════════════
+/* 9c · OUR OWN CHANNELS SAY IT OUT LOUD TOO.
+
+   Meituan and Eleme have alerted the merchant on their version of this since
+   2026-09-08. The mini app, the web store and the counter till take a shelf
+   below zero through the two commits in lib/inventory.js and raised nothing at
+   all — so a bought-in product's debt (not batch-made, so not in the owed block
+   above) reached only a row inside the dashboard's out-of-stock panel, among
+   the plain zeroes.
+
+   What is NOT changing, and these cases hold it: the decrement still has no
+   floor. §84's negative is the record. This adds a voice, not a clamp. */
+section('9c · the debt is said out loud, not only written down');
+{
+  const inv = fs.readFileSync(path.join(ROOT, 'lib/inventory.js'), 'utf8');
+  const rep = fs.readFileSync(path.join(ROOT, 'lib/channel-line-report.js'), 'utf8');
+
+  it('both commits collect the lines that crossed zero', () => {
+    assert.strictEqual((inv.match(/if \(bal < 0\) belowZero\.push\(/g) || []).length, 2,
+      'commitOrderReservations and commitUnreservedOrder both watch the balance');
+    assert.strictEqual((inv.match(/_reportBelowZero\(/g) || []).length, 3,
+      'defined once, called from both');
+  });
+  it('…and neither gained a floor doing it', () => {
+    assert.ok(!/physical_qty = MAX\(0/i.test(inv), 'no clamp crept into the decrement');
+    assert.ok((inv.match(/SET physical_qty = physical_qty - \?/g) || []).length >= 2,
+      'both commits still write the honest negative');
+  });
+  it('the alert fires AFTER the rows are committed, never inside the write', () => {
+    // An alert is worth having and is not worth one order.
+    const at = inv.indexOf('function _reportBelowZero');
+    assert.ok(at > -1);
+    const body = inv.slice(at, at + 1800);
+    assert.ok(/try \{/.test(body) && /catch \(e\)/.test(body), 'it cannot throw');
+    const commit = inv.indexOf('_reportBelowZero(o, belowZero);');
+    const bump = inv.lastIndexOf('_bumpStockLive();', commit);
+    assert.ok(bump > -1 && bump < commit, 'it runs after the transaction, not within it');
+  });
+  it('a walk-in is named as the till rather than as whatever channel the row carries', () => {
+    assert.ok(/fulfillment_type FROM retail_orders/.test(inv),
+      'the commit reads the fulfilment so the alert can say which door it was');
+    assert.ok(/fulfilment === 'counter' \? 'counter'/.test(rep));
+  });
+  it('it does NOT borrow the platform sentence — ours did not clamp', () => {
+    const at = rep.indexOf('function belowZeroText');
+    assert.ok(at > -1);
+    const body = rep.slice(at, at + 1600);
+    assert.ok(!/已按 0 计|clamped/.test(body),
+      'a completed deduction must not be reported as a refused one');
+    assert.ok(/有客户订单等待/.test(body),
+      'and it reuses the kitchen owed block\'s own live heading');
+  });
+  it('it is the COMPLEMENT of the owed block, so the two cannot both fire', () => {
+    // owedAt reads `is_batch_made = 1`. If this alerted on those too, every
+    // pre-order of a wrap the kitchen has not cooked yet would wake the shop —
+    // the ordinary case, which is precisely the noise that buries a real one.
+    assert.ok(/COALESCE\(p\.is_batch_made, 0\) = 1/.test(fs.readFileSync(path.join(ROOT, 'lib/batch-owed.js'), 'utf8')),
+      'the owed block still covers what the kitchen cooks');
+    assert.ok(/Number\(p\.is_batch_made\) === 1 \|\| Number\(p\.ship_from_supplier\) === 1/.test(inv),
+      'and the alert covers only what it does not');
+  });
+  it('a product the commit could not find is skipped, not reported as "?"', () => {
+    assert.ok(/if \(!p\) continue;/.test(inv));
+    assert.ok(/if \(!named\.length\) return;/.test(inv),
+      'and an order whose every line was filtered out sends nothing at all');
+  });
+  it('no new log table — the ledger already holds the durable record', () => {
+    assert.ok(!/CREATE TABLE/i.test(rep));
+    assert.ok(/balance_after/.test(inv), 'the negative balance is written to retail_stock_ledger as before');
+  });
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 section('10 · the module stays a stock question (§80\'s line, held)');
 {
