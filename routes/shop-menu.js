@@ -948,6 +948,27 @@ img{display:block;max-width:100%}
    takes the delta's column because a price nobody can pay is noise. */
 .oc.out{cursor:not-allowed;opacity:.42}
 .oc.out .oc-l{text-decoration:line-through}
+/* A PICK-ANY QUESTION SAYS SO, AND IT SAYS SO WITH A BOX ON EVERY ANSWER.
+   Until 2026-09-15 this picker drew a single-answer question and a
+   multi-answer one with identical furniture — a column of rows that flip to
+   an ink ground — so nothing on the screen distinguished "pick one of these"
+   from "pick any of these". REPORTED BY ASH, who ticked both breads on a
+   product whose question is typed multi and read it as the picker being
+   broken: *"it let me choose both options."* It was not broken, and that is
+   exactly the problem — a control that is behaving correctly and looks
+   identical to one that is not has failed at the only job the screen has.
+   The mini app has never had this gap: .op-extra puts a tick box on every
+   multi answer, which is the shape being copied here.
+   THE BOX BORROWS currentColor RATHER THAN NAMING A TOKEN, so it flips with
+   the row it sits in — an ink outline on the near-white ground, an oat
+   outline and an oat tick once the row goes to ink. The mini app fills its
+   box with --ink on a row that is already --ink, which leaves the box
+   invisible and the tick floating; this reads the same and stays legible. */
+.oc.multi{justify-content:flex-start;gap:12px}
+.oc.multi .oc-l{flex:1}
+.oc-x{flex:none;width:21px;height:21px;border:1.5px solid currentColor;
+  border-radius:4px;display:flex;align-items:center;justify-content:center;
+  font-size:14px;line-height:1}
 /* The picker's foot holds one button and, when a required question has been
    left alone, one line above it. */
 /* NO RULE ABOVE THE PICKER'S FOOT. .sheet-f draws one because the basket's
@@ -1741,8 +1762,14 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `(g.req?' <span class=\"og-req\">*</span>':'')+'</div>';` +
   `for(var j=0;j<g.choices.length;j++){var c=g.choices[j];` +
   `var on=(sel.indexOf(c.id)>=0&&!c.out);` +
-  `h+='<button type=\"button\" class=\"oc'+(on?' on':'')+(c.out?' out':'')+'\"'+` +
+  `h+='<button type=\"button\" class=\"oc'+(g.multi?' multi':'')+` +
+  `(on?' on':'')+(c.out?' out':'')+'\"'+` +
   `(c.out?' disabled':'')+' data-og=\"'+g.id+'\" data-oc=\"'+c.id+'\">'+` +
+  /* THE BOX IS EMPTY OR IT HAS A TICK, and it is only drawn for a question
+     that accepts more than one answer. A single-answer question keeps the
+     bare row: a box that can only ever hold one tick is a radio drawn as a
+     checkbox, which is the opposite of the distinction being made here. */
+  `(g.multi?'<span class=\"oc-x\">'+(on?'\\u2713':'')+'</span>':'')+` +
   `'<span class=\"oc-l\">'+bi(c.en,c.cn)+'</span>'+` +
   `'<span class=\"oc-d\">'+(c.out?L_OUT:(c.d?('+'+money(c.d)):''))+'</span>'+` +
   `'</button>'}` +

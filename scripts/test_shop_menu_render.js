@@ -1727,6 +1727,15 @@ function boxOf(text) {
         on: b.classList.contains('on'),
         out: b.classList.contains('out'),
         disabled: !!b.disabled,
+        // Whether this answer belongs to a question that accepts more than
+        // one, and whether the box saying so is actually drawn with ink in it.
+        multi: b.classList.contains('multi'),
+        box: (() => {
+          const x = b.querySelector('.oc-x');
+          if (!x) return null;
+          const r = x.getBoundingClientRect();
+          return { w: r.width, h: r.height, tick: x.textContent.trim() };
+        })(),
       }));
       return {
         sheetOpen: vis(document.querySelector('#sheet .sheet-p')),
@@ -1769,6 +1778,43 @@ function boxOf(text) {
       assert.ok(soy && !soy.out, 'the live extra was greyed out with the dead one');
       // THE DRINK ITSELF IS STILL BEING SOLD — that is the whole of rule 1A.
       assert.ok(st.sheetOpen, 'an optional sold-out extra closed the picker');
+    });
+
+    /* A CONTROL THAT IS BEHAVING CORRECTLY AND LOOKS IDENTICAL TO ONE THAT IS
+       NOT HAS FAILED. Reported by Ash 2026-09-15: both breads ticked on a
+       product whose question is typed multi, read as the picker being broken.
+       The tick handler was right and the screen was silent about which kind of
+       question it was, which is the same thing as being wrong. Measured in
+       pixels, because the box existing in the markup and the box being on
+       screen are different claims and only the second one is the fix. */
+    await check('§120 a PICK-ANY question is told apart from a PICK-ONE, in ink', async () => {
+      const st = await pickerState();
+      const milk = st.rows.filter(r => r.label === 'Soy' || r.label === 'Oat');
+      const sugar = st.rows.filter(r => r.label === 'Full sugar' || r.label === 'Half sugar');
+      assert.strictEqual(milk.length, 2, 'the multi question lost its answers');
+      assert.strictEqual(sugar.length, 2, 'the single question lost its answers');
+      for (const r of milk) {
+        assert.ok(r.multi, `a multi answer is not marked as one: ${JSON.stringify(r)}`);
+        assert.ok(r.box && r.box.w > 0 && r.box.h > 0,
+          `a multi answer has no box on screen: ${JSON.stringify(r)}`);
+      }
+      // AND THE ASSERTION IS NOT VACUOUS — the single question must NOT have one.
+      for (const r of sugar) {
+        assert.ok(!r.multi, `a single answer was marked multi: ${JSON.stringify(r)}`);
+        assert.strictEqual(r.box, null,
+          `a pick-one question drew a tick box, which is a radio dressed as a checkbox: ${JSON.stringify(r)}`);
+      }
+    });
+
+    await check('§120 the box carries the tick, and only while the answer is on', async () => {
+      // Soy is the defaulted multi answer, so it opens ticked and Oat does not.
+      const st = await pickerState();
+      const soy = st.rows.find(r => r.label === 'Soy');
+      const oat = st.rows.find(r => r.label === 'Oat');
+      assert.ok(soy.on && soy.box.tick === '\u2713',
+        `a ticked answer has an empty box: ${JSON.stringify(soy)}`);
+      assert.ok(!oat.on && oat.box.tick === '',
+        `an unticked answer is showing a tick: ${JSON.stringify(oat)}`);
     });
 
     await check('§120 a defaulted answer opens pre-ticked, and a dead one never does', async () => {
