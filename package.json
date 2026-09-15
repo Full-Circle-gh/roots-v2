@@ -57,6 +57,7 @@
     "test:shop-menu-options": "node scripts/test_shop_menu_options.js",
     "test:shop-menu": "node scripts/test_shop_menu.js",
     "test:shop-menu-render": "node scripts/test_shop_menu_render.js",
+    "test:shop-menu-filter": "node scripts/test_shop_menu_filter.js",
     "test:shop-menu-search-typing": "node scripts/test_shop_menu_search_typing.js",
     "test:shop-qr": "node scripts/test_shop_qr.js",
     "test:counter-sweep": "node scripts/test_counter_sweep_exempt.js",
