@@ -826,6 +826,16 @@ img{display:block;max-width:100%}
 .sheet-h{flex:none;display:flex;align-items:center;gap:10px;padding:12px 14px;
   border-bottom:2px solid var(--ink)}
 .sheet-t{flex:1;font-family:var(--f-bear);font-size:16px;letter-spacing:.04em}
+/* THE HEADING IS TWO LINES WHEN THE PICKER IS WEARING IT: what the sheet is
+   asking, and the product it is asking about. The basket has one face and one
+   line; the picker has a title that is the same words every time ("Choose
+   your options") and would be useless without the name under it. .sheet-ht
+   carries the flex:1 the wrapper now needs — .sheet-t keeps its own for
+   #dsheetT, which is still a direct child of its own header. */
+.sheet-ht{flex:1;min-width:0}
+.sheet-n{font-size:12.5px;color:var(--olive);margin-top:2px;
+  overflow-wrap:anywhere}
+.sheet-n[hidden]{display:none}
 .sheet-x{flex:none;position:relative;width:32px;height:32px;
   border:2px solid var(--ink);background:transparent;color:var(--ink);
   cursor:pointer;padding:0}
@@ -887,30 +897,73 @@ img{display:block;max-width:100%}
    others. The cost is vertical space, which the sheet scrolls. */
 .og{padding:12px 0;border-bottom:1px solid rgba(0,0,0,.08)}
 .og:last-child{border-bottom:0}
-.og-q{font-size:14px;overflow-wrap:anywhere;margin-bottom:8px}
-/* NO "REQUIRED" MARKER, and its absence is a decision. There is no live
-   English/中文 pair for the word anywhere on a customer surface, and §120 will
-   not mint one for a marker: the mini app's own picker marks nothing either
-   and blocks on Add with the question named (rule 2B), which is the same
-   answer given at the moment it is needed rather than decorating every
-   heading with a word most of them do not need. */
+/* THE HEADING IS A KICKER, NOT A SENTENCE — uppercase, letterspaced, olive,
+   in the display face. Same treatment .dt-k, .alab and .mo-h already wear on
+   this page, and the same one .op-q wears in the mini app's own picker. The
+   question is a label over its answers rather than a line of prose beside
+   them, and at 12.5px it stops competing with the 16px answers below it. */
+.og-q{font-family:var(--f-bear);font-size:12.5px;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--olive);margin-bottom:7px;
+  overflow-wrap:anywhere}
+/* THE REQUIRED MARKER IS AN ASTERISK, and it replaces a note that stood here
+   saying there would be none. That note gave two grounds: there is no live
+   English/中文 pair for the word "required", and the mini app's own picker
+   marks nothing either. THE SECOND GROUND WAS SIMPLY WRONG — product.wxml has
+   rendered is_required ? " *" : "" inside .op-q for as long as that sheet has
+   existed, which is what this picker was asked to match. The first ground
+   survives and is why the marker is a glyph: an asterisk is not a word, so it
+   needs no pair and mints nothing. It sits OUTSIDE bi()'s two spans, because
+   it is the same mark in both languages and because the suite reads the
+   question out of .og-q .l-en and must keep reading the question alone.
+   Rule 2B is untouched: Add still blocks and still names the question. */
+.og-req{color:var(--olive)}
+/* ROUNDED AND FILLED, matching the mini app's .op-choice row for row: a 7px
+   corner, a 1.5px rule and a near-white card lifted off the oat ground, at
+   the mini app's own 24rpx/28rpx padding converted at a 390px phone. The fill
+   is this sheet's existing veil — the one .err and .pw button already use —
+   rather than a second near-white literal invented for one control. */
 .oc{display:flex;align-items:center;justify-content:space-between;gap:10px;
-  width:100%;padding:9px 10px;margin-top:6px;cursor:pointer;
-  border:2px solid var(--ink);background:transparent;color:var(--ink);
-  font-family:inherit;font-size:14px;text-align:left}
+  width:100%;padding:12.5px 14px;margin-top:7px;cursor:pointer;
+  border:1.5px solid var(--ink);border-radius:7px;
+  background:rgba(255,255,255,.72);color:var(--ink);
+  font-family:inherit;font-size:16px;text-align:left}
 .oc-l{min-width:0;overflow-wrap:anywhere}
-.oc-d{flex:none;font-variant-numeric:tabular-nums;font-size:13px;opacity:.75}
+.oc-d{flex:none;font-variant-numeric:tabular-nums;font-size:12.5px;
+  color:var(--olive)}
 /* Ticked. The ground flips rather than a tick appearing beside the label:
    a checkbox glyph at this size is a smaller target than the row it marks. */
-.oc.on{background:var(--ink);color:var(--paper)}
-.oc.on .oc-d{opacity:.85}
+/* Ticked. The ground flips rather than a tick appearing beside the label:
+   a checkbox glyph at this size is a smaller target than the row it marks.
+   THE COLOUR IS --oat, AND THE ONE IT REPLACES WAS A BUG. This rule asked for
+   var(--paper), which themeToCssVars has never emitted — the whole token set
+   is --oat/--ink/--forest/--lime/--olive plus the two faces. An unresolvable
+   var() makes the declaration invalid at computed-value time, which for an
+   inherited property means inherit, so the ticked row inherited --ink and
+   drew ink text on an ink ground: the answer a customer had just chosen was
+   the one they could no longer read. --oat is the ground this sheet sits on
+   and the pair .ichip.lead already uses against the same --ink. */
+.oc.on{background:var(--ink);color:var(--oat)}
+.oc.on .oc-d{color:var(--oat);opacity:.85}
 /* Sold out. Not disabled-and-silent — the word is the whole point, and it
    takes the delta's column because a price nobody can pay is noise. */
 .oc.out{cursor:not-allowed;opacity:.42}
 .oc.out .oc-l{text-decoration:line-through}
 /* The picker's foot holds one button and, when a required question has been
    left alone, one line above it. */
+/* NO RULE ABOVE THE PICKER'S FOOT. .sheet-f draws one because the basket's
+   foot is a form under a list of lines and needs separating from it; the
+   picker's foot is one button under its own answers, and the mini app runs it
+   as one unbroken panel. Scoped to this foot, so the basket keeps its rule. */
+#sheetO{border-top:0}
 #sheetO .err{margin-bottom:8px}
+/* THE PICKER'S BUTTON IS INK, NOT LIME, and it is the one place on this page
+   where those two part company. .place is lime everywhere else because it is
+   the page's go: the button that ends the order. This one does not end
+   anything — it puts a line in the basket and hands the customer back to the
+   menu — and the mini app's .op-add has drawn that distinction in ink since
+   its sheet shipped. Same 7px corner as the answers it sits under. */
+#oAdd{background:var(--ink);color:var(--oat);border-radius:7px;
+  letter-spacing:.06em}
 
 /* ── the orders this phone has already placed ──
    One row per order: the number staff will call, the amount, and a chevron
@@ -1417,7 +1470,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `ttl=document.getElementById('sheetT'),` +
   `foot=document.getElementById('sheetF'),nEl=document.getElementById('cbarN'),` +
   `optFoot=document.getElementById('sheetO'),oAdd=document.getElementById('oAdd'),` +
-  `oErr=document.getElementById('oErr'),` +
+  `oErr=document.getElementById('oErr'),nmEl=document.getElementById('sheetN'),` +
   `vEl=document.getElementById('cbarV'),tEl=document.getElementById('cTot'),` +
   `errEl=document.getElementById('cErr'),nameEl=document.getElementById('cName'),` +
   `place=document.getElementById('cPlace'),lEl=document.getElementById('cbarL');` +
@@ -1518,7 +1571,13 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var L_ADD=${JSON.stringify(bi('Add to basket', '加入购物车'))},` +
   `L_OUT=${JSON.stringify(bi('Sold out', '售罄'))},` +
   `L_PICK_EN=${JSON.stringify('Please choose: ')},` +
-  `L_PICK_CN=${JSON.stringify('请选择 ')};` +
+  `L_PICK_CN=${JSON.stringify('请选择 ')},` +
+  // THE PICKER'S HEADING, COPIED FROM A LIVE PAIR AND NOT COMPOSED. It is the
+  // mini app's own, character for character: miniapp/pages/product/product.js
+  // sets opTitle to '选择选项' / 'Choose your options' when its sheet opens.
+  // The vocabulary document is not touched, for the same reason §120's
+  // '请选择 ' above did not touch it — nothing here is new.
+  `L_OPTS=${JSON.stringify(bi('Choose your options', '选择选项'))};` +
   // THE TENANT'S CURRENCY, ALL THREE PARTS OF IT, read off the bar's own data
   // attributes rather than baked in here: this script is built once at module
   // load and the currency is resolved per request (§0 — no currency literal in
@@ -1678,7 +1737,8 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `if(g.choices[i].id===id)return g.choices[i];return null};` +
   `var pkPaint=function(){var h='';` +
   `for(var i=0;i<pk.o.length;i++){var g=pk.o[i],sel=pk.s[g.id]||[];` +
-  `h+='<div class=\"og\"><div class=\"og-q\">'+bi(g.q_en,g.q_cn)+'</div>';` +
+  `h+='<div class=\"og\"><div class=\"og-q\">'+bi(g.q_en,g.q_cn)+` +
+  `(g.req?' <span class=\"og-req\">*</span>':'')+'</div>';` +
   `for(var j=0;j<g.choices.length;j++){var c=g.choices[j];` +
   `var on=(sel.indexOf(c.id)>=0&&!c.out);` +
   `h+='<button type=\"button\" class=\"oc'+(on?' on':'')+(c.out?' out':'')+'\"'+` +
@@ -1709,11 +1769,13 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `if(c.def&&!c.out){d.push(c.id);if(!g.multi)break}}` +
   `pk.s[g.id]=d}` +
   `oErr.hidden=true;foot.hidden=true;optFoot.hidden=false;errEl.hidden=true;` +
-  `ttl.innerHTML=bi(pk.en,pk.cn);pkPaint();shOpen(sheet);body.scrollTop=0};` +
+  `ttl.innerHTML=L_OPTS;nmEl.innerHTML=bi(pk.en,pk.cn);nmEl.hidden=false;` +
+  `pkPaint();shOpen(sheet);body.scrollTop=0};` +
   /* Leaving the picker puts the sheet back to being the basket. Every face of
      this panel repaints the heading and swaps the foot, or it wears the last
      one's. */
-  `var pkClose=function(){pk=null;optFoot.hidden=true;oErr.hidden=true};` +
+  `var pkClose=function(){pk=null;optFoot.hidden=true;oErr.hidden=true;` +
+  `nmEl.hidden=true;nmEl.innerHTML=''};` +
   `var addLine=function(pid,price,en,cn,ops){` +
   `var ch=[];for(var i=0;i<ops.length;i++)ch.push(ops[i].choice_id);` +
   `var k=ckey(pid,ch);` +
@@ -2384,7 +2446,16 @@ router.get('/s/:shopCode', (req, res) => {
           // the heading, not a face forgetting to. A face that leaves it alone
           // is a face wearing the last one's word; done() carried YOUR BASKET
           // over a placed order for exactly that reason.
-          `<div class="sheet-t" id="sheetT">${bi('YOUR BASKET', '购物车')}</div>` +
+          `<div class="sheet-ht">` +
+            `<div class="sheet-t" id="sheetT">${bi('YOUR BASKET', '购物车')}</div>` +
+            // THE PRODUCT BEING ASKED ABOUT, and only the picker wears it. The
+            // basket, the orders list and the placed order all name themselves
+            // in the heading above; the picker's heading is the same four words
+            // every time, so the name has to go somewhere and this is it. Empty
+            // and [hidden] for every other face, cleared by pkClose the way
+            // every other face-specific part of this panel is.
+            `<div class="sheet-n" id="sheetN" hidden></div>` +
+          `</div>` +
           // AN ATTRIBUTE TAKES TEXT, NOT MARKUP. bi() returns two <span>s, and
           // putting that in aria-label closed the attribute at its first quote
           // and spilled the rest into the header as visible text — a stray
