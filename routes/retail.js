@@ -4094,6 +4094,10 @@ const ALIPAY_SHORT_OK_CNY = 2.00;
 function validateAlipayProof(order, ocr, manual, refMs) {
   const reasons = [];
   const checks = {};
+  // Set when the window was live but the screenshot carried no clock at all.
+  // Rides on the verdict the way shortBy does, so a confirmation resting on no
+  // time is visible on the card rather than indistinguishable from a checked one.
+  let timeUnread = false;
   // 1. success screen
   checks.success = !!ocr.success;
   if (!ocr.success) reasons.push('not a successful-payment screen');
@@ -4147,8 +4151,20 @@ function validateAlipayProof(order, ocr, manual, refMs) {
     const stamp = ocr.paid_at || ocr.raw_time_text;
     const t = parseBeijingTime(stamp || ocr.status_bar_time, ref);
     if (t == null) {
-      checks.time = false;
-      if (checks.success && checks.amount && checks.payee !== false) reasons.push("couldn't read the payment time on the screenshot");
+      // AMENDED by Ash, 2026-09-15 (§133): no clock ANYWHERE on the screenshot is
+      // "couldn't verify", not "the payment is wrong", and only the second of
+      // those is a reason to hold a customer's order. The comment at the head of
+      // this check has said "couldn't verify" since it was written; the code
+      // nonetheless failed hard, and that gap is what is closed here.
+      //
+      // What still guards the money: the success screen, the amount, the payee,
+      // and — the one that actually stops a re-used screenshot — the image-hash
+      // and txn-id reuse guard the caller applies. What is GIVEN UP is stated in
+      // §133 rather than discovered later: a genuine receipt to this shop, for
+      // this amount, paid long ago and never uploaded here before, is no longer
+      // caught by the clock.
+      checks.time = null;
+      timeUnread = true;
     } else {
       const ageMin = (ref - t) / 60000;
       checks.time = ageMin >= -10 && ageMin <= win;   // allow 10min clock skew
@@ -4163,7 +4179,7 @@ function validateAlipayProof(order, ocr, manual, refMs) {
   } else { checks.time = null; }
 
   const hardPass = checks.success && checks.amount && checks.payee !== false && checks.time !== false;
-  return { verdict: hardPass ? 'match' : 'mismatch', reasons, checks, shortBy };
+  return { verdict: hardPass ? 'match' : 'mismatch', reasons, checks, shortBy, timeUnread };
 }
 
 // Accept a key as either a ready PEM (with BEGIN/END lines) or as bare base64
@@ -5652,7 +5668,7 @@ async function ocrVerifyAlipayProof(order, img, imgHash, manual, refMs) {
     if (reused) { verdict = 'mismatch'; v.verdict = 'mismatch'; v.reasons.push(`this ${dupImg ? 'screenshot' : 'transaction'} was already used on order #${reused.id}`); }
     tdb().prepare(
       "UPDATE retail_orders SET alipay_ocr_verdict = ?, alipay_ocr_json = ?, alipay_txn_id = ? WHERE id = ?"
-    ).run(verdict, JSON.stringify({ ...ocr, reasons: v.reasons, checks: v.checks, ...(v.shortBy ? { short_by: v.shortBy } : {}) }), ocr.txn_id || null, order.id);
+    ).run(verdict, JSON.stringify({ ...ocr, reasons: v.reasons, checks: v.checks, ...(v.shortBy ? { short_by: v.shortBy } : {}), ...(v.timeUnread ? { time_unread: true } : {}) }), ocr.txn_id || null, order.id);
 
     // Auto-flip ONLY when the operator enabled it AND every guard passed: a full
     // match (amount + payee + recent time), not a reused screenshot/txn, and the

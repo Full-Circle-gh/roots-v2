@@ -661,6 +661,14 @@ function renderAlipayProof(o) {
   if (payeeShown) facts.push(`<li><span class="k">${cuT('Paid to', '收款方')}</span><span class="v" data-no-i18n>${escapeHtml(payeeShown)}</span></li>`);
   if (payeeAlt) facts.push(`<li><span class="k">${cuT('Account name', '收款方全称')}</span><span class="v" data-no-i18n>${escapeHtml(payeeAlt)}</span></li>`);
   if (paidAt) facts.push(`<li><span class="k">${cuT('Paid at', '付款时间')}</span><span class="v" data-no-i18n>${escapeHtml(paidAt)}</span></li>`);
+  // §133: the server stopped holding an order over a screenshot that carried no
+  // clock, so the row says so rather than vanishing. A missing row reads as a
+  // field nobody thought about; this one reads as a check that was not made, next
+  // to a verdict that was reached anyway — which is the thing a person standing
+  // in front of a confirmed order would want to know. Both halves are live pairs
+  // from this same card: the label from the row above, the value from the
+  // "Couldn't read it" pill. Nothing composed.
+  else if (d.time_unread) facts.push(`<li><span class="k">${cuT('Paid at', '付款时间')}</span><span class="v">${cuT("Couldn't read it", '无法识别')}</span></li>`);
   if (uploadedAt) facts.push(`<li><span class="k">${cuT('Uploaded', '上传于')}</span><span class="v" data-no-i18n>${escapeHtml(uploadedAt)}</span></li>`);
   if (d.txn_id) facts.push(`<li><span class="k">${cuT('Txn', '流水号')}</span><span class="v">${copyChip(d.txn_id, 'Txn ID')}</span></li>`);
 
