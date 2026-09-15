@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.266
+# Tacet shared-core consolidation — decisions record, v4.267
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,8 +23,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-15 · v4.266 — **§129 AMENDED: ANSWERING THE QUESTIONS PUTS THE CUSTOMER BACK ON THE MENU, NOT ON THE CHECKOUT — REPORTED BY ASH from the live menu, ticking a paid extra on a Quinoa Salad:** *"when i click add to basket it goes to chekcut instead going back to main menu."* §120 built the option picker to flip this panel to the BASKET face once the questions were answered, and said why in the source: it is *"the face that shows what has just been added"*. **THE TELL IS THAT NOTHING ELSE ON THIS MENU BEHAVES THAT WAY.** Tapping + on a product with no questions adds it and leaves the customer browsing, with the photo thrown into the bar; §129's size picker does the same. Only the question path ended somewhere else — and where it ended was a form asking for a name and a tender, which tells somebody who has just chosen a sugar level that they have finished shopping. A basket of one is the common case for that screen and it is the wrong one. **THE CONFIRMATION WAS NEVER MISSING and is now given the same way the other two paths give it:** the bar already carries the count and the running total, and the flight is what says WHICH product went in. The photo now flies at the moment the line actually exists rather than at the tap that opened the picker — which is the other side of §120's own note beside the flight, *"a photo sailing into the bar before the customer has answered anything would be telling them a lie"*. The basket stays one tap away on the bar, where it always was. **Opened from the PRODUCT PAGE the picker closes onto the page**, not the menu, which is the mini app's behaviour and means a customer adding two of something is not thrown out of the product to do it. **The check that asserted the old behaviour (`basketFoot && !pickerFoot` immediately after Add) is rewritten rather than deleted, and keeps the old expectation in words** — it now asserts the panel CLOSES onto the menu with the bar showing one item, and a second check opens the basket and reads the line, so what the line says is still held. Proven non-vacuous: with the fix reverted the new check fails with *"answering the questions left the panel open on the checkout"*. `test_shop_menu_render.js` 49/49, `test:fast` 241/241. No schema, no migration, no Chinese composed, no change to `.gitignore` or CI.
+2026-09-15 · v4.267 — **§129 AMENDED: ANSWERING THE QUESTIONS PUTS THE CUSTOMER BACK ON THE MENU, NOT ON THE CHECKOUT — REPORTED BY ASH from the live menu, ticking a paid extra on a Quinoa Salad:** *"when i click add to basket it goes to chekcut instead going back to main menu."* §120 built the option picker to flip this panel to the BASKET face once the questions were answered, and said why in the source: it is *"the face that shows what has just been added"*. **THE TELL IS THAT NOTHING ELSE ON THIS MENU BEHAVES THAT WAY.** Tapping + on a product with no questions adds it and leaves the customer browsing, with the photo thrown into the bar; §129's size picker does the same. Only the question path ended somewhere else — and where it ended was a form asking for a name and a tender, which tells somebody who has just chosen a sugar level that they have finished shopping. A basket of one is the common case for that screen and it is the wrong one. **THE CONFIRMATION WAS NEVER MISSING and is now given the same way the other two paths give it:** the bar already carries the count and the running total, and the flight is what says WHICH product went in. The photo now flies at the moment the line actually exists rather than at the tap that opened the picker — which is the other side of §120's own note beside the flight, *"a photo sailing into the bar before the customer has answered anything would be telling them a lie"*. The basket stays one tap away on the bar, where it always was. **Opened from the PRODUCT PAGE the picker closes onto the page**, not the menu, which is the mini app's behaviour and means a customer adding two of something is not thrown out of the product to do it. **The check that asserted the old behaviour (`basketFoot && !pickerFoot` immediately after Add) is rewritten rather than deleted, and keeps the old expectation in words** — it now asserts the panel CLOSES onto the menu with the bar showing one item, and a second check opens the basket and reads the line, so what the line says is still held. Proven non-vacuous: with the fix reverted the new check fails with *"answering the questions left the panel open on the checkout"*. `test_shop_menu_render.js` 49/49, `test:fast` 241/241. No schema, no migration, no Chinese composed, no change to `.gitignore` or CI.
 
+2026-09-15 · v4.266 — **§131 · A FEEDBACK THREAD CAN BE FINISHED WITHOUT ANSWERING IT — DECIDED BY ASH from the front door**, on a "Feedback to answer · 1 · oldest 17h" row that had been up most of a day about a thread that needed no answer: *"need to have the option to not answering a feedback and this message should be gone."* **THE ROW WAS NOT WRONG, IT WAS UNREACHABLE.** Nothing in the existing design ever demanded a reply — opening a thread stamps `admin_read_at` and the clause drops it. **The gap was WHERE that clause could be reached from: the Inbox list prints the customer's message inline, photos and all, so the reading that settles the question happens in the LIST and the stamp only fires in the DRAWER.** An operator who reads a row, decides it needs nothing and moves on has done the work and left no trace of it, and the front door goes on naming the job. So the fix is not a new rule about what clears the queue; it is putting the action where the decision is already being made — **on the row**, on desktop and phone alike, left of Reply and never primary. **`retail_feedback.handled_at`** is its own column and not a reuse of `admin_read_at` because the two are different statements: *somebody opened this*, which is accidental and anonymous, versus a decision with a name and a time against it in the activity log. It mirrors `retail_reviews.dismissed_at`, which exists on the same kind of queue for the same reason. **NOTHING IS SENT** — the only other way to clear this queue was the reply box, and a reply drops an in-app notification with a push behind it; the endpoint is tested for the ABSENCE of `notifyCustomer` and of any message turn. **AND IT IS NOT A MUTE: `FEEDBACK_WAITING_SQL` compares the customer's latest turn against the LATER of the two stamps rather than testing `handled_at IS NULL`, so a follow-up returns the thread by itself.** Marking handled says *nothing further from us on what has been said*, never *stop hearing from this person*, and the difference is one clause a later session could simplify away without noticing — four tests hold it. **`/unhandle` clears BOTH stamps**, because nulling only `handled_at` would leave the read stamp holding the thread out and Put back would look broken for the reason hardest to guess at. **NO BULK "mark all as handled", deliberately** — reviews have one because that queue arrives hundreds at a time and is mostly thank-yous; a feedback thread is one person writing to the shop, and a sweep across those is how a real complaint gets buried. **THE THREE HAND-COPIED WAITING CLAUSES ARE NOW ONE**, the way the reviews side already reads `REVIEW_WAITING_SQL`; both it and `FEEDBACK_SEEN_SQL` stay expression-bodied arrows because `test_inbox_fires.js` lifts them out of the shipped file by slicing to the first semicolon. **NO CHINESE COMPOSED** — all five pairs are live strings from the Reviews queue, which ships this same control.
 2026-09-15 · v4.265 — **§130 · A PAYMENT SHORT OF THE ORDER BY UP TO ¥2 IS STILL A PAYMENT — DECIDED BY ASH on order TC000723**, which sat in `pending_payment` with a brick *Doesn't match — check first* over **49 fen**: ¥425.31 arrived against a ¥425.80 order, and every other check on that screenshot passed. Ash: *"when the gap difference is 0-2 rmb, confirm the payment if that's the only mismatch"*. **THE RULE HAD ONLY EVER BEEN ASYMMETRIC BY ACCIDENT OF WHAT WAS NOTICED FIRST** — `validateAlipayProof` already forgave an OVERpayment (Alipay's card and cross-border surcharges land on top of what we charged, so ¥241.54 settles a ¥234.50 order) and refused every underpayment to the fen. The same machinery takes fees off a transfer in the other direction. **THE CONDITION IS THE WHOLE DECISION AND IT IS IN THE CODE, NOT IN THE COMMENT:** the shortfall is forgiven by the AMOUNT check alone, so a ¥0.49 gap next to a payee that was never ours, a stale receipt, a non-success screen or a screenshot already spent on another order is still a mismatch — the reuse guard is untouched. **FORGIVEN, NEVER HIDDEN.** The verdict carries `shortBy`, persisted as `short_by` in `alipay_ocr_json`, and the proof card states both numbers under the facts list: what arrived, and what the order came to. **IT IS A CONSTANT (`ALIPAY_SHORT_OK_CNY = 2.00`) AND NOT AN OPERATOR SETTING**, because it describes what Alipay does to a transfer rather than a per-shop preference, and a box on the settings screen is a box somebody eventually types 20 into. **WHAT IS ACCEPTED WITH IT:** the order's total does not move, so the books keep ¥425.80 against ¥425.31 banked — capped at ¥2 an order, deliberately, rather than rewriting an order to match a screenshot. **With auto-flip on, such an order now marks itself paid**, which is the point of the request. **NO CHINESE COMPOSED** — the gap line is `03-dashboard.js`'s own live pair for the same fact, `paid {x}, order {y}` / `已付 {x},订单 {y}`, character for character including its half-width comma (preference 1, copy a live pair); `docs/tacet-delivery-vocabulary.md` is not touched. **Tests:** `scripts/test_payment_mismatch.js` 48 → **55**, gaining section 11, which slices `validateAlipayProof` out of the shipped route and runs it — ¥2.00 short passes, ¥2.01 does not, an unreadable amount is never forgiven, and a small gap beside a second fault still fails. No schema, no migration, no change to `.gitignore` or CI.**
 
 2026-09-15 · v4.264 — **§129 · THE QR MENU GETS THE MINI APP'S PRODUCT PAGE, AND TWO OF §120's OWN DECISIONS ARE REVERSED TO GET IT — DECIDED BY ASH across four reports in one sitting, each one looking at the live menu on a phone.** The picker restyle (v4.263) closed the gap in how the option sheet LOOKS; these close the gap in what the surface IS. **§120 DECIDED A SHEET AND NOT A PAGE**, showing only what a person needs to decide *"whether they can eat it"* — ingredients, allergens, nutrition — and **DELIBERATELY NOT the marketing paragraph**. Ash, reading a product on the live menu: *"i cant see the description ... only the picture ingridents allerges"*, then *"why its even doing a pop up for a product, i want a complete page, same as the mini app."* **§120 ALSO DECIDED FLATLY NO VARIANTS**, each size its own menu row, on the reasoning that variants cost three lines of a small screen for one drink. Ash, on a screenshot of two identical photographs both captioned Almond Butter at ¥50 and ¥76: *"those are 2 variant on the mini app. under the same page. on the qrcode menu its 2 seperate products. i wsnt it to be like the mini app. choose variant inside the product page."* **BOTH REVERSALS ARE HIS AND BOTH WERE DECIDED ON EVIDENCE THE ORIGINAL DECISION DID NOT HAVE**: the original reasoned about a drink sold in three sizes taking three rows, and what actually shipped was two rows that were visually IDENTICAL — same photo, same name, no size shown anywhere — which does not read as a choice at all but as a duplicate listing. **THE READ CAME FIRST, TWICE, AND BOTH TIMES IT MOVED THE ANSWER.** `diagnose_qr_menu_option_types.js` proved the two-breads report was the DATA (`type='multi'`) and not the tick handler, which turned a bug report into a legibility fix. `diagnose_qr_menu_detail_blocks.js` proved the missing description was PRESENT and dropped — all 7 listed products carry a `hero_intro`, 250 across the catalogue — rather than absent, which is the difference between building a renderer and filing a content task. **THE PAGE IS THE SHEET PROMOTED, NOT A SECOND SYSTEM.** `#dsheet` keeps its element, its open path, its template-clone and its enlarge; it gains full-screen chrome, a hero, the prose blocks and a sticky buy bar. A parallel page would have been a second renderer for one product and the two would have drifted. **AND IT IS NOT A NAVIGATION, WHICH IS THE ONE CONSTRAINT THAT DECIDED THE ARCHITECTURE:** §44 puts the basket in memory and nowhere else — no cookie, no localStorage, stated in the source — so a real page load would empty the basket of every customer who looked at a product. The page is a full-screen view with `history.pushState`, so the URL moves and the phone's Back works while nothing reloads. **THE SIZE IS CHOSEN IN A SHEET FROM THE BUTTON, NOT INLINE ON THE PAGE**, which is the mini app's own arrangement and its own recorded reason: *"not inline — so the choice is unmissable like the size picker."* Collapsing follows the mini app's grid rule exactly — group by `variant_group_id`, representative is the group owner where it is listed, members ordered by the operator's `variant_sort`. **NO CHINESE COMPOSED.**
@@ -14279,13 +14280,14 @@ deliberately knows nothing of the new flag.
 
 **2026-09-15 · Ash decided, on four reports from a live phone in one sitting.**
 
-**AMENDED 2026-09-15 · v4.266 — answering the questions returns to the menu.**
+**AMENDED 2026-09-15 · v4.267 — answering the questions returns to the menu.**
 Reported by Ash: *"when i click add to basket it goes to chekcut instead going
 back to main menu."* §120 flipped the panel to the basket face after the
 questions were answered; it now closes onto whatever the customer came from —
 the menu, or the product page — and the photo flies into the bar at that moment
 instead of at the tap that opened the picker. Every add path on this surface now
-ends the same way. See the v4.266 changelog entry.
+ends the same way. **RENUMBERED FROM v4.266 ON MERGE** — §131 took that number
+on main while this sat unmerged. See the v4.267 changelog entry.
 
 **WHAT CHANGED AND WHY IT IS A REVERSAL, NOT A REFINEMENT.** §120 built the QR
 menu's product surface as a bottom sheet carrying ingredients, allergens and
@@ -14419,3 +14421,79 @@ dashboard-queue fixtures carry stored verdicts, not re-computed ones.
 window, the payee list, the stale-pending sweep, or what the dashboard counts. No
 tolerance in the other direction — an overpayment was already accepted in full and
 still is. No schema, no migration, and no change to `.gitignore` or CI.
+## §131 — A FEEDBACK THREAD CAN BE FINISHED WITHOUT ANSWERING IT
+
+**2026-09-15 · Decided by Ash, from the front door: a "Feedback to answer, 1,
+oldest 17h" row that had been up for the better part of a day about a thread
+that needed no answer.** *"need to have the option to not answering a feedback
+and this message should be gone."*
+
+**THE ROW WAS NOT WRONG, IT WAS UNREACHABLE.** "Waiting" already cleared itself:
+opening a thread stamps `admin_read_at`, and the dashboard's clause takes it off
+the card. Nothing about the existing design demanded a reply. The gap was where
+the clause could be reached from. **The Inbox list prints the customer's message
+inline** — the whole of it, with the photos — so the reading that would settle
+the question happens in the LIST, and the stamp only fires in the DRAWER. An
+operator who reads a row, decides it needs nothing, and moves on has done the
+work and left no trace of it, and the front door goes on naming the job.
+
+So the fix is not a new rule about what clears the queue. It is putting the
+action where the decision is actually made.
+
+1. **`retail_feedback.handled_at`.** Read, and judged to need no answer. Its own
+   column rather than a reuse of `admin_read_at`, because the two are different
+   statements: one is *somebody opened this*, which is accidental and anonymous,
+   the other is a decision with a name and a time against it in the activity log.
+   Mirrors `retail_reviews.dismissed_at` (§ the Reviews triage queue), which
+   exists on the same kind of queue for the same reason. The names differ because
+   the actions do: a dismissed review leaves a public queue nobody replied in, a
+   handled thread is a private conversation somebody decided was finished.
+
+2. **NOTHING IS SENT.** That is the point of the column, and it is the same point
+   `dismissed_at` was built on. The only other way to clear this queue was the
+   reply box, and a reply drops an in-app notification with a push behind it.
+   Clearing a worklist must not put words in front of someone who is owed none.
+   The endpoint is tested for the absence of `notifyCustomer` and of any message
+   turn, not just for the presence of the stamp.
+
+3. **IT IS NOT A MUTE, AND THE CLAUSE IS SHAPED SO IT CANNOT BECOME ONE.**
+   `FEEDBACK_WAITING_SQL` compares the customer's latest turn against the LATER
+   of the two stamps rather than testing `handled_at IS NULL`. A follow-up from
+   that customer is newer than both, so the thread returns to the queue by
+   itself. Marking handled says *"nothing further from us on what has been
+   said"*, never *"stop hearing from this person"* — and the difference between
+   those two is one clause that a later session could simplify away without
+   noticing. Four tests hold it.
+
+4. **THE ACTION LIVES ON THE ROW**, on both surfaces, not only inside the thread.
+   The drawer and the phone's thread sheet carry it too, but the row is the one
+   that matters: it is the surface the decision is already being made on. It sits
+   left of Reply, as a plain button, never primary — the quiet exit from a thread
+   that needs no answer, not a second way to finish one.
+
+5. **THERE IS A WAY BACK, AND IT CLEARS BOTH STAMPS.** `POST .../unhandle` nulls
+   `handled_at` AND `admin_read_at`. Clearing only the first would leave the read
+   stamp holding the thread out of the queue, and Put back would look broken for
+   the reason hardest to guess at. Reviews learned this: without an undo, an
+   accidental click is undoable only by writing to the customer, which is the
+   exact thing the dismissal existed to avoid.
+
+6. **NO BULK "MARK ALL AS HANDLED", DELIBERATELY.** Reviews have one because that
+   queue arrives hundreds at a time and is mostly five-star thank-yous. A
+   feedback thread is one person writing to the shop directly. A sweep across
+   those is how a real complaint gets buried under a click nobody remembers
+   making. One at a time is the feature, not a shortfall in it.
+
+**THE THREE HAND-COPIED CLAUSES ARE NOW ONE.** The dashboard's fire, the admin
+list's `needs_reply` flag and the Inbox all read `FEEDBACK_WAITING_SQL`, the way
+the reviews side already reads `REVIEW_WAITING_SQL`. They were three copies
+before this, which is how a fire ends up promising work a list says is finished.
+Both it and `FEEDBACK_SEEN_SQL` are expression-bodied arrows on purpose:
+`scripts/test_inbox_fires.js` lifts them out of the shipped file by slicing to
+the first semicolon, and a block body would slice in half and stop testing the
+guarantee without failing.
+
+**No Chinese is composed.** All five pairs are live strings lifted from the
+Reviews queue, which ships this same control: 标记为已处理, 放回待处理,
+已处理 — 未回复, 已放回待处理, and the two error lines. A control that is a copy
+of one that already shipped does not need new vocabulary.

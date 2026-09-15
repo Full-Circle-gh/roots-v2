@@ -202,7 +202,20 @@ router.patch('/api/retail-admin/shops/:id', requireRetailAdmin, requireStoresEdi
 // ─── Listings ───────────────────────────────────────────────────────────
 
 // Products that could be added: active store_products not already on this
-// menu, capped so the picker never becomes the whole catalogue.
+// menu. EVERY one of them — an empty box is the whole addable catalogue.
+//
+// THERE IS NO CAP, and the cap it used to carry is the reason this comment is
+// long. `LIMIT 50` read as "the picker never becomes the whole catalogue",
+// which is a fine thing to want and the wrong way to get it: with the box
+// empty the operator saw the first fifty products in alphabetical order and
+// nothing said so, so a catalogue of several hundred looked like a catalogue
+// of fifty that stopped somewhere in the B's. Everything past that could only
+// be reached by guessing enough of its name to type, which is the opposite of
+// what a list is for. Nothing here has ever filtered on stock — an out-of-stock
+// product was always a candidate — but a truncated list is indistinguishable
+// from a filtered one to the person reading it, and reads as "the out-of-stock
+// ones are missing". The panel scrolls (retail-admin.css #shp-pick-list) so a
+// long list costs height inside the card, not the page.
 //
 // THE SEARCH IS THE STOREFRONT'S, and deliberately so: a product the shopper
 // can find in the shop must be findable by the operator putting it ON a shop.
@@ -231,14 +244,16 @@ router.get('/api/retail-admin/shops/:id/candidates', requireRetailAdmin, (req, r
     const like = '%' + t.replace(/[%_\\]/g, ch => '\\' + ch) + '%';
     for (let i = 0; i < SEARCH_COLS.length; i++) params.push(like);
   }
+  // Ordered by the name the picker actually PRINTS. Sorting on name_en alone
+  // put every Chinese-only product at the top in a block, under an empty sort
+  // key, which is where a reader looks last.
   const rows = tdb().prepare(`
     SELECT p.id, p.name_en, p.name_cn, p.sku, p.sell_price, COALESCE(p.is_published, 0) AS is_published
       FROM store_products p
      WHERE COALESCE(p.is_active, 1) = 1
        AND p.id NOT IN (SELECT store_product_id FROM shop_listings WHERE shop_id = ?)
        ${where}
-     ORDER BY p.name_en COLLATE NOCASE ASC
-     LIMIT 50
+     ORDER BY COALESCE(NULLIF(p.name_en, ''), p.name_cn) COLLATE NOCASE ASC
   `).all(...params);
   ok(res, rows);
 });

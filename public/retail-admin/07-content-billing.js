@@ -2228,15 +2228,67 @@ async function loadFeedback() {
   }
 }
 
+// The status pill and, where there is one, the action that changes it.
+//
+// THE ACTION LIVES ON THE ROW, not only inside the thread, and that is the
+// whole point of this feature rather than a convenience. This list prints the
+// customer's message inline: an operator reads it here, decides it needs no
+// answer, and never opens the drawer — so the read stamp that would have taken
+// it off the dashboard never fires and the front door goes on saying "Feedback
+// to answer" at work that was finished yesterday. The button is put where the
+// decision is actually made.
 function feedbackStatusPill(f) {
   // needs_reply covers a brand-new report and an unanswered follow-up alike.
   if (f.needs_reply) {
-    return `<span class="pill warn" style="font-size: 10px;">${cuT('Needs reply', '待回复')}</span>`;
+    return `<span class="pill warn" style="font-size: 10px;">${cuT('Needs reply', '待回复')}</span>`
+      // stopPropagation: the row itself opens the thread. Marking handled is the
+      // one click here that must NOT also open it — the operator already read
+      // the message in this row and is saying so.
+      + ` <button type="button" class="btn btn-sm" onclick="event.stopPropagation();fbSetHandled(${f.id}, true)">`
+      + `${cuT('Mark as handled', '标记为已处理')}</button>`;
   }
   if (f.replied) {
     return `<span class="pill ok" style="font-size: 10px;">${cuT('Replied', '已回复')}</span>`;
   }
+  // Left the queue without an answer. Says which of the two it was — the same
+  // words the Reviews list uses for the same decision — and offers the way back,
+  // so an accidental click is not undoable only by writing to the customer.
+  if (f.handled) {
+    return `<span class="pill neutral" style="font-size: 10px;">${cuT('Handled — no reply sent', '已处理 — 未回复')}</span>`
+      + ` <button type="button" class="btn btn-sm" onclick="event.stopPropagation();fbSetHandled(${f.id}, false)">`
+      + `${cuT('Put back', '放回待处理')}</button>`;
+  }
   return '';
+}
+
+// Mark one thread handled, or put it back. Nothing is sent to the customer
+// either way — that is what separates this from the reply box.
+//
+// Repaints the dashboard's Needs-you fire on the way out. That row reads the
+// same queue, so it is wrong the moment this succeeds, and leaving a stale count
+// on the front door for the rest of the 60s poll is exactly the complaint this
+// feature was built to answer.
+// Returns whether it actually saved. The drawer needs that answer: its button
+// flips its own label in place, and flipping it on a request that failed would
+// leave the footer offering Put back on a thread that is still in the queue —
+// the toast says one thing and the button says the other.
+async function fbSetHandled(id, on) {
+  let ok = true;
+  try {
+    await api(`/api/retail-admin/feedback/${id}/${on ? 'handled' : 'unhandle'}`, { method: 'POST' });
+    // Both pairs are live strings lifted from the Reviews queue, which does this
+    // exact thing — no new vocabulary for a control that is a copy of one that
+    // already shipped. "Handled — no reply sent" doubles as the confirmation
+    // because the second half is the reassurance: nothing went to the customer.
+    toast(on ? cuT('Handled — no reply sent', '已处理 — 未回复')
+             : cuT('Back in the queue', '已放回待处理'), 'ok');
+  } catch (e) {
+    ok = false;
+    toast(cuT('That did not save. Nothing has changed.', '没有保存成功。数据没有变化。'), 'err');
+  }
+  await loadFeedback();
+  if (typeof tdOpsLoad === 'function') tdOpsLoad();
+  return ok;
 }
 
 function renderFeedbackRow(f) {
@@ -2302,6 +2354,34 @@ document.querySelector('[data-tab="feedback"]').addEventListener('click', feedba
 
 // ── Feedback thread drawer — read the conversation and reply ───────────────
 let _fbThreadId = null;
+let _fbHandled = false;   // is the open thread marked handled (and unanswered)?
+
+// The footer's left-hand button. One slot, two states: a thread that is not
+// marked handled offers the way out, a handled one offers the way back. It flips
+// on handled_at alone — see buildFeedbackThread for why this route cannot also
+// ask "is it still waiting" and get a useful answer.
+function fbPaintHandledBtn() {
+  const btn = $('#fb-handled');
+  if (!btn) return;
+  btn.hidden = false;
+  btn.textContent = _fbHandled
+    ? cuT('Put back', '放回待处理')
+    : cuT('Mark as handled', '标记为已处理');
+}
+
+// The drawer's copy of the row action. Same two endpoints, same toasts; it
+// repaints the button in place rather than reloading the thread, because the
+// operator is looking at the conversation and yanking it out from under them to
+// change one word in the footer is worse than the word being changed.
+async function toggleFeedbackHandled() {
+  if (_fbThreadId == null) return;
+  const btn = $('#fb-handled');
+  if (btn) btn.disabled = true;
+  const want = !_fbHandled;
+  if (await fbSetHandled(_fbThreadId, want)) _fbHandled = want;
+  fbPaintHandledBtn();
+  if (btn) btn.disabled = false;
+}
 
 function fbBubble(m) {
   const mine = m.author === 'admin';
@@ -2322,6 +2402,10 @@ async function openFeedbackThread(id) {
   const body = $('#fb-thread-body');
   body.innerHTML = `<div class="muted">${cuT('Loading…', '加载中…')}</div>`;
   $('#fb-reply-input').value = '';
+  // Hidden until the thread lands. The button's label is a claim about THIS
+  // thread; carrying the last one's over while the next one loads is how a
+  // "Put back" appears on something that was never marked handled.
+  if ($('#fb-handled')) $('#fb-handled').hidden = true;
   try {
     const { data } = await api('/api/retail-admin/feedback/' + id);
     const customer = data.customer_name || ('#' + data.customer_id);
@@ -2336,6 +2420,8 @@ async function openFeedbackThread(id) {
       data.messages.map(fbBubble).join('') +
       (photos ? `<div class="fb-photos">${photos}</div>` : '');
     body.scrollTop = body.scrollHeight;
+    _fbHandled = !!data.handled;
+    fbPaintHandledBtn();
   } catch (e) {
     body.innerHTML = `<div class="err">${cuT('Failed to load', '加载失败')}: ${escapeHtml(e.message)}</div>`;
   }

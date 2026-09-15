@@ -16949,20 +16949,12 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     reviews_unanswered = { count: rvCount, low: rvLow, items: rvItems };
 
     // ── Feedback threads waiting on a reply ──────────────────────────────
-    // "Waiting" is the list's own needs_reply rule — the customer's latest turn
-    // is newer than the last time an operator opened the thread, which covers a
-    // brand-new report (admin_read_at NULL) and a fresh follow-up alike.
-    //
-    // Plus one guard the list does not need and this card does: the thread must
-    // actually HAVE a customer turn. Staff can start a thread themselves (a
-    // direct message to a customer), and on one of those admin_read_at is null
-    // until somebody re-opens it — so the bare needs_reply rule would raise a
-    // fire about the operator's own unanswered message. Same discipline the
-    // unseen-count endpoint already applies to the Inbox badge.
-    const FB_WAITING =
-      "(f.admin_read_at IS NULL"
-      + "   OR datetime(COALESCE(f.last_customer_msg_at, f.created_at)) > datetime(f.admin_read_at))"
-      + " AND (COALESCE(f.initiated_by, 'customer') = 'customer' OR f.last_customer_msg_at IS NOT NULL)";
+    // FEEDBACK_WAITING_SQL, shared rather than copied, for the same reason
+    // REVIEW_WAITING_SQL is: a fire that disagrees with the queue it opens means
+    // one of the two is lying. Read that definition for what "waiting" means —
+    // including why a thread marked handled leaves this count, and why the
+    // customer's next message brings it back.
+    const FB_WAITING = FEEDBACK_WAITING_SQL('f');
     const fbCount = tdb().prepare(
       `SELECT COUNT(*) AS n FROM retail_feedback f WHERE ${FB_WAITING}`
     ).get().n;
@@ -19990,6 +19982,47 @@ const REVIEW_WAITING_SQL = (a = 'r') =>
   + ` AND ${a}.comment IS NOT NULL AND TRIM(${a}.comment) <> ''`
   + ` AND ${a}.dismissed_at IS NULL`;
 
+// A feedback thread the customer is still waiting on. Two clauses, and the
+// shape of the first one is the whole point:
+//
+//   1. THE CUSTOMER'S LATEST TURN IS NEWER THAN ANYTHING WE DID ABOUT IT.
+//      "Anything we did" is the later of two stamps — admin_read_at (somebody
+//      opened the thread) and handled_at (somebody read it and decided it needs
+//      no answer). Taking the LATER of the two, rather than requiring both, is
+//      what makes a follow-up reopen the thread: the customer's new message is
+//      newer than both stamps, so it comes back into the queue by itself and
+//      "handled" never becomes a way to stop hearing from someone.
+//
+//      Both stamps NULL means nobody has looked at all — a brand-new report.
+//      MAX() over COALESCE(...,'') gives '' in that case, and datetime('') is
+//      NULL, which is why the empty test is written out rather than left to the
+//      comparison: a NULL comparison is falsy and would quietly drop every new
+//      report out of its own queue.
+//
+//   2. THE THREAD ACTUALLY HAS A CUSTOMER TURN. Staff can start a thread
+//      themselves (a direct message out to a customer), and on one of those
+//      nobody is waiting on us until they write back. Without this the queue
+//      would raise its hand about the operator's own unanswered message.
+//
+// Takes the alias so the dashboard's fire, the admin list's needs_reply flag
+// and the Inbox all read one clause instead of three hand-copied versions of
+// it. They disagreed before this existed, which is how a fire ends up promising
+// work a list says is already done.
+// The later of the two stamps, as one expression so both places that need it
+// read the same one. Its own const rather than a local inside the clause below,
+// because that clause has to stay a single expression-bodied arrow: the test
+// that holds the fire and the list to the same SQL lifts both of these out of
+// this file by slicing to the first semicolon, the way it already does for
+// REVIEW_WAITING_SQL. A block body would slice in half and the guarantee would
+// quietly stop being tested.
+const FEEDBACK_SEEN_SQL = (a = 'f') =>
+  `MAX(COALESCE(${a}.admin_read_at, ''), COALESCE(${a}.handled_at, ''))`;
+
+const FEEDBACK_WAITING_SQL = (a = 'f') =>
+  `(${FEEDBACK_SEEN_SQL(a)} = ''`
+  + `   OR datetime(COALESCE(${a}.last_customer_msg_at, ${a}.created_at)) > datetime(${FEEDBACK_SEEN_SQL(a)}))`
+  + ` AND (COALESCE(${a}.initiated_by, 'customer') = 'customer' OR ${a}.last_customer_msg_at IS NOT NULL)`;
+
 function synthReviewsTableExists() {
   try {
     return !!tdb().prepare(
@@ -20213,6 +20246,17 @@ function buildFeedbackThread(row) {
     photos: parseJsonArray(row.photos_json),
     kind: row.kind || 'bug',
     initiated_by: row.initiated_by || 'customer',
+    // Read and judged to need no answer. Sent as plain state rather than
+    // re-derived on the client: the client cannot see handled_at, and guessing
+    // it from the turn list gets a staff-initiated thread wrong every time.
+    //
+    // The drawer's footer button flips on this one fact and nothing else.
+    // Deliberately NOT paired with a "is it still waiting" flag: this route
+    // stamps admin_read_at on the way past, so by the time anything here is
+    // computed the thread is no longer waiting BECAUSE IT WAS JUST OPENED — a
+    // flag read after that would say "handled" about every thread anyone looks
+    // at, which is the exact confusion handled_at exists to end.
+    handled: !!row.handled_at,
     messages: [
       // The root turn, normalised into the same shape as a reply turn. It's the
       // customer's first message on a bug report, or the operator's opener on an
@@ -20442,7 +20486,7 @@ router.get('/api/retail-admin/feedback', requireRetailAdmin, (req, res) => {
     `SELECT f.id, f.customer_id, f.customer_name, f.message,
             f.photos_json, f.page_context, f.app_version, f.created_at, f.kind,
             f.initiated_by, f.root_author_name,
-            f.last_customer_msg_at, f.last_admin_msg_at, f.admin_read_at,
+            f.last_customer_msg_at, f.last_admin_msg_at, f.admin_read_at, f.handled_at,
             c.nickname AS nickname, c.avatar_url AS customer_avatar,
             (SELECT COUNT(*) FROM retail_feedback_messages m WHERE m.feedback_id = f.id) AS reply_count,
             -- The newest turn in the thread. Without this the row can only show
@@ -20453,11 +20497,10 @@ router.get('/api/retail-admin/feedback', requireRetailAdmin, (req, res) => {
             (SELECT m.author      FROM retail_feedback_messages m WHERE m.feedback_id = f.id ORDER BY m.id DESC LIMIT 1) AS last_author,
             (SELECT m.author_name FROM retail_feedback_messages m WHERE m.feedback_id = f.id ORDER BY m.id DESC LIMIT 1) AS last_author_name,
             (SELECT m.created_at  FROM retail_feedback_messages m WHERE m.feedback_id = f.id ORDER BY m.id DESC LIMIT 1) AS last_at,
-            -- The customer is waiting if their latest turn is newer than the
-            -- last time an operator opened the thread (covers a brand-new
-            -- report — admin_read_at NULL — and a fresh follow-up alike).
-            (f.admin_read_at IS NULL
-               OR datetime(COALESCE(f.last_customer_msg_at, f.created_at)) > datetime(f.admin_read_at)) AS needs_reply
+            -- FEEDBACK_WAITING_SQL, the same clause the dashboard's fire counts
+            -- and the Inbox reads. Covers a brand-new report, a fresh follow-up,
+            -- and the thread an operator marked handled without replying.
+            (${FEEDBACK_WAITING_SQL('f')}) AS needs_reply
        FROM retail_feedback f
   LEFT JOIN retail_customers c ON c.id = f.customer_id
    ORDER BY COALESCE(f.last_customer_msg_at, f.last_admin_msg_at, f.created_at) DESC
@@ -20478,6 +20521,10 @@ router.get('/api/retail-admin/feedback', requireRetailAdmin, (req, res) => {
       last_at: hasReply ? f.last_at : f.created_at,
       replied: !!f.last_admin_msg_at,
       needs_reply: !!f.needs_reply,
+      // Read and judged to need no answer. The row decides what to DO with that
+      // — needs_reply and replied both outrank it in the status pill, so this
+      // only ever surfaces on a thread that left the queue without an answer.
+      handled: !!f.handled_at,
     };
   });
   const total = tdb().prepare('SELECT COUNT(*) AS n FROM retail_feedback').get().n;
@@ -20519,6 +20566,56 @@ router.get('/api/retail-admin/feedback/:id', requireRetailAdmin, (req, res) => {
   if (!row) return res.status(404).json({ success: false, error: 'not_found' });
   tdb().prepare('UPDATE retail_feedback SET admin_read_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
   res.json({ success: true, data: buildFeedbackThread(row) });
+});
+
+// Operator read the thread and decided it needs no answer. Stamps handled_at,
+// which takes it out of FEEDBACK_WAITING_SQL — off the dashboard's "Feedback to
+// answer" row, off the Inbox's "Needs reply" pill, off the phone.
+//
+// NOTHING IS SENT. That is the whole point of the column: the only other way to
+// clear this queue was to write a reply, and a reply goes into the customer's
+// in-app inbox with a push behind it. Clearing a worklist should not put words
+// in front of someone who is owed none.
+//
+// Single-thread only, and there is deliberately no bulk version. Reviews have
+// one because that queue arrives 300 at a time and is mostly five-star
+// thank-yous. A feedback thread is one person writing to the shop directly; a
+// sweep across those is how a real complaint gets buried under a click nobody
+// remembers making.
+//
+// Logged with the thread id so "who decided this needed no answer" has an
+// answer that is not a shrug.
+router.post('/api/retail-admin/feedback/:id/handled', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const row = tdb().prepare('SELECT id FROM retail_feedback WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ success: false, error: 'not_found' });
+  // admin_read_at moves too. Whoever clicked this has, by definition, read the
+  // thread, and leaving the read stamp behind would mean the two clauses tell
+  // different stories about the same click.
+  tdb().prepare(
+    'UPDATE retail_feedback SET handled_at = CURRENT_TIMESTAMP, admin_read_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(id);
+  logActivity(req.user.id, req.user.username, 'feedback_handled', 'retail_feedback', id, {}, req.ip);
+  res.json({ success: true });
+});
+
+// Put one back in the queue. Pairs with the action above for the same reason
+// review undismiss does: without it, an accidental click could only be undone by
+// writing a reply to the customer — the exact thing marking it handled exists to
+// avoid.
+//
+// Clearing admin_read_at as well is what actually puts it back. handled_at alone
+// is not what holds the thread out of the queue; the LATER of the two stamps is,
+// and on a thread just marked handled that is whichever of them we leave behind.
+router.post('/api/retail-admin/feedback/:id/unhandle', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const row = tdb().prepare('SELECT id FROM retail_feedback WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ success: false, error: 'not_found' });
+  tdb().prepare(
+    'UPDATE retail_feedback SET handled_at = NULL, admin_read_at = NULL WHERE id = ?'
+  ).run(id);
+  logActivity(req.user.id, req.user.username, 'feedback_unhandle', 'retail_feedback', id, {}, req.ip);
+  res.json({ success: true });
 });
 
 // Operator replies to a report. Writes the turn, stamps the thread, and drops
