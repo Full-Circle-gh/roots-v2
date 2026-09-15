@@ -30,9 +30,10 @@
  *
  * WHAT IS PINNED HERE, and why each case has to be its own:
  *
- *   products rejects          → loadError, the network copy, a retry button
- *   products resolves []      → the operator copy, and NO retry button
- *   only the tree rejects     → NOT a network error (grouping is optional)
+ *   products rejects           → loadError, the network copy, a retry button
+ *   products resolves []       → the operator copy, and NO retry button
+ *   only the tree rejects      → a network error too (see section 2)
+ *   a filter/search matched 0  → "No matches." — neither of the other two
  *
  * The third is the case a coarser fix gets wrong. Keying the verdict off either
  * call would report a failed connection to a customer whose catalogue arrived
@@ -201,6 +202,57 @@ it('a product with no category at all still survives a lost tree', async () => {
   assert.strictEqual(c.data.loadError, true, 'and the lost tree is still reported');
 });
 
+// ── 2b. She narrowed it to nothing herself ─────────────────────────────────
+section('2b. A filter or search that matches nothing is her doing, not a fault');
+
+it('a search with no hits says so, and blames nobody', async () => {
+  // Server-side search: q= comes back empty, which used to be indistinguishable
+  // from an empty catalogue and so told her to go and publish products.
+  const { c } = await runRefresh({ products: [], tree: [], data: { query: 'kombucha' } });
+  assert.strictEqual(c.data.loadError, false, 'the server answered — nothing failed');
+  assert.strictEqual(c.data.emptyTitle, 'No matches.');
+  assert.strictEqual(c.data.emptySub, '', 'nothing to add, and nothing minted to add it with');
+  assert.strictEqual(c.data.emptyRetry, '', 'a retry would just run the same search again');
+});
+
+it('every narrowing control counts, not just the search box', async () => {
+  const narrowings = [
+    { query: 'x' }, { activeDietary: 'gluten' }, { activeBadge: 'NEW' },
+    { priceMin: '50' }, { priceMax: '10' }, { inStockOnly: true }, { hideOutOfStock: true },
+  ];
+  for (const n of narrowings) {
+    const { c } = await runRefresh({ products: [], tree: [], data: n });
+    assert.strictEqual(c.data.emptyTitle, 'No matches.',
+      'narrowed by ' + JSON.stringify(n) + ' — must not read as an empty catalogue');
+  }
+});
+
+it('an empty catalogue with NO filter still reads as the operator\'s job', async () => {
+  const { c } = await runRefresh({ products: [], tree: [] });
+  assert.strictEqual(c.data.emptyTitle, 'No products yet.',
+    'nothing was narrowing, so this really is an unpublished catalogue');
+});
+
+it('a dropped request outranks a filter — she cannot know it matched nothing', async () => {
+  const { c } = await runRefresh({ products: netErr(), tree: [], data: { query: 'kombucha' } });
+  assert.strictEqual(c.data.emptyTitle, 'No connection',
+    'with no answer, "No matches" would be a claim we cannot make');
+  assert.strictEqual(c.data.emptyRetry, 'TRY AGAIN');
+});
+
+it('the no-match copy is the FAQ page\'s own, character for character', () => {
+  const FAQ = fs.readFileSync(path.join(ROOT, 'miniapp/pages/faq/faq.wxml'), 'utf8');
+  for (const str of ['No matches.', '没有匹配。']) {
+    assert.ok(FAQ.includes(str), `${str} must already be live on the FAQ page`);
+    assert.ok(SHOP_JS.includes(str), `${str} must be the string the shop page uses`);
+  }
+});
+
+it('the Chinese no-match pane is whole', async () => {
+  const { c } = await runRefresh({ products: [], tree: [], data: { query: 'x', lang: 'cn' } });
+  assert.strictEqual(c.data.emptyTitle, '没有匹配。');
+});
+
 // ── 3. Giving up sooner ────────────────────────────────────────────────────
 section('3. The browse reads give up before the customer does');
 
@@ -270,6 +322,23 @@ it('the delivery re-render cannot clear a standing loadError', () => {
   c._renderRows([]);        // _syncDelivery calls it with no verdict
   assert.strictEqual(c.data.loadError, true, 'a re-render is not new evidence');
   assert.strictEqual(c.data.emptyTitle, 'No connection');
+});
+
+it('the subtitle is gated too, so the no-match pane has no empty gap under it', () => {
+  const gated = SHOP_WXML.match(/wx:if="\{\{emptySub\}\}" class="empty-sub"/g) || [];
+  assert.strictEqual(gated.length, 2, 'both panes');
+  assert.ok(!/<view class="empty-sub">/.test(SHOP_WXML), 'no ungated subtitle left');
+});
+
+it('a new filter that forgets _isNarrowed shows the wrong pane — so pin the list', () => {
+  // Anchor on the DEFINITION, not the first call site — they read alike.
+  const at = SHOP_JS.indexOf('\n  _isNarrowed() {');
+  assert.ok(at !== -1, '_isNarrowed must exist as its own method');
+  const body = SHOP_JS.slice(at, SHOP_JS.indexOf('\n  },', at));
+  for (const f of ['query', 'activeDietary', 'activeBadge', 'priceMin', 'priceMax',
+                   'inStockOnly', 'hideOutOfStock']) {
+    assert.ok(body.includes(f), `_isNarrowed must read ${f}`);
+  }
 });
 
 it('both empty panes render the retry, gated on there being one', () => {
