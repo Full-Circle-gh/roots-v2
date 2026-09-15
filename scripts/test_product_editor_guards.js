@@ -1,0 +1,252 @@
+// The product page editor does not lose the office's work, does not lie about
+// a failure, and does not hand an id it was given to the JS parser.
+//
+// WHY THIS FILE EXISTS. public/product-editor.html is one 4,400-line page with
+// no module boundary and no runtime test around it, so every guard in it is a
+// line somebody could delete without anything going red. The audit that
+// produced these fixes found four ways to lose an unsaved design, two failures
+// that painted in the success colour, and three ids interpolated into inline
+// handlers as JavaScript source. Each one had been correct at some point in a
+// sibling function and wrong here — which is what a test is for.
+//
+// THESE ARE SOURCE ASSERTIONS, like test_product_editor_tacet.js beside them.
+// The page needs a DOM to run and the fast shard has no browser, so each check
+// first proves its ANCHOR is present and then proves the property holds at it.
+// A rename therefore fails this file loudly rather than passing it vacuously —
+// an assertion that can only ever match nothing is worse than no assertion.
+'use strict';
+
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const ROOT = path.join(__dirname, '..');
+const SRC = fs.readFileSync(path.join(ROOT, 'public/product-editor.html'), 'utf8');
+
+let pass = 0, fail = 0;
+const ok  = (m) => { pass++; console.log('  ✓ ' + m); };
+const bad = (m, e) => { fail++; console.log('  ✗ ' + m + (e ? '\n      ' + e : '')); };
+const check = (m, fn) => { try { fn(); ok(m); } catch (e) { bad(m, e.message); } };
+const section = (t) => console.log('\n' + t);
+
+// The body of a top-level `function name(...) { ... }`, by brace balance.
+// Returns '' when the function is not there, so a caller asserting on its
+// contents fails on the anchor rather than on an empty string that matches
+// nothing it was looking for.
+function fnBody(name) {
+  const re = new RegExp('(?:async\\s+)?function\\s+' + name + '\\s*\\([^)]*\\)\\s*\\{');
+  const m = re.exec(SRC);
+  if (!m) return '';
+  let i = m.index + m[0].length, depth = 1;
+  for (; i < SRC.length && depth > 0; i++) {
+    const c = SRC[i];
+    if (c === '{') depth++;
+    else if (c === '}') depth--;
+  }
+  return SRC.slice(m.index, i);
+}
+const anchored = (name) => {
+  const b = fnBody(name);
+  assert.ok(b, `${name}() not found — the anchor moved, so this check proves nothing`);
+  return b;
+};
+
+// ── 1. Unsaved work never leaves without a question ─────────────────────
+section('Unsaved work');
+
+check('a beforeunload listener guards the exits the page does not own', () => {
+  const m = /addEventListener\('beforeunload',\s*\(e\)\s*=>\s*\{([\s\S]*?)\n\}\);/.exec(SRC);
+  assert.ok(m, 'no beforeunload listener — tab close and reload drop the design silently');
+  assert.ok(/peIsDirty\(\)/.test(m[1]), 'beforeunload does not consult peIsDirty()');
+  assert.ok(/e\.preventDefault\(\)/.test(m[1]) && /returnValue/.test(m[1]),
+    'beforeunload must both preventDefault and set returnValue or Chrome shows nothing');
+});
+
+check('the page\'s own navigations suppress that prompt so it never double-asks', () => {
+  assert.ok(/function peLeaveIntentionally\(\)/.test(SRC), 'no peLeaveIntentionally()');
+  const m = /addEventListener\('beforeunload',\s*\(e\)\s*=>\s*\{([\s\S]*?)\n\}\);/.exec(SRC);
+  assert.ok(/_peLeaving/.test(m[1]), 'beforeunload ignores the deliberate-exit flag');
+  // Every location.href / window.close in the page's own code sets it first.
+  for (const fn of ['fcGotoMiniApp', 'peClose', 'peSwitchProduct']) {
+    assert.ok(/peLeaveIntentionally\(\)/.test(anchored(fn)),
+      `${fn}() navigates away without flagging the exit — the browser asks a second time`);
+  }
+});
+
+check('peClose asks before discarding, like every other exit', () => {
+  const b = anchored('peClose');
+  assert.ok(/peIsDirty\(\)/.test(b), 'peClose does not check for unsaved changes');
+  assert.ok(/askConfirm\(/.test(b), 'peClose does not ask');
+});
+
+check('paSaveEdit reports its verdict instead of swallowing it', () => {
+  const b = anchored('paSaveEdit');
+  assert.ok(/\breturn true;/.test(b), 'paSaveEdit never reports success');
+  assert.ok(/\breturn false;/.test(b), 'paSaveEdit never reports failure');
+});
+
+check('fcGotoMiniApp stays put when that save failed', () => {
+  const b = anchored('fcGotoMiniApp');
+  assert.ok(!/try\s*\{\s*await paSaveEdit\(\);?\s*\}\s*catch/.test(b),
+    'a try/catch around paSaveEdit always falls through — it catches its own errors and never throws');
+  assert.ok(/await paSaveEdit\(\)/.test(b) && /if \(!saved\) return;/.test(b),
+    'fcGotoMiniApp navigates without reading the save verdict');
+});
+
+// ── 2. A failure looks like a failure ───────────────────────────────────
+section('Error paths');
+
+check("toast() is never called with a kind it does not know", () => {
+  const t = anchored('toast');
+  assert.ok(/kind === 'err'/.test(t), "toast's error kind is no longer 'err' — update this check");
+  const strays = SRC.match(/toast\([^;]*?,\s*'error'\s*\)/g) || [];
+  assert.deepStrictEqual(strays, [],
+    `toast(..., 'error') paints in the SUCCESS colour — toast only tests for 'err': ${strays.join(' | ')}`);
+});
+
+check('the media upload handles a lost session and a non-JSON body', () => {
+  const b = anchored('paImageBandUpload');
+  assert.ok(/status === 401 \|\| \w+\.status === 403/.test(b),
+    'an expired session during upload reads as a generic "Upload failed"');
+  assert.ok(/peAuthBail\(\)/.test(b), 'upload does not bounce on a lost session');
+  assert.ok(/\.json\(\)\.catch\(/.test(b),
+    'an unguarded .json() throws on a proxy error page (413, gateway HTML)');
+});
+
+check('peBoot checks BOTH responses for a lost session', () => {
+  const b = anchored('peBoot');
+  assert.ok(/listRes\.status === 401 \|\| listRes\.status === 403/.test(b),
+    'the catalog list response is not checked for 401/403');
+});
+
+check('switching to a product missing from the stale cache is not a dead end', () => {
+  const b = anchored('peSwitchProduct');
+  assert.ok(!/const p = PA_ALL_PRODUCTS\.find\([^)]*\);\s*\n\s*if \(!p\) return;/.test(b),
+    'a bare return on a cache miss is a click that does nothing and says nothing');
+  assert.ok(/Number\.isFinite\(id\)/.test(b), 'a non-numeric id still reaches the fetch URL');
+});
+
+// ── 3. An id is data, never source ──────────────────────────────────────
+section('Ids that come from outside');
+
+check('block ids are sanitised where they enter, not escaped at each use', () => {
+  assert.ok(/function paSafeBlockId\(id\)/.test(SRC), 'no paSafeBlockId()');
+  const b = anchored('peMount');
+  assert.ok(/paSafeBlockId\(/.test(b),
+    'peMount trusts the id stored in description_blocks JSON, which lands in onclick= as source');
+  assert.ok(!/id: b\.id \|\| paBlocksGenId\(\)/.test(SRC),
+    'the old unchecked "keep whatever id was stored" is still there');
+});
+
+check('template ids reach their handlers as data attributes', () => {
+  const b = anchored('paRenderPresets');
+  assert.ok(/data-tpl="\$\{escapeAttr\(p\.id\)\}"/.test(b),
+    'the template id is not carried as an escaped data attribute');
+  assert.ok(!/paOpenTemplatePreview\('\$\{p\.id\}'\)/.test(b) &&
+            !/paDeleteCustomTemplate\(event, '\$\{p\.id\}'\)/.test(b),
+    'an operator-supplied template id is still interpolated into JS source inside an inline handler');
+  assert.ok(/this\.dataset\.tpl/.test(b), 'the handlers do not read the id back from dataset');
+});
+
+check('a template id in a CSS class name is stripped, everywhere it is used', () => {
+  assert.ok(/function paTplClass\(id\)/.test(SRC), 'no paTplClass()');
+  for (const fn of ['paThumbHtml', 'paOpenTemplatePreview']) {
+    assert.ok(/paTplClass\(/.test(anchored(fn)), `${fn}() builds a pa-tpl- class from a raw id`);
+  }
+  assert.ok(/pa-tpl-\$\{paTplClass\(p\.id\)\}/.test(anchored('paRenderPresets')),
+    "the chooser card's own pa-tpl- class still takes the raw id");
+});
+
+check('a template with no block stack cannot be applied', () => {
+  const a = anchored('paApplyTemplate');
+  assert.ok(/Array\.isArray\(tpl\.blocks\)/.test(a),
+    'paApplyTemplate calls .map on a blocks array it never checked');
+  const p = anchored('paOpenTemplatePreview');
+  assert.ok(/nBlocks/.test(p) && /useBtn\.disabled = isCur \|\| !nBlocks/.test(p),
+    'the Use button is offered for a template that would do nothing');
+});
+
+check('an imported template with no descriptions gets no tooltip, not "undefined"', () => {
+  const b = anchored('paRenderPresets');
+  assert.ok(!/escapeHtml\(p\.desc_en \+ ' · ' \+ p\.desc_cn\)/.test(b),
+    'joining two possibly-absent descriptions prints "undefined · undefined"');
+  assert.ok(/\[p\.desc_en, p\.desc_cn\]/.test(b), 'the descriptions are not filtered before joining');
+});
+
+// ── 4. Work the page does not need to do ────────────────────────────────
+section('Efficiency');
+
+check('the phone preview is not rebuilt on every keystroke', () => {
+  const b = anchored('paLivePreview');
+  assert.ok(/_paPreviewTimer/.test(b) && /setTimeout\(paRenderPreview/.test(b),
+    'paLivePreview rebuilds the whole preview synchronously per input event');
+  assert.ok(/paBlocksSyncFromDOM\(\)/.test(b),
+    'the block state must stay immediate — peIsDirty and paSaveEdit both read it');
+  assert.ok(/clearTimeout\(_paPreviewTimer\)/.test(anchored('paRenderPreview')),
+    'a direct render leaves the queued one to paint the same page again');
+});
+
+check('nothing renders the preview twice in a row', () => {
+  const pairs = SRC.match(/paRenderAll\(\);\s*\n\s*paLivePreview\(\);/g) || [];
+  assert.deepStrictEqual(pairs, [],
+    'paRenderAll() already ends in paRenderPreview() — the paLivePreview() after it repaints everything a second time');
+});
+
+check('the i18n registry lets go of nodes the preview replaced', () => {
+  assert.ok(/function pruneReg\(\)/.test(SRC), 'no pruneReg()');
+  assert.ok(/if \(_reg\.length > \d+\) pruneReg\(\);/.test(SRC),
+    'the registry is only swept when somebody toggles the language, so it grows for the session');
+});
+
+check('auto-fill remembers every product it has already composed', () => {
+  assert.ok(/_peAutoFilledFor = new Set\(\)/.test(SRC),
+    'a single remembered id means switching away and back fires a second AI compose');
+  const b = anchored('peAutoFillFromKitchen');
+  assert.ok(/_peAutoFilledFor\.has\(p\.id\)/.test(b) && /_peAutoFilledFor\.add\(p\.id\)/.test(b),
+    'peAutoFillFromKitchen does not use the set');
+});
+
+// ── 5. One language at a time, on every control ─────────────────────────
+section('Bilingual chrome');
+
+check('every confirm dialog labels its button in the reader\'s language', () => {
+  const calls = SRC.match(/askConfirm\(\{[\s\S]*?\}\)/g) || [];
+  assert.ok(calls.length >= 5, `expected the page's askConfirm calls, found ${calls.length}`);
+  const english = calls.filter(c =>
+    !/confirmCn:/.test(c) && !/confirmLabel: cuT\(/.test(c));
+  assert.deepStrictEqual(english, [],
+    `a dialog that asks in 中文 and answers in English only:\n${english.join('\n---\n')}`);
+});
+
+check('cuT is never handed the same string for both languages', () => {
+  const dup = [];
+  for (const m of SRC.matchAll(/cuT\('((?:[^'\\]|\\.)*)',\s*'((?:[^'\\]|\\.)*)'\)/g)) {
+    if (m[1] === m[2]) dup.push(m[0]);
+  }
+  assert.deepStrictEqual(dup, [],
+    `cuT(x, x) prints BOTH languages whichever one is chosen, beside siblings that print one:\n${dup.join('\n')}`);
+});
+
+check('the three product lists say "no match" the same way', () => {
+  const variants = new Set();
+  for (const m of SRC.matchAll(/cuLang\(\) === 'cn' \? '没有匹配的产品。'|cuT\('No products match\.',\s*'没有匹配的产品。'\)/g)) {
+    variants.add(m[0].startsWith('cuT') ? 'cuT' : 'ternary');
+  }
+  assert.deepStrictEqual([...variants], ['cuT'],
+    'the switcher, the left rail and the cold-start picker do not agree on how to say it');
+});
+
+// ── 6. The preview never draws a broken image ───────────────────────────
+section('Preview');
+
+check('the colophon portrait hides itself when the asset is missing', () => {
+  const b = anchored('paRenderPreview');
+  const m = /<img class="pa-prev-colophon-img"[^>]*>/.exec(b);
+  assert.ok(m, 'the colophon portrait is no longer rendered here — update this check');
+  assert.ok(/onerror=/.test(m[0]),
+    'the live preview draws a broken-image glyph where its own sample-screen twin hides it');
+  assert.ok(/encodeURIComponent\(colResChar\)/.test(m[0]),
+    'the character key goes into a src attribute unescaped');
+});
+
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);

@@ -1704,9 +1704,19 @@ async function peExitToPages() {
 }
 // Close the editor tab. Opened via window.open() from retail-admin, so
 // window.close() works; fall back to navigating back if the browser blocks it.
-function peClose() {
+// ASKS FIRST when there are unsaved edits — peExitToPages and peSwitchProduct
+// both did and this one did not, so the button sitting next to Save was the one
+// exit that dropped the work without a word. Same question, same two strings.
+async function peClose() {
   // Embedded as a backend tab — nothing to close; the parent owns navigation.
   if (window.self !== window.top) return;
+  if (peIsDirty() && !(await askConfirm({
+    title: cuT('You have unsaved changes that will be lost. Leave anyway?', '有未保存的更改将会丢失,仍要离开吗?'),
+    confirmLabel: cuT('Leave', '离开'),
+  }))) {
+    return;
+  }
+  peLeaveIntentionally();
   window.close();
   // If still here a tick later, the tab wasn't script-opened — go back.
   setTimeout(() => {
@@ -1728,9 +1738,15 @@ function peAuthBail() {
 // Editor switch — jump to the Mini App (pages) editor, saving first if the
 // current product has unsaved edits so nothing is lost.
 async function fcGotoMiniApp() {
+  // paSaveEdit never throws — it catches its own failure and toasts it — so a
+  // try/catch around it always fell through to the navigation below and the
+  // edits went with the page. Read its verdict instead: on a failed save STAY,
+  // with its own 'Save failed · 保存失败' toast already on screen.
   if (typeof peIsDirty === 'function' && peIsDirty()) {
-    try { await paSaveEdit(); } catch {}
+    const saved = await paSaveEdit();
+    if (!saved) return;
   }
+  peLeaveIntentionally();
   window.location.href = '/cms';
 }
 
@@ -2237,7 +2253,8 @@ async function peBoot() {
       fetch('/api/retail-admin/products/' + id, { credentials: 'same-origin', cache: 'no-store' }),
       fetch('/api/retail-admin/products',       { credentials: 'same-origin', cache: 'no-store' }),
     ]);
-    if (fullRes.status === 401 || fullRes.status === 403) { peAuthBail(); return; }
+    if (fullRes.status === 401 || fullRes.status === 403 ||
+        listRes.status === 401 || listRes.status === 403) { peAuthBail(); return; }
     const jFull = await fullRes.json();
     if (!jFull.success) {
       if (fullRes.status === 404) { peFatal('Product #' + id + ' not found · 未找到产品'); return; }
@@ -2317,17 +2334,17 @@ function peRenderPickerList() {
   if (q) rows = rows.filter(p =>
     ((p.name_en || '') + ' ' + (p.name_cn || '') + ' ' + (p.sku || '')).toLowerCase().includes(q));
   if (!rows.length) {
-    list.innerHTML = '<div class="pe-switcher-empty">' + (cuLang() === 'cn' ? '没有匹配的产品。' : 'No products match.') + '</div>';
+    list.innerHTML = '<div class="pe-switcher-empty">' + cuT('No products match.', '没有匹配的产品。') + '</div>';
     return;
   }
   list.innerHTML = rows.map(p => {
     const pub  = p.is_published === 1;
     const name = escapeHtml(p.name_en || '—') + (p.name_cn ? ' <small>' + escapeHtml(p.name_cn) + '</small>' : '');
     const badge = pub
-      ? '<span class="pe-switcher-item-badge pub">' + (cuLang() === 'cn' ? '已上架' : 'Live') + '</span>'
-      : '<span class="pe-switcher-item-badge">' + (cuLang() === 'cn' ? '草稿' : 'Draft') + '</span>';
+      ? '<span class="pe-switcher-item-badge pub">' + cuT('Live', '已上架') + '</span>'
+      : '<span class="pe-switcher-item-badge">' + cuT('Draft', '草稿') + '</span>';
     return '<button type="button" class="pe-switcher-item" data-id="' + p.id +
-      '" onclick="location.href=\'/product-editor?id=' + p.id + '\'">' +
+      '" onclick="peLeaveIntentionally();location.href=\'/product-editor?id=' + p.id + '\'">' +
       '<span class="pe-switcher-item-name">' + name + '</span>' + badge + '</button>';
   }).join('');
 }
@@ -2368,7 +2385,7 @@ function peRenderProdPicker() {
     ((p.name_en || '') + ' ' + (p.name_cn || '') + ' ' + (p.sku || '')).toLowerCase().includes(q));
   if (!rows.length) {
     list.innerHTML = '<div class="pe-switcher-empty">' +
-      cuT('No products match. · 没有匹配的产品。', 'No products match. · 没有匹配的产品。') + '</div>';
+      cuT('No products match.', '没有匹配的产品。') + '</div>';
     return;
   }
   list.innerHTML = rows.map(p => {
@@ -2409,7 +2426,7 @@ function peOpenSwitcher() {
   btn.setAttribute('aria-expanded', 'true');
   if (search) {
     search.value = '';
-    search.placeholder = cuT('Search products… · 搜索产品…', 'Search products… · 搜索产品…');
+    search.placeholder = cuT('Search products…', '搜索产品…');
   }
   _peSwitcherActive = -1;
   peRenderSwitcherList();
@@ -2455,7 +2472,7 @@ function peRenderSwitcherList() {
   const rows = _peSwitcherFiltered();
   if (!rows.length) {
     list.innerHTML = '<div class="pe-switcher-empty">' +
-      cuT('No products match. · 没有匹配的产品。', 'No products match. · 没有匹配的产品。') + '</div>';
+      cuT('No products match.', '没有匹配的产品。') + '</div>';
     return;
   }
   list.innerHTML = rows.map((p, i) => {
@@ -2476,9 +2493,12 @@ function peRenderSwitcherList() {
 }
 async function peSwitchProduct(id) {
   id = Number(id);
+  if (!Number.isFinite(id) || id <= 0) return;
   if (PA_CURRENT && id === PA_CURRENT.id) { peCloseSwitcher(); return; }
-  const p = PA_ALL_PRODUCTS.find(x => x.id === id);
-  if (!p) return;
+  // The cached list can be stale (another tab published, renamed or archived a
+  // row since this page loaded). A bare `return` here meant a click that did
+  // nothing at all and said nothing either; the fetch below is the authority,
+  // so fall through to it and let a real 404 answer through peFatal.
   if (peIsDirty() && !(await askConfirm({
     title: cuT('You have unsaved changes that will be lost. Switch product anyway?', '有未保存的更改将会丢失,仍要切换产品吗?'),
     confirmLabel: cuT('Switch product', '切换产品'),
@@ -2500,6 +2520,8 @@ async function peSwitchProduct(id) {
     }
   } catch (e) {}
   // Fall back to a full reload (peBoot does the full fetch) if the fetch failed.
+  // The discard question was already asked and answered above.
+  peLeaveIntentionally();
   location.href = '/product-editor?id=' + id;
 }
 // Arrow-key navigation inside the switcher search box.
@@ -2700,7 +2722,7 @@ function peSmartApply() {
 // canvas, so saved or hand-edited sections are never clobbered — once the page
 // has blocks, auto-fill stays out of the way. The result is left UNSAVED so the
 // operator reviews and commits it deliberately.
-let _peAutoFilledFor = null;   // product id we've already auto-filled this session
+const _peAutoFilledFor = new Set();   // product ids already auto-filled this session
 function _peStripToText(html) {
   let s = String(html == null ? '' : html);
   if (!s.trim()) return '';
@@ -2711,7 +2733,7 @@ function _peStripToText(html) {
     .replace(/\n{3,}/g, '\n\n').split('\n').map(l => l.trim()).join('\n').trim();
 }
 async function peAutoFillFromKitchen(p) {
-  if (!p || _peAutoFilledFor === p.id) return;
+  if (!p || _peAutoFilledFor.has(p.id)) return;
   // A saved design (the product of earlier work) locks auto-fill out.
   if (Array.isArray(p.description_blocks) && p.description_blocks.length) return;
   const textEn = _peStripToText(p.description_en);
@@ -2722,7 +2744,7 @@ async function peAutoFillFromKitchen(p) {
   // bilingual page for the operator to review.
   if (!textEn && !textCn) return;
   const translate = !(textEn && textCn);
-  _peAutoFilledFor = p.id;
+  _peAutoFilledFor.add(p.id);
   toast(cuT('Auto-filling sections from the kitchen description… · 正在根据厨房描述生成板块…', '正在根据厨房描述生成板块…'));
   try {
     const r = await fetch('/api/retail-admin/ai/compose-blocks', {
@@ -2787,7 +2809,7 @@ function peMount(p) {
 
   window._paTemplate = p.page_template || null;
   window._paBlocks = Array.isArray(p.description_blocks)
-    ? p.description_blocks.map(b => ({ ...b, id: b.id || paBlocksGenId() }))
+    ? p.description_blocks.map(b => ({ ...b, id: paSafeBlockId(b && b.id) }))
     : [];
   // NUTRITION IS A BLOCK LIKE ANY OTHER — it just has a second home.
   //
@@ -2989,8 +3011,12 @@ function _paSampleScreen(sample, withColophon) {
 }
 // Card thumbnail: a true scaled-down render of the page top in the template's
 // skin. JS (paFitThumbs) scales the fixed 390px render to the card width.
+// A template id also lands in a CSS class name, where anything outside
+// [a-z0-9_-] can close the attribute. paOpenTemplatePreview and paRenderPreview
+// already stripped it this way; the card and its thumbnail did not.
+function paTplClass(id) { return String(id || '').replace(/[^a-z0-9_-]/gi, ''); }
 function paThumbHtml(id) {
-  return `<div class="pa-thumb-scale"><div class="pa-prev-screen pa-thumb-screen pa-tpl-${id}">${_paSampleScreen(PA_THUMB_SAMPLE, false)}</div></div>`;
+  return `<div class="pa-thumb-scale"><div class="pa-prev-screen pa-thumb-screen pa-tpl-${paTplClass(id)}">${_paSampleScreen(PA_THUMB_SAMPLE, false)}</div></div>`;
 }
 // Click-to-open full preview: render the COMPLETE sample page in `id`'s skin into
 // the lightbox so an operator can see the whole template before applying it.
@@ -2999,15 +3025,21 @@ function paOpenTemplatePreview(id) {
   const overlay = document.getElementById('pe-tplprev-overlay'); if (!overlay) return;
   const screen  = document.getElementById('pe-tplprev-screen');
   [...screen.classList].forEach(c => { if (c.indexOf('pa-tpl-') === 0) screen.classList.remove(c); });
-  screen.classList.add('pa-tpl-' + id.replace(/[^a-z0-9_-]/gi, ''));
+  screen.classList.add('pa-tpl-' + paTplClass(id));
   screen.innerHTML = _paSampleScreen(PA_PREVIEW_SAMPLE, true);
   document.getElementById('pe-tplprev-title').innerHTML =
     `<span data-lang-block="en">${escapeHtml(tpl.label_en)}</span><span data-lang-block="cn">${escapeHtml(tpl.label_cn)}</span>`;
   const useBtn = document.getElementById('pe-tplprev-use');
-  const isCur  = id === window._paTemplate && (window._paBlocks || []).length;
+  const isCur  = !!(id === window._paTemplate && (window._paBlocks || []).length);
+  // An imported template can arrive with no block stack at all. Say so with the
+  // count pair the chooser card already uses, and refuse the click here rather
+  // than in paApplyTemplate, where a bare return is a button that does nothing.
+  const nBlocks = (tpl.blocks || []).length;
   useBtn.dataset.tpl = id;
-  useBtn.disabled = !!isCur;
-  useBtn.innerHTML = isCur
+  useBtn.disabled = isCur || !nBlocks;
+  useBtn.innerHTML = !nBlocks
+    ? `<span data-lang-block="en">0 blocks</span><span data-lang-block="cn">0 个板块</span>`
+    : isCur
     ? `<span data-lang-block="en">✓ Current template</span><span data-lang-block="cn">✓ 当前模板</span>`
     : `<span data-lang-block="en">Use this template</span><span data-lang-block="cn">套用此模板</span>`;
   overlay.hidden = false;
@@ -3080,7 +3112,11 @@ async function paHandleImportFile(input) {
 }
 async function paDeleteCustomTemplate(ev, id) {
   ev.stopPropagation();
-  if (!(await askConfirm({ title: 'Remove this template? Products already built from it keep their blocks. · 删除此模板?已套用的产品保留其板块。', confirmLabel: 'Remove template', danger: true }))) return;
+  if (!(await askConfirm({
+    titleEn: 'Remove this template? Products already built from it keep their blocks.',
+    titleCn: '删除此模板?已套用的产品保留其板块。',
+    confirmEn: 'Remove', confirmCn: '删除', danger: true,
+  }))) return;
   try {
     const r = await fetch('/api/retail-admin/page-templates/' + encodeURIComponent(id), {
       method: 'DELETE', credentials: 'same-origin',
@@ -3108,12 +3144,16 @@ function paRenderPresets() {
       ? `<span class="pa-preset-custom-tag" data-no-i18n>${paBiTitle('Custom', '自定义')}</span>` : '';
     const delBtn = p.custom
       ? `<span class="pa-preset-del" role="button" tabindex="0" title="Remove · 删除" data-no-i18n
-           onclick="paDeleteCustomTemplate(event, '${p.id}')"
-           onkeydown="if(event.key==='Enter'||event.key===' ')paDeleteCustomTemplate(event,'${p.id}')">✕</span>` : '';
+           data-tpl="${escapeAttr(p.id)}"
+           onclick="paDeleteCustomTemplate(event, this.dataset.tpl)"
+           onkeydown="if(event.key==='Enter'||event.key===' ')paDeleteCustomTemplate(event,this.dataset.tpl)">✕</span>` : '';
+    // An imported template need not carry descriptions; joining two undefineds
+    // put the literal "undefined · undefined" in the card's tooltip.
+    const desc = [p.desc_en, p.desc_cn].map(x => (x || '').trim()).filter(Boolean).join(' · ');
     return `
-    <button type="button" class="pa-preset-card${active ? ' active' : ''}" onclick="paOpenTemplatePreview('${p.id}')" title="${escapeHtml(p.desc_en + ' · ' + p.desc_cn)}">
+    <button type="button" class="pa-preset-card${active ? ' active' : ''}" data-tpl="${escapeAttr(p.id)}" onclick="paOpenTemplatePreview(this.dataset.tpl)"${desc ? ` title="${escapeAttr(desc)}"` : ''}>
       ${customTag}${delBtn}
-      <div class="pa-preset-thumb pa-tpl-${p.id}">${paThumbHtml(p.id)}</div>
+      <div class="pa-preset-thumb pa-tpl-${paTplClass(p.id)}">${paThumbHtml(p.id)}</div>
       <div class="pa-preset-meta">
         <span class="pa-preset-card-label" data-no-i18n>${paBiTitle(escapeHtml(p.label_en), escapeHtml(p.label_cn))}</span>
         <span class="pa-preset-card-count" data-no-i18n>${count}</span>
@@ -3124,6 +3164,11 @@ function paRenderPresets() {
 }
 async function paApplyTemplate(id) {
   const tpl = PA_TEMPLATES.find(p => p.id === id); if (!tpl) return;
+  // paRenderPresets counts these defensively as (p.blocks || []); applying one
+  // did not, so an imported template with no stack threw on .map and the click
+  // did nothing at all. The preview's Use button is disabled for these too, so
+  // this is the backstop rather than the message — see paOpenTemplatePreview.
+  if (!Array.isArray(tpl.blocks) || !tpl.blocks.length) return;
   // Re-picking the template the page is already built from would needlessly
   // wipe the operator's edits — no-op instead.
   if (id === window._paTemplate && (window._paBlocks || []).length) {
@@ -3133,9 +3178,10 @@ async function paApplyTemplate(id) {
   const existing = (window._paBlocks || []).length;
   if (existing > 0) {
     const ok = await askConfirm({
-      title: 'Switch template? · 切换模板?',
-      body: 'It will REPLACE the ' + existing + ' block(s) currently on this product. · 将替换当前产品上的 ' + existing + ' 个板块,无法撤销。',
-      confirmLabel: 'Switch template',
+      titleEn: 'Switch template?', titleCn: '切换模板?',
+      bodyEn: 'It will REPLACE the ' + existing + ' block(s) currently on this product.',
+      bodyCn: '将替换当前产品上的 ' + existing + ' 个板块,无法撤销。',
+      confirmEn: 'Switch template', confirmCn: '切换模板',
       danger: true,
     });
     if (!ok) return;
@@ -3153,10 +3199,18 @@ function paRenderAll() {
   paRenderSelectedEditor();
   paRenderPreview();
 }
+// Typing path. The block state and the section-list labels stay immediate —
+// they are cheap, and peIsDirty/paSaveEdit both read the state, so it must never
+// lag the caret. The phone preview is the expensive half: a full innerHTML
+// rebuild of the whole page, which ALSO wakes the i18n MutationObserver into a
+// fresh walk of everything it just built. Per keystroke that is a lot of work to
+// throw away 40ms later; one frame behind the caret reads as live.
+let _paPreviewTimer = null;
 function paLivePreview() {
   paBlocksSyncFromDOM();
-  paRenderPreview();
   paRefreshTabLabels();
+  clearTimeout(_paPreviewTimer);
+  _paPreviewTimer = setTimeout(paRenderPreview, 90);
 }
 
 // ── Inline emoji picker for tile / card Icon fields ──
@@ -3264,9 +3318,11 @@ async function paSaveEdit() {
     PA_SAVED_SNAPSHOT = peSerializeState();
     status.textContent = 'Saved ✓ · 已保存 ' + tdWhen(new Date(), 'time');
     toast('Saved ✓ · 已保存');
+    return true;
   } catch (e) {
     status.textContent = '';
     toast('Save failed · 保存失败: ' + e.message, 'err');
+    return false;
   } finally {
     btn.disabled = false;
   }
@@ -3274,6 +3330,13 @@ async function paSaveEdit() {
 
 // ── Block editor core ──
 function paBlocksGenId() { return 'b' + Math.random().toString(36).slice(2, 9); }
+// A block id is interpolated into onclick= handlers, CSS selectors and data
+// attributes all over this file. Generated ids are [a-z0-9] by construction;
+// ids arriving from description_blocks JSON are whatever was stored there.
+// Anything that is not a plain handle gets a fresh one at the door.
+function paSafeBlockId(id) {
+  return /^[A-Za-z0-9_-]{1,64}$/.test(String(id || '')) ? String(id) : paBlocksGenId();
+}
 
 function paBlocksPopulatePicker() {
   const pick = document.getElementById('pa-blocks-picker');
@@ -3316,7 +3379,10 @@ function paBlocksAdd(type) {
   }, 30);
 }
 async function paBlocksRemove(id) {
-  if (!(await askConfirm({ title: 'Delete this section? · 删除此板块?', confirmLabel: 'Delete section', danger: true }))) return;
+  if (!(await askConfirm({
+    titleEn: 'Delete this section?', titleCn: '删除此板块?',
+    confirmEn: 'Delete section', confirmCn: '删除板块', danger: true,
+  }))) return;
   paBlocksSyncFromDOM();
   const arr = window._paBlocks || [];
   const i = arr.findIndex(b => b.id === id);
@@ -3896,8 +3962,7 @@ function paPairAdd(blockId, productId) {
   if (b.items.some(it => it.id === id)) return;
   const p = PA_ALL_PRODUCTS.find(x => x.id === id) || {};
   b.items.push({ id, name_en: p.name_en || '', name_cn: p.name_cn || '' });
-  paRenderAll();
-  paLivePreview();
+  paRenderAll();   // ends in paRenderPreview — a paLivePreview here repainted it twice
 }
 function paPairRemove(blockId, idx) {
   paBlocksSyncFromDOM();
@@ -3905,7 +3970,6 @@ function paPairRemove(blockId, idx) {
   if (!Array.isArray(b.items)) return;
   b.items.splice(idx, 1);
   paRenderAll();
-  paLivePreview();
 }
 // Upload a lifestyle photo for an image_band block. Reuses the shared media
 // endpoint (stores in retail_media, returns a stable /api/retail/media/:id
@@ -3971,20 +4035,28 @@ async function paImageBandUpload(input, blockId) {
     const fd = new FormData();
     fd.append('file', file);
     const res = await fetch('/api/retail-admin/media/upload', { method: 'POST', credentials: 'same-origin', body: fd });
-    const j = await res.json();
-    if (!j.success) {
+    // A lost session here used to read as a plain "Upload failed", leaving the
+    // operator re-picking the same file against a dead cookie. Bounce, as every
+    // other authenticated call on this page does.
+    if (res.status === 401 || res.status === 403) { peAuthBail(); return; }
+    // A proxy-level rejection (413, a gateway error page) answers HTML, and an
+    // unguarded .json() threw on it — landing in the catch below with a parser
+    // message instead of the reason.
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || !j.success) {
       const msg = j.error === 'too_large' ? cuT('Image too large.', '图片过大。')
                 : j.error === 'not_an_image' ? cuT('That file is not an image.', '该文件不是图片。')
                 : cuT('Upload failed.', '上传失败。');
-      toast(msg, 'error');
+      // 'error' is not a kind toast() knows — it tests for 'err' — so both of
+      // these failures painted in the success colour.
+      toast(msg, 'err');
       return;
     }
     b.url = j.data.url;
     paRenderAll();
-    paLivePreview();
     toast(cuT('Image added.', '图片已添加。'));
   } catch (e) {
-    toast(cuT('Upload failed.', '上传失败。'), 'error');
+    toast(cuT('Upload failed.', '上传失败。'), 'err');
   }
 }
 function paImageBandClear(blockId) {
@@ -3993,7 +4065,6 @@ function paImageBandClear(blockId) {
   if (!b) return;
   b.url = '';
   paRenderAll();
-  paLivePreview();
 }
 function paRenderSelectedEditor() {
   const mount = document.getElementById('pa-block-editor-mount'); if (!mount) return;
@@ -4237,6 +4308,9 @@ function _paSyncPreviewLangToggle() {
     b.classList.toggle('active', b.dataset.plang === _paPreviewLang));
 }
 function paRenderPreview() {
+  // Drops any render paLivePreview had queued — a direct call is always the
+  // fresher one, and letting the timer fire afterwards paints the same page twice.
+  clearTimeout(_paPreviewTimer);
   const screen = document.getElementById('pa-preview-screen'); if (!screen || !PA_CURRENT) return;
   const p = PA_CURRENT;
   // Per-template visual skin — the preview screen carries a pa-tpl-<id> class so
@@ -4284,13 +4358,33 @@ function paRenderPreview() {
       </div>
       ${blocksHtml || (!keywords && !tagline ? `<div class="pa-prev-empty">${_paPreviewLang === 'cn' ? '还没有板块,点上方“添加板块”开始排版。' : 'No designer sections yet. Add one to compose the page.'}</div>` : '')}
       <div class="pa-prev-colophon">
-        <img class="pa-prev-colophon-img" src="/assets/brand/ip-${colResChar}.jpg" alt="">
+        <img class="pa-prev-colophon-img" src="/assets/brand/ip-${encodeURIComponent(colResChar)}.jpg" alt="" onerror="this.style.display='none'">
         <div class="pa-prev-colophon-tagline">${escapeHtml(colResTag)}</div>
         <div class="pa-prev-colophon-meta"><span class="pa-prev-colophon-rule"></span><span>Roots · ESTD 2017</span><span class="pa-prev-colophon-rule"></span></div>
         ${colIsAuto ? '<div class="pa-prev-colophon-auto">auto · 自动</div>' : ''}
       </div>
     </div>`;
 }
+
+// LEAVING WITH UNSAVED WORK.
+//
+// The editor's own exits — Close, switch product, switch editor — each ask
+// their own question and then set this flag, so the browser does not ask the
+// same thing twice on the navigation that follows.
+//
+// Everything else that can take the page away (the tab's close button, reload,
+// Back, a typed URL) is not ours to intercept, and until now took the unsaved
+// design with it silently. beforeunload is the one hook browsers give for that;
+// the wording is the browser's own, in the reader's own language, and cannot be
+// set from here — which is also why no string is needed.
+let _peLeaving = false;
+function peLeaveIntentionally() { _peLeaving = true; }
+window.addEventListener('beforeunload', (e) => {
+  if (_peLeaving || !peIsDirty()) return;
+  e.preventDefault();
+  e.returnValue = '';   // Chrome/Safari still require this to show the prompt
+  return '';
+});
 
 // Ctrl/Cmd+S → save; Escape closes the smart-paste modal / product switcher
 window.addEventListener('keydown', (e) => {
@@ -4369,6 +4463,15 @@ window.addEventListener('resize', () => {
     textNode.__i18nDone = true;
     textNode.nodeValue = _lang === 'cn' ? cnFull : enFull;
     _reg.push({ node: textNode, en: enFull, cn: cnFull });
+    // The registry holds one entry per translated text node so applyLang can
+    // rewrite them in place. applyLang drops the detached ones — but only when
+    // somebody toggles the language, and the phone preview is rebuilt on every
+    // edit, so in a long editing session the list grew without bound over nodes
+    // that left the document minutes ago. Sweep once it gets long.
+    if (_reg.length > 4000) pruneReg();
+  }
+  function pruneReg() {
+    for (let i = _reg.length - 1; i >= 0; i--) if (!_reg[i].node.isConnected) _reg.splice(i, 1);
   }
   function processSubtree(root) {
     if (!root) return;
