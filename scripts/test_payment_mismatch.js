@@ -39,6 +39,12 @@
  *      already in. A rejected proof is not a stage: the order never moved, so
  *      neither does its place in the Orders list, and the row there carries the
  *      mark that says which one it is.
+ *   7. WHO IS REJECTED IN THE FIRST PLACE — the amount rule that decides it,
+ *      run as shipped. A payment short of the total by no more than ¥2 is
+ *      confirmed (Ash, 2026-09-15) when nothing else is wrong; a bigger gap,
+ *      an unreadable amount, or a small gap sitting next to a second fault is
+ *      still a mismatch. Section 1 tests who reaches the queue; this tests who
+ *      is put in it.
  */
 'use strict';
 
@@ -639,6 +645,86 @@ it('every order the sweep will never reap lands in exactly one of the two', () =
   const covered = [...opsNos(db), ...puNos(db)].sort();
   assert.deepStrictEqual(covered, all.slice().sort(), 'an exempt order is uncounted, or counted twice');
   assert.strictEqual(new Set(covered).size, covered.length, 'no order may light both fires');
+});
+
+console.log('\n11 · the amount rule that decides who is rejected');
+
+// ── The amount rule, as shipped ───────────────────────────────────────────
+// validateAlipayProof itself, sliced out of routes/retail.js and run against
+// plain objects — the tolerance is a business rule about money, so it is tested
+// against the real function rather than a fixture that repeats its answer.
+const AP_SRC = [
+  sliceStatement(RETAIL_JS, 'const ALIPAY_SHORT_OK_CNY ='),
+  sliceBlock(RETAIL_JS, 'function parseBeijingTime('),
+  sliceBlock(RETAIL_JS, 'function payeeNames('),
+  sliceBlock(RETAIL_JS, 'function normPayee('),
+  sliceBlock(RETAIL_JS, 'function validateAlipayProof('),
+].join('\n');
+const validateAlipayProof = vm.runInNewContext(
+  `(() => { ${AP_SRC}\nreturn validateAlipayProof; })()`, { Date, Number, String, Math });
+
+// One shop, one order, one clean screenshot — each case below changes the ONE
+// thing under test. Payee is configured (so the check runs) and the time window
+// is off (so a fixture never ages out and turns a green test red overnight).
+const MANUAL = { payeeMatch: 'Govegan', proofAgeMin: 0, timeWindowMin: 0 };
+const proofFor = (amount, over = {}) => ({ success: true, amount, payee: 'Govegan 哈素萌', ...over });
+const verify = (total, amount, over) => validateAlipayProof({ total }, proofFor(amount, over), MANUAL, Date.now());
+
+it('the exact amount is a match, and carries no gap', () => {
+  const v = verify(425.80, 425.80);
+  assert.strictEqual(v.verdict, 'match');
+  assert.strictEqual(v.shortBy, 0, 'an exact payment must not report a shortfall');
+});
+
+it('paying MORE than the order is still a match (Alipay surcharge)', () => {
+  const v = verify(234.50, 241.54);
+  assert.strictEqual(v.verdict, 'match');
+  assert.strictEqual(v.shortBy, 0, 'an overpayment is not a shortfall');
+});
+
+it('short by ¥0.49 is confirmed, and says by how much (TC000723)', () => {
+  // The order this rule was written for: the customer was debited ¥425.31 on a
+  // ¥425.80 order and the order sat in pending_payment over 49 fen.
+  const v = verify(425.80, 425.31);
+  assert.strictEqual(v.verdict, 'match');
+  assert.strictEqual(v.shortBy, 0.49);
+  assert.strictEqual(v.reasons.length, 0, 'a forgiven gap is not a complaint');
+});
+
+it('¥2.00 short is the last amount confirmed; ¥2.01 is not', () => {
+  const ok = verify(100.00, 98.00);
+  assert.strictEqual(ok.verdict, 'match', '¥2.00 is inside the rule, not outside it');
+  assert.strictEqual(ok.shortBy, 2);
+  const no = verify(100.00, 97.99);
+  assert.strictEqual(no.verdict, 'mismatch');
+  assert.ok(/amount ¥97\.99 < expected ¥100\.00/.test(no.reasons.join('；')),
+    'a rejected amount must still name both numbers');
+});
+
+it('a small gap beside a SECOND fault is still a mismatch', () => {
+  // "if that's the only mismatch" is the whole condition: forgiving the money
+  // must not forgive a payee that was never ours.
+  const v = verify(425.80, 425.31, { payee: '另一家店', payee_full: '' });
+  assert.strictEqual(v.verdict, 'mismatch');
+  assert.strictEqual(v.checks.amount, true, 'the amount half still passes on its own');
+  assert.strictEqual(v.checks.payee, false);
+  const v2 = verify(425.80, 425.31, { success: false });
+  assert.strictEqual(v2.verdict, 'mismatch', 'a non-success screen is never forgiven');
+});
+
+it('an unreadable amount is never forgiven', () => {
+  // null is not "zero short" — nothing was read, so nothing covers the order.
+  const v = verify(425.80, null);
+  assert.strictEqual(v.verdict, 'mismatch');
+  assert.strictEqual(v.checks.amount, false);
+  assert.ok(/amount unreadable/.test(v.reasons.join('；')));
+});
+
+it('the tolerance is a constant, and it is ¥2', () => {
+  // It is deliberately not an operator setting; if that changes, this line is
+  // where the decision gets re-made rather than drifting.
+  assert.ok(/const ALIPAY_SHORT_OK_CNY = 2\.00;/.test(RETAIL_JS),
+    'the shortfall rule moved or changed value — say so in the commit');
 });
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

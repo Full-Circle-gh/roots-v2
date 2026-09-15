@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.264
+# Tacet shared-core consolidation — decisions record, v4.265
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-15 · v4.265 — **§130 · A PAYMENT SHORT OF THE ORDER BY UP TO ¥2 IS STILL A PAYMENT — DECIDED BY ASH on order TC000723**, which sat in `pending_payment` with a brick *Doesn't match — check first* over **49 fen**: ¥425.31 arrived against a ¥425.80 order, and every other check on that screenshot passed. Ash: *"when the gap difference is 0-2 rmb, confirm the payment if that's the only mismatch"*. **THE RULE HAD ONLY EVER BEEN ASYMMETRIC BY ACCIDENT OF WHAT WAS NOTICED FIRST** — `validateAlipayProof` already forgave an OVERpayment (Alipay's card and cross-border surcharges land on top of what we charged, so ¥241.54 settles a ¥234.50 order) and refused every underpayment to the fen. The same machinery takes fees off a transfer in the other direction. **THE CONDITION IS THE WHOLE DECISION AND IT IS IN THE CODE, NOT IN THE COMMENT:** the shortfall is forgiven by the AMOUNT check alone, so a ¥0.49 gap next to a payee that was never ours, a stale receipt, a non-success screen or a screenshot already spent on another order is still a mismatch — the reuse guard is untouched. **FORGIVEN, NEVER HIDDEN.** The verdict carries `shortBy`, persisted as `short_by` in `alipay_ocr_json`, and the proof card states both numbers under the facts list: what arrived, and what the order came to. **IT IS A CONSTANT (`ALIPAY_SHORT_OK_CNY = 2.00`) AND NOT AN OPERATOR SETTING**, because it describes what Alipay does to a transfer rather than a per-shop preference, and a box on the settings screen is a box somebody eventually types 20 into. **WHAT IS ACCEPTED WITH IT:** the order's total does not move, so the books keep ¥425.80 against ¥425.31 banked — capped at ¥2 an order, deliberately, rather than rewriting an order to match a screenshot. **With auto-flip on, such an order now marks itself paid**, which is the point of the request. **NO CHINESE COMPOSED** — the gap line is `03-dashboard.js`'s own live pair for the same fact, `paid {x}, order {y}` / `已付 {x},订单 {y}`, character for character including its half-width comma (preference 1, copy a live pair); `docs/tacet-delivery-vocabulary.md` is not touched. **Tests:** `scripts/test_payment_mismatch.js` 48 → **55**, gaining section 11, which slices `validateAlipayProof` out of the shipped route and runs it — ¥2.00 short passes, ¥2.01 does not, an unreadable amount is never forgiven, and a small gap beside a second fault still fails. No schema, no migration, no change to `.gitignore` or CI.**
 
 2026-09-15 · v4.264 — **§129 · THE QR MENU GETS THE MINI APP'S PRODUCT PAGE, AND TWO OF §120's OWN DECISIONS ARE REVERSED TO GET IT — DECIDED BY ASH across four reports in one sitting, each one looking at the live menu on a phone.** The picker restyle (v4.263) closed the gap in how the option sheet LOOKS; these close the gap in what the surface IS. **§120 DECIDED A SHEET AND NOT A PAGE**, showing only what a person needs to decide *"whether they can eat it"* — ingredients, allergens, nutrition — and **DELIBERATELY NOT the marketing paragraph**. Ash, reading a product on the live menu: *"i cant see the description ... only the picture ingridents allerges"*, then *"why its even doing a pop up for a product, i want a complete page, same as the mini app."* **§120 ALSO DECIDED FLATLY NO VARIANTS**, each size its own menu row, on the reasoning that variants cost three lines of a small screen for one drink. Ash, on a screenshot of two identical photographs both captioned Almond Butter at ¥50 and ¥76: *"those are 2 variant on the mini app. under the same page. on the qrcode menu its 2 seperate products. i wsnt it to be like the mini app. choose variant inside the product page."* **BOTH REVERSALS ARE HIS AND BOTH WERE DECIDED ON EVIDENCE THE ORIGINAL DECISION DID NOT HAVE**: the original reasoned about a drink sold in three sizes taking three rows, and what actually shipped was two rows that were visually IDENTICAL — same photo, same name, no size shown anywhere — which does not read as a choice at all but as a duplicate listing. **THE READ CAME FIRST, TWICE, AND BOTH TIMES IT MOVED THE ANSWER.** `diagnose_qr_menu_option_types.js` proved the two-breads report was the DATA (`type='multi'`) and not the tick handler, which turned a bug report into a legibility fix. `diagnose_qr_menu_detail_blocks.js` proved the missing description was PRESENT and dropped — all 7 listed products carry a `hero_intro`, 250 across the catalogue — rather than absent, which is the difference between building a renderer and filing a content task. **THE PAGE IS THE SHEET PROMOTED, NOT A SECOND SYSTEM.** `#dsheet` keeps its element, its open path, its template-clone and its enlarge; it gains full-screen chrome, a hero, the prose blocks and a sticky buy bar. A parallel page would have been a second renderer for one product and the two would have drifted. **AND IT IS NOT A NAVIGATION, WHICH IS THE ONE CONSTRAINT THAT DECIDED THE ARCHITECTURE:** §44 puts the basket in memory and nowhere else — no cookie, no localStorage, stated in the source — so a real page load would empty the basket of every customer who looked at a product. The page is a full-screen view with `history.pushState`, so the URL moves and the phone's Back works while nothing reloads. **THE SIZE IS CHOSEN IN A SHEET FROM THE BUTTON, NOT INLINE ON THE PAGE**, which is the mini app's own arrangement and its own recorded reason: *"not inline — so the choice is unmissable like the size picker."* Collapsing follows the mini app's grid rule exactly — group by `variant_group_id`, representative is the group owner where it is listed, members ordered by the operator's `variant_sort`. **NO CHINESE COMPOSED.**
 
@@ -14332,3 +14334,78 @@ they are not lost: option group #1346 on Garlic Dill Sour Cream Toast is typed
 reads 加点配料? (*"Add extras?"*), copied from the Apple Pie Overnight Oats
 question. Both are production data and belong to the operator, not to a
 session.
+
+
+## §130 — A PAYMENT SHORT BY UP TO ¥2 IS STILL A PAYMENT
+
+**2026-09-15 · Ash decided, on one order in the live admin.**
+
+**THE ORDER THAT ASKED THE QUESTION.** TC000723, paid by Alipay off-app, proof
+uploaded and read: ¥425.31 against a ¥425.80 order. Success screen, right payee
+on both names the 收钱码 can show, timestamp inside the window, screenshot never
+used anywhere else. The card said *Doesn't match — check first* and the order
+stayed in `pending_payment` — over **49 fen**, with a customer who had paid and a
+shop that could not dispatch until somebody opened that one order and judged it.
+
+**THE RULE WAS ALREADY ASYMMETRIC, AND NOBODY HAD MEANT IT TO BE.**
+`validateAlipayProof` forgave paying MORE than the total, with its reason written
+in the source: Alipay adds card and cross-border processing surcharges, so a
+customer is debited ¥241.54 on a ¥234.50 order and the order is still fully
+covered. The same machinery can take a fee OFF a transfer, and that direction was
+refused to the fen — not by decision, but because the overpayment case is the one
+that got looked at first.
+
+**WHAT IS DECIDED.** A payment lands no more than **¥2.00 under** the order total
+and every other hard check passes → **match**, and the auto-flip marks it paid if
+the operator has that on. ¥2.01 under is a mismatch, exactly as before.
+
+**THE CONDITION IS "IF THAT'S THE ONLY MISMATCH", AND IT NEEDED NO NEW MACHINERY
+TO ENFORCE.** The tolerance lives inside the AMOUNT check and moves nothing else:
+`hardPass` still demands the success screen, the payee, the time window, and the
+caller still applies the image / txn reuse guard on top. So a forgiven ¥0.49 next
+to a payee that was never ours is still a mismatch, and a forgiven ¥0.49 on a
+screenshot already spent on another order is still a mismatch. A test asserts
+both, because the sentence "if that's the only mismatch" is the half of this
+decision that a later simplification would quietly drop.
+
+**FORGIVEN, NEVER HIDDEN.** The verdict returns `shortBy`; `ocrVerifyAlipayProof`
+persists it as `short_by` in `alipay_ocr_json`; the proof card prints the two
+numbers under the facts list — what arrived, and what the order came to. An
+exact or over payment carries no gap and prints no line. The alternative
+considered and rejected was to show nothing at all once the verdict is *Verified*:
+it would make a ¥1.99 shortfall and an exact payment indistinguishable on screen,
+and the person who would want to know is the one standing in front of it.
+
+**A CONSTANT, NOT A SETTING.** `ALIPAY_SHORT_OK_CNY = 2.00`, declared beside the
+function. It describes what a payment rail does to a transfer, not something a
+shop should tune, and a field on the settings screen is a field somebody
+eventually types 20 into. If it ever needs to move, it moves here, in a commit
+that says so — and a test asserts both the name and the value, so it cannot drift
+silently.
+
+**WHAT IS ACCEPTED ALONG WITH IT, STATED RATHER THAN DISCOVERED LATER.** The
+order's total is NOT rewritten to what was paid. So the books carry ¥425.80 for
+an order that banked ¥425.31, and the difference is a real, unrecorded shortfall
+of up to ¥2 per Alipay order. That is the trade Ash made: an order rewritten to
+match a screenshot would be worse, because then nothing anywhere would show that
+the customer paid less than the order said.
+
+**NO CHINESE COMPOSED.** The gap line reuses the pair the dashboard's
+payment-mismatch fire already ships for exactly this fact —
+`paid {x}, order {y}` / `已付 {x},订单 {y}` — character for character, half-width
+comma included, which is preference 1 (copy a live pair) and not a composition.
+`docs/tacet-delivery-vocabulary.md` is untouched.
+
+**TESTS.** `scripts/test_payment_mismatch.js`, 48 → 55. Section 11 slices
+`validateAlipayProof` (with `parseBeijingTime`, `payeeNames`, `normPayee` and the
+constant) out of `routes/retail.js` and runs the shipped function: the exact
+amount matches with no gap, an overpayment matches with no gap, TC000723's ¥0.49
+matches and reports 0.49, ¥2.00 is the last amount confirmed and ¥2.01 is not, an
+unreadable amount is never forgiven, and a small gap beside a wrong payee or a
+non-success screen still fails. The suite's existing 48 are unchanged — its
+dashboard-queue fixtures carry stored verdicts, not re-computed ones.
+
+**NOT DONE, so it is not assumed.** No change to the reuse guard, the freshness
+window, the payee list, the stale-pending sweep, or what the dashboard counts. No
+tolerance in the other direction — an overpayment was already accepted in full and
+still is. No schema, no migration, and no change to `.gitignore` or CI.
