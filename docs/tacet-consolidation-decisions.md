@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.277
+# Tacet shared-core consolidation — decisions record, v4.278
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,6 +23,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
+2026-09-15 · v4.278 — **§141 · ONE PRIMARY ACTION, ONE COLOUR, ON EVERY SCREEN — FOUND BY SURVEY while looking for something else.** Asked to put `public/cms.html` onto Tacet after §139 did the product editor, this session checked first and found the premise wrong: **the mini app editor was ALREADY on Tacet**, and got there before the product editor did — all fifteen of its light-theme colours match `retail-admin.css` value for value. The recommendation to reskin it came from a stale comment and should not have been made without looking; recorded so nobody re-opens it. **WHAT THE SURVEY FOUND INSTEAD:** `cms.html` pointed `--brass` — its name for the one primary action — at **Dusk**, so Publish was purple there while the same button is Ink in the product editor and on Customers. One operator, three screens, purple meaning two things. **Dusk does not mean “important”; it means “Tacet did this for you”**, and publishing your own work is the merchant acting — which `retail-admin.css` states beside the Customers modal in as many words. `--brass` now points at Ink, and the old reasoning is KEPT in the file beside the reversal rather than deleted. **THE DARK ROOM HAD TO INVERT WITH IT, and this was nearly the bug:** `cms.html` is light-first, its dark block restates `--accent` but never restated `--brass` — which did not matter while `--brass` was Dusk, a colour that holds in both themes. Ink does not, and an Ink button on an Ink ground is an invisible one. The dark block now restates it as Paper and `.btn-primary` takes its label from `--accent-ink` rather than a literal `#FFFFFF`. **What still wears Dusk there is no button:** focus rings (exempt by name), the drop-zone marker, and the selected-block ring — that last one drawn OVER the customer's page where Ink would vanish on a dark brand block, so it is deliberately left alone. **THE RULEBOOK PASS:** 48 chrome rules setting uppercase and 43 setting a weight above 500 are now sentence case at 400/500; four labels typed in capitals in the MARKUP are recased, which is a case change to an existing English string and composes nothing. **Two traps recorded rather than rediscovered:** the `font:` shorthand sets a weight without writing `font-weight` (it hid five rules from the first sweep), and `.phone-preview-*` is the “Preview on phone” MODAL, not the device mock, so the preview fence needs a negative lookahead. **THE NAMES ARE NOT UNIFIED, DELIBERATELY** — renaming `--tacet-*` to `--td-*` would touch some six hundred rules to change nothing a reader can see; the VALUES must agree and a mapping table in the test says which name means which. **TESTS:** `scripts/test_tacet_one_palette.js`, eleven checks closing the triangle `test_product_editor_tacet.js` opened, asserting BOTH sides of the fence — the chrome checks would pass trivially if the preview had been swept along, so it also requires that at least twenty preview rules still set caps or a heavy weight. Proved by mutation: four deliberate breakages each fail the check meant to catch them. No reskin, no rename, no change to `.block-wrap.selected`, no layout, no JS, no route, no schema, and no change to `.gitignore` or CI.
 2026-09-15 · v4.277 — **§140 · A PACK CAN HOLD A COUNT, NOT ONLY A WEIGHT — DECIDED BY ASH,** shown why J-57 Label Paper costs ¥9.27 a sticker and what the three ways out were: *“ok fix it properly”* — the third, the one that changes the model rather than working around it. **THE SHAPE THAT COULD NOT BE SAID.** `lib/ingredient-cost.js` keys on the RECIPE unit: g/ml divides, pcs/bag/bottle/box does not, because a recipe calling for one bag consumes one bag whatever is inside it (2026-08-17, 29 live rows). A roll of 1000 labels bought for ¥9.27 and used one label at a time is per-piece by that rule, so the derivation returned the ROLL price and every label cost a thousand times what it cost. The contents pair beside it — `pack_contents_qty` + `pack_contents_unit` — could have said so, and offered only g/kg/ml/L. **WHAT IS DECIDED:** `pcs` joins that dropdown, and a per-piece recipe unit whose pack contents are COUNTED divides by `buy_pack_size × pieces`, the same formula shape the weight path uses. **NOTHING INFERS IT, which is the load-bearing half:** only `pack_contents_unit` normalising to 'pcs' opens the divisor, nothing in the word 'box' or 'roll' says how many are in one, and no row in the catalogue carries 'pcs' there today — the UI never offered it and no import writes it — so the 29 rows that depend on the pack price being the unit cost cannot acquire a divisor by accident. A count of zero, or contents in grams, behaves exactly as before. **A ZERO PACK SIZE IS REFUSED, not waved through on a divisor of 1** — the same requirement the weight path makes, because a divisor of 1 invented here would store the roll price, which is the bug. **THE EDITOR NOW PRINTS THE DIVISION** (`¥9.27 ÷ 1000`), numerals only and no label, because `buy_pack_size` carried a different meaning before the `pack_size_semantics_v2` migration and that migration could only normalise rows whose buy unit was a MEASURE — a pcs-bought row can still sit on a stale 1000 nobody has been asked about, and printed it reads as an absurd divisor instead of a quietly wrong cost. **AND THE FIGURE IS SHOWN TO THE PLACES IT NEEDS:** `acMoney()` renders two, so ¥0.00927 read as ¥0.01 — eight percent out — and ¥0.0316 a gram read as ¥0.03. `unitMoney()` in `18-materials.js` gives four places below a jiao and five below a fen, on the record line and the list column; nothing at or above ¥0.10 changes shape, and it is local to this screen rather than a change to `acMoney()`. **NO MIGRATION AND NONE WANTED** — an affected row is fixed by filling in its contents, and the save re-derives and fires the recipe recompute. **THE PO WRITE-BACK NEEDED NO CHANGE AND IS WHERE THE LOOP WAS:** it already runs the one derivation, so the ¥9.27-per-label rows it wrote on every order (two of them in J-57's live cost history) stop; `buy_price` stays the ROLL price, because it is what the supplier charges and what the ±5% alert compares against. **NO CHINESE COMPOSED** — `pcs` is a unit token beside `g` and `kg`, the arithmetic line is numerals, and `docs/tacet-delivery-vocabulary.md` is untouched. **TESTS:** new `scripts/test_material_piece_pack.js`, 18 cases in three parts — the rule, the editor wiring, and a guard band over the four shapes §140 promised not to touch — proven non-vacuous (six fail when the divisor is removed); `scripts/test_price_writeback.js` gains case 10, the same material through a real PO against a real database, 9 → 10 cases. `test:fast` 251 → **252/252**; lint 0 errors; the bilingual-banner gate passes. No schema, no migration, and no change to `.gitignore` or CI.
 
 2026-09-15 · v4.276 — **§139 · THE PRODUCT EDITOR WEARS TACET, AND THE PREVIEW INSIDE IT DOES NOT — ASKED FOR BY ASH:** *“need a new mock up of the product editor, right now it doesnt look like part of tacet.”* Three directions were drawn; Ash chose **Option A** — the layout stands, the skin changes. **WHAT IT WAS WEARING:** a palette of its own (Ink Charcoal, Tea Green for selection, Aged Brass for the primary action, IBM Plex) minted before this product had a design system, while `retail-admin.css` has carried the Tacet `--td-*` layer since 2026-07-26. It was the last large surface speaking the older language. **THE OLD TOKEN NAMES SURVIVE, REMAPPED IN ONE PLACE** — some four hundred rules reference them, and renaming them would have been a four-hundred-line diff in which a real mistake could hide. **WHAT THE REMAP DECIDES:** selection is Ink rather than a hue (Tea Green had meant selected, active AND live at once); live is Sage and draft is Amber, two statements that were one hue apart; the primary action is Ink, never Dusk; **Dusk is spent once, on Smart paste**, the only control here that hands work to the model, with the focus ring exempt by name; and `--bg-elev-2` is NOT `--td-header` — the first draft mapped it there and every hovered row read as a table's column-header band. **TYPOGRAPHY:** Inter 400/500, sentence case, no tracking on small labels; thirty-two chrome rules were shouting and the badges already carried sentence-case copy. IBM Plex Sans SC stays loaded behind Inter because Inter carries no Chinese and every label here is bilingual. **THE PHONE PREVIEW IS NOT TOUCHED, AND THAT IS THE LOAD-BEARING PART:** it renders the CUSTOMER'S page in the CUSTOMER'S brand, and a session reaching one rule too far would have the office approving a page that does not exist. Every `.pa-prev-*` rule keeps its literal hex and is fenced off from the tokens BY TEST. **NO COPY CHANGED AND NO CHINESE WAS COMPOSED** — `docs/tacet-delivery-vocabulary.md` untouched. **TESTS:** `scripts/test_product_editor_tacet.js`, eleven checks; the load-bearing one holds every `--td-*` the editor declares against `retail-admin.css` value for value, the same second-implementation-of-one-contract shape `test_product_blocks_read.js` holds against the mini app — and it caught a real drift on its first run. Verified by looking too: a throwaway Chromium harness drove both themes, the Templates pane, the open rail accordions and the Smart paste modal; not committed, because it stubs the admin API and would rot into a test that proves nothing. `test:fast` 250/250. No layout change, no JS, no markup, no route, no schema, and no change to `.gitignore` or CI.
@@ -15301,3 +15302,100 @@ drives the same material through a real PO against a real database and holds
 both halves: the cost divides, the buy price does not. `test:fast` 251 →
 **252/252**, lint 0 errors, bilingual-banner gate passes. No schema, no
 migration, and no change to `.gitignore` or CI.
+
+## §141 — ONE PRIMARY ACTION, ONE COLOUR, ON EVERY SCREEN
+
+**Found by survey, 2026-09-15, while looking for something else.** Asked to put
+`public/cms.html` onto Tacet after §139 did the product editor, this session
+checked first and found the premise wrong: **the mini app editor was already on
+Tacet, and had got there before the product editor did.** All fifteen of its
+light-theme colours match `public/retail-admin.css` value for value. The
+recommendation to reskin it was an inference from a stale comment in
+`product-editor.html` ("mirror of /cms + retail-admin") and should not have been
+made without looking. Recorded here so nobody re-opens it.
+
+**WHAT THE SURVEY DID FIND is worth more than the job it replaced.**
+
+**THE PRIMARY ACTION WAS A DIFFERENT COLOUR IN EACH EDITOR.** `cms.html` pointed
+`--brass` — its name for "the one primary action" — at Dusk, so **Publish** was
+purple there while the same button is Ink in the product editor and on the
+Customers tab. One operator, three screens, and purple meaning two different
+things.
+
+**DUSK DOES NOT MEAN "IMPORTANT". IT MEANS "TACET DID THIS FOR YOU."** That is
+the most important rule in the design system and the reason Dusk is scarce:
+`docs/tacet-design-system.md` §1 says one Dusk element per screen is the norm
+and that ordinary operator controls are "Ink or Secondary, NEVER Dusk";
+`retail-admin.css` says it again beside the Customers modal — *"Primary is INK,
+not Dusk — a modal's primary is the merchant acting."* Publishing your own work
+is the merchant acting. **`--brass` now points at Ink.**
+
+**THE OLD REASONING IS KEPT IN THE FILE RATHER THAN DELETED.** `cms.html`
+carried a comment defending the choice: *"Publish — the single Dusk primary
+action ... because publishing is the deliberate act the whole screen leads
+to."* True about the act, wrong about the colour, and left in place beside the
+reversal so the change is legible to whoever reads that rule next.
+
+**THE DARK ROOM HAD TO INVERT WITH IT, and this was nearly the bug.** `cms.html`
+is light-first with a dark override, and the dark block restates `--accent` but
+never restated `--brass` — which had not mattered while `--brass` was Dusk, a
+colour that holds in both themes. Ink does not: pointing `--brass` at Ink alone
+would have painted an Ink button on an Ink ground and the primary action would
+have disappeared in dark mode. The dark block now restates it as Paper, exactly
+as it restates `--accent`, and `.btn-primary` takes its label from
+`--accent-ink` instead of a literal `#FFFFFF` that would have been unreadable on
+that inverted fill.
+
+**WHAT STILL WEARS DUSK IN THAT EDITOR, and why none of it is a button:** focus
+rings (`input:focus`, `.btn:focus-visible`, `::selection`), which are exempt by
+name; `.drop-zone.hover`, a transient drag marker; and `.block-wrap.selected`,
+the ring around the selected block. That last one is a selection, which the
+rulebook would ordinarily make Ink — the file's own note argues it is drawn OVER
+the customer's page, where Ink would vanish on a dark brand block, and that
+argument holds. **It is deliberately left alone.** Changing it is a design
+decision and was not the one asked for.
+
+**THE RULEBOOK PASS (the second half of the brief).** Forty-eight chrome rules
+in `cms.html` were setting uppercase and forty-three a weight above 500, both
+against §1.6 and the type scale. All are now sentence case at 400/500. Four
+labels — `PAGE`, `BACKGROUND`, `TAB BAR`, `DESIGN CHECK` — were typed in capitals
+in the MARKUP, where no stylesheet change could reach them, and are recased.
+**That is a case change to an existing English string, not new copy:** the
+Chinese half of each pair is untouched and nothing is composed, so
+`docs/tacet-delivery-vocabulary.md` has nothing to record.
+
+**THE `font:` SHORTHAND IS WHERE A PASS LIKE THIS GOES WRONG.** The first sweep
+matched `font-weight:` and missed five rules that set the weight inside the
+shorthand (`font: 700 11px …`) without ever writing the longhand. The test
+below checks both spellings for that reason.
+
+**`.phone-preview-*` IS NOT THE PHONE.** The fence that protects the customer's
+page keys on `.b-*`, `.fsd-*` and `.phone` — and `.phone-preview-*` is the
+"Preview on phone" MODAL, editor chrome that shares only a prefix with the
+device mock. A first pass skipped two chrome rules on that collision. The
+distinction is encoded in the test as a negative lookahead rather than left to
+be rediscovered.
+
+**THE NAMES ARE NOT UNIFIED, DELIBERATELY.** The palette is declared three times:
+`--td-*` in `retail-admin.css` and `product-editor.html`, `--tacet-*` in
+`cms.html`. Renaming one to match the others would touch some six hundred rules
+to change nothing a reader can see — a large diff for a small tidiness, and a
+good place for a real mistake to hide. **The values are what must agree**, and a
+mapping table in the test says which name means which.
+
+**TESTS.** `scripts/test_tacet_one_palette.js`, eleven checks, closing the
+triangle that `scripts/test_product_editor_tacet.js` opened: all three files
+against one palette, the primary Ink in both editors, the dark inversion, no
+literal white on a filled primary, and the rulebook over the mini app editor's
+chrome. **Both sides of the fence are asserted** — the chrome checks would pass
+trivially if the preview rules had been swept along with them, so the test also
+requires that at least twenty preview rules STILL set caps or a heavy weight,
+because the customer's blocks are editorial and must be able to say so. **Proved
+by mutation**: drifting one colour, pointing `--brass` back at Dusk, adding one
+uppercase rule to the chrome, and sweeping the `.b-*` rules each fail the check
+that exists to catch them.
+
+**NOT DONE, so it is not assumed.** No reskin of `cms.html` — it did not need
+one. No rename of `--tacet-*`. No change to `.block-wrap.selected`. No layout,
+no JS, no markup beyond the four recased labels, no route, no schema, and no
+change to `.gitignore` or CI.
