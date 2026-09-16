@@ -171,11 +171,16 @@ check('the pick writes the INPUTS, never the block directly', () => {
 });
 
 check('the pick is scoped to its own CELL, not to the section', () => {
-  const b = anchored('_paSpecInputs');
-  assert.ok(/closest\(['"`]\[data-speccell\]['"`]\)/.test(b),
-    'the handler does not resolve the cell it sits in — with three cells it will fill the first');
+  /* §147 generalised this helper so the storage box's two cards use it too —
+     one scoping helper on the page, not two copies drifting apart. The rule it
+     enforces did not change: a picker fills the inputs inside its OWN scope. */
+  const b = anchored('_paPickInputs');
+  assert.ok(/closest\(['"`]\[data-pickscope\]['"`]\)/.test(b),
+    'the handler does not resolve the scope it sits in — with three cells it will fill the first');
   assert.ok(!/document\.querySelector\(['"`]\[data-bkey/.test(b),
-    'an unscoped document query is back — it will fill whichever cell rendered first');
+    'an unscoped document query is back — it will fill whichever scope rendered first');
+  assert.ok(/data-pickscope/.test(anchored('_paSpecCell')),
+    'the spec cell no longer carries the scope marker, so its pickers resolve to nothing');
 });
 
 check('the label pick writes BEFORE it syncs, or the rebuild paints over it', () => {
