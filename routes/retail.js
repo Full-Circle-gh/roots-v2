@@ -34436,6 +34436,28 @@ function computeDeliverySlots(zone, now, opts = {}) {
   // above — the two are the same day by construction (both read tzNow's
   // calendar date), and midday dodges any DST edge as earliestBatchMakeDate does.
   const floorBlocksToday = !!localFreshFloor && localFreshFloor > nowParts.ymd;
+  /* §80 — A WINDOW TODAY'S BATCH CANNOT REACH IS NOT OFFERABLE.
+     `floorBlocksToday` above withdraws today whole when the next batch is a
+     LATER day. On a batch MORNING the floor is today, so it withdraws nothing —
+     and every one of today's windows was offered, including the ones that close
+     before the kitchen finishes. The customer picked 8–10am against an 11:00
+     batch, and the checkout then stripped the window it had just offered him
+     (freshLinesCoveredToday → not covered → the order parks undated). The
+     picker offered a time the order refused: the same disagreement §80 exists
+     to prevent, one screen earlier.
+     THE TEST IS freshLinesCoveredToday'S OWN, asked of the same helper with the
+     same comparison — covered iff the window ENDS at or after the ready hour —
+     so the two cannot answer differently. Null on every day, hour and cart that
+     is not this one: the floor is only today when a fresh line is SOLD OUT and
+     today's batch is still coming, so an in-stock cart keeps every window it
+     has today.
+     Day-only zones never reach it. Their floor comes from the ship-district
+     branch, not the local run, so `localFreshFloor` is null there and the Today
+     chip is untouched — stated rather than left to be discovered. */
+  const freshPendingToday = (localFreshFloor && localFreshFloor === nowParts.ymd)
+    ? todaysBatchStillComing(tzNow, tz)
+    : null;
+  const freshReadyMinutes = freshPendingToday ? freshPendingToday.readyHour * 60 : null;
   const startHour  = cfg.slot_start_hour;
   const endHour    = cfg.slot_end_hour;
   const slotMins   = cfg.slot_duration_minutes;
@@ -34469,6 +34491,14 @@ function computeDeliverySlots(zone, now, opts = {}) {
   // "Right away" only applies in time-slot mode. Day-only zones express
   // the same-day option as a "Today (+¥X)" day-chip instead.
   const rightAwayAvailable = !floorBlocksToday &&
+        /* "Right away" promises the SOONEST POSSIBLE, and a batch that has not
+           been made cannot answer it — which is exactly why slotWindowEnd
+           returns null for it and freshLinesCoveredToday therefore never covers
+           it. Offering it on a batch morning is the same broken promise as
+           offering 8–10am: the customer picks it and the order parks undated.
+           So it is withdrawn for the same reason and by the same flag; today's
+           reachable windows below are what he picks from instead. */
+        !freshPendingToday &&
         !isDayOnly &&
         cfg.same_day_allowed === 1 &&
         kitchenOpenNow &&
@@ -34535,13 +34565,40 @@ function computeDeliverySlots(zone, now, opts = {}) {
       const slotEndCursor = Math.min(hourCursor + slotMins, endCursor);
       const slotEndH = Math.floor(slotEndCursor / 60);
       const slotEndM = slotEndCursor % 60;
+      // Built once, here, because the reachability check below asks
+      // slotWindowEnd about this exact id — the one the customer will send back.
+      const slotId = `${isoDate}T${hhmm(slotStartH, slotStartM)}`;
       if (filterElapsed) {
         const slotStartsAt = new Date(startOfTargetDay.getTime() + hourCursor * 60000);
         if (slotStartsAt.getTime() <= tzNow.getTime()) { hourCursor += slotMins; continue; }
       }
+      /* …and the window the batch cannot reach, today only.
+         THE TEST IS slotWindowEnd, NOT A SECOND PIECE OF ARITHMETIC. Comparing
+         `slotEndCursor` against the ready hour in minutes gives the same answer
+         for every window this grid can express, and it is still the wrong way
+         to ask: checkout decides with slotWindowEnd, so anything this function
+         works out for itself is a copy that can drift — which is the defect
+         being fixed, not a shape to repeat. Asking the same function the same
+         question about the same slot_id makes the picker and the checkout agree
+         BY CONSTRUCTION.
+         It also inherits that function's null, and the inheritance is the point:
+         a slot_id it cannot parse is one freshLinesCoveredToday will not cover
+         either, so withdrawing it keeps the promise this rule exists to keep.
+         (`hhmm` does not pad the hour, so a kitchen opening before 10:00 builds
+         exactly such an id — a separate defect, deliberately not papered over
+         here: this withdraws the window rather than offering one the order
+         would strip.) */
+      if (freshReadyMinutes != null && isoDate === todayIso) {
+        const windowEnd = slotWindowEnd(zone, slotId, tzNow, tz);
+        const readyAt = businessDate.dateInZone(tz, isoDate, freshPendingToday.readyHour, 0);
+        if (!windowEnd || !readyAt || windowEnd.getTime() < readyAt.getTime()) {
+          hourCursor += slotMins;
+          continue;
+        }
+      }
       const requiresSurcharge = (isoDate === todayIso) && cfg.same_day_surcharge > 0;
       out.push({
-        slot_id:    `${isoDate}T${hhmm(slotStartH, slotStartM)}`,
+        slot_id:    slotId,
         date_iso:   isoDate,
         start_hour: slotStartH,  start_minute: slotStartM,
         end_hour:   slotEndH,    end_minute:   slotEndM,
