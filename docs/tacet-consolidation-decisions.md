@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.287
+# Tacet shared-core consolidation — decisions record, v4.288
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-16 · v4.288 — **§151 · A LOCKED DATABASE IS NOT A SIGNED-OUT OPERATOR — DECIDED BY ASH**, shown the finding and asked whether to fix it: *“fix it”*. **FOUND BY A TEST THAT FAILED ONCE.** During the §150 build, one parallel run of `npm run test:fast` came back with `scripts/test_manual_restock_park.js` failing `401 !== 200`; it passed alone and passed on three later full runs. **A flake is not a root cause**, so it was read rather than re-run: `requireRetailAdmin` wraps its two control-plane queries in a try/catch written for a FIRST BOOT — *tables not ready* — and that catch swallowed every error, `SQLITE_BUSY: database is locked` included, then fell through to `401 Not authenticated`. **`public/retail-admin/01-core.js` sends a 401 to `/backend/login` with no prompt**, so a moment of write contention signed an operator out mid-task and said nothing about the database. The suites share one sqlite file, which is why a test met it first; production has one file and several writers too. **WHAT SHIPS:** `lib/sqlite-errors.js` tells the two cases apart, and the gate answers each honestly — schema not ready falls through to the same 401 as before (there is nobody to sign in as yet), anything else is **503 `service_busy`, logged**. **MATCHED ON THE MESSAGE, NOT THE CODE, and that is forced rather than chosen:** better-sqlite3 gives `no such table` and `no such column` the generic `SQLITE_ERROR`, which a constraint violation and a syntax error also carry. The match is narrow on purpose — an unrecognised error is treated as a real failure, so a miss costs a first boot one wrong status and the opposite default would restore the bug. **THE SAME SWALLOW, ONE FLOOR DOWN**, found by grepping for the pattern rather than closing on the one `file:line`: `lib/require-cap.js`'s `loadCaller` catches everything around its tenant read, and a swallowed error there leaves `tenant` null, which sends `resolveOperator` to the SHIPPED PRESET instead of the tenant's own edited role — **a permission decision made on capabilities nobody granted**, which is worse than a failed request. Both catches are narrowed to the schema gap they were written for. **A CLAIM MADE AND WITHDRAWN IN THE SAME BUILD, recorded because the mutation is what caught it:** the first draft also moved `next()` out of the try and said this fixed a second bug — a handler throwing synchronously after its write had landed, reported as a login problem. **A mutation putting `next()` back inside the try changed no status the suite could see**, because express catches a handler's throw at the layer boundary and turns it into `next(err)`; it never reached this gate. The code stays (this catch should be about this gate's two queries and nothing downstream) and **the comment now says it fixes nothing observable**, because a comment claiming a bug that does not exist is how the next reader is sent hunting. **WHAT THE OPERATOR READS:** `service_busy` → *The system is busy right now — try again in a moment.* / 系统繁忙,请稍后重试。 **ONE COMPOSED STRING, declared in `docs/tacet-delivery-vocabulary.md` v1.97** with its rejected candidates: the three live alternatives all blame the operator (操作过于频繁, 尝试次数过多) or describe a read only (加载失败), and the person clicking did nothing wrong. 请稍后重试 is live in five pairs in that same error table; 系统繁忙 is WeChat's own word for this state and is already in the tree. **401 REMAINS THE ONLY STATUS THAT SENDS ANYBODY TO THE LOGIN PAGE**, and every ordinary refusal — no such operator, an inactive one, a suspended tenant — is still exactly 401: the fix must not widen a gate, and a test holds each one. New suite `scripts/test_retail_admin_gate.js` **14/14**, driving the REAL router over HTTP with the failure injected onto the shared database module so the error arrives from where a real one would; proven non-vacuous by four mutations, **one of which walked past the check meant for it** and is the withdrawal above. **Its own runner had to be fixed first**: the checks are async and a synchronous runner would have let every assertion escape as an unhandled rejection and printed a tick — a suite that cannot fail is worse than none. `test:fast` 262 → **263**; lint 0 errors. No schema, no migration, no change to the mini app, the QR menu, the web storefront, `.gitignore` or CI.
 
 2026-09-16 · v4.287 — **§150 · THE COUNTER SELLS WHAT THE SHOP HAS AND WHAT THE SHOP MAKES — DECIDED BY ASH from a Tianhe till**, on a screenshot of the counter search: *“i cant see the products made in the location in the counter till”*, and then, shown the two shapes the fix could take, the argument that settled it: *“people might order from the mini app products that offered in the warehouse of that location, the till will not show them because they are not on the menu list”*. **THE TILL WAS ASKING THE WEBSITE WHAT THE COUNTER MAY SELL.** `public/till.html` built its product list from `/api/retail-admin/products?published=1` and its quantities from `/stores/:id/stock?published=1` — `is_published`, the ONLINE STORE's flag. **§42 draws the line the other way round and the public QR menu has honoured it since §47**: *is_published governs the online store; a shop listing governs the shop*. Nothing built at a counter is ever sold on a website, so nothing built at a counter was ever published, so nothing built at a counter reached a till. **A latte was invisible to the cashier standing next to the machine that makes it**, and publishing it to get it on screen would have put it on the website AND drawn it greyed out, because a made-here row has no shelf record by design (§47) and the till reads 0 as sold out. **THE SHAPE ASH REJECTED IS THE TIDY ONE.** Menu-only was put to him and argued against here before he answered; his own reason for refusing it is better than the one offered, and it is recorded in his words above: **the mini app already sells that location's warehouse stock**, so a till narrowed to the menu would take a walk-in customer's sale off a shelf the app is selling from. **THREE SOURCES, ONE LIST**, and the change is ADDITIVE — no tile a cashier can see today disappears: this location's menu at ITS price (§42 puts the price on the listing, so the counter and the QR code can no longer quote two figures for one drink); anything counted on this location's shelf, published or not, because **publishing is a decision about a website and has nothing to do with whether a cashier may sell a box somebody put on the shelf in front of them**; and everything the till already showed. **A LISTING GOVERNS ITS PRODUCT ABSOLUTELY** — where one exists it decides the price, the mode and whether the row appears at all, so a product switched off for the day is ABSENT rather than reappearing two rows down at the catalogue price, which is exactly what concatenating the two halves would have done. **MADE HERE IS NEVER STOCK-GATED**: its stock comes back `null` rather than 0 and §42's manual switch is the whole of its availability, per §47's closing line. **ONE NEW ROUTE, NO NEW TABLE, NO SCHEMA, NO MIGRATION**, and **the containment around `shop_listings` was NOT widened**: the route lives in `routes/retail-shops.js` for the reason `/products/:id/shops` already gives in that file — a reader in `public/till.html` would have forced the allowlist in `scripts/test_shop_listings.js` open, and a reader there widens nothing. The till FETCHES it and never names the table; a check in the new suite holds that. **THE ORDER PATH IS UNCHANGED AND WAS NEVER THE PROBLEM** — `resolveManualOrderLines` resolves on `is_active` alone, with no published gate, and has always accepted a per-line `unit_price`. **The till posts one on menu lines and only on menu lines**: a listing's price is the single figure that endpoint cannot resolve for itself, and a till that posted its own number for everything would charge a stale one every time the office corrected a catalogue price between two reloads of the tablet. **`shops.is_active` IS DELIBERATELY NOT CONSULTED** — it governs the `/s/:shopCode` page, and switching a QR menu off is a statement about a public URL, not about whether the counter may ring up a coffee; the till's own closed-store gate (`posClosedForStore`) is untouched. New suite `scripts/test_counter_catalogue.js` **21/21**, proven non-vacuous by four mutations (made-here gated on the shelf, a switched-off listing falling through to the catalogue half, listed rows priced from the product, the published/counted narrowing removed) each caught by the check meant for it; `test:fast` 261 → **262**; lint 0 errors. **One correction to an older document made in the same pass**: `scripts/test_shop_listings.js` printed *“Nothing else reads these tables yet — the till is unchanged”*, which this makes false, so the heading and the allowlist's note now say what is actually true. No new UI string in either language, so nothing to declare in `docs/tacet-delivery-vocabulary.md`. No change to the mini app, the QR menu, the web storefront, `.gitignore` or CI.
 
@@ -16291,3 +16293,92 @@ is a subset of that, never the whole of it.**
 No schema, no migration, no new table. No change to the mini app, the QR menu or
 the web storefront. No new UI string in either language. No change to
 `.gitignore`, CI, or anything governing how sessions and builds work.
+
+
+## §151 — A LOCKED DATABASE IS NOT A SIGNED-OUT OPERATOR
+
+**Decided by Ash, 2026-09-16,** shown the finding and asked whether to fix it:
+*"fix it"*.
+
+### How it was found
+
+A test failed once. During the §150 build, one parallel run of
+`npm run test:fast` reported `scripts/test_manual_restock_park.js` failing
+`401 !== 200`. It passed alone, and passed on three later full runs.
+
+**A flake is not a root cause**, so the code was read instead of re-run.
+
+### What was wrong
+
+`requireRetailAdmin` wraps its two control-plane queries — the operator row and
+the tenant row — in a try/catch written for a first boot, where `tenant_users`
+does not exist yet and the gate must not 500. The catch swallowed **everything**
+and fell through to `401 Not authenticated`.
+
+`SQLITE_BUSY: database is locked` is an error. And `public/retail-admin/01-core.js`
+sends a 401 to `/backend/login` without asking. So a moment of write contention
+signed an operator out mid-task, and nothing in the answer mentioned a database.
+
+The suites share one sqlite file, which is why a test met it first. Production
+has one file and several writers too.
+
+### What ships
+
+`lib/sqlite-errors.js` tells the two cases apart, and the gate answers each one
+honestly:
+
+- **Schema not ready** → falls through to the same 401 as before. That refusal
+  is correct: there is nobody to be signed in as yet.
+- **Anything else** → `503`, code `service_busy`, and a log line.
+
+**Matched on the message, not the code**, and that is forced rather than chosen:
+better-sqlite3 gives `no such table` and `no such column` the generic
+`SQLITE_ERROR`, which a constraint violation and a syntax error also carry. The
+match is narrow on purpose — anything unrecognised counts as a real failure, so
+a miss costs a first boot one wrong status, where the opposite default would
+put the original bug back.
+
+### The same swallow, one floor down
+
+Found by grepping for the pattern rather than closing the finding on the one
+`file:line` it arrived as. `lib/require-cap.js`'s `loadCaller` catches
+everything around its tenant read. A swallowed error there leaves `tenant` null,
+which sends `resolveOperator` to the **shipped preset** instead of the tenant's
+own edited role — a request then allowed or refused on capabilities nobody
+granted. **A silently wrong permission decision is worse than a failed one.**
+Both catches are narrowed to the schema gap they were written for.
+
+### A claim made and withdrawn in the same build
+
+The first draft also moved `next()` out of the try and said this fixed a second
+bug: a handler throwing synchronously, after its write had landed, reported as a
+login problem.
+
+**It did not.** A mutation putting `next()` back inside the try changed no
+status the suite could see — express catches a handler's throw at the layer
+boundary and turns it into `next(err)`, so it never reached this gate.
+
+The code stays, because this catch should be about this gate's own two queries
+and nothing downstream of them. The comment now says plainly that it fixes
+nothing observable. A comment claiming a bug that does not exist is how the next
+reader is sent hunting for one.
+
+### What the operator reads
+
+`service_busy` → *The system is busy right now — try again in a moment.* /
+系统繁忙,请稍后重试。 One composed string, declared in
+`docs/tacet-delivery-vocabulary.md` v1.97 with the three live alternatives it
+beat: they blame the operator (操作过于频繁, 尝试次数过多) or describe a read
+only (加载失败), and the person clicking did nothing wrong.
+
+### Not widened
+
+**401 remains the only status that sends anybody to the login page**, and every
+ordinary refusal — no such operator, an inactive one, a suspended tenant — is
+still exactly 401. A fix to a gate must not quietly open it, and a test holds
+each refusal.
+
+### Not done
+
+No schema, no migration. No change to the mini app, the QR menu, the web
+storefront, `.gitignore`, CI, or anything governing how sessions and builds work.
