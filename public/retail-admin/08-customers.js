@@ -2500,11 +2500,40 @@ async function cuToggleBlock(ev) {
   cuOpenDetail(c.id);
 }
 
+// 🔴 EVERY STRING HERE IS COMPOSED THROUGH cuT, NOT WRITTEN AS AN 'EN · CN'
+// PAIR, and both reasons are live failures this control was shipping.
+//
+//   1. The COUNT is interpolated. The bilingual walker splits a text node on
+//      its FIRST ' · ' (10-extras.js processNode), so the old toast
+//      "Signed out all devices · N sessions revoked · 已退出..." split into
+//      en="Signed out all devices" and cn="N sessions revoked · 已退出...".
+//      English operators were shown NO NUMBER AT ALL — the one fact the toast
+//      existed to carry — and Chinese ones were shown the English half. This
+//      is the same trap cuOpenAdjust documents below; the cure is the same.
+//   2. toast() assigns textContent, which replaces the text node, which IS a
+//      childList mutation, so the walker's MutationObserver does reach it. A
+//      toast is not exempt from the pair rule just because it is transient.
+//
+// ⚠ WHAT THE COPY NOW ADMITS. The old wording said "She can sign back in
+// normally" — true, and misleading by omission. In the WeChat mini app she
+// does not have to: utils/api.js catches the 401 this revoke causes and runs a
+// fresh silent wx.login, then replays the request. There is no sign-in screen
+// and the customer notices nothing. On the web storefront (shop.html) there is
+// no silent re-login, so the sign-out is real and visible. An operator
+// reaching for this because a phone was stolen has to know which of those two
+// they are getting, and that Block — which requireRetailAuth refuses even on
+// a valid token — is the control that actually locks an account.
 async function cuForceLogout(ev) {
   const btn = ev && ev.currentTarget;   // capture before the confirm await nulls currentTarget
   if (!CU_CURRENT?.customer) return;
+  const n0 = Number(CU_CURRENT.stats && CU_CURRENT.stats.active_sessions) || 0;
   if (!(await askConfirm({
-    title: 'Sign this customer out on all devices? Active sessions are revoked immediately — useful if a token may be compromised. She can sign back in normally; to lock her out, use Block instead. · 退出该顾客的所有设备?将立即撤销所有活跃会话——令牌可能泄露时适用。她可正常重新登录;如需锁定,请改用封禁。',
+    title: cuT('Sign out all devices?', '退出所有设备？'),
+    body: n0
+      ? cuT(`Signed in on ${n0} device${n0 === 1 ? '' : 's'}. Revoking clears a leaked token — it does not lock them out. On the web store they are signed out at once; in the WeChat Mini Program they are signed back in automatically, with no sign-in screen. Use Block to lock them out.`,
+            `当前有 ${n0} 台设备已登录。撤销可以清除泄露的令牌，但不能锁定账号。网页商店会立即退出；微信小程序会自动重新登录，不会出现登录页。如需锁定，请改用封禁。`)
+      : cuT('No active sessions — there is nothing to revoke. Use Block to lock them out.',
+            '当前没有活跃会话，无可撤销内容。如需锁定，请改用封禁。'),
     confirmLabel: cuT('Sign out all devices', '退出所有设备'),
   }))) return;
   if (btn) btn.disabled = true;   // manual disable (not adminWrite's btn) so the icon isn't stripped
@@ -2514,7 +2543,12 @@ async function cuForceLogout(ev) {
       errLabelEn: 'Sign-out failed', errLabelCn: '退出失败',
     });
     const n = j.revoked || 0;
-    toast(`Signed out all devices · ${n} session${n === 1 ? '' : 's'} revoked · 已退出所有设备(${n} 个会话)`);
+    // Reports what the server actually did, including the honest zero. "0
+    // sessions revoked" is the answer to "why did nothing change", and the
+    // old string could not deliver it in either language.
+    toast(n
+      ? cuT(`Signed out — ${n} session${n === 1 ? '' : 's'} revoked`, `已退出登录，已撤销 ${n} 个会话`)
+      : cuT('No active sessions — nothing was revoked', '当前没有活跃会话，未撤销任何内容'));
     cuOpenDetail(CU_CURRENT.customer.id);
   } catch {} finally { if (btn) btn.disabled = false; }
 }
