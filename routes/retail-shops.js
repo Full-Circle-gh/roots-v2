@@ -10,9 +10,12 @@
 // nothing serves a menu: the /s/:shopCode page is designed separately and is
 // not built here.
 //
-// READ BY NOTHING ELSE. The till and every order path are unchanged by this
-// file — shop_listings is written here and read here, and by nothing else in
-// the repo. scripts/test_shop_listings.js holds that line.
+// THE TABLE IS STILL ONLY READ HERE AND IN THE PUBLIC MENU — scripts/
+// test_shop_listings.js holds that line — but the second sentence this block
+// used to carry, that the till is unchanged by this file, is no longer true.
+// §150 gives the counter till its catalogue from here, for the reason the
+// counter-catalogue route at the foot of this file sets out. The till FETCHES
+// that route and never names the table, so the containment is unwidened.
 //
 // WHAT IS NEVER WRITABLE THROUGH THIS API
 //   • shops.public_code — minted once at creation by lib/shop-code.js and never
@@ -30,6 +33,7 @@ const { newShopCode } = require('../lib/shop-code');
 const { menuUrlFor } = require('../lib/shop-qr');
 const { currentTenantId } = require('../lib/tenant-db');
 const qrpng = require('../lib/qrpng');
+const inventory = require('../lib/inventory');
 const { requireRetailAdmin } = require('./retail');
 const { logActivity } = require('../middleware/auth');
 
@@ -487,6 +491,132 @@ router.get('/api/retail-admin/products/:id/shops', requireRetailAdmin, (req, res
       is_available: !!r.is_available,
     })),
   });
+});
+
+// ─── What the counter may sell — §150 ───────────────────────────────────
+// THE COUNTER SELLS WHAT THE SHOP PHYSICALLY HAS, PLUS WHAT THE SHOP MAKES.
+// Reported by Ash from a Tianhe till: a product listed on that location's menu
+// could not be found in the till's search at all.
+//
+// The till used to build its list from `/api/retail-admin/products?published=1`
+// — the ONLINE STORE flag. §42 draws the line the other way round and the public
+// menu has always honoured it: is_published governs the website, a shop listing
+// governs the shop. Nothing made at a location is ever sold on a website, so
+// nothing made at a location was ever ticked published, so nothing made at a
+// location reached the counter. A latte was invisible to the cashier standing
+// next to the machine that makes it.
+//
+// THREE SOURCES, ONE LIST, and the middle one is the fix:
+//   1. Anything on this location's menu, at ITS price (§42: the price lives on
+//      the listing). A made-here row carries no shelf record by design, so its
+//      stock comes back null and the till never gates it — §47 says the manual
+//      switch is the whole of its availability, and `is_available = 0` is
+//      therefore absent from this list rather than shown greyed.
+//   2. Anything with counted stock at this location, published or not. A box
+//      somebody put on a shelf here is sellable at the counter in front of it;
+//      whether the website offers it is a different question that was never
+//      being asked.
+//   3. Everything the till already showed — published, priced, in or out of
+//      stock. Named explicitly so this change is additive and no tile that a
+//      cashier can see today disappears.
+//
+// A LISTING GOVERNS ITS PRODUCT ABSOLUTELY. Where a listing exists, it decides
+// the price, the mode and whether the row appears at all — a product switched
+// off for the day must not reappear two rows down at the catalogue price, which
+// is what "menu first, then the catalogue" would do if the two halves were
+// merely concatenated.
+//
+// IT LIVES IN THIS FILE for the reason /products/:id/shops gives above: a
+// reader in public/till.html or routes/retail-inventory.js would have widened
+// the containment allowlist, and a reader here widens nothing.
+//
+// SHOP is_active IS DELIBERATELY NOT CONSULTED. It governs the /s/:shopCode
+// page — switching the QR menu off is a statement about a public URL, not about
+// whether the counter can ring up a coffee. The till has its own closed-store
+// gate (posClosedForStore) and it is unchanged.
+router.get('/api/retail-admin/stores/:id/counter-catalogue', requireRetailAdmin, (req, res) => {
+  const locationId = intParam(req.params.id);
+  if (!locationId) return bad(res, 404, 'store_not_found');
+  const loc = tdb().prepare('SELECT id FROM retail_stores WHERE id = ?').get(locationId);
+  if (!loc) return bad(res, 404, 'store_not_found');
+
+  const shop = tdb().prepare('SELECT id FROM shops WHERE location_id = ?').get(locationId) || null;
+  const listings = shop
+    ? tdb().prepare(`
+        SELECT store_product_id, price, fulfilment_mode, is_available, sort_position
+          FROM shop_listings WHERE shop_id = ?`).all(shop.id)
+    : [];
+  const byProduct = new Map(listings.map(l => [l.store_product_id, l]));
+
+  // The same figure the till drew before: availability on the wechat channel,
+  // which nets the safety buffer and live holds off the shelf. Absent from the
+  // map means this location has never counted the product — which §47 reads as
+  // no claim rather than a smaller one, so it is not stock the counter may sell
+  // against. It is still the number 0 on the glass.
+  const avail = inventory.getAvailableMap(locationId);
+
+  const products = tdb().prepare(`
+    SELECT id, name_en, name_cn, sku, top_category, sell_price,
+           COALESCE(is_published, 0)    AS is_published,
+           COALESCE(is_restock_only, 0) AS is_restock_only
+      FROM store_products
+     WHERE COALESCE(is_active, 1) = 1
+     ORDER BY COALESCE(NULLIF(name_en, ''), name_cn) COLLATE NOCASE ASC`).all();
+
+  const rows = [];
+  for (const p of products) {
+    // A restock-only product is a receiving record, never a thing to sell. The
+    // till filtered these out client-side and the filter moves here with it.
+    if (p.is_restock_only) continue;
+    const listed = byProduct.get(p.id) || null;
+    const counted = avail.get(p.id) || null;
+    const onShelf = counted ? Number(counted.available) || 0 : null;
+
+    let price, mode, stock;
+    if (listed) {
+      if (!listed.is_available) continue;            // switched off for the day
+      price = Number(listed.price) || 0;
+      mode  = listed.fulfilment_mode;
+      // Made here: built at the moment of sale, so there is no shelf to run out
+      // of and null tells the till not to draw one.
+      stock = mode === 'made_here' ? null : (onShelf == null ? 0 : onShelf);
+    } else {
+      price = Number(p.sell_price) || 0;
+      mode  = null;
+      stock = onShelf == null ? 0 : onShelf;
+      // Source 2 and source 3. A product that is neither published nor counted
+      // here is in this tenant's catalogue and not in this shop, and a price of
+      // zero is not a price — both were already excluded and stay excluded.
+      if (!(price > 0)) continue;
+      if (!p.is_published && !(onShelf != null && onShelf > 0)) continue;
+    }
+
+    rows.push({
+      product_id: p.id,
+      name_en: p.name_en, name_cn: p.name_cn, sku: p.sku,
+      top_category: p.top_category,
+      price,
+      // The till posts unit_price on these and only these: the listing price is
+      // the only price the order endpoint cannot resolve for itself, and a till
+      // that posted its own figure for everything would charge a stale one every
+      // time the office corrected a catalogue price.
+      on_menu: !!listed,
+      fulfilment_mode: mode,
+      // null = nothing to count (made here). A number = the shelf, already net.
+      stock,
+      sort_position: listed ? listed.sort_position : null,
+    });
+  }
+
+  // Menu first, in the order the operator arranged it, because that is the list
+  // a cashier reaches for most; then the shelf, by the name the tile prints.
+  rows.sort((a, b) => {
+    if (a.on_menu !== b.on_menu) return a.on_menu ? -1 : 1;
+    if (a.on_menu) return (a.sort_position - b.sort_position) || (a.product_id - b.product_id);
+    return 0;                                   // already name-ordered by SQL
+  });
+
+  ok(res, { has_shop: !!shop, shop_id: shop ? shop.id : null, rows });
 });
 
 module.exports = router;
