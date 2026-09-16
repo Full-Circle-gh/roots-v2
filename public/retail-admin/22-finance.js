@@ -1253,14 +1253,95 @@ function finTxRow(r) {
       ? (r.po_open === false ? ''
         : `<a class="fin-tx-act" href="#" onclick="finTxOpenPO(${Number(r.po_id)});return false">${escapeHtml(cuT('Open purchase order', '查看采购单'))}</a>`)
       : claim
-      ? ((typeof can === 'function' && can('expenses:cancel') && !r.settled)
-        ? `<a class="fin-tx-act" href="#" onclick="finTxVoidClaim(${Number(r.claim_id)});return false">${escapeHtml(cuT('Void', '作废'))}</a>`
-        : '')
+      ? (finTxClaimActs(r))
       : (typeof can === 'function' && !can('finance:record')) ? ''
       : `<a class="fin-tx-act" href="#" onclick="finTxEdit('${escapeHtml(String(r.kind))}',${Number(r.id)});return false">${escapeHtml(cuT('Edit', '编辑'))}</a>`)
     + '</td>'
     + '</tr>';
 }
+
+/* §146 — WHAT A CLAIM ROW OFFERS: re-file it, and (unless it is settled) void it.
+
+   **THE TWO ARE NOT THE SAME KIND OF ACT, and the settled rule is where that
+   shows.** Void is hidden once the employee has been paid back, because the
+   server refuses it — reversing then would take the expense out of the books
+   while leaving the repayment made. Re-filing is offered on a settled claim,
+   because nothing leaves the books: hiding it would mean a category could only
+   ever be corrected before payday.
+
+   EITHER CAPABILITY OPENS THE PICKER. The bookkeeper holds `expenses:cancel`
+   and not `expenses:approve`; before §146 that let them delete a cost from the
+   ledger and not rename one. Same test as the server's `requireFiler`.
+
+   `Change` IS THE LIVE PAIR (04-orders.js) and reads correctly over a blank
+   too: the category cell beside it already says `Not recorded`, so the link
+   changes it from nothing. */
+function finTxClaimActs(r) {
+  // FAIL-CLOSED, and spelled out rather than routed through a helper: this is
+  // the Void link's own test, unchanged, and the re-filing test beside it in the
+  // same shape. A control that appears when the capability layer could not
+  // answer is a control that refuses every time it is pressed.
+  const canVoid = typeof can === 'function' && can('expenses:cancel') && !r.settled;
+  const canFile = typeof can === 'function'
+    && (can('expenses:approve') || can('expenses:cancel'));
+  const voidLink = canVoid
+    ? `<a class="fin-tx-act" href="#" onclick="finTxVoidClaim(${Number(r.claim_id)});return false">${escapeHtml(cuT('Void', '作废'))}</a>`
+    : '';
+  if (!canFile) return voidLink;
+  if (FIN_TX_FILING !== Number(r.claim_id)) {
+    return `<a class="fin-tx-act" href="#" onclick="finTxFileOpen(${Number(r.claim_id)});return false">`
+      + escapeHtml(cuT('Change', '更改')) + '</a>' + voidLink;
+  }
+  const list = finTxExpenseCats();
+  // NO LIST, NO PICKER — §36's empty-list rule, and the link above still closes
+  // it. A tenant with no categories is offered nothing rather than an empty box.
+  if (!list.length) return voidLink;
+  const labels = finCatLabels(list);
+  const opts = list.map(c => `<option value="${escapeAttr(c)}"${c === r.category ? ' selected' : ''}>`
+    + escapeHtml(labels.get(c) || finCatLabel(c)) + '</option>').join('');
+  return `<select class="fin-apr-cat" onchange="finTxFileClaim(${Number(r.claim_id)}, this.value)">`
+    + `<option value=""${r.category ? '' : ' selected'}>`
+    + escapeHtml(cuT('— pick a category —', '— 选择分类 —')) + '</option>'
+    + opts + '</select>';
+}
+
+/* Opening the picker is a repaint of the list, the same gesture the direction
+   filter above it already makes — no fetch, and the row the operator clicked is
+   the row they are looking at. */
+window.finTxFileOpen = function finTxFileOpen(claimId) {
+  FIN_TX_FILING = Number(claimId) || 0;
+  finTxRender();
+};
+
+/* §146 — RE-FILING FROM THE LEDGER. **NO MONEY MOVES**: same claim, same sum,
+   same date, same person, same approval record. What changes is which line of
+   the category breakdown it sits on, and whether the tenant's non-operating flag
+   reaches it — a cost filed under nothing counts as operating, so a private one
+   quietly inflates that total.
+
+   IT CALLS THE CLAIM'S ENDPOINT, NOT THIS SCREEN'S. `finTxSave` refuses a
+   claim-linked row outright and is right to: the row is a projection, and a
+   value typed onto it is lost the next time the claim re-posts. This changes the
+   claim, and the ledger row is re-posted from it. Same reasoning as
+   `finTxVoidClaim` one function up, and the same manage-its-own-toast shape. */
+window.finTxFileClaim = async function finTxFileClaim(claimId, value) {
+  const category = String(value == null ? '' : value);
+  // Choosing the blank row is a way OUT of the picker, not a request to unfile
+  // a cost — the server refuses an empty value for that reason.
+  if (!category) { FIN_TX_FILING = 0; finTxRender(); return; }
+  try {
+    await api(`/api/retail-admin/staff-expenses/${Number(claimId)}/category`,
+      { method: 'POST', body: { category } });
+    FIN_TX_FILING = 0;
+    FIN_TX = null;                           // force a real reload, not a repaint
+    FIN_DATA = null;                         // the staircase drawn from the same ledger
+    FIN_APR = null; FIN_APR_SEEN = false;    // and the claim's own row on the queue
+    await finTxLoad();
+    if (window.toast) toast(cuT('Saved', '已保存'));
+  } catch (e) {
+    if (window.toast) toast(e.message, 'err');
+  }
+};
 
 /* §1.18 — the English surface renders US dates, and the year is omitted because
    every row is inside the selected window. */
@@ -1527,6 +1608,15 @@ function finTxKeepsCat() {
    `storeCategory` would then snap the typed value onto the wrong master list. */
 function finTxCatOptions() {
   if (FIN_TX_KIND === 'in') return finIncomeCats();
+  return finTxExpenseCats();
+}
+
+/* THE EXPENSE HALF, ON ITS OWN. §146 split it out: a claim row's picker needs
+   the money-OUT list whatever the FORM is currently set to, and calling
+   `finTxCatOptions()` there would have offered INCOME categories to a claim
+   whenever the operator had last opened the income form. Same list, asked
+   without the form's question. */
+function finTxExpenseCats() {
   // §87 part two: the tenant's own list, when they have one. It is the list the
   // Categories sub-view maintains, ACTIVE ENTRIES ONLY — a category the tenant
   // hid must stop being offered, which is the whole of what hiding does.
@@ -1549,6 +1639,20 @@ function finTxCatOptions() {
    edge of the window instead of under the field that opened it — which is
    what this field was doing. It reuses that fix's .pu2-suggest-menu /
    .pu2-suggest-opt classes rather than inventing a second popup style. */
+/* §146 — THE CLAIM ROW CURRENTLY OPEN AS A CATEGORY PICKER, or 0.
+
+   **THE APPROVALS QUEUE IS NOT REACHABLE BY EVERYONE THIS IS FOR.** `/pending`
+   is gated on `expenses:approve`, which the `bookkeeper` preset does not hold —
+   so a picker living only there would have been a permission the accountant has
+   and a screen they cannot open. Transactions is the finance screen they DO
+   reach, and it is where Void already lives for exactly this reason (§90:
+   requested by Ash off this screen). The correction belongs beside it.
+
+   ONE ROW AT A TIME, opened by its own link rather than drawn on every claim
+   row: a ledger window can hold dozens, and a dropdown on each would make a
+   list somebody opened to READ into a wall of controls. */
+let FIN_TX_FILING = 0;
+
 let FIN_CAT_SUG_OPEN = false;
 let FIN_CAT_SUG_IDX = -1;   // keyboard-highlighted row, -1 = none
 
@@ -2263,6 +2367,14 @@ let FIN_APR = null;          // the last /pending payload
 let FIN_APR_SEEN = false;    // has this sub-view ever been pulled
 let FIN_APR_BUSY = 0;        // id being decided, or -1 while a settle runs
 let FIN_APR_SHOT = null;     // the receipt currently open: { id, data, err }
+/* §146 — A CATEGORY CHOSEN ON A WAITING CLAIM, BEFORE ANYTHING IS COMMITTED.
+   It rides with the Approve click rather than saving on its own, so it has to
+   survive until then — and this list re-renders under the operator for reasons
+   that have nothing to do with the pick: opening a receipt, a decision landing
+   on another row. Held in the DOM alone it would be silently thrown away by the
+   very act of checking the photo before approving. Keyed by claim id, cleared
+   when that claim is decided. */
+let FIN_APR_CAT = {};
 
 /* THE ROW IS BUSY, NOT THE SCREEN. Ported verbatim from the phone's reasoning:
    a manager working down a queue of six clicks the next one while the last is
@@ -2421,6 +2533,107 @@ window.finAprShot = function finAprShot(id) {
   });
 };
 
+/* ── WHERE THE CLAIM IS FILED (§146) ────────────────────────────────────────
+   **THE SUBMITTER MAY LEAVE THE CATEGORY BLANK AND OFTEN DOES.** Somebody
+   standing beside a taxi does not know the shop's chart of accounts; the person
+   working this queue is the person who keeps the books. So the category is
+   editable HERE, on the row being decided, and it is one control rather than a
+   prompt that fires only on a blank one — a WRONG category is at least as common
+   as a missing one, and a prompt that only catches the empty case would wave the
+   wrong one straight through into the ledger.
+
+   IT IS OFFERED AFTER THE DECISION TOO, on an approved claim, and that half is
+   the one nothing in this product could do before: `finance-transactions.js`
+   refuses to edit a claim-posted ledger row — rightly, it is a projection — and
+   nothing could edit the claim either, so a ¥299 taxi approved without a
+   category could only be fixed by voiding it and asking the employee to send it
+   again. Re-filing posts the same money under a different heading.
+
+   NOT OFFERED ON A CLAIM THAT RAISED AN ORDER, and not on a rejected or voided
+   one. Neither has a ledger row of its own to file — the order owns the first,
+   and the other two were deliberately taken back out. The server refuses all
+   three (`ERR.onOrderCat`, `ERR.notApprovedCat`); this is the same rule said
+   before the click rather than after it.
+
+   NO LIST, NO PICKER. §36's empty-list rule: a tenant that has not built its
+   accounting categories is offered nothing here rather than something wrong. */
+function finAprFileable(r) {
+  if (Number(r.awaiting_delivery) || r.po_id) return false;
+  return r.status === 'submitted' || r.status === 'approved';
+}
+
+function finAprCatCell(r) {
+  const list = (FIN_APR && FIN_APR.categories) || [];
+  if (!list.length || !finAprFileable(r)) return '';
+  const waiting = r.status === 'submitted';
+  // The pending pick on a waiting row wins over the stored one; `undefined`
+  // rather than a falsy test, because '' is a real choice (back to no category)
+  // that a plain `||` would quietly replace with the stored value.
+  const chosen = waiting && FIN_APR_CAT[r.id] !== undefined
+    ? FIN_APR_CAT[r.id] : (r.category || '');
+  const labels = finCatLabels(list);
+  // The blank row is the product's own live pair (09-products.js), and it is
+  // present on a waiting claim only: choosing it there means "not yet", which is
+  // today's behaviour. On an approved claim it would mean UNFILING one, and this
+  // route does not offer that — the server refuses an empty value for the same
+  // reason (ERR.needCategory).
+  const blank = (waiting || !r.category)
+    ? `<option value=""${chosen ? '' : ' selected'}>`
+      + escapeHtml(cuT('— pick a category —', '— 选择分类 —')) + '</option>'
+    : '';
+  const opts = list.map(c => `<option value="${escapeAttr(c)}"${c === chosen ? ' selected' : ''}>`
+    + escapeHtml(labels.get(c) || finCatLabel(c)) + '</option>').join('');
+  const busy = !!FIN_APR_BUSY;
+  const handler = waiting
+    ? `onchange="finAprCatPick(${r.id}, this.value)"`
+    : `onchange="finAprFile(${r.id}, this.value)"`;
+  return '<span class="fin-apr-catwrap">'
+    + `<select class="fin-apr-cat" id="fin-apr-cat-${r.id}"${busy ? ' disabled' : ''} ${handler}>`
+    + blank + opts + '</select></span>';
+}
+
+/* The pick, remembered rather than sent. See FIN_APR_CAT. No re-render: the
+   <select> is already showing what was chosen, and redrawing the list under a
+   dropdown the operator has just used is the jump this screen does not need. */
+window.finAprCatPick = function finAprCatPick(id, value) {
+  FIN_APR_CAT[Number(id)] = String(value == null ? '' : value);
+};
+
+/* ── RE-FILING AN APPROVED CLAIM (§146) ─────────────────────────────────────
+   **NO MONEY MOVES.** Same claim, same sum, same date, same person — what
+   changes is which line of the category breakdown it sits on, and whether the
+   tenant's non-operating flag reaches it. An uncategorised row is counted as
+   operating by the summary, so a private cost filed under nothing quietly
+   inflates the operating total; that is what this fixes.
+
+   SAVED ON CHANGE, WITH NO CONFIRM. The act is reversible by making the same
+   change again, it is logged server-side with the value it replaced, and a
+   dialog guarding a reclassification would be a dialog nobody reads. The ledger
+   caches are dropped exactly as a decision drops them — this wrote to the same
+   table they are drawn from. */
+window.finAprFile = async function finAprFile(id, value) {
+  const claim = Number(id);
+  const category = String(value == null ? '' : value);
+  // An empty pick on an approved claim is not a request to unfile it — the
+  // server refuses one — so it is a no-op that puts the row back as it was.
+  if (!claim || !category || FIN_APR_BUSY) { finAprRender(); return; }
+  FIN_APR_BUSY = claim;
+  finAprRender();
+  try {
+    await api('/api/retail-admin/staff-expenses/' + claim + '/category',
+      { method: 'POST', body: { category } });
+    FIN_APR_BUSY = 0;
+    FIN_TX = null; FIN_TX_SEEN = false;     // the ledger row this just re-posted
+    FIN_DATA = null;                        // and the staircase drawn from it
+    await finAprLoad();
+    if (window.toast) toast(cuT('Saved', '已保存'));
+  } catch (e) {
+    FIN_APR_BUSY = 0;
+    if (window.toast) toast(e.message, 'err');
+    finAprRender();
+  }
+};
+
 /* ── DECIDING ───────────────────────────────────────────────────────────────
    **THE TAP THAT PUTS MONEY IN THE BOOKS.** Approving posts one row into
    `expense_entries` carrying this claim's id; rejecting takes it back out. Both
@@ -2435,12 +2648,22 @@ window.finAprShot = function finAprShot(id) {
 window.finAprDecide = async function finAprDecide(id, decision) {
   const claim = Number(id);
   if (!claim || FIN_APR_BUSY) return;
+  /* §146 — THE CATEGORY GOES WITH THE APPROVAL, in the same request that posts
+     the row. A second call afterwards could fail on its own and leave the ledger
+     holding a classification nobody chose. Sent only on approve and only when
+     something was picked: the field is absent otherwise, and the server leaves
+     the claim's own value alone (`COALESCE`) rather than blanking it. */
+  const picked = FIN_APR_CAT[claim];
+  const body = (decision === 'approve' && picked) ? { decision, category: picked } : { decision };
   FIN_APR_BUSY = claim;
   finAprRender();
   try {
     await api('/api/retail-admin/staff-expenses/' + claim + '/decide',
-      { method: 'POST', body: { decision } });
+      { method: 'POST', body });
     FIN_APR_BUSY = 0;
+    // The pick is spent — the claim carries it now. Left here it would be
+    // offered back on the decided row, over whatever the server actually stored.
+    delete FIN_APR_CAT[claim];
     FIN_APR_SHOT = null;
     FIN_TX = null; FIN_TX_SEEN = false;     // the ledger this just wrote to
     FIN_DATA = null;                        // and the staircase drawn from it
@@ -2548,7 +2771,15 @@ function finAprRow(r) {
   const busy = FIN_APR_BUSY === r.id;
   const anyBusy = !!FIN_APR_BUSY;
   const bits = [finTxDay(r.date)];
+  /* §146 — A BLANK CATEGORY SAYS SO. It used to render as nothing at all, so a
+     claim with no category and one filed under Transport looked the same on this
+     line — which is how a ¥299 taxi reached the books unfiled with nobody
+     noticing. `Not recorded` is the word Finance already uses for exactly this
+     value, two screens over. Said only where no picker follows: on a row that
+     carries one, the picker's own blank option says it better. */
+  const filing = finAprCatCell(r);
   if (r.category) bits.push(finCatLabel(r.category));
+  else if (!filing) bits.push(cuT('Not recorded', '未记录'));
   bits.push(r.paid_by === 'employee' ? cuT('own money', '个人支付') : cuT('company', '公司'));
   // §114. On the meta line beside whose money it was, because it is the same
   // kind of fact about the purchase — and because an approver reads this line
@@ -2631,6 +2862,9 @@ function finAprRow(r) {
     + '<td><span class="fin-apr-who">' + escapeHtml(r.who || cuT('Someone', '未知')) + mine + '</span>'
     + `<span class="fin-tx-meta">${escapeHtml(bits.join(' · '))}</span>`
     + (r.note ? `<span class="fin-apr-note">${escapeHtml(r.note)}</span>` : '')
+    // Under the note and above everything optional: it is a fact about the
+    // claim, and the receipt and the order link are ways OUT of the row.
+    + filing
     + (coming ? `<span class="fin-apr-comingwrap">${coming}</span>` : '')
     + (shotBtn ? `<span class="fin-apr-shotwrap">${shotBtn}</span>` : '')
     + '</td>'

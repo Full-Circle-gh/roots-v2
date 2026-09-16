@@ -15005,6 +15005,17 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 #tab-finance .fin-apr-note {
   display: block; margin-top: 4px; font: 400 14px/1.6 var(--f-sans); color: var(--td-text);
 }
+/* §146 — WHERE THE CLAIM IS FILED. Its own line under the note, for the reason
+   the note has one: the meta line above is a list of facts, and this is a
+   control. Sized to the receipt button beside it rather than to a form field —
+   it sits inside a table row, and a full-width box would make every claim taller
+   than the decision it is asking for. */
+#tab-finance .fin-apr-catwrap { display: block; margin-top: 8px; }
+#tab-finance .fin-apr-cat {
+  font: 400 13px/1.5 var(--f-sans); padding: 3px 30px 3px 10px;
+  max-width: 280px; width: auto;
+}
+#tab-finance .fin-apr-cat[disabled] { opacity: .55; cursor: default; }
 #tab-finance .fin-apr-shotwrap { display: block; margin-top: 8px; }
 #tab-finance .fin-apr-shotbtn { padding: 3px 12px; font-size: 13px; }
 

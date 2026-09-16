@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.282
+# Tacet shared-core consolidation — decisions record, v4.283
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-16 · v4.283 — **§146 · A COST FILED UNDER NOTHING IS FIXED WHERE IT WAS DECIDED, NOT BY UNDOING IT — REPORTED BY ASH off a live Transactions row:** a ¥299 staff claim, *“bai · take taxi to the office and Ramada”*, approved and in the books with no category and no control anywhere in the product that could give it one. **THE GAP WAS INVISIBLE BEFORE IT WAS UNFIXABLE.** The approval row printed the category only when there was one, so a claim filed under nothing and one filed under Transport drew the same meta line; `/decide` read a `note` from its body and nothing else; and `routes/finance-transactions.js` refuses to edit a claim-posted ledger row — **correctly, and that refusal is untouched here**, since the row is a projection and any value typed onto it is lost the next time the claim re-posts. But nothing could edit the CLAIM either, so the only way to file that ¥299 was to VOID it and ask the employee to send it again — destroying an approval record to correct a classification. **WHAT SHIPS:** one category control on the claim row, in both queues, carrying the claim's current value and editable before the decision and after it; `/decide` takes an optional category and applies it in the same write that posts the row; and a new `POST /staff-expenses/:id/category` re-files an approved claim, re-posting its ledger row under the new heading. **THE PROMPT-ON-APPROVE SHAPE WAS REJECTED**, and it is the obvious one: asking only when the category is blank catches the empty case and waves the WRONG case straight through, and a category picked by a submitter who does not know the chart of accounts is wrong at least as often as it is missing — wrong data reads as good data in a report, blank data announces itself. **COMPULSION WAS REJECTED TOO** — forced, the approver clears the queue with whatever is at the top of the list, trading a visible problem for an invisible one. The claim form is unchanged. **WHY A BLANK IS NOT MERELY UNTIDY:** `finance-summary.js` gives it its own “Not recorded” line and counts it as OPERATING, so a private cost with no category silently inflates the operating total. **NO MONEY MOVES IN A RE-FILING** — same claim, same sum, same date, same person, same approval record; `postClaim`'s DELETE-then-INSERT does the work, so the ledger says what the claim says. **A SETTLED CLAIM IS STILL RE-FILEABLE**, the one place this parts company with `/decide` and `/void`: those refuse a settled claim because they would take an expense out of the books while leaving the repayment made, and nothing leaves the books here — refusing would mean a category could only be corrected before payday. **A CLAIM THAT RAISED AN ORDER IS REFUSED**, on `awaiting_delivery` as well as `po_id`, and the refusal names the way out: the order owns that cost, under the line's category. **THREE THINGS A LATER EDIT COULD QUIETLY UNDO, named:** `category = COALESCE(?, category)` in `/decide` (a bare assignment blanks the category on every claim decided by an older client); `expense_id` cleared in the same UPDATE before `postClaim` runs (§90's FK trap, third occurrence); and the submitter's name resolved BEFORE the transaction, or a re-post rewrites the ledger line stripped of whose taxi it was. **THE PICK IS HELD IN STATE, NOT THE DOM** — both queues re-render when a receipt is opened, so a category chosen and then checked against the photo would have been thrown away at the exact moment the approver was being careful. **WHO MAY RE-FILE — EITHER `expenses:approve` OR `expenses:cancel`, DECIDED BY ASH** on being shown the route as first built: the `bookkeeper` preset holds `cancel` and not `approve`, so the accountant could remove a claim from the books entirely and could not rename the heading it sat under — the bigger hammer and not the small screwdriver, for the one role whose job this is. Re-filing moves no money and is strictly less power than the void they already hold; it is not a third key, for the reason `/settle` gives about sharing one. **AND A PERMISSION WITH NO SCREEN IS NOT A PERMISSION** — `/pending` is approver-gated, so the claim row on TRANSACTIONS gains the same control, beside the Void link that is there for the same reason (§90) and where the ¥299 was noticed in the first place. Void stays hidden once a claim is settled and re-filing does not, which is the whole asymmetry in one row. **NEARLY WRONG, RECORDED:** `finTxCatOptions()` branches on the FORM's kind, so a claim row would have been offered INCOME categories whenever the income form had last been opened; the expense half is now its own function. **TESTS:** thirty-three new checks in `scripts/test_staff_expenses.js` (82 → 115), fast shard, covering the re-post behaviour against a fixture ledger, both pickers and the ledger row's actions EXECUTED in a VM rather than grepped, and every invariant above. No schema, no migration, no change to what a claim means, and no change to `.gitignore` or CI.
 
 2026-09-16 · v4.282 — **§145 · A LABEL TYPED 724 TIMES IS A LABEL TYPED SEVERAL WAYS — DECIDED BY ASH, shown the measurements and asked which to build:** *“do all as you recommend”*. **WHAT THE CATALOGUE SAID.** `scripts/diagnose_spec_strip_labels.js`, read-only against production, over the **724 spec-strip cells on 242 products**: the same label has been typed several ways — `Net Wt` **163** beside `Net Weight` **29**, `Certification` / `Certified` / `Certifications` across **13** cells, and **four Chinese words for “category”** (类别 14, 品类 6, 分类 5, …). Nobody was careless; that is what happens when a label is retyped 724 times on different days. **THE VALUES WERE THE BIGGER FIND, and were not what anybody guessed:** under Origin, **“Guangzhou, China” is 109 of 156 cells (70%)**; under Shelf Life, **“See packaging” is 46 of 57 (81%)** — and its Chinese came out three ways (见包装标示 38, 见包装 8, 请见包装标注 2); under Diet, **“100% plant” is 28 of 29**. **242 cells whose answer was typed out by hand, in two languages, every time.** **WHAT IS DECIDED:** two dropdowns per cell — one for the label, one for the value, the second depending on the first, because “Guangzhou, China” is an answer to Origin and nonsense under Net Wt. **A PICK FILLS BOTH LANGUAGES**, which is the half that matters more than the typing saved: a typed label is one somebody can finish in English and forget in 中文, and nothing on the English view shows the gap. **`Type` IS DELIBERATELY NOT OFFERED beside `Product Type`** — they are not spellings of each other but two labels for one idea (66 and 64 cells, holding the same answers); only one can be offered or the split continues, and `Product Type` wins on the Chinese where 产品类型 (83) already beats 类型 (40). **NET WT GETS NO VALUE LIST ON PURPOSE** — 67 distinct weights across 163 cells is exactly what a weight field should look like; so do Certification and Storage, too thin to draw a list from. **NOTHING REWRITES A LIVE PAGE.** The 66 cells that say `Type` keep saying it; the list is an offer, and `peMount` and `paBlocksCollect` never consult it. The match is on the ENGLISH only and case-insensitive, so a cell reading `Net wt` is not shown as unusual and a cell carrying a good 中文 the list spells differently is never demoted to “Something else”, which would invite somebody to overwrite it. **THE PICK IS A CONVENIENCE LAYER, NEVER A SECOND WRITER** — the `k_en`/`k_cn`/`v_en`/`v_cn` inputs never leave the DOM and still ride `paBlocksSyncFromDOM` unchanged; the selects write into those inputs and never into the block, so free text is not a special case but what the control already was. **ONE ORDERING BUG, CAUGHT IN A BROWSER RATHER THAN IN REVIEW, and now held by a test:** the handler must write the inputs BEFORE it syncs, because syncing first reads the OLD values into the model and `paRenderDoc` paints them back over the pick — choosing `Product Type` left the cell saying `Net Wt`. **NO CHINESE COMPOSED — every pair in both lists is LIFTED from production with its count**, recorded in `docs/tacet-delivery-vocabulary.md` v1.92. New suite `scripts/test_spec_strip_picklists.js` **15/15**, proven non-vacuous by four mutations (sync-before-write, an unscoped cell query, `Type` re-offered, a label with no Chinese) each caught by the check meant for it; `test:fast` 257 → **258**; lint 0 errors. No schema, no migration, no change to the mini app, the QR menu, the web storefront, `.gitignore` or CI.
 
@@ -15765,3 +15767,137 @@ governing how sessions and builds work. `hero_intro` was measured alongside and
 deliberately gets **no list**: its kicker is 172 distinct answers across 248
 fills, its highlight phrase 207 across 256, its body 217 across 258. That is the
 catalogue's voice.
+
+## §146 — A COST FILED UNDER NOTHING IS FIXED WHERE IT WAS DECIDED, NOT BY UNDOING IT
+
+**Decided by Ash, 2026-09-16, from a live row:** a ¥299 staff claim — *"bai ·
+take taxi to the office and Ramada"* — approved and in the books with no
+category, and no control anywhere in the product that could give it one.
+
+### What was actually broken, in order
+
+1. `lib/expense-claim.js` never required a category, and does not now. The phone
+   sends `category: x.cat || null`.
+2. `/decide` read a `note` from its body and nothing else, so the approver could
+   see a blank category and had no way to fill it.
+3. The approval row printed the category **only when there was one** — so a claim
+   filed under nothing and one filed under Transport drew the same meta line.
+   The gap was not merely unfixable, it was invisible.
+4. `routes/finance-transactions.js` refuses to edit a claim-posted ledger row.
+   **That refusal is correct** and is not touched here: the row is a projection
+   of the claim, and any value typed onto it is lost the next time the claim
+   re-posts. But nothing could edit the claim either.
+
+So the only way to file that ¥299 was to **void the claim and ask the employee
+to send it again** — destroying the approval record to correct a classification.
+
+### It is not a prompt on approve, and that is the decision
+
+The obvious shape — *if the category is blank, ask for one when Approve is
+clicked* — is **rejected**. It catches the empty case and waves the wrong case
+straight through, and a category picked by a submitter who does not know the
+chart of accounts is wrong at least as often as it is missing. Wrong data reads
+as good data in a report; blank data announces itself.
+
+**What ships instead is one control on the row, in both queues**, carrying the
+claim's current category and editable before the decision and after it.
+
+### Nor is the category made compulsory
+
+Also **rejected**: requiring a category on the phone form, or blocking Approve
+until one is chosen. Forced, the approver clears the queue by taking whatever is
+at the top of the list. That trades a visible problem for an invisible one, and
+the visible one is the cheaper of the two to live with.
+
+The claim form stays as it is. The approver — the person who keeps the books —
+is who the picker is for.
+
+### Why an uncategorised row is not merely untidy
+
+`routes/finance-summary.js` gives a blank category **its own "Not recorded" line
+and counts it as OPERATING**, because an unlisted cost is a real cost until
+somebody says otherwise. A private or non-operating expense that arrives without
+a category therefore inflates the operating total silently. Re-filing is the only
+thing that moves it, and until this section there was no way to re-file.
+
+### What re-filing is, and what it is not
+
+**No money moves.** Same claim, same sum, same date, same person, same approval
+record. `postClaim` deletes the ledger row and writes it again — the shape it has
+always had — so the ledger says what the claim currently says, and the row's
+description is rebuilt from the submitter's name resolved before the write.
+
+**A settled claim is still re-fileable, and that is the one place this route
+parts company with `/decide` and `/void`.** Those refuse a settled claim because
+they would take an expense out of the books while leaving the repayment made.
+Nothing leaves the books here; refusing would mean a category could only ever be
+corrected before payday.
+
+**A claim that raised a purchase order is refused**, on `awaiting_delivery` as
+well as `po_id`. It has no ledger row of its own — the order owns the cost, under
+the *line's* category — so re-filing the claim would move nothing. The refusal
+names the way out, which is `ERR.onOrder`'s own rule.
+
+### The three things a later edit could quietly undo
+
+* **`category = COALESCE(?, category)` in `/decide`.** A bare assignment blanks
+  the category on every claim decided by a client that does not send the field —
+  which is every client older than this change, and the phone until it reloads.
+* **`expense_id` cleared in the same UPDATE, before `postClaim` runs.** §90's FK
+  trap, third occurrence: the column still points at the row about to be deleted,
+  and SQLite refuses the delete while it does.
+* **The submitter's name resolved before the transaction.** `claimDescription`
+  reads `submitted_name`, which no `staff_expenses` row carries. A re-post that
+  forgot it would rewrite the ledger line stripped of the one fact that makes a
+  ¥299 line answerable months later — whose taxi it was.
+
+### Held in state, not in the DOM
+
+A category chosen on a claim that has not been decided rides with the Approve
+click rather than saving on its own — one request, so a second call cannot fail
+and leave the ledger holding a classification nobody chose. Both queues re-render
+for reasons that have nothing to do with the pick: opening the receipt, another
+row's decision landing. Held in the `<select>` alone, **checking the photo before
+approving would throw the pick away** — silently, at the exact moment the
+approver was being careful. `FIN_APR_CAT` on the desktop and `state.apr.cat` on
+the phone hold it, keyed by claim id, and the decision spends it.
+
+### Who may re-file — either key, and the asymmetry it removes
+
+**Decided by Ash, 2026-09-16**, on being shown that the route as first built was
+gated on `expenses:approve` alone: *"anyone who can remove a claim from the books
+can certainly rename the heading it sits under."*
+
+The `bookkeeper` preset holds `expenses:cancel` and **not** `expenses:approve`
+(that stays an owner/admin/manager default). So the accountant could take a claim
+out of the ledger entirely and could not change the category it sat under — the
+bigger hammer and not the small screwdriver, for the one role whose job this is
+and which already types ledger rows by hand under `finance:record`.
+
+`requireFiler` accepts either key. It is not a third capability, for the reason
+`/settle` gives about sharing one: a key gating a single picker is one more row
+in a matrix somebody has to understand. `lib/cap-routes.js` returns both, which
+it already supports — five routes name a pair.
+
+**A permission with no screen is not a permission.** The picker was first built
+on the approvals queue, and `/pending` is gated on `expenses:approve` — which is
+exactly the key the bookkeeper lacks. So the claim row on **Transactions** gains
+the same control, beside the Void link that is there for the same reason (§90:
+requested by Ash off that screen). That is also where the ¥299 was noticed.
+
+**Void is hidden once a claim is settled; re-filing is not.** Voiding after the
+employee has been paid back would take the expense out of the books while leaving
+the payment made, which the server refuses. Re-filing takes nothing out. One row,
+two controls, two different rules — and the settled case is where the difference
+is visible.
+
+**One thing was nearly wrong and is recorded so it is not reintroduced:**
+`finTxCatOptions()` branches on the *form's* kind, so a claim row drawn while the
+income form had last been opened would have been offered INCOME categories. The
+expense half is now `finTxExpenseCats()`, asked without the form's question.
+
+### Where it is NOT offered
+
+Rejected and voided claims, and claims on a purchase order: none has a ledger row
+of its own. A tenant with no accounting categories gets no picker at all rather
+than an empty one — §36's empty-list rule.
