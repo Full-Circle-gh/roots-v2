@@ -585,6 +585,19 @@
   html[data-ui-lang="en"] [data-lang-block="cn"] { display: none !important; }
   html[data-ui-lang="cn"] [data-lang-block="en"] { display: none !important; }
 
+  /* ── §149 · Allergen quick-add chips ── */
+  .pa-allergen-chips { margin-top: 8px; }
+  .pa-allergen-chip {
+    display: inline-flex; align-items: baseline; gap: 5px;
+    padding: 5px 10px; border: 1px dashed var(--line-soft); border-radius: 999px;
+    background: none; color: var(--text-2); font-size: 12px; cursor: pointer;
+    transition: border-color var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .pa-allergen-chip:hover { border-color: var(--text-3); color: var(--text-1); }
+  .pa-allergen-chip .helper { font-size: 11px; }
+  .pa-allergen-note { margin: 8px 0 0; font-size: 11.5px; line-height: 1.55; }
+  .pa-allergen-note b { font-weight: 500; color: var(--text-1); }
+
   /* ── §147 · Icon chips: the icons this catalogue actually uses ── */
   .pa-icon-chips { display: flex; flex-wrap: wrap; gap: 5px; }
   .pa-icon-chip {
@@ -4536,6 +4549,63 @@ function paSpecPickValue(sel, blockId, idx) {
   paLivePreview();
 }
 
+// ── §149 · THE ALLERGENS THIS CATALOGUE ACTUALLY NAMES ─────────────────────
+//
+// Every term LIFTED, both halves. Read off the 189 allergen cards in
+// production; the Chinese for each was already live somewhere in the tree.
+//
+// PEANUTS AND TREE NUTS ARE SEPARATE, AND THE BARE WORD "Nuts" IS NOT OFFERED
+// — Ash's decision, asked about explicitly because it is the one choice here
+// with a consequence. They are different allergens: somebody allergic to
+// peanuts is often fine with almonds and the reverse. The catalogue had five
+// words for nuts (`Nuts` 55, `Tree nuts` 36, `Other tree nuts` 15, `Other
+// nuts` 14, `Peanuts` 7) and a customer reading `Nuts` cannot tell which they
+// are being warned about. The 55 cards that say `Nuts` are NOT rewritten;
+// they keep their wording and the editor shows it as typed, which turns them
+// into a visible worklist instead of a silent inconsistency.
+const PA_ALLERGENS = [
+  { en: 'Tree nuts', cn: '坚果' },
+  { en: 'Peanuts',   cn: '花生' },
+  { en: 'Soy',       cn: '大豆' },
+  { en: 'Gluten',    cn: '麸质' },
+  { en: 'Sesame',    cn: '芝麻' },
+  { en: 'Coconut',   cn: '椰子' },
+  { en: 'Legumes',   cn: '豆类' },
+  { en: 'Gluten-containing cereals', cn: '含麸质谷物' },
+];
+
+// WHY QUICK-ADD CHIPS AND NOT CHECKBOXES, which is what was discussed.
+// Both allergen rows are ONE comma-separated string, and the catalogue's
+// entries are more specific than any checkbox: `Tree nuts (hazelnuts)`,
+// `Sesame (tahini), Legumes (chickpeas)`. A checkbox would have to decide
+// whether `Tree nuts (hazelnuts)` means its box is ticked, and un-ticking it
+// would have to decide what to delete — which is how an allergen line gets
+// silently truncated. A chip APPENDS and never removes, the text stays
+// editable underneath, and the specificity the office already writes survives.
+function _paAllergenChips(keyEn, keyCn) {
+  return `<div class="pa-icon-chips pa-allergen-chips">${PA_ALLERGENS.map(a =>
+    `<button type="button" class="pa-allergen-chip" onclick="paAllergenAdd(this, '${escapeAttr(a.en)}', '${escapeAttr(a.cn)}', '${keyEn}', '${keyCn}')">+ ${escapeHtml(a.en)} <span class="helper">${escapeHtml(a.cn)}</span></button>`
+  ).join('')}</div>`;
+}
+// Append to BOTH languages at once, with each language's own separator — the
+// catalogue writes `Nuts, Soy, Gluten` and `坚果、大豆、麸质`, and
+// _paSplitChips already reads , 、 and ，. Adding a term that is already there
+// is a no-op rather than a duplicate.
+function paAllergenAdd(btn, en, cn, keyEn, keyCn) {
+  const scope = btn.closest('[data-pickscope]'); if (!scope) return;
+  const enI = scope.querySelector(`[data-bkey="${keyEn}"]`);
+  const cnI = scope.querySelector(`[data-bkey="${keyCn}"]`);
+  if (!enI || !cnI) return;
+  const push = (el, term, sep) => {
+    const have = String(el.value || '').split(/[,、，]/g).map(x => x.trim().toLowerCase()).filter(Boolean);
+    if (have.includes(term.toLowerCase())) return;
+    el.value = el.value.trim() ? el.value.trim().replace(/[,、，]\s*$/, '') + sep + term : term;
+  };
+  push(enI, en, ', ');
+  push(cnI, cn, '、');
+  paLivePreview();
+}
+
 // ── §147 · A pair field that can be picked or typed ────────────────────────
 //
 // The same shape §145 gave the spec strip, now general: a <select> of known
@@ -4672,8 +4742,22 @@ function _paBlockEditorBody(b) {
   if (b.type === 'allergen_card') {
     return `
       <div class="pa-edit-grid-2">
-        ${paPair({ label: paBiTitle('Contains', '包含'), keyEn: 'contains_en', keyCn: 'contains_cn', valEn: b.contains_en, valCn: b.contains_cn, phEn: 'Tree nuts, Hazelnuts', phCn: '树坚果,榛子', span2: true, helper: 'Comma-separated, shown as berry strong chips. Leave blank for "None declared". · 逗号分隔,显示为深莓色标签。' })}
-        ${paPair({ label: paBiTitle('May Contain', '可能含有'), keyEn: 'may_contain_en', keyCn: 'may_contain_cn', valEn: b.may_contain_en, valCn: b.may_contain_cn, phEn: 'Other tree nuts, soy', phCn: '其他树坚果、大豆', span2: true, helper: 'Comma-separated, shown as corn soft chips. · 逗号分隔,显示为玉米色软标签。' })}
+        <div data-pickscope style="grid-column:1/-1">
+          ${paPair({ label: paBiTitle('Contains', '包含'), keyEn: 'contains_en', keyCn: 'contains_cn', valEn: b.contains_en, valCn: b.contains_cn, phEn: 'Tree nuts (hazelnuts), Soy', phCn: '坚果（榛子）、大豆', span2: true })}
+          ${_paAllergenChips('contains_en', 'contains_cn')}
+          <p class="helper pa-allergen-note" data-no-i18n>
+            <span data-lang-block="en"><b>Leave both boxes empty</b> and every surface already prints “None declared · 未声明” by itself. Typing it makes a chip that says the same thing twice.</span>
+            <span data-lang-block="cn"><b>两栏留空</b>即可 — 各端会自动显示“未声明”。手动填写反而会多出一个重复的标签。</span>
+          </p>
+        </div>
+        <div data-pickscope style="grid-column:1/-1">
+          ${paPair({ label: paBiTitle('May Contain', '可能含有'), keyEn: 'may_contain_en', keyCn: 'may_contain_cn', valEn: b.may_contain_en, valCn: b.may_contain_cn, phEn: 'Tree nuts, Soy, Gluten', phCn: '坚果、大豆、麸质', span2: true })}
+          ${_paAllergenChips('may_contain_en', 'may_contain_cn')}
+          <p class="helper pa-allergen-note" data-no-i18n>
+            <span data-lang-block="en">A chip adds to both languages. <b>Peanuts and tree nuts are separate allergens</b> — somebody allergic to one is often fine with the other, so “Nuts” on its own is not offered.</span>
+            <span data-lang-block="cn">点击标签会同时填入两种语言。<b>花生与坚果是不同的致敏原</b> — 对其中一种过敏的人往往可以吃另一种,因此不提供笼统的“坚果类”。</span>
+          </p>
+        </div>
       </div>`;
   }
   if (b.type === 'how_to_use') {

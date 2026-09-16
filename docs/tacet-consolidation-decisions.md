@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.285
+# Tacet shared-core consolidation — decisions record, v4.286
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-16 · v4.286 — **§149 · PEANUTS AND TREE NUTS ARE NOT THE SAME ALLERGEN, AND “NONE DECLARED” WAS ALREADY BUILT IN — DECIDED BY ASH, asked about the nuts specifically rather than shown a usage count:** *“Peanuts and Tree nuts separate”*. **THE ONE BLOCK WHERE A WRONG WORD HAS A CONSEQUENCE.** The catalogue had **five words for nuts** — `Nuts` 55, `Tree nuts` 36, `Other tree nuts` 15, `Other nuts` 14, `Peanuts` 7 — and these are not spelling variants: somebody allergic to peanuts is often fine with almonds and the reverse. **A customer reading `Nuts` cannot tell which they are being warned about.** So most-used-wins, the rule that decided every other list in §145 to §148, was deliberately NOT applied: the most-used word is the one being dropped. **The 55 cards saying `Nuts` are not rewritten** — they keep their wording, the editor shows it as typed, and they become a visible worklist rather than a silent inconsistency. **A FINDING THAT CHANGED THE ANSWER ASH HAD ALREADY GIVEN, and it was mine to have found earlier.** Asked which of three hand-typed sentences should be the single form for *nothing to declare*, he chose `None declared` / 未声明常见致敏原. Reading the renderers afterwards shows **all three surfaces already print `None declared` / 未声明 when the contains row is blank** — `lib/product-blocks-read.js`, `public/shop/product-blocks.js` and the mini app's product-blocks component each carry their own copy. So the 66 cards that type it by hand (43 `None declared`, 15 `None`, 8 `No known allergens`) produce a CHIP saying what the empty state says quietly, and the built-in Chinese is **未声明**, not the 未声明常见致敏原 he was shown. **His choice is implemented through the mechanism that already exists rather than by adding a fourth variant:** the form now says, in both languages, that leaving both boxes empty prints it. The three surfaces are held in agreement by a test, because a product that reads one way on the counter menu and another in the app is exactly the difference a customer with an allergy would notice. **QUICK-ADD CHIPS, NOT CHECKBOXES, and the departure is deliberate.** Both rows are ONE comma-separated string and the catalogue is more specific than any checkbox — `Tree nuts (hazelnuts)`, `Sesame (tahini), Legumes (chickpeas)`. A checkbox would have to decide whether `Tree nuts (hazelnuts)` counts as ticked, and un-ticking would have to decide what to delete, **which is how an allergen line gets silently truncated**. A chip APPENDS, never removes, fills both languages with each one's own separator (`, ` and `、`, both already read by `_paSplitChips`), and is a no-op when the term is already there. **NO CHINESE COMPOSED** — all eight terms lifted, each half verified live in the committed tree. New suite `scripts/test_allergen_options.js` **12/12**, proven non-vacuous by four mutations; **one walked past the check meant for it a second time** — a removal written as `split(term).join('')` used none of the forbidden method names — so the check stopped naming methods and pins the invariant instead: the field is assigned exactly once, inside the only function that can grow it. `test:fast` 260 → **261**; lint 0 errors. No schema, no migration, no change to the mini app, the QR menu, the web storefront, `.gitignore` or CI.
 
 2026-09-16 · v4.285 — **§148 · THE ESCAPE HATCH TOLD US WHAT THE LIST WAS MISSING — DECIDED BY ASH, asked whether a vegan shop should offer these at all:** *“add all three as checkboxes”*. **THE FREE-OF BOXES HAVE BEEN `Nuts · Soy · Gluten · 5 Spice` AND NOTHING ELSE**, with anything else typed into the free-text tail that `pdFreeOfSet` preserves. Reading that tail on production says exactly what the list lacks: **`animal products` typed by hand on 75 products, `dairy` on 15, `egg` on 14** — and **`5spice` on 16**, a spelling twin of the `5 spice` checkbox's own 154. **That is the escape hatch doing its job**, and it is the argument for always building one: a list without a tail teaches people to pick the nearest wrong answer, and nobody ever learns the list was short. **THE QUESTION ASH WAS ASKED, because it is not obvious:** the shop is fully vegan (stated in `public/product-editor.html`), so *free of animal products / dairy / egg* is true of all 342 products, yet only 75 say so. Either it is a marketing line applied deliberately or it is arbitrary. Ash's answer keeps it a per-product editorial choice — **offered, never assumed** — which is what the office is already doing by hand. **THE TWO LISTS MUST AGREE, and that is what the new suite is really for.** These flags are drawn twice from two files that know nothing about each other: `PW_FREE_OF` in `public/retail-admin/09-products.js` for the wizard, and hand-written markup in `public/retail-admin.html` for the details panel. A flag added to one and not the other is one a product can be GIVEN in the wizard and SILENTLY LOSE the next time the panel is saved — the panel would not recognise the token, park it in the tail, and never tick the box. Nothing goes red. `scripts/test_free_of_options.js` compares the two lists directly. **A SUSPECTED BUG THAT WAS NOT ONE, recorded so it is not re-investigated:** `pwReviewHtml` renders the flags through `cuT(en, cn)`, which looks as though the wizard stores a language-dependent LABEL. It does not — that is the review screen's display; `pwFreeOfStr` maps `([id]) => id`. The two paths already agreed, and a test now holds them there. **THE TYPO FOLD IS ON READ ONLY:** `5spice` ticks the `5 spice` box when a product is opened, and the next save writes the canonical spelling. Nothing sweeps the catalogue, per Ash's standing answer (*“lists only, for now”*), so a product nobody opens keeps saying what it says. **CHINESE: ONE COMPOSED STRING AND TWO VERBATIM LIFTS** — 无动物成分 is lifted from `miniapp/pages/faq/faq.js`, 无乳制品 from `miniapp/pages/product/product.js`; **无蛋 is composed**, on the live `无X` shape its five siblings already use, over the rejected 无鸡蛋 and 不含蛋, and declared in `docs/tacet-delivery-vocabulary.md` v1.95. New suite **8/8**, proven non-vacuous by three mutations (a flag dropped from one list only, an alias folding onto an id that does not exist, the wizard storing a label) each caught by the check meant for it; `test:fast` 259 → **260**; lint 0 errors. No schema, no migration, and no change to `.gitignore` or CI.
 
@@ -16115,3 +16117,99 @@ No sweep of existing values. No schema, no migration. No change to the mini app,
 the QR menu, the web storefront, `.gitignore` or CI. The allergen card is the
 third piece of this brief and is a separate PR: its wording carries a decision
 that should be readable on its own.
+
+## §149 — PEANUTS AND TREE NUTS ARE NOT THE SAME ALLERGEN
+
+**Decided by Ash, 2026-09-16,** asked about this one specifically rather than
+shown a usage count: *"Peanuts and Tree nuts separate"*.
+
+### The one block where a wrong word has a consequence
+
+The catalogue had **five words for nuts**:
+
+| word | cards |
+|---|---:|
+| `Nuts` | 55 |
+| `Tree nuts` | 36 |
+| `Other tree nuts` | 15 |
+| `Other nuts` | 14 |
+| `Peanuts` | 7 |
+
+**These are not spelling variants.** Somebody allergic to peanuts is often fine
+with almonds, and the reverse. A customer reading `Nuts` cannot tell which they
+are being warned about.
+
+So **most-used-wins was deliberately not applied here.** It decided every other
+list from §145 to §148; here the most-used word is the one being dropped. That
+is why Ash was asked rather than shown a count.
+
+**The 55 cards saying `Nuts` are not rewritten.** They keep their wording, the
+editor shows it as typed, and they become a visible worklist instead of a silent
+inconsistency.
+
+### A finding that changed an answer already given
+
+Asked which of three hand-typed sentences should be the single form for *nothing
+to declare*, Ash chose `None declared` / 未声明常见致敏原, from:
+
+| typed | cards |
+|---|---:|
+| `None declared` | 43 |
+| `None` | 15 |
+| `No known allergens` | 8 |
+
+**Reading the renderers afterwards shows all three surfaces already print
+`None declared` / 未声明 when the contains row is blank.** Each carries its own
+copy: `lib/product-blocks-read.js`, `public/shop/product-blocks.js`, and the
+mini app's product-blocks component.
+
+Two things follow, and the first was mine to have found before asking:
+
+1. Those 66 cards produce a **chip** saying what the empty state says quietly.
+   The system has always had a fourth answer, and it was not among the three
+   offered.
+2. **The built-in Chinese is 未声明**, not the 未声明常见致敏原 Ash was shown.
+   What would print is not what he picked.
+
+**His choice is implemented through the mechanism that already exists** rather
+than by adding a fourth variant: the form now says in both languages that
+leaving both boxes empty prints it. The three surfaces are held in agreement by
+a test — a product that reads one way on the counter menu and another in the app
+is exactly the difference a customer with an allergy would notice.
+
+### Quick-add chips, not checkboxes
+
+The discussion said checkboxes; this is a deliberate departure and the reason is
+the data shape.
+
+Both rows are **one comma-separated string**, and the catalogue is more specific
+than any checkbox: `Tree nuts (hazelnuts)`, `Sesame (tahini), Legumes
+(chickpeas)`. A checkbox would have to decide whether `Tree nuts (hazelnuts)`
+counts as ticked — and un-ticking it would have to decide what to delete.
+**That is how an allergen line gets silently truncated.**
+
+A chip **appends and never removes**, fills both languages with each one's own
+separator (`, ` and `、`, both already read by `_paSplitChips`), and is a no-op
+when the term is already present. The text stays editable underneath, so a
+person does any deleting.
+
+### A mutation that walked past its check, for the second time
+
+Four mutations were run. Three were caught. The fourth — a removal written as
+`split(term).join('')` — **used none of the method names the check forbade**,
+so it passed.
+
+The check stopped naming methods. It now pins the invariant instead: **the field
+is assigned exactly once**, inside the only function that can grow it. A second
+assignment anywhere is a second thing that can happen to an allergen line.
+
+This is the second time in two sections (§147 was the first) that a mutation
+revealed a check watching the wrong thing. Both are recorded because the instinct
+on seeing one is to assume the mutation was badly chosen.
+
+### Not done
+
+No rewrite of existing cards. No schema, no migration. No change to the mini app,
+the QR menu or the web storefront — only a test that holds their three copies of
+the empty state in agreement. No change to `.gitignore`, CI, or anything
+governing how sessions and builds work.
