@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.283
+# Tacet shared-core consolidation — decisions record, v4.284
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-16 · v4.284 — **§147 · TWO SNOWFLAKES THAT LOOK IDENTICAL AND ARE NOT — DECIDED BY ASH, who set the rule in advance:** *“you pick, most-used wins”*, then *“ok do it”*. **THE CASE NOBODY COULD HAVE FOUND BY READING.** Across the **218 storage boxes** in the catalogue, ❄️ appears 83 times on the left card and ❄ five times on the right — **the same snowflake, typed with and without the invisible variation selector U+FE0F**. 🌡️ (18) sits beside 🌡 (9) the same way. On screen they are identical; to a string comparison, a filter, or anything that groups by value they are different characters, and no amount of proofreading finds it. **A picker ends it in one click**, which is the clearest argument for this whole family of change and was not an argument anybody made before the data was read. **THE REST, same method as §145:** heads (218 cells, 22 and 29 distinct) and units (49 and 64 distinct) become lists with free text; the big word stays TYPED because it is a per-product figure, a temperature or a count of days. **MOST-USED WINS, WHICH WAS ASH'S RULE SET IN ADVANCE** — `Refrigerate` 52 over `Keep refrigerated` 13, `Shelf Life` 57 over `Shelf life`, `After Opening` 41 over `Use After Opening` 16, `Freeze for longer` 9 over `Freeze` 8 and `Freezing` 7, `Unopened` 11 over `Before Opening` 6, 冷藏保存 59 over 冷藏 12, 阴凉干燥 34 over 置于阴凉干燥处 16. Every loser is recorded in `docs/tacet-delivery-vocabulary.md` v1.94 rather than quietly dropped. **THE NOTE LIST IS DELIBERATELY TWO ENTRIES LONG.** The field has 77 distinct answers and the usage report truncated the long ones, so pairing an English sentence to its 中文 would have meant GUESSING which belongs to which — the one thing this method exists to prevent. Only the two printed whole are offered, and a test refuses a list that grows past four without a fresh measurement. **THE PICKER §145 BUILT IS NOW GENERAL**, which is the structural half: `_paSpecInputs` becomes `_paPickInputs` and every picker on the page sits inside one `[data-pickscope]` marker — a spec strip's three cells, a storage box's two cards and its note, five scopes on screen each carrying a `head_en`. That is §144's bug and §142's at a smaller scale, made twice already, so there is ONE helper rather than two copies drifting apart. **THE LIST NAME REACHES THE HANDLER AS A NAME**: it is written into an inline `onchange` attribute, so it resolves against a fixed map and never through `eval` — an attribute value must not reach the JS parser. **NOTHING REWRITES A LIVE PAGE**, per Ash's standing answer (*“lists only, for now”*): `peMount` and `paBlocksCollect` never consult the lists, and a card saying `Keep refrigerated` keeps saying it. **NO CHINESE COMPOSED** — all 27 pairs lifted from production with counts. New suite `scripts/test_storage_box_picklists.js` **14/14**, proven non-vacuous by four mutations (the bare snowflake offered, a losing twin restored, an unscoped icon lookup, a unit with no Chinese) each caught by the check meant for it — the icon check had to be tightened after the third slipped through a first draft, which is recorded because a mutation that passes is the only way to learn a check was testing the wrong line. `test:fast` 258 → **259**; lint 0 errors. No schema, no migration, no change to the mini app, the QR menu, the web storefront, `.gitignore` or CI.
 
 2026-09-16 · v4.283 — **§146 · A COST FILED UNDER NOTHING IS FIXED WHERE IT WAS DECIDED, NOT BY UNDOING IT — REPORTED BY ASH off a live Transactions row:** a ¥299 staff claim, *“bai · take taxi to the office and Ramada”*, approved and in the books with no category and no control anywhere in the product that could give it one. **THE GAP WAS INVISIBLE BEFORE IT WAS UNFIXABLE.** The approval row printed the category only when there was one, so a claim filed under nothing and one filed under Transport drew the same meta line; `/decide` read a `note` from its body and nothing else; and `routes/finance-transactions.js` refuses to edit a claim-posted ledger row — **correctly, and that refusal is untouched here**, since the row is a projection and any value typed onto it is lost the next time the claim re-posts. But nothing could edit the CLAIM either, so the only way to file that ¥299 was to VOID it and ask the employee to send it again — destroying an approval record to correct a classification. **WHAT SHIPS:** one category control on the claim row, in both queues, carrying the claim's current value and editable before the decision and after it; `/decide` takes an optional category and applies it in the same write that posts the row; and a new `POST /staff-expenses/:id/category` re-files an approved claim, re-posting its ledger row under the new heading. **THE PROMPT-ON-APPROVE SHAPE WAS REJECTED**, and it is the obvious one: asking only when the category is blank catches the empty case and waves the WRONG case straight through, and a category picked by a submitter who does not know the chart of accounts is wrong at least as often as it is missing — wrong data reads as good data in a report, blank data announces itself. **COMPULSION WAS REJECTED TOO** — forced, the approver clears the queue with whatever is at the top of the list, trading a visible problem for an invisible one. The claim form is unchanged. **WHY A BLANK IS NOT MERELY UNTIDY:** `finance-summary.js` gives it its own “Not recorded” line and counts it as OPERATING, so a private cost with no category silently inflates the operating total. **NO MONEY MOVES IN A RE-FILING** — same claim, same sum, same date, same person, same approval record; `postClaim`'s DELETE-then-INSERT does the work, so the ledger says what the claim says. **A SETTLED CLAIM IS STILL RE-FILEABLE**, the one place this parts company with `/decide` and `/void`: those refuse a settled claim because they would take an expense out of the books while leaving the repayment made, and nothing leaves the books here — refusing would mean a category could only be corrected before payday. **A CLAIM THAT RAISED AN ORDER IS REFUSED**, on `awaiting_delivery` as well as `po_id`, and the refusal names the way out: the order owns that cost, under the line's category. **THREE THINGS A LATER EDIT COULD QUIETLY UNDO, named:** `category = COALESCE(?, category)` in `/decide` (a bare assignment blanks the category on every claim decided by an older client); `expense_id` cleared in the same UPDATE before `postClaim` runs (§90's FK trap, third occurrence); and the submitter's name resolved BEFORE the transaction, or a re-post rewrites the ledger line stripped of whose taxi it was. **THE PICK IS HELD IN STATE, NOT THE DOM** — both queues re-render when a receipt is opened, so a category chosen and then checked against the photo would have been thrown away at the exact moment the approver was being careful. **WHO MAY RE-FILE — EITHER `expenses:approve` OR `expenses:cancel`, DECIDED BY ASH** on being shown the route as first built: the `bookkeeper` preset holds `cancel` and not `approve`, so the accountant could remove a claim from the books entirely and could not rename the heading it sat under — the bigger hammer and not the small screwdriver, for the one role whose job this is. Re-filing moves no money and is strictly less power than the void they already hold; it is not a third key, for the reason `/settle` gives about sharing one. **AND A PERMISSION WITH NO SCREEN IS NOT A PERMISSION** — `/pending` is approver-gated, so the claim row on TRANSACTIONS gains the same control, beside the Void link that is there for the same reason (§90) and where the ¥299 was noticed in the first place. Void stays hidden once a claim is settled and re-filing does not, which is the whole asymmetry in one row. **NEARLY WRONG, RECORDED:** `finTxCatOptions()` branches on the FORM's kind, so a claim row would have been offered INCOME categories whenever the income form had last been opened; the expense half is now its own function. **TESTS:** thirty-three new checks in `scripts/test_staff_expenses.js` (82 → 115), fast shard, covering the re-post behaviour against a fixture ledger, both pickers and the ledger row's actions EXECUTED in a VM rather than grepped, and every invariant above. No schema, no migration, no change to what a claim means, and no change to `.gitignore` or CI.
 
@@ -15926,3 +15928,104 @@ the row's own cell removes the second link rather than spacing it.
 Rejected and voided claims, and claims on a purchase order: none has a ledger row
 of its own. A tenant with no accounting categories gets no picker at all rather
 than an empty one — §36's empty-list rule.
+
+## §147 — TWO SNOWFLAKES THAT LOOK IDENTICAL AND ARE NOT
+
+**Decided by Ash, 2026-09-16.** The rule was set in advance — *"you pick,
+most-used wins"* — then *"ok do it"*.
+
+### The case nobody could have found by reading
+
+Across the **218 storage boxes** in the catalogue:
+
+| icon | left card | right card |
+|---|---:|---:|
+| `❄️` (U+2744 U+FE0F) | 83 | 55 |
+| `❄` (U+2744 alone) | — | 5 |
+| `🌡️` (U+1F321 U+FE0F) | 18 | — |
+| `🌡` (U+1F321 alone) | 9 | — |
+
+**These are the same two icons, typed with and without the invisible variation
+selector.** On screen they are identical. To a string comparison, to a filter,
+to anything that groups by value, they are different characters.
+
+No amount of care finds that, and no amount of proofreading fixes it. A picker
+ends it in one click. This is the clearest argument for the whole family of
+change made since §145, and **nobody made it before the data was read** — it
+came out of the measurement, not out of a design discussion.
+
+### The rest, same method as §145
+
+**Heads** (218 cells, 22 distinct left / 29 right) and **units** (49 / 64
+distinct) become lists with free text. **The big word stays typed** — it is a
+per-product figure, a temperature or a count of days, and a dropdown there is a
+dropdown nobody can find their product in.
+
+**Most-used wins**, which was Ash's rule, set before the data was shown:
+
+| kept | cells | dropped | cells |
+|---|---:|---|---:|
+| `Refrigerate` | 52 | `Keep refrigerated` | 13 |
+| `Shelf Life` | 57 | `Shelf life` | — |
+| `After Opening` | 41 | `Use After Opening` | 16 |
+| `Freeze for longer` | 9 | `Freeze` / `Freezing` | 8 / 7 |
+| `Unopened` | 11 | `Before Opening` | 6 |
+| 冷藏保存 | 59 | 冷藏 | 12 |
+| 阴凉干燥 | 34 | 置于阴凉干燥处 | 16 |
+
+Every loser is recorded in `docs/tacet-delivery-vocabulary.md` v1.94 rather than
+quietly dropped.
+
+### The note list is deliberately two entries long
+
+The note field has **77 distinct answers**, and the usage report truncated the
+long ones. Pairing an English sentence to its 中文 would therefore have meant
+**guessing which belongs to which** — the one thing this method exists to
+prevent.
+
+Only the two printed whole are offered. A test refuses a list that grows past
+four without a fresh measurement, so the next person to add one has to go and
+look rather than fill it in from memory.
+
+### The picker §145 built is now general
+
+This is the structural half. `_paSpecInputs` becomes `_paPickInputs`, and every
+picker on the page sits inside one `[data-pickscope]` marker: a spec strip's
+three cells, a storage box's two cards, and its note. **Five scopes can be on
+screen at once, each carrying a `head_en`.**
+
+That is §144's bug and §142's before it, at a smaller scale. The same mistake
+has now been available twice on this page, so there is **one** helper rather
+than two copies free to drift apart.
+
+**The list name reaches the handler as a name, never as source.** It is written
+into an inline `onchange` attribute, so it resolves against a fixed map and
+never through `eval`. An attribute value must not reach the JS parser.
+
+### Nothing rewrites a live page
+
+Per Ash's standing answer when asked — *"lists only, for now"* — `peMount` never
+consults the lists on load and `paBlocksCollect` never consults them on save. A
+card saying `Keep refrigerated` keeps saying it, and shows as typed rather than
+as an error.
+
+### A mutation that passed, recorded because it taught something
+
+Four mutations were run against the new suite. Three were caught by the check
+meant for them. The fourth — replacing the icon input's scoped lookup with an
+unscoped `document.querySelector`, so clicking the right card would write the
+left card's icon — **passed**, because the check asserted that the scope line
+existed rather than that it was used.
+
+The check was tightened and the mutation now fails it. Recorded because a
+mutation that passes is the only way to learn that a check was testing the wrong
+line, and the instinct on seeing it is to assume the mutation was badly chosen.
+
+### Not done, so it is not assumed
+
+No migration of existing cards. No schema, no migration. No change to the mini
+app, the QR menu or the web storefront. No change to `.gitignore`, CI, or
+anything governing how sessions and builds work. `free_of` and the allergen card
+are the next two pieces of the same brief and are deliberately **separate PRs**:
+they touch different screens, and the allergen wording carries a decision that
+should be readable on its own.

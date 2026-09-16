@@ -585,6 +585,18 @@
   html[data-ui-lang="en"] [data-lang-block="cn"] { display: none !important; }
   html[data-ui-lang="cn"] [data-lang-block="en"] { display: none !important; }
 
+  /* ── §147 · Icon chips: the icons this catalogue actually uses ── */
+  .pa-icon-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .pa-icon-chip {
+    width: 34px; height: 34px; flex: 0 0 34px;
+    display: grid; place-items: center;
+    border: 1px solid var(--line-soft); border-radius: var(--r-sm);
+    background: var(--bg-elev-1); font-size: 17px; line-height: 1; cursor: pointer;
+    transition: border-color var(--t-fast) ease, background var(--t-fast) ease;
+  }
+  .pa-icon-chip:hover { border-color: var(--text-3); }
+  .pa-icon-chip.is-on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+
   /* ── §145 · A spec-strip cell ── */
   .pa-spec-cell {
     padding: 12px 14px; margin-bottom: 10px;
@@ -4012,6 +4024,79 @@ const PA_SPEC_VALUES = {
     { en: 'Laundry Liquid',       cn: '洗衣液' },          // 2
   ],
 };
+
+// ── §147 · THE STORAGE BOX, SAME METHOD ────────────────────────────────────
+//
+// Read out of production by scripts/diagnose_block_field_values.js over the 218
+// storage boxes in the catalogue. Every pair is a LIFT, never a composition.
+//
+// THE ICONS ARE THE PUREST CASE FOR A PICKER ON THIS WHOLE PAGE. ❄️ appears 83
+// times on the left and ❄ five times on the right — THE SAME SNOWFLAKE, typed
+// with and without the invisible variation selector U+FE0F. So does 🌡️ (18)
+// beside 🌡 (9). Nobody can see the difference, nobody can fix it by being
+// careful, and no amount of proofreading finds it. A picker ends it outright.
+const PA_STORAGE_ICONS = {
+  left:  ['❄️', '🌬️', '🫙', '🧊', '🌡️', '🏠'],          // 83 · 43 · 39 · 22 · 18(+9 as 🌡) · 2
+  right: ['❄️', '📅', '🔒', '📦', '🧊', '🫧', '⏱️'],     // 55(+5 as ❄) · 50 · 38 · 23 · 20 · 5 · 4
+};
+
+// MOST-USED WINS, which is the rule Ash set: whichever wording the catalogue
+// already carries more becomes the entry, the Chinese breaks a tie, and the
+// twin that loses is recorded in docs/tacet-delivery-vocabulary.md rather than
+// quietly dropped. Nothing rewrites a product that already says the loser.
+const PA_STORAGE_HEADS = {
+  left: [
+    { en: 'Refrigerate',      cn: '冷藏保存' },   // 52 / 59 — beats 'Keep refrigerated' 13, 冷藏 12
+    { en: 'Cool & Dry',       cn: '阴凉干燥' },   // 55 / 34 — beats 'Cool & dry', 置于阴凉干燥处 16
+    { en: 'Keep it dry',      cn: '干燥存放' },   // 19 / 17
+    { en: 'Keep Frozen',      cn: '冷冻保存' },   // 16 / 19 — beats 'Keep frozen'
+    { en: 'Room Temperature', cn: '常温保存' },   // 12 / 13
+    { en: 'Unopened',         cn: '未开封' },     // 11 / 17 — beats 'Before Opening' 6
+  ],
+  right: [
+    { en: 'Shelf Life',       cn: '保质期' },     // 57 / 57 exact — beats 'Shelf life'
+    { en: 'After Opening',    cn: '开封后' },     // 41 / 44 — beats 'After opening', 'Use After Opening' 16
+    { en: 'To keep longer',   cn: '延长保鲜' },   // 13 / 13 exact
+    { en: 'Refrigerated',     cn: '冷藏保存' },   // 12 / 13
+    { en: 'Freeze for longer', cn: '长期保存请冷冻' }, // 9 / 9 exact — beats 'Freeze' 8, 'Freezing' 7
+  ],
+};
+
+// The trailing phrase beside the big word: "0–4" + "°C at all times". A long
+// tail (49 and 64 distinct) with a strong head, so this is a list AND free
+// text, never a list alone.
+const PA_STORAGE_UNITS = {
+  left: [
+    { en: '°C at all times',                 cn: '°C 全程冷藏' },        // 49 / 42
+    { en: '°C away from sunlight',           cn: '°C 避免阳光直射' },    // 17 / 16
+    { en: 'Away from direct sunlight',       cn: '避免阳光直射' },       // 15 / 13
+    { en: 'Store away from heat and moisture', cn: '远离高温和潮湿' },   // 14 / 6
+    { en: 'Airtight, away from heat & light', cn: '密封,避免高温与阳光' }, // 12 / 11
+    { en: 'months',                          cn: '个月' },              // 12 / 12
+    { en: 'days — eat fresh',                cn: '天内尝鲜' },          // 7 / 7 exact
+  ],
+  right: [
+    { en: 'See packaging',                   cn: '见包装标示' },        // 37 / 31
+    { en: 'days for peak potency',           cn: '天内风味与效力最佳' }, // 16 / 17
+    { en: 'months, sealed',                  cn: '个月（密封）' },      // 15 / 15 exact
+    { en: 'Refrigerate or freeze — the oils stay fresh', cn: '冷藏或冷冻——油脂更不易氧化' }, // 13 / 12
+    { en: 'months',                          cn: '个月' },              // 12 / 13
+    { en: 'Up to 6 months',                  cn: '最长可保存6个月' },   // 9 / 9 exact
+    { en: 'days in the fridge',              cn: '天内（冷藏）' },      // 8 / 8 exact
+  ],
+};
+
+// ONLY TWO NOTES ARE OFFERED, AND THAT IS DELIBERATE. The note field has 77
+// distinct answers and the report truncated the long ones, so pairing an
+// English sentence to its Chinese would have meant GUESSING which 中文 belongs
+// to which — and a guessed pair is exactly what this method exists to avoid.
+// These two are short enough to have been printed whole and read as plainly the
+// same sentence. Everything else stays typed.
+const PA_STORAGE_NOTES = [
+  { en: 'Shelf life: see packaging.',   cn: '保质期：见包装标示。' },  // 27 / 21
+  { en: 'Reseal tightly after opening.', cn: '开封后请密封保存。' },   // 17 / 17 exact
+];
+
 const PA_SPEC_CUSTOM = '__custom__';
 function paSpecValuesFor(labelEn) {
   return PA_SPEC_VALUES[String(labelEn || '').trim().toLowerCase()] || null;
@@ -4359,7 +4444,7 @@ function _paSpecCell(b, c, i, total) {
     list.map((o, n) => `<option value="${n}" ${n === sel ? 'selected' : ''}>${escapeHtml(o.en)} · ${escapeHtml(o.cn)}</option>`).join('');
 
   return `
-    <div class="pa-spec-cell" data-speccell="${i}">
+    <div class="pa-spec-cell" data-pickscope data-speccell="${i}">
       <div class="pa-spec-cell-head">
         <span class="pa-edit-section-title">Cell · 第 ${i + 1} 格</span>
         <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','cells',${i})" ${total <= 1 ? 'disabled' : ''}>Remove · 删除</button>
@@ -4395,8 +4480,13 @@ function _paSpecCell(b, c, i, total) {
 // the cell, not the section: a strip has three cells side by side and each
 // carries a k_en, so an unscoped query would fill the first one every time —
 // the same shape of bug §144 had to close for whole sections.
-function _paSpecInputs(sel, key) {
-  const cell = sel.closest('[data-speccell]');
+function _paPickInputs(sel, key) {
+  // ONE SCOPE MARKER FOR EVERY PICKER ON THIS PAGE. A spec strip has three
+  // cells side by side and a storage box has two cards; each carries a head_en,
+  // so an unscoped query fills whichever rendered first. That is §144's bug at
+  // a smaller scale and §142's before it — three times is enough, so there is
+  // one helper and every picker sits inside [data-pickscope].
+  const cell = sel.closest('[data-pickscope]');
   if (!cell) return null;
   return {
     en: cell.querySelector(`[data-bkey="${key}_en"]`),
@@ -4405,7 +4495,7 @@ function _paSpecInputs(sel, key) {
   };
 }
 function paSpecPickLabel(sel, blockId, idx) {
-  const io = _paSpecInputs(sel, 'k'); if (!io || !io.en) return;
+  const io = _paPickInputs(sel, 'k'); if (!io || !io.en) return;
   if (sel.value !== PA_SPEC_CUSTOM) {
     const o = PA_SPEC_LABELS[+sel.value]; if (!o) return;
     io.en.value = o.en; io.cn.value = o.cn;
@@ -4431,10 +4521,10 @@ function paSpecPickLabel(sel, blockId, idx) {
   if (box) box.focus();
 }
 function paSpecPickValue(sel, blockId, idx) {
-  const io = _paSpecInputs(sel, 'v'); if (!io || !io.en) return;
+  const io = _paPickInputs(sel, 'v'); if (!io || !io.en) return;
   const custom = sel.value === PA_SPEC_CUSTOM;
   if (!custom) {
-    const list = paSpecValuesFor(io.en.closest('[data-speccell]').querySelector('[data-bkey="k_en"]').value);
+    const list = paSpecValuesFor(io.en.closest('[data-pickscope]').querySelector('[data-bkey="k_en"]').value);
     const o = list && list[+sel.value]; if (!o) return;
     io.en.value = o.en; io.cn.value = o.cn;
   }
@@ -4443,6 +4533,76 @@ function paSpecPickValue(sel, blockId, idx) {
   const typed = io.en.closest('.pa-spec-typed');
   if (typed) typed.hidden = !custom;
   if (custom) { io.en.value = ''; io.cn.value = ''; io.en.focus(); }
+  paLivePreview();
+}
+
+// ── §147 · A pair field that can be picked or typed ────────────────────────
+//
+// The same shape §145 gave the spec strip, now general: a <select> of known
+// pairs with "Something else — type it" at the top, and the real EN/中 inputs
+// underneath, hidden while a list answer is in force. The inputs NEVER leave
+// the DOM — they carry data-bkey and still ride paBlocksSyncFromDOM exactly as
+// they always have, so the select is a convenience layer and never a second
+// writer. Free text is not a special case; it is what the control already was.
+function _paPickField({ list, keyEn, keyCn, valEn, valCn, label, attrs = '', phEn = '', phCn = '', onpick }) {
+  const idx = paSpecMatch(list, valEn);
+  const custom = idx < 0;
+  const opts = list.map((o, n) =>
+    `<option value="${n}" ${n === idx ? 'selected' : ''}>${escapeHtml(o.en)} · ${escapeHtml(o.cn)}</option>`).join('');
+  return `
+    <div class="field">
+      <label class="stacked">${label}</label>
+      <select class="pa-spec-sel" onchange="${onpick}">
+        <option value="${PA_SPEC_CUSTOM}" ${custom ? 'selected' : ''}>Something else — type it · 其他 — 手动输入</option>
+        ${opts}
+      </select>
+    </div>
+    <div class="pa-spec-typed" ${custom ? '' : 'hidden'}>
+      ${paPair({ label: '', keyEn, keyCn, valEn, valCn, phEn, phCn, attrs })}
+    </div>`;
+}
+// Write the picked pair into this scope's own inputs. No re-render: the caret
+// may be in another section and a rebuild would take it away.
+function paPickPair(sel, listExpr, key) {
+  const io = _paPickInputs(sel, key); if (!io || !io.en) return;
+  const custom = sel.value === PA_SPEC_CUSTOM;
+  if (!custom) {
+    const list = _paPickList(listExpr); const o = list && list[+sel.value]; if (!o) return;
+    io.en.value = o.en; io.cn.value = o.cn;
+  } else {
+    io.en.value = ''; io.cn.value = '';
+  }
+  const typed = io.en.closest('.pa-spec-typed');
+  if (typed) typed.hidden = !custom;
+  if (custom) io.en.focus();
+  paLivePreview();
+}
+// 'PA_STORAGE_HEADS.left' → the array. A NAME, resolved against a fixed map —
+// never eval, because this string is written into an inline onchange attribute
+// and anything that reaches the JS parser from markup is a door left open.
+const _PA_PICK_LISTS = {
+  'PA_STORAGE_HEADS.left':  () => PA_STORAGE_HEADS.left,
+  'PA_STORAGE_HEADS.right': () => PA_STORAGE_HEADS.right,
+  'PA_STORAGE_UNITS.left':  () => PA_STORAGE_UNITS.left,
+  'PA_STORAGE_UNITS.right': () => PA_STORAGE_UNITS.right,
+  'PA_STORAGE_NOTES':       () => PA_STORAGE_NOTES,
+};
+function _paPickList(name) { const f = _PA_PICK_LISTS[name]; return f ? f() : null; }
+
+// The icon is one field, not a pair, so it gets chips rather than a dropdown —
+// a row of the icons this catalogue actually uses, plus the emoji picker that
+// was already there for anything else.
+function _paIconChips(which, current, icons) {
+  const cur = String(current || '');
+  return `<div class="pa-icon-chips">${icons.map(ic =>
+    `<button type="button" class="pa-icon-chip${ic === cur ? ' is-on' : ''}" title="${escapeAttr(ic)}"
+       onclick="paPickIcon(this, '${escapeAttr(ic)}')">${escapeHtml(ic)}</button>`).join('')}</div>`;
+}
+function paPickIcon(btn, ic) {
+  const scope = btn.closest('[data-pickscope]'); if (!scope) return;
+  const input = scope.querySelector('[data-bkey="icon"]'); if (!input) return;
+  input.value = ic;
+  scope.querySelectorAll('.pa-icon-chip').forEach(c => c.classList.toggle('is-on', c === btn));
   paLivePreview();
 }
 
@@ -4538,13 +4698,22 @@ function _paBlockEditorBody(b) {
     const L = b.left  || {};
     const R = b.right || {};
     const card = (which, c) => `
-      <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
+      <div data-pickscope style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
         <div class="pa-edit-section-title" style="margin-bottom:8px">${which === 'left' ? 'Left card · 左卡' : 'Right card · 右卡'}</div>
         <div class="pa-pairs-stack">
-          ${paPair({ label: paBiTitle('Head', '标题'), keyEn: 'head_en', keyCn: 'head_cn', valEn: c.head_en, valCn: c.head_cn, phEn: 'Unopened', phCn: '未开封', attrs: `data-sub="${which}"` })}
-          ${paPair({ label: paBiTitle('Big word', '大字'), keyEn: 'num_en', keyCn: 'num_cn', valEn: c.num_en || c.num, valCn: c.num_cn, phEn: 'Cool & dry', phCn: '阴凉干燥', attrs: `data-sub="${which}"` })}
-          ${paPair({ label: paBiTitle('Unit', '单位'), keyEn: 'unit_en', keyCn: 'unit_cn', valEn: c.unit_en, valCn: c.unit_cn, phEn: 'Store away from heat', phCn: '远离高温和潮湿', attrs: `data-sub="${which}"` })}
-          <div class="field"><label class="stacked">Icon · 图标</label><div class="pe-emoji-field"><input data-sub="${which}" data-bkey="icon" type="text" value="${escapeAttr(c.icon || '')}" placeholder="❄" style="text-align:center;font-size:18px"><button type="button" class="pe-emoji-btn" title="Pick emoji · 选择表情" onclick="peEmojiOpen(this)">😀</button></div></div>
+          ${_paPickField({ list: PA_STORAGE_HEADS[which], keyEn: 'head_en', keyCn: 'head_cn',
+                           valEn: c.head_en, valCn: c.head_cn, label: paBiTitle('Head', '标题'),
+                           attrs: `data-sub="${which}"`, phEn: 'Unopened', phCn: '未开封',
+                           onpick: `paPickPair(this, 'PA_STORAGE_HEADS.${which}', 'head')` })}
+          ${paPair({ label: paBiTitle('Big word', '大字'), keyEn: 'num_en', keyCn: 'num_cn', valEn: c.num_en || c.num, valCn: c.num_cn, phEn: 'Cool & dry', phCn: '阴凉干燥', attrs: `data-sub="${which}"`, helper: 'The figure itself — a temperature or a number of days. Typed, because it is different on every product. · 数字本身(温度或天数),每个产品都不一样,手动填写。' })}
+          ${_paPickField({ list: PA_STORAGE_UNITS[which], keyEn: 'unit_en', keyCn: 'unit_cn',
+                           valEn: c.unit_en, valCn: c.unit_cn, label: paBiTitle('Unit', '单位'),
+                           attrs: `data-sub="${which}"`, phEn: 'Store away from heat', phCn: '远离高温和潮湿',
+                           onpick: `paPickPair(this, 'PA_STORAGE_UNITS.${which}', 'unit')` })}
+          <div class="field"><label class="stacked">Icon · 图标</label>
+            ${_paIconChips(which, c.icon, PA_STORAGE_ICONS[which])}
+            <div class="pe-emoji-field" style="margin-top:6px"><input data-sub="${which}" data-bkey="icon" type="text" value="${escapeAttr(c.icon || '')}" placeholder="❄" style="text-align:center;font-size:18px"><button type="button" class="pe-emoji-btn" title="Pick emoji · 选择表情" onclick="peEmojiOpen(this)">😀</button></div>
+          </div>
         </div>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-1);margin-top:10px;cursor:pointer">
           <input data-sub="${which}" data-bkey="alt" type="checkbox" ${c.alt ? 'checked' : ''}>
@@ -4555,8 +4724,11 @@ function _paBlockEditorBody(b) {
       <div class="helper" style="margin:-4px 0 14px">Two paired condition cards. Keep one inverted so they read as a set. · 双卡片成对,其中一张反色形成对比。</div>
       ${card('left',  L)}
       ${card('right', R)}
-      <div class="pa-edit-grid-2" style="margin-top:8px">
-        ${paPair({ label: paBiTitle('After-opening note', '开封后备注'), keyEn: 'note_en', keyCn: 'note_cn', valEn: b.note_en, valCn: b.note_cn, phEn: 'After opening · refrigerate', phCn: '开封后冷藏', span2: true })}
+      <div data-pickscope style="margin-top:8px">
+        ${_paPickField({ list: PA_STORAGE_NOTES, keyEn: 'note_en', keyCn: 'note_cn',
+                         valEn: b.note_en, valCn: b.note_cn, label: paBiTitle('After-opening note', '开封后备注'),
+                         phEn: 'After opening · refrigerate', phCn: '开封后冷藏',
+                         onpick: "paPickPair(this, 'PA_STORAGE_NOTES', 'note')" })}
       </div>`;
   }
   if (b.type === 'notes_callout') {
