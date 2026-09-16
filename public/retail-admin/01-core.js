@@ -260,6 +260,13 @@ const TD_ERR = {
   too_many_attempts:      ['Too many tries. Wait a moment and try again.', '尝试次数过多,请稍后重试。'],
   daily_cap:              ['That is today’s limit.', '已达今日上限。'],
   too_soon:               ['Too soon — try again in a moment.', '操作过于频繁,请稍后重试。'],
+  /* §151. What a locked database answers now, in place of the 401 that used to
+     send an operator to the login page mid-task. It says the system, not the
+     operator: `too_soon` and `too_many_attempts` sit one line up and both blame
+     the person clicking, which is the wrong sentence for a queue they cannot
+     see. 系统繁忙 is WeChat's own word for exactly this transient state; 请稍后重试
+     is live in five pairs in this table. Declared in the vocabulary, v1.97. */
+  service_busy:           ['The system is busy right now — try again in a moment.', '系统繁忙,请稍后重试。'],
 
   // ── A late parcel that spoiled the food (§98) ──
   // The refusal an operator actually meets: the close button on a delay case,

@@ -30,6 +30,9 @@ const inventory = require('../lib/inventory');
    inside its own block, which is fine there; the order-status handler needs
    capDenied() too and a local const 24,000 lines up is not in its scope. */
 const capRoutes = require('../lib/cap-routes');
+// §151: tells a database that has not been built yet from one that could not
+// answer just now. requireRetailAdmin's catch used to treat them as one thing.
+const { schemaNotReady } = require('../lib/sqlite-errors');
 const geocode = require('../lib/geocode');
 const regionI18n = require('../lib/region-i18n');
 // English/pinyin address → simplified Chinese. Shared with the Qingyun push
@@ -158,9 +161,35 @@ router.use((req, res, next) => {
 // Declared as a function (hoisted) so later sections can reference it before
 // this point — same reason the previous const needed a comment.
 function requireRetailAdmin(req, res, next) {
-  // (1) Mini App Backend operator. Guarded so a not-yet-created tenant_users
-  // table can never 500 the kitchen path — on any error we just fall through.
+  /* (1) Mini App Backend operator.
+     THE GUARD IS FOR A FIRST BOOT AND FOR NOTHING ELSE — §151. It was written
+     so a not-yet-created `tenant_users` table could not 500 the gate, and it
+     swallowed every error to get there. `SQLITE_BUSY: database is locked` is an
+     error. So an ordinary write elsewhere in the process answered the operator
+     "Not authenticated", and public/retail-admin/01-core.js sends a 401
+     straight to /backend/login: a locked database signed somebody out mid-sale.
+     Found when a test suite's 200 came back 401 in a parallel run and nothing
+     about the failure mentioned the database.
+
+     THE FIX: the catch now asks lib/sqlite-errors.js which case it is. Schema
+     not ready falls through to the refusal below, exactly as before; anything
+     else is answered 503 and logged, because a transient failure is not a
+     statement about who is signed in.
+
+     next() also moved OUT of the try, and the honest note is that this fixes
+     nothing observable: a handler's synchronous throw is caught by express at
+     the layer boundary and turned into next(err), so it never unwound into
+     this catch. That was checked rather than assumed — putting next() back
+     inside the try changes no status the suite can see. It stays out because
+     the structure should not REST on that: this gate's catch is now about this
+     gate's two queries and nothing downstream of them. */
   if (req.session && req.session.backendUserId) {
+    // Set only once the operator has fully resolved. The TENANT ID rather than
+    // the handle: scripts/check-tenant-als.js has to be able to prove that what
+    // tenantAls.run receives came from rawTenantDb, and it can only see that
+    // where the call is written out at the site. So the id is carried out of
+    // the try and the raw accessor is called below, in plain sight.
+    let authorisedTenantId = null;
     try {
       const u = db.prepare('SELECT * FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
       if (u) {
@@ -217,10 +246,31 @@ function requireRetailAdmin(req, res, next) {
           // ALS context so handlers reach the right connection via tdb();
           // control-plane reads above + logActivity stay on the global `db`.
           req.tenantDb = getTenantDb(tenant.id);
-          return tenantAls.run(rawTenantDb(tenant.id), () => next());
+          authorisedTenantId = tenant.id;
         }
       }
-    } catch (e) { /* tables not ready — fall through to the kitchen path */ }
+    } catch (e) {
+      // A database that has not been built yet is the case this guard was
+      // written for: fall through and refuse, because there is nobody to be
+      // signed in as. Everything else — a locked database above all — is this
+      // server's problem and is said out loud.
+      if (!schemaNotReady(e)) {
+        console.error('[requireRetailAdmin] operator lookup failed:', e && e.message ? e.message : e);
+        return res.status(503).json({
+          success: false,
+          error: 'service_busy',
+          // The admin's fetch wrapper prefers a server `message` over its own
+          // table, and this server does not know which language is on screen —
+          // so no message is sent and TD_ERR.service_busy answers in the
+          // reader's own.
+        });
+      }
+    }
+    // OUTSIDE the try: this catch is about this gate's own two queries, and
+    // nothing that happens after they have answered.
+    if (authorisedTenantId != null) {
+      return tenantAls.run(rawTenantDb(authorisedTenantId), () => next());
+    }
   }
   /* (2) THE LEGACY KITCHEN PATH IS GONE (§81). This gate used to fall through
      to requireAuth + the `retail` permission, granting a `users`-realm session
