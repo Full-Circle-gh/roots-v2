@@ -79,6 +79,7 @@ const ERR = {
      merely refusing, which is `onOrder`'s own rule one line above. */
   notApprovedCat: 'only an approved claim can be re-categorised · 仅审批通过的申请可修改分类',
   needCategory:   'pick a category · 选择分类',
+  forbiddenFile:  'this account cannot change an expense category · 此账号无法修改费用分类',
   onOrderCat:     'this claim is on a purchase order — set the category on the order · 该笔已记入采购单 — 请在采购单上修改分类',
 };
 
@@ -112,6 +113,36 @@ function isApprover(req) {
 }
 function requireApprover(req, res, next) {
   if (!isApprover(req)) return res.status(403).json({ error: ERR.forbidden });
+  return next();
+}
+
+/* WHO MAY RE-FILE (§145). **EITHER KEY, AND THE ASYMMETRY IT REMOVES IS THE
+   ARGUMENT.** The `bookkeeper` preset holds `expenses:cancel` and NOT
+   `expenses:approve` (lib/capabilities.js) — so before this, the accountant
+   could take a claim out of the books entirely and could not change the heading
+   it sat under. The bigger hammer and not the small screwdriver, for the person
+   whose job is the books and who already types ledger rows by hand
+   (`finance:record`).
+
+   RE-FILING IS STRICTLY LESS POWER THAN VOIDING. It moves no money: same claim,
+   same sum, same date, same person, same approval record. Anyone trusted to
+   remove a cost from the ledger is trusted to rename it.
+
+   NOT A THIRD KEY. `/settle`'s argument, which this follows: a capability
+   gating one picker is one more row in a matrix somebody has to understand, and
+   this act belongs to two roles that already exist rather than to a new one.
+
+   SAME FAIL-CLOSED SHAPE as the two guards below it — an unresolved capability
+   set is a control-plane failure, and a route that re-posts a ledger row does
+   not fall open on a question the RBAC layer could not answer. */
+function requireFiler(req, res, next) {
+  if (req.backendUser && req.backendUser.role === 'owner') return next();
+  if (!req.caps || typeof req.caps.has !== 'function') {
+    return res.status(403).json({ error: ERR.forbiddenFile });
+  }
+  if (!req.caps.has('expenses:approve') && !req.caps.has('expenses:cancel')) {
+    return res.status(403).json({ error: ERR.forbiddenFile });
+  }
   return next();
 }
 
@@ -764,11 +795,11 @@ router.post('/api/retail-admin/staff-expenses/:id/void', requireRetailAdmin, req
    the claim currently says and there is no second path by which the two could
    drift.
 
-   GATED ON `expenses:approve`, for the reason `/settle` gives about its own
-   key: this is an assertion about the books by the person who already decides
-   them on this screen, and a third capability gating one picker is a row in a
-   matrix somebody has to understand. */
-router.post('/api/retail-admin/staff-expenses/:id/category', requireRetailAdmin, requireApprover, express.json(), async (req, res) => {
+   GATED ON `expenses:approve` OR `expenses:cancel` — see `requireFiler`. The
+   bookkeeper holds the second and not the first, and could therefore void a
+   claim but not re-file one: the bigger hammer and not the small screwdriver,
+   for the person whose job this is. */
+router.post('/api/retail-admin/staff-expenses/:id/category', requireRetailAdmin, requireFiler, express.json(), async (req, res) => {
   try {
     const db = tdb();
     if (!/^\d+$/.test(String(req.params.id))) return res.status(404).json({ error: ERR.notFound });

@@ -1253,14 +1253,95 @@ function finTxRow(r) {
       ? (r.po_open === false ? ''
         : `<a class="fin-tx-act" href="#" onclick="finTxOpenPO(${Number(r.po_id)});return false">${escapeHtml(cuT('Open purchase order', '查看采购单'))}</a>`)
       : claim
-      ? ((typeof can === 'function' && can('expenses:cancel') && !r.settled)
-        ? `<a class="fin-tx-act" href="#" onclick="finTxVoidClaim(${Number(r.claim_id)});return false">${escapeHtml(cuT('Void', '作废'))}</a>`
-        : '')
+      ? (finTxClaimActs(r))
       : (typeof can === 'function' && !can('finance:record')) ? ''
       : `<a class="fin-tx-act" href="#" onclick="finTxEdit('${escapeHtml(String(r.kind))}',${Number(r.id)});return false">${escapeHtml(cuT('Edit', '编辑'))}</a>`)
     + '</td>'
     + '</tr>';
 }
+
+/* §145 — WHAT A CLAIM ROW OFFERS: re-file it, and (unless it is settled) void it.
+
+   **THE TWO ARE NOT THE SAME KIND OF ACT, and the settled rule is where that
+   shows.** Void is hidden once the employee has been paid back, because the
+   server refuses it — reversing then would take the expense out of the books
+   while leaving the repayment made. Re-filing is offered on a settled claim,
+   because nothing leaves the books: hiding it would mean a category could only
+   ever be corrected before payday.
+
+   EITHER CAPABILITY OPENS THE PICKER. The bookkeeper holds `expenses:cancel`
+   and not `expenses:approve`; before §145 that let them delete a cost from the
+   ledger and not rename one. Same test as the server's `requireFiler`.
+
+   `Change` IS THE LIVE PAIR (04-orders.js) and reads correctly over a blank
+   too: the category cell beside it already says `Not recorded`, so the link
+   changes it from nothing. */
+function finTxClaimActs(r) {
+  // FAIL-CLOSED, and spelled out rather than routed through a helper: this is
+  // the Void link's own test, unchanged, and the re-filing test beside it in the
+  // same shape. A control that appears when the capability layer could not
+  // answer is a control that refuses every time it is pressed.
+  const canVoid = typeof can === 'function' && can('expenses:cancel') && !r.settled;
+  const canFile = typeof can === 'function'
+    && (can('expenses:approve') || can('expenses:cancel'));
+  const voidLink = canVoid
+    ? `<a class="fin-tx-act" href="#" onclick="finTxVoidClaim(${Number(r.claim_id)});return false">${escapeHtml(cuT('Void', '作废'))}</a>`
+    : '';
+  if (!canFile) return voidLink;
+  if (FIN_TX_FILING !== Number(r.claim_id)) {
+    return `<a class="fin-tx-act" href="#" onclick="finTxFileOpen(${Number(r.claim_id)});return false">`
+      + escapeHtml(cuT('Change', '更改')) + '</a>' + voidLink;
+  }
+  const list = finTxExpenseCats();
+  // NO LIST, NO PICKER — §36's empty-list rule, and the link above still closes
+  // it. A tenant with no categories is offered nothing rather than an empty box.
+  if (!list.length) return voidLink;
+  const labels = finCatLabels(list);
+  const opts = list.map(c => `<option value="${escapeAttr(c)}"${c === r.category ? ' selected' : ''}>`
+    + escapeHtml(labels.get(c) || finCatLabel(c)) + '</option>').join('');
+  return `<select class="fin-apr-cat" onchange="finTxFileClaim(${Number(r.claim_id)}, this.value)">`
+    + `<option value=""${r.category ? '' : ' selected'}>`
+    + escapeHtml(cuT('— pick a category —', '— 选择分类 —')) + '</option>'
+    + opts + '</select>';
+}
+
+/* Opening the picker is a repaint of the list, the same gesture the direction
+   filter above it already makes — no fetch, and the row the operator clicked is
+   the row they are looking at. */
+window.finTxFileOpen = function finTxFileOpen(claimId) {
+  FIN_TX_FILING = Number(claimId) || 0;
+  finTxRender();
+};
+
+/* §145 — RE-FILING FROM THE LEDGER. **NO MONEY MOVES**: same claim, same sum,
+   same date, same person, same approval record. What changes is which line of
+   the category breakdown it sits on, and whether the tenant's non-operating flag
+   reaches it — a cost filed under nothing counts as operating, so a private one
+   quietly inflates that total.
+
+   IT CALLS THE CLAIM'S ENDPOINT, NOT THIS SCREEN'S. `finTxSave` refuses a
+   claim-linked row outright and is right to: the row is a projection, and a
+   value typed onto it is lost the next time the claim re-posts. This changes the
+   claim, and the ledger row is re-posted from it. Same reasoning as
+   `finTxVoidClaim` one function up, and the same manage-its-own-toast shape. */
+window.finTxFileClaim = async function finTxFileClaim(claimId, value) {
+  const category = String(value == null ? '' : value);
+  // Choosing the blank row is a way OUT of the picker, not a request to unfile
+  // a cost — the server refuses an empty value for that reason.
+  if (!category) { FIN_TX_FILING = 0; finTxRender(); return; }
+  try {
+    await api(`/api/retail-admin/staff-expenses/${Number(claimId)}/category`,
+      { method: 'POST', body: { category } });
+    FIN_TX_FILING = 0;
+    FIN_TX = null;                           // force a real reload, not a repaint
+    FIN_DATA = null;                         // the staircase drawn from the same ledger
+    FIN_APR = null; FIN_APR_SEEN = false;    // and the claim's own row on the queue
+    await finTxLoad();
+    if (window.toast) toast(cuT('Saved', '已保存'));
+  } catch (e) {
+    if (window.toast) toast(e.message, 'err');
+  }
+};
 
 /* §1.18 — the English surface renders US dates, and the year is omitted because
    every row is inside the selected window. */
@@ -1527,6 +1608,15 @@ function finTxKeepsCat() {
    `storeCategory` would then snap the typed value onto the wrong master list. */
 function finTxCatOptions() {
   if (FIN_TX_KIND === 'in') return finIncomeCats();
+  return finTxExpenseCats();
+}
+
+/* THE EXPENSE HALF, ON ITS OWN. §145 split it out: a claim row's picker needs
+   the money-OUT list whatever the FORM is currently set to, and calling
+   `finTxCatOptions()` there would have offered INCOME categories to a claim
+   whenever the operator had last opened the income form. Same list, asked
+   without the form's question. */
+function finTxExpenseCats() {
   // §87 part two: the tenant's own list, when they have one. It is the list the
   // Categories sub-view maintains, ACTIVE ENTRIES ONLY — a category the tenant
   // hid must stop being offered, which is the whole of what hiding does.
@@ -1549,6 +1639,20 @@ function finTxCatOptions() {
    edge of the window instead of under the field that opened it — which is
    what this field was doing. It reuses that fix's .pu2-suggest-menu /
    .pu2-suggest-opt classes rather than inventing a second popup style. */
+/* §145 — THE CLAIM ROW CURRENTLY OPEN AS A CATEGORY PICKER, or 0.
+
+   **THE APPROVALS QUEUE IS NOT REACHABLE BY EVERYONE THIS IS FOR.** `/pending`
+   is gated on `expenses:approve`, which the `bookkeeper` preset does not hold —
+   so a picker living only there would have been a permission the accountant has
+   and a screen they cannot open. Transactions is the finance screen they DO
+   reach, and it is where Void already lives for exactly this reason (§90:
+   requested by Ash off this screen). The correction belongs beside it.
+
+   ONE ROW AT A TIME, opened by its own link rather than drawn on every claim
+   row: a ledger window can hold dozens, and a dropdown on each would make a
+   list somebody opened to READ into a wall of controls. */
+let FIN_TX_FILING = 0;
+
 let FIN_CAT_SUG_OPEN = false;
 let FIN_CAT_SUG_IDX = -1;   // keyboard-highlighted row, -1 = none
 
