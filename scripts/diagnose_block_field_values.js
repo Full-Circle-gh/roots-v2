@@ -149,7 +149,7 @@ for (const t of types) {
     console.log(`    ${uses} filled in · ${distinct} distinct answer(s) · ${v}`);
     if (/PROSE/.test(v)) continue;
     const top = entries.slice(0, 8);
-    for (const [norm, e] of top) {
+    for (const [, e] of top) {
       const forms = [...e.forms.entries()].sort((a, b) => b[1] - a[1]);
       const shown = forms[0][0].length > 46 ? forms[0][0].slice(0, 46) + '…' : forms[0][0];
       const variants = forms.length > 1
