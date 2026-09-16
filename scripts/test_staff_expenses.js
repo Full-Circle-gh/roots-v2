@@ -1058,17 +1058,18 @@ it('and it is reachable from the screen that role can actually open', () => {
      DO reach, and where Void already lives for the same reason (§90). */
   assert.match(ROUTE_CODE, /staff-expenses\/pending', requireRetailAdmin, requireApprover/,
     'the queue stays approver-only');
-  const acts = codeOnly(CLIENT).match(/function finTxClaimActs\(r\) \{[\s\S]*?\n\}/)[0];
-  assert.match(acts, /can\('expenses:approve'\) \|\| can\('expenses:cancel'\)/,
+  const code = codeOnly(CLIENT);
+  const filing = code.match(/function finTxClaimFiling\(r\) \{[\s\S]*?\n\}/)[0];
+  assert.match(filing, /can\('expenses:approve'\) \|\| can\('expenses:cancel'\)/,
     'the ledger row offers it under either key, same test as the server');
-  assert.match(acts, /can\('expenses:cancel'\) && !r\.settled/,
-    'while Void stays hidden once the employee has been paid back');
-  assert.match(acts, /typeof can === 'function'/,
+  assert.match(filing, /typeof can === 'function'/,
     'fail-closed: a control that appears when the capability layer could not '
     + 'answer is one that refuses every time it is pressed');
-  assert.ok(!/canFile[\s\S]{0,40}settled/.test(acts),
-    'and re-filing is NOT hidden by settled — nothing leaves the books, so it '
-    + 'would mean a category could only be corrected before payday');
+  assert.ok(!/settled/.test(filing),
+    're-filing is NOT hidden by settled — nothing leaves the books, so it would '
+    + 'mean a category could only be corrected before payday');
+  assert.match(code, /can\('expenses:cancel'\) && !r\.settled/,
+    'while Void, an action rather than a field, stays hidden once paid back');
 });
 
 it('the ledger picker offers EXPENSE categories whatever the form is set to', () => {
@@ -1076,9 +1077,9 @@ it('the ledger picker offers EXPENSE categories whatever the form is set to', ()
   // is always money out, so calling it here would have offered income
   // categories to a claim whenever the income form had last been opened.
   const code = codeOnly(CLIENT);
-  const acts = code.match(/function finTxClaimActs\(r\) \{[\s\S]*?\n\}/)[0];
-  assert.match(acts, /finTxExpenseCats\(\)/);
-  assert.ok(!/finTxCatOptions\(\)/.test(acts));
+  const filing = code.match(/function finTxClaimFiling\(r\) \{[\s\S]*?\n\}/)[0];
+  assert.match(filing, /finTxExpenseCats\(\)/);
+  assert.ok(!/finTxCatOptions\(\)/.test(filing));
   assert.match(code, /function finTxExpenseCats\(\)/, 'the split exists');
 });
 
@@ -1227,10 +1228,10 @@ for (const which of ['desk', 'phone']) {
   });
 }
 
-/* THE LEDGER ROW'S ACTIONS, RUN. Same technique as the pickers above, and the
-   same reason: which links a role is shown is the kind of thing a source grep
-   reports as present while the condition around it is inverted. */
-function txActsCtx(caps) {
+/* THE LEDGER ROW'S PICKER, RUN. Same technique as the approval pickers above,
+   and the same reason: which control a role is shown is the kind of thing a
+   source grep reports as present while the condition around it is inverted. */
+function txFilingCtx(caps) {
   const held = new Set(caps);
   const ctx = {
     Map, Array, String, Number, Object, Set,
@@ -1240,53 +1241,60 @@ function txActsCtx(caps) {
     cuT: (en) => en,
     finCatLabel: (v) => String(v == null ? '' : v),
     finCatLabels: (list) => new Map(list.map(v => [v, String(v)])),
-    finTxExpenseCats: () => ['Transport 交通', 'Rent 房租'],
-    FIN_TX_FILING: 0,
+    finTxExpenseCats: () => ['Transportation 交通', 'Software Service Fee 软件服务费'],
   };
   ctx.escapeAttr = ctx.escapeHtml;
   vm2.createContext(ctx);
-  const src = DESK.slice(DESK.indexOf('function finTxClaimActs(r) {'), DESK.indexOf('window.finTxFileOpen'));
-  new vm2.Script(src + '\nthis.acts = finTxClaimActs;').runInContext(ctx);
+  const src = DESK.slice(DESK.indexOf('function finTxClaimFiling(r) {'), DESK.indexOf('/* §146 — RE-FILING FROM THE LEDGER.'));
+  new vm2.Script(src + '\nthis.filing = finTxClaimFiling;').runInContext(ctx);
   return ctx;
 }
-const LEDGER_CLAIM = { claim_id: 5, category: null, settled: 0 };
+const LEDGER_CLAIM = { claim_id: 5, source: 'claim', category: null, settled: 0 };
 
-it('ledger row: the bookkeeper is offered BOTH — the void they had and the fix they did not', () => {
-  const ctx = txActsCtx(['expenses:cancel']);
-  const html = ctx.acts(LEDGER_CLAIM);
-  assert.match(html, /finTxFileOpen\(5\)/, 'the thing this section is for');
-  assert.match(html, /finTxVoidClaim\(5\)/, 'and the thing they could already do');
-});
-
-it('ledger row: an approver who cannot void is still offered the fix', () => {
-  const html = txActsCtx(['expenses:approve']).acts(LEDGER_CLAIM);
-  assert.match(html, /finTxFileOpen\(5\)/);
-  assert.ok(!/finTxVoidClaim/.test(html), 'and only that');
-});
-
-it('ledger row: neither capability, neither link', () => {
-  assert.strictEqual(txActsCtx(['finance:record']).acts(LEDGER_CLAIM), '');
-});
-
-it('ledger row: a SETTLED claim keeps the fix and loses the void', () => {
-  // The whole asymmetry, in one row: voiding after the employee has been paid
-  // back would take the expense out of the books while leaving the payment
-  // made. Re-filing takes nothing out, so payday does not close the door on it.
-  const html = txActsCtx(['expenses:approve', 'expenses:cancel']).acts({ ...LEDGER_CLAIM, settled: 1 });
-  assert.match(html, /finTxFileOpen\(5\)/);
-  assert.ok(!/finTxVoidClaim/.test(html));
-});
-
-it('ledger row: the open picker replaces the link and offers the expense list', () => {
-  const ctx = txActsCtx(['expenses:cancel']);
-  ctx.FIN_TX_FILING = 5;
-  const html = ctx.acts(LEDGER_CLAIM);
-  assert.match(html, /<select/);
-  assert.strictEqual((html.match(/<option/g) || []).length, 3, 'two categories and the way out');
-  assert.strictEqual((html.match(/selected/g) || []).length, 1);
+it('ledger row: the SAME control the queue draws, not a link to one', () => {
+  /* It shipped as a `Change` link, on the reasoning that a dropdown per row
+     would make a list somebody opened to READ into a wall of controls. Ash, off
+     the live screen: "why is it not similar?" Claim rows are a small minority
+     of a ledger, so the wall never arrives — and one screen hiding a control
+     the other shows is two products for one act. */
+  const html = txFilingCtx(['expenses:cancel']).filing(LEDGER_CLAIM);
+  assert.match(html, /<select/, 'drawn, not linked to');
+  assert.ok(!/finTxFileOpen/.test(html), 'and there is no open-the-picker step left');
+  assert.match(html, /class="fin-apr-cat"/,
+    "the approval row's own classes, so the two cannot drift into two shapes");
   assert.match(html, /finTxFileClaim\(5, this\.value\)/);
-  // And another row is untouched while this one is open.
-  assert.match(ctx.acts({ ...LEDGER_CLAIM, claim_id: 6 }), /finTxFileOpen\(6\)/);
+  assert.strictEqual((html.match(/<option/g) || []).length, 3, 'two categories and the blank');
+  assert.strictEqual((html.match(/selected/g) || []).length, 1);
+});
+
+it('ledger row: a filed claim shows its category and is not offered a blank', () => {
+  const html = txFilingCtx(['expenses:cancel']).filing({ ...LEDGER_CLAIM, category: 'Transportation 交通' });
+  assert.ok(!/value=""/.test(html), 'unfiling a cost is what the server refuses');
+  assert.match(html, /value="Transportation 交通" selected/);
+});
+
+it('ledger row: either capability draws it, neither draws nothing', () => {
+  for (const caps of [['expenses:cancel'], ['expenses:approve'], ['expenses:approve', 'expenses:cancel']]) {
+    assert.match(txFilingCtx(caps).filing(LEDGER_CLAIM), /<select/, caps.join('+'));
+  }
+  assert.strictEqual(txFilingCtx(['finance:record']).filing(LEDGER_CLAIM), '');
+});
+
+it('ledger row: a SETTLED claim keeps the picker — only Void is withdrawn', () => {
+  // Voiding after the employee has been paid back would take the expense out of
+  // the books while leaving the payment made. Re-filing takes nothing out.
+  assert.match(txFilingCtx(['expenses:cancel']).filing({ ...LEDGER_CLAIM, settled: 1 }), /<select/);
+  assert.match(codeOnly(CLIENT), /can\('expenses:cancel'\) && !r\.settled/, 'Void still is');
+});
+
+it('ledger row: nothing is drawn on a row that is not a claim', () => {
+  const ctx = txFilingCtx(['expenses:approve', 'expenses:cancel']);
+  assert.strictEqual(ctx.filing({ ...LEDGER_CLAIM, source: 'po', claim_id: null }), '');
+  assert.strictEqual(ctx.filing({ ...LEDGER_CLAIM, source: 'manual', claim_id: null }), '');
+  // And none at all for a tenant with no categories — §36's empty-list rule.
+  const bare = txFilingCtx(['expenses:cancel']);
+  bare.finTxExpenseCats = () => [];
+  assert.strictEqual(bare.filing(LEDGER_CLAIM), '');
 });
 
 it('re-filing drops the ledger caches it just invalidated', () => {

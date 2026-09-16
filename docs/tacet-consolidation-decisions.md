@@ -15896,6 +15896,31 @@ is visible.
 income form had last been opened would have been offered INCOME categories. The
 expense half is now `finTxExpenseCats()`, asked without the form's question.
 
+### The ledger row draws the picker, it does not link to one
+
+**Amended by Ash, 2026-09-16, off the live screen:** *"why is it not similar?"*
+
+It shipped with a `Change` link on the Transactions row, opening the picker one
+row at a time, on the reasoning that a ledger window can hold dozens of rows and
+a dropdown on each would turn a list somebody opened to READ into a wall of
+controls. **That reasoning was wrong twice.** Claim rows are a small minority of
+a ledger — purchase-order rows and typed rows are the bulk, and neither draws a
+picker — so the wall never arrives. And one screen that hides a control behind a
+link while the other shows it is two products, not one, for the same act.
+
+The row now draws the same `<select>` the approvals queue draws, in the same
+place: under the line that describes the claim. It carries the approval row's
+own classes so the two cannot drift into two shapes for one control.
+
+**Void stays in the actions column**, where it was. It is an action; this is a
+field. It also keeps its own rule — hidden once the claim is settled, where the
+picker is not.
+
+**The link also shipped a rendering bug**, which is how it was noticed: the
+actions cell had never held two links, so nothing separated them and the pair
+rendered as `ChangeVoid` — one word, and the wrong one. Drawing the picker in
+the row's own cell removes the second link rather than spacing it.
+
 ### Where it is NOT offered
 
 Rejected and voided claims, and claims on a purchase order: none has a ledger row
