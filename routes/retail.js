@@ -23338,6 +23338,56 @@ router.get('/api/retail-admin/products/export.csv', requireRetailAdmin, (req, re
   }
 });
 
+// GET /api/retail-admin/products/block-usage — how many of THIS TENANT'S
+// products carry each kind of page section.
+//
+// WHY THIS IS AN ENDPOINT AND NOT A CONSTANT (§144). The product editor shows
+// an unwritten section as a named line saying how many of your products do say
+// it, so a gap reads as ordinary or unusual without opening anything. That
+// number was measured once, against production, and could have been compiled
+// into the editor's source. A percentage baked into source is a percentage that
+// is wrong by next quarter and that nobody re-measures — and a confidently
+// wrong number is worse than none, because the office has no way to tell.
+//
+// MUST BE REGISTERED BEFORE /products/:id, which would otherwise match
+// "block-usage" as an id and answer 404 — the same reason /products/highlights
+// and /products/export.csv sit above it.
+//
+// Reads only the office's own layout choices. No customer data of any kind.
+router.get('/api/retail-admin/products/block-usage', requireRetailAdmin, (req, res) => {
+  res.set('Cache-Control', 'no-store, must-revalidate');
+  try {
+    const rows = tdb().prepare(
+      `SELECT description_blocks FROM store_products
+        WHERE COALESCE(is_active, 1) = 1
+          AND description_blocks IS NOT NULL
+          AND description_blocks != '' AND description_blocks != '[]'`
+    ).all();
+    const counts = {};
+    let total = 0;
+    for (const r of rows) {
+      let arr;
+      try { arr = JSON.parse(r.description_blocks); } catch { continue; }
+      if (!Array.isArray(arr) || !arr.length) continue;
+      total++;
+      // A product carrying a type twice still counts once: the question the
+      // editor asks is "do your products say this", not "how many times".
+      const seen = new Set();
+      for (const b of arr) {
+        const t = b && b.type;
+        if (!t || seen.has(t)) continue;
+        seen.add(t);
+        counts[t] = (counts[t] || 0) + 1;
+      }
+    }
+    res.json({ total, counts });
+  } catch (e) {
+    // The editor treats a failure as "no number available" and prints no
+    // percentage. It must never be a reason the editor cannot open.
+    res.json({ total: 0, counts: {} });
+  }
+});
+
 // GET /api/retail-admin/products/:id — FULL single product, including the
 // heavy description_blocks JSON the LIST endpoint deliberately omits. The
 // product-page editor MUST hydrate from this (not the list): the list only

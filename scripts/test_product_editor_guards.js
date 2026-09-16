@@ -342,10 +342,17 @@ check('an unknown block type is kept rather than quietly discarded', () => {
 });
 
 check('the marker is recomputed on the typing path, not only on a full rebuild', () => {
-  const b = anchored('paRefreshTabLabels');
+  /* §144 retired paRefreshTabLabels with the section list it repainted. The
+     reason the check exists did not retire with it: a marker that is only
+     decided on a full rebuild stays on a section for the rest of the session
+     after the missing answer is typed, and the office learns to ignore it. */
+  const b = anchored('paDocRefreshMarks');
   assert.ok(/_paBlockWillSave\(b\)/.test(b) && /_paBlockHasWords\(b\)/.test(b),
-    'paRefreshTabLabels repaints labels per keystroke but leaves the marker stale');
-  assert.ok(/classList\.toggle\('pbr-unsaved'/.test(b), 'the row class is never cleared once set');
+    'paDocRefreshMarks does not re-decide the marker from the same predicate');
+  assert.ok(/\.remove\(\)/.test(b), 'the marker is never cleared once set');
+  const live = anchored('paLivePreview');
+  assert.ok(/paDocRefreshMarks\(\)/.test(live),
+    'the typing path never calls it, so the marker only moves on a full repaint');
 });
 
 check('the save reports the count in the failure colour, from the same predicate', () => {

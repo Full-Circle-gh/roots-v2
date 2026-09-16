@@ -551,16 +551,153 @@
     /* Rail and inspector are equal-width (288px) bookends; the canvas flexes
        between them so the phone gets breathing room and absorbs extra width on
        big monitors. */
-    grid-template-columns: 288px 1fr 288px;
+    /* Rail · the page itself · the phone. The document takes the middle and the
+       widest share, because it is the work; the phone is a check on the work
+       and sits beside it rather than between the two halves of the form (§144
+       — "things are too far apart on screen"). */
+    grid-template-columns: 272px minmax(0, 1fr) 404px;
     /* Definite row so the panes (and the phone inside the canvas) fill the body
        instead of growing to content. Lets the phone fit at any zoom. */
     grid-template-rows: minmax(0, 1fr);
     overflow: hidden;
   }
-  @media (max-width: 1100px) {
-    #pe-body { grid-template-columns: 260px 1fr; }
-    .pa-edit-inspector { display: none !important; }
+  @media (max-width: 1240px) {
+    /* The phone goes before the document does: the document IS the editor, and
+       a preview you cannot see is a smaller loss than a form you cannot reach. */
+    #pe-body { grid-template-columns: 260px minmax(0, 1fr); }
+    .pa-edit-canvas { display: none !important; }
   }
+  @media (max-width: 820px) {
+    #pe-body { grid-template-columns: minmax(0, 1fr); }
+    .pa-edit-palette { display: none !important; }
+  }
+
+  /* EN/中 PAIRS: SHOW ONE HALF, NOT BOTH.
+     A bilingual label rides as two sibling spans — <span data-lang-block="en">
+     beside <span data-lang-block="cn"> — and something has to hide the half
+     that is not the chrome's current language. In the backend shell that rule
+     is injected at runtime by public/retail-admin/10-extras.js. THIS PAGE IS
+     STANDALONE AND NEVER LOADS IT, so every pair on it has been rendering both
+     halves glued together: "Hero Intro开篇引言", "Online store线上商城".
+     applyLang() has always set data-ui-lang on <html> for exactly this rule to
+     key off; only the rule was missing. Declared here rather than by importing
+     the backend's script, because the page loads none of it. */
+  html[data-ui-lang="en"] [data-lang-block="cn"] { display: none !important; }
+  html[data-ui-lang="cn"] [data-lang-block="en"] { display: none !important; }
+
+  /* ── §144 · The page as one document ──────────────────────────────────────
+     Nine named sections in the product's own order, each showing its fields in
+     place. Replaces the "list on the left, form on the right" pair the office
+     had to travel between. */
+  .pa-edit-doc {
+    background: var(--bg-app);
+    border-right: 1px solid var(--line-soft);
+    display: flex; flex-direction: column;
+    min-width: 0; min-height: 0; overflow: hidden;
+  }
+  .pa-doc-head {
+    flex-shrink: 0;
+    display: flex; align-items: center; gap: var(--s4); flex-wrap: wrap;
+    padding: var(--s4) var(--s5);
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--bg-pane);
+  }
+  .pa-doc-title { display: flex; align-items: baseline; gap: var(--s3); flex-wrap: wrap; min-width: 0; }
+  .pa-doc-title h2 { margin: 0; font-size: 16px; font-weight: 500; letter-spacing: -.01em; }
+  .pa-doc-prog { display: flex; align-items: center; gap: var(--s3); }
+  .pa-doc-prog b { font-weight: 500; font-variant-numeric: tabular-nums; color: var(--text-1); }
+  .pa-ticks { display: flex; gap: 3px; }
+  .pa-ticks i { width: 15px; height: 5px; border-radius: 3px; background: var(--line-soft); }
+  .pa-ticks i.on { background: var(--text-1); }
+  .pa-doc-tidy { padding: 5px 11px; font-size: 12px; }
+
+  .pa-doc-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: var(--s5) var(--s5) 64px; }
+  .pa-doc { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--s3); }
+
+  .pa-sec {
+    background: var(--bg-elev-1);
+    border: 1px solid var(--line-soft);
+    border-radius: var(--r-lg);
+    padding: var(--s4) var(--s4) var(--s3);
+    display: flex; flex-direction: column; gap: var(--s3);
+    scroll-margin-top: 12px;
+  }
+  .pa-sec.is-offqr { border-color: var(--warn); }
+  .pa-sec.is-flash { box-shadow: 0 0 0 2px var(--ring); }
+  .pa-sec-head { display: flex; align-items: center; gap: var(--s2); }
+  .pa-sec-dot { width: 22px; height: 22px; flex: 0 0 22px; color: var(--text-2); }
+  .pa-sec-dot svg { width: 100%; height: 100%; display: block; }
+  .pa-sec-name { margin: 0; font-size: 14px; font-weight: 500; }
+  .pa-sec-warn { color: var(--warn); display: grid; place-items: center; }
+  .pa-sec-warn svg { width: 15px; height: 15px; }
+  .pa-sec-eye, .pa-sec-x {
+    width: 28px; height: 28px; flex: 0 0 28px;
+    border: 0; background: none; border-radius: var(--r-sm);
+    display: grid; place-items: center; color: var(--text-3); cursor: pointer;
+    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .pa-sec-eye svg, .pa-sec-x svg { width: 15px; height: 15px; display: block; }
+  .pa-sec-eye:hover, .pa-sec-x:hover { background: var(--bg-pane); color: var(--text-1); }
+  .pa-sec-eye.is-off { color: var(--warn); }
+  .pa-sec-x:hover { color: var(--danger); }
+  .pa-sec-body { display: flex; flex-direction: column; }
+  .pa-sec-note {
+    margin: 0; padding: 9px 11px; border-radius: var(--r-md);
+    background: var(--bg-pane); color: var(--warn);
+    font-size: 11.5px; line-height: 1.5;
+  }
+
+  .pa-sec-more {
+    display: flex; align-items: center; gap: var(--s2);
+    border: 0; background: none; padding: 2px 0 0;
+    color: var(--text-3); font-size: 12px; cursor: pointer;
+  }
+  .pa-sec-more:hover { color: var(--text-1); }
+  .pa-sec-more svg { width: 14px; height: 14px; transition: transform var(--t-fast) ease; }
+  .pa-sec-more[aria-expanded="true"] svg { transform: rotate(180deg); }
+  .pa-sec-more-hint { font-size: 11px; }
+  .pa-sec-more-body {
+    display: flex; flex-direction: column; gap: var(--s4);
+    padding: var(--s3) 0 var(--s2);
+    border-top: 1px solid var(--line-soft);
+  }
+  .pa-sec-sub { display: flex; flex-direction: column; gap: var(--s2); }
+  .pa-sec-sub-t { font-size: 11px; font-weight: 500; color: var(--text-2); }
+
+  /* An unwritten section. Named, and carrying how many of your products do say
+     it — so a gap reads as ordinary or unusual without opening anything. */
+  .pa-sec-empty {
+    display: flex; align-items: center; gap: var(--s3);
+    padding: var(--s3) var(--s4);
+    border: 1px dashed var(--line-soft); border-radius: var(--r-lg);
+    background: none;
+  }
+  .pa-sec-ring {
+    width: 16px; height: 16px; flex: 0 0 16px; border-radius: 50%;
+    border: 1.5px dashed var(--text-3);
+  }
+  .pa-sec-empty-txt { flex: 1 1 auto; min-width: 0; }
+  .pa-sec-empty-name { font-size: 13.5px; font-weight: 500; color: var(--text-2); }
+  .pa-sec-empty-pct { font-size: 11.5px; }
+  .pa-sec-empty-pct b { font-weight: 500; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .pa-sec-write { flex: 0 0 auto; padding: 5px 12px; font-size: 12px; }
+
+  .pa-doc-div { display: flex; align-items: center; gap: var(--s3); padding: var(--s4) 0 2px; }
+  .pa-doc-div i { flex: 1 1 auto; height: 1px; background: var(--line-soft); }
+  .pa-doc-div span { font-size: 11.5px; color: var(--text-3); }
+  .pa-doc-rare { display: flex; flex-wrap: wrap; gap: var(--s2); }
+  .pa-rare {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 11px; border: 1px dashed var(--line-soft); border-radius: 999px;
+    background: none; color: var(--text-2); font-size: 12px; cursor: pointer;
+  }
+  .pa-rare:hover { border-color: var(--text-3); color: var(--text-1); }
+  .pa-rare .helper { font-size: 11px; font-variant-numeric: tabular-nums; }
+
+  /* Clicking a block in the phone opens that section in the document. The
+     preview stops being a picture and becomes a way in. */
+  .pa-prev-block[data-prev-blockid] { cursor: pointer; }
+
 
   /* Loading / error overlay */
   #pe-loading {
@@ -894,111 +1031,29 @@
   .pa-preset-card:hover .pa-preset-thumb::before { opacity: 1; }
 
   /* Block rows — match the Mini App Editor's .palette-item exactly */
-  .pa-block-row {
-    display: flex; align-items: center; gap: var(--s3);
-    padding: 10px 12px;
-    background: var(--td-surface);
-    border: 1px solid var(--line);
-    border-radius: var(--r-md);
-    cursor: pointer;
-    transition: border-color var(--t-fast), background var(--t-fast), transform var(--t-fast);
-    user-select: none;
-  }
-  .pa-block-row:hover { background: var(--td-raised); border-color: var(--line-strong); transform: translateY(-1px); }
-  .pa-block-row.active { background: var(--td-raised); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
-  .pa-block-row .pbr-icon {
-    width: 32px; height: 32px;
-    background: var(--td-raised);
-    border-radius: var(--r-md);
-    display: flex; align-items: center; justify-content: center;
-    color: var(--text-2); flex-shrink: 0;
-  }
-  .pa-block-row .pbr-icon svg { width: 18px; height: 18px; }
-  .pa-block-row.active .pbr-icon { background: var(--td-paper); color: var(--text-1); }
-  .pa-block-row .pbr-info { flex: 1; min-width: 0; }
-  .pa-block-row .pbr-name {
-    font-size: 13px; font-weight: 500; color: var(--text-1);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  /* Bilingual block names: paired spans, CSS shows only the active language.
-     Used because some names contain a literal " · " (e.g. "Ingredients · Chips")
-     which the text-node splitter would otherwise mis-split. */
-  html[data-ui-lang="en"] [data-lang-block="cn"] { display: none !important; }
-  html[data-ui-lang="cn"] [data-lang-block="en"] { display: none !important; }
-  .pa-block-row .pbr-sub {
-    font-size: 11px; color: var(--text-3);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px;
-  }
-  .pa-block-row .pbr-num {
-    width: 16px; height: 16px; border-radius: 50%;
-    background: var(--bg-elev-2); color: var(--text-3);
-    font-size: 9px; font-weight: 500;
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  }
-  .pa-block-row.active .pbr-num { background: var(--accent); color: var(--accent-ink); }
-  /* A section switched off for the QR menu. The row stays full strength —
-     it is live on the mini app, which is the page being composed — and carries
-     one struck-through eye. Only the eye is dimmed, so the mark reads as a
-     note about one surface rather than as a disabled row. */
-  .pa-block-row .pbr-qr {
-    width: 24px; height: 24px; flex-shrink: 0; padding: 4px;
-    display: grid; place-items: center;
-    border: 0; border-radius: var(--r-sm); background: none; cursor: pointer;
-    /* Quiet until wanted: a section that shows everywhere needs no comment, so
-       the open eye sits at the weight of a hint and comes forward on hover. */
-    color: var(--text-4);
-    opacity: 0;
-    transition: opacity var(--t-fast) ease, color var(--t-fast) ease, background var(--t-fast) ease;
-  }
-  .pa-block-row:hover .pbr-qr, .pa-block-row .pbr-qr:focus-visible { opacity: 1; }
-  .pa-block-row .pbr-qr:hover { color: var(--text-1); background: var(--bg-elev-2); }
-  .pa-block-row .pbr-qr:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 1px; }
-  /* Switched off: always visible, and amber, because now there IS something to
-     say about this row and it must be readable without hovering it. */
-  .pa-block-row .pbr-qr.is-off { opacity: 1; color: var(--td-amber, #C9954A); }
-  .pa-block-row .pbr-qr.is-off:hover { color: var(--td-amber-ink, #8A6425); }
-  .pa-block-row .pbr-qr svg { width: 15px; height: 15px; display: block; }
-  /* A section that carries words and would still be dropped by the save.
-     Brick rather than the QR mark's amber, because this is not a note about
-     one surface — it is work that is about to not exist. The row's left edge
-     carries the same colour so the mark is findable while scrolling a stack of
-     fifteen, and survives the row's own active/hover states (which paint the
-     background, never this border). */
-  .pa-block-row.pbr-unsaved { box-shadow: inset 2px 0 0 var(--td-brick, #B4533E); }
-  .pa-block-row .pbr-unsaved-ic {
-    width: 15px; height: 15px; flex-shrink: 0; color: var(--td-brick-ink, #D07A66);
-  }
-  .pa-block-row .pbr-unsaved-ic svg { width: 100%; height: 100%; display: block; }
+  /* .pa-block-row styles retired with the section list they painted (§144). */
 
-  /* "Shows on" — the per-block channel switch in the inspector. */
-  .pa-ch-row {
-    display: flex; align-items: flex-start; gap: 10px; cursor: pointer;
-    padding: 2px 0;
-  }
-  .pa-ch-row input { margin-top: 2px; flex-shrink: 0; }
-  .pa-ch-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .pa-ch-t { font-size: 13px; color: var(--text-1); }
-  .pa-ch-s { font-size: 11px; line-height: 1.45; }
-  .pa-ch-note { margin: 10px 0 2px; font-size: 11px; line-height: 1.5; }
   /* Drag-to-reorder: a grip cue that fades in on hover, plus a lime drop
      line above/below the target row. Mirrors the mini-app editor. */
-  .pa-block-row { cursor: grab; }
-  .pa-block-row:active { cursor: grabbing; }
-  .pa-block-row .pbr-grip {
-    color: var(--text-4); font: 700 13px var(--f-sans);
-    letter-spacing: -1px; line-height: 1; opacity: 0; flex-shrink: 0;
+  /* The grip is the only drag handle: a section's body is full of text
+     inputs, and selecting text inside one must never pick the section up. */
+  .pa-sec-grip {
+    color: var(--text-4); font: 500 13px var(--f-sans);
+    letter-spacing: -1px; line-height: 1; opacity: 0; flex: 0 0 auto;
+    cursor: grab; padding: 2px 1px;
     transition: opacity var(--t-fast) ease, color var(--t-fast) ease;
   }
-  .pa-block-row:hover .pbr-grip { opacity: .6; }
-  .pa-block-row.pa-row-dragging { opacity: .4; }
-  .pa-block-row.pa-drop-before, .pa-block-row.pa-drop-after { position: relative; }
-  .pa-block-row.pa-drop-before::before,
-  .pa-block-row.pa-drop-after::after {
+  .pa-sec:hover .pa-sec-grip { opacity: .55; }
+  .pa-sec-grip:active { cursor: grabbing; }
+  .pa-sec.pa-row-dragging { opacity: .4; }
+  .pa-sec.pa-drop-before, .pa-sec.pa-drop-after { position: relative; }
+  .pa-sec.pa-drop-before::before,
+  .pa-sec.pa-drop-after::after {
     content: ''; position: absolute; left: 0; right: 0;
     height: 2px; background: var(--accent); border-radius: 1px;
   }
-  .pa-block-row.pa-drop-before::before { top: -3px; }
-  .pa-block-row.pa-drop-after::after  { bottom: -3px; }
+  .pa-sec.pa-drop-before::before { top: -4px; }
+  .pa-sec.pa-drop-after::after  { bottom: -4px; }
 
   /* Inspector-style block editor head */
   .pa-inspector-head {
@@ -1062,7 +1117,7 @@
      Editor's section folding so a long block form folds away. The head is a
      full-width button; the body shows only when .open. Open/closed survives the
      inspector's rebuild on add/remove via the paInspectorOpen map (see
-     paInspSec / paRenderSelectedEditor). */
+     paInspSec / paRenderDoc). */
   .insp-sec { border-top: 1px solid var(--line-soft); }
   .insp-sec:first-child { border-top: 0; }
   .insp-sec-head {
@@ -1576,22 +1631,30 @@
             </div>
           </details>
         </div>
-        <!-- SECTIONS — the main task, sticky header keeps + Add reachable -->
-        <div class="pe-left-head-sticky">
-          <span class="pa-edit-palette-title">Sections · 板块</span>
-          <select id="pa-blocks-picker" onchange="paBlocksAdd(this.value);this.value=''" style="font-size:11px;padding:5px 8px;font-weight:500;width:100%">
-            <option value="">+ Add section… · + 添加板块…</option>
-          </select>
+        <!-- SHORTCUTS — the sections themselves live in the document (§144).
+             What stays here is the one thing that is not a section: pasting a
+             wall of copy and letting the editor split it. -->
+        <div class="pe-left-group">
+          <div class="pe-left-grouptitle">Shortcuts · 快捷</div>
           <button type="button" class="pe-smart-btn" onclick="peSmartOpen()" title="Paste text, let the editor split it into sections · 粘贴文字,自动拆分成板块">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 3l1.9 4.8L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.7L12 3z"/><path d="M19 14l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg>
             Smart paste · 智能粘贴
           </button>
+          <details class="pa-left-acc" id="pe-acc-templates">
+            <summary><span class="pe-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="7" rx="1"/><rect x="3" y="14" width="9" height="7" rx="1"/><rect x="16" y="14" width="5" height="7" rx="1"/></svg></span> Templates · 模板</summary>
+            <div class="pa-left-acc-body" id="pe-templates-mount"></div>
+          </details>
         </div>
-        <div id="pa-blocks-list" class="pe-blocks-list"></div>
       </div>
     </div>
 
-    <!-- CENTER: phone canvas -->
+    <!-- CENTER: the page itself, as one document (§144) -->
+    <div class="pa-edit-doc">
+      <div class="pa-doc-head" id="pa-doc-head"></div>
+      <div class="pa-doc-scroll"><div class="pa-doc" id="pa-doc"></div></div>
+    </div>
+
+    <!-- RIGHT: phone canvas -->
     <div class="pa-edit-canvas">
       <div class="pa-prev-langbar">
         <span class="pa-prev-langbar-hint">Preview as · 预览语言</span>
@@ -1612,38 +1675,6 @@
       </div>
     </div>
 
-    <!-- RIGHT: inspector panel -->
-    <div class="pa-edit-inspector">
-      <div class="pe-insp-tabs">
-        <div class="pe-insp-seg">
-          <button id="pe-tab-block" class="active" onclick="peInspTab('block')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg> Block · 板块</button>
-          <button id="pe-tab-page" onclick="peInspTab('page')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="7" rx="1"/><rect x="3" y="14" width="9" height="7" rx="1"/><rect x="16" y="14" width="5" height="7" rx="1"/></svg> Templates · 模板</button>
-        </div>
-      </div>
-      <div class="pa-edit-inspector-scroll">
-        <!-- PAGE mode: templates only (card chrome + colophon live in the left rail) -->
-        <div id="pe-page-pane" style="display:none">
-        <div class="pa-inspector-presets">
-          <div class="pa-presets">
-            <div class="pa-presets-head">
-              <span class="pa-presets-title" data-no-i18n><span data-lang-block="en">Choose a template</span><span data-lang-block="cn">选择模板</span></span>
-              <span class="pa-presets-hint helper" data-no-i18n><span data-lang-block="en">Seeds a coherent block stack. Switching replaces the current blocks.</span><span data-lang-block="cn">套用一套连贯板块,切换会替换现有板块。</span></span>
-              <button type="button" class="btn btn-ghost pa-tpl-import-btn" onclick="paOpenImport()" data-no-i18n title="Upload a template file (.json) · 上传模板文件">
-                <span data-lang-block="en">⬆ Import template</span><span data-lang-block="cn">⬆ 导入模板</span>
-              </button>
-              <input type="file" id="pa-import-file" accept="application/json,.json" hidden onchange="paHandleImportFile(this)">
-            </div>
-            <div class="pa-presets-row" id="pa-presets-row"></div>
-          </div>
-        </div>
-        </div><!-- /pe-page-pane -->
-
-        <!-- BLOCK mode: the selected block's form (default) -->
-        <div id="pe-block-pane">
-          <div id="pa-block-editor-mount"></div>
-        </div>
-      </div>
-    </div>
   </div>
 
   <!-- Smart paste → AI divides pasted text into sections -->
@@ -2105,8 +2136,8 @@ function paBlockColorStyle(b) {
 // ── Collapsible inspector folds (Content / Colours) ──
 // String-based mirror of the Mini App Editor's section folding. The open map is
 // keyed per block type so a fold's open/closed choice survives the inspector's
-// rebuild on add/remove; paRenderSelectedEditor wipes it when the operator moves
-// to a different block, so each block opens at its own defaults.
+// rebuild on add/remove. With the document layout every section carries its own
+// "More options" fold, keyed 'more:<block id>' so nine of them are independent.
 const paInspectorOpen = Object.create(null);
 let paLastInspectedId = null;
 // Bilingual fold title — switches live with the chrome language toggle via the
@@ -2166,9 +2197,11 @@ function _paChannelEditorHtml(b) {
 // inversion is why this control carries no data-bkey. See the note above.
 // This is the only writer of hide_qr from the inspector.
 function paChannelFlip(el) {
-  const mount = document.getElementById('pa-block-editor-mount'); if (!mount) return;
-  const card = mount.querySelector('[data-blockid]'); if (!card) return;
-  paSetHideQr(card.getAttribute('data-blockid'), !el.checked);
+  // The section this control sits inside — NOT "the one card in the mount".
+  // With the document layout (§144) there are nine of them on screen, and the
+  // old lookup would have flipped whichever section rendered first.
+  const host = el.closest('[data-blockid]'); if (!host) return;
+  paSetHideQr(host.getAttribute('data-blockid'), !el.checked);
 }
 
 // THE ONE PLACE hide_qr IS WRITTEN. Both the row's eye and the inspector's
@@ -2179,14 +2212,35 @@ function paSetHideQr(id, hidden, fromRow) {
   const b = (window._paBlocks || []).find(x => x.id === id);
   if (!b) return;
   if (hidden) b.hide_qr = true; else delete b.hide_qr;
-  paRenderTabs();
+  // Repaint the SECTION, never the document: a full repaint would discard
+  // whatever the office is part-way through typing in another section.
+  const sec = document.querySelector(`.pa-sec[data-blockid="${CSS.escape(id)}"]`);
+  if (sec) {
+    sec.classList.toggle('is-offqr', !!b.hide_qr);
+    const eye = sec.querySelector('.pa-sec-eye');
+    if (eye) {
+      eye.classList.toggle('is-off', !!b.hide_qr);
+      eye.setAttribute('aria-pressed', b.hide_qr ? 'true' : 'false');
+      eye.innerHTML = b.hide_qr
+        ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
+        : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+    }
+    const note = sec.querySelector('.pa-sec-note');
+    if (b.hide_qr && !note) {
+      sec.insertAdjacentHTML('beforeend', `<p class="pa-sec-note" data-no-i18n><span data-lang-block="en">Hidden on the QR menu. The mini app and web shop still show it, and nothing is deleted.</span><span data-lang-block="cn">仅在二维码菜单隐藏。小程序与网店照常显示,内容不会删除。</span></p>`);
+    } else if (!b.hide_qr && note) { note.remove(); }
+  }
+  paRenderPreview();
   /* Clicking the eye on the row that is OPEN must move the inspector's switch
      too, or the two controls sit side by side disagreeing. The checkbox is set
      in place rather than by re-rendering the inspector, because a re-render
      would discard whatever the office is part-way through typing in the fields
      above it. */
-  if (fromRow && id === PA_SELECTED_BLOCK_ID) {
-    const box = document.querySelector('#pa-block-editor-mount .pa-ch-row input[type="checkbox"]');
+  if (fromRow) {
+    // That section's own checkbox — with nine forms on screen the old global
+    // query would have re-ticked the first one it found.
+    const host = document.querySelector(`.pa-sec[data-blockid="${CSS.escape(id)}"]`);
+    const box  = host && host.querySelector('.pa-ch-row input[type="checkbox"]');
     if (box) box.checked = !hidden;
   }
 }
@@ -2774,7 +2828,6 @@ function peSmartApply() {
   });
   if (firstId) PA_SELECTED_BLOCK_ID = firstId;
   paRenderAll();
-  peInspTab('block');
   peSmartClose();
   let msg = cuT('Added ' + added + ' section' + (added === 1 ? '' : 's') + ' ✓', '已添加 ' + added + ' 个板块 ✓');
   if (skippedNutrition) msg += cuT(' · nutrition already present', ' · 营养成分已存在');
@@ -2844,7 +2897,6 @@ async function peAutoFillFromKitchen(p) {
     window._paBlocks = fresh.concat(cur);   // composed sections first, keep nutrition after
     PA_SELECTED_BLOCK_ID = window._paBlocks[0]?.id || null;
     paRenderAll();
-    peInspTab('block');
     const draftNote = translate
       ? (!textCn
           ? cuT(' (drafted the 中文 in the brand voice — give it a read)', '(已按品牌语气替你撰写中文,请校对)')
@@ -2903,7 +2955,6 @@ function peMount(p) {
     });
   }
   PA_SELECTED_BLOCK_ID = window._paBlocks[0]?.id || null;
-  paBlocksPopulatePicker();
   paRenderPresets();
   paLoadCustomTemplates();   // async — merges imported templates into the chooser when they arrive
   paRenderAll();
@@ -2931,10 +2982,14 @@ function peMount(p) {
   try { history.replaceState(null, '', '?id=' + p.id); } catch (e) {}
   PA_SAVED_SNAPSHOT = peSerializeState();
 
-  // Default tab: if the page already has blocks, open Block (the common
-  // case — you came here to edit a section). If it's a blank page, open
-  // Page so the presets are right there to start from.
-  peInspTab(window._paBlocks.length ? 'block' : 'page');
+  // The templates fold in the rail opens itself on a page with nothing on it
+  // yet, because a blank product is the one case where a template is the
+  // fastest way in. A page that already has sections leaves it shut.
+  const _tplAcc = document.getElementById('pe-acc-templates');
+  if (_tplAcc) _tplAcc.open = !window._paBlocks.length;
+
+  paWirePreviewClicks();  // clicking a block in the phone opens its section
+  paLoadUsage();          // fills in "N% of your products say this" when it lands
 
   document.getElementById('pe-loading').classList.add('hide');
   const _peEmpty = document.getElementById('pe-canvas-empty'); if (_peEmpty) _peEmpty.hidden = true;
@@ -3087,17 +3142,6 @@ async function peTogglePublish() {
 
 // Switch the inspector between the selected-block form and page-level
 // settings (card chrome, colophon, presets). Block is the default.
-function peInspTab(mode) {
-  const isPage = mode === 'page';
-  document.getElementById('pe-page-pane').style.display  = isPage ? '' : 'none';
-  document.getElementById('pe-block-pane').style.display = isPage ? 'none' : '';
-  document.getElementById('pe-tab-page').classList.toggle('active', isPage);
-  document.getElementById('pe-tab-block').classList.toggle('active', !isPage);
-  // Thumbs render at 0 width while the pane is hidden, so their scale can't be
-  // computed — refit now that the pane is laid out.
-  if (isPage) paFitThumbs(document.getElementById('pa-presets-row'));
-  peUpdatePageDot();
-}
 
 // Show a small dot on each left-rail accordion (Card chrome / Colophon)
 // when it carries content, so the office can see what's configured without
@@ -3337,6 +3381,16 @@ async function paDeleteCustomTemplate(ev, id) {
 // which design this page is built from. Always rebuilds (no children guard) so
 // applying a template repaints the highlight.
 function paRenderPresets() {
+  // Lives in the left rail's Templates fold now that the inspector is gone
+  // (§144). Built on demand so the fold's body is empty until it is opened.
+  const mount = document.getElementById('pe-templates-mount');
+  if (mount && !document.getElementById('pa-presets-row')) {
+    mount.innerHTML = `<div class="pa-presets"><div class="pa-presets-head">
+        <span class="pa-presets-hint helper" data-no-i18n><span data-lang-block="en">Seeds a coherent block stack. Switching replaces the current sections.</span><span data-lang-block="cn">套用一套连贯板块,切换会替换现有板块。</span></span>
+        <button type="button" class="btn btn-ghost pa-tpl-import-btn" onclick="paOpenImport()" data-no-i18n title="Upload a template file (.json) · 上传模板文件"><span data-lang-block="en">⬆ Import template</span><span data-lang-block="cn">⬆ 导入模板</span></button>
+        <input type="file" id="pa-import-file" accept="application/json,.json" hidden onchange="paHandleImportFile(this)">
+      </div><div class="pa-presets-row" id="pa-presets-row"></div></div>`;
+  }
   const row = document.getElementById('pa-presets-row'); if (!row) return;
   row.innerHTML = PA_TEMPLATES.map(p => {
     const active = p.id === window._paTemplate;
@@ -3399,8 +3453,7 @@ async function paApplyTemplate(id) {
 
 // ── Repaint orchestration ──
 function paRenderAll() {
-  paRenderTabs();
-  paRenderSelectedEditor();
+  paRenderDoc();
   paRenderPreview();
 }
 // Typing path. The block state and the section-list labels stay immediate —
@@ -3412,7 +3465,8 @@ function paRenderAll() {
 let _paPreviewTimer = null;
 function paLivePreview() {
   paBlocksSyncFromDOM();
-  paRefreshTabLabels();
+  paDocHeader();
+  paDocRefreshMarks();
   clearTimeout(_paPreviewTimer);
   _paPreviewTimer = setTimeout(paRenderPreview, 90);
 }
@@ -3556,21 +3610,8 @@ function paSafeBlockId(id) {
   return /^[A-Za-z0-9_-]{1,64}$/.test(String(id || '')) ? String(id) : paBlocksGenId();
 }
 
-function paBlocksPopulatePicker() {
-  const pick = document.getElementById('pa-blocks-picker');
-  if (pick && pick.options.length <= 1) {
-    // Strip the leading emoji glyph from the registry labels so the native
-    // dropdown reads as clean text (it can't render SVG); the section list
-    // carries the proper SVG icon instead.
-    const strip = s => String(s || '').replace(/^\s*\P{L}+\s*/u, '').trim();
-    PA_BLOCK_TYPES.forEach(t => {
-      const o = document.createElement('option');
-      o.value = t.type;
-      o.textContent = strip(t.label_en) + ' · ' + strip(t.label_cn);
-      pick.appendChild(o);
-    });
-  }
-}
+// paBlocksPopulatePicker retired with the "+ Add section" select it filled:
+// the document offers every section by name, written or not (§144).
 function paBlocksAdd(type) {
   if (!type) return;
   const def = PA_BLOCK_TYPES.find(t => t.type === type); if (!def) return;
@@ -3591,10 +3632,7 @@ function paBlocksAdd(type) {
   window._paBlocks.push(nb);
   PA_SELECTED_BLOCK_ID = nb.id;
   paRenderAll();
-  setTimeout(() => {
-    const row = document.querySelector(`.pa-block-row[data-blockid="${nb.id}"]`);
-    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, 30);
+  setTimeout(() => paBlocksSelect(nb.id), 30);
 }
 async function paBlocksRemove(id) {
   if (!(await askConfirm({
@@ -3616,11 +3654,15 @@ function paInitBlockDnd() {
   if (window._paDndWired) return;
   window._paDndWired = true;
   const clearDropMarks = () =>
-    document.querySelectorAll('.pa-block-row.pa-drop-before, .pa-block-row.pa-drop-after')
+    document.querySelectorAll('.pa-sec.pa-drop-before, .pa-sec.pa-drop-after')
       .forEach(r => r.classList.remove('pa-drop-before', 'pa-drop-after'));
 
   document.addEventListener('dragstart', e => {
-    const row = e.target.closest?.('.pa-block-row'); if (!row) return;
+    // Only the grip starts a drag. A whole section is draggable in the old
+    // list sense, but its body is full of text inputs — dragging a selection
+    // out of a textarea must not pick the section up.
+    if (!e.target.closest?.('.pa-sec-grip')) return;
+    const row = e.target.closest?.('.pa-sec'); if (!row) return;
     _paDragId = row.dataset.blockid;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', _paDragId);
@@ -3629,11 +3671,11 @@ function paInitBlockDnd() {
   document.addEventListener('dragend', () => {
     _paDragId = null;
     clearDropMarks();
-    document.querySelectorAll('.pa-block-row.pa-row-dragging').forEach(r => r.classList.remove('pa-row-dragging'));
+    document.querySelectorAll('.pa-sec.pa-row-dragging').forEach(r => r.classList.remove('pa-row-dragging'));
   });
   document.addEventListener('dragover', e => {
     if (!_paDragId) return;
-    const row = e.target.closest?.('.pa-block-row'); if (!row) return;
+    const row = e.target.closest?.('.pa-sec'); if (!row) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     clearDropMarks();
@@ -3643,7 +3685,7 @@ function paInitBlockDnd() {
   });
   document.addEventListener('drop', e => {
     if (!_paDragId) return;
-    const row = e.target.closest?.('.pa-block-row'); if (!row) return;
+    const row = e.target.closest?.('.pa-sec'); if (!row) return;
     e.preventDefault();
     const after = row.classList.contains('pa-drop-after');
     clearDropMarks();
@@ -3663,11 +3705,30 @@ function paBlocksReorder(dragId, targetId, after) {
   arr.splice(to, 0, moved);
   paRenderAll();
 }
+// "Select" used to mean "swap the far-away inspector". With the document every
+// section is already on screen, so it means: take me there, and mark which one.
+// This is what turns a click on the phone preview into a way IN.
 function paBlocksSelect(id) {
-  paBlocksSyncFromDOM();
   PA_SELECTED_BLOCK_ID = id;
-  paRenderAll();
-  paScrollPreviewTo(id);
+  const sec = document.querySelector(`.pa-sec[data-blockid="${CSS.escape(id)}"]`);
+  if (!sec) return;
+  sec.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  sec.classList.add('is-flash');
+  setTimeout(() => sec.classList.remove('is-flash'), 900);
+  const first = sec.querySelector('[data-bkey]');
+  if (first) first.focus({ preventScroll: true });
+}
+// Clicking a block in the phone opens that section in the document — the
+// feature Ash asked to bring across from the home page editor. Delegated on
+// the screen so it survives every preview repaint.
+function paWirePreviewClicks() {
+  const screen = document.getElementById('pa-preview-screen');
+  if (!screen || screen._paClicksWired) return;
+  screen._paClicksWired = true;
+  screen.addEventListener('click', e => {
+    const el = e.target.closest('[data-prev-blockid]'); if (!el) return;
+    paBlocksSelect(el.getAttribute('data-prev-blockid'));
+  });
 }
 function paScrollPreviewTo(id) {
   const screen = document.getElementById('pa-preview-screen'); if (!screen) return;
@@ -3675,15 +3736,28 @@ function paScrollPreviewTo(id) {
   const top = el.getBoundingClientRect().top - screen.getBoundingClientRect().top + screen.scrollTop;
   screen.scrollTo({ top: Math.max(0, top - 12), behavior: 'smooth' });
 }
-function paBlocksSyncFromDOM() {
-  const mount = document.getElementById('pa-block-editor-mount'); if (!mount) return;
-  const card = mount.querySelector('[data-blockid]'); if (!card) return;
-  const id = card.getAttribute('data-blockid');
-  const b = (window._paBlocks || []).find(x => x.id === id); if (!b) return;
-  // The editable inputs live in the .pa-inspector-body sibling, NOT inside the
-  // .pa-inspector-head element that carries data-blockid — so query the whole
-  // mount (it only ever holds the one selected block's form at a time).
-  mount.querySelectorAll('[data-bkey]').forEach(el => {
+// ── Read every open section's form back into its own block ──
+//
+// THE WHOLE DANGER OF §144 IS IN THIS FUNCTION, so it is worth saying plainly.
+// Until the document layout, the editor showed ONE block's form at a time: find
+// the single [data-blockid] in the mount, sweep every [data-bkey] under that
+// mount, write them all onto that one block. With nine forms on screen at once
+// that sweep would pour every section's words into whichever block happened to
+// be first — silently, on a page nobody can see is wrong until a customer reads
+// it. §142 is the same family of mistake, eleven days younger.
+//
+// So the walk is per SECTION: each section element carries data-blockid, and a
+// field belongs to the section it sits inside. `scripts/test_product_editor_doc.js`
+// holds that invariant with two sections on screen.
+function _paSyncOneSection(host) {
+  const id = host.getAttribute('data-blockid');
+  const b  = (window._paBlocks || []).find(x => x.id === id); if (!b) return;
+  host.querySelectorAll('[data-bkey]').forEach(el => {
+    // A nested section's fields belong to that section, not this one. Nothing
+    // nests today; the guard costs one comparison and removes the whole class
+    // of bug if something ever does.
+    const owner = el.closest('[data-blockid]');
+    if (owner && owner !== host) return;
     const k    = el.getAttribute('data-bkey');
     const val  = el.type === 'checkbox' ? !!el.checked : el.value;
     const cIdx = el.getAttribute('data-cellidx');
@@ -3708,6 +3782,10 @@ function paBlocksSyncFromDOM() {
       b[k] = val;
     }
   });
+}
+function paBlocksSyncFromDOM() {
+  const doc = document.getElementById('pa-doc'); if (!doc) return;
+  doc.querySelectorAll('.pa-sec[data-blockid]').forEach(_paSyncOneSection);
 }
 function paArrAdd(blockId, key, factory) {
   paBlocksSyncFromDOM();
@@ -3735,7 +3813,7 @@ function paArrRemove(blockId, key, idx) {
 // The rule itself is unchanged and stays strict: a section with nothing in it
 // is noise, and an EMPTY section shown to a customer is worse than no section.
 // What changes is that the office can now see which ones those are, before
-// pressing Save rather than after (paRenderTabs marks them, paSaveEdit counts
+// pressing Save rather than after (the section head marks them, paSaveEdit counts
 // them).
 function _paBlockWillSave(b) {
     if (!b) return false;
@@ -3882,74 +3960,237 @@ function _paBlockSubLabel(b) {
   }
   return '';
 }
-function paRenderTabs() {
-  const list = document.getElementById('pa-blocks-list'); if (!list) return;
+// ── §144 · THE PAGE AS ONE DOCUMENT ────────────────────────────────────────
+//
+// THE SPINE. Nine section types, and the order is the HOUSE'S, not a designer's
+// idea of one — it is what 74 live products already carry, and it puts the spec
+// strip above the opening paragraph, which no whiteboard would have chosen.
+// Measured by scripts/diagnose_block_spine_order.js against production: these
+// nine are on 73-99% of the 260 products that carry any blocks, and the next
+// type down is on 8%. That cliff is the reason the editor is a form rather than
+// a builder — see §144.
+const PA_SPINE = ['spec_strip', 'hero_intro', 'big_stat', 'why', 'ingredients_chips',
+                  'allergen_card', 'storage_box', 'notes_callout', 'how_to_use'];
+const PA_SPINE_AT = Object.fromEntries(PA_SPINE.map((t, i) => [t, i]));
+
+// How many of THIS tenant's products carry each type, fetched once per editor
+// load. Null until it answers, and null forever if it fails — a wrong number is
+// worse than no number, so a failed fetch prints nothing at all.
+let PA_USAGE = null;
+async function paLoadUsage() {
+  try {
+    const r = await fetch('/api/retail-admin/products/block-usage',
+                          { credentials: 'same-origin', cache: 'no-store' });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (j && j.total > 0 && j.counts) { PA_USAGE = j; paRenderDoc(); }
+  } catch (e) { /* no number, no line */ }
+}
+function paUsagePct(type) {
+  if (!PA_USAGE || !PA_USAGE.total) return null;
+  return Math.round(((PA_USAGE.counts[type] || 0) / PA_USAGE.total) * 100);
+}
+
+// WHAT THE DOCUMENT SHOWS, and the one rule it must never break: NO STORED
+// BLOCK MOVES. 71 distinct block orders are in use across the catalogue and
+// only 56% of products sit inside the commonest, so an editor that rendered a
+// canonical order and saved it would silently reorder 115 live customer pages
+// on first save. So the stored blocks are listed in their stored order, and a
+// placeholder for a missing spine section is inserted at the first position
+// where a spine entry of higher canonical rank already sits. Placeholders carry
+// no stored position, so inserting one cannot move anything.
+function paDocEntries() {
   const blocks = window._paBlocks || [];
-  if (!blocks.length) {
-    list.innerHTML = '<div class="helper" style="padding:14px 6px;text-align:center;font-size:11px;line-height:1.5">No sections yet — add one from the dropdown above. · 暂无板块,请从上方下拉添加。</div>';
-    return;
-  }
-  list.innerHTML = blocks.map((b, i) => {
-    const icon   = peTypeIcon(b.type);
-    const tName  = (PA_TYPE_NAME[b.type] || { en: b.type, cn: '' });
-    const sub    = _paBlockSubLabel(b);
-    const active = b.id === PA_SELECTED_BLOCK_ID ? ' active' : '';
-    // A section switched off for the QR menu is marked in the stack, not only
-    // in its own inspector — otherwise "which of these nine does the till page
-    // show?" costs nine clicks to answer.
-    const offQr  = b.hide_qr ? ' pbr-offqr' : '';
-    // A section with words in it that the save would still drop. Marked here,
-    // in the stack, for the same reason hide_qr is: the alternative is opening
-    // every section to find out which one is about to disappear. The words are
-    // the page's own live pair — this is the state 09-products calls
-    // "Not saved yet · 尚未保存" of a product that has never been written.
-    const unsaved = (!_paBlockWillSave(b) && _paBlockHasWords(b)) ? ' pbr-unsaved' : '';
-    return `<div class="pa-block-row${active}${offQr}${unsaved}" draggable="true" data-blockid="${b.id}" data-idx="${i}" onclick="paBlocksSelect('${b.id}')" title="${escapeAttr(tName.en + (tName.cn ? ' · ' + tName.cn : ''))}">
-      <div class="pbr-icon">${icon}</div>
-      <div class="pbr-info">
-        <div class="pbr-name" data-no-i18n><span data-lang-block="en">${escapeHtml(tName.en)}</span><span data-lang-block="cn">${escapeHtml(tName.cn || tName.en)}</span></div>
-        ${sub ? `<div class="pbr-sub">${escapeHtml(sub)}</div>` : ''}
-      </div>
-      ${unsaved ? `<div class="pbr-unsaved-ic" title="Not saved yet · 尚未保存"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16.5" x2="12.01" y2="16.5"/></svg></div>` : ''}
-      <button type="button" class="pbr-qr${b.hide_qr ? ' is-off' : ''}"
+  const out = blocks.map(b => ({ block: b }));
+  const rankOf = (e) => {
+    const t = e.block ? e.block.type : e.missing;
+    return (t in PA_SPINE_AT) ? PA_SPINE_AT[t] : -1;
+  };
+  PA_SPINE.forEach((type, ci) => {
+    if (blocks.some(b => b && b.type === type)) return;
+    let at = out.findIndex(e => { const r = rankOf(e); return r >= 0 && r > ci; });
+    if (at < 0) at = out.length;
+    out.splice(at, 0, { missing: type });
+  });
+  return out;
+}
+// Is this product already in the house reading order? Only the spine sections
+// present are compared — a page missing four of them can still be "in order".
+function paDocInReadingOrder() {
+  const seen = (window._paBlocks || [])
+    .map(b => b && b.type).filter(t => t in PA_SPINE_AT).map(t => PA_SPINE_AT[t]);
+  for (let i = 1; i < seen.length; i++) if (seen[i] < seen[i - 1]) return false;
+  return true;
+}
+
+function _paSecHead(b) {
+  const tName = PA_TYPE_NAME[b.type] || { en: b.type, cn: '' };
+  const unsaved = (!_paBlockWillSave(b) && _paBlockHasWords(b));
+  return `<div class="pa-sec-head">
+      <span class="pa-sec-grip" title="Drag to reorder · 拖动排序">⋮⋮</span>
+      <div class="pa-sec-dot">${peTypeIcon(b.type)}</div>
+      <h3 class="pa-sec-name" data-no-i18n><span data-lang-block="en">${escapeHtml(tName.en)}</span><span data-lang-block="cn">${escapeHtml(tName.cn || tName.en)}</span></h3>
+      <span style="flex:1 1 auto"></span>
+      ${unsaved ? `<span class="pa-sec-warn" title="Not saved yet · 尚未保存"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16.5" x2="12.01" y2="16.5"/></svg></span>` : ''}
+      <button type="button" class="pa-sec-eye${b.hide_qr ? ' is-off' : ''}"
         onclick="paRowHideQr(event, '${b.id}')"
         aria-pressed="${b.hide_qr ? 'true' : 'false'}"
         title="${b.hide_qr ? escapeAttr('Hidden on the QR menu — click to show · 二维码菜单已隐藏,点击显示') : escapeAttr('Shows on the QR menu — click to hide · 在二维码菜单显示,点击隐藏')}">${b.hide_qr
           ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
           : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`}</button>
-      <div class="pbr-grip" title="Drag to reorder · 拖动排序">⋮⋮</div>
-      <div class="pbr-num">${i + 1}</div>
+      <button type="button" class="pa-sec-x" title="Remove this section · 删除板块" onclick="paBlocksRemove('${b.id}')">${PE_UI.x}</button>
     </div>`;
-  }).join('');
-  paInitBlockDnd();
 }
-function paRefreshTabLabels() {
-  const blocks = window._paBlocks || [];
-  blocks.forEach(b => {
-    const row = document.querySelector(`.pa-block-row[data-blockid="${b.id}"]`);
-    if (!row) return;
-    // The typing path repaints labels without rebuilding the stack, so the
-    // unsavable marker has to be re-decided here too — otherwise it stays on
-    // the row for the rest of the session after the missing answer is typed,
-    // and the office learns to ignore it.
-    const unsavable = !_paBlockWillSave(b) && _paBlockHasWords(b);
-    row.classList.toggle('pbr-unsaved', unsavable);
-    const icon = row.querySelector('.pbr-unsaved-ic');
-    if (unsavable && !icon) paRenderTabs();
-    else if (!unsavable && icon) icon.remove();
-    const subEl = row.querySelector('.pbr-sub');
-    const sub = _paBlockSubLabel(b);
-    if (sub) {
-      if (subEl) subEl.textContent = sub;
-      else {
-        const div = document.createElement('div');
-        div.className = 'pbr-sub'; div.textContent = sub;
-        const info = row.querySelector('.pbr-info');
-        if (info) info.appendChild(div);
-      }
-    } else if (subEl) subEl.remove();
+
+// The fold. Colours and "Where to show" are the two things the usage report
+// found nobody opens — 30 colour fields filled by nobody across 260 products —
+// so they are folded rather than deleted (v4.280: Ash declined the deletion).
+function _paSecMore(b) {
+  const open   = !!paInspectorOpen['more:' + b.id];
+  const colour = _paColorEditorHtml(b);
+  return `<button type="button" class="pa-sec-more" aria-expanded="${open}" onclick="paSecMoreToggle('${b.id}')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      <span data-no-i18n><span data-lang-block="en">More options</span><span data-lang-block="cn">更多选项</span></span>
+      <span class="pa-sec-more-hint helper" data-no-i18n><span data-lang-block="en">${colour ? 'colours, where to show' : 'where to show'}</span><span data-lang-block="cn">${colour ? '颜色、显示位置' : '显示位置'}</span></span>
+    </button>
+    ${open ? `<div class="pa-sec-more-body">
+      ${colour ? `<div class="pa-sec-sub"><span class="pa-sec-sub-t" data-no-i18n><span data-lang-block="en">Colours</span><span data-lang-block="cn">颜色</span></span>${colour}</div>` : ''}
+      <div class="pa-sec-sub"><span class="pa-sec-sub-t" data-no-i18n><span data-lang-block="en">Where to show</span><span data-lang-block="cn">显示位置</span></span>${_paChannelEditorHtml(b)}</div>
+    </div>` : ''}`;
+}
+function paSecMoreToggle(id) {
+  paBlocksSyncFromDOM();
+  paInspectorOpen['more:' + id] = !paInspectorOpen['more:' + id];
+  paRenderDoc();
+}
+
+function _paSecEmpty(type) {
+  const tName = PA_TYPE_NAME[type] || { en: type, cn: '' };
+  const pct = paUsagePct(type);
+  return `<div class="pa-sec-empty" data-missing="${escapeAttr(type)}">
+      <span class="pa-sec-ring"></span>
+      <div class="pa-sec-empty-txt">
+        <div class="pa-sec-empty-name" data-no-i18n><span data-lang-block="en">${escapeHtml(tName.en)}</span><span data-lang-block="cn">${escapeHtml(tName.cn || tName.en)}</span></div>
+        ${pct === null ? '' : `<div class="helper pa-sec-empty-pct" data-no-i18n><span data-lang-block="en"><b>${pct}%</b> of your products say this</span><span data-lang-block="cn">你有 <b>${pct}%</b> 的产品写了这一段</span></div>`}
+      </div>
+      <button type="button" class="btn pa-sec-write" onclick="paDocWrite('${escapeAttr(type)}')" data-no-i18n><span data-lang-block="en">Write it</span><span data-lang-block="cn">去填写</span></button>
+    </div>`;
+}
+// Adds the section AT ITS CANONICAL POSITION rather than at the end, so the
+// slot the office just clicked is the slot the section appears in. This is the
+// one place the canonical order touches stored data, and it only ever INSERTS.
+function paDocWrite(type) {
+  paBlocksSyncFromDOM();
+  const def = PA_BLOCK_TYPES.find(t => t.type === type);
+  if (!def) return;
+  const blocks = window._paBlocks || (window._paBlocks = []);
+  const b = { id: paBlocksGenId(), type, ...(def.make ? def.make() : {}) };
+  const ci = PA_SPINE_AT[type];
+  let at = blocks.length;
+  if (ci != null) {
+    const found = blocks.findIndex(x => x && (x.type in PA_SPINE_AT) && PA_SPINE_AT[x.type] > ci);
+    if (found >= 0) at = found;
+  }
+  blocks.splice(at, 0, b);
+  paRenderDoc();
+  paRenderPreview();
+  const first = document.querySelector(`.pa-sec[data-blockid="${CSS.escape(b.id)}"] [data-bkey]`);
+  if (first) { first.focus(); first.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+}
+
+function paRenderDoc() {
+  const host = document.getElementById('pa-doc'); if (!host) return;
+  const entries = paDocEntries();
+  host.innerHTML = entries.map(e => {
+    if (e.missing) return _paSecEmpty(e.missing);
+    const b = e.block;
+    const off = b.hide_qr ? ' is-offqr' : '';
+    return `<section class="pa-sec${off}" draggable="true" data-blockid="${b.id}">
+        ${_paSecHead(b)}
+        <div class="pa-sec-body">${_paBlockEditorBody(b)}</div>
+        ${_paSecMore(b)}
+        ${b.hide_qr ? `<p class="pa-sec-note" data-no-i18n><span data-lang-block="en">Hidden on the QR menu. The mini app and web shop still show it, and nothing is deleted.</span><span data-lang-block="cn">仅在二维码菜单隐藏。小程序与网店照常显示,内容不会删除。</span></p>` : ''}
+      </section>`;
+  }).join('');
+
+  // The rare types, below the spine. Frequency is printed beside each so the
+  // office can see what it is reaching for — nutrition_facts is on 8% of
+  // products, four of these are on none at all.
+  const rare = PA_BLOCK_TYPES.map(t => t.type)
+    .filter(t => !(t in PA_SPINE_AT))
+    .filter(t => !(window._paBlocks || []).some(b => b && b.type === t));
+  if (rare.length) {
+    host.insertAdjacentHTML('beforeend', `
+      <div class="pa-doc-div"><i></i><span data-no-i18n><span data-lang-block="en">Rarely needed</span><span data-lang-block="cn">不常用</span></span><i></i></div>
+      <div class="pa-doc-rare">${rare.map(t => {
+        const n = PA_TYPE_NAME[t] || { en: t, cn: '' };
+        const pct = paUsagePct(t);
+        return `<button type="button" class="pa-rare" onclick="paDocWrite('${escapeAttr(t)}')" data-no-i18n>+ <span data-lang-block="en">${escapeHtml(n.en)}</span><span data-lang-block="cn">${escapeHtml(n.cn || n.en)}</span>${pct === null ? '' : `<span class="helper">${pct}%</span>`}</button>`;
+      }).join('')}</div>`);
+  }
+
+  paDocHeader();
+  host.querySelectorAll('[data-bkey]').forEach(el => {
+    el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', paLivePreview);
+  });
+  paWireColorSelects(host);
+}
+
+// Progress, and the reading-order offer. The offer is only shown when it would
+// actually do something, and it says what it would move BEFORE it moves it —
+// 115 of 260 products would have their sections reordered by a canonical save,
+// so this is never something that happens on its own.
+// Re-decide the "carries words that would still be dropped" marker on every
+// section, without rebuilding anything that holds a caret. The typing path
+// calls this; a full paRenderDoc would throw away what is being typed.
+function paDocRefreshMarks() {
+  (window._paBlocks || []).forEach(b => {
+    const sec = document.querySelector(`.pa-sec[data-blockid="${CSS.escape(b.id)}"]`);
+    if (!sec) return;
+    const want = (!_paBlockWillSave(b) && _paBlockHasWords(b));
+    const has  = sec.querySelector('.pa-sec-warn');
+    if (want && !has) {
+      const eye = sec.querySelector('.pa-sec-eye');
+      if (eye) eye.insertAdjacentHTML('beforebegin',
+        `<span class="pa-sec-warn" title="Not saved yet · 尚未保存"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16.5" x2="12.01" y2="16.5"/></svg></span>`);
+    } else if (!want && has) { has.remove(); }
   });
 }
+function paDocHeader() {
+  const bar = document.getElementById('pa-doc-head'); if (!bar) return;
+  const present = PA_SPINE.filter(t => (window._paBlocks || []).some(b => b && b.type === t)).length;
+  const ticks = PA_SPINE.map((t, i) => `<i class="${i < present ? 'on' : ''}"></i>`).join('');
+  const tidy = paDocInReadingOrder() ? '' :
+    `<button type="button" class="btn pa-doc-tidy" onclick="paDocReorder()" data-no-i18n
+       title="${escapeAttr('Nothing moves until you press this · 按下前不会移动任何板块')}">
+       <span data-lang-block="en">Put in reading order</span><span data-lang-block="cn">按阅读顺序排列</span></button>`;
+  bar.innerHTML = `<div class="pa-doc-title">
+      <h2 data-no-i18n><span data-lang-block="en">The product page</span><span data-lang-block="cn">产品详情页</span></h2>
+      <span class="helper" data-no-i18n><span data-lang-block="en">in the order a customer reads it</span><span data-lang-block="cn">按顾客阅读的顺序</span></span>
+    </div>
+    <div class="pa-doc-prog"><div class="pa-ticks">${ticks}</div>
+      <span class="helper" data-no-i18n><span data-lang-block="en"><b>${present}</b> of ${PA_SPINE.length} written</span><span data-lang-block="cn">已写 <b>${present}</b> / ${PA_SPINE.length}</span></span>
+    </div>
+    <span style="flex:1 1 auto"></span>${tidy}`;
+}
+function paDocReorder() {
+  paBlocksSyncFromDOM();
+  const blocks = window._paBlocks || [];
+  const names = blocks.filter(b => b && (b.type in PA_SPINE_AT))
+    .map(b => (PA_TYPE_NAME[b.type] || { en: b.type }).en);
+  if (!confirm(`Put these sections in the house reading order?\n\n${names.join('\n')}\n\nNothing is deleted and no words change — only the order on the customer's page. · 按门店阅读顺序排列这些板块?不会删除内容,只改变顾客页面上的顺序。`)) return;
+  // A stable sort that leaves every non-spine block exactly where it is: only
+  // the spine blocks are re-slotted, into the positions the spine blocks
+  // already occupy.
+  const slots = [];
+  blocks.forEach((b, i) => { if (b && (b.type in PA_SPINE_AT)) slots.push(i); });
+  const spine = slots.map(i => blocks[i]).sort((a, b) => PA_SPINE_AT[a.type] - PA_SPINE_AT[b.type]);
+  slots.forEach((slot, n) => { blocks[slot] = spine[n]; });
+  paRenderDoc();
+  paRenderPreview();
+  peToast('Sections reordered. Save to keep it. · 板块已重排,保存后生效。');
+}
+
 
 // ── Selected-block editor form ──
 // EN/中 paired input widget — one field label, then EN + 中 rows grouped into a
@@ -4347,47 +4588,6 @@ function paImageBandClear(blockId) {
   if (!b) return;
   b.url = '';
   paRenderAll();
-}
-function paRenderSelectedEditor() {
-  const mount = document.getElementById('pa-block-editor-mount'); if (!mount) return;
-  const blocks = window._paBlocks || [];
-  if (!blocks.length) {
-    mount.innerHTML = '<div class="pa-blocks-empty">No sections yet — use + Add section on the left to compose the page. · 暂无板块,请用左侧"添加板块"开始排版。</div>';
-    return;
-  }
-  let b = blocks.find(x => x.id === PA_SELECTED_BLOCK_ID);
-  if (!b) { b = blocks[0]; PA_SELECTED_BLOCK_ID = b.id; }
-  // Moving to a different block resets every fold to its default open state.
-  if (b.id !== paLastInspectedId) {
-    for (const k in paInspectorOpen) delete paInspectorOpen[k];
-    paLastInspectedId = b.id;
-  }
-  const tName = PA_TYPE_NAME[b.type] || { en: b.type, cn: '' };
-  const icon  = peTypeIcon(b.type);
-  const colorInner = _paColorEditorHtml(b);
-  const body =
-    paInspSec(b.type + ':content', paBiTitle('Content', '内容'), _paBlockEditorBody(b), { open: true })
-    + (colorInner ? paInspSec(b.type + ':colours', paBiTitle('Colours', '颜色'), colorInner) : '')
-    + paInspSec(b.type + ':shows', paBiTitle('Where to show', '显示位置'), _paChannelEditorHtml(b));
-  mount.innerHTML = `
-    <div class="pa-inspector-head" data-blockid="${b.id}">
-      <div class="pa-inspector-head-left">
-        <div class="pa-inspector-icon">${icon}</div>
-        <div style="min-width:0;display:flex;flex-direction:column;gap:2px">
-          <span class="pa-inspector-title" data-no-i18n><span data-lang-block="en">${escapeHtml(tName.en)}</span><span data-lang-block="cn">${escapeHtml(tName.cn || tName.en)}</span></span>
-          <span class="pa-inspector-sub" data-no-i18n>id: ${escapeHtml(b.id)}</span>
-        </div>
-      </div>
-      <div class="pa-inspector-actions">
-        <button type="button" class="btn btn-icon danger" title="Delete block · 删除板块" onclick="paBlocksRemove('${b.id}')">${PE_UI.x}</button>
-      </div>
-    </div>
-    <div class="pa-inspector-body">${body}</div>`;
-  mount.querySelectorAll('[data-bkey]').forEach(el => {
-    const ev = el.type === 'checkbox' ? 'change' : 'input';
-    el.addEventListener(ev, paLivePreview);
-  });
-  paWireColorSelects(mount);
 }
 
 // ── Live phone-frame preview ──
