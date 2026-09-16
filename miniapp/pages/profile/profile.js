@@ -6,6 +6,16 @@
 //   • <button open-type="getPhoneNumber"> → real bound phone (needs real AppID)
 // All three require explicit user action — WeChat no longer hands them out
 // silently via wx.getUserInfo / wx.getUserProfile.
+//
+// NO ADDRESS FIELD. This page is the first wall a new customer hits (cart,
+// checkout and addresses all route here), and the only address control it ever
+// had was a wx.chooseAddress shortcut. With nothing saved in WeChat that API
+// drops the customer straight into WeChat's own create-address form, whose
+// chrome follows their WeChat language but whose region list is Chinese-only —
+// an English-speaking first-timer got buttons they could read over a list they
+// could not, at the moment before they had bought anything. The address is
+// collected at checkout instead, on our own bilingual form
+// (pages/addresses, pages/checkout), where it is asked for with a reason.
 
 const api = require('../../utils/api');
 const contentCheck = require('../../utils/content-check');
@@ -17,24 +27,17 @@ Page({
     nickname: '',
     phone: '',
     saving: false,
-    wxAddrPicking: false,
-    addrPreview: null,    // { name, phone, address } once picked
-    pendingAddr: null,    // saved on PATCH save → /api/retail/addresses
     showPhone: false,     // toggle on once getPhoneNumber works (needs real AppID)
     lang: 'en',
     copy: {
       kicker: 'BIND PROFILE',
       title: 'Hey,\nyou.',
-      sub: 'WeChat keeps your nickname, avatar and address private. Tap to pull them in.',
+      sub: 'WeChat keeps your nickname and avatar private. Tap to pull them in.',
       pickAvatar: 'Pick avatar',
       avatarHint: 'Tap to pick your WeChat avatar or upload one.',
       useWxAvatar: 'Use my WeChat avatar',
       nicknameLabel: 'NICKNAME',
       nicknamePh: 'Tap, then choose from WeChat',
-      addrLabel: 'ADDRESS · NAME · PHONE',
-      wxAddrBtn: 'Import from WeChat',
-      addrLoading: 'Loading…',
-      addrHint: 'WeChat gives us your name, phone, and full address in a single tap.',
       phoneLabel: 'PHONE',
       phoneBtn: 'Use my WeChat phone number',
       phoneHint: 'Optional. Available once we go live on WeChat.',
@@ -72,16 +75,12 @@ Page({
       copy: {
         kicker: '绑定资料',
         title: '你好。',
-        sub: '微信不会自动告诉我们您的昵称、头像和地址，请点击下方手动绑定。',
+        sub: '微信不会自动告诉我们您的昵称和头像，请点击下方手动绑定。',
         pickAvatar: '选择头像',
         avatarHint: '点击选择微信头像或上传图片。',
         useWxAvatar: '使用微信头像',
         nicknameLabel: '昵称',
         nicknamePh: '点击输入框，从微信选择',
-        addrLabel: '地址 · 姓名 · 电话',
-        wxAddrBtn: '从微信一键导入',
-        addrLoading: '加载中…',
-        addrHint: '一键导入姓名、手机号与完整地址。',
         phoneLabel: '手机号',
         phoneBtn: '使用微信绑定的手机号',
         phoneHint: '可选，上线后可用。',
@@ -143,61 +142,6 @@ Page({
 
   onNicknameInput(e) {
     this.setData({ nickname: (e.detail.value || '').trim() });
-  },
-
-  // One-shot WeChat address — fills name + phone + full address in a single tap.
-  pickWxAddress() {
-    if (this.data.wxAddrPicking || !wx.chooseAddress) {
-      if (!wx.chooseAddress) {
-        wx.showToast({ title: this.data.lang === 'cn' ? '微信地址不可用' : 'WeChat address unavailable', icon: 'none' });
-      }
-      return;
-    }
-    this.setData({ wxAddrPicking: true });
-    const apply = (addr) => {
-      const composed = [addr.provinceName, addr.cityName, addr.countyName, addr.detailInfo]
-        .filter(Boolean).join(' ');
-      const pending = {
-        recipient_name: addr.userName || '',
-        phone: addr.telNumber || '',
-        address: composed,
-        // WeChat returns the GZ district as `countyName` (e.g. 番禺区). Persist
-        // it so the server's zone-match (`matchDeliveryZone`) can route to the
-        // right delivery rule — without this the saved address has no district
-        // and every WeChat-picked GZ order fails with "no_zone_match".
-        city: addr.cityName || '',
-        district: addr.countyName || '',
-        province: addr.provinceName || '',
-        is_default: true,
-      };
-      this.setData({
-        wxAddrPicking: false,
-        nickname: this.data.nickname || addr.userName || '',
-        phone: addr.telNumber || this.data.phone,
-        pendingAddr: pending,
-        addrPreview: { name: pending.recipient_name, phone: pending.phone, address: composed },
-      });
-    };
-    const fail = (err) => {
-      this.setData({ wxAddrPicking: false });
-      if (/cancel|deny/i.test(err?.errMsg || '')) return;
-      wx.showToast({ title: this.data.lang === 'cn' ? '微信地址不可用' : 'WeChat address unavailable', icon: 'none' });
-    };
-    wx.getSetting({
-      success: (s) => {
-        if (s.authSetting['scope.address'] === false) {
-          wx.openSetting({
-            success: (r) => r.authSetting['scope.address']
-              ? wx.chooseAddress({ success: apply, fail })
-              : this.setData({ wxAddrPicking: false }),
-            fail,
-          });
-        } else {
-          wx.chooseAddress({ success: apply, fail });
-        }
-      },
-      fail,
-    });
   },
 
   onGetPhone(e) {
@@ -318,12 +262,6 @@ Page({
       const app = getApp();
       app.globalData.customer = { ...(app.globalData.customer || {}), ...updated };
       try { wx.setStorageSync('customer', app.globalData.customer); } catch {}
-
-      // If the user pulled an address from WeChat, persist it too.
-      if (this.data.pendingAddr) {
-        try { await api.post('/api/retail/addresses', this.data.pendingAddr); }
-        catch (e) { console.warn('[profile] address save failed:', e.message); }
-      }
 
       wx.showToast({ title: this.data.copy.savedToast, icon: 'success' });
       setTimeout(() => wx.navigateBack(), 600);

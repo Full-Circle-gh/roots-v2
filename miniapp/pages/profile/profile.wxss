@@ -140,54 +140,6 @@
   color: var(--olive);
 }
 
-/* ── WeChat address button — brand-styled (ink shell, small green dot to signal WeChat) ── */
-.wx-addr-btn {
-  background: #FFFCF7;
-  color: var(--ink);
-  border: 3rpx solid var(--ink);
-  border-radius: 0;
-  padding: 0 24rpx;
-  height: 84rpx;
-  line-height: 84rpx;
-  font-size: calc(22rpx * var(--font-scale));
-  letter-spacing: 0.1em;
-  text-align: center;
-  width: 100% !important;
-  min-width: 0 !important;
-  margin: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12rpx;
-}
-.wx-addr-btn::after { border: none; }
-.wx-addr-btn[disabled] { opacity: 0.5; }
-.wx-dot {
-  width: 14rpx;
-  height: 14rpx;
-  border-radius: 999rpx;
-  background: #07c160;
-  display: inline-block;
-}
-.addr-preview {
-  background: var(--ink);
-  color: #fff;
-  padding: 20rpx 24rpx;
-  margin-top: -3rpx;
-  border: 3rpx solid var(--ink);
-}
-.addr-line {
-  font-size: calc(26rpx * var(--font-scale));
-  line-height: 1.35;
-  color: #fff;
-}
-.addr-line.addr-sub {
-  font-family: var(--f-aleo);
-  font-size: calc(22rpx * var(--font-scale));
-  margin-top: 6rpx;
-  color: rgba(255, 255, 255, 0.7);
-}
-
 /* ── Phone (conditional) ── */
 .phone-btn {
   background: #FFFCF7;
