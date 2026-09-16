@@ -585,6 +585,18 @@
   html[data-ui-lang="en"] [data-lang-block="cn"] { display: none !important; }
   html[data-ui-lang="cn"] [data-lang-block="en"] { display: none !important; }
 
+  /* ── §145 · A spec-strip cell ── */
+  .pa-spec-cell {
+    padding: 12px 14px; margin-bottom: 10px;
+    background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: var(--r-md);
+  }
+  .pa-spec-cell-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .pa-spec-sel { width: 100%; font-size: 13px; }
+  /* The typed pair is hidden, not removed, while a list answer is in force —
+     the inputs must stay in the DOM or paBlocksSyncFromDOM loses the cell. */
+  .pa-spec-typed { margin-top: 6px; }
+  .pa-spec-typed[hidden] { display: none; }
+
   /* ── §144 · The page as one document ──────────────────────────────────────
      Nine named sections in the product's own order, each showing its fields in
      place. Replaces the "list on the left, form on the right" pair the office
@@ -3900,6 +3912,122 @@ function paCollectNutrition() {
   return { basis_en: basis_en || null, basis_cn: basis_cn || null, rows };
 }
 // ── Tabs / palette rows ──
+// ── §145 · WHAT A SPEC STRIP CELL IS ALLOWED TO SAY, OFFERED NOT ENFORCED ──
+//
+// EVERY PAIR BELOW WAS LIFTED FROM PRODUCTION, NOT COMPOSED. That is the whole
+// method and it is why `docs/tacet-delivery-vocabulary.md` records lifts here
+// rather than new strings: scripts/diagnose_spec_strip_labels.js read the 724
+// cells the catalogue actually carries, and these are the words the office
+// already uses, with the counts to prove it. Nothing here is a translation
+// somebody made up.
+//
+// WHY A LIST AT ALL. The same label was being typed several ways — `Net Wt`
+// 163 times and `Net Weight` 29, `Certification` / `Certified` /
+// `Certifications` across 13 cells, and FOUR Chinese words for "category"
+// (类别 14, 品类 6, 分类 5, …). None of that is carelessness; it is what
+// happens when a label is retyped 724 times on different days. A pick also
+// fills BOTH languages at once, which is the half that matters: a typed label
+// is a label somebody can finish in English and forget in 中文.
+//
+// `Type` (66 cells) IS DELIBERATELY NOT OFFERED. It is not a misspelling of
+// `Product Type` (64 cells) — it is a second label for the same idea, holding
+// the same answers ("Ready-to-eat spread" appears under both). Only one can be
+// offered or the split continues. `Product Type` wins on the Chinese, where
+// 产品类型 (83) already beats 类型 (40). THE 66 EXISTING CELLS ARE NOT TOUCHED:
+// nothing rewrites a live page, and a product that says `Type` keeps saying it
+// until somebody decides otherwise. Ash's call, recorded in §145.
+const PA_SPEC_LABELS = [
+  { en: 'Product Type',  cn: '产品类型' },   // EN 64 · CN 83  (supersedes Type / 类型)
+  { en: 'Net Wt',        cn: '净含量' },     // EN 163 · CN 200 (supersedes Net Weight / 净重)
+  { en: 'Origin',        cn: '产地' },       // EN 156 · CN 150
+  { en: 'Shelf Life',    cn: '保质期' },     // EN 57  · CN 57
+  { en: 'Diet',          cn: '饮食' },       // EN 29  · CN 29
+  { en: 'Form',          cn: '形态' },       // EN 28  · CN 28
+  { en: 'Use',           cn: '用法' },       // EN 26  · CN 26
+  { en: 'Category',      cn: '类别' },       // EN 18  · CN 14 (supersedes 品类 / 分类)
+  { en: 'Certification', cn: '认证' },       // EN 13 across three spellings · CN 14
+  { en: 'Storage',       cn: '储存方式' },   // EN 5   · CN 5
+];
+
+// THE VALUES, AND WHY THEY HANG OFF THE LABEL. "Guangzhou, China" is an answer
+// to Origin and nonsense under Net Wt, so a flat list of values would be worse
+// than none. Keyed by the label's English, lower-cased.
+//
+// THE THREE THAT PAY FOR THIS WHOLE CHANGE: Origin is "Guangzhou, China" on
+// 109 of 156 cells, Shelf Life is "See packaging" on 46 of 57, and Diet is
+// "100% plant" on 28 of 29. That is 242 cells whose answer was typed out by
+// hand, in two languages, every time.
+//
+// NET WT HAS NO LIST ON PURPOSE — 67 distinct weights across 163 cells is
+// exactly what a weight field should look like. So do Certification and
+// Storage, which are too thin to draw a list from.
+const PA_SPEC_VALUES = {
+  'origin': [
+    { en: 'Guangzhou, China',     cn: '中国广州' },        // 109
+    { en: 'China',                cn: '中国' },            // 15
+    { en: 'Yunnan, China',        cn: '中国云南' },        // 5 / 3
+    { en: 'Israel',               cn: '以色列' },          // 3
+    { en: 'Northeast China',      cn: '中国东北' },        // 2
+    { en: 'Tunisia, North Africa', cn: '突尼斯（北非）' }, // 2
+  ],
+  'shelf life': [
+    { en: 'See packaging',        cn: '见包装标示' },      // 46 / 38 (also 见包装 8, 请见包装标注 2)
+    { en: 'Up to 6 months frozen', cn: '冷冻最长保存6个月' }, // 5 / 3
+  ],
+  'diet': [
+    { en: '100% plant',           cn: '纯植物' },          // 28
+    { en: 'Vegan',                cn: '纯素' },            // 1
+  ],
+  'form': [
+    { en: 'Raw · whole',          cn: '生 · 整粒' },       // 6
+    { en: 'Dried · raw',          cn: '干豆 · 生' },       // 4
+    { en: 'Raw seeds',            cn: '生 · 籽' },         // 4
+    { en: 'Whole rolled',         cn: '整粒压片' },        // 2
+    { en: 'Organic powder',       cn: '有机粉' },          // 2
+  ],
+  'use': [
+    { en: 'Snack · bake · blend', cn: '直接吃·烘焙·打浆' }, // 6
+    { en: 'Sprinkle · blend · soak', cn: '撒·打浆·泡发' },  // 4
+    { en: 'No soak needed',       cn: '无需浸泡' },        // 2
+    { en: 'Rinse & cook',         cn: '冲洗后烹煮' },      // 2
+    { en: 'Soak & cook',          cn: '泡发后烹煮' },      // 2
+    { en: 'Cook in minutes',      cn: '几分钟煮好' },      // 2
+    { en: 'Season anything',      cn: '万物可调味' },      // 2
+  ],
+  'category': [
+    { en: 'Home & Body',          cn: '家居护理' },        // 6 / 4 (also 家居护肤, 家居与身体护理)
+    { en: 'Fresh & Deli',         cn: '鲜食与熟食' },      // 3 / 2
+    { en: 'Protein Powder',       cn: '蛋白粉' },          // 2
+    { en: 'Dry & Pantry',         cn: '干货 & 储备食材' }, // 2 / 1
+    { en: 'Chili Paste',          cn: '辣椒酱' },          // 2
+  ],
+  'product type': [
+    { en: 'Ready-to-eat spread',  cn: '即食抹酱' },        // 9
+    { en: 'Ready-to-eat nut butter', cn: '即食坚果酱' },   // 8
+    { en: 'Dried Fruit',          cn: '干果' },            // 4 / 3
+    { en: 'Ready-to-eat refrigerated food', cn: '即食冷藏食品' }, // 3
+    { en: 'Frozen · heat to eat', cn: '冷冻 · 加热食用' }, // 3
+    { en: 'Fresh Food',           cn: '鲜食' },            // 2
+    { en: 'Glass Cleaner',        cn: '玻璃清洁液' },      // 2
+    { en: 'Laundry Liquid',       cn: '洗衣液' },          // 2
+  ],
+};
+const PA_SPEC_CUSTOM = '__custom__';
+function paSpecValuesFor(labelEn) {
+  return PA_SPEC_VALUES[String(labelEn || '').trim().toLowerCase()] || null;
+}
+// Does this cell's current wording match one of the offered pairs? Matched on
+// the ENGLISH only, and loosely: a cell that says "Net wt" is the same answer
+// as "Net Wt" and must not be shown as though somebody had typed something
+// unusual. The Chinese is not part of the test — an existing cell may carry a
+// perfectly good 中文 the list happens to spell differently, and demoting it to
+// "Something else" would invite somebody to overwrite it.
+function paSpecMatch(list, en) {
+  const k = String(en || '').trim().toLowerCase();
+  if (!k) return -1;
+  return (list || []).findIndex(o => o.en.toLowerCase() === k);
+}
+
 const PA_TYPE_GLYPH = Object.fromEntries(PA_BLOCK_TYPES.map(t => [t.type, t.glyph]));
 const PA_TYPE_NAME  = Object.fromEntries(PA_BLOCK_TYPES.map(t => [t.type, { en: t.name_en, cn: t.name_cn }]));
 PA_TYPE_GLYPH.stat_callout = PA_TYPE_GLYPH.stat_callout || '✨';
@@ -4210,26 +4338,127 @@ function paPair({ label, keyEn, keyCn, valEn = '', valCn = '', phEn = '', phCn =
     </div>${helper ? `<div class="helper">${helper}</div>` : ''}
   </div>`;
 }
+// ── §145 · One spec-strip cell: pick the label, pick the value, or type it ──
+//
+// THE TEXT INPUTS NEVER LEAVE THE DOM, and that is the whole safety argument.
+// paBlocksSyncFromDOM/_paSyncOneSection means one thing — "the block field
+// equals the input" — and every k_en/k_cn/v_en/v_cn still rides that exact
+// mechanism, carrying data-bkey and data-cellidx as they always have. The two
+// <select>s are a convenience layer ON TOP: they write into those inputs and
+// never into the block. So there is no second writer, no polarity to get
+// backwards (§142), and free text is not a special case — it is what the
+// control already was, merely hidden while a list answer is in force.
+function _paSpecCell(b, c, i, total) {
+  const labelIdx = paSpecMatch(PA_SPEC_LABELS, c.k_en);
+  const vList    = paSpecValuesFor(c.k_en);
+  const valueIdx = vList ? paSpecMatch(vList, c.v_en) : -1;
+  const kCustom  = labelIdx < 0;
+  const vCustom  = !vList || valueIdx < 0;
+
+  const opts = (list, sel) =>
+    list.map((o, n) => `<option value="${n}" ${n === sel ? 'selected' : ''}>${escapeHtml(o.en)} · ${escapeHtml(o.cn)}</option>`).join('');
+
+  return `
+    <div class="pa-spec-cell" data-speccell="${i}">
+      <div class="pa-spec-cell-head">
+        <span class="pa-edit-section-title">Cell · 第 ${i + 1} 格</span>
+        <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','cells',${i})" ${total <= 1 ? 'disabled' : ''}>Remove · 删除</button>
+      </div>
+
+      <div class="field">
+        <label class="stacked" data-no-i18n><span data-lang-block="en">Label</span><span data-lang-block="cn">标签</span></label>
+        <select class="pa-spec-sel" onchange="paSpecPickLabel(this, '${b.id}', ${i})">
+          <option value="${PA_SPEC_CUSTOM}" ${kCustom ? 'selected' : ''}>Something else — type it · 其他 — 手动输入</option>
+          ${opts(PA_SPEC_LABELS, labelIdx)}
+        </select>
+      </div>
+      <div class="pa-spec-typed" ${kCustom ? '' : 'hidden'}>
+        ${paPair({ label: '', keyEn: 'k_en', keyCn: 'k_cn', valEn: c.k_en, valCn: c.k_cn, phEn: 'Label in English', phCn: '中文标签', attrs: `data-cellidx="${i}"` })}
+      </div>
+
+      <div class="field" style="margin-top:10px">
+        <label class="stacked" data-no-i18n><span data-lang-block="en">Value</span><span data-lang-block="cn">值</span></label>
+        ${vList
+          ? `<select class="pa-spec-sel" onchange="paSpecPickValue(this, '${b.id}', ${i})">
+               <option value="${PA_SPEC_CUSTOM}" ${vCustom ? 'selected' : ''}>Something else — type it · 其他 — 手动输入</option>
+               ${opts(vList, valueIdx)}
+             </select>`
+          : `<p class="helper" style="margin:0 0 6px" data-no-i18n><span data-lang-block="en">Typed — this one is different on every product.</span><span data-lang-block="cn">手动填写 — 每个产品都不一样。</span></p>`}
+      </div>
+      <div class="pa-spec-typed" ${vCustom ? '' : 'hidden'}>
+        ${paPair({ label: '', keyEn: 'v_en', keyCn: 'v_cn', valEn: c.v_en, valCn: c.v_cn, phEn: 'Value in English', phCn: '中文值', attrs: `data-cellidx="${i}"` })}
+      </div>
+    </div>`;
+}
+
+// Write the picked pair into the cell's OWN inputs. `_paSpecInputs` scopes to
+// the cell, not the section: a strip has three cells side by side and each
+// carries a k_en, so an unscoped query would fill the first one every time —
+// the same shape of bug §144 had to close for whole sections.
+function _paSpecInputs(sel, key) {
+  const cell = sel.closest('[data-speccell]');
+  if (!cell) return null;
+  return {
+    en: cell.querySelector(`[data-bkey="${key}_en"]`),
+    cn: cell.querySelector(`[data-bkey="${key}_cn"]`),
+    typed: cell.querySelectorAll('.pa-spec-typed'),
+  };
+}
+function paSpecPickLabel(sel, blockId, idx) {
+  const io = _paSpecInputs(sel, 'k'); if (!io || !io.en) return;
+  if (sel.value !== PA_SPEC_CUSTOM) {
+    const o = PA_SPEC_LABELS[+sel.value]; if (!o) return;
+    io.en.value = o.en; io.cn.value = o.cn;
+  } else {
+    io.en.value = ''; io.cn.value = '';
+  }
+  // THE ORDER HERE IS THE WHOLE FUNCTION. The inputs are written FIRST, then
+  // synced, then the document is rebuilt from the model. Syncing first — which
+  // is what every other handler on this page does — would read the OLD input
+  // values into the model, and the rebuild would paint them straight back over
+  // the pick. Caught in the browser: choosing "Product Type" left the cell
+  // saying "Net Wt".
+  paBlocksSyncFromDOM();
+  // The label decides which values are on offer, so the whole cell is rebuilt.
+  // Safe here and nowhere else: choosing from a dropdown is a deliberate act,
+  // not something anybody does mid-sentence, and the sync above already took
+  // every other section's words into the model first.
+  paRenderDoc();
+  paRenderPreview();
+  const again = document.querySelector(`.pa-sec[data-blockid="${CSS.escape(blockId)}"] [data-speccell="${idx}"]`);
+  if (!again) return;
+  const box = sel.value === PA_SPEC_CUSTOM ? again.querySelector('[data-bkey="k_en"]') : again.querySelector('.pa-spec-sel');
+  if (box) box.focus();
+}
+function paSpecPickValue(sel, blockId, idx) {
+  const io = _paSpecInputs(sel, 'v'); if (!io || !io.en) return;
+  const custom = sel.value === PA_SPEC_CUSTOM;
+  if (!custom) {
+    const list = paSpecValuesFor(io.en.closest('[data-speccell]').querySelector('[data-bkey="k_en"]').value);
+    const o = list && list[+sel.value]; if (!o) return;
+    io.en.value = o.en; io.cn.value = o.cn;
+  }
+  // Only the value changed, so the cell is edited in place rather than rebuilt
+  // — a rebuild would take the caret out from under anybody typing elsewhere.
+  const typed = io.en.closest('.pa-spec-typed');
+  if (typed) typed.hidden = !custom;
+  if (custom) { io.en.value = ''; io.cn.value = ''; io.en.focus(); }
+  paLivePreview();
+}
+
 function _paBlockEditorBody(b) {
   const v = (k) => escapeAttr(b[k] || '');
   const t = (k) => escapeHtml(b[k] || '');
 
   if (b.type === 'spec_strip') {
+    // The seed follows the list now (§145): 'Product Type' rather than 'Type',
+    // and 净含量 rather than 净重, so a brand-new strip starts on the wording
+    // the catalogue already agrees on instead of adding to the split.
     const cells = Array.isArray(b.cells) && b.cells.length ? b.cells
-      : [{ k_en:'Type',k_cn:'类型',v_en:'',v_cn:'' },{ k_en:'Net Wt',k_cn:'净重',v_en:'',v_cn:'' },{ k_en:'Origin',k_cn:'产地',v_en:'',v_cn:'' }];
+      : [{ k_en:'Product Type',k_cn:'产品类型',v_en:'',v_cn:'' },{ k_en:'Net Wt',k_cn:'净含量',v_en:'',v_cn:'' },{ k_en:'Origin',k_cn:'产地',v_en:'',v_cn:'' }];
     return `
-      <div class="helper" style="margin:-4px 0 14px">Meta facts shown as a quiet strip under the product header. Labels are caps; values are serif. Designed for 3 cells but you can add/remove as needed. · 产品头部下方的安静一行,小标签 + 衬线值。默认 3 格,可按需增删。</div>
-      ${cells.map((c, i) => `
-        <div style="padding:12px 14px;background:var(--bg-pane);border:1px solid var(--line-soft);border-radius:var(--r-md);margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <span class="pa-edit-section-title">Cell · 第 ${i + 1} 格</span>
-            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','cells',${i})" ${cells.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
-          </div>
-          <div class="pa-pairs-stack">
-            ${paPair({ label: paBiTitle('Label', '标签'), keyEn: 'k_en', keyCn: 'k_cn', valEn: c.k_en, valCn: c.k_cn, phEn: 'Type', phCn: '类型', attrs: `data-cellidx="${i}"` })}
-            ${paPair({ label: paBiTitle('Value', '值'), keyEn: 'v_en', keyCn: 'v_cn', valEn: c.v_en, valCn: c.v_cn, phEn: 'Refrigerated dip', phCn: '冷藏蘸酱', attrs: `data-cellidx="${i}"` })}
-          </div>
-        </div>`).join('')}
+      <div class="helper" style="margin:-4px 0 14px">Meta facts shown as a quiet strip under the product header. Pick a label and the Chinese comes with it; pick a value where your products keep saying the same thing. · 产品头部下方的安静一行。选择标签即自动带出中文;常用答案可直接选择。</div>
+      ${cells.map((c, i) => _paSpecCell(b, c, i, cells.length)).join('')}
       <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','cells',{k_en:'',k_cn:'',v_en:'',v_cn:''})">+ Add cell · 添加一格</button>`;
   }
   if (b.type === 'hero_intro') {
