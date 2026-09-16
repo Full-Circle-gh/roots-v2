@@ -240,7 +240,7 @@ function call(method, url, body) {
       'every claim row in the file names its approver in the last column');
   });
 
-  console.log('\n5 · filing a claim under a category, and re-filing one (§145)');
+  console.log('\n5 · filing a claim under a category, and re-filing one (§146)');
 
   /* §90's LESSON, APPLIED TO A NEW ROUTE. The re-filing route re-posts a ledger
      row the way `/void` removes one, so it walks into the same FK ordering trap:

@@ -62,7 +62,7 @@ const ERR = {
   // document that may already have been received, priced and part-delivered.
   // The refusal names the way out rather than merely refusing.
   onOrder: 'this claim is on a purchase order — cancel that order instead · 该笔已记入采购单 — 请取消该采购单',
-  /* §145 — THE THREE THINGS THE RE-FILING ROUTE REFUSES.
+  /* §146 — THE THREE THINGS THE RE-FILING ROUTE REFUSES.
 
      A claim with no ledger row behind it has nothing to re-file: a submitted one
      may still be rejected, and a rejected or voided one was deliberately taken
@@ -116,7 +116,7 @@ function requireApprover(req, res, next) {
   return next();
 }
 
-/* WHO MAY RE-FILE (§145). **EITHER KEY, AND THE ASYMMETRY IT REMOVES IS THE
+/* WHO MAY RE-FILE (§146). **EITHER KEY, AND THE ASYMMETRY IT REMOVES IS THE
    ARGUMENT.** The `bookkeeper` preset holds `expenses:cancel` and NOT
    `expenses:approve` (lib/capabilities.js) — so before this, the accountant
    could take a claim out of the books entirely and could not change the heading
@@ -176,7 +176,7 @@ const { withTransaction } = require('../lib/db-transaction');
 // The one place a `tenant_users` id becomes a name — shared with Finance's
 // ledger so the two cannot name the same person differently (§92).
 const { userNames } = require('../lib/user-names');
-// §145 — WHAT A CATEGORY STRING IS, and there is one answer to it. The approver
+// §146 — WHAT A CATEGORY STRING IS, and there is one answer to it. The approver
 // now files a claim the submitter left blank, so a second writer of
 // `staff_expenses.category` exists — and it snaps onto the tenant's own list
 // through the SAME function the submit path uses (lib/expense-claim.js), not a
@@ -225,7 +225,7 @@ const submitterNames = userNames;
    ACTIVE ONLY and in the tenant's own order.
 
    ONE FUNCTION BECAUSE TWO SCREENS NOW ASK IT. The submit form asks (`/meta`)
-   and, since §145, so does the approval queue (`/pending`): the approver files
+   and, since §146, so does the approval queue (`/pending`): the approver files
    the claims that arrived without a category, and a picker drawn from a second
    query shaped slightly differently is precisely how two surfaces come to offer
    different lists. Hiding a category means it stops being offered — on both.
@@ -463,7 +463,7 @@ router.get('/api/retail-admin/staff-expenses/pending', requireRetailAdmin, requi
     res.json({
       success: true,
       data: {
-        // §145 — WHAT THIS SCREEN MAY FILE A CLAIM UNDER. It travels with the
+        // §146 — WHAT THIS SCREEN MAY FILE A CLAIM UNDER. It travels with the
         // queue rather than being fetched beside it: the picker is drawn per
         // row, and a second request racing the list is how a queue renders
         // before the options it offers exist.
@@ -592,7 +592,7 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
     // not depend on.
     const submittedName = submitterNames([claim.submitted_by]).get(claim.submitted_by) || null;
 
-    /* §145 — THE CATEGORY THE APPROVER FILES IT UNDER.
+    /* §146 — THE CATEGORY THE APPROVER FILES IT UNDER.
 
        **THE SUBMITTER MAY LEAVE IT BLANK AND OFTEN DOES.** Somebody standing
        beside a taxi does not know the shop's chart of accounts; the person who
@@ -634,7 +634,7 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
       // the delete while a live reference stands. Harmless on the ordinary path
       // (first-time approve or reject, where expense_id is already NULL) and set
       // back to the real value below when postClaim posts one.
-      // §145 — `category = COALESCE(?, category)` RATHER THAN `category = ?`.
+      // §146 — `category = COALESCE(?, category)` RATHER THAN `category = ?`.
       // The approver's pick when they made one; the claim's own value untouched
       // when they did not. A bare assignment here would blank the category on
       // every claim decided by a client that does not send the field — which is
@@ -675,7 +675,7 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
 
     logActivity(req.user?.id || null, req.user?.username || null,
       decision === 'approve' ? 'approve' : 'reject', 'staff_expense', claim.id,
-      // §145: the category AS DECIDED, and the claim's own when the approver
+      // §146: the category AS DECIDED, and the claim's own when the approver
       // left it alone. Logging `claim.category` unconditionally would report the
       // blank the approver had just filled in.
       { amount: fen(claim.amount), category: filedCategory || claim.category,
@@ -766,7 +766,7 @@ router.post('/api/retail-admin/staff-expenses/:id/void', requireRetailAdmin, req
 });
 
 // ── POST /api/retail-admin/staff-expenses/:id/category ─────────────────────
-/* §145 — RE-FILING A CLAIM THAT IS ALREADY IN THE BOOKS.
+/* §146 — RE-FILING A CLAIM THAT IS ALREADY IN THE BOOKS.
 
    **THE ONE THING THIS PRODUCT COULD NOT DO.** A claim approved without a
    category posts a ledger row with none, and `routes/finance-transactions.js`

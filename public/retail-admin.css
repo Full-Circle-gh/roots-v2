@@ -15005,7 +15005,7 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 #tab-finance .fin-apr-note {
   display: block; margin-top: 4px; font: 400 14px/1.6 var(--f-sans); color: var(--td-text);
 }
-/* §145 — WHERE THE CLAIM IS FILED. Its own line under the note, for the reason
+/* §146 — WHERE THE CLAIM IS FILED. Its own line under the note, for the reason
    the note has one: the meta line above is a list of facts, and this is a
    control. Sized to the receipt button beside it rather than to a form field —
    it sits inside a table row, and a full-width box would make every claim taller

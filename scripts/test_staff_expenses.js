@@ -934,7 +934,7 @@ it('the photo can come from the gallery, not only the camera', () => {
   assert.match(PHONE, /<input type="file" accept="image\/\*" style="display:none"/);
 });
 
-console.log('\n9 · re-filing a claim that is already in the books (§145)');
+console.log('\n9 · re-filing a claim that is already in the books (§146)');
 
 /* WHAT THIS SECTION IS FOR. A claim approved with no category posted a ledger
    row with none, and nothing could then fix it: `finance-transactions.js`

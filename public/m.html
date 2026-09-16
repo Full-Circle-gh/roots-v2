@@ -937,7 +937,7 @@ const state = {
      deliberately cannot see. Keeping them apart here is the client half of the
      server's own split; one state object with a flag on it would be one typo
      away from showing a submitter the shop's whole ledger of claims. */
-  /* §145 — `cats` is the tenant's accounting list, carried by the queue itself;
+  /* §146 — `cats` is the tenant's accounting list, carried by the queue itself;
      `cat` holds a category chosen on a claim that has NOT been approved yet,
      keyed by claim id. It rides with the Approve tap rather than saving on its
      own, so it has to survive the re-renders this screen does for other reasons
@@ -11475,7 +11475,7 @@ reg('aprShot', id=>{
 reg('aprDecide', (id,decision)=>{
   const a=state.apr;
   if(a.busy) return;
-  /* §145 — THE CATEGORY GOES WITH THE APPROVAL, in the same request that posts
+  /* §146 — THE CATEGORY GOES WITH THE APPROVAL, in the same request that posts
      the row: a second call afterwards could fail on its own and leave the ledger
      holding a classification nobody chose. Sent only on approve and only when
      something was picked — absent otherwise, and the server then leaves the
@@ -11498,13 +11498,13 @@ reg('aprDecide', (id,decision)=>{
   });
 });
 
-/* §145 — A CATEGORY CHOSEN ON A CLAIM STILL WAITING. Remembered, not sent: it
+/* §146 — A CATEGORY CHOSEN ON A CLAIM STILL WAITING. Remembered, not sent: it
    goes with the Approve tap. No render — the <select> already shows the choice,
    and redrawing the queue under a wheel somebody has just closed is a jump this
    screen does not need. */
 reg('aprCatPick', (id,value)=>{ state.apr.cat[Number(id)]=String(value==null?'':value); });
 
-/* §145 — RE-FILING A CLAIM THAT IS ALREADY IN THE BOOKS. **NO MONEY MOVES** —
+/* §146 — RE-FILING A CLAIM THAT IS ALREADY IN THE BOOKS. **NO MONEY MOVES** —
    same claim, same sum, same person. What changes is which line of the category
    breakdown it sits on, and whether the tenant's non-operating flag reaches it:
    a cost filed under nothing is counted as operating, so a private one quietly
@@ -11572,7 +11572,7 @@ reg('aprSettle', async (who,total,ids)=>{
   }
 });
 
-/* §145 — WHERE THE CLAIM IS FILED, ON THE ROW BEING DECIDED.
+/* §146 — WHERE THE CLAIM IS FILED, ON THE ROW BEING DECIDED.
 
    **THE SUBMITTER MAY LEAVE IT BLANK AND OFTEN DOES.** The expense screen makes
    the category optional on purpose — somebody standing beside a taxi does not
@@ -11625,7 +11625,7 @@ function aprRow(r){
   // the marker silently never appeared.
   const mine=!!r.mine;
   const bits=[fmtDateOnly(r.date)];
-  /* §145 — A BLANK CATEGORY SAYS SO. It rendered as nothing at all, so a claim
+  /* §146 — A BLANK CATEGORY SAYS SO. It rendered as nothing at all, so a claim
      filed under nothing and one filed under Transport read the same on this
      line. `Not recorded` is Finance's own word for this value. Said only where
      no picker follows: where one does, its blank option says it better. */

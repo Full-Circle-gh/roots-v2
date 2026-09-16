@@ -1260,7 +1260,7 @@ function finTxRow(r) {
     + '</tr>';
 }
 
-/* §145 — WHAT A CLAIM ROW OFFERS: re-file it, and (unless it is settled) void it.
+/* §146 — WHAT A CLAIM ROW OFFERS: re-file it, and (unless it is settled) void it.
 
    **THE TWO ARE NOT THE SAME KIND OF ACT, and the settled rule is where that
    shows.** Void is hidden once the employee has been paid back, because the
@@ -1270,7 +1270,7 @@ function finTxRow(r) {
    ever be corrected before payday.
 
    EITHER CAPABILITY OPENS THE PICKER. The bookkeeper holds `expenses:cancel`
-   and not `expenses:approve`; before §145 that let them delete a cost from the
+   and not `expenses:approve`; before §146 that let them delete a cost from the
    ledger and not rename one. Same test as the server's `requireFiler`.
 
    `Change` IS THE LIVE PAIR (04-orders.js) and reads correctly over a blank
@@ -1313,7 +1313,7 @@ window.finTxFileOpen = function finTxFileOpen(claimId) {
   finTxRender();
 };
 
-/* §145 — RE-FILING FROM THE LEDGER. **NO MONEY MOVES**: same claim, same sum,
+/* §146 — RE-FILING FROM THE LEDGER. **NO MONEY MOVES**: same claim, same sum,
    same date, same person, same approval record. What changes is which line of
    the category breakdown it sits on, and whether the tenant's non-operating flag
    reaches it — a cost filed under nothing counts as operating, so a private one
@@ -1611,7 +1611,7 @@ function finTxCatOptions() {
   return finTxExpenseCats();
 }
 
-/* THE EXPENSE HALF, ON ITS OWN. §145 split it out: a claim row's picker needs
+/* THE EXPENSE HALF, ON ITS OWN. §146 split it out: a claim row's picker needs
    the money-OUT list whatever the FORM is currently set to, and calling
    `finTxCatOptions()` there would have offered INCOME categories to a claim
    whenever the operator had last opened the income form. Same list, asked
@@ -1639,7 +1639,7 @@ function finTxExpenseCats() {
    edge of the window instead of under the field that opened it — which is
    what this field was doing. It reuses that fix's .pu2-suggest-menu /
    .pu2-suggest-opt classes rather than inventing a second popup style. */
-/* §145 — THE CLAIM ROW CURRENTLY OPEN AS A CATEGORY PICKER, or 0.
+/* §146 — THE CLAIM ROW CURRENTLY OPEN AS A CATEGORY PICKER, or 0.
 
    **THE APPROVALS QUEUE IS NOT REACHABLE BY EVERYONE THIS IS FOR.** `/pending`
    is gated on `expenses:approve`, which the `bookkeeper` preset does not hold —
@@ -2367,7 +2367,7 @@ let FIN_APR = null;          // the last /pending payload
 let FIN_APR_SEEN = false;    // has this sub-view ever been pulled
 let FIN_APR_BUSY = 0;        // id being decided, or -1 while a settle runs
 let FIN_APR_SHOT = null;     // the receipt currently open: { id, data, err }
-/* §145 — A CATEGORY CHOSEN ON A WAITING CLAIM, BEFORE ANYTHING IS COMMITTED.
+/* §146 — A CATEGORY CHOSEN ON A WAITING CLAIM, BEFORE ANYTHING IS COMMITTED.
    It rides with the Approve click rather than saving on its own, so it has to
    survive until then — and this list re-renders under the operator for reasons
    that have nothing to do with the pick: opening a receipt, a decision landing
@@ -2533,7 +2533,7 @@ window.finAprShot = function finAprShot(id) {
   });
 };
 
-/* ── WHERE THE CLAIM IS FILED (§145) ────────────────────────────────────────
+/* ── WHERE THE CLAIM IS FILED (§146) ────────────────────────────────────────
    **THE SUBMITTER MAY LEAVE THE CATEGORY BLANK AND OFTEN DOES.** Somebody
    standing beside a taxi does not know the shop's chart of accounts; the person
    working this queue is the person who keeps the books. So the category is
@@ -2599,7 +2599,7 @@ window.finAprCatPick = function finAprCatPick(id, value) {
   FIN_APR_CAT[Number(id)] = String(value == null ? '' : value);
 };
 
-/* ── RE-FILING AN APPROVED CLAIM (§145) ─────────────────────────────────────
+/* ── RE-FILING AN APPROVED CLAIM (§146) ─────────────────────────────────────
    **NO MONEY MOVES.** Same claim, same sum, same date, same person — what
    changes is which line of the category breakdown it sits on, and whether the
    tenant's non-operating flag reaches it. An uncategorised row is counted as
@@ -2648,7 +2648,7 @@ window.finAprFile = async function finAprFile(id, value) {
 window.finAprDecide = async function finAprDecide(id, decision) {
   const claim = Number(id);
   if (!claim || FIN_APR_BUSY) return;
-  /* §145 — THE CATEGORY GOES WITH THE APPROVAL, in the same request that posts
+  /* §146 — THE CATEGORY GOES WITH THE APPROVAL, in the same request that posts
      the row. A second call afterwards could fail on its own and leave the ledger
      holding a classification nobody chose. Sent only on approve and only when
      something was picked: the field is absent otherwise, and the server leaves
@@ -2771,7 +2771,7 @@ function finAprRow(r) {
   const busy = FIN_APR_BUSY === r.id;
   const anyBusy = !!FIN_APR_BUSY;
   const bits = [finTxDay(r.date)];
-  /* §145 — A BLANK CATEGORY SAYS SO. It used to render as nothing at all, so a
+  /* §146 — A BLANK CATEGORY SAYS SO. It used to render as nothing at all, so a
      claim with no category and one filed under Transport looked the same on this
      line — which is how a ¥299 taxi reached the books unfiled with nobody
      noticing. `Not recorded` is the word Finance already uses for exactly this
