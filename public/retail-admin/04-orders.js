@@ -8385,33 +8385,60 @@ async function submitJdLabel(orderId, shipmentId, product, btn, pieces) {
 // operator knows something the plan does not — a customer paying for speed, a
 // parcel re-routed at the counter — had no way through the dialog at all. The
 // server has always accepted an explicit product on any parcel, so this adds no
-// new server power; it stops the UI from hiding one. Where the parcel carries
-// goods the airline will not take (ship_modes = land only, the same read
-// renderPackBadges draws "Land only — airline rejected" from), the air row is
-// badged with those goods named on it, and choosing it asks once before the
-// waybill is booked. The parcel's own air/land mode is never written here —
-// exactly as with the Fujian / Guangxi default above, only the product printed
-// on the waybill changes.
+// new server power; it stops the UI from hiding one. The parcel's own air/land
+// mode is never written here — exactly as with the Fujian / Guangxi default
+// above, only the product printed on the waybill changes.
+//
+// PICKING AIR ON A LAND PARCEL ASKS, ON THE CLICK. THE PARCEL IS THE TRIGGER,
+// NOT THE PRODUCT. The first version of this warned only where an item was
+// flagged land-only, which meant the ordinary case — a parcel the system
+// planned as land, holding goods nobody has flagged — booked air in silence,
+// and getting the warning meant editing a product. Ash's ruling (2026-09-16):
+// the parcel already says it is a land shipment, and that is the whole
+// condition. Every land and local parcel asks; the only list where air is
+// picked WITHOUT a question is an air parcel's own (the Fujian / Guangxi case
+// below), where air is what the plan asked for.
+//
+// ON THE CLICK, AND ONLY THERE. Ash chose the moment: the question lands the
+// instant the row is chosen rather than at Create & ship. Declining puts the
+// selection back where it was, so backing out costs nothing. There is
+// deliberately NO second question on submit — two dialogs for one decision is
+// how an operator learns to click through both without reading either.
+//
+// The badged "airline rejected" line on the row is a separate thing and stays:
+// it says the airline REFUSES these goods, which is more than "the plan said
+// land", and it is drawn from the same ship_modes_arr renderPackBadges reads.
 function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
   const isAir = mode === 'air';
   // Province comes off the open order (the GET parses address_json into
   // o.address) — the same source openEditShipTo reads.
   const ord = (_OPEN_ORDER && _OPEN_ORDER.id === orderId) ? _OPEN_ORDER : null;
   const destProvince = (ord && ord.address && typeof ord.address === 'object' && ord.address.province) || '';
-  // The goods in THIS parcel the airline refuses. ship_modes_arr is the order
-  // GET's own normalized array, so this is the same source renderPackBadges
-  // reads and the two cannot disagree. Land-only is the test: an item with no
-  // modes at all defaults to both, and a 'local' item is neither — neither is
-  // an airline rejection, and neither is claimed as one.
   const parcel = (ord && Array.isArray(ord.shipments))
     ? ord.shipments.find(s => Number(s.id) === Number(shipmentId))
     : null;
+  const jdItemName = (it) => cuT(it.name_en || it.name_cn || '', it.name_cn || it.name_en || '');
+  // What the question names: this parcel's own contents, deduped, because the
+  // question is about the parcel. Capped at three and counted after that — a
+  // ten-line dialog is one nobody reads to the end, and a bare '+4' needs no
+  // words in either language.
+  const parcelNames = ((parcel && parcel.items) || []).map(jdItemName).filter(Boolean);
+  const shownNames = parcelNames.filter((n, i) => parcelNames.indexOf(n) === i);
+  const namesLabel = shownNames.length
+    ? shownNames.slice(0, 3).join(', ') + (shownNames.length > 3 ? ' +' + (shownNames.length - 3) : '')
+    : '';
+  // The goods in THIS parcel the airline actually REFUSES, which is a stronger
+  // claim than the plan's and drives the row's badge, not the question.
+  // ship_modes_arr is the order GET's own normalized array, so this is the same
+  // source renderPackBadges reads and the two cannot disagree. Land-only is the
+  // test: an item with no modes at all defaults to both, and a 'local' item is
+  // neither — neither is an airline rejection, and neither is claimed as one.
   const noAirNames = ((parcel && parcel.items) || [])
     .filter(it => {
       const arr = it.ship_modes_arr || ['air', 'land'];
       return arr.includes('land') && !arr.includes('air');
     })
-    .map(it => cuT(it.name_en || it.name_cn || '', it.name_cn || it.name_en || ''))
+    .map(jdItemName)
     .filter(Boolean);
   // An air parcel into Fujian / Guangxi books GROUND by default. Unlike every
   // other air parcel it now gets the two fresh services to choose between,
@@ -8480,31 +8507,44 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
       </div>
     </div>`;
   mountFloatingPuModal(bg);
+  // Picking air on a parcel the plan made LAND asks right here, on the click.
+  // Not on submit: Ash chose the moment, and one question beats two. Declining
+  // restores whatever was selected before, so backing out of a mis-click costs
+  // nothing and the pieces count the operator may already have typed survives.
+  //
+  // `!isAir` is the whole condition. On an air parcel's own list (the Fujian /
+  // Guangxi case) air is what the plan asked for, so picking it asks nothing.
+  if (!isAir) {
+    let lastSvc = preset;                 // never LL-SD-M here — see `preset` above
+    bg.querySelectorAll('input[name="jd-svc"]').forEach((radio) => {
+      radio.addEventListener('change', async () => {
+        if (radio.value !== 'LL-SD-M') { lastSvc = radio.value; return; }
+        const ok = await askConfirm({
+          titleEn: 'Land only', titleCn: '仅陆运',
+          bodyEn: namesLabel
+            ? `<b>${escapeHtml(namesLabel)}</b> — land shipping only. Create the air waybill anyway?`
+            : 'This parcel is land shipping only. Create the air waybill anyway?',
+          bodyCn: namesLabel
+            ? `<b>${escapeHtml(namesLabel)}</b> 仅陆运。仍要生成空运运单吗?`
+            : '此包裹仅陆运。仍要生成空运运单吗?',
+          confirmEn: 'Create air waybill anyway', confirmCn: '仍要生成空运运单',
+          cancelEn: 'Not yet', cancelCn: '暂不',
+          danger: true,
+        });
+        if (ok) { lastSvc = 'LL-SD-M'; return; }
+        // Declined — put the selection back. The dialog stays open on the row
+        // the operator was on before, which is the state they backed out to.
+        const back = bg.querySelector(`input[name="jd-svc"][value="${lastSvc}"]`);
+        if (back) back.checked = true;
+      });
+    });
+  }
   bg.querySelector('#jd-svc-submit').addEventListener('click', async (e) => {
-    // Captured before the confirm below: currentTarget is null after an await,
-    // which is why transition() does the same thing.
-    const btn = e.currentTarget;
     const product = services.length ? (bg.querySelector('input[name="jd-svc"]:checked') || {}).value : preset;
     if (!product) return;
-    // Booking air on a parcel carrying airline-rejected goods is allowed and
-    // never silent: the operator is shown WHICH goods and says so once. The
-    // parcel's mode is untouched either way — only the product is.
-    if (product === 'LL-SD-M' && noAirNames.length) {
-      const names = noAirNames.join(', ');
-      const ok = await askConfirm({
-        titleEn: 'Land shipping only — airline rejected',
-        titleCn: '仅陆运 — 航空拒运',
-        bodyEn: `<b>${escapeHtml(names)}</b> cannot ship by air. Create the air waybill anyway?`,
-        bodyCn: `<b>${escapeHtml(names)}</b> 航空拒运。仍要生成空运运单吗?`,
-        confirmEn: 'Create air waybill anyway', confirmCn: '仍要生成空运运单',
-        cancelEn: 'Not yet', cancelCn: '暂不',
-        danger: true,
-      });
-      if (!ok) return;
-    }
     const piecesEl = bg.querySelector('#jd-pieces');
     const pieces = Math.max(1, Math.min(30, parseInt(piecesEl && piecesEl.value, 10) || 1));
-    const ok = await submitJdLabel(orderId, shipmentId, product, btn, pieces);
+    const ok = await submitJdLabel(orderId, shipmentId, product, e.currentTarget, pieces);
     if (ok) bg.remove();
   });
 }
