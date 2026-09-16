@@ -44,19 +44,6 @@
       />
     </view>
 
-    <view class="field-block">
-      <view class="field-label f-toni">{{copy.addrLabel}}</view>
-      <button class="wx-addr-btn f-toni" bindtap="pickWxAddress" disabled="{{wxAddrPicking}}">
-        <view class="wx-dot"></view>
-        <text>{{wxAddrPicking ? copy.addrLoading : copy.wxAddrBtn}}</text>
-      </button>
-      <view wx:if="{{addrPreview}}" class="addr-preview">
-        <view class="addr-line f-bear">{{addrPreview.name}} · {{addrPreview.phone}}</view>
-        <view class="addr-line addr-sub">{{addrPreview.address}}</view>
-      </view>
-      <view class="field-hint">{{copy.addrHint}}</view>
-    </view>
-
     <view class="field-block" wx:if="{{showPhone}}">
       <view class="field-label f-toni">{{copy.phoneLabel}}</view>
       <button
