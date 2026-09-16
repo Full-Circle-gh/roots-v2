@@ -136,8 +136,14 @@ section('5 · a ticked box is read in all three places that matter');
   yes(/q\.is_required && !answered\.has\(q\.id\)/.test(MENU)
     && /choice_required/.test(MENU),
     'the order route refuses it again on the server, so the block is not cosmetic');
-  yes(/o\.is_required && !selIds\(o\)\.length/.test(SHOP),
+  // §152 gave a pick-any group a floor (min_choices), so this block now reads
+  // "required with nothing ticked, OR fewer than the floor". The claim is
+  // unchanged and the check is deliberately NOT pinned to the whole expression
+  // again — a literal is what made this assertion go red for a correct change.
+  yes(/o\.is_required\s*&&\s*!n/.test(SHOP) && /selIds\(o\)\.length/.test(SHOP),
     'and the web storefront refuses it the same way');
+  yes(/l\.min\s*&&\s*n\s*<\s*l\.min/.test(SHOP),
+    'and now also refuses a group answered fewer times than its floor (§152)');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

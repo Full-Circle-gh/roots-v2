@@ -304,6 +304,19 @@ Page({
     this.recalc();
   },
 
+  // Re-marks every pick-any group's unticked rows as closed or open, after any
+  // change to what is picked. A ticked row is never capped — untick is how the
+  // counter changes its mind, and a sheet with nothing tappable is dead.
+  _applyCaps(groups) {
+    groups.forEach(g => {
+      const max = Number(g.max_choices) || 0;
+      if (g.type !== 'multi' || !max) { g.choices.forEach(c => { c.capped = false; }); return; }
+      const full = g.choices.filter(c => c.picked).length >= max;
+      g.choices.forEach(c => { c.capped = full && !c.picked; });
+    });
+    return groups;
+  },
+
   // ── Option sheet ──────────────────────────────────────────────────────
   async openOptions(e) {
     const id = parseInt(e.currentTarget.dataset.id, 10);
@@ -319,6 +332,12 @@ Page({
         question: lang.pick(o.question_en, o.question_cn, L),
         type: o.type,
         is_required: !!o.is_required,
+        // HOW MANY of a pick-any group may be ticked. The server clamps the
+        // floor against what is still pickable before serving, so these ARE the
+        // numbers checkout applies. 0 = no limit, as every older group carries.
+        min_choices: Number(o.min_choices) || 0,
+        max_choices: Number(o.max_choices) || 0,
+        lim_hint: o.type === 'multi' ? optionText.limHint(o, L) : '',
         choices: (o.choices || []).map(c => {
           const soldOut = !!c.stock_product_id && c.addon_available === false;
           const isDefault = !!c.is_default && !soldOut;
@@ -335,6 +354,12 @@ Page({
       }));
       // For single groups, keep only ONE default picked.
       groups.forEach(g => {
+        if (g.type === 'multi') {
+          // Defaults obey the ceiling too: three rows all marked default on a
+          // "choose 2" group would open the sheet already over the cap.
+          const cap = Number(g.max_choices) || 0;
+          if (cap) { let n = 0; g.choices.forEach(c => { if (c.picked && ++n > cap) c.picked = false; }); }
+        }
         if (g.type !== 'multi') {
           let seen = false;
           g.choices.forEach(c => {
@@ -346,7 +371,7 @@ Page({
       });
       this.setData({
         opProduct: { id: p.id, name: lang.pick(p.name_en, p.name_cn, L), base_price: effPrice(p) },
-        opGroups: groups,
+        opGroups: this._applyCaps(groups),
         opLoading: false,
       });
       this.recalcSheet();
@@ -364,11 +389,16 @@ Page({
     const c = g.choices[ci];
     if (!g || !c || c.sold_out) return;
     if (g.type === 'multi') {
+      // The row is already dimmed at the ceiling; refuse the tap anyway rather
+      // than trust the paint — an over-full line is refused at checkout, so
+      // letting it through would only move the failure somewhere worse.
+      const max = Number(g.max_choices) || 0;
+      if (!c.picked && max && g.choices.filter(x => x.picked).length >= max) return;
       c.picked = !c.picked;                 // toggle
     } else {
       g.choices.forEach((x, i) => { x.picked = i === ci; });  // radio
     }
-    this.setData({ opGroups: groups });
+    this.setData({ opGroups: this._applyCaps(groups) });
     this.recalcSheet();
   },
 
@@ -396,8 +426,16 @@ Page({
     const cn = this.data.lang === 'cn';
     // Required check.
     for (const g of this.data.opGroups) {
-      if (g.is_required && !g.choices.some(c => c.picked)) {
-        wx.showToast({ title: this.data.copy.pickRequired, icon: 'none' });
+      const min = Number(g.min_choices) || 0;
+      const n = g.choices.filter(c => c.picked).length;
+      // A floor of 1 or more IS the requirement; naming the number is what tells
+      // the counter, sitting on one side, that the sheet is asking for two.
+      if ((g.is_required && !n) || (min && n < min)) {
+        const hint = min > 1 ? optionText.limHint(g, this.data.lang) : '';
+        wx.showToast({
+          title: this.data.copy.pickRequired + (hint ? (cn ? '（' + hint + '）' : ' (' + hint + ')') : ''),
+          icon: 'none',
+        });
         return;
       }
     }

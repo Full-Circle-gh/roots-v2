@@ -67,6 +67,7 @@ const { isShopCode } = require('../lib/shop-code');
 const { getCategoryTree } = require('../lib/category-tree');
 const { themeToCssVars, sanitizeTheme } = require('../lib/brand-theme');
 const inventory = require('../lib/inventory');
+const optionLimits = require('../lib/option-limits');
 // resolveProductImage and normalizeCurrency are retail.js's, exported for this
 // file so the photo fallback and the money format cannot drift from the
 // storefront's. routes/retail-shops.js requires retail.js the same way; both
@@ -334,7 +335,7 @@ function attachOptions(shop, listings) {
   if (!pids.length) return;
   const ph = pids.map(() => '?').join(',');
   const options = tdb().prepare(
-    `SELECT id, product_id, question_en, question_cn, type, is_required, sort_order
+    `SELECT id, product_id, question_en, question_cn, type, is_required, min_choices, max_choices, sort_order
        FROM retail_product_options
       WHERE product_id IN (${ph}) AND type IN ('single','multi')
       ORDER BY sort_order ASC, id ASC`
@@ -381,13 +382,23 @@ function attachOptions(shop, listings) {
     // space under it, and — if it were required — as an order that can never
     // be placed.
     if (!cs.length) continue;
+    // HOW MANY of a pick-any group may be ticked, clamped here and NOT on the
+    // client. The floor is measured against the choices still pickable, so a
+    // "choose 2" whose stock-backed extras have sold down to one asks for one
+    // rather than becoming unanswerable — lib/option-limits.js carries the rule.
+    // A ceiling needs no such clamp; it simply stops binding.
+    const lim = optionLimits.effectiveLimits(o, cs.filter(c => !c.out).length);
     if (!byProduct.has(o.product_id)) byProduct.set(o.product_id, []);
     byProduct.get(o.product_id).push({
       id: o.id,
       q_en: o.question_en || o.question_cn || '',
       q_cn: o.question_cn || o.question_en || '',
       multi: o.type === 'multi' ? 1 : 0,
-      req: o.is_required ? 1 : 0,
+      // A floor of 1 or more IS required; the flag and the floor agree on save,
+      // and the clamp above can only lower the floor, never the flag.
+      req: (o.is_required || lim.min > 0) ? 1 : 0,
+      min: lim.min,
+      max: lim.max,
       choices: cs,
     });
   }
@@ -3589,7 +3600,8 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
     const cph = postedChoiceIds.map(() => '?').join(',');
     for (const c of tdb().prepare(
       `SELECT c.id, c.option_id, c.label_en, c.label_cn, c.price_delta, c.stock_product_id,
-              o.product_id, o.type, o.is_required, o.question_en, o.question_cn
+              o.product_id, o.type, o.is_required, o.min_choices, o.max_choices,
+              o.question_en, o.question_cn
          FROM retail_product_option_choices c
          JOIN retail_product_options o ON o.id = c.option_id
         WHERE c.id IN (${cph})`
@@ -3601,16 +3613,35 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
   const orderedPids = [...wanted.keys()];
   const pph = orderedPids.map(() => '?').join(',');
   const questions = tdb().prepare(
-    `SELECT id, product_id, type, is_required FROM retail_product_options
+    `SELECT id, product_id, type, is_required, min_choices, max_choices
+       FROM retail_product_options
       WHERE product_id IN (${pph}) AND type IN ('single','multi')`
   ).all(...orderedPids);
   const liveChoiceCount = new Map();
+  // PICKABLE choices, not merely existing ones — a stock-backed extra that has
+  // run out is not an answer anybody could have given. The menu clamped each
+  // group's floor by this same count (attachOptions), so measuring it any other
+  // way here would reject an order the page itself told the customer to place:
+  // "choose 2 sides" with two of three sold out is served as "choose 1".
+  const pickableChoiceCount = new Map();
   if (questions.length) {
     const qph = questions.map(() => '?').join(',');
-    for (const r of tdb().prepare(
-      `SELECT option_id, COUNT(*) AS n FROM retail_product_option_choices
-        WHERE option_id IN (${qph}) GROUP BY option_id`
-    ).all(...questions.map(q => q.id))) liveChoiceCount.set(r.option_id, r.n);
+    const qChoices = tdb().prepare(
+      `SELECT option_id, id, stock_product_id FROM retail_product_option_choices
+        WHERE option_id IN (${qph})`
+    ).all(...questions.map(q => q.id));
+    for (const c of qChoices) liveChoiceCount.set(c.option_id, (liveChoiceCount.get(c.option_id) || 0) + 1);
+    const qAddonIds = [...new Set(qChoices.map(c => c.stock_product_id).filter(Boolean))];
+    const qAddonAvail = qAddonIds.length
+      ? inventory.getAvailableMap(shop.location_id, qAddonIds, SHOP_CHANNEL)
+      : new Map();
+    for (const c of qChoices) {
+      if (c.stock_product_id) {
+        const a = qAddonAvail.get(c.stock_product_id);
+        if (!a || a.available <= 0) continue;          // absent shelf record IS sold out — §47
+      }
+      pickableChoiceCount.set(c.option_id, (pickableChoiceCount.get(c.option_id) || 0) + 1);
+    }
   }
   const questionsFor = new Map();
   for (const q of questions) {
@@ -3628,6 +3659,10 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
   const addonWant = new Map();
   for (const r of rows) {
     const seenOpt = new Set();
+    // Answers per question on THIS line, so a pick-any group's ceiling can be
+    // counted. A duplicate choice id counts once: the tick-box it came from can
+    // only be on or off, so posting it twice is not two sides, it is one.
+    const answerCount = new Map();
     for (const cid of r.choices) {
       const c = choiceById.get(cid);
       if (!c) return res.status(400).json({ success: false, error: 'bad_choice', store_product_id: r.pid });
@@ -3645,6 +3680,8 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
         }
         seenOpt.add(c.option_id);
       }
+      if (!answerCount.has(c.option_id)) answerCount.set(c.option_id, new Set());
+      answerCount.get(c.option_id).add(c.id);
       if (c.stock_product_id) {
         addonWant.set(c.stock_product_id, (addonWant.get(c.stock_product_id) || 0) + r.qty);
       }
@@ -3654,6 +3691,19 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
     // endpoint.
     const answered = new Set(r.choices.map(cid => choiceById.get(cid).option_id));
     for (const q of (questionsFor.get(r.pid) || [])) {
+      // HOW MANY, server side. A pick-any group's floor and ceiling are the same
+      // rule the sheet enforces with a greyed-out tick-box, in the one place a
+      // post straight at this endpoint cannot skip. The floor is measured
+      // against the choices still pickable — see pickableChoiceCount — so it is
+      // the floor the customer was actually shown.
+      const lim = optionLimits.effectiveLimits(q, pickableChoiceCount.get(q.id) || 0);
+      const n = (answerCount.get(q.id) || new Set()).size;
+      if (lim.max && n > lim.max) {
+        return res.status(400).json({ success: false, error: 'too_many_answers', store_product_id: r.pid });
+      }
+      if (lim.min && n < lim.min) {
+        return res.status(400).json({ success: false, error: 'too_few_answers', store_product_id: r.pid });
+      }
       if (q.is_required && !answered.has(q.id)) {
         return res.status(400).json({ success: false, error: 'choice_required', store_product_id: r.pid });
       }

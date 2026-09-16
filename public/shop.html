@@ -1020,6 +1020,13 @@
       padding:13px 16px;background:#FFFCF7;border:2px solid var(--ink);border-radius:8px;cursor:pointer;color:var(--ink);font:inherit;}
     .op-choice .op-cl{font-family:var(--bf-bear);font-size:16px;}
     .op-choice .op-cd{font-family:var(--bf-toni);font-size:13px;color:var(--olive);flex:none;}
+    /* HOW MANY a pick-any group takes, under its question. */
+    .op-lim{font-family:var(--bf-toni);font-size:11px;letter-spacing:.06em;color:var(--olive);
+      opacity:.75;margin:-5px 0 9px;text-transform:none;}
+    /* At the ceiling, the tick-boxes NOT already on go quiet and stop taking
+       taps. The ones that are on stay live — untick is how you change your mind,
+       and a customer stuck at the cap with nothing clickable is a dead sheet. */
+    .op-choice[disabled]{opacity:.38;cursor:default;}
     .op-choice.on{background:var(--ink);}
     .op-choice.on .op-cl,.op-choice.on .op-cd{color:var(--oat);}
     .op-extra{justify-content:flex-start;}
@@ -5661,6 +5668,22 @@ async function renderProduct(id){
     extra.forEach(o=>{ sel[o.id]=sel[o.id]||[]; });
 
     const selIds=o=>sel[o.id]||[];
+    // HOW MANY of a pick-any group may be ticked. Read straight off the payload:
+    // the server clamps the floor against what is still pickable before serving
+    // the page, so the numbers here are already the ones checkout will apply.
+    // 0 means no limit, which is every group authored before this existed.
+    const limOf=o=>({min:Number(o&&o.min_choices)||0,max:Number(o&&o.max_choices)||0});
+    // "Choose 2" under the question — the numerals do the work, so a group that
+    // says it in its own title (爽脆配菜) is not contradicted, just confirmed.
+    function limHint(l){
+      const cn=state.lang==='cn';
+      if(l.min&&l.max) return l.min===l.max
+        ? (cn?('选 '+l.min+' 项'):('Choose '+l.min))
+        : (cn?('选 '+l.min+'–'+l.max+' 项'):('Choose '+l.min+'–'+l.max));
+      if(l.max) return cn?('最多 '+l.max+' 项'):('Up to '+l.max);
+      if(l.min) return cn?('至少 '+l.min+' 项'):('At least '+l.min);
+      return '';
+    }
     const findChoice=(o,cid)=>(o.choices||[]).find(c=>c.id===cid);
     function unit(){
       let d=0;
@@ -5678,8 +5701,14 @@ async function renderProduct(id){
       $('#pdQty').textContent=qty;refreshBar();});
 
     function doAdd(){
-      for(const o of popts){ if(o.is_required && !selIds(o).length){
-        toast(state.lang==='cn'?('请选择 '+pick(o.question_en,o.question_cn)):('Please choose: '+pick(o.question_en,o.question_cn))); return false; } }
+      for(const o of popts){
+        const l=limOf(o), n=selIds(o).length;
+        // A floor of 1 or more IS the requirement; naming the number is what
+        // tells a customer sitting on one side that the sheet wants two.
+        if((o.is_required&&!n)||(l.min&&n<l.min)){
+          const q=pick(o.question_en,o.question_cn), h=l.min>1?limHint(l):'';
+          toast((state.lang==='cn'?('请选择 '+q):('Please choose: '+q))+(h?(state.lang==='cn'?('（'+h+'）'):(' ('+h+')')):''));
+          return false; } }
       const chosen=[];
       // Keep the group's QUESTION beside each picked answer so the cart + checkout
       // receipt read "Heat up?: Yes", not a bare, ambiguous "Yes". Spread onto the
@@ -5696,15 +5725,18 @@ async function renderProduct(id){
     // size-picker shell. opts:{title,multi,btnLabel(),onConfirm(close)}.
     function buildSheet(groups,o){
       const mask=document.createElement('div'); mask.className='sl-vpmask';
-      const rows=groups.map(g=>`<div class="op-group">
+      const rows=groups.map(g=>{const gl=limOf(g),gh=o.multi?limHint(gl):'';
+        const atCap=()=>!!(gl.max&&selIds(g).length>=gl.max);
+        return `<div class="op-group">
         <div class="op-q">${esc(pick(g.question_en,g.question_cn))}${g.is_required?' <span class="op-req">*</span>':''}</div>
+        ${gh?`<div class="op-lim">${esc(gh)}</div>`:''}
         <div class="op-choices">${(g.choices||[]).map(c=>{
           const on=selIds(g).indexOf(c.id)>=0, d=Number(c.price_delta)||0;
-          return `<button type="button" class="op-choice${o.multi?' op-extra':''}${on?' on':''}" data-oid="${g.id}" data-cid="${c.id}">
+          return `<button type="button" class="op-choice${o.multi?' op-extra':''}${on?' on':''}" data-oid="${g.id}" data-cid="${c.id}"${(!on&&atCap())?' disabled':''}>
             ${o.multi?'<span class="op-box">'+(on?'✓':'')+'</span>':''}
             <span class="op-cl">${esc(pick(c.label_en,c.label_cn))}</span>
             ${d?`<span class="op-cd">+${money(d)}</span>`:''}</button>`;
-        }).join('')}</div></div>`).join('');
+        }).join('')}</div></div>`;}).join('');
       mask.innerHTML=`<div class="sl-vp"><div class="sl-vp-h"><div>
         <div class="sl-vp-t">${esc(o.title)}</div><div class="sl-vp-n">${esc(pick(p.name_en,p.name_cn))}</div>
         </div><div class="sl-vp-x" data-x>×</div></div>
@@ -5718,8 +5750,16 @@ async function renderProduct(id){
         const ch=e.target.closest('.op-choice');
         if(ch){ const oid=ch.dataset.oid, cid=Number(ch.dataset.cid);
           if(o.multi){ const arr=sel[oid]||(sel[oid]=[]); const i=arr.indexOf(cid);
-            if(i>=0)arr.splice(i,1); else arr.push(cid);
+            const g=groups.find(x=>String(x.id)===String(oid)), max=limOf(g).max;
+            // At the ceiling the untickeds are already disabled, so this can only
+            // be an untick or a tick with room. Belt and braces: refuse anyway,
+            // because a stale sheet is not a reason to send an over-full line.
+            if(i>=0)arr.splice(i,1); else { if(max&&arr.length>=max) return; arr.push(cid); }
             ch.classList.toggle('on'); const bx=ch.querySelector('.op-box'); if(bx)bx.textContent=ch.classList.contains('on')?'✓':'';
+            // Close or re-open the rest of THIS group as the count crosses the cap.
+            if(max){ const full=arr.length>=max;
+              ch.closest('.op-group').querySelectorAll('.op-choice').forEach(b=>{
+                b.disabled=full&&!b.classList.contains('on'); }); }
           } else { sel[oid]=[cid];
             ch.parentElement.querySelectorAll('.op-choice').forEach(x=>x.classList.toggle('on',x===ch)); }
           updFoot(); refreshBar(); return; }

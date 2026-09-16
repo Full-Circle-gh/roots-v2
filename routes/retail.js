@@ -19,6 +19,8 @@ const db = require('../database');
 const { recipeOwnsProductCost, fireRecompute } = require('../lib/recipe-rollup');
 const { bundleOwnsProductCost, bundleUnitCostYuan } = require('../lib/bundle-cost');
 const { productUnitCostYuan } = require('../lib/product-cost');
+const optionLimits = require('../lib/option-limits');
+const { normaliseLimits } = optionLimits;
 // Read-only cost maths, used by the recipe-link endpoint to say whether the
 // recipe an operator just picked can actually yield a figure — the same
 // function applyProductCosts() decides that with, so the answer the modal
@@ -1515,6 +1517,87 @@ function sanitizeBundleItems(input, selfId = null) {
     .slice(0, 20);
   return items.length ? JSON.stringify(items) : null;
 }
+// WHETHER A STOCK-BACKED PAID EXTRA CAN STILL BE GIVEN, for a set of add-on
+// product ids → Map<id, boolean>. An id absent from the map is an add-on link
+// pointing at a row that no longer exists; callers read `=== true`, so a
+// dangling link answers false rather than being honoured.
+//
+// The stock question is the SAME ONE the product itself is asked (real_stock on
+// every storefront list): sellableStockSql, i.e. the whole company's sellable
+// count. This is the online storefront, which does not route to one location
+// until checkout, so a per-store count would answer a question nobody has asked
+// yet. The counter/QR menu DOES know its store and asks per-location instead
+// (routes/shop-menu.js attachOptions) — the two differ on purpose.
+//
+// TWO CALLERS, ONE RULE: the product detail response greys the extra out, and
+// order-create counts the same choices to clamp a pick-any group's floor. They
+// were one inline block until the floor needed it too; a second copy would be a
+// second answer to "is this extra still on the shelf".
+function addonAvailabilityById(addonIds) {
+  const ids = [...new Set((addonIds || []).filter(Boolean))];
+  if (!ids.length) return new Map();
+  const ph = ids.map(() => '?').join(',');
+  const stockRows = tdb().prepare(
+    `SELECT id, ${inventory.sellableStockSql('store_products.id', 'stock_qty')} AS stock,
+            is_published, is_active, ship_from_supplier, supplier_paused
+       FROM store_products WHERE id IN (${ph})`
+  ).all(...ids);
+  return new Map(stockRows.map(r => [r.id, (
+    // Unpublished or deactivated: the extra is not sellable at all.
+    (!r.is_published || !r.is_active) ? false
+      // Supplier-direct add-on: we hold none of it, so our own count says
+      // nothing. It is available unless the supplier is paused — the same
+      // reading the product path takes for a ship_from_supplier line.
+      : r.ship_from_supplier ? !r.supplier_paused
+        : Number(r.stock) > 0
+  )]));
+}
+
+// HOW MANY of a pick-any group a line must answer, checked against the database.
+// Returns null when the line is fine, or an error code to refuse it with.
+//
+// The sheet greys out the tick-box that would break the ceiling and blocks the
+// Add button under the floor; this is that same rule where a post straight at
+// the endpoint cannot skip it. `chosenIds` is what the line posted, deduped —
+// a tick-box is on or off, so the same choice twice is one answer, not two.
+//
+// THE FLOOR IS MEASURED AGAINST PICKABLE CHOICES, the way the product response
+// clamped it before serving the page (see product.options above). Measuring it
+// any other way would refuse an order the page itself told the customer to
+// place: "choose 2 sides" with two of three sold out is served as "choose 1".
+function checkOptionLimits(productId, chosenIds) {
+  const groups = tdb().prepare(
+    `SELECT id, type, min_choices, max_choices FROM retail_product_options
+      WHERE product_id = ? AND type = 'multi' AND (min_choices > 0 OR max_choices > 0)`
+  ).all(productId);
+  if (!groups.length) return null;
+
+  const gph = groups.map(() => '?').join(',');
+  const gChoices = tdb().prepare(
+    `SELECT id, option_id, stock_product_id FROM retail_product_option_choices
+      WHERE option_id IN (${gph})`
+  ).all(...groups.map(g => g.id));
+  const availById = addonAvailabilityById(gChoices.map(c => c.stock_product_id));
+  const pickable = new Map();
+  for (const c of gChoices) {
+    if (c.stock_product_id && availById.get(c.stock_product_id) !== true) continue;
+    pickable.set(c.option_id, (pickable.get(c.option_id) || 0) + 1);
+  }
+
+  const chosen = new Set((chosenIds || []).map(n => parseInt(n, 10)).filter(Number.isFinite));
+  const answered = new Map();
+  for (const c of gChoices) {
+    if (chosen.has(c.id)) answered.set(c.option_id, (answered.get(c.option_id) || 0) + 1);
+  }
+  for (const g of groups) {
+    const lim = optionLimits.effectiveLimits(g, pickable.get(g.id) || 0);
+    const n = answered.get(g.id) || 0;
+    if (lim.max && n > lim.max) return 'too_many_answers';
+    if (lim.min && n < lim.min) return 'too_few_answers';
+  }
+  return null;
+}
+
 // ── Per-product options (customer choices: dressing, spice level, cutlery…) ──
 // Stored in retail_product_options + retail_product_option_choices, keyed by the
 // store-product id. Orthogonal to stock — a choice never deducts inventory; it
@@ -1523,7 +1606,7 @@ function sanitizeBundleItems(input, selfId = null) {
 // Mini App Backend editor a read + write path so options can actually be authored.
 function loadProductOptions(productId) {
   const options = tdb().prepare(
-    `SELECT id, question_en, question_cn, type, is_required, sort_order
+    `SELECT id, question_en, question_cn, type, is_required, min_choices, max_choices, sort_order
        FROM retail_product_options WHERE product_id = ?
       ORDER BY sort_order ASC, id ASC`
   ).all(productId);
@@ -1604,7 +1687,16 @@ async function saveProductOptions(productId, input) {
         stock_product_id: (c && Number.isFinite(parseInt(c.stock_product_id, 10))) ? parseInt(c.stock_product_id, 10) : null,
       }))
       .filter(c => c.label_en || c.label_cn);
-    return { question_en, question_cn, type, is_required: o && o.is_required ? 1 : 0, choices };
+    // HOW MANY of a pick-any group the customer must/may tick. Normalised
+    // against the choices being saved in the same breath, so a ceiling of 5 on a
+    // three-choice group is stored as "no ceiling" rather than as a number that
+    // silently never binds. See lib/option-limits.js for the whole rule.
+    const limits = normaliseLimits(type, o && o.min_choices, o && o.max_choices,
+      choices.length, o && o.is_required);
+    return {
+      question_en, question_cn, type, is_required: limits.is_required,
+      min_choices: limits.min_choices, max_choices: limits.max_choices, choices,
+    };
   })
     // The `o.type === 'text'` arm keeps a choice-less text option from being
     // dropped on save — but it is NOT an endorsement. 'text' is half-built and
@@ -1630,15 +1722,16 @@ async function saveProductOptions(productId, input) {
     ).run(productId);
     tx.prepare('DELETE FROM retail_product_options WHERE product_id = ?').run(productId);
     const insOpt = tx.prepare(
-      `INSERT INTO retail_product_options (product_id, question_en, question_cn, type, is_required, sort_order)
-       VALUES (?,?,?,?,?,?)`
+      `INSERT INTO retail_product_options (product_id, question_en, question_cn, type, is_required, min_choices, max_choices, sort_order)
+       VALUES (?,?,?,?,?,?,?,?)`
     );
     const insChoice = tx.prepare(
       `INSERT INTO retail_product_option_choices (option_id, label_en, label_cn, price_delta, is_default, stock_product_id, sort_order)
        VALUES (?,?,?,?,?,?,?)`
     );
     clean.forEach((o, oi) => {
-      const optId = insOpt.run(productId, o.question_en, o.question_cn || null, o.type, o.is_required, oi).lastInsertRowid;
+      const optId = insOpt.run(productId, o.question_en, o.question_cn || null, o.type,
+        o.is_required, o.min_choices, o.max_choices, oi).lastInsertRowid;
       o.choices.forEach((c, ci) => insChoice.run(optId, c.label_en, c.label_cn || null, c.price_delta, c.is_default, c.stock_product_id, ci));
     });
   });
@@ -2920,7 +3013,7 @@ router.get('/api/retail/products/:id', (req, res) => {
   product.reviews_recent = mergedRecentReviews(id, 3);
 
   const options = tdb().prepare(
-    `SELECT id, question_en, question_cn, type, is_required, sort_order
+    `SELECT id, question_en, question_cn, type, is_required, min_choices, max_choices, sort_order
        FROM retail_product_options WHERE product_id = ?
       ORDER BY sort_order ASC, id ASC`
   ).all(id);
@@ -2964,28 +3057,20 @@ router.get('/api/retail/products/:id', (req, res) => {
       .map(c => c.stock_product_id).filter(Boolean)
   )];
   if (addonIds.length) {
-    const ph = addonIds.map(() => '?').join(',');
-    const stockRows = tdb().prepare(
-      `SELECT id, ${inventory.sellableStockSql('store_products.id', 'stock_qty')} AS stock,
-              is_published, is_active, ship_from_supplier, supplier_paused
-         FROM store_products WHERE id IN (${ph})`
-    ).all(...addonIds);
-    const availById = new Map(stockRows.map(r => [r.id, (
-      // Unpublished or deactivated: the extra is not sellable at all. An id
-      // pointing at a row that no longer exists never reaches the map and is
-      // answered `false` below — a dangling link cannot be honoured either.
-      (!r.is_published || !r.is_active) ? false
-        // Supplier-direct add-on: we hold none of it, so our own count says
-        // nothing. It is available unless the supplier is paused — the same
-        // reading the product path takes for a ship_from_supplier line.
-        : r.ship_from_supplier ? !r.supplier_paused
-          : Number(r.stock) > 0
-    )]));
+    const availById = addonAvailabilityById(addonIds);
     for (const c of Object.values(choicesByOpt).flat()) {
       if (c.stock_product_id) c.addon_available = availById.get(c.stock_product_id) === true;
     }
   }
-  product.options = options.map(o => ({ ...o, choices: choicesByOpt[o.id] || [] }));
+  product.options = options.map(o => {
+    // THE FLOOR THE CUSTOMER IS SHOWN IS THE FLOOR THEY ARE HELD TO. "Choose 2
+    // crunchy sides" with two of the three sold out is served as "choose 1", so
+    // a required group never becomes unanswerable — and so order-create, which
+    // measures pickability the same way, agrees with the page it served.
+    const cs = choicesByOpt[o.id] || [];
+    const lim = optionLimits.effectiveLimits(o, cs.filter(c => c.addon_available !== false).length);
+    return { ...o, min_choices: lim.min, max_choices: lim.max, choices: cs };
+  });
 
   // Variant siblings — every purchasable product in the same variant_group_id
   // (includes this one, so the app highlights the current pick). Powers the
@@ -10588,6 +10673,12 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
           delta: c.price_delta, stock_product_id: c.stock_product_id || null,
         });
       }
+    }
+    // HOW MANY, server side — runs whether or not the line posted any choices,
+    // so a pick-any floor cannot be dodged by sending none at all.
+    {
+      const bad = checkOptionLimits(pid, Array.isArray(it.choices) ? it.choices : []);
+      if (bad) return res.status(400).json({ success: false, error: bad, product_id: pid });
     }
 
     // Apply flash price when active. Stock-cap enforcement happens inside
@@ -23888,13 +23979,13 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
     // product and is carried through unchanged — the copy draws that extra from
     // the same stock the source did.
     const srcOpts = tdb().prepare(
-      `SELECT id, question_en, question_cn, type, is_required, sort_order
+      `SELECT id, question_en, question_cn, type, is_required, min_choices, max_choices, sort_order
          FROM retail_product_options WHERE product_id = ? ORDER BY sort_order ASC, id ASC`
     ).all(id);
     if (srcOpts.length) {
       const insOpt = tdb().prepare(
-        `INSERT INTO retail_product_options (product_id, question_en, question_cn, type, is_required, sort_order)
-         VALUES (?,?,?,?,?,?)`
+        `INSERT INTO retail_product_options (product_id, question_en, question_cn, type, is_required, min_choices, max_choices, sort_order)
+         VALUES (?,?,?,?,?,?,?,?)`
       );
       const getChoices = tdb().prepare(
         `SELECT label_en, label_cn, price_delta, is_default, stock_product_id, sort_order
@@ -23905,7 +23996,8 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
          VALUES (?,?,?,?,?,?,?)`
       );
       for (const o of srcOpts) {
-        const newOptId = insOpt.run(copyId, o.question_en, o.question_cn, o.type, o.is_required, o.sort_order).lastInsertRowid;
+        const newOptId = insOpt.run(copyId, o.question_en, o.question_cn, o.type, o.is_required,
+          o.min_choices || 0, o.max_choices || 0, o.sort_order).lastInsertRowid;
         for (const c of getChoices.all(o.id)) {
           insChoice.run(newOptId, c.label_en, c.label_cn, c.price_delta, c.is_default, c.stock_product_id, c.sort_order);
         }
@@ -36822,6 +36914,13 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
           delta: ch.price_delta, stock_product_id: ch.stock_product_id || null,
         });
       }
+    }
+    // The same pick-any floor/ceiling the first checkout applied — a line added
+    // to a live order is still a line, and the sheet that built it is the same
+    // sheet.
+    {
+      const bad = checkOptionLimits(pid, Array.isArray(it.choices) ? it.choices : []);
+      if (bad) return res.status(400).json({ success: false, error: bad, product_id: pid });
     }
 
     const eff = flashsales.effectivePriceFor(p, p.price, orderNowMs);

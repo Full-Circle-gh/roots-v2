@@ -4346,6 +4346,17 @@
     background: var(--bg-pane); color: var(--text-1);
   }
   .opt-addc { align-self: flex-start; margin-top: 2px; }
+  /* HOW MANY of a pick-any group the customer may tick. Only rendered on
+     type=multi — a radio is exactly one answer by construction. Two small
+     number boxes reading "Pick [n] – [n]", styled off .opt-cdelta so the
+     editor's numeric inputs stay one size. */
+  .opt-lim { display: inline-flex; align-items: center; gap: 4px; flex: none;
+    font-size: 12px; color: var(--text-2); white-space: nowrap; }
+  #pd-options .opt-lim input {
+    width: 44px; height: 28px; box-sizing: border-box; padding: 0 4px; text-align: center;
+    font: 13px var(--f-sans); border: 1px solid var(--line-soft); border-radius: 6px;
+    background: var(--bg-pane); color: var(--text-1);
+  }
   /* Stock-product link on a paid add-on choice. */
   .opt-link-btn { flex: none; white-space: nowrap; }
   .opt-link { display: inline-flex; align-items: center; gap: 6px; flex: none; max-width: 220px;

@@ -2161,7 +2161,7 @@ db.exec(`
   -- Per-product custom Q&A (e.g. "Choose size", "Add cutlery?", "Spice level?")
   -- The mini app renders one block per option, in sort_order. type controls UI:
   --   single  → radio (one choice)
-  --   multi   → checkbox (zero-or-more choices)
+  --   multi   → checkbox (zero-or-more choices, or min_choices..max_choices)
   --   text    → free-text input (price_delta ignored, no choices needed)
   CREATE TABLE IF NOT EXISTS retail_product_options (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2170,6 +2170,8 @@ db.exec(`
     question_cn     TEXT,
     type            TEXT NOT NULL DEFAULT 'single',   -- single | multi | text
     is_required     INTEGER DEFAULT 0,
+    min_choices     INTEGER DEFAULT 0,                -- multi only; 0 = no floor
+    max_choices     INTEGER DEFAULT 0,                -- multi only; 0 = no ceiling
     sort_order      INTEGER DEFAULT 0,
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
@@ -2388,6 +2390,23 @@ addColumn('retail_synthetic_reviews', 'reply_at', 'DATETIME');
 // expandStockLines (order-create reserves the linked product like a bundle
 // component, so the existing atomic stock gate prevents overselling).
 addColumn('retail_product_option_choices', 'stock_product_id', 'INTEGER');
+
+// How many answers a "Pick any" (multi) question takes. 0 on BOTH means the
+// old unlimited behaviour, which is what every existing row gets — a group that
+// never had a limit keeps not having one.
+//   min_choices  the customer must tick at least this many (0 = no floor)
+//   max_choices  the customer may tick at most this many  (0 = no ceiling)
+// "Choose 2 crunchy sides" is min 2 / max 2. is_required is the older, coarser
+// form of the same idea and still governs single-answer questions; for a multi
+// question a min of 1 or more IS required, and saving keeps the two in step.
+// Ignored for 'single' (a radio is exactly one) and 'text'.
+//
+// The FLOOR IS NOT ABSOLUTE AT RENDER TIME: a group whose choices have sold
+// down to fewer than min would otherwise make the product unbuyable, so both
+// storefronts and the checkout clamp the effective min to the number of live
+// choices. Same principle as "a question with no answers left is not asked".
+addColumn('retail_product_options', 'min_choices', 'INTEGER DEFAULT 0');
+addColumn('retail_product_options', 'max_choices', 'INTEGER DEFAULT 0');
 
 // Customer-reported bugs / feedback submitted from the mini app "Found a bug?"
 // form. Lands read-only in the Mini App Backend → Feedback tab — completely
