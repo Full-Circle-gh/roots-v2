@@ -59,8 +59,11 @@ function fnBody(src, name) {
 
 section('The inverted control stays out of the generic sync');
 check('the generic sync still is what this rule is about', () => {
-  const body = fnBody(SRC, 'paBlocksSyncFromDOM');
-  assert.ok(body, 'paBlocksSyncFromDOM is gone — re-read this file before trusting it');
+  /* §144 split the sweep in two: paBlocksSyncFromDOM walks the sections and
+     _paSyncOneSection does the copying. The rule is about the COPYING, so this
+     follows it there rather than relaxing. */
+  const body = fnBody(SRC, '_paSyncOneSection');
+  assert.ok(body, '_paSyncOneSection is gone — re-read this file before trusting it');
   assert.ok(/\[data-bkey\]/.test(body), 'the sync no longer keys on data-bkey');
   assert.ok(/el\.checked/.test(body),
     'the sync no longer copies a checkbox verbatim — if it now inverts, this whole file needs rewriting, not relaxing');
@@ -115,11 +118,12 @@ check('IT IS RENDERED ON EVERY ROW, not only on hidden ones', () => {
      is a mark you cannot click to hide with — Ash went to use it and there was
      nothing there. The row markup must emit the button unconditionally and vary
      only its state. */
-  const tabs = fnBody(SRC, 'paRenderTabs');
-  assert.ok(tabs, 'paRenderTabs is gone');
-  const m = tabs.match(/<button[^>]*class="pbr-qr[^"]*"/);
-  assert.ok(m, 'the row no longer renders a pbr-qr button');
-  assert.ok(!/\$\{b\.hide_qr \? `<(?:button|div)[^>]*pbr-qr/.test(tabs),
+  /* §144 moved the row into the section head; the rule did not move. */
+  const head = fnBody(SRC, '_paSecHead');
+  assert.ok(head, '_paSecHead is gone');
+  assert.ok(/<button[^>]*class="pa-sec-eye/.test(head),
+    'the section head no longer renders the QR eye');
+  assert.ok(!/\$\{b\.hide_qr \? `<(?:button|div)[^>]*pa-sec-eye/.test(head),
     'the eye is drawn only when the block is already hidden — it cannot be used to hide one');
 });
 check('clicking it does not also open the block', () => {
@@ -129,10 +133,24 @@ check('clicking it does not also open the block', () => {
     'the eye lets its click reach the row, which selects the block — the office asked to hide one, not open it');
   assert.ok(/paSetHideQr\(/.test(row), 'the eye does not go through the single writer');
 });
-check('and the two controls cannot disagree about the open block', () => {
+check('and the two controls cannot disagree, on the section they belong to', () => {
+  /* The head's eye and the fold's checkbox now sit in the SAME section, and
+     nine sections are on screen at once — so the write-back must be scoped to
+     the section it changed. A global querySelector here would re-tick whichever
+     section rendered first, which is the §142 failure with a new address. */
   const owner = fnBody(SRC, 'paSetHideQr');
-  assert.ok(/PA_SELECTED_BLOCK_ID/.test(owner) && /checked\s*=/.test(owner),
-    'clicking the eye on the OPEN row leaves the inspector switch saying the opposite');
+  assert.ok(/checked\s*=/.test(owner),
+    "clicking the eye leaves that section's own switch saying the opposite");
+  assert.ok(/\.pa-sec\[data-blockid=/.test(owner),
+    'the write-back is not scoped to a section — with nine on screen it will hit the wrong one');
+  assert.ok(!/document\.querySelector\(['"`]#pa-block-editor-mount/.test(owner),
+    'still reaching for the retired single-block inspector');
+});
+check('and so is the checkbox handler that writes it', () => {
+  const flip = fnBody(SRC, 'paChannelFlip');
+  assert.ok(flip, 'paChannelFlip is gone');
+  assert.ok(/closest\(['"`]\[data-blockid\]['"`]\)/.test(flip),
+    'paChannelFlip does not resolve the section it sits inside — it will flip the wrong block');
 });
 
 section('The flag still means what the QR menu reads');

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.280
+# Tacet shared-core consolidation — decisions record, v4.281
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-15 · v4.281 — **§144 · THE PRODUCT EDITOR IS A FORM, NOT A BUILDER — AND THE READING ORDER IS OFFERED, NEVER IMPOSED — DECIDED BY ASH from three working prototypes:** *“option a”*. **WHY A BUILDER WAS THE WRONG SHAPE, measured rather than felt.** A read-only production run of `scripts/diagnose_block_spine_order.js` over the 260 live products that carry any blocks finds nine types on 73–99% of them — `hero_intro` 99%, `spec_strip` 93%, `how_to_use` 90%, `notes_callout` 89%, `ingredients_chips` 87%, `why` 86%, `storage_box` 84%, `big_stat` 83%, `allergen_card` 73% — then a cliff to `nutrition_facts` 8%, `pull_quote` 5%, `recipe_steps` 3%, `ingredients_line` 0%. Four offered types (`image_band`, `pairings`, `faq`, `stat_callout`) are on no product at all. **Nobody is composing a page; everybody is filling in the same one.** So the editor stops asking the office to assemble what it already knows, and the nine become a spine that is always present — written sections inline, unwritten ones as a named line carrying how many products do say it, so a gap reads as unusual or ordinary without opening anything. **WHAT IS DECIDED, and the second half is the one that matters:** the spine is rendered, and **the stored order is preserved**. The same run found **71 distinct block orders in use**, with only 145 of 260 products (56%) sitting inside the commonest — so an editor that rendered a canonical order and saved it would have silently reordered **115 live customer pages on first save, with no edit made**. That is rejected outright. Placeholders for missing sections are inserted at their canonical position *relative to the blocks the product already has*; **no stored block is ever moved by rendering, by typing, or by saving.** Reordering stays a thing the operator does, now also available as one deliberate action that says what would move before it moves it. **THE CANONICAL ORDER IS THE HOUSE'S, NOT AN INVENTION** — `spec_strip > hero_intro > big_stat > why > ingredients_chips > allergen_card > storage_box > notes_callout > how_to_use`, which is what 74 products already carry and which puts the spec strip above the opening paragraph, where no whiteboard would have put it. **THE FREQUENCY IS READ LIVE, NEVER FROZEN INTO A CONSTANT** — a percentage baked into the source is a percentage that is wrong by next quarter and that nobody re-measures; a new endpoint counts the tenant's own products. **THE RISK THIS CHANGE CARRIES, NAMED:** `paBlocksSyncFromDOM` read one form at a time and wrote every `[data-bkey]` in the mount onto one block; with nine forms on screen it must scope per section, and a scoping bug writes one section's words into another's. §142 is the same family of mistake eleven days younger, so the invariant is held by a test rather than by care. **OPTIONS B AND C ARE RECORDED, not discarded:** B kept the block list and moved the settings beside it — fixes the distance, leaves the assembly work; C made the customer's page itself the editor — defeated by the bilingual pair, since only one language is ever on the page and chips, allergens and tables have nowhere to sit. Both were built as working prototypes before the choice was made. **NOT DONE, so it is not assumed:** no field deleted (the 30 never-filled colour fields stay, per v4.280); no schema, no migration; no change to the mini app, the QR menu or the web storefront; no change to `.gitignore` or CI.
 
 2026-09-15 · v4.280 — **§143 · THE FILE NAME IS THE WHOLE OF THE PERMISSION, SO A TEST HOLDS IT — found while running the block-field usage report against production.** `.github/workflows/ro-query.yml` will run ANY `scripts/diagnose_*.js` against the LIVE database and its only gate is that file-name shape; the workflow's header promises such a file opens SQLite `readonly: true` and PROVES it by attempting a write. **That promise lived in a comment and in each author's care, which is not a mechanism — and it had been broken twice.** `diagnose_hide_qr_flags.js` (written by this session earlier the same day) opened the database through `require('../database.js')`, the APPLICATION'S READ-WRITE handle; it failed on the box as MODULE_NOT_FOUND because the workflow stubs `database.js`, **so the mistake surfaced as a path error rather than as what it was.** `diagnose_variant_descriptions.js` opened `data/roots.db` with no options at all. Both fixed. **ENFORCED:** `readonly: true` on every open of the LIVE database. **COUNTED, NOT ENFORCED:** the run-time probe, which 13 of 58 live-opening scripts predate — failing those would make the gate red on a main that is not unsafe, and a suite red for a reason nobody intends to fix is one people learn to ignore. **THE CHECKER CRIED WOLF TWICE BEFORE IT WAS RIGHT, and all three ways are recorded:** it failed seven file/HTTP diagnostics that open no database; it failed three seam audits that open a writable SCRATCH database on purpose (so the question is not “is it readonly” but “is this the LIVE database”); and then it failed five CORRECT scripts because `/new Database\([^)]*\)/` cannot see past the `)` closing `path.join(...)` and never saw the options object. The scan now balances parentheses — **a checker that cries wolf is one whose next real finding gets waved through.** **THE USAGE REPORT THAT STARTED IT**, `diagnose_block_field_usage.js`, also lands: its first production run found **30 of 78 fields in the product page editor never filled in by anybody across 260 products** (`accent_color`/`bg_color`/`fg_color` on all ten types offering them). Deleting them was proposed and **Ash declined**, on the reading that nobody using a control buried in a closed fold is not the same as nobody wanting it — recorded so it is not re-derived or re-opened. **TESTS:** `test_diagnostics_are_read_only.js`, four checks in the fast shard, reading the workflow itself so it fails loudly if the gate is renamed. Proved by mutation. No change to `ro-query.yml` or `oneoff.yml`, no probe added to the 13, no field deleted, no schema, and no change to `.gitignore` or CI.
 2026-09-15 · v4.279 — **§142 · AN INVERTED CONTROL CANNOT RIDE A SYNC THAT MEANS “THE FIELD EQUALS THE INPUT” — REPORTED BY ASH against §135, shipped the same day:** *“i cant really click hide/unhide the same block, i have to click on one block to hide and another block to unhide.”* **IT WAS WORSE THAN THE SYMPTOM AND IT REACHED THE DATABASE.** No click was needed: `paBlocksSyncFromDOM()` copies `b[dataset.bkey] = el.checked` verbatim, and the QR switch is INVERTED — ticked means SHOWN — so wiring it in with `data-bkey` wrote `hide_qr = true` for a VISIBLE block. The change handler had the inversion right and was clobbered a moment later, because that sync runs on every selection, every live preview, inside `peSerializeState()` (the unsaved-changes fingerprint, which runs ON LOAD) and inside `paBlocksCollect()` — which is how it reached the save. Measured against the shipped build: open a product, touch nothing, block 1 comes back flagged hidden. **THE RULE:** an inverted control carries NO `data-bkey`. Not a second inversion inside the sync — that mechanism is general, and a special case in it rearms the same trap for the next inverted control. `paSetHideQr()` is the only writer now. **THE EYE ON THE ROW IS A BUTTON**, because §135 drew it only once a block was already hidden — a mark you cannot click to hide with, which is what Ash reached for and did not find. Now on every row, with `stopPropagation` so it does not also open the block, and it moves the inspector's switch in place so the two cannot disagree. **WHAT REACHED LIVE DATA:** between deploy #2067 and this fix, opening a product and saving flagged the selected block. `scripts/diagnose_hide_qr_flags.js` is READ-ONLY and sorts by the accident's fingerprint — the fault always landed on block 1, always alone. **A blanket clear was rejected:** it would undo the real ones set deliberately in the same window, and the flag cannot tell them apart. **TESTS:** `scripts/test_product_editor_hide_qr.js`, nine checks in the FAST shard, guarding the invariant rather than the symptom — including that no OTHER checkbox in that sync is inverted (`lead` and `alt` both are honest; `alt`'s label says “Inverted” about how its card is painted, not its polarity, written down because that is what a later reader trips over). Proved by mutation. A Chromium pass proves more and would land in the slow shard, which is not run, so a suite that never runs was not written; the browser pass was run by hand against this change and against the shipped code before it. No repair of existing rows, no change to what the flag means to the QR menu, no change to `paBlocksSyncFromDOM` itself, no schema, and no change to `.gitignore` or CI.
@@ -15544,3 +15546,110 @@ catch them.
 **NOT DONE, so it is not assumed.** No change to `ro-query.yml` or to
 `oneoff.yml`. No probe added to the 13 scripts that lack one. No field deleted
 from either editor. No schema, no migration, and no change to `.gitignore` or CI.
+
+## §144 — THE PRODUCT EDITOR IS A FORM, NOT A BUILDER — AND THE READING ORDER IS OFFERED, NEVER IMPOSED
+
+**Decided by Ash, 2026-09-15, from three working prototypes:** *"option a"*.
+
+### What the data said, before anything was drawn
+
+`scripts/diagnose_block_spine_order.js`, run read-only against production, over
+the **260 of 342 products that carry any `description_blocks` at all**:
+
+| share | products | type |
+|------:|---------:|------|
+| 99% | 258 | `hero_intro` |
+| 93% | 242 | `spec_strip` |
+| 90% | 234 | `how_to_use` |
+| 89% | 231 | `notes_callout` |
+| 87% | 225 | `ingredients_chips` |
+| 86% | 224 | `why` |
+| 84% | 218 | `storage_box` |
+| 83% | 217 | `big_stat` |
+| 73% | 189 | `allergen_card` |
+| 8% | 20 | `nutrition_facts` |
+| 5% | 14 | `pull_quote` |
+| 3% | 8 | `recipe_steps` |
+| 0% | 1 | `ingredients_line` |
+
+`image_band`, `pairings`, `faq` and `stat_callout` are offered by the editor and
+carried by **no product at all**.
+
+**There is a cliff between 73% and 8%, and it is the whole argument.** Nine types
+are on nearly every page; everything else is an exception. An editor whose main
+gesture is *choose a block and place it* is asking the office to re-decide, 260
+times, a thing that was decided once. So the nine become a spine that is always
+on screen: written sections show their fields inline, unwritten ones show as a
+named line carrying **how many of your products do say this**, so a gap reads as
+ordinary or unusual without opening anything.
+
+### The half that matters more: the stored order is preserved
+
+The same run found **71 distinct block orders in use**. Against the commonest,
+only **145 of 260 products (56%)** already sit inside it.
+
+**So an editor that rendered a canonical order and saved it would silently have
+reordered 115 live customer pages on first save, with no edit made.** That is
+rejected outright, and it is the reason this section exists rather than being a
+paragraph in the previous one.
+
+**What is built instead:** placeholders for missing sections are inserted at
+their canonical position *relative to the blocks the product already has*. **No
+stored block is moved by rendering, by typing, or by saving.** Putting a page
+into reading order stays something the operator does — now available as one
+deliberate action that says what would move before it moves it.
+
+**The canonical order is the house's own, not an invention.** It is what 74
+products already carry:
+
+    spec_strip > hero_intro > big_stat > why > ingredients_chips
+               > allergen_card > storage_box > notes_callout > how_to_use
+
+Note that it puts the spec strip **above** the opening paragraph. No whiteboard
+would have chosen that; the catalogue did.
+
+### The frequency is read live, never frozen into a constant
+
+A percentage compiled into the source is a percentage that is wrong by next
+quarter and that nobody re-measures. `GET /api/retail-admin/products/block-usage`
+counts the tenant's own products on demand. If the endpoint fails the line is
+simply absent — a wrong number is worse than no number.
+
+### The risk this change carries, named rather than discovered
+
+`paBlocksSyncFromDOM` read **one** form at a time: find the single
+`[data-blockid]` in the mount, then write every `[data-bkey]` under that mount
+onto that block. With nine forms on screen at once, it must scope per section,
+and a scoping bug writes one section's words into another's — silently, on a
+page the office cannot see is wrong until a customer reads it.
+
+**§142 is the same family of mistake eleven days younger** (an inverted checkbox
+riding a sync that means "the field equals the input"). So the invariant is held
+by a test, not by care: `scripts/test_product_editor_doc.js` renders two sections
+and proves that typing into one leaves the other untouched.
+
+`paChannelFlip` and `paSetHideQr` carried the same single-form assumption and
+move to the enclosing section with `closest('[data-blockid]')`.
+
+### Options B and C are recorded, not discarded
+
+Both were built as working prototypes before the choice was made.
+
+**B — keep the block list, move the settings beside it.** Fixes *"things are too
+far apart on screen"* and leaves the assembly work exactly where it was: nine
+blocks placed and ordered by hand on every product, forever.
+
+**C — the customer's page is the editor.** Defeated by the bilingual pair. Only
+one language is ever on the customer's page, so editing in place hides the other
+half of every field and makes a missing 中文 string invisible until somebody
+switches. Chips, allergens and tables have nowhere to sit on a customer's page
+either, so about a third of the editing returns to a panel — which is the form,
+back again, with extra steps.
+
+### Not done, so it is not assumed
+
+No field deleted — the 30 never-filled colour fields stay, per v4.280, folded
+rather than removed. No schema, no migration. No change to the mini app, the QR
+menu or the web storefront: `description_blocks` is written in the same shape by
+the same collector. No change to `.gitignore`, CI, or anything governing how
+sessions and builds work.
