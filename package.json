@@ -27,6 +27,7 @@
     "test:saved-views": "node scripts/test_saved_views.js",
     "test:keyboard": "node scripts/test_keyboard_reach.js",
     "test:wizard-first-question": "node scripts/test_wizard_first_question.js",
+    "test:wizard-required-pick": "node scripts/test_wizard_required_pick.js",
     "test:print-documents": "node scripts/test_print_documents.js",
     "test:settings-findable": "node scripts/test_settings_findable.js",
     "test:delivery-in-settings": "node scripts/test_delivery_in_settings.js",

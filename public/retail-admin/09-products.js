@@ -6558,7 +6558,28 @@ function pwOptBlock(o, oi) {
   const q = '<input type="text" class="pw-opt-q" placeholder="' + (paid ? cuT('What can they add? e.g. Add extras', '可添加什么?如:添加加项') : cuT('What are they picking? e.g. Choose your dressing', '让顾客选什么?如:选择酱料')) + '" value="' + escapeAttr(o[qKey] || '') + '" oninput="pwOptQ(' + oi + ', \'' + qKey + '\', this.value)">';
   const choices = o.choices.map((c, ci) => pwChoiceRow(o, oi, c, ci)).join('');
   const addLbl = paid ? cuT('+ Add an extra', '+ 添加加项') : cuT('+ Add another', '+ 添加选项');
-  const req = paid ? '' : '<label class="pw-check"><input type="checkbox"' + (o.is_required ? ' checked' : '') + ' onchange="pwOptReq(' + oi + ', this.checked)"> ' + cuT('They have to pick one before they can buy', '购买前必须选择') + '</label>';
+  // THE REQUIRED TICK IS DRAWN ON BOTH KINDS OF QUESTION, and it used to be
+  // drawn only on the free pick. The v1 spec put it there deliberately, on the
+  // reading that a "paid extra" is an upsell and nobody should be forced to buy
+  // one. That reading holds for a genuine upsell and breaks on the shape the
+  // menus actually carry: a question with SEVERAL free answers — "Choose 2
+  // crunchy sides", every delta zero — is a multi here, because a free pick is
+  // always a single, and so it was the one question no wizard could ever make
+  // required.
+  //
+  // The full editor has shown Required on every type all along
+  // (the .opt-req label in optEditorHtml), and pwSave below writes
+  // o.is_required through whatever the type. So the two editors disagreed about
+  // one saved field: a required multi set in the full editor came back into the
+  // wizard with its tick nowhere on screen, read as optional, and was saved back
+  // still required. An invisible ticked box is worse than a box the shop owner
+  // decides not to tick.
+  //
+  // The label is the live pair unchanged. On a pick-any question "pick one"
+  // reads as at least one, which is exactly what the storefront and the QR menu
+  // enforce (routes/shop-menu.js pkMissing counts live answers and blocks on
+  // none), so there is nothing new to say and no new string to compose.
+  const req = '<label class="pw-check"><input type="checkbox"' + (o.is_required ? ' checked' : '') + ' onchange="pwOptReq(' + oi + ', this.checked)"> ' + cuT('They have to pick one before they can buy', '购买前必须选择') + '</label>';
   return '<div class="pw-opt">' + head + q + '<div class="pw-choices">' + choices + '</div><button type="button" class="btn btn-sm pw-addc" onclick="pwAddChoice(' + oi + ')">' + addLbl + '</button>' + req + '</div>';
 }
 function pwChoiceRow(o, oi, c, ci) {
