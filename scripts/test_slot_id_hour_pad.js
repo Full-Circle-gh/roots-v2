@@ -208,16 +208,26 @@ section('3 · an early window the batch reaches is covered');
   const covered = (slotId) => retail.freshLinesCoveredToday({
     zone, deliverySlotId: slotId, productIds: [P_FRESH], now, tz: TZ,
   });
+  // THE IDS COME FROM THE PICKER, not from a literal written here. Spelling
+  // them out padded made two of these cases pass against the unfixed code:
+  // they proved that a correct id is covered, which was never in doubt, while
+  // the id the picker actually minted was the broken one. Asking
+  // computeDeliverySlots for them is what puts the defect back inside the test.
+  const byStart = (h) => {
+    const s = todaysWindows(zone, now).find((w) => w.start_hour === h);
+    assert.ok(s, `the fixture must offer a window starting at ${h}:00`);
+    return s.slot_id;
+  };
 
   it('08:00–09:00 is covered by a 09:00 batch', () => {
-    assert.ok(covered(`${TODAY}T08:00`).has(P_FRESH));
+    assert.ok(covered(byStart(8)).has(P_FRESH));
   });
   it('09:00–10:00 is covered too', () => {
-    assert.ok(covered(`${TODAY}T09:00`).has(P_FRESH));
+    assert.ok(covered(byStart(9)).has(P_FRESH));
   });
   it('…and a window that shuts BEFORE the batch still is not — the rule is intact', () => {
     setSchedule(11);
-    assert.strictEqual(covered(`${TODAY}T08:00`).size, 0);
+    assert.strictEqual(covered(byStart(8)).size, 0);
     setSchedule(9);
   });
 }
