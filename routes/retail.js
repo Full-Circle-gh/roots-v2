@@ -33752,13 +33752,44 @@ function todaysBatchStillComing(now, tz = deliveryTz()) {
   return { readyHour: cfg.ready_hour, dateIso: p.ymd };
 }
 
+// ── The one shape of a time-slot id ────────────────────────────────────────
+//
+// WRITTEN WITH A PADDED HOUR, READ WITH A TOLERANT ONE, and both halves of
+// that sentence are the fix for the same defect. emitTimeSlots built the id
+// through an `hhmm` that padded the MINUTE and not the hour, while every
+// reader demanded two digits — so a kitchen opening at 08:00 minted
+// '2026-09-16T8:00', which matches neither the time shape nor the bare-date
+// shape. slotWindowEnd answered null (the window was uncoverable, and
+// freshLinesCoveredToday could never cover it) and resolveDeliverySlot
+// answered 'slot_invalid': the picker OFFERED the window and checkout refused
+// it. Latent only because the one live zone's slot_start_hour is 10; live the
+// moment any zone opens earlier, or a slot duration lands a window on a
+// single-digit hour.
+//
+// THE TOLERANCE IS NOT BACK-COMPAT FOR STORED IDS — nothing stores one. A slot
+// id lives for exactly one request: computeDeliverySlots enumerates it, the
+// client echoes it back, resolveDeliverySlot turns it into the three columns
+// that ARE persisted (scheduled_for, delivery_slot_label, delivery_slot_kind).
+// It is here so an id minted before this commit — held in an open picker, or
+// replayed from a client's own cache — resolves to the window it names rather
+// than to nothing, and so a hand-written id is answered rather than dropped.
+const SLOT_TIME_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{1,2}):(\d{2})$/;
+
+// The canonical spelling, from a SLOT_TIME_RE match. Every comparison against
+// an enumerated chip has to go through this or the tolerant parse buys
+// nothing: `slots` carries the padded spelling, and `'…T8:00' === '…T08:00'`
+// is false however generously the id was parsed.
+function canonicalSlotId(m) {
+  return `${m[1]}-${m[2]}-${m[3]}T${String(Number(m[4])).padStart(2, '0')}:${m[5]}`;
+}
+
 // When does the customer's chosen window CLOSE? A Date, or null for a pick that
 // names no window it could close by — 'right_away' above all, which promises the
 // soonest possible and cannot be answered by a batch that has not been made. A
 // day-only chip closes when the kitchen does.
 function slotWindowEnd(zone, slotId, now, tz = deliveryTz()) {
   if (!slotId || slotId === 'right_away') return null;
-  const mTime = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(slotId));
+  const mTime = SLOT_TIME_RE.exec(String(slotId));
   const mDay  = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(slotId));
   const dur = Number(zone && zone.slot_duration_minutes) > 0
     ? Number(zone.slot_duration_minutes) : 120;
@@ -34400,7 +34431,12 @@ function computeDeliverySlots(zone, now, opts = {}) {
     const dispH = h % 12 === 0 ? 12 : h % 12;
     return `${dispH}${mer}`;
   };
-  const hhmm = (h, m) => `${h}:${String(m).padStart(2, '0')}`;
+  // BOTH halves padded. The minute always was; the hour was not, which is what
+  // put a single-digit hour into slot_id and made the window unresolvable —
+  // see SLOT_TIME_RE above. It feeds label_cn too, and a padded hour is what a
+  // 24-hour clock wants there anyway (§1.18): the live zone opens at 10, so no
+  // label the tenant can see changes.
+  const hhmm = (h, m) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 
   // TWO ANCHORS, AND THE SPLIT IS LOAD-BEARING. `startOfDay` is the instant the
   // tenant's wall clock reads 00:00 today, and it exists so emitTimeSlots can
@@ -34676,8 +34712,13 @@ function matchScheduledTimeSlot(enumed, mTime) {
   if ((startCursor - dayStart) % slotMins !== 0) return null;
   if (startCursor + slotMins > dayEnd + 1) return null;
   const endCursor = Math.min(startCursor + slotMins, dayEnd);
+  // The CANONICAL spelling, not the one that came in. label_en is persisted to
+  // delivery_slot_label whenever the client sends none, and both label readers
+  // that recognise an id-shaped label want a two-digit hour (absolutizeSlot in
+  // lib/feie.js, absolutizeSlotLabel in public/retail-admin/04-orders.js).
+  const canonical = canonicalSlotId(mTime);
   return {
-    slot_id:    `${dateIso}T${mTime[4]}:${mTime[5]}`,
+    slot_id:    canonical,
     date_iso:   dateIso,
     start_hour: Math.floor(startCursor / 60), start_minute: startCursor % 60,
     end_hour:   Math.floor(endCursor / 60),   end_minute:   endCursor % 60,
@@ -34685,8 +34726,8 @@ function matchScheduledTimeSlot(enumed, mTime) {
     is_day_only: false,
     requires_surcharge: false,
     surcharge:  0,
-    label_en:   `${dateIso}T${mTime[4]}:${mTime[5]}`,
-    label_cn:   `${dateIso}T${mTime[4]}:${mTime[5]}`,
+    label_en:   canonical,
+    label_cn:   canonical,
   };
 }
 
@@ -34760,10 +34801,12 @@ function resolveDeliverySlot(zone, slotId, now, opts = {}) {
   // covers an open range) — we just validate it falls inside the
   // schedule window or matches the today_day_chip.
   let dt, found, kind;
-  const mTime = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(slotId);
+  const mTime = SLOT_TIME_RE.exec(String(slotId));
   const mDay  = /^(\d{4})-(\d{2})-(\d{2})$/.exec(slotId);
   if (mTime) {
-    found = enumed.slots.find(s => s.slot_id === slotId);
+    // Compare the CANONICAL spelling: `slots` carries a padded hour, so an id
+    // parsed tolerantly still has to be normalised before it can match one.
+    found = enumed.slots.find(s => s.slot_id === canonicalSlotId(mTime));
     // Not in today/tomorrow's chips → try a scheduled-for-later time window
     // (time-slot zones offer hour windows across the whole calendar).
     if (!found) found = matchScheduledTimeSlot(enumed, mTime);
