@@ -1336,6 +1336,15 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
 .og-q{font-family:var(--f-bear);font-size:12.5px;letter-spacing:.08em;
   text-transform:uppercase;color:var(--olive);margin-bottom:7px;
   overflow-wrap:anywhere}
+/* HOW MANY THE QUESTION TAKES, under its heading. Not in the heading: the
+   heading is a kicker in the display face and a numeral set in it reads as
+   part of the question's name rather than as a rule about it. Quiet ink
+   rather than olive, because it is the answer to a question nobody asked
+   until they try to tick a third box — and loud at 12px would compete with
+   the answers it is describing. Sits above the first .oc, which brings its
+   own 7px, so this only has to close the gap the heading opened. */
+.og-lim{font-size:12px;color:var(--ink);opacity:.62;margin:-3px 0 4px;
+  overflow-wrap:anywhere}
 /* THE REQUIRED MARKER IS AN ASTERISK, and it replaces a note that stood here
    saying there would be none. That note gave two grounds: there is no live
    English/中文 pair for the word "required", and the mini app's own picker
@@ -1379,6 +1388,14 @@ html.sh-lock,html.sh-lock body{overflow:hidden;overscroll-behavior:none}
    takes the delta's column because a price nobody can pay is noise. */
 .oc.out{cursor:not-allowed;opacity:.42}
 .oc.out .oc-l{text-decoration:line-through}
+/* AT THE CEILING. Dimmed like a sold-out answer and refusing taps for the
+   same reason — it cannot be had right now — but WITHOUT the strike-through,
+   because nothing is sold out and a line through the veggie sticks would say
+   the kitchen has run out of them. The difference is temporary and the
+   customer holds the remedy: unticking one of the two they already chose
+   brings every row back. That is also why a TICKED row never gets this class
+   — untick is the only way out, so the way out must stay tappable. */
+.oc.cap{cursor:not-allowed;opacity:.42}
 /* A PICK-ANY QUESTION SAYS SO, AND IT SAYS SO WITH A BOX ON EVERY ANSWER.
    Until 2026-09-15 this picker drew a single-answer question and a
    multi-answer one with identical furniture — a column of rows that flip to
@@ -2109,6 +2126,28 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `L_OUT=${JSON.stringify(bi('Sold out', '售罄'))},` +
   `L_PICK_EN=${JSON.stringify('Please choose: ')},` +
   `L_PICK_CN=${JSON.stringify('请选择 ')},` +
+  // §153's four customer pairs for HOW MANY a pick-any question takes, and
+  // every one is COPIED rather than composed: public/shop.html builds these
+  // exact four shapes in its own limHint(), and v1.99 of the vocabulary
+  // document locked them there. The counter is 项 — the word 至少选一项
+  // already established — and 款, from Ash's own 爽脆配菜（选2款） label, was
+  // weighed and recorded as rejected when §153 declared them. Nothing new is
+  // minted here and the document is not touched, because copying a locked
+  // pair into the second page that needs it is not composing.
+  //
+  // They arrive in PIECES because the numeral is not known until the sheet
+  // opens: the server clamps the floor against what is still pickable, so a
+  // group authored as "choose 2" says "choose 1" when only one side is left.
+  // A whole sentence baked at module load could not say that.
+  `L_CH_EN=${JSON.stringify('Choose ')},L_CH_CN=${JSON.stringify('选 ')},` +
+  `L_N_CN=${JSON.stringify(' 项')},` +
+  `L_UPTO_EN=${JSON.stringify('Up to ')},L_UPTO_CN=${JSON.stringify('最多 ')},` +
+  `L_ATL_EN=${JSON.stringify('At least ')},L_ATL_CN=${JSON.stringify('至少 ')},` +
+  // The brackets the refusal puts round the count. Full-width in 中文, which
+  // is what shop.html's own refusal uses and what the label that started this
+  // — 爽脆配菜（选2款） — is already written with.
+  `L_PO_EN=${JSON.stringify(' (')},L_PC_EN=${JSON.stringify(')')},` +
+  `L_PO_CN=${JSON.stringify('（')},L_PC_CN=${JSON.stringify('）')},` +
   // THE PICKER'S HEADING, COPIED FROM A LIVE PAIR AND NOT COMPOSED. It is the
   // mini app's own, character for character: miniapp/pages/product/product.js
   // sets opTitle to '选择选项' / 'Choose your options' when its sheet opens.
@@ -2272,20 +2311,59 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      will meet first when they scroll back up. */
   `var pkMissing=function(){if(!pk)return null;` +
   `for(var i=0;i<pk.o.length;i++){var g=pk.o[i];if(!g.req)continue;` +
-  `var sel=pk.s[g.id]||[],live=0;` +
-  `for(var j=0;j<sel.length;j++){var c=pkFind(g,sel[j]);if(c&&!c.out)live++}` +
-  `if(!live)return g}return null};` +
+  `var sel=pk.s[g.id]||[],live=pkLive(g,sel);` +
+  `if(!live)return g;` +
+  /* §153's FLOOR, and it is the same refusal rather than a second one. A
+     customer sitting on one crunchy side out of the two the question asks for
+     has answered it — just not enough — so "please choose" still names the
+     right question, and the count in brackets is what tells them what is
+     short. The ceiling is NOT checked here: a tick that would break it never
+     goes on in the first place, so there is nothing to refuse at the button. */
+  `if(g.min&&live<g.min)return g}return null};` +
   `var pkFind=function(g,id){for(var i=0;i<g.choices.length;i++)` +
   `if(g.choices[i].id===id)return g.choices[i];return null};` +
+  /* HOW MANY ANSWERS ARE ACTUALLY ON. Counted rather than read off
+     sel.length, because a choice can sell out while the sheet is open and a
+     tick on a dead answer is not an answer — the same measure pkMissing has
+     always used, and the same one the endpoint uses (pickableChoiceCount).
+     Counting the raw array instead would let a sold-out tick fill the
+     ceiling, locking the customer out of the sides they can still have. */
+  `var pkLive=function(g,sel){var n=0;` +
+  `for(var i=0;i<sel.length;i++){var c=pkFind(g,sel[i]);if(c&&!c.out)n++}` +
+  `return n};` +
+  /* THE SENTENCE UNDER THE QUESTION, in both languages, or null for a group
+     with no limit — which is every group authored before §153 and stays the
+     shape it always was. Mirrors public/shop.html's limHint() case for case;
+     if these two ever disagree the same product reads differently on the two
+     pages the same customer might open. */
+  `var limTxt=function(g){var mn=g.min||0,mx=g.max||0;` +
+  `if(mn&&mx){var t=(mn===mx)?(''+mn):(mn+'\u2013'+mx);` +
+  `return [L_CH_EN+t,L_CH_CN+t+L_N_CN]}` +
+  `if(mx)return [L_UPTO_EN+mx,L_UPTO_CN+mx+L_N_CN];` +
+  `if(mn)return [L_ATL_EN+mn,L_ATL_CN+mn+L_N_CN];` +
+  `return null};` +
   `var pkPaint=function(){var h='';` +
   `for(var i=0;i<pk.o.length;i++){var g=pk.o[i],sel=pk.s[g.id]||[];` +
   `h+='<div class=\"og\"><div class=\"og-q\">'+bi(g.q_en,g.q_cn)+` +
   `(g.req?' <span class=\"og-req\">*</span>':'')+'</div>';` +
+  /* The rule, printed under the question it governs. A group with no limit
+     prints nothing, so nothing on this page changes shape for the menus that
+     were authored before §153. */
+  `var lt=limTxt(g);` +
+  `if(lt)h+='<div class=\"og-lim\">'+bi(lt[0],lt[1])+'</div>';` +
+  /* AT THE CEILING, every answer not already on stops taking taps. Measured
+     once for the whole group rather than per row — it is a fact about the
+     question, not about any one answer. */
+  `var full=(g.max&&pkLive(g,sel)>=g.max)?1:0;` +
   `for(var j=0;j<g.choices.length;j++){var c=g.choices[j];` +
   `var on=(sel.indexOf(c.id)>=0&&!c.out);` +
+  /* A TICKED ROW IS NEVER CAPPED. Unticking is the only way back under the
+     ceiling, so the rows that can do it must stay live — cap the ticked ones
+     too and the customer is stuck at two with no way to change their mind. */
+  `var cap=(!on&&full&&!c.out)?1:0;` +
   `h+='<button type=\"button\" class=\"oc'+(g.multi?' multi':'')+` +
-  `(on?' on':'')+(c.out?' out':'')+'\"'+` +
-  `(c.out?' disabled':'')+' data-og=\"'+g.id+'\" data-oc=\"'+c.id+'\">'+` +
+  `(on?' on':'')+(c.out?' out':'')+(cap?' cap':'')+'\"'+` +
+  `((c.out||cap)?' disabled':'')+' data-og=\"'+g.id+'\" data-oc=\"'+c.id+'\">'+` +
   /* THE BOX IS EMPTY OR IT HAS A TICK, and it is only drawn for a question
      that accepts more than one answer. A single-answer question keeps the
      bare row: a box that can only ever hold one tick is a radio drawn as a
@@ -2451,7 +2529,12 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `var g=null;for(var gi=0;gi<pk.o.length;gi++)if(pk.o[gi].id===gid)g=pk.o[gi];` +
   `if(!g)return;` +
   `var sel=pk.s[gid]||[],at=sel.indexOf(cid);` +
-  `if(g.multi){if(at>=0)sel.splice(at,1);else sel.push(cid)}` +
+  /* The ceiling, guarded at the model and not only at the paint. The row is
+     already disabled, so this catches the ways a tap can arrive anyway — a
+     keyboard, a stale paint, an assistive click — and it is three lines
+     rather than a trust that the class and the array can never disagree. */
+  `if(g.multi){if(at>=0)sel.splice(at,1);` +
+  `else{if(g.max&&pkLive(g,sel)>=g.max)return;sel.push(cid)}}` +
   `else if(at<0)sel=[cid];` +
   `else if(!g.req)sel=[];` +
   `pk.s[gid]=sel;oErr.hidden=true;pkPaint();return}` +
@@ -2494,7 +2577,14 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
      chosen. */
   `oAdd.addEventListener('click',function(){if(!pk)return;` +
   `var miss=pkMissing();` +
-  `if(miss){oErr.innerHTML=bi(L_PICK_EN+miss.q_en,L_PICK_CN+miss.q_cn);` +
+  /* NAMING THE COUNT, but only when the count is the news. A question with a
+     floor of one is answered by any single tick, so "(Choose 1)" after it
+     tells the customer nothing they have not just been told. At two or more
+     it is the whole message: the customer looking at one ticked side needs to
+     read that the question wanted two, not just that it wants something. */
+  `if(miss){var mt=(miss.min>1)?limTxt(miss):null;` +
+  `oErr.innerHTML=bi(L_PICK_EN+miss.q_en+(mt?(L_PO_EN+mt[0]+L_PC_EN):''),` +
+  `L_PICK_CN+miss.q_cn+(mt?(L_PO_CN+mt[1]+L_PC_CN):''));` +
   `oErr.hidden=false;return}` +
   /* pkPrice(), NOT pk.p. The basket line carries the price the customer will
      actually be charged — base PLUS every delta they ticked — and pk.p is the
