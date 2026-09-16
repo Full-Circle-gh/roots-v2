@@ -8378,14 +8378,41 @@ async function submitJdLabel(orderId, shipmentId, product, btn, pieces) {
 // ground pre-selected (jdIsLandDefaultProvince). Every mode also gets a
 // pieces (箱数) stepper — staff bump it above 1 when the parcel doesn't fit in
 // one box, so JD splits it across boxes under the SAME waybill number
-// (一单多件); left at 1 it's the ordinary single-box case. We never re-ask air
-// vs ground — only the two GROUND service options are offered.
+// (一单多件); left at 1 it's the ordinary single-box case.
+//
+// AIR IS ON A GROUND PARCEL'S LIST TOO, MARKED RATHER THAN HIDDEN. It used to
+// be filtered out, which made a land parcel a lock: the one case where the
+// operator knows something the plan does not — a customer paying for speed, a
+// parcel re-routed at the counter — had no way through the dialog at all. The
+// server has always accepted an explicit product on any parcel, so this adds no
+// new server power; it stops the UI from hiding one. Where the parcel carries
+// goods the airline will not take (ship_modes = land only, the same read
+// renderPackBadges draws "Land only — airline rejected" from), the air row is
+// badged with those goods named on it, and choosing it asks once before the
+// waybill is booked. The parcel's own air/land mode is never written here —
+// exactly as with the Fujian / Guangxi default above, only the product printed
+// on the waybill changes.
 function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
   const isAir = mode === 'air';
   // Province comes off the open order (the GET parses address_json into
   // o.address) — the same source openEditShipTo reads.
   const ord = (_OPEN_ORDER && _OPEN_ORDER.id === orderId) ? _OPEN_ORDER : null;
   const destProvince = (ord && ord.address && typeof ord.address === 'object' && ord.address.province) || '';
+  // The goods in THIS parcel the airline refuses. ship_modes_arr is the order
+  // GET's own normalized array, so this is the same source renderPackBadges
+  // reads and the two cannot disagree. Land-only is the test: an item with no
+  // modes at all defaults to both, and a 'local' item is neither — neither is
+  // an airline rejection, and neither is claimed as one.
+  const parcel = (ord && Array.isArray(ord.shipments))
+    ? ord.shipments.find(s => Number(s.id) === Number(shipmentId))
+    : null;
+  const noAirNames = ((parcel && parcel.items) || [])
+    .filter(it => {
+      const arr = it.ship_modes_arr || ['air', 'land'];
+      return arr.includes('land') && !arr.includes('air');
+    })
+    .map(it => cuT(it.name_en || it.name_cn || '', it.name_cn || it.name_en || ''))
+    .filter(Boolean);
   // An air parcel into Fujian / Guangxi books GROUND by default. Unlike every
   // other air parcel it now gets the two fresh services to choose between,
   // ground pre-selected — a default, not a lock, so air is still one click away.
@@ -8393,9 +8420,14 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
   const preset = landDefault ? 'LL-HD-M'
     : isAir ? 'LL-SD-M'
     : jdSuggestedService(mode, !!Number(isFresh));
+  // Ground list order: the two the question is actually about first, air last
+  // — it is the exception, and the pre-selected row stays at the top where the
+  // operator's eye already is. Nothing is pre-selected that was not before.
+  const JD_GROUND_ORDER = ['LL-HD-M', 'ed-m-0001', 'LL-SD-M'];
   const services = landDefault
     ? JD_SERVICES.filter(s => s.code === 'LL-HD-M' || s.code === 'LL-SD-M')      // fresh: ground (default) or air
-    : isAir ? [] : JD_SERVICES.filter(s => s.code !== 'LL-SD-M');                // ground-only: fresh vs ambient
+    : isAir ? []                                                                 // plain air parcel: nothing to ask
+    : JD_GROUND_ORDER.map(c => JD_SERVICES.find(s => s.code === c)).filter(Boolean);
   // Built from the service table's own live labels — no new wording is minted
   // for this case; the row the operator is about to send names itself.
   const presetSvc = JD_SERVICES.find(s => s.code === preset) || null;
@@ -8418,14 +8450,23 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
       <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px; display:block;">
         ${services.length ? `
         <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
-          ${services.map(s => `
+          ${services.map(s => {
+            // The air row on a parcel the airline refuses. Badged, named, and
+            // still selectable — the operator is told, not overruled.
+            const blocked = s.code === 'LL-SD-M' && noAirNames.length > 0;
+            return `
             <label class="jd-svc" style="display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--line-soft); border-radius:8px; cursor:pointer;">
               <input type="radio" name="jd-svc" value="${s.code}" ${s.code === preset ? 'checked' : ''} style="margin:0;">
               <span style="flex:1;">
-                <span style="font-weight:600;">${cuT(s.en, s.cn)}</span>
-                <span class="muted" style="display:block; font-size:11px; margin-top:1px;">${s.sub}</span>
+                <span style="font-weight:600;">${cuT(s.en, s.cn)}</span>${blocked
+                  ? `<span class="pack-badge land" style="margin-left:8px; margin-right:0;">${cuT('Land only', '仅陆运')}</span>`
+                  : ''}
+                <span class="muted" style="display:block; font-size:11px; margin-top:1px;">${s.sub}</span>${blocked
+                  ? `<span style="display:block; font-size:11px; margin-top:3px; color:var(--danger);">${escapeHtml(cuT('Land shipping only — airline rejected', '仅陆运 — 航空拒运'))}: ${escapeHtml(noAirNames.join(', '))}</span>`
+                  : ''}
               </span>
-            </label>`).join('')}
+            </label>`;
+          }).join('')}
         </div>` : ''}
         <div style="margin-bottom:14px;">
           <label style="font-size:12px; font-weight:600; display:block; margin-bottom:6px;">${cuT('Pieces (boxes)', '箱数')}</label>
@@ -8440,11 +8481,30 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
     </div>`;
   mountFloatingPuModal(bg);
   bg.querySelector('#jd-svc-submit').addEventListener('click', async (e) => {
+    // Captured before the confirm below: currentTarget is null after an await,
+    // which is why transition() does the same thing.
+    const btn = e.currentTarget;
     const product = services.length ? (bg.querySelector('input[name="jd-svc"]:checked') || {}).value : preset;
     if (!product) return;
+    // Booking air on a parcel carrying airline-rejected goods is allowed and
+    // never silent: the operator is shown WHICH goods and says so once. The
+    // parcel's mode is untouched either way — only the product is.
+    if (product === 'LL-SD-M' && noAirNames.length) {
+      const names = noAirNames.join(', ');
+      const ok = await askConfirm({
+        titleEn: 'Land shipping only — airline rejected',
+        titleCn: '仅陆运 — 航空拒运',
+        bodyEn: `<b>${escapeHtml(names)}</b> cannot ship by air. Create the air waybill anyway?`,
+        bodyCn: `<b>${escapeHtml(names)}</b> 航空拒运。仍要生成空运运单吗?`,
+        confirmEn: 'Create air waybill anyway', confirmCn: '仍要生成空运运单',
+        cancelEn: 'Not yet', cancelCn: '暂不',
+        danger: true,
+      });
+      if (!ok) return;
+    }
     const piecesEl = bg.querySelector('#jd-pieces');
     const pieces = Math.max(1, Math.min(30, parseInt(piecesEl && piecesEl.value, 10) || 1));
-    const ok = await submitJdLabel(orderId, shipmentId, product, e.currentTarget, pieces);
+    const ok = await submitJdLabel(orderId, shipmentId, product, btn, pieces);
     if (ok) bg.remove();
   });
 }
