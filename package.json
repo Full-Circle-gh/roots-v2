@@ -130,6 +130,7 @@
     "test:addon-stock": "node scripts/test_addon_stock_gate.js",
     "test:checkout-stock-blocks": "node scripts/test_checkout_stock_blocks.js",
     "test:fresh-slot-reachable": "node scripts/test_fresh_slot_reachable.js",
+    "test:preorder-cap": "node scripts/test_preorder_allowance_cap.js",
     "test:addon-available": "node scripts/test_addon_available.js",
     "test:fresh-stock-deferral": "node scripts/test_fresh_stock_deferral.js",
     "test:cost-incomplete": "node scripts/test_cost_incomplete_flag.js",

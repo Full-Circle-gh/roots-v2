@@ -1334,7 +1334,63 @@ function checkoutStockBlocks(lines, address, {
     }
   }
 
+  /* 4. THE PRE-ORDER ALLOWANCE, which the mini app had never been told about.
+     "How many to offer · 预订可售数量" caps what the platforms may sell against
+     a batch that is not made yet: lib/channel-publish.js publishes shelf + qty
+     and no more. The app publishes nothing, so nothing capped it — it parked
+     pre-orders without limit, and a batch of twenty could be promised to sixty
+     people before anybody noticed at the ready hour.
+
+     The three conditions are channel-publish's own, for its own reasons:
+       • an allowance is set. Blank or 0 does NOT mean "no pre-orders" here, it
+         means this cap is off and the app behaves exactly as it does today.
+         The label's "0 switches pre-orders off" is written about the platform
+         push, where 0 extra units IS off; reading it that way for the app would
+         silently withdraw pre-ordering from every tenant who never filled the
+         field in. Off-by-default is the direction that changes nothing.
+       • the line is only orderable BECAUSE it can be pre-ordered — a short line
+         on a backorder policy. A 'strict' line is refused by rule 1 above and a
+         line still on the shelf is not pre-ordering anything.
+       • it is BATCH-MADE. "A product that is not batch-made never gets the
+         allowance" — the window is a statement about the kitchen's cooking day,
+         and a jar of olive oil is not made by it.
+
+     The count is the demand already parked against that batch, which is the one
+     number the shelf cannot give: a parked order holds no reservation. */
+  const allowance = preorderAllowance();
+  if (allowance > 0) {
+    const candidates = (lines || []).filter((r) => {
+      if (!r || !r.product || !r.product.is_batch_made) return false;
+      if (!isPreorderPolicy(effectiveOosPolicy(r.product))) return false;
+      const avail = r.product.real_stock == null ? null : Number(r.product.real_stock);
+      return avail != null && avail < r.qty;
+    });
+    if (candidates.length) {
+      const taken = inventory.parkedRestockDemand(candidates.map((r) => r.product.id));
+      for (const r of candidates) {
+        const shelf = Math.max(0, Number(r.product.real_stock) || 0);
+        // Only the part of this line the shelf cannot cover is a pre-order; the
+        // rest comes off stock and spends none of the allowance.
+        const wants = r.qty - shelf;
+        const already = taken.get(r.product.id) || 0;
+        if (already + wants > allowance) add(r, 'preorder_full', shelf);
+      }
+    }
+  }
+
   return out;
+}
+
+/* The allowance, read the same way the daemons read it so the app and the
+   platforms cannot end up capped by different numbers. 0 when unset, which is
+   this cap's off switch — see rule 4. Never throws: a checkout must not fail
+   because a settings row is malformed. */
+function preorderAllowance() {
+  try {
+    const cfg = batchCadence.readCfg(tdb());
+    const n = cfg ? parseInt(cfg.preorder_qty, 10) : 0;
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch (e) { return 0; }
 }
 
 // List/grid variant of the column set: NEVER pull the heavy inline base64 photo.
@@ -10959,6 +11015,34 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
         blocked_items: checkoutStockBlocks(mutatedItems, address, {
           isPickup, scheduledShipDistrict, freshPreorderOk: true, preorderParkOk: true,
         }),
+      });
+    }
+
+    /* ── The pre-order allowance, enforced ────────────────────────────────
+       checkoutStockBlocks rule 4 says which lines have spent it; this is the
+       refusal. Asked of that ONE helper rather than restated, so the page the
+       customer is looking at (which runs the same call from /quote) and the
+       endpoint taking his money cannot answer differently — the disagreement
+       this whole file has been paying for.
+
+       The carve-outs are the gate above's, for the gate above's reasons.
+       Pickup never pre-orders: reserveForOrder refuses a sold-out collection
+       outright, and a second refusal here would only change the wording.
+       'wait_for_restock' is exempt on principle rather than by oversight —
+       the allowance protects a promise about TODAY'S batch, and that order
+       makes no such promise: the customer chose an indefinite wait in front of
+       a modal that named the item, and it parks undated. It is not competing
+       for the batch this cap is rationing. */
+    const capBlocks = checkoutStockBlocks(mutatedItems, address, {
+      isPickup, scheduledShipDistrict, freshPreorderOk: true, preorderParkOk: true,
+    });
+    const overCap = capBlocks.filter((b) => b.reason === 'preorder_full');
+    if (overCap.length) {
+      return res.status(409).json({
+        success: false, error: 'insufficient_stock',
+        product_id: overCap[0].product_id,
+        available: overCap[0].available,
+        blocked_items: capBlocks,
       });
     }
   }
