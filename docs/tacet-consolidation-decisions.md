@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.284
+# Tacet shared-core consolidation — decisions record, v4.285
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-16 · v4.285 — **§148 · THE ESCAPE HATCH TOLD US WHAT THE LIST WAS MISSING — DECIDED BY ASH, asked whether a vegan shop should offer these at all:** *“add all three as checkboxes”*. **THE FREE-OF BOXES HAVE BEEN `Nuts · Soy · Gluten · 5 Spice` AND NOTHING ELSE**, with anything else typed into the free-text tail that `pdFreeOfSet` preserves. Reading that tail on production says exactly what the list lacks: **`animal products` typed by hand on 75 products, `dairy` on 15, `egg` on 14** — and **`5spice` on 16**, a spelling twin of the `5 spice` checkbox's own 154. **That is the escape hatch doing its job**, and it is the argument for always building one: a list without a tail teaches people to pick the nearest wrong answer, and nobody ever learns the list was short. **THE QUESTION ASH WAS ASKED, because it is not obvious:** the shop is fully vegan (stated in `public/product-editor.html`), so *free of animal products / dairy / egg* is true of all 342 products, yet only 75 say so. Either it is a marketing line applied deliberately or it is arbitrary. Ash's answer keeps it a per-product editorial choice — **offered, never assumed** — which is what the office is already doing by hand. **THE TWO LISTS MUST AGREE, and that is what the new suite is really for.** These flags are drawn twice from two files that know nothing about each other: `PW_FREE_OF` in `public/retail-admin/09-products.js` for the wizard, and hand-written markup in `public/retail-admin.html` for the details panel. A flag added to one and not the other is one a product can be GIVEN in the wizard and SILENTLY LOSE the next time the panel is saved — the panel would not recognise the token, park it in the tail, and never tick the box. Nothing goes red. `scripts/test_free_of_options.js` compares the two lists directly. **A SUSPECTED BUG THAT WAS NOT ONE, recorded so it is not re-investigated:** `pwReviewHtml` renders the flags through `cuT(en, cn)`, which looks as though the wizard stores a language-dependent LABEL. It does not — that is the review screen's display; `pwFreeOfStr` maps `([id]) => id`. The two paths already agreed, and a test now holds them there. **THE TYPO FOLD IS ON READ ONLY:** `5spice` ticks the `5 spice` box when a product is opened, and the next save writes the canonical spelling. Nothing sweeps the catalogue, per Ash's standing answer (*“lists only, for now”*), so a product nobody opens keeps saying what it says. **CHINESE: ONE COMPOSED STRING AND TWO VERBATIM LIFTS** — 无动物成分 is lifted from `miniapp/pages/faq/faq.js`, 无乳制品 from `miniapp/pages/product/product.js`; **无蛋 is composed**, on the live `无X` shape its five siblings already use, over the rejected 无鸡蛋 and 不含蛋, and declared in `docs/tacet-delivery-vocabulary.md` v1.95. New suite **8/8**, proven non-vacuous by three mutations (a flag dropped from one list only, an alias folding onto an id that does not exist, the wizard storing a label) each caught by the check meant for it; `test:fast` 259 → **260**; lint 0 errors. No schema, no migration, and no change to `.gitignore` or CI.
 
 2026-09-16 · v4.284 — **§147 · TWO SNOWFLAKES THAT LOOK IDENTICAL AND ARE NOT — DECIDED BY ASH, who set the rule in advance:** *“you pick, most-used wins”*, then *“ok do it”*. **THE CASE NOBODY COULD HAVE FOUND BY READING.** Across the **218 storage boxes** in the catalogue, ❄️ appears 83 times on the left card and ❄ five times on the right — **the same snowflake, typed with and without the invisible variation selector U+FE0F**. 🌡️ (18) sits beside 🌡 (9) the same way. On screen they are identical; to a string comparison, a filter, or anything that groups by value they are different characters, and no amount of proofreading finds it. **A picker ends it in one click**, which is the clearest argument for this whole family of change and was not an argument anybody made before the data was read. **THE REST, same method as §145:** heads (218 cells, 22 and 29 distinct) and units (49 and 64 distinct) become lists with free text; the big word stays TYPED because it is a per-product figure, a temperature or a count of days. **MOST-USED WINS, WHICH WAS ASH'S RULE SET IN ADVANCE** — `Refrigerate` 52 over `Keep refrigerated` 13, `Shelf Life` 57 over `Shelf life`, `After Opening` 41 over `Use After Opening` 16, `Freeze for longer` 9 over `Freeze` 8 and `Freezing` 7, `Unopened` 11 over `Before Opening` 6, 冷藏保存 59 over 冷藏 12, 阴凉干燥 34 over 置于阴凉干燥处 16. Every loser is recorded in `docs/tacet-delivery-vocabulary.md` v1.94 rather than quietly dropped. **THE NOTE LIST IS DELIBERATELY TWO ENTRIES LONG.** The field has 77 distinct answers and the usage report truncated the long ones, so pairing an English sentence to its 中文 would have meant GUESSING which belongs to which — the one thing this method exists to prevent. Only the two printed whole are offered, and a test refuses a list that grows past four without a fresh measurement. **THE PICKER §145 BUILT IS NOW GENERAL**, which is the structural half: `_paSpecInputs` becomes `_paPickInputs` and every picker on the page sits inside one `[data-pickscope]` marker — a spec strip's three cells, a storage box's two cards and its note, five scopes on screen each carrying a `head_en`. That is §144's bug and §142's at a smaller scale, made twice already, so there is ONE helper rather than two copies drifting apart. **THE LIST NAME REACHES THE HANDLER AS A NAME**: it is written into an inline `onchange` attribute, so it resolves against a fixed map and never through `eval` — an attribute value must not reach the JS parser. **NOTHING REWRITES A LIVE PAGE**, per Ash's standing answer (*“lists only, for now”*): `peMount` and `paBlocksCollect` never consult the lists, and a card saying `Keep refrigerated` keeps saying it. **NO CHINESE COMPOSED** — all 27 pairs lifted from production with counts. New suite `scripts/test_storage_box_picklists.js` **14/14**, proven non-vacuous by four mutations (the bare snowflake offered, a losing twin restored, an unscoped icon lookup, a unit with no Chinese) each caught by the check meant for it — the icon check had to be tightened after the third slipped through a first draft, which is recorded because a mutation that passes is the only way to learn a check was testing the wrong line. `test:fast` 258 → **259**; lint 0 errors. No schema, no migration, no change to the mini app, the QR menu, the web storefront, `.gitignore` or CI.
 
@@ -16029,3 +16031,87 @@ anything governing how sessions and builds work. `free_of` and the allergen card
 are the next two pieces of the same brief and are deliberately **separate PRs**:
 they touch different screens, and the allergen wording carries a decision that
 should be readable on its own.
+
+## §148 — THE ESCAPE HATCH TOLD US WHAT THE LIST WAS MISSING
+
+**Decided by Ash, 2026-09-16,** asked whether a fully vegan shop should offer
+these at all: *"add all three as checkboxes"*.
+
+### What the tail said
+
+The Free-of boxes have been `Nuts · Soy · Gluten · 5 Spice` and nothing else.
+Anything else gets typed into the free-text tail, which `pdFreeOfSet` preserves
+rather than dropping.
+
+Reading that tail on production says exactly what the list lacks:
+
+| typed by hand | products |
+|---|---:|
+| `animal products` | 75 |
+| `dairy` | 15 |
+| `egg` | 14 |
+| `5spice` — a spelling twin of the `5 spice` **checkbox** (154) | 16 |
+
+**This is the escape hatch doing its job**, and it is the argument for always
+building one. A list without a tail teaches people to pick the nearest wrong
+answer, and nobody ever learns the list was short.
+
+### The question Ash was asked, because it is not obvious
+
+The shop is fully vegan — stated in `public/product-editor.html`. So *free of
+animal products / dairy / egg* is true of all 342 products, and yet only 75 say
+so. Either it is a marketing line applied deliberately, or it is arbitrary.
+
+Ash's answer keeps it a per-product editorial choice: **offered, never
+assumed.** Which is what the office is already doing by hand — the change is
+only that it stops being typed.
+
+### The two lists must agree, and that is what the suite is really for
+
+These flags are drawn **twice**, from two files that know nothing about each
+other:
+
+- `PW_FREE_OF` in `public/retail-admin/09-products.js` — the new-product wizard
+- hand-written markup in `public/retail-admin.html` — the details panel
+
+Both write into the same `free_of` column, keyed by id. **A flag added to one
+and not the other is a flag a product can be given in the wizard and silently
+lose the next time the details panel is saved**: the panel would not recognise
+the token, park it in the free-text tail, and never tick the box. Nothing goes
+red. The product just quietly stops claiming something.
+
+`scripts/test_free_of_options.js` compares the two lists directly.
+
+### A suspected bug that was not one
+
+Recorded so it is not re-investigated. `pwReviewHtml` renders these flags
+through `cuT(en, cn)`, which reads as though the wizard stores a
+language-dependent **label** — meaning a product created while the interface was
+in 中文 would store `无坚果` and the panel would not recognise it.
+
+It does not. That `cuT` is the review screen's display. `pwFreeOfStr` maps
+`([id]) => id`. The two paths already agreed; a test now holds them there.
+
+### The typo fold is on read only
+
+`5spice` ticks the `5 spice` box when a product is opened, and the next save
+writes the canonical spelling. **Nothing sweeps the catalogue** — per Ash's
+standing answer, *"lists only, for now"* — so a product nobody opens keeps
+saying what it says.
+
+### Chinese
+
+One composed string, two lifts.
+
+- **无动物成分** — lifted verbatim from `miniapp/pages/faq/faq.js`
+- **无乳制品** — lifted verbatim from `miniapp/pages/product/product.js`
+- **无蛋** — **composed**, on the live `无X` shape its five siblings already
+  use, over the rejected 无鸡蛋 and 不含蛋. Declared in
+  `docs/tacet-delivery-vocabulary.md` v1.95.
+
+### Not done
+
+No sweep of existing values. No schema, no migration. No change to the mini app,
+the QR menu, the web storefront, `.gitignore` or CI. The allergen card is the
+third piece of this brief and is a separate PR: its wording carries a decision
+that should be readable on its own.
