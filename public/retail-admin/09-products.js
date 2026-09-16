@@ -5689,6 +5689,13 @@ function pdPlainToHtml(t) { return escapeHtml(String(t || '')).replace(/\n/g, '<
 // string. Any stored token not covered by a checkbox (legacy/custom values)
 // is preserved in _pdFreeOfExtra so saving never silently drops it.
 let _pdFreeOfExtra = [];
+// §147 · Hand-typed spellings of a box that already exists. `5spice` is on 16
+// products beside the `5 spice` checkbox's 154 — one word, two spellings, and
+// nothing in the catalogue can tell them apart. Folding happens on READ only:
+// the box ticks, and the next save writes the checkbox's own spelling. Nothing
+// sweeps the catalogue, so a product nobody opens keeps saying what it says.
+const _PD_FREE_OF_ALIAS = { '5spice': '5 spice', '5-spice': '5 spice',
+                            'animal product': 'animal products', 'eggs': 'egg' };
 function pdFreeOfSet(str) {
   const group = document.getElementById('pd-free-of'); if (!group) return;
   const boxes = [...group.querySelectorAll('input[data-freeof-id]')];
@@ -5696,7 +5703,11 @@ function pdFreeOfSet(str) {
   const toks = String(str || '').split(',').map(s => s.trim()).filter(Boolean);
   boxes.forEach(b => { b.checked = false; });
   _pdFreeOfExtra = [];
-  toks.forEach(t => { const b = known.get(t.toLowerCase()); if (b) b.checked = true; else _pdFreeOfExtra.push(t); });
+  toks.forEach(t => {
+    const k = t.toLowerCase();
+    const b = known.get(_PD_FREE_OF_ALIAS[k] || k);
+    if (b) b.checked = true; else _pdFreeOfExtra.push(t);
+  });
 }
 function pdFreeOfGet() {
   const group = document.getElementById('pd-free-of'); if (!group) return '';
@@ -6165,7 +6176,13 @@ async function pdDelete() {
 // ════════════════════════════════════════════════════════════════════════════
 let _pw = null;
 const PW_STEPS = ['what', 'price', 'details', 'extras', 'review'];
-const PW_FREE_OF = [['nuts', 'Nuts', '无坚果'], ['soy', 'Soy', '无大豆'], ['gluten', 'Gluten', '无麸质'], ['5 spice', '5 Spice', '无五香']];
+// §147 · The last three were being typed by hand into the free-text escape
+// hatch — `animal products` on 75 products, `dairy` on 15, `egg` on 14. The
+// shop is fully vegan so all three are true of every product; they are OFFERED
+// rather than assumed, because which of them a page spells out is an editorial
+// choice the office is already making one product at a time.
+const PW_FREE_OF = [['nuts', 'Nuts', '无坚果'], ['soy', 'Soy', '无大豆'], ['gluten', 'Gluten', '无麸质'], ['5 spice', '5 Spice', '无五香'],
+                    ['animal products', 'Animal products', '无动物成分'], ['dairy', 'Dairy', '无乳制品'], ['egg', 'Egg', '无蛋']];
 const PW_FACTS = [['origin', 'Where it’s from', '产地', 'e.g. Peru'],
                   ['ingredients', 'What’s in it', '配料', 'e.g. 100% cacao'],
                   ['storage', 'How to store it', '储存方式', 'e.g. Cool, dry place'],
