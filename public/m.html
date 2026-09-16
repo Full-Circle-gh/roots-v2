@@ -13558,11 +13558,21 @@ reg('toggleBlock', ()=>{
 reg('forceLogout', ()=>{
   const d=state.custDetail, c=(d&&d.customer)||{}; if(!state.custId||!mCan('customers:block')) return;
   const n=Number((d&&d.stats&&d.stats.active_sessions)||0);
+  /* The old body said they "will need to sign in again", on both branches. In
+     the WeChat mini app that is not true: utils/api.js catches the 401 this
+     revoke causes, runs a fresh silent wx.login and replays the request, so
+     the customer sees no sign-in screen and notices nothing. On the web store
+     there is no silent re-login and the sign-out is real. The phone is where
+     this gets reached for — somebody says their phone was stolen, in the shop,
+     out loud — so the phone is the last place to be vague about which of the
+     two they are getting, and about Block being the control that locks an
+     account. The zero branch now says there is nothing to revoke rather than
+     promising to end sessions that do not exist. */
   state.ask={title:T('Sign out all devices?','退出所有设备？'),
-    body:n?T('They are signed in on '+n+(n===1?' device':' devices')+'. All of them are signed out and they will need to sign in again. The account itself is untouched.',
-             '当前有 '+n+' 台设备已登录。全部退出后需要重新登录，账号本身不受影响。')
-          :T('Any session they have is ended and they will need to sign in again. The account itself is untouched.',
-             '结束其所有登录会话，需要重新登录。账号本身不受影响。'),
+    body:n?T('They are signed in on '+n+(n===1?' device':' devices')+'. Revoking clears a leaked token — it does not lock them out. On the web store they are signed out at once; in the WeChat Mini Program they are signed back in automatically, with no sign-in screen. Use Block to lock them out.',
+             '当前有 '+n+' 台设备已登录。撤销可以清除泄露的令牌，但不能锁定账号。网页商店会立即退出；微信小程序会自动重新登录，不会出现登录页。如需锁定，请改用封禁。')
+          :T('No active sessions — there is nothing to revoke. Use Block to lock them out.',
+             '当前没有活跃会话，无可撤销内容。如需锁定，请改用封禁。'),
     confirmLabel:T('Sign them out','退出登录'),
     run:()=>custWrite('logout', ()=>apiWrite('/customers/'+state.custId+'/force-logout',{}),
       T('Signed out','已退出登录'))};

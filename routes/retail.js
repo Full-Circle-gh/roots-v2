@@ -18326,8 +18326,18 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
        FROM retail_reviews WHERE customer_id = ?`
   ).get(id);
 
+  // datetime() around the COLUMN, not just around 'now'. retail_auth_tokens
+  // stores expires_at as a raw .toISOString() (see issueToken) — '2026-10-16
+  // T06:22:40.123Z', with a 'T' and a 'Z'. datetime('now') returns SQLite's
+  // own shape, '2026-09-16 06:22:40', with a SPACE. Compared as text those
+  // agree on the first ten characters and then hit 'T' (0x54) against ' '
+  // (0x20), and 'T' sorts higher — so EVERY token that expired earlier the
+  // same day read as still active and got counted. Only over-counted: the
+  // gate itself (requireRetailAuth) already wraps the column, which is why a
+  // dead token was never honoured, only advertised. Every other reader of
+  // this column in this file wraps it; this was the one that didn't.
   const sessions = tdb().prepare(
-    "SELECT COUNT(*) AS n FROM retail_auth_tokens WHERE customer_id = ? AND expires_at > datetime('now')"
+    "SELECT COUNT(*) AS n FROM retail_auth_tokens WHERE customer_id = ? AND datetime(expires_at) > CURRENT_TIMESTAMP"
   ).get(id).n;
 
   const topItems = tdb().prepare(

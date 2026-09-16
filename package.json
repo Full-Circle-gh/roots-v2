@@ -22,6 +22,7 @@
     "test:alert-audience": "node scripts/test_alert_audience.js",
     "test:new-merchant-locale": "node scripts/test_new_merchant_locale.js",
     "test:signin-code": "node scripts/test_signin_code_delivery.js",
+    "test:force-logout": "node scripts/test_force_logout_truth.js",
     "test:open-close": "node scripts/test_open_close_panel.js",
     "test:notification-choices": "node scripts/test_notification_choices.js",
     "test:saved-views": "node scripts/test_saved_views.js",
