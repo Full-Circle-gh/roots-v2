@@ -442,7 +442,13 @@ function call(method, url, body) {
       CAPS = null;
     });
 
-    console.log('\nNothing else reads these tables yet — the till is unchanged');
+    /* AMENDED 2026-09-16 (§150): the till is no longer unchanged. It fetches
+       /api/retail-admin/stores/:id/counter-catalogue, which lives in
+       routes/retail-shops.js precisely so that the table stays read where it
+       always was — public/till.html never names it, and the allowlist below
+       is untouched. The schema half of this heading still holds and is what
+       the check under it proves. */
+    console.log('\nStill read in one place — the till fetches a route, not the table');
     check('the location without a shop is unchanged: no shop row, no listing, same columns', () => {
       assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM shops WHERE location_id = ?').get(LOC_B).n, 0);
       for (const t of Object.keys(BEFORE)) assert.strictEqual(colsOf(t), BEFORE[t], `${t} columns changed`);
@@ -455,7 +461,10 @@ function call(method, url, body) {
       // rather than the guard being softened. Everything the line was for is
       // intact: the till, the storefront and every order path are still held
       // to reading nothing here, and the next unannounced reader still turns
-      // this red and has to say so.
+      // this red and has to say so. §150 (2026-09-16) tested that line and did
+      // NOT widen it: the counter till needed this table, and the route it
+      // needed was built inside routes/retail-shops.js rather than the table
+      // being reached for from public/till.html.
       const allowed = new Set([
         path.join('routes', 'retail-shops.js'),
         path.join('routes', 'shop-menu.js'),

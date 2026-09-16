@@ -1488,27 +1488,40 @@ button{font:inherit;color:inherit;margin:0}
       });
   }
 
-  // Two reads, joined on product_id: the catalogue for names and the price the
-  // ORDER path will charge (sell_price — resolveManualOrderLines reads that
-  // column, so a till showing anything else would quote a price the order does
-  // not use), and the store's own shelf for quantities.
+  /* ONE READ, AND IT ASKS THE SHOP RATHER THAN THE WEBSITE — §150.
+
+     This used to be two reads: the catalogue filtered to `published=1`, joined
+     to the store's shelf. That filter is the ONLINE STORE's flag, and §42 puts
+     a counter on the other side of the line: is_published governs the website,
+     a shop listing governs the shop. Nothing made at a location is sold on a
+     website, so nothing made at a location was ever published, so nothing made
+     at a location could be rung up — reported from Tianhe as a menu product the
+     till's search could not find at all.
+
+     The server-side route answers with the three sources §150 names — this
+     location's menu at its own price, anything counted on its shelf, and
+     everything the till already showed — and carries the shelf figure per row,
+     so the join that used to happen here happens there.
+
+     `stock: null` means there is nothing to count: a made-here item is built
+     when it is ordered and can never be short. stockOf() already reads null as
+     "no gate", so it needs no change. */
   function loadCatalogue() {
-    return Promise.all([
-      api('/api/retail-admin/products?published=1'),
-      api('/api/retail-admin/stores/' + S.storeId + '/stock?published=1')
-    ]).then(function (r) {
-      var prods = (r[0] && r[0].data) || [];
-      var stk = (r[1] && r[1].data) || [];
+    return api('/api/retail-admin/stores/' + S.storeId + '/counter-catalogue')
+      .then(function (r) {
+      var rows = (r && r.data && r.data.rows) || [];
       S.stock = {};
-      stk.forEach(function (row) {
-        // available_wechat already nets off the safety buffer and live holds —
-        // the same number the shop shows a customer. Fall back to the raw
-        // shelf count only when the decorated field is absent.
-        var n = row.available_wechat != null ? row.available_wechat : row.physical_qty;
-        S.stock[row.product_id] = Number(n) || 0;
-      });
-      S.products = prods.filter(function (p) {
-        return !p.is_restock_only && Number(p.sell_price) > 0;
+      S.products = rows.map(function (row) {
+        if (row.stock != null) S.stock[row.product_id] = Number(row.stock) || 0;
+        return {
+          id: row.product_id,
+          name_en: row.name_en, name_cn: row.name_cn, sku: row.sku,
+          top_category: row.top_category,
+          // The price this till QUOTES and, on a menu row, the price it POSTS.
+          price: Number(row.price) || 0,
+          on_menu: !!row.on_menu,
+          fulfilment_mode: row.fulfilment_mode || null
+        };
       });
       var seen = {}; var cats = [];
       S.products.forEach(function (p) {
@@ -1781,7 +1794,7 @@ button{font:inherit;color:inherit;margin:0}
               ? '<span class="lo">' + esc(T('outOfStock')) + '</span>'
               // In stock: code, price, and a single digit when the shelf is low.
               : (p.sku ? '<span class="sku">' + esc(p.sku) + '</span>' : '')
-                + '<span class="pr">' + money(p.sell_price) + '</span>'
+                + '<span class="pr">' + money(p.price) + '</span>'
                 + (left != null && left <= 5 ? '<span class="lo">' + left + '</span>' : ''))
          + '</span></button>';
     });
@@ -2430,7 +2443,13 @@ button{font:inherit;color:inherit;margin:0}
     var have = l ? l.qty : 0;
     if (st != null && have >= st) return;          // never sell past the shelf
     if (l) l.qty += 1;
-    else S.lines.push({ id: id, name: pname(p), sku: p.sku || '', price: Number(p.sell_price) || 0, qty: 1 });
+    // `menu` rides the line to the submit: a listing's price is the one figure
+    // the order endpoint cannot resolve for itself (§42 puts it on the listing,
+    // not on the product), so those lines and only those lines post a
+    // unit_price. Everything else stays server-priced, which is what keeps a
+    // catalogue price corrected in the office from being charged stale here.
+    else S.lines.push({ id: id, name: pname(p), sku: p.sku || '',
+                        price: Number(p.price) || 0, qty: 1, menu: !!p.on_menu });
     render();
   }
   function bumpQty(d, idx) {
@@ -2486,7 +2505,12 @@ button{font:inherit;color:inherit;margin:0}
       // exactly this state. It is stored data, not a rendered label — and the
       // receipt suppresses the hand-over block on a counter sale anyway.
       recipient_name: S.customer ? (S.customer.nickname || 'Guest') : 'Guest',
-      items: S.lines.map(function (l) { return { product_id: l.id, qty: l.qty }; })
+      items: S.lines.map(function (l) {
+        var it = { product_id: l.id, qty: l.qty };
+        // See addLine: the menu's price, and never the catalogue's.
+        if (l.menu) it.unit_price = l.price;
+        return it;
+      })
     }, mode.payload(S), creditBody());
     /* THE TENDER IS THE CREDIT'S when no cash changed hands (§93). mode.payload
        set `payment_method` from the wallet picker, and with the bill fully

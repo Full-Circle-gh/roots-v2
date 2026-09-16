@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.286
+# Tacet shared-core consolidation — decisions record, v4.287
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-16 · v4.287 — **§150 · THE COUNTER SELLS WHAT THE SHOP HAS AND WHAT THE SHOP MAKES — DECIDED BY ASH from a Tianhe till**, on a screenshot of the counter search: *“i cant see the products made in the location in the counter till”*, and then, shown the two shapes the fix could take, the argument that settled it: *“people might order from the mini app products that offered in the warehouse of that location, the till will not show them because they are not on the menu list”*. **THE TILL WAS ASKING THE WEBSITE WHAT THE COUNTER MAY SELL.** `public/till.html` built its product list from `/api/retail-admin/products?published=1` and its quantities from `/stores/:id/stock?published=1` — `is_published`, the ONLINE STORE's flag. **§42 draws the line the other way round and the public QR menu has honoured it since §47**: *is_published governs the online store; a shop listing governs the shop*. Nothing built at a counter is ever sold on a website, so nothing built at a counter was ever published, so nothing built at a counter reached a till. **A latte was invisible to the cashier standing next to the machine that makes it**, and publishing it to get it on screen would have put it on the website AND drawn it greyed out, because a made-here row has no shelf record by design (§47) and the till reads 0 as sold out. **THE SHAPE ASH REJECTED IS THE TIDY ONE.** Menu-only was put to him and argued against here before he answered; his own reason for refusing it is better than the one offered, and it is recorded in his words above: **the mini app already sells that location's warehouse stock**, so a till narrowed to the menu would take a walk-in customer's sale off a shelf the app is selling from. **THREE SOURCES, ONE LIST**, and the change is ADDITIVE — no tile a cashier can see today disappears: this location's menu at ITS price (§42 puts the price on the listing, so the counter and the QR code can no longer quote two figures for one drink); anything counted on this location's shelf, published or not, because **publishing is a decision about a website and has nothing to do with whether a cashier may sell a box somebody put on the shelf in front of them**; and everything the till already showed. **A LISTING GOVERNS ITS PRODUCT ABSOLUTELY** — where one exists it decides the price, the mode and whether the row appears at all, so a product switched off for the day is ABSENT rather than reappearing two rows down at the catalogue price, which is exactly what concatenating the two halves would have done. **MADE HERE IS NEVER STOCK-GATED**: its stock comes back `null` rather than 0 and §42's manual switch is the whole of its availability, per §47's closing line. **ONE NEW ROUTE, NO NEW TABLE, NO SCHEMA, NO MIGRATION**, and **the containment around `shop_listings` was NOT widened**: the route lives in `routes/retail-shops.js` for the reason `/products/:id/shops` already gives in that file — a reader in `public/till.html` would have forced the allowlist in `scripts/test_shop_listings.js` open, and a reader there widens nothing. The till FETCHES it and never names the table; a check in the new suite holds that. **THE ORDER PATH IS UNCHANGED AND WAS NEVER THE PROBLEM** — `resolveManualOrderLines` resolves on `is_active` alone, with no published gate, and has always accepted a per-line `unit_price`. **The till posts one on menu lines and only on menu lines**: a listing's price is the single figure that endpoint cannot resolve for itself, and a till that posted its own number for everything would charge a stale one every time the office corrected a catalogue price between two reloads of the tablet. **`shops.is_active` IS DELIBERATELY NOT CONSULTED** — it governs the `/s/:shopCode` page, and switching a QR menu off is a statement about a public URL, not about whether the counter may ring up a coffee; the till's own closed-store gate (`posClosedForStore`) is untouched. New suite `scripts/test_counter_catalogue.js` **21/21**, proven non-vacuous by four mutations (made-here gated on the shelf, a switched-off listing falling through to the catalogue half, listed rows priced from the product, the published/counted narrowing removed) each caught by the check meant for it; `test:fast` 261 → **262**; lint 0 errors. **One correction to an older document made in the same pass**: `scripts/test_shop_listings.js` printed *“Nothing else reads these tables yet — the till is unchanged”*, which this makes false, so the heading and the allowlist's note now say what is actually true. No new UI string in either language, so nothing to declare in `docs/tacet-delivery-vocabulary.md`. No change to the mini app, the QR menu, the web storefront, `.gitignore` or CI.
 
 2026-09-16 · v4.286 — **§149 · PEANUTS AND TREE NUTS ARE NOT THE SAME ALLERGEN, AND “NONE DECLARED” WAS ALREADY BUILT IN — DECIDED BY ASH, asked about the nuts specifically rather than shown a usage count:** *“Peanuts and Tree nuts separate”*. **THE ONE BLOCK WHERE A WRONG WORD HAS A CONSEQUENCE.** The catalogue had **five words for nuts** — `Nuts` 55, `Tree nuts` 36, `Other tree nuts` 15, `Other nuts` 14, `Peanuts` 7 — and these are not spelling variants: somebody allergic to peanuts is often fine with almonds and the reverse. **A customer reading `Nuts` cannot tell which they are being warned about.** So most-used-wins, the rule that decided every other list in §145 to §148, was deliberately NOT applied: the most-used word is the one being dropped. **The 55 cards saying `Nuts` are not rewritten** — they keep their wording, the editor shows it as typed, and they become a visible worklist rather than a silent inconsistency. **A FINDING THAT CHANGED THE ANSWER ASH HAD ALREADY GIVEN, and it was mine to have found earlier.** Asked which of three hand-typed sentences should be the single form for *nothing to declare*, he chose `None declared` / 未声明常见致敏原. Reading the renderers afterwards shows **all three surfaces already print `None declared` / 未声明 when the contains row is blank** — `lib/product-blocks-read.js`, `public/shop/product-blocks.js` and the mini app's product-blocks component each carry their own copy. So the 66 cards that type it by hand (43 `None declared`, 15 `None`, 8 `No known allergens`) produce a CHIP saying what the empty state says quietly, and the built-in Chinese is **未声明**, not the 未声明常见致敏原 he was shown. **His choice is implemented through the mechanism that already exists rather than by adding a fourth variant:** the form now says, in both languages, that leaving both boxes empty prints it. The three surfaces are held in agreement by a test, because a product that reads one way on the counter menu and another in the app is exactly the difference a customer with an allergy would notice. **QUICK-ADD CHIPS, NOT CHECKBOXES, and the departure is deliberate.** Both rows are ONE comma-separated string and the catalogue is more specific than any checkbox — `Tree nuts (hazelnuts)`, `Sesame (tahini), Legumes (chickpeas)`. A checkbox would have to decide whether `Tree nuts (hazelnuts)` counts as ticked, and un-ticking would have to decide what to delete, **which is how an allergen line gets silently truncated**. A chip APPENDS, never removes, fills both languages with each one's own separator (`, ` and `、`, both already read by `_paSplitChips`), and is a no-op when the term is already there. **NO CHINESE COMPOSED** — all eight terms lifted, each half verified live in the committed tree. New suite `scripts/test_allergen_options.js` **12/12**, proven non-vacuous by four mutations; **one walked past the check meant for it a second time** — a removal written as `split(term).join('')` used none of the forbidden method names — so the check stopped naming methods and pins the invariant instead: the field is assigned exactly once, inside the only function that can grow it. `test:fast` 260 → **261**; lint 0 errors. No schema, no migration, no change to the mini app, the QR menu, the web storefront, `.gitignore` or CI.
 
@@ -16213,3 +16215,79 @@ No rewrite of existing cards. No schema, no migration. No change to the mini app
 the QR menu or the web storefront — only a test that holds their three copies of
 the empty state in agreement. No change to `.gitignore`, CI, or anything
 governing how sessions and builds work.
+
+
+## §150 — THE COUNTER SELLS WHAT THE SHOP HAS AND WHAT THE SHOP MAKES
+
+**Decided by Ash, 2026-09-16,** reported from a Tianhe till: *"i cant see the
+products made in the location in the counter till"*.
+
+### What was wrong
+
+The counter till built its list from the catalogue filtered to `is_published`,
+joined to the location's shelf. That flag is the **online store's**. §42 puts a
+counter on the other side of it and the public QR menu has read it that way
+since §47:
+
+> is_published governs the ONLINE STORE; a shop listing governs the SHOP.
+
+Nothing made at a location is sold on a website. So nothing made at a location
+was ever published, so nothing made at a location reached a till — and ticking
+it published to force it onto the screen would have put a latte on the website
+and still drawn it greyed out, because a made-here listing has no shelf record
+by design and the till reads a missing count as zero.
+
+### What the till shows now
+
+Three sources, one list:
+
+1. **This location's menu**, at the listing's own price (§42). A `made_here`
+   row is never stock-gated: its stock is `null`, not 0, and §42's manual
+   switch is the whole of its availability, exactly as §47 says.
+2. **Anything counted on this location's shelf**, published or not. Publishing
+   is a decision about a website. It has never had anything to do with whether
+   a cashier may sell a box somebody put on the shelf in front of them.
+3. **Everything the till already showed.** Named so the change is additive: no
+   tile a cashier can see today disappears.
+
+**A listing governs its product absolutely.** Where a listing exists it decides
+the price, the mode, and whether the row appears at all. A product switched off
+for the day is ABSENT — not shown two rows lower at the catalogue price, which
+is what merely concatenating the two halves would have done.
+
+### Why not menu-only
+
+That shape was put to Ash and refused, in his words:
+
+> people might order from the mini app products that offered in the warehouse of
+> that location, the till will not show them because they are not on the menu
+> list
+
+The mini app already sells that location's warehouse stock. A till narrowed to
+the menu would take the walk-in customer's sale off a shelf the app is selling
+from. **The counter is where anything physically present can be sold; the menu
+is a subset of that, never the whole of it.**
+
+### What was deliberately not changed
+
+- **`shops.is_active`** is not consulted. It governs the `/s/:shopCode` page —
+  switching a QR menu off is a statement about a public URL, not about whether
+  the counter may ring up a coffee. The till's own closed-store gate is
+  untouched.
+- **The order path.** `resolveManualOrderLines` resolves on `is_active` alone
+  and has always taken a per-line `unit_price`. The till posts one on menu lines
+  and only on menu lines: a listing's price is the one figure that endpoint
+  cannot resolve for itself, and posting its own number for every line would
+  charge a stale price whenever the office corrected a catalogue price between
+  two reloads of the tablet.
+- **The containment around `shop_listings`.** The new route lives in
+  `routes/retail-shops.js` for the reason `/products/:id/shops` gives there: a
+  reader in `public/till.html` would have forced the allowlist open, and a
+  reader here widens nothing. The till fetches the route and never names the
+  table.
+
+### Not done
+
+No schema, no migration, no new table. No change to the mini app, the QR menu or
+the web storefront. No new UI string in either language. No change to
+`.gitignore`, CI, or anything governing how sessions and builds work.
