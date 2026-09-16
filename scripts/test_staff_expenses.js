@@ -934,5 +934,243 @@ it('the photo can come from the gallery, not only the camera', () => {
   assert.match(PHONE, /<input type="file" accept="image\/\*" style="display:none"/);
 });
 
+console.log('\n9 · re-filing a claim that is already in the books (§145)');
+
+/* WHAT THIS SECTION IS FOR. A claim approved with no category posted a ledger
+   row with none, and nothing could then fix it: `finance-transactions.js`
+   refuses to edit a claim-posted row (rightly — it is a projection), and no
+   route edited the CLAIM. The only way to file a ¥299 taxi that arrived blank
+   was to void it and ask the employee to send it again. Both halves of the fix
+   are asserted here: the approver may file it as they approve, and an approved
+   claim may be re-filed afterwards. */
+
+const rdb = new Database(':memory:');
+rdb.exec(`
+  CREATE TABLE expense_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, date DATE, amount REAL, category TEXT,
+    description TEXT, po_id INTEGER, payment_method TEXT, store_id INTEGER,
+    claim_id INTEGER, created_by INTEGER
+  );`);
+const unfiled = {
+  id: 77, date: '2026-09-16', amount: 299, category: null,
+  note: 'take taxi to the office and Ramada', submitted_name: 'bai',
+  status: 'approved', paid_by: 'employee', store_id: 2, payment_method: null,
+  decided_by: 2,
+};
+
+it('an approved claim with no category posts a row filed under nothing', () => {
+  POST.postClaim(rdb, unfiled);
+  const row = rdb.prepare('SELECT * FROM expense_entries WHERE claim_id = 77').get();
+  assert.ok(row, 'the money is in the books either way — that is the problem');
+  assert.strictEqual(row.category, null);
+});
+
+it('re-filing rewrites the SAME one row, under the new category', () => {
+  POST.postClaim(rdb, { ...unfiled, category: 'Transport 交通' });
+  const rows = rdb.prepare('SELECT * FROM expense_entries WHERE claim_id = 77').all();
+  assert.strictEqual(rows.length, 1, 'DELETE-then-INSERT, never a second row');
+  assert.strictEqual(rows[0].category, 'Transport 交通');
+});
+
+it('and nothing else about the money moves', () => {
+  const row = rdb.prepare('SELECT * FROM expense_entries WHERE claim_id = 77').get();
+  assert.strictEqual(row.amount, 299, 'same sum');
+  assert.strictEqual(row.date, '2026-09-16', 'same day');
+  assert.strictEqual(row.store_id, 2, 'same shop');
+  assert.match(row.description, /bai/, 'and still says whose taxi it was');
+});
+
+it('the name is resolved BEFORE the write, or re-filing would strip it', () => {
+  // `claimDescription` reads `submitted_name`, which a `staff_expenses` row does
+  // not carry — the route resolves it. A re-post that forgot would rewrite the
+  // ledger line without the one fact that makes a ¥299 line answerable later.
+  const route = ROUTE_CODE.match(/staff-expenses\/:id\/category[\s\S]*?^\}\);/m);
+  assert.ok(route, 'the re-filing route must exist');
+  const body = route[0];
+  assert.match(body, /submitterNames\(\[claim\.submitted_by\]\)/);
+  assert.ok(body.indexOf('submitterNames') < body.indexOf('withTransaction'),
+    'resolved outside the transaction, as /decide does — it reads the other handle');
+  assert.match(body, /fresh\.submitted_name = submittedName/);
+});
+
+it('it clears expense_id in the same UPDATE, before postClaim deletes the row', () => {
+  // §90's FK trap, third occurrence: schema.sql's FK on `expense_id` still
+  // points at the row postClaim is about to DELETE, and SQLite refuses.
+  const route = ROUTE_CODE.match(/staff-expenses\/:id\/category[\s\S]*?^\}\);/m)[0];
+  assert.match(route, /SET category = \?, expense_id = NULL/);
+  assert.ok(route.indexOf('expense_id = NULL') < route.indexOf('postClaim('),
+    'cleared first, or the delete is refused');
+});
+
+it('it refuses what has no ledger row to re-file, and names which', () => {
+  const route = ROUTE_CODE.match(/staff-expenses\/:id\/category[\s\S]*?^\}\);/m)[0];
+  assert.match(route, /claim\.status !== 'approved'[\s\S]*?ERR\.notApprovedCat/,
+    'a submitted claim may still be rejected; a rejected one was taken back out');
+  assert.match(route, /claim\.po_id \|\| claim\.awaiting_delivery[\s\S]*?ERR\.onOrderCat/,
+    'the order owns that cost, under the LINE category');
+  assert.match(route, /!category[\s\S]*?ERR\.needCategory/, 'and an empty value is a mistake');
+  for (const key of ['notApprovedCat', 'needCategory', 'onOrderCat']) {
+    const line = ROUTE.match(new RegExp(`${key}:\\s*'([^']+)'`));
+    assert.ok(line, `${key} must be defined`);
+    assert.match(line[1], /·/, 'every refusal a person reads carries both languages');
+  }
+});
+
+it('a SETTLED claim can still be re-filed — deliberately, unlike void', () => {
+  const route = ROUTE_CODE.match(/staff-expenses\/:id\/category[\s\S]*?^\}\);/m)[0];
+  // /decide and /void refuse a settled claim because they would take an expense
+  // out of the books while leaving the repayment made. Nothing leaves the books
+  // here, and refusing would mean a category could only be fixed before payday.
+  assert.ok(!/claim\.settled/.test(route), 'no settled guard on this route');
+});
+
+it('it is gated on the approving key, not on submitting', () => {
+  assert.match(ROUTE_CODE,
+    /staff-expenses\/:id\/category', requireRetailAdmin, requireApprover/,
+    'filing a cost is bookkeeping by the person who already decides the books');
+});
+
+it('the decision may carry a category, and a client that sends none blanks nothing', () => {
+  assert.match(ROUTE_CODE, /category = COALESCE\(\?, category\)/,
+    'a bare `category = ?` would blank every claim decided by an older client');
+  assert.match(ROUTE_CODE, /decision === 'approve'\s*\?\s*storeCategory\(db, \(req\.body \|\| \{\}\)\.category, 'accounting'\)/,
+    'snapped onto the tenant list by the same function the submit path uses');
+});
+
+it('the queue carries the list its picker is drawn from', () => {
+  assert.match(ROUTE_CODE, /categories: activeCategories\(db\)/);
+  // One function, or the two surfaces come to offer different lists.
+  assert.strictEqual((ROUTE_CODE.match(/function activeCategories/g) || []).length, 1);
+  assert.match(ROUTE_CODE, /const categories = activeCategories\(db\);/, '/meta uses it too');
+});
+
+it('both screens offer the picker where the server allows it, and nowhere else', () => {
+  for (const [name, src] of [['desktop', codeOnly(CLIENT)], ['phone', PHONE_CODE]]) {
+    assert.match(src, /awaiting_delivery\)\s*\|\|\s*r\.po_id\) return false/,
+      `${name}: a claim on an order is filed on the order`);
+    assert.match(src, /status === 'submitted' \|\| r\.status === 'approved'|status==='submitted'\|\|r\.status==='approved'/,
+      `${name}: waiting and approved, never rejected or voided`);
+  }
+});
+
+it('a blank category is VISIBLE on both queues rather than rendering as nothing', () => {
+  // How a ¥299 taxi reached the books unfiled with nobody noticing: a claim with
+  // no category and one filed under Transport drew the same meta line.
+  assert.match(codeOnly(CLIENT), /else if \(!filing\) bits\.push\(cuT\('Not recorded', '未记录'\)\)/);
+  assert.match(PHONE_CODE, /else if\(!filing\) bits\.push\(T\('Not recorded','未记录'\)\)/);
+});
+
+it('a pick made on a waiting claim survives opening the receipt', () => {
+  // Both screens re-render for reasons that have nothing to do with the pick.
+  // Held in the DOM alone, checking the photo before approving would throw it
+  // away — silently, and at the exact moment the approver was being careful.
+  assert.match(codeOnly(CLIENT), /let FIN_APR_CAT = \{\}/);
+  assert.match(codeOnly(CLIENT), /delete FIN_APR_CAT\[claim\]/, 'and is spent by the decision');
+  assert.match(PHONE_CODE, /cat:\{\}/);
+  assert.match(PHONE_CODE, /delete a\.cat\[Number\(id\)\]/);
+});
+
+it('the category rides WITH the approval, in one request', () => {
+  // A second call afterwards could fail on its own and leave the ledger holding
+  // a classification nobody chose.
+  assert.match(codeOnly(CLIENT), /\{ decision, category: picked \} : \{ decision \}/);
+  assert.match(PHONE_CODE, /\{decision:decision,category:picked\}:\{decision:decision\}/);
+});
+
+/* THE PICKER, RUN RATHER THAN GREPPED. The two functions are lifted out of the
+   shipped files and executed against stubs, the technique section 8 uses on the
+   category splitter. A source assertion cannot see two rows marked `selected`,
+   a value that reaches the markup unescaped, or an option list that closed one
+   tag short — and all three are how a <select> built by string concatenation
+   actually fails. */
+function catCellCtx(which) {
+  const ctx = {
+    Map, Array, String, Number, Object,
+    escapeHtml: (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
+  };
+  ctx.escapeAttr = ctx.escapeHtml;
+  ctx.escAttr = ctx.escapeHtml;
+  ctx.cuT = (en) => en;
+  ctx.T = (en) => en;
+  ctx.finCatLabel = ctx.catLabel = (v) => String(v == null ? '' : v);
+  ctx.finCatLabels = ctx.catLabels = (list) => new Map(list.map(v => [v, String(v)]));
+  vm2.createContext(ctx);
+  if (which === 'desk') {
+    const src = DESK.slice(DESK.indexOf('function finAprFileable('), DESK.indexOf('window.finAprCatPick'));
+    ctx.FIN_APR = { categories: [] };
+    ctx.FIN_APR_CAT = {};
+    ctx.FIN_APR_BUSY = 0;
+    new vm2.Script(src + '\nthis.cell = finAprCatCell;').runInContext(ctx);
+  } else {
+    const src = PHONE.slice(PHONE.indexOf('function aprFileable('), PHONE.indexOf('function aprRow('));
+    ctx.state = { apr: { cats: [], cat: {}, busy: 0 } };
+    new vm2.Script(src + '\nthis.cell = aprCatCell;').runInContext(ctx);
+  }
+  return ctx;
+}
+function setCats(ctx, which, list) {
+  if (which === 'desk') ctx.FIN_APR.categories = list;
+  else ctx.state.apr.cats = list;
+}
+const CLAIM_WAITING  = { id: 9, status: 'submitted', category: null, awaiting_delivery: 0, po_id: null };
+const CLAIM_APPROVED = { id: 9, status: 'approved',  category: 'Transport 交通', awaiting_delivery: 0, po_id: null };
+
+for (const which of ['desk', 'phone']) {
+  it(`${which}: the picker draws one option per category and marks exactly one`, () => {
+    const ctx = catCellCtx(which);
+    setCats(ctx, which, ['Transport 交通', 'Rent 房租', 'Other 其他']);
+    const html = ctx.cell(CLAIM_APPROVED);
+    assert.strictEqual((html.match(/<option/g) || []).length, 3, 'three categories, no blank row');
+    assert.strictEqual((html.match(/selected/g) || []).length, 1, 'two marked rows is a browser coin-toss');
+    assert.match(html, /value="Transport 交通" selected/);
+    assert.strictEqual((html.match(/<\/select>/g) || []).length, 1);
+  });
+
+  it(`${which}: a waiting claim is offered the blank row, an approved one is not`, () => {
+    const ctx = catCellCtx(which);
+    setCats(ctx, which, ['Transport 交通']);
+    assert.match(ctx.cell(CLAIM_WAITING), /value=""/, 'choosing it means "not yet", which is today\'s behaviour');
+    assert.ok(!/value=""/.test(ctx.cell(CLAIM_APPROVED)),
+      'on an approved claim it would mean UNfiling a cost, which the server refuses');
+  });
+
+  it(`${which}: a category with a quote in it cannot break out of the markup`, () => {
+    const ctx = catCellCtx(which);
+    setCats(ctx, which, ['Rent" onfocus="x']);
+    const html = ctx.cell(CLAIM_WAITING);
+    assert.ok(!/onfocus="x/.test(html), 'the value reaches the attribute escaped');
+    assert.match(html, /&quot;/);
+  });
+
+  it(`${which}: no list, no picker — and none on a claim that raised an order`, () => {
+    const ctx = catCellCtx(which);
+    assert.strictEqual(ctx.cell(CLAIM_WAITING), '', 'an empty list offers nothing rather than something wrong');
+    setCats(ctx, which, ['Transport 交通']);
+    assert.strictEqual(ctx.cell({ ...CLAIM_WAITING, awaiting_delivery: 1 }), '');
+    assert.strictEqual(ctx.cell({ ...CLAIM_APPROVED, po_id: 12 }), '');
+    assert.strictEqual(ctx.cell({ ...CLAIM_APPROVED, status: 'rejected' }), '');
+    assert.strictEqual(ctx.cell({ ...CLAIM_APPROVED, status: 'voided' }), '');
+  });
+
+  it(`${which}: the two rows send to two different places`, () => {
+    const ctx = catCellCtx(which);
+    setCats(ctx, which, ['Transport 交通']);
+    // A waiting claim remembers; an approved one saves. Crossed, a decision
+    // would post a category to a claim with no ledger row, or a correction
+    // would sit in memory and never reach the books.
+    assert.match(ctx.cell(CLAIM_WAITING), /CatPick/);
+    assert.ok(!/CatPick/.test(ctx.cell(CLAIM_APPROVED)));
+    assert.match(ctx.cell(CLAIM_APPROVED), /aprFile|finAprFile/);
+  });
+}
+
+it('re-filing drops the ledger caches it just invalidated', () => {
+  const fn = codeOnly(CLIENT).match(/finAprFile = async function[\s\S]*?^\};/m);
+  assert.ok(fn, 'the desktop re-filing call must exist');
+  assert.match(fn[0], /FIN_TX = null/, 'the Transactions list is drawn from the row it re-posted');
+  assert.match(fn[0], /FIN_DATA = null/, 'and so is the staircase');
+});
+
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

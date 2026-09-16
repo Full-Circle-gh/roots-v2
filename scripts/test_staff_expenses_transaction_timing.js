@@ -240,6 +240,128 @@ function call(method, url, body) {
       'every claim row in the file names its approver in the last column');
   });
 
+  console.log('\n5 · filing a claim under a category, and re-filing one (§145)');
+
+  /* §90's LESSON, APPLIED TO A NEW ROUTE. The re-filing route re-posts a ledger
+     row the way `/void` removes one, so it walks into the same FK ordering trap:
+     `staff_expenses.expense_id` still points at the `expense_entries` row
+     `postClaim` is about to DELETE, and only the REAL schema refuses that. The
+     fixture in test_staff_expenses.js declares no such constraint, so it can
+     prove the category moves and cannot prove the write survives. This can. */
+
+  async function submitUnfiled() {
+    const r = await call('POST', '/api/retail-admin/staff-expenses', {
+      date: '2026-09-10', amount: 299, note: 'tx timing test unfiled', paid_by: 'employee',
+    });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    claimIds.push(r.body.id);
+    return r.body.id;
+  }
+
+  await it('a claim can be submitted with no category at all — the state this is about', async () => {
+    const claimId = await submitUnfiled();
+    const row = db.prepare('SELECT category FROM staff_expenses WHERE id = ?').get(claimId);
+    assert.strictEqual(row.category, null);
+  });
+
+  await it('approving with a category files it, and the ledger row carries it', async () => {
+    const claimId = await submitUnfiled();
+    const dec = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`,
+      { decision: 'approve', category: 'Transport' });
+    assert.strictEqual(dec.status, 200, JSON.stringify(dec.body));
+    assert.strictEqual(dec.body.data.status, 'approved');
+    const posted = db.prepare('SELECT category, amount FROM expense_entries WHERE claim_id = ?').get(claimId);
+    assert.ok(posted, 'a row must be posted');
+    assert.strictEqual(posted.category, 'Transport');
+    assert.strictEqual(posted.amount, 299, 'and the sum is the one that was claimed');
+  });
+
+  await it('approving WITHOUT one leaves the claim as it was, never blanked', async () => {
+    // The COALESCE. A bare `category = ?` here would blank the category on every
+    // claim decided by a client that does not send the field.
+    const r = await call('POST', '/api/retail-admin/staff-expenses', {
+      date: '2026-09-10', amount: 88, category: 'Transport', note: 'tx timing test keep', paid_by: 'company',
+    });
+    claimIds.push(r.body.id);
+    const dec = await call('POST', `/api/retail-admin/staff-expenses/${r.body.id}/decide`, { decision: 'approve' });
+    assert.strictEqual(dec.status, 200);
+    const row = db.prepare('SELECT category FROM staff_expenses WHERE id = ?').get(r.body.id);
+    assert.strictEqual(row.category, 'Transport', 'the claim keeps what it arrived with');
+  });
+
+  await it('re-filing an approved claim moves the LEDGER row, over HTTP, against the real FK', async () => {
+    const claimId = await submitUnfiled();
+    await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`, { decision: 'approve' });
+    const before = db.prepare('SELECT id, category, description FROM expense_entries WHERE claim_id = ?').get(claimId);
+    assert.ok(before, 'posted, and filed under nothing');
+    assert.strictEqual(before.category, null);
+
+    const filed = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/category`, { category: 'Transport' });
+    // Before the `expense_id = NULL` ordering, this is where SQLite refuses the
+    // delete and the route 500s — the exact shape of §90's bug.
+    assert.strictEqual(filed.status, 200, JSON.stringify(filed.body));
+    assert.strictEqual(filed.body.data.category, 'Transport');
+    assert.ok(filed.body.data.expense_id, 'and the claim names its new row');
+
+    const rows = db.prepare('SELECT * FROM expense_entries WHERE claim_id = ?').all(claimId);
+    assert.strictEqual(rows.length, 1, 'one row, re-written — never a second');
+    assert.strictEqual(rows[0].category, 'Transport');
+    assert.strictEqual(rows[0].amount, 299, 'no money moved');
+    assert.strictEqual(rows[0].description, before.description,
+      'and the line still says whose taxi it was — the name is re-resolved, not dropped');
+    assert.strictEqual(rows[0].id, filed.body.data.expense_id,
+      'the claim and the ledger agree on which row stands for it');
+  });
+
+  await it('the Transactions screen shows the new category, not the old blank', async () => {
+    const claimId = await submitUnfiled();
+    await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`, { decision: 'approve' });
+    await call('POST', `/api/retail-admin/staff-expenses/${claimId}/category`, { category: 'Transport' });
+    const list = await call('GET', '/api/retail-admin/finance/transactions?from=2026-09-01&to=2026-09-30');
+    const row = list.body.data.rows.find(r => r.claim_id === claimId);
+    assert.ok(row, 'still on the ledger');
+    assert.strictEqual(row.category, 'Transport');
+  });
+
+  await it('a claim still waiting cannot be re-filed — /decide is the route for that', async () => {
+    const claimId = await submitUnfiled();
+    const r = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/category`, { category: 'Transport' });
+    assert.strictEqual(r.status, 409, JSON.stringify(r.body));
+  });
+
+  await it('an empty category is refused rather than unfiling the claim', async () => {
+    const claimId = await submitUnfiled();
+    await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`,
+      { decision: 'approve', category: 'Transport' });
+    const r = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/category`, { category: '' });
+    assert.strictEqual(r.status, 400, JSON.stringify(r.body));
+    const row = db.prepare('SELECT category FROM staff_expenses WHERE id = ?').get(claimId);
+    assert.strictEqual(row.category, 'Transport', 'and the refusal changed nothing');
+  });
+
+  await it('a SETTLED claim can still be re-filed — unlike voiding it', async () => {
+    // Nothing leaves the books here, so the reason /void and /decide refuse a
+    // settled claim does not apply. Refusing would mean a category could only
+    // ever be corrected before payday.
+    const claimId = await submitUnfiled();
+    await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`, { decision: 'approve' });
+    const paid = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/settle`, { settled: true });
+    assert.strictEqual(paid.status, 200, JSON.stringify(paid.body));
+    const filed = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/category`, { category: 'Transport' });
+    assert.strictEqual(filed.status, 200, JSON.stringify(filed.body));
+    const row = db.prepare('SELECT settled, category FROM staff_expenses WHERE id = ?').get(claimId);
+    assert.strictEqual(row.category, 'Transport');
+    assert.ok(row.settled, 'and it is still paid back — re-filing is not a reversal');
+  });
+
+  await it('the approval queue carries the list its picker is drawn from', async () => {
+    const q = await call('GET', '/api/retail-admin/staff-expenses/pending');
+    assert.strictEqual(q.status, 200, JSON.stringify(q.body));
+    assert.ok(Array.isArray(q.body.data.categories),
+      'the queue and the picker travel together — a second request racing the list '
+      + 'is how a queue renders before the options it offers exist');
+  });
+
   // Best-effort cleanup — this runs against the shared dev database (tenant 1
   // maps to it directly), so leave it as it was found.
   for (const id of claimIds) {

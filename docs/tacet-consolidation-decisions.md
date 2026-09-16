@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.281
+# Tacet shared-core consolidation — decisions record, v4.282
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-16 · v4.282 — **§145 · A COST FILED UNDER NOTHING IS FIXED WHERE IT WAS DECIDED, NOT BY UNDOING IT — REPORTED BY ASH off a live Transactions row:** a ¥299 staff claim, *“bai · take taxi to the office and Ramada”*, approved and in the books with no category and no control anywhere in the product that could give it one. **THE GAP WAS INVISIBLE BEFORE IT WAS UNFIXABLE.** The approval row printed the category only when there was one, so a claim filed under nothing and one filed under Transport drew the same meta line; `/decide` read a `note` from its body and nothing else; and `routes/finance-transactions.js` refuses to edit a claim-posted ledger row — **correctly, and that refusal is untouched here**, since the row is a projection and any value typed onto it is lost the next time the claim re-posts. But nothing could edit the CLAIM either, so the only way to file that ¥299 was to VOID it and ask the employee to send it again — destroying an approval record to correct a classification. **WHAT SHIPS:** one category control on the claim row, in both queues, carrying the claim's current value and editable before the decision and after it; `/decide` takes an optional category and applies it in the same write that posts the row; and a new `POST /staff-expenses/:id/category` re-files an approved claim, re-posting its ledger row under the new heading. **THE PROMPT-ON-APPROVE SHAPE WAS REJECTED**, and it is the obvious one: asking only when the category is blank catches the empty case and waves the WRONG case straight through, and a category picked by a submitter who does not know the chart of accounts is wrong at least as often as it is missing — wrong data reads as good data in a report, blank data announces itself. **COMPULSION WAS REJECTED TOO** — forced, the approver clears the queue with whatever is at the top of the list, trading a visible problem for an invisible one. The claim form is unchanged. **WHY A BLANK IS NOT MERELY UNTIDY:** `finance-summary.js` gives it its own “Not recorded” line and counts it as OPERATING, so a private cost with no category silently inflates the operating total. **NO MONEY MOVES IN A RE-FILING** — same claim, same sum, same date, same person, same approval record; `postClaim`'s DELETE-then-INSERT does the work, so the ledger says what the claim says. **A SETTLED CLAIM IS STILL RE-FILEABLE**, the one place this parts company with `/decide` and `/void`: those refuse a settled claim because they would take an expense out of the books while leaving the repayment made, and nothing leaves the books here — refusing would mean a category could only be corrected before payday. **A CLAIM THAT RAISED AN ORDER IS REFUSED**, on `awaiting_delivery` as well as `po_id`, and the refusal names the way out: the order owns that cost, under the line's category. **THREE THINGS A LATER EDIT COULD QUIETLY UNDO, named:** `category = COALESCE(?, category)` in `/decide` (a bare assignment blanks the category on every claim decided by an older client); `expense_id` cleared in the same UPDATE before `postClaim` runs (§90's FK trap, third occurrence); and the submitter's name resolved BEFORE the transaction, or a re-post rewrites the ledger line stripped of whose taxi it was. **THE PICK IS HELD IN STATE, NOT THE DOM** — both queues re-render when a receipt is opened, so a category chosen and then checked against the photo would have been thrown away at the exact moment the approver was being careful. **TESTS:** fifteen new checks in `scripts/test_staff_expenses.js` (82 → 97), fast shard, covering the re-post behaviour against a fixture ledger and every invariant above. No schema, no migration, no change to what a claim means, and no change to `.gitignore` or CI.
 
 2026-09-15 · v4.281 — **§144 · THE PRODUCT EDITOR IS A FORM, NOT A BUILDER — AND THE READING ORDER IS OFFERED, NEVER IMPOSED — DECIDED BY ASH from three working prototypes:** *“option a”*. **WHY A BUILDER WAS THE WRONG SHAPE, measured rather than felt.** A read-only production run of `scripts/diagnose_block_spine_order.js` over the 260 live products that carry any blocks finds nine types on 73–99% of them — `hero_intro` 99%, `spec_strip` 93%, `how_to_use` 90%, `notes_callout` 89%, `ingredients_chips` 87%, `why` 86%, `storage_box` 84%, `big_stat` 83%, `allergen_card` 73% — then a cliff to `nutrition_facts` 8%, `pull_quote` 5%, `recipe_steps` 3%, `ingredients_line` 0%. Four offered types (`image_band`, `pairings`, `faq`, `stat_callout`) are on no product at all. **Nobody is composing a page; everybody is filling in the same one.** So the editor stops asking the office to assemble what it already knows, and the nine become a spine that is always present — written sections inline, unwritten ones as a named line carrying how many products do say it, so a gap reads as unusual or ordinary without opening anything. **WHAT IS DECIDED, and the second half is the one that matters:** the spine is rendered, and **the stored order is preserved**. The same run found **71 distinct block orders in use**, with only 145 of 260 products (56%) sitting inside the commonest — so an editor that rendered a canonical order and saved it would have silently reordered **115 live customer pages on first save, with no edit made**. That is rejected outright. Placeholders for missing sections are inserted at their canonical position *relative to the blocks the product already has*; **no stored block is ever moved by rendering, by typing, or by saving.** Reordering stays a thing the operator does, now also available as one deliberate action that says what would move before it moves it. **THE CANONICAL ORDER IS THE HOUSE'S, NOT AN INVENTION** — `spec_strip > hero_intro > big_stat > why > ingredients_chips > allergen_card > storage_box > notes_callout > how_to_use`, which is what 74 products already carry and which puts the spec strip above the opening paragraph, where no whiteboard would have put it. **THE FREQUENCY IS READ LIVE, NEVER FROZEN INTO A CONSTANT** — a percentage baked into the source is a percentage that is wrong by next quarter and that nobody re-measures; a new endpoint counts the tenant's own products. **THE RISK THIS CHANGE CARRIES, NAMED:** `paBlocksSyncFromDOM` read one form at a time and wrote every `[data-bkey]` in the mount onto one block; with nine forms on screen it must scope per section, and a scoping bug writes one section's words into another's. §142 is the same family of mistake eleven days younger, so the invariant is held by a test rather than by care. **OPTIONS B AND C ARE RECORDED, not discarded:** B kept the block list and moved the settings beside it — fixes the distance, leaves the assembly work; C made the customer's page itself the editor — defeated by the bilingual pair, since only one language is ever on the page and chips, allergens and tables have nowhere to sit. Both were built as working prototypes before the choice was made. **NOT DONE, so it is not assumed:** no field deleted (the 30 never-filled colour fields stay, per v4.280); no schema, no migration; no change to the mini app, the QR menu or the web storefront; no change to `.gitignore` or CI.
 
@@ -15653,3 +15655,103 @@ rather than removed. No schema, no migration. No change to the mini app, the QR
 menu or the web storefront: `description_blocks` is written in the same shape by
 the same collector. No change to `.gitignore`, CI, or anything governing how
 sessions and builds work.
+
+## §145 — A COST FILED UNDER NOTHING IS FIXED WHERE IT WAS DECIDED, NOT BY UNDOING IT
+
+**Decided by Ash, 2026-09-16, from a live row:** a ¥299 staff claim — *"bai ·
+take taxi to the office and Ramada"* — approved and in the books with no
+category, and no control anywhere in the product that could give it one.
+
+### What was actually broken, in order
+
+1. `lib/expense-claim.js` never required a category, and does not now. The phone
+   sends `category: x.cat || null`.
+2. `/decide` read a `note` from its body and nothing else, so the approver could
+   see a blank category and had no way to fill it.
+3. The approval row printed the category **only when there was one** — so a claim
+   filed under nothing and one filed under Transport drew the same meta line.
+   The gap was not merely unfixable, it was invisible.
+4. `routes/finance-transactions.js` refuses to edit a claim-posted ledger row.
+   **That refusal is correct** and is not touched here: the row is a projection
+   of the claim, and any value typed onto it is lost the next time the claim
+   re-posts. But nothing could edit the claim either.
+
+So the only way to file that ¥299 was to **void the claim and ask the employee
+to send it again** — destroying the approval record to correct a classification.
+
+### It is not a prompt on approve, and that is the decision
+
+The obvious shape — *if the category is blank, ask for one when Approve is
+clicked* — is **rejected**. It catches the empty case and waves the wrong case
+straight through, and a category picked by a submitter who does not know the
+chart of accounts is wrong at least as often as it is missing. Wrong data reads
+as good data in a report; blank data announces itself.
+
+**What ships instead is one control on the row, in both queues**, carrying the
+claim's current category and editable before the decision and after it.
+
+### Nor is the category made compulsory
+
+Also **rejected**: requiring a category on the phone form, or blocking Approve
+until one is chosen. Forced, the approver clears the queue by taking whatever is
+at the top of the list. That trades a visible problem for an invisible one, and
+the visible one is the cheaper of the two to live with.
+
+The claim form stays as it is. The approver — the person who keeps the books —
+is who the picker is for.
+
+### Why an uncategorised row is not merely untidy
+
+`routes/finance-summary.js` gives a blank category **its own "Not recorded" line
+and counts it as OPERATING**, because an unlisted cost is a real cost until
+somebody says otherwise. A private or non-operating expense that arrives without
+a category therefore inflates the operating total silently. Re-filing is the only
+thing that moves it, and until this section there was no way to re-file.
+
+### What re-filing is, and what it is not
+
+**No money moves.** Same claim, same sum, same date, same person, same approval
+record. `postClaim` deletes the ledger row and writes it again — the shape it has
+always had — so the ledger says what the claim currently says, and the row's
+description is rebuilt from the submitter's name resolved before the write.
+
+**A settled claim is still re-fileable, and that is the one place this route
+parts company with `/decide` and `/void`.** Those refuse a settled claim because
+they would take an expense out of the books while leaving the repayment made.
+Nothing leaves the books here; refusing would mean a category could only ever be
+corrected before payday.
+
+**A claim that raised a purchase order is refused**, on `awaiting_delivery` as
+well as `po_id`. It has no ledger row of its own — the order owns the cost, under
+the *line's* category — so re-filing the claim would move nothing. The refusal
+names the way out, which is `ERR.onOrder`'s own rule.
+
+### The three things a later edit could quietly undo
+
+* **`category = COALESCE(?, category)` in `/decide`.** A bare assignment blanks
+  the category on every claim decided by a client that does not send the field —
+  which is every client older than this change, and the phone until it reloads.
+* **`expense_id` cleared in the same UPDATE, before `postClaim` runs.** §90's FK
+  trap, third occurrence: the column still points at the row about to be deleted,
+  and SQLite refuses the delete while it does.
+* **The submitter's name resolved before the transaction.** `claimDescription`
+  reads `submitted_name`, which no `staff_expenses` row carries. A re-post that
+  forgot it would rewrite the ledger line stripped of the one fact that makes a
+  ¥299 line answerable months later — whose taxi it was.
+
+### Held in state, not in the DOM
+
+A category chosen on a claim that has not been decided rides with the Approve
+click rather than saving on its own — one request, so a second call cannot fail
+and leave the ledger holding a classification nobody chose. Both queues re-render
+for reasons that have nothing to do with the pick: opening the receipt, another
+row's decision landing. Held in the `<select>` alone, **checking the photo before
+approving would throw the pick away** — silently, at the exact moment the
+approver was being careful. `FIN_APR_CAT` on the desktop and `state.apr.cat` on
+the phone hold it, keyed by claim id, and the decision spends it.
+
+### Where it is NOT offered
+
+Rejected and voided claims, and claims on a purchase order: none has a ledger row
+of its own. A tenant with no accounting categories gets no picker at all rather
+than an empty one — §36's empty-list rule.

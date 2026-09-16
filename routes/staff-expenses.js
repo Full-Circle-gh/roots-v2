@@ -62,6 +62,24 @@ const ERR = {
   // document that may already have been received, priced and part-delivered.
   // The refusal names the way out rather than merely refusing.
   onOrder: 'this claim is on a purchase order — cancel that order instead · 该笔已记入采购单 — 请取消该采购单',
+  /* §145 — THE THREE THINGS THE RE-FILING ROUTE REFUSES.
+
+     A claim with no ledger row behind it has nothing to re-file: a submitted one
+     may still be rejected, and a rejected or voided one was deliberately taken
+     back out. `/decide` is the route for the first of those.
+
+     An EMPTY value is a mistake rather than an instruction to clear the
+     category. Clearing is not offered at all — a cost filed under nothing is
+     exactly the state this route exists to end, and a route that could also
+     produce it would be handing back the problem with a second name.
+
+     A claim awaiting its delivery has no ledger row of its own — the order it
+     raised owns the cost, under the LINE's category — so re-filing the claim
+     would move nothing in the books. The refusal names the way out rather than
+     merely refusing, which is `onOrder`'s own rule one line above. */
+  notApprovedCat: 'only an approved claim can be re-categorised · 仅审批通过的申请可修改分类',
+  needCategory:   'pick a category · 选择分类',
+  onOrderCat:     'this claim is on a purchase order — set the category on the order · 该笔已记入采购单 — 请在采购单上修改分类',
 };
 
 /* WHO MAY DECIDE. `lib/cap-routes.js` gates the decide route on
@@ -127,6 +145,12 @@ const { withTransaction } = require('../lib/db-transaction');
 // The one place a `tenant_users` id becomes a name — shared with Finance's
 // ledger so the two cannot name the same person differently (§92).
 const { userNames } = require('../lib/user-names');
+// §145 — WHAT A CATEGORY STRING IS, and there is one answer to it. The approver
+// now files a claim the submitter left blank, so a second writer of
+// `staff_expenses.category` exists — and it snaps onto the tenant's own list
+// through the SAME function the submit path uses (lib/expense-claim.js), not a
+// second normalisation shaped slightly differently.
+const { storeCategory } = require('../lib/category-text');
 
 /* The rows one person can see: their own, whatever their capability.
    **A CLAIM IS PERSONAL UNTIL IT IS APPROVED**, and this is the read that says
@@ -165,6 +189,26 @@ function listMine(db, userId) {
    A MISSING NAME IS NOT A FAILURE. The map simply has no entry: a claim without
    a name still decides, and a ledger row without one still carries its money. */
 const submitterNames = userNames;
+
+/* THE CATEGORIES A CLAIM MAY BE FILED UNDER — the tenant's own accounting list,
+   ACTIVE ONLY and in the tenant's own order.
+
+   ONE FUNCTION BECAUSE TWO SCREENS NOW ASK IT. The submit form asks (`/meta`)
+   and, since §145, so does the approval queue (`/pending`): the approver files
+   the claims that arrived without a category, and a picker drawn from a second
+   query shaped slightly differently is precisely how two surfaces come to offer
+   different lists. Hiding a category means it stops being offered — on both.
+
+   A READ FAILURE IS AN EMPTY LIST, never a thrown queue. The screens render no
+   picker at all for one, which is §36's empty-list rule: offer nothing rather
+   than offer something wrong. */
+function activeCategories(db) {
+  try {
+    return db.prepare(
+      "SELECT name FROM categories WHERE kind = 'accounting' AND COALESCE(is_active, 1) = 1 ORDER BY sort_order, name"
+    ).all().map(r => r.name);
+  } catch (e) { return []; }
+}
 
 // ── POST /api/retail-admin/staff-expenses ──────────────────────────────────
 router.post('/api/retail-admin/staff-expenses', requireRetailAdmin, express.json({ limit: '4mb' }), (req, res) => {
@@ -240,9 +284,7 @@ router.get('/api/retail-admin/staff-expenses/meta', requireRetailAdmin, (req, re
     // ACTIVE ONLY, and in the tenant's own order. Hiding a category means it
     // stops being offered, and this is one of the surfaces that has to honour
     // it or hiding is a promise the product only half keeps.
-    const categories = db.prepare(
-      "SELECT name FROM categories WHERE kind = 'accounting' AND COALESCE(is_active, 1) = 1 ORDER BY sort_order, name"
-    ).all().map(r => r.name);
+    const categories = activeCategories(db);
 
     // The operator's own store scope, which the RBAC layer has already resolved
     // for this request. NULL scope means every store — the same meaning it
@@ -390,6 +432,11 @@ router.get('/api/retail-admin/staff-expenses/pending', requireRetailAdmin, requi
     res.json({
       success: true,
       data: {
+        // §145 — WHAT THIS SCREEN MAY FILE A CLAIM UNDER. It travels with the
+        // queue rather than being fetched beside it: the picker is drawn per
+        // row, and a second request racing the list is how a queue renders
+        // before the options it offers exist.
+        categories: activeCategories(db),
         owed: owed.map(o => ({
           submitted_by: o.submitted_by,
           who: names.get(o.submitted_by) || null,
@@ -513,6 +560,28 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
     // latency added to a lock this one is holding, for a value the write does
     // not depend on.
     const submittedName = submitterNames([claim.submitted_by]).get(claim.submitted_by) || null;
+
+    /* §145 — THE CATEGORY THE APPROVER FILES IT UNDER.
+
+       **THE SUBMITTER MAY LEAVE IT BLANK AND OFTEN DOES.** Somebody standing
+       beside a taxi does not know the shop's chart of accounts; the person who
+       approves the claim is the person who keeps the books. So the decision
+       carries an optional category, and it is applied as part of the same write
+       that posts the row — not by a second call afterwards, which could fail and
+       leave the ledger holding a classification nobody chose.
+
+       IT IS NOT AN EDIT OF THE CLAIM'S OTHER FIELDS, and this route still does
+       not offer one: the header's refusal ("a claim that changed under them
+       after they read it is the defect the approval step exists to prevent")
+       is about the amount, the note and the date — the facts the SUBMITTER
+       asserts. The category is the bookkeeping the approver performs, it is
+       logged below with the decision, and it never changes what was claimed.
+
+       ONLY ON APPROVE. A rejected claim has no ledger row to file, and writing a
+       category onto one while refusing it would be an edit made in passing. */
+    const filedCategory = decision === 'approve'
+      ? storeCategory(db, (req.body || {}).category, 'accounting')
+      : null;
     let raisedPoId = null;
 
     // AWAITED (§90's fix). This route was never `async` and never awaited this
@@ -534,9 +603,15 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
       // the delete while a live reference stands. Harmless on the ordinary path
       // (first-time approve or reject, where expense_id is already NULL) and set
       // back to the real value below when postClaim posts one.
+      // §145 — `category = COALESCE(?, category)` RATHER THAN `category = ?`.
+      // The approver's pick when they made one; the claim's own value untouched
+      // when they did not. A bare assignment here would blank the category on
+      // every claim decided by a client that does not send the field — which is
+      // every client older than this change, and the phone until it is reloaded.
       tx.prepare(`UPDATE staff_expenses
-                     SET status = ?, decided_by = ?, decided_at = datetime('now'), decided_note = ?, expense_id = NULL
-                   WHERE id = ?`).run(status, decidedBy, note, claim.id);
+                     SET status = ?, decided_by = ?, decided_at = datetime('now'), decided_note = ?,
+                         category = COALESCE(?, category), expense_id = NULL
+                   WHERE id = ?`).run(status, decidedBy, note, filedCategory, claim.id);
       // Posted from the row AS IT NOW STANDS, not from the one read above: the
       // status this decision just wrote is what decides whether a row exists.
       const fresh = tx.prepare('SELECT * FROM staff_expenses WHERE id = ?').get(claim.id);
@@ -569,8 +644,12 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
 
     logActivity(req.user?.id || null, req.user?.username || null,
       decision === 'approve' ? 'approve' : 'reject', 'staff_expense', claim.id,
-      { amount: fen(claim.amount), category: claim.category, self: claim.submitted_by === decidedBy,
-        po_id: raisedPoId }, req.ip);
+      // §145: the category AS DECIDED, and the claim's own when the approver
+      // left it alone. Logging `claim.category` unconditionally would report the
+      // blank the approver had just filled in.
+      { amount: fen(claim.amount), category: filedCategory || claim.category,
+        filed: filedCategory ? true : undefined,
+        self: claim.submitted_by === decidedBy, po_id: raisedPoId }, req.ip);
     const after = db.prepare('SELECT status, expense_id, po_id FROM staff_expenses WHERE id = ?').get(claim.id);
     res.json({ success: true, data: after });
   } catch (e) {
@@ -651,6 +730,96 @@ router.post('/api/retail-admin/staff-expenses/:id/void', requireRetailAdmin, req
     res.json({ success: true, data: after });
   } catch (e) {
     console.error('[staff-expenses void]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── POST /api/retail-admin/staff-expenses/:id/category ─────────────────────
+/* §145 — RE-FILING A CLAIM THAT IS ALREADY IN THE BOOKS.
+
+   **THE ONE THING THIS PRODUCT COULD NOT DO.** A claim approved without a
+   category posts a ledger row with none, and `routes/finance-transactions.js`
+   refuses to edit a claim-posted row — correctly, because that row is a
+   projection and anything typed onto it is lost the next time the claim
+   re-posts. But nothing could edit the CLAIM either, so the only way to file a
+   ¥299 taxi that arrived blank was to void it and ask the employee to send it
+   again. The refusal was right and the gap behind it was not.
+
+   **IT CHANGES A CLASSIFICATION, NEVER AN AMOUNT.** The money was decided at
+   approval and is not touched here — same claim, same sum, same date, same
+   person. What moves is which line of the category breakdown it sits on, and
+   whether the tenant's non-operating flag reaches it: an uncategorised row is
+   counted as operating by `routes/finance-summary.js`, so a private cost with
+   no category silently inflates the operating total. That is the defect this
+   route closes, and it is why re-filing is not the same kind of act as voiding.
+
+   A SETTLED CLAIM IS STILL RE-FILEABLE, and that is deliberate — the one place
+   this route parts company with `/decide` and `/void`. Both of those refuse a
+   settled claim because they would take an expense out of the books while
+   leaving the repayment made. Nothing leaves the books here. Refusing a settled
+   claim would mean a category could only ever be fixed before payday.
+
+   RE-POSTED RATHER THAN UPDATED IN PLACE. `postClaim` deletes the row and
+   writes it again, which is the shape it has always had, so the ledger says what
+   the claim currently says and there is no second path by which the two could
+   drift.
+
+   GATED ON `expenses:approve`, for the reason `/settle` gives about its own
+   key: this is an assertion about the books by the person who already decides
+   them on this screen, and a third capability gating one picker is a row in a
+   matrix somebody has to understand. */
+router.post('/api/retail-admin/staff-expenses/:id/category', requireRetailAdmin, requireApprover, express.json(), async (req, res) => {
+  try {
+    const db = tdb();
+    if (!/^\d+$/.test(String(req.params.id))) return res.status(404).json({ error: ERR.notFound });
+    const claim = db.prepare('SELECT * FROM staff_expenses WHERE id = ?').get(req.params.id);
+    if (!claim) return res.status(404).json({ error: ERR.notFound });
+
+    if (claim.status !== 'approved') return res.status(409).json({ error: ERR.notApprovedCat });
+    // ON `awaiting_delivery` AS WELL AS `po_id`, and the order of events is why
+    // — the same reason `postClaim` tests the flag rather than the id. A claim
+    // whose order failed to raise carries the flag and no id, has no ledger row
+    // either way, and would take a category this route could not post.
+    if (claim.po_id || claim.awaiting_delivery) return res.status(409).json({ error: ERR.onOrderCat });
+
+    const category = storeCategory(db, (req.body || {}).category, 'accounting');
+    if (!category) return res.status(400).json({ error: ERR.needCategory });
+    // ALREADY FILED THERE — answered without a write. Re-posting would delete
+    // and re-insert the same ledger row for nothing, taking a new `id` with it.
+    if (category === claim.category) {
+      return res.json({ success: true, data: { id: claim.id, category, expense_id: claim.expense_id } });
+    }
+
+    // THE NAME, RESOLVED BEFORE THE TRANSACTION OPENS, for both of the reasons
+    // `/decide` gives — it reads the control-plane handle, and `postClaim`
+    // rebuilds the row's description from it. Without it, re-filing would strip
+    // the ledger line of the one fact that makes a ¥38 taxi answerable months
+    // later: whose taxi it was.
+    const submittedName = submitterNames([claim.submitted_by]).get(claim.submitted_by) || null;
+
+    await withTransaction(db, (tx) => {
+      // `expense_id` CLEARED IN THE SAME UPDATE, BEFORE postClaim RUNS. §90's FK
+      // trap, third occurrence: schema.sql's `FOREIGN KEY (expense_id)
+      // REFERENCES expense_entries(id)` still points at the row postClaim is
+      // about to DELETE, and SQLite refuses the delete while it does.
+      tx.prepare('UPDATE staff_expenses SET category = ?, expense_id = NULL WHERE id = ?')
+        .run(category, claim.id);
+      const fresh = tx.prepare('SELECT * FROM staff_expenses WHERE id = ?').get(claim.id);
+      fresh.submitted_name = submittedName;
+      const expenseId = postClaim(tx, fresh);
+      tx.prepare('UPDATE staff_expenses SET expense_id = ? WHERE id = ?').run(expenseId, claim.id);
+    });
+
+    // WHAT IT WAS FILED UNDER BEFORE travels in the log beside what it is filed
+    // under now. A re-filing that cannot be read backwards is indistinguishable
+    // from the claim having always said this, which is the whole point of
+    // recording it.
+    logActivity(req.user?.id || null, req.user?.username || null, 'update', 'staff_expense', claim.id,
+      { amount: fen(claim.amount), category, was: claim.category || null }, req.ip);
+    const after = db.prepare('SELECT id, category, expense_id FROM staff_expenses WHERE id = ?').get(claim.id);
+    res.json({ success: true, data: after });
+  } catch (e) {
+    console.error('[staff-expenses category]', e.message);
     res.status(500).json({ error: e.message });
   }
 });

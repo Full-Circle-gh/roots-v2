@@ -937,7 +937,13 @@ const state = {
      deliberately cannot see. Keeping them apart here is the client half of the
      server's own split; one state object with a flag on it would be one typo
      away from showing a submitter the shop's whole ledger of claims. */
-  apr:{rows:null,tried:false,err:'',busy:0,waiting:0,shot:null,shotFor:null,owed:[]},
+  /* §145 — `cats` is the tenant's accounting list, carried by the queue itself;
+     `cat` holds a category chosen on a claim that has NOT been approved yet,
+     keyed by claim id. It rides with the Approve tap rather than saving on its
+     own, so it has to survive the re-renders this screen does for other reasons
+     — opening a receipt, another row's decision landing. Held in the DOM alone,
+     checking the photo before approving would silently throw the pick away. */
+  apr:{rows:null,tried:false,err:'',busy:0,waiting:0,shot:null,shotFor:null,owed:[],cats:[],cat:{}},
   /* WRITING A BROADCAST (§63). Four steps, one decision each: what it says, who
      gets it, when it goes, and a last look before it does. `count` is the
      server's own audience preview — never derived here, because the phone does
@@ -11442,7 +11448,8 @@ function aprLoad(){
   const a=state.apr;
   if(a.tried) return; a.tried=true;
   api('/staff-expenses/pending').then(d=>{
-    a.rows=(d&&d.rows)||[]; a.waiting=(d&&d.waiting)||0; a.owed=(d&&d.owed)||[]; a.err=''; render();
+    a.rows=(d&&d.rows)||[]; a.waiting=(d&&d.waiting)||0; a.owed=(d&&d.owed)||[];
+    a.cats=(d&&d.categories)||[]; a.err=''; render();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
     a.rows=[]; a.err=e.message||E('Could not load the queue.','无法加载列表。'); render();
@@ -11468,11 +11475,59 @@ reg('aprShot', id=>{
 reg('aprDecide', (id,decision)=>{
   const a=state.apr;
   if(a.busy) return;
+  /* §145 — THE CATEGORY GOES WITH THE APPROVAL, in the same request that posts
+     the row: a second call afterwards could fail on its own and leave the ledger
+     holding a classification nobody chose. Sent only on approve and only when
+     something was picked — absent otherwise, and the server then leaves the
+     claim's own value alone rather than blanking it. */
+  const picked=a.cat[Number(id)];
+  const body=(decision==='approve'&&picked)?{decision:decision,category:picked}:{decision:decision};
   a.busy=Number(id); a.err=''; render();
-  apiWrite('/staff-expenses/'+Number(id)+'/decide',{decision:decision}).then(()=>{
+  apiWrite('/staff-expenses/'+Number(id)+'/decide',body).then(()=>{
     a.busy=0; a.tried=false; a.shot=null; a.shotFor=null;
+    // Spent — the claim carries it now. Left here it would be offered back on
+    // the decided row, over whatever the server actually stored.
+    delete a.cat[Number(id)];
     aprLoad();
     if(window.toast) toast(decision==='approve'?T('Approved','已通过'):T('Not approved','已拒绝'));
+  }).catch(e=>{
+    a.busy=0;
+    if(String(e.message)==='auth') return;
+    a.err=e.message||E('Could not do that.','操作失败。');
+    render();
+  });
+});
+
+/* §145 — A CATEGORY CHOSEN ON A CLAIM STILL WAITING. Remembered, not sent: it
+   goes with the Approve tap. No render — the <select> already shows the choice,
+   and redrawing the queue under a wheel somebody has just closed is a jump this
+   screen does not need. */
+reg('aprCatPick', (id,value)=>{ state.apr.cat[Number(id)]=String(value==null?'':value); });
+
+/* §145 — RE-FILING A CLAIM THAT IS ALREADY IN THE BOOKS. **NO MONEY MOVES** —
+   same claim, same sum, same person. What changes is which line of the category
+   breakdown it sits on, and whether the tenant's non-operating flag reaches it:
+   a cost filed under nothing is counted as operating, so a private one quietly
+   inflates the operating total.
+
+   THIS IS THE HALF NOTHING COULD DO BEFORE. A claim-posted ledger row refuses
+   to be edited on the Finance screen — it is a projection — and nothing could
+   edit the claim either, so a taxi approved without a category could only be
+   fixed by voiding it and asking the person to send it again.
+
+   SAVED ON CHANGE, NO CONFIRM: it is undone by making the same change again,
+   and the server logs the value it replaced. */
+reg('aprFile', (id,value)=>{
+  const a=state.apr;
+  const cat=String(value==null?'':value);
+  // An empty pick is not a request to unfile an approved claim — the server
+  // refuses one — so it is a no-op that puts the row back as it was.
+  if(a.busy||!cat){ render(); return; }
+  a.busy=Number(id); a.err=''; render();
+  apiWrite('/staff-expenses/'+Number(id)+'/category',{category:cat}).then(()=>{
+    a.busy=0; a.tried=false;
+    aprLoad();
+    if(window.toast) toast(T('Saved','已保存'));
   }).catch(e=>{
     a.busy=0;
     if(String(e.message)==='auth') return;
@@ -11517,6 +11572,50 @@ reg('aprSettle', async (who,total,ids)=>{
   }
 });
 
+/* §145 — WHERE THE CLAIM IS FILED, ON THE ROW BEING DECIDED.
+
+   **THE SUBMITTER MAY LEAVE IT BLANK AND OFTEN DOES.** The expense screen makes
+   the category optional on purpose — somebody standing beside a taxi does not
+   know the shop's chart of accounts — and the person working this queue is the
+   person who keeps the books. So it is editable here, as ONE control rather than
+   a prompt that fires only on a blank claim: a WRONG category is at least as
+   common as a missing one, and a prompt that caught only the empty case would
+   wave the wrong one straight into the ledger.
+
+   A NATIVE <select>, for the reason the ask-sheet gives for its own: it renders
+   as the platform's wheel on a phone, which beats a chip row for a list that is
+   short and closed, and costs one branch here rather than a screen of its own.
+   The expense form's full picker earns its keep — search, recents, one-handed —
+   because that is where a claim is TYPED. This is a correction, made once.
+
+   NOT ON A CLAIM THAT RAISED AN ORDER, nor on a rejected or voided one: none of
+   the three has a ledger row of its own to file, and the server refuses all
+   three. NO LIST, NO PICKER — §1.12, offer nothing rather than something wrong. */
+function aprFileable(r){
+  if(Number(r.awaiting_delivery)||r.po_id) return false;
+  return r.status==='submitted'||r.status==='approved';
+}
+
+function aprCatCell(r){
+  const a=state.apr;
+  const list=a.cats||[];
+  if(!list.length||!aprFileable(r)) return '';
+  const waiting=r.status==='submitted';
+  // `undefined` rather than a falsy test: '' is a real choice on a waiting claim
+  // (back to no category) that a plain `||` would replace with the stored value.
+  const chosen=waiting&&a.cat[r.id]!==undefined?a.cat[r.id]:(r.category||'');
+  const labels=catLabels(list);
+  // The blank row means "not yet", which is today's behaviour, and it belongs to
+  // a claim that has not been decided. On an approved one it would mean UNfiling
+  // a cost — the server refuses an empty value for that reason.
+  const blank=(waiting||!r.category)
+    ?`<option value=""${chosen?'':' selected'}>${T('— pick a category —','— 选择分类 —')}</option>`:'';
+  const opts=list.map(c=>`<option value="${escAttr(c)}"${c===chosen?' selected':''}>${escAttr(labels.get(c)||catLabel(c))}</option>`).join('');
+  const cmd=waiting?'aprCatPick':'aprFile';
+  return `<select style="width:100%;font-size:13.5px;height:40px"${a.busy?' disabled':''}
+    onchange="APP.cmd('${cmd}',${r.id},this.value)">${blank}${opts}</select>`;
+}
+
 function aprRow(r){
   const a=state.apr;
   const waiting=r.status==='submitted';
@@ -11526,7 +11625,13 @@ function aprRow(r){
   // the marker silently never appeared.
   const mine=!!r.mine;
   const bits=[fmtDateOnly(r.date)];
+  /* §145 — A BLANK CATEGORY SAYS SO. It rendered as nothing at all, so a claim
+     filed under nothing and one filed under Transport read the same on this
+     line. `Not recorded` is Finance's own word for this value. Said only where
+     no picker follows: where one does, its blank option says it better. */
+  const filing=aprCatCell(r);
   if(r.category) bits.push(catLabel(r.category));
+  else if(!filing) bits.push(T('Not recorded','未记录'));
   bits.push(own?T('own money','个人支付'):T('company','公司'));
   const busy=a.busy===r.id;
   return `<div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
@@ -11544,6 +11649,9 @@ function aprRow(r){
         ${waiting?'':expStatusPill(r)}
       </span>
     </div>
+    ${/* Under the note and above everything optional: it is a fact about the
+         claim, and the receipt is a way OUT of the row. */''}
+    ${filing}
     ${r.has_receipt?`<button class="btn2" style="align-self:flex-start;padding:0 12px;height:36px;font-size:13px"
         onclick="APP.cmd('aprShot',${r.id})">${a.shotFor===r.id?T('Hide photo','收起照片'):T('View photo','查看照片')}</button>`:''}
     ${a.shotFor===r.id?(a.shot
