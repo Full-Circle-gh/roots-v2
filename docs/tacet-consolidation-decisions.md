@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.282
+# Tacet shared-core consolidation — decisions record, v4.283
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,7 +23,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-16 · v4.282 — **§145 · A COST FILED UNDER NOTHING IS FIXED WHERE IT WAS DECIDED, NOT BY UNDOING IT — REPORTED BY ASH off a live Transactions row:** a ¥299 staff claim, *“bai · take taxi to the office and Ramada”*, approved and in the books with no category and no control anywhere in the product that could give it one. **THE GAP WAS INVISIBLE BEFORE IT WAS UNFIXABLE.** The approval row printed the category only when there was one, so a claim filed under nothing and one filed under Transport drew the same meta line; `/decide` read a `note` from its body and nothing else; and `routes/finance-transactions.js` refuses to edit a claim-posted ledger row — **correctly, and that refusal is untouched here**, since the row is a projection and any value typed onto it is lost the next time the claim re-posts. But nothing could edit the CLAIM either, so the only way to file that ¥299 was to VOID it and ask the employee to send it again — destroying an approval record to correct a classification. **WHAT SHIPS:** one category control on the claim row, in both queues, carrying the claim's current value and editable before the decision and after it; `/decide` takes an optional category and applies it in the same write that posts the row; and a new `POST /staff-expenses/:id/category` re-files an approved claim, re-posting its ledger row under the new heading. **THE PROMPT-ON-APPROVE SHAPE WAS REJECTED**, and it is the obvious one: asking only when the category is blank catches the empty case and waves the WRONG case straight through, and a category picked by a submitter who does not know the chart of accounts is wrong at least as often as it is missing — wrong data reads as good data in a report, blank data announces itself. **COMPULSION WAS REJECTED TOO** — forced, the approver clears the queue with whatever is at the top of the list, trading a visible problem for an invisible one. The claim form is unchanged. **WHY A BLANK IS NOT MERELY UNTIDY:** `finance-summary.js` gives it its own “Not recorded” line and counts it as OPERATING, so a private cost with no category silently inflates the operating total. **NO MONEY MOVES IN A RE-FILING** — same claim, same sum, same date, same person, same approval record; `postClaim`'s DELETE-then-INSERT does the work, so the ledger says what the claim says. **A SETTLED CLAIM IS STILL RE-FILEABLE**, the one place this parts company with `/decide` and `/void`: those refuse a settled claim because they would take an expense out of the books while leaving the repayment made, and nothing leaves the books here — refusing would mean a category could only be corrected before payday. **A CLAIM THAT RAISED AN ORDER IS REFUSED**, on `awaiting_delivery` as well as `po_id`, and the refusal names the way out: the order owns that cost, under the line's category. **THREE THINGS A LATER EDIT COULD QUIETLY UNDO, named:** `category = COALESCE(?, category)` in `/decide` (a bare assignment blanks the category on every claim decided by an older client); `expense_id` cleared in the same UPDATE before `postClaim` runs (§90's FK trap, third occurrence); and the submitter's name resolved BEFORE the transaction, or a re-post rewrites the ledger line stripped of whose taxi it was. **THE PICK IS HELD IN STATE, NOT THE DOM** — both queues re-render when a receipt is opened, so a category chosen and then checked against the photo would have been thrown away at the exact moment the approver was being careful. **WHO MAY RE-FILE — EITHER `expenses:approve` OR `expenses:cancel`, DECIDED BY ASH** on being shown the route as first built: the `bookkeeper` preset holds `cancel` and not `approve`, so the accountant could remove a claim from the books entirely and could not rename the heading it sat under — the bigger hammer and not the small screwdriver, for the one role whose job this is. Re-filing moves no money and is strictly less power than the void they already hold; it is not a third key, for the reason `/settle` gives about sharing one. **AND A PERMISSION WITH NO SCREEN IS NOT A PERMISSION** — `/pending` is approver-gated, so the claim row on TRANSACTIONS gains the same control, beside the Void link that is there for the same reason (§90) and where the ¥299 was noticed in the first place. Void stays hidden once a claim is settled and re-filing does not, which is the whole asymmetry in one row. **NEARLY WRONG, RECORDED:** `finTxCatOptions()` branches on the FORM's kind, so a claim row would have been offered INCOME categories whenever the income form had last been opened; the expense half is now its own function. **TESTS:** thirty-three new checks in `scripts/test_staff_expenses.js` (82 → 115), fast shard, covering the re-post behaviour against a fixture ledger, both pickers and the ledger row's actions EXECUTED in a VM rather than grepped, and every invariant above. No schema, no migration, no change to what a claim means, and no change to `.gitignore` or CI.
+2026-09-16 · v4.283 — **§146 · A COST FILED UNDER NOTHING IS FIXED WHERE IT WAS DECIDED, NOT BY UNDOING IT — REPORTED BY ASH off a live Transactions row:** a ¥299 staff claim, *“bai · take taxi to the office and Ramada”*, approved and in the books with no category and no control anywhere in the product that could give it one. **THE GAP WAS INVISIBLE BEFORE IT WAS UNFIXABLE.** The approval row printed the category only when there was one, so a claim filed under nothing and one filed under Transport drew the same meta line; `/decide` read a `note` from its body and nothing else; and `routes/finance-transactions.js` refuses to edit a claim-posted ledger row — **correctly, and that refusal is untouched here**, since the row is a projection and any value typed onto it is lost the next time the claim re-posts. But nothing could edit the CLAIM either, so the only way to file that ¥299 was to VOID it and ask the employee to send it again — destroying an approval record to correct a classification. **WHAT SHIPS:** one category control on the claim row, in both queues, carrying the claim's current value and editable before the decision and after it; `/decide` takes an optional category and applies it in the same write that posts the row; and a new `POST /staff-expenses/:id/category` re-files an approved claim, re-posting its ledger row under the new heading. **THE PROMPT-ON-APPROVE SHAPE WAS REJECTED**, and it is the obvious one: asking only when the category is blank catches the empty case and waves the WRONG case straight through, and a category picked by a submitter who does not know the chart of accounts is wrong at least as often as it is missing — wrong data reads as good data in a report, blank data announces itself. **COMPULSION WAS REJECTED TOO** — forced, the approver clears the queue with whatever is at the top of the list, trading a visible problem for an invisible one. The claim form is unchanged. **WHY A BLANK IS NOT MERELY UNTIDY:** `finance-summary.js` gives it its own “Not recorded” line and counts it as OPERATING, so a private cost with no category silently inflates the operating total. **NO MONEY MOVES IN A RE-FILING** — same claim, same sum, same date, same person, same approval record; `postClaim`'s DELETE-then-INSERT does the work, so the ledger says what the claim says. **A SETTLED CLAIM IS STILL RE-FILEABLE**, the one place this parts company with `/decide` and `/void`: those refuse a settled claim because they would take an expense out of the books while leaving the repayment made, and nothing leaves the books here — refusing would mean a category could only be corrected before payday. **A CLAIM THAT RAISED AN ORDER IS REFUSED**, on `awaiting_delivery` as well as `po_id`, and the refusal names the way out: the order owns that cost, under the line's category. **THREE THINGS A LATER EDIT COULD QUIETLY UNDO, named:** `category = COALESCE(?, category)` in `/decide` (a bare assignment blanks the category on every claim decided by an older client); `expense_id` cleared in the same UPDATE before `postClaim` runs (§90's FK trap, third occurrence); and the submitter's name resolved BEFORE the transaction, or a re-post rewrites the ledger line stripped of whose taxi it was. **THE PICK IS HELD IN STATE, NOT THE DOM** — both queues re-render when a receipt is opened, so a category chosen and then checked against the photo would have been thrown away at the exact moment the approver was being careful. **WHO MAY RE-FILE — EITHER `expenses:approve` OR `expenses:cancel`, DECIDED BY ASH** on being shown the route as first built: the `bookkeeper` preset holds `cancel` and not `approve`, so the accountant could remove a claim from the books entirely and could not rename the heading it sat under — the bigger hammer and not the small screwdriver, for the one role whose job this is. Re-filing moves no money and is strictly less power than the void they already hold; it is not a third key, for the reason `/settle` gives about sharing one. **AND A PERMISSION WITH NO SCREEN IS NOT A PERMISSION** — `/pending` is approver-gated, so the claim row on TRANSACTIONS gains the same control, beside the Void link that is there for the same reason (§90) and where the ¥299 was noticed in the first place. Void stays hidden once a claim is settled and re-filing does not, which is the whole asymmetry in one row. **NEARLY WRONG, RECORDED:** `finTxCatOptions()` branches on the FORM's kind, so a claim row would have been offered INCOME categories whenever the income form had last been opened; the expense half is now its own function. **TESTS:** thirty-three new checks in `scripts/test_staff_expenses.js` (82 → 115), fast shard, covering the re-post behaviour against a fixture ledger, both pickers and the ledger row's actions EXECUTED in a VM rather than grepped, and every invariant above. No schema, no migration, no change to what a claim means, and no change to `.gitignore` or CI.
+
+2026-09-16 · v4.282 — **§145 · A LABEL TYPED 724 TIMES IS A LABEL TYPED SEVERAL WAYS — DECIDED BY ASH, shown the measurements and asked which to build:** *“do all as you recommend”*. **WHAT THE CATALOGUE SAID.** `scripts/diagnose_spec_strip_labels.js`, read-only against production, over the **724 spec-strip cells on 242 products**: the same label has been typed several ways — `Net Wt` **163** beside `Net Weight` **29**, `Certification` / `Certified` / `Certifications` across **13** cells, and **four Chinese words for “category”** (类别 14, 品类 6, 分类 5, …). Nobody was careless; that is what happens when a label is retyped 724 times on different days. **THE VALUES WERE THE BIGGER FIND, and were not what anybody guessed:** under Origin, **“Guangzhou, China” is 109 of 156 cells (70%)**; under Shelf Life, **“See packaging” is 46 of 57 (81%)** — and its Chinese came out three ways (见包装标示 38, 见包装 8, 请见包装标注 2); under Diet, **“100% plant” is 28 of 29**. **242 cells whose answer was typed out by hand, in two languages, every time.** **WHAT IS DECIDED:** two dropdowns per cell — one for the label, one for the value, the second depending on the first, because “Guangzhou, China” is an answer to Origin and nonsense under Net Wt. **A PICK FILLS BOTH LANGUAGES**, which is the half that matters more than the typing saved: a typed label is one somebody can finish in English and forget in 中文, and nothing on the English view shows the gap. **`Type` IS DELIBERATELY NOT OFFERED beside `Product Type`** — they are not spellings of each other but two labels for one idea (66 and 64 cells, holding the same answers); only one can be offered or the split continues, and `Product Type` wins on the Chinese where 产品类型 (83) already beats 类型 (40). **NET WT GETS NO VALUE LIST ON PURPOSE** — 67 distinct weights across 163 cells is exactly what a weight field should look like; so do Certification and Storage, too thin to draw a list from. **NOTHING REWRITES A LIVE PAGE.** The 66 cells that say `Type` keep saying it; the list is an offer, and `peMount` and `paBlocksCollect` never consult it. The match is on the ENGLISH only and case-insensitive, so a cell reading `Net wt` is not shown as unusual and a cell carrying a good 中文 the list spells differently is never demoted to “Something else”, which would invite somebody to overwrite it. **THE PICK IS A CONVENIENCE LAYER, NEVER A SECOND WRITER** — the `k_en`/`k_cn`/`v_en`/`v_cn` inputs never leave the DOM and still ride `paBlocksSyncFromDOM` unchanged; the selects write into those inputs and never into the block, so free text is not a special case but what the control already was. **ONE ORDERING BUG, CAUGHT IN A BROWSER RATHER THAN IN REVIEW, and now held by a test:** the handler must write the inputs BEFORE it syncs, because syncing first reads the OLD values into the model and `paRenderDoc` paints them back over the pick — choosing `Product Type` left the cell saying `Net Wt`. **NO CHINESE COMPOSED — every pair in both lists is LIFTED from production with its count**, recorded in `docs/tacet-delivery-vocabulary.md` v1.92. New suite `scripts/test_spec_strip_picklists.js` **15/15**, proven non-vacuous by four mutations (sync-before-write, an unscoped cell query, `Type` re-offered, a label with no Chinese) each caught by the check meant for it; `test:fast` 257 → **258**; lint 0 errors. No schema, no migration, no change to the mini app, the QR menu, the web storefront, `.gitignore` or CI.
 
 2026-09-15 · v4.281 — **§144 · THE PRODUCT EDITOR IS A FORM, NOT A BUILDER — AND THE READING ORDER IS OFFERED, NEVER IMPOSED — DECIDED BY ASH from three working prototypes:** *“option a”*. **WHY A BUILDER WAS THE WRONG SHAPE, measured rather than felt.** A read-only production run of `scripts/diagnose_block_spine_order.js` over the 260 live products that carry any blocks finds nine types on 73–99% of them — `hero_intro` 99%, `spec_strip` 93%, `how_to_use` 90%, `notes_callout` 89%, `ingredients_chips` 87%, `why` 86%, `storage_box` 84%, `big_stat` 83%, `allergen_card` 73% — then a cliff to `nutrition_facts` 8%, `pull_quote` 5%, `recipe_steps` 3%, `ingredients_line` 0%. Four offered types (`image_band`, `pairings`, `faq`, `stat_callout`) are on no product at all. **Nobody is composing a page; everybody is filling in the same one.** So the editor stops asking the office to assemble what it already knows, and the nine become a spine that is always present — written sections inline, unwritten ones as a named line carrying how many products do say it, so a gap reads as unusual or ordinary without opening anything. **WHAT IS DECIDED, and the second half is the one that matters:** the spine is rendered, and **the stored order is preserved**. The same run found **71 distinct block orders in use**, with only 145 of 260 products (56%) sitting inside the commonest — so an editor that rendered a canonical order and saved it would have silently reordered **115 live customer pages on first save, with no edit made**. That is rejected outright. Placeholders for missing sections are inserted at their canonical position *relative to the blocks the product already has*; **no stored block is ever moved by rendering, by typing, or by saving.** Reordering stays a thing the operator does, now also available as one deliberate action that says what would move before it moves it. **THE CANONICAL ORDER IS THE HOUSE'S, NOT AN INVENTION** — `spec_strip > hero_intro > big_stat > why > ingredients_chips > allergen_card > storage_box > notes_callout > how_to_use`, which is what 74 products already carry and which puts the spec strip above the opening paragraph, where no whiteboard would have put it. **THE FREQUENCY IS READ LIVE, NEVER FROZEN INTO A CONSTANT** — a percentage baked into the source is a percentage that is wrong by next quarter and that nobody re-measures; a new endpoint counts the tenant's own products. **THE RISK THIS CHANGE CARRIES, NAMED:** `paBlocksSyncFromDOM` read one form at a time and wrote every `[data-bkey]` in the mount onto one block; with nine forms on screen it must scope per section, and a scoping bug writes one section's words into another's. §142 is the same family of mistake eleven days younger, so the invariant is held by a test rather than by care. **OPTIONS B AND C ARE RECORDED, not discarded:** B kept the block list and moved the settings beside it — fixes the distance, leaves the assembly work; C made the customer's page itself the editor — defeated by the bilingual pair, since only one language is ever on the page and chips, allergens and tables have nowhere to sit. Both were built as working prototypes before the choice was made. **NOT DONE, so it is not assumed:** no field deleted (the 30 never-filled colour fields stay, per v4.280); no schema, no migration; no change to the mini app, the QR menu or the web storefront; no change to `.gitignore` or CI.
 
@@ -15656,7 +15658,117 @@ menu or the web storefront: `description_blocks` is written in the same shape by
 the same collector. No change to `.gitignore`, CI, or anything governing how
 sessions and builds work.
 
-## §145 — A COST FILED UNDER NOTHING IS FIXED WHERE IT WAS DECIDED, NOT BY UNDOING IT
+## §145 — A LABEL TYPED 724 TIMES IS A LABEL TYPED SEVERAL WAYS
+
+**Decided by Ash, 2026-09-16,** shown the measurements and asked which of them
+to build: *"do all as you recommend"*.
+
+### What the catalogue said
+
+`scripts/diagnose_spec_strip_labels.js`, read-only against production, over the
+**724 spec-strip cells carried by 242 products**.
+
+**The same label, typed several ways:**
+
+| label | cells | its twin | cells |
+|---|---:|---|---:|
+| `Net Wt` | 163 | `Net Weight` | 29 |
+| `Certification` | 5 | `Certified` / `Certifications` | 4 / 4 |
+| 类别 | 14 | 品类 / 分类 | 6 / 5 |
+
+Nobody was careless. That is simply what happens when a label is retyped 724
+times on different days.
+
+**The values were the bigger find, and not what anybody guessed:**
+
+| under this label | cells | the dominant answer |
+|---|---:|---|
+| Origin | 156 | **Guangzhou, China — 109 (70%)** |
+| Shelf Life | 57 | **See packaging — 46 (81%)** |
+| Diet | 29 | **100% plant — 28 (97%)** |
+
+**242 cells whose answer was typed out by hand, in two languages, every time.**
+And "See packaging" came out in Chinese three ways — 见包装标示 38, 见包装 8,
+请见包装标注 2 — all three sitting on live product pages.
+
+### What is decided
+
+**Two dropdowns per cell**: one for the label, one for the value, the second
+depending on the first. That dependency is not a nicety — "Guangzhou, China" is
+an answer to Origin and nonsense under Net Wt, so a flat list of values would be
+worse than no list at all.
+
+**A pick fills both languages.** This matters more than the typing it saves. A
+typed label is one somebody can finish in English and forget in 中文, and
+nothing on the English view shows that gap. A picked one cannot be half-done.
+
+**`Type` is deliberately not offered beside `Product Type`.** They are not
+spellings of each other — they are two labels for one idea, 66 and 64 cells,
+holding the same answers ("Ready-to-eat spread" appears under both). Only one
+can be offered or the split continues. `Product Type` wins on the Chinese, where
+产品类型 (83) already beats 类型 (40).
+
+**Net Wt gets no value list, on purpose.** 67 distinct weights across 163 cells
+is exactly what a weight field should look like. Certification and Storage get
+none either — 13 and 5 cells is too thin to draw a list from.
+
+### Nothing rewrites a page that is already live
+
+The 66 cells that say `Type` keep saying it. `peMount` never consults the list
+on load and `paBlocksCollect` never consults it on save: the list is an **offer**
+at the moment of editing and nothing else. Cleaning up what is already stored is
+a migration with its own risk, and it is a separate decision that has not been
+made.
+
+Two details protect existing wording from the list:
+
+- **The match is on the English only, and case-insensitive.** A cell reading
+  `Net wt` is the same answer as `Net Wt` and is not shown as though somebody
+  had typed something unusual.
+- **The 中文 is not part of the test.** An existing cell may carry a perfectly
+  good Chinese that the list happens to spell differently; demoting it to
+  "Something else" would invite somebody to overwrite it.
+
+### The pick is a convenience layer, never a second writer
+
+The `k_en` / `k_cn` / `v_en` / `v_cn` inputs **never leave the DOM**. They still
+carry `data-bkey` and `data-cellidx` and still ride `paBlocksSyncFromDOM`
+exactly as they always have. The two `<select>`s write into those inputs and
+never into the block.
+
+So there is no second writer, no polarity to get backwards (§142), and free text
+is not a special case — it is what the control already was, merely hidden while
+a list answer is in force.
+
+### One ordering bug, caught in a browser rather than in review
+
+`paSpecPickLabel` must write the inputs **before** it syncs. Syncing first —
+which is what every other handler on this page does, so it is the natural thing
+to write — reads the OLD input values into the model, and `paRenderDoc` then
+paints them straight back over the pick. Choosing `Product Type` left the cell
+still saying `Net Wt`.
+
+Source review did not catch it; driving the page did. It is now held by a test
+that asserts the three steps appear in that order.
+
+### Chinese
+
+**None composed.** Every pair in both lists is lifted from production with its
+count, declared in `docs/tacet-delivery-vocabulary.md` v1.92. This is the
+preference order in `CLAUDE.md` working out the easy way: the office had already
+written every one of these words, hundreds of times.
+
+### Not done, so it is not assumed
+
+No migration of existing cells. No schema, no migration, no change to the mini
+app, the QR menu or the web storefront — `description_blocks` is written in the
+same shape by the same collector. No change to `.gitignore`, CI, or anything
+governing how sessions and builds work. `hero_intro` was measured alongside and
+deliberately gets **no list**: its kicker is 172 distinct answers across 248
+fills, its highlight phrase 207 across 256, its body 217 across 258. That is the
+catalogue's voice.
+
+## §146 — A COST FILED UNDER NOTHING IS FIXED WHERE IT WAS DECIDED, NOT BY UNDOING IT
 
 **Decided by Ash, 2026-09-16, from a live row:** a ¥299 staff claim — *"bai ·
 take taxi to the office and Ramada"* — approved and in the books with no
