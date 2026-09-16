@@ -3,7 +3,7 @@
 //     copy stays in our app language. (We dropped open-type="chooseAvatar"
 //     because its native sheet follows the user's WeChat language, not ours.)
 //   • <input type="nickname">           → auto-fills real WeChat nickname
-//   • <button open-type="getPhoneNumber"> → real bound phone (needs real AppID)
+//   • <button open-type="getPhoneNumber"> → real bound phone, optional
 // All three require explicit user action — WeChat no longer hands them out
 // silently via wx.getUserInfo / wx.getUserProfile.
 //
@@ -27,7 +27,7 @@ Page({
     nickname: '',
     phone: '',
     saving: false,
-    showPhone: false,     // toggle on once getPhoneNumber works (needs real AppID)
+    binding: false,       // a phone bind is in flight
     lang: 'en',
     copy: {
       kicker: 'BIND PROFILE',
@@ -38,9 +38,9 @@ Page({
       useWxAvatar: 'Use my WeChat avatar',
       nicknameLabel: 'NICKNAME',
       nicknamePh: 'Tap, then choose from WeChat',
-      phoneLabel: 'PHONE',
+      phoneLabel: 'PHONE (OPTIONAL)',
       phoneBtn: 'Use my WeChat phone number',
-      phoneHint: 'Optional. Available once we go live on WeChat.',
+      phoneHint: 'Shopped with us before?',
       save: 'Save',
       saving: 'Saving…',
       cancel: 'Cancel',
@@ -48,6 +48,16 @@ Page({
       savedToast: 'Saved',
       missingToast: 'Add at least a nickname',
       uploadFailToast: 'Avatar upload failed',
+      // Phone-bind outcomes — the same words pages/me uses for the same event,
+      // so a customer who binds here and a customer who binds there read one
+      // sentence, not two.
+      restoreDenied: 'Cancelled',
+      restoreDone: 'All set!',
+      restoreFailed: "Couldn't restore — please try again",
+      restoreWelcome: 'Welcome back!',
+      restoreGotIt: 'Great',
+      restoredLead: "We've restored ",
+      restoredTail: ' to your wallet.',
     },
   },
 
@@ -81,9 +91,9 @@ Page({
         useWxAvatar: '使用微信头像',
         nicknameLabel: '昵称',
         nicknamePh: '点击输入框，从微信选择',
-        phoneLabel: '手机号',
+        phoneLabel: '手机号 (可选)',
         phoneBtn: '使用微信绑定的手机号',
-        phoneHint: '可选，上线后可用。',
+        phoneHint: '以前在我们这买过?',
         save: '保存',
         saving: '保存中…',
         cancel: '取消',
@@ -91,6 +101,13 @@ Page({
         savedToast: '已保存',
         missingToast: '请至少填写昵称',
         uploadFailToast: '头像上传失败',
+        restoreDenied: '已取消',
+        restoreDone: '已完成!',
+        restoreFailed: '找回失败,请重试',
+        restoreWelcome: '欢迎回来!',
+        restoreGotIt: '好的',
+        restoredLead: '已为您找回 ',
+        restoredTail: '。',
       },
     });
   },
@@ -144,17 +161,60 @@ Page({
     this.setData({ nickname: (e.detail.value || '').trim() });
   },
 
-  onGetPhone(e) {
-    // The real phone is server-side: WeChat returns an encrypted blob + code
-    // that we exchange for a phone number via mp.weixin.qq.com. Stub for now.
-    if (e.detail.errMsg !== 'getPhoneNumber:ok') {
-      wx.showToast({ title: this.data.lang === 'cn' ? '已取消' : 'Cancelled', icon: 'none' });
+  // Optional phone bind. WeChat's sheet hands us a one-time `code`; the server
+  // exchanges it for the real number. A free-form phone is refused on purpose —
+  // see the SECURITY note on PATCH /api/retail/customer — because the number is
+  // what unlocks OUT1N migration credit.
+  //
+  // Binding also claims that credit and reconciles the signup voucher, so a
+  // returning customer's balance and points land on this screen, before they
+  // have bought anything. That is the reason the field is worth offering here
+  // at all, and why the celebration below is pages/me's, word for word.
+  //
+  // This fires on tap, not on Save: the number is bound the moment WeChat
+  // confirms it, exactly as on pages/me and pages/wallet.
+  async onGetPhone(e) {
+    const code = e && e.detail && e.detail.code;
+    if (!code) {
+      // "Not Allowed" on WeChat's sheet, or it was dismissed. Nothing to say
+      // beyond acknowledging it — the field is optional and Save still works.
+      wx.showToast({ title: this.data.copy.restoreDenied, icon: 'none' });
       return;
     }
-    wx.showToast({
-      title: this.data.lang === 'cn' ? '即将上线' : 'Coming soon',
-      icon: 'none',
-    });
+    if (this.data.binding) return;
+    this.setData({ binding: true });
+    const app = getApp();
+    const before = app.globalData.customer || {};
+    const beforeBal = Number(before.balance || 0);
+    const beforePts = Number(before.points_balance || 0);
+    try {
+      const after = (await api.post('/api/retail/phone', { code })) || {};
+      app.globalData.customer = { ...(app.globalData.customer || {}), ...after };
+      try { wx.setStorageSync('customer', app.globalData.customer); } catch {}
+      this.setData({ phone: after.phone || this.data.phone });
+      const gainBal = Number(after.balance || 0) - beforeBal;
+      const gainPts = Number(after.points_balance || 0) - beforePts;
+      const c = this.data.copy;
+      if (gainBal > 0.001 || gainPts > 0) {
+        const cn = this.data.lang === 'cn';
+        const parts = [];
+        if (gainBal > 0.001) parts.push('¥' + gainBal.toFixed(2));
+        if (gainPts > 0) parts.push(gainPts + (cn ? ' 积分' : ' points'));
+        wx.showModal({
+          title: c.restoreWelcome,
+          content: c.restoredLead + parts.join(cn ? ' 和 ' : ' and ') + c.restoredTail,
+          showCancel: false,
+          confirmText: c.restoreGotIt,
+        });
+      } else {
+        wx.showToast({ title: c.restoreDone, icon: 'success' });
+      }
+    } catch (err) {
+      console.warn('[profile] phone bind failed:', err.message);
+      wx.showToast({ title: this.data.copy.restoreFailed, icon: 'none' });
+    } finally {
+      this.setData({ binding: false });
+    }
   },
 
   async uploadAvatar(tempPath) {

@@ -44,13 +44,14 @@
       />
     </view>
 
-    <view class="field-block" wx:if="{{showPhone}}">
+    <view class="field-block">
       <view class="field-label f-toni">{{copy.phoneLabel}}</view>
       <button
         class="phone-btn f-aleo"
         open-type="getPhoneNumber"
-        bindgetphonenumber="onGetPhone">
-        {{phone ? phone : copy.phoneBtn}}
+        bindgetphonenumber="onGetPhone"
+        disabled="{{binding}}">
+        {{binding ? '...' : (phone ? phone : copy.phoneBtn)}}
       </button>
       <view class="field-hint">{{copy.phoneHint}}</view>
     </view>

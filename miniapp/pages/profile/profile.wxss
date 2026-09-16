@@ -157,6 +157,7 @@
   margin: 0;
 }
 .phone-btn::after { border: none; }
+.phone-btn[disabled] { opacity: 0.5; }
 
 /* ── Actions ── */
 .actions {
