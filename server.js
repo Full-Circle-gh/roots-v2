@@ -460,6 +460,7 @@ app.use(require('./routes/staff-expenses')); // Staff expense claims (§87 step 
 app.use(require('./routes/retail-setup')); // new-tenant "Open your store" setup guide (auto-detected checklist)
 app.use(require('./routes/sku')); // Settings → SKU codes: the tenant's automatic-numbering rules (lib/sku-format.js + lib/sku-rules.js)
 app.use(require('./routes/retail-page-templates')); // product editor: imported custom templates
+app.use(require('./routes/retail-product-picklists')); // product editor: the shop's own entries in the built-in pick lists (§150)
 app.use('/api/internal/meituan', require('./routes/meituan-internal')); // daemon-only, localhost
 app.use(require('./routes/meituan-admin')); // retail-admin Meituan sync config
 app.use(require('./routes/guanyi-admin')); // retail-admin Guanyi (gzgrocery) sync config

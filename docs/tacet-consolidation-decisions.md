@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.286
+# Tacet shared-core consolidation — decisions record, v4.287
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-16 · v4.287 — **§150 · A CLOSED LIST IS ONLY RIGHT UNTIL SOMEBODY SELLS SOMETHING IT HAS NEVER HEARD OF — DECIDED BY ASH, off the allergen card in the product editor:** *"tenant should be able to add permanent options by himself as well"*. **THE SIX LISTS §145 TO §149 BUILT ARE CLOSED BY CONSTRUCTION, and that is both their virtue and the gap.** Every entry in `PA_ALLERGENS`, `PA_SPEC_LABELS`, `PA_SPEC_VALUES`, `PA_STORAGE_HEADS`, `PA_STORAGE_UNITS` and `PA_STORAGE_NOTES` was read off the catalogue and decided by most-used-wins, which is what makes them trustworthy — and a shop that sells something this catalogue has never sold has no word to pick, so it types the term on every product. **That is the exact behaviour those five sections were written to end**, reappearing one step outside the list. **ALL SIX TAKE ADDITIONS, NOT JUST THE ALLERGEN CARD THAT PROMPTED IT** — asked, and Ash chose the wider build: the lists already share one shape and one resolver, so a per-list answer would have been six near-copies inside a week. **SHOP-WIDE, NOT PER OPERATOR, also asked and also Ash's:** an allergen term is shop vocabulary, and per-person lists would let two people spell one term two ways with neither ever seeing the other's — the drift, restored, with a new hiding place. **AN ADDITION, NEVER A REPLACEMENT.** No built-in entry can be edited or removed, nothing rewrites a live page (Ash's standing answer, *"lists only, for now"*), and deleting an added pair takes the chip away while every product already carrying the term keeps carrying it. **THE SERVER DELIBERATELY KEEPS NO COPY OF THE BUILT-IN LISTS.** It refuses duplicates against its own rows only; a row that duplicates a built-in is dropped by the editor at merge time, where the built-ins actually live. A second copy on the server would be **two lists that must agree with nothing to make them** — §148's wizard/details-panel bug, which is how a flag could be given in one screen and silently lost in the other. **THREE SILENT WAYS THIS COULD HAVE UNDONE §145 TO §149, each with its own check:** a merge that appends without stripping the previous pass (the list re-merges after every add and delete, so an entry would appear twice, then three times); a merge that eats a built-in (the strip pass removes everything flagged `custom`, so a built-in that ever carries that flag disappears and nothing goes red); and a list key only one side knows (a row that stores, counts against the cap, and displays nowhere). **THE ＋ SITS BESIDE A LIST, NEVER INSIDE ONE** — a chip that appends a term to this product and an × that deletes it from the shop's vocabulary are very different consequences to put one pixel apart, on the one block where a wrong word has a consequence. **THE CASE WORTH HAVING, and it was not the one asked about:** `Net Wt`, `Certification` and `Storage` were left with no value list because the catalogue was too thin to draw one from — a shop whose answer IS the same every time can now say so, and emptying that list again leaves no dropdown offering nothing but "Something else". **CHINESE: TWO COMPOSED STRINGS AND FIVE LIFTS** — 自定义选项 composed from the live `Custom · 自定义` and `Options · 选项`, 该选项已存在 composed on the live 该…已存在 shape, and 两种语言都填写 lifted verbatim from the editor's own Smart paste hint; declared in `docs/tacet-delivery-vocabulary.md` v1.97. **What a shop types is its own and is not locked here** — the one thing the control insists on is that both halves are filled. New suite `scripts/test_product_picklists.js` **28/28**, proven non-vacuous by six mutations (the strip pass removed, a built-in flagged `custom`, a key dropped from the server allowlist, the ＋ moved inside the append chip, an emptied list still reading as a list, and the refresh rendering before it syncs) each caught by the check meant for it; `test:fast` 261 → **262**; lint 0 errors. **ONE NEW TABLE AND ITS UNIQUE INDEX** (`retail_product_picklists`), created the way every other table here is — no migration step. No change to the mini app, the QR menu, the web storefront, `.gitignore` or CI.
 
 2026-09-16 · v4.286 — **§149 · PEANUTS AND TREE NUTS ARE NOT THE SAME ALLERGEN, AND “NONE DECLARED” WAS ALREADY BUILT IN — DECIDED BY ASH, asked about the nuts specifically rather than shown a usage count:** *“Peanuts and Tree nuts separate”*. **THE ONE BLOCK WHERE A WRONG WORD HAS A CONSEQUENCE.** The catalogue had **five words for nuts** — `Nuts` 55, `Tree nuts` 36, `Other tree nuts` 15, `Other nuts` 14, `Peanuts` 7 — and these are not spelling variants: somebody allergic to peanuts is often fine with almonds and the reverse. **A customer reading `Nuts` cannot tell which they are being warned about.** So most-used-wins, the rule that decided every other list in §145 to §148, was deliberately NOT applied: the most-used word is the one being dropped. **The 55 cards saying `Nuts` are not rewritten** — they keep their wording, the editor shows it as typed, and they become a visible worklist rather than a silent inconsistency. **A FINDING THAT CHANGED THE ANSWER ASH HAD ALREADY GIVEN, and it was mine to have found earlier.** Asked which of three hand-typed sentences should be the single form for *nothing to declare*, he chose `None declared` / 未声明常见致敏原. Reading the renderers afterwards shows **all three surfaces already print `None declared` / 未声明 when the contains row is blank** — `lib/product-blocks-read.js`, `public/shop/product-blocks.js` and the mini app's product-blocks component each carry their own copy. So the 66 cards that type it by hand (43 `None declared`, 15 `None`, 8 `No known allergens`) produce a CHIP saying what the empty state says quietly, and the built-in Chinese is **未声明**, not the 未声明常见致敏原 he was shown. **His choice is implemented through the mechanism that already exists rather than by adding a fourth variant:** the form now says, in both languages, that leaving both boxes empty prints it. The three surfaces are held in agreement by a test, because a product that reads one way on the counter menu and another in the app is exactly the difference a customer with an allergy would notice. **QUICK-ADD CHIPS, NOT CHECKBOXES, and the departure is deliberate.** Both rows are ONE comma-separated string and the catalogue is more specific than any checkbox — `Tree nuts (hazelnuts)`, `Sesame (tahini), Legumes (chickpeas)`. A checkbox would have to decide whether `Tree nuts (hazelnuts)` counts as ticked, and un-ticking would have to decide what to delete, **which is how an allergen line gets silently truncated**. A chip APPENDS, never removes, fills both languages with each one's own separator (`, ` and `、`, both already read by `_paSplitChips`), and is a no-op when the term is already there. **NO CHINESE COMPOSED** — all eight terms lifted, each half verified live in the committed tree. New suite `scripts/test_allergen_options.js` **12/12**, proven non-vacuous by four mutations; **one walked past the check meant for it a second time** — a removal written as `split(term).join('')` used none of the forbidden method names — so the check stopped naming methods and pins the invariant instead: the field is assigned exactly once, inside the only function that can grow it. `test:fast` 260 → **261**; lint 0 errors. No schema, no migration, no change to the mini app, the QR menu, the web storefront, `.gitignore` or CI.
 
@@ -16213,3 +16215,112 @@ No rewrite of existing cards. No schema, no migration. No change to the mini app
 the QR menu or the web storefront — only a test that holds their three copies of
 the empty state in agreement. No change to `.gitignore`, CI, or anything
 governing how sessions and builds work.
+
+
+## §150 — A CLOSED LIST IS ONLY RIGHT UNTIL SOMEBODY SELLS SOMETHING IT HAS NEVER HEARD OF
+
+**Decided by Ash, 2026-09-16,** off the allergen card in the product editor:
+*"tenant should be able to add permanent options by himself as well"*.
+
+### The gap is the same shape as the thing it sits inside
+
+§145 to §149 replaced hand-typing with six bilingual pick lists. Every entry in
+them was read off the catalogue and chosen by most-used-wins. **That is what
+makes them trustworthy, and it is also what makes them closed.**
+
+A shop that sells something this catalogue has never sold has no word to pick.
+So it types the term — on every product, on different days, in two languages.
+**That is the exact behaviour those five sections were written to end**,
+reappearing one step outside the list.
+
+### Two questions that were asked, because the answers change the build
+
+**How wide?** The allergen card prompted it; all six lists take additions. The
+lists already share one shape (`{en, cn}`) and one resolver, so a per-list answer
+would have been six near-copies inside a week, and the same request again for the
+storage box.
+
+**Whose?** Shop-wide, like the imported page templates and for the same reason.
+Per-person lists would let two people spell one term two ways with neither ever
+seeing the other's — the drift, restored, with a new hiding place.
+
+### An addition, never a replacement
+
+- No built-in entry can be edited or removed.
+- Nothing rewrites a live page. Ash's standing answer — *"lists only, for now"* —
+  holds: `peMount` and `paBlocksCollect` never consult the lists.
+- Deleting an added pair takes the **chip** away. Every product already carrying
+  the term keeps carrying it.
+
+### The server keeps no copy of the built-in lists, on purpose
+
+`routes/retail-product-picklists.js` refuses duplicates **against its own rows
+only**. A row that duplicates a built-in is dropped by the editor at merge time,
+where the built-ins actually live.
+
+The obvious alternative — copy `PA_ALLERGENS` and the rest into the route so the
+server can refuse a duplicate outright — would be **two lists that must agree
+with nothing to make them agree**. That is §148's wizard/details-panel bug
+exactly: a flag added to one and not the other could be *given* in one screen and
+*silently lost* in the next save, and nothing goes red.
+
+Holding the invariant in the editor means it holds **however the row got into the
+table**, including by a hand-rolled request.
+
+### Three silent ways this could have undone §145 to §149
+
+Each has its own check in `scripts/test_product_picklists.js`.
+
+1. **A merge that accumulates.** The list re-merges after every add and every
+   delete. An entry appended without the previous pass being stripped appears
+   twice, then three times.
+2. **A merge that eats a built-in.** The strip pass removes everything flagged
+   `custom`. A built-in that ever carries that flag disappears from the product,
+   and nothing goes red. The check walks all six lists and refuses the flag.
+3. **A list key only one side knows.** The editor names the lists;
+   `routes/retail-product-picklists.js` holds the allowlist. A name in one and
+   not the other is a row that stores, counts against the cap, and displays
+   nowhere. The check pins the two sets equal.
+
+### The ＋ sits beside a list, never inside one
+
+The allergen chips **append** a term to this product. An × on the same chip would
+**delete** it from the shop's vocabulary. Those are very different consequences
+to put one pixel apart, on the one block where a wrong word has a consequence
+(§149).
+
+So adding and removing both happen in one panel, opened by a ＋ that sits beside
+the list rather than in it — and that panel lists only what the shop added,
+because built-ins cannot be removed and showing them would only invite the
+attempt.
+
+### The case worth having, and it was not the one asked about
+
+§145 left `Net Wt`, `Certification` and `Storage` with **no value list at all**,
+because 67 distinct weights across 163 cells is what a weight field should look
+like and the other two were too thin to draw a list from.
+
+A shop whose answer *is* the same every time can now start one. And emptying it
+again — removing the last entry — leaves **no list**, not an empty one:
+`paSpecValuesFor` treats a zero-length array as absent, because a `<select>`
+offering nothing but "Something else — type it" is worse than the plain typed
+field it replaced.
+
+### Chinese
+
+Two composed strings, five lifts, declared in
+`docs/tacet-delivery-vocabulary.md` v1.97.
+
+**This is the first entry in this family where the strings that matter are not
+ours.** What a shop types into these lists is its vocabulary, recorded in its own
+database. The one thing the control insists on is that **both halves are filled**
+— a term entered in English and forgotten in 中文 is invisible on the English
+view, which is §145's finding and the reason a pick beats typing at all.
+
+### Not done
+
+No rewrite of existing products. No change to the mini app, the QR menu or the
+web storefront. **One new table** (`retail_product_picklists`) and its unique
+index, created in `database.js` the way every other table here is — no migration
+step, and it clones into new tenant DBs with the rest of the schema. No change to
+`.gitignore`, CI, or anything governing how sessions and builds work.

@@ -2719,6 +2719,39 @@ db.exec(`CREATE TABLE IF NOT EXISTS retail_page_templates (
   updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
 )`);
 
+// §150 · The shop's own entries in the product editor's pick lists.
+//
+// The editor ships six bilingual lists baked into public/product-editor.html —
+// PA_ALLERGENS, PA_SPEC_LABELS, PA_SPEC_VALUES, PA_STORAGE_HEADS,
+// PA_STORAGE_UNITS, PA_STORAGE_NOTES (§145 to §149). Every entry in those was
+// read off the catalogue and chosen by most-used-wins, so the lists are closed
+// by construction: a shop that sells something this catalogue has never sold
+// has no way to add its word and retypes it on every product instead.
+//
+// A row here is an ADDITION to one of those lists, never a replacement. The
+// built-ins are untouched, nothing rewrites a live page, and a row removed
+// here only takes the chip away — every product that already used the term
+// keeps saying it. `list_key` names the list ('allergens', 'spec_labels',
+// 'storage_heads.left', 'spec_values:origin', …); the allowlist that decides
+// which names are real lives in routes/retail-product-picklists.js.
+//
+// Shared across every operator in the tenant, like retail_page_templates
+// above and for the same reason: an allergen term is shop vocabulary, not a
+// personal preference, and per-user lists would let two people spell one term
+// two ways — the exact drift §145 to §149 exist to end.
+db.exec(`CREATE TABLE IF NOT EXISTS retail_product_picklists (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  list_key    TEXT NOT NULL,                 -- which list this joins
+  en          TEXT NOT NULL,
+  cn          TEXT NOT NULL,
+  created_by  INTEGER,                       -- staff user_id or backend operator id
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+// One spelling per list. NOCASE because `Soy` and `soy` are the same answer,
+// and offering both is the drift this whole family of change exists to stop.
+try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_retail_product_picklists_key_en ON retail_product_picklists(list_key, en COLLATE NOCASE)'); }
+catch { /* Safe to ignore: an existing DB may already hold a duplicate pair, which fails the index build. The route's own duplicate check still refuses new ones, so the worst case is a term offered twice until somebody removes one — not a startup that will not boot. */ }
+
 // Broadcasts — operator-composed announcements that fan out to every active
 // (non-blocked) customer's notification feed. Each row here is the authored
 // message; the per-customer copies live in retail_notifications with

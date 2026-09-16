@@ -598,6 +598,36 @@
   .pa-allergen-note { margin: 8px 0 0; font-size: 11.5px; line-height: 1.55; }
   .pa-allergen-note b { font-weight: 500; color: var(--text-1); }
 
+  /* ── §150 · The shop's own entries in a pick list ── */
+  /* The ＋ sits beside its list, never inside it: adding a word to the shop's
+     vocabulary and picking one for this product are different acts. */
+  .pa-sel-row { display: flex; align-items: center; gap: 6px; }
+  .pa-sel-row > select { flex: 1 1 auto; min-width: 0; }
+  .pa-sel-row > .helper { flex: 1 1 auto; min-width: 0; }
+  .pa-custom-btn {
+    flex: 0 0 auto;
+    width: 28px; height: 28px; display: grid; place-items: center;
+    border: 1px dashed var(--line-soft); border-radius: var(--r-sm);
+    background: none; color: var(--text-2); font-size: 13px; line-height: 1; cursor: pointer;
+    transition: border-color var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .pa-custom-btn:hover { border-color: var(--text-3); color: var(--text-1); }
+  /* In the allergen chip row it is one more chip on the same baseline. */
+  .pa-allergen-chips .pa-custom-btn { width: auto; height: auto; padding: 5px 10px; border-radius: 999px; }
+  .pa-copt-list:empty { display: none; }
+  .pa-copt-row {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+    padding: 6px 0; border-bottom: 1px solid var(--line-soft);
+  }
+  .pa-copt-term { font-size: 13px; color: var(--text-1); }
+  .pa-copt-x {
+    flex: 0 0 auto; border: none; background: none; cursor: pointer;
+    color: var(--text-3); font-size: 12px; padding: 2px 6px;
+  }
+  .pa-copt-x:hover { color: var(--tacet-brick, #B4533E); }
+  .pa-copt-err { margin: 8px 0 0; font-size: 12px; color: var(--tacet-brick, #B4533E); }
+  .pa-copt-err[hidden] { display: none; }
+
   /* ── §147 · Icon chips: the icons this catalogue actually uses ── */
   .pa-icon-chips { display: flex; flex-wrap: wrap; gap: 5px; }
   .pa-icon-chip {
@@ -2994,6 +3024,7 @@ function peMount(p) {
   PA_SELECTED_BLOCK_ID = window._paBlocks[0]?.id || null;
   paRenderPresets();
   paLoadCustomTemplates();   // async — merges imported templates into the chooser when they arrive
+  paLoadCustomOptions();     // async — merges the shop's own pick-list entries when they arrive (§150)
   paRenderAll();
 
   // Wire chrome inputs → live preview + page-dot refresh. Bind ONCE — peMount
@@ -4111,8 +4142,14 @@ const PA_STORAGE_NOTES = [
 ];
 
 const PA_SPEC_CUSTOM = '__custom__';
+// AN EMPTY LIST IS NO LIST. §150 lets a shop start a value list for a label
+// that never had one (Net Wt, Certification, Storage), which means the array
+// can also be emptied again by removing the last entry it added — and a
+// <select> offering nothing but "Something else — type it" is worse than the
+// plain typed field this returns null for.
 function paSpecValuesFor(labelEn) {
-  return PA_SPEC_VALUES[String(labelEn || '').trim().toLowerCase()] || null;
+  const list = PA_SPEC_VALUES[String(labelEn || '').trim().toLowerCase()];
+  return (list && list.length) ? list : null;
 }
 // Does this cell's current wording match one of the offered pairs? Matched on
 // the ENGLISH only, and loosely: a cell that says "Net wt" is the same answer
@@ -4452,6 +4489,9 @@ function _paSpecCell(b, c, i, total) {
   const valueIdx = vList ? paSpecMatch(vList, c.v_en) : -1;
   const kCustom  = labelIdx < 0;
   const vCustom  = !vList || valueIdx < 0;
+  // The value list hangs off the label, so its key does too — and is empty
+  // while the label is blank or holds characters the key cannot carry.
+  const vKey     = paSpecValuesKey(c.k_en);
 
   const opts = (list, sel) =>
     list.map((o, n) => `<option value="${n}" ${n === sel ? 'selected' : ''}>${escapeHtml(o.en)} · ${escapeHtml(o.cn)}</option>`).join('');
@@ -4465,10 +4505,10 @@ function _paSpecCell(b, c, i, total) {
 
       <div class="field">
         <label class="stacked" data-no-i18n><span data-lang-block="en">Label</span><span data-lang-block="cn">标签</span></label>
-        <select class="pa-spec-sel" onchange="paSpecPickLabel(this, '${b.id}', ${i})">
+        ${_paSelRow(`<select class="pa-spec-sel" onchange="paSpecPickLabel(this, '${b.id}', ${i})">
           <option value="${PA_SPEC_CUSTOM}" ${kCustom ? 'selected' : ''}>Something else — type it · 其他 — 手动输入</option>
           ${opts(PA_SPEC_LABELS, labelIdx)}
-        </select>
+        </select>`, 'spec_labels')}
       </div>
       <div class="pa-spec-typed" ${kCustom ? '' : 'hidden'}>
         ${paPair({ label: '', keyEn: 'k_en', keyCn: 'k_cn', valEn: c.k_en, valCn: c.k_cn, phEn: 'Label in English', phCn: '中文标签', attrs: `data-cellidx="${i}"` })}
@@ -4477,11 +4517,11 @@ function _paSpecCell(b, c, i, total) {
       <div class="field" style="margin-top:10px">
         <label class="stacked" data-no-i18n><span data-lang-block="en">Value</span><span data-lang-block="cn">值</span></label>
         ${vList
-          ? `<select class="pa-spec-sel" onchange="paSpecPickValue(this, '${b.id}', ${i})">
+          ? _paSelRow(`<select class="pa-spec-sel" onchange="paSpecPickValue(this, '${b.id}', ${i})">
                <option value="${PA_SPEC_CUSTOM}" ${vCustom ? 'selected' : ''}>Something else — type it · 其他 — 手动输入</option>
                ${opts(vList, valueIdx)}
-             </select>`
-          : `<p class="helper" style="margin:0 0 6px" data-no-i18n><span data-lang-block="en">Typed — this one is different on every product.</span><span data-lang-block="cn">手动填写 — 每个产品都不一样。</span></p>`}
+             </select>`, vKey)
+          : `<div class="pa-sel-row"><p class="helper" style="margin:0" data-no-i18n><span data-lang-block="en">Typed — this one is different on every product.</span><span data-lang-block="cn">手动填写 — 每个产品都不一样。</span></p>${_paCustomBtn(vKey)}</div>`}
       </div>
       <div class="pa-spec-typed" ${vCustom ? '' : 'hidden'}>
         ${paPair({ label: '', keyEn: 'v_en', keyCn: 'v_cn', valEn: c.v_en, valCn: c.v_cn, phEn: 'Value in English', phCn: '中文值', attrs: `data-cellidx="${i}"` })}
@@ -4585,7 +4625,7 @@ const PA_ALLERGENS = [
 function _paAllergenChips(keyEn, keyCn) {
   return `<div class="pa-icon-chips pa-allergen-chips">${PA_ALLERGENS.map(a =>
     `<button type="button" class="pa-allergen-chip" onclick="paAllergenAdd(this, '${escapeAttr(a.en)}', '${escapeAttr(a.cn)}', '${keyEn}', '${keyCn}')">+ ${escapeHtml(a.en)} <span class="helper">${escapeHtml(a.cn)}</span></button>`
-  ).join('')}</div>`;
+  ).join('')}${_paCustomBtn('allergens')}</div>`;
 }
 // Append to BOTH languages at once, with each language's own separator — the
 // catalogue writes `Nuts, Soy, Gluten` and `坚果、大豆、麸质`, and
@@ -4614,7 +4654,7 @@ function paAllergenAdd(btn, en, cn, keyEn, keyCn) {
 // the DOM — they carry data-bkey and still ride paBlocksSyncFromDOM exactly as
 // they always have, so the select is a convenience layer and never a second
 // writer. Free text is not a special case; it is what the control already was.
-function _paPickField({ list, keyEn, keyCn, valEn, valCn, label, attrs = '', phEn = '', phCn = '', onpick }) {
+function _paPickField({ list, keyEn, keyCn, valEn, valCn, label, attrs = '', phEn = '', phCn = '', onpick, listKey = '' }) {
   const idx = paSpecMatch(list, valEn);
   const custom = idx < 0;
   const opts = list.map((o, n) =>
@@ -4622,10 +4662,10 @@ function _paPickField({ list, keyEn, keyCn, valEn, valCn, label, attrs = '', phE
   return `
     <div class="field">
       <label class="stacked">${label}</label>
-      <select class="pa-spec-sel" onchange="${onpick}">
+      ${_paSelRow(`<select class="pa-spec-sel" onchange="${onpick}">
         <option value="${PA_SPEC_CUSTOM}" ${custom ? 'selected' : ''}>Something else — type it · 其他 — 手动输入</option>
         ${opts}
-      </select>
+      </select>`, listKey)}
     </div>
     <div class="pa-spec-typed" ${custom ? '' : 'hidden'}>
       ${paPair({ label: '', keyEn, keyCn, valEn, valCn, phEn, phCn, attrs })}
@@ -4658,6 +4698,234 @@ const _PA_PICK_LISTS = {
   'PA_STORAGE_NOTES':       () => PA_STORAGE_NOTES,
 };
 function _paPickList(name) { const f = _PA_PICK_LISTS[name]; return f ? f() : null; }
+
+// ── §150 · THE SHOP'S OWN ENTRIES IN THESE LISTS ───────────────────────────
+//
+// Every list above was read off the catalogue and decided by most-used-wins,
+// which is what makes them trustworthy and also what makes them CLOSED. A shop
+// that sells something this catalogue has never sold has no word to pick, so it
+// types the term on every product — and a term typed repeatedly is a term
+// spelled several ways, which is the one problem §145 to §149 exist to end.
+//
+// So the lists take additions. A tenant-added pair is an ADDITION and never a
+// replacement: no built-in entry can be edited or removed, nothing rewrites a
+// live page, and deleting an added pair takes the chip away while every product
+// already carrying the term keeps carrying it.
+//
+// THE ROWS ARE SHOP-WIDE, not per operator, for the reason the lists exist:
+// an allergen term is shop vocabulary. Per-person lists would let two people
+// spell one term two ways and neither would ever see the other's.
+//
+// THE KEY NAMES MUST MATCH THE SERVER'S ALLOWLIST in
+// routes/retail-product-picklists.js — a name only one side knows is a row
+// that stores, counts against the cap and displays nowhere. A test pins the
+// two sets equal.
+let PA_CUSTOM_OPTIONS = [];   // the shop's rows, flat, as the server returned them
+const _PA_CUSTOM_TARGETS = {
+  'allergens':           () => PA_ALLERGENS,
+  'spec_labels':         () => PA_SPEC_LABELS,
+  'storage_notes':       () => PA_STORAGE_NOTES,
+  'storage_heads.left':  () => PA_STORAGE_HEADS.left,
+  'storage_heads.right': () => PA_STORAGE_HEADS.right,
+  'storage_units.left':  () => PA_STORAGE_UNITS.left,
+  'storage_units.right': () => PA_STORAGE_UNITS.right,
+};
+// The spec strip's values hang off the LABEL, so that one key carries the
+// label's English lower-cased — the same key paSpecValuesFor() already reads.
+// The label is operator-typed, so this is bounded rather than enumerated, and
+// the bound is the server's own SPEC_VALUES_RE. A label outside it simply gets
+// no button: refusing to offer is better than offering a save that 400s.
+const PA_SPEC_VALUES_KEY_RE = /^[a-z0-9][a-z0-9 ._&'’·()/-]{0,59}$/;
+function paSpecValuesKey(labelEn) {
+  const k = String(labelEn || '').trim().toLowerCase();
+  return PA_SPEC_VALUES_KEY_RE.test(k) ? 'spec_values:' + k : '';
+}
+// The array a key names, CREATING the spec-values array when the label has no
+// built-in list. That is the case worth having: Net Wt, Certification and
+// Storage were left listless because the catalogue was too thin to draw one
+// from, and a shop whose answer IS the same every time can now say so.
+function _paCustomTarget(listKey) {
+  const f = _PA_CUSTOM_TARGETS[listKey];
+  if (f) return f();
+  const sv = /^spec_values:(.+)$/.exec(String(listKey || ''));
+  if (!sv) return null;
+  const k = sv[1];
+  if (!PA_SPEC_VALUES[k]) PA_SPEC_VALUES[k] = [];
+  return PA_SPEC_VALUES[k];
+}
+function _paEachCustomList(fn) {
+  fn(PA_ALLERGENS); fn(PA_SPEC_LABELS); fn(PA_STORAGE_NOTES);
+  fn(PA_STORAGE_HEADS.left);  fn(PA_STORAGE_HEADS.right);
+  fn(PA_STORAGE_UNITS.left);  fn(PA_STORAGE_UNITS.right);
+  Object.keys(PA_SPEC_VALUES).forEach(k => fn(PA_SPEC_VALUES[k]));
+}
+// STRIP THEN PUSH, the same shape paMergeCustomTemplates uses, so the merge is
+// repeatable: it runs again after every add and every delete, and a list must
+// not accumulate the same entry twice.
+//
+// A ROW THAT DUPLICATES A BUILT-IN IS DROPPED rather than shown twice. The
+// server refuses duplicates against its own rows only — it deliberately keeps
+// no copy of PA_ALLERGENS, because a second copy of a list is two lists that
+// must agree with nothing to make them (§148's wizard/details-panel bug). The
+// invariant is held HERE instead, where the built-ins actually live, so it
+// holds however the row got into the table.
+function paMergeCustomOptions(rows) {
+  let changed = false;
+  _paEachCustomList(list => {
+    for (let i = list.length - 1; i >= 0; i--) if (list[i].custom) { list.splice(i, 1); changed = true; }
+  });
+  PA_CUSTOM_OPTIONS = (rows || []).map(r => ({ id: r.id, list_key: r.list_key, en: r.en, cn: r.cn }));
+  PA_CUSTOM_OPTIONS.forEach(r => {
+    const target = _paCustomTarget(r.list_key);
+    if (!target) return;
+    const same = String(r.en || '').trim().toLowerCase();
+    if (target.some(o => !o.custom && String(o.en || '').trim().toLowerCase() === same)) return;
+    target.push({ en: r.en, cn: r.cn, custom: true, id: r.id });
+    changed = true;
+  });
+  return changed;
+}
+// Fetched on mount beside paLoadCustomTemplates(). A failure is silent on
+// purpose: the built-in lists are the product, the additions are a convenience,
+// and an editor that refused to open because one fetch 404'd would be worse
+// than one whose chip row is eight entries long.
+async function paLoadCustomOptions() {
+  try {
+    const r = await fetch('/api/retail-admin/product-picklists', { credentials: 'same-origin', cache: 'no-store' });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (!j || !j.success) return;
+    if (paMergeCustomOptions(j.data || [])) paRefreshAfterCustomOptions();
+  } catch (e) { /* offline / not yet deployed — the built-in lists still work */ }
+}
+// SYNC BEFORE RENDER, never the other way round. paRenderDoc rebuilds every
+// section from the model, so anything typed and not yet synced would be painted
+// over — §145's ordering bug, which was caught in a browser and not in review.
+// Unlike that one there is nothing to write into the inputs first: the lists
+// changed, not the block.
+function paRefreshAfterCustomOptions() {
+  if (!document.getElementById('pa-doc')) return;
+  paBlocksSyncFromDOM();
+  paRenderDoc();
+  paRenderPreview();
+}
+
+// The ＋ beside a list. No button when the key is not a real list — a spec-strip
+// value list whose label is still blank has nowhere to put an entry.
+//
+// THE KEY RIDES A data- ATTRIBUTE AND IS READ BACK THROUGH THE DOM, never
+// written into the onclick. Unlike every other list name on this page, a
+// spec-values key carries OPERATOR-TYPED TEXT — the label, lower-cased — and a
+// label with an apostrophe in it would close the string literal the moment the
+// HTML parser decoded `&#39;` back to `'`. That is the same door _PA_PICK_LISTS
+// is closed against one screen above, and this is the one caller whose input a
+// person chooses.
+function _paCustomBtn(listKey) {
+  if (!listKey) return '';
+  return `<button type="button" class="pa-custom-btn" title="Custom options · 自定义选项" data-no-i18n
+     data-listkey="${escapeAttr(listKey)}"
+     onclick="paOpenCustomOptions(this.dataset.listkey)">＋</button>`;
+}
+// A <select> and its ＋ on one row.
+function _paSelRow(selectHtml, listKey) {
+  return `<div class="pa-sel-row">${selectHtml}${_paCustomBtn(listKey)}</div>`;
+}
+
+// ── The panel: what this shop has added to one list, and a row to add another ─
+//
+// ADD AND REMOVE IN ONE PLACE, rather than an "add" control beside the list and
+// a delete affordance on the chip itself. A chip that can be clicked to APPEND a
+// term and also carries an × that DELETES it from the shop's vocabulary is two
+// very different consequences one pixel apart, on the one block where a wrong
+// word has a consequence.
+//
+// BUILT-IN ENTRIES ARE NOT LISTED HERE. They cannot be removed, so showing them
+// beside rows that can would only invite the attempt.
+async function paOpenCustomOptions(listKey) {
+  if (!listKey || !_paCustomTarget(listKey)) return;
+  const body = `
+    <h3 class="tdlg-title" data-no-i18n>Custom options · 自定义选项</h3>
+    <div class="pa-copt">
+      <div class="pa-copt-list" id="pa-copt-list"></div>
+      <div class="txt-pair" id="pa-copt-add">
+        <div class="txt-pair-row"><span class="lang-tag">EN</span><input id="pa-copt-en" type="text" maxlength="80" data-no-i18n></div>
+        <div class="txt-pair-row"><span class="lang-tag">中</span><input id="pa-copt-cn" type="text" maxlength="80" data-no-i18n></div>
+      </div>
+      <p class="pa-copt-err" id="pa-copt-err" hidden data-no-i18n></p>
+    </div>`;
+  const foot = `
+    <button class="tdlg-btn tdlg-btn--ghost" data-copt-close data-no-i18n>Cancel · 取消</button>
+    <button class="tdlg-btn tdlg-btn--primary" data-copt-save data-no-i18n>Save · 保存</button>`;
+  const { scrim, closer, ready } = askCustom('', body, foot, '#pa-copt-en');
+
+  const errEl  = scrim.querySelector('#pa-copt-err');
+  const enEl   = scrim.querySelector('#pa-copt-en');
+  const cnEl   = scrim.querySelector('#pa-copt-cn');
+  const saveEl = scrim.querySelector('[data-copt-save]');
+  const fail = (msg) => { errEl.textContent = msg; errEl.hidden = false; };
+  const clearErr = () => { errEl.hidden = true; };
+
+  // No toast on success and none on removal: the row appearing in the list
+  // above, or vanishing from it, is the whole confirmation — and the dialog
+  // stays open so several terms can be added in one sitting.
+  function paint() {
+    const mine = PA_CUSTOM_OPTIONS.filter(o => o.list_key === listKey);
+    scrim.querySelector('#pa-copt-list').innerHTML = mine.map(o => `
+      <div class="pa-copt-row">
+        <span class="pa-copt-term">${escapeHtml(o.en)} <span class="helper">${escapeHtml(o.cn)}</span></span>
+        <button type="button" class="pa-copt-x" title="Remove · 删除" data-copt-del="${o.id}" data-no-i18n>✕</button>
+      </div>`).join('');
+  }
+  async function reload() {
+    const r = await fetch('/api/retail-admin/product-picklists', { credentials: 'same-origin', cache: 'no-store' });
+    const j = await r.json();
+    if (!j || !j.success) throw new Error('load');
+    paMergeCustomOptions(j.data || []);
+    paint();
+    paRefreshAfterCustomOptions();
+  }
+
+  paint();
+  scrim.querySelector('[data-copt-close]').addEventListener('click', () => closer(null));
+  scrim.querySelector('#pa-copt-list').addEventListener('click', async (ev) => {
+    const btn = ev.target.closest('[data-copt-del]'); if (!btn) return;
+    clearErr();
+    try {
+      const r = await fetch('/api/retail-admin/product-picklists/' + encodeURIComponent(btn.dataset.coptDel),
+        { method: 'DELETE', credentials: 'same-origin' });
+      if (!r.ok) throw new Error('delete');
+      await reload();
+    } catch (e) { fail('Save failed · 保存失败'); }
+  });
+  saveEl.addEventListener('click', async () => {
+    clearErr();
+    const en = enEl.value.trim(), cn = cnEl.value.trim();
+    // BOTH LANGUAGES, ALWAYS. A term filled in English and forgotten in 中文 is
+    // invisible on the English view — §145's finding, and the reason a pick
+    // beats typing at all. A half-filled entry would put the gap straight back.
+    if (!en || !cn) { fail('Fill both languages · 两种语言都填写'); enEl.focus(); return; }
+    // Refused here rather than at the server, which keeps no copy of the
+    // built-in lists on purpose (see paMergeCustomOptions).
+    const target = _paCustomTarget(listKey) || [];
+    if (target.some(o => String(o.en || '').trim().toLowerCase() === en.toLowerCase())) {
+      fail('Already on this list · 该选项已存在'); enEl.focus(); return;
+    }
+    saveEl.disabled = true;
+    try {
+      const r = await fetch('/api/retail-admin/product-picklists', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ list_key: listKey, en, cn }),
+      });
+      if (!r.ok) throw new Error('save');
+      enEl.value = ''; cnEl.value = '';
+      await reload();
+      enEl.focus();
+    } catch (e) { fail('Save failed · 保存失败'); }
+    saveEl.disabled = false;
+  });
+  await ready;
+}
 
 // The icon is one field, not a pair, so it gets chips rather than a dropdown —
 // a row of the icons this catalogue actually uses, plus the emoji picker that
@@ -4788,12 +5056,12 @@ function _paBlockEditorBody(b) {
           ${_paPickField({ list: PA_STORAGE_HEADS[which], keyEn: 'head_en', keyCn: 'head_cn',
                            valEn: c.head_en, valCn: c.head_cn, label: paBiTitle('Head', '标题'),
                            attrs: `data-sub="${which}"`, phEn: 'Unopened', phCn: '未开封',
-                           onpick: `paPickPair(this, 'PA_STORAGE_HEADS.${which}', 'head')` })}
+                           onpick: `paPickPair(this, 'PA_STORAGE_HEADS.${which}', 'head')`, listKey: `storage_heads.${which}` })}
           ${paPair({ label: paBiTitle('Big word', '大字'), keyEn: 'num_en', keyCn: 'num_cn', valEn: c.num_en || c.num, valCn: c.num_cn, phEn: 'Cool & dry', phCn: '阴凉干燥', attrs: `data-sub="${which}"`, helper: 'The figure itself — a temperature or a number of days. Typed, because it is different on every product. · 数字本身(温度或天数),每个产品都不一样,手动填写。' })}
           ${_paPickField({ list: PA_STORAGE_UNITS[which], keyEn: 'unit_en', keyCn: 'unit_cn',
                            valEn: c.unit_en, valCn: c.unit_cn, label: paBiTitle('Unit', '单位'),
                            attrs: `data-sub="${which}"`, phEn: 'Store away from heat', phCn: '远离高温和潮湿',
-                           onpick: `paPickPair(this, 'PA_STORAGE_UNITS.${which}', 'unit')` })}
+                           onpick: `paPickPair(this, 'PA_STORAGE_UNITS.${which}', 'unit')`, listKey: `storage_units.${which}` })}
           <div class="field"><label class="stacked">Icon · 图标</label>
             ${_paIconChips(which, c.icon, PA_STORAGE_ICONS[which])}
             <div class="pe-emoji-field" style="margin-top:6px"><input data-sub="${which}" data-bkey="icon" type="text" value="${escapeAttr(c.icon || '')}" placeholder="❄" style="text-align:center;font-size:18px"><button type="button" class="pe-emoji-btn" title="Pick emoji · 选择表情" onclick="peEmojiOpen(this)">😀</button></div>
@@ -4812,7 +5080,7 @@ function _paBlockEditorBody(b) {
         ${_paPickField({ list: PA_STORAGE_NOTES, keyEn: 'note_en', keyCn: 'note_cn',
                          valEn: b.note_en, valCn: b.note_cn, label: paBiTitle('After-opening note', '开封后备注'),
                          phEn: 'After opening · refrigerate', phCn: '开封后冷藏',
-                         onpick: "paPickPair(this, 'PA_STORAGE_NOTES', 'note')" })}
+                         onpick: "paPickPair(this, 'PA_STORAGE_NOTES', 'note')", listKey: 'storage_notes' })}
       </div>`;
   }
   if (b.type === 'notes_callout') {
