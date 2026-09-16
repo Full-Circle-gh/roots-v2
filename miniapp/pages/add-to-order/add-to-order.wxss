@@ -283,6 +283,14 @@
   color: #2c281f;
 }
 .op-choice.soldout { opacity: 0.4; }
+/* At a pick-any group's ceiling the rows NOT already picked go quiet. A picked
+   row stays live — unpicking is how the counter changes its mind. */
+.op-choice.capped { opacity: 0.35; }
+/* HOW MANY a pick-any group takes, under its question. */
+.op-lim {
+  font-size: calc(22rpx * var(--font-scale)); letter-spacing: 0.06em;
+  color: var(--olive); opacity: 0.75; margin: -6rpx 0 12rpx;
+}
 .op-c-delta {
   font-size: calc(26rpx * var(--font-scale));
   color: var(--olive);

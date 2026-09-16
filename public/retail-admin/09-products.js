@@ -4700,6 +4700,8 @@ function optLoad(id) {
       OPT = opts.map(o => ({
         question_en: o.question_en || '', question_cn: o.question_cn || '',
         type: o.type || 'single', is_required: o.is_required ? 1 : 0,
+        // How many of a pick-any group may be ticked; 0 on both = no limit.
+        min_choices: Number(o.min_choices) || 0, max_choices: Number(o.max_choices) || 0,
         choices: (o.choices || []).map(c => ({
           label_en: c.label_en || '', label_cn: c.label_cn || '',
           price_delta: Number(c.price_delta) || 0, is_default: c.is_default ? 1 : 0,
@@ -4740,6 +4742,23 @@ function optRender() {
       opt('single', cuT('Pick one', '单选')) + opt('multi', cuT('Pick any', '多选')) +
       (t === 'text' ? opt('text', cuT('Type an answer (unsupported)', '填写(暂不支持)'), true) : '') + `</select>`;
   };
+  // HOW MANY of a pick-any group the customer may tick. Blank/0 on both boxes
+  // is the old unlimited behaviour, which is what every group written before
+  // this control carries — so nothing already authored changes by being opened.
+  // A radio has no such control: "Pick one" already says the number.
+  const limBoxes = (oi, o) => {
+    if (o.type !== 'multi') return '';
+    const box = (key, title) =>
+      `<input type="number" min="0" max="${o.choices.length || 0}" step="1"` +
+      ` value="${Number(o[key]) > 0 ? Number(o[key]) : ''}" placeholder="0"` +
+      ` title="${title}" oninput="optLimit(${oi}, '${key}', this.value)">`;
+    return `<span class="opt-lim" title="${cuT('0 in a box means no limit', '填 0 表示不限')}">` +
+      cuT('Pick', '选') +
+      box('min_choices', cuT('Fewest they must pick (0 = no limit)', '至少选几项(0 = 不限)')) +
+      `–` +
+      box('max_choices', cuT('Most they can pick (0 = no limit)', '最多选几项(0 = 不限)')) +
+      cuT('', '项') + `</span>`;
+  };
   const blocks = OPT.map((o, oi) => {
     const choices = o.type === 'text' ? '' : (o.choices.length
       ? o.choices.map((c, ci) => _optChoiceRow(o, oi, c, ci)).join('')
@@ -4750,6 +4769,7 @@ function optRender() {
         `<input type="text" class="opt-q" value="${escapeAttr(o.question_en)}" placeholder="${cuT('Question EN (e.g. Choose your dressing)', '问题(英文,如:选择酱料)')}" oninput="optQ(${oi}, 'question_en', this.value)">` +
         `<input type="text" class="opt-q" value="${escapeAttr(o.question_cn)}" placeholder="${cuT('Question 中文', '问题(中文)')}" oninput="optQ(${oi}, 'question_cn', this.value)">` +
         typeSel(oi, o.type) +
+        limBoxes(oi, o) +
         `<label class="opt-req" title="${cuT('Customer must choose before adding to cart', '加入购物车前必须选择')}"><input type="checkbox"${o.is_required ? ' checked' : ''} onchange="optReq(${oi}, this.checked)"> ${cuT('Required', '必选')}</label>` +
         `<button type="button" class="bp-chip-x" title="${cuT('Remove this option', '移除此选项')}" onclick="optRemoveOption(${oi})">✕</button>` +
       `</div>` +
@@ -4819,6 +4839,10 @@ function optType(oi, val) {
   o.type = val;
   // Switching to a free pick ("Pick one") drops any charge/stock link the choices
   // carried as paid extras — the money/stock section no longer applies.
+  // Limits belong to a pick-any group only: "Pick one" already says the number,
+  // and a stale floor left behind would be enforced by a server that cannot see
+  // the control the operator used to set it.
+  if (val !== 'multi') { o.min_choices = 0; o.max_choices = 0; }
   if (val === 'single') {
     o.choices.forEach(c => {
       c.price_delta = 0; c.stock_product_id = null;
@@ -4827,7 +4851,27 @@ function optType(oi, val) {
   }
   optRender();
 }
-function optReq(oi, on) { if (OPT[oi]) OPT[oi].is_required = on ? 1 : 0; }
+function optReq(oi, on) {
+  const o = OPT[oi]; if (!o) return;
+  o.is_required = on ? 1 : 0;
+  // Un-ticking Required on a group with a floor would leave the two saying
+  // different things; the floor IS the requirement, so drop it with the tick.
+  if (!on && o.type === 'multi' && Number(o.min_choices) > 0) { o.min_choices = 0; optRender(); }
+}
+// A pick-any group's floor/ceiling. NOT re-rendered on every keystroke — the box
+// being typed into would lose the caret — so the one coupled control, the
+// Required tick, is nudged in place instead: a floor of 1 or more IS required,
+// which is the same rule the server applies on save (lib/option-limits.js).
+function optLimit(oi, key, val) {
+  const o = OPT[oi]; if (!o) return;
+  const n = Math.max(0, Math.floor(Number(val) || 0));
+  o[key] = n;
+  if (key === 'min_choices') {
+    if (n > 0) o.is_required = 1;
+    const box = document.querySelector(`.opt-block[data-oi="${oi}"] .opt-req input`);
+    if (box) box.checked = !!o.is_required;
+  }
+}
 function optDefault(oi, ci) {   // single-select: exactly one default
   const o = OPT[oi]; if (!o) return;
   o.choices.forEach((c, i) => { c.is_default = i === ci ? 1 : 0; });
@@ -4835,12 +4879,12 @@ function optDefault(oi, ci) {   // single-select: exactly one default
 }
 function optDefaultMulti(oi, ci, on) { const c = OPT[oi] && OPT[oi].choices[ci]; if (c) c.is_default = on ? 1 : 0; }
 function optAddOption() {
-  OPT.push({ question_en: '', question_cn: '', type: 'single', is_required: 1, choices: [_optBlankChoice(), _optBlankChoice()] });
+  OPT.push({ question_en: '', question_cn: '', type: 'single', is_required: 1, min_choices: 0, max_choices: 0, choices: [_optBlankChoice(), _optBlankChoice()] });
   OPT_OPEN = true; optRender();
 }
 // "Add paid extras" → a pick-any group seeded with one product-linked slot.
 function optAddExtras() {
-  OPT.push({ question_en: 'Add extras?', question_cn: '加点配料?', type: 'multi', is_required: 0, choices: [_optBlankChoice()] });
+  OPT.push({ question_en: 'Add extras?', question_cn: '加点配料?', type: 'multi', is_required: 0, min_choices: 0, max_choices: 0, choices: [_optBlankChoice()] });
   OPT_OPEN = true; optRender();
 }
 function _optBlankChoice() {
@@ -4910,7 +4954,14 @@ function optBody() {
     const choices = type === 'text' ? [] : (o.choices || [])
       .map(c => ({ label_en: (c.label_en || '').trim(), label_cn: (c.label_cn || '').trim(), price_delta: Number(c.price_delta) || 0, is_default: c.is_default ? 1 : 0, stock_product_id: c.stock_product_id || null }))
       .filter(c => c.label_en || c.label_cn);
-    return { question_en: (o.question_en || '').trim(), question_cn: (o.question_cn || '').trim(), type, is_required: o.is_required ? 1 : 0, choices };
+    const lim = type === 'multi'
+      ? { min: Math.max(0, Math.floor(Number(o.min_choices) || 0)), max: Math.max(0, Math.floor(Number(o.max_choices) || 0)) }
+      : { min: 0, max: 0 };
+    return {
+      question_en: (o.question_en || '').trim(), question_cn: (o.question_cn || '').trim(), type,
+      is_required: (o.is_required || lim.min > 0) ? 1 : 0,
+      min_choices: lim.min, max_choices: lim.max, choices,
+    };
   }).filter(o => (o.question_en || o.question_cn) && (o.type === 'text' || o.choices.length));
 }
 // ── Image optimisation (resize) ─────────────────────────────────────────────

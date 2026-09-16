@@ -10,6 +10,7 @@ const cart     = require('../../utils/cart');
 const track    = require('../../utils/track');
 const delivery = require('../../utils/delivery');
 const diag     = require('../../utils/diag');
+const optionText = require('../../utils/options');
 
 function absUrl(u) {
   if (!u) return '';
@@ -184,6 +185,7 @@ Page({
     optionsExtra: [],      // 'multi' groups → second (paid extras) sheet
     selectedChoices: {},   // { [option_id]: choice_id (single) | [choice_id] (multi) }
     choiceSel: {},         // { [choice_id]: true } — flat map for the WXML "on" state
+    choiceCap: {},         // { [choice_id]: true } — rows a pick-any ceiling has closed
     bundle: null,          // "buy together" set (resolved item cards) or null
     whatsInside: null,     // bundle PRODUCT component list ("what's inside") or null
     hasVariants: false,    // ≥2 purchasable siblings → "Add" opens the size picker
@@ -475,6 +477,11 @@ Page({
     const options = (p.options || []).map(o => ({
       ...o,
       question: lang.pick(o.question_en, o.question_cn, L),
+      // HOW MANY of a pick-any group may be ticked. Read straight off the
+      // payload: the server clamps the floor against what is still pickable
+      // before serving the page, so these ARE the numbers checkout applies.
+      // 0 means no limit, which is every group authored before this existed.
+      lim_hint: o.type === 'multi' ? optionText.limHint(o, L) : '',
       choices: (o.choices || []).map(c => ({
         ...c,
         label: lang.pick(c.label_en, c.label_cn, L),
@@ -492,7 +499,12 @@ Page({
     options.forEach(o => {
       if (o.type === 'multi') {
         if (Array.isArray(selected[o.id])) return;
-        selected[o.id] = o.choices.filter(c => c.is_default && !c.sold_out).map(c => c.id);
+        // Pre-picked defaults obey the ceiling too: three tick-boxes all marked
+        // default on a "choose 2" group would open the sheet already over the
+        // cap, with the extra one un-untickable-into-legality by any single tap.
+        const pre = o.choices.filter(c => c.is_default && !c.sold_out).map(c => c.id);
+        const cap = Number(o.max_choices) || 0;
+        selected[o.id] = cap ? pre.slice(0, cap) : pre;
       } else {
         if (selected[o.id] != null) return;
         const def = o.choices.find(c => c.is_default);
@@ -813,6 +825,7 @@ Page({
       optionsExtra,
       selectedChoices: selected,
       choiceSel: this._buildChoiceSel(selected),
+      choiceCap: this._buildChoiceCap(selected, options),
       hasVariants,
       oosLabel: L === 'cn' ? '售罄' : 'SOLD OUT',
       preLabel: L === 'cn' ? '可预订' : 'PRE-ORDER',
@@ -865,9 +878,23 @@ Page({
     const choiceId = e.currentTarget.dataset.choiceId;
     const cur = Array.isArray(this.data.selectedChoices[optionId]) ? this.data.selectedChoices[optionId].slice() : [];
     const i = cur.indexOf(choiceId);
-    if (i >= 0) cur.splice(i, 1); else cur.push(choiceId);
+    if (i >= 0) cur.splice(i, 1);
+    else {
+      // The row is already dimmed at the ceiling; refuse the tap anyway rather
+      // than trust the paint. An over-full line is refused at checkout, so
+      // letting it through here would only move the failure somewhere worse.
+      const o = (this.data.options || []).find(x => String(x.id) === String(optionId));
+      const max = Number(o && o.max_choices) || 0;
+      if (max && cur.length >= max) return;
+      cur.push(choiceId);
+    }
     const selected = { ...this.data.selectedChoices, [optionId]: cur };
-    this.setData({ selectedChoices: selected, choiceSel: this._buildChoiceSel(selected), exAddLabel: this._sheetBtnLabel() });
+    this.setData({
+      selectedChoices: selected,
+      choiceSel: this._buildChoiceSel(selected),
+      choiceCap: this._buildChoiceCap(selected),
+      exAddLabel: this._sheetBtnLabel(),
+    });
   },
   // Flatten selectedChoices ({opt: id | [id]}) → { [choice_id]: true } so the
   // WXML can mark a row selected without array lookups.
@@ -960,6 +987,24 @@ Page({
     if (this._doAddWithOptions()) this._finishAdd(this.data.preKind);
   },
 
+  // { choice_id: true } for the rows a ceiling has closed — unticked choices in
+  // a group already holding its maximum. Ticked rows are never capped: untick is
+  // how a customer changes their mind, and a sheet with nothing tappable is dead.
+  // `opts` defaults to what is already on the page; the load path passes the
+  // freshly built list, which setData has not written back yet.
+  _buildChoiceCap(selected, opts) {
+    const m = {};
+    (opts || this.data.options || []).forEach(o => {
+      const max = Number(o.max_choices) || 0;
+      if (o.type !== 'multi' || !max) return;
+      const sel = selected[o.id];
+      const cur = Array.isArray(sel) ? sel : (sel != null ? [sel] : []);
+      if (cur.length < max) return;
+      (o.choices || []).forEach(c => { if (cur.indexOf(c.id) < 0) m[c.id] = true; });
+    });
+    return m;
+  },
+
   // Chosen choice-ids for an option group (scalar→[id], array as-is).
   _selIds(o) {
     const sel = this.data.selectedChoices[o.id];
@@ -973,8 +1018,18 @@ Page({
     const p = this.data.product;
     if (!p) return false;
     for (const o of this.data.options) {
-      if (o.is_required && !this._selIds(o).length) {
-        wx.showToast({ title: this.data.lang === 'cn' ? '请选择 ' + o.question : 'Please choose: ' + o.question, icon: 'none' });
+      const min = Number(o.min_choices) || 0;
+      const n = this._selIds(o).length;
+      // A floor of 1 or more IS the requirement; naming the number is what tells
+      // a customer sitting on one side that the sheet is asking for two.
+      if ((o.is_required && !n) || (min && n < min)) {
+        const L = this.data.lang;
+        const hint = min > 1 ? optionText.limHint(o, L) : '';
+        wx.showToast({
+          title: (L === 'cn' ? '请选择 ' + o.question : 'Please choose: ' + o.question)
+            + (hint ? (L === 'cn' ? '（' + hint + '）' : ' (' + hint + ')') : ''),
+          icon: 'none',
+        });
         return false;
       }
     }

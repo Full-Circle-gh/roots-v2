@@ -97,8 +97,9 @@
         <scroll-view scroll-y="true" class="op-body">
           <view wx:for="{{ opGroups }}" wx:for-item="g" wx:for-index="gi" wx:key="id" class="op-group">
             <view class="op-q f-bear">{{ g.question }}<text wx:if="{{ g.is_required }}" class="op-req"> *</text></view>
+            <view wx:if="{{ g.lim_hint }}" class="op-lim">{{ g.lim_hint }}</view>
             <view wx:for="{{ g.choices }}" wx:for-item="c" wx:for-index="ci" wx:key="id"
-                  class="op-choice {{ c.picked ? 'picked' : '' }} {{ c.sold_out ? 'soldout' : '' }}"
+                  class="op-choice {{ c.picked ? 'picked' : '' }} {{ c.sold_out ? 'soldout' : '' }} {{ c.capped ? 'capped' : '' }}"
                   data-gi="{{ gi }}" data-ci="{{ ci }}" bindtap="onChoiceTap">
               <view class="op-c-dot {{ g.type === 'multi' ? 'sq' : '' }}"></view>
               <view class="op-c-label">{{ c.label }}</view>

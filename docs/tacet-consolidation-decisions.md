@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.288
+# Tacet shared-core consolidation — decisions record, v4.289
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -20,6 +20,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+
+
+2026-09-16 · v4.289 — **§153 · A PICK-ANY QUESTION CAN NOW SAY HOW MANY — DECIDED BY ASH**, from a screenshot of the product editor showing a three-choice group headed *Choose 2 crunchy sides · 爽脆配菜（选2款）*: *“need to limit how many can choose. in this example can choose only 2 from the 3 option.”* **THE SENTENCE LIVED IN THE LABEL AND NOWHERE ELSE.** `type='multi'` took ANY number of answers, including none: a customer ticked one side or all three and checked out either way, and `is_required` — a yes/no — can say *at least one* but never *exactly two*. **TWO COLUMNS, NOT ONE, AND THE SECOND ONE WAS ARGUED FOR RATHER THAN ASSUMED:** a maximum alone is what was asked for and is NOT what shipped, because with `max 2` and no floor a customer ticks one cracker and checks out under a label promising two — the same complaint, one control later. `min_choices` + `max_choices` on `retail_product_options`, **0 on both = no limit**, which is what every row written before today carries, so nothing already authored changes shape. `is_required` and the floor are two faces of one rule and are kept in step on save. **THE FLOOR IS NOT ABSOLUTE, AND THAT IS THE WHOLE TRAP.** *Choose 2* whose stock-backed sides have sold down to one cannot be answered; an unanswerable required question does not make a product unbuyable here, it stops being a floor — the same principle §120 states for a question whose answers were all deleted. Both storefronts and the counter menu are served a floor **already clamped to the choices still pickable**, and every checkout measures pickability the same way. **Clamp one side and not the other and the endpoint refuses the very order the page told the customer to place**, with nothing on screen able to explain it; that is the assertion the new suite exists for. **ENFORCED ON BOTH CHECKOUT PATHS, not one** — the QR menu basket (`routes/shop-menu.js`) and customer order-create plus add-to-a-live-order (`routes/retail.js`) — because a limit enforced on one of two checkouts is not a limit. **A REPEATED CHOICE ID COUNTS ONCE**: a tick-box is on or off, so counting the repeat would refuse a correct line and counting it toward a floor would let one side satisfy a request for two. **ONE MODULE FOR THE RULE**, `lib/option-limits.js` — the save path normalises, the menu and both checkouts clamp, and **the browser clients get no copy of the arithmetic**, only the already-clamped numbers: a limit the client computes is a limit the client can compute differently. `addonAvailabilityById()` was extracted from the product response in `routes/retail.js` for the same reason — the floor needed to ask *is this extra still on the shelf* and a second copy would have been a second answer. **WHAT THE OPERATOR SETS:** two number boxes on a Pick-any row, hidden on Pick-one. **WHAT THE CUSTOMER READS:** *Choose 2* / 选 2 项 under the question, the tick-box that would break the ceiling greyed out (a ticked one stays live — untick is how you change your mind), and the Add button blocked under the floor naming the number. **FIVE COMPOSED CN STRINGS, declared in `docs/tacet-delivery-vocabulary.md` v1.99**, every one a live shape with a numeral swapped in; 不限 is a verbatim lift from four live admin strings, and **款 — Ash’s own word in the label that prompted this — was weighed and recorded as rejected** in favour of 项, which is what `至少选一项` already establishes as the counter for an option answer. **WHAT WAS DELIBERATELY LEFT ALONE, named so nobody reads silence as coverage:** the wizard offers no limit control; `routes/retail.js` order-create still does not enforce the older `is_required` flag (a pre-existing gap that a floor of 1+ now closes for pick-any groups, and a separate change otherwise); `public/shop.html` still does not grey out a sold-out paid extra although the server has answered `addon_available` since §120 — the mini app does; and there is no per-choice quantity, so two sides cannot both be corn chips. New suite `scripts/test_option_limits.js` **19/19**, nine of them pure rule tests and the rest driving the REAL router over HTTP. `test:fast` 265 → **266**; lint 0 errors. **REBASED THREE TIMES MID-BUILD, onto db7de6f, 9ef2400 and then 1480456** — three other sessions merged into this tree while it was being written, which is what the enumerate-first rule in `CLAUDE.md` exists to make visible. PR #640 landed first and took §151 and v1.97; PR #643 landed last and took v1.98 AND §152. This renumbered each time rather than renumbering theirs — section numbers are permanent. **§152 IS DELIBERATELY LEFT EMPTY IN THIS FILE**, not skipped by accident: PR #643's vocabulary entry cites §152 for the sign-out work but never wrote that section here, so the number is held for it rather than taken. A reader following v1.98's citation today lands on nothing, and that is a gap in #643 to close, not one to paper over by filling §152 with something else. PR #641 landed second, in the same admin file: it makes the WIZARD's Required tick visible on a pick-any question, which this reinforces rather than contradicts — a wizard-set required multi now normalises to `min_choices 1`, and a floor of 1 IS required. **One assertion of that PR's suite had to be updated**, and it is named here rather than quietly edited: `test_wizard_required_pick.js` pinned the web storefront's block to the literal `o.is_required && !selIds(o).length`, which the floor rewrote. The claim it makes is unchanged and still holds; the check no longer matches a whole expression, because a literal is exactly what makes a sound assertion go red for a correct change. No change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
 
 
@@ -16382,3 +16386,91 @@ each refusal.
 
 No schema, no migration. No change to the mini app, the QR menu, the web
 storefront, `.gitignore`, CI, or anything governing how sessions and builds work.
+
+## §153 — A PICK-ANY QUESTION CAN NOW SAY HOW MANY
+
+**Decided by Ash, 2026-09-16,** from a screenshot of the product editor showing
+a three-choice group headed *Choose 2 crunchy sides · 爽脆配菜（选2款）*:
+*"need to limit how many can choose. in this example can choose only 2 from the
+3 option."*
+
+### What was wrong
+
+"Pick any" (`retail_product_options.type = 'multi'`) took **any** number of
+answers, including none. The sentence *Choose 2* lived in the label and nowhere
+else: the sheet let a customer tick one side or all three, and the checkout
+accepted whichever arrived. The label promised two; the kitchen packed what came.
+
+`is_required` was the only control, and it is a yes/no — it can say *at least
+one*, never *exactly two*.
+
+### Two numbers, not one
+
+`min_choices` and `max_choices` on the option row. **0 on both is no limit**,
+which is what every group written before today carries, so nothing already
+authored changes shape.
+
+**A maximum alone was asked for and is not what was built.** With `max = 2` and
+nothing else, a customer ticks one cracker and checks out — the label still
+promises two and the complaint still arrives, one control later. *Choose 2* is
+`min 2 / max 2`, and a floor is the half a customer is actually blocked by.
+Adding the second column later would have meant a second pass through the same
+seven files.
+
+`is_required` and the floor say the same thing and are **kept in step on save**:
+a floor of 1 or more IS required, and Required with no floor means a floor of 1.
+Single-answer questions are untouched — a radio is exactly one by construction.
+
+### The floor is not absolute, and that is the whole trap
+
+*Choose 2 crunchy sides* with two of the three sold out cannot be answered. An
+unanswerable required question does not make a product unbuyable here — it stops
+being a floor. Both storefronts and the counter menu are served a floor already
+**clamped to the choices still pickable**, and the checkout measures pickability
+the same way.
+
+**Clamp one side and not the other and the endpoint refuses the very order the
+page told the customer to place**, with nothing on screen able to explain it.
+That is the assertion `scripts/test_option_limits.js` exists for. It is the same
+principle §120 states for a question whose answers have all been deleted: a
+question with nothing to answer it is not asked.
+
+### The limit is not a client-side nicety
+
+The sheets grey out the tick-box that would break the ceiling and block the Add
+button under the floor — and every checkout path checks both again against the
+database, where a post straight at the endpoint cannot skip it. Both paths, not
+one: the QR menu's basket (`routes/shop-menu.js`) and the customer order-create
+plus add-to-a-live-order (`routes/retail.js`). A limit enforced on one of two
+checkouts is not a limit.
+
+A **repeated choice id counts once**. A tick-box is on or off, so posting it
+twice is one answer — counting the repeat would refuse a correct line, and
+counting it toward a floor would let one side satisfy a request for two.
+
+### One module for the rule
+
+`lib/option-limits.js`. The save path normalises what the editor posts; the menu
+and both checkouts clamp. The browser clients deliberately get **no copy of the
+arithmetic** — they are handed the already-clamped numbers and obey them. A
+limit the client computes is a limit the client can compute differently.
+
+`addonAvailabilityById()` in `routes/retail.js` was extracted from the product
+response for the same reason: the floor needed to ask "is this extra still on
+the shelf" and a second copy would have been a second answer.
+
+### What was deliberately not changed
+
+- **The wizard (`pw*`) offers no limit control.** It is the simplified flow; a
+  group it creates has no limit, exactly as before. The full editor is where a
+  limit is set.
+- **`is_required` is still not enforced by `routes/retail.js` order-create.**
+  That gap predates this work and is a separate change — a floor of 1 or more
+  now closes it for pick-any groups, and nothing else moved.
+- **`public/shop.html` still does not grey out a sold-out paid extra**, although
+  the server has answered `addon_available` since §120's follow-up. The mini app
+  does. Recorded here rather than fixed: one PR per change.
+- **No per-choice quantity.** Two sides cannot both be corn chips. That is a
+  different feature reaching the order lines, and nothing here walls it off.
+- No change to `.gitignore`, CI, or anything governing how sessions and builds
+  work.

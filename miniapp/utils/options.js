@@ -55,4 +55,28 @@ function format(options, L) {
   return options.map(o => formatOne(o, L)).filter(Boolean).join(SEP);
 }
 
-module.exports = { format, formatOne, SEP };
+// "Choose 2" under a pick-any question — how many of a group may be ticked, in
+// words, for the two sheets that ask it (the shopper's product page and the
+// counter's add-to-order). The numerals do the work, so a group that already
+// says it in its own title (爽脆配菜) is confirmed rather than contradicted.
+//
+// Reads min_choices/max_choices off the payload, which the server has ALREADY
+// clamped against the choices still pickable — so what this prints is what
+// checkout will apply, even when an extra has sold out since the group was
+// authored. Nothing is printed when a group has no limit, which is every group
+// written before those two columns existed.
+function limHint(o, L) {
+  const min = Number(o && o.min_choices) || 0;
+  const max = Number(o && o.max_choices) || 0;
+  const cn = L === 'cn';
+  if (min && max) {
+    return min === max
+      ? (cn ? ('选 ' + min + ' 项') : ('Choose ' + min))
+      : (cn ? ('选 ' + min + '–' + max + ' 项') : ('Choose ' + min + '–' + max));
+  }
+  if (max) return cn ? ('最多 ' + max + ' 项') : ('Up to ' + max);
+  if (min) return cn ? ('至少 ' + min + ' 项') : ('At least ' + min);
+  return '';
+}
+
+module.exports = { format, formatOne, limHint, SEP };

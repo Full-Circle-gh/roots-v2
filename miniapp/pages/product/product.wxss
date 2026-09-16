@@ -813,6 +813,14 @@
   color: var(--olive); background: rgba(0,0,0,.08); padding: 2rpx 12rpx; border-radius: 999rpx;
 }
 .op-extra.sold-out { opacity: 0.45; }
+/* At the ceiling the rows NOT already ticked go quiet. A ticked row stays live —
+   untick is how you change your mind, and a sheet with nothing tappable is dead. */
+.op-extra.capped { opacity: 0.38; }
+/* HOW MANY a pick-any group takes, under its question. */
+.op-lim {
+  font-size: calc(22rpx * var(--font-scale)); letter-spacing: 0.06em;
+  color: var(--olive); opacity: 0.75; margin: -8rpx 0 14rpx;
+}
 
 /* Sticky bottom bar */
 .sticky-bar {

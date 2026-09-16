@@ -375,9 +375,10 @@
         <scroll-view scroll-y class="op-body">
           <view wx:for="{{optionsExtra}}" wx:for-item="opt" wx:key="id" class="op-group">
             <view wx:if="{{opt.question}}" class="op-q f-toni">{{opt.question}}{{opt.is_required ? ' *' : ''}}</view>
+            <view wx:if="{{opt.lim_hint}}" class="op-lim f-toni">{{opt.lim_hint}}</view>
             <view class="op-choices">
               <view wx:for="{{opt.choices}}" wx:for-item="ch" wx:key="id"
-                    class="op-choice op-extra {{choiceSel[ch.id] ? 'on' : ''}} {{ch.sold_out ? 'sold-out' : ''}}"
+                    class="op-choice op-extra {{choiceSel[ch.id] ? 'on' : ''}} {{ch.sold_out ? 'sold-out' : ''}} {{choiceCap[ch.id] ? 'capped' : ''}}"
                     data-option-id="{{opt.id}}" data-choice-id="{{ch.id}}" data-sold-out="{{ch.sold_out}}" bindtap="toggleExtra">
                 <view class="op-extra-box">{{choiceSel[ch.id] ? '✓' : ''}}</view>
                 <text class="op-choice-label f-bear">{{ch.label}}</text>
