@@ -686,6 +686,10 @@ const state = {
      field. null means no override, exactly as on the desktop. */
   dashCards:null,
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
+  /* The out-of-stock policy picker, over the product sheet — the SKU it is
+     answering for, or null. Keyed by sku the way productSku is, so the picker
+     and the sheet under it can never end up addressing two different products. */
+  oosSku:null,
   /* A photo blown up full-screen — the src being shown, or null. Generic: any
      screen can open one (see aprRow's receipt), rather than each screen
      growing its own zoomed-view state. */
@@ -2097,7 +2101,7 @@ reg('priceTyped', v=>{
   const p=DB.products.find(x=>x.sku===state.productSku);
   if(p&&p._id!=null) sheetPrice[p._id]=v;   // no render: it would eat the keystroke
 });
-reg('closeProduct', ()=>{ state.productSku=null; render(); });
+reg('closeProduct', ()=>{ state.productSku=null; state.oosSku=null; render(); });
 reg('saveProduct', ()=>saveProductEdits());
 reg('custSeg', v=>{ state.custSeg=v; loadCustomers(); });
 /* THE THREE MULTI-SELECT ROWS, one toggle. 'all' is the row's clear — it empties
@@ -2275,6 +2279,77 @@ reg('toggleShop', ids=>{
     .then(()=>{ state.prodBusy=null; render(); showToast(next?T('On the shop','已上架'):T('Off the shop','已下架')); })
     .catch(e=>{
       rows.forEach(p=>{ p.pub=!next; reKindProduct(p); });   // the switch must never lie
+      state.prodBusy=null;
+      if(String(e.message)==='auth') return;
+      state.prodErr=E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
+      render();
+    });
+});
+/* SUPPLIER OUT, FROM THE SHOP FLOOR. A supplier-direct item holds none of our
+   stock, so the sheet drew a read-only card and told the operator to "Resume on
+   desktop" — a sentence that is true and useless, because the person reading it
+   is holding the only thing that needs to change. The supplier rings at night;
+   the answer is one flag.
+
+   Writes at once and rolls back, the same contract as toggleShop above, because
+   it is the same kind of decision: something has to stop selling NOW. Staging
+   it behind the sheet's Save would make two switches that look identical behave
+   differently on the same screen. */
+reg('togglePaused', id=>{
+  const p=(DB.products||[]).find(x=>x._id===Number(id));
+  if(!p||!p.supplier||state.prodBusy) return;
+  const next=!p.paused;
+  state.prodBusy='pause'+p._id; state.prodErr=null;
+  p.paused=next; reKindProduct(p);   // optimistic
+  render();
+  apiWrite('/products/'+p._id,{supplier_paused:next?1:0},'PATCH')
+    .then(()=>{ state.prodBusy=null; render(); showToast(next?T('Paused','已暂停'):T('Available','有货')); })
+    .catch(e=>{
+      p.paused=!next; reKindProduct(p);   // the switch must never lie
+      state.prodBusy=null;
+      if(String(e.message)==='auth') return;
+      state.prodErr=E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
+      render();
+    });
+});
+/* WHAT HAPPENS WHEN IT RUNS OUT. The desktop's own select (retail-admin.html
+   #pd-oos-policy) offers exactly these three and no others; the four values the
+   PATCH route accepts include a legacy 'always' that select has never shown, so
+   this does not show it either — a phone that could set a value the desktop
+   cannot display is a value nobody can undo from the desktop.
+
+   Applied on the pick, not on Save: it is a picker, and a picker that needs a
+   second confirmation somewhere else is how a choice gets lost on the way back
+   up the sheet. */
+const OOS_POLICIES=[
+  ['strict',        ['Sold out everywhere','全国售罄停售']],
+  ['backorder_gz',  ['Pre-order outside Guangzhou','广州外可预订(现订现发)']],
+  ['backorder_all', ['Pre-order everywhere','全国可预订(补货后发出)']],
+];
+function oosLabel(v){
+  const row=OOS_POLICIES.find(o=>o[0]===String(v||'strict'));
+  return (row||OOS_POLICIES[0])[1];
+}
+reg('openOos', sku=>{ state.oosSku=String(sku||'')||null; render(); });
+reg('closeOos', ()=>{ state.oosSku=null; render(); });
+reg('pickOos', v=>{
+  const p=DB.products.find(x=>x.sku===state.oosSku);
+  /* A product that has gone (a refresh underneath) closes the picker; a write
+     already in flight does NOT. Closing on busy looks identical to the pick
+     being taken and silently throws it away, so the sheet stays up and the
+     second tap lands. */
+  if(!p){ state.oosSku=null; render(); return; }
+  if(state.prodBusy) return;
+  const next=String(v);
+  if(next===String(p.oos||'strict')){ state.oosSku=null; render(); return; }
+  const was=p.oos;
+  state.prodBusy='oos'+p._id; state.prodErr=null;
+  p.oos=next; state.oosSku=null;   // optimistic
+  render();
+  apiWrite('/products/'+p._id,{oos_policy:next},'PATCH')
+    .then(()=>{ state.prodBusy=null; render(); showToast(T('Saved','已保存')); })
+    .catch(e=>{
+      p.oos=was;   // the row must never lie
       state.prodBusy=null;
       if(String(e.message)==='auth') return;
       state.prodErr=E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
@@ -15439,12 +15514,26 @@ function stockCard(p){
      nothing. A supplier-direct item ships from the supplier; an assembled
      bundle's count is derived from its parts. The phone offered a per-store
      stepper for both, and the write would have gone through. */
+  /* THE DEAD END, CLOSED. This card used to end on "Resume on desktop", which
+     was true when the phone had no way to write the flag and is a lie now. Only
+     that sentence goes: "customers cannot order it" is the consequence of being
+     paused and is still worth saying, so the pair is cut at its full stop rather
+     than dropped — test_mobile_products asserts it, and is right to. What sent
+     the operator away is replaced by the switch it was talking about. The
+     label is the desktop's own (retail-admin.html #pd-supplier-paused),
+     verbatim, so both screens name the flag the same. */
   if(p.supplier) return `<div class="card" style="padding:16px">
     <div class="eyebrow">${T('Stock','库存')}</div>
     <div style="font-size:18px;font-weight:500;margin-top:10px">${p.paused?T('Paused','已暂停'):T('Available','有货')}</div>
     <div style="font-size:13px;color:var(--text-secondary);margin-top:5px;line-height:1.55">${p.paused
-      ? T('Supplier paused — customers cannot order it. Resume on desktop.','供应商已暂停 — 顾客无法下单。请在电脑端恢复。')
-      : T('Ships from the supplier, so it holds none of your stock and never runs out.','由供应商直发，不占用你的库存，也不会缺货。')}</div></div>`;
+      ? T('Supplier paused — customers cannot order it.','供应商已暂停 — 顾客无法下单。')
+      : T('Ships from the supplier, so it holds none of your stock and never runs out.','由供应商直发，不占用你的库存，也不会缺货。')}</div>
+    <div style="border-top:1px solid var(--border-default);margin-top:16px;padding-top:16px;display:flex;align-items:center;gap:14px">
+      <span style="flex:1;min-width:0;font-size:15px">${T('Supplier out — pause selling','供应商缺货,暂停销售')}</span>
+      ${state.prodBusy==='pause'+p._id
+        ? `<span style="font-size:12px;color:var(--text-secondary);width:44px;text-align:center;flex:none">…</span>`
+        : toggle(!!p.paused,`APP.cmd('togglePaused','${p._id}')`)}
+    </div></div>`;
   if(p.bundle) return `<div class="card" style="padding:16px">
     <div class="eyebrow">${T('Stock','库存')}</div>
     <div class="num" style="font-size:26px;font-weight:500;margin-top:10px">${p.stock<=0?T('Out','缺货'):p.stock}</div>
@@ -15498,6 +15587,74 @@ function sheetVariants(p){
       ><span>${escAttr(m.vLabel||String(m.sku).replace(/^SKU /,''))}</span></button>`;
   }).join('')}</div>`;
 }
+/* ON THE SHOP, IN THE SHEET. The switch was on the catalogue card and nowhere
+   else, so taking a line off sale from the screen where you had just read its
+   price meant closing the sheet first. It is the one product decision that is
+   urgent, and the sheet is where the operator already is.
+
+   It sits in the HEAD, above the scroll: the whole point of putting it here is
+   that it is read first and cannot be scrolled away from. It writes at once and
+   rolls back on refusal — the same command the card calls, on the same family of
+   sizes — because a switch that looks identical on two screens must not behave
+   differently on them. Price and stock still ride Save; those are numbers being
+   typed, not a decision being taken.
+
+   The desktop drawer puts the same control in the same place, as a tappable
+   state tag (09-products.js pdRenderHeadTags), so this is one gesture across
+   all three surfaces rather than a phone invention.
+
+   COLOUR: Sage for on, plain grey for off, matching what the pills already mean
+   in this app — Live is Sage, Draft is the neutral. Amber is Low and is not
+   spent here; a product the operator has deliberately hidden is not a warning. */
+function sheetShopStrip(p){
+  const fam=prodFamily(p);
+  const members=fam.length?fam:[p];
+  const on=members.some(m=>m.pub);
+  const ids=members.map(m=>m._id).join(',');
+  const busy=state.prodBusy==='shop'+members[0]._id;
+  const bg=on?'var(--sage-tint)':'rgba(88,96,110,0.10)';
+  const fg=on?'var(--sage-ink)':'var(--text-secondary)';
+  return `<div style="display:flex;align-items:center;gap:14px;margin-top:12px;padding:11px 14px;border-radius:12px;background:${bg}">
+    <span style="flex:1;min-width:0;font-size:15px;font-weight:500;color:${fg}">${on?T('In shop','上架'):T('Hidden','未上架')}</span>
+    ${busy?`<span style="font-size:12px;color:${fg};width:44px;text-align:center;flex:none">…</span>`
+          :toggle(on,`APP.cmd('toggleShop','${ids}')`)}</div>`;
+}
+/* WHAT SHOPPERS SEE AT ZERO. One row, carrying the answer rather than a label
+   for it: the three policies are whole sentences already and a heading above
+   them would only say the same thing twice.
+
+   HIDDEN FOR SUPPLIER-DIRECT AND NOTHING ELSE, which is the desktop's own rule
+   (pdSyncSupplierUi hides #pd-oos-block on exactly that condition). A BUNDLE
+   KEEPS IT: its count is derived from its parts, but it still reaches zero, and
+   what a shopper sees then is as real a question for a bundle as for anything
+   on a shelf. Leaving it off would have been this file inventing a divergence. */
+function oosCard(p){
+  if(p.supplier) return '';
+  const busy=state.prodBusy==='oos'+p._id;
+  return `<div class="card" style="padding:0">
+    <button class="row" ${busy?'disabled':''} onclick="APP.cmd('openOos','${escAttr(p.sku)}')" style="opacity:${busy?'.55':'1'}">
+      <span style="flex:1;min-width:0">
+        <span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('When it runs out','缺货时的处理方式')}</span>
+        <span style="display:block;font-size:15px;margin-top:2px">${T(...oosLabel(p.oos))}</span>
+      </span>
+      <span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right',20)}</span>
+    </button></div>`;
+}
+/* The picker. Applies on the pick and closes — a choice that needed a second
+   confirmation elsewhere is a choice that gets lost on the way back up. */
+function sheetOos(){
+  const p=DB.products.find(x=>x.sku===state.oosSku); if(!p) return '';
+  const cur=String(p.oos||'strict');
+  return `<div class="scrim" style="z-index:47;background:rgba(17,26,43,.30)" onclick="APP.scrimClose('closeOos')"></div>
+   <div class="sheet" style="z-index:48;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 30px)"><div class="grabber" style="margin-bottom:10px"></div>
+   <div style="padding:2px 20px 10px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('When it runs out','缺货时的处理方式')}</div>
+   ${OOS_POLICIES.map(([k,label],i)=>`${i?'<div class="sep" style="margin:0 20px"></div>':''}
+     <button class="row" style="min-height:60px;padding:12px 20px" onclick="APP.cmd('pickOos','${k}')">
+       <span style="flex:1;min-width:0;font-size:15px;${k===cur?'font-weight:500':''}">${T(...label)}</span>
+       ${k===cur?`<span style="flex:none;display:flex">${ic('check',20,2)}</span>`:'<span style="width:20px;flex:none"></span>'}</button>`).join('')}
+   <div style="display:flex;gap:8px;padding:14px 20px 0">
+     <button class="btn2" style="flex:1" onclick="APP.cmd('closeOos')">${T('Cancel','取消')}</button></div></div>`;
+}
 function sheetProduct(){
   const p=DB.products.find(x=>x.sku===state.productSku); if(!p) return '';
   const noAnim=state.prodMounted?'animation:none;':'';
@@ -15506,10 +15663,18 @@ function sheetProduct(){
      <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
          <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('closeProduct')">${ic('x',22,2)}</button>
-         <div style="flex:1;min-width:0;padding-top:1px"><div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><span style="font-size:17px;font-weight:500">${T(...p.name)}</span>${pill(p.kind,T(...p.status))}</div>
-         <div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:3px">${p.sku}</div></div><span style="width:36px;flex:none"></span></div></div>
+         <div style="flex:1;min-width:0;padding-top:1px"><div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><span style="font-size:17px;font-weight:500">${T(...p.name)}</span>${
+           /* THE PILL AND THE SWITCH MUST NOT SAY THE SAME THING TWICE. The
+              catalogue card settled this already: "Live" is the switch in its on
+              position and "Draft" is the switch in its off position, so the pill
+              is drawn only where it says something the switch cannot — Low, Out,
+              or a supplier item that has been Paused. Same rule here, now that
+              the switch is on this screen too. */
+           (p.kind==='restock'||p.kind==='off')?pill(p.kind,T(...p.status)):''}</div>
+         <div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:3px">${p.sku}</div></div><span style="width:36px;flex:none"></span></div>
+       ${sheetShopStrip(p)}</div>
      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px;background:var(--bg)">
-       ${noteBar(T('Quick-edit stock and price · full editing on desktop','快改库存与价格 · 完整编辑在电脑端'))}
+       ${noteBar(T('Quick-edit selling, stock and price · full editing on desktop','快改上架、库存与价格 · 完整编辑在电脑端'))}
        ${sheetVariants(p)}
        ${state.prodErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
          <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
@@ -15523,6 +15688,7 @@ function sheetProduct(){
          </div>
        </div>
        ${stockCard(p)}
+       ${oosCard(p)}
      </div>
      <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
        <button class="btn2" style="width:100%" ${state.prodBusy?'disabled':''} onclick="APP.cmd('saveProduct')">${state.prodBusy?T('Saving…','保存中…'):T('Save','保存')}</button></div></div>`;
@@ -18942,6 +19108,7 @@ function render(){
   if(state.detailId) html += sheetOrderDetail();
   if(state.detailActions) html += sheetActions();
   if(state.productSku) html += sheetProduct();
+  if(state.oosSku) html += sheetOos();
   if(state.reply!=null) html += sheetReply();
   if(state.poId!=null) html += sheetPO();
   if(state.chanSheet) html += sheetChannel();
@@ -19371,6 +19538,7 @@ function layers(){
   /* After the record, so Back closes it FIRST: the address sheet sits over the
      record it was opened from, exactly as its z-index says. */
   if(state.caddr) L.push(()=>{ state.caddr=null; });
+  if(state.oosSku) L.push(()=>{ state.oosSku=null; });
   if(state.productSku) L.push(()=>{ state.productSku=null; });
   if(state.poId!=null) L.push(()=>{ state.poId=null; });
   /* AN OPEN KITCHEN JOB (§115). It is a STATE of the queue screen rather than a
@@ -20875,7 +21043,8 @@ function mapProduct(r){
     bundle:!!(r.is_bundle||r.bundle_mode==='prepacked'),
     designed:!!r.has_blocks,
     price:money(CUR,price), priceNum:Number(price)||0, stock, stockLabel:[stock+' in stock',('库存 '+stock)], status:st, kind,
-    pub, supplier, paused, cat:String(r.top_category||r.category||'').trim(),
+    pub, supplier, paused, oos:String(r.oos_policy||'strict'),
+    cat:String(r.top_category||r.category||'').trim(),
     // One lowercased haystack per product, built once: name in both languages
     // and the SKU, which is what the desktop's search box matches on.
     hay:[r.name_en||'',r.name_cn||'',r.sku||''].join(' ').toLowerCase()};
