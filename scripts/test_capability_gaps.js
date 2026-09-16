@@ -147,6 +147,28 @@ is(requiredCapFor('POST', '/api/retail-admin/customers/12/affiliate-block'), 'cu
 is(requiredCapFor('POST', '/api/retail-admin/customers/12/affiliate-unblock'), 'customers:edit',
   '…and so does affiliate-unblock');
 
+// ──────────────────────────────────────────────────────────────────────
+section('5 · the same shape, CLOSED — reset-test');
+
+/* `reset-test` missed the same rule for the same reason and answered
+   `customers:edit`: the weakest customer capability, on the most destructive
+   route in the file. It archives a customer's openid so their next silent
+   mini-app login mints them a brand-new row, leaving their orders, points,
+   balance and addresses in place and permanently unreachable from their phone.
+
+   CLOSED rather than pinned, which is the opposite call to §4 above, and the
+   difference is who gets refused. affiliate-block is live: narrowing it takes
+   a tool away from operators mid-shift. reset-test had NO BUTTON ANYWHERE
+   until the Customers drawer got one, so narrowing it refuses nobody who can
+   do it today. A gate is cheapest to move before the control ships, and this
+   is that moment. */
+is(requiredCapFor('POST', '/api/retail-admin/customers/12/reset-test'), 'customers:block',
+  'reset-test answers customers:block, not customers:edit');
+is(requiredCapFor('POST', '/api/retail-admin/customers/12/block'), 'customers:block',
+  '…alongside the block rule it now rides, which is unchanged');
+is(requiredCapFor('PATCH', '/api/retail-admin/customers/12'), 'customers:edit',
+  '…and a plain profile edit still answers customers:edit');
+
 // ─────────────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

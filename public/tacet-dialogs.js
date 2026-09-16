@@ -12,7 +12,8 @@
 //   askConfirm(opts) -> Promise<boolean>
 //     opts: { title|titleEn+titleCn, body|bodyEn+bodyCn (may contain simple HTML
 //            like <b>), confirmLabel|confirmEn+confirmCn, cancelLabel|cancelEn+cancelCn,
-//            danger: bool, matchWord: string (optional typed-confirmation gate),
+//            danger: bool, matchWord: string (optional typed-confirmation gate;
+//            ASCII only and no ' · ' — it is printed inside a bilingual label),
 //            hideCancel: bool — drops the Cancel button, turning the dialog into
 //            an acknowledgement ("here is what happened") rather than a question.
 //            Escape and the backdrop still dismiss it. }
@@ -217,8 +218,21 @@
     const body = pick(opts, 'body');
     const confirmLabel = pick(opts, ['confirm', 'confirmLabel']) || 'Confirm';
     const cancelLabel = pick(opts, ['cancel', 'cancelLabel']) || 'Cancel';
+    /* BILINGUAL, like every other label this file emits. It was English-only
+       until the Customers drawer's reset-to-a-new-customer control became the
+       FIRST caller ever to pass matchWord — the gate was built, documented
+       and never used, so nobody had yet seen it print English at an operator
+       reading Chinese.
+
+       The pair is split by the page's own walker, exactly as pick() above
+       relies on: English left, ' · ', Chinese right. matchWord therefore has
+       to be ASCII and must not itself contain ' · ', or the walker cuts the
+       label in the wrong place — the caller's word is repeated on BOTH sides,
+       so a Chinese word there would put Chinese on the English side and the
+       split would be refused. Callers pass a short uppercase token; RESET is
+       the only one so far. */
     const gateField = opts.matchWord
-      ? `<div class="tdlg-field"><label for="tdlg-gate">Type ${opts.matchWord} to continue</label><input id="tdlg-gate" type="text" placeholder="${opts.matchWord}" autocomplete="off"></div>`
+      ? `<div class="tdlg-field"><label for="tdlg-gate">Type ${opts.matchWord} to continue · 输入 ${opts.matchWord} 以继续</label><input id="tdlg-gate" type="text" placeholder="${opts.matchWord}" autocomplete="off"></div>`
       : '';
     const bodyHtml = `
       <div class="tdlg-ic">${icon}</div>

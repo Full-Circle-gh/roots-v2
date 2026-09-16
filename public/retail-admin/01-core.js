@@ -210,6 +210,7 @@ const TD_ERR = {
   already_shipped:        ['That has already shipped, so it cannot be undone here.', '已发货,无法在此撤销。'],
   already_delivered:      ['That has already been delivered.', '已送达。'],
   already_used_or_missing:['That has already been used, or is no longer there.', '已使用或已不存在。'],
+  already_reset:          ['That customer has already been reset — they are waiting to arrive as a new customer.', '该顾客已重置，正等待以新顾客身份进入。'],
   already_receiving:      ['Somebody is already receiving that order.', '已有人正在收货。'],
   courier_already_called: ['A courier has already been called for this order.', '该订单已呼叫运力。'],
   refund_already_processing: ['A refund is being processed for this order right now — try again in a moment.', '该订单正在处理退款,请稍后重试。'],

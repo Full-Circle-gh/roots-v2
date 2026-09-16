@@ -1489,9 +1489,25 @@ function cuRenderDetail() {
   };
 
   // Drawer action bar — two everyday buttons (Message, Edit profile). The
-  // rare/deliberate actions (Sign out all devices, Block) fold into a More ▾
-  // menu so the header stays calm; Block sits last, brick, behind a divider.
-  // Unblock renders neutral since it isn't destructive.
+  // rare/deliberate actions (Sign out all devices, Block, Reset to a new
+  // customer) fold into a More ▾ menu so the header stays calm. Unblock
+  // renders neutral since it isn't destructive.
+  //
+  // RESET SITS BELOW BLOCK, which used to be last. Block is a door you can
+  // open again; reset is not. It detaches the customer's WeChat sign-in from
+  // this record, so their next mini-app open mints them a brand-new customer
+  // and their orders, points, balance and addresses — all still here — become
+  // unreachable from their phone forever. The endpoint refuses a second reset,
+  // which is the only thing standing between a mis-click and a customer who
+  // cannot be put back from this screen. So it is last, it is brick, it is
+  // behind its own divider, its label says TESTING rather than implying an
+  // everyday tool, and it is the one control in this drawer that makes the
+  // operator TYPE a word before it will run.
+  //
+  // data-cap, which the Block item beside it still lacks: applyCapGates hides
+  // it from anyone without `customers:block`, the capability lib/cap-routes.js
+  // now demands for this route. The server was always the gate; this stops the
+  // control being offered to somebody it will only refuse.
   const blockItem = c.is_blocked
     ? `<button class="cux-mi" onclick="cuMoreClose(); cuToggleBlock(event)">
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 5-5"/></svg>
@@ -1499,6 +1515,19 @@ function cuRenderDetail() {
     : `<button class="cux-mi danger" onclick="cuMoreClose(); cuToggleBlock(event)">
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>
          Block customer · 封禁顾客</button>`;
+  // Already-reset customers get the control in a spent state rather than a
+  // hidden one: the openid carries a `_reset_` prefix once it has run, the
+  // endpoint answers `already_reset`, and an operator who cannot see why the
+  // button vanished is an operator who asks whether the reset worked.
+  const alreadyReset = String(c.openid || '').startsWith('_reset_');
+  const resetItem = `
+        <div class="cux-sep"></div>
+        <button class="cux-mi danger" data-cap="customers:block"
+                onclick="cuMoreClose(); cuResetTestCustomer(event)" ${alreadyReset ? 'disabled' : ''}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+          Reset to a new customer · 重置为新顾客
+          <span class="hint" data-no-i18n>${alreadyReset ? cuT('already reset', '已重置') : cuT('testing', '测试')}</span></button>`;
+
   // "Back to order" leads the row when we got here from an order's Customer
   // tile. It sits in the PINNED row rather than in the scrolling body (where
   // the order drawer keeps its mirror) so it survives a scroll down the
@@ -1533,6 +1562,7 @@ function cuRenderDetail() {
           <span class="hint" data-no-i18n>${sessions || ''}</span></button>
         <div class="cux-sep"></div>
         ${blockItem}
+        ${resetItem}
       </div>
     </div>
   `;
@@ -1989,6 +2019,30 @@ function cuRenderDetail() {
     </div>
   `;
 
+  /* ⚠ THE SWEEP THIS DRAWER HAS NEVER RUN. applyCapGates() is what turns a
+     [data-cap] attribute into a hidden control, and it is called from a dozen
+     render paths — Settings, Orders, Marketing, Delivery, Shops — but never
+     from here. It runs once from setCaps() when capabilities arrive, so it
+     only ever swept what was already in the DOM; this drawer is built in
+     JavaScript and painted long afterwards, so the two Adjust buttons below
+     — tagged for `customers:adjust`, and counted by
+     scripts/test_role_tagged_controls.js §3b, which is why this note spells
+     the capability out rather than quoting the attribute — have been
+     DECORATIVE since the day they were written.
+     Nothing leaked — cap-routes.js has always made the server refuse a
+     points/wallet adjust without `customers:adjust` — but the buttons were
+     offered to operators the server would then turn down, which is the exact
+     thing data-cap exists to stop.
+
+     Found because the reset control above carries data-cap too, and claiming a
+     gate that does not run would have been worse than claiming none.
+
+     THE VISIBLE CHANGE: an operator WITHOUT `customers:adjust` stops seeing the
+     two Adjust buttons, and one without `customers:block` stops seeing Reset to
+     a new customer. Neither could successfully use them before. Same idiom and
+     same swallow as the five other callers — the gate is a nicety, the server
+     is the gate. */
+  try { if (typeof applyCapGates === 'function') applyCapGates(); } catch (e) { /* the server still refuses */ }
 }
 
 
@@ -2551,6 +2605,73 @@ async function cuForceLogout(ev) {
       : cuT('No active sessions — nothing was revoked', '当前没有活跃会话，未撤销任何内容'));
     cuOpenDetail(CU_CURRENT.customer.id);
   } catch {} finally { if (btn) btn.disabled = false; }
+}
+
+// 🔴 THE ONLY CONTROL IN THIS DRAWER THAT MAKES THE OPERATOR TYPE A WORD.
+//
+// What it does, exactly: POST /reset-test archives the customer's openid by
+// prefixing it, so the next silent wx.login cannot match it and falls through
+// to the INSERT path in POST /api/retail/auth. WeChat's own identity is
+// unchanged; what breaks is the mapping from that identity to THIS row. Their
+// orders, points, balance, addresses and review history all stay exactly where
+// they are, and their phone can never reach any of it again. The row is not
+// deleted — several child tables are ON DELETE RESTRICT and the data is worth
+// keeping — which is also why "reset" is the honest word and "delete" is not.
+//
+// WHY IT EXISTS: testing the signup and onboarding flow on your own phone
+// without a second WeChat account. That is the whole purpose, and the copy
+// says so rather than leaving an operator to infer it from a quiet label.
+//
+// WHY THE TYPED GATE: it is effectively one-way from this screen. The endpoint
+// refuses a second reset (`already_reset`), and nothing in this admin puts the
+// old openid back — restoring one means editing the row by hand. A confirm
+// button is the right friction for Block, which can simply be undone. It is
+// not the right friction for this.
+//
+// ⚠ cuT, NOT an 'EN · CN' pair, for the title and the toast: both carry the
+// customer's own name or a count, and the bilingual walker splits a text node
+// on its FIRST ' · '. A name containing ' · ' — or simply sitting to the left
+// of the separator — is exactly how cuForceLogout above lost its number for
+// every English operator. The body has no interpolation but is composed the
+// same way, because one call mixing two mechanisms is how the next edit picks
+// the wrong one.
+async function cuResetTestCustomer(ev) {
+  const btn = ev && ev.currentTarget;   // capture before the confirm await nulls currentTarget
+  if (!CU_CURRENT?.customer) return;
+  const c = CU_CURRENT.customer;
+  const who = c.nickname || c.phone || ('#' + c.id);
+  if (String(c.openid || '').startsWith('_reset_')) {
+    return toast(cuT('That customer has already been reset.', '该顾客已重置。'), 'err');
+  }
+  if (!(await askConfirm({
+    title: cuT(`Reset ${who} to a new customer?`, `将 ${who} 重置为新顾客？`),
+    body: cuT(
+      'Their WeChat sign-in is detached from this record. Next time they open the mini app they arrive as a new customer with no orders, points, balance or addresses. This record is kept here and is not deleted, but their phone can never reach it again. For testing signup on your own phone. Not for a real customer.',
+      '将其微信登录与此记录解除关联。下次打开小程序时，将以新顾客身份进入，没有订单、积分、余额和地址。此记录会保留，不会删除，但其手机将无法再次访问。仅用于在自己手机上测试注册流程，请勿用于真实顾客。'),
+    confirmLabel: cuT('Reset to a new customer', '重置为新顾客'),
+    danger: true,
+    matchWord: 'RESET',   // ASCII, no ' · ' — it is printed inside a bilingual label
+  }))) return;
+  if (btn) btn.disabled = true;   // manual disable (not adminWrite's btn) so the icon isn't stripped
+  try {
+    const j = await cuWriteRequest({
+      url: '/api/retail-admin/customers/' + c.id + '/reset-test', method: 'POST',
+      errLabelEn: 'Reset failed', errLabelCn: '重置失败',
+    });
+    const n = j.revoked || 0;
+    toast(n
+      ? cuT(`Reset — ${n} session${n === 1 ? '' : 's'} revoked, they arrive as a new customer next time`,
+            `已重置，已撤销 ${n} 个会话，下次进入将是新顾客`)
+      : cuT('Reset — they arrive as a new customer next time',
+            '已重置，下次进入将是新顾客'));
+    cuOpenDetail(c.id);
+  } catch {
+    // Safe to swallow: adminWrite has already toasted the reason — it turns the
+    // server's code into a sentence via tdErrorText (which now knows
+    // `already_reset`) and puts the bare code in the toast's title. Re-raising
+    // here would leave the drawer half-refreshed behind an unhandled rejection,
+    // and toasting again would say the same thing twice.
+  } finally { if (btn) btn.disabled = false; }
 }
 
 function cuOpenAdjust(kind) {
