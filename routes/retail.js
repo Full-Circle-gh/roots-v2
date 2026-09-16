@@ -1255,6 +1255,88 @@ function localPreorderLine(lines, address, { scheduledShipDistrict = false, fres
   }) || null;
 }
 
+// EVERY line the checkout will refuse on stock — not just the first one.
+//
+// The three gates this wraps already existed, each with its own `.find()`, each
+// returning ONE product_id. That is right for a refusal (the order stops at the
+// first thing wrong with it) and wrong for everything else, because
+// /checkout/quote ran NONE of them: priceCart selects neither oos_policy nor
+// real_stock, so the quote could not have answered the question if it had been
+// asked. The page therefore drew a clean cart and a live PLACE ORDER for a cart
+// POST /orders had already decided to refuse, and the customer met the refusal
+// as a toast naming one item. Removing it revealed the next. A five-line cart
+// was five round trips and the last of them still never said the cart was the
+// problem. Reported by a customer on 2026-09-16, twice, in the same sitting.
+//
+// So the gates are asked here, TOGETHER, over the whole cart, and the answer is
+// a LIST. Nothing about what gets refused changes: POST /orders keeps its own
+// gates in their own places, in their own order, returning their own 409 — this
+// only rides alongside so the body can carry the rest of the list. /quote calls
+// it and reports it without refusing anything; a quote prices a cart, it does
+// not accept one.
+//
+// `lines` are resolved order lines ({ product, qty }) whose product carries
+// oos_policy / is_batch_made / ship_from_supplier / supplier_paused and the
+// per-store `real_stock` SUM — the column set POST /orders already selects and
+// the one /quote now selects beside priceCart.
+//
+// The local pre-order half DELEGATES to localPreorderLine one line at a time
+// rather than restating its test. That rule has three opt-in exemptions and a
+// register of reasons above it; a second copy of the condition here would be a
+// second thing to keep true, and the whole point of this helper is that the
+// quote and the order cannot disagree again.
+function checkoutStockBlocks(lines, address, {
+  isPickup = false,
+  scheduledShipDistrict = false,
+  freshPreorderOk = false,
+  preorderParkOk = false,
+  includeLocalPreorder = true,
+} = {}) {
+  const out  = [];
+  const seen = new Set();
+  // One entry per PRODUCT, first reason wins. A line that is both sold out and
+  // supplier-paused is one thing for the customer to remove, not two rows
+  // saying so twice.
+  const add = (r, reason, available) => {
+    if (!r || !r.product || seen.has(r.product.id)) return;
+    seen.add(r.product.id);
+    out.push({
+      product_id: r.product.id,
+      name_en:    r.product.name_en || null,
+      name_cn:    r.product.name_cn || null,
+      requested:  r.qty,
+      available:  Math.max(0, Number(available) || 0),
+      reason,
+    });
+  };
+
+  // 1. Hard out-of-stock — a 'strict' line (the default policy) is never
+  //    orderable at zero, in any region. Same test as the gate in POST /orders.
+  for (const r of lines || []) {
+    if (!r || !r.product) continue;
+    if (effectiveOosPolicy(r.product) !== 'strict') continue;
+    const avail = r.product.real_stock == null ? null : Number(r.product.real_stock);
+    if (avail != null && avail < r.qty) add(r, 'out_of_stock', avail);
+  }
+
+  // 2. Supplier-direct line whose supplier the operator has flagged as out.
+  for (const r of lines || []) {
+    if (!r || !r.product) continue;
+    if (r.product.ship_from_supplier && r.product.supplier_paused) add(r, 'supplier_unavailable', 0);
+  }
+
+  // 3. Local pre-order gate, asked of each line on its own so the ONE rule in
+  //    localPreorderLine answers for all of them.
+  if (includeLocalPreorder && !isPickup) {
+    for (const r of lines || []) {
+      const hit = localPreorderLine([r], address, { scheduledShipDistrict, freshPreorderOk, preorderParkOk });
+      if (hit) add(r, 'local_preorder', hit.product.real_stock);
+    }
+  }
+
+  return out;
+}
+
 // List/grid variant of the column set: NEVER pull the heavy inline base64 photo.
 // A data: URI is collapsed to the tiny literal 'data:' marker INSIDE SQLite, so
 // the multi-MB blob never enters Node's heap or the JSON payload — the list
@@ -10593,6 +10675,14 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       success: false, error: 'insufficient_stock',
       product_id: hardOos.product.id,
       available: Math.max(0, Number(hardOos.product.real_stock) || 0),
+      // The refusal is still hardOos alone — unchanged, first offender, same
+      // two fields above. This carries the REST of the cart's blocked lines so
+      // a client that hits this as a race (the quote said fine, the shelf moved
+      // underneath it) can clear all of them in one go instead of coming back
+      // once per item. The local-run half is left out: `scheduledShipDistrict`
+      // is resolved further down, from an address this point has not finished
+      // with, and guessing it here is how the two answers drift apart.
+      blocked_items: checkoutStockBlocks(resolved, address, { includeLocalPreorder: false }),
     });
   }
 
@@ -10863,6 +10953,12 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
         success: false, error: 'insufficient_stock',
         product_id: localPre.product.id,
         available: Math.max(0, Number(localPre.product.real_stock) || 0),
+        // Same as the hard gate above: the refusal is unchanged, the list rides
+        // alongside. Every flag this point resolved is passed on, so the list
+        // answers for exactly the cart this gate just judged.
+        blocked_items: checkoutStockBlocks(mutatedItems, address, {
+          isPickup, scheduledShipDistrict, freshPreorderOk: true, preorderParkOk: true,
+        }),
       });
     }
   }
@@ -35519,6 +35615,82 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   const priced = priceCart(items, req.customer.id);
   if (priced.error) return res.status(400).json({ success: false, error: priced.error });
 
+  // ONE CLOCK for the whole quote, declared before its first reader. It has
+  // moved up once before for exactly this reason — a const read above its own
+  // declaration is a ReferenceError, and this endpoint is every customer's
+  // checkout. The stock pre-flight below is now the first reader.
+  const quoteNow = new Date();
+
+  // ── Which lines will the ORDER endpoint refuse on stock? ─────────────
+  // Asked here so the answer arrives with the page rather than with the
+  // payment. priceCart deliberately selects none of the columns this needs
+  // (it prices; it does not judge stock), so the gate columns are read once,
+  // here, in one statement for the whole cart — the same column set POST
+  // /orders selects per line, so checkoutStockBlocks is answering the same
+  // question off the same data.
+  //
+  // THIS NEVER REFUSES. A quote that started returning 409 would break every
+  // client that treats a failed quote as "couldn't price it" and falls back to
+  // a local subtotal (applyQuoteFallback), which would put the customer back in
+  // front of a live PLACE ORDER — the exact failure this is here to end. The
+  // list goes in the body; the client decides what to draw. An older client
+  // that has never heard of `blocked_items` ignores it and behaves as it does
+  // today, and POST /orders still refuses on its own.
+  let blockedItems = [];
+  try {
+    const wantIds = [...new Set((items || [])
+      .map((i) => parseInt(i.product_id, 10))
+      .filter(Boolean))];
+    if (wantIds.length) {
+      const ph = wantIds.map(() => '?').join(',');
+      const gateRows = tdb().prepare(
+        `SELECT id, name_en, name_cn,
+                ship_from_supplier, supplier_paused, is_batch_made, oos_policy,
+                ${inventory.sellableStockSql('store_products.id', 'stock_qty')} AS real_stock
+           FROM store_products
+          WHERE id IN (${ph}) AND is_published = 1 AND COALESCE(is_active, 1) = 1`
+      ).all(...wantIds);
+      const gateById = new Map(gateRows.map((r) => [r.id, r]));
+      // Quantities summed per product: two cart rows of the same product with
+      // different options are ONE demand on one shelf, which is how
+      // expandStockLines aggregates them for the reservation.
+      const qtyById = new Map();
+      for (const i of items || []) {
+        const pid = parseInt(i.product_id, 10);
+        const q   = Number(i.qty);
+        if (!pid || !(q > 0)) continue;
+        qtyById.set(pid, (qtyById.get(pid) || 0) + q);
+      }
+      const gateLines = [...qtyById.entries()]
+        .filter(([pid]) => gateById.has(pid))
+        .map(([pid, qty]) => ({ product: gateById.get(pid), qty }));
+      // The local-run half needs to know whether this shopper is ON the local
+      // run, resolved exactly as the order path resolves it — an opt-in
+      // same-day district that did NOT buy the same-day slot ships on the batch
+      // cadence and keeps its pre-order.
+      const scheduledShipDistrict =
+        inventory.isGuangzhouAddress(address) &&
+        inventory.isOptInSameDayDistrict(address) &&
+        !inventory.isSameDayDelivery(body.delivery_slot_id || null, quoteNow, deliveryTz());
+      blockedItems = checkoutStockBlocks(gateLines, address, {
+        isPickup: false,           // this endpoint never quotes a pickup
+        scheduledShipDistrict,
+        // Checkout is the caller that CAN honour a fresh pre-order and CAN park
+        // a §128 one — the same two flags POST /orders passes, for the same two
+        // reasons. Passing anything else here would make the page warn about a
+        // line the order would have accepted.
+        freshPreorderOk: true,
+        preorderParkOk: true,
+      });
+    }
+  } catch (e) {
+    // A quote that can't answer the stock question still prices the cart. The
+    // order endpoint's own gates are unchanged and remain the refusal.
+    console.warn('[quote blocked_items]', e.message);
+    blockedItems = [];
+  }
+
+
   // Best-effort checkout-abandonment log. Every reach of this point means the
   // customer opened checkout and got a valid price; if they never place a paid
   // order in the same window the dashboard flags it as an abandoned checkout.
@@ -35656,11 +35828,10 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   // `resolvedStoreCode`, which stays the proximity answer because that is what
   // the store-move notice below is a counterfactual about. Null when routing
   // couldn't settle; earliestBatchMakeDate reads that as "today unproven" and rolls forward.
-  // ONE CLOCK for the whole quote. It used to be declared halfway down, which
-  // was fine until §80's covered-lines call needed it above that point — a
-  // const read before its declaration is a ReferenceError, and this endpoint
-  // is every customer's checkout. Declared once, at the top, read everywhere.
-  const quoteNow = new Date();
+  // `quoteNow` — the one clock for the whole quote — is declared at the top of
+  // this handler. It sat here until §80's covered-lines call needed it above
+  // this point, and moved again when the stock pre-flight became its first
+  // reader. Declared once, above every reader, for the reason stated there.
   let quoteStore = null;
   // The shelves this order would actually be served off — set on EVERY branch
   // below, unlike `quoteStore`, which only lands on the no-shortage path and
@@ -35910,6 +36081,10 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
       ),
       store_move_notice: storeMoveNotice,
       routing: routingPreview,
+      // Lines POST /orders will refuse on stock, ALL of them, so the page can
+      // say so before the customer pays instead of after. Empty on the happy
+      // path. See checkoutStockBlocks for why this list is not a refusal.
+      blocked_items: blockedItems,
       // Is this order heading for a same-city rider (Qingyun)? The client uses
       // it to decide whether a recipient phone that can't take a rider's call
       // is worth mentioning — see the notice in the mini-app checkout and

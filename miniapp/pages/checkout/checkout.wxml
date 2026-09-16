@@ -28,6 +28,10 @@
             <view wx:if="{{item.ship_from_supplier}}" class="line-supplier f-toni">
               <text class="line-supplier-glyph">↗</text>{{lang === 'cn' ? '供应商直发 · 单独送达' : 'Ships from supplier · separately'}}
             </view>
+            <!-- Sold out, said on the LINE. The customer's question at a
+                 refusal is "which one?", and the answer belongs beside the
+                 item, not only in a popup they have to remember. -->
+            <view wx:if="{{item.soldOut}}" class="line-soldout f-toni">{{lang === 'cn' ? '售罄' : 'SOLD OUT'}}</view>
           </view>
         </view>
         <view class="line-total f-bear">
@@ -719,12 +723,16 @@
          tap-target view is strictly simpler and visually stable.
          Disabled state is a class — placeOrder() also no-ops on disabled
          so a stray tap can't fire. -->
-    <view class="place-btn f-toni {{!isBound ? 'place-btn--bind' : ''}} {{(placing || (isBound && (zoneError || localOnlyBlock))) ? 'place-btn--disabled' : ''}}"
+    <view class="place-btn f-toni {{!isBound ? 'place-btn--bind' : ''}} {{(placing || (isBound && (zoneError || localOnlyBlock || stockBlock))) ? 'place-btn--disabled' : ''}}"
           hover-class="place-btn--pressed"
           hover-stay-time="80"
           bindtap="placeOrder"
-          aria-disabled="{{!!(placing || (isBound && (zoneError || localOnlyBlock)))}}">
-      {{placing ? '...' : (isBound ? copy.placeOrder : copy.placeOrderBind)}}
+          aria-disabled="{{!!(placing || (isBound && (zoneError || localOnlyBlock || stockBlock)))}}">
+      <!-- A held button that still says PLACE ORDER is the old bug in a new
+           place: the customer taps, nothing visibly happens, and they are back
+           to guessing. Say what is wrong on the button itself; the tap still
+           works and opens the popup that fixes it. -->
+      {{placing ? '...' : (isBound ? (stockBlock ? (lang === 'cn' ? '部分商品缺货' : 'Some items out of stock') : copy.placeOrder) : copy.placeOrderBind)}}
     </view>
   </view>
 
@@ -1230,6 +1238,37 @@
       <view class="bn-body">{{localOnlyBody}}</view>
 
       <view class="bn-cta f-toni" bindtap="closeLocalOnly">{{localOnlyCta}}</view>
+    </view>
+  </view>
+
+  <!-- Sold-out explainer. Same card as the Guangzhou-only popup above and driven
+       by one flag for the same reason (a re-quote and the submit backstop both
+       raise it and must not stack two copies).
+
+       EVERY blocked line is named here, which is the point. This replaced a
+       toast that named ONE and offered nothing: the customer removed it, tapped
+       again, met the next name, and had no way to know how many more there
+       were. The primary action clears all of them and re-quotes. -->
+  <view wx:if="{{stockBlockPopup}}" class="bn-backdrop" bindtap="closeStockBlock" catchtouchmove="noop">
+    <view class="bn-card" catchtap="noop">
+      <view class="bn-hero bn-hero--warn">
+        <view class="bn-badge bn-badge--warn">🥗</view>
+      </view>
+      <view class="bn-kicker bn-kicker--warn f-toni">{{ lang === 'cn' ? '缺货商品' : 'Out of stock' }}</view>
+      <view class="bn-title f-bear">{{ lang === 'cn' ? '部分商品缺货' : 'Some items out of stock' }}</view>
+
+      <view wx:if="{{stockBlockItems.length}}" class="bn-items bn-items--warn">
+        <view wx:for="{{stockBlockItems}}" wx:key="name" class="bn-item">
+          <image wx:if="{{item.image}}" class="bn-item-img" src="{{item.image}}" mode="aspectFill"/>
+          <view wx:else class="bn-item-img bn-item-img--ph bn-item-img--warn">🥗</view>
+          <view class="bn-item-name">{{item.name}}</view>
+        </view>
+      </view>
+
+      <view class="bn-body">{{ lang === 'cn' ? '部分商品库存不足,请稍后重试或修改购物车' : 'Some items are out of stock — try again later or update your cart' }}</view>
+
+      <view class="bn-cta f-toni" bindtap="onRemoveBlocked">{{ lang === 'cn' ? '移除缺货商品并下单' : 'Remove out-of-stock & order' }}</view>
+      <view class="bn-cta bn-cta--ghost f-toni" bindtap="closeStockBlock">{{ lang === 'cn' ? '我知道了' : 'OK' }}</view>
     </view>
   </view>
 

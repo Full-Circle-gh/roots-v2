@@ -82,6 +82,15 @@ Page({
     localOnlyNames: [],      // display names of those offending items (for the banner + modal)
     localOnlyPopup: false,   // drives the custom "Guangzhou delivery only" popup (one flag → can't stack)
     localOnlyItems: [],      // [{ name, image }] shown in the popup, matched to the cart for thumbnails
+    // ── Sold-out lines the ORDER endpoint would refuse ──────────────────────
+    // Filled from /quote's `blocked_items`, which runs the same gates POST
+    // /orders runs. Before this existed the quote never asked, so the page drew
+    // a live PLACE ORDER over a cart the server had already decided to refuse,
+    // and the customer found out one item at a time from a toast.
+    stockBlock: false,       // true while any cart line is sold out — PLACE ORDER is held
+    stockBlockIds: [],       // product ids of those lines, so the item rows can mark themselves
+    stockBlockItems: [],     // [{ name, image }] for the popup, matched to the cart for thumbnails
+    stockBlockPopup: false,  // one flag → the popup can't stack on a re-quote
     localOnlyTitle: '',      // computed title for that popup (removed / emptied / blocked variants)
     localOnlyBody: '',       // computed body copy for that popup (avoids an apostrophe literal in WXML)
     localOnlyCta: '',        // computed CTA label for that popup
@@ -1366,6 +1375,14 @@ Page({
     // trigger that calls refreshQuote (voucher apply, points toggle, payment
     // change) routes here while in pickup mode.
     if (this.data.fulfillment === 'pickup') {
+      // Drop any delivery-side sold-out hold on the way in. /quote is the only
+      // thing that sets it and this branch never calls /quote, so a hold raised
+      // before the customer switched to pickup would otherwise sit there for
+      // the rest of the session with nothing able to lift it. Pickup gates its
+      // own stock at the chosen store, inside reserveForOrder.
+      if (this.data.stockBlock) {
+        this.setData({ stockBlock: false, stockBlockIds: [], stockBlockItems: [] });
+      }
       this.recomputePickupTotals();
       return;
     }
@@ -1441,6 +1458,10 @@ Page({
         // A successful quote means the address can receive this cart — clear any
         // prior "Guangzhou only" block.
         if (this.data.localOnlyBlock) this.setData({ localOnlyBlock: false, localOnlyNames: [] });
+        // Sold-out lines, as judged by the SAME gates POST /orders runs. Always
+        // applied — including the empty case, which is what lifts the hold once
+        // the customer has removed them.
+        this.applyBlockedItems(data.blocked_items);
         // The endpoint returns { success: false, error: 'no_zone_match', data } when
         // no zone matches. api.js may surface that as a thrown error OR as a
         // resolved value depending on the helper — defensively handle both.
@@ -2628,6 +2649,14 @@ Page({
       }
       return this.submitOrder({});
     }
+    // A sold-out line in the cart holds the tap. The order endpoint would
+    // refuse this cart anyway; opening the popup here means the customer meets
+    // the refusal with a button that fixes it, instead of meeting it as a toast
+    // after the pay sheet has already been reached.
+    if (this.data.stockBlock) {
+      this.showStockBlockPopup();
+      return;
+    }
     // Replaces the native <button disabled> guard now that the place-order
     // tap target is a <view>. Tapping while in a disabled state silently
     // no-ops (with a toast when the customer would benefit from knowing
@@ -2971,6 +3000,105 @@ Page({
     }
   },
 
+  // ── Sold-out lines ────────────────────────────────────────────────────────
+  // `list` is /quote's (or a 409's) `blocked_items`: [{ product_id, name_en,
+  // name_cn, requested, available, reason }]. Everything downstream — the row
+  // marker, the held PLACE ORDER, the popup, the one-tap removal — reads the
+  // page data this sets, so the quote path and the race path produce exactly
+  // the same screen.
+  applyBlockedItems(list) {
+    const L = this.data.lang;
+    const rows = Array.isArray(list) ? list : [];
+    if (!rows.length) {
+      // Cleared deliberately rather than left stale: a re-quote after removing
+      // the items is the ONLY thing that lifts the hold, so it must lift it.
+      if (this.data.stockBlock || this.data.stockBlockIds.length) {
+        this.setData({ stockBlock: false, stockBlockIds: [], stockBlockItems: [] });
+      }
+      return false;
+    }
+    // Thumbnails come off the live cart rows — the server payload carries names
+    // but no image, and the popup reads better with the product photo. Keyed by
+    // id first, then by display name, the same two-step the Guangzhou-only
+    // popup uses for the same reason (variant/id skew).
+    const cartItems = cart.get().items || [];
+    const imgById = {};
+    const imgByName = {};
+    for (const ci of cartItems) {
+      if (ci.product_id != null && !imgById[ci.product_id]) imgById[ci.product_id] = ci.image || '';
+      const nm = lang.pick(ci.name_en, ci.name_cn, L);
+      if (nm && !imgByName[nm] && ci.image) imgByName[nm] = ci.image;
+    }
+    const ids = [];
+    const items = [];
+    for (const b of rows) {
+      const pid = b && b.product_id;
+      if (pid == null) continue;
+      ids.push(pid);
+      const name = lang.pick(b.name_en, b.name_cn, L);
+      if (name) items.push({ name, image: imgById[pid] || imgByName[name] || '' });
+    }
+    this.setData({
+      stockBlock: ids.length > 0,
+      stockBlockIds: ids,
+      stockBlockItems: items,
+      // Re-mark the rendered cart rows so the sold-out ones carry the tag.
+      items: (this.data.items || []).map(it => ({ ...it, soldOut: ids.indexOf(it.product_id) >= 0 })),
+    });
+    return ids.length > 0;
+  },
+
+  // The popup. Names every sold-out line at once and offers the one action that
+  // gets the customer paid: drop them and carry on with the rest. That is the
+  // whole fix — the old path toasted ONE name and offered nothing, so the only
+  // way forward was to guess, edit the cart, and meet the next one.
+  showStockBlockPopup() {
+    this.setData({
+      stockBlockPopup: true,
+      // Never stack with the other explainers, same rule the Guangzhou-only
+      // popup follows: the thing standing between the customer and paying wins.
+      localOnlyPopup: false,
+      batchNoticePopup: false,
+      preorderNoticePopup: false,
+      localFreshNoticePopup: false,
+      storeMoveNoticePopup: false,
+    });
+  },
+
+  closeStockBlock() {
+    this.setData({ stockBlockPopup: false });
+  },
+
+  // "Remove out-of-stock & order" — every sold-out line, in one tap.
+  onRemoveBlocked() {
+    const ids = this.data.stockBlockIds || [];
+    const cartItems = cart.get().items || [];
+    let removed = 0;
+    cartItems
+      .filter(it => ids.indexOf(it.product_id) >= 0)
+      .forEach(it => { cart.remove(it.key); removed++; });
+    this.setData({ stockBlockPopup: false });
+    // Nothing matched — the cart and the server disagree about what is in it.
+    // Don't loop and don't silently clear the hold; leave the popup's state so
+    // the customer can edit the cart themselves.
+    if (!removed) {
+      wx.showToast({
+        title: this.data.lang === 'cn' ? '部分商品库存不足,请稍后重试或修改购物车' : 'Some items are out of stock — try again later or update your cart',
+        icon: 'none',
+        duration: 2800,
+      });
+      return;
+    }
+    this.setData({ stockBlock: false, stockBlockIds: [], stockBlockItems: [] });
+    // Everything in the cart was sold out — nowhere to check out. Send them
+    // back to browse rather than leaving an empty checkout on screen.
+    if (!cart.get().items.length) {
+      wx.navigateBack({ delta: 1, fail: () => wx.switchTab({ url: '/pages/shop/shop', fail: () => {} }) });
+      return;
+    }
+    this.refreshQuote();
+  },
+
   // The actual order POST + payment flow. Extracted from placeOrder so the
   // 5-option modal handlers can call it directly with the right
   // fallback_choice / replacements payload.
@@ -3283,16 +3411,37 @@ Page({
         if (!extra || !extra._stockRetried) {
           return this.submitOrder({ ...(extra || {}), _stockRetried: true });
         }
-        // 3. Still failing after a retry — give the customer a clear next step.
+        // 3. Still failing after a retry. This used to toast ONE item name and
+        // stop — no button, no list, nothing the customer could act on. They
+        // removed the named item, tapped again, and met the next name; a
+        // customer reported exactly that loop on 2026-09-16. The server now
+        // sends every blocked line, so name them all and offer the removal.
+        const blocked = e?.body?.blocked_items;
+        if (this.applyBlockedItems(blocked)) {
+          this.showStockBlockPopup();
+          return;
+        }
+        // No list came back (an older server, or a shortage raised by routing
+        // rather than by the line gates) — fall back to naming what we were
+        // told, and still offer the removal rather than dead-ending on a toast.
         const offendingId = e?.body?.product_id;
         const offending = offendingId
           ? (this.data.items || []).find(it => it.product_id === offendingId)
           : null;
-        const name = offending ? (this.data.lang === 'cn' ? offending.name_cn : offending.name_en) : '';
+        if (offending) {
+          this.applyBlockedItems([{
+            product_id: offendingId,
+            name_en: offending.name_en,
+            name_cn: offending.name_cn,
+            requested: offending.qty,
+            available: e?.body?.available ?? 0,
+            reason: 'out_of_stock',
+          }]);
+          this.showStockBlockPopup();
+          return;
+        }
         wx.showToast({
-          title: name
-            ? (this.data.lang === 'cn' ? `「${name}」库存不足` : `${name} is out of stock`)
-            : (this.data.lang === 'cn' ? '部分商品库存不足,请稍后重试或修改购物车' : 'Some items are out of stock — try again later or update your cart'),
+          title: this.data.lang === 'cn' ? '部分商品库存不足,请稍后重试或修改购物车' : 'Some items are out of stock — try again later or update your cart',
           icon: 'none',
           duration: 2800,
         });

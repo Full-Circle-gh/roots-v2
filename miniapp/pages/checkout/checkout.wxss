@@ -92,6 +92,23 @@
   padding: 2rpx 12rpx;
 }
 .line-supplier-glyph { font-weight: 700; }
+/* Sold-out tag on a cart line. Same pill shape as the supplier tag beside it,
+   in the warn amber the sold-out popup uses, so the line and the popup are
+   visibly the same message. Berry is the voucher/remove colour on this page and
+   is deliberately not reused here. */
+.line-soldout {
+  white-space: normal;
+  display: inline-flex;
+  align-items: center;
+  margin-top: 5rpx;
+  font-size: calc(19rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  color: #b07d22;
+  background: rgba(240, 212, 155, 0.5);
+  border-radius: 999rpx;
+  padding: 2rpx 12rpx;
+}
 .line-total { font-size: calc(28rpx * var(--font-scale)); display: flex; flex-direction: column; align-items: flex-end; }
 /* Flash-sale line: struck-through original price + a green "save ¥X" tag. */
 .line-was { color: var(--olive); text-decoration: line-through; margin-right: 10rpx; font-size: calc(24rpx * var(--font-scale)); }
@@ -1328,6 +1345,17 @@
   letter-spacing: 0.04em;
 }
 .bn-cta:active { opacity: 0.85; }
+/* Secondary CTA — dismiss without acting. Deliberately colourless: the card has
+   ONE primary action (§ "one primary action, one colour, on every screen") and
+   a second filled button would make the customer choose between two equals when
+   only one of them clears the block. */
+.bn-cta--ghost {
+  margin-top: 10rpx;
+  background: transparent;
+  color: var(--ink);
+  opacity: 0.6;
+  font-size: 26rpx;
+}
 /* Freshness reminder under the dates ("enjoy within 48 hours"). The markup for
    this has shipped since the batch modal was built; the rules never did, so it
    rendered as unstyled body text running edge to edge with an invisible dot.
