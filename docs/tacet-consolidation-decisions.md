@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.297
+# Tacet shared-core consolidation — decisions record, v4.298
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -20,6 +20,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+
+
+2026-09-17 · v4.298 — **§161 · A DUPLICATED PRODUCT CARRIES ANOTHER PRODUCT'S PAGE, AND NOW SAYS SO — REPORTED BY ASH**, who duplicated a product, changed everything about the copy, pressed *Auto-fill from text*, opened the Product editor and found the ORIGINAL's words still there, behind a browser popup saying the page might not be saved: *"all info there still from the dublicate product, not the new iunformation i added"*. **THREE FAULTS WORE ONE SYMPTOM, AND TWO OF THEM MADE THE THIRD INVISIBLE.** `pdOpenPageDesign()` opened the editor without flushing the pending autosave — the editor re-fetches with `cache:'no-store'`, and *Auto-fill* ends on `pdScheduleAutosave()`, so clicking straight through landed inside the 800ms debounce every time; `pdOpen()` and `pdRecipeLinkOpen()` already flushed and this was the one exit that did not. `openProductEditor()` re-pointed the editor's **iframe** `src` with no word to the editor, so its own `beforeunload` fired and the browser asked its generic question — **that is the popup, and Cancel there ABORTS the navigation**, leaving the previous product on screen with nothing said, which is the other half of "it ignored my changes". **THE DECISION: DUPLICATE KEEPS COPYING THE PAGE, AND THE COPY IS MARKED INSTEAD.** Copying `description_blocks` is correct and stays — a 500g/1kg size variant wants the same page, which is most of what duplicate is for; **the rejected alternative was to stop copying it**, breaking the common case to fix the uncommon one. What was missing is that the copy had no way to SAY whose page it carried, since nothing in the classic product form writes to that column. **`store_products.blocks_from_product_id`**, an `INTEGER` added through `addColumn` per the README's convention, set by the duplicate endpoint **only when there were sections to copy** — stamping a copy of a pageless product would print "came from X" over nothing. **IT IS A FACT ABOUT THE ROW, AND THAT IS THE POINT:** the existing *"Designed page is out of date"* nudge answers a different question — *has this been edited since it was built?* — and dies on every reload, and a warning you have to re-earn by typing is not a warning about a duplicate, which arrives wrong before anybody types. **THE MARK IS THE SERVER'S TO SET AND TO CLEAR**: deliberately absent from `PRODUCT_PATCH_ALLOWED`, and cleared on **every** write of `description_blocks` rather than on a rebuild specifically — no write leaves it true, and a client that had to remember to clear it is one that will one day forget. **A FOURTH FAULT, CAUGHT REVIEWING THE FIX AGAINST ITS OWN CONSEQUENCES:** the nudge had gated on `use_block_design`, which only decides what the SHOPFRONT draws — the sections exist either way — so a copy whose source had *Design: Off* went unwarned; re-gating it on the sections existing then put its **Rebuild** button within reach of a product showing its classic description, where `pdAutoComposeBlocks()`'s hardcoded `use_block_design: 1` **would have quietly moved shoppers onto the designed page**. A button offering to refresh some words must not change what the shop shows; `keepFlag` now carries the live value, and the two callers that genuinely mean *turn it on* — the Design switch and the wizard's option — are unchanged. **COVERAGE:** `test_product_duplicate_fields.js` section 5 runs the SHIPPED duplicate handler against a real in-memory database (sections kept, source recorded, source itself unmarked, mark in the reply, and **not** marked when there was nothing to copy — `NULL` and `'[]'` both); the new `test_product_editor_open_freshness.js` asserts the flush, the iframe handover, the gate, `keepFlag` and that the clear rides on the `description_blocks` write itself. **Every case red-proofed against the tree before the fix.** **ONE PAIR COMPOSED** — `Designed page came from X · 设计页来自 X`, both halves lifted (`设计页` from the bar's own existing line, `来自` from the locked `来自仓库`), declared with its rejected live candidates in `docs/tacet-delivery-vocabulary.md` v1.112; the compact summary row keeps the existing locked pair. `test:fast` **274 suites, 0 failed** — the suite COUNT is unchanged because this adds cases to two existing files rather than a third: 6 to `test_product_duplicate_fields.js` and 10 to `test_product_editor_open_freshness.js`, which was itself added earlier in the same branch and is already in the 274. eslint 0 errors; doc-numbering PASS; swallowed-errors PASS at budget. **Schema: one idempotent `addColumn`, no rebuild, no backfill.** No change to `.gitignore` or CI.
 
 
 
@@ -17206,3 +17210,86 @@ answers are still there.
 with the mechanism gone they assert the behaviour of code that no longer exists. This is
 not the forbidden move — nothing red is being relocated somewhere it will not run. Both
 were green, and both are removed along with what they covered.
+
+## §161 — A DUPLICATED PRODUCT CARRIES ANOTHER PRODUCT'S PAGE, AND NOW SAYS SO
+
+Reported by Ash, 2026-09-17: *"i dublicate a product, then i change all the info in
+the product edit page them i click auto fill, then i go to product editor, all info
+there still from the dublicate product, not the new iunformation i added. once i
+clcik product editor i get a window pop up say this page might not be saved"*.
+
+**THREE FAULTS WORE ONE SYMPTOM.** Two were mechanical and are recorded here only
+because they made the third invisible.
+
+1. `pdOpenPageDesign()` opened the editor without flushing the pending autosave.
+   The editor re-fetches the product with `cache:'no-store'`, so anything still
+   inside the 800ms debounce was not in the row it read. *Auto-fill from text*
+   ends on `pdScheduleAutosave()`, so clicking straight through landed inside that
+   window every time. `pdOpen()` and `pdRecipeLinkOpen()` already flushed; this was
+   the one exit that did not.
+2. `openProductEditor()` re-pointed the editor's **iframe** `src` with no word to
+   the editor, so the editor's own `beforeunload` guard fired and the browser asked
+   its generic question. That is the popup in the report — and **Cancel there aborts
+   the navigation**, leaving the previous product on screen with nothing said, which
+   is the other half of "it ignored my changes".
+3. The real one, below.
+
+### THE DECISION: DUPLICATE KEEPS COPYING THE PAGE. THE COPY IS MARKED INSTEAD.
+
+Copying `description_blocks` is correct and stays. A 500g/1kg size variant wants the
+same page, and that is most of what duplicate is for. **The rejected alternative was
+to stop copying it**, which would have broken the common case to fix the uncommon one.
+
+What was missing is that the copy had no way to SAY whose page it was carrying.
+Nothing in the classic product form writes to `description_blocks`, so a copy whose
+name, price, description and Product details had all been changed still opened the
+Product editor holding the original's words, unmarked.
+
+**`store_products.blocks_from_product_id`** — an `INTEGER`, normally NULL, added
+through `addColumn` in `database.js` per the README's migration convention. Set by
+the duplicate endpoint, and **only when there were sections to copy**: stamping a
+copy of a product with no page would print "came from X" over an empty page.
+
+**IT IS A FACT ABOUT THE ROW, AND THAT IS THE POINT.** The editor already had a
+session-local *"Designed page is out of date"* nudge. It answers a different question
+— *has this been edited since it was built?* — and it dies on every reload. A warning
+you have to re-earn by typing is not a warning about a duplicate, which arrives wrong
+before anybody types anything.
+
+**THE MARK IS THE SERVER'S TO SET AND THE SERVER'S TO CLEAR.** It is deliberately
+absent from `PRODUCT_PATCH_ALLOWED`: a request body does not get to assert this about
+itself. It is cleared on **every** write of `description_blocks`, not on a rebuild
+specifically — there is no write that leaves it true, and a client that had to
+remember to clear it is a client that will one day forget.
+
+### AND A FOURTH, CAUGHT ON REVIEW OF THE FIX ITSELF
+
+The out-of-date nudge had gated on `use_block_design`. That flag only decides which
+of the two descriptions the **shopfront** draws; the sections exist either way and the
+Product editor shows them either way, so a copy whose source had *Design: Off* went
+unwarned. Re-gated on the sections existing.
+
+**That change put the nudge's Rebuild button within reach of a product showing its
+classic description — which it never was before — and `pdAutoComposeBlocks()`
+hardcoded `use_block_design: 1`.** Pressing Rebuild there would have quietly moved
+shoppers onto the designed page: a button offering to refresh some words would have
+changed what the shop shows. The flag is the operator's decision, made with the Design
+switch, and is not a side effect of rebuilding. `pdAutoComposeBlocks()` now takes
+`keepFlag`; the two callers that genuinely mean *turn it on* — the switch itself and
+the wizard's "designed page" option — are unchanged.
+
+### VOCABULARY
+
+One pair composed: `Designed page came from X · 设计页来自 X`, declared in
+`docs/tacet-delivery-vocabulary.md` v1.112 with both lifted halves and the live
+candidates rejected. The compact summary row keeps the existing locked pair.
+
+### COVERAGE
+
+`scripts/test_product_duplicate_fields.js` section 5 runs the shipped duplicate
+handler against a real in-memory database: the copy keeps its sections, records its
+source, leaves the source unmarked, replies with the mark, and is **not** marked when
+there was nothing to copy (`NULL` and `'[]'` both). `scripts/test_product_editor_open_
+freshness.js` asserts the rest against source — the flush, the iframe handover, the
+gate, `keepFlag`, and that the clear rides on the `description_blocks` write itself.
+Every case red-proofed against the tree before the fix.

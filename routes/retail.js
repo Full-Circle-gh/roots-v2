@@ -22936,6 +22936,22 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     } else if (Array.isArray(v)) { arr = v; }
     sets.push('description_blocks = ?');
     params.push(arr && arr.length ? JSON.stringify(arr) : null);
+    // THE COPIED-FROM MARK IS CLEARED HERE, AND ONLY HERE.
+    //
+    // A duplicate carries its source's sections and a blocks_from_product_id
+    // saying so (see the duplicate endpoint). Writing description_blocks for
+    // this product — a rebuild from its own description, a save out of the
+    // Product editor, a clear — makes the page this product's own, whoever's
+    // words it started as, so the mark goes.
+    //
+    // Cleared on EVERY write of the column rather than on a rebuild
+    // specifically, because there is no write that leaves the mark true, and a
+    // client that had to remember to clear it is a client that will one day
+    // forget. It is deliberately NOT in PRODUCT_PATCH_ALLOWED: the mark is the
+    // server's to set and the server's to clear, never something a request
+    // body can assert about itself.
+    sets.push('blocks_from_product_id = ?');
+    params.push(null);
     // Designing a page here makes it live without a second trip back to the
     // kitchen app's design toggle: a non-empty block stack auto-switches the
     // mini-app to the block renderer. An explicit use_block_design wins.
@@ -23210,7 +23226,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, bundle_mode, tags,
             is_batch_made, oos_policy, ship_from_supplier, supplier_paused, page_template,
             cost_incomplete,
-            colophon_character, colophon_tagline_en, colophon_tagline_cn
+            colophon_character, colophon_tagline_en, colophon_tagline_cn, blocks_from_product_id
        FROM store_products WHERE id = ?`
   ).get(id);
   if (row && typeof row.description_blocks === 'string' && row.description_blocks) {
@@ -23763,7 +23779,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
             variant_group_id, variant_label, variant_sort, variant_noun_en, variant_noun_cn,
             is_batch_made, oos_policy, ship_from_supplier, supplier_paused, page_template,
             cost_incomplete,
-            colophon_character, colophon_tagline_en, colophon_tagline_cn
+            colophon_character, colophon_tagline_en, colophon_tagline_cn, blocks_from_product_id
        FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1`
   ).get(id);
   if (!row) return res.status(404).json({ success: false, error: 'not_found' });
@@ -24148,21 +24164,29 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
           unit_cost, cost_incomplete, low_stock_threshold, stock_qty, ship_modes,
           description_en, description_cn, description_format, image_data, images, image_url, image_aspect,
           keywords_en, keywords_cn, tagline_en, tagline_cn, free_of, tags, nutrition, notes,
-          description_blocks, use_block_design, page_template, product_facts,
+          description_blocks, blocks_from_product_id, use_block_design, page_template, product_facts,
           colophon_character, colophon_tagline_en, colophon_tagline_cn,
           bundle, bundle_items, bundle_mode,
           status, is_batch_made, oos_policy, ship_from_supplier, supplier_paused, no_coupon_on_flash,
           is_market, is_restock_only,
           variant_group_id, variant_label, variant_label_cn, variant_noun_en, variant_noun_cn, sort_order,
           is_published, is_active, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
                0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
       src.name_en, src.name_cn, generateRetailSku(), src.category, src.top_category, src.subcategory, src.weight, src.sell_price, src.compare_at_price,
       src.unit_cost, src.cost_incomplete, src.low_stock_threshold, 0, src.ship_modes,
       src.description_en, src.description_cn, src.description_format, src.image_data, src.images, src.image_url, imageAspect(src.image_data),
       src.keywords_en, src.keywords_cn, src.tagline_en, src.tagline_cn, src.free_of, src.tags, src.nutrition, src.notes,
-      src.description_blocks, src.use_block_design, src.page_template, src.product_facts,
+      // WHERE THIS PAGE CAME FROM, recorded at the moment it is copied.
+      //
+      // Only when there is actually a page to copy: stamping a product whose
+      // source had no sections would put a "copied from" mark on an empty
+      // page, which says nothing true. An empty string and '[]' are both
+      // "no sections" here, same as the has_blocks flag the list computes.
+      src.description_blocks,
+      (src.description_blocks && src.description_blocks !== '' && src.description_blocks !== '[]') ? id : null,
+      src.use_block_design, src.page_template, src.product_facts,
       src.colophon_character, src.colophon_tagline_en, src.colophon_tagline_cn,
       src.bundle, src.bundle_items, src.bundle_mode,
       src.status, src.is_batch_made, src.oos_policy, src.ship_from_supplier, src.supplier_paused, src.no_coupon_on_flash,
@@ -24226,7 +24250,7 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
             bundle, bundle_items, bundle_mode, tags,
             is_batch_made, oos_policy, ship_from_supplier, supplier_paused, page_template,
             variant_group_id, variant_label, variant_label_cn, variant_noun_en, variant_noun_cn,
-            colophon_character, colophon_tagline_en, colophon_tagline_cn
+            colophon_character, colophon_tagline_en, colophon_tagline_cn, blocks_from_product_id
        FROM store_products WHERE id = ?`
   ).get(newId);
   if (row && typeof row.description_blocks === 'string' && row.description_blocks) {
@@ -24644,6 +24668,11 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     -- be absent on exactly the rows nobody has looked at.
                     cost_incomplete,
                     colophon_character, colophon_tagline_en, colophon_tagline_cn,
+                    -- Cheap (an integer, almost always NULL) and needed on every
+                    -- row: the dock reads the product out of this cache rather
+                    -- than re-fetching it, so a mark that arrived only on a
+                    -- fetch would be absent exactly where it is read.
+                    blocks_from_product_id,
                     ${hasImageFallbackSql('p')} AS has_image_data,
                     (description_blocks IS NOT NULL AND description_blocks != '' AND description_blocks != '[]') AS has_blocks
                FROM store_products p WHERE COALESCE(is_active, 1) = 1`;

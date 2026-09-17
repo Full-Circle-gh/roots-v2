@@ -380,5 +380,68 @@ section('4. Duplicating as a new size still behaves like a variant');
   });
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+section('5. A copied page says which product it was copied from');
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Copying description_blocks is CORRECT and stays — a 500g/1kg size variant
+// wants the same page, which is most of what duplicate is for. What was missing
+// is that the copy had no way to SAY so. Nothing in the classic product form
+// writes to description_blocks, so a copy whose name, price and description had
+// all been changed still opened the Product editor holding the original's
+// words, unmarked and unexplained. Reported by Ash, 2026-09-17.
+//
+// blocks_from_product_id is that mark. It is a fact about the ROW, which is the
+// point: the session-local "out of date" nudge died on every reload, and a
+// warning you have to re-earn by typing is not a warning about a duplicate.
+//
+// The other half of the pair — that writing description_blocks clears the mark
+// — lives in the PATCH handler and is asserted against its source in
+// scripts/test_product_editor_open_freshness.js, rather than standing a second
+// vm harness up here for one column.
+{
+  const db  = freshDb();
+  const src = seedFullProduct(db);
+  db.prepare('UPDATE store_products SET description_blocks = ? WHERE id = ?')
+    .run(JSON.stringify([{ id: 'b1', type: 'hero', title_en: 'Hummus' }]), src);
+  const copy = runDuplicate(db, src, { as_variant: false, label: null });
+  const row  = db.prepare('SELECT * FROM store_products WHERE id = ?').get(copy.id);
+
+  check('the copy still carries the sections — this is not a regression of that', () =>
+    assert.strictEqual(JSON.parse(row.description_blocks)[0].type, 'hero'));
+  check('the copy records the product its sections came from', () =>
+    assert.strictEqual(row.blocks_from_product_id, src));
+  check('the source is not marked — its own page is its own', () =>
+    assert.strictEqual(
+      db.prepare('SELECT blocks_from_product_id AS m FROM store_products WHERE id = ?').get(src).m, null));
+  check('the reply carries the mark, so the dock can warn without a second fetch', () =>
+    assert.strictEqual(copy.blocks_from_product_id, src));
+}
+
+// A product with no designed page has nothing to be copied FROM, and marking
+// its copy would put "came from X" on an empty page — a sentence about nothing.
+{
+  const db  = freshDb();
+  const src = seedFullProduct(db);      // seeded WITHOUT description_blocks
+  const copy = runDuplicate(db, src, { as_variant: false, label: null });
+  const row  = db.prepare('SELECT * FROM store_products WHERE id = ?').get(copy.id);
+
+  check('copying a product with no sections leaves the mark unset', () =>
+    assert.strictEqual(row.blocks_from_product_id, null));
+}
+
+// An empty stack is no stack. '[]' is what the list endpoint's has_blocks flag
+// already treats as "no sections", and the two must not disagree.
+{
+  const db  = freshDb();
+  const src = seedFullProduct(db);
+  db.prepare("UPDATE store_products SET description_blocks = '[]' WHERE id = ?").run(src);
+  const copy = runDuplicate(db, src, { as_variant: false, label: null });
+  const row  = db.prepare('SELECT * FROM store_products WHERE id = ?').get(copy.id);
+
+  check("an empty '[]' stack counts as no sections, same as has_blocks reads it", () =>
+    assert.strictEqual(row.blocks_from_product_id, null));
+}
+
 console.log('\n' + (failures ? `${failures} assertion(s) failed` : 'all assertions held'));
 process.exit(failures ? 1 : 0);

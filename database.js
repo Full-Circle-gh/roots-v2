@@ -5607,6 +5607,27 @@ try {
   // marks an explicit 1. The distinction is for the seed and for anyone later
   // measuring how much of the catalogue has actually been through the pass.
   addColumn('store_products', 'cost_incomplete', 'INTEGER');
+  // WHERE A COPIED PAGE CAME FROM.
+  //
+  // Duplicating a product copies description_blocks with everything else, which
+  // is right — a 500g/1kg size variant wants the same page, and that is what
+  // duplicate is mostly for. What was missing is that the copy had no way to
+  // SAY so. Nothing in the classic product form writes to description_blocks,
+  // so a copy whose name, price and description had all been changed still
+  // opened the Product editor holding the original's words, with no mark on it
+  // anywhere and nothing on screen to explain it. Reported by Ash, 2026-09-17.
+  //
+  // The id of the product the sections were copied from. Set by the duplicate
+  // endpoint (only when there were sections to copy) and cleared the moment
+  // anything writes description_blocks for this product — a rebuild, or a save
+  // out of the Product editor. Both of those mean the page is this product's
+  // own now, whoever's words it started as.
+  //
+  // NULL is the normal state and means "these sections are this product's own".
+  // It is not a foreign key on purpose: the source may be deleted later, and
+  // the answer to "where did this come from" is then simply unknown, which the
+  // admin already handles by falling back to the plain out-of-date warning.
+  addColumn('store_products', 'blocks_from_product_id', 'INTEGER');
   // Own indexes — store_products has its OWN sku namespace (independent of the
   // kitchen's), mirroring the products indexes the storefront relies on.
   db.prepare('CREATE UNIQUE INDEX IF NOT EXISTS idx_store_products_sku ON store_products(sku)').run();

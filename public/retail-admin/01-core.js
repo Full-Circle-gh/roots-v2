@@ -1587,9 +1587,47 @@ function showProductSection() {
 }
 // Open the Product Page Editor on a specific product, in-page: point its iframe
 // at that product, activate the Editor tab, then reveal the product section.
-function openProductEditor(id) {
+//
+// ASKS FIRST, AND IN OUR OWN WORDS. The editor is an IFRAME, so re-pointing its
+// src is a navigation, and the editor's own beforeunload guard fires on it.
+// That handed the operator the browser's generic "changes you made may not be
+// saved" — a question naming neither the editor nor the product — and Cancel
+// there ABORTS the navigation, leaving the PREVIOUS product on screen with
+// nothing said. Opening the editor after editing a product then looked exactly
+// like the editor ignoring the edits.
+//
+// So ask here, in the same two strings the editor's own exits already use, then
+// tell the editor the exit is intentional so the browser stays out of it.
+async function openProductEditor(id) {
   const frame = document.getElementById('frame-product-editor');
-  if (frame) frame.src = '/product-editor?id=' + encodeURIComponent(id);
+  if (frame) {
+    // Same origin, so the editor's own dirty check is callable directly. It is
+    // absent until the iframe has actually booted a product — guard for that
+    // rather than assuming, because the first open has no document at all.
+    let w = null;
+    try { w = frame.contentWindow; } catch (e) {
+      // Swallowed on purpose: an unreachable contentWindow just means there is
+      // no editor document to ask, which is the same answer as "not dirty" — w
+      // stays null and the open proceeds without a question.
+    }
+    let dirty = false;
+    try { dirty = !!(w && typeof w.peIsDirty === 'function' && w.peIsDirty()); } catch (e) {
+      // Swallowed on purpose: peIsDirty() serializes the whole editor state, so
+      // a half-built document can throw mid-boot. A dirty check that cannot
+      // answer must not block the open — the editor's own beforeunload is still
+      // there as the backstop, exactly as it was before this guard existed.
+    }
+    if (dirty && !(await askConfirm({
+      title: cuT('You have unsaved changes that will be lost. Leave anyway?', '有未保存的更改将会丢失,仍要离开吗?'),
+      confirmLabel: cuT('Leave', '离开'),
+    }))) return;
+    try { if (w && typeof w.peLeaveIntentionally === 'function') w.peLeaveIntentionally(); } catch (e) {
+      // Swallowed on purpose: this call only suppresses the browser's duplicate
+      // question. If it cannot be made, the worst case is the old behaviour —
+      // the operator is asked a second time, having already answered ours.
+    }
+    frame.src = '/product-editor?id=' + encodeURIComponent(id);
+  }
   const btn = document.querySelector('.tabs [data-tab="mini-app-editor"]');
   if (btn) btn.click();   // activate Editor tab (hides every other section)
   showProductSection();
