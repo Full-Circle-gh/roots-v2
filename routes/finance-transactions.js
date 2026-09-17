@@ -418,27 +418,9 @@ function readTransactions(query, opts = {}) {
   // every tenant on the day this ships — an empty list is §36's decision for a
   // vocabulary nobody has written yet, and it must not take away the only
   // suggestions a tenant with three years of ledger rows already has.
-  const expenseRows = db.prepare(
-    "SELECT name, needs_po FROM categories WHERE kind = 'accounting' AND COALESCE(is_active, 1) = 1 ORDER BY sort_order, name"
-  ).all();
-  const expenseCategories = expenseRows.map(r => r.name);
-
-  // ── Which of them have been asked §111's question ──
-  // A MAP OF THE ANSWERED ONES ONLY, and the absence is the third state: a
-  // category that is not a key here has never been asked whether what it holds
-  // is ordered from a supplier, which is what makes the form ask. Sending a
-  // value for every category — 0 for the unasked — would tell the screen an
-  // answer exists when none does, and the question would never be put.
-  //
-  // It rides this payload for the reason the two lists above it do: the form
-  // needs it at exactly the moment it already has this object, and a second
-  // endpoint fetched on the way to a question is a question that arrives late.
-  //
-  // A DEACTIVATED CATEGORY IS ABSENT HERE TOO, because it is absent from the
-  // list above — it cannot be offered, so nothing can be filed under it, so
-  // there is nothing for its answer to decide.
-  const categoryNeedsPo = {};
-  for (const r of expenseRows) if (r.needs_po != null) categoryNeedsPo[r.name] = r.needs_po ? 1 : 0;
+  const expenseCategories = db.prepare(
+    "SELECT name FROM categories WHERE kind = 'accounting' AND COALESCE(is_active, 1) = 1 ORDER BY sort_order, name"
+  ).all().map(r => r.name);
 
   // ── Who put each row in the books (§92) ────────────────────────────────
   // ONE READ FOR THE WHOLE PAGE, not one per row: the ids are collected across
@@ -557,7 +539,6 @@ function readTransactions(query, opts = {}) {
     window: { from, to, span_days: win.span_days },
     income_categories: incomeCategories,
     expense_categories: expenseCategories,
-    category_needs_po: categoryNeedsPo,
     totals: { in: sum('in'), out: sum('out') },
     counts: {
       all: rows.length,

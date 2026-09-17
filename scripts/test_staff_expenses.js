@@ -358,14 +358,21 @@ it('§114 — the terms the two composed strings were built from are still live'
      FAIL if that source stops being live, so a rename cannot quietly orphan the
      composition. `到货` is `Arrives · 到货` on the purchasing screen and the
      phone's own receiving screen; `尚未` is `Not on any purchase order yet. ·
-     尚未出现在任何采购单中。` on the materials screen; `记入采购单` is v1.70's own, declared for §111
-     part two. Recorded in docs/tacet-delivery-vocabulary.md v1.72. */
+     尚未出现在任何采购单中。` on the materials screen. Recorded in
+     docs/tacet-delivery-vocabulary.md v1.72.
+
+     `记入采购单` WAS DECLARED AGAINST v1.70's `该笔记入采购单` — the toast §111 part
+     two showed on an already-answered category — and §160 withdrew that whole
+     mechanism, which made THIS CASE FAIL. That is the guard doing its job. The
+     term is not orphaned: ERR.onOrder in routes/staff-expenses.js is live, is
+     older than these compositions, and is where v1.81's sibling refusal already
+     lifted its first half from. The anchor moves there; neither composed string
+     changes. See v1.111 for the full note. */
   const PURCH = read('public', 'retail-admin', '16-purchasing.js');
   assert.ok(/'Arrives', ?'到货'/.test(PURCH), '到货 must stay live where it was taken from');
   const MATS = read('public', 'retail-admin', '18-materials.js');
   assert.ok(/尚未出现在任何采购单中/.test(MATS), '尚未 must stay live where it was taken from');
-  const FIN2 = read('public', 'retail-admin', '22-finance.js');
-  assert.ok(/该笔记入采购单/.test(FIN2), '记入采购单 is v1.70\'s, and this leans on it');
+  assert.ok(/该笔已记入采购单/.test(ROUTE), '记入采购单 must stay live where it is now taken from');
 });
 
 it('the form opens empty every time — a reopened screen is not a second claim', () => {

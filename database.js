@@ -1188,22 +1188,21 @@ addColumn('expense_entries', 'updated_at', 'DATETIME');
 // deleting it was for.
 addColumn('categories', 'is_operating', 'INTEGER DEFAULT 1');
 addColumn('categories', 'is_active',    'INTEGER DEFAULT 1');
-// ── And a third, which is §111 part two ────────────────────────────────────
-// needs_po — IS A COST FILED HERE SOMETHING ORDERED FROM A SUPPLIER? Rent,
-// wages and a taxi are not; an ingredient, a box of gloves and a desk chair are,
-// and §111 says what is ordered belongs on a purchase order, where it carries a
-// supplier, a receiving step, a 发票 to match and something to return it
-// against. The Transactions form asks once per category and writes the answer
-// here, so it never has to ask about rent twice.
+// ── And a third, RETIRED: §111 part two, withdrawn by §160 ─────────────────
+// needs_po — DEAD. NOTHING READS THIS COLUMN. It held the answer to "is a cost
+// filed here something ordered from a supplier?", and a stored 1 made the
+// Transactions form abandon the row and open the Purchasing wizard instead of
+// saving. That lost ¥3,818.22 of August social insurance in production, twice,
+// with no row, no draft and no log line carrying the amount — §160 has the whole
+// account, and the mechanism is gone.
 //
-// **NO DEFAULT, AND THE THREE STATES ARE THE POINT.** NULL is *nobody has been
-// asked yet* — the state every category is in on the day this ships and the only
-// state that makes the form ask. 1 is *ordered*, 0 is *not ordered*, and both are
-// answers a person gave. A `DEFAULT 0` here would ship every existing category
-// pre-answered "no" and the question would never be asked at all; a `DEFAULT 1`
-// would nag about rent every month. §36's rule, one field further in: nothing is
-// pre-marked, because a list that cannot say "I have not been told" has to guess,
-// and a guess on this screen is what the ¥152,309 mis-filing was made of.
+// KEPT RATHER THAN DROPPED, deliberately. Dropping a column in SQLite is a table
+// rebuild, and simply deleting this line would be worse than either: every
+// database that has already migrated would keep the column while a fresh one
+// would lack it, and a schema that differs by how old it is makes the next
+// question about it unanswerable. It costs one nullable integer. The stored
+// answers stay with it, which is the whole of what a rebuild at the BUYING end
+// would want if §111's intent is ever built again.
 addColumn('categories', 'needs_po',     'INTEGER');
 // ── A claim can be waiting for its goods (§114) ────────────────────────────
 // awaiting_delivery — THE MONEY HAS GONE AND THE GOODS HAVE NOT ARRIVED. §111
@@ -1215,8 +1214,9 @@ addColumn('categories', 'needs_po',     'INTEGER');
 // the way every other delivery is.
 //
 // DEFAULT 0, and here a default is right where `categories.needs_po` above
-// refused one: this is not a question anybody is being asked, it is a fact about
-// the purchase, and every claim ever submitted was for goods in hand. The
+// refused one (before §160 retired it): this is not a question anybody is being
+// asked, it is a fact about the purchase, and every claim ever submitted was for
+// goods in hand. The
 // unticked state IS the existing behaviour, so no historical row changes meaning.
 //
 // po_id — THE ORDER THAT NOW OWNS THIS PURCHASE, and the reason it cannot be
