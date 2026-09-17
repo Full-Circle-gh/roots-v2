@@ -313,6 +313,18 @@ function logOrderShapes(storeCode, browser) {
     shapeLogged[key] = true;
     logSync(storeCode, 'order_shape', 'ok', { kind, digest });
     log(storeCode, `${kind} payload shape recorded to eleme_sync_log (${digest.length} chars)`);
+    /* THE WIDE ONE, as its own event. The shallow digest above stops at depth 4
+       and 4000 chars, and when it was finally read back on 2026-09-17 it had hit
+       both on the detail payload: `userInfo` was a bare {...} and the tail was
+       gone, which left fourteen of the parser's candidate key lists matching
+       nothing with no way to tell a wrong guess from a field past the cut.
+       Same payload, same pass, no extra request — and no values in either, so
+       this widens what we know about Eleme's field NAMES and nothing else. */
+    const deep = browser.orderShapesDeep && browser.orderShapesDeep[kind];
+    if (deep) {
+      logSync(storeCode, 'order_shape_deep', 'ok', { kind, digest: deep });
+      log(storeCode, `${kind} deep shape recorded (${deep.length} chars)`);
+    }
   }
   // The request side, once per process. Values kept (query params, no customer
   // data) — this is what shows the real tab/queryType a replay had to fill blind.
