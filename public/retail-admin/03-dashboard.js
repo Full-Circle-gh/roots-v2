@@ -3874,10 +3874,15 @@ function dashRenderTiers() {
   const tiers = DASH_DATA.tiers || [];
   const tierLabel = t => ({ seed: 'Seed · 种子', sprout: 'Sprout · 嫩芽', root: 'Root · 扎根', tree: 'Tree · 大树' }[t] || t);
   // The mockup's tiles: buyer count, then new / returning as SHARES of buyers.
+  // NAMED FOR THE POPULATION IT COUNTS (§169). This is DISTINCT customer_id, a
+  // column the marketplace routes never write, so it is the shop's own buyers
+  // and not every channel's — the facts bar above carries the rest by channel.
+  const bbc = DASH_DATA.buyers_by_channel || null;
   const buyers = Number(nvr.buyers || 0);
   const shr = n => buyers > 0 ? Math.round(Number(n || 0) / buyers * 100) + '%' : '—';
   let html = '<div class="db-tiles">'
-    + `<div class="db-tile"><div class="t-val">${dashNum(buyers)}</div><div class="t-lbl">buyers · 购买客户</div></div>`
+    + `<div class="db-tile"><div class="t-val">${dashNum(buyers)}</div><div class="t-lbl">${
+        bbc ? 'shop buyers · 自有渠道客户' : 'buyers · 购买客户'}</div></div>`
     + `<div class="db-tile"><div class="t-val">${shr(nvr.new_buyers)}</div><div class="t-lbl">new · 新客</div></div>`
     + `<div class="db-tile"><div class="t-val">${shr(nvr.returning_buyers)}</div><div class="t-lbl">returning · 回头客</div></div>`
     + '</div>';
@@ -4200,6 +4205,8 @@ function dashFactBits() {
     payShare: topPay && payTotal > 0 ? Math.round(topPay.revenue / payTotal * 100) : null,
     busiest,
     buyers: Number(nvr.buyers || 0),
+    // §169 — who bought, by channel. Absent on a server that predates the block.
+    bbc: D.buyers_by_channel || null,
     newPct: nvr.buyers > 0 ? Math.round(Number(nvr.new_buyers || 0) / nvr.buyers * 100) : null,
     topCust: (D.topCustomers || [])[0] || null,
     topCity: (D.geoCities || [])[0] || null,
@@ -4285,8 +4292,28 @@ function dashRenderFacts() {
   dashFactsFill('db-facts-sales', s);
 
   const c = [];
-  if (b.buyers) c.push(dashFactRow(cuT('People bought', '购买人数'), dashNum(b.buyers)));
+  /* §169 — BUYERS ARE A BREAKDOWN, NOT A NUMBER. new_vs_returning counts
+     DISTINCT customer_id, and neither marketplace route writes that column, so
+     this row was the storefront's figure wearing an all-channel label while the
+     revenue beside it counted every channel. They are not summed because they
+     cannot be: our customer_id, Meituan's wmUserId and a wholesale phone are
+     three identity spaces that do not reconcile, and one total would count the
+     same person twice the moment they order in two places. */
+  if (b.buyers) c.push(dashFactRow(b.bbc ? cuT('Bought in the shop', '自有渠道购买')
+                                         : cuT('People bought', '购买人数'), dashNum(b.buyers)));
   if (b.newPct != null) c.push(dashFactRow(cuT('First-time buyers', '新客占比'), b.newPct + '%'));
+  if (b.bbc) {
+    const mt = b.bbc.meituan || {};
+    // Meituan's own lifetime count says first-EVER, not first-in-window, so it
+    // rides its own row rather than the percentage above.
+    if (mt.buyers) c.push(dashFactRow(cuT('Bought on Meituan', '美团购买'),
+      mt.new_buyers ? `${dashNum(mt.buyers)} · ${dashNum(mt.new_buyers)} ${cuT('new', '新客')}`
+                    : dashNum(mt.buyers)));
+    const wh = b.bbc.wholesale || {};
+    if (wh.buyers) c.push(dashFactRow(cuT('Bought wholesale', '批发购买'), dashNum(wh.buyers)));
+    // Eleme is deliberately absent rather than a zero: its payload carries a
+    // consignee, not a customer. A 0 would say nobody bought.
+  }
   if (b.topCust) c.push(dashFactRow(
     cuT('Top spender', '消费最高') + (cn ? '：' : ': ') + (b.topCust.nickname || ('#' + b.topCust.customer_id)),
     dashMoney(b.topCust.revenue)));

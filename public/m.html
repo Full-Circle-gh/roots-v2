@@ -16497,9 +16497,31 @@ function trendSections(){
   // ── Customers ──
   const cust=[];
   const nvr=d.new_vs_returning||{};
-  if(nvr.buyers) cust.push({t:T('People bought','购买人数'),v:num(nvr.buyers)});
-  if(nvr.buyers>0) cust.push({t:T('First-time buyers','新客占比'),
-    v:Math.round(Number(nvr.new_buyers||0)/nvr.buyers*100)+'%'});
+  /* WHO BOUGHT, BY CHANNEL, AND NEVER ADDED UP (§169). The old single figure
+     counted DISTINCT customer_id, a column neither marketplace writes, so it
+     was the storefront's number wearing an all-channel label — 79 buyers under
+     ¥149,344 of revenue, with nothing on the card to explain the gap.
+
+     They are not summed because they cannot be: our customer_id, Meituan's
+     wmUserId and a wholesale phone are three identity spaces that do not
+     reconcile, and one total would count the same person twice the moment they
+     order in the mini app and on Meituan. Eleme is shown as not sharing rather
+     than as zero — zero would say nobody bought. */
+  const bbc=d.buyers_by_channel||null;
+  const sf=(bbc&&bbc.storefront)||{buyers:nvr.buyers,new_buyers:nvr.new_buyers};
+  if(sf.buyers) cust.push({t:bbc?T('Bought in the shop','自有渠道购买'):T('People bought','购买人数'),v:num(sf.buyers)});
+  if(sf.buyers>0) cust.push({t:T('First-time buyers','新客占比'),
+    v:Math.round(Number(sf.new_buyers||0)/sf.buyers*100)+'%'});
+  if(bbc){
+    const mt=bbc.meituan||{};
+    if(mt.buyers) cust.push({t:T('Bought on Meituan','美团购买'),
+      /* Meituan's own lifetime count says first-ever, not first-in-window, so
+         it is named as theirs rather than folded into the percentage above. */
+      v:mt.new_buyers?T(num(mt.buyers)+' · '+num(mt.new_buyers)+' new',num(mt.buyers)+' · '+num(mt.new_buyers)+' 新客')
+                     :num(mt.buyers)});
+    const wh=bbc.wholesale||{};
+    if(wh.buyers) cust.push({t:T('Bought wholesale','批发购买'),v:num(wh.buyers)});
+  }
   const tc=(d.topCustomers||[])[0];
   if(!noMoney&&tc) cust.push({t:T('Top spender','消费最高'),
     v:(tc.nickname||('#'+tc.customer_id))+' · '+mn(tc.revenue)});
@@ -16517,9 +16539,21 @@ function trendSections(){
      at all. Revenue four tiles up counts those orders; this section cannot, and
      an operator reading 79 buyers under ¥149,344 deserves to know why rather
      than to conclude the shop is broken. */
+  /* The note names what is still missing rather than what is covered, and says
+     WHY for each. Eleme's silence is evidenced: its payload's only person-shaped
+     object holds a consignee name, phones, an address and IM state, and no id of
+     any kind — it identifies a delivery. Meituan's date is there because
+     channel_customer_id has only been stored since 2026-09-15, so a longer
+     window reads low and will climb; a figure that says so is honest, one that
+     quietly under-reports is not. */
   if(cust.length) out.push({key:'customers',icon:'users',tone:'dusk',title:T('Customers','客户'),rows:cust,
-    note:T('Mini app, web and in-store only — Meituan and Eleme orders carry no customer.',
-           '仅小程序、网页与门店 —— 美团、饿了么订单没有顾客。')});
+    note:bbc
+      ? T('Counted separately — the same person on two channels cannot be matched. Eleme shares no customer'
+          + ((bbc.meituan&&bbc.meituan.since)?'; Meituan from '+fmtDateOnly(bbc.meituan.since):'')+'.',
+          '分渠道统计 —— 同一个人在不同渠道无法匹配。饿了么不提供顾客信息'
+          + ((bbc.meituan&&bbc.meituan.since)?'；美团自 '+fmtDateOnly(bbc.meituan.since)+' 起':'')+'。')
+      : T('Mini app, web and in-store only — Meituan and Eleme orders carry no customer.',
+          '仅小程序、网页与门店 —— 美团、饿了么订单没有顾客。')});
 
   // ── Products & traffic ──
   const prod=[];

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.304
+# Tacet shared-core consolidation — decisions record, v4.305
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-17 · v4.305 — **§169 · BUYERS ARE A BREAKDOWN, NOT A NUMBER — ASKED BY ASH.** Ash, reading the phone's Trend screen: *"people bought I see low number it can't be all channels"*. It could not, and the reason is that every customer figure on both halves of the product is keyed on `retail_orders.customer_id`, which `routes/meituan-internal.js` and `routes/eleme-internal.js` have never written — so `COUNT(DISTINCT customer_id)` silently skips every marketplace order while the revenue four tiles above counts them. 79 buyers under ¥149,344. **THE DECISION IS THAT THEY STAY SEPARATE.** Summing the channels into one "people bought" would count the same human twice the moment they order in the mini app and on Meituan, and no join exists that could ever detect it — the identity spaces do not reconcile and never will. A breakdown is the closest to real that is also true. **THREE CHANNELS CAN BE COUNTED AND ONE CANNOT.** Storefront is exact on `customer_id`; Meituan is exact on `channel_customer_id` (wmUserId, "the only stable customer identity Meituan gives a merchant", stored since 2026-09-15); wholesale is countable on the real unmasked `recipient_phone` the gzgrocery daemon writes. **Eleme cannot, and that is now evidenced rather than assumed**: the shape digest was read back on 2026-09-17 and its `userInfo` object — the only person-shaped container in 189 field names — holds 33 keys that are consignee name, phones, address, distance and IM state, and no id of any kind. It identifies a DELIVERY, not a customer. **NEW-VS-RETURNING IS NOT ONE DEFINITION ACROSS THE THREE, and the doc says so rather than the screen implying otherwise**: storefront's *new* means first-ever paid order falling inside the window, which we compute; Meituan's means `channel_customer_orders = 1`, which is MEITUAN'S OWN lifetime count at the moment the order arrived and covers business done before this daemon existed. They are both honest and they are not the same question, so they are labelled by channel and never added together. **THE MEITUAN COUNT UNDER-REPORTS UNTIL MID-SEPTEMBER AND IS SHOWN ANYWAY, WITH ITS DATE.** `channel_customer_id` has only been stored since 2026-09-15, so a 30- or 90-day window reads low and will climb as history accrues; backfilling means re-reading every historical order from Meituan and is not done. A figure carrying *from 15 Sep* is honest; one silently reading 3 is not. **NOTHING ELSE MOVES.** Revenue, orders, products, stores, payments and visits are untouched — this section decides the customer figures and only those. Covered on the phone by `scripts/test_mobile_trend.js` and asserted against the payload's real key names so a server-side rename breaks a test rather than a card.
 
 2026-09-17 · v4.304 — **§168 · THE FACILITY NAMES COME INTO ENGLISH, AND §30's "KEEP IT CHINESE" NARROWS TO ONE CASE — ASKED BY ASH.** Looking at TC000761 on the English side: *"can we do city and provinces also in English?"* **This REVERSES a decision taken the same day, six hours earlier, by the session that shipped the carrier-event translator (PR #676).** That decision kept FACILITY names Chinese inside a translated sentence on two arguments — they are proper nouns, and a customer ringing the carrier needs the Chinese. **Both fail on a real timeline.** A customer quotes a WAYBILL, never a sorting centre; and `Left 深圳航空分拣中心 — heading to 北京大兴航空分拣中心` withholds the single most useful fact on the screen — the parcel flew Shenzhen to Beijing — from precisely the reader the translation exists for. Half the sentence was English and the half carrying the geography was not. **PARSED, NOT TRANSLITERATED.** These names are structured `[city][district][type]`, so three tables reassemble them: `广州黄埔集货分拣中心` → Guangzhou Huangpu Consolidation Sorting Centre, `广州黄村站` → Guangzhou Huangcun Station. **ALL OR NOTHING** — one unknown part and the WHOLE name stays Chinese, so `广州市-保利天汇项目接驳点` renders unchanged rather than as a half-English `Guangzhou 保利天汇项目 Transfer Point`; the same rule the location field already follows, and what stops a growing table producing mixed lines while it grows. **PICKUP POINTS STAY CHINESE, and are now the whole of that rule rather than a blanket**: the customer physically walks to a `菜鸟驿站` and matches the name against a shopfront sign, which is the one case the original reasoning was right about. **Also here: air legs.** TC000761's newest event — the top line of the screen, the first thing a customer reads — was `您的快件在【深圳市飞往北京】的航班上,已起飞` and had no rule at all; it now reads `In flight — Shenzhen to Beijing, departed`, the two names taken as cities because that is what they are. **No Chinese is composed** — every string added is English read out of Chinese the carrier wrote — so `docs/tacet-delivery-vocabulary.md` Rule 4 is not engaged and this is not an amendment to it. `scripts/test_tracking_translation.js` grows to 94 checks; its section 6 previously asserted the opposite and now carries the reversal in its own comment, so the change is readable rather than merely absent.
 
@@ -17726,3 +17728,90 @@ applied inside `TRANSLATION_RULES` via the `fac()` alias. Pinned by
 opposite and now carries the reversal in its own comment so the change is
 readable rather than merely absent.
 
+
+## §169 — BUYERS ARE A BREAKDOWN, NOT A NUMBER
+
+Asked by Ash, 2026-09-17, reading the phone's Trend screen: *"people bought I
+see low number it can't be all channels"*.
+
+### THE FAULT
+
+Every customer figure on both halves of the product — People bought, First-time
+buyers, Top spender, retention — is keyed on `retail_orders.customer_id`.
+`routes/meituan-internal.js` and `routes/eleme-internal.js` have never written
+that column; their INSERTs do not carry it. SQL's `COUNT(DISTINCT customer_id)`
+skips NULL, so every marketplace order is invisible to all of them, while the
+revenue four tiles above counts every one.
+
+That is how **79 buyers** comes to sit under **¥149,344**. Neither number is
+wrong. They describe different populations and nothing said so.
+
+### THE DECISION: THEY STAY SEPARATE
+
+**One "people bought" across all channels is not available and never will be.**
+A single total would count the same human twice the moment they order in the
+mini app and on Meituan, and no join exists that could detect it: our
+`customer_id`, Meituan's `wmUserId` and a wholesale phone are three identity
+spaces that do not reconcile. Adding them produces a number that is confidently
+wrong and unfalsifiable.
+
+A breakdown is the closest to real that is also true.
+
+### WHAT CAN BE COUNTED, AND ON WHAT
+
+| Channel | Counted on | Exact? |
+|---|---|---|
+| Storefront — mini app, web, QR, POS | `customer_id` | yes |
+| Meituan | `channel_customer_id` (wmUserId) | yes, from 2026-09-15 |
+| Wholesale — gzgrocery | `recipient_phone`, real and unmasked | yes |
+| Eleme | — | **cannot** |
+
+**Eleme's absence is evidenced, not assumed.** The shape digest the daemon has
+recorded all along was read back on 2026-09-17. Its `userInfo` object — the only
+person-shaped container among 189 field names — holds 33 keys: consignee name,
+phones, address, distance, image and IM state. No `userId`, no `uid`, no
+`openid`, nothing that survives from one order to the next. It identifies a
+DELIVERY, not a customer. The masked address is `天河区**大厦 3*号` and the phone
+is a 隐私号 that rotates; neither is an identity.
+
+### NEW-VS-RETURNING IS NOT ONE DEFINITION
+
+They are labelled by channel and never added together, because they answer
+different questions:
+
+- **Storefront** — *new* means the customer's first-ever paid order falls inside
+  the window. We compute it from our own history.
+- **Meituan** — *new* means `channel_customer_orders = 1`, which is **Meituan's
+  own lifetime count** at the moment the order arrived. It counts business done
+  before this daemon existed, which ours cannot.
+
+Both are honest. Presenting them as one figure would not be.
+
+### THE MEITUAN COUNT UNDER-REPORTS UNTIL MID-SEPTEMBER, AND IS SHOWN ANYWAY
+
+`channel_customer_id` has only been stored since 2026-09-15 (PR #614). A 30- or
+90-day window therefore reads low and will climb as history accrues. Backfilling
+it means re-reading every historical order from Meituan's most-audited endpoint
+and is **not done**.
+
+A figure that carries *from 15 Sep* is honest. One that silently reads 3 is not.
+
+### WHAT DOES NOT CHANGE
+
+Revenue, orders, products, stores, payments and visits are untouched. This
+section decides the customer figures and only those.
+
+### NOT DECIDED HERE
+
+**Whether wholesale product lines join the product ranking.** gzgrocery revenue
+is in the headline and its order lines are filtered out of `topProducts` by the
+same `NOTGZ` guard that stops its takings being counted twice. Including them is
+defensible — the ranking is its own aggregation and is not added to the
+headline — but it changes a desktop panel a year old, and it is a different
+question from who bought. Left for its own decision.
+
+**Whether Eleme's order tags carry a returning-customer label.** `orderTags`,
+`cqsOrderTag` and `deliveryTag` are in the payload, and Meituan answers
+"returning?" with a label rather than an id. Settling it means reading tag
+VALUES, which the shape digest deliberately strips. That is a different
+permission from reading field names and is not taken in passing.
