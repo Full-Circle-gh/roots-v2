@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.299
+# Tacet shared-core consolidation — decisions record, v4.300
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-17 · v4.300 — **§164 ADDENDUM · THE WIRE IS CLOSED, AND CLOSING IT FOUND A LIVE DATA LOSS THE SCREEN GATE HAD CREATED — ASKED BY ASH**, who was told the figures were still one devtools tab away and said to close it. `routes/retail-recipes.js` now strips money from all four reads and 403s the one write, through `lib/recipe-cost-visibility.js` — EXTRACTED like `lib/product-cost-visibility.js` beside it, so the rules can be held to a contract without standing up a database. Same three rules as waste and materials, deliberately: **fails closed** (a null cap set is not a grant), **keys DELETED not zeroed** (a 0 reads as free), **a FIELD refused, never a request** — with `costs_hidden: true` on the envelope so a client can tell *withheld* from *there was none*. The computed cost object is **ALLOW-LISTED, not deny-listed**, and that is the one shape here that differs in kind: `computeRecipeCost()` returns thirty-odd keys, fifteen of them money, and it GROWS (`materialCostPerGram` and `embeddedOverhead` both arrived after the first of them), so a deny-list is a list of the money keys that existed the day it was written. Percentages go with the amounts — `foodCostPct`, `overheadPct` and `targetFoodCost` print no currency sign and are still cost — and the three COUNTS stay, because a count and a cause are what make a fault fixable. **AND THE REAL FINDING: §164's screen gate had quietly armed a data loss.** `draftCostData()` reads the Cost & Pricing inputs out of the DOM; §164 stopped rendering that tab; `v()` returns null for an element that is not there and `parseFloat(null) || 0` is **0** — so an operator holding `recipes:edit` without `recipes:costs` who corrected a recipe's NAME would have PUT `{labour: 0, overhead_pct: 0, sell_price: 0, target_food_cost: 30}` and wiped the labour, the overhead and the sell price, taking every margin built on that recipe with them. Live from the moment #669 deployed; no preset holds edit-without-costs, so the exposure was the by-name grants alone. **OMITTING THE KEYS WOULD NOT HAVE FIXED IT**, which is the trap worth naming: `lib/recipe-cost-data-write.js` grants preserve-on-absent to `packaging_type_id` ALONE and says in terms that "an absent `labour` still writes 0, an absent `target_food_cost` still writes 30" — the packaging comment in `draftCostData()` is about that one column and does not generalise. Not sending the REQUEST is the only shape that preserves what is stored, and the route refuses it anyway for a tab left open across the deploy, a retry, or a hand-rolled request. Coverage: `scripts/test_recipe_cost_visibility.js` grows to 106 assertions, including that a money key invented tomorrow does not leak, that the sell price survives, and that no GET 403s.
 
 2026-09-17 · v4.299 — **§164 · A RECIPE IS NOT ONLY A COST, AND THE KITCHEN NEEDS THE HALF THAT ISN'T — ASKED BY ASH**, choosing how the desktop Recipes screen should reach the phone: *"the only thing is that cost section should be only accessable per role permission . kitchen staff for example can't reach there"*. **THERE IS ONE KEY WHERE THERE SHOULD BE TWO.** `lib/capabilities.js` gives materials, products and waste each a PAIR — a view key that opens the screen and a costs key that reveals the money on it, with `waste:costs` deliberately off in both floor presets — and gives Recipes only `recipes:view`, which **alone among the view keys carries `money: 'shows'`**, justified by MONEY_NOTES' `A recipe is a cost. · 食谱本身就是成本。`. That sentence is TRUE of the screen as it stands, which is why the coin is on the wrong KEY rather than simply wrong: with nothing else to carry it, opening Recipes at all IS seeing money, and a kitchen operator cannot be handed the ingredients and the steps without also being handed the batch cost, the cost per gram and the margin on everything the recipe makes. **THE DECISION: MINT `recipes:costs` AND MOVE THE COIN ONTO IT**, modelled line for line on `products:costs`; `recipes:view` loses its mark and the note is reworded onto the new key, which is now the thing the sentence is about. **THE COIN COMES OFF ONLY TOGETHER WITH THE GATE, IN ONE PR** — the list prints Cost, Cost per gram and the whole-batch fallback in columns of its own, and un-marking the key while those still paint would call it safe while it still shows money, which is worse than the state it replaces. **IT GOES ON THE DESKTOP, NOT ONLY ON THE PHONE**: `public/retail-admin/19-recipes.js` is 3,031 lines carrying exactly one capability check — `canEdit()` on `recipes:edit` — so Cost & Pricing is visible to everyone who can open the screen, and a gate added only to the phone is one a laptop steps around. **AND IT TAKES SOMETHING AWAY ON THE DAY IT SHIPS**, deliberately rather than as a side effect: `owner` holds everything, `admin` and `manager` are `ALL_KEYS` filters that pick the new key up on the same deploy, and no floor preset holds `recipes:view` at all — so what is left is operators ticked on **by name**, a list read off live data and acted on per person BEFORE the gate merges, because no session can see it from the repository. Does NOT decide the mobile Recipes build, which is its own decision and its own PR, and does not touch `lib/cap-routes.js`: GETs are open at that choke point, so this is a client-side read gate over data the endpoint already returns. One pair composed — `See recipe cost & margin · 查看食谱成本与毛利`, the live `products:costs` pair with its one noun swapped (产品 → 食谱, the noun `recipes:view` already carries) — declared in §164 with its sources and its rejected candidate, and locked in `docs/tacet-delivery-vocabulary.md` in the commit that ships the code, not before.
 
@@ -17423,3 +17425,56 @@ code*. The PR that implements it carries
 - a test that the desktop Cost & Pricing sub-tab and the list's cost columns are
   absent without `recipes:costs` and present with it;
 - the by-name grant list above, read off live data and acted on before merge.
+
+### ADDENDUM, 2026-09-17 — the wire, and the data loss the screen gate armed
+
+§164 above records that it deliberately did not gate the server: *"whether the
+API should withhold cost fields per capability is a separate question nobody has
+asked yet."* Ash asked, on being told the figures were still readable in the
+network tab. This is that decision, and what implementing it turned up.
+
+**THE WIRE.** All four reads strip money; the one write refuses it. The rules
+live in `lib/recipe-cost-visibility.js`, extracted from the route the way
+`lib/product-cost-visibility.js` was and for the same reason: a rule reachable
+only by standing up a database is a rule that gets tested loosely or not at all.
+Waste's and materials' three rules are followed to the letter so all three read
+alike — fail closed, delete rather than zero, refuse a field rather than a
+request — and `costs_hidden: true` rides the envelope.
+
+**THE COST OBJECT IS ALLOW-LISTED.** Every other shape is built in the route, in
+sight, where a `delete` beside its construction stays honest. `computeRecipeCost()`
+is not: thirty-odd keys, fifteen of them money, and it has grown twice since the
+first of them. A deny-list is a list of what was money on the day it was written.
+
+**THE ONE 403.** Every column `PUT /:id/cost` writes is money, so a caller
+without the capability has nothing legitimate to say there. That is the only
+request in the file that is refused rather than answered with less.
+
+**AND THE FINDING THAT MATTERED MORE THAN THE GAP.** §164's screen gate had
+armed a silent data loss, live from the moment #669 deployed. `draftCostData()`
+reads the Cost & Pricing inputs out of the DOM; §164 stopped rendering that tab;
+an absent element reads `null`, and `parseFloat(null) || 0` is `0`. So an
+ordinary autosave — after correcting a recipe's NAME — sent
+`{labour: 0, overhead_pct: 0, sell_price: 0, target_food_cost: 30}`, and the
+writer stored it. Labour, overhead and sell price wiped; every margin built on
+that recipe with them.
+
+No preset holds `recipes:edit` without `recipes:costs`, so the exposure was the
+by-name grants alone — the same list §164 already asks to be read off live data.
+**It should still be read now, and any recipe those operators saved between
+#669 and this fix should be checked against its version history**, which is
+intact: the loss goes through the ordinary cost write, so `recipe_versions`
+holds the displaced state.
+
+**OMITTING THE KEYS WOULD NOT HAVE FIXED IT.** `lib/recipe-cost-data-write.js`
+grants preserve-on-absent to `packaging_type_id` alone and says so in terms:
+*"an absent `labour` still writes 0, an absent `target_food_cost` still writes
+30."* The packaging comment inside `draftCostData()` is about that one column
+and does not generalise — reading it as a general rule is exactly how this bug
+would have been "fixed" and left live. Not sending the request is the only shape
+that preserves what is stored.
+
+**COVERAGE.** `scripts/test_recipe_cost_visibility.js` — 106 assertions:
+the registry, the presets, the screen, the wire, and both halves of the write
+fix. Including that a money key added to `computeRecipeCost()` tomorrow does not
+leak, that the product's sell price survives, and that no GET in the file 403s.

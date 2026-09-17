@@ -684,8 +684,18 @@ check('every save route files the state it displaces', () => {
   // files it is retail-recipes.js's business and scripts/check-tenant-als.js's.
   assert.match(ROUTES_JS, /snapshotRecipe\((?:db|tdb\(\)), req\.params\.id, \{ source: saveSourceOf\(req\)/,
     'the recipe update route must file a version before it writes');
-  const costRoute = ROUTES_JS.slice(ROUTES_JS.indexOf("router.put('/api/retail-admin/recipes/:id/cost'"));
-  assert.match(costRoute.slice(0, 1400), /snapshotRecipe\(/,
+  // BOUNDED BY THE ROUTE, NOT BY A BYTE COUNT. This read 1400 characters from
+  // the route's opening line, which is a guess about how long the handler is —
+  // and §164's addendum falsified it: the cost write gained a capability guard
+  // whose comment pushed snapshotRecipe() past the window, failing an invariant
+  // that was still perfectly true. A comment is not a behaviour change, and a
+  // test that cannot tell the difference will be "fixed" by deleting prose.
+  // The handler ends where the next route begins, so that is the slice.
+  const costAt = ROUTES_JS.indexOf("router.put('/api/retail-admin/recipes/:id/cost'");
+  assert.notStrictEqual(costAt, -1, 'no cost route');
+  const nextAt = ROUTES_JS.indexOf('\nrouter.', costAt + 10);
+  const costRoute = ROUTES_JS.slice(costAt, nextAt === -1 ? ROUTES_JS.length : nextAt);
+  assert.match(costRoute, /snapshotRecipe\(/,
     'the cost route must file one too — a cost-only save is a real change');
 });
 
