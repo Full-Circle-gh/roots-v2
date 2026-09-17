@@ -304,6 +304,63 @@ check('the server accepts the field on a product PATCH', () =>
   assert.ok(/if \('cost_incomplete' in body\)/.test(RETAIL_JS),
     'routes/retail.js does not write cost_incomplete'));
 
+// ═══════════════════════════════════════════════════════════════════════════
+section('5. The Product-details boxes ride the same omit-when-untouched rule');
+// ═══════════════════════════════════════════════════════════════════════════
+// §156. The autosave posts the whole form, and an untouched Product-details
+// card collects as {} — which the route reads as "clear them". Type one
+// character in a name with that card untouched and the empty boxes in front of
+// you are written over whatever the record holds. Survivable while this screen
+// was the only writer; the Product Page Editor now fills the same boxes to
+// compose a page from them, so the same autosave could wipe a bag it never knew
+// about. Executed, not grepped: these call the shipped pdCollectBody.
+
+check('an untouched card does not send the boxes at all', () => {
+  sandbox.pdFactsSet({ origin_en: 'Guangzhou, China', origin_cn: '中国广州' });
+  sandbox._pdFactsTouched = false;      // as pdOpen leaves it
+  const body = sandbox.pdCollectBody().body;
+  assert.ok(!('product_facts' in body),
+    'the key is present on an untouched card, so an empty one would clear the record');
+});
+
+check('a touched card sends them, and an emptied one still clears', () => {
+  sandbox.pdFactsSet({ origin_en: 'Guangzhou, China', origin_cn: '中国广州' });
+  sandbox.pdFactsMarkTouched();
+  let body = sandbox.pdCollectBody().body;
+  assert.ok('product_facts' in body, 'a touched card dropped its boxes');
+  assert.strictEqual(body.product_facts.origin_en, 'Guangzhou, China');
+  // Clearing a box is a statement, exactly as unticking the cost tag is.
+  sandbox.pdFactsSet({});
+  sandbox.pdFactsMarkTouched();
+  body = sandbox.pdCollectBody().body;
+  assert.ok('product_facts' in body, 'an emptied card cannot clear the record');
+  // Key-counted rather than deepStrictEqual: the bag is built inside the vm, so
+  // its prototype is that realm's and a structural compare fails on identity.
+  assert.strictEqual(Object.keys(body.product_facts).length, 0,
+    'an emptied card still sent values');
+});
+
+// The two programmatic writers set no input event, so without an explicit mark
+// their own values would be collected and then dropped by the rule above —
+// "Auto-fill from text" would appear to work and save nothing.
+check('every programmatic writer of the boxes marks them touched', () => {
+  // pdApplySnapshot is the Revert path — it writes the boxes back from the
+  // as-opened snapshot, and a revert that does not persist is not a revert.
+  for (const fn of ['pdFactsAutofill', 'pdFactsAutoFillQuiet', 'pdApplySnapshot']) {
+    const src = PRODUCTS_JS.slice(PRODUCTS_JS.indexOf('function ' + fn));
+    assert.notStrictEqual(PRODUCTS_JS.indexOf('function ' + fn), -1, fn + '() has moved');
+    const body = src.slice(0, src.indexOf('\n}\n'));
+    assert.ok(/pdFactsMarkTouched\(\)/.test(body),
+      fn + '() writes the boxes without marking them — its values would never be saved');
+  }
+});
+
+check('opening a product starts an untouched sitting', () => {
+  const open = PRODUCTS_JS.slice(PRODUCTS_JS.indexOf('pdFactsSet(p && p.product_facts)'));
+  assert.ok(/_pdFactsTouched = false/.test(open.slice(0, 400)),
+    'pdOpen does not reset the flag, so a previous product\'s edit marks the next one');
+});
+
 // A mark that only appeared once the editor had been opened would be absent on
 // exactly the rows nobody has looked at — which is every row that needs it.
 check('the products list query carries the column', () => {

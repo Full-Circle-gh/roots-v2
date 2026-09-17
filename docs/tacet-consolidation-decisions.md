@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.291
+# Tacet shared-core consolidation — decisions record, v4.293
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-17 · v4.293 — **§156 AMENDED IN THE BUILDING, three ways, all of them because the code disagreed with the plan.** (1) **THE CITY SEED IS WITHDRAWN.** §156 as written seeds a new tenant's Origin from `retail_stores.city`. Building it, two objections: the city is stored in whichever language the setup wizard was filled in, so the seed could only ever fill half a bilingual pair — the exact fault §145's dropdowns exist to prevent — and, worse, **the shop's city is not the product's origin.** Roots' 109-of-156 Guangzhou holds because Roots makes what it sells; a Shanghai shop reselling Vietnamese goods would be handed a false provenance as a default, in the control that elsewhere carries measured fact. §156's own rule — nothing pre-filled that we do not actually know — is what decides it. A new tenant's Origin is now simply empty on product one. The same reasoning withdraws the Net Wt seed. (2) **§145's "Net Wt gets no value list" becomes a measured rule instead of a named exception.** A per-tenant count cannot carry a hard-code for the words *net wt* — they mean nothing to a shop selling rugs — so an answer must have been **used twice** before it is offered back. A field of 67 one-off weights collapses to nothing, which was §145's point; the three or four sizes a shop actually stocks do become a list, which §145 never objected to. (3) **THE COLOPHON WAS THREE LEAKS, NOT ONE.** §156 named the character grid. Grepping the pattern rather than trusting the citation found the auto-picker resolving through Roots' category map to a literal `soilsoul` fallback — so a tenant who had chosen nothing got Roots' character drawn on their page **by default, with no operator action at all**, which is worse than the grid — plus `From Soil to Soul` and `Roots · ESTD 2017` printed into the preview, into the template thumbnail's colophon (a SECOND render, missed on the first pass and caught by a test counting them), and into the tagline input's placeholder. All four now come from `GET /api/retail-admin/brand/signature`, which answers Roots' cast, line and name byte-identically and answers every other tenant its own name, no cast and **no invented slogan**. **WHAT IS STILL ROOTS' IN SOURCE, named so silence is not read as coverage:** §147's `PA_STORAGE_HEADS`, `PA_STORAGE_UNITS` and `PA_STORAGE_NOTES` are the same fault one section over and are the next PR, held meanwhile by a check that fails if a fourth such list appears; and `miniapp/pages/product/product.js` carries its own copy of the category map, the `soilsoul` fallback AND the Roots tagline, so the customer-facing mini app still signs every tenant's product page as Roots — a separate surface needing a WeChat release, and the more urgent of the two. 2026-09-17 · v4.292 — **§156 · THE PAGE IS THE FORM, AND EVERY SHOP FILLS ITS OWN LISTS — DECIDED BY ASH**, on the automatic design: *“seems that now need to fill up some information in product page editor so that the automatic design feature will work well. seems like waist of time.”* **THE MEASURED FAULT IS SMALLER THAN THE DECISION AND IS RECORDED FIRST.** Two doors reach the same compose endpoint carrying different loads: the products sheet (`pdAutoComposeBlocks`) fills the five Product-details boxes from the description via `/api/retail-admin/ai/extract-facts` and then posts the description AND the weight AND those boxes, while the product page editor (`peAutoFillFromKitchen`) posts the id, both names and the category and **nothing else** — although `GET /api/retail-admin/products/:id` handed it `product_facts` and `weight AS size` in the very response it mounted from, and the prompt in `routes/ai.js` names those facts the source of truth for `spec_strip`, `storage_box`, `ingredients_chips` and `how_to_use`. **The editor's design is worse because the editor forgets to send what it is already holding.** Three smaller faults in the same function, named so they are not read as style: the product joins `_peAutoFilledFor` BEFORE the fetch so a failure cannot retry in that session; every failure is silent by design; and no control anywhere in the editor runs the compose against the product's own description — `Smart paste` asks the office to paste text the database is already storing. **BUT THE DOORS ARE NOT THE DECISION.** A product's content lives in three places — the prose description, the five boxes, the designed page — and the machine copies the first into the second into the third, which sets a trap with no good exit: edit the description and the page is marked out of date, press Rebuild and **the rebuild replaces the page**, hand edits included; edit the page instead and the description drifts from what the customer reads. §144 already found nobody composes a page (the same nine sections on 73–99% of products, then a cliff to 8%) and §145 that the answers barely vary (Origin *Guangzhou, China* 109 of 156, Shelf Life *See packaging* 46 of 57, Diet *100% plant* 28 of 29) — **most of what the AI "generates" is a default that could have been filled for free, or a pick from a short list.** **WHAT IS DECIDED: THE SECTIONS ARE THE ONLY FORM.** A new product's page opens carrying what the platform knows (Net Wt from the weight field, Origin from the shop's own city, no AI call); one box of raw material; **one button that drafts ONLY the blank sections**, reading the raw material and the sections already filled, never touching a section carrying words; the plain description becomes **derived** from the sections on save so the not-yet-republished mini app and the `use_block_design: 0` fallback never render empty; and **"out of date" and "Rebuild" retire with the copying** — there is nothing left to be out of date with, and no pass that replaces work. **WHAT MAKES IT WORK FOR A TENANT THAT IS NOT ROOTS, asked for second and the half that decides whether this ships at all:** §145's `PA_SPEC_VALUES` is Roots' catalogue compiled into source, so a candle shop in Shanghai would be offered a Guangzhou origin and a vegan claim as its defaults — **the values therefore stop being source** and become a tenant-scoped count over that tenant's own spec cells, the same shape `/api/retail-admin/products/block-usage` already uses for *N% of your products say this*; Roots' list stops being code and becomes what the counter computes from Roots' own products, the same answers arrived at honestly. **Labels stay in source, values do not** — *Net Wt · 净含量*, *Origin · 产地* are what the section IS and are neutral in any trade. **The seed for a shop with no history is that shop's own setup**, `retail_stores.city` as the wizard wrote it, suggested and one tap to change; nothing else is pre-filled because nothing else is known. **The colophon is gated on having one** — `PA_IP_CHARACTERS` is ten of Roots' mascots backed by `public/brand/ip-*.jpg`, so a tenant with no characters sees no grid rather than an empty one, and never Roots' radishes on somebody else's page. The voice was already split by `composeSystem(shop)` and this does not re-open it. **WHAT A NEW TENANT SEES ON DAY ONE**, stated plainly because it is the test of the decision: nine empty sections, **no percentages** (nothing of theirs to count yet, and §144 rules a failed count prints no number rather than a wrong one), Net Wt from the weight they typed, Origin suggesting their own city, one box and one button — **no Guangzhou, no diet claim, no mascots, no Roots** — and by their tenth product their own answers are their defaults. **THE FOOD SHAPE IS NOT SOLVED AND IS NOT PRETENDED TO BE:** the nine sections are food sections and every tenant today sells food, so a non-food spine is a later decision with a real signup behind it rather than a guess made now. **WHAT DOES NOT MOVE:** §144's invariant (no stored block moves by rendering, typing or saving, held by `scripts/test_product_editor_doc.js`), §145's 66 cells that say `Type` (a learned default is offered on a NEW product, never written over an old one), and nutrition's two homes. **BUILD ORDER — three PRs, the first useful on its own:** the editor sends what it holds, with the fill-only-blanks control and loud retryable failure; then the shop fills its own lists (tenant-counted defaults, city seed, colophon gate); then the derived description on save, and only then the five boxes leave the sheet, once nothing reads them. No change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
 2026-09-17 · v4.291 — **§155 · A BILINGUAL PAIR IS ONE TEXT NODE, AND A TAG INSIDE IT BREAKS THE PAIR**, found in production by Ash hours after §154 shipped: *“there is some chinese here.”* An English screen was rendering a Chinese sentence. **THE PAIR WAS WRITTEN CORRECTLY AND STILL LEAKED**: §1.11's walker works on TEXT NODES, and a `<code>{pts}</code>` in the middle of the hint made it five nodes instead of one — the node holding the ` · ` split correctly, and the node AFTER the tag, having no ` · ` of its own, rendered in both languages permanently. Nothing errors, and only the English reader ever sees it. **THE RULE: a pair is one text node, plain text, no elements inside it; copy that needs markup is written as two blocks, one per language, marked `data-lang-block`** — a mechanism the i18n engine already had. It is the opposite of `data-no-i18n`, and reaching for the shield instead would have glued both languages permanently, which is the very bug. **CHECKED, NOT REMEMBERED:** `scripts/test_voting_page.js` §10 scans every text node in the section and is proven by re-introducing the broken markup. Scope is the Voting section only and the same shape is likely live elsewhere in the admin — named as a separate pass, not quietly folded in. Shipped with a copy pass Ash asked for in the same breath (*“it need to be super clear for the tenant”*): twelve explanations rewritten to state the consequence rather than describe the control, declared in `docs/tacet-delivery-vocabulary.md` v1.107. `test:fast` 270, lint 0 errors. No schema, no server change, no change to `.gitignore` or CI.
 
@@ -16631,3 +16633,211 @@ shape is almost certainly live elsewhere in the admin — any hint that puts a
 separate pass on a separate ratchet, not something to bolt onto this one; what
 this section buys is that the next person meeting the symptom has the mechanism
 written down instead of rediscovering it from a screenshot.
+## §156 — THE PAGE IS THE FORM, AND EVERY SHOP FILLS ITS OWN LISTS
+
+**2026-09-17 · Decided by Ash**, from the automatic design feature: *"seems that
+now need to fill up some information in product page editor so that the
+automatic design feature will work well. seems like waist of time."* Then, shown
+the survey and the proposal: *"this need to work for every tenant not just for
+roots, so how we do it if im a new tenant what i will see"* — and, on the
+answer: *"ok lets do it"*.
+
+### The measured fault, first, because it is smaller than the decision
+
+**Two doors reach the same compose endpoint and they do not carry the same
+load.** The products sheet (`pdAutoComposeBlocks`, `public/retail-admin/09-products.js`)
+fills the five Product-details boxes from the description first via
+`/api/retail-admin/ai/extract-facts`, then posts the description AND the weight
+AND those five boxes. The product page editor (`peAutoFillFromKitchen`,
+`public/product-editor.html`) posts the product id, both names and the category —
+and nothing else — although `GET /api/retail-admin/products/:id` has already
+handed it `product_facts` and `weight AS size` in the same response it mounted
+from.
+
+The compose prompt in `routes/ai.js` names those facts *the source of truth* for
+`spec_strip`, `storage_box`, `ingredients_chips` and `how_to_use`. So the
+editor's door asks the model to guess what the office already typed, three
+screens away. **That is the "waste of time" in one sentence: the editor's design
+is worse because the editor forgets to send what it is already holding.**
+
+Three smaller faults live in the same function and are named here so they are
+not read as style. It adds the product to `_peAutoFilledFor` **before** the
+fetch, so a failure cannot retry in that session. Every failure is silent by
+design — the catch is empty and commented as a convenience. And **no control
+anywhere in the editor runs the compose against the product's own description**:
+`Smart paste` asks the office to paste in text the database is already storing.
+
+### But the doors are not the decision
+
+Fixing the doors makes the current flow work as drawn. It does not remove what
+was complained about, because the shape is the fault.
+
+**A product's content lives in three places today**: the prose description, the
+five Product-details boxes, and the designed page. The machine copies the first
+into the second into the third. That is the whole "automatic design", and it
+sets a trap with no good exit — edit the description and the page is marked out
+of date, press Rebuild and **the rebuild replaces the page**, taking every hand
+edit with it; edit the page instead and the description drifts away from what
+the customer reads. The office keeps two documents in step by hand and the AI is
+the courier between them.
+
+Two measurements already in this file say what to do about it. §144 found the
+same nine sections on 73–99% of products and a cliff to 8% — **nobody composes a
+page, everybody fills in the same one.** §145 found the answers barely vary:
+Origin is *Guangzhou, China* on 109 of 156 cells, Shelf Life *See packaging* on
+46 of 57, Diet *100% plant* on 28 of 29. **Most of what the AI "generates" is
+either a default that could have been filled for free, or a pick from a short
+list.** The genuinely written part is three sections: the opening paragraph, the
+why, and the notes.
+
+### What is decided: the sections are the only form
+
+1. **A new product's page opens already carrying what the platform knows.** Net
+   Wt from the weight field. Origin from the shop's own city. No AI call, no
+   wait, and right most of the time.
+2. **One box of raw material** — *anything you have about this product*: a
+   supplier blurb, label text, scattered notes, either language or both. It is
+   material, not a second truth to keep in step.
+3. **One button: draft the empty sections.** The model writes **only what is
+   blank**, reading the raw material *and the sections already filled*. It never
+   touches a section carrying words. Pressed again next week it fills whatever
+   is still blank.
+4. **The plain description becomes derived** from the sections on save, in both
+   languages, so the not-yet-republished mini app and the `use_block_design: 0`
+   fallback never render an empty page. Derived, not authored — nothing to keep
+   in step.
+5. **"Out of date" and "Rebuild" retire with the copying.** There is nothing
+   left for the page to be out of date *with*, and no pass that replaces work.
+
+### What makes it work for a tenant that is not Roots
+
+This is the half that was asked for second, and it is the half that decides
+whether the feature ships at all.
+
+- **§145's value lists are Roots' catalogue compiled into source.**
+  `PA_SPEC_VALUES` in `public/product-editor.html` names *Guangzhou, China*,
+  *See packaging*, *100% plant*. A candle shop in Shanghai opening its first
+  product would be offered a Guangzhou origin and a vegan claim as its
+  defaults. **So the values stop being source.** They become a tenant-scoped
+  count over that tenant's own spec cells — the same shape
+  `/api/retail-admin/products/block-usage` already uses to print *N% of your
+  products say this*. Roots' list stops being code and becomes what the counter
+  computes from Roots' own products: the same answers as today, arrived at
+  honestly instead of typed in once.
+- **Labels stay in source; values do not.** *Net Wt · 净含量*, *Origin · 产地*,
+  *Shelf Life · 保质期* are what the section IS, and they are neutral in any
+  trade. The answers belong to the tenant.
+- **The seed for a shop with no history is that shop's own setup**, never
+  Roots'. `retail_stores.city` — what the setup wizard writes from its City box —
+  is what Origin suggests. Suggested, one tap to change. Nothing else is
+  pre-filled, because nothing else is known.
+- **The colophon is gated on having one.** `PA_IP_CHARACTERS` is ten of Roots'
+  own mascots backed by files under `public/brand/ip-*.jpg`. A tenant with no
+  characters sees no grid and the fold does not open — not an empty grid, and
+  never Roots' radishes on somebody else's page.
+- **The voice is already split and this does not re-open it.**
+  `composeSystem(shop)` in `routes/ai.js` gives Roots the plant-based Guangzhou
+  sentence and every other tenant a neutral one carrying their own brand name,
+  with the animal-emoji ban applied only where it is true.
+
+### What a new tenant sees on day one
+
+Stated plainly, because it is the test of the whole decision. Nine empty
+sections. **No percentages** — there is nothing of theirs to count yet, and §144
+already rules that a failed count prints no number rather than a wrong one. Net
+Wt filled from the weight they typed. Origin suggesting their own city. One box
+for whatever they have, and one button. **No Guangzhou, no diet claim, no
+mascots, no Roots.** By their tenth product, their own answers are their
+defaults.
+
+### The food shape is not solved and is not pretended to be
+
+The nine sections are food sections — allergens, ingredients, storage,
+nutrition. Every tenant on the platform today sells food, so that is what is
+built. A non-food tenant needs a second spine, and that is a later decision with
+a real signup behind it rather than a guess made now. Recorded so nobody reads
+silence as coverage.
+
+### What does not move
+
+- **§144's invariant is untouched.** No stored block moves by rendering, typing
+  or saving; `scripts/test_product_editor_doc.js` holds it, and the defaults
+  above are inserted at their canonical position exactly as `paDocWrite` already
+  inserts a written section.
+- **§145's 66 cells that say `Type` keep saying it.** Nothing here rewrites a
+  live page. A learned default is offered on a NEW product, never written over
+  an old one.
+- **Nutrition keeps both homes** — the block and the `nutrition` column —
+  exactly as §144 left it.
+
+### Build order — three PRs, and the first is useful on its own
+
+1. **The editor sends what it holds.** Weight and `product_facts` into the
+   compose call, the facts filled first when empty, a visible *draft the empty
+   sections* control with the fill-only-blanks rule, and failures that are loud
+   and retryable. Relief today, and step 3 of the new flow.
+2. **The shop fills its own lists.** Tenant-counted spec defaults replace the
+   compiled value lists; the city seed; the colophon gate.
+3. **The derived description on save**, and only then the five boxes leave the
+   sheet — last, once nothing reads them.
+
+No change to `.gitignore`, CI, or anything governing how sessions and builds
+work.
+
+
+### AMENDED 2026-09-17, in the building (v4.291)
+
+Three things in the decision above did not survive contact with the code. They
+are recorded here rather than edited into the text, so what was decided and what
+was learned stay separable.
+
+**The city seed is withdrawn.** The decision seeds a new tenant's Origin from
+the shop's own city. Two objections, the second fatal: `retail_stores.city` is
+stored in whichever language the setup wizard was filled in, so the seed could
+fill only half a bilingual pair — precisely what §145's dropdowns exist to
+prevent — and **the shop's city is not the product's origin.** Roots' 109 of 156
+holds because Roots makes what it sells; a Shanghai shop reselling Vietnamese
+goods would be handed a false provenance as its default. The rule stated three
+paragraphs above it — *nothing pre-filled that we do not actually know* — decides
+against it. A new tenant's Origin is empty on product one. The Net Wt seed goes
+for the same reason: a weight typed as `250g` has no Chinese half to offer.
+
+**"Net Wt gets no value list" stops being a named exception.** §145 gave that
+field no list because 163 cells held 67 distinct weights. A per-tenant count
+cannot carry a hard-code for the words *net wt*, so the judgement is read off
+the data: an answer must have been used **twice** before it is offered back. A
+field of one-offs collapses to nothing — §145's point, now self-applying to any
+field and any trade — while the three or four sizes a shop actually repeats do
+become a list, which §145 never argued against.
+
+**The colophon was three leaks, not one.** The decision named the character
+grid. Grepping the pattern rather than trusting the citation — the house rule at
+the head of this file — found three more, one of them worse than the one named:
+
+- `_paResolveColophonChar` resolved through Roots' category map to a literal
+  `soilsoul` fallback, so a tenant who had chosen nothing got Roots' character
+  drawn onto their page **by default, with no operator action at all.**
+- `From Soil to Soul` and `Roots · ESTD 2017` were printed into the live
+  preview, and again into the template thumbnail's colophon — a SECOND render,
+  missed on the first pass and found by a test that counts them.
+- The tagline input offered Roots' slogan as its placeholder, to everybody.
+
+All of it now comes from `GET /api/retail-admin/brand/signature`: Roots' cast,
+line and name byte-identically, and for every other tenant its own name, no cast
+and **no invented slogan** — a shop's motto is not something a platform can
+supply, and printing one it made up is worse than printing none.
+
+### Still Roots' in source, after this PR
+
+Named so that silence is not read as coverage.
+
+- **§147's storage-box lists** — `PA_STORAGE_HEADS`, `PA_STORAGE_UNITS`,
+  `PA_STORAGE_NOTES` — are the same fault one section over, and the next PR.
+  Held meanwhile by a check in `scripts/test_spec_strip_picklists.js` that fails
+  if a fourth such list is added.
+- **The mini app carries its own copy.** `miniapp/pages/product/product.js` has
+  the category map, the `soilsoul` fallback and the Roots tagline written into
+  it, so the CUSTOMER-FACING page still signs every tenant's product as Roots.
+  That is a separate surface needing a WeChat release, and it is the more urgent
+  of the two: the editor leak was seen by the office, this one is seen by the
+  shopper.

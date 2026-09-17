@@ -23505,6 +23505,175 @@ router.get('/api/retail-admin/products/export.csv', requireRetailAdmin, (req, re
 // and /products/export.csv sit above it.
 //
 // Reads only the office's own layout choices. No customer data of any kind.
+// GET /api/retail-admin/brand/signature — everything the product page signs
+// itself with, for THIS tenant: the illustrated cast, the house line under it,
+// and the name on the rule below that.
+//
+// WHY THIS IS A ROUTE AND NOT A LIST IN THE EDITOR (§156). The product editor's
+// colophon offered ten characters — Soil & Soul, Skater, Kombucha, Radishes and
+// the rest — backed by files in public/brand/. They are Roots' own illustrated
+// cast. The editor named them in its source, so EVERY tenant on the platform
+// was shown them and could sign their page with somebody else's mascot.
+//
+// There is no per-tenant character store yet, and inventing one here would be a
+// bigger change than the fault deserves. So the platform ANSWERS THE QUESTION
+// instead of the editor assuming it: Roots gets its cast, every other tenant
+// gets none and the editor hides the whole fold rather than showing an empty
+// grid. The seam is what matters — when characters become something a tenant
+// uploads, this route starts returning them and nothing in the editor changes.
+//
+// The same shape and the same reasoning as composeSystem(shop) in routes/ai.js,
+// which already gives Roots its own brand sentence and every other tenant a
+// neutral one: an absent tenant and account #1 are the same answer, because the
+// kitchen realm has no tenant row and the kitchen IS account #1.
+const ROOTS_IP_CHARACTERS = [
+  { key: 'soilsoul',      label: 'Soil & Soul' },
+  { key: 'skater',        label: 'Skater'      },
+  { key: 'kombucha-gang', label: 'Kombucha'    },
+  { key: 'flex',          label: 'Flex'        },
+  { key: 'radishes',      label: 'Radishes'    },
+  { key: 'mushroom',      label: 'Mushroom'    },
+  { key: 'peas',          label: 'Peas'        },
+  { key: 'onion',         label: 'Onion'       },
+  { key: 'broccoli',      label: 'Broccoli'    },
+  { key: 'hula',          label: 'Hula'        },
+];
+router.get('/api/retail-admin/brand/signature', requireRetailAdmin, (req, res) => {
+  res.set('Cache-Control', 'no-store, must-revalidate');
+  const t = req.tenant;
+  const isRoots = !t || Number(t.id) === 1;
+  if (isRoots) {
+    // Byte-identical to what the editor printed before this route existed.
+    return res.json({
+      characters: ROOTS_IP_CHARACTERS,
+      tagline_en: 'From Soil to Soul', tagline_cn: '从土壤到灵魂',
+      house: 'Roots · ESTD 2017',
+    });
+  }
+  // EVERY OTHER SHOP GETS ITS OWN NAME AND NOTHING INVENTED. No cast, because
+  // it has none; no house line, because a slogan is not something the platform
+  // can supply; and the name only if the tenant row carries one — a colophon
+  // reading "undefined" is worse than a colophon with no name in it.
+  const name = String((t && (t.brand_name || t.name)) || '').trim();
+  res.json({ characters: [], tagline_en: '', tagline_cn: '', house: name });
+});
+
+// GET /api/retail-admin/products/spec-usage — the spec-strip labels and values
+// THIS TENANT'S own products actually use, counted.
+//
+// WHY THIS EXISTS (§156). §145 gave the spec strip two dropdowns so a label is
+// picked rather than retyped 724 different ways, and filled BOTH languages from
+// one pick — which is the half that matters, because a typed label is one
+// somebody can finish in English and forget in the Chinese. But the lists it
+// offered were Roots' own catalogue compiled into the editor's source:
+// `Guangzhou, China`, `See packaging`, `100% plant`. On a platform, that is a
+// candle shop in Shanghai being offered a Guangzhou origin and a vegan claim as
+// its defaults — a guess presented in the same control as a measured fact.
+//
+// So the VALUES stop being source and are counted here, per tenant, from that
+// tenant's own cells. The LABELS stay in the editor: Net Wt, Origin and the
+// rest name what the row IS and are neutral in any trade — but a tenant's own
+// labels are counted too and merged in, so a shop that says `Fabric` is offered
+// `Fabric` rather than told it typed something unusual.
+//
+// Roots' list is not lost by this; it is recomputed from Roots' own products,
+// which is where it came from. The same answers, arrived at honestly.
+//
+// THE PAIR IS TAKEN WHOLE OR NOT AT ALL. A cell is counted only when it has an
+// English AND a Chinese side, because the entire point of the control is that
+// one pick fills both. Counting half-written cells would let the list offer a
+// pair whose Chinese is blank, which is the fault §145 built the dropdown to
+// stop. Spelling variants are counted separately and the commonest wins, so the
+// list self-corrects as the tenant's catalogue grows.
+//
+// MUST BE REGISTERED BEFORE /products/:id, for the reason block-usage states.
+//
+// Reads only the office's own layout choices. No customer data of any kind.
+router.get('/api/retail-admin/products/spec-usage', requireRetailAdmin, (req, res) => {
+  res.set('Cache-Control', 'no-store, must-revalidate');
+  try {
+    const rows = tdb().prepare(
+      `SELECT description_blocks FROM store_products
+        WHERE COALESCE(is_active, 1) = 1
+          AND description_blocks IS NOT NULL
+          AND description_blocks != '' AND description_blocks != '[]'`
+    ).all();
+    // key(lower) -> { n, pairs: Map(JSON pair -> count) }
+    const labels = new Map();
+    const values = new Map();
+    const bump = (map, key, en, cn) => {
+      let e = map.get(key);
+      if (!e) { e = { n: 0, pairs: new Map() }; map.set(key, e); }
+      e.n++;
+      const pk = JSON.stringify([en, cn]);
+      e.pairs.set(pk, (e.pairs.get(pk) || 0) + 1);
+    };
+    for (const r of rows) {
+      let arr;
+      try { arr = JSON.parse(r.description_blocks); } catch { continue; }
+      if (!Array.isArray(arr)) continue;
+      for (const b of arr) {
+        if (!b || b.type !== 'spec_strip' || !Array.isArray(b.cells)) continue;
+        for (const c of b.cells) {
+          if (!c) continue;
+          const kEn = String(c.k_en || '').trim(), kCn = String(c.k_cn || '').trim();
+          if (!kEn || !kCn) continue;                 // half a pair is not an answer
+          const lk = kEn.toLowerCase();
+          bump(labels, lk, kEn, kCn);
+          const vEn = String(c.v_en || '').trim(), vCn = String(c.v_cn || '').trim();
+          if (!vEn || !vCn) continue;
+          if (!values.has(lk)) values.set(lk, new Map());
+          bump(values.get(lk), vEn.toLowerCase(), vEn, vCn);
+        }
+      }
+    }
+    // The commonest spelling of a pair represents it; ties keep insertion order.
+    const best = (e) => {
+      let top = null, topN = -1;
+      for (const [pk, n] of e.pairs) if (n > topN) { topN = n; top = pk; }
+      let en = '', cn = '';
+      try { [en, cn] = JSON.parse(top); } catch { /* cannot happen: we wrote it */ }
+      return { en, cn, n: e.n };
+    };
+    const rank = (m, cap, min) => [...m.values()].map(best)
+      .filter(o => o.n >= (min || 1))
+      .sort((a, b) => b.n - a.n).slice(0, cap);
+    const outValues = {};
+    for (const [lk, m] of values) {
+      // A VALUE IS OFFERED ONLY ONCE THE SHOP HAS USED IT TWICE, and this is
+      // §145's "Net Wt gets no list" rule made measurable instead of typed.
+      //
+      // §145 hard-coded the exception: Net Wt was given no value list because
+      // 163 cells held 67 distinct weights, and a dropdown nobody can find
+      // their own product in is worse than an empty box. Counting per tenant
+      // cannot carry a hard-coded exception — `net wt` means nothing to a shop
+      // that sells rugs — so the judgement has to be read off the data.
+      //
+      // Requiring a repeat does exactly that, and it does it for every label at
+      // once. Origin collapses to a handful (Guangzhou 109 of 156); a field of
+      // one-offs collapses to nothing and the cell stays a typed box, which is
+      // what it should have been. A weight field keeps only the sizes actually
+      // stocked more than once — three or four rows, not sixty-seven — and that
+      // is a list worth opening rather than the one §145 refused.
+      //
+      // Eight is what a dropdown can be read down without becoming a search
+      // problem; the tail is always reachable through "Something else".
+      const list = rank(m, 8, 2);
+      if (list.length) outValues[lk] = list;
+    }
+    // Labels are deliberately NOT filtered by repeat: a label used once is still
+    // a label this shop uses, and leaving it out would show that cell as
+    // "Something else" — the demotion §145 forbids.
+    res.json({ labels: rank(labels, 16, 1), values: outValues });
+  } catch (e) {
+    // The editor falls back to its neutral labels and offers no values — the
+    // same posture block-usage takes, for the same reason: a wrong list is
+    // worse than none, because nothing on screen says it is wrong.
+    console.error('[spec-usage]', e && (e.message || e));
+    res.status(500).json({ labels: [], values: {} });
+  }
+});
+
 router.get('/api/retail-admin/products/block-usage', requireRetailAdmin, (req, res) => {
   res.set('Cache-Control', 'no-store, must-revalidate');
   try {

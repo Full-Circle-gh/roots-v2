@@ -1654,7 +1654,10 @@
               <div class="field" style="margin-bottom:2px"><label class="stacked">Tagline CN · 标语(中文)</label><input id="pa-edit-tagline-cn" type="text" placeholder="例如:肠道值得更好的关怀"></div>
             </div>
           </details>
-          <details class="pa-left-acc" id="pe-acc-colophon">
+          <!-- Hidden until the platform says this tenant HAS a cast to sign with
+               (§156). Starting visible would flash a control at every shop that
+               has none, in the half-second before the answer lands. -->
+          <details class="pa-left-acc" id="pe-acc-colophon" hidden>
             <summary><span class="pe-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg></span> Colophon · 片尾签名 <span id="pe-colophon-dot" class="pe-acc-dot"></span></summary>
             <div class="pa-left-acc-body">
               <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 6px;gap:8px;flex-wrap:wrap">
@@ -1662,17 +1665,28 @@
                 <button type="button" class="btn" style="padding:3px 8px;font-size:11px" onclick="paClearColophonChar()">Auto · 自动</button>
               </div>
               <div id="pa-colophon-grid" class="pa-colophon-grid"></div>
-              <div class="field" style="margin-top:10px"><label class="stacked">Tagline EN · 标语(英文)</label><input id="pa-edit-colophon-tagline-en" type="text" placeholder="From Soil to Soul"></div>
-              <div class="field" style="margin-bottom:2px"><label class="stacked">Tagline CN · 标语(中文)</label><input id="pa-edit-colophon-tagline-cn" type="text" placeholder="从土壤到灵魂"></div>
+              <!-- Placeholders are set by paLoadSignature from the tenant's own house line
+                   (§156): they were Roots' slogan, offered to every shop as a suggestion. -->
+              <div class="field" style="margin-top:10px"><label class="stacked">Tagline EN · 标语(英文)</label><input id="pa-edit-colophon-tagline-en" type="text" placeholder=""></div>
+              <div class="field" style="margin-bottom:2px"><label class="stacked">Tagline CN · 标语(中文)</label><input id="pa-edit-colophon-tagline-cn" type="text" placeholder=""></div>
               <input type="hidden" id="pa-edit-colophon-character" value="">
             </div>
           </details>
         </div>
         <!-- SHORTCUTS — the sections themselves live in the document (§144).
-             What stays here is the one thing that is not a section: pasting a
-             wall of copy and letting the editor split it. -->
+             What stays here is what is not a section: drafting the blank ones
+             from this product's own description, and pasting in a wall of copy
+             from somewhere else. -->
         <div class="pe-left-group">
           <div class="pe-left-grouptitle">Shortcuts · 快捷</div>
+          <!-- The product's OWN description, drafted into whichever sections are
+               still blank. This is the one the office wants nine times in ten;
+               Smart paste below it is for copy that lives somewhere else. Both
+               wear the same weight — the screen's one primary action is Save. -->
+          <button type="button" class="pe-smart-btn" id="pe-draft-btn" onclick="peDraftEmptySections()" title="Draft the sections that are still blank from this product's description · 根据本产品描述补全仍为空白的板块">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+            Draft the empty sections · 补全空白板块
+          </button>
           <button type="button" class="pe-smart-btn" onclick="peSmartOpen()" title="Paste text, let the editor split it into sections · 粘贴文字,自动拆分成板块">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 3l1.9 4.8L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.7L12 3z"/><path d="M19 14l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg>
             Smart paste · 智能粘贴
@@ -2006,18 +2020,41 @@ const PA_BLOCK_TYPES = [
   },
 ];
 
-const PA_IP_CHARACTERS = [
-  { key: 'soilsoul',       label: 'Soil & Soul' },
-  { key: 'skater',         label: 'Skater'      },
-  { key: 'kombucha-gang',  label: 'Kombucha'    },
-  { key: 'flex',           label: 'Flex'        },
-  { key: 'radishes',       label: 'Radishes'    },
-  { key: 'mushroom',       label: 'Mushroom'    },
-  { key: 'peas',           label: 'Peas'        },
-  { key: 'onion',          label: 'Onion'       },
-  { key: 'broccoli',       label: 'Broccoli'    },
-  { key: 'hula',           label: 'Hula'        },
-];
+// WHOSE CHARACTERS THESE ARE (§156). This was Roots' own illustrated cast,
+// named in the editor's source, which meant every tenant on the platform was
+// shown it and could sign a product page with somebody else's mascot. The
+// platform answers the question now — GET /api/retail-admin/brand/characters —
+// and the list starts EMPTY so a tenant who has none never sees a grid at all.
+// Roots' ten arrive from that route unchanged.
+let PA_IP_CHARACTERS = [];
+// The rest of the signature: the house line under the cast and the name on the
+// rule below it. BOTH WERE LITERALS IN THIS PAGE — `From Soil to Soul` and
+// `Roots · ESTD 2017` — so the preview signed every tenant's product page with
+// Roots' slogan and Roots' name. Empty until the route answers, and empty
+// forever for a shop that has no cast: a slogan is not something the platform
+// can supply, and printing one it invented is worse than printing none.
+let PA_SIGNATURE = { tagline_en: '', tagline_cn: '', house: '' };
+async function paLoadSignature() {
+  try {
+    const r = await fetch('/api/retail-admin/brand/signature',
+                          { credentials: 'same-origin', cache: 'no-store' });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (!j || !Array.isArray(j.characters)) return;
+    PA_IP_CHARACTERS = j.characters;
+    PA_SIGNATURE = {
+      tagline_en: j.tagline_en || '', tagline_cn: j.tagline_cn || '', house: j.house || '',
+    };
+  } catch (e) { /* nothing offered — the fold stays hidden and the rule stays bare */ }
+  // The house line doubles as the placeholder for the per-product override, so
+  // Roots keeps the suggestion it has always had and nobody else is shown it.
+  const ph = (id, v) => { const n = document.getElementById(id); if (n) n.placeholder = v || ''; };
+  ph('pa-edit-colophon-tagline-en', PA_SIGNATURE.tagline_en);
+  ph('pa-edit-colophon-tagline-cn', PA_SIGNATURE.tagline_cn);
+  paRenderColophonGrid();
+  paRenderPreview();
+  paRenderPresets();   // the template thumbnails carry the colophon too
+}
 
 // Product-page templates. Each entry is a self-contained design: an id (saved
 // to products.page_template), bilingual label/description, and the default
@@ -2793,9 +2830,11 @@ async function peSmartDivide() {
       credentials: 'same-origin',
       body: JSON.stringify({
         text_en: textEn, text_cn: textCn, translate,
-        product: PA_CURRENT
-          ? { id: PA_CURRENT.id, name_en: PA_CURRENT.name_en, name_cn: PA_CURRENT.name_cn, category: PA_CURRENT.category }
-          : {},
+        // The same full context the draft sends — weight and the Product-details
+        // boxes included. Smart paste was dropping them exactly as the draft
+        // was (§156), so a pasted wall of copy composed a worse spec strip than
+        // the identical text pasted on the products sheet.
+        product: peComposeProduct(),
       }),
     });
     if (r.status === 401 || r.status === 403) { peAuthBail(); return; }
@@ -2871,78 +2910,232 @@ function peSmartApply() {
   toast(msg);
 }
 
-// ── Auto-fill — Smart paste, but the source is the kitchen app's product
-// description (EN + CN) instead of a manual paste. This is the DEFAULT: when a
-// product opens with a blank design and the kitchen already carries both
-// languages, compose the sections automatically so the operator never has to
-// hand-copy the kitchen text into Smart paste. It only fires on an empty
-// canvas, so saved or hand-edited sections are never clobbered — once the page
-// has blocks, auto-fill stays out of the way. The result is left UNSAVED so the
-// operator reviews and commits it deliberately.
-const _peAutoFilledFor = new Set();   // product ids already auto-filled this session
+// ── DRAFTING THE EMPTY SECTIONS (§156) ────────────────────────────────────
+//
+// ONE PATH, TWO WAYS IN. The office either opens a product that has nothing on
+// its page (the draft runs by itself, as it always has) or presses "Draft the
+// empty sections" (it runs on demand, as often as they like). Both land here,
+// and both obey the same rule: THE MODEL ONLY EVER FILLS A BLANK. A section
+// carrying words is never rewritten, never reordered, never dropped. That rule
+// is what retires "rebuild replaces the page" — there is no pass here that can
+// take an edit away.
+//
+// WHAT IT READS is the product's own description, which is already loaded — the
+// office never pastes in text this page is holding. Smart paste stays for the
+// other case: copy that lives somewhere else entirely.
+//
+// WHAT IT SENDS is everything this editor knows, which is the fault §156 was
+// written about. GET /api/retail-admin/products/:id hands us product_facts and
+// `weight AS size` in the same response we mounted from, and the compose prompt
+// in routes/ai.js names those facts the source of truth for the spec strip,
+// storage, ingredients and how-to-use. Sending only the name and category asked
+// the model to guess what the office had already typed three screens away.
+//
+// The result is left UNSAVED, so it is reviewed and committed deliberately.
+const _peAutoFilledFor = new Set();   // products auto-drafted this session (manual runs are never blocked)
 function _peStripToText(html) {
   let s = String(html == null ? '' : html);
   if (!s.trim()) return '';
   // Turn block-level boundaries into newlines so paragraphs survive the strip.
   s = s.replace(/<\s*(br|\/p|\/div|\/li|\/h[1-6])\s*>/gi, '\n').replace(/<[^>]+>/g, '');
   const ta = document.createElement('textarea'); ta.innerHTML = s;  // decode entities
-  return ta.value.replace(/[  	]+/g, ' ')
+  return ta.value.replace(/[  \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n').split('\n').map(l => l.trim()).join('\n').trim();
 }
-async function peAutoFillFromKitchen(p) {
-  if (!p || _peAutoFilledFor.has(p.id)) return;
-  // A saved design (the product of earlier work) locks auto-fill out.
-  if (Array.isArray(p.description_blocks) && p.description_blocks.length) return;
+// The context the compose endpoint is built to read. `facts` and `weight` are
+// the two this editor was dropping on the floor; routes/ai.js reads them under
+// exactly these names (see the _factLines block in composeBlocksHandler).
+function peComposeProduct() {
+  if (!PA_CURRENT) return {};
+  const facts = (PA_CURRENT.product_facts && typeof PA_CURRENT.product_facts === 'object')
+    ? PA_CURRENT.product_facts : null;
+  return {
+    id: PA_CURRENT.id,
+    name_en: PA_CURRENT.name_en, name_cn: PA_CURRENT.name_cn,
+    category: PA_CURRENT.top_category || PA_CURRENT.category,
+    weight: PA_CURRENT.size || '',
+    facts: (facts && Object.keys(facts).length) ? facts : null,
+  };
+}
+// Fill the Product-details boxes from the description when they are still
+// empty, BEFORE composing — the same fold-in the products sheet does
+// (pdFactsAutoFillQuiet). Best-effort in every sense: AI off, a failure or no
+// text just proceeds, and an existing box is never clobbered. Persisted with a
+// PATCH so the office does not have to type them again on the other screen.
+async function peEnsureFacts(textEn, textCn) {
+  if (!PA_CURRENT) return;
+  const have = PA_CURRENT.product_facts;
+  if (have && typeof have === 'object' && Object.keys(have).length) return;
+  if (!textEn && !textCn) return;
+  try {
+    const r = await fetch('/api/retail-admin/ai/extract-facts', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text_en: textEn || '', text_cn: textCn || '' }),
+    });
+    if (!r.ok) return;
+    const j = await r.json().catch(() => ({}));
+    const facts = (j && j.success && j.data && j.data.facts) || null;
+    if (!facts || !Object.keys(facts).length) return;
+    // ASK THE RECORD, NOT THE MOUNT, BEFORE WRITING. PA_CURRENT is as old as
+    // the page — minutes, on a tab left open — and the products sheet fills
+    // these same boxes. Extracting from a stale empty and PATCHing it would
+    // overwrite what somebody typed on the other screen in between. The compose
+    // below still gets the facts either way; only the WRITE is conditional.
+    let live = null;
+    try {
+      const cur = await fetch('/api/retail-admin/products/' + PA_CURRENT.id,
+                              { credentials: 'same-origin', cache: 'no-store' });
+      const cj = cur.ok ? await cur.json().catch(() => ({})) : {};
+      live = (cj && cj.success && cj.data) ? (cj.data.product_facts || null) : null;
+    } catch (e) { return; }   // could not check — do not write blind
+    if (live && typeof live === 'object' && Object.keys(live).length) {
+      PA_CURRENT.product_facts = live;   // somebody got there first; theirs wins
+      return;
+    }
+    PA_CURRENT.product_facts = facts;
+    // Persist on its own, not folded into the page save: the boxes are the
+    // sheet's data and the office may never press Save here at all.
+    await fetch('/api/retail-admin/products/' + PA_CURRENT.id, {
+      method: 'PATCH', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_facts: facts }),
+    }).catch(() => {});
+  } catch (e) { /* compose still runs, just without the boxes */ }
+}
+// Which types already carry words. A composed block of one of these is dropped
+// on arrival — that is the whole "only ever fills a blank" rule, enforced at
+// the one point where new blocks enter the stack.
+function peFilledTypes() {
+  paBlocksSyncFromDOM();
+  const out = new Set();
+  (window._paBlocks || []).forEach(b => { if (b && b.type && _paBlockHasWords(b)) out.add(b.type); });
+  return out;
+}
+// Insert at the section's canonical place in the spine rather than at the end,
+// the same arithmetic paDocWrite uses when the office clicks "Write it". Only
+// ever an INSERT: no stored block moves, which is §144's invariant.
+function peInsertAtSpine(blocks, b) {
+  const ci = PA_SPINE_AT[b.type];
+  let at = blocks.length;
+  if (ci != null) {
+    const found = blocks.findIndex(x => x && (x.type in PA_SPINE_AT) && PA_SPINE_AT[x.type] > ci);
+    if (found >= 0) at = found;
+  }
+  blocks.splice(at, 0, b);
+}
+// `auto` is the on-mount run: it stays quiet about the things a background
+// nicety has no business shouting (no description, nothing blank left), and it
+// runs once per product per session. A pressed button is never quiet and is
+// never blocked — the whole point of it is that it can be pressed again.
+async function peDraftEmptySections(opts) {
+  const auto = !!(opts && opts.auto);
+  const p = PA_CURRENT;
+  if (!p) return;
+  if (auto && _peAutoFilledFor.has(p.id)) return;
+  const btn = document.getElementById('pe-draft-btn');
+
   const textEn = _peStripToText(p.description_en);
   const textCn = _peStripToText(p.description_cn);
-  // Need at least ONE language — when only one is written, the AI drafts the
-  // other side itself in the brand voice (original, idiomatic, NOT a literal
-  // gloss), so a single-language kitchen description still produces a fully
-  // bilingual page for the operator to review.
-  if (!textEn && !textCn) return;
+  if (!textEn && !textCn) {
+    if (!auto) toast(cuT('Add a description to this product first, then draft · 请先填写描述', '请先填写描述'), 'err');
+    return;
+  }
+  // Only one language needed — the model drafts the other in the brand voice.
   const translate = !(textEn && textCn);
-  _peAutoFilledFor.add(p.id);
-  toast(cuT('Auto-filling sections from the kitchen description… · 正在根据厨房描述生成板块…', '正在根据厨房描述生成板块…'));
+
+  const already = peFilledTypes();
+  // On mount the draft only runs on a page with nothing on it, so opening a
+  // designed product never starts a background call. Pressed, it runs whatever
+  // the page looks like and lets the blank-only filter do the deciding.
+  if (auto && already.size) return;
+  if (!auto && PA_SPINE.every(t => already.has(t))) {
+    toast(cuT('Every section already has words · 没有空白板块需要补全', '没有空白板块需要补全'));
+    return;
+  }
+
+  if (auto) _peAutoFilledFor.add(p.id);
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+  const prog = auto ? null : _peComposeProgress();
+  if (auto) toast(cuT('Drafting the empty sections… · 正在补全空白板块…', '正在补全空白板块…'));
   try {
+    await peEnsureFacts(textEn, textCn);
     const r = await fetch('/api/retail-admin/ai/compose-blocks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
-      body: JSON.stringify({
-        text_en: textEn, text_cn: textCn, translate,
-        product: { id: p.id, name_en: p.name_en, name_cn: p.name_cn, category: p.category },
-      }),
+      body: JSON.stringify({ text_en: textEn, text_cn: textCn, translate, product: peComposeProduct() }),
     });
-    // No peAuthBail here. This is a background nicety fired from peMount, so a
-    // 401/403 would throw the operator out to the dashboard the instant they
-    // opened any product that has kitchen copy but no design yet — the editor
-    // looked like it crashed on that one product. Stay silent; a real expired
-    // session surfaces on the next save, which is a path worth bouncing.
-    if (r.status === 401 || r.status === 403) return;
+    // No peAuthBail on the AUTO path: it is fired from peMount, so a 401 there
+    // would throw the office out to the dashboard the instant they opened a
+    // product with copy and no page — the editor looked like it had crashed on
+    // that one product. A pressed button is a deliberate act and does bounce.
+    if (r.status === 401 || r.status === 403) {
+      if (auto) return;
+      peAuthBail(); return;
+    }
+    // AI OFF IS A SETTING, NOT A FAILURE. A shop with no key configured would
+    // otherwise be told its draft failed every single time a product was
+    // opened. The pressed button says it plainly — the office asked, so the
+    // office gets an answer — and the background run says nothing at all.
+    if (r.status === 503) {
+      if (prog) prog.done(false, cuT('AI is not configured yet · AI 尚未配置', 'AI 尚未配置'));
+      if (!auto) toast(cuT('AI is not configured yet · AI 尚未配置', 'AI 尚未配置'), 'err');
+      return;
+    }
     const j = await r.json().catch(() => ({}));
-    // Convenience step, not a required one — fail quietly (AI off, error, etc.).
-    if (!r.ok || !j.success) return;
-    const composed = (j.blocks || []).map(b => ({ ...b, id: paBlocksGenId() }));
-    if (!composed.length) return;
-    // Back off if the operator started composing while the call was in flight —
-    // only a lone synthesised nutrition block (no real design work) is OK.
-    paBlocksSyncFromDOM();
-    const cur = window._paBlocks || [];
-    if (cur.some(b => b.type !== 'nutrition_facts')) return;
-    const hasNutrition = cur.some(b => b.type === 'nutrition_facts');
-    const fresh = composed.filter(b => !(b.type === 'nutrition_facts' && hasNutrition));
-    window._paBlocks = fresh.concat(cur);   // composed sections first, keep nutrition after
-    PA_SELECTED_BLOCK_ID = window._paBlocks[0]?.id || null;
+    if (!r.ok || !j.success) throw new Error(j.error || 'compose_failed');
+
+    // THE BLANK-ONLY FILTER. Re-read the page here rather than trusting the set
+    // taken before the call: the office may have typed into a section while it
+    // was in flight, and their words win over a draft every time.
+    const filled = peFilledTypes();
+    const blocks = window._paBlocks || (window._paBlocks = []);
+    const fresh = (j.blocks || [])
+      .filter(b => b && b.type && !filled.has(b.type))
+      .map(b => ({ ...b, id: paBlocksGenId() }));
+    // A second composed block of a type already placed by this same pass is a
+    // duplicate, not a second section — the spine holds one of each.
+    const placed = new Set();
+    const added = [];
+    fresh.forEach(b => {
+      if (placed.has(b.type)) return;
+      placed.add(b.type);
+      // An EMPTY husk of a type already on the page (a spec strip with no cells,
+      // say) is what the filter above cannot see: it carries no words, so the
+      // type is not "filled", but the stack would end up with two of them.
+      const husk = blocks.findIndex(x => x && x.type === b.type);
+      if (husk >= 0) blocks.splice(husk, 1, b); else peInsertAtSpine(blocks, b);
+      added.push(b);
+    });
+    if (!added.length) {
+      if (prog) prog.done(false, cuT('Nothing to add · 没有可补全的板块', '没有可补全的板块'));
+      if (!auto) toast(cuT('Every section already has words · 没有空白板块需要补全', '没有空白板块需要补全'));
+      return;
+    }
+    PA_SELECTED_BLOCK_ID = added[0].id;
     paRenderAll();
+    if (prog) prog.done(true, cuT('Drafted ✓ · 已补全 ✓', '已补全 ✓'));
     const draftNote = translate
       ? (!textCn
           ? cuT(' (drafted the 中文 in the brand voice — give it a read)', '(已按品牌语气替你撰写中文,请校对)')
           : cuT(' (drafted the English in the brand voice — give it a read)', '(已按品牌语气替你撰写英文,请校对)'))
       : '';
     toast(cuT(
-      'Auto-filled ' + fresh.length + ' section' + (fresh.length === 1 ? '' : 's') + ' from the kitchen description' + draftNote + ' — review and save ✓',
-      '已根据厨房描述自动生成 ' + fresh.length + ' 个板块' + draftNote + ' — 请审阅后保存 ✓'));
-  } catch (e) { /* convenience feature — stay silent on failure */ }
+      'Drafted ' + added.length + ' section' + (added.length === 1 ? '' : 's') + draftNote + ' — review and save ✓',
+      '已补全 ' + added.length + ' 个板块' + draftNote + ' — 请审阅后保存 ✓'));
+  } catch (e) {
+    // A FAILURE IS NEVER SILENT ANY MORE, and never final: the product is only
+    // marked drafted on the auto path, and a pressed button can always be
+    // pressed again. The old code added to _peAutoFilledFor BEFORE the call, so
+    // one bad pass meant no draft for that product for the rest of the session
+    // and nothing on screen ever said why.
+    if (auto) _peAutoFilledFor.delete(p.id);
+    if (prog) prog.done(false, cuT("Couldn't draft · 生成失败", '生成失败'));
+    toast(cuT("Couldn't draft the sections — try again · 生成失败,请重试", '生成失败,请重试'), 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+  }
 }
 
 function peMount(p) {
@@ -3027,15 +3220,26 @@ function peMount(p) {
 
   paWirePreviewClicks();  // clicking a block in the phone opens its section
   paLoadUsage();          // fills in "N% of your products say this" when it lands
+  // Both of these describe the SHOP, not the product, so they are fetched once
+  // per editor load and survive a switch between products (§156). The guard
+  // matters: switching products re-runs this whole mount, and re-counting the
+  // catalogue on every switch would be a request per click for an answer that
+  // cannot have changed.
+  if (!window._peShopLoaded) {
+    window._peShopLoaded = true;
+    paLoadSpecUsage();    // the spec labels + values THIS tenant already uses
+    paLoadSignature();    // the cast, house line and name this tenant signs with
+  }
 
   document.getElementById('pe-loading').classList.add('hide');
   const _peEmpty = document.getElementById('pe-canvas-empty'); if (_peEmpty) _peEmpty.hidden = true;
   peRenderProdPicker();   // refresh left-pane list + current highlight
 
-  // Default behaviour: if this product has no design yet but the kitchen app
-  // already carries both EN + CN descriptions, compose the sections off that
-  // copy automatically (fire-and-forget — it leaves the page dirty for review).
-  peAutoFillFromKitchen(p);
+  // Default behaviour: a product with nothing on its page and a description
+  // already written gets its empty sections drafted off that description
+  // (fire-and-forget — it leaves the page dirty for review). The same path the
+  // "Draft the empty sections" button runs, in its quiet mode. §156.
+  peDraftEmptySections({ auto: true });
 }
 
 // ── WHERE THIS PRODUCT IS, AND THE ONE OF THOSE PLACES THIS PAGE CAN CHANGE ──
@@ -3194,6 +3398,17 @@ function peUpdatePageDot() {
 // ── Colophon ──
 function paRenderColophonGrid() {
   const grid = document.getElementById('pa-colophon-grid'); if (!grid) return;
+  // NO CAST, NO GRID, AND NO FOLD. An empty grid would read as "your characters
+  // have not loaded"; the whole control is hidden instead, and the taglines
+  // below it go with it — a colophon signature with nothing to sign it is two
+  // text boxes whose purpose is not on screen. The route decides, not the page.
+  const fold = document.getElementById('pe-acc-colophon');
+  if (!PA_IP_CHARACTERS.length) {
+    grid.innerHTML = '';
+    if (fold) { fold.hidden = true; fold.open = false; }
+    return;
+  }
+  if (fold) fold.hidden = false;
   const current = (document.getElementById('pa-edit-colophon-character').value || '').trim();
   grid.innerHTML = PA_IP_CHARACTERS.map(c => `
     <div class="pa-colophon-tile ${current === c.key ? 'active' : ''}" onclick="paPickColophonChar('${c.key}')" title="${escapeAttr(c.label)}">
@@ -3280,11 +3495,20 @@ function _paSampleScreen(sample, withColophon) {
   const name    = PL === 'cn' ? '芝麻酱' : 'Sesame Tahini';
   const sub     = PL === 'cn' ? 'Sesame Tahini · 石磨' : '芝麻酱 · stone-ground';
   const tagline = PL === 'cn' ? '一罐,一种原料' : 'One jar, one ingredient';
-  const colophon = withColophon ? `
+  // THE SAMPLE SIGNS WITH THIS SHOP'S SIGNATURE TOO (§156). The product in this
+  // thumbnail is openly a sample — a jar of tahini nobody sells — but the
+  // colophon under it is not read as sample: it is the footer the template will
+  // put on YOUR page, so a hard-coded Soil & Soul portrait over `Roots · ESTD
+  // 2017` told every other tenant their pages would be signed by a company they
+  // have never heard of. Same rule as the live preview: the shop's own cast,
+  // line and name, or nothing at all.
+  const sampleChar = (PA_IP_CHARACTERS[0] || {}).key || '';
+  const sampleTag  = (PL === 'cn' ? PA_SIGNATURE.tagline_cn : PA_SIGNATURE.tagline_en) || '';
+  const colophon = (withColophon && (sampleChar || sampleTag || PA_SIGNATURE.house)) ? `
     <div class="pa-prev-colophon">
-      <img class="pa-prev-colophon-img" src="/assets/brand/ip-soilsoul.jpg" alt="" onerror="this.style.display='none'">
-      <div class="pa-prev-colophon-tagline">${PL === 'cn' ? '从土壤到灵魂' : 'From Soil to Soul'}</div>
-      <div class="pa-prev-colophon-meta"><span class="pa-prev-colophon-rule"></span><span>Roots · ESTD 2017</span><span class="pa-prev-colophon-rule"></span></div>
+      ${sampleChar ? `<img class="pa-prev-colophon-img" src="/assets/brand/ip-${encodeURIComponent(sampleChar)}.jpg" alt="" onerror="this.style.display='none'">` : ''}
+      ${sampleTag ? `<div class="pa-prev-colophon-tagline">${escapeHtml(sampleTag)}</div>` : ''}
+      ${PA_SIGNATURE.house ? `<div class="pa-prev-colophon-meta"><span class="pa-prev-colophon-rule"></span><span>${escapeHtml(PA_SIGNATURE.house)}</span><span class="pa-prev-colophon-rule"></span></div>` : ''}
     </div>` : '';
   return `
     <div class="pa-prev-hero">🛍</div>
@@ -3986,57 +4210,50 @@ const PA_SPEC_LABELS = [
 // NET WT HAS NO LIST ON PURPOSE — 67 distinct weights across 163 cells is
 // exactly what a weight field should look like. So do Certification and
 // Storage, which are too thin to draw a list from.
-const PA_SPEC_VALUES = {
-  'origin': [
-    { en: 'Guangzhou, China',     cn: '中国广州' },        // 109
-    { en: 'China',                cn: '中国' },            // 15
-    { en: 'Yunnan, China',        cn: '中国云南' },        // 5 / 3
-    { en: 'Israel',               cn: '以色列' },          // 3
-    { en: 'Northeast China',      cn: '中国东北' },        // 2
-    { en: 'Tunisia, North Africa', cn: '突尼斯（北非）' }, // 2
-  ],
-  'shelf life': [
-    { en: 'See packaging',        cn: '见包装标示' },      // 46 / 38 (also 见包装 8, 请见包装标注 2)
-    { en: 'Up to 6 months frozen', cn: '冷冻最长保存6个月' }, // 5 / 3
-  ],
-  'diet': [
-    { en: '100% plant',           cn: '纯植物' },          // 28
-    { en: 'Vegan',                cn: '纯素' },            // 1
-  ],
-  'form': [
-    { en: 'Raw · whole',          cn: '生 · 整粒' },       // 6
-    { en: 'Dried · raw',          cn: '干豆 · 生' },       // 4
-    { en: 'Raw seeds',            cn: '生 · 籽' },         // 4
-    { en: 'Whole rolled',         cn: '整粒压片' },        // 2
-    { en: 'Organic powder',       cn: '有机粉' },          // 2
-  ],
-  'use': [
-    { en: 'Snack · bake · blend', cn: '直接吃·烘焙·打浆' }, // 6
-    { en: 'Sprinkle · blend · soak', cn: '撒·打浆·泡发' },  // 4
-    { en: 'No soak needed',       cn: '无需浸泡' },        // 2
-    { en: 'Rinse & cook',         cn: '冲洗后烹煮' },      // 2
-    { en: 'Soak & cook',          cn: '泡发后烹煮' },      // 2
-    { en: 'Cook in minutes',      cn: '几分钟煮好' },      // 2
-    { en: 'Season anything',      cn: '万物可调味' },      // 2
-  ],
-  'category': [
-    { en: 'Home & Body',          cn: '家居护理' },        // 6 / 4 (also 家居护肤, 家居与身体护理)
-    { en: 'Fresh & Deli',         cn: '鲜食与熟食' },      // 3 / 2
-    { en: 'Protein Powder',       cn: '蛋白粉' },          // 2
-    { en: 'Dry & Pantry',         cn: '干货 & 储备食材' }, // 2 / 1
-    { en: 'Chili Paste',          cn: '辣椒酱' },          // 2
-  ],
-  'product type': [
-    { en: 'Ready-to-eat spread',  cn: '即食抹酱' },        // 9
-    { en: 'Ready-to-eat nut butter', cn: '即食坚果酱' },   // 8
-    { en: 'Dried Fruit',          cn: '干果' },            // 4 / 3
-    { en: 'Ready-to-eat refrigerated food', cn: '即食冷藏食品' }, // 3
-    { en: 'Frozen · heat to eat', cn: '冷冻 · 加热食用' }, // 3
-    { en: 'Fresh Food',           cn: '鲜食' },            // 2
-    { en: 'Glass Cleaner',        cn: '玻璃清洁液' },      // 2
-    { en: 'Laundry Liquid',       cn: '洗衣液' },          // 2
-  ],
-};
+// THE VALUES ARE THE TENANT'S, AND THEY ARE COUNTED, NOT COMPILED (§156).
+//
+// This was Roots' catalogue written into the editor: Guangzhou on Origin, "See
+// packaging" on Shelf Life, "100% plant" on Diet. Those were real measurements
+// — 109 of 156, 46 of 57, 28 of 29 — and they are still exactly right FOR
+// ROOTS. They are nonsense for anybody else, and a platform that offers a
+// candle shop in Shanghai a Guangzhou origin as its default has put a guess in
+// the same control as a measured fact, where nothing on screen tells them apart.
+//
+// So the measurement moved to where it can be taken for whoever is asking:
+// GET /api/retail-admin/products/spec-usage counts this tenant's own cells.
+// Roots' list is not lost, it is recomputed from the products it was read off
+// in the first place. A NEW TENANT IS OFFERED NOTHING, which is the honest
+// answer on day one and stops being the answer by their tenth product.
+//
+// Null until the count lands, and null forever if it fails — the same posture
+// §144's usage percentage takes, for the same reason.
+let PA_SPEC_VALUES = null;
+let PA_SPEC_LABELS_OWN = [];      // labels this tenant uses that the house list has no name for
+async function paLoadSpecUsage() {
+  try {
+    const r = await fetch('/api/retail-admin/products/spec-usage',
+                          { credentials: 'same-origin', cache: 'no-store' });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (!j || typeof j.values !== 'object' || !j.values) return;
+    PA_SPEC_VALUES = j.values;
+    // A label the tenant already uses is offered even when the house list has
+    // never heard of it — otherwise a shop that says "Fabric" is told, by a
+    // dropdown reading "Something else", that its own vocabulary is irregular.
+    const known = new Set(PA_SPEC_LABELS.map(o => o.en.toLowerCase()));
+    PA_SPEC_LABELS_OWN = (Array.isArray(j.labels) ? j.labels : [])
+      .filter(o => o && o.en && o.cn && !known.has(String(o.en).toLowerCase()))
+      .map(o => ({ en: o.en, cn: o.cn }));
+    paRenderDoc();
+  } catch (e) { /* no lists offered; every cell stays free text */ }
+}
+// The labels a cell may be given: the house's neutral set plus whatever this
+// tenant already says. Free text remains what it always was — the fallback, not
+// a special case.
+function paSpecLabels() {
+  return PA_SPEC_LABELS_OWN.length ? PA_SPEC_LABELS.concat(PA_SPEC_LABELS_OWN) : PA_SPEC_LABELS;
+}
+
 
 // ── §147 · THE STORAGE BOX, SAME METHOD ────────────────────────────────────
 //
@@ -4112,7 +4329,9 @@ const PA_STORAGE_NOTES = [
 
 const PA_SPEC_CUSTOM = '__custom__';
 function paSpecValuesFor(labelEn) {
-  return PA_SPEC_VALUES[String(labelEn || '').trim().toLowerCase()] || null;
+  if (!PA_SPEC_VALUES) return null;   // not counted yet, or the count failed
+  const list = PA_SPEC_VALUES[String(labelEn || '').trim().toLowerCase()];
+  return (Array.isArray(list) && list.length) ? list : null;
 }
 // Does this cell's current wording match one of the offered pairs? Matched on
 // the ENGLISH only, and loosely: a cell that says "Net wt" is the same answer
@@ -4447,7 +4666,7 @@ function paPair({ label, keyEn, keyCn, valEn = '', valCn = '', phEn = '', phCn =
 // backwards (§142), and free text is not a special case — it is what the
 // control already was, merely hidden while a list answer is in force.
 function _paSpecCell(b, c, i, total) {
-  const labelIdx = paSpecMatch(PA_SPEC_LABELS, c.k_en);
+  const labelIdx = paSpecMatch(paSpecLabels(), c.k_en);
   const vList    = paSpecValuesFor(c.k_en);
   const valueIdx = vList ? paSpecMatch(vList, c.v_en) : -1;
   const kCustom  = labelIdx < 0;
@@ -4467,7 +4686,7 @@ function _paSpecCell(b, c, i, total) {
         <label class="stacked" data-no-i18n><span data-lang-block="en">Label</span><span data-lang-block="cn">标签</span></label>
         <select class="pa-spec-sel" onchange="paSpecPickLabel(this, '${b.id}', ${i})">
           <option value="${PA_SPEC_CUSTOM}" ${kCustom ? 'selected' : ''}>Something else — type it · 其他 — 手动输入</option>
-          ${opts(PA_SPEC_LABELS, labelIdx)}
+          ${opts(paSpecLabels(), labelIdx)}
         </select>
       </div>
       <div class="pa-spec-typed" ${kCustom ? '' : 'hidden'}>
@@ -4510,7 +4729,7 @@ function _paPickInputs(sel, key) {
 function paSpecPickLabel(sel, blockId, idx) {
   const io = _paPickInputs(sel, 'k'); if (!io || !io.en) return;
   if (sel.value !== PA_SPEC_CUSTOM) {
-    const o = PA_SPEC_LABELS[+sel.value]; if (!o) return;
+    const o = paSpecLabels()[+sel.value]; if (!o) return;
     io.en.value = o.en; io.cn.value = o.cn;
   } else {
     io.en.value = ''; io.cn.value = '';
@@ -5257,11 +5476,29 @@ const PA_COLOPHON_AUTO_MAP = [
   [/(onion|allium|garlic|leek)/,           'onion'],
   [/(broccoli|cabbage|leafy|green)/,       'broccoli'],
 ];
+// THE AUTO-PICK CAN ONLY EVER PICK SOMETHING THIS SHOP HAS (§156). The map
+// below is Roots' cast filed by what Roots sells, and the fallback was a
+// literal `soilsoul` — so a tenant who had never chosen a character, on a page
+// nobody had touched, got Roots' Soil & Soul drawn onto their product. That is
+// worse than the grid this commit hides, because it needed no operator action
+// at all: it was the default.
+//
+// The map stays where it is and keeps working for the shop it was written for.
+// What changes is that every answer it gives is checked against the cast the
+// platform actually handed this editor, and an unmatched one is no character.
+function _paHasCharacter(key) {
+  return !!key && PA_IP_CHARACTERS.some(c => c.key === key);
+}
 function _paResolveColophonChar(override, category) {
+  // An override is still honoured even when the cast has not landed yet — it is
+  // this product's stored choice, and blanking it on a slow fetch would repaint
+  // a page the office had already signed.
   if (override) return override;
+  if (!PA_IP_CHARACTERS.length) return '';
   const cat = (category || '').toLowerCase();
   const hit = PA_COLOPHON_AUTO_MAP.find(([rx]) => rx.test(cat));
-  return hit ? hit[1] : 'soilsoul';
+  const key = hit ? hit[1] : 'soilsoul';
+  return _paHasCharacter(key) ? key : '';
 }
 // Switch the phone preview between the EN and 中文 customer view. Independent
 // of the top-bar chrome toggle — re-renders the preview in the chosen language.
@@ -5305,8 +5542,13 @@ function paRenderPreview() {
   const colTagEN = (document.getElementById('pa-edit-colophon-tagline-en').value || '').trim();
   const colTagCN = (document.getElementById('pa-edit-colophon-tagline-cn').value || '').trim();
   const colResChar = _paResolveColophonChar(colChar, p.category);
-  const colResTag  = pick(colTagEN, colTagCN) || (PL === 'cn' ? '从土壤到灵魂' : 'From Soil to Soul');
+  // The operator's own tagline first; the house line only if this shop HAS one.
+  const colResTag  = pick(colTagEN, colTagCN)
+    || (PL === 'cn' ? PA_SIGNATURE.tagline_cn : PA_SIGNATURE.tagline_en) || '';
   const colIsAuto  = !colChar;
+  // A colophon with no character, no line and no name is three empty elements
+  // and a rule. It is not drawn at all.
+  const colShow    = !!(colResChar || colResTag || PA_SIGNATURE.house);
   const img = p.image_data || p.image_url || '';
   const heroStyle = img ? `background-image:url('${escapeAttr(img)}'); background-color:transparent;` : '';
   const blocksHtml = (window._paBlocks || []).map(b => {
@@ -5324,12 +5566,12 @@ function paRenderPreview() {
         ${tagline ? `<div class="pa-prev-tagline">${escapeHtml(tagline)}</div>` : ''}
       </div>
       ${blocksHtml || (!keywords && !tagline ? `<div class="pa-prev-empty">${_paPreviewLang === 'cn' ? '还没有板块,点上方“添加板块”开始排版。' : 'No designer sections yet. Add one to compose the page.'}</div>` : '')}
-      <div class="pa-prev-colophon">
-        <img class="pa-prev-colophon-img" src="/assets/brand/ip-${encodeURIComponent(colResChar)}.jpg" alt="" onerror="this.style.display='none'">
-        <div class="pa-prev-colophon-tagline">${escapeHtml(colResTag)}</div>
-        <div class="pa-prev-colophon-meta"><span class="pa-prev-colophon-rule"></span><span>Roots · ESTD 2017</span><span class="pa-prev-colophon-rule"></span></div>
-        ${colIsAuto ? '<div class="pa-prev-colophon-auto">auto · 自动</div>' : ''}
-      </div>
+      ${colShow ? `<div class="pa-prev-colophon">
+        ${colResChar ? `<img class="pa-prev-colophon-img" src="/assets/brand/ip-${encodeURIComponent(colResChar)}.jpg" alt="" onerror="this.style.display='none'">` : ''}
+        ${colResTag ? `<div class="pa-prev-colophon-tagline">${escapeHtml(colResTag)}</div>` : ''}
+        ${PA_SIGNATURE.house ? `<div class="pa-prev-colophon-meta"><span class="pa-prev-colophon-rule"></span><span>${escapeHtml(PA_SIGNATURE.house)}</span><span class="pa-prev-colophon-rule"></span></div>` : ''}
+        ${colIsAuto && colResChar ? '<div class="pa-prev-colophon-auto">auto · 自动</div>' : ''}
+      </div>` : ''}
     </div>`;
 }
 
