@@ -8341,126 +8341,331 @@
   <!-- ─── VOTING / POLLS ─── -->
   <section id="tab-voting">
     <style>
-      .vot-list { display: flex; flex-direction: column; gap: 14px; }
-      .vot-row {
-        background: var(--bg-pane); border: 1px solid var(--line);
-        border-radius: 10px; padding: 14px 18px;
-        display: flex; gap: 14px; align-items: center;
-      }
-      .vot-row .vot-q { font-size: 14px; font-weight: 600; }
-      .vot-row .vot-meta { font-size: 11px; color: var(--text-3); margin-top: 2px; letter-spacing: .04em; }
-      .vot-row .vot-stat {
-        font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
-        padding: 3px 9px; border-radius: 999px;
-        background: var(--bg-elev-2); color: var(--text-3);
-      }
-      .vot-row .vot-stat.open    { background: rgba(233, 97, 116, .14); color: #E96174; }
-      .vot-row .vot-stat.draft   { background: var(--bg-elev-2); color: var(--text-3); }
-      .vot-row .vot-stat.closed  { background: rgba(54, 83, 41, .14); color: #365329; }
-      .vot-row .vot-featured {
-        font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
-        background: #1a1a17; color: #CCD900;
-        padding: 3px 8px; border-radius: 4px;
-      }
-      .vot-row .vot-spacer { flex: 1; }
-      .vot-row .vot-actions { display: flex; gap: 6px; }
-      .vot-row .vot-actions button { font-size: 11px; }
+      /* ══════════════════════════════════════════════════════════════════
+         TACET VOTING — one screen, one question: "what are customers
+         saying right now?" Built from scratch against the C · Stage
+         mockup (canvas "Voting page — three directions", chosen by Ash
+         2026-09-17); nothing of the old panel survives.
 
-      .vot-form {
-        background: var(--bg-pane); border: 1px solid var(--line);
-        border-radius: 12px; padding: 18px 20px; margin-bottom: 18px;
-      }
-      .vot-form h3 { margin: 0 0 4px; font-size: 14px; }
-      .vot-form .field {
-        display: flex; flex-direction: column; gap: 4px; margin-top: 12px;
-      }
-      .vot-form .field label {
-        font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3);
-      }
-      /* background-color (not the shorthand) so the global `select`
-         chevron image + no-repeat + right-aligned position survive. */
-      .vot-form input[type="text"], .vot-form input[type="number"],
-      .vot-form input[type="datetime-local"], .vot-form textarea, .vot-form select {
-        background-color: var(--bg-elev-1); border: 1px solid var(--line);
-        border-radius: 6px; padding: 8px 10px; color: var(--text-1);
-        font: inherit; font-size: 13px; width: 100%; box-sizing: border-box;
-      }
-      .vot-form select { padding-right: 32px; }
-      .vot-form textarea { resize: vertical; min-height: 56px; }
-      .vot-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-      @media (max-width: 720px) { .vot-row-2 { grid-template-columns: 1fr; } }
+         Archetype: this page is NOT the Console that tacet-ia-blueprint
+         §4 row 24 files it as. A poll is authored, published and closed —
+         a Library object with a lifecycle — so the page is a Library with
+         the live poll staged on top, and its editor is a Composer (§A2 +
+         §A3). The Console half is two settings, and they sit at the foot
+         of the page behind a disclosure. Recorded in
+         docs/tacet-consolidation-decisions.md §154.
 
-      .vot-opts { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
-      .vot-opt {
-        background: var(--bg-elev-1); border: 1px solid var(--line);
-        border-radius: 8px; padding: 10px 12px;
-        display: grid; grid-template-columns: 36px 1fr 1fr 110px 90px 40px;
-        gap: 8px; align-items: center;
+         Everything is namespaced `vot-` and scoped to #tab-voting. Colour
+         is state only (§1.10): open is sage, draft and closed are neutral,
+         featured is a property and gets no status colour at all. The old
+         panel painted an open poll in an error red and featured in
+         black-on-lime, neither of which is in the system — the exact values
+         are in the decisions record, deliberately not repeated here where
+         they could be copied back.
+         ══════════════════════════════════════════════════════════════════ */
+
+      #tab-voting { font-family: 'Inter', 'IBM Plex Sans SC', 'PingFang SC', system-ui, sans-serif; }
+      #tab-voting .vot-wrap { max-width: 1120px; }
+      #tab-voting .td-head { align-items: flex-start; }
+      /* The page's ONE Dusk element (§1.8 rule 1 — the header CTA has first
+         claim). Every other control on this page is Secondary or Ghost. */
+      #tab-voting .vot-dusk {
+        background: var(--td-dusk); border-color: var(--td-dusk); color: #FFFFFF;
       }
-      .vot-opt .vot-opt-letter {
-        font-weight: 700; color: var(--text-3); text-align: center; font-size: 12px;
+      #tab-voting .vot-dusk:hover:not(:disabled) { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
+
+      #tab-voting .vot-card {
+        background: var(--td-surface); border: 1px solid var(--td-border);
+        border-radius: 14px; padding: 24px;
       }
-      .vot-opt .vot-opt-color { display: flex; align-items: center; gap: 6px; }
-      .vot-opt .vot-opt-color input[type="color"] {
-        width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 6px;
-        padding: 0; background: var(--bg-elev-1); cursor: pointer;
+      #tab-voting .vot-num { font-variant-numeric: tabular-nums; }
+
+      /* ── Status pills. Sentence case, no uppercase anywhere (§1.6). ── */
+      #tab-voting .vot-badge {
+        display: inline-block; border-radius: 999px; padding: 4px 11px;
+        font-size: 13px; line-height: 1; text-transform: none; letter-spacing: 0;
+        background: var(--td-raised); color: var(--td-text2);
       }
-      .vot-opt .vot-opt-votes {
-        text-align: right; font-size: 11px; color: var(--text-3); letter-spacing: .04em;
-      }
-      .vot-opt .vot-opt-rm { font-size: 11px; }
-      @media (max-width: 720px) {
-        .vot-opt { grid-template-columns: 32px 1fr 80px 60px; row-gap: 6px; }
+      #tab-voting .vot-badge.is-open   { background: var(--td-sage-tint); color: var(--td-sage-ink); }
+      #tab-voting .vot-badge.is-draft  { background: var(--td-raised); color: var(--td-text2); }
+      #tab-voting .vot-badge.is-closed { background: var(--td-raised); color: var(--td-text2); }
+      /* Featured is a property, not a state — neutral, outlined, no colour. */
+      #tab-voting .vot-badge.is-featured {
+        background: var(--td-raised); color: var(--td-text2); border: 1px solid var(--td-border);
       }
 
-      .vot-form-actions {
-        display: flex; gap: 10px; margin-top: 16px;
-        padding-top: 14px; border-top: 1px dashed var(--line);
+      /* ── The stage: the live poll, full width, results in place ── */
+      #tab-voting .vot-stage { padding: 28px 32px; display: flex; flex-direction: column; gap: 24px; }
+      #tab-voting .vot-stage-top { display: flex; align-items: flex-start; gap: 20px; }
+      #tab-voting .vot-stage-id { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+      #tab-voting .vot-badges { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+      #tab-voting .vot-stage-q {
+        margin: 0; font-size: 22px; font-weight: 500; line-height: 1.3;
+        color: var(--td-text); letter-spacing: -.01em; text-transform: none;
       }
-      .vot-form .danger { color: #c64242; }
+      #tab-voting .vot-stage-meta { font-size: 15px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+      #tab-voting .vot-stage-acts { display: flex; gap: 8px; align-items: center; flex: none; }
+
+      #tab-voting .vot-bars { display: flex; flex-direction: column; gap: 16px; padding-top: 4px; }
+      #tab-voting .vot-bar { display: flex; align-items: center; gap: 20px; }
+      #tab-voting .vot-bar-label { width: 240px; flex: none; font-size: 15px; color: var(--td-text2); }
+      #tab-voting .vot-bar.is-lead .vot-bar-label { color: var(--td-text); font-weight: 500; }
+      #tab-voting .vot-track {
+        flex: 1; height: 10px; border-radius: 999px;
+        background: var(--td-raised); overflow: hidden;
+      }
+      #tab-voting .vot-fill {
+        height: 10px; border-radius: 999px; background: var(--td-border);
+        transition: width .35s cubic-bezier(.16, 1, .3, 1);
+      }
+      /* Leading is emphasis, not a status — Ink, the operator's current
+         selection colour (§1.8, "Ink = the operator's current selection"). */
+      #tab-voting .vot-bar.is-lead .vot-fill { background: var(--td-text); }
+      #tab-voting .vot-bar-n {
+        width: 118px; flex: none; text-align: right; font-size: 15px;
+        color: var(--td-text2); font-variant-numeric: tabular-nums;
+      }
+      #tab-voting .vot-bar.is-lead .vot-bar-n { color: var(--td-text); }
+
+      /* ── The rest of the shelf ── */
+      #tab-voting .vot-sec { margin-top: 30px; display: flex; flex-direction: column; gap: 14px; }
+      #tab-voting .vot-sec-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+      #tab-voting .vot-sec-head h3 {
+        margin: 0; font-size: 18px; font-weight: 500; color: var(--td-text);
+        text-transform: none; letter-spacing: 0; font-family: inherit;
+      }
+      #tab-voting .vot-sec-count { font-size: 14px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+      #tab-voting .vot-rows { display: flex; flex-direction: column; gap: 12px; }
+      #tab-voting .vot-row { padding: 20px 24px; display: flex; align-items: center; gap: 20px; }
+      #tab-voting .vot-row-id { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+      #tab-voting .vot-row-q {
+        display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        font-size: 15px; font-weight: 500; color: var(--td-text);
+      }
+      #tab-voting .vot-row-meta { font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+      #tab-voting .vot-row-acts { display: flex; gap: 8px; align-items: center; flex: none; }
+
+      /* ── Page settings — the Console half, folded away ── */
+      #tab-voting .vot-set {
+        margin-top: 30px; background: var(--td-raised); border-radius: 14px; padding: 20px 24px;
+      }
+      #tab-voting .vot-set-head { display: flex; align-items: center; gap: 20px; }
+      #tab-voting .vot-set-id { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+      #tab-voting .vot-set-id .t { font-size: 15px; font-weight: 500; color: var(--td-text); }
+      #tab-voting .vot-set-id .d { font-size: 13px; color: var(--td-text2); line-height: 1.6; }
+      #tab-voting .vot-set-body {
+        margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--td-border);
+        display: flex; flex-direction: column; gap: 20px;
+      }
+      #tab-voting .vot-set-body[hidden] { display: none; }
+
+      /* ── Fields, shared by the settings card and the editor ── */
+      #tab-voting .vot-field { display: flex; flex-direction: column; gap: 6px; }
+      #tab-voting .vot-field > label, #tab-voting .vot-lbl {
+        font-size: 13px; font-weight: 500; color: var(--td-text2);
+        text-transform: none; letter-spacing: 0;
+      }
+      #tab-voting .vot-hint { font-size: 13px; color: var(--td-text2); line-height: 1.6; }
+      #tab-voting input[type="text"], #tab-voting input[type="number"],
+      #tab-voting input[type="datetime-local"], #tab-voting textarea, #tab-voting select {
+        background-color: var(--td-surface); border: 1px solid var(--td-border);
+        border-radius: 8px; padding: 10px 12px; color: var(--td-text);
+        font: 400 14px inherit; font-family: inherit; width: 100%; box-sizing: border-box;
+      }
+      #tab-voting select { padding-right: 32px; }
+      #tab-voting textarea { resize: vertical; min-height: 60px; line-height: 1.6; }
+      /* Focus turns the border Dusk — no glow ring (design system §5). */
+      #tab-voting input:focus, #tab-voting textarea:focus, #tab-voting select:focus {
+        outline: none; border-color: var(--td-dusk);
+      }
+      #tab-voting .vot-check { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+      #tab-voting .vot-check input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--td-dusk); }
+      #tab-voting .vot-split { display: flex; align-items: flex-start; gap: 32px; }
+      #tab-voting .vot-split > .k { width: 300px; flex: none; display: flex; flex-direction: column; gap: 4px; }
+      #tab-voting .vot-split > .k .t { font-size: 14px; font-weight: 500; color: var(--td-text); }
+      #tab-voting .vot-split > .v { flex: 1; min-width: 0; }
+
+      /* ── The editor: a full-page takeover, not a sheet (§1.7a) ── */
+      #tab-voting.vot-editing > .vot-wrap { display: none; }
+      #tab-voting .vot-ed { max-width: 1120px; display: flex; flex-direction: column; gap: 28px; }
+      #tab-voting .vot-ed-back {
+        background: none; border: 0; padding: 0; font-size: 14px; color: var(--td-text2);
+        cursor: pointer; align-self: flex-start;
+      }
+      #tab-voting .vot-ed-back:hover { color: var(--td-text); }
+      #tab-voting .vot-ed-head { display: flex; align-items: flex-start; gap: 16px; }
+      #tab-voting .vot-ed-id { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+      #tab-voting .vot-ed-id h2 {
+        margin: 0; font-size: 24px; font-weight: 500; letter-spacing: -.01em;
+        color: var(--td-text); text-transform: none; font-family: inherit;
+      }
+      #tab-voting .vot-ed-state { font-size: 15px; color: var(--td-text2); }
+      #tab-voting .vot-ed-cols { display: flex; gap: 56px; align-items: flex-start; }
+      #tab-voting .vot-ed-form { width: 560px; flex: none; display: flex; flex-direction: column; gap: 32px; }
+      #tab-voting .vot-group { display: flex; flex-direction: column; gap: 14px; }
+      #tab-voting .vot-group > h3 {
+        margin: 0; font-size: 18px; font-weight: 500; color: var(--td-text);
+        text-transform: none; letter-spacing: 0; font-family: inherit;
+      }
+      #tab-voting .vot-group-head { display: flex; align-items: baseline; gap: 12px; }
+      /* Language picker — the one control allowed to show both languages at
+         once, because it IS the control for choosing (§1.11's exception). */
+      #tab-voting .vot-langs { display: flex; gap: 20px; border-bottom: 1px solid var(--td-border); }
+      #tab-voting .vot-lang {
+        background: none; border: 0; padding: 0 0 8px; font-size: 14px; cursor: pointer;
+        color: var(--td-text2); border-bottom: 2px solid transparent;
+      }
+      #tab-voting .vot-lang.is-on { color: var(--td-text); font-weight: 500; border-bottom-color: var(--td-text); }
+
+      #tab-voting .vot-opt { display: flex; align-items: center; gap: 12px; }
+      #tab-voting .vot-opt input[type="color"] {
+        width: 26px; height: 26px; flex: none; padding: 0; border-radius: 8px;
+        border: 1px solid var(--td-border); background: var(--td-surface); cursor: pointer;
+      }
+      #tab-voting .vot-opt .vot-opt-label { flex: 1; min-width: 0; }
+      #tab-voting .vot-opt .vot-opt-n {
+        width: 84px; flex: none; text-align: right; font-size: 13px;
+        color: var(--td-text2); font-variant-numeric: tabular-nums;
+      }
+      #tab-voting .vot-opt .vot-opt-rm {
+        background: none; border: 0; color: var(--td-text2); font-size: 18px; line-height: 1;
+        padding: 4px 8px; cursor: pointer; border-radius: 8px;
+      }
+      #tab-voting .vot-opt .vot-opt-rm:hover:not(:disabled) { color: var(--td-brick-ink); }
+      #tab-voting .vot-opt .vot-opt-rm:disabled { opacity: .35; cursor: not-allowed; }
+      #tab-voting .vot-danger { color: var(--td-brick-ink); }
+      /* Destructive is an outline that tints on hover — never a solid slab. */
+      #tab-voting .vot-del {
+        background: transparent; border: 1px solid var(--td-brick); color: var(--td-brick-ink);
+      }
+      #tab-voting .vot-del:hover:not(:disabled) { background: var(--td-brick-tint); }
+
+      /* Phone preview — the merchant is designing for their customer's
+         phone, so the preview wears one (§A3). */
+      #tab-voting .vot-prev-wrap { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 76px; }
+      #tab-voting .vot-prev-cap { font-size: 13px; color: var(--td-text2); }
+      #tab-voting .vot-phone {
+        width: 320px; box-sizing: border-box; background: var(--td-surface);
+        border: 1px solid var(--td-border); border-radius: 28px; padding: 28px 20px;
+        display: flex; flex-direction: column; gap: 18px;
+      }
+      #tab-voting .vot-phone-h { font-size: 20px; font-weight: 500; color: var(--td-text); }
+      #tab-voting .vot-phone-sub { font-size: 13px; color: var(--td-text2); line-height: 1.6; }
+      #tab-voting .vot-phone-card {
+        background: var(--td-raised); border-radius: 14px; padding: 18px 16px;
+        display: flex; flex-direction: column; gap: 12px;
+      }
+      #tab-voting .vot-phone-kick { font-size: 12px; color: var(--td-text2); }
+      #tab-voting .vot-phone-q { font-size: 15px; font-weight: 500; line-height: 1.4; color: var(--td-text); }
+      #tab-voting .vot-phone-exp { font-size: 12px; color: var(--td-text2); line-height: 1.6; }
+      #tab-voting .vot-phone-opts { display: flex; flex-direction: column; gap: 8px; }
+      #tab-voting .vot-phone-opt {
+        display: flex; align-items: center; gap: 10px; background: var(--td-surface);
+        border: 1px solid var(--td-border); border-radius: 10px; padding: 11px 12px;
+        font-size: 13px; color: var(--td-text2);
+      }
+      #tab-voting .vot-phone-opt.is-lead { color: var(--td-text); font-weight: 500; }
+      #tab-voting .vot-phone-dot { width: 14px; height: 14px; border-radius: 5px; flex: none; background: var(--td-border); }
+      #tab-voting .vot-phone-n { margin-left: auto; font-variant-numeric: tabular-nums; }
+      #tab-voting .vot-phone-foot { font-size: 12px; color: var(--td-text2); line-height: 1.6; }
+
+      /* ── States (§1.12) ── */
+      #tab-voting .vot-skel {
+        background: var(--td-raised); border-radius: 14px; height: 148px;
+      }
+      #tab-voting .vot-empty { padding: 28px 32px; display: flex; flex-direction: column; gap: 6px; }
+      #tab-voting .vot-empty .t { font-size: 16px; font-weight: 500; color: var(--td-text); }
+      #tab-voting .vot-empty .d { font-size: 14px; color: var(--td-text2); line-height: 1.6; }
+      /* An error renders where the operator is looking and stays until it is
+         fixed — never a toast that flies past (§1.12). */
+      #tab-voting .vot-err {
+        background: var(--td-brick-tint); color: var(--td-brick-ink);
+        border-radius: 14px; padding: 16px 20px; font-size: 14px; line-height: 1.6;
+      }
+
+      @media (max-width: 1000px) {
+        #tab-voting .vot-ed-cols { flex-direction: column; gap: 32px; }
+        #tab-voting .vot-ed-form { width: 100%; }
+        #tab-voting .vot-prev-wrap { position: static; }
+        #tab-voting .vot-split { flex-direction: column; gap: 12px; }
+        #tab-voting .vot-split > .k { width: 100%; }
+        #tab-voting .vot-bar-label { width: 150px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #tab-voting .vot-fill { transition: none; }
+      }
     </style>
 
-    <h2>Voting · community polls · 投票 · 社区调查</h2>
-    <p class="muted" style="font-size: 12px; max-width: 720px; margin: 0 0 var(--s4);">
-      Build polls the mini-app shows on Me → Your say. Customers vote one option per poll and earn the poll's reward points (default 5) once per poll. Drafts stay hidden; flip status to Open to publish. Close to lock in the result and surface it under "Past results" — pick the winner to highlight it. · 创建在小程序“我的 → 你说了算”页展示的投票。每位顾客每个投票只能选一个选项,并可获得该投票的奖励积分(默认 5 分,每个投票一次)。草稿保持隐藏;将状态切换为“开放”即可发布。“关闭”可锁定结果并展示在“往期结果”中 —— 选择获胜项即可高亮显示。
-    </p>
+    <!-- The shelf. Hidden outright while the editor is up: a takeover, not a
+         sheet, so the page behind is gone from the tab order rather than
+         sitting live underneath with its Dusk CTA still reachable (§1.7a). -->
+    <div class="vot-wrap">
+      <div class="td-head">
+        <div class="td-hd-col">
+          <h2>Voting · 投票</h2>
+          <!-- Status line: work waiting, never a census (§1.7). Drafts are
+               work — somebody has to decide whether to publish them. Absent
+               when there is nothing waiting, and that is a finished header. -->
+          <div class="td-hd-sub vot-num" id="vot-status" hidden></div>
+        </div>
+        <span class="td-head-sp"></span>
+        <button class="btn btn-primary vot-dusk" id="vot-new-btn" onclick="votOpenEditor(null, event)">New poll · 新建投票</button>
+      </div>
 
-    <!-- Editable intro tagline shown under the "Your say" headline. Reads live
-         in the mini-app, so a reword takes effect with no republish. -->
-    <div class="vot-form" style="max-width: 720px;">
-      <h3>Intro tagline · 引导文字</h3>
-      <div class="muted" style="font-size: 11px;">
-        The line under the "Your say" headline. Use <code>{pts}</code> where the points number should appear — it auto-fills from the featured poll's reward. Saves instantly; no app republish needed. · 显示在“你说了算”标题下方的文字。在需要显示积分数字的位置使用 <code>{pts}</code> —— 它会自动填入精选投票的奖励分值。即时保存,无需重新发布小程序。
-      </div>
-      <div class="field">
-        <label for="vot-intro-en">English</label>
-        <input type="text" id="vot-intro-en" maxlength="240" placeholder="Every poll closes Sundays. Voting earns {pts} pts."/>
-      </div>
-      <div class="field">
-        <label for="vot-intro-cn">中文</label>
-        <input type="text" id="vot-intro-cn" maxlength="240" placeholder="每周日截止,投票得 {pts} 积分。"/>
-      </div>
-      <div class="field" style="margin-top: 16px; border-top: 1px solid var(--border); padding-top: 14px;">
-        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-          <input type="checkbox" id="vot-show-counts" checked style="width: auto;"/>
-          <span>Show vote counts · 显示票数</span>
-        </label>
-        <div class="muted" style="font-size: 11px; margin-top: 6px;">
-          When off, the poll still highlights which option is winning, but hides all numbers (vote tallies and percentages). · 关闭后,投票仍会标出领先/获胜的选项,但隐藏所有数字(票数和百分比)。
+      <div id="vot-err" class="vot-err" hidden></div>
+      <div id="vot-stage"><div class="vot-skel" aria-hidden="true"></div></div>
+      <div id="vot-rest"></div>
+
+      <div class="vot-set">
+        <div class="vot-set-head">
+          <div class="vot-set-id">
+            <span class="t">Page settings · 页面设置</span>
+            <span class="d">The line under the headline, and whether customers see vote counts. · “你说了算”标题下方的文字,以及顾客是否看到票数。</span>
+          </div>
+          <button class="btn" id="vot-set-toggle" onclick="votToggleSettings()">Open · 展开</button>
+        </div>
+        <div class="vot-set-body" id="vot-set-body" hidden>
+          <div class="vot-split">
+            <div class="k">
+              <span class="t">Line under the headline · 标题下方的文字</span>
+              <span class="vot-hint">Write <code>{pts}</code> where the points number goes — it fills in from the featured poll's reward. Saved on its own; the mini app picks it up with no republish. · 在需要显示积分数字的位置写 <code>{pts}</code> —— 它会自动填入精选投票的奖励分值。单独保存,小程序无需重新发布。</span>
+            </div>
+            <div class="v">
+              <div class="vot-field">
+                <label for="vot-intro-en">English</label>
+                <input type="text" id="vot-intro-en" maxlength="240" data-ph-en="Every poll closes Sundays. Voting earns {pts} pts." data-ph-cn="每周日截止,投票得 {pts} 积分。" placeholder="Every poll closes Sundays. Voting earns {pts} pts."/>
+              </div>
+              <div class="vot-field" style="margin-top: 12px;">
+                <label for="vot-intro-cn">中文</label>
+                <input type="text" id="vot-intro-cn" maxlength="240" data-ph-en="每周日截止,投票得 {pts} 积分。" data-ph-cn="每周日截止,投票得 {pts} 积分。" placeholder="每周日截止,投票得 {pts} 积分。"/>
+              </div>
+            </div>
+          </div>
+
+          <div class="vot-split">
+            <div class="k">
+              <span class="t">Vote counts · 票数</span>
+              <span class="vot-hint" id="vot-counts-state"></span>
+            </div>
+            <div class="v">
+              <label class="vot-check" for="vot-show-counts">
+                <input type="checkbox" id="vot-show-counts" onchange="votCountsStateSync()"/>
+                <span>Show vote counts to customers · 向顾客显示票数</span>
+              </label>
+              <div class="vot-hint" style="margin-top: 6px;">When off, the poll still marks which option is winning, but hides every number. Your own figures here never change. · 关闭后,投票仍会标出领先的选项,但隐藏所有数字。后台看到的数字始终不变。</div>
+            </div>
+          </div>
+
+          <div>
+            <button class="btn" id="vot-set-save" onclick="votSaveConfig(event)">Save · 保存</button>
+          </div>
         </div>
       </div>
-      <button class="btn btn-primary" onclick="saveVotingConfig(this)" style="margin-top: 14px;">Save · 保存</button>
     </div>
 
-    <div style="display: flex; gap: 10px; margin-bottom: var(--s4);">
-      <button class="btn btn-primary" onclick="newPoll()">+ New poll · 新建投票</button>
-      <button class="btn" onclick="loadPolls()">Refresh · 刷新</button>
-    </div>
-
-    <div id="vot-form-mount"></div>
-    <div id="vot-list" class="vot-list">
-      <div class="muted" style="font-size: 12px;">Loading… · 加载中…</div>
-    </div>
+    <!-- The editor takeover. Empty until opened, so nothing of it is in the
+         tab order while the shelf is up. -->
+    <div id="vot-editor"></div>
   </section>
 
   <!-- ─── MEDIA LIBRARY ─── -->

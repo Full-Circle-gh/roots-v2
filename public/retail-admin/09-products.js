@@ -5794,7 +5794,7 @@ let _pdOpenBaseline = null;   // form snapshot captured when the product was ope
 // Structured product facts (the "Product details" card) ↔ the product_facts
 // JSON bag. Keys are <col>_en/_cn so the same bag fits any product type.
 const PD_FACT_FIELDS = [['origin','origin'],['ingredients','ingredients'],['storage','storage'],['shelflife','shelf_life'],['serving','serving']];
-// HAS ANYBODY ACTUALLY SET THESE BOXES IN THIS SITTING? (§154)
+// HAS ANYBODY ACTUALLY SET THESE BOXES IN THIS SITTING? (§155)
 //
 // The autosave sends the whole form, and an untouched Product-details card
 // collects as `{}` — which the route reads as "clear them". Open a product on

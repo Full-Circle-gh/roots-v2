@@ -23509,7 +23509,7 @@ router.get('/api/retail-admin/products/export.csv', requireRetailAdmin, (req, re
 // itself with, for THIS tenant: the illustrated cast, the house line under it,
 // and the name on the rule below that.
 //
-// WHY THIS IS A ROUTE AND NOT A LIST IN THE EDITOR (§154). The product editor's
+// WHY THIS IS A ROUTE AND NOT A LIST IN THE EDITOR (§155). The product editor's
 // colophon offered ten characters — Soil & Soul, Skater, Kombucha, Radishes and
 // the rest — backed by files in public/brand/. They are Roots' own illustrated
 // cast. The editor named them in its source, so EVERY tenant on the platform
@@ -23561,7 +23561,7 @@ router.get('/api/retail-admin/brand/signature', requireRetailAdmin, (req, res) =
 // GET /api/retail-admin/products/spec-usage — the spec-strip labels and values
 // THIS TENANT'S own products actually use, counted.
 //
-// WHY THIS EXISTS (§154). §145 gave the spec strip two dropdowns so a label is
+// WHY THIS EXISTS (§155). §145 gave the spec strip two dropdowns so a label is
 // picked rather than retyped 724 different ways, and filled BOTH languages from
 // one pick — which is the half that matters, because a typed label is one
 // somebody can finish in English and forget in the Chinese. But the lists it

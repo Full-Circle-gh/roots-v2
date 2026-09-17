@@ -1655,7 +1655,7 @@
             </div>
           </details>
           <!-- Hidden until the platform says this tenant HAS a cast to sign with
-               (§154). Starting visible would flash a control at every shop that
+               (§155). Starting visible would flash a control at every shop that
                has none, in the half-second before the answer lands. -->
           <details class="pa-left-acc" id="pe-acc-colophon" hidden>
             <summary><span class="pe-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg></span> Colophon · 片尾签名 <span id="pe-colophon-dot" class="pe-acc-dot"></span></summary>
@@ -1666,7 +1666,7 @@
               </div>
               <div id="pa-colophon-grid" class="pa-colophon-grid"></div>
               <!-- Placeholders are set by paLoadSignature from the tenant's own house line
-                   (§154): they were Roots' slogan, offered to every shop as a suggestion. -->
+                   (§155): they were Roots' slogan, offered to every shop as a suggestion. -->
               <div class="field" style="margin-top:10px"><label class="stacked">Tagline EN · 标语(英文)</label><input id="pa-edit-colophon-tagline-en" type="text" placeholder=""></div>
               <div class="field" style="margin-bottom:2px"><label class="stacked">Tagline CN · 标语(中文)</label><input id="pa-edit-colophon-tagline-cn" type="text" placeholder=""></div>
               <input type="hidden" id="pa-edit-colophon-character" value="">
@@ -2020,7 +2020,7 @@ const PA_BLOCK_TYPES = [
   },
 ];
 
-// WHOSE CHARACTERS THESE ARE (§154). This was Roots' own illustrated cast,
+// WHOSE CHARACTERS THESE ARE (§155). This was Roots' own illustrated cast,
 // named in the editor's source, which meant every tenant on the platform was
 // shown it and could sign a product page with somebody else's mascot. The
 // platform answers the question now — GET /api/retail-admin/brand/characters —
@@ -2832,7 +2832,7 @@ async function peSmartDivide() {
         text_en: textEn, text_cn: textCn, translate,
         // The same full context the draft sends — weight and the Product-details
         // boxes included. Smart paste was dropping them exactly as the draft
-        // was (§154), so a pasted wall of copy composed a worse spec strip than
+        // was (§155), so a pasted wall of copy composed a worse spec strip than
         // the identical text pasted on the products sheet.
         product: peComposeProduct(),
       }),
@@ -2910,7 +2910,7 @@ function peSmartApply() {
   toast(msg);
 }
 
-// ── DRAFTING THE EMPTY SECTIONS (§154) ────────────────────────────────────
+// ── DRAFTING THE EMPTY SECTIONS (§155) ────────────────────────────────────
 //
 // ONE PATH, TWO WAYS IN. The office either opens a product that has nothing on
 // its page (the draft runs by itself, as it always has) or presses "Draft the
@@ -2924,7 +2924,7 @@ function peSmartApply() {
 // office never pastes in text this page is holding. Smart paste stays for the
 // other case: copy that lives somewhere else entirely.
 //
-// WHAT IT SENDS is everything this editor knows, which is the fault §154 was
+// WHAT IT SENDS is everything this editor knows, which is the fault §155 was
 // written about. GET /api/retail-admin/products/:id hands us product_facts and
 // `weight AS size` in the same response we mounted from, and the compose prompt
 // in routes/ai.js names those facts the source of truth for the spec strip,
@@ -3221,7 +3221,7 @@ function peMount(p) {
   paWirePreviewClicks();  // clicking a block in the phone opens its section
   paLoadUsage();          // fills in "N% of your products say this" when it lands
   // Both of these describe the SHOP, not the product, so they are fetched once
-  // per editor load and survive a switch between products (§154). The guard
+  // per editor load and survive a switch between products (§155). The guard
   // matters: switching products re-runs this whole mount, and re-counting the
   // catalogue on every switch would be a request per click for an answer that
   // cannot have changed.
@@ -3238,7 +3238,7 @@ function peMount(p) {
   // Default behaviour: a product with nothing on its page and a description
   // already written gets its empty sections drafted off that description
   // (fire-and-forget — it leaves the page dirty for review). The same path the
-  // "Draft the empty sections" button runs, in its quiet mode. §154.
+  // "Draft the empty sections" button runs, in its quiet mode. §155.
   peDraftEmptySections({ auto: true });
 }
 
@@ -3495,7 +3495,7 @@ function _paSampleScreen(sample, withColophon) {
   const name    = PL === 'cn' ? '芝麻酱' : 'Sesame Tahini';
   const sub     = PL === 'cn' ? 'Sesame Tahini · 石磨' : '芝麻酱 · stone-ground';
   const tagline = PL === 'cn' ? '一罐,一种原料' : 'One jar, one ingredient';
-  // THE SAMPLE SIGNS WITH THIS SHOP'S SIGNATURE TOO (§154). The product in this
+  // THE SAMPLE SIGNS WITH THIS SHOP'S SIGNATURE TOO (§155). The product in this
   // thumbnail is openly a sample — a jar of tahini nobody sells — but the
   // colophon under it is not read as sample: it is the footer the template will
   // put on YOUR page, so a hard-coded Soil & Soul portrait over `Roots · ESTD
@@ -4210,7 +4210,7 @@ const PA_SPEC_LABELS = [
 // NET WT HAS NO LIST ON PURPOSE — 67 distinct weights across 163 cells is
 // exactly what a weight field should look like. So do Certification and
 // Storage, which are too thin to draw a list from.
-// THE VALUES ARE THE TENANT'S, AND THEY ARE COUNTED, NOT COMPILED (§154).
+// THE VALUES ARE THE TENANT'S, AND THEY ARE COUNTED, NOT COMPILED (§155).
 //
 // This was Roots' catalogue written into the editor: Guangzhou on Origin, "See
 // packaging" on Shelf Life, "100% plant" on Diet. Those were real measurements
@@ -5476,7 +5476,7 @@ const PA_COLOPHON_AUTO_MAP = [
   [/(onion|allium|garlic|leek)/,           'onion'],
   [/(broccoli|cabbage|leafy|green)/,       'broccoli'],
 ];
-// THE AUTO-PICK CAN ONLY EVER PICK SOMETHING THIS SHOP HAS (§154). The map
+// THE AUTO-PICK CAN ONLY EVER PICK SOMETHING THIS SHOP HAS (§155). The map
 // below is Roots' cast filed by what Roots sells, and the fallback was a
 // literal `soilsoul` — so a tenant who had never chosen a character, on a page
 // nobody had touched, got Roots' Soil & Soul drawn onto their product. That is

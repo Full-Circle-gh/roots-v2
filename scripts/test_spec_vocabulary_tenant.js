@@ -5,7 +5,7 @@
 //
 // WHAT THIS IS FOR
 // ----------------
-// §154. §145 gave the spec strip two dropdowns and filled both languages from
+// §155. §145 gave the spec strip two dropdowns and filled both languages from
 // one pick, which is the half that matters — a typed label is one somebody can
 // finish in English and forget in the Chinese. But the lists it offered were
 // Roots' own catalogue compiled into public/product-editor.html: `Guangzhou,
