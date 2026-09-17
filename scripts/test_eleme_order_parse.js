@@ -281,6 +281,79 @@ section('H · shape digest carries structure, not values');
 }
 
 
+// ── H2. The consignee block, under the names Eleme actually sends ────────────
+// THIS SECTION EXISTS BECAUSE THE FIXTURES ABOVE AGREED WITH THE BUG.
+// `deliveryAddress` and `privacyPhone` in section A are invented names: they
+// were written from the same candidate lists the parser reads by, so both sides
+// shared one guess and the suite proved they agreed rather than that either was
+// right. On 2026-09-17 the recorded shape digest was read back for the first
+// time and the real consignee block came out — consigneeAddress, consigneePhones
+// and consigneeSecretPhones, none of which the lists held. Every Eleme order
+// since this shipped parsed both fields as null.
+//
+// So this fixture uses ONLY the names the payload really carries, and section A
+// keeps its invented ones on purpose: the old spellings stay in the lists as
+// fallbacks, and something has to hold that door open.
+section('H2 · the real consignee names parse');
+{
+  const payload = {
+    orders: [{
+      orderId: '2000123456789099',
+      statusDesc: '已完成',
+      consumerTotal: 42,
+      createTime: 1787461712272,
+      consigneeName: '王*',
+      consigneeAddress: '天河区**大厦 3*号',
+      // Plural, and Eleme sends a list. String() on an array joins it with a
+      // comma and hands a rider two numbers in one field.
+      consigneePhones: ['188****1234', '188****9999'],
+      consigneeSecretPhones: ['170****0001_1357'],
+      items: [{ name: '素食卷饼', quantity: 1, price: 42, totalPrice: 42 }],
+    }],
+  };
+  const o = b.parseOrderPayload(payload)[0];
+  ok('the real address key is read', o.addressMasked === '天河区**大厦 3*号', o.addressMasked);
+  // The privacy number wins: this field feeds rider contact, which is what a
+  // 隐私号 is for.
+  ok('the privacy number is preferred', o.phoneMasked === '170****0001_1357', o.phoneMasked);
+  ok('an array yields one number, not a join', !String(o.phoneMasked).includes(','), o.phoneMasked);
+
+  // With no 隐私号 the customer's own masked number is the fallback, still one.
+  const noSecret = JSON.parse(JSON.stringify(payload));
+  delete noSecret.orders[0].consigneeSecretPhones;
+  const o2 = b.parseOrderPayload(noSecret)[0];
+  ok('falls back to the consignee number', o2.phoneMasked === '188****1234', o2.phoneMasked);
+
+  // An empty list is nothing, not the string "".
+  const empty = JSON.parse(JSON.stringify(payload));
+  empty.orders[0].consigneePhones = [];
+  delete empty.orders[0].consigneeSecretPhones;
+  const o3 = b.parseOrderPayload(empty)[0];
+  ok('an empty list is null', o3.phoneMasked === null, o3.phoneMasked);
+}
+
+// ── H3. The candidate lists are exported, and stay in step with the audit ────
+// scripts/diagnose_eleme_candidate_keys.js reads these rather than copying them.
+// A copy drifts within a release and then reports on a list the parser no longer
+// uses, which is a worse failure than no audit at all.
+section('H3 · the candidate lists are exported for the audit');
+{
+  const { CANDIDATE_KEYS } = require('../lib/eleme-browser');
+  ok('exported', !!CANDIDATE_KEYS && typeof CANDIDATE_KEYS === 'object');
+  ok('every entry is a non-empty array of strings',
+    Object.values(CANDIDATE_KEYS).every(v => Array.isArray(v) && v.length
+      && v.every(k => typeof k === 'string' && k)));
+  ok('the address list leads with the real name',
+    CANDIDATE_KEYS.ADDRESS_KEYS[0] === 'consigneeAddress', CANDIDATE_KEYS.ADDRESS_KEYS[0]);
+  ok('the phone list carries both real names',
+    CANDIDATE_KEYS.PHONE_KEYS.includes('consigneePhones')
+    && CANDIDATE_KEYS.PHONE_KEYS.includes('consigneeSecretPhones'), CANDIDATE_KEYS.PHONE_KEYS);
+  // The old spellings are fallbacks, not casualties.
+  ok('the guesses are kept behind them',
+    CANDIDATE_KEYS.ADDRESS_KEYS.includes('deliveryAddress')
+    && CANDIDATE_KEYS.PHONE_KEYS.includes('privacyPhone'));
+}
+
 // ── I. Void classification — the guards that decide whether stock moves ──────
 // These two live in routes/eleme-internal.js, which can't be require()'d here: it
 // pulls in database.js and better-sqlite3 has no Windows build (see
