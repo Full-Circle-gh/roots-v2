@@ -3197,6 +3197,7 @@ async function pdOpen(id) {
   pdApplyDescMode();
   _pdUseBlockDesign = !!(p && p.use_block_design === 1);
   _pdDesignExists = _paHasBlocks(p);
+  _pdDesignFromId = (p && p.blocks_from_product_id) || null;
   _pdDesignStale = false; pdRenderDesignStale();
   pdRenderBlockDesignToggle();
   const modes = String((p && p.ship_modes) || 'air,land').toLowerCase();
@@ -3921,12 +3922,16 @@ function pdRenderSummaries() {
   // The "design is out of date" nudge lives inside the block the dock hides,
   // so carry its warning up into the summary — otherwise editing a name or a
   // description in the dock would silently stale the page with nothing to say so.
-  const pageState = _pdDesignStale ? cuT('Designed page — out of date', '已设计页面 — 已过期')
+  // A copied page is out of date in the sense this row means — it does not
+  // describe this product. The compact row keeps the live pair; the bar below
+  // is where the two reasons are told apart and the source is named.
+  const pageOld = _pdDesignStale || !!_pdDesignFromId;
+  const pageState = pageOld ? cuT('Designed page — out of date', '已设计页面 — 已过期')
     : designed ? cuT('Designed page', '已设计页面')
     : cuT('Default template', '默认模板');
   set('pd-sum-page', '<div class="pd-sumcard">'
     + _pdSumRow(cuT('Shopper page', '顾客页面'), pageState, 'page',
-        _pdDesignStale ? cuT('Rebuild', '重新生成') : null)
+        pageOld ? cuT('Rebuild', '重新生成') : null)
     + _pdSumRow(cuT('Description', '描述'),
         written ? cuT('Written', '已填写') : cuT('Not written yet', '尚未填写'), 'page')
     + '</div>'
@@ -5638,6 +5643,10 @@ async function pdAutoComposeBlocks(id, btn, skipConfirm, keepFlag) {
     if (i2 >= 0) PA_PRODUCTS[i2] = { ...PA_PRODUCTS[i2], ...(sj.data || {}), description_blocks: composed, use_block_design: flag };
     _pdUseBlockDesign = flag === 1; pdRenderBlockDesignToggle();
     _pdDesignExists = composed.length > 0;
+    // The PATCH above wrote description_blocks, which is what clears
+    // blocks_from_product_id server-side — these sections are this product's
+    // own now. Mirrored here so the bar goes without waiting for a reload.
+    _pdDesignFromId = null;
     _pdDesignStale = false; pdRenderDesignStale();
     // Repaint the grid so the just-built design flips the card's Plain → Designed
     // pill immediately, without waiting for the operator to click another product.
@@ -6148,9 +6157,37 @@ async function pdAutoSaveNow() {
 // snapshot stale until rebuilt. Reset on open + on a successful (re)build.
 let _pdDesignStale = false;
 let _pdDesignExists = false;   // does this product have designer sections at all
+// The product these sections were COPIED from (store_products.blocks_from_
+// product_id), or null when they are this product's own. Duplicating carries
+// the whole designed page across — right for a size variant, and the reason a
+// copy could sit there holding another product's words with nothing saying so.
+// Unlike _pdDesignStale this survives a reload, because it is a fact about the
+// row rather than about this session's typing.
+let _pdDesignFromId = null;
+// The source's NAME, or null when it cannot be named — it may have been deleted
+// since. "came from —" says less than the plain out-of-date line, so in that
+// case we fall back to it rather than print a blank.
+function pdDesignFromName() {
+  if (!_pdDesignFromId) return null;
+  const src = (PA_PRODUCTS || []).find(x => x.id === Number(_pdDesignFromId));
+  if (!src) return null;
+  return cuT(src.name_en || src.name_cn || '', src.name_cn || src.name_en || '') || null;
+}
 function pdRenderDesignStale() {
   const el = document.getElementById('pd-design-stale');
-  if (el) el.style.display = _pdDesignStale ? 'flex' : 'none';
+  const from = pdDesignFromName();
+  // Two reasons to warn, one bar. Copied-from is the more specific of the two
+  // and names the product, so it wins when both are true: an operator who has
+  // edited a copy is better served by "this page came from X" than by "content
+  // changed", which would leave them to work out which content.
+  const show = _pdDesignStale || !!from;
+  if (el) el.style.display = show ? 'flex' : 'none';
+  const txt = document.getElementById('pd-design-stale-text');
+  if (txt && show) {
+    txt.textContent = from
+      ? cuT('Designed page came from ' + from, '设计页来自 ' + from)
+      : cuT('Designed page is out of date — content changed since it was built', '设计页已过期 — 内容已更改');
+  }
 }
 function pdMarkDesignStale() {
   // Gated on whether a designed page EXISTS, not on whether the storefront is

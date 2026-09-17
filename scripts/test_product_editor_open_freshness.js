@@ -43,6 +43,8 @@ const path = require('path');
 const REPO = path.join(__dirname, '..');
 const PRODUCTS = fs.readFileSync(path.join(REPO, 'public/retail-admin/09-products.js'), 'utf8');
 const CORE = fs.readFileSync(path.join(REPO, 'public/retail-admin/01-core.js'), 'utf8');
+const RETAIL = fs.readFileSync(path.join(REPO, 'routes/retail.js'), 'utf8');
+const ADMIN_HTML = fs.readFileSync(path.join(REPO, 'public/retail-admin.html'), 'utf8');
 
 // Pull one function's body out, brace-balanced. A regex cannot do this: the
 // first `}` inside the body would end the match, and the orderings that matter
@@ -135,6 +137,68 @@ function bodyOf(src, name) {
   const toggle = bodyOf(PRODUCTS, 'pdToggleBlockDesign');
   assert.ok(/pdAutoComposeBlocks\(id,\s*btn\)/.test(toggle),
     'the Design switch must still call pdAutoComposeBlocks() without keepFlag — turning it on is the whole point there');
+}
+
+// ── 5. A copied page is marked on the ROW, and the mark is the server's ──
+//
+// The session-local "out of date" nudge above answers "has this been edited
+// since it was built?". It cannot answer "were these words ever this product's
+// at all?", and it dies on every reload. blocks_from_product_id answers the
+// second question and survives, which is what a duplicate actually needs.
+//
+// The behavioural half — that duplicate stamps it, and only when there were
+// sections to copy — runs against a real database with the shipped handler in
+// scripts/test_product_duplicate_fields.js section 5. What is asserted here is
+// the half that is about WHERE the clear lives.
+{
+  // The clear rides on the description_blocks write itself. Anywhere else and
+  // some future caller writes the column without clearing the mark, leaving a
+  // page claiming to be a copy of something it no longer resembles.
+  const blocksWrite = RETAIL.indexOf("sets.push('description_blocks = ?')");
+  assert.notStrictEqual(blocksWrite, -1, "the PATCH handler's description_blocks write has moved");
+  const after = RETAIL.slice(blocksWrite, blocksWrite + 1600);
+  assert.ok(/sets\.push\('blocks_from_product_id = \?'\)/.test(after),
+    'writing description_blocks must also clear blocks_from_product_id — the sections are this product\'s own once it has written them');
+
+  // Never settable from a request body: the mark is a statement the server
+  // makes about a row, not one a client gets to make about itself.
+  const allowed = RETAIL.slice(RETAIL.indexOf('PRODUCT_PATCH_ALLOWED'), RETAIL.indexOf('VERSION_COLLAPSE_SECONDS'));
+  assert.ok(!/blocks_from_product_id/.test(allowed),
+    'blocks_from_product_id must NOT be in PRODUCT_PATCH_ALLOWED');
+
+  // The dock reads the product out of the list cache rather than re-fetching,
+  // so a mark absent from the list is a mark absent where it is read.
+  const list = RETAIL.slice(RETAIL.indexOf('AS has_blocks'), RETAIL.indexOf('AS has_blocks') + 400);
+  const listStart = RETAIL.lastIndexOf('SELECT', RETAIL.indexOf('AS has_blocks'));
+  assert.ok(/blocks_from_product_id/.test(RETAIL.slice(listStart, RETAIL.indexOf('AS has_blocks'))),
+    'the catalogue LIST select must carry blocks_from_product_id — pdOpen() reads the row from that cache');
+  void list;
+}
+
+// ── 6. The dock warns off the mark, and stops when the page is rebuilt ──
+{
+  const open = bodyOf(PRODUCTS, 'pdOpen');
+  assert.ok(/_pdDesignFromId\s*=\s*\(p && p\.blocks_from_product_id\)/.test(open),
+    'pdOpen() must read blocks_from_product_id off the row, or the warning cannot survive a reload');
+
+  const render = bodyOf(PRODUCTS, 'pdRenderDesignStale');
+  assert.ok(/pdDesignFromName\(\)/.test(render),
+    'pdRenderDesignStale() must consider the copied-from mark, not only this session\'s edits');
+  assert.ok(/_pdDesignStale\s*\|\|\s*!!from/.test(render),
+    'the bar must show for EITHER reason — a duplicate nobody has typed into yet is the whole reported case');
+  assert.ok(ADMIN_HTML.includes('id="pd-design-stale-text"'),
+    'the warning bar needs an addressable text node — the two reasons do not read the same');
+
+  // Named, or not claimed at all: the source may have been deleted since.
+  const name = bodyOf(PRODUCTS, 'pdDesignFromName');
+  assert.ok(/if \(!src\) return null;/.test(name),
+    'pdDesignFromName() must return null when the source is gone, so the bar falls back rather than printing a blank');
+
+  // Rebuilding writes description_blocks, which clears the column server-side;
+  // the cache has to follow or the bar outlives the thing it warns about.
+  const compose = bodyOf(PRODUCTS, 'pdAutoComposeBlocks');
+  assert.ok(/_pdDesignFromId\s*=\s*null/.test(compose),
+    'a successful rebuild must clear _pdDesignFromId — the server has already cleared the column');
 }
 
 console.log('ok — Product editor opens on the current product (autosave flushed, exit handed over, stale design declared)');
