@@ -70,16 +70,21 @@ it('eight groups, each with a heading in both languages', () => {
   }
 });
 
-it('the same twenty-two rows came out as went in — a regroup is a move, not an edit', () => {
+/* TWENTY-THREE SINCE 2026-09-17, and the count moved for the one reason it may:
+   a row was ADDED, not lost, duplicated or swapped. `recipes` (§164's read-only
+   screen) joins Making things beside the kitchen queue and the batch log. The
+   set below is what actually guards this — a count alone would pass a rename —
+   so the number and the names move together or not at all. */
+it('the same rows came out as went in — a regroup is a move, not an edit', () => {
   const keys = groups().flatMap((g) => g.keys);
-  assert.strictEqual(keys.length, 22, `expected 22 Operations rows, found ${keys.length}`);
-  assert.strictEqual(new Set(keys).size, 22, 'a row key appears in two groups');
+  assert.strictEqual(keys.length, 23, `expected 23 Operations rows, found ${keys.length}`);
+  assert.strictEqual(new Set(keys).size, 23, 'a row key appears in two groups');
   /* Named in full rather than counted, so a row SWAPPED for another still
      fails. A count alone would pass a rename of the set. */
   const expected = ['neworder', 'till', 'sales', 'trend', 'invoices', 'pick', 'delivery',
     'purchasing', 'receiving', 'receivexfer', 'stockapp', 'kitchenqueue', 'logbatch',
     'askkitchen', 'askstock', 'askbuy', 'kitchenready', 'waste', 'expense', 'approvals',
-    'inbox', 'channelsync'];
+    'inbox', 'channelsync', 'recipes'];
   assert.deepStrictEqual([...keys].sort(), [...expected].sort(),
     'the set of Operations rows changed, not just their grouping');
 });
@@ -159,7 +164,7 @@ it('three pill values, and no pill is the default', () => {
     .concat([...PILLS.matchAll(/[,{]\s*([a-z]+):\[/g)].map((m) => m[1]));
   const pilled = new Set(keys);
   assert.ok(pilled.size <= 6,
-    `${pilled.size} of 22 rows carry a pill — past a handful it is a column, not a mark`);
+    `${pilled.size} of 23 rows carry a pill — past a handful it is a column, not a mark`);
 });
 
 it('the pill is on the rows that earn it, and on no others', () => {
