@@ -13285,6 +13285,33 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     text-transform: none; letter-spacing: -.01em; margin: 0;
   }
 
+  /* ── PAGE WIDTH — set by the table, because the table is the page ────────
+     THE LIST IS CAPPED, NOT STRETCHED. main is up to 1440px, which on a desk
+     monitor left the list card ~1384px wide holding a table whose content
+     wants 970px. That 414px of nothing had to sit somewhere inside the row,
+     and wherever it was put it looked wrong: shared out across all eight
+     columns it pushed the figures apart (which is what the column-fit rule
+     further down was added to stop), and given whole to the name column it
+     opened a gap between a recipe's name and its category wide enough to
+     lose the row across.
+
+     There is no third place to put it, so it is not put anywhere — the
+     section is capped just above what the table asks for and the space
+     stays outside, as page margin, where empty space is supposed to be.
+
+     THE CAP IS ON THE SECTION, NOT THE CARD. Head, filters, chips and card
+     narrow together, so New recipe still sits over the card's right edge and
+     the search box over its left. Capping the card alone would have left
+     that button floating 400px off the corner it belongs to.
+
+     1040px, measured: the table's max-content on a real 205-recipe list is
+     970px. Past the cap the name column gives first (it is the one column
+     with slack to give) and its second line wraps — the figures never
+     compress. This is why the number is stated here rather than rounded to
+     a round one: it is 970 plus a little, and if a column is ever added or
+     removed it should be re-measured, not nudged. */
+  #tab-recipes { max-width: 1040px; }
+
   /* ── page head ── */
   #tab-recipes .rcp-pagehead { margin: 2px 0 0; }
   #tab-recipes .rcp-eyebrow { font: 500 11px var(--f-sans); letter-spacing: .14em;
