@@ -2294,91 +2294,361 @@ document.querySelector('[data-tab="leaderboard"]').addEventListener('click', () 
 });
 
 // ════════════════════════════════════════════════════════════════
-// VOTING — community polls. Admin builds, opens, closes, and picks
-// winners. Lazy-loaded on first tab open.
+// VOTING — community polls. Rebuilt 2026-09-17 from the C · Stage
+// mockup (canvas "Voting page — three directions", picked by Ash).
+// Nothing of the previous panel survives: it opened on a settings
+// card, painted an open poll in error-red, shouted its pills in
+// uppercase, and edited in a form injected above the list.
+//
+// The shape now: the live poll IS the page (question, turnout, the
+// bars), everything else is a quiet shelf below it, and the two
+// settings fold away at the foot. Authoring happens in a full-page
+// takeover (§1.13 — a draft state is never a drawer).
+//
+// Archetype note: tacet-ia-blueprint §4 row 24 files Voting as a
+// Console. It isn't one — a poll is an authored object with a
+// lifecycle, which is a Library, and a Console's own rules demand a
+// master switch this feature has never had. Recorded in
+// docs/tacet-consolidation-decisions.md §154.
 // ════════════════════════════════════════════════════════════════
 let POLLS_LOADED = false;
-let _pollsCache = [];                // last server snapshot
-let _pollDraft  = null;              // { id?, ...form state } while editing
+let _polls      = [];                 // last server snapshot
+let _votCfg     = { intro_en: '', intro_cn: '', show_counts: true };
+let _ed         = null;               // the poll being authored, or null
+let _edLang     = 'en';               // which language the editor is typing in
+let _edDirty    = false;              // unsaved changes → confirm before leaving
+let _edPop      = null;               // popstate handler while the editor is up
+let _prevTimer  = null;               // preview settle timer
 
 const POLL_PALETTE = [
   '#F2CA6C', '#F4B8CB', '#F4F087', '#E96174',
   '#B2CFED', '#7BBD3B', '#A8D185', '#FFAF60',
 ];
 
-function pollLetter(i) { return String.fromCharCode(65 + i); }
+const votT = (en, cn) => (window.cuT ? cuT(en, cn) : en);
+function votLetter(i) { return String.fromCharCode(65 + i); }
 
-function pollStatusPill(status) {
-  return `<span class="vot-stat ${status}">${status}</span>`;
+// Merchant-authored text (questions, option labels) is outside-system text as
+// far as the language walker is concerned: an English question followed by a
+// Chinese label reads as an `English · 中文` pair and half of it goes blank in
+// one language, silently (§1.11). Every echo of merchant text wears the shield.
+function votSafe(s) { return `<span data-no-i18n>${escapeHtml(s == null ? '' : s)}</span>`; }
+
+// Merchant content carries both languages; the operator reads the one they
+// picked. An admin in Chinese showing an English option label is the same
+// half-and-half screen §1.11 exists to stop, one layer further in.
+function votPick(en, cn) {
+  const wantCn = !!(window.cuLang && cuLang() === 'cn');
+  return (wantCn ? (cn || en) : (en || cn)) || '';
 }
 
-// Mirror "any poll currently open" onto the Voting nav row as an OPEN pill,
-// the same way body.lb-off drives Leaderboard's OFF pill.
+function votStatusWord(status) {
+  if (status === 'open')   return votT('Open', '进行中');
+  if (status === 'closed') return votT('Closed', '已结束');
+  return votT('Draft', '草稿');
+}
+
+// Real numbers, always — the admin sees the ledger, never the display boost
+// the mini app applies (`display_min_total` is a customer-facing floor).
+function votTally(p) {
+  const opts = (p && p.options) || [];
+  const total = opts.reduce((s, o) => s + (o.votes || 0), 0);
+  const ranked = opts.slice().sort((a, b) => (b.votes || 0) - (a.votes || 0));
+  // A closed poll can name its own winner; otherwise the leader is whoever
+  // has the most votes, and nobody leads a poll with no votes yet.
+  let leadId = null;
+  if (p && p.winner_option_id && opts.some(o => o.id === p.winner_option_id)) leadId = p.winner_option_id;
+  else if (total > 0 && ranked[0]) leadId = ranked[0].id;
+  return { total, ranked, leadId, lead: opts.find(o => o.id === leadId) || null };
+}
+
+// The poll that owns the stage: the featured open one, else any open one.
+// Nothing open → no stage poll, and the stage says so rather than promoting
+// a draft nobody can see.
+function votStagePoll() {
+  const open = _polls.filter(p => p.status === 'open');
+  return open.find(p => p.is_featured) || open[0] || null;
+}
+
+function votCloses(p) {
+  if (!p || !p.closes_at) return null;
+  const iso = String(p.closes_at).replace('T', ' ');
+  return (typeof tdWhen === 'function') ? tdWhen(iso, 'dateTime') : iso.slice(0, 16);
+}
+
+// ── Load ──────────────────────────────────────────────────────────────────
+// Mirror "any poll currently open" onto the Voting nav row as a Live pill,
+// the same way body.lb-off drives Leaderboard's Off pill.
 function votUpdateNavState() {
-  const anyOpen = (_pollsCache || []).some(p => p.status === 'open');
-  document.body.classList.toggle('vot-open', anyOpen);
+  document.body.classList.toggle('vot-open', (_polls || []).some(p => p.status === 'open'));
 }
-// Seed the nav OPEN pill at startup so it reflects reality before the operator
-// ever opens the Voting tab (the full list lazy-loads on first tab open).
+// Seed the nav pill at startup so it reflects reality before the operator ever
+// opens the Voting tab (the page itself lazy-loads on first open).
 async function votInitNavState() {
   try {
     const r = await fetch('/api/retail-admin/polls', { credentials: 'same-origin' });
     const b = await r.json();
     const polls = (b && (b.data || b)) || [];
     document.body.classList.toggle('vot-open', Array.isArray(polls) && polls.some(p => p.status === 'open'));
-  } catch (e) { /* leave nav as-is if the probe fails */ }
+  } catch (e) { /* leave the nav as-is if the probe fails */ }
 }
 
-async function loadPolls() {
+async function votLoad() {
+  const err = $('#vot-err');
   try {
-    const r = await api('/api/retail-admin/polls');
-    _pollsCache = r.data || [];
+    const [pollsRes, cfgRes] = await Promise.all([
+      api('/api/retail-admin/polls'),
+      api('/api/retail-admin/voting/config').catch(() => ({ data: null })),
+    ]);
+    _polls = pollsRes.data || [];
+    if (cfgRes && cfgRes.data) _votCfg = { ..._votCfg, ...cfgRes.data };
+    _votCfg.show_counts = _votCfg.show_counts !== false;
+    if (err) { err.hidden = true; err.innerHTML = ''; }
     votUpdateNavState();
-    renderPollList();
+    votRenderAll();
   } catch (e) {
-    $('#vot-list').innerHTML = `<div class="muted" style="color: #c64242;">${cuT('Failed to load', '加载失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
+    // The region says it failed and stays saying it. A page that empties
+    // itself on a failed read is indistinguishable from a page with no polls.
+    const stage = $('#vot-stage'); if (stage) stage.innerHTML = '';
+    const rest  = $('#vot-rest');  if (rest)  rest.innerHTML = '';
+    if (err) {
+      err.hidden = false;
+      err.innerHTML = `${escapeHtml(votT('The polls did not load.', '投票没有加载出来。'))} `
+        + `${votSafe(e.message || '')} `
+        + `<button class="btn" style="margin-left: 8px;" onclick="votLoad()">${escapeHtml(votT('Try again', '重试'))}</button>`;
+    }
   }
 }
 
-function renderPollList() {
-  const mount = $('#vot-list');
-  if (!_pollsCache.length) {
-    mount.innerHTML = '<div class="muted" style="font-size: 12px;">No polls yet. Click <b>+ New poll</b> to create one.</div>';
+function votRenderAll() {
+  votRenderStatusLine();
+  votRenderStage();
+  votRenderRest();
+  votRenderSettingsFields();
+}
+
+// ── Status line — work waiting, never a census (§1.7) ─────────────────────
+function votRenderStatusLine() {
+  const el = $('#vot-status');
+  if (!el) return;
+  const drafts = _polls.filter(p => p.status === 'draft').length;
+  if (!drafts) { el.hidden = true; el.textContent = ''; return; }
+  el.hidden = false;
+  el.textContent = votT(
+    `${drafts} draft${drafts === 1 ? '' : 's'} waiting to publish`,
+    `${drafts} 个草稿待发布`
+  );
+}
+
+// ── The stage ─────────────────────────────────────────────────────────────
+function votRenderStage() {
+  const mount = $('#vot-stage');
+  if (!mount) return;
+  const p = votStagePoll();
+
+  if (!p) {
+    const drafts = _polls.filter(p2 => p2.status === 'draft').length;
+    // Empty names what will arrive and never apologises (§1.12).
+    const line = drafts
+      ? votT('A draft is ready when you are. Publishing one puts it on Me → Your say.',
+             '草稿已就绪,随时可以发布。发布后会出现在“我的 → 你说了算”。')
+      : votT('Your first poll takes about a minute. It lands on Me → Your say.',
+             '第一个投票大约一分钟就能建好,会出现在“我的 → 你说了算”。');
+    mount.innerHTML = `
+      <div class="vot-card vot-empty">
+        <div class="t">${escapeHtml(votT('No poll is open.', '当前没有进行中的投票。'))}</div>
+        <div class="d">${escapeHtml(line)}</div>
+      </div>`;
     return;
   }
-  mount.innerHTML = _pollsCache.map(p => {
-    const top = (p.options || [])
-      .slice()
-      .sort((a, b) => (b.votes || 0) - (a.votes || 0))[0];
-    const meta = [
-      `${(p.options || []).length} ${cuT('opts', '选项')}`,
-      `${p.total_votes || 0} ${cuT('votes', '票')}`,
-      p.reward_points ? `+${p.reward_points} ${cuT('pts', '积分')}` : null,
-      p.closes_at ? `${cuT('closes', '截止')} ${String(p.closes_at).slice(0, 16).replace('T', ' ')}` : null,
-      top && (p.status !== 'open' || p.total_votes > 0) ? `${cuT('top:', '领先:')} ${escapeHtml(top.label_en)}` : null,
-    ].filter(Boolean).join(' · ');
+
+  const { total, leadId } = votTally(p);
+  const meta = [
+    votT(`${total} vote${total === 1 ? '' : 's'}`, `${total} 票`),
+    p.reward_points
+      ? votT(`${p.reward_points} point${p.reward_points === 1 ? '' : 's'} each`, `每票 ${p.reward_points} 积分`)
+      : votT('no points', '不给积分'),
+    p.closes_at ? votT(`closes ${votCloses(p)}`, `${votCloses(p)} 截止`) : null,
+    _votCfg.show_counts ? null : votT('counts hidden from customers', '顾客看不到票数'),
+  ].filter(Boolean).join(' · ');
+
+  const bars = (p.options || []).map((o) => {
+    const votes = o.votes || 0;
+    const pct = total > 0 ? Math.round((votes / total) * 100) : 0;
+    const lead = o.id === leadId;
     return `
-      <div class="vot-row" data-id="${p.id}">
-        <div style="min-width: 0; flex: 1;">
-          <div class="vot-q">${escapeHtml(p.question_en || '(untitled)')}</div>
-          <div class="vot-meta">${escapeHtml(meta)}</div>
+      <div class="vot-bar${lead ? ' is-lead' : ''}">
+        <div class="vot-bar-label">${votSafe(votPick(o.label_en, o.label_cn) || votT('(unnamed)', '(未命名)'))}</div>
+        <div class="vot-track"><div class="vot-fill" style="width: ${pct}%;"></div></div>
+        <div class="vot-bar-n">${votSafe(String(votes))} ${escapeHtml(votT('votes', '票'))} · ${votSafe(pct + '%')}</div>
+      </div>`;
+  }).join('');
+
+  mount.innerHTML = `
+    <div class="vot-card vot-stage">
+      <div class="vot-stage-top">
+        <div class="vot-stage-id">
+          <div class="vot-badges">
+            <span class="vot-badge is-open">${escapeHtml(votStatusWord('open'))}</span>
+            ${p.is_featured ? `<span class="vot-badge is-featured">${escapeHtml(votT('Featured', '精选'))}</span>` : ''}
+          </div>
+          <h3 class="vot-stage-q">${votSafe(votPick(p.question_en, p.question_cn) || votT('(untitled)', '(未命名)'))}</h3>
+          <div class="vot-stage-meta">${votSafe(meta)}</div>
         </div>
-        ${p.is_featured ? '<span class="vot-featured">Featured · 精选</span>' : ''}
-        ${pollStatusPill(p.status)}
-        <div class="vot-actions">
-          <button class="btn" onclick="editPoll(${p.id})">Edit · 编辑</button>
-          ${p.status === 'draft' ? `<button class="btn btn-primary" onclick="quickPollStatus(${p.id}, 'open')">Open · 开启</button>` : ''}
-          ${p.status === 'open'  ? `<button class="btn" onclick="quickPollStatus(${p.id}, 'closed')">Close · 关闭</button>` : ''}
-          ${p.status === 'closed'? `<button class="btn" onclick="quickPollStatus(${p.id}, 'open')">Reopen · 重新开启</button>` : ''}
-          <button class="btn danger" onclick="deletePoll(${p.id})">Delete · 删除</button>
+        <div class="vot-stage-acts">
+          <button class="btn" onclick="votOpenEditor(${p.id}, event)">${escapeHtml(votT('Edit', '编辑'))}</button>
+          <button class="btn" onclick="votSetStatus(${p.id}, 'closed', event)">${escapeHtml(votT('Close poll', '关闭投票'))}</button>
         </div>
       </div>
-    `;
-  }).join('');
+      ${total > 0
+        ? `<div class="vot-bars">${bars}</div>`
+        : `<div class="vot-hint">${escapeHtml(votT('No votes yet. The bars fill as customers pick.', '还没有人投票。顾客开始选择后,进度条就会填充。'))}</div>`}
+    </div>`;
 }
 
-function newPoll() {
-  _pollDraft = {
+// ── The shelf below the stage ─────────────────────────────────────────────
+function votRenderRest() {
+  const mount = $('#vot-rest');
+  if (!mount) return;
+  const staged = votStagePoll();
+  const rest = _polls.filter(p => !staged || p.id !== staged.id);
+
+  if (!rest.length) { mount.innerHTML = ''; return; }
+
+  const drafts = rest.filter(p => p.status === 'draft').length;
+  const closed = rest.filter(p => p.status === 'closed').length;
+  const others = rest.filter(p => p.status === 'open').length;
+  const counts = [
+    others ? votT(`${others} more open`, `另有 ${others} 个进行中`) : null,
+    drafts ? votT(`${drafts} draft${drafts === 1 ? '' : 's'}`, `${drafts} 个草稿`) : null,
+    closed ? votT(`${closed} closed`, `${closed} 个已结束`) : null,
+  ].filter(Boolean).join(' · ');
+
+  const rows = rest.map(p => {
+    const { total, lead } = votTally(p);
+    const meta = [
+      votT(`${(p.options || []).length} options`, `${(p.options || []).length} 个选项`),
+      votT(`${total} vote${total === 1 ? '' : 's'}`, `${total} 票`),
+      p.status === 'draft'
+        ? votT('hidden from customers', '顾客看不到')
+        : (lead ? votT('leading: ', '领先:') + votPick(lead.label_en, lead.label_cn) : null),
+    ].filter(Boolean).join(' · ');
+
+    const act = p.status === 'draft'
+      ? `<button class="btn" onclick="votSetStatus(${p.id}, 'open', event)">${escapeHtml(votT('Publish', '发布'))}</button>`
+      : p.status === 'open'
+        ? `<button class="btn" onclick="votSetStatus(${p.id}, 'closed', event)">${escapeHtml(votT('Close', '关闭'))}</button>`
+        : `<button class="btn" onclick="votSetStatus(${p.id}, 'open', event)">${escapeHtml(votT('Reopen', '重新开启'))}</button>`;
+
+    return `
+      <div class="vot-card vot-row">
+        <div class="vot-row-id">
+          <div class="vot-row-q">
+            ${votSafe(votPick(p.question_en, p.question_cn) || votT('(untitled)', '(未命名)'))}
+            <span class="vot-badge is-${escapeAttr(p.status)}">${escapeHtml(votStatusWord(p.status))}</span>
+            ${p.is_featured ? `<span class="vot-badge is-featured">${escapeHtml(votT('Featured', '精选'))}</span>` : ''}
+          </div>
+          <div class="vot-row-meta">${votSafe(meta)}</div>
+        </div>
+        <div class="vot-row-acts">
+          ${act}
+          <button class="btn" onclick="votOpenEditor(${p.id}, event)">${escapeHtml(votT('Edit', '编辑'))}</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  mount.innerHTML = `
+    <div class="vot-sec">
+      <div class="vot-sec-head">
+        <h3>Everything else · 其他投票</h3>
+        <span class="vot-sec-count">${votSafe(counts)}</span>
+      </div>
+      <div class="vot-rows">${rows}</div>
+    </div>`;
+}
+
+// ── Page settings ─────────────────────────────────────────────────────────
+function votToggleSettings() {
+  const body = $('#vot-set-body'), btn = $('#vot-set-toggle');
+  if (!body || !btn) return;
+  const open = body.hidden;
+  body.hidden = !open;
+  btn.textContent = open ? votT('Hide', '收起') : votT('Open', '展开');
+}
+
+function votRenderSettingsFields() {
+  const en = $('#vot-intro-en'), cn = $('#vot-intro-cn'), sc = $('#vot-show-counts');
+  if (en) en.value = _votCfg.intro_en || '';
+  if (cn) cn.value = _votCfg.intro_cn || '';
+  if (sc) sc.checked = _votCfg.show_counts !== false;
+  votCountsStateSync();
+}
+
+// The consequence, in words, beside the switch — never left to the checkbox.
+function votCountsStateSync() {
+  const sc = $('#vot-show-counts'), out = $('#vot-counts-state');
+  if (!out) return;
+  out.textContent = (sc && sc.checked)
+    ? votT('On. Customers see the tallies and percentages.', '开启。顾客能看到票数和百分比。')
+    : votT('Off. Customers see which option leads, never the numbers.', '关闭。顾客只看到哪个选项领先,看不到数字。');
+}
+
+async function votSaveConfig(ev) {
+  // Captured synchronously: `currentTarget` is null once dispatch ends, so a
+  // handler that awaits before reading it disables nothing (§1.12, shape C).
+  const btn = ev && ev.currentTarget;
+  const body = {
+    intro_en: ($('#vot-intro-en').value || '').trim(),
+    intro_cn: ($('#vot-intro-cn').value || '').trim(),
+    show_counts: !!($('#vot-show-counts') && $('#vot-show-counts').checked),
+  };
+  try {
+    await adminWrite({
+      btn, url: '/api/retail-admin/voting/config', method: 'PUT', body,
+      errLabelEn: 'Save failed', errLabelCn: '保存失败',
+    });
+    _votCfg = { ..._votCfg, ...body };
+    toast(votT('Saved', '已保存'));
+    votRenderStage();   // the meta line carries "counts hidden from customers"
+  } catch (e) { /* adminWrite has already said so */ }
+}
+
+// ── Lifecycle writes ──────────────────────────────────────────────────────
+async function votSetStatus(id, status, ev) {
+  const btn = ev && ev.currentTarget;   // before any await — see votSaveConfig
+  const poll = _polls.find(p => p.id === id);
+  const was = poll ? poll.status : null;
+  if (status === 'open' && was !== 'open') {
+    const ask = was === 'closed'
+      ? { title: votT('Reopen this poll? Customers can vote again.', '重新开启此投票?顾客可以再次投票。'), confirmLabel: votT('Reopen poll', '重新开启') }
+      : { title: votT('Publish this poll? Customers see it immediately and start earning points for voting.', '发布此投票?顾客会立即看到,并可通过投票获得积分。'), confirmLabel: votT('Publish poll', '发布投票') };
+    if (!(await askConfirm(ask))) return;
+  }
+  if (status === 'closed' && !(await askConfirm({
+    title: votT('Close this poll? Voting locks and the result moves to past results.', '关闭此投票?投票将被锁定,结果会移到“往期结果”。'),
+    confirmLabel: votT('Close poll', '关闭投票'),
+  }))) return;
+
+  try {
+    await adminWrite({
+      btn, url: '/api/retail-admin/polls/' + id, method: 'PUT', body: { status },
+      errLabelEn: 'Failed', errLabelCn: '失败',
+    });
+    toast(status === 'open' ? votT('Poll published', '投票已发布') : votT('Poll closed', '投票已关闭'));
+    await votLoad();
+    // Pressed from inside the editor, the list behind it reloads but the page
+    // in front does not — so it would sit saying "Draft" over a published poll
+    // until something else redrew it. Take the poll's new state back.
+    if (_ed && _ed.id === id) {
+      const fresh = _polls.find(p2 => p2.id === id);
+      if (fresh) { _ed.status = fresh.status; votRenderEditor(); }
+    }
+  } catch (e) { /* adminWrite has already put the reason on screen */ }
+}
+
+// ── The editor — a full-page takeover (§1.7a) ─────────────────────────────
+function votBlankPoll() {
+  return {
     id: null,
     question_en: '', question_cn: '',
     explainer_en: '', explainer_cn: '',
@@ -2388,350 +2658,510 @@ function newPoll() {
     reward_points: 5,
     is_featured: 0,
     sort_order: 0,
+    display_min_total: 0,
     winner_option_id: null,
     options: [
       { label_en: '', label_cn: '', color_hex: POLL_PALETTE[0], votes: 0 },
       { label_en: '', label_cn: '', color_hex: POLL_PALETTE[1], votes: 0 },
     ],
   };
-  renderPollForm();
 }
 
-function editPoll(id) {
-  const p = _pollsCache.find(x => x.id === id);
-  if (!p) return;
-  _pollDraft = JSON.parse(JSON.stringify(p));
-  _pollDraft.closes_at = _pollDraft.closes_at ? String(_pollDraft.closes_at).slice(0, 16).replace(' ', 'T') : '';
-  if (!Array.isArray(_pollDraft.options)) _pollDraft.options = [];
-  renderPollForm();
-}
-
-function renderPollForm() {
-  const d = _pollDraft;
-  if (!d) { $('#vot-form-mount').innerHTML = ''; return; }
-  const isEdit = !!d.id;
-  const hasVotes = (d.options || []).some(o => (o.votes || 0) > 0);
-  const realTotal = (d.options || []).reduce((s, o) => s + (o.votes || 0), 0);
-  const optsHtml = (d.options || []).map((o, i) => `
-    <div class="vot-opt" data-idx="${i}">
-      <div class="vot-opt-letter">${pollLetter(i)}</div>
-      <input type="text" placeholder="Label · EN" value="${escapeAttr(o.label_en || '')}" oninput="pollOptEdit(${i}, 'label_en', this.value)"/>
-      <input type="text" placeholder="标签 · 中文" value="${escapeAttr(o.label_cn || '')}" oninput="pollOptEdit(${i}, 'label_cn', this.value)"/>
-      <div class="vot-opt-color">
-        <input type="color" value="${escapeAttr(o.color_hex || '#CCD900')}" oninput="pollOptEdit(${i}, 'color_hex', this.value)" title="Card color"/>
-        <input type="text" value="${escapeAttr(o.color_hex || '')}" placeholder="#hex" oninput="pollOptEdit(${i}, 'color_hex', this.value)" style="width: 70px; font-size: 11px;"/>
-      </div>
-      <div class="vot-opt-votes">${(o.votes || 0)} votes</div>
-      <button class="btn vot-opt-rm" onclick="pollOptRemove(${i})" title="Remove option"${(o.votes || 0) > 0 ? ' disabled style="opacity:.4;cursor:not-allowed"' : ''}>×</button>
-    </div>
-  `).join('');
-
-  const winnerOpts = (d.options || []).map((o, i) =>
-    `<option value="${o.id || ''}" ${String(d.winner_option_id || '') === String(o.id || '') ? 'selected' : ''}>${pollLetter(i)} · ${escapeHtml(o.label_en || '(unnamed)')}</option>`
-  ).join('');
-
-  $('#vot-form-mount').innerHTML = `
-    <div class="vot-form">
-      <h3>${isEdit ? cuT('Edit poll', '编辑投票') + ' #' + d.id : cuT('New poll', '新建投票')}</h3>
-      <div class="muted" style="font-size: 11px;">Question + options are required (min 2 options). Customers see polls with status <code>open</code> or <code>closed</code>; <code>draft</code> stays hidden. · 问题与选项为必填(至少 2 个选项)。顾客只能看到状态为 <code>open</code> 或 <code>closed</code> 的投票;<code>draft</code> 始终隐藏。</div>
-
-      <div class="vot-row-2">
-        <div class="field">
-          <label>Question · EN <span style="color:#c64242">*</span></label>
-          <input type="text" id="vot-q-en" value="${escapeAttr(d.question_en || '')}" placeholder="Which kombucha flavor next?"/>
-        </div>
-        <div class="field">
-          <label>问题 · 中文</label>
-          <input type="text" id="vot-q-cn" value="${escapeAttr(d.question_cn || '')}" placeholder="下款康普茶应该是哪个口味?"/>
-        </div>
-      </div>
-
-      <div class="vot-row-2">
-        <div class="field">
-          <label>Category kicker · EN · 分类引题 · 英文</label>
-          <input type="text" id="vot-cat-en" value="${escapeAttr(d.category_en || '')}" placeholder="NEW FLAVOR"/>
-        </div>
-        <div class="field">
-          <label>类别 · 中文</label>
-          <input type="text" id="vot-cat-cn" value="${escapeAttr(d.category_cn || '')}" placeholder="新口味"/>
-        </div>
-      </div>
-
-      <div class="vot-row-2">
-        <div class="field">
-          <label>Explainer · EN <span class="muted" style="font-weight: normal; letter-spacing: 0;">(italic line under the question) · (问题下方的斜体说明行)</span></label>
-          <textarea id="vot-exp-en" placeholder="You spoke, we listened — Mango sold out. Pick what we develop next.">${escapeHtml(d.explainer_en || '')}</textarea>
-        </div>
-        <div class="field">
-          <label>说明 · 中文</label>
-          <textarea id="vot-exp-cn">${escapeHtml(d.explainer_cn || '')}</textarea>
-        </div>
-      </div>
-
-      <div class="field">
-        <label>Options · 选项 <span class="muted" style="font-weight: normal; letter-spacing: 0;">(drag is server-side via sort_order; reorder by editing — first row becomes A) · (排序由服务端的 sort_order 决定;通过编辑来调整顺序——第一行即为 A)</span></label>
-        <div class="vot-opts">${optsHtml}</div>
-        <div style="margin-top: 6px;">
-          <button class="btn" onclick="pollOptAdd()" ${d.options.length >= 8 ? 'disabled' : ''}>+ Add option · 添加选项</button>
-          <span class="muted" style="font-size: 11px; margin-left: 8px;">${d.options.length}/8 options</span>
-          ${hasVotes ? '<span class="muted" style="font-size: 11px; margin-left: 8px;">· options with votes can\'t be removed individually — use the "Hard reset" toggle below to wipe all votes · 含有投票的选项不能单独删除——请用下方“硬重置”开关清空所有投票</span>' : ''}
-        </div>
-      </div>
-
-      <div class="vot-row-2">
-        <div class="field">
-          <label>Status · 状态</label>
-          <select id="vot-status">
-            <option value="draft"  ${d.status === 'draft'  ? 'selected' : ''}>Draft (hidden) · 草稿(隐藏)</option>
-            <option value="open"   ${d.status === 'open'   ? 'selected' : ''}>Open · accepting votes · 进行中 · 接受投票</option>
-            <option value="closed" ${d.status === 'closed' ? 'selected' : ''}>Closed · show result · 已结束 · 显示结果</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Reward points · 投票积分奖励</label>
-          <input type="number" id="vot-reward" value="${d.reward_points != null ? d.reward_points : 5}" min="0" max="100"/>
-        </div>
-      </div>
-
-      <div class="vot-row-2">
-        <div class="field">
-          <label>Closes at <span class="muted" style="font-weight: normal; letter-spacing: 0;">(cosmetic — shown as "N days left")</span></label>
-          <input type="datetime-local" id="vot-closes" value="${escapeAttr(d.closes_at || '')}"/>
-        </div>
-        <div class="field">
-          <label>Featured? · 精选? <span class="muted" style="font-weight: normal; letter-spacing: 0;">(promotes this poll to the big top card) · (将此投票提升为顶部大卡片)</span></label>
-          <select id="vot-featured">
-            <option value="0" ${!d.is_featured ? 'selected' : ''}>No · 否</option>
-            <option value="1" ${d.is_featured  ? 'selected' : ''}>Featured · 精选</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="field">
-        <label>Show vote count as · 对外显示票数 <span class="muted" style="font-weight: normal; letter-spacing: 0;">(0 = show the real count) · (0 = 显示真实票数)</span></label>
-        <input type="number" id="vot-display-min" min="0" max="100000"
-               value="${d.display_min_total != null ? d.display_min_total : 0}"
-               oninput="pollBoostPreview()"/>
-        <div class="muted" id="vot-display-preview" style="font-size: 11px; margin-top: 4px;"></div>
-        <div class="muted" style="font-size: 11px;">Customers see at least this many votes — every option is scaled up by the same factor, so the percentages and the winner stay identical. The real count (<b>${realTotal}</b>) is unchanged here in the office and in your data. · 顾客至少看到这么多票;所有选项按同一比例放大,百分比与领先项不变。真实票数(<b>${realTotal}</b>)在后台与数据中保持不变。</div>
-      </div>
-
-      ${isEdit ? `
-      <div class="vot-row-2">
-        <div class="field">
-          <label>Winner option · 获胜选项 <span class="muted" style="font-weight: normal; letter-spacing: 0;">(only used when Closed) · (仅在已结束时生效)</span></label>
-          <select id="vot-winner">
-            <option value="">— (auto: highest vote count) · —(自动:票数最高)</option>
-            ${winnerOpts}
-          </select>
-        </div>
-        <div class="field">
-          <label>Sort order · 排序 <span class="muted" style="font-weight: normal; letter-spacing: 0;">(lower appears first within status) · (数值越小在同状态内越靠前)</span></label>
-          <input type="number" id="vot-sort" value="${d.sort_order || 0}"/>
-        </div>
-      </div>
-
-      ${hasVotes ? `
-      <div class="field">
-        <label class="danger" style="display: flex; align-items: center; gap: 8px;">
-          <input type="checkbox" id="vot-replace-opts"/> Hard reset options · 硬重置选项 (clears all ${d.total_votes || 0} votes · 将清空全部 ${d.total_votes || 0} 票)
-        </label>
-        <div class="muted" style="font-size: 11px;">Use this only when reworking the question entirely. Otherwise just edit labels in place — vote counts are preserved. · 仅在彻底改写问题时使用;否则直接就地编辑文本即可,投票数会保留。</div>
-      </div>
-      ` : ''}
-      ` : `
-      <div class="field">
-        <label>Sort order · 排序</label>
-        <input type="number" id="vot-sort" value="${d.sort_order || 0}"/>
-      </div>
-      `}
-
-      <div class="vot-form-actions">
-        <button class="btn btn-primary" onclick="savePoll()">${isEdit ? cuT('Save changes', '保存更改') : cuT('Create poll', '创建投票')}</button>
-        <button class="btn" onclick="cancelPollEdit()">Cancel · 取消</button>
-        <div style="flex: 1"></div>
-        ${isEdit ? `<button class="btn danger" onclick="deletePoll(${d.id})">Delete · 删除</button>` : ''}
-      </div>
-    </div>
-  `;
-  pollBoostPreview();   // seed the "real → shown" hint for the loaded value
-}
-
-function pollOptEdit(i, field, value) {
-  if (!_pollDraft) return;
-  if (!_pollDraft.options[i]) return;
-  _pollDraft.options[i][field] = value;
-  // Don't re-render on every keystroke — only on structural changes.
-}
-
-// Live "real → shown" preview under the display-vote-count input. Mirrors the
-// server's applyPollDisplayBoost exactly: scale every option by the same factor
-// when the floor is above real turnout; never shrink; no ratio to inflate at 0.
-function pollBoostPreview() {
-  const out = $('#vot-display-preview');
-  if (!out || !_pollDraft) return;
-  const opts = _pollDraft.options || [];
-  const realTotal = opts.reduce((s, o) => s + (o.votes || 0), 0);
-  const floor = Math.max(0, parseInt($('#vot-display-min')?.value, 10) || 0);
-  if (!floor || realTotal <= 0 || floor <= realTotal) {
-    out.innerHTML = realTotal > 0
-      ? cuT(`Showing the real ${realTotal} votes.`, `按真实票数 ${realTotal} 显示。`)
-      : cuT('No votes yet — nothing to scale until the first real vote.', '暂无投票 — 在首次真实投票前不会放大。');
-    return;
+function votOpenEditor(id, ev) {
+  if (ev && ev.preventDefault) ev.preventDefault();
+  if (id) {
+    const p = _polls.find(x => x.id === id);
+    if (!p) return;
+    _ed = JSON.parse(JSON.stringify(p));
+    _ed.closes_at = _ed.closes_at ? String(_ed.closes_at).slice(0, 16).replace(' ', 'T') : '';
+    if (!Array.isArray(_ed.options)) _ed.options = [];
+  } else {
+    _ed = votBlankPoll();
   }
-  const factor = floor / realTotal;
-  let shown = 0;
-  const parts = opts.map(o => {
-    const v = Math.round((o.votes || 0) * factor);
-    shown += v;
-    return `${escapeHtml(o.label_en || '?')} ${o.votes || 0}→<b>${v}</b>`;
-  });
-  out.innerHTML = cuT(
-    `Customers will see ~<b>${shown}</b> votes (×${factor.toFixed(1)}): `,
-    `顾客将看到约 <b>${shown}</b> 票(×${factor.toFixed(1)}):`
-  ) + parts.join(' · ');
+  _edLang = (window.cuLang && cuLang() === 'cn') ? 'cn' : 'en';
+  _edDirty = false;
+  votRenderEditor();
+  const sec = document.getElementById('tab-voting');
+  if (sec) sec.classList.add('vot-editing');
+  window.scrollTo({ top: 0, behavior: 'auto' });
+  // The takeover reads like a new page, so the browser's Back gesture has to
+  // land on the shelf rather than out of the admin entirely (§1.7a rule 3).
+  // Same mechanic as the product lightbox's trap.
+  _edPop = () => votCloseEditor({ viaPop: true });
+  history.pushState({ votEditor: true }, '');
+  window.addEventListener('popstate', _edPop);
 }
 
-function pollOptAdd() {
-  if (!_pollDraft) return;
-  if (_pollDraft.options.length >= 8) return;
-  const i = _pollDraft.options.length;
-  _pollDraft.options.push({
+async function votCloseEditor(opts) {
+  const viaPop = !!(opts && opts.viaPop);
+  if (_edDirty && !viaPop) {
+    const go = await askConfirm({
+      title: votT('Leave without saving? The changes on this page are lost.', '不保存就离开?此页面的改动会丢失。'),
+      confirmLabel: votT('Leave', '离开'),
+      danger: true,
+    });
+    if (!go) return;
+  }
+  _ed = null; _edDirty = false;
+  const sec = document.getElementById('tab-voting');
+  if (sec) sec.classList.remove('vot-editing');
+  const mount = $('#vot-editor');
+  if (mount) mount.innerHTML = '';   // out of the tab order, not merely hidden
+  if (_edPop) {
+    window.removeEventListener('popstate', _edPop);
+    _edPop = null;
+    if (!viaPop) history.back();     // unwind the entry the open pushed
+  }
+  votRenderAll();
+}
+
+function votEdSet(field, value) {
+  if (!_ed) return;
+  _ed[field] = value;
+  _edDirty = true;
+  votPreviewSoon();
+}
+
+function votEdOptSet(i, field, value) {
+  if (!_ed || !_ed.options[i]) return;
+  _ed.options[i][field] = value;
+  _edDirty = true;
+  votPreviewSoon();
+}
+
+function votEdLang(lang) {
+  if (!_ed) return;
+  _edLang = lang === 'cn' ? 'cn' : 'en';
+  votRenderEditor();
+}
+
+function votEdAddOption() {
+  if (!_ed || _ed.options.length >= 8) return;
+  _ed.options.push({
     label_en: '', label_cn: '',
-    color_hex: POLL_PALETTE[i % POLL_PALETTE.length],
+    color_hex: POLL_PALETTE[_ed.options.length % POLL_PALETTE.length],
     votes: 0,
   });
-  renderPollForm();
+  _edDirty = true;
+  votRenderEditor();
 }
 
-function pollOptRemove(i) {
-  if (!_pollDraft) return;
-  if ((_pollDraft.options[i]?.votes || 0) > 0) return;
-  _pollDraft.options.splice(i, 1);
-  renderPollForm();
+function votEdRemoveOption(i) {
+  if (!_ed || !_ed.options[i]) return;
+  if ((_ed.options[i].votes || 0) > 0) return;   // votes are never dropped quietly
+  _ed.options.splice(i, 1);
+  _edDirty = true;
+  votRenderEditor();
 }
 
-function _collectPollFormState() {
-  const d = _pollDraft;
-  if (!d) return null;
+function votRenderEditor() {
+  const mount = $('#vot-editor');
+  if (!mount || !_ed) return;
+  const d = _ed;
+  const isEdit = !!d.id;
+  const cn = _edLang === 'cn';
+  const qField = cn ? 'question_cn' : 'question_en';
+  const eField = cn ? 'explainer_cn' : 'explainer_en';
+  const kField = cn ? 'category_cn' : 'category_en';
+  const lField = cn ? 'label_cn' : 'label_en';
+  const { total } = votTally(d);
+  const hasVotes = (d.options || []).some(o => (o.votes || 0) > 0);
+
+  const title = votPick(d.question_en, d.question_cn) || votT('New poll', '新建投票');
+  const state = d.status === 'open'
+    ? votT('Open. Customers can vote on it now.', '进行中。顾客现在可以投票。')
+    : d.status === 'closed'
+      ? votT('Closed. It shows under past results.', '已结束。展示在“往期结果”中。')
+      : isEdit ? votT('Draft. Nobody can see it yet.', '草稿。顾客还看不到。')
+               : votT('New. Nothing is saved until you save it.', '新建。保存前不会存下任何内容。');
+
+  // One Dusk on this page, and it is the commit (§1.8 rule 1). The other exit
+  // is Secondary, never Ghost — an operator half-way through a poll has to be
+  // able to find the way out (§1.7a).
+  const primary = d.status === 'draft'
+    ? `<button class="btn btn-primary vot-dusk" onclick="votSavePoll(event, 'open')">${escapeHtml(votT('Publish', '发布'))}</button>`
+    : `<button class="btn btn-primary vot-dusk" onclick="votSavePoll(event)">${escapeHtml(votT('Save changes', '保存更改'))}</button>`;
+  const secondary = d.status === 'draft'
+    ? `<button class="btn" onclick="votSavePoll(event)">${escapeHtml(votT('Save draft', '保存草稿'))}</button>`
+    : d.status === 'open'
+      ? `<button class="btn" onclick="votSetStatus(${d.id}, 'closed', event)">${escapeHtml(votT('Close poll', '关闭投票'))}</button>`
+      : `<button class="btn" onclick="votSetStatus(${d.id}, 'open', event)">${escapeHtml(votT('Reopen', '重新开启'))}</button>`;
+
+  const opts = (d.options || []).map((o, i) => `
+    <div class="vot-opt">
+      <input type="color" value="${escapeAttr(o.color_hex || POLL_PALETTE[i % POLL_PALETTE.length])}"
+             oninput="votEdOptSet(${i}, 'color_hex', this.value)"
+             aria-label="${escapeAttr(votT('Colour for option ', '选项颜色 ') + votLetter(i))}"/>
+      <input type="text" class="vot-opt-label" value="${escapeAttr(o[lField] || '')}"
+             placeholder="${escapeAttr(votLetter(i))}"
+             aria-label="${escapeAttr(votT('Option ', '选项 ') + votLetter(i))}"
+             oninput="votEdOptSet(${i}, '${lField}', this.value)"/>
+      <span class="vot-opt-n">${votSafe(String(o.votes || 0))} ${escapeHtml(votT('votes', '票'))}</span>
+      <button class="vot-opt-rm" onclick="votEdRemoveOption(${i})"
+              ${(o.votes || 0) > 0 ? 'disabled' : ''}
+              aria-label="${escapeAttr(votT('Remove option ', '删除选项 ') + votLetter(i))}">&times;</button>
+    </div>`).join('');
+
+  const winner = (d.options || []).map((o, i) =>
+    `<option value="${o.id || ''}" ${String(d.winner_option_id || '') === String(o.id || '') ? 'selected' : ''}>`
+    + `${escapeHtml(votLetter(i))} · ${escapeHtml(votPick(o.label_en, o.label_cn) || votT('(unnamed)', '(未命名)'))}</option>`
+  ).join('');
+
+  mount.innerHTML = `
+    <div class="vot-ed">
+      <button class="vot-ed-back" onclick="votCloseEditor()">&larr; ${escapeHtml(votT('Voting', '投票'))}</button>
+
+      <div class="vot-ed-head">
+        <div class="vot-ed-id">
+          <h2>${votSafe(title)}</h2>
+          <div class="vot-ed-state">${escapeHtml(state)}</div>
+        </div>
+        ${isEdit ? `<button class="btn vot-del" onclick="votDeletePoll(event)">${escapeHtml(votT('Delete', '删除'))}</button>` : ''}
+        ${secondary}
+        ${primary}
+      </div>
+
+      <div class="vot-ed-cols">
+        <div class="vot-ed-form">
+
+          <div class="vot-group">
+            <h3>The question · 问题</h3>
+            <div class="vot-langs">
+              <button class="vot-lang${cn ? '' : ' is-on'}" onclick="votEdLang('en')">English</button>
+              <button class="vot-lang${cn ? ' is-on' : ''}" onclick="votEdLang('cn')">中文</button>
+            </div>
+            <div class="vot-field">
+              <label for="vot-ed-q">${escapeHtml(votT('Question', '问题'))}</label>
+              <input type="text" id="vot-ed-q" value="${escapeAttr(d[qField] || '')}"
+                     oninput="votEdSet('${qField}', this.value)"/>
+              <div class="vot-hint" id="vot-ed-q-err"></div>
+            </div>
+            <div class="vot-field">
+              <label for="vot-ed-kick">${escapeHtml(votT('Label above the question', '问题上方的小标题'))}</label>
+              <input type="text" id="vot-ed-kick" value="${escapeAttr(d[kField] || '')}"
+                     oninput="votEdSet('${kField}', this.value)"/>
+            </div>
+            <div class="vot-field">
+              <label for="vot-ed-exp">${escapeHtml(votT('Line under it', '问题下方的说明'))}</label>
+              <textarea id="vot-ed-exp" oninput="votEdSet('${eField}', this.value)">${escapeHtml(d[eField] || '')}</textarea>
+            </div>
+          </div>
+
+          <div class="vot-group">
+            <div class="vot-group-head">
+              <h3>Options · 选项</h3>
+              <span class="vot-sec-count">${votSafe(d.options.length + ' / 8')}</span>
+            </div>
+            ${opts}
+            <div class="vot-field">
+              <button class="btn" onclick="votEdAddOption()" ${d.options.length >= 8 ? 'disabled' : ''}>${escapeHtml(votT('Add option', '添加选项'))}</button>
+              <div class="vot-hint">${escapeHtml(votT('The first row is A. An option with votes can only go by clearing the whole poll.', '第一行即为 A。已有票数的选项只能通过清空整个投票来删除。'))}</div>
+            </div>
+            ${hasVotes ? `
+            <label class="vot-check" for="vot-ed-reset">
+              <input type="checkbox" id="vot-ed-reset"/>
+              <span class="vot-danger">${escapeHtml(votT(`Clear all ${total} votes and rebuild the options`, `清空全部 ${total} 票并重建选项`))}</span>
+            </label>
+            <div class="vot-hint">${escapeHtml(votT('Only when you are rewriting the question entirely. Editing the labels in place keeps every vote.', '仅在彻底改写问题时使用。就地修改文字不会影响任何票数。'))}</div>` : ''}
+          </div>
+
+          <div class="vot-group">
+            <h3>Rules · 规则</h3>
+            <div class="vot-split">
+              <div class="k">
+                <span class="t">${escapeHtml(votT('Points for voting', '投票奖励积分'))}</span>
+                <span class="vot-hint">${escapeHtml(votT('Earned once per customer, per poll.', '每位顾客每个投票只能获得一次。'))}</span>
+              </div>
+              <div class="v"><input type="number" min="0" max="100" value="${escapeAttr(String(d.reward_points != null ? d.reward_points : 5))}"
+                     aria-label="${escapeAttr(votT('Points for voting', '投票奖励积分'))}"
+                     oninput="votEdSet('reward_points', this.value)"/></div>
+            </div>
+            <div class="vot-split">
+              <div class="k">
+                <span class="t">${escapeHtml(votT('Closes', '截止时间'))}</span>
+                <span class="vot-hint">${escapeHtml(votT('Shown to customers as days left. Nothing closes on its own — you close it here.', '向顾客显示为剩余天数。系统不会自动关闭 —— 由你在此关闭。'))}</span>
+              </div>
+              <div class="v"><input type="datetime-local" value="${escapeAttr(d.closes_at || '')}"
+                     aria-label="${escapeAttr(votT('Closes', '截止时间'))}"
+                     oninput="votEdSet('closes_at', this.value)"/></div>
+            </div>
+            <div class="vot-split">
+              <div class="k">
+                <span class="t">${escapeHtml(votT('Feature it', '设为精选'))}</span>
+                <span class="vot-hint">${escapeHtml(votT('Sits at the top of Your say as the big card.', '在“你说了算”页面顶部以大卡片展示。'))}</span>
+              </div>
+              <div class="v">
+                <label class="vot-check" for="vot-ed-feat">
+                  <input type="checkbox" id="vot-ed-feat" ${d.is_featured ? 'checked' : ''}
+                         onchange="votEdSet('is_featured', this.checked ? 1 : 0)"/>
+                  <span>${escapeHtml(votT('Featured', '精选'))}</span>
+                </label>
+              </div>
+            </div>
+            <div class="vot-split">
+              <div class="k">
+                <span class="t">${escapeHtml(votT('Order', '排序'))}</span>
+                <span class="vot-hint">${escapeHtml(votT('Lower numbers come first among polls in the same state.', '同一状态下,数值越小越靠前。'))}</span>
+              </div>
+              <div class="v"><input type="number" value="${escapeAttr(String(d.sort_order || 0))}"
+                     aria-label="${escapeAttr(votT('Order', '排序'))}"
+                     oninput="votEdSet('sort_order', this.value)"/></div>
+            </div>
+            ${isEdit && d.status === 'closed' ? `
+            <div class="vot-split">
+              <div class="k">
+                <span class="t">${escapeHtml(votT('Winner', '获胜选项'))}</span>
+                <span class="vot-hint">${escapeHtml(votT('Highlighted under past results. Left alone, the most-voted option wins.', '在“往期结果”中高亮显示。留空则票数最高者获胜。'))}</span>
+              </div>
+              <div class="v"><select aria-label="${escapeAttr(votT('Winner', '获胜选项'))}" onchange="votEdSet('winner_option_id', this.value)">
+                <option value="">${escapeHtml(votT('The most-voted option', '票数最高的选项'))}</option>
+                ${winner}
+              </select></div>
+            </div>` : ''}
+          </div>
+
+          <div class="vot-group">
+            <h3>Vote count shown · 对外显示的票数</h3>
+            <div class="vot-split">
+              <div class="k">
+                <span class="t">${escapeHtml(votT('Show at least', '至少显示'))}</span>
+                <span class="vot-hint">${escapeHtml(votT('Every option scales by the same factor, so the leader and the percentages hold. Your own figures never change.', '所有选项按同一比例放大,领先项与百分比保持不变。后台数字始终不变。'))}</span>
+              </div>
+              <div class="v"><input type="number" min="0" max="100000" value="${escapeAttr(String(d.display_min_total || 0))}"
+                     aria-label="${escapeAttr(votT('Show at least', '至少显示'))}"
+                     oninput="votEdSet('display_min_total', this.value); votBoostLine();"/></div>
+            </div>
+            <div class="vot-hint" id="vot-ed-boost"></div>
+          </div>
+
+        </div>
+
+        <div class="vot-prev-wrap">
+          <div class="vot-prev-cap">${escapeHtml(votT('On the phone, as a customer sees it', '顾客在手机上看到的样子'))}</div>
+          <div class="vot-phone" id="vot-ed-phone"></div>
+        </div>
+      </div>
+    </div>`;
+
+  votBoostLine();
+  votRenderPreview();
+}
+
+// The real → shown line under the display floor. Mirrors the server's
+// applyPollDisplayBoost exactly: scale every option by the same factor when the
+// floor is above real turnout; never shrink; nothing to inflate at zero.
+function votBoostLine() {
+  const out = $('#vot-ed-boost');
+  if (!out || !_ed) return;
+  const { total } = votTally(_ed);
+  const floor = Math.max(0, parseInt(_ed.display_min_total, 10) || 0);
+  if (!floor || total <= 0 || floor <= total) {
+    out.textContent = total > 0
+      ? votT(`Off. Customers see the real ${total} votes.`, `关闭。顾客看到真实的 ${total} 票。`)
+      : votT('Off. Nothing is scaled until the first real vote.', '关闭。在第一票之前不会放大任何数字。');
+    return;
+  }
+  const factor = floor / total;
+  let shown = 0;
+  (_ed.options || []).forEach(o => { shown += Math.round((o.votes || 0) * factor); });
+  out.textContent = votT(
+    `Customers will see about ${shown} votes — every option ×${factor.toFixed(1)}.`,
+    `顾客将看到约 ${shown} 票 —— 所有选项均放大 ${factor.toFixed(1)} 倍。`
+  );
+}
+
+// Settle the preview rather than repaint it on every keystroke (200ms, §4).
+function votPreviewSoon() {
+  if (_prevTimer) clearTimeout(_prevTimer);
+  _prevTimer = setTimeout(() => { _prevTimer = null; votRenderPreview(); }, 200);
+}
+
+function votRenderPreview() {
+  const box = $('#vot-ed-phone');
+  if (!box || !_ed) return;
+  const d = _ed;
+  const cn = _edLang === 'cn';
+  const pick = (en, zh) => (cn ? (zh || en) : (en || zh));
+  const { total, leadId } = votTally(d);
+  const pts = d.reward_points != null ? d.reward_points : 5;
+  const tagline = String(pick(_votCfg.intro_en, _votCfg.intro_cn) || '').replace(/\{pts\}/g, String(pts));
+
+  const rows = (d.options || []).map(o => {
+    const label = pick(o.label_en, o.label_cn);
+    const votes = o.votes || 0;
+    const lead = o.id && o.id === leadId;
+    const pct = total > 0 ? Math.round((votes / total) * 100) : 0;
+    return `
+      <div class="vot-phone-opt${lead ? ' is-lead' : ''}">
+        <span class="vot-phone-dot" style="background: ${escapeAttr(o.color_hex || 'var(--td-border)')};"></span>
+        <span>${label ? votSafe(label) : escapeHtml(votT('(empty option)', '(空选项)'))}</span>
+        ${(_votCfg.show_counts !== false && total > 0) ? `<span class="vot-phone-n">${votSafe(pct + '%')}</span>` : ''}
+      </div>`;
+  }).join('');
+
+  const kicker = pick(d.category_en, d.category_cn);
+  const question = pick(d.question_en, d.question_cn);
+  const explainer = pick(d.explainer_en, d.explainer_cn);
+
+  box.innerHTML = `
+    <div>
+      <div class="vot-phone-h">${escapeHtml(votT('Your say', '你说了算'))}</div>
+      ${tagline ? `<div class="vot-phone-sub" style="margin-top: 6px;">${votSafe(tagline)}</div>` : ''}
+    </div>
+    <div class="vot-phone-card">
+      ${kicker ? `<div class="vot-phone-kick">${votSafe(kicker)}</div>` : ''}
+      <div class="vot-phone-q">${question ? votSafe(question) : escapeHtml(votT('Your question goes here', '这里显示你的问题'))}</div>
+      ${explainer ? `<div class="vot-phone-exp">${votSafe(explainer)}</div>` : ''}
+      <div class="vot-phone-opts">${rows}</div>
+      <div class="vot-phone-foot">${escapeHtml(
+        _votCfg.show_counts === false
+          ? votT('One pick each. The leader is marked; the numbers stay hidden.', '每人一票。只标出领先项,不显示数字。')
+          : votT('One pick each. The result updates as people vote.', '每人一票。结果随投票实时更新。')
+      )}</div>
+    </div>
+    <div class="vot-phone-foot">${escapeHtml(votT('Past results appear here once a poll closes.', '投票结束后,结果会显示在这里。'))}</div>`;
+}
+
+// ── Save + delete ─────────────────────────────────────────────────────────
+function votCollect() {
+  const d = _ed;
   const out = {
-    question_en:  $('#vot-q-en').value.trim(),
-    question_cn:  $('#vot-q-cn').value.trim(),
-    category_en:  $('#vot-cat-en').value.trim(),
-    category_cn:  $('#vot-cat-cn').value.trim(),
-    explainer_en: $('#vot-exp-en').value.trim(),
-    explainer_cn: $('#vot-exp-cn').value.trim(),
-    status:       $('#vot-status').value,
-    reward_points: Math.max(0, parseInt($('#vot-reward').value, 10) || 0),
-    is_featured:  $('#vot-featured').value === '1' ? 1 : 0,
-    closes_at:    $('#vot-closes').value || null,
-    sort_order:   parseInt($('#vot-sort').value, 10) || 0,
-    display_min_total: Math.max(0, parseInt($('#vot-display-min')?.value, 10) || 0),
-    options:      d.options.map((o, i) => ({
-      id:         o.id || null,
-      label_en:   String(o.label_en || '').trim(),
-      label_cn:   String(o.label_cn || '').trim(),
-      color_hex:  String(o.color_hex || '').trim(),
-      image_url:  String(o.image_url || '').trim(),
+    question_en: String(d.question_en || '').trim(),
+    question_cn: String(d.question_cn || '').trim(),
+    category_en: String(d.category_en || '').trim(),
+    category_cn: String(d.category_cn || '').trim(),
+    explainer_en: String(d.explainer_en || '').trim(),
+    explainer_cn: String(d.explainer_cn || '').trim(),
+    status: d.status,
+    reward_points: Math.max(0, parseInt(d.reward_points, 10) || 0),
+    is_featured: d.is_featured ? 1 : 0,
+    closes_at: d.closes_at || null,
+    sort_order: parseInt(d.sort_order, 10) || 0,
+    display_min_total: Math.max(0, parseInt(d.display_min_total, 10) || 0),
+    options: (d.options || []).map((o, i) => ({
+      id: o.id || null,
+      label_en: String(o.label_en || '').trim(),
+      label_cn: String(o.label_cn || '').trim(),
+      color_hex: String(o.color_hex || '').trim(),
+      image_url: String(o.image_url || '').trim(),
       sort_order: i,
     })),
   };
   if (d.id) {
-    const winSel = $('#vot-winner');
-    if (winSel) out.winner_option_id = winSel.value ? parseInt(winSel.value, 10) : null;
-    const replace = $('#vot-replace-opts');
-    if (replace) out.replace_options = !!replace.checked;
+    if ('winner_option_id' in d) out.winner_option_id = d.winner_option_id ? parseInt(d.winner_option_id, 10) : null;
+    const reset = $('#vot-ed-reset');
+    if (reset) out.replace_options = !!reset.checked;
   }
   return out;
 }
 
-async function savePoll() {
-  if (!_pollDraft) return;
-  const body = _collectPollFormState();
-  if (!body.question_en) { toast('Question (EN) is required · 英文问题必填', 'err'); return; }
-  const realOpts = body.options.filter(o => o.label_en);
-  if (realOpts.length < 2) { toast('At least 2 options required · 至少需要 2 个选项', 'err'); return; }
-  body.options = realOpts;
+async function votSavePoll(ev, publishAs) {
+  const btn = ev && ev.currentTarget;   // synchronously — see votSaveConfig
+  if (!_ed) return;
+  const body = votCollect();
+
+  // The failure renders beside the field that caused it and stays there
+  // (§1.12) — a toast that flies past is not an error state.
+  const qErr = $('#vot-ed-q-err');
+  if (!body.question_en && !body.question_cn) {
+    if (qErr) {
+      qErr.classList.add('vot-danger');
+      qErr.textContent = votT('Give the poll a question — customers see this line first.', '请填写问题 —— 顾客最先看到的就是这一行。');
+    }
+    const q = $('#vot-ed-q'); if (q) q.focus();
+    return;
+  }
+  if (qErr) { qErr.classList.remove('vot-danger'); qErr.textContent = ''; }
+  // The server keys polls off the English question, so a Chinese-only poll
+  // still needs something in that column; its own text is what goes there.
+  if (!body.question_en) body.question_en = body.question_cn;
+
+  const named = body.options.filter(o => o.label_en || o.label_cn);
+  if (named.length < 2) {
+    toast(votT('A poll needs at least two options to choose between.', '投票至少需要两个可供选择的选项。'), 'err');
+    return;
+  }
+  named.forEach(o => { if (!o.label_en) o.label_en = o.label_cn; });
+  body.options = named;
+
+  if (publishAs === 'open' && body.status !== 'open') {
+    if (!(await askConfirm({
+      title: votT('Publish this poll? Customers see it immediately and start earning points for voting.', '发布此投票?顾客会立即看到,并可通过投票获得积分。'),
+      confirmLabel: votT('Publish poll', '发布投票'),
+    }))) return;
+    body.status = 'open';
+  }
+  if (body.replace_options && !(await askConfirm({
+    title: votT('Clear every vote on this poll? The tally cannot be recovered.', '清空此投票的全部票数?票数无法恢复。'),
+    confirmLabel: votT('Clear votes', '清空票数'),
+    danger: true,
+  }))) return;
 
   try {
-    if (_pollDraft.id) {
-      await api('/api/retail-admin/polls/' + _pollDraft.id, { method: 'PUT', body });
-      toast('Poll saved · 投票已保存');
+    if (_ed.id) {
+      await adminWrite({
+        btn, url: '/api/retail-admin/polls/' + _ed.id, method: 'PUT', body,
+        errLabelEn: 'Save failed', errLabelCn: '保存失败',
+      });
+      toast(body.status === 'open' && publishAs === 'open' ? votT('Poll published', '投票已发布') : votT('Poll saved', '投票已保存'));
     } else {
-      await api('/api/retail-admin/polls', { method: 'POST', body });
-      toast('Poll created · 投票已创建');
+      await adminWrite({
+        btn, url: '/api/retail-admin/polls', method: 'POST', body,
+        errLabelEn: 'Could not create the poll', errLabelCn: '创建投票失败',
+      });
+      toast(body.status === 'open' ? votT('Poll published', '投票已发布') : votT('Poll created', '投票已创建'));
     }
-    _pollDraft = null;
-    $('#vot-form-mount').innerHTML = '';
-    await loadPolls();
-  } catch (e) {
-    toast('Save failed · 保存失败: ' + e.message, 'err');
-  }
+    _edDirty = false;
+    await votLoad();
+    await votCloseEditor();
+  } catch (e) { /* already reported, and the draft is still on screen */ }
 }
 
-function cancelPollEdit() {
-  _pollDraft = null;
-  $('#vot-form-mount').innerHTML = '';
-}
-
-async function quickPollStatus(id, status) {
-  if (status === 'open' && !(await askConfirm({ title: 'Publish this poll? Customers will see it immediately and start earning points for voting. · 发布此投票?顾客会立即看到并通过投票获得积分。', confirmLabel: 'Publish poll' }))) return;
-  if (status === 'closed' && !(await askConfirm({ title: 'Close this poll? Voting will be locked. · 关闭此投票?投票将被锁定。', confirmLabel: 'Close poll' }))) return;
+async function votDeletePoll(ev) {
+  const btn = ev && ev.currentTarget;   // synchronously — see votSaveConfig
+  if (!_ed || !_ed.id) return;
+  const { total } = votTally(_ed);
+  if (!(await askConfirm({
+    title: total
+      ? votT(`Delete this poll? Its ${total} votes go with it.`, `删除此投票?已有的 ${total} 票也会一并删除。`)
+      : votT('Delete this poll?', '删除此投票?'),
+    confirmLabel: votT('Delete poll', '删除投票'),
+    danger: true,
+  }))) return;
   try {
-    await api('/api/retail-admin/polls/' + id, { method: 'PUT', body: { status } });
-    toast('Poll → · 投票状态 → ' + status);
-    await loadPolls();
-  } catch (e) { toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
-}
-
-async function deletePoll(id) {
-  if (!(await askConfirm({ title: 'Delete this poll? All vote records are removed too. · 删除此投票?所有投票记录也将一并删除。', confirmLabel: 'Delete poll', danger: true }))) return;
-  try {
-    await api('/api/retail-admin/polls/' + id, { method: 'DELETE' });
-    if (_pollDraft && _pollDraft.id === id) {
-      _pollDraft = null;
-      $('#vot-form-mount').innerHTML = '';
-    }
-    toast('Poll deleted · 投票已删除');
-    await loadPolls();
-  } catch (e) { toast('Delete failed · 删除失败: ' + e.message, 'err'); }
-}
-
-// Intro tagline editor — the line shown under the "Your say" headline.
-// Stored under storefront_config.voting.config; read live by the mini app.
-async function loadVotingConfig() {
-  try {
-    const r = await api('/api/retail-admin/voting/config');
-    const c = r.data || {};
-    const en = $('#vot-intro-en'), cn = $('#vot-intro-cn'), sc = $('#vot-show-counts');
-    if (en) en.value = c.intro_en || '';
-    if (cn) cn.value = c.intro_cn || '';
-    if (sc) sc.checked = c.show_counts !== false;
-  } catch (e) { /* leave placeholders if the load fails */ }
-}
-
-async function saveVotingConfig(btn) {
-  if (btn) btn.disabled = true;
-  try {
-    await api('/api/retail-admin/voting/config', {
-      method: 'PUT',
-      body: {
-        intro_en: $('#vot-intro-en').value.trim(),
-        intro_cn: $('#vot-intro-cn').value.trim(),
-        show_counts: !!($('#vot-show-counts') && $('#vot-show-counts').checked),
-      },
+    await adminWrite({
+      btn, url: '/api/retail-admin/polls/' + _ed.id, method: 'DELETE',
+      errLabelEn: 'Delete failed', errLabelCn: '删除失败',
     });
-    toast('Saved · 已保存');
-  } catch (e) {
-    toast('Save failed · 保存失败: ' + e.message, 'err');
-  } finally {
-    if (btn) btn.disabled = false;
-  }
+    toast(votT('Poll deleted', '投票已删除'));
+    _edDirty = false;
+    await votLoad();
+    await votCloseEditor();
+  } catch (e) { /* adminWrite has already put the reason on screen */ }
 }
 
+// ── Wiring ────────────────────────────────────────────────────────────────
 document.querySelector('[data-tab="voting"]').addEventListener('click', () => {
-  if (!POLLS_LOADED) { POLLS_LOADED = true; loadPolls(); loadVotingConfig(); }
+  // Every visit re-reads, not just the first. Votes arrive while the operator is
+  // elsewhere, and the old page made them press Refresh to find out. Skipped
+  // while the editor is up, so a reload can't pull the ground out from under a
+  // half-written poll.
+  if (_ed) return;
+  POLLS_LOADED = true;
+  votLoad();
 });
+
+// The walker swaps the static chrome by itself; everything painted from JS has
+// to be repainted, or half the page stays in the language nobody chose.
+if (window.onLangChange) {
+  window.onLangChange(() => {
+    if (!POLLS_LOADED) return;
+    if (_ed) votRenderEditor();
+    else votRenderAll();
+    const btn = $('#vot-set-toggle'), body = $('#vot-set-body');
+    if (btn && body) btn.textContent = body.hidden ? votT('Open', '展开') : votT('Hide', '收起');
+  });
+}
 
 // ─── About page editor ─────────────────────────────────────────────────
 // Stored as one JSON blob under storefront_config.about.content. The
