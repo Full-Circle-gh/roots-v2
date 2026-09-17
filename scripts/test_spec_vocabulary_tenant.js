@@ -326,23 +326,26 @@ check('the preview signs with this shop\'s line and name, or with none', () => {
   assert.notStrictEqual(at, -1, 'nothing decides whether to draw the colophon at all');
 });
 
-check('the signature route answers a name but never invents a slogan', () => {
+// THESE TWO CHECKS MOVED, they were not withdrawn. They used to read the
+// signature route's BODY — its Roots branch, its tenant test and its empty
+// answer — all of which now live in lib/brand-signature.js, because the mini
+// app needed the identical answer and a second copy of an answer is a second
+// answer. The substance is asserted against that module, over real calls rather
+// than over a regexp on a route body, in scripts/test_brand_signature.js:
+// Roots byte-for-byte, another tenant with no cast and no invented slogan, and
+// the mini app's duplicated rule proved to agree case for case.
+//
+// What is worth checking HERE is the thing that file cannot see from the editor's
+// side: that the route the EDITOR asks is the delegating one, so the page and
+// the phone cannot be answered differently.
+check('the route the editor asks delegates to the one shared answer', () => {
   const at = RETAIL_JS.indexOf("router.get('/api/retail-admin/brand/signature'");
   assert.notStrictEqual(at, -1, 'there is no signature route');
-  const body = RETAIL_JS.slice(at, at + 1200);
-  assert.ok(/brand_name \|\| t\.name/.test(body),
-    "a non-Roots tenant is not given its own name");
-  assert.ok(/tagline_en: '', tagline_cn: ''/.test(body),
-    'a non-Roots tenant is handed a slogan the platform made up');
-});
-
-check('the platform answers who has a cast, and answers empty by default', () => {
-  const at = RETAIL_JS.indexOf("router.get('/api/retail-admin/brand/signature'");
-  assert.notStrictEqual(at, -1, 'there is no characters route');
-  const body = RETAIL_JS.slice(at, at + 1400);
-  assert.ok(/Number\(t\.id\) === 1/.test(body),
-    'the route does not decide by tenant, so it answers the same list to everyone');
-  assert.ok(/: \[\]/.test(body), 'a tenant that is not Roots is not answered an empty list');
+  const body = RETAIL_JS.slice(at, at + 400);
+  assert.ok(/brandSignature\.signatureFor\(req\.tenant\)/.test(body),
+    'the route answers from its own logic again — the phone and the editor will drift apart');
+  assert.ok(!/ROOTS_IP_CHARACTERS/.test(RETAIL_JS),
+    'routes/retail.js kept its own cast beside the shared module');
 });
 
 check('an empty cast hides the whole fold, not just the grid', () => {

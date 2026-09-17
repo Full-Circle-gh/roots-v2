@@ -261,18 +261,21 @@
            sheet opened from "Add to basket" (see the options picker below),
            not inline — so the choice is unmissable like the size picker. -->
 
-      <!-- Colophon — page sign-off. One IP character (mapped by category)
-           centred on oat fill, "From Soil to Soul" tagline below, then a
-           small "Roots · ESTD 2017" meta line bracketed by hairlines.
+      <!-- Colophon — page sign-off: one character centred on oat fill, the house
+           line below it, then the shop's name on a hairline rule. ALL THREE COME
+           FROM THIS SHOP'S OWN SIGNATURE (§156) — they were Roots' literals, in
+           a codebase published once per tenant, so every merchant's shopper-
+           facing page was signed as Roots. Each part hides itself when this shop
+           has none, and the block is not drawn at all when it has nothing.
            Renders ONCE per page per v1 spec. -->
-      <view class="colophon">
+      <view wx:if="{{colophonShow}}" class="colophon">
         <view wx:if="{{colophonImg}}" class="colophon-character">
           <image src="{{colophonImg}}" mode="aspectFit" class="colophon-character-img"/>
         </view>
-        <view class="colophon-tagline f-bear">{{colophonTagline}}</view>
-        <view class="colophon-meta f-toni">
+        <view wx:if="{{colophonTagline}}" class="colophon-tagline f-bear">{{colophonTagline}}</view>
+        <view wx:if="{{colophonHouse}}" class="colophon-meta f-toni">
           <view class="colophon-rule"></view>
-          <text>Roots · ESTD 2017</text>
+          <text>{{colophonHouse}}</text>
           <view class="colophon-rule"></view>
         </view>
       </view>

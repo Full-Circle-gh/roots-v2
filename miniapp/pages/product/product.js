@@ -9,6 +9,39 @@ const lang     = require('../../utils/lang');
 const cart     = require('../../utils/cart');
 const track    = require('../../utils/track');
 const delivery = require('../../utils/delivery');
+const config   = require('../../utils/config');
+
+// WHICH CHARACTER SIGNS THIS PAGE — the mini app's half of lib/brand-signature
+// resolveCharacter(). A WeChat bundle cannot require from lib/, so this is a
+// real and permanent duplication of the RULE (never of the data — the cast, the
+// map and the fallback all arrive on the storefront config, so they cannot
+// drift). scripts/test_brand_signature.js lifts this function out of this file
+// and runs it against the same cases as the server's copy, which is the only
+// thing standing between one rule and two silently different ones. Same pattern,
+// and the same reason, as the nutrition lists above it.
+//
+// The one rule: it can only ever return a character this shop HAS. An override
+// is the product's stored choice and is honoured as typed; an auto pick is
+// checked against the cast; a shop with no cast gets no character.
+function resolveColophonCharacter(sig, override, category) {
+  const s = sig || {};
+  const chosen = String(override || '').trim();
+  if (chosen) return chosen;
+  const cast = Array.isArray(s.characters) ? s.characters : [];
+  if (!cast.length) return '';
+  const cat = String(category || '').toLowerCase();
+  const map = Array.isArray(s.auto_map) ? s.auto_map : [];
+  let key = '';
+  for (let i = 0; i < map.length; i++) {
+    const pair = map[i];
+    if (!Array.isArray(pair) || pair.length < 2) continue;
+    let rx;
+    try { rx = new RegExp(pair[0]); } catch (e) { continue; }
+    if (rx.test(cat)) { key = String(pair[1]); break; }
+  }
+  if (!key) key = String(s.fallback_character || '');
+  return cast.some((c) => c && c.key === key) ? key : '';
+}
 const diag     = require('../../utils/diag');
 const optionText = require('../../utils/options');
 
@@ -176,8 +209,10 @@ Page({
     keywords: '',       // bilingual short descriptors (e.g. "raw, alive")
     tagline: '',        // bold one-liner slogan
     taglineSegments: [], // [{kind:'plain'|'mark', text}] — pre-parsed for [[ink-mark]]
-    colophonImg: '',     // resolved IP-character image path
-    colophonTagline: '', // resolved tagline text ("From Soil to Soul" or override)
+    colophonImg: '',     // resolved character image path, '' when this shop has no cast
+    colophonTagline: '', // the product's own tagline, else this shop's house line
+    colophonHouse: '',   // this shop's name on the hairline rule, '' when it has none
+    colophonShow: false, // nothing to sign with → the block is not drawn at all
     badges: [],
     shipFromSupplier: false, // drop-ship product → show "ships separately" notice
     options: [],
@@ -668,33 +703,49 @@ Page({
       }
     }
 
-    // Colophon — IP character + tagline. Office can override either field
-    // in /retail-admin → Products; blank fields fall back to:
-    //   character → mapped from product category (soilsoul default)
-    //   tagline   → "From Soil to Soul" / "从土壤到灵魂"
-    const COLOPHON_MAP = [
-      [/(sauce|dip|condiment|paste|chutney)/, 'soilsoul'],
-      [/(spread|butter|jam)/,                  'skater'],
-      [/(drink|kombucha|juice|beverage|tea)/,  'kombucha-gang'],
-      [/(protein|powder|supplement|flour)/,    'flex'],
-      [/(root|tuber|carrot|radish|beet)/,      'radishes'],
-      [/(fungi|mushroom)/,                     'mushroom'],
-      [/(legume|bean|pea|lentil|chickpea)/,    'peas'],
-      [/(onion|allium|garlic|leek)/,           'onion'],
-      [/(broccoli|cabbage|leafy|green)/,       'broccoli'],
-    ];
-    const overrideChar = (p.colophon_character || '').trim();
-    let ipKey = overrideChar;
-    if (!ipKey) {
-      const cat = (p.category || '').toLowerCase();
-      ipKey = (COLOPHON_MAP.find(([rx]) => rx.test(cat)) || [, 'soilsoul'])[1];
-    }
-    const colophonImg = '/assets/brand/ip-' + ipKey + '.jpg';
+    // Colophon — character, house line, name. WHOSE COLOPHON THIS IS (§158).
+    //
+    // All three used to be literals right here: Roots' cast filed by category,
+    // a `soilsoul` fallback, and "From Soil to Soul" / "从土壤到灵魂". THIS
+    // CODEBASE IS PUBLISHED ONCE PER TENANT, each under its own WeChat AppID
+    // (utils/api.js), so those literals were not Roots' page signing itself —
+    // they were every tenant's SHOPPER-FACING product page signing itself as
+    // Roots. The fallback made it the default rather than an edge case: a shop
+    // that had chosen nothing got Roots' mascot drawn on its product.
+    //
+    // The signature now arrives on the storefront config, resolved per tenant
+    // by the same AppID that routes every other call, and the resolver is
+    // shared with the server and the product editor (lib/brand-signature) so
+    // three surfaces cannot disagree. An override the office typed still wins;
+    // an AUTO pick can only ever be a character this shop actually has; and a
+    // shop with no cast draws no character at all.
+    // READ IT THROUGH config.get, NOT app.globalData. Two reasons, and the
+    // second is a regression this would otherwise have shipped:
+    //
+    //   * recomputeDisplay() has no `app` of its own — the getApp() above it is
+    //     in a different method — so app.globalData here was a ReferenceError.
+    //   * app.globalData.config is only set once the launch fetch RESOLVES, and
+    //     app.js fires it deliberately fire-and-forget (onLaunch step 4) so a
+    //     page can paint first. The product fetch racing it would have left the
+    //     colophon blank on a cold launch — Roots' signature vanishing at
+    //     random. config.get() hydrates from the persisted last-good copy, so
+    //     it answers on the first paint of the first launch that has ever
+    //     completed one.
+    const sig = config.get('colophon', {}) || {};
+    const ipKey = resolveColophonCharacter(sig, p.colophon_character, p.category);
+    // Empty key → empty src, and the wxml already hides the character on that.
+    const colophonImg = ipKey ? '/assets/brand/ip-' + ipKey + '.jpg' : '';
     // Tagline override — pick the language-matching field first; if the
     // chosen language is empty, fall back to the OTHER language so the
-    // office can fill only one and have it show in both views.
+    // office can fill only one and have it show in both views. The house line
+    // behind it is this shop's own, and is empty for a shop that has none: a
+    // motto is not something the platform can invent on a merchant's behalf.
     const colophonTagline = lang.pick(p.colophon_tagline_en, p.colophon_tagline_cn, L)
-      || (L === 'cn' ? '从土壤到灵魂' : 'From Soil to Soul');
+      || (L === 'cn' ? (sig.tagline_cn || '') : (sig.tagline_en || ''));
+    const colophonHouse = String(sig.house || '');
+    // Nothing to sign with → the block is not drawn. Three empty elements and
+    // two hairlines is not a colophon.
+    const colophonShow = !!(colophonImg || colophonTagline || colophonHouse);
 
     // Description: split into segments so lines starting with "## " become
     // styled section headings (the office inserts them via the picker in the
@@ -816,6 +867,8 @@ Page({
       taglineSegments,
       colophonImg,
       colophonTagline,
+      colophonHouse,
+      colophonShow,
       // Drop-ship product — show an up-front "ships directly from supplier,
       // may arrive separately" notice before the customer adds it to the cart.
       shipFromSupplier: !!p.ship_from_supplier,

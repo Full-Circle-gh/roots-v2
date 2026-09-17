@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.294
+# Tacet shared-core consolidation — decisions record, v4.295
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,7 +23,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-17 · v4.294 — **§157 · THE SWEEP §155 ASKED FOR, AND THE TWO SHAPES IT FOUND THAT §155 DID NOT**, from Ash on that section's own scope note: *“ok do it”*. **SCOPE WAS ESTABLISHED BY GREPPING FOR THE ENGINE, NOT BY GUESSING**: three surfaces run a walker — the admin page, the modules that inject into it, and `public/product-editor.html`, which carries its own copy and would have been missed by looking at the admin alone. **16 elements fixed, 19 leaked text nodes**, all of them helper paragraphs with a `<b>`, `<em>`, `<strong>` or `<code>` inside the pair; the product editor was clean. **TWO SHAPES THE ORIGINAL SECTION DID NOT NAME**, which is the argument for sweeping rather than fixing what you were shown: a single Chinese glyph in the ENGLISH half (*“fill in both EN and 中”*) makes the walker refuse the node outright, stranding the whole sentence rather than its tail; and `${name}` inside the pair's Chinese half means the store's name renders in Chinese and is simply ABSENT in English, with nothing on either screen looking broken. **NEW GATE `scripts/check-glued-language.js`, two ratchets: 0 broken (structural, swept today) and 234 orphan** — Chinese in a node that is neither a pair nor shielded, which is a real backlog of three distinct kinds (a missing English half, a pair glued with no separator, and text that is correctly Chinese under §1.11's scope note, like a WeCom card preview). It is counted rather than failed because clearing it needs a person per string; counting it is what stops it growing. **PROVEN BY THREE MUTATIONS, one being the production markup restored verbatim — and an earlier pair that MISSED is recorded, because working out why exposed that the gate only failed the structural shape; the orphan ratchet exists because of it.** Nothing was minted: every Chinese string here is the one already in the tree, moved, so the vocabulary document is deliberately untouched. `test:fast` **272 on the merged head**; lint 0 errors. No schema, no server change, no change to `.gitignore` or CI; `package.json` gains the checker's npm alias.
+2026-09-17 · v4.295 — **§158 · NOBODY'S PRODUCT PAGE IS SIGNED BY SOMEBODY ELSE — DECIDED BY ASH**, on the item §156 recorded as owed and named as the more urgent of the two: *"do it"*. **THE COLOPHON IN THE MINI APP WAS THE SAME FAULT ON THE SURFACE THAT MATTERS.** §156 took Roots' cast, house line and name out of the product page EDITOR, and recorded in its own "still Roots' in source" list that `miniapp/pages/product/product.js` held its own copy of all three. The mini app is published **once per tenant, each under its own WeChat AppID** (`miniapp/utils/api.js`) off one shared codebase, so those literals were not Roots' page signing itself — they were **every merchant's shopper-facing product page signing itself as Roots**, and the category map's `soilsoul` fallback made that the DEFAULT rather than an edge case: a shop that had chosen nothing had Roots' mascot drawn onto its product with nobody having touched anything. The editor's leak was seen by the office; this one was seen by the customer. **ONE MODULE, BECAUSE A SECOND COPY OF AN ANSWER IS A SECOND ANSWER** — which is the fault itself repeating. `lib/brand-signature.js` holds the cast, the category map, the fallback, both taglines and the house line, plus the resolver, and is read by BOTH the operator route the editor asks (`/api/retail-admin/brand/signature`) and the public storefront config the phone asks (`/api/retail/config` → `cfg.colophon`). The public side resolves its tenant with `resolvePublicTenant(req)` — the same x-wx-appid-then-host resolver that already entered the ALS scope for that request — so **a customer request and an operator request cannot be answered differently**, and null means Roots on both, exactly as `composeSystem(shop)` already treats an absent tenant. **ROOTS IS BYTE-IDENTICAL** and a test asserts all ten characters in order, both taglines, the house line, every category mapping and the `soilsoul` fallback; every character's image file is checked to exist on disk, because a colophon rendering a broken tile is not an improvement. **THE DUPLICATION THAT REMAINS IS THE RULE, NEVER THE DATA.** A WeChat bundle cannot require from `lib/`, so `resolveColophonCharacter()` in the page is a real and permanent second copy of `resolveCharacter()` — the same permanent duplication `test_nutrition_rows.js` was written for. It is pulled out of the shipped file and run against the server's copy over 144 combinations of signature, override and category; the DATA cannot drift at all, because the cast and the map arrive over the wire. **TWO BUGS CAUGHT BY READING RATHER THAN ASSUMING, both of which would have shipped:** `recomputeDisplay()` has no `app` of its own — the `getApp()` above it is in a different method — so the first draft's `app.globalData.config` was a **ReferenceError on every product page**; and `app.globalData.config` is only set once the launch fetch RESOLVES, which `app.js` fires deliberately fire-and-forget so a page can paint first, so the product fetch racing it would have left **Roots' colophon blank at random on a cold launch**. Both are fixed by reading through `config.get('colophon', {})`, which hydrates from the persisted last-good copy. **EACH PART HIDES ITSELF AND THE BLOCK HIDES ITSELF:** no character, no line and no name is not a colophon, it is three empty elements and two hairlines, so it is not drawn. An override the office typed is still honoured as typed, cast or no cast — it is the product's stored choice and blanking it would unsign a page somebody deliberately signed. **WHAT THIS DOES NOT SHIP BY ITSELF:** a mini-app change reaches customers only after `node scripts/upload_miniapp.js` and a release in the WeChat console, which is Ash's to do; the deploy puts the server half live immediately, and an un-republished build keeps drawing its old colophon until then — Roots' either way, which is why the order is safe. **STILL OUTSTANDING:** §147's `PA_STORAGE_HEADS` / `PA_STORAGE_UNITS` / `PA_STORAGE_NOTES`, unchanged by this and still the next PR. No new Chinese is composed — `从土壤到灵魂` moves from the mini app into the shared module unchanged, recorded in `docs/tacet-delivery-vocabulary.md` v1.109. No schema, no migration, no change to the QR menu, the web storefront, `.gitignore` or CI. 2026-09-17 · v4.294 — **§157 · THE SWEEP §155 ASKED FOR, AND THE TWO SHAPES IT FOUND THAT §155 DID NOT**, from Ash on that section's own scope note: *“ok do it”*. **SCOPE WAS ESTABLISHED BY GREPPING FOR THE ENGINE, NOT BY GUESSING**: three surfaces run a walker — the admin page, the modules that inject into it, and `public/product-editor.html`, which carries its own copy and would have been missed by looking at the admin alone. **16 elements fixed, 19 leaked text nodes**, all of them helper paragraphs with a `<b>`, `<em>`, `<strong>` or `<code>` inside the pair; the product editor was clean. **TWO SHAPES THE ORIGINAL SECTION DID NOT NAME**, which is the argument for sweeping rather than fixing what you were shown: a single Chinese glyph in the ENGLISH half (*“fill in both EN and 中”*) makes the walker refuse the node outright, stranding the whole sentence rather than its tail; and `${name}` inside the pair's Chinese half means the store's name renders in Chinese and is simply ABSENT in English, with nothing on either screen looking broken. **NEW GATE `scripts/check-glued-language.js`, two ratchets: 0 broken (structural, swept today) and 234 orphan** — Chinese in a node that is neither a pair nor shielded, which is a real backlog of three distinct kinds (a missing English half, a pair glued with no separator, and text that is correctly Chinese under §1.11's scope note, like a WeCom card preview). It is counted rather than failed because clearing it needs a person per string; counting it is what stops it growing. **PROVEN BY THREE MUTATIONS, one being the production markup restored verbatim — and an earlier pair that MISSED is recorded, because working out why exposed that the gate only failed the structural shape; the orphan ratchet exists because of it.** Nothing was minted: every Chinese string here is the one already in the tree, moved, so the vocabulary document is deliberately untouched. `test:fast` **272 on the merged head**; lint 0 errors. No schema, no server change, no change to `.gitignore` or CI; `package.json` gains the checker's npm alias.
 
 
 
@@ -16933,3 +16933,104 @@ today, the other being the product-editor session's; lint 0 errors. No schema, n
 server change, no change to `.gitignore` or CI — `package.json` gains the checker's npm alias, matching
 `verify:swallowed-errors`, and that is the only line outside the sweep itself.
 
+
+## §158 — NOBODY'S PRODUCT PAGE IS SIGNED BY SOMEBODY ELSE
+
+**2026-09-17 · Decided by Ash**, on the item §156 recorded as owed and named as
+the more urgent of the two: *"do it"*.
+
+### What it was
+
+§156 took Roots' illustrated cast, house line and name out of the product page
+editor, and listed in its own *still Roots' in source* section that
+`miniapp/pages/product/product.js` held its own copy of all three.
+
+**The mini app is published once per tenant, each under its own WeChat AppID**
+(`miniapp/utils/api.js`), off this one shared codebase. So those literals were
+not Roots' page signing itself. They were every merchant's **shopper-facing**
+product page signing itself as Roots — and the category map's `soilsoul`
+fallback made that the default rather than an edge case: a shop that had chosen
+no character had Roots' mascot drawn onto its product, with nobody having
+touched anything.
+
+The editor's leak was seen by the office. This one was seen by the customer,
+which is why §156 named it the more urgent half.
+
+### One module, because a second copy of an answer is a second answer
+
+Which is the fault itself, repeating one surface along. `lib/brand-signature.js`
+holds the cast, the category map, the fallback, both taglines, the house line
+and the resolver. It is read by **both**:
+
+- the operator route the editor asks — `/api/retail-admin/brand/signature`
+- the public storefront config the phone asks — `/api/retail/config`, as
+  `cfg.colophon`
+
+The public side resolves its tenant with `resolvePublicTenant(req)`, the same
+x-wx-appid-then-host resolver that had already entered the ALS scope for that
+very request. **A customer request and an operator request therefore cannot be
+answered differently**, and on both a null tenant means Roots — the same
+equivalence `composeSystem(shop)` in `routes/ai.js` already relies on, because
+the kitchen realm carries no tenant row and the kitchen is account #1.
+
+### Roots is byte-identical, and that is asserted rather than intended
+
+All ten characters in order, both taglines, the house line, every category
+mapping and the `soilsoul` fallback. Every character's image file is also
+checked to exist on disk: a colophon that renders a broken tile is not an
+improvement on one that renders somebody else's mascot.
+
+### The duplication that remains is the RULE, never the DATA
+
+A WeChat bundle cannot require from `lib/`, so `resolveColophonCharacter()` in
+the page is a real and permanent second copy of `resolveCharacter()` — the same
+permanent duplication `scripts/test_nutrition_rows.js` exists for, and it says
+so in its own header. It is **lifted out of the shipped file and executed**
+against the server's copy over 144 combinations of signature, override and
+category, including a malformed map that must break neither.
+
+The data cannot drift at all, because the cast, the map and the fallback arrive
+over the wire. That is the part worth having.
+
+### Two bugs caught by reading rather than assuming
+
+Both would have shipped, and both are the kind a review reading the diff would
+have called fine.
+
+1. **`recomputeDisplay()` has no `app` of its own.** The `getApp()` above it
+   lives in a different method, so the first draft's `app.globalData.config`
+   was a **ReferenceError on every product page** — not a degraded colophon, a
+   dead page.
+2. **`app.globalData.config` is only set once the launch fetch resolves.**
+   `app.js` fires it fire-and-forget on purpose (onLaunch step 4) so a page can
+   paint before it lands, so the product fetch racing it would have left
+   **Roots' colophon blank at random on a cold launch.**
+
+Both are fixed the same way: read through `config.get('colophon', {})`, which
+hydrates from the persisted last-good copy and so answers on the first paint of
+any launch after the first that ever completed.
+
+### What is drawn, and what is not
+
+Each part hides itself when the shop has none, and the block hides itself when
+the shop has nothing: no character, no line and no name is not a colophon, it is
+three empty elements and two hairlines.
+
+An override the office typed is honoured **as typed**, cast or no cast. It is
+the product's stored choice, and second-guessing it would unsign a page somebody
+deliberately signed — and would drop a character a shop uploaded after this
+signature was cached.
+
+### This does not reach a customer by itself
+
+A mini-app change ships only after `node scripts/upload_miniapp.js` and a
+release in the WeChat console, which is Ash's to do. The deploy puts the server
+half live at once, and **an un-republished build keeps drawing its old colophon
+until then — Roots' either way**, which is what makes that order safe rather
+than merely convenient.
+
+### Still outstanding
+
+§147's `PA_STORAGE_HEADS`, `PA_STORAGE_UNITS` and `PA_STORAGE_NOTES` are
+untouched by this and remain the next PR, still held by the check §156 left in
+`scripts/test_spec_strip_picklists.js`.
