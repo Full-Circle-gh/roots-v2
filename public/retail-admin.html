@@ -6004,8 +6004,9 @@
   <section id="tab-snippets">
     <h2>Mini-app copy · 小程序文案</h2>
     <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
-      Short text labels shown on fixed mini-app screens (cart, checkout, profile, order tracking, etc). · 显示在小程序固定页面（购物车、结算、个人中心、订单追踪等）上的短文案标签。<br>
-      Customers see one language at a time based on their WeChat preference — fill in both EN and 中. · 顾客会根据微信语言偏好一次只看到一种语言——请同时填写英文和中文。
+      <span data-lang-block="en">Short text labels shown on fixed mini-app screens (cart, checkout, profile, order tracking, etc).<br>
+      Customers see one language at a time based on their WeChat preference — fill in both the English and the Chinese.</span><span data-lang-block="cn">显示在小程序固定页面（购物车、结算、个人中心、订单追踪等）上的短文案标签。<br>
+      顾客会根据微信语言偏好一次只看到一种语言——请同时填写英文和中文。</span>
     </div>
     <div id="snippets-mount"></div>
     <div style="margin-top: var(--s5); display: flex; align-items: center; gap: var(--s4); position: sticky; bottom: 0; background: var(--bg-app); padding: var(--s3) 0;">
@@ -8677,9 +8678,7 @@
   <!-- ─── MEDIA LIBRARY ─── -->
   <section id="tab-media">
     <h2>Media · 媒体库</h2>
-    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
-      All images uploaded for the mini app — banners, product photos, FAQ icons, anywhere in the CMS. Drag &amp; drop files onto the grid (or paste from clipboard) to upload. Drag a card onto a folder in the sidebar to move it. Click a card to edit alt text, tags, and folder. The <b>used-where</b> badge is a quick "safe to delete?" hint. · 为小程序上传的全部图片 —— 横幅、产品图、常见问题图标,以及 CMS 中的任何位置。将文件拖放到网格上(或从剪贴板粘贴)即可上传。将卡片拖到侧栏的文件夹上即可移动。点击卡片可编辑替代文字、标签和所属文件夹。<b>引用位置</b>徽标可快速判断“是否可安全删除”。
-    </div>
+    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;"><span data-lang-block="en">All images uploaded for the mini app — banners, product photos, FAQ icons, anywhere in the CMS. Drag &amp; drop files onto the grid (or paste from clipboard) to upload. Drag a card onto a folder in the sidebar to move it. Click a card to edit alt text, tags, and folder. The <b>used-where</b> badge is a quick "safe to delete?" hint.</span><span data-lang-block="cn">为小程序上传的全部图片 —— 横幅、产品图、常见问题图标,以及 CMS 中的任何位置。将文件拖放到网格上(或从剪贴板粘贴)即可上传。将卡片拖到侧栏的文件夹上即可移动。点击卡片可编辑替代文字、标签和所属文件夹。<b>引用位置</b>徽标可快速判断“是否可安全删除”。</span></div>
 
     <div class="ml-layout">
       <aside class="ml-side">
@@ -9212,7 +9211,7 @@
           <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Layout · 布局</h3>
-              <div class="muted">The <b>default</b> arrangement when a customer opens the Shop — they can switch views themselves unless you lock it below. List and Grid both keep the fixed left category sidebar (Grid just swaps the rows for tiles); Gallery is one big hero per row with a chip bar on top. · 顾客打开商城时的<b>默认</b>排列方式 —— 除非在下方锁定,否则顾客可自行切换视图。列表与网格都保留左侧固定分类侧栏(网格只是把行换成瓦片)/画廊(每行一张大图,顶部横向标签)。</div>
+              <div class="muted"><span data-lang-block="en">The <b>default</b> arrangement when a customer opens the Shop — they can switch views themselves unless you lock it below. List and Grid both keep the fixed left category sidebar (Grid just swaps the rows for tiles); Gallery is one big hero per row with a chip bar on top.</span><span data-lang-block="cn">顾客打开商城时的<b>默认</b>排列方式 —— 除非在下方锁定,否则顾客可自行切换视图。列表与网格都保留左侧固定分类侧栏(网格只是把行换成瓦片)/画廊(每行一张大图,顶部横向标签)。</span></div>
             </div>
             <select id="cfg-shop-layout" aria-label="Shop layout · 商城布局" class="picker-source">
               <option value="list">List with sidebar · 列表 + 侧栏</option>
@@ -9408,9 +9407,7 @@
                     <span class="chip lit">SALE</span>
                     <span class="chip lit">HOT</span>
                   </div>
-                  <div class="helper" style="margin-left: 24px; margin-top: -4px;">
-                    Set a product's badge with the <b>Badge</b> dropdown in its editor (Products page). · 在产品编辑器(产品页)的<b>徽标</b>下拉中设置某个产品的徽标。
-                  </div>
+                  <div class="helper" style="margin-left: 24px; margin-top: -4px;"><span data-lang-block="en">Set a product's badge with the <b>Badge</b> dropdown in its editor (Products page).</span><span data-lang-block="cn">在产品编辑器(产品页)的<b>徽标</b>下拉中设置某个产品的徽标。</span></div>
 
                   <label class="ckbox"><input type="checkbox" id="cfg-shop-showPriceFilter"> <span>Show price ¥min – ¥max · 显示价格 ¥min – ¥max 筛选</span></label>
                   <label class="ckbox"><input type="checkbox" id="cfg-shop-hideOutOfStock"> <span>Hide out-of-stock products entirely · 完全隐藏缺货产品</span></label>
@@ -9434,7 +9431,7 @@
           <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Order-status subscribe-message template · 订单状态订阅消息模板</h3>
-              <div class="muted">WeChat doesn't allow free push — instead, each customer opts in to <em>one</em> notification per submission. We use that slot to send "Order paid", "Preparing", "Dispatched", and "Delivered" updates. · 微信不允许免费推送 —— 顾客每次提交只能订阅<em>一条</em>通知。我们用这个名额发送“已付款”“备货中”“已发货”“已送达”等更新。</div>
+              <div class="muted"><span data-lang-block="en">WeChat doesn't allow free push — instead, each customer opts in to <em>one</em> notification per submission. We use that slot to send "Order paid", "Preparing", "Dispatched", and "Delivered" updates.</span><span data-lang-block="cn">微信不允许免费推送 —— 顾客每次提交只能订阅<em>一条</em>通知。我们用这个名额发送“已付款”“备货中”“已发货”“已送达”等更新。</span></div>
             </div>
             <div class="illus-row">
               <div class="mini-phone">
@@ -9900,7 +9897,7 @@
             <div class="field" style="margin-top: var(--s3); margin-bottom: 0;">
               <label for="cfg-cs-phone" class="stacked">Phone number (optional) · 电话(可选)</label>
               <input type="text" id="cfg-cs-phone" placeholder="+86 20 1234 5678" style="width: 100%; font-family: monospace;">
-              <div class="muted" style="font-size: 11px; margin-top: 6px;">Shown as the <b>Call</b> button on the FAQ help screen. Leave blank to hide. · 显示为常见问题帮助页上的<b>拨打</b>按钮;留空则隐藏。</div>
+              <div class="muted" style="font-size: 11px; margin-top: 6px;"><span data-lang-block="en">Shown as the <b>Call</b> button on the FAQ help screen. Leave blank to hide.</span><span data-lang-block="cn">显示为常见问题帮助页上的<b>拨打</b>按钮;留空则隐藏。</span></div>
             </div>
           </div>
 
@@ -10272,9 +10269,7 @@
           <div class="dlv-view" data-dlv="zones" hidden>
             <button type="button" class="dlv-back" onclick="dlvGo('hub')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Delivery · 配送</button>
             <h2>Delivery zones · 配送区</h2>
-            <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4); line-height: 1.6;">
-              One row per area you deliver to. <b>Pricing</b> shows the ¥ a customer pays; <b>Scheduling</b> shows when they can pick. Click any row to edit. An address that matches no active zone (and no default below) fails at checkout. · 每个配送区一行:<b>定价</b>显示顾客支付的 ¥,<b>时间</b>显示可选时段,点击任意行编辑。未匹配任何启用配送区(且无下方默认值)的地址将在结账时被拒。
-            </div>
+            <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4); line-height: 1.6;"><span data-lang-block="en">One row per area you deliver to. <b>Pricing</b> shows the ¥ a customer pays; <b>Scheduling</b> shows when they can pick. Click any row to edit. An address that matches no active zone (and no default below) fails at checkout.</span><span data-lang-block="cn">每个配送区一行:<b>定价</b>显示顾客支付的 ¥,<b>时间</b>显示可选时段,点击任意行编辑。未匹配任何启用配送区(且无下方默认值)的地址将在结账时被拒。</span></div>
           </div>
 
           <!-- Coverage at a glance — shared fc-* KPI strip, computed in-browser from the
@@ -10438,9 +10433,7 @@
                     <label class="stacked">Threshold · 门槛</label>
                     <span class="yen-input"><input type="number" id="cfg-fees-freeShippingThreshold" aria-label="Free-shipping threshold · 包邮门槛"></span>
                   </div>
-                  <div class="helper" style="margin-top: 10px;">
-                    Set high to push average-order-value up; set low (or 0) to be more generous. Set to <b>0</b> for "always free shipping" on standard delivery. Same-day delivery never qualifies — it always charges its own fee. · 设得高可以拉高客单价,设得低（或为 0）则更慷慨。设为 <b>0</b> 表示标准配送"始终包邮"。当日达永远不享受包邮。
-                  </div>
+                  <div class="helper" style="margin-top: 10px;"><span data-lang-block="en">Set high to push average-order-value up; set low (or 0) to be more generous. Set to <b>0</b> for "always free shipping" on standard delivery. Same-day delivery never qualifies — it always charges its own fee.</span><span data-lang-block="cn">设得高可以拉高客单价,设得低（或为 0）则更慷慨。设为 <b>0</b> 表示标准配送"始终包邮"。当日达永远不享受包邮。</span></div>
                 </div>
               </div>
             </div>
@@ -10513,7 +10506,7 @@
             <div class="group-card">
               <div class="group-card-head">
                 <h3>Packing fee · 包装费</h3>
-                <div class="muted">A flat fee added to every <b>Store pickup</b> order so the store is paid for boxing the items. Charged once per order regardless of item count. Set to <b>0</b> for no pickup packing fee. · 每笔"到店自提"订单收取的固定包装费,按单收取一次,与件数无关。设为 <b>0</b> 则不收。</div>
+                <div class="muted"><span data-lang-block="en">A flat fee added to every <b>Store pickup</b> order so the store is paid for boxing the items. Charged once per order regardless of item count. Set to <b>0</b> for no pickup packing fee.</span><span data-lang-block="cn">每笔"到店自提"订单收取的固定包装费,按单收取一次,与件数无关。设为 <b>0</b> 则不收。</span></div>
               </div>
               <div class="illus-row">
                 <div class="ctrl" style="flex: 1;">
@@ -11220,7 +11213,7 @@
           <div class="group-card" data-sees="customer">
             <div class="group-card-head">
               <h3>Support button · 客服按钮</h3>
-              <div class="muted">The floating <b>Support</b> button in the bottom-right corner opens a chat with platform support. Turn it off to hide it. · 右下角悬浮的<b>客服</b>按钮用于联系平台客服。关闭即可隐藏。</div>
+              <div class="muted"><span data-lang-block="en">The floating <b>Support</b> button in the bottom-right corner opens a chat with platform support. Turn it off to hide it.</span><span data-lang-block="cn">右下角悬浮的<b>客服</b>按钮用于联系平台客服。关闭即可隐藏。</span></div>
             </div>
             <div style="display:flex;align-items:center;gap:10px;padding:4px 2px 2px">
               <input type="checkbox" id="cfg-support-btn" style="width:18px;height:18px">
@@ -11235,7 +11228,7 @@
           <div class="group-card">
             <div class="group-card-head">
               <h3>Stores · 门店</h3>
-              <div class="muted">The stores / warehouses this online store ships and routes orders from. Each store's <strong>street address</strong> sets the GPS location used to route orders to the nearest store — keep it accurate. · 本店派单/发货的门店与仓库。每个门店的<strong>详细地址</strong>决定其 GPS 定位(用于就近派单),请保持准确。</div>
+              <div class="muted"><span data-lang-block="en">The stores / warehouses this online store ships and routes orders from. Each store's <strong>street address</strong> sets the GPS location used to route orders to the nearest store — keep it accurate.</span><span data-lang-block="cn">本店派单/发货的门店与仓库。每个门店的<strong>详细地址</strong>决定其 GPS 定位(用于就近派单),请保持准确。</span></div>
             </div>
             <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--line)">
               <label class="field-label">Low-stock alert at · 低库存提醒 <span style="color:var(--text-3);font-weight:400">— flag any product low when it drops to this many units. Each store can set its own number below. · 商品降到此数量时提醒;每个门店可在下方单独设置。</span></label>
@@ -11334,7 +11327,7 @@
             <div class="group-card">
               <div class="group-card-head">
                 <h3>Tacet on a phone · 手机上的 Tacet</h3>
-                <div class="muted">The same Tacet, on your staff's phones. What they see follows the role you gave them (Settings → Team): a shop staffer counts that store's shelves, a kitchen staffer enters only <b>how many they just made</b>. No PC, and no access to the rest of this back office. Open it on a phone and tap <b>Add to Home Screen</b> to use it like an installed app, then share the link below with staff. · 同一个 Tacet,装在员工手机上。看到哪些功能取决于你为其设置的角色(设置 → 团队):门店员工盘点本店货架,后厨员工<b>只需输入刚制作的数量</b>。无需电脑,也无法进入后台其他功能。在手机上打开后点按<b>“添加到主屏幕”</b>即可像已安装的应用一样使用,再把下面的链接发给员工。</div>
+                <div class="muted"><span data-lang-block="en">The same Tacet, on your staff's phones. What they see follows the role you gave them (Settings → Team): a shop staffer counts that store's shelves, a kitchen staffer enters only <b>how many they just made</b>. No PC, and no access to the rest of this back office. Open it on a phone and tap <b>Add to Home Screen</b> to use it like an installed app, then share the link below with staff.</span><span data-lang-block="cn">同一个 Tacet,装在员工手机上。看到哪些功能取决于你为其设置的角色(设置 → 团队):门店员工盘点本店货架,后厨员工<b>只需输入刚制作的数量</b>。无需电脑,也无法进入后台其他功能。在手机上打开后点按<b>“添加到主屏幕”</b>即可像已安装的应用一样使用,再把下面的链接发给员工。</span></div>
               </div>
               <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:4px 2px 2px;">
                 <button class="btn btn-primary" onclick="window.location.href='/m'">Open Tacet · 打开 Tacet</button>
@@ -11748,7 +11741,7 @@
           <div class="group-card">
             <div class="group-card-head">
               <h3>"Last ordered X ago" — product page · "上次订购于 X 前" — 商品页</h3>
-              <div class="muted">A freshness nudge from the most recent order. It shows the real time when there's been a recent sale; otherwise it fills in believable activity that <b>ages on its own</b> (the "X ago" climbs over time and resets, never stuck on one number) and only appears on <b>some</b> products at a time — popular ones often, quiet ones now and then — so it's never on every product at once. Hidden when the bought-count line is already showing "today/this week" (so the two don't repeat). · 基于最近一次订单的新鲜度提示。有真实近期订单时显示真实时间;否则填充会<b>自动变旧</b>的可信活动(“X 前”随时间增长并适时重置,不再固定),且只在<b>部分</b>商品上出现——热销品常见、冷门品偶尔——不会同时出现在每个商品上。</div>
+              <div class="muted"><span data-lang-block="en">A freshness nudge from the most recent order. It shows the real time when there's been a recent sale; otherwise it fills in believable activity that <b>ages on its own</b> (the "X ago" climbs over time and resets, never stuck on one number) and only appears on <b>some</b> products at a time — popular ones often, quiet ones now and then — so it's never on every product at once. Hidden when the bought-count line is already showing "today/this week" (so the two don't repeat).</span><span data-lang-block="cn">基于最近一次订单的新鲜度提示。有真实近期订单时显示真实时间;否则填充会<b>自动变旧</b>的可信活动(“X 前”随时间增长并适时重置,不再固定),且只在<b>部分</b>商品上出现——热销品常见、冷门品偶尔——不会同时出现在每个商品上。</span></div>
             </div>
             <label class="ckbox" style="margin-bottom: 12px;">
               <input type="checkbox" id="cfg-social-lo-enabled">
@@ -11816,12 +11809,10 @@
                   <input type="number" min="0" id="cfg-social-sb-boost_max" aria-label="Starting sold baseline, highest · 起始已售基数上限" style="width: 90px;">
                 </div>
               </div>
-              <div class="helper" style="line-height: 1.5; flex: 1; min-width: 220px;">
-                The number a product starts life with. Each one picks its own steady value in this range, so totals differ (e.g. "72 sold", "138 sold").<br>
+              <div class="helper" style="line-height: 1.5; flex: 1; min-width: 220px;"><span data-lang-block="en">The number a product starts life with. Each one picks its own steady value in this range, so totals differ (e.g. "72 sold", "138 sold").<br>
                 From there the count <b>creeps up over time</b> — a little each day since the product launched — so it grows week to week instead of sitting frozen. Best-sellers climb faster, and the growth is capped so it can't balloon.<br>
                 Real units sold are added on top.<br>
-                Set both to 0 for real data only. Try 50 to 150. · 商品的起始数字,各取范围内一个稳定值。之后会<b>随时间缓慢增长</b>(按上架天数,每天少量累加),逐周变大而非固定;热销品增长更快,且有上限。真实销量另行叠加。设为 0 则只显示真实数据。
-              </div>
+                Set both to 0 for real data only. Try 50 to 150.</span><span data-lang-block="cn">商品的起始数字,各取范围内一个稳定值。之后会<b>随时间缓慢增长</b>(按上架天数,每天少量累加),逐周变大而非固定;热销品增长更快,且有上限。真实销量另行叠加。设为 0 则只显示真实数据。</span></div>
             </div>
           </div>
 
@@ -11938,7 +11929,7 @@
     <div class="group-card">
       <div class="group-card-head">
         <h3>Categories · 分类</h3>
-        <div class="muted">The colour-coded chips at the top of the FAQ screen. Customers tap one to filter the question list. <b>id</b> is the slug stored in each question — change it only if no questions reference it yet. · 常见问题页顶部的彩色标签;顾客点击其一即可筛选问题列表。<b>id</b> 是存储在每个问题中的标识(slug),只有当还没有问题引用它时才可修改。</div>
+        <div class="muted"><span data-lang-block="en">The colour-coded chips at the top of the FAQ screen. Customers tap one to filter the question list. <b>id</b> is the slug stored in each question — change it only if no questions reference it yet.</span><span data-lang-block="cn">常见问题页顶部的彩色标签;顾客点击其一即可筛选问题列表。<b>id</b> 是存储在每个问题中的标识(slug),只有当还没有问题引用它时才可修改。</span></div>
       </div>
       <div class="table-wrap" style="margin-bottom: 12px;">
         <table id="faq-cats-table">
