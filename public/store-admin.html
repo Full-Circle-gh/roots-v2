@@ -181,6 +181,17 @@
   .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--elev); border: 1px solid var(--line-2); color: var(--paper); font-size: 13px; padding: 11px 16px; border-radius: 10px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 60; }
   .toast.show { opacity: 1; }
 </style>
+<style>
+/* NO BROWSER TEXT SELECTION — this is a tool, not a page. A long-press on any
+   text an allowlist did not name pops Android Chrome's "touch to search" Google
+   bar over the app. The default is none, inputs opt back in (or typing breaks),
+   and .sel is the escape hatch. Copying lives on Copy buttons, not on dragging
+   blue handles. Full reasoning, and why the customer-facing pages are
+   deliberately excluded, sits beside the same two rules in public/m.html. */
+html,body{-webkit-user-select:none;-moz-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
+  -webkit-user-select:text;-moz-user-select:text;user-select:text;-webkit-touch-callout:default}
+</style>
 </head>
 <body>
 

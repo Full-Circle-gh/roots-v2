@@ -262,10 +262,42 @@ button,input,textarea{font-family:inherit}
    where scrolling was always meant to happen. */
 html,body{overscroll-behavior:none;overflow:hidden}
 .content{overscroll-behavior-y:contain}
-/* Tapping a control should not paint its label blue and offer to copy it.
-   Selection stays ON everywhere else on purpose: an address, a phone number
-   and an order number are things people lift out of this app by hand. */
-button,.tabbar,.row,.chip,.pill,.eyebrow,h1,.grabber{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+/* NO BROWSER TEXT SELECTION ANYWHERE. This is a tool, not a page, and this is
+   the one block that says so for the whole app — the sibling surfaces carry the
+   same two rules and point back here rather than restating the reasoning.
+
+   What stood here was an ALLOWLIST — button, .tabbar, .row, .chip, .pill,
+   .eyebrow, h1, .grabber were unselectable and everything else was left
+   selectable on purpose, the note reading "an address, a phone number and an
+   order number are things people lift out of this app by hand". What it bought
+   in practice was Android Chrome. A long-press on anything the allowlist did
+   not name painted the text blue and threw Chrome's own "touch to search"
+   Google bar across the bottom of the app — reported against the customer
+   record sheet, where the name is a bare <span> (the header row below), but the
+   same was true of every stat figure and every section label. An allowlist can
+   only ever name the controls somebody remembered; every unclassed <span> in
+   21k lines was the hole, and there are thousands of them.
+
+   So the default inverts: none everywhere, opted back in only where it is
+   load-bearing. Copying is not lost and was already not selection's job — it is
+   Copy BUTTONS, which take the whole field in one tap rather than asking for
+   two blue handles to be dragged accurately over a line of Chinese: the order's
+   ship-to (copyAddr) and txn (copyTxn), the waybill (copyWaybill), and the
+   customer's phone and addresses (copyCustAddr, added with this change so the
+   record sheet keeps the one thing its long-press was genuinely used for).
+
+   Selection INHERITS, so html/body carries it and any element with a rule of
+   its own still wins — which is how the inputs opt back in, and they must, or
+   typing breaks. .sel is the escape hatch for anything that later needs real
+   selection.
+
+   Deliberately NOT applied to the customer-facing pages — shop.html,
+   storefront.html, full-circle.html. A visitor reading a shop or a marketing
+   landing page has every reason to select and copy, and none of the operator
+   chrome this protects. */
+html,body{-webkit-user-select:none;-moz-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
+  -webkit-user-select:text;-moz-user-select:text;user-select:text;-webkit-touch-callout:default}
 /* No 300ms wait on every tap for a double-tap-to-zoom that can't happen. */
 button,a,.row,.chip,.stepbtn{touch-action:manipulation}
 /* The refresh that replaces pull-to-reload: a ring in the gap the content
@@ -2075,6 +2107,22 @@ reg('copyTxn', ()=>{
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
   if(!o||!o.txn) return;   // nothing to copy is nothing to copy
   copyText(String(o.txn));
+});
+/* THE CUSTOMER RECORD'S OWN ADDRESS COPY. copyAddr above does this for an
+   ORDER, off state.liveDetail; a customer's addresses are a different list on a
+   different record, so this reads state.custDetail and finds the row by id.
+   It exists because the app stopped being text-selectable (see the selection
+   block in this file's <style>): lifting a ship-to out of the record sheet by
+   long-press was the one thing that gesture was genuinely used for here, so it
+   becomes a button rather than disappearing. Built like copyAddr — the parts
+   that EXIST, joined, with the em-dash placeholder dropped: a dash is something
+   for a reader to look at, never something to paste onto a courier label. */
+reg('copyCustAddr', id=>{
+  const list=(state.custDetail&&state.custDetail.addresses)||[];
+  const a=list.find(x=>String(x.id)===String(id));
+  if(!a) return;
+  const where=[a.province,a.city,a.district,a.address,a.detail].filter(Boolean).join(' ');
+  copyText([a.recipient_name, a.phone, where].filter(v=>v&&v!=='\u2014').join('\n'));
 });
 reg('openProduct', sku=>{
   state.productSku=sku; state.prodErr=null; state.prodBusy=false;
@@ -17693,10 +17741,17 @@ function custAddresses(d){
       </div>
       <div style="font-size:14px;color:var(--text-secondary);line-height:1.55;margin-top:3px">${
         escAttr([a.province,a.city,a.district,a.address,a.detail].filter(Boolean).join(' ')||'—')}</div>
-      ${editable?`<div style="display:flex;gap:16px;margin-top:8px">
-        <button onclick="APP.cmd('caddrOpen','${a.id}')" style="background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Edit','编辑')}</button>
-        <button onclick="APP.cmd('caddrDelete','${a.id}')" style="background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--brick-ink)">${T('Delete','删除')}</button>
-      </div>`:''}
+      ${/* Copy sits OUTSIDE the editable gate and ahead of the two that mutate.
+            It is the read-only one, so a view-only operator — dispatch, customer
+            service — still gets it, and it lands in the same place for them as
+            for an editor rather than shifting under the row. It exists at all
+            because the app stopped being text-selectable: long-pressing a
+            ship-to out of this row was the real use of that gesture here. */''}
+      <div style="display:flex;gap:16px;margin-top:8px">
+        <button onclick="APP.cmd('copyCustAddr','${a.id}')" style="display:inline-flex;align-items:center;gap:5px;background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Copy','复制')} ${ic('copy',13)}</button>
+        ${editable?`<button onclick="APP.cmd('caddrOpen','${a.id}')" style="background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Edit','编辑')}</button>
+        <button onclick="APP.cmd('caddrDelete','${a.id}')" style="background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--brick-ink)">${T('Delete','删除')}</button>`:''}
+      </div>
     </div>`).join('');
   return custSection(T('Addresses','地址'), `<div class="list">${rows}</div>`, add);
 }
@@ -17834,7 +17889,13 @@ function sheetCustomer(){
           <span style="flex:1"></span>
           <button class="iconbtn" onclick="APP.cmd('closeCustomer')" aria-label="${T('Close','关闭')}">${ic('x',20,2)}</button>
         </div>
-        ${c.phone?`<div class="num" style="margin-top:4px;font-size:13px;color:var(--text-secondary)">${c.phone}</div>`:''}
+      ${/* TAP THE NUMBER TO COPY IT. It was plain text whose only way out was a
+            long-press, which is exactly the gesture that pulled Chrome's Google
+            bar over the sheet and is now off app-wide. A phone number is the
+            single most-lifted field on this record — it goes into a dialler or
+            a courier form — so it gets the same one-tap treatment the order
+            card's ship-to has, rather than becoming unreachable. */''}
+        ${c.phone?`<button class="num" onclick="APP.cmd('copyPlain','${escAttr(c.phone)}')" style="display:inline-flex;align-items:center;gap:6px;margin-top:4px;padding:2px 0;background:none;border:none;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-secondary)">${c.phone} ${ic('copy',12)}</button>`:''}
       ${/* Four labelled buttons, and Block is not one of them.
             This row was one worded button and four bare 44px squares —
             pencil, speech bubble, wallet, ban — with the words only in an

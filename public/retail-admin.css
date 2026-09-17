@@ -187,7 +187,7 @@
   }
   /* Re-enable selection where it's genuinely useful: form fields and any
      element that deliberately sets user-select: text (e.g. the openid). */
-  input, textarea, [contenteditable], [contenteditable] *,
+  input, textarea, [contenteditable], [contenteditable] *, .sel, .sel *,
   [style*="user-select: text"], [style*="user-select:text"] {
     -webkit-user-select: text;
     -moz-user-select: text;
