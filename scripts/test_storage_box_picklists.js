@@ -13,6 +13,23 @@
 // box's two cards plus its note. That is three scopes on screen at once, each
 // carrying a head_en — the exact shape of bug §144 and §142 both had to close.
 // It is asserted, not trusted.
+//
+// AMENDED BY §159 — THE FOUR LISTS ARE NO LONGER IN THIS PAGE. They were Roots'
+// catalogue compiled into the editor, offered to every tenant on the platform
+// including shops that sell nothing perishable. They are counted per tenant now
+// by GET /api/retail-admin/products/storage-usage, so the checks here that read
+// a literal could no longer read anything — and this file's `literal()` helper
+// did what it was built to do: it failed on the anchor rather than passing
+// against an empty object.
+//
+// THE CLAIMS DID NOT GO AWAY, THEY MOVED, and the snowflake is the reason this
+// mattered more than a tidy-up. A count keyed on the exact string would tally
+// ❄ and ❄️ as two answers and offer BOTH — extending the very drift this file
+// was written to end. lib/pair-usage.js therefore folds a variation selector
+// before counting and returns the commonest exact spelling, and
+// scripts/test_storage_vocabulary_tenant.js proves it over real rows. What
+// stays HERE is every claim about the pick MECHANICS — the scoping, the second
+// writer, the name-not-source rule — none of which §159 touched.
 'use strict';
 
 const assert = require('assert');
@@ -57,121 +74,85 @@ function literal(name) {
   return new Function('return ' + SRC.slice(open, i + 1) + ';')();
 }
 
-const ICONS = literal('PA_STORAGE_ICONS');
-const HEADS = literal('PA_STORAGE_HEADS');
-const UNITS = literal('PA_STORAGE_UNITS');
-const NOTES = literal('PA_STORAGE_NOTES');
+// No literals to read any more — see the amendment above. `literal()` is kept
+// because the check below uses it to prove they are GONE rather than moved to a
+// new name, and because deleting a helper a future list might need again is a
+// deletion somebody has to undo.
 
-// The variation selector that makes two identical-looking emoji different data.
-const VS16 = '️';
 
 section('The invisible drift — the reason this exists');
 
-check('every offered icon carries its variation selector', () => {
-  /* ❄ and ❄️ look the same and are not. The list must offer the form the
-     catalogue uses MOST, or a picker would introduce a third spelling rather
-     than end the second. */
-  for (const side of ['left', 'right']) {
-    for (const ic of ICONS[side]) {
-      // Only emoji that HAVE a text/emoji duality need the selector; the test
-      // is that any icon whose base is in the dual set carries it.
-      const base = ic.replace(VS16, '');
-      const dual = ['❄', '☁', '☀', '⏱', '⬛'];  // ❄ ☁ ☀ ⏱ ⬛
-      if (dual.includes(base)) {
-        assert.ok(ic.includes(VS16),
-          `${side} offers ${JSON.stringify(ic)} without U+FE0F — that is the bare form, ` +
-          'which is the minority spelling the list is meant to replace');
-      }
-    }
+// Every check that used to stand here read a compiled list: that each icon
+// carried its variation selector, that no icon was offered twice in two
+// spellings, that the snowflake matched across both cards, that every head and
+// unit was a pair, that a losing twin was not also offered, that no two entries
+// differed only by case, and that the note list stayed short. All seven were
+// claims about DATA the editor no longer holds.
+//
+// They are asserted against the counter that now produces that data, over rows
+// rather than over a literal, in scripts/test_storage_vocabulary_tenant.js —
+// including the snowflake case, which is the one that could have been silently
+// undone: a tally keyed on the exact string would offer ❄ AND ❄️.
+
+check('the page carries no storage list of its own', () => {
+  for (const name of ['PA_STORAGE_ICONS', 'PA_STORAGE_HEADS', 'PA_STORAGE_UNITS', 'PA_STORAGE_NOTES']) {
+    assert.ok(!new RegExp('const ' + name + ' = ').test(SRC),
+      `${name} is a compiled list again — every tenant would be offered the shop it was measured from`);
+    assert.ok(new RegExp('let ' + name + ' = ').test(SRC),
+      `${name} is neither a literal nor the empty list it should start as`);
+  }
+  /* The answers themselves, spot-checked in LIST SHAPE — `en: '…'`, which is
+     how an offered pair is written. Deliberately not a bare substring search:
+     the same words appear in PA_TEMPLATES and in the preview/thumbnail samples
+     as `num_en: 'Refrigerate'`, and those are a different thing. A template is
+     a starting design the office PICKS and previews before applying; a pick
+     list is an answer offered as though it were measured. §159 moved the
+     second and left the first, which §156 already recorded as the food-shaped
+     part of this editor that is not solved and is not pretended to be. */
+  for (const roots of ['Refrigerate', 'See packaging', '开封后请密封保存。', '冷藏保存']) {
+    // The property boundary is load-bearing: `num_en: 'Refrigerate'` ENDS with
+    // `en: 'Refrigerate'`, so a plain substring search reports the template
+    // samples as list entries. A list pair is written `{ en: …` or `, en: …`.
+    const asListEntry = new RegExp("[{,]\\s*en: '" + roots.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "'");
+    assert.ok(!asListEntry.test(SRC),
+      `the editor still offers "${roots}" as a list answer — that is one shop's data`);
   }
 });
 
-check('no icon is offered twice on one side, in either spelling', () => {
-  for (const side of ['left', 'right']) {
-    const bare = ICONS[side].map(ic => ic.replace(VS16, ''));
-    assert.strictEqual(new Set(bare).size, bare.length,
-      `${side} offers the same icon twice — once with the selector and once without, which is the bug`);
-  }
+check('the page asks for them instead, beside the other shop-wide counts', () => {
+  assert.ok(/\/api\/retail-admin\/products\/storage-usage/.test(SRC),
+    'nothing fetches the counted lists, so no storage field will ever be offered one');
+  const mount = anchored('peMount');
+  assert.ok(/paLoadStorageUsage\(\)/.test(mount), 'the mount never asks for the counts');
+  assert.ok(/_peShopLoaded/.test(mount),
+    'the count is re-fetched on every product switch — a request per click for an answer that cannot change');
 });
 
-check('the snowflake is offered on both cards, identically', () => {
-  /* It is the commonest icon on each side (83 left, 55 right). If the two
-     lists spelled it differently the picker would CREATE the drift. */
-  const l = ICONS.left.find(i => i.startsWith('❄'));
-  const r = ICONS.right.find(i => i.startsWith('❄'));
-  assert.ok(l && r, 'the snowflake has left one of the icon lists');
-  assert.strictEqual(l, r, 'the two cards offer the snowflake in different spellings');
+check('a field with nothing to offer shows no control, not an empty one', () => {
+  /* A select whose only entry is "Something else" is a dropdown that cannot be
+     used, sitting above the boxes it would have filled. On a shop's first
+     product every one of these lists is empty, so this is the NORMAL state for
+     a new tenant rather than a corner. */
+  const f = anchored('_paPickField');
+  assert.ok(/!Array\.isArray\(list\) \|\| !list\.length/.test(f),
+    '_paPickField renders a select before checking it has anything to put in it');
+  const chips = anchored('_paIconChips');
+  assert.ok(/!icons\.length/.test(chips),
+    'an empty icon row is still drawn — a gap under a label with no control in it');
 });
 
-section('Every offered answer is a PAIR');
-
-check('every head and unit carries both languages', () => {
-  for (const [name, group] of [['heads', HEADS], ['units', UNITS]]) {
-    for (const side of ['left', 'right']) {
-      assert.ok(group[side] && group[side].length, `${name}.${side} is empty`);
-      for (const o of group[side]) {
-        assert.ok(o.en && o.en.trim(), `${name}.${side}: an entry has no English`);
-        assert.ok(o.cn && o.cn.trim(), `${name}.${side}: "${o.en}" has no 中文`);
-        assert.ok(/[一-鿿°]/.test(o.cn), `${name}.${side}: "${o.en}" has no CJK in its 中文`);
-      }
-    }
+check('the lists stay let-bound so the pickers see them once they land', () => {
+  /* _PA_PICK_LISTS resolves a NAME to an array through a closure. That is what
+     makes an async fill work with no re-wiring — and it only works while these
+     are bindings the closure can re-read. */
+  const map = SRC.slice(SRC.indexOf('const _PA_PICK_LISTS = {'));
+  const body = map.slice(0, map.indexOf('};') + 2);
+  for (const name of ['PA_STORAGE_HEADS.left', 'PA_STORAGE_HEADS.right',
+                      'PA_STORAGE_UNITS.left', 'PA_STORAGE_UNITS.right', 'PA_STORAGE_NOTES']) {
+    assert.ok(body.includes("'" + name + "'"), `${name} has left the pick-list map`);
   }
-  for (const o of NOTES) {
-    assert.ok(o.en && o.cn, 'a note entry is missing a language');
-  }
-});
-
-check('the losing twin is not also offered', () => {
-  /* Most-used wins, which was Ash's rule. Offering both halves of a pair the
-     list exists to merge would leave the split exactly where it was. */
-  /* Only twins that differ by WORDS are listed here. A twin that differs only
-     by CASE — 'Cool & Dry' beside 'Cool & dry' — cannot be expressed in a
-     case-insensitive check at all; the duplicate check below catches those. */
-  const lose = {
-    'HEADS.left':  ['keep refrigerated', 'before opening'],
-    'HEADS.right': ['use after opening', 'freeze', 'freezing'],
-  };
-  const has = (list, en) => list.some(o => o.en.toLowerCase() === en.trim());
-  for (const en of lose['HEADS.left']) {
-    assert.ok(!has(HEADS.left, en), `left heads still offer "${en.trim()}" beside its winner`);
-  }
-  for (const en of lose['HEADS.right']) {
-    assert.ok(!has(HEADS.right, en), `right heads still offer "${en.trim()}" beside its winner`);
-  }
-  assert.ok(HEADS.left.some(o => o.en === 'Refrigerate'), 'Refrigerate (52) is no longer the winner on the left');
-  assert.ok(HEADS.right.some(o => o.en === 'Shelf Life'), 'Shelf Life (57) is no longer the winner on the right');
-});
-
-check('no two entries in one list differ only by case', () => {
-  /* This is the check that catches 'Cool & Dry' beside 'Cool & dry'. The
-     picker matches case-insensitively, so two such entries would be two rows
-     that select each other — and would put back the exact split the list ends. */
-  for (const [name, group] of [['heads', HEADS], ['units', UNITS]]) {
-    for (const side of ['left', 'right']) {
-      const seen = new Set();
-      for (const o of group[side]) {
-        const k = o.en.toLowerCase();
-        assert.ok(!seen.has(k), `${name}.${side} offers "${o.en}" and a case-twin of it`);
-        seen.add(k);
-      }
-    }
-  }
-  const seen = new Set();
-  for (const o of NOTES) {
-    const k = o.en.toLowerCase();
-    assert.ok(!seen.has(k), `the note list offers "${o.en}" and a case-twin of it`);
-    seen.add(k);
-  }
-});
-
-check('the note list stays short on purpose', () => {
-  /* 77 distinct notes, and the usage report truncated the long ones — so
-     pairing an English sentence to its 中文 would have meant guessing, which is
-     the one thing this method must not do. Only the two printed whole are
-     offered. A list that grows here without a fresh measurement is a list
-     somebody filled in from memory. */
-  assert.ok(NOTES.length <= 4,
-    'the note list has grown past what the measurement supports — re-run the usage report before adding more');
+  assert.ok(/\(\) =>/.test(body),
+    'the map holds values rather than getters — a list filled after load would never be seen');
 });
 
 section('Three scopes on screen, and each fills only its own');
@@ -230,10 +211,16 @@ check('the pick writes the inputs, not the block', () => {
 });
 
 check('nothing consults the lists on load or on save', () => {
-  for (const [fn, why] of [['peMount', 'on load — that would be a migration'],
-                           ['paBlocksCollect', 'on save — it must persist what is in the block']]) {
-    assert.ok(!/PA_STORAGE_(ICONS|HEADS|UNITS|NOTES)/.test(anchored(fn)),
-      `${fn} consults the storage lists ${why}`);
+  /* 218 storage boxes say what they say today. They keep saying it. A list that
+     silently rewrote them would be changing live customer pages on load, which
+     is the §144 refusal in a smaller frame — and it is the reason the counted
+     lists are an OFFER and never a migration. */
+  for (const fn of ['peMount', 'paBlocksCollect']) {
+    const b = anchored(fn);
+    for (const name of ['PA_STORAGE_ICONS', 'PA_STORAGE_HEADS', 'PA_STORAGE_UNITS', 'PA_STORAGE_NOTES']) {
+      assert.ok(!new RegExp(name + '\\b').test(b),
+        `${fn} consults ${name} — a pick list must be offered, never applied`);
+    }
   }
 });
 

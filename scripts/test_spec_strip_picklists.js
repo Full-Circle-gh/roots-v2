@@ -128,51 +128,14 @@ check('the page carries no value list of its own', () => {
   }
 });
 
-// §147's storage-box lists are the SAME fault one section over: PA_STORAGE_HEADS,
-// PA_STORAGE_UNITS and PA_STORAGE_NOTES are Roots' measured answers compiled
-// into the page, offered to every tenant. §156 migrated the spec strip first
-// and named these as next. This check exists so that stays a decision somebody
-// made rather than something everyone forgot — it fails the day a FOURTH list
-// is added, and it is deleted the day the three are counted like the spec's.
-check('the storage box\'s lists are the known remainder, and have not grown', () => {
-  const compiled = ['PA_STORAGE_HEADS', 'PA_STORAGE_UNITS', 'PA_STORAGE_NOTES']
-    .filter(n => new RegExp('const ' + n + ' = ').test(SRC));
-  assert.deepStrictEqual(compiled.sort(),
-    ['PA_STORAGE_HEADS', 'PA_STORAGE_NOTES', 'PA_STORAGE_UNITS'],
-    'the storage lists changed shape — if they were migrated, delete this check; ' +
-    'if one was added, it is a fourth list of one shop\'s answers shown to every shop');
-  assert.ok(!/const PA_[A-Z_]*_VALUES = \{/.test(SRC),
-    'a new compiled answer list appeared — count it per tenant instead');
-});
-
-check('the page asks for the values instead, and asks once', () => {
-  assert.ok(/\/api\/retail-admin\/products\/spec-usage/.test(SRC),
-    'nothing fetches the counted lists, so no cell will ever be offered a value');
-  const mount = anchored('peMount');
-  assert.ok(/paLoadSpecUsage\(\)/.test(mount), 'the mount never asks for the counts');
-  assert.ok(/_peShopLoaded/.test(mount),
-    'the count is re-fetched on every product switch — a request per click for an answer that cannot change');
-});
-
-check('a cell is offered nothing at all until the count lands', () => {
-  /* Null, not an empty object, and not a leftover from the last shop. A wrong
-     list is worse than no list, because nothing on screen says it is wrong —
-     the same posture §144's usage percentage takes. */
-  const b = anchored('paSpecValuesFor');
-  assert.ok(/if \(!PA_SPEC_VALUES\) return null;/.test(b),
-    'the lookup reads the bag before it exists');
-  assert.ok(/Array\.isArray\(list\) && list\.length/.test(b),
-    'an empty list would be handed to the renderer as though it were offered answers');
-});
-
-check('no duplicate labels, and none of them collide case-insensitively', () => {
-  const seen = new Set();
-  for (const o of LABELS) {
-    const k = o.en.toLowerCase();
-    assert.ok(!seen.has(k), 'the label list itself contains "' + o.en + '" twice');
-    seen.add(k);
-  }
-});
+// §156 left a check here naming §147's PA_STORAGE_HEADS / PA_STORAGE_UNITS /
+// PA_STORAGE_NOTES as the known remainder — the same fault one section over —
+// so that staying unfixed was a decision somebody made rather than something
+// everyone forgot. Its own comment said it was to be DELETED the day those
+// three were counted like the spec's. §159 is that day, and this is that
+// deletion. What replaced it lives in test_storage_box_picklists.js (the page
+// holds no list) and test_storage_vocabulary_tenant.js (the count reproduces
+// them, snowflake and all).
 
 section('The decision Ash made: one label for one idea');
 

@@ -23,6 +23,9 @@ const optionLimits = require('../lib/option-limits');
 // One answer for what a product page signs itself with, read here by BOTH the
 // operator route the editor asks and the public config the mini app asks (§156).
 const brandSignature = require('../lib/brand-signature');
+// Tally bilingual answers the way every pick list in the editor is counted
+// (§159). One copy of the rule, read by the spec strip and the storage box.
+const pairUsage = require('../lib/pair-usage');
 // The mini app's x-wx-appid → tenant id, with a storefront-host fallback. Same
 // resolver the ALS scope for /api/retail uses, so the colophon on the public
 // config cannot name a different shop than the data beside it.
@@ -23560,6 +23563,26 @@ router.get('/api/retail-admin/brand/signature', requireRetailAdmin, (req, res) =
   res.json(brandSignature.signatureFor(req.tenant));
 });
 
+// Every block of one type across this tenant's active products, parsed. Both
+// vocabulary counts below walk the same column, so the reading of it is written
+// once — a second JSON.parse loop is a second place for a shape to be wrong.
+function* blocksOfType(db, type) {
+  const rows = db.prepare(
+    `SELECT description_blocks FROM store_products
+      WHERE COALESCE(is_active, 1) = 1
+        AND description_blocks IS NOT NULL
+        AND description_blocks != '' AND description_blocks != '[]'`
+  ).all();
+  for (const r of rows) {
+    let arr;
+    try { arr = JSON.parse(r.description_blocks); } catch { continue; }
+    if (!Array.isArray(arr)) continue;
+    for (const b of arr) if (b && b.type === type) yield b;
+  }
+}
+const specStripBlocks = (db) => blocksOfType(db, 'spec_strip');
+const storageBoxBlocks = (db) => blocksOfType(db, 'storage_box');
+
 // GET /api/retail-admin/products/spec-usage — the spec-strip labels and values
 // THIS TENANT'S own products actually use, counted.
 //
@@ -23594,85 +23617,95 @@ router.get('/api/retail-admin/brand/signature', requireRetailAdmin, (req, res) =
 router.get('/api/retail-admin/products/spec-usage', requireRetailAdmin, (req, res) => {
   res.set('Cache-Control', 'no-store, must-revalidate');
   try {
-    const rows = tdb().prepare(
-      `SELECT description_blocks FROM store_products
-        WHERE COALESCE(is_active, 1) = 1
-          AND description_blocks IS NOT NULL
-          AND description_blocks != '' AND description_blocks != '[]'`
-    ).all();
-    // key(lower) -> { n, pairs: Map(JSON pair -> count) }
-    const labels = new Map();
-    const values = new Map();
-    const bump = (map, key, en, cn) => {
-      let e = map.get(key);
-      if (!e) { e = { n: 0, pairs: new Map() }; map.set(key, e); }
-      e.n++;
-      const pk = JSON.stringify([en, cn]);
-      e.pairs.set(pk, (e.pairs.get(pk) || 0) + 1);
-    };
-    for (const r of rows) {
-      let arr;
-      try { arr = JSON.parse(r.description_blocks); } catch { continue; }
-      if (!Array.isArray(arr)) continue;
-      for (const b of arr) {
-        if (!b || b.type !== 'spec_strip' || !Array.isArray(b.cells)) continue;
-        for (const c of b.cells) {
-          if (!c) continue;
-          const kEn = String(c.k_en || '').trim(), kCn = String(c.k_cn || '').trim();
-          if (!kEn || !kCn) continue;                 // half a pair is not an answer
-          const lk = kEn.toLowerCase();
-          bump(labels, lk, kEn, kCn);
-          const vEn = String(c.v_en || '').trim(), vCn = String(c.v_cn || '').trim();
-          if (!vEn || !vCn) continue;
-          if (!values.has(lk)) values.set(lk, new Map());
-          bump(values.get(lk), vEn.toLowerCase(), vEn, vCn);
-        }
+    const labels = pairUsage.makeCounter();
+    const values = new Map();   // label key → its own counter
+    for (const b of specStripBlocks(tdb())) {
+      for (const c of (b.cells || [])) {
+        if (!c) continue;
+        const kEn = String(c.k_en || '').trim(), kCn = String(c.k_cn || '').trim();
+        if (!kEn || !kCn) continue;                 // half a pair is not an answer
+        const lk = kEn.toLowerCase();
+        labels.bump(lk, kEn, kCn);
+        if (!values.has(lk)) values.set(lk, pairUsage.makeCounter());
+        values.get(lk).bump(String(c.v_en || '').trim().toLowerCase(), c.v_en, c.v_cn);
       }
     }
-    // The commonest spelling of a pair represents it; ties keep insertion order.
-    const best = (e) => {
-      let top = null, topN = -1;
-      for (const [pk, n] of e.pairs) if (n > topN) { topN = n; top = pk; }
-      let en = '', cn = '';
-      try { [en, cn] = JSON.parse(top); } catch { /* cannot happen: we wrote it */ }
-      return { en, cn, n: e.n };
-    };
-    const rank = (m, cap, min) => [...m.values()].map(best)
-      .filter(o => o.n >= (min || 1))
-      .sort((a, b) => b.n - a.n).slice(0, cap);
     const outValues = {};
-    for (const [lk, m] of values) {
-      // A VALUE IS OFFERED ONLY ONCE THE SHOP HAS USED IT TWICE, and this is
-      // §145's "Net Wt gets no list" rule made measurable instead of typed.
-      //
-      // §145 hard-coded the exception: Net Wt was given no value list because
-      // 163 cells held 67 distinct weights, and a dropdown nobody can find
-      // their own product in is worse than an empty box. Counting per tenant
-      // cannot carry a hard-coded exception — `net wt` means nothing to a shop
-      // that sells rugs — so the judgement has to be read off the data.
-      //
-      // Requiring a repeat does exactly that, and it does it for every label at
-      // once. Origin collapses to a handful (Guangzhou 109 of 156); a field of
-      // one-offs collapses to nothing and the cell stays a typed box, which is
-      // what it should have been. A weight field keeps only the sizes actually
-      // stocked more than once — three or four rows, not sixty-seven — and that
-      // is a list worth opening rather than the one §145 refused.
-      //
+    for (const [lk, counter] of values) {
       // Eight is what a dropdown can be read down without becoming a search
-      // problem; the tail is always reachable through "Something else".
-      const list = rank(m, 8, 2);
+      // problem; the tail is always reachable through "Something else". The
+      // two-use floor is rule 3 in lib/pair-usage — §145's "Net Wt gets no
+      // list", read off the data instead of hard-coded to a field name.
+      const list = counter.rank(8, 2);
       if (list.length) outValues[lk] = list;
     }
     // Labels are deliberately NOT filtered by repeat: a label used once is still
     // a label this shop uses, and leaving it out would show that cell as
     // "Something else" — the demotion §145 forbids.
-    res.json({ labels: rank(labels, 16, 1), values: outValues });
+    res.json({ labels: labels.rank(16, 1), values: outValues });
   } catch (e) {
     // The editor falls back to its neutral labels and offers no values — the
     // same posture block-usage takes, for the same reason: a wrong list is
     // worse than none, because nothing on screen says it is wrong.
     console.error('[spec-usage]', e && (e.message || e));
     res.status(500).json({ labels: [], values: {} });
+  }
+});
+
+// GET /api/retail-admin/products/storage-usage — the storage box's four lists,
+// counted from THIS TENANT'S own products.
+//
+// WHY (§159). §147 gave the storage box pick lists the same way §145 gave them
+// to the spec strip, and they carried the same fault one section along: the
+// icons, the two heads, the two unit tails and the notes were Roots' catalogue
+// compiled into the editor's source — `Refrigerate · 冷藏保存`, `See packaging`,
+// `开封后请密封保存。` — and a platform offered every one of them to a shop that
+// may sell nothing perishable at all. §156 moved the spec strip's values and
+// recorded these three constants as the known remainder. This is that PR.
+//
+// FIVE TALLIES, NOT ONE, and the split is load-bearing: `Refrigerate` is a LEFT
+// head and `Shelf Life` is a RIGHT one, and offering either on the wrong side
+// would be offering an answer to a question that was not asked. The icon is a
+// single value rather than a pair, because an emoji belongs to no language.
+//
+// MUST BE REGISTERED BEFORE /products/:id, for the reason block-usage states.
+//
+// Reads only the office's own layout choices. No customer data of any kind.
+router.get('/api/retail-admin/products/storage-usage', requireRetailAdmin, (req, res) => {
+  res.set('Cache-Control', 'no-store, must-revalidate');
+  const empty = { icons: { left: [], right: [] }, heads: { left: [], right: [] },
+                  units: { left: [], right: [] }, notes: [] };
+  try {
+    const icons = { left: pairUsage.makeSingleCounter(), right: pairUsage.makeSingleCounter() };
+    const heads = { left: pairUsage.makeCounter(), right: pairUsage.makeCounter() };
+    const units = { left: pairUsage.makeCounter(), right: pairUsage.makeCounter() };
+    const notes = pairUsage.makeCounter();
+    for (const b of storageBoxBlocks(tdb())) {
+      for (const side of ['left', 'right']) {
+        const c = b[side];
+        if (!c || typeof c !== 'object') continue;
+        // Folded on the base glyph so ❄ and ❄️ tally as ONE icon and the
+        // commoner spelling wins the row — §147's finding, which a count that
+        // keyed on the exact string would have quietly undone by offering both.
+        icons[side].bump(String(c.icon || '').replace(/\uFE0F/g, ''), c.icon);
+        // Keyed on the English lower-cased so `Cool & Dry` and `Cool & dry`
+        // tally as one answer and the commoner spelling wins the row.
+        heads[side].bump(String(c.head_en || '').trim().toLowerCase(), c.head_en, c.head_cn);
+        units[side].bump(String(c.unit_en || '').trim().toLowerCase(), c.unit_en, c.unit_cn);
+      }
+      notes.bump(String(b.note_en || '').trim().toLowerCase(), b.note_en, b.note_cn);
+    }
+    res.json({
+      icons: { left: icons.left.rank(8, 2), right: icons.right.rank(8, 2) },
+      heads: { left: heads.left.rank(8, 2), right: heads.right.rank(8, 2) },
+      units: { left: units.left.rank(8, 2), right: units.right.rank(8, 2) },
+      notes: notes.rank(6, 2),
+    });
+  } catch (e) {
+    // Same posture as every other count on this page: no list rather than a
+    // wrong one, and every field stays free text.
+    console.error('[storage-usage]', e && (e.message || e));
+    res.status(500).json(empty);
   }
 });
 
