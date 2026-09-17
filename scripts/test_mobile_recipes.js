@@ -176,6 +176,33 @@ check('typing patches the list and leaves the input alone', () => {
   assert.match(h, /state\.focus=\{id:'mRcpQ'/, 'the caret is carried across the patch');
 });
 
+// REPORTED OFF A PHONE, 2026-09-17: "Spreads & Dips 涂抹酱和蘸酱 · 652.82 g ·
+// 4 ser…" — the row truncates, and the filing was eating the two facts somebody
+// opens this screen for. recipes.category is ONE TEXT column holding both
+// languages (unlike store_products' name/name_cn, which catName() can pick a
+// half from), so there is nothing to shorten. Ordering is the fix.
+check('the weight and the servings come before the category, so truncation eats the filing', () => {
+  const fn = slice('function rcpMeta(x)', 'function screenRecipes()');
+  const body = codeOnly(fn);
+  const batch = body.indexOf('x.batch_size');
+  const serv  = body.indexOf('x.servings');
+  const cat   = body.indexOf('x.category');
+  assert.ok(batch !== -1 && serv !== -1 && cat !== -1, 'all three parts must be on the line');
+  assert.ok(batch < cat, 'the batch weight must be pushed before the category');
+  assert.ok(serv  < cat, 'and so must the servings');
+});
+
+// A row states what it has and omits what it does not — a recipe with no
+// serving count prints no "— servings", which on a truncating line would spend
+// the width that the weight needs.
+check('each part is dropped when it is not recorded, rather than dashed', () => {
+  const body = codeOnly(slice('function rcpMeta(x)', 'function screenRecipes()'));
+  assert.match(body, /if\(x\.batch_size\)/);
+  assert.match(body, /if\(x\.servings\)/);
+  assert.match(body, /if\(x\.category\)/);
+  assert.doesNotMatch(body, /'—'/);
+});
+
 check('the Made/Repacked chips are filing only, and are dropped when there is nothing to file', () => {
   assert.match(MHTML, /function rcpChips\(\)\{[\s\S]{0,500}if\(made\) out\.push/);
   assert.match(MHTML, /if\(rep\) out\.push/);
