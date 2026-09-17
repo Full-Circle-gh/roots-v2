@@ -2560,7 +2560,7 @@ function votRenderRest() {
   mount.innerHTML = `
     <div class="vot-sec">
       <div class="vot-sec-head">
-        <h3>Everything else · 其他投票</h3>
+        <h3>Other polls · 其他投票</h3>
         <span class="vot-sec-count">${votSafe(counts)}</span>
       </div>
       <div class="vot-rows">${rows}</div>
@@ -2834,16 +2834,19 @@ function votRenderEditor() {
               <label for="vot-ed-q">${escapeHtml(votT('Question', '问题'))}</label>
               <input type="text" id="vot-ed-q" value="${escapeAttr(d[qField] || '')}"
                      oninput="votEdSet('${qField}', this.value)"/>
+              <div class="vot-hint">${escapeHtml(votT('What you are asking. Customers read this first, in bold at the top of the card.', '你要问的问题。顾客最先读到的就是它,以粗体显示在卡片顶部。'))}</div>
               <div class="vot-hint" id="vot-ed-q-err"></div>
             </div>
             <div class="vot-field">
-              <label for="vot-ed-kick">${escapeHtml(votT('Label above the question', '问题上方的小标题'))}</label>
+              <label for="vot-ed-kick">${escapeHtml(votT('Small label above it', '上方的小标签'))}</label>
               <input type="text" id="vot-ed-kick" value="${escapeAttr(d[kField] || '')}"
                      oninput="votEdSet('${kField}', this.value)"/>
+              <div class="vot-hint">${escapeHtml(votT('Optional. One or two words saying what kind of question this is — New flavour, Opening hours. Leave it empty and nothing shows.', '可不填。用一两个词说明这是什么类型的问题 —— 新口味、营业时间。留空则不显示。'))}</div>
             </div>
             <div class="vot-field">
-              <label for="vot-ed-exp">${escapeHtml(votT('Line under it', '问题下方的说明'))}</label>
+              <label for="vot-ed-exp">${escapeHtml(votT('Line under the question', '问题下方的一行字'))}</label>
               <textarea id="vot-ed-exp" oninput="votEdSet('${eField}', this.value)">${escapeHtml(d[eField] || '')}</textarea>
+              <div class="vot-hint">${escapeHtml(votT('Optional. One line telling customers why you are asking, or what happens to the winner.', '可不填。用一行字告诉顾客你为什么问,或者胜出的选项会怎样。'))}</div>
             </div>
           </div>
 
@@ -2855,7 +2858,7 @@ function votRenderEditor() {
             ${opts}
             <div class="vot-field">
               <button class="btn" onclick="votEdAddOption()" ${d.options.length >= 8 ? 'disabled' : ''}>${escapeHtml(votT('Add option', '添加选项'))}</button>
-              <div class="vot-hint">${escapeHtml(votT('The first row is A. An option with votes can only go by clearing the whole poll.', '第一行即为 A。已有票数的选项只能通过清空整个投票来删除。'))}</div>
+              <div class="vot-hint">${escapeHtml(votT('Customers pick exactly one of these. The colour is the dot shown beside it in the mini app. An option that already has votes cannot be removed on its own — clearing the whole poll below is the only way.', '顾客只能从中选一项。颜色就是小程序里显示在该选项旁边的圆点。已有票数的选项无法单独删除 —— 只能用下方的清空整个投票。'))}</div>
             </div>
             ${hasVotes ? `
             <label class="vot-check" for="vot-ed-reset">
@@ -2870,7 +2873,7 @@ function votRenderEditor() {
             <div class="vot-split">
               <div class="k">
                 <span class="t">${escapeHtml(votT('Points for voting', '投票奖励积分'))}</span>
-                <span class="vot-hint">${escapeHtml(votT('Earned once per customer, per poll.', '每位顾客每个投票只能获得一次。'))}</span>
+                <span class="vot-hint">${escapeHtml(votT('Each customer may vote once on this poll, and that one vote pays these points. Voting on your other polls pays their own points again.', '每位顾客在本投票中只能投一次,这一票即可获得这些积分。参与你的其他投票可再次获得该投票的积分。'))}</span>
               </div>
               <div class="v"><input type="number" min="0" max="100" value="${escapeAttr(String(d.reward_points != null ? d.reward_points : 5))}"
                      aria-label="${escapeAttr(votT('Points for voting', '投票奖励积分'))}"
@@ -2879,7 +2882,7 @@ function votRenderEditor() {
             <div class="vot-split">
               <div class="k">
                 <span class="t">${escapeHtml(votT('Closes', '截止时间'))}</span>
-                <span class="vot-hint">${escapeHtml(votT('Shown to customers as days left. Nothing closes on its own — you close it here.', '向顾客显示为剩余天数。系统不会自动关闭 —— 由你在此关闭。'))}</span>
+                <span class="vot-hint">${escapeHtml(votT('A date customers see as days left. It closes nothing by itself — the poll keeps taking votes until you press Close poll.', '顾客会看到由此算出的剩余天数。它本身不会关闭投票 —— 在你点击“关闭投票”之前,投票一直接受投票。'))}</span>
               </div>
               <div class="v"><input type="datetime-local" value="${escapeAttr(d.closes_at || '')}"
                      aria-label="${escapeAttr(votT('Closes', '截止时间'))}"
@@ -2888,7 +2891,7 @@ function votRenderEditor() {
             <div class="vot-split">
               <div class="k">
                 <span class="t">${escapeHtml(votT('Feature it', '设为精选'))}</span>
-                <span class="vot-hint">${escapeHtml(votT('Sits at the top of Your say as the big card.', '在“你说了算”页面顶部以大卡片展示。'))}</span>
+                <span class="vot-hint">${escapeHtml(votT('The featured poll is the big card at the top of Your say. Everything else sits under it in a plain list.', '精选投票会以大卡片显示在“你说了算”页面顶部,其余投票以普通列表排在下方。'))}</span>
               </div>
               <div class="v">
                 <label class="vot-check" for="vot-ed-feat">
@@ -2901,7 +2904,7 @@ function votRenderEditor() {
             <div class="vot-split">
               <div class="k">
                 <span class="t">${escapeHtml(votT('Order', '排序'))}</span>
-                <span class="vot-hint">${escapeHtml(votT('Lower numbers come first among polls in the same state.', '同一状态下,数值越小越靠前。'))}</span>
+                <span class="vot-hint">${escapeHtml(votT('Where this poll sits when several are open at once. Lower numbers come first.', '多个投票同时进行时,决定本投票的位置。数值越小越靠前。'))}</span>
               </div>
               <div class="v"><input type="number" value="${escapeAttr(String(d.sort_order || 0))}"
                      aria-label="${escapeAttr(votT('Order', '排序'))}"
@@ -2911,7 +2914,7 @@ function votRenderEditor() {
             <div class="vot-split">
               <div class="k">
                 <span class="t">${escapeHtml(votT('Winner', '获胜选项'))}</span>
-                <span class="vot-hint">${escapeHtml(votT('Highlighted under past results. Left alone, the most-voted option wins.', '在“往期结果”中高亮显示。留空则票数最高者获胜。'))}</span>
+                <span class="vot-hint">${escapeHtml(votT('The option customers see marked as the winner under past results. Leave it alone and whichever option took the most votes is marked.', '顾客在“往期结果”中看到的获胜选项。留空则票数最高的选项自动标为获胜。'))}</span>
               </div>
               <div class="v"><select aria-label="${escapeAttr(votT('Winner', '获胜选项'))}" onchange="votEdSet('winner_option_id', this.value)">
                 <option value="">${escapeHtml(votT('The most-voted option', '票数最高的选项'))}</option>
@@ -2921,11 +2924,11 @@ function votRenderEditor() {
           </div>
 
           <div class="vot-group">
-            <h3>Vote count shown · 对外显示的票数</h3>
+            <h3>What customers see as the count · 顾客看到的票数</h3>
             <div class="vot-split">
               <div class="k">
                 <span class="t">${escapeHtml(votT('Show at least', '至少显示'))}</span>
-                <span class="vot-hint">${escapeHtml(votT('Every option scales by the same factor, so the leader and the percentages hold. Your own figures never change.', '所有选项按同一比例放大,领先项与百分比保持不变。后台数字始终不变。'))}</span>
+                <span class="vot-hint">${escapeHtml(votT('Customers see at least this many votes. If real turnout is lower, every option is multiplied by the same number — the leader and every percentage stay exactly as they are, only the size of the numbers changes. 0 shows the real count. This page always shows you the real count.', '顾客至少会看到这么多票。若真实票数低于此值,所有选项按同一倍数放大 —— 领先项与每个百分比完全不变,变的只是数字的大小。填 0 即显示真实票数。本页始终向你显示真实票数。'))}</span>
               </div>
               <div class="v"><input type="number" min="0" max="100000" value="${escapeAttr(String(d.display_min_total || 0))}"
                      aria-label="${escapeAttr(votT('Show at least', '至少显示'))}"
