@@ -468,14 +468,14 @@ section('9c · the debt is said out loud, not only written down');
     assert.ok(/Counter till/.test(till) && !/Web store/.test(till),
       'the fulfilment wins over the channel column on a walk-in');
     // …and the cause follows the same fork: a till sale owes nobody.
-    assert.ok(!/are now owed/.test(till) && /likely counted wrong/.test(till),
+    assert.ok(!/waiting on items/.test(till) && /nearly always means a miscount/.test(till),
       'a counter sale is reported as a miscount, not as a debt');
   });
   it('it does NOT borrow the platform sentence — ours did not clamp', () => {
     const at = rep.indexOf('function belowZeroText');
     assert.ok(at > -1);
     const body = rep.slice(at, at + 1600);
-    assert.ok(!/已按 0 计|clamped/.test(body),
+    assert.ok(!/已按 0 计|clamp|nothing left on the shelf/.test(body),
       'a completed deduction must not be reported as a refused one');
     assert.ok(/有客户订单等待/.test(body),
       'and it reuses the kitchen owed block\'s own live heading');

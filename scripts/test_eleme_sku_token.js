@@ -323,7 +323,7 @@ console.log('\nG · an unmatched line reaches the merchant; an option line does 
   const o = ingest([{ name: 'Roasted Pumpkin Soup', sku: 'RT-330', qty: 2, unitPrice: 30, lineTotal: 60 }]);
   check('the order still lands', o.code === 200 && o.body.ok, JSON.stringify(o));
   check('the oversell alerts', alerts.length === 1 && alerts[0].text.includes('库存不足'), JSON.stringify(alerts));
-  check('and says what was short', alerts[0] && alerts[0].text.includes('wanted 2, had 0'), JSON.stringify(alerts));
+  check('and says what was short', alerts[0] && alerts[0].text.includes('ordered 2, stock said 0'), JSON.stringify(alerts));
 }
 
 console.log(failures ? `\n${failures} check(s) failed\n` : '\nall checks passed\n');

@@ -90,6 +90,10 @@ async function tick() {
     // Active = first usable candidate in priority order (direct always backstops).
     const active = cands.find(c => avail[c.label]) || cands[cands.length - 1];
     const desc = cands.map(c => `${pm.LABEL_CN[c.label] || c.label}${avail[c.label] ? '✓' : '✗'}`).join(' · ');
+    // The same list for the English half. It used to print `desc` — the CHINESE
+    // labels — inside an English sentence, so the English reader got the raw key
+    // in one place and Chinese in the other, and neither said what a path is.
+    const descEn = cands.map(c => `${pm.LABEL_EN[c.label] || c.label}${avail[c.label] ? ' ✓' : ' ✗'}`).join(' · ');
 
     // 1) Per-candidate up/down transitions → one alert per flip.
     const prevHealth = lastHealth[channel] || {};
@@ -97,9 +101,10 @@ async function tick() {
       const now = avail[c.label], before = prevHealth[c.label];
       if (before !== undefined && before !== now) {
         const name = pm.LABEL_CN[c.label] || c.label;
+        const nameEn = pm.LABEL_EN[c.label] || c.label;
         await announce(now
-          ? `🟢 ${cn}：${name} 恢复可用\n${cn}: ${c.label} proxy back UP`
-          : `🟠 ${cn}：${name} 不可达\n${cn}: ${c.label} proxy DOWN (can't reach Meituan)`,
+          ? `🟢 ${cn}：${name} 恢复可用\n${cn}: ${nameEn} can reach Meituan again. Nothing to do.`
+          : `🟠 ${cn}：${name} 不可达\n${cn}: ${nameEn} cannot reach Meituan. Another route is being used instead — nothing to do.`,
           `${channel}: ${c.label} ${now ? 'back UP' : "DOWN (can't reach Meituan)"}`);
       }
     }
@@ -108,6 +113,7 @@ async function tick() {
     // 2) Active-path change → failover/failback alert + persist for the launchers.
     const prevActive = lastActive[channel];
     const toName = pm.LABEL_CN[active.label] || active.label;
+    const toNameEn = pm.LABEL_EN[active.label] || active.label;
     if (firstRun) {
       // A cold start used to page the bot with this baseline EVERY time, and this
       // process restarts on every deploy that ships anything under lib/ (see
@@ -120,15 +126,16 @@ async function tick() {
       // we are not on the top-priority candidate. Read `probed`, not `avail`: see
       // above, the debounce makes every candidate look healthy on tick one.
       const rawDesc = cands.map(c => `${pm.LABEL_CN[c.label] || c.label}${probed[c.label] ? '✓' : '✗'}`).join(' · ');
+      const rawDescEn = cands.map(c => `${pm.LABEL_EN[c.label] || c.label}${probed[c.label] ? ' ✓' : ' ✗'}`).join(' · ');
       const line = `${channel}: active=${active.label} — ${rawDesc}`;
       if (cands.some(c => !probed[c.label]) || active.label !== cands[0].label) {
-        await announce(`⚠️ ${cn}：启动时已降级，当前走 ${toName}\n${cn} started DEGRADED — active proxy: ${active.label}\n${rawDesc}`, line);
+        await announce(`⚠️ ${cn}：启动时已降级，当前走 ${toName}\n${cn} started up on a backup route, not the usual one. It is now using ${toNameEn}. Selling carries on; tell whoever looks after the box.\n${rawDescEn}`, line);
       } else {
         say(line);   // all green on boot — the log remembers it, the group does not need to
       }
       lastLogged[channel] = Date.now();
     } else if (prevActive !== undefined && prevActive !== active.url) {
-      await announce(`🔀 ${cn}：切换到 ${toName}\n${cn} FAILOVER → ${active.label}\n${desc}`,
+      await announce(`🔀 ${cn}：切换到 ${toName}\n${cn} switched itself to ${toNameEn} because the one before it stopped working. Selling carries on — nothing to do.\n${descEn}`,
         `${channel}: FAILOVER ${prevActive || 'direct'} → ${active.label} — ${desc}`);
       lastLogged[channel] = Date.now();
     } else if (Date.now() - (lastLogged[channel] || 0) >= LOG_EVERY_MS) {

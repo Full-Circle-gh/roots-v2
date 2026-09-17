@@ -217,8 +217,8 @@ function noteVerifyResult(storeCode, challenged) {
           ? `闪购 验证中心 challenge right after a browser relaunch — session intact; backing off ~${mins} min`
           : `闪购 验证中心 challenge — a human must pass the captcha; backing off ~${mins} min`);
       alertMerchant(ACCOUNT, cold
-        ? `🟠 美团闪购 ${storeCode} 风控/验证（浏览器刚重启，登录未掉），库存同步暂停约 ${mins} 分钟后自动恢复，无需操作\nMeituan 闪购 ${storeCode} risk-control right after a browser restart — NOT logged out, stock sync auto-resumes in ~${mins} min, no action needed`
-        : `🔴 美团闪购 ${storeCode} 掉线：风控/验证，库存同步已暂停，需要在盒子上重新登录\nMeituan 闪购 ${storeCode} disconnected (risk-control 403) — stock sync paused, needs re-login`);
+        ? `🟠 美团闪购 ${storeCode} 风控/验证（浏览器刚重启，登录未掉），库存同步暂停约 ${mins} 分钟后自动恢复，无需操作\nMeituan 闪购 ${storeCode} hit a security check right after the browser restarted. We are still logged in and stock syncing starts again by itself in about ${mins} min. Nothing to do.`
+        : `🔴 美团闪购 ${storeCode} 掉线：风控/验证，库存同步已暂停，需要在盒子上重新登录\nMeituan 闪购 ${storeCode} is blocked by a security check. Stock is not syncing until someone logs in again on the box.`);
     }
     log(storeCode, `verification challenge — cooling down ~${Math.round(wait / 60000)} min (strike ${s.strikes})`);
   } else {
