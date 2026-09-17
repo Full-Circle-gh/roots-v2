@@ -3,7 +3,7 @@
 /* ── Hero band (editorial) ── */
 .hero {
   position: relative;
-  background: var(--corn);
+  background: var(--lime);
   padding: 80rpx 44rpx 140rpx;
   overflow: hidden;
   min-height: 380rpx;
