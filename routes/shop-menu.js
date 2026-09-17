@@ -77,7 +77,7 @@ const {
   // A QR sale and a till sale at the same counter are numbered, taxed and
   // costed by the same code. A second answer to any of the three would show up
   // as a margin report nobody can reconcile.
-  nextOrderNo, taxSettings, costAtSale,
+  nextOrderNo, taxSettings, costAtSale, optionsCostAtSale,
   // autoPrintOrder is NO LONGER IMPORTED, and its absence is the change rather
   // than an oversight: §44's print-on-submit was narrowed away on 2026-09-08 and
   // every QR ticket now comes from markOrderPaid() on the paid transition. See
@@ -3968,8 +3968,9 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
       const insItem = h.prepare(`
         INSERT INTO retail_order_items
           (order_id, product_id, name_en, name_cn, sku, size, qty, unit_price, line_total,
-           ship_modes, needs_ice_pack, ship_from_supplier, unit_cost_at_sale, options_json)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+           ship_modes, needs_ice_pack, ship_from_supplier, unit_cost_at_sale, options_json,
+           options_cost_at_sale)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
       `);
       for (const r of lines) {
         insItem.run(
@@ -3978,7 +3979,13 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
           r.l.needs_ice_pack ? 1 : 0,
           r.l.ship_from_supplier ? 1 : 0,
           costAtSale(h, r.pid),
-          r.opts.length ? JSON.stringify(r.opts) : null
+          r.opts.length ? JSON.stringify(r.opts) : null,
+          // The same two figures a till sale records, for the same reason the
+          // export block in routes/retail.js gives: a QR sale and a till sale at
+          // one counter must be costed by the SAME code, or the margin report
+          // cannot be reconciled. §120 already reserves a stock-backed extra
+          // here — this is what that extra COST.
+          optionsCostAtSale(h, r.opts)
         );
       }
       h.prepare(
