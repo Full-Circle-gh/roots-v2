@@ -705,6 +705,12 @@ const state = {
      count derived by walking the array is drawn only while this is true. */
   catalogueComplete:false,
   workOpen:false, workEvents:null, workLoading:false, workErr:null, vchSeg:'on',
+  /* Which later step of a delay case has its controls out, as `<shipment>:<index>`,
+     or null. STATE RATHER THAN A DOM TOGGLE because this sheet repaints on the
+     60-second live backstop: an inline show/hide would fold the row back up
+     under the thumb of whoever had just opened it. One at a time, deliberately —
+     the point of the fold is that the next step is the only loud thing. */
+  dcMore:null,
   affiliate:null, affiliateTried:false, affRows:null, affSeg:'', affErr:null, invSeg:'all', invLoaded:false,
   geo:null, geoTried:false, chan:null, chanTried:false, sales:null, salesSummary:null, dlvBusy:false, dlvErr:null,
   chanSheet:null, chanBusy:null, chanErr:null,
@@ -1628,6 +1634,13 @@ reg('dcDelEv', (sid,fid)=>{
 });
 reg('dcTold', sid=>{ dcStep(sid,'customer_told',{}); });
 reg('dcRemedy', (sid,kind)=>{ dcStep(sid,'remedy',{kind}); });
+/* Unfold one later step's controls. ONE AT A TIME: opening the second closes
+   the first, because two open folds is the flat panel this came from. Nothing
+   is fetched and nothing is written — it is a fold, so it repaints and stops. */
+reg('dcMore', (sid,i)=>{
+  const k=String(sid)+':'+String(i);
+  state.dcMore=(state.dcMore===k)?null:k; render();
+});
 /* §98 stage three. The only step that CREATES something — real stock leaves the
    building — so unlike every other one it asks first. The sheet is the phone's
    confirm; the desktop's is a browser confirm() for the same reason. */
@@ -14751,15 +14764,20 @@ function mDcDays(iso){
    since §98 and no surface ever drew them; "close once every step above is
    done" made the operator re-scan a list the server had already read. */
 
-/* The blocker codes, worded. lib/delay-case.js returns codes and says why in
-   its own header: the wording belongs to each surface, as every other refusal
-   in this product does. These three are the desktop's step labels, shortened to
-   the noun each one is. */
-const M_DC_BLOCKER={
-  customer_not_told:['Tell the customer','联系客户'],
-  customer_not_made_whole:['Replacement or refund','补发或退款'],
-  dispute_open:['Carrier settled','承运商赔偿'],
-};
+/* The blocker codes, as the STEP NUMBER each one is. lib/delay-case.js returns
+   codes and says why in its own header, so the surface still does the wording —
+   what changed is that the wording is now a numeral.
+
+   IT USED TO BE THE STEP'S OWN LABEL, AND THE FOOTER THEREFORE PRINTED WORDS
+   THAT WERE ALREADY ON SCREEN. Every one of the four steps is drawn in this
+   panel, always, so "to do: Replacement or refund · Carrier settled" named two
+   rows sitting two and three lines above it — the same two words twice, in a
+   block whose whole complaint was that there was too much to read. Reported
+   from the phone against TC000716: "not clear, maybe step by step better?"
+
+   The rows now carry numerals, so the footer points at them instead of
+   repeating them, and it costs the vocabulary nothing in either language. */
+const M_DC_BLOCKER={ customer_not_told:1, customer_not_made_whole:3, dispute_open:4 };
 /* A step that is finished — tick, what it was, and what closed it.
    A STAMP AND A SENTENCE ARE NOT THE SAME THING AND DO NOT SHARE A SLOT. Both
    used to arrive as one `meta` pinned right at flex:none, so a note somebody
@@ -14776,9 +14794,9 @@ const M_DC_BLOCKER={
    word printed outside it. Shrink 8 against the label's 1 spends the squeeze on
    the stamp, which has spaces to wrap at; `overflow-wrap:anywhere` on both is
    the backstop under that. Nothing in this row may ever overlap again. */
-function mDcDone(label,meta,note){
+function mDcDone(label,meta,note,na){
   return `<div style="display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--hairline)">
-    <span style="flex:none;display:flex;color:var(--sage-ink);margin-top:2px">${ic('check',14,2.25)}</span>
+    <span style="flex:none;display:flex;justify-content:center;width:14px;margin-top:2px;color:var(--${na?'text-secondary':'sage-ink'})">${na?'–':ic('check',14,2.25)}</span>
     <div style="flex:1;min-width:0">
       <div style="display:flex;gap:10px;align-items:baseline">
         <span style="font-size:13.5px;flex:1 1 auto;min-width:0;overflow-wrap:anywhere">${label}</span>
@@ -14787,27 +14805,47 @@ function mDcDone(label,meta,note){
     </div></div>`;
 }
 /* THE NEXT STEP. The only thing in the panel lifted onto a surface of its own,
-   and the only one holding a filled button. */
-function mDcNext(label,detail,controls){
+   and the only one holding a filled button.
+
+   ITS EYEBROW CARRIES THE POSITION, because the header's `✓ 1/4` had nothing on
+   screen to point at — no row said which of the four it was. A tick and two
+   numerals need no word in either language, which is the same reason the header
+   count is drawn that way. */
+function mDcNext(label,detail,controls,n,total){
   return `<div style="margin:10px 0;padding:12px;border-radius:11px;background:var(--surface-card);border:1px solid var(--border-default)">
-    <span style="display:block;font-size:10.5px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--text-secondary)">${T('Next','下一步')}</span>
+    <span style="display:block;font-size:10.5px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--text-secondary)">${T('Next','下一步')} <span class="num">· ${n}/${total}</span></span>
     <span style="display:block;font-size:15px;font-weight:600;color:var(--text-primary);margin:5px 0 ${detail?'5px':'10px'}">${label}</span>
     ${detail?`<div style="font-size:12.5px;color:var(--text-secondary);line-height:1.45;margin-bottom:10px">${detail}</div>`:''}
     ${controls}</div>`;
 }
-/* A step that is not next: one grey line. `aside` says what it waits on when
-   there is nothing to press; `controls` carry it when there is. */
-function mDcLater(label,aside,controls){
-  /* CONTROLS GO ON THEIR OWN LINE, NOT ON THE ROW. Two buttons and a label
-     sharing 390px crushed 'Replacement or refund' into three stacked words with
-     the buttons sitting on top of it — measured on an iPhone 14's width, which
-     is the narrowest this app supports and therefore the one that decides. */
-  return `<div style="padding:9px 0;border-top:1px solid var(--hairline);color:var(--text-secondary)">
-    <div style="display:flex;gap:9px;align-items:center">
-      <span style="flex:none;width:14px;text-align:center">○</span>
+/* A step that is not next: one grey line, numbered. `aside` says what it waits
+   on when there is nothing to press; `controls` carry it when there is.
+
+   CONTROLS GO ON THEIR OWN LINE, NOT ON THE ROW. Two buttons and a label
+   sharing 390px crushed 'Replacement or refund' into three stacked words with
+   the buttons sitting on top of it — measured on an iPhone 14's width, which
+   is the narrowest this app supports and therefore the one that decides.
+
+   AND NOW THEY ARE FOLDED AWAY UNTIL THE ROW IS TAPPED. One primary button was
+   already the rule and it held, but the greys still shouted: a fresh case put
+   'Claim filed', 'Not claiming', 'Add photo', 'Send replacement', 'Refunded'
+   and 'Nothing needed' on screen at once, and the three belonging to a step
+   that is not next sat directly under the one that is. A step out of turn stays
+   REACHABLE — the carrier rings while the remedy is open, and that is ordinary —
+   but it costs a tap now instead of competing for the eye. The chevron is the
+   whole affordance; a word there would be a new pair in two languages for
+   something every phone already teaches. */
+function mDcLater(label,aside,controls,n,open,sid,i){
+  const head=`<div style="display:flex;gap:9px;align-items:center;padding:3px 0">
+      <span class="num" style="flex:none;width:14px;text-align:center">${n}</span>
       <span style="font-size:13.5px;flex:1;min-width:0">${label}</span>
-      ${aside?`<span style="flex:none;font-size:12px">${aside}</span>`:''}</div>
-    ${controls?`<div style="margin:9px 0 2px 23px">${controls}</div>`:''}</div>`;
+      ${aside?`<span style="flex:none;font-size:12px">${aside}</span>`:''}
+      <span style="flex:none;width:16px;text-align:center;font-size:12px">${controls?(open?'▴':'▾'):''}</span></div>`;
+  return `<div style="padding:9px 0;border-top:1px solid var(--hairline);color:var(--text-secondary)">
+    ${controls
+      ? `<button type="button" onclick="APP.cmd('dcMore',${sid},${i})" style="display:block;width:100%;text-align:left;font:inherit;color:inherit;background:none;border:0;padding:0;margin:0;cursor:pointer">${head}</button>`
+      : head}
+    ${controls&&open?`<div style="margin:9px 0 2px 23px">${controls}</div>`:''}</div>`;
 }
 /* One control. `kind` is the whole hierarchy: 'cta' for the single primary,
    'btn' for an alternative beside it, 'link' for an opt-out that must not look
@@ -14875,7 +14913,10 @@ function delayCaseCard(o,sp){
        link:{cmd:'dcNoRemedy',arg:sid,text:T('Nothing needed','无需补发退款')}});
 
   if(ds==='no_claim'){
-    steps.push({done:true,label:T('Carrier settled','承运商赔偿'),meta:'–'});
+    /* NOT DONE — NOT APPLICABLE, and the marker column says so. The '–' used to
+       sit in the stamp slot beside a green tick, which read as a step somebody
+       had finished; it is the one row the count deliberately does not count. */
+    steps.push({na:true,label:T('Carrier settled','承运商赔偿')});
   } else if(ds==='filed'){
     const w=mDcDays(dc.dispute_filed_at);
     steps.push({label:T('Carrier settled','承运商赔偿'),
@@ -14908,32 +14949,40 @@ function delayCaseCard(o,sp){
     <label class="rowact" style="margin-left:auto">${files.length?T('Add','添加'):T('Add photo','添加照片')}
       <input type="file" accept="image/*" style="display:none" onchange="APP.cmd('dcPhoto',${sid},this)"></label></div>`;
 
-  /* One step is promoted, and it is the first unfinished one that can actually
-     be acted on. The rest stay lines. */
-  let promoted=false;
-  const body=steps.map((st,i)=>{
-    let html;
-    if(st.done){ html=mDcDone(st.label,st.meta,st.note); }
-    else if(!promoted&&!st.waits){ promoted=true; html=mDcNext(st.label,st.detail,mDcActs(st,true)); }
-    else { html=mDcLater(st.label,st.aside,mDcActs(st,false)); }
-    return i===1?html+ev:html;   // evidence belongs to the claim, whatever state it is in
-  }).join('');
-
   /* ✓ 2/4. A tick and two numerals need no word in either language, which is
      also why they cost the vocabulary nothing. A case that will not claim has
      three steps, not four — counting a step marked n/a as outstanding forever
-     is how a progress figure stops being believed. */
+     is how a progress figure stops being believed.
+
+     COMPUTED BEFORE THE BODY, not after, because the rows now carry their own
+     position and the NEXT pane prints `n/total`. A second total worked out
+     beside the first is how two numbers on one card start to disagree. */
   const naSettle=ds==='no_claim';
   const total=naSettle?3:4;
   const doneN=(told?1:0)+(ds!=='none'?1:0)+(remedy?1:0)+((!naSettle&&M_DC_TERMINAL.indexOf(ds)>=0)?1:0);
 
+  /* One step is promoted, and it is the first unfinished one that can actually
+     be acted on. The rest stay numbered lines, folded. The numeral is the
+     step's POSITION, which is fixed — the n/a row keeps its place and shows a
+     dash rather than renumbering the rows above it. */
+  const openKey=state.dcMore||'';
+  let promoted=false;
+  const body=steps.map((st,i)=>{
+    const n=i+1;
+    let html;
+    if(st.done||st.na){ html=mDcDone(st.label,st.meta,st.note,st.na); }
+    else if(!promoted&&!st.waits){ promoted=true; html=mDcNext(st.label,st.detail,mDcActs(st,true),n,total); }
+    else { html=mDcLater(st.label,st.aside,mDcActs(st,false),n,openKey===sid+':'+i,sid,i); }
+    return i===1?html+ev:html;   // evidence belongs to the claim, whatever state it is in
+  }).join('');
+
   const canClose=!!(dc&&dc.can_close);
-  const blk=((dc&&dc.blockers)||[]).map(k=>M_DC_BLOCKER[k]).filter(Boolean).map(p=>T(...p));
+  const blk=((dc&&dc.blockers)||[]).map(k=>M_DC_BLOCKER[k]).filter(Boolean);
   const busy=state.parcelBusy===('air'+sid);
   const foot=canClose
     ? `<button class="cta" ${busy?'disabled':''} onclick="APP.cmd('clearAirDelay',${sid})">${busy?T('Saving…','处理中…'):T('Mark handled','标记已处理')}</button>`
     : blk.length
-      ? `<span style="font-size:12.5px;color:var(--text-secondary)">${T('to do','待办')}: ${blk.join(' · ')}</span>`
+      ? `<span style="font-size:12.5px;color:var(--text-secondary)">${T('to do','待办')}: <span class="num">${blk.join(' · ')}</span></span>`
       : `<span style="font-size:12px;color:var(--text-secondary);font-style:italic">${T('Close once every step above is done.','以上步骤全部完成后方可关闭。')}</span>`;
 
   /* THE PANEL SITS INSIDE THE TRACKING CARD, which is already white — so the

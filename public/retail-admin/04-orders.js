@@ -7372,14 +7372,43 @@ function delayDaysSince(iso) {
 // And the footer NAMES what is missing instead of asking the operator to read
 // the list again — those codes have been on the payload since §98 unrendered.
 
-// The blocker codes, worded. lib/delay-case.js returns codes and says in its
-// own header why: a sentence built there would be a third place the wording
-// lives. Each of these is this screen's own step label, shortened to its noun.
-const DELAY_BLOCKER = {
-  customer_not_told:       ['Tell the customer', '联系客户'],
-  customer_not_made_whole: ['Replacement or refund', '补发或退款'],
-  dispute_open:            ['Carrier settled', '承运商赔偿'],
-};
+// The blocker codes, as the STEP NUMBER each one is. lib/delay-case.js returns
+// codes and says in its own header why: a sentence built there would be a third
+// place the wording lives. What changed is that the wording is now a numeral.
+//
+// IT USED TO BE THE STEP'S OWN LABEL, AND THE FOOTER THEREFORE PRINTED WORDS
+// THAT WERE ALREADY ON SCREEN. All four steps are drawn here, always, so
+// "to do: Replacement or refund · Carrier settled" named two rows sitting two
+// and three lines above it — the same words twice, in a block whose complaint
+// was that there was too much to read. Reported from the phone against
+// TC000716: "not clear, maybe step by step better?". The rows carry numerals
+// now, so the footer points at them instead of repeating them, and it costs the
+// vocabulary nothing in either language.
+const DELAY_BLOCKER = { customer_not_told: 1, customer_not_made_whole: 3, dispute_open: 4 };
+
+// Which later step has its controls unfolded, as `<shipment>:<index>`, or null.
+// It is held in module state so that a real re-render — the drawer reopening
+// after a step is taken — puts the fold back where the operator left it, which
+// is how the phone holds it too.
+//
+// BUT THE FOLD ITSELF DOES NOT RE-RENDER, AND THAT IS THE WHOLE CARE HERE. This
+// surface, unlike the phone's, has the claim number and the amounts as inline
+// inputs; `renderOpenOrder` rebuilds the drawer's markup, so folding a row open
+// while a claim number sat half-typed two rows above would have thrown the
+// typing away. A fold is a fold. It flips two attributes and touches nothing
+// else, so every field on screen keeps what is in it.
+let _DELAY_MORE = null;
+function delayMore(sid, i, ev) {
+  if (ev) ev.preventDefault();
+  const k = String(sid) + ':' + String(i);
+  _DELAY_MORE = (_DELAY_MORE === k) ? null : k;
+  document.querySelectorAll('[data-dcmore]').forEach(el => {
+    el.style.display = (el.getAttribute('data-dcmore') === _DELAY_MORE) ? '' : 'none';
+  });
+  document.querySelectorAll('[data-dcchev]').forEach(el => {
+    el.textContent = (el.getAttribute('data-dcchev') === _DELAY_MORE) ? '▴' : '▾';
+  });
+}
 
 // A step that is finished: a tick, what it was, and what closed it.
 // A STAMP AND A SENTENCE ARE NOT THE SAME THING AND DO NOT SHARE A SLOT. Both
@@ -7396,10 +7425,11 @@ const DELAY_BLOCKER = {
 // the label's box went under the width of its own word and the word printed
 // outside it. Shrink 8 against the label's 1 spends the squeeze on the stamp,
 // which has spaces to wrap at; overflow-wrap on both is the backstop under that.
-function delayDone(label, meta, note) {
+function delayDone(label, meta, note, na) {
   return `
     <div style="display:flex; gap:9px; align-items:flex-start; padding:8px 0; border-top:1px solid var(--line-soft);">
-      <span style="color:var(--success, #A3B49F); font-weight:700; line-height:1.4; flex:none;">✓</span>
+      <span style="color:${na ? 'var(--text-3)' : 'var(--success, #A3B49F)'}; font-weight:700; line-height:1.4;
+                   flex:none; width:12px; text-align:center;">${na ? '–' : '✓'}</span>
       <div style="flex:1; min-width:0; color:var(--text-1);">
         <div style="display:flex; gap:10px; align-items:baseline;">
           <div style="flex:1 1 auto; min-width:0; overflow-wrap:anywhere;">${label}</div>
@@ -7412,31 +7442,54 @@ function delayDone(label, meta, note) {
 
 // THE NEXT STEP — the only thing lifted onto a pane of its own, and the only
 // one carrying a filled button.
-function delayNext(label, detail, controls) {
+// ITS EYEBROW CARRIES THE POSITION, because the header's '✓ 1/4' had nothing on
+// screen to point at — no row said which of the four it was. A tick and two
+// numerals need no word in either language, which is why the header count is
+// drawn that way in the first place.
+function delayNext(label, detail, controls, n, total) {
   return `
     <div style="margin:9px 0; padding:11px 12px; border:1px solid var(--line); border-radius:var(--r-md,8px);
                 background:var(--bg-pane, #fff);">
       <div style="font-size:9.5px; font-weight:700; letter-spacing:.11em; text-transform:uppercase; color:var(--text-3);">
-        ${cuT('Next', '下一步')}</div>
+        ${cuT('Next', '下一步')} · ${n}/${total}</div>
       <div style="font-size:13.5px; font-weight:700; color:var(--text-1); margin:4px 0 ${detail ? '4px' : '8px'};">${label}</div>
       ${detail ? `<div style="font-size:11.5px; color:var(--text-3); line-height:1.45; margin-bottom:8px;">${detail}</div>` : ''}
       ${controls}
     </div>`;
 }
 
-// A step that is not next: one quiet line.
-function delayLater(label, aside, controls) {
-  // Controls sit UNDER the row, not on it. The drawer is wider than the phone
-  // and would usually get away with one line, but the two surfaces drawing the
-  // same step differently is how §98's two halves drifted the first time.
-  return `
-    <div style="padding:8px 0; border-top:1px solid var(--line-soft); color:var(--text-3);">
+// A step that is not next: one quiet numbered line.
+// Controls sit UNDER the row, not on it. The drawer is wider than the phone
+// and would usually get away with one line, but the two surfaces drawing the
+// same step differently is how §98's two halves drifted the first time.
+//
+// AND THEY ARE FOLDED AWAY UNTIL THE ROW IS CLICKED. One primary button was
+// already the rule and it held, but the greys still shouted: a fresh case put
+// 'Claim filed', 'Not claiming', 'Add photo', 'Send replacement', 'Refunded'
+// and 'Nothing needed' on screen at once, and the three belonging to a step
+// that is not next sat directly under the one that is. A step taken out of turn
+// stays REACHABLE — the carrier rings while the remedy is open, and that is
+// ordinary — it just costs a click now instead of competing for the eye. The
+// chevron is the whole affordance; a word there would be a new pair in two
+// languages for something every disclosure on the web already teaches.
+function delayLater(label, aside, controls, n, open, sid, i) {
+  const head = `
       <div style="display:flex; gap:9px; align-items:center;">
-        <span style="flex:none; width:12px; text-align:center;">○</span>
+        <span style="flex:none; width:12px; text-align:center;">${n}</span>
         <div style="flex:1; min-width:0;">${label}</div>
         ${aside ? `<span style="flex:none; font-size:11.5px;">${aside}</span>` : ''}
-      </div>
-      ${controls ? `<div style="margin:7px 0 2px 21px;">${controls}</div>` : ''}
+        <span ${controls ? `data-dcchev="${sid}:${i}"` : ''} style="flex:none; width:14px; text-align:center; font-size:11px;">${controls ? (open ? '▴' : '▾') : ''}</span>
+      </div>`;
+  return `
+    <div style="padding:8px 0; border-top:1px solid var(--line-soft); color:var(--text-3);">
+      ${controls
+        ? `<button type="button" onclick="delayMore(${sid},${i},event)"
+             style="display:block; width:100%; text-align:left; font:inherit; color:inherit;
+                    background:none; border:0; padding:0; margin:0; cursor:pointer;">${head}</button>`
+        : head}
+      ${controls
+        ? `<div data-dcmore="${sid}:${i}" style="margin:7px 0 2px 21px; display:${open ? '' : 'none'};">${controls}</div>`
+        : ''}
     </div>`;
 }
 
@@ -7557,7 +7610,10 @@ function renderDelayCase(o, s, delayDays) {
   // reaches the books in §98's fourth stage and not before, because a claim is
   // not income for having been filed (§87).
   if (ds === 'no_claim') {
-    steps.push({ done: true, label: cuT('Carrier settled', '承运商赔偿'), meta: '–' });
+    // NOT DONE — NOT APPLICABLE, and the marker column says so. The '–' used to
+    // sit in the stamp slot beside a green tick, which read as a step somebody
+    // had finished; it is the one row the count deliberately does not count.
+    steps.push({ na: true, label: cuT('Carrier settled', '承运商赔偿') });
   } else if (ds === 'filed') {
     const waited = delayDaysSince(dc.dispute_filed_at);
     steps.push({
@@ -7607,30 +7663,36 @@ function renderDelayCase(o, s, delayDays) {
         files.length ? cuT('Add', '添加') : cuT('Add photo', '添加照片'), 'link')}</span>
     </div>`;
 
-  // One step is promoted: the first unfinished one that can actually be acted
-  // on. Everything else is a line.
-  let promoted = false;
-  const body = steps.map((st, i) => {
-    let html;
-    if (st.done)                      html = delayDone(st.label, st.meta, st.note);
-    else if (!promoted && !st.waits) { promoted = true; html = delayNext(st.label, st.detail, delayActs(st, true)); }
-    else                              html = delayLater(st.label, st.aside, delayActs(st, false));
-    return i === 1 ? html + evidence : html;   // evidence belongs to the claim, in whatever state it is
-  }).join('');
-
   // ✓ 2/4. A tick and two numerals need no word in either language. A case that
   // will not claim has THREE steps, not four — counting a step marked n/a as
   // outstanding forever is how a progress figure stops being believed.
+  // COMPUTED BEFORE THE BODY, not after, because the rows now carry their own
+  // position and the NEXT pane prints `n/total`. A second total worked out
+  // beside the first is how two numbers on one card start to disagree.
   const naSettle = ds === 'no_claim';
   const total = naSettle ? 3 : 4;
   const doneN = (told ? 1 : 0) + (ds !== 'none' ? 1 : 0) + (remedy ? 1 : 0)
               + ((!naSettle && DELAY_TERMINAL.includes(ds)) ? 1 : 0);
 
+  // One step is promoted: the first unfinished one that can actually be acted
+  // on. The rest are numbered lines, folded. The numeral is the step's POSITION,
+  // which is fixed — the n/a row keeps its place and shows a dash rather than
+  // renumbering the rows above it.
+  const openKey = _DELAY_MORE || '';
+  let promoted = false;
+  const body = steps.map((st, i) => {
+    const n = i + 1;
+    let html;
+    if (st.done || st.na)             html = delayDone(st.label, st.meta, st.note, st.na);
+    else if (!promoted && !st.waits) { promoted = true; html = delayNext(st.label, st.detail, delayActs(st, true), n, total); }
+    else                              html = delayLater(st.label, st.aside, delayActs(st, false), n, openKey === sid + ':' + i, sid, i);
+    return i === 1 ? html + evidence : html;   // evidence belongs to the claim, in whatever state it is
+  }).join('');
+
   // The close button is the one that has always been here. It is refused while
   // the dispute is open — server-side too, so the phone cannot slip past it —
   // and the refusal now says which steps it is waiting on.
-  const blockers = ((dc && dc.blockers) || [])
-    .map(k => DELAY_BLOCKER[k]).filter(Boolean).map(pair => cuT(pair[0], pair[1]));
+  const blockers = ((dc && dc.blockers) || []).map(k => DELAY_BLOCKER[k]).filter(Boolean);
   const foot = canClose
     ? delayBtn(`clearAirDelay(${oid}, event)`, cuT('Mark handled', '标记已处理'), 'cta')
     : blockers.length
