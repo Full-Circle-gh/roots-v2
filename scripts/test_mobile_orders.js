@@ -377,7 +377,7 @@ const detailOrder = (extra) => `
   window.__o=mapDetail(Object.assign({id:77, order_no:'RT-077', status:'paid', channel:'wechat',
     recipient_name:'Chen Meiling', total:312, placed_at:'${today} 09:00:00',
     fulfillment_type:'delivery', items:[], shipments:[]}, ${extra}));
-  state.liveDetail=window.__o; state.detailId=window.__o.id; state.ordNote=null;
+  state.liveDetail=window.__o; state.detailId=window.__o.id; state.ordNote=null; state.ordNoteOpen=null;
   state.tab='orders'; render();`;
 
 CASES.push(['the note is read from the order, not invented',
@@ -386,12 +386,64 @@ CASES.push(['the note is read from the order, not invented',
   ['carrying the saved note',  `document.getElementById('mOrdNote').value==='Call before the van leaves'`],
   // Nothing has changed yet, so there is nothing to save.
   ['with no footer',           `document.getElementById('mOrdNoteFoot').hidden===true`],
+  /* AND NOT DRAWN, which the `hidden` assertion above does NOT prove: the
+     attribute is only a UA display:none, and the inline style="display:flex"
+     this node used to carry out-ranked it — so Cancel and Save note sat under
+     every untouched box while that assertion passed. The COMPUTED display is
+     the cascade the bug lived in, so it is what gets asserted. */
+  ['and not drawn at all',     `getComputedStyle(document.getElementById('mOrdNoteFoot')).display==='none'`],
 ]]);
 
-CASES.push(['an order with no note still offers the field',
+/* THE EMPTY BOX IS GONE. It used to be drawn on every drawer: a heading, a
+   textarea and a placeholder asking for a note on orders that will never carry
+   one. An order WITH a note still shows the editor exactly as it did — the case
+   above this one — and an order without one is reached from the "…" sheet,
+   which reveals this same card rather than opening a second surface. */
+const noteRow = (o) => `orderActs(${o}).some(function(a){return a[2].indexOf('ordNoteOpen')>=0})`;
+
+CASES.push(['an order with no note shows no box, and says where the box is',
   detailOrder(`{}`), [
-  ['the card is drawn', `document.getElementById('mOrdNote')!==null`],
-  ['empty',             `document.getElementById('mOrdNote').value===''`],
+  ['no card drawn',       `document.getElementById('mOrdNote')===null`],
+  ['the sheet offers it', noteRow('currentOrder()')],
+]]);
+
+CASES.push(['asking for it from the sheet draws the card, empty',
+  detailOrder(`{}`) + `APP.cmd('ordNoteOpen');`, [
+  ['the card is drawn',     `document.getElementById('mOrdNote')!==null`],
+  ['empty',                 `document.getElementById('mOrdNote').value===''`],
+  ['nothing to save yet',   `document.getElementById('mOrdNoteFoot').hidden===true`],
+  ['and not drawn',         `getComputedStyle(document.getElementById('mOrdNoteFoot')).display==='none'`],
+  ['the sheet closed',      `state.detailActions===false`],
+  // One way in, offered once: a row pointing at something already on screen is
+  // the noise this change removed.
+  ['and stops offering it', `!(${noteRow('currentOrder()')})`],
+]]);
+
+CASES.push(['an order that already has a note is never offered the row',
+  detailOrder(`{staff_note:'Call before the van leaves'}`), [
+  ['its card is up', `document.getElementById('mOrdNote')!==null`],
+  ['so no row',      `!(${noteRow('currentOrder()')})`],
+]]);
+
+/* A ROW THAT OPENS AN EMPTY BOX OVER A NOTE THAT EXISTS is the exact wrong
+   answer the case below this group guards against, so the row waits for the
+   detail read too — before it lands the phone does not know either way.
+   The SAME order object, with only the detail read taken away, so what the
+   assertions turn on is the readiness gate and nothing else. */
+CASES.push(['the row waits for the detail read, exactly as the card does',
+  detailOrder(`{}`) + `state.liveDetail=null; render();`, [
+  // Not because orderActs bailed out — the order is still actionable. It is the
+  // note specifically that is not known yet.
+  ['the order is actionable', `orderActs(window.__o).length>0`],
+  ['the note is not known',   `shopNoteReady(window.__o)===false`],
+  ['so no row',               `!(${noteRow('window.__o')})`],
+]]);
+
+CASES.push(['cancel on an order that had no note takes the card away again',
+  detailOrder(`{}`) + `APP.cmd('ordNoteOpen'); APP.cmd('ordNoteTyped','half a thought'); APP.cmd('ordNoteReset');`, [
+  ['the card is gone',     `document.getElementById('mOrdNote')===null`],
+  ['the draft with it',    `state.ordNote===null`],
+  ['and the row is back',  noteRow('currentOrder()')],
 ]]);
 
 /* THE LIST DOES NOT CARRY staff_note. Painting the box from a list row would
@@ -418,6 +470,7 @@ CASES.push(['typing shows the footer and never repaints',
     APP.cmd('ordNoteTyped','after');`, [
   ['the draft is held in state', `state.ordNote && state.ordNote.text==='after' && state.ordNote.id===77`],
   ['the footer appears',         `document.getElementById('mOrdNoteFoot').hidden===false`],
+  ['and is really drawn',        `getComputedStyle(document.getElementById('mOrdNoteFoot')).display==='flex'`],
   // The same node, not a replacement: a repaint per keystroke would rebuild the
   // textarea under the caret.
   ['the textarea was not rebuilt', `document.getElementById('mOrdNote')===window.__box`],
@@ -480,7 +533,7 @@ const parcelOrder = (trk) => `
   window.__o=mapDetail({id:77, order_no:'RT-077', status:'dispatched', channel:'wechat',
     recipient_name:'A', total:312, placed_at:'${today} 09:00:00', fulfillment_type:'delivery',
     items:[], shipments:[{id:9, mode:'land', state:'dispatched', items:[], tracking:${trk}}]});
-  state.liveDetail=window.__o; state.detailId=window.__o.id; state.ordNote=null;
+  state.liveDetail=window.__o; state.detailId=window.__o.id; state.ordNote=null; state.ordNoteOpen=null;
   state.tab='orders'; render();`;
 
 CASES.push(['a parcel with no waybill is offered the control, not a signpost',
