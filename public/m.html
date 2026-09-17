@@ -1014,6 +1014,15 @@ const state = {
      reasons) survives the record sheet opening and closing, and the FORM half
      (open … previewSeq) is reset on every open by CMD.wasteNew, so a sheet
      never reopens carrying the last entry's product. */
+  /* RECIPES (§164's screen, read-only). `rows` is the catalogue and is kept
+     across entries — re-reading 205 recipes every time somebody opens the row
+     is a wait for nothing, the same call SUBS.askbuy's material list makes.
+     `q` and `type` ARE reset on entry (see push), because a list reopened
+     still filtered to one word is a list that looks empty for no reason.
+     `rec` is whichever recipe is open; it is re-read every time, because a
+     recipe is edited on desktop and the copy in hand may be an hour old. */
+  rcp:{rows:null,tried:false,loading:false,err:null,q:'',type:'',listSeq:0,
+       openId:null,rec:null,recTried:false,recErr:null,tab:'ingredients'},
   wst:{rows:null,totals:null,tried:false,loading:false,err:null,listSeq:0,
        range:'week',reason:'',store:'',reasons:null,
        /* `mounted` is the house guard against a sheet that re-enters on every
@@ -1124,6 +1133,16 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   /* Log a batch opens with nothing counted. A basket left over from a batch
      that was already recorded would add it a second time. */
   if(route==='logbatch'){ state.bat.qty={}; state.bat.q=''; }
+  /* The CATALOGUE is kept and the FILTERS are dropped — the split SUBS.askbuy
+     already makes for the same reason. 205 recipes are the shop's vocabulary
+     and re-reading them on every entry is a wait for nothing; a search word
+     left over from last time is a list that opens looking empty. */
+  if(route==='recipes'){ const r=state.rcp; r.q=''; r.type=''; }
+  /* A RECORD IS RE-READ EVERY TIME. Recipes are written on desktop, so the
+     copy in hand may be an hour old and the person holding the phone is about
+     to make the thing. `rec` to null rather than kept, so the screen draws
+     "Loading…" rather than the last recipe somebody opened. */
+  if(route==='recipeone'){ const r=state.rcp; r.rec=null; r.recTried=false; r.recErr=null; r.tab='ingredients'; }
   /* A CLAIM IS WRITTEN FROM AN EMPTY FORM EVERY TIME, and a screen reopened
      after a send does not reappear on its own receipt — the rule the three
      request screens above already follow. THE LISTS ARE KEPT: the categories are
@@ -4542,7 +4561,16 @@ const MORE_GROUPS=[
        is never opened from here — it is where the queue and this row both
        arrive, carrying lines with them, and a row that opened it cold would
        open it empty. */
-    ['logbatch','clipboard-list','Log a batch','登记批次']]},
+    ['logbatch','clipboard-list','Log a batch','登记批次'],
+    /* WHAT A THING IS MADE FROM, for the person making it. Read-only: the
+       ingredients, the quantities and the steps, and no money at all — this
+       screen holds no cost figure for anyone, whatever they hold, so §164's
+       split decides what the SERVER sends it and never what it draws.
+       BORN GATED on `production`, the same Features switch that gates Materials
+       and Recipes on the desktop and `askbuy` four rows down. A new row may be
+       born gated; an old one may not be gated retroactively, which is why this
+       carries the switch and `logbatch` above it still does not. */
+    ['recipes','book-open','Recipes','食谱',null,'production']]},
   /* THE THREE REQUEST SCREENS, AND THE ONE GROUP THAT EARNED ITS HEADING MOST.
      Each asks somebody else to act and moves nothing on its own; each was
      previously scattered among the rows that DO the thing being asked for.
@@ -11554,6 +11582,216 @@ SUBS.kitchenqueue={title:['Kitchen queue','厨房制作队列'],
 SUBS.channelsync={title:['Channel sync','渠道同步'],render:()=>screenChannelSync()};
 SUBS.whatmade={title:['What you made','登记制作'],render:()=>screenWhatMade()};
 SUBS.logbatch={title:['Log a batch','登记批次'],render:()=>screenLogBatch()};
+
+/* ==========================================================================
+   Recipes — read-only (§164). What a thing is made from, and in what order.
+   ==========================================================================
+   NO MONEY ON THIS SCREEN, for anybody. §164 split `recipes:costs` out of
+   `recipes:view` so the kitchen could be handed the ingredients and the steps
+   without the batch cost, the cost per gram and the margin; this screen is the
+   half that was being withheld, so it draws none of the other half. That is a
+   decision about what the screen is FOR, not a gate — nothing here asks who is
+   looking, and the server already declines to send the figures to anyone
+   without the capability (lib/recipe-cost-visibility.js).
+
+   READ-ONLY, and the note at the foot says so in the app's own standing words.
+   The desktop record autosaves across four sub-tabs with version history
+   behind it; none of that comes across a phone, and a half-editor that can
+   save a name but not a line is worse than a page that states its purpose. */
+/* Quantities on this screen are weights and counts, not money — acMoney and
+   the phone's money helpers have no business here. A recipe line can be
+   fractional (0.5 kg) and a batch can be 3,179.25 g, so the digits are capped
+   rather than left to whatever the locale would do with a long float. */
+const rcpNum = v => { const n=Number(v);
+  return Number.isFinite(n) ? n.toLocaleString(undefined,{maximumFractionDigits:3}) : String(v==null?'':v); };
+function loadRecipes(force){
+  const r=state.rcp;
+  if(r.tried&&!force) return;
+  r.tried=true; r.loading=true; r.err=null;
+  /* Last asked wins, not last to arrive — the guard loadWaste() carries, for
+     the same reason: two taps a second apart can come back out of order. */
+  const seq=++r.listSeq;
+  api('/api/retail-admin/recipes').then(rows=>{
+    if(seq!==r.listSeq) return;
+    r.rows=Array.isArray(rows)?rows:[];
+    r.loading=false; r.err=null; render();
+  }).catch(e=>{
+    if(seq!==r.listSeq||String(e.message)==='auth') return;
+    r.loading=false; r.rows=null;
+    /* §1.12 — a section with bad data SHOWS that it failed rather than falling
+       through to the empty state, which would read as "this shop has no
+       recipes". */
+    r.err=E('Could not load recipes.','无法加载食谱。'); render();
+  });
+}
+function loadRecipeOne(){
+  const r=state.rcp;
+  if(r.recTried||r.openId==null) return;
+  r.recTried=true; r.recErr=null;
+  api('/api/retail-admin/recipes/'+Number(r.openId)).then(rec=>{
+    r.rec=rec||null; r.recErr=null; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    r.rec=null; r.recErr=E('Could not load recipes.','无法加载食谱。'); render();
+  });
+}
+/* Filed, not behaved: `recipe_type` decides which chip a row sits under and
+   nothing else — the desktop's own comment says nothing may start gating on
+   it, and this screen does not. */
+function rcpChips(){
+  const rows=state.rcp.rows||[];
+  const made=rows.filter(x=>(x.recipe_type||'made')!=='repacked').length;
+  const rep=rows.length-made;
+  const out=[{key:'',en:'All',zh:'全部',count:rows.length}];
+  if(made) out.push({key:'made',en:'Made',zh:'自制',count:made});
+  if(rep) out.push({key:'repacked',en:'Repacked',zh:'分装',count:rep});
+  return out;
+}
+function rcpRows(){
+  const r=state.rcp, q=String(r.q||'').trim().toLowerCase();
+  let rows=r.rows||[];
+  if(r.type) rows=rows.filter(x=>(x.recipe_type||'made')===r.type);
+  if(q) rows=rows.filter(x=>String(x.name_en||'').toLowerCase().indexOf(q)>=0
+                         || String(x.name_cn||'').toLowerCase().indexOf(q)>=0
+                         || String(x.sku||'').toLowerCase().indexOf(q)>=0);
+  return rows;
+}
+/* The one line under a name. Category, then the two facts a person standing at
+   a bench actually asks — how much it makes and how many that is. Each is
+   dropped when it is not recorded rather than printed as a dash: a row reading
+   "— g" says nothing and costs a line's width. */
+function rcpMeta(x){
+  const bits=[];
+  if(x.category) bits.push(String(x.category));
+  if(x.batch_size) bits.push(rcpNum(x.batch_size)+' g');
+  if(x.servings) bits.push(LANG==='en'
+    ? (x.servings+(x.servings===1?' serving':' servings'))
+    : (x.servings+' 份'));
+  return bits.join(' · ');
+}
+function screenRecipes(){
+  if(!featOn('production')) return flagGate('production');
+  loadRecipes();
+  const r=state.rcp;
+  const search=`<div style="padding:12px 16px;position:relative">
+    <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
+    <input id="mRcpQ" inputmode="search" enterkeyhint="search" value="${escAttr(r.q)}" style="padding-left:42px"
+      placeholder="${T('Search recipes','搜索食谱')}" oninput="APP.cmd('rcpSearch',this.value)"></div>`;
+  return search+`<div id="mRcpBody">${rcpBodyHtml()}</div>`;
+}
+/* Split from the screen so a keystroke repaints the list without rebuilding the
+   input under it — the same arrangement screenLogBatch() uses, and for the same
+   reason: a render() there takes the soft keyboard with it. */
+function rcpBodyHtml(){
+  const r=state.rcp;
+  if(r.err) return `<div style="padding:34px 24px;text-align:center;font-size:15px;color:var(--brick-ink)">${T(...r.err)}</div>`;
+  if(!r.rows) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!r.rows.length) return nothingYet(T('No recipes yet','暂无食谱'),
+    T('A recipe is what you make and what goes into it. They are written on desktop.',
+      '食谱记录你制作的东西及其用料。请在电脑端创建。'));
+  const rows=rcpRows();
+  const chips=rcpChips();
+  return `${chips.length>1?`<div style="padding:4px 0 4px">${chipRow(chips,r.type,'rcpType')}</div>`:''}
+    <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:10px">
+    ${!rows.length?`<div style="padding:32px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${
+      T('Nothing matches','没有匹配项')}</div>`:''}
+    ${rows.length?`<div class="list">${rows.map((x,i)=>`
+      ${i?'<div class="sep"></div>':''}
+      <button class="row" onclick="APP.cmd('rcpOpen',${Number(x.id)})" style="min-height:64px;align-items:center">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+          <span style="font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(x.name_en||x.name_cn||'')}</span>
+          ${rcpMeta(x)?`<span class="num" style="font-size:13px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rcpMeta(x))}</span>`:''}
+        </span>
+        <span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right',18)}</span>
+      </button>`).join('')}</div>`:''}
+    ${rows.length?desktopNote():''}</div>`;
+}
+/* ── One recipe ──────────────────────────────────────────────────────────── */
+const RCP_STORAGE={freezer:['Freezer','冷冻'],fridge:['Fridge','冷藏'],room_temp:['Room temperature','常温']};
+function screenRecipeOne(){
+  const r=state.rcp;
+  loadRecipeOne();
+  if(r.recErr) return `<div style="padding:34px 24px;text-align:center;font-size:15px;color:var(--brick-ink)">${T(...r.recErr)}</div>`;
+  const rec=r.rec;
+  if(!rec) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const lines=Array.isArray(rec.ingredients)?rec.ingredients:[];
+  const steps=Array.isArray(rec.steps)?rec.steps:[];
+  /* TWO TABS, NOT FOUR. The desktop record carries Details, Ingredients, Steps
+     and Cost & Pricing; the money tab is not this screen's to draw and the
+     Details tab is three fields, which sit at the foot of Ingredients instead
+     of behind a tap of their own. */
+  const strip=`<div class="hscroll" style="display:flex;gap:24px;padding:8px 16px 0;border-bottom:1px solid var(--border-default)">
+    ${[['ingredients','Ingredients','原料',lines.length],['steps','Steps','步骤',steps.length]].map(([k,en,zh,n])=>{
+      const on=r.tab===k;
+      return `<button onclick="APP.cmd('rcpTab','${k}')" style="flex:none;background:none;border:none;padding:10px 0 11px;margin:0;font-family:inherit;cursor:pointer;
+        font-size:15px;font-weight:${on?'500':'400'};color:${on?'var(--text-primary)':'var(--text-secondary)'};
+        box-shadow:${on?'inset 0 -2px 0 var(--text-primary)':'none'}">${T(en,zh)}${n?` <span class="num" style="font-size:12px;opacity:.7">${n}</span>`:''}</button>`;
+    }).join('')}</div>`;
+
+  const keep=[];
+  if(rec.storage&&RCP_STORAGE[rec.storage]) keep.push([T('Storage','储存方式'),T(...RCP_STORAGE[rec.storage])]);
+  if(rec.shelf_life) keep.push([T('Shelf life','保质期'),String(rec.shelf_life)]);
+  if(rec.notes) keep.push([T('Notes','备注'),String(rec.notes)]);
+
+  const body=r.tab==='steps'
+    ? (!steps.length
+        ? `<div style="padding:32px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('None','无')}</div>`
+        : `<div style="display:flex;flex-direction:column;gap:10px">${steps.map((st,i)=>`
+            <div class="card" style="padding:14px;display:flex;gap:13px;align-items:flex-start">
+              <span class="num" style="flex:none;width:26px;height:26px;border-radius:8px;background:var(--surface-raised);color:var(--text-secondary);
+                display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500">${i+1}</span>
+              <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+                ${st.name?`<span style="font-size:15px;font-weight:500">${escAttr(st.name)}</span>`:''}
+                ${st.instructions?`<span style="font-size:14.5px;line-height:1.55;color:${st.name?'var(--text-secondary)':'var(--text-primary)'};white-space:pre-line">${escAttr(st.instructions)}</span>`:''}
+              </span></div>`).join('')}</div>`)
+    : (!lines.length
+        ? `<div style="padding:32px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('None','无')}</div>`
+        : `<div class="list">${lines.map((l,i)=>`
+            ${i?'<div class="sep"></div>':''}
+            <div style="display:flex;align-items:center;gap:14px;min-height:52px;padding:11px 16px">
+              <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                <span style="font-size:15px">${escAttr(l.name_en||l.master_name_en||l.name_cn||'')}</span>
+                ${l.notes?`<span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(l.notes)}</span>`:''}
+              </span>
+              <span class="num" style="flex:none;font-size:15px;font-weight:500">${escAttr(rcpNum(l.qty))} ${escAttr(l.unit||'g')}</span>
+            </div>`).join('')}</div>`);
+
+  return strip+`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">
+    ${body}
+    ${keep.length?`<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+      ${keep.map(([k,v])=>`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+        <span style="font-size:14.5px;color:var(--text-secondary);flex:none">${k}</span>
+        <span style="font-size:14.5px;font-weight:500;text-align:right;min-width:0">${escAttr(v)}</span></div>`).join('')}</div>`:''}
+    ${desktopNote()}</div>`;
+}
+SUBS.recipes={title:['Recipes','食谱'],
+  status:()=>{ const r=state.rcp; if(!r.rows) return '';
+    const n=r.rows.length;
+    return LANG==='en' ? (n+(n===1?' recipe':' recipes')) : (n+' 个食谱'); },
+  render:()=>screenRecipes()};
+SUBS.recipeone={title:['Recipes','食谱'],
+  titleOf:()=>escAttr((state.rcp.rec&&(state.rcp.rec.name_en||state.rcp.rec.name_cn))||T('Recipes','食谱')),
+  backLabel:()=>T('Recipes','食谱'),
+  /* Batch and servings, which is what the title cannot say and what somebody
+     about to make the thing opened it to find out. Silent when neither is
+     recorded rather than printing a dash — §1.7's status line is a fact or it
+     is nothing. */
+  status:()=>{ const rec=state.rcp.rec; if(!rec) return '';
+    const bits=[];
+    if(rec.batch_size) bits.push(rcpNum(rec.batch_size)+' g');
+    if(rec.servings) bits.push(LANG==='en'
+      ? (rec.servings+(rec.servings===1?' serving':' servings'))
+      : (rec.servings+' 份'));
+    return bits.join(' · '); },
+  render:()=>screenRecipeOne()};
+reg('rcpSearch', v=>{ const r=state.rcp, el=document.getElementById('mRcpQ');
+  r.q=String(v||''); state.focus={id:'mRcpQ',pos:el?el.selectionStart:null};
+  /* Patch the list alone. The rows are already in memory — this filters them —
+     so a render() would only serve to destroy the field being typed into. */
+  const b=document.getElementById('mRcpBody'); if(b) b.innerHTML=rcpBodyHtml(); else render(); });
+reg('rcpType', v=>{ state.rcp.type=String(v||''); render(); });
+reg('rcpTab', v=>{ state.rcp.tab=String(v||'ingredients'); render(); });
+reg('rcpOpen', id=>{ state.rcp.openId=Number(id); push('recipeone'); });
 SUBS.pick={title:['Pick','拣货'],render:()=>screenPick()};
 SUBS.receivexfer={title:['Receive from another shop','调拨收货'],render:()=>screenReceiveTransfer()};
 SUBS.kitchenready={title:['Ready from the kitchen','厨房已完成'],render:()=>screenKitchenReady()};
@@ -18677,6 +18915,13 @@ const ROUTE_CAP={
      the page reads correctly with the CTA gone. The record button carries the
      second capability itself — see SUBS.waste's cta. */
   waste:'waste:view',
+  /* RECIPES IS GATED ON VIEW, NOT ON COSTS, and the distinction is §164's.
+     `recipes:view` is what opens a recipe — what it is made from, in what
+     quantities, in what order. `recipes:costs` is the money, and this screen
+     shows none of it to anybody, so gating on it would refuse the screen to
+     exactly the kitchen operator it was built for. The record screen carries
+     the same key: it is the list's other half, not a second permission. */
+  recipes:'recipes:view', recipeone:'recipes:view',
   /* `till` is deliberately ABSENT from this table — it is the one route that
      needs ALL of a pair rather than any of it, and an array here means any-of.
      Its gate is the named branch in canRoute() below. */

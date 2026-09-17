@@ -161,8 +161,12 @@ it('B moved no row, and the 收货 collision it left open is now CLOSED', () => 
      GROUP'S HEADING rather than by a count of groups, so adding a ninth does
      not silently narrow what this counts. */
   const ops = groups.slice(groups.indexOf("h:['Take an order'"), groups.indexOf("h:['Marketing'"));
-  assert.strictEqual((ops.match(/\['[a-z]+','[a-z-]+',/g) || []).length, 22,
-    'the Operations rows no longer number twenty-two across the eight groups (§121)');
+  /* TWENTY-THREE SINCE 2026-09-17: `recipes` (§164's read-only screen) was added
+     to Making things. This assertion is a guard against §118's strip QUIETLY
+     MOVING a row, so it moves when a row is deliberately added and not
+     otherwise. scripts/test_mobile_ops_groups.js holds the set by name. */
+  assert.strictEqual((ops.match(/\['[a-z]+','[a-z-]+',/g) || []).length, 23,
+    'the Operations rows no longer number twenty-three across the eight groups (§121)');
 
   const row = (k) => {
     const m = new RegExp(`\\['${k}','[a-z-]+','([^']+)','([^']+)'`).exec(ops);
