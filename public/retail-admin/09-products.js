@@ -1601,16 +1601,69 @@ function paOpenRecipe(recipeId) {
 // field keeps its one-line height for every product with no channel history.
 // The line reads live off the Cost field, like the first one, so typing a cost
 // moves both figures together.
+// What this product's REQUIRED choices add to what it COSTS us, from the server
+// (lib/option-cost.js requiredOptionFloorYuan). Not a price — the worst we can
+// be obliged to hand over, because at the moment a margin is drawn nobody has
+// chosen yet and anything less than the worst case flatters it.
+//
+// WHY THIS EXISTS AT ALL. A choice used to be a garnish, and a garnish's cost
+// sitting outside the margin cost nobody anything. Then a choice became how a
+// product is BUILT: Ash, 2026-09-17, on Beet Salad — the customer picks one of
+// two dressings, both sat in the recipe, and the product carried a dressing it
+// never shipped. Modelling the choice properly moves that cost OUT of the
+// recipe, and without this the margin here would jump the other way and read
+// better than the product really is. Too-high a cost makes an operator
+// cautious; too-low gets a price cut that cannot be afforded.
+//
+// null = a required group has a linked choice nobody could price, so the floor
+// is UNKNOWN rather than free, and the margin must say so instead of showing a
+// confident number. 0 = no required choice costs us anything, which is the true
+// answer for nearly every product and is NOT the same fact.
+//
+// Absent for a cost-blind operator: lib/product-cost-visibility.js strips it
+// beside unit_cost, so `undefined` here means "not mine to see", and the margin
+// line that reads it is already hidden for that operator.
+let OPT_COST_FLOOR = 0;
+// DECLARED HERE, BESIDE ITS ONLY READER, AND NOT BESIDE optLoad() WHICH WRITES
+// IT. `let` has a temporal dead zone: this file is one long script, and a
+// declaration three thousand lines BELOW pdRenderMargin would throw outright if
+// anything rendered a margin while the file was still evaluating. Nothing does
+// today, which is exactly the kind of fact that stops being true quietly.
 function pdRenderMargin() {
   const el = document.getElementById('pd-margin');
   if (!el) return;
   const g = id => { const n = document.getElementById(id); return n ? n.value : ''; };
-  const cost = g('pd-cost').trim();
-  const m = _paMargin(g('pd-price'), cost);
+  const costTyped = g('pd-cost').trim();
+  // ── THE REQUIRED CHOICES ARE PART OF WHAT THE PRODUCT COSTS ──────────────
+  //
+  // The Cost field holds what the product itself costs. A product that cannot
+  // leave the counter without a choice costs that too, and OPT_COST_FLOOR is
+  // what the dearest permitted answer adds (see its declaration for why the
+  // dearest and not a mean).
+  //
+  // A FLOOR OF null BLOCKS THE MARGIN OUTRIGHT, rather than falling back to the
+  // typed cost. Null means a required group carries a linked choice nobody could
+  // price, so the real cost is the typed figure PLUS an unknown — and a margin
+  // drawn on the typed figure alone would be confidently too good, which is the
+  // one direction that gets a price cut. The em dash is the honest answer, and
+  // the same one an unpriced build line already produces.
+  //
+  // 0 AND undefined BOTH CHANGE NOTHING, deliberately and for different reasons:
+  // 0 is a true "no required choice costs us anything" (nearly every product),
+  // and undefined is a cost-blind operator whose margin line is hidden anyway.
+  const floorBlocked = OPT_COST_FLOOR === null;
+  const floor = Number(OPT_COST_FLOOR) || 0;
+  const cost = (costTyped === '' || floorBlocked)
+    ? costTyped
+    : String(Number(costTyped) + floor);
+  // The sanity pill compares COST against PRICE, so it reads the same combined
+  // figure — a product pushed above its price by its required choices is exactly
+  // the case §36 put that warning there for.
+  const m = floorBlocked ? null : _paMargin(g('pd-price'), cost);
   pdRenderCostSanity(m);
   // The row the list already holds — mt_revenue / mt_units come down with it.
   const p = (PA_PRODUCTS || []).find(x => x.id === Number(g('pd-id'))) || null;
-  const ch = p ? _paChannelMargin(p.mt_revenue, p.mt_units, cost) : null;
+  const ch = (p && !floorBlocked) ? _paChannelMargin(p.mt_revenue, p.mt_units, cost) : null;
   // `noteBelowCost` defaults to shown — the Meituan-actual line below keeps its
   // own long-standing wording. The list-margin line passes false: that
   // condition now has its own pill (pdRenderCostSanity) and would otherwise say
@@ -1621,17 +1674,36 @@ function pdRenderMargin() {
          + (v.money < 0 && noteBelowCost !== false ? ' — ' + cuT('selling below cost', '低于成本销售') : '');
   };
   el.textContent = '';
+  if (floorBlocked) {
+    // Says WHICH of the two unknowns this is. "Add a cost" would send the
+    // operator to a field that is already filled; the missing figure is on a
+    // choice, and naming that is the difference between a dead end and a job.
+    // CN PENDING elsewhere in this file ships English on both halves; this one
+    // is composed rather than sourced and is declared in
+    // docs/tacet-delivery-vocabulary.md in the same commit.
+    el.textContent = cuT('Margin — a required choice has no cost yet',
+                         '毛利 — 必选项暂无成本');
+    return;
+  }
   if (!m) { el.textContent = cuT('Margin — add a cost to see it', '毛利 — 填写成本后显示'); return; }
   // One figure keeps the word it has always had. Two figures need two words
   // (§1.17 rule 1) — they are the same expression on different revenue.
-  if (!ch) { el.textContent = line(cuT('Margin', '毛利'), m, false); return; }
+  // When the required choices moved the figure, SAY SO on the line. A margin
+  // silently computed on a cost the operator cannot see in the Cost field is a
+  // number they cannot check, and an unexplained difference is how a correct
+  // figure gets overridden by a wrong one.
+  const withOpts = floor > 0
+    ? ' · ' + cuT('incl. ' + paMoney(floor) + ' required choice',
+                  '含必选项 ' + paMoney(floor))
+    : '';
+  if (!ch) { el.textContent = line(cuT('Margin', '毛利'), m, false) + withOpts; return; }
   const add = (text, cls) => {
     const d = document.createElement('div');
     d.textContent = text;
     if (cls) d.className = cls;
     el.appendChild(d);
   };
-  add(line(cuT('List margin', '标价毛利'), m, false));
+  add(line(cuT('List margin', '标价毛利'), m, false) + withOpts);
   // qty is REAL on the line item, so a count is rounded for display rather than
   // shown as "12.0 sold". It is context for the figure above it, not a stock number.
   const sold = Math.round(ch.units).toLocaleString();
@@ -1789,6 +1861,24 @@ function _paMarginFlagged(u, body) {
 // cost. Two figures need two words (§1.17 rule 1), so each line is labelled the
 // moment there are two; a product with no Meituan sales renders exactly the one
 // unlabelled figure it always did, and the row keeps its single-line height.
+// ── KNOWN AND STATED: THE LIST COLUMN CARRIES NO OPTION FLOOR ──────────────
+//
+// This is the CATALOGUE LIST's margin cell, and it reads `unit_cost` off the
+// list payload — the product's own cost, with nothing added for a required
+// choice. pdRenderMargin() in the editor adds that floor (§162); this does not,
+// so the two can disagree for a product whose required choice costs us money.
+//
+// WHY IT IS LEFT, WRITTEN DOWN RATHER THAN QUIETLY: the floor is a per-product
+// derivation over two more tables, priced through productUnitCostYuan() so a
+// bundle chosen as an extra resolves — 261 active products would be 261 of them
+// on every list paint. The list is a scan; the editor is where a price is
+// actually set, and that is the one this ships for.
+//
+// THE DISAGREEMENT IS ZERO TODAY and becomes real the moment a required choice
+// is linked to a costed product — nothing in the live catalogue is in that shape
+// yet. When one is, the cell here reads HIGH (the flattering direction), which
+// is the same trap §162 exists to close, so the honest fix is a batched floor on
+// the list endpoint and not a second derivation in this file.
 function _paMarginCell(u) {
   const ms = (u.group ? u.members : [u.p])
     .map(m => _paMargin(m.sell_price, m.unit_cost))
@@ -4692,6 +4782,7 @@ function optDrop(ev, kind, oi, ci) {
 function optLoad(id) {
   const box = document.getElementById('pd-options'); if (!box) return;
   OPT_ID = id; OPT = []; OPT_OPEN = false; OPT_PICK = null;
+  OPT_COST_FLOOR = 0;
   if (!id) {
     box.innerHTML = `<div class="pd-var-head">${cuT('Options (customer chooses)', '选项(顾客选择)')}</div>` +
       `<div class="helper" style="font-size:11px">${cuT('Add a name & SKU above — it saves automatically, then add a choice like a dressing here.', '请先在上方填写名称和货号 — 系统会自动保存,随后即可在此添加如酱料等选项。')}</div>`;
@@ -4703,6 +4794,13 @@ function optLoad(id) {
     .then(r => r.json())
     .then(j => {
       if (OPT_ID !== id) return;   // operator switched products mid-fetch
+      // Captured from the SAME payload the choices come from, so the floor can
+      // never describe a different set of options than the ones on screen.
+      OPT_COST_FLOOR = (j && j.success && j.data) ? j.data.options_cost_floor : 0;
+      // The margin was drawn before this arrived and was drawn without the
+      // floor. Repaint it now rather than leaving a flattering number up until
+      // the next keystroke — see pdRenderMargin.
+      if (typeof pdRenderMargin === 'function') pdRenderMargin();
       const opts = (j && j.success && j.data && Array.isArray(j.data.options)) ? j.data.options : [];
       OPT = opts.map(o => ({
         question_en: o.question_en || '', question_cn: o.question_cn || '',

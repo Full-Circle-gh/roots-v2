@@ -207,17 +207,40 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
     //   never reduced, and §36 records that nothing else in the codebase
     //   subtracts it from any aggregate. This is the first reader that does.
     //
-    // ── AND THREE IT CANNOT, WHICH IS WHY THE FRACTION IS NOT A COMPLETENESS
+    // ── AND TWO IT CANNOT, WHICH IS WHY THE FRACTION IS NOT A COMPLETENESS
     //    CLAIM ──
     //
     //   An AMOUNT-ONLY refund writes nothing to the line at all, so §36's
     //   "cannot be seen at any level of sophistication" holds here too — 7 such
-    //   orders, ¥328, in the measured window. OPTIONS carry a price delta with
-    //   no cost counterpart. A BUNDLE line goes null when ONE component is
-    //   unpriced, so a null here is not always the plain "never costed" the
-    //   fraction reads it as. `cost_coverage` counts what carries a cost, not
-    //   what carries a RIGHT one; §36's two accuracy findings are untouched by
-    //   anything in this block.
+    //   orders, ¥328, in the measured window. A BUNDLE line goes null when ONE
+    //   component is unpriced, so a null here is not always the plain "never
+    //   costed" the fraction reads it as. `cost_coverage` counts what carries a
+    //   cost, not what carries a RIGHT one; §36's two accuracy findings are
+    //   untouched by anything in this block.
+    //
+    // ── OPTIONS WERE THE THIRD, AND ARE NOW THE SECOND TERM OF THE SUM ──
+    //
+    // This paragraph read "OPTIONS carry a price delta with no cost counterpart",
+    // and it was true: a chosen extra could draw down a real shelf
+    // (`stock_product_id`, reserved one per unit bought by expandStockLines) while
+    // contributing nothing at all to this figure. `options_cost_at_sale` is that
+    // counterpart, written at the sale through lib/option-cost.js.
+    //
+    // IT TAKES THE REFUND FACTOR AND NOT THE PACK ONE. That asymmetry is the same
+    // shape as the one above rather than an oversight: an extra is added ONCE PER
+    // UNIT BOUGHT — `add(o.stock_product_id, r.qty)`, with no pack factor anywhere
+    // in it — so a six-pack listing takes six products off the shelf and one oat
+    // milk. Multiplying this term by `pack_units` would charge for six.
+    //
+    // A SEPARATE TERM RATHER THAN A WIDER unit_cost_at_sale, for precisely that
+    // reason: one column cannot be multiplied by pack_units and left unmultiplied
+    // by it in the same breath. database.js carries the warning at the other end.
+    //
+    // COVERAGE STILL MEASURES THE PRODUCT HALF ONLY. `line_rev_costed` below asks
+    // whether `unit_cost_at_sale` is present and says nothing about the extras, so
+    // a line whose product is costed and whose oat milk is not still counts as
+    // covered. Left alone deliberately: the fraction has a published meaning and
+    // redefining it quietly is worse than a gap that is written down.
     //
     // THE PREDICATE IS THE ONE ABOVE, ALIAS-QUALIFIED. `PAID_O` is the same
     // allow-list `PAID` is, and taking it from lib/finance-window.js rather than
@@ -230,6 +253,10 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
                   THEN i.unit_cost_at_sale
                        * (COALESCE(i.qty, 0) - COALESCE(i.refunded_qty, 0))
                        * COALESCE(i.pack_units, 1)
+                  ELSE 0 END), 0)
+           + COALESCE(SUM(CASE WHEN i.options_cost_at_sale IS NOT NULL
+                  THEN i.options_cost_at_sale
+                       * (COALESCE(i.qty, 0) - COALESCE(i.refunded_qty, 0))
                   ELSE 0 END), 0)                                     AS cogs,
              COALESCE(SUM(COALESCE(i.line_total, 0)), 0)              AS line_rev,
              COALESCE(SUM(CASE WHEN i.unit_cost_at_sale IS NOT NULL

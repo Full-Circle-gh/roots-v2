@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.298
+# Tacet shared-core consolidation — decisions record, v4.299
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -20,6 +20,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+
+
+2026-09-17 · v4.299 — **§162 · A CHOICE THE CUSTOMER MAKES IS PART OF WHAT THE PRODUCT COSTS — AND A FEATURE THAT WAS ALREADY DESIGNED IS WITHDRAWN.** Ash reported a waste problem (*"fresh meals sometimes are waste without the dressing, we keep dressing many time in the freezer"*) and then, two turns later, the thing underneath it: *"beet salad is an example of a salad that we offer to choose 2 types of dressing. the staff made a mistake and put both of them inside the recipe."* **The second report killed the first fix.** A tick on the material and a *was the dressing kept?* question on the waste sheet was designed, measured against the live ledger (¥27.65 of ¥121.93 in thirteen days, `scripts/diagnose_dressing_waste.js`) and is now **withdrawn, not deferred**: it was a workaround for the dressing being buried in a recipe, and once the dressing is its own stocked product a binned salad is a binned salad. **Waste is the one reader this section does not change.** The real fault is not waste at all — Beet Salad carries ¥11.43 where the truth is ¥8.31 or ¥9.33, **20–27% too high on every sale at a ¥48 price**, and the live sweep found it is the ONLY genuine instance among five candidate recipes. The hole it opens is far wider than dressings: 54 option choices draw down a real shelf today and 15 can be priced, on 8.5% of all order lines, and `routes/finance-summary.js` had already written the gap down in its own words — *"OPTIONS carry a price delta with no cost counterpart"*. So `lib/option-cost.js` answers the two questions separately: a SALE takes the chosen choice's cost into the new `retail_order_items.options_cost_at_sale`, and the CATALOGUE takes the **dearest REQUIRED** choice, because nobody has chosen yet and a mean reads plausible while flattering. **A second column rather than a wider `unit_cost_at_sale`, and that is provable rather than tidy**: that column is multiplied by `pack_units` downstream while a linked choice is added once per unit bought, so one column would have charged a six-pack for six oat milks. **The direction of the error is the whole point** — taking the dressing out of the recipe replaces a cost that was too high with one that is too low, and too low is what gets a price cut, so the editor's margin ships in the same commit and a required choice nobody priced **blocks it outright** rather than falling back to the typed figure. Two pairs COMPOSED and declared in `docs/tacet-delivery-vocabulary.md` v1.114. `cost_coverage`, the channel ingest paths and `is_default` are all deliberately untouched, each for a stated reason. Covered by `scripts/test_option_cost.js` (23 checks).
 
 
 
@@ -17293,3 +17297,125 @@ there was nothing to copy (`NULL` and `'[]'` both). `scripts/test_product_editor
 freshness.js` asserts the rest against source — the flush, the iframe handover, the
 gate, `keepFlag`, and that the clear rides on the `description_blocks` write itself.
 Every case red-proofed against the tree before the fix.
+
+
+## §162 — A CHOICE THE CUSTOMER MAKES IS PART OF WHAT THE PRODUCT COSTS
+
+Reported by Ash, 2026-09-17, working outward from the waste ledger: *"fresh meals
+sometimes are waste without the dressing, we keep dressing many time in the
+freezer"*, and then, on Beet Salad: *"beet salad is an example of a salad that we
+offer to choose 2 types of dressing. the staff made a mistake and put both of them
+inside the recipe."*
+
+**THE SECOND REPORT SUPERSEDED THE FIRST, AND KILLED A FEATURE THAT WAS ALREADY
+DESIGNED.** The first proposal was a tick on the material (*packed separately, can be
+kept*) and a two-chip question on the waste sheet that subtracted the dressing's share
+when the answer was *kept*. It was measured and worth about ¥65 a month
+(`scripts/diagnose_dressing_waste.js`, live, 2026-09-17: ¥121.93 written off in
+thirteen days, of which ¥27.65 was separately-packed dressing). **It is withdrawn.**
+It was a workaround for the dressing being buried inside a recipe, and once the
+dressing is its own stocked product a binned salad is a binned salad and a binned
+dressing is its own record. No tick, no question, no subtraction. **Waste is the one
+reader this section does not change.**
+
+### WHAT THE LIVE DATA SAID
+
+`scripts/diagnose_dressing_waste.js` and `scripts/diagnose_option_cost_gap.js`, both
+read-only against production:
+
+- **Beet Salad is the only genuine instance.** Five recipes carry two or more
+  dressing-ish lines; the other four (Tabbouleh Bowl, Marinated Tempeh, Seitan,
+  Ginger Tahini) genuinely contain all of theirs. The data fault is ONE product.
+- **And it is not a waste problem.** Beet Salad's recipe holds `Beet salad dressing`
+  (¥3.11/unit) and `Ginger Tahini` (¥2.10/unit) against a ¥6.22 base, so the product
+  carries ¥11.43 where the truth is ¥8.31 or ¥9.33 — **20–27% too high on every sale,
+  at a ¥48 price**, not merely on the two that were thrown away.
+- **The hole this opens is much wider than dressings.** 54 live option choices carry
+  a `stock_product_id` — a real shelf, reserved one per unit by `expandStockLines` —
+  and only 15 can be priced at all. 542 of 6,393 order lines (8.5%) carry options.
+  `routes/finance-summary.js` had already written the gap down in its own words:
+  *"OPTIONS carry a price delta with no cost counterpart."*
+
+### THE DECISION: MODEL THE CHOICE AS A CHOICE, AND GIVE ITS COST SOMEWHERE TO LAND
+
+A recipe describes one fixed thing. A choice is not a recipe line, and a recipe
+holding every branch of one is wrong in a way that cannot be rounded away. So:
+
+1. **The recipe holds the salad WITHOUT the dressing.** Each dressing becomes a real
+   product and a stock-linked option choice. This is DATA work, and it is Ash's:
+   neither `Beet salad dressing` nor `Ginger Tahini` exists as a product yet.
+2. **`retail_order_items.options_cost_at_sale`** — a new snapshot column, ¥ per unit
+   of the line, written by `lib/option-cost.js` `chosenOptionCostYuan()` at every
+   sale path that records options.
+3. **The catalogue answer is the DEAREST required choice**, not the chosen one and
+   not a mean — `requiredOptionFloorYuan()`. At the moment a margin is drawn nobody
+   has chosen, and a mean reads plausible while flattering. **Only REQUIRED groups
+   count**: an optional *Add extras?* is revenue the customer volunteered, and
+   charging every unit for it would be the same error in the other direction.
+
+### WHY A SECOND COLUMN RATHER THAN A WIDER `unit_cost_at_sale`
+
+The smaller change was to fold the extras into the existing column, and it is
+**provably wrong**. `unit_cost_at_sale` is multiplied by `pack_units` downstream — a
+Meituan qty of 1 against a 6瓶 listing is six units off the shelf — while
+`expandStockLines` adds a linked choice **once per unit bought**, with no pack factor
+anywhere in it. One column cannot be multiplied by `pack_units` and left unmultiplied
+by it in the same breath: a six-pack would have been charged for six oat milks. The
+COGS sum therefore takes the refund factor on both terms and the pack factor on only
+one, and both ends carry the warning.
+
+### THE DIRECTION OF THE ERROR IS THE WHOLE POINT
+
+Taking the dressing out of the recipe fixes a cost that was too HIGH and, on its own,
+replaces it with one that is too LOW — the salad's price still includes a dressing its
+cost no longer does. **Too high makes an operator cautious; too low gets a price cut
+that cannot be afforded.** That is why the margin change ships in the same PR as the
+modelling advice rather than after it, why the floor is the dearest rather than the
+mean, and why a required choice nobody has priced **blocks the margin outright**
+instead of falling back to the typed cost. An em dash is the honest answer; a
+confident number built on a partial sum is not.
+
+### WHAT DOES NOT CHANGE, DELIBERATELY
+
+- **Waste.** See above. The first design is withdrawn, not deferred.
+- **`cost_coverage`.** The fraction still asks only whether `unit_cost_at_sale` is
+  present, so a line whose product is costed and whose oat milk is not still counts
+  as covered. The fraction has a published meaning and redefining it quietly is worse
+  than a gap that is written down.
+- **The channel ingest paths.** Meituan's and Eleme's `options_json` carries the
+  channel's own attribute labels, not our `choice_id`/`stock_product_id`, so there is
+  no link to price and nothing to write. Left alone rather than wired to return null.
+- **Nothing reads `is_default` for cost.** A default is what the customer is shown
+  first, not what we are obliged to hand over, and the floor is about obligation.
+
+### ONE GAP LEFT OPEN ON PURPOSE, AND IT LEANS THE WRONG WAY
+
+**The catalogue LIST's margin column carries no floor.** `_paMarginCell()` reads
+`unit_cost` off the list payload; only the editor's `pdRenderMargin()` adds the
+required choices. The floor is a per-product derivation over two more tables, priced
+through `productUnitCostYuan()` so a bundle chosen as an extra resolves, and 261
+active products would be 261 of those on every list paint. The list is a scan; the
+editor is where a price is set, and that is the one this ships for.
+
+**The disagreement is zero today** — nothing live has a required choice linked to a
+costed product — **and when it appears the list will read HIGH**, which is the same
+flattering direction this whole section exists to close. So it is written down at the
+call site as well as here, and the fix when it is wanted is a batched floor on the
+list endpoint, never a second derivation in the browser.
+
+### LANGUAGE
+
+Two pairs COMPOSED under Rule 4's fourth amendment and declared in
+`docs/tacet-delivery-vocabulary.md` v1.114 with every lifted half named and the live
+candidates rejected: `含必选项 ¥X` and `毛利 — 必选项暂无成本`. `必选` is lifted from
+the checkbox that sets the very flag being read, on the same screen; `暂无成本` from
+the waste screen's own words for the identical fact.
+
+### COVERAGE
+
+`scripts/test_option_cost.js` drives `lib/option-cost.js` against a real in-memory
+database: a label-only choice costs a real zero, a linked-but-unpriced choice blocks
+rather than contributing nothing, a required multi takes its `min_choices` dearest, an
+optional group never counts toward the floor, and the two nulls (nothing linked vs
+nothing priceable) are told apart by `linked`. Every case red-proofed against the tree
+before the fix.

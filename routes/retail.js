@@ -19,6 +19,9 @@ const db = require('../database');
 const { recipeOwnsProductCost, fireRecompute } = require('../lib/recipe-rollup');
 const { bundleOwnsProductCost, bundleUnitCostYuan } = require('../lib/bundle-cost');
 const { productUnitCostYuan } = require('../lib/product-cost');
+// The cost half of a product option — see lib/option-cost.js for why a chosen
+// extra's cost had nowhere to land until this existed.
+const { chosenOptionCostYuan, requiredOptionFloorYuan } = require('../lib/option-cost');
 const optionLimits = require('../lib/option-limits');
 // One answer for what a product page signs itself with, read here by BOTH the
 // operator route the editor asks and the public config the mini app asks (§156).
@@ -2132,6 +2135,37 @@ function costAtSale(handle, productId) {
     return productUnitCostYuan(handle, productId);
   } catch (e) {
     console.error('[cost-at-sale] could not resolve cost for product', productId, e && e.message);
+    return null;
+  }
+}
+
+// ── And what the CHOSEN EXTRAS on that line cost ───────────────────────────
+// The sibling of costAtSale, for retail_order_items.options_cost_at_sale.
+//
+// A SECOND FUNCTION RATHER THAN A SECOND ARGUMENT TO THE ONE ABOVE, because the
+// two answer different questions and land in different columns. costAtSale is
+// per unit AND per pack (`pack_units` multiplies it downstream); this is per
+// unit and NEVER per pack — expandStockLines adds one linked extra per unit
+// bought, with no pack factor. Merging them would make one of the two wrong at
+// every channel six-pack, and the mistake would be invisible in either
+// expression on its own. The column's comment in database.js carries the same
+// warning at the other end.
+//
+// NEVER THROWS, for exactly the reason its sibling gives: three of the write
+// sites sit inside the transaction that writes the order, and a cost lookup
+// that raised there would roll back a real sale over a column nothing depended
+// on. Null is already the column's word for unknown, so a failure degrades to
+// the honest answer instead of losing the order.
+//
+// `options` is what goes into options_json — the array the checkout already
+// builds and expandStockLines already reads. A line with no options, or none
+// carrying a stock link, has nothing to record and returns null.
+function optionsCostAtSale(handle, options) {
+  if (!Array.isArray(options) || !options.length) return null;
+  try {
+    return chosenOptionCostYuan(handle, options).yuan;
+  } catch (e) {
+    console.error('[cost-at-sale] could not resolve option costs', e && e.message);
     return null;
   }
 }
@@ -11929,8 +11963,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
          (order_id, product_id, name_en, name_cn, sku, size, image_url,
           qty, unit_price, line_total, options_json,
           ship_modes, needs_ice_pack, ship_from_supplier, replaced_for_product_id,
-          unit_cost_at_sale)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+          unit_cost_at_sale, options_cost_at_sale)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     );
     for (const r of resolved) {
       insertItem.run(
@@ -11947,7 +11981,13 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
         // product's cost. `?? null` keeps undefined out of better-sqlite3, which
         // refuses it — a line from a path that somehow set no cost lands NULL
         // (unknown), never 0.
-        r.unitCostAtSale ?? null
+        r.unitCostAtSale ?? null,
+        // The extras' own cost, computed HERE rather than carried on `r`, and
+        // deliberately: it is derived from the very array being stringified on
+        // the line above, so the two cannot describe different sets of choices.
+        // Null whenever a chosen extra could not be priced — see the column's
+        // comment in database.js for why that is not a zero.
+        optionsCostAtSale(tdb(), r.options)
       );
     }
     // Auto-plan shipments based on dest city + per-item ship_modes. For
@@ -23800,6 +23840,21 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
   } else { row.nutrition = null; }
   row.product_facts = parseFactsCol(row.product_facts);
   row.options = loadProductOptions(id);
+  // What this product's REQUIRED choices add to what it costs us — the worst
+  // the customer can oblige us to hand over, because at this moment nobody has
+  // chosen yet and a mean would read plausible while flattering the margin.
+  // See lib/option-cost.js for why only REQUIRED groups count.
+  //
+  // 0 for almost every product today and that is correct, not a stub: a choice
+  // only costs us something when it carries a `stock_product_id`, and a sugar
+  // level never will. null means a required group HAS a linked choice we could
+  // not price, which is an unknown floor rather than a free one.
+  //
+  // ONLY `yuan` TRAVELS. requiredOptionFloorYuan also counts how many links it
+  // could not price, and that count is deliberately NOT sent: a blocked margin
+  // needs to say WHICH choice is unpriced to be actionable, and a bare number
+  // cannot, so it would be a figure on the wire that no screen could use.
+  row.options_cost_floor = requiredOptionFloorYuan(tdb(), id).yuan;
   res.json({ success: true, data: stripProductCosts(req, row) });
 });
 
@@ -36691,8 +36746,8 @@ function finalizeOrderAddon(addonId) {
     `INSERT INTO retail_order_items
        (order_id, product_id, name_en, name_cn, sku, size, qty, unit_price,
         line_total, options_json, ship_modes, needs_ice_pack, ship_from_supplier, addon_id,
-        unit_cost_at_sale)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        unit_cost_at_sale, options_cost_at_sale)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const newItemIds = [];
 
@@ -36713,7 +36768,12 @@ function finalizeOrderAddon(addonId) {
         // Set above from the settlement-time derivation; undefined whenever that
         // derivation could not run, which better-sqlite3 will not accept — so
         // it becomes an explicit NULL.
-        it.unit_cost_at_sale ?? null
+        it.unit_cost_at_sale ?? null,
+        // Derived from the same `it.options` the column beside it stringifies,
+        // so a line cannot record one set of choices and the cost of another.
+        // Settlement-time, like the unit cost above: this is when the sale
+        // happens on an added-later line.
+        optionsCostAtSale(tdb(), it.options)
       );
       newItemIds.push(info.lastInsertRowid);
     }
@@ -38608,6 +38668,9 @@ module.exports.normalizeCurrency     = normalizeCurrency;
 module.exports.nextOrderNo           = nextOrderNo;
 module.exports.taxSettings           = taxSettings;
 module.exports.costAtSale            = costAtSale;
+//   optionsCostAtSale — the SAME for a line's chosen stock-backed extras, which
+//                     a QR sale can carry exactly as a till sale can
+module.exports.optionsCostAtSale     = optionsCostAtSale;
 // §44: a QR order's kitchen ticket prints on SUBMIT rather than on paid, so the
 // menu route needs the same printer resolution, the same template and the same
 // outcome recording the paid path uses. It is the whole function rather than a

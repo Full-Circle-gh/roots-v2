@@ -103,6 +103,12 @@ function makeSandbox(lang, products) {
     escapeHtml: (s) => String(s),
     paMoney: (n) => '¥' + Number(n || 0).toFixed(2),
     PA_PRODUCTS: products || [],
+    // §162: pdRenderMargin adds what the product's REQUIRED choices cost us.
+    // The variable is a page-level `let` declared beside optLoad(), which is
+    // outside the slice above — so the sandbox supplies it exactly as the loaded
+    // page does, at its initial value. A case wanting a different floor sets
+    // sandbox.OPT_COST_FLOOR before rendering.
+    OPT_COST_FLOOR: 0,
     document: {
       getElementById: node,
       createElement: () => ({ textContent: '', className: '' }),
@@ -117,12 +123,16 @@ function makeSandbox(lang, products) {
 
 /** Set #pd-price / #pd-cost / #pd-id, as the editor's own inputs, then run
  *  pdRenderMargin() exactly as the keystroke handler does. */
-function typeAndRender(sb, { price, cost, id }) {
+function typeAndRender(sb, { price, cost, id, floor }) {
   sb._nodes = sb._nodes || {};
   const set = (elId, v) => { sb.document.getElementById(elId).value = v == null ? '' : String(v); };
   set('pd-price', price);
   set('pd-cost', cost);
   set('pd-id', id || '');
+  // undefined leaves whatever the sandbox was built with (0, the page's own
+  // starting value); null is a REAL value here and means "a required choice
+  // could not be priced", so it must not be confused with "not supplied".
+  if (floor !== undefined) sb.OPT_COST_FLOOR = floor;
   sb.pdRenderMargin();
 }
 
@@ -266,6 +276,74 @@ it('public/retail-admin.html has #pd-cost-sanity between #pd-cost-alert and #pd-
   const i3 = HTML.indexOf('id="pd-margin"');
   assert.ok(i1 > -1 && i2 > -1 && i3 > -1, 'all three ids must be present');
   assert.ok(i1 < i2 && i2 < i3, 'expected order: cost-alert, cost-sanity, margin');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+console.log('\n7. §162 — a REQUIRED choice is part of what the product costs');
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Beet Salad's own numbers, because the direction of the error is the point.
+// Taking the dressing out of the recipe drops the typed cost from ¥11.43 to
+// ¥6.22, and if the margin did not add the choice back it would jump from 76%
+// to 87% — better than the product is, which is the one direction that gets a
+// price cut nobody can afford.
+
+it('a required choice is ADDED to the typed cost, not ignored', () => {
+  const sb = makeSandbox('en');
+  typeAndRender(sb, { price: 48, cost: 6.2159, floor: 3.1143 });
+  // ¥48 − ¥9.33 = ¥38.67, not ¥41.78.
+  assert.match(sb._nodes['pd-margin'].textContent, /¥38\.67/);
+});
+
+it('...and the line SAYS it did, so the operator can check a figure they cannot see', () => {
+  const sb = makeSandbox('en');
+  typeAndRender(sb, { price: 48, cost: 6.2159, floor: 3.1143 });
+  assert.match(sb._nodes['pd-margin'].textContent, /incl\. ¥3\.11 required choice/);
+});
+
+it('a floor of zero changes nothing and says nothing — nearly every product', () => {
+  const sb = makeSandbox('en');
+  typeAndRender(sb, { price: 48, cost: 6.2159, floor: 0 });
+  assert.match(sb._nodes['pd-margin'].textContent, /¥41\.78/);
+  assert.ok(!/incl\./.test(sb._nodes['pd-margin'].textContent),
+    'no required choice costs anything, so the clause must be absent entirely');
+});
+
+it('an UNPRICED required choice blocks the margin rather than falling back', () => {
+  // The trap: falling back to the typed cost here would publish 87% on a
+  // product whose real cost is 6.2159 PLUS an unknown.
+  const sb = makeSandbox('en');
+  typeAndRender(sb, { price: 48, cost: 6.2159, floor: null });
+  assert.match(sb._nodes['pd-margin'].textContent, /a required choice has no cost yet/);
+  assert.ok(!/%/.test(sb._nodes['pd-margin'].textContent), 'no percentage may be shown');
+});
+
+it('...and says WHICH unknown it is, not "add a cost" to a field already filled', () => {
+  const sb = makeSandbox('en');
+  typeAndRender(sb, { price: 48, cost: 6.2159, floor: null });
+  assert.ok(!/add a cost/i.test(sb._nodes['pd-margin'].textContent),
+    'the Cost field is filled; sending the operator there is a dead end');
+});
+
+it('the blocked line has its own Chinese, the composed pair', () => {
+  const sb = makeSandbox('cn');
+  typeAndRender(sb, { price: 48, cost: 6.2159, floor: null });
+  assert.match(sb._nodes['pd-margin'].textContent, /毛利 — 必选项暂无成本/);
+});
+
+it('the sanity pill reads the COMBINED cost, so a choice can push a product past its price', () => {
+  // ¥10 typed + ¥5 required = ¥15 against a ¥12 price. On the typed figure
+  // alone the pill would stay silent and the margin would read positive.
+  const sb = makeSandbox('en');
+  typeAndRender(sb, { price: 12, cost: 10, floor: 5 });
+  assert.strictEqual(sb._nodes['pd-cost-sanity'].style.display, '');
+  assert.match(sb._nodes['pd-cost-sanity'].innerHTML, /selling below cost/);
+});
+
+it('both composed pairs are declared in the vocabulary doc', () => {
+  assert.match(VOCAB_MD, /含必选项/);
+  assert.match(VOCAB_MD, /毛利 — 必选项暂无成本/);
+  assert.match(VOCAB_MD, /COMPOSED by Claude, 2026-09-17/);
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
