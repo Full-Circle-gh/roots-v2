@@ -4510,6 +4510,48 @@ addColumn('retail_order_items', 'refunded_qty', 'INTEGER DEFAULT 0');
 // records nothing at all), and a backfill falling back to TODAY's cost would
 // produce a column that looks like a snapshot without being one.
 addColumn('retail_order_items', 'unit_cost_at_sale', 'REAL');
+
+// What the CHOSEN EXTRAS on this line cost us, ¥ per unit of the line.
+//
+// SEPARATE FROM unit_cost_at_sale, AND THE PACK MULTIPLIER IS WHY. Folding an
+// extra into the column above would have been smaller and is provably wrong:
+// that column is multiplied by `pack_units` (a Meituan qty of 1 against a 6瓶
+// listing is six units off the shelf), while a stock-linked choice is added ONCE
+// PER UNIT BOUGHT — expandStockLines does `add(o.stock_product_id, r.qty)`, with
+// no pack factor anywhere in it. One column carrying both would be right for the
+// product and six times wrong for the oat milk beside it. So the line's extras
+// cost is
+//   options_cost_at_sale × (qty − refunded_qty)
+// with NO pack_units, and routes/finance-summary.js sums it exactly that way.
+//
+// WHY IT EXISTS AT ALL. routes/finance-summary.js names this gap in its own
+// words, as one of three things its cost-coverage fraction cannot see:
+// "OPTIONS carry a price delta with no cost counterpart." A choice has always
+// carried `price_delta` — what the customer pays — and `stock_product_id`, a
+// real product whose shelf it draws down, and never what that product costs us.
+// 54 live choices carry a stock link today and 15 of them can be priced.
+//
+// IT BECAME URGENT WHEN A CHOICE BECAME HOW A PRODUCT IS BUILT. Ash, 2026-09-17,
+// on Beet Salad: the customer picks one of two dressings and both sat in the
+// recipe, so every unit carried a dressing it did not ship. Modelling the choice
+// as a choice is the fix — and it moves the dressing's cost OUT of the recipe,
+// to here. Without this column that cost would land nowhere.
+//
+// NULL = UNKNOWN, 0 IS NEVER WRITTEN, and the two are told apart deliberately
+// (§32 rule 10). A line with no stock-linked choice has nothing to record and
+// stays NULL; so does a line whose linked choice could not be priced, because a
+// sum missing one contributor is confidently low and low reads as plausible.
+// lib/option-cost.js chosenOptionCostYuan() returns `linked` alongside the
+// figure so a caller can tell those two nulls apart.
+//
+// ALWAYS WRITTEN THROUGH lib/option-cost.js, which prices each link through
+// productUnitCostYuan() — never a raw SELECT unit_cost, for the same reason the
+// column above says so: a bundle chosen as an extra would snapshot free.
+//
+// Rows predating this column stay NULL permanently, exactly as unit_cost_at_sale's
+// do and for the same reason: today's cost reconstructed into a snapshot column
+// looks like history without being any.
+addColumn('retail_order_items', 'options_cost_at_sale', 'REAL');
 // Wallet balance (prepaid store credit) spent on this order, ¥. Mirrors
 // points_amount: deducted from retail_customers.balance inside the order-create
 // tx and reversed to the wallet on cancel/refund. Store credit (balance OR

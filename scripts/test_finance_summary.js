@@ -414,24 +414,40 @@ xdb.exec(`
   CREATE TABLE retail_order_items (
     id INTEGER PRIMARY KEY, order_id INTEGER, qty REAL, line_total REAL,
     pack_units INTEGER DEFAULT 1, refunded_qty INTEGER DEFAULT 0,
-    unit_cost_at_sale REAL);
+    unit_cost_at_sale REAL, options_cost_at_sale REAL);
 `);
 {
   const o = xdb.prepare('INSERT INTO retail_orders VALUES (?,?,?,?,NULL,?)');
-  const i = xdb.prepare('INSERT INTO retail_order_items VALUES (?,?,?,?,?,?,?)');
+  const i = xdb.prepare('INSERT INTO retail_order_items VALUES (?,?,?,?,?,?,?,?)');
   //      id  status       total  paid_at                 replacement
   o.run(1, 'paid', 40, '2026-08-10 03:00:00', 0);
-  i.run(1, 1, 2, 40, 1, 0, 8);          // plain: 8 × 2 × 1 = 16
+  i.run(1, 1, 2, 40, 1, 0, 8, null);    // plain: 8 × 2 × 1 = 16
   o.run(2, 'delivered', 30, '2026-08-11 03:00:00', 0);
-  i.run(2, 2, 1, 30, 6, 0, 8);          // PACK UNITS: 8 × 1 × 6 = 48
+  i.run(2, 2, 1, 30, 6, 0, 8, null);    // PACK UNITS: 8 × 1 × 6 = 48
   o.run(3, 'paid', 40, '2026-08-12 03:00:00', 0);
-  i.run(3, 3, 2, 40, 1, 1, 8);          // ITEMISED REFUND: 8 × (2−1) × 1 = 8
+  i.run(3, 3, 2, 40, 1, 1, 8, null);    // ITEMISED REFUND: 8 × (2−1) × 1 = 8
   o.run(4, 'paid', 20, '2026-08-13 03:00:00', 0);
-  i.run(4, 4, 1, 20, 1, 0, null);       // never costed — revenue only
+  i.run(4, 4, 1, 20, 1, 0, null, null); // never costed — revenue only
   o.run(5, 'cancelled', 999, '2026-08-14 03:00:00', 0);
-  i.run(5, 5, 50, 999, 1, 0, 8);        // excluded by the allow-list
+  i.run(5, 5, 50, 999, 1, 0, 8, null);  // excluded by the allow-list
   o.run(6, 'paid', 0, '2026-08-15 03:00:00', 1);
-  i.run(6, 6, 9, 0, 1, 0, 8);           // §98 replacement — excluded
+  i.run(6, 6, 9, 0, 1, 0, 8, null);     // §98 replacement — excluded
+  // ── §166's rows, in SEPTEMBER and one per day ─────────────────────────────
+  // OUTSIDE the August window every assertion above is measured over, because
+  // `COST` is the whole of August and a row added inside it moves figures that
+  // were pinned deliberately. (Learned the hard way: dropping these on 08-20
+  // turned the pack-multiplier case from 72 into 175.5.)
+  //
+  // A chosen extra draws down a real shelf once per UNIT BOUGHT. The pack factor
+  // must not touch it and the refund factor must.
+  o.run(7, 'paid', 60, '2026-09-20 03:00:00', 0);
+  i.run(7, 7, 2, 60, 1, 0, 8, 1.5);     // 8×2×1 = 16 product, 1.5×2 = 3 extras
+  o.run(8, 'paid', 60, '2026-09-21 03:00:00', 0);
+  i.run(8, 8, 1, 60, 6, 0, 8, 1.5);     // 8×1×6 = 48 product, 1.5×1 = 1.5 extras
+  o.run(9, 'paid', 60, '2026-09-22 03:00:00', 0);
+  i.run(9, 9, 3, 60, 1, 1, 8, 1.5);     // 8×2 = 16 product, 1.5×2 = 3 extras
+  o.run(10, 'paid', 60, '2026-09-23 03:00:00', 0);
+  i.run(10, 10, 2, 60, 1, 0, 8, null);  // product costed, extras unknown
 }
 const COST = xdb.prepare(COST_SQL).get('2026-08-01', '2026-08-31');
 
@@ -439,6 +455,47 @@ it('the cost half takes the pack multiplier and the revenue half does not', () =
   // 16 + 48 + 8 = 72. Had the revenue side taken it too, line_rev would be 230.
   assert.strictEqual(COST.cogs, 72, '§36 trap 1: cost is per unit, line_total is per line');
   assert.strictEqual(COST.line_rev, 130, 'revenue must NOT be multiplied by pack_units');
+});
+
+// ── §166 — a chosen extra costs money, and takes ONE of the two factors ────
+//
+// The gap this closes was written down in the route's own comment for months:
+// "OPTIONS carry a price delta with no cost counterpart." A choice carrying a
+// `stock_product_id` is a real thing off a real shelf, reserved one per unit by
+// expandStockLines, and it contributed nothing at all to this sum.
+//
+// THE PACK FACTOR IS THE WHOLE REASON IT IS A SECOND COLUMN. Folding the extras
+// into unit_cost_at_sale was the smaller change and is provably wrong: that
+// column is multiplied by pack_units, an extra is not, and one column cannot be
+// both. These are the cases that would have caught the fold.
+const day = (d) => xdb.prepare(COST_SQL.replace('BETWEEN ? AND ?', `BETWEEN '${d}' AND '${d}'`)).get();
+
+it('a chosen extra reaches the cost sum at all', () => {
+  assert.strictEqual(day('2026-09-20').cogs, 19, '16 product + 3 extras');
+});
+
+it('the extras do NOT take the pack multiplier, though the product does', () => {
+  // Six units off the shelf, ONE oat milk. Folded into unit_cost_at_sale this
+  // would read 48 + 9 = 57 and charge for six.
+  assert.strictEqual(day('2026-09-21').cogs, 49.5, '48 product + 1.5 extras, not 9');
+});
+
+it('the extras DO take the refund factor, exactly as the product does', () => {
+  // qty 3, one refunded → two billable units, so two extras and not three.
+  assert.strictEqual(day('2026-09-22').cogs, 19, '16 product + 3 extras on 2 units');
+});
+
+it('an unknown extras cost adds nothing rather than guessing a zero', () => {
+  // NULL is the column's word for unknown. The line still contributes its
+  // product cost — a missing extras figure must not take the product with it.
+  assert.strictEqual(day('2026-09-23').cogs, 16, 'product only, extras absent');
+});
+
+it('coverage still measures the PRODUCT half only, and that is deliberate', () => {
+  // The fraction has a published meaning. Order 10's product is costed and its
+  // extras are not, and it still counts as covered — recorded in the route's
+  // own comment rather than quietly redefined.
+  assert.strictEqual(day('2026-09-23').line_rev_costed, 60, 'a costed product covers the line');
 });
 
 it('an itemised partial refund comes off the cost, as nothing else in the tree does', () => {

@@ -16197,7 +16197,14 @@ function trendSections(){
   const payTotal=pays.reduce((a,p)=>a+Number(p.revenue||0),0);
   if(!noMoney&&pays.length&&payTotal>0){
     const nm=trendPayName(pays[0].method);
-    sales.push({t:T(nm+' share of revenue',nm+'占营收'),
+    /* "SHARE OF REVENUE" WAS A SHARE OF SOMETHING ELSE. payRows is PAID — every
+       channel except the gzgrocery mirror rows — and nothing folds the wholesale
+       ledger or top-up cash into it, while the headline revenue above folds
+       both. So the percentage was of a SMALLER pot than the total it sat under,
+       and the two could not be reconciled by anybody reading them together.
+       The arithmetic is unchanged and correct for what it measures; what was
+       wrong was a label that did not say which total it divided by. */
+    sales.push({t:T(nm+' share of order revenue',nm+'占订单营收'),
                 v:Math.round(pays[0].revenue/payTotal*100)+'%'});
   }
   let hot=null; (d.heat||[]).forEach(h=>{ if(!hot||h.orders>hot.orders) hot=h; });
@@ -16229,15 +16236,34 @@ function trendSections(){
     v:(LANG==='en'?(gc.city_en||gc.city):gc.city)+' · '+nOrders(gc.orders)});
   const r1=trendRetain1();
   if(r1!=null) cust.push({t:T('Still buying a month later','一个月后仍回购'),v:Math.round(r1)+'%'});
-  if(cust.length) out.push({key:'customers',icon:'users',tone:'dusk',title:T('Customers','客户'),rows:cust});
+  /* WHICH PEOPLE THESE ARE, on the card that counts them. Every figure in this
+     section is keyed on customer_id, and the two marketplaces never write one —
+     routes/meituan-internal.js and routes/eleme-internal.js simply do not carry
+     the column, so SQL's COUNT(DISTINCT customer_id) skips every order they
+     send. That is a fact about the channels: Meituan masks the address and gives
+     a platform id we have only collected since 2026-09-15, Eleme gives nothing
+     at all. Revenue four tiles up counts those orders; this section cannot, and
+     an operator reading 79 buyers under ¥149,344 deserves to know why rather
+     than to conclude the shop is broken. */
+  if(cust.length) out.push({key:'customers',icon:'users',tone:'dusk',title:T('Customers','客户'),rows:cust,
+    note:T('Mini app, web and in-store only — Meituan and Eleme orders carry no customer.',
+           '仅小程序、网页与门店 —— 美团、饿了么订单没有顾客。')});
 
   // ── Products & traffic ──
   const prod=[];
   const tp=(d.topProducts||[])[0];
   const tpName=tp?((LANG==='en'?(tp.name_en||tp.name_cn):(tp.name_cn||tp.name_en))||''):'';
   if(tpName){
-    prod.push({t:T('Top seller','最热销'),v:tpName});
-    prod.push({t:T('Units sold','销量'),v:num(tp.units)});
+    /* NOT THE MOST UNITS — THE MOST MONEY. topProducts comes back
+       `ORDER BY revenue DESC` (routes/retail.js), so row one is the product that
+       EARNED most, and its unit count can be lower than the row below it. Called
+       "Top seller" it read as a volume ranking and was not one; a costly product
+       shifting seventeen units outranked a cheap one shifting four hundred. The
+       desktop's own Top products panel carries the same fault and is renamed
+       with this (03-dashboard.js / retail-admin.html). Renamed rather than
+       re-sorted: the ranking is useful, it was only ever named wrong. */
+    prod.push({t:T('Top earner','营收最高'),v:tpName});
+    prod.push({t:T('Units sold','销量'),v:noMoney?num(tp.units):num(tp.units)+' · '+mn(tp.revenue)});
   }
   const k=d.kpis||{};
   /* The mini app's own conversion, and the server says so: kpis.conversion_rate
@@ -16246,7 +16272,13 @@ function trendSections(){
     v:Number(k.conversion_rate).toFixed(1)+'%'});
   const co=d.checkout||{};
   if(co.abandoned) prod.push({t:T('Started checkout, did not pay','进入结算但未付款'),v:num(co.abandoned)});
-  if(prod.length) out.push({key:'products',icon:'package',tone:'amber',title:T('Products & traffic','商品与流量'),rows:prod});
+  /* The wholesale channel's REVENUE is in the headline and its ITEMS are not in
+     this ranking — topProducts filters channel='gzgrocery' out. The exclusion is
+     there to stop its takings being counted twice (they arrive by their own
+     ledger), and it catches the order lines on the way past. Said out loud here
+     rather than left for somebody to discover by adding the rows up. */
+  if(prod.length) out.push({key:'products',icon:'package',tone:'amber',title:T('Products & traffic','商品与流量'),rows:prod,
+    note:T('Wholesale pickups are not counted here.','不含批发提货。')});
 
   // ── Stores ──
   /* The breakdown the old note sent people to a desktop for. Six at most: a
@@ -16323,6 +16355,18 @@ function screenTrend(){
     <span style="font-size:13px;color:var(--text-secondary)">${
       T('vs prior '+state.trendRange+' days','对比前 '+state.trendRange+' 天')}</span></div>`;
 
+  /* VISITS ARE ONE CHANNEL'S, SITTING IN A CHIP ROW BESIDE TWO THAT ARE EVERY
+     CHANNEL'S. retail_visits has exactly one writer — the mini app's tracker via
+     POST /api/retail/track — so a Meituan or Eleme order arrives with no browse
+     behind it, and the web shop has never called /track either. A marketplace
+     will never tell us how many people looked; that is a fact about the channel
+     and not a gap we might fill. Without this line the chip row invites the
+     reading that Revenue, Orders and Visits describe the same business, and the
+     third one describes a slice of it. */
+  const metricNote = m!=='visits' ? '' :
+    `<div style="font-size:12px;line-height:1.5;color:var(--text-secondary);border-top:1px solid var(--border-default);margin-top:10px;padding-top:10px">${
+      T('Mini app only — the marketplaces do not report visits.','仅小程序 —— 外卖平台不提供访问数据。')}</div>`;
+
   const bestDow=trendBestDow(vals);
   const sections=trendSections();
   const section=s=>{
@@ -16337,7 +16381,15 @@ function screenTrend(){
                 goes when the card opens, or the same fact is printed twice —
                 once as a summary and again as the first row under it, which is
                 what it looked like on the first render of this screen. */''}
-          ${open?'':`<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(s.rows[0].t)} · ${escAttr(s.rows[0].v)}</span>`}</span>
+          ${/* THE VALUE IS PINNED AND THE LABEL GIVES WAY. As one run of text with a
+                middle dot, a long first fact lost its own number to the ellipsis —
+                "WeChat Pay share of order revenue · …" — which is a summary line
+                carrying no figure, worse than none at all. Laid out like the rows
+                it summarises instead: label truncates from the right, value never
+                does. */''}
+          ${open?'':`<span style="display:flex;align-items:baseline;gap:8px;margin-top:1px">
+            <span style="font-size:12.5px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(s.rows[0].t)}</span>
+            <span class="num" style="font-size:12.5px;color:var(--text-secondary);flex:none">${escAttr(s.rows[0].v)}</span></span>`}</span>
         <span style="flex:none;color:var(--text-secondary);display:flex">${ic(open?'chevron-down':'chevron-right')}</span></button>
       ${open?`<div style="padding:0 16px 14px;display:flex;flex-direction:column;gap:11px">
         ${s.rows.map(r=>`<div style="border-top:1px solid var(--border-default);padding-top:11px">
@@ -16346,6 +16398,7 @@ function screenTrend(){
             <span class="num" style="font-size:14.5px;font-weight:500;flex:none;text-align:right">${escAttr(r.v)}</span></div>
           ${r.bar!=null?`<div style="margin-top:7px;height:6px;border-radius:3px;background:var(--surface-raised);overflow:hidden">
             <div style="height:6px;border-radius:3px;width:${r.bar}%;background:var(--${s.tone}-ink)"></div></div>`:''}</div>`).join('')}
+        ${s.note?`<div style="font-size:12px;line-height:1.5;color:var(--text-secondary);border-top:1px solid var(--border-default);padding-top:11px">${s.note}</div>`:''}
       </div>`:''}</div>`;
   };
 
@@ -16353,7 +16406,7 @@ function screenTrend(){
     <div class="card" style="padding:16px 14px 12px">${sparkline(vals,tone)}
       <div class="num" style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-secondary);padding:8px 2px 0">
         <span>${escAttr(fmtDateOnly(t[0].bucket))}</span><span>${escAttr(fmtDateOnly(t[days-1].bucket))}</span></div>
-      ${deltaRow}</div>
+      ${deltaRow}${metricNote}</div>
     <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">
       ${fact(T('Total','合计'),fmt(total))}
       ${fact(T('Busiest day','最高的一天'),fmt(vals[bi]),escAttr(fmtDateOnly(t[bi].bucket)))}

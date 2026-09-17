@@ -4240,7 +4240,9 @@ function dashRenderHeadlines() {
   }
   if (b.topProd) {
     const nm = cn ? (b.topProd.name_cn || b.topProd.name_en) : (b.topProd.name_en || b.topProd.name_cn);
-    let t = cn ? `${nm} 最热销（${dashNum(b.topProd.units)} 件）。` : `${nm} leads with ${dashNum(b.topProd.units)} units.`;
+    // "leads with N units" read as a volume claim about a revenue ranking.
+    let t = cn ? `${nm} 营收最高（${dashMoney(b.topProd.revenue)}，${dashNum(b.topProd.units)} 件）。`
+               : `${nm} earned the most (${dashMoney(b.topProd.revenue)} on ${dashNum(b.topProd.units)} units).`;
     if (b.k.conversion_rate != null) t += cn ? ` ${b.k.conversion_rate.toFixed(1)}% 的会话转化为订单。`
                                              : ` ${b.k.conversion_rate.toFixed(1)}% of sessions became orders.`;
     rows.push(['products', cuT('Products & traffic', '商品与流量'), t]);
@@ -4297,8 +4299,11 @@ function dashRenderFacts() {
   const p = [];
   if (b.topProd) {
     const nm = cn ? (b.topProd.name_cn || b.topProd.name_en) : (b.topProd.name_en || b.topProd.name_cn);
-    p.push(dashFactRow(cuT('Top seller', '最热销') + (cn ? '：' : ': ') + nm,
-      `${dashNum(b.topProd.units)} ${cuT('units', '件')}`));
+    // Top EARNER — see the panel comment in retail-admin.html. The money it made
+    // leads the value, because that is the figure it was ranked on; the units it
+    // took to get there follow it.
+    p.push(dashFactRow(cuT('Top earner', '营收最高') + (cn ? '：' : ': ') + nm,
+      `${dashMoney(b.topProd.revenue)} · ${dashNum(b.topProd.units)} ${cuT('units', '件')}`));
   }
   if (b.k.conversion_rate != null) p.push(dashFactRow(cuT('Sessions that became orders', '会话转化下单'), b.k.conversion_rate.toFixed(1) + '%'));
   if (b.checkout && b.checkout.conversion_rate != null) p.push(dashFactRow(cuT('Checkouts that got paid', '结算完成支付'), Math.round(b.checkout.conversion_rate) + '%'));
