@@ -114,44 +114,76 @@ const MEASURE = `
 // is never more than one of it.
 const count = 'function count(h,s){return h.split(s).length-1}';
 
+// The panel as a reader sees it, with the markup taken out. The step numerals
+// and the footer's are single characters sitting in their own span, so a raw
+// markup assertion on them would be pinning a style attribute rather than what
+// the row says; stripped text asserts "3 Replacement or refund" as one thing.
+const strip = 'function strip(h){return h.replace(/<[^>]*>/g," ").replace(/\\s+/g," ").trim()}';
+const SETUP = `${count}; ${strip}; state.dcMore=null;`;
+
 run('mobile delay panel', [
   ['nothing done yet',
-   `${count}; window.H = delayCaseCard({id:1}, ${FRESH});`,
+   `${SETUP} window.H = delayCaseCard({id:1}, ${FRESH}); window.TX = strip(H);`,
    [['exactly one primary button', 'count(H,\'class="cta"\') === 1'],
     ['one tinted surface, and it is the header', 'count(H,"var(--brick-tint)") === 1'],
     ['the next step is the customer', 'H.indexOf("Next") < H.indexOf("Customer told")'],
-    ['not claiming is not a button', 'H.indexOf("rowact") > 0'],
-    ['the footer names all three blockers',
-     'H.indexOf("Tell the customer") > 0 && H.indexOf("Replacement or refund") > 0 && H.indexOf("Carrier settled") > 0'],
+    ['and it says which of the four it is', 'TX.indexOf("Next · 1/4") > 0'],
+    // The complaint this answers: the header counted 1/4 and no row on screen
+    // carried a 1, a 2, a 3 or a 4 for it to be counting.
+    ['every later step carries its number',
+     'TX.indexOf("2 Claim the delay off the carrier") > 0 && TX.indexOf("3 Replacement or refund") > 0 '
+     + '&& TX.indexOf("4 Carrier settled") > 0'],
+    // Six controls at once was the whole of "not clear". The later steps' are
+    // folded; the next step's are not.
+    ['a later step keeps its controls folded away',
+     'H.indexOf("Claim filed") < 0 && H.indexOf("Send replacement") < 0 && H.indexOf("Nothing needed") < 0'],
+    ['the step that is next keeps its own', 'H.indexOf("Customer told") > 0'],
+    ['evidence is still offered, and is still not a primary', 'H.indexOf("rowact") > 0'],
+    ['the footer names all three blockers, by number', 'TX.indexOf("to do: 1 · 3 · 4") > 0'],
+    ['and does not repeat the rows it is pointing at', 'H.indexOf("Tell the customer") === H.lastIndexOf("Tell the customer")'],
     ['the old blanket refusal is gone', 'H.indexOf("Close once every step") < 0'],
     ['nothing is done yet', 'H.indexOf("0/4") > 0']]],
 
+  // The fold is not a lock. A step out of turn — the carrier rings while the
+  // remedy is open — is one tap away and keeps its quiet weight when it opens.
+  ['a folded step opens, and nothing else changes weight',
+   `${SETUP} state.dcMore='7:1'; window.H = delayCaseCard({id:1}, ${FRESH}); state.dcMore=null;`,
+   [['the claim controls are out', 'H.indexOf("Claim filed") > 0'],
+    ['not claiming is still not a button', 'H.indexOf("Not claiming") > 0 && H.indexOf("rowact") > 0'],
+    ['the next step still holds the only primary', 'count(H,\'class="cta"\') === 1'],
+    ['and the other later step stays folded', 'H.indexOf("Send replacement") < 0']]],
+
   ['told, claim filed, carrier still owes an answer',
-   `${count}; window.H = delayCaseCard({id:1}, ${MID});`,
+   `${SETUP} window.H = delayCaseCard({id:1}, ${MID}); window.TX = strip(H);`,
    [['still exactly one primary button', 'count(H,\'class="cta"\') === 1'],
     ['still one tinted surface', 'count(H,"var(--brick-tint)") === 1'],
-    ['two of four done', 'H.indexOf("2/4") > 0'],
+    ['two of four done', 'H.indexOf("✓ 2/4") > 0'],
+    ['and the next step is the third of them', 'TX.indexOf("Next · 3/4") > 0'],
     ['the finished call carries who and when', 'H.indexOf("owner") > 0'],
     ['evidence is attached and is not a primary', 'H.indexOf("box.jpg") > 0'],
-    ['the remedy is still reachable out of order', 'H.indexOf("Send replacement") > 0'],
-    ['the footer names what is left, not the whole list',
-     'H.indexOf("Replacement or refund") > 0 && H.indexOf("Tell the customer") < 0']]],
+    ['the remedy is the next step, so its controls are out', 'H.indexOf("Send replacement") > 0'],
+    ['the carrier answer is folded until it is asked for', 'H.indexOf("Carrier paid") < 0'],
+    ['the footer names what is left, by number',
+     'TX.indexOf("to do: 3 · 4") > 0 && TX.indexOf("to do: 1") < 0']]],
 
   ['every step done — the close is offered',
-   `${count}; window.H = delayCaseCard({id:1}, ${DONE});`,
+   `${SETUP} window.H = delayCaseCard({id:1}, ${DONE});`,
    [['the close is the one primary', 'count(H,\'class="cta"\') === 1'],
     ['and it is Mark handled', 'H.indexOf("Mark handled") > 0'],
     ['no step is promoted any more', 'H.indexOf("Next") < 0'],
     ['four of four', 'H.indexOf("4/4") > 0']]],
 
   ['not claiming — the carrier step is not counted',
-   `${count}; window.H = delayCaseCard({id:1}, ${NO_CLAIM});`,
+   `${SETUP} window.H = delayCaseCard({id:1}, ${NO_CLAIM}); window.TX = strip(H);`,
    [['three steps, not four', 'H.indexOf("3/3") > 0'],
     ['exactly one primary button', 'count(H,\'class="cta"\') === 1'],
-    ['the reason is shown', 'H.indexOf("value too small") > 0']]],
+    ['the reason is shown', 'H.indexOf("value too small") > 0'],
+    // A step nobody did is not a step somebody finished. It used to carry a
+    // green tick with a '–' in the stamp slot, which read as done.
+    ['the carrier step is marked n/a rather than ticked', 'TX.indexOf("– Carrier settled") > 0']]],
 
   ['a typed note never lands on top of its own label',
-   `${MEASURE}; draw(${NOTED});`,
+   `${SETUP} ${MEASURE}; draw(${NOTED});`,
    [['nothing is printed over anything else', 'overprint().length === 0'],
     ['no line is squeezed narrower than its own text', 'crush().length === 0'],
     ['nothing runs off the right edge of the card', 'spill().length === 0'],
@@ -163,7 +195,7 @@ run('mobile delay panel', [
      + 'BOX.innerText.split("\\n").filter(function(l){return l.indexOf("Customer told") >= 0}).length === 1']]],
 
   ['the stamp-only panel is laid out too — the common case, measured',
-   `${MEASURE}; draw(${DONE});`,
+   `${SETUP} ${MEASURE}; draw(${DONE});`,
    [['nothing is printed over anything else', 'overprint().length === 0'],
     ['no line is squeezed narrower than its own text', 'crush().length === 0'],
     ['nothing runs off the right edge of the card', 'spill().length === 0']]],
@@ -173,10 +205,29 @@ run('mobile delay panel', [
   // pane, a future surface — and the row has to survive it, because the way it
   // failed at 330 was by having no answer to being narrow.
   ['and it holds at a width narrower than any phone',
-   `${MEASURE}; draw(${NOTED}, 260);`,
+   `${SETUP} ${MEASURE}; draw(${NOTED}, 260);`,
    [['nothing is printed over anything else', 'overprint().length === 0'],
     ['no line is squeezed narrower than its own text', 'crush().length === 0'],
     ['nothing runs off the right edge of the card', 'spill().length === 0']]],
+
+  // THE STATE IN THE PHOTOGRAPH, MEASURED. Every geometry case above draws a
+  // panel whose steps are all finished — the shape that broke TC000667 — so
+  // the numbered row, the chevron and the folded block had no measurement at
+  // all until here. A fresh case is also the widest thing this panel ever draws.
+  ['a fresh case is laid out too — numbered rows and a chevron, measured',
+   `${SETUP} ${MEASURE}; draw(${FRESH});`,
+   [['nothing is printed over anything else', 'overprint().length === 0'],
+    ['no line is squeezed narrower than its own text', 'crush().length === 0'],
+    ['nothing runs off the right edge of the card', 'spill().length === 0'],
+    ['the numerals are on screen, not just in the markup',
+     'BOX.innerText.indexOf("Claim the delay off the carrier") > 0 && /(^|\\n)\\s*2\\b/.test(BOX.innerText)']]],
+
+  ['and with a step unfolded, at a width narrower than any phone',
+   `${SETUP} state.dcMore='7:1'; ${MEASURE}; draw(${FRESH}, 260); state.dcMore=null;`,
+   [['nothing is printed over anything else', 'overprint().length === 0'],
+    ['no line is squeezed narrower than its own text', 'crush().length === 0'],
+    ['nothing runs off the right edge of the card', 'spill().length === 0'],
+    ['the controls it unfolded are visible', 'BOX.innerText.indexOf("Claim filed") > 0']]],
 
   ['the parcel header says how late it was',
    `window.H = trackingCard({id:1}, Object.assign(${SP(null)}, {trk:{number:'JDVC1',status_label_en:'Delivered',status_code:'delivered',events:[]}}), 'Parcel 1');`,

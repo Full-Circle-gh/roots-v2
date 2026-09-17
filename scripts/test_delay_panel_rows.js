@@ -67,7 +67,12 @@ for (const s of SURFACES) {
     `${s.row} not found`);
 
   // 1 — the stamp and the note are two arguments, and the caller passes both.
-  yes(/\(\s*label\s*,\s*meta\s*,\s*note\s*\)/.test(row.split('\n')[0] + row.split('\n')[1]),
+  // MATCHED UP TO `note`, NOT TO THE CLOSING BRACKET. What this guards is that
+  // a stamp and a sentence never share one slot again; it is not a pin on the
+  // builder's arity, and reading it as one made a row that grew a fourth
+  // argument (`na`, the marker for a step that does not apply) look like the
+  // fault this file exists to catch.
+  yes(/\(\s*label\s*,\s*meta\s*,\s*note\s*[,)]/.test(row.split('\n')[0] + row.split('\n')[1]),
     'the row takes the stamp and the note separately');
   yes(new RegExp(s.call.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*,\\s*st\\.meta\\s*,\\s*st\\.note').test(steps),
     'and the step hands it both');
