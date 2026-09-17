@@ -366,20 +366,28 @@
     if (arch) arch.checked = _archived;
   }
 
-  // Primary cost figure with the other on hover (title=), per plan: cost per
-  // serving when servings is recorded (the number an operator actually
-  // prices against), else cost per gram, else — when NEITHER can be worked
-  // out, which is common (batch_size/servings are both often unset) — the
-  // raw batch cost, so a recipe with real priced ingredients never reads as
-  // a blank dash next to ones that are genuinely empty.
+  // Primary cost figure: cost per serving when servings is recorded (the number
+  // an operator actually prices against), else the raw batch cost, so a recipe
+  // with real priced ingredients never reads as a blank dash next to ones that
+  // are genuinely empty.
+  //
+  // THE PER-GRAM FALLBACK LEFT THIS FUNCTION when per gram became a column of
+  // its own beside Cost (Ash, 2026-09-17). Keeping it here as well would print
+  // one figure twice in the same row under two different headings — and, worse,
+  // it was what hid the batch cost of every recipe that records a batch size
+  // but no servings: the column said ¥0.0114/g and the ¥7.42 the batch actually
+  // costs appeared nowhere on the screen. That row now reads its batch cost in
+  // Cost and its per-gram figure in Cost per gram, which is the pair the
+  // record's own breakdown has always shown.
+  //
+  // Returns the markup or null — no {text, title} pair any more. The hover this
+  // used to carry belonged to the per-gram fallback; what the caller now shows
+  // on hover depends on whether a batch size was recorded, which is a fact
+  // about the row rather than about the figure returned here, so it is the
+  // caller that says it.
   function primaryCost(row) {
     if (row.costPerServing != null) {
-      const hover = row.costPerGram != null ? `${T('Cost per gram', '每克成本')}: ${moneyU(row.costPerGram)}` : '';
-      return { text: `${money(row.costPerServing)}<span class="rcp-per">/${esc(T('serving', '份'))}</span>`, title: hover };
-    }
-    if (row.costPerGram != null) {
-      const hover = T('No servings recorded', '未记录份数');
-      return { text: `${moneyU(row.costPerGram)}<span class="rcp-per">/g</span>`, title: hover };
+      return `${money(row.costPerServing)}<span class="rcp-per">/${esc(T('serving', '份'))}</span>`;
     }
     return null;
   }
@@ -433,9 +441,27 @@
     }
     const rows = view.map(rcp => {
       const pc = primaryCost(rcp);
+      // The whole-batch fallback explains itself differently depending on what
+      // is missing, because only one of the two sentences is ever true. With a
+      // batch size recorded the per-gram column beside this one carries a real
+      // figure and the only thing absent is the serving count; with neither
+      // recorded, both are. Both sentences are already live on this screen —
+      // the first is the hover the per-gram fallback used to carry, the second
+      // is this cell's own, unchanged.
       const costCell = pc
-        ? `<span title="${esc(pc.title)}">${pc.text}</span>`
-        : `<span title="${esc(T('No batch size or servings recorded — showing the whole-batch cost instead', '未记录批量大小或份数 — 显示整批成本'))}">${money(rcp.batchCost)}<span class="rcp-per"> ${esc(T('(batch)', '(整批)'))}</span></span>`;
+        ? pc
+        : `<span title="${esc(rcp.batch_size
+            ? T('No servings recorded', '未记录份数')
+            : T('No batch size or servings recorded — showing the whole-batch cost instead', '未记录批量大小或份数 — 显示整批成本'))}">${money(rcp.batchCost)}<span class="rcp-per"> ${esc(T('(batch)', '(整批)'))}</span></span>`;
+      // Per gram, out of the tooltip and onto the screen. It is the figure a
+      // made material inherits as its unit cost (lib/recipe-materialize.js), so
+      // it is the one number on this row that leaves the recipe — and until now
+      // the only way to see it was to hover a cell that says something else, or
+      // to open the record. moneyU keeps its extra two places: at 2dp a
+      // sub-cent per-gram cost rounds to ¥0.01 for everything on the screen.
+      const gramCell = rcp.costPerGram != null
+        ? `${moneyU(rcp.costPerGram)}<span class="rcp-per">/g</span>`
+        : '—';
       // ── THE ONE ICON, FOR EITHER WAY THE COST COMES OUT TOO LOW ───────────
       //
       // This row's cost can be understated for two different reasons, and until
@@ -474,15 +500,16 @@
         : '';
       return `
         <tr onclick="rcpRecordOpen(${rcp.id})">
-          <td>
+          <td class="rcp-namecell">
             <div class="rcp-name">${esc(rcp.name_en || '')} ${warnIcon}</div>
             ${rcp.name_cn ? `<div class="rcp-sub2">${esc(rcp.name_cn)}</div>` : ''}
           </td>
-          <td>${esc(dash(rcp.category))}</td>
-          <td class="right rcp-num">${rcp.batch_size ? esc(rcp.batch_size) + 'g' : '—'}</td>
-          <td class="right rcp-num">${dash(rcp.servings)}</td>
-          <td class="right rcp-num">${costCell}</td>
-          <td>${matBadge}</td>
+          <td class="rcp-fit">${esc(dash(rcp.category))}</td>
+          <td class="right rcp-num rcp-fit">${rcp.batch_size ? esc(rcp.batch_size) + 'g' : '—'}</td>
+          <td class="right rcp-num rcp-fit">${dash(rcp.servings)}</td>
+          <td class="right rcp-num rcp-fit">${costCell}</td>
+          <td class="right rcp-num rcp-fit">${gramCell}</td>
+          <td class="rcp-fit">${matBadge}</td>
           <td class="rcp-actcell">${dupButton(rcp)}</td>
         </tr>`;
     }).join('');
@@ -491,12 +518,20 @@
         <div class="rcp-tblwrap">
           <table class="rcp-tbl">
             <thead><tr>
-              <th>${esc(T('Recipe', '食谱'))}</th>
-              <th>${esc(T('Category', '分类'))}</th>
-              <th class="right">${esc(T('Batch size', '批量大小'))}</th>
-              <th class="right">${esc(T('Servings', '份数'))}</th>
-              <th class="right">${esc(T('Cost', '成本'))}</th>
-              <th>${esc(T('Backs', '产出'))}</th>
+              ${/* Only the name column is elastic (.rcp-namecol) — every other
+                    one is sized to its own content (.rcp-fit). See the column-fit
+                    rule in retail-admin.css for why the widths live there. */''}
+              <th class="rcp-namecol">${esc(T('Recipe', '食谱'))}</th>
+              <th class="rcp-fit">${esc(T('Category', '分类'))}</th>
+              <th class="right rcp-fit">${esc(T('Batch size', '批量大小'))}</th>
+              <th class="right rcp-fit">${esc(T('Servings', '份数'))}</th>
+              <th class="right rcp-fit">${esc(T('Cost', '成本'))}</th>
+              ${/* Cost per gram · 每克成本 is the pair the record's cost breakdown
+                    already prints for this same figure (breakdownHtml, this file),
+                    copied rather than shortened: a heading of its own wording
+                    beside one that says Cost would read as a different quantity. */''}
+              <th class="right rcp-fit">${esc(T('Cost per gram', '每克成本'))}</th>
+              <th class="rcp-fit">${esc(T('Backs', '产出'))}</th>
               ${/* The action column carries no visible heading — a word above a
                     single icon button reads as another data column. The name is
                     there for a screen reader, and on the button itself. */''}
