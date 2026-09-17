@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.289
+# Tacet shared-core consolidation — decisions record, v4.290
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-17 · v4.290 — **§154 · A POLL IS SOMETHING YOU MADE, NOT A SETTING — DECIDED BY ASH**, who was shown three page directions drawn against the design system and picked one: *“lets go with c”*. **THE IA BLUEPRINT'S ARCHETYPE FOR VOTING IS AMENDED** — §4 row 24 files it as an A4 Console and it is a Library with a Composer, because a poll is authored, published and closed rather than configured. **THE PROOF IS THAT THE CONSOLE COULD NOT BE DRAWN WITHOUT INVENTING A CONTROL**: a Console opens on a master switch and Voting has never had one. The admin Voting tab is rebuilt from scratch — the live poll and its bars own the page, the rest of the polls are a shelf below, the two settings fold away at the foot, and authoring moved into a full-page takeover with a phone preview. Uppercase pills, the purpose paragraph, the error-red *open* state and the black-on-lime featured chip all go. The doubled EN/中文 fields are replaced by one language picker (§1.11's licensed exception). **EVERY ECHO OF MERCHANT TEXT NOW WEARS `data-no-i18n`** — an English question beside a Chinese option label is exactly the shape the language walker splits, so half of it would have vanished in the language nobody had open. Write controls capture their button synchronously (§1.12 shape C; four of five paths confirm first). Front end only: no schema, no migration, no server change, mini app untouched. **96 pairs, 38 lifted and 58 composed, declared in `docs/tacet-delivery-vocabulary.md` v1.106.** New suite `scripts/test_voting_page.js` **69/69**, proven non-vacuous by four mutations (an amber open pill, a write that never disables its button, a leader on a poll with no votes, and a display floor that shrinks real turnout — all four caught); its render half drives the real templates in a sandbox because this repo does not run browser suites. `test:fast` 269 → **270**; lint 0 errors. No change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
 2026-09-16 · v4.289 — **§153 · A PICK-ANY QUESTION CAN NOW SAY HOW MANY — DECIDED BY ASH**, from a screenshot of the product editor showing a three-choice group headed *Choose 2 crunchy sides · 爽脆配菜（选2款）*: *“need to limit how many can choose. in this example can choose only 2 from the 3 option.”* **THE SENTENCE LIVED IN THE LABEL AND NOWHERE ELSE.** `type='multi'` took ANY number of answers, including none: a customer ticked one side or all three and checked out either way, and `is_required` — a yes/no — can say *at least one* but never *exactly two*. **TWO COLUMNS, NOT ONE, AND THE SECOND ONE WAS ARGUED FOR RATHER THAN ASSUMED:** a maximum alone is what was asked for and is NOT what shipped, because with `max 2` and no floor a customer ticks one cracker and checks out under a label promising two — the same complaint, one control later. `min_choices` + `max_choices` on `retail_product_options`, **0 on both = no limit**, which is what every row written before today carries, so nothing already authored changes shape. `is_required` and the floor are two faces of one rule and are kept in step on save. **THE FLOOR IS NOT ABSOLUTE, AND THAT IS THE WHOLE TRAP.** *Choose 2* whose stock-backed sides have sold down to one cannot be answered; an unanswerable required question does not make a product unbuyable here, it stops being a floor — the same principle §120 states for a question whose answers were all deleted. Both storefronts and the counter menu are served a floor **already clamped to the choices still pickable**, and every checkout measures pickability the same way. **Clamp one side and not the other and the endpoint refuses the very order the page told the customer to place**, with nothing on screen able to explain it; that is the assertion the new suite exists for. **ENFORCED ON BOTH CHECKOUT PATHS, not one** — the QR menu basket (`routes/shop-menu.js`) and customer order-create plus add-to-a-live-order (`routes/retail.js`) — because a limit enforced on one of two checkouts is not a limit. **A REPEATED CHOICE ID COUNTS ONCE**: a tick-box is on or off, so counting the repeat would refuse a correct line and counting it toward a floor would let one side satisfy a request for two. **ONE MODULE FOR THE RULE**, `lib/option-limits.js` — the save path normalises, the menu and both checkouts clamp, and **the browser clients get no copy of the arithmetic**, only the already-clamped numbers: a limit the client computes is a limit the client can compute differently. `addonAvailabilityById()` was extracted from the product response in `routes/retail.js` for the same reason — the floor needed to ask *is this extra still on the shelf* and a second copy would have been a second answer. **WHAT THE OPERATOR SETS:** two number boxes on a Pick-any row, hidden on Pick-one. **WHAT THE CUSTOMER READS:** *Choose 2* / 选 2 项 under the question, the tick-box that would break the ceiling greyed out (a ticked one stays live — untick is how you change your mind), and the Add button blocked under the floor naming the number. **FIVE COMPOSED CN STRINGS, declared in `docs/tacet-delivery-vocabulary.md` v1.99**, every one a live shape with a numeral swapped in; 不限 is a verbatim lift from four live admin strings, and **款 — Ash’s own word in the label that prompted this — was weighed and recorded as rejected** in favour of 项, which is what `至少选一项` already establishes as the counter for an option answer. **WHAT WAS DELIBERATELY LEFT ALONE, named so nobody reads silence as coverage:** the wizard offers no limit control; `routes/retail.js` order-create still does not enforce the older `is_required` flag (a pre-existing gap that a floor of 1+ now closes for pick-any groups, and a separate change otherwise); `public/shop.html` still does not grey out a sold-out paid extra although the server has answered `addon_available` since §120 — the mini app does; and there is no per-choice quantity, so two sides cannot both be corn chips. New suite `scripts/test_option_limits.js` **19/19**, nine of them pure rule tests and the rest driving the REAL router over HTTP. `test:fast` 265 → **266**; lint 0 errors. **REBASED THREE TIMES MID-BUILD, onto db7de6f, 9ef2400 and then 1480456** — three other sessions merged into this tree while it was being written, which is what the enumerate-first rule in `CLAUDE.md` exists to make visible. PR #640 landed first and took §151 and v1.97; PR #643 landed last and took v1.98 AND §152. This renumbered each time rather than renumbering theirs — section numbers are permanent. **§152 IS DELIBERATELY LEFT EMPTY IN THIS FILE**, not skipped by accident: PR #643's vocabulary entry cites §152 for the sign-out work but never wrote that section here, so the number is held for it rather than taken. A reader following v1.98's citation today lands on nothing, and that is a gap in #643 to close, not one to paper over by filling §152 with something else. PR #641 landed second, in the same admin file: it makes the WIZARD's Required tick visible on a pick-any question, which this reinforces rather than contradicts — a wizard-set required multi now normalises to `min_choices 1`, and a floor of 1 IS required. **One assertion of that PR's suite had to be updated**, and it is named here rather than quietly edited: `test_wizard_required_pick.js` pinned the web storefront's block to the literal `o.is_required && !selIds(o).length`, which the floor rewrote. The claim it makes is unchanged and still holds; the check no longer matches a whole expression, because a literal is exactly what makes a sound assertion go red for a correct change. No change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
@@ -16474,3 +16476,99 @@ the shelf" and a second copy would have been a second answer.
   different feature reaching the order lines, and nothing here walls it off.
 - No change to `.gitignore`, CI, or anything governing how sessions and builds
   work.
+
+## §154 — A POLL IS SOMETHING YOU MADE, NOT A SETTING
+
+**Decided by Ash 2026-09-17**, from three page directions drawn against the
+design system and put to him on a canvas: *"lets go with c"*.
+
+**THE ARCHETYPE IN `tacet-ia-blueprint.md` §4 ROW 24 IS WRONG, AND THIS SECTION
+AMENDS IT.** Voting is filed there as an **A4 Console**. It is not one. A poll
+is written, published, run and closed — an authored object with a lifecycle,
+which is the definition of an **A2 Library**, and its editor is an **A3
+Composer**. The tell is in the Console's own rules: a Console opens on a master
+switch with the consequence in words, and **Voting has never had a master
+switch** — there is no on/off for this feature anywhere in the code. Drawing the
+Console faithfully meant inventing one, and a rule that can only be satisfied by
+inventing a control is a rule pointed at the wrong page. The genuinely
+Console-shaped part of Voting is two settings (the intro tagline and whether
+customers see vote counts), and two settings do not make a Console — they make a
+card at the foot of a Library. **A later survey that finds Voting rendering as a
+Library has found this decision, not drift.**
+
+**WHAT THE OLD PAGE DID, named because each one is a rule already written down.**
+It opened on its settings card, so the first thing an operator saw was
+configuration rather than what customers were saying. Its title was a
+`text-transform: uppercase` eyebrow and its state pills were uppercase too
+(§1.6 — there is no licensed uppercase in Tacet). Under the title sat a
+four-line bilingual paragraph describing what the page was for, which is the
+purpose line §1.7 cut product-wide. An **open** poll was painted `#E96174` — a
+pink-red off the palette entirely, for a state where nothing is wrong (§1.10:
+colour is state, and that colour says *error*). **Featured** was a black chip
+with lime text, which is neither a Tacet colour nor a status — featured is a
+property, and properties get neutral treatment. Editing a poll injected a tall
+form above the list, so the thing being authored and the list it came from were
+on screen at once; §1.13 sends anything with a draft state to a full page.
+
+**WHAT SHIPS.** The live poll **is** the page: its question at 22px, its
+turnout, and a bar per option with the leader in Ink — the one question an
+operator opens this tab to answer, in the first screenful, with no list to read
+first. Everything else — drafts, other open polls, closed ones — is a quiet
+shelf below it, one row each with the single action that row actually needs
+(Publish a draft, Close an open one, Reopen a closed one) plus Edit. The two
+settings fold away at the foot behind a disclosure. Authoring is a **full-page
+takeover** (§1.7a): the shelf is `display: none` while it is up, so the page's
+Dusk CTA is gone from the tab order rather than sitting live underneath, and the
+browser Back gesture is trapped to return to the shelf — the same mechanic the
+product lightbox already uses. The editor carries a **phone preview** that
+settles at 200ms as fields change, because the merchant is authoring for their
+customer's phone. **One Dusk element per page**, and on the editor it is the
+commit; every other control is Secondary or Ghost.
+
+**THE DOUBLED LANGUAGE FIELDS ARE GONE.** The old editor stacked `Question · EN`
+beside `问题 · 中文`, `标签` beside `Label`, for every field — a form that is half
+noise to both readers, and §1.11's own failure in form. The editor now has one
+language picker at the top of the question group, and the fields below it are in
+whichever language you picked. The picker itself shows both words, which is
+§1.11's single licensed exception: it is the control for choosing, not a label.
+
+**THE SHIELD IS THE PART THAT WOULD HAVE BITTEN SILENTLY.** Every echo of
+merchant-authored text on this page — a question, an option label, a meta line
+built from them — is wrapped in `data-no-i18n`. The live language walker treats
+` · ` with Chinese on the right as an `English · 中文` pair and blanks one half;
+an English question followed by a Chinese option label is exactly that shape, so
+a poll named in one language and answered in the other would have half
+disappeared in the language nobody had open, with nothing in the console. The
+old code escaped this text but never shielded it.
+
+**Every write control disables while it writes**, with the button captured
+**synchronously at the top of its handler** rather than read after the confirm
+dialog resolves — §1.12's shape C, where `event.currentTarget` is null by the
+time an awaited handler reads it and the disable silently no-ops. Four of this
+page's five write paths run a confirm first, so all four would have had it.
+
+**FRONT END ONLY. No schema, no migration, no server change** — `routes/retail.js`
+already served everything this page needs, including the display-vote floor
+whose real→shown arithmetic the editor mirrors exactly rather than
+approximating. The mini app, the web storefront and the QR menu are untouched.
+
+**96 STRING PAIRS, 38 lifted and 58 composed**, declared in
+`docs/tacet-delivery-vocabulary.md` v1.106 with the three contested word choices
+and their rejected candidates. Every noun and verb is a lift; what is composed
+is the consequence line beside each control, which the old page did not have in
+either language.
+
+**THE SUITE HOLDS THE RULES, NOT THE PIXELS.** `scripts/test_voting_page.js`,
+**69/69**: the header contract, the absence of every dead-brand signature by
+name, each badge's colour against the state it encodes, both halves of every
+label pair, the synchronous button capture on all four write paths, the
+takeover's `display: none`, and the arithmetic — who leads, and what the
+customer will be shown — driven in a sandbox against hand-built polls. **Proven
+non-vacuous by four mutations**, every one caught: an amber open pill, an
+`adminWrite` call that never disables its button, a leader on a poll with no
+votes, and a display floor that shrinks real turnout. The render half drives
+the real templates through a DOM stub rather than a browser, because the
+browser shard is not run here and a template that throws on its first real poll
+is exactly what static checks cannot see. `test:fast` 269 → **270**; lint 0
+errors. No change to `.gitignore`, CI, or anything else governing how sessions
+and builds work.
