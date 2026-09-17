@@ -7560,6 +7560,13 @@
   .ord-note-in:focus { outline: none; border-color: var(--td-dusk, var(--text-2)); }
   .ord-note-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
   .ord-note-foot[hidden] { display: none; }
+  /* The whole block hides on an order with no note yet — reached from the
+     drawer header's "…" menu instead. Stated here and not left to the UA's
+     `hidden`, exactly as the footer above it is: `.order-detail .full` sets
+     grid-column on this element, and a grid item with any author `display`
+     landing on it later would out-rank a UA rule and put the box back on
+     every drawer. */
+  .ord-note[hidden] { display: none; }
   /* Info labels — mono, wider tracking, to match the design's field labels. */
   .order-detail .kicker {
     font-family: var(--f-mono);

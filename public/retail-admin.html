@@ -2246,7 +2246,15 @@
         <div class="card db-panel db-factsbar" id="db-facts-products" data-no-i18n hidden></div>
         <div class="db-grid-2">
           <div class="card db-panel">
-            <div class="db-card-head"><h3>Top products · 热销商品</h3><span class="td-meta">units · 件数</span></div>
+            <!-- RANKED BY REVENUE, NOT BY THE NUMBER IN THE ROW. topProducts comes
+                 back `ORDER BY revenue DESC` (routes/retail.js) while each row prints
+                 units, so row one can carry FEWER units than row two — a list whose
+                 visible figure does not determine its own order. The heading said
+                 热销商品 and the meta said 件数, which together promised a volume
+                 ranking this has never been. The ordering is the useful one and is
+                 kept; the labels now say what it is, and each row's revenue and order
+                 count stay on its hover title. -->
+            <div class="db-card-head"><h3>Top products · 商品排行</h3><span class="td-meta">by revenue, showing units · 按营收排序，显示件数</span></div>
             <div id="db-products"></div>
           </div>
           <div class="card db-panel">

@@ -517,6 +517,20 @@ input,textarea{padding:12px 14px;border:1px solid var(--border-default);border-r
   color:var(--text-primary);font-size:15px;width:100%}
 input:focus,textarea:focus{outline:none;border-color:var(--border-focus)}
 
+/* THE SHOP NOTE'S SAVE/CANCEL PAIR, and the reason its layout is here rather
+   than in the style string beside it. The pair is meant to appear only once the
+   text differs from what is stored — the rule the desktop has carried since the
+   note was built — and the phone toggles it through the `hidden` attribute,
+   which the handlers set correctly and the probes assert on. But `hidden` is
+   only a UA rule (display:none), and an INLINE display out-ranks any rule in
+   any stylesheet, so a node written as style="display:flex" and hidden by the
+   attribute is not hidden at all. Cancel and Save note sat under every
+   untouched empty box; Ash's 2026-09-17 screenshot of the drawer is that bug.
+   With no display in the style string the attribute works, and the second rule
+   (id + attribute) out-specifies the first. */
+#mOrdNoteFoot{display:flex;gap:8px;margin-top:10px}
+#mOrdNoteFoot[hidden]{display:none}
+
 /* ── Receiving ────────────────────────────────────────────────────────────
    The quantity control on the receive screen. 52px because it is used one-
    handed with a box in the other, standing at a door — the 44px floor is a
@@ -738,6 +752,13 @@ const state = {
      and anything only in the DOM goes with it. Keyed by order id so a draft
      cannot follow you into the next order you open. */
   ordNote:null,
+  /* The order whose shop-note editor was asked for from the "…" sheet, or null.
+     An order with a note shows its editor without being asked; this is the one
+     case the drawer cannot work out for itself — an EMPTY note the operator
+     wants to type. It lives in state and not as a `hidden` node because the
+     phone repaints by rewriting the whole app's innerHTML, which a DOM flag
+     would not survive (the desktop, painting one drawer, can use the node). */
+  ordNoteOpen:null,
   /* The carriers the server will accept on a waybill, read once from
      /tracking/carriers. The server refuses a code it does not know
      (`invalid_carrier`), so this list is not a convenience — it is the only
@@ -1020,6 +1041,15 @@ const state = {
      reasons) survives the record sheet opening and closing, and the FORM half
      (open … previewSeq) is reset on every open by CMD.wasteNew, so a sheet
      never reopens carrying the last entry's product. */
+  /* RECIPES (§164's screen, read-only). `rows` is the catalogue and is kept
+     across entries — re-reading 205 recipes every time somebody opens the row
+     is a wait for nothing, the same call SUBS.askbuy's material list makes.
+     `q` and `type` ARE reset on entry (see push), because a list reopened
+     still filtered to one word is a list that looks empty for no reason.
+     `rec` is whichever recipe is open; it is re-read every time, because a
+     recipe is edited on desktop and the copy in hand may be an hour old. */
+  rcp:{rows:null,tried:false,loading:false,err:null,q:'',type:'',listSeq:0,
+       openId:null,rec:null,recTried:false,recErr:null,tab:'ingredients'},
   wst:{rows:null,totals:null,tried:false,loading:false,err:null,listSeq:0,
        range:'week',reason:'',store:'',reasons:null,
        /* `mounted` is the house guard against a sheet that re-enters on every
@@ -1130,6 +1160,16 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   /* Log a batch opens with nothing counted. A basket left over from a batch
      that was already recorded would add it a second time. */
   if(route==='logbatch'){ state.bat.qty={}; state.bat.q=''; }
+  /* The CATALOGUE is kept and the FILTERS are dropped — the split SUBS.askbuy
+     already makes for the same reason. 205 recipes are the shop's vocabulary
+     and re-reading them on every entry is a wait for nothing; a search word
+     left over from last time is a list that opens looking empty. */
+  if(route==='recipes'){ const r=state.rcp; r.q=''; r.type=''; }
+  /* A RECORD IS RE-READ EVERY TIME. Recipes are written on desktop, so the
+     copy in hand may be an hour old and the person holding the phone is about
+     to make the thing. `rec` to null rather than kept, so the screen draws
+     "Loading…" rather than the last recipe somebody opened. */
+  if(route==='recipeone'){ const r=state.rcp; r.rec=null; r.recTried=false; r.recErr=null; r.tab='ingredients'; }
   /* A CLAIM IS WRITTEN FROM AN EMPTY FORM EVERY TIME, and a screen reopened
      after a send does not reappear on its own receipt — the rule the three
      request screens above already follow. THE LISTS ARE KEPT: the categories are
@@ -1506,6 +1546,9 @@ reg('custRetry', ()=>{ state.custLoadErr=null; loadCustomers(); });
 reg('ordersClear', ()=>{ state.statusF='all'; state.channelF='all'; state.storeF='all'; state.orderQ=''; loadOrdersPage(); });
 reg('openOrder', id=>{ state.detailId=id; state.drag=0; render(); });
 reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null;
+  /* An editor opened and left empty is not a note. Clearing it here is what
+     stops a drawer reopened later from showing a box nobody asked for twice. */
+  state.ordNoteOpen=null;
   /* Both belong to the order, not to the app: leaving orderOverCust set
      would push the NEXT customer record under a sheet that is no longer
      there, and leaving detailFetch set would draw the loading shell over
@@ -1928,9 +1971,28 @@ reg('ordNoteTyped', v=>{
   const foot=document.getElementById('mOrdNoteFoot');
   if(foot) foot.hidden=(state.ordNote.text===(o.shopNote||''));
 });
+/* THE WAY IN TO A NOTE THAT DOES NOT EXIST YET, from the "…" sheet. An order
+   already carrying a note shows its editor unasked; this command is only for
+   the empty case, which until now put a labelled box and a placeholder on
+   every single drawer whether or not anyone would ever type in it. */
+reg('ordNoteOpen', ()=>{
+  const o=currentOrder(); state.detailActions=false;
+  if(!o||o._id==null){ render(); return; }
+  state.ordNoteOpen=o._id;
+  /* The textarea does not exist yet — the render below writes it — so the
+     caret is asked for through state.focus, which focuses after the paint.
+     A .focus() here would address the node this paint is about to replace. */
+  state.focus={id:'mOrdNote'};
+  render();
+});
 reg('ordNoteReset', ()=>{
   const o=currentOrder(); if(!o||o._id==null) return;
   state.ordNote=null;
+  /* CANCEL ON AN ORDER THAT HAD NO NOTE puts the drawer back the way it was
+     found: the card goes, and that needs the repaint. An order that HAS a note
+     keeps its card and loses only the edit — the DOM touch the comment above
+     ordNoteTyped explains, so nothing repaints under the caret. */
+  if(!(o.shopNote||'')){ state.ordNoteOpen=null; render(); return; }
   const box=document.getElementById('mOrdNote'); if(box) box.value=o.shopNote||'';
   const foot=document.getElementById('mOrdNoteFoot'); if(foot) foot.hidden=true;
 });
@@ -1952,6 +2014,11 @@ reg('ordNoteSave', ()=>{
     const saved=(j&&j.staff_note)||'';
     if(state.liveDetail&&state.liveDetail._id===o._id) state.liveDetail.shopNote=saved;
     state.ordNote=null;
+    /* The saved note is now what decides whether the card shows, so the "was
+       asked for" flag has done its job. Saving an EMPTY box clears the note —
+       the endpoint blanks whatever trims to nothing — and the card goes with
+       it, which is the same answer Cancel gives. */
+    state.ordNoteOpen=null;
     return T('Note saved','备注已保存');
   });
 });
@@ -4555,7 +4622,16 @@ const MORE_GROUPS=[
        is never opened from here — it is where the queue and this row both
        arrive, carrying lines with them, and a row that opened it cold would
        open it empty. */
-    ['logbatch','clipboard-list','Log a batch','登记批次']]},
+    ['logbatch','clipboard-list','Log a batch','登记批次'],
+    /* WHAT A THING IS MADE FROM, for the person making it. Read-only: the
+       ingredients, the quantities and the steps, and no money at all — this
+       screen holds no cost figure for anyone, whatever they hold, so §164's
+       split decides what the SERVER sends it and never what it draws.
+       BORN GATED on `production`, the same Features switch that gates Materials
+       and Recipes on the desktop and `askbuy` four rows down. A new row may be
+       born gated; an old one may not be gated retroactively, which is why this
+       carries the switch and `logbatch` above it still does not. */
+    ['recipes','book-open','Recipes','食谱',null,'production']]},
   /* THE THREE REQUEST SCREENS, AND THE ONE GROUP THAT EARNED ITS HEADING MOST.
      Each asks somebody else to act and moves nothing on its own; each was
      previously scattered among the rows that DO the thing being asked for.
@@ -11567,6 +11643,216 @@ SUBS.kitchenqueue={title:['Kitchen queue','厨房制作队列'],
 SUBS.channelsync={title:['Channel sync','渠道同步'],render:()=>screenChannelSync()};
 SUBS.whatmade={title:['What you made','登记制作'],render:()=>screenWhatMade()};
 SUBS.logbatch={title:['Log a batch','登记批次'],render:()=>screenLogBatch()};
+
+/* ==========================================================================
+   Recipes — read-only (§164). What a thing is made from, and in what order.
+   ==========================================================================
+   NO MONEY ON THIS SCREEN, for anybody. §164 split `recipes:costs` out of
+   `recipes:view` so the kitchen could be handed the ingredients and the steps
+   without the batch cost, the cost per gram and the margin; this screen is the
+   half that was being withheld, so it draws none of the other half. That is a
+   decision about what the screen is FOR, not a gate — nothing here asks who is
+   looking, and the server already declines to send the figures to anyone
+   without the capability (lib/recipe-cost-visibility.js).
+
+   READ-ONLY, and the note at the foot says so in the app's own standing words.
+   The desktop record autosaves across four sub-tabs with version history
+   behind it; none of that comes across a phone, and a half-editor that can
+   save a name but not a line is worse than a page that states its purpose. */
+/* Quantities on this screen are weights and counts, not money — acMoney and
+   the phone's money helpers have no business here. A recipe line can be
+   fractional (0.5 kg) and a batch can be 3,179.25 g, so the digits are capped
+   rather than left to whatever the locale would do with a long float. */
+const rcpNum = v => { const n=Number(v);
+  return Number.isFinite(n) ? n.toLocaleString(undefined,{maximumFractionDigits:3}) : String(v==null?'':v); };
+function loadRecipes(force){
+  const r=state.rcp;
+  if(r.tried&&!force) return;
+  r.tried=true; r.loading=true; r.err=null;
+  /* Last asked wins, not last to arrive — the guard loadWaste() carries, for
+     the same reason: two taps a second apart can come back out of order. */
+  const seq=++r.listSeq;
+  api('/api/retail-admin/recipes').then(rows=>{
+    if(seq!==r.listSeq) return;
+    r.rows=Array.isArray(rows)?rows:[];
+    r.loading=false; r.err=null; render();
+  }).catch(e=>{
+    if(seq!==r.listSeq||String(e.message)==='auth') return;
+    r.loading=false; r.rows=null;
+    /* §1.12 — a section with bad data SHOWS that it failed rather than falling
+       through to the empty state, which would read as "this shop has no
+       recipes". */
+    r.err=E('Could not load recipes.','无法加载食谱。'); render();
+  });
+}
+function loadRecipeOne(){
+  const r=state.rcp;
+  if(r.recTried||r.openId==null) return;
+  r.recTried=true; r.recErr=null;
+  api('/api/retail-admin/recipes/'+Number(r.openId)).then(rec=>{
+    r.rec=rec||null; r.recErr=null; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    r.rec=null; r.recErr=E('Could not load recipes.','无法加载食谱。'); render();
+  });
+}
+/* Filed, not behaved: `recipe_type` decides which chip a row sits under and
+   nothing else — the desktop's own comment says nothing may start gating on
+   it, and this screen does not. */
+function rcpChips(){
+  const rows=state.rcp.rows||[];
+  const made=rows.filter(x=>(x.recipe_type||'made')!=='repacked').length;
+  const rep=rows.length-made;
+  const out=[{key:'',en:'All',zh:'全部',count:rows.length}];
+  if(made) out.push({key:'made',en:'Made',zh:'自制',count:made});
+  if(rep) out.push({key:'repacked',en:'Repacked',zh:'分装',count:rep});
+  return out;
+}
+function rcpRows(){
+  const r=state.rcp, q=String(r.q||'').trim().toLowerCase();
+  let rows=r.rows||[];
+  if(r.type) rows=rows.filter(x=>(x.recipe_type||'made')===r.type);
+  if(q) rows=rows.filter(x=>String(x.name_en||'').toLowerCase().indexOf(q)>=0
+                         || String(x.name_cn||'').toLowerCase().indexOf(q)>=0
+                         || String(x.sku||'').toLowerCase().indexOf(q)>=0);
+  return rows;
+}
+/* The one line under a name. Category, then the two facts a person standing at
+   a bench actually asks — how much it makes and how many that is. Each is
+   dropped when it is not recorded rather than printed as a dash: a row reading
+   "— g" says nothing and costs a line's width. */
+function rcpMeta(x){
+  const bits=[];
+  if(x.category) bits.push(String(x.category));
+  if(x.batch_size) bits.push(rcpNum(x.batch_size)+' g');
+  if(x.servings) bits.push(LANG==='en'
+    ? (x.servings+(x.servings===1?' serving':' servings'))
+    : (x.servings+' 份'));
+  return bits.join(' · ');
+}
+function screenRecipes(){
+  if(!featOn('production')) return flagGate('production');
+  loadRecipes();
+  const r=state.rcp;
+  const search=`<div style="padding:12px 16px;position:relative">
+    <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
+    <input id="mRcpQ" inputmode="search" enterkeyhint="search" value="${escAttr(r.q)}" style="padding-left:42px"
+      placeholder="${T('Search recipes','搜索食谱')}" oninput="APP.cmd('rcpSearch',this.value)"></div>`;
+  return search+`<div id="mRcpBody">${rcpBodyHtml()}</div>`;
+}
+/* Split from the screen so a keystroke repaints the list without rebuilding the
+   input under it — the same arrangement screenLogBatch() uses, and for the same
+   reason: a render() there takes the soft keyboard with it. */
+function rcpBodyHtml(){
+  const r=state.rcp;
+  if(r.err) return `<div style="padding:34px 24px;text-align:center;font-size:15px;color:var(--brick-ink)">${T(...r.err)}</div>`;
+  if(!r.rows) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!r.rows.length) return nothingYet(T('No recipes yet','暂无食谱'),
+    T('A recipe is what you make and what goes into it. They are written on desktop.',
+      '食谱记录你制作的东西及其用料。请在电脑端创建。'));
+  const rows=rcpRows();
+  const chips=rcpChips();
+  return `${chips.length>1?`<div style="padding:4px 0 4px">${chipRow(chips,r.type,'rcpType')}</div>`:''}
+    <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:10px">
+    ${!rows.length?`<div style="padding:32px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${
+      T('Nothing matches','没有匹配项')}</div>`:''}
+    ${rows.length?`<div class="list">${rows.map((x,i)=>`
+      ${i?'<div class="sep"></div>':''}
+      <button class="row" onclick="APP.cmd('rcpOpen',${Number(x.id)})" style="min-height:64px;align-items:center">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+          <span style="font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(x.name_en||x.name_cn||'')}</span>
+          ${rcpMeta(x)?`<span class="num" style="font-size:13px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rcpMeta(x))}</span>`:''}
+        </span>
+        <span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right',18)}</span>
+      </button>`).join('')}</div>`:''}
+    ${rows.length?desktopNote():''}</div>`;
+}
+/* ── One recipe ──────────────────────────────────────────────────────────── */
+const RCP_STORAGE={freezer:['Freezer','冷冻'],fridge:['Fridge','冷藏'],room_temp:['Room temperature','常温']};
+function screenRecipeOne(){
+  const r=state.rcp;
+  loadRecipeOne();
+  if(r.recErr) return `<div style="padding:34px 24px;text-align:center;font-size:15px;color:var(--brick-ink)">${T(...r.recErr)}</div>`;
+  const rec=r.rec;
+  if(!rec) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const lines=Array.isArray(rec.ingredients)?rec.ingredients:[];
+  const steps=Array.isArray(rec.steps)?rec.steps:[];
+  /* TWO TABS, NOT FOUR. The desktop record carries Details, Ingredients, Steps
+     and Cost & Pricing; the money tab is not this screen's to draw and the
+     Details tab is three fields, which sit at the foot of Ingredients instead
+     of behind a tap of their own. */
+  const strip=`<div class="hscroll" style="display:flex;gap:24px;padding:8px 16px 0;border-bottom:1px solid var(--border-default)">
+    ${[['ingredients','Ingredients','原料',lines.length],['steps','Steps','步骤',steps.length]].map(([k,en,zh,n])=>{
+      const on=r.tab===k;
+      return `<button onclick="APP.cmd('rcpTab','${k}')" style="flex:none;background:none;border:none;padding:10px 0 11px;margin:0;font-family:inherit;cursor:pointer;
+        font-size:15px;font-weight:${on?'500':'400'};color:${on?'var(--text-primary)':'var(--text-secondary)'};
+        box-shadow:${on?'inset 0 -2px 0 var(--text-primary)':'none'}">${T(en,zh)}${n?` <span class="num" style="font-size:12px;opacity:.7">${n}</span>`:''}</button>`;
+    }).join('')}</div>`;
+
+  const keep=[];
+  if(rec.storage&&RCP_STORAGE[rec.storage]) keep.push([T('Storage','储存方式'),T(...RCP_STORAGE[rec.storage])]);
+  if(rec.shelf_life) keep.push([T('Shelf life','保质期'),String(rec.shelf_life)]);
+  if(rec.notes) keep.push([T('Notes','备注'),String(rec.notes)]);
+
+  const body=r.tab==='steps'
+    ? (!steps.length
+        ? `<div style="padding:32px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('None','无')}</div>`
+        : `<div style="display:flex;flex-direction:column;gap:10px">${steps.map((st,i)=>`
+            <div class="card" style="padding:14px;display:flex;gap:13px;align-items:flex-start">
+              <span class="num" style="flex:none;width:26px;height:26px;border-radius:8px;background:var(--surface-raised);color:var(--text-secondary);
+                display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500">${i+1}</span>
+              <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+                ${st.name?`<span style="font-size:15px;font-weight:500">${escAttr(st.name)}</span>`:''}
+                ${st.instructions?`<span style="font-size:14.5px;line-height:1.55;color:${st.name?'var(--text-secondary)':'var(--text-primary)'};white-space:pre-line">${escAttr(st.instructions)}</span>`:''}
+              </span></div>`).join('')}</div>`)
+    : (!lines.length
+        ? `<div style="padding:32px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('None','无')}</div>`
+        : `<div class="list">${lines.map((l,i)=>`
+            ${i?'<div class="sep"></div>':''}
+            <div style="display:flex;align-items:center;gap:14px;min-height:52px;padding:11px 16px">
+              <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+                <span style="font-size:15px">${escAttr(l.name_en||l.master_name_en||l.name_cn||'')}</span>
+                ${l.notes?`<span style="font-size:12.5px;color:var(--text-secondary)">${escAttr(l.notes)}</span>`:''}
+              </span>
+              <span class="num" style="flex:none;font-size:15px;font-weight:500">${escAttr(rcpNum(l.qty))} ${escAttr(l.unit||'g')}</span>
+            </div>`).join('')}</div>`);
+
+  return strip+`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">
+    ${body}
+    ${keep.length?`<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px">
+      ${keep.map(([k,v])=>`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+        <span style="font-size:14.5px;color:var(--text-secondary);flex:none">${k}</span>
+        <span style="font-size:14.5px;font-weight:500;text-align:right;min-width:0">${escAttr(v)}</span></div>`).join('')}</div>`:''}
+    ${desktopNote()}</div>`;
+}
+SUBS.recipes={title:['Recipes','食谱'],
+  status:()=>{ const r=state.rcp; if(!r.rows) return '';
+    const n=r.rows.length;
+    return LANG==='en' ? (n+(n===1?' recipe':' recipes')) : (n+' 个食谱'); },
+  render:()=>screenRecipes()};
+SUBS.recipeone={title:['Recipes','食谱'],
+  titleOf:()=>escAttr((state.rcp.rec&&(state.rcp.rec.name_en||state.rcp.rec.name_cn))||T('Recipes','食谱')),
+  backLabel:()=>T('Recipes','食谱'),
+  /* Batch and servings, which is what the title cannot say and what somebody
+     about to make the thing opened it to find out. Silent when neither is
+     recorded rather than printing a dash — §1.7's status line is a fact or it
+     is nothing. */
+  status:()=>{ const rec=state.rcp.rec; if(!rec) return '';
+    const bits=[];
+    if(rec.batch_size) bits.push(rcpNum(rec.batch_size)+' g');
+    if(rec.servings) bits.push(LANG==='en'
+      ? (rec.servings+(rec.servings===1?' serving':' servings'))
+      : (rec.servings+' 份'));
+    return bits.join(' · '); },
+  render:()=>screenRecipeOne()};
+reg('rcpSearch', v=>{ const r=state.rcp, el=document.getElementById('mRcpQ');
+  r.q=String(v||''); state.focus={id:'mRcpQ',pos:el?el.selectionStart:null};
+  /* Patch the list alone. The rows are already in memory — this filters them —
+     so a render() would only serve to destroy the field being typed into. */
+  const b=document.getElementById('mRcpBody'); if(b) b.innerHTML=rcpBodyHtml(); else render(); });
+reg('rcpType', v=>{ state.rcp.type=String(v||''); render(); });
+reg('rcpTab', v=>{ state.rcp.tab=String(v||'ingredients'); render(); });
+reg('rcpOpen', id=>{ state.rcp.openId=Number(id); push('recipeone'); });
 SUBS.pick={title:['Pick','拣货'],render:()=>screenPick()};
 SUBS.receivexfer={title:['Receive from another shop','调拨收货'],render:()=>screenReceiveTransfer()};
 SUBS.kitchenready={title:['Ready from the kitchen','厨房已完成'],render:()=>screenKitchenReady()};
@@ -13346,6 +13632,17 @@ function orderActs(o){
   // as the only exit from a mis-tap.
   if(st==='preparing'&&!orderHasWaybill(o))
     acts.push(['rotate-ccw',T('Undo preparing','撤销备货'),"APP.cmd('undoPreparing')"]);
+  /* LAST, AND ONLY WHEN THE EDITOR IS NOT ALREADY SHOWING. Appended rather than
+     placed among the rows above so no existing row moves — this sheet holds
+     Cancel and Refund, and a row that shifts under a thumb that knows where it
+     used to be is a mis-tap on money. The label is the card's own heading, so
+     what you pick and what appears say the same words.
+
+     shopNoteReady as well as not-shown: before the detail read lands the phone
+     does not yet know whether this order HAS a note, and a row that opens an
+     empty box over a note that exists is the exact wrong answer the card's own
+     comment was written about. Half a second later the row is there. */
+  if(shopNoteReady(o)&&!shopNoteShown(o)) acts.push(['pencil',T('Shop note','店铺备注'),"APP.cmd('ordNoteOpen')"]);
   return acts;
 }
 function orderNext(o){
@@ -15519,9 +15816,26 @@ function orderItemsBlock(o){
    A MIRRORED ORDER GETS NO NOTE, matching the desktop exactly: staffNoteBlock
    is called from renderOpenOrder and never from renderReadonlyOrder. A note on
    a platform's own order is a note on a record we do not own. */
+/* IS THE EDITOR ON SCREEN FOR THIS ORDER? One function owns the rule, because
+   the "…" sheet has to ask the same question — it offers the way in exactly
+   when the editor is not already showing — and two copies of a condition
+   written out separately is how the desktop's own note button and sheet drifted
+   apart (see orderActionRow's note on orderActs). */
+function shopNoteReady(o){
+  if(!o||o._id==null||o.viewOnly) return false;
+  /* The two guards the long comment above this pair explains: it waits for the
+     detail read, because the list row does not carry staff_note, and a mirrored
+     order gets no note at all. */
+  return !!(state.liveDetail&&state.liveDetail.id===state.detailId);
+}
+function shopNoteShown(o){
+  if(!shopNoteReady(o)) return false;
+  if(state.ordNoteOpen===o._id) return true;                       // asked for
+  if(state.ordNote&&state.ordNote.id===o._id) return true;         // being typed
+  return !!(o.shopNote||'');                                       // already has one
+}
 function shopNoteCard(o){
-  if(!o||o._id==null||o.viewOnly) return '';
-  if(!(state.liveDetail&&state.liveDetail.id===state.detailId)) return '';
+  if(!shopNoteShown(o)) return '';
   const saved=o.shopNote||'';
   const draft=(state.ordNote&&state.ordNote.id===o._id)?state.ordNote.text:saved;
   const dirty=draft!==saved;
@@ -15529,13 +15843,13 @@ function shopNoteCard(o){
   return `<div class="card" style="padding:14px">
     <div style="display:flex;align-items:center;gap:8px;color:var(--text-secondary)">${ic('pencil',16)}
       <span class="eyebrow">${T('Shop note','店铺备注')}</span></div>
-    <textarea id="mOrdNote" maxlength="2000" style="margin-top:10px;min-height:${(saved||dirty)?'84px':'46px'};resize:none"
+    <textarea id="mOrdNote" maxlength="2000" style="margin-top:10px;min-height:84px;resize:none"
       placeholder="${escAttr(T('Add a note for whoever handles this order','给处理这张订单的同事留个备注'))}"
       oninput="APP.cmd('ordNoteTyped',this.value)">${escAttr(draft)}</textarea>
     ${/* The footer appears only once something has actually changed — the
           desktop's rule. A Save button that is always there and does nothing
           four times out of five is noise. */''}
-    <div id="mOrdNoteFoot" ${dirty?'':'hidden'} style="display:flex;gap:8px;margin-top:10px">
+    <div id="mOrdNoteFoot" ${dirty?'':'hidden'}>
       <button class="btn2" style="flex:1" ${busy?'disabled':''} onclick="APP.cmd('ordNoteReset')">${T('Cancel','取消')}</button>
       <button class="btn2" style="flex:1" ${busy?'disabled':''} onclick="APP.cmd('ordNoteSave')">${busy?T('Saving…','保存中…'):T('Save note','保存备注')}</button>
     </div></div>`;
@@ -16008,7 +16322,14 @@ function trendSections(){
   const payTotal=pays.reduce((a,p)=>a+Number(p.revenue||0),0);
   if(!noMoney&&pays.length&&payTotal>0){
     const nm=trendPayName(pays[0].method);
-    sales.push({t:T(nm+' share of revenue',nm+'占营收'),
+    /* "SHARE OF REVENUE" WAS A SHARE OF SOMETHING ELSE. payRows is PAID — every
+       channel except the gzgrocery mirror rows — and nothing folds the wholesale
+       ledger or top-up cash into it, while the headline revenue above folds
+       both. So the percentage was of a SMALLER pot than the total it sat under,
+       and the two could not be reconciled by anybody reading them together.
+       The arithmetic is unchanged and correct for what it measures; what was
+       wrong was a label that did not say which total it divided by. */
+    sales.push({t:T(nm+' share of order revenue',nm+'占订单营收'),
                 v:Math.round(pays[0].revenue/payTotal*100)+'%'});
   }
   let hot=null; (d.heat||[]).forEach(h=>{ if(!hot||h.orders>hot.orders) hot=h; });
@@ -16040,15 +16361,34 @@ function trendSections(){
     v:(LANG==='en'?(gc.city_en||gc.city):gc.city)+' · '+nOrders(gc.orders)});
   const r1=trendRetain1();
   if(r1!=null) cust.push({t:T('Still buying a month later','一个月后仍回购'),v:Math.round(r1)+'%'});
-  if(cust.length) out.push({key:'customers',icon:'users',tone:'dusk',title:T('Customers','客户'),rows:cust});
+  /* WHICH PEOPLE THESE ARE, on the card that counts them. Every figure in this
+     section is keyed on customer_id, and the two marketplaces never write one —
+     routes/meituan-internal.js and routes/eleme-internal.js simply do not carry
+     the column, so SQL's COUNT(DISTINCT customer_id) skips every order they
+     send. That is a fact about the channels: Meituan masks the address and gives
+     a platform id we have only collected since 2026-09-15, Eleme gives nothing
+     at all. Revenue four tiles up counts those orders; this section cannot, and
+     an operator reading 79 buyers under ¥149,344 deserves to know why rather
+     than to conclude the shop is broken. */
+  if(cust.length) out.push({key:'customers',icon:'users',tone:'dusk',title:T('Customers','客户'),rows:cust,
+    note:T('Mini app, web and in-store only — Meituan and Eleme orders carry no customer.',
+           '仅小程序、网页与门店 —— 美团、饿了么订单没有顾客。')});
 
   // ── Products & traffic ──
   const prod=[];
   const tp=(d.topProducts||[])[0];
   const tpName=tp?((LANG==='en'?(tp.name_en||tp.name_cn):(tp.name_cn||tp.name_en))||''):'';
   if(tpName){
-    prod.push({t:T('Top seller','最热销'),v:tpName});
-    prod.push({t:T('Units sold','销量'),v:num(tp.units)});
+    /* NOT THE MOST UNITS — THE MOST MONEY. topProducts comes back
+       `ORDER BY revenue DESC` (routes/retail.js), so row one is the product that
+       EARNED most, and its unit count can be lower than the row below it. Called
+       "Top seller" it read as a volume ranking and was not one; a costly product
+       shifting seventeen units outranked a cheap one shifting four hundred. The
+       desktop's own Top products panel carries the same fault and is renamed
+       with this (03-dashboard.js / retail-admin.html). Renamed rather than
+       re-sorted: the ranking is useful, it was only ever named wrong. */
+    prod.push({t:T('Top earner','营收最高'),v:tpName});
+    prod.push({t:T('Units sold','销量'),v:noMoney?num(tp.units):num(tp.units)+' · '+mn(tp.revenue)});
   }
   const k=d.kpis||{};
   /* The mini app's own conversion, and the server says so: kpis.conversion_rate
@@ -16057,7 +16397,13 @@ function trendSections(){
     v:Number(k.conversion_rate).toFixed(1)+'%'});
   const co=d.checkout||{};
   if(co.abandoned) prod.push({t:T('Started checkout, did not pay','进入结算但未付款'),v:num(co.abandoned)});
-  if(prod.length) out.push({key:'products',icon:'package',tone:'amber',title:T('Products & traffic','商品与流量'),rows:prod});
+  /* The wholesale channel's REVENUE is in the headline and its ITEMS are not in
+     this ranking — topProducts filters channel='gzgrocery' out. The exclusion is
+     there to stop its takings being counted twice (they arrive by their own
+     ledger), and it catches the order lines on the way past. Said out loud here
+     rather than left for somebody to discover by adding the rows up. */
+  if(prod.length) out.push({key:'products',icon:'package',tone:'amber',title:T('Products & traffic','商品与流量'),rows:prod,
+    note:T('Wholesale pickups are not counted here.','不含批发提货。')});
 
   // ── Stores ──
   /* The breakdown the old note sent people to a desktop for. Six at most: a
@@ -16134,6 +16480,18 @@ function screenTrend(){
     <span style="font-size:13px;color:var(--text-secondary)">${
       T('vs prior '+state.trendRange+' days','对比前 '+state.trendRange+' 天')}</span></div>`;
 
+  /* VISITS ARE ONE CHANNEL'S, SITTING IN A CHIP ROW BESIDE TWO THAT ARE EVERY
+     CHANNEL'S. retail_visits has exactly one writer — the mini app's tracker via
+     POST /api/retail/track — so a Meituan or Eleme order arrives with no browse
+     behind it, and the web shop has never called /track either. A marketplace
+     will never tell us how many people looked; that is a fact about the channel
+     and not a gap we might fill. Without this line the chip row invites the
+     reading that Revenue, Orders and Visits describe the same business, and the
+     third one describes a slice of it. */
+  const metricNote = m!=='visits' ? '' :
+    `<div style="font-size:12px;line-height:1.5;color:var(--text-secondary);border-top:1px solid var(--border-default);margin-top:10px;padding-top:10px">${
+      T('Mini app only — the marketplaces do not report visits.','仅小程序 —— 外卖平台不提供访问数据。')}</div>`;
+
   const bestDow=trendBestDow(vals);
   const sections=trendSections();
   const section=s=>{
@@ -16148,7 +16506,15 @@ function screenTrend(){
                 goes when the card opens, or the same fact is printed twice —
                 once as a summary and again as the first row under it, which is
                 what it looked like on the first render of this screen. */''}
-          ${open?'':`<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(s.rows[0].t)} · ${escAttr(s.rows[0].v)}</span>`}</span>
+          ${/* THE VALUE IS PINNED AND THE LABEL GIVES WAY. As one run of text with a
+                middle dot, a long first fact lost its own number to the ellipsis —
+                "WeChat Pay share of order revenue · …" — which is a summary line
+                carrying no figure, worse than none at all. Laid out like the rows
+                it summarises instead: label truncates from the right, value never
+                does. */''}
+          ${open?'':`<span style="display:flex;align-items:baseline;gap:8px;margin-top:1px">
+            <span style="font-size:12.5px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(s.rows[0].t)}</span>
+            <span class="num" style="font-size:12.5px;color:var(--text-secondary);flex:none">${escAttr(s.rows[0].v)}</span></span>`}</span>
         <span style="flex:none;color:var(--text-secondary);display:flex">${ic(open?'chevron-down':'chevron-right')}</span></button>
       ${open?`<div style="padding:0 16px 14px;display:flex;flex-direction:column;gap:11px">
         ${s.rows.map(r=>`<div style="border-top:1px solid var(--border-default);padding-top:11px">
@@ -16157,6 +16523,7 @@ function screenTrend(){
             <span class="num" style="font-size:14.5px;font-weight:500;flex:none;text-align:right">${escAttr(r.v)}</span></div>
           ${r.bar!=null?`<div style="margin-top:7px;height:6px;border-radius:3px;background:var(--surface-raised);overflow:hidden">
             <div style="height:6px;border-radius:3px;width:${r.bar}%;background:var(--${s.tone}-ink)"></div></div>`:''}</div>`).join('')}
+        ${s.note?`<div style="font-size:12px;line-height:1.5;color:var(--text-secondary);border-top:1px solid var(--border-default);padding-top:11px">${s.note}</div>`:''}
       </div>`:''}</div>`;
   };
 
@@ -16164,7 +16531,7 @@ function screenTrend(){
     <div class="card" style="padding:16px 14px 12px">${sparkline(vals,tone)}
       <div class="num" style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-secondary);padding:8px 2px 0">
         <span>${escAttr(fmtDateOnly(t[0].bucket))}</span><span>${escAttr(fmtDateOnly(t[days-1].bucket))}</span></div>
-      ${deltaRow}</div>
+      ${deltaRow}${metricNote}</div>
     <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">
       ${fact(T('Total','合计'),fmt(total))}
       ${fact(T('Busiest day','最高的一天'),fmt(vals[bi]),escAttr(fmtDateOnly(t[bi].bucket)))}
@@ -18673,6 +19040,13 @@ const ROUTE_CAP={
      the page reads correctly with the CTA gone. The record button carries the
      second capability itself — see SUBS.waste's cta. */
   waste:'waste:view',
+  /* RECIPES IS GATED ON VIEW, NOT ON COSTS, and the distinction is §164's.
+     `recipes:view` is what opens a recipe — what it is made from, in what
+     quantities, in what order. `recipes:costs` is the money, and this screen
+     shows none of it to anybody, so gating on it would refuse the screen to
+     exactly the kitchen operator it was built for. The record screen carries
+     the same key: it is the list's other half, not a second permission. */
+  recipes:'recipes:view', recipeone:'recipes:view',
   /* `till` is deliberately ABSENT from this table — it is the one route that
      needs ALL of a pair rather than any of it, and an array here means any-of.
      Its gate is the named branch in canRoute() below. */
