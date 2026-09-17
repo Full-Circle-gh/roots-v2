@@ -43,13 +43,18 @@
  *      JD's opeCityName went from the carrier to the screen untranslated,
  *      so even a perfectly translated sentence ended "· 广州市".
  *
- * WHAT IS DELIBERATELY STILL CHINESE, asserted below so a later reader
- * does not "fix" it: FACILITY names inside the sentence. "Arrived at
- * 广州黄埔集货分拣中心" is the intended output. Facility names are proper
- * nouns, they romanise badly, and the Chinese is the string a customer
- * needs if they ring the carrier. Administrative place names (广州市) are
- * a different thing — they romanise cleanly and standardly — which is why
- * the location field is translated and the facility name is not.
+ * AMENDED 2026-09-17. This header used to say facility names stayed
+ * Chinese on purpose. That decision was reversed by Ash after seeing a
+ * real timeline: see section 6, which carries the reasoning and now pins
+ * the opposite. Facility names are parsed as [city][district][type] and
+ * translated; a name with any unknown part stays WHOLE Chinese.
+ *
+ * WHAT IS STILL DELIBERATELY CHINESE, asserted below so a later reader
+ * does not "fix" it: PICKUP POINT names — 菜鸟驿站, 快递柜, 代收点. The
+ * customer physically walks to one and has to match the name against a
+ * sign on a shopfront. That is the one case the original reasoning was
+ * right about, and it is why the pickup rule does not call the facility
+ * translator while the transit rules do.
  *
  * Not a browser suite — no Chromium, no layout, no DOM. It belongs in the
  * fast shard, and CLAUDE.md's standing instruction is that the slow shard
@@ -75,19 +80,19 @@ function loc(cn) { return t.translateLocation(cn); }
 // in English. This is the regression that started the work.
 const TC000756 = [
   ['开始长途运输,距离下一站【天津散货分拣中心】2094KM',
-   'Long-haul transit started — 2094KM to 天津散货分拣中心'],
+   'Long-haul transit started — 2094KM to Tianjin Bulk Sorting Centre'],
   ['您的快件已离开【广州花都集货分拣中心】,正在发往下一站【天津散货分拣中心】',
-   'Left 广州花都集货分拣中心 — heading to 天津散货分拣中心'],
-  ['您的快件在【广州花都集货分拣中心】分拣完成', 'Sorted at 广州花都集货分拣中心'],
+   'Left Guangzhou Huadu Consolidation Sorting Centre — heading to Tianjin Bulk Sorting Centre'],
+  ['您的快件在【广州花都集货分拣中心】分拣完成', 'Sorted at Guangzhou Huadu Consolidation Sorting Centre'],
   ['您的快件已离开【广州黄埔集货分拣中心】,正在发往下一站【广州花都集货分拣中心】',
-   'Left 广州黄埔集货分拣中心 — heading to 广州花都集货分拣中心'],
-  ['您的快件在【广州黄埔集货分拣中心】分拣完成', 'Sorted at 广州黄埔集货分拣中心'],
-  ['您的快件已到达【广州黄埔集货分拣中心】', 'Arrived at 广州黄埔集货分拣中心'],
+   'Left Guangzhou Huangpu Consolidation Sorting Centre — heading to Guangzhou Huadu Consolidation Sorting Centre'],
+  ['您的快件在【广州黄埔集货分拣中心】分拣完成', 'Sorted at Guangzhou Huangpu Consolidation Sorting Centre'],
+  ['您的快件已到达【广州黄埔集货分拣中心】', 'Arrived at Guangzhou Huangpu Consolidation Sorting Centre'],
   ['您的快件已离开【广州市-保利天汇项目接驳点】,正在发往下一站【广州黄埔集货分拣中心】',
-   'Left 广州市-保利天汇项目接驳点 — heading to 广州黄埔集货分拣中心'],
+   'Left 广州市-保利天汇项目接驳点 — heading to Guangzhou Huangpu Consolidation Sorting Centre'],
   ['您的快件已到达【广州市-保利天汇项目接驳点】', 'Arrived at 广州市-保利天汇项目接驳点'],
   ['货物已交付京东物流', 'Handed over to JD Logistics'],
-  ['您的快件已由【广州黄村站】揽收完成', 'Picked up at 广州黄村站'],
+  ['您的快件已由【广州黄村站】揽收完成', 'Picked up at Guangzhou Huangcun Station'],
   ['京东快递已收取快件', 'Picked up by JD Express'],
   ['您的快件将由快递员王培贤上门取件,联系电话:16620303543',
    'Courier 王培贤 will collect your parcel — 16620303543'],
@@ -107,7 +112,7 @@ for (const [cn] of TC000756) {
 const REGRESSION = [
   ['您的快件已签收,签收人:张三', 'Delivered, signed by 张三'],
   ['您的快件已本人签收',          'Delivered, signed in person'],
-  ['您的快件已到达【上海转运中心】', 'Arrived at 上海转运中心'],
+  ['您的快件已到达【上海转运中心】', 'Arrived at Shanghai Transfer Centre'],
   ['您的快件已揽收',              'Package picked up'],
   ['您的快件已发车',              'Package departed'],
   ['您的快件已下单',              'Waybill created'],
@@ -171,14 +176,59 @@ if (!/^Out for delivery · /.test(fb)) {
 // — that is the honest answer, not a defect.
 eq('fallback · no status readable', tr('测试文本无关内容'), '测试文本无关内容');
 
-// ── 6. Facility names stay Chinese, on purpose ──────────────────────
-const facility = tr('您的快件已到达【广州黄埔集货分拣中心】');
-if (!facility.includes('广州黄埔集货分拣中心')) {
-  failures.push(`facility name should stay Chinese, got: ${facility}`);
-} else pass++;
-if (!facility.startsWith('Arrived at ')) {
-  failures.push(`facility line should still translate its verb, got: ${facility}`);
-} else pass++;
+// ── 6. Facility names ───────────────────────────────────────────────
+// THIS SECTION REVERSED ON 2026-09-17, on Ash's call, and the reversal is
+// recorded here rather than quietly deleted. It used to assert the
+// opposite: that 广州黄埔集货分拣中心 stayed Chinese inside a translated
+// sentence, on the reasoning that facility names are proper nouns a
+// customer would need in Chinese to ring the carrier.
+//
+// That reasoning did not survive a real timeline. You quote a WAYBILL to a
+// carrier, never a sorting centre, and "Left 深圳航空分拣中心 — heading to
+// 北京大兴航空分拣中心" withheld the single most useful fact on the screen:
+// the parcel flew from Shenzhen to Beijing. The names are structured
+// ([city][district][type]), so they are parsed, not transliterated.
+eq('facility · city + district + type',
+   tr('您的快件已到达【广州黄埔集货分拣中心】'),
+   'Arrived at Guangzhou Huangpu Consolidation Sorting Centre');
+eq('facility · city + type',
+   t.translateFacility('深圳航空分拣中心'), 'Shenzhen Air Sorting Centre');
+eq('facility · station',
+   t.translateFacility('广州黄村站'),       'Guangzhou Huangcun Station');
+eq('facility · branch',
+   t.translateFacility('上海奉贤营业部'),    'Shanghai Fengxian Branch');
+// ALL OR NOTHING. 保利天汇项目 is a property development, not a place we
+// can name, so the WHOLE facility stays Chinese rather than rendering a
+// half-English "Guangzhou 保利天汇项目 Transfer Point".
+eq('facility · unknown part → all Chinese',
+   t.translateFacility('广州市-保利天汇项目接驳点'), '广州市-保利天汇项目接驳点');
+eq('facility · no recognised type → unchanged',
+   t.translateFacility('某某中心'),          '某某中心');
+eq('facility · empty',  t.translateFacility(''),   '');
+eq('facility · latin passthrough', t.translateFacility('Hub 7'), 'Hub 7');
+
+// PICKUP POINTS ARE STILL CHINESE, AND THAT IS THE POINT. This is the one
+// case the original reasoning was right about: the customer physically
+// walks to a 菜鸟驿站 and has to match the name against a shopfront sign.
+eq('pickup point stays Chinese',
+   t.translateFacility('菜鸟驿站'), '菜鸟驿站');
+const pickup = tr('已送达菜鸟驿站,取件码:1-2-3456');
+if (/菜鸟驿站/.test(pickup)) pass++;
+else failures.push(`pickup-point name must stay Chinese, got: ${pickup}`);
+
+// ── 6b. Air legs ────────────────────────────────────────────────────
+// From TC000761, where this was the NEWEST event and therefore the top
+// line of the screen — the first thing a customer reads — and had no rule
+// at all. The two names here are cities, not facilities.
+eq('air · departed',
+   tr('您的快件在【深圳市飞往北京】的航班上,已起飞'),
+   'In flight — Shenzhen to Beijing, departed');
+eq('air · landed',
+   tr('您的快件在【深圳市飞往北京】的航班上,已降落'),
+   'Flight landed — Shenzhen to Beijing');
+eq('air · in flight, no state',
+   tr('您的快件在【广州市飞往上海】的航班上'),
+   'In flight — Guangzhou to Shanghai');
 
 // ── 7. Never throws, always a string ────────────────────────────────
 for (const bad of [null, undefined, '', 0, {}, []]) {
@@ -187,6 +237,9 @@ for (const bad of [null, undefined, '', 0, {}, []]) {
   else pass++;
   const outL = loc(bad);
   if (typeof outL !== 'string') failures.push(`translateLocation(${JSON.stringify(bad)}) → not a string: ${typeof outL}`);
+  else pass++;
+  const outF = t.translateFacility(bad);
+  if (typeof outF !== 'string') failures.push(`translateFacility(${JSON.stringify(bad)}) → not a string: ${typeof outF}`);
   else pass++;
 }
 

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.303
+# Tacet shared-core consolidation — decisions record, v4.304
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-17 · v4.304 — **§168 · THE FACILITY NAMES COME INTO ENGLISH, AND §30's "KEEP IT CHINESE" NARROWS TO ONE CASE — ASKED BY ASH.** Looking at TC000761 on the English side: *"can we do city and provinces also in English?"* **This REVERSES a decision taken the same day, six hours earlier, by the session that shipped the carrier-event translator (PR #676).** That decision kept FACILITY names Chinese inside a translated sentence on two arguments — they are proper nouns, and a customer ringing the carrier needs the Chinese. **Both fail on a real timeline.** A customer quotes a WAYBILL, never a sorting centre; and `Left 深圳航空分拣中心 — heading to 北京大兴航空分拣中心` withholds the single most useful fact on the screen — the parcel flew Shenzhen to Beijing — from precisely the reader the translation exists for. Half the sentence was English and the half carrying the geography was not. **PARSED, NOT TRANSLITERATED.** These names are structured `[city][district][type]`, so three tables reassemble them: `广州黄埔集货分拣中心` → Guangzhou Huangpu Consolidation Sorting Centre, `广州黄村站` → Guangzhou Huangcun Station. **ALL OR NOTHING** — one unknown part and the WHOLE name stays Chinese, so `广州市-保利天汇项目接驳点` renders unchanged rather than as a half-English `Guangzhou 保利天汇项目 Transfer Point`; the same rule the location field already follows, and what stops a growing table producing mixed lines while it grows. **PICKUP POINTS STAY CHINESE, and are now the whole of that rule rather than a blanket**: the customer physically walks to a `菜鸟驿站` and matches the name against a shopfront sign, which is the one case the original reasoning was right about. **Also here: air legs.** TC000761's newest event — the top line of the screen, the first thing a customer reads — was `您的快件在【深圳市飞往北京】的航班上,已起飞` and had no rule at all; it now reads `In flight — Shenzhen to Beijing, departed`, the two names taken as cities because that is what they are. **No Chinese is composed** — every string added is English read out of Chinese the carrier wrote — so `docs/tacet-delivery-vocabulary.md` Rule 4 is not engaged and this is not an amendment to it. `scripts/test_tracking_translation.js` grows to 94 checks; its section 6 previously asserted the opposite and now carries the reversal in its own comment, so the change is readable rather than merely absent.
 
 2026-09-17 · v4.303 — **§98 ADDENDUM 7 · THE FOUR STEPS ARE NUMBERED, AND THE THREE THAT ARE NOT NEXT STOP SHOUTING — REPORTED BY ASH** from the phone, against TC000716 with the case open on screen: *"not clear, maybe step by step better?"*. **THE PANEL WAS ASKED FOR A WIZARD AND DID NOT GET ONE, AND THAT REFUSAL IS THE DECISION HERE.** One step at a time was put up and rejected on three grounds, recorded because it is the intuitive answer: the steps are **not strictly ordered** — the carrier rings while the remedy is still open, which is ordinary, and the renderers have carried controls for an out-of-turn step since §98 precisely so it is reachable; a wizard **costs the glance**, and seeing where a case stands without tapping is the whole reason the panel exists rather than a page; and it would **undo the weight pass** §98 addendum 6 shipped off Ash's own *"can make a better design?"*. Ash chose the alternative. **WHAT WAS ACTUALLY UNCLEAR, MEASURED OFF THE PHOTOGRAPH, WAS THREE THINGS.** The header counted `✓ 1/4` and **no row on screen carried a 1, a 2, a 3 or a 4** for it to be counting. **Six controls were visible at once** — `Claim filed`, `Not claiming`, `Add photo`, `Send replacement`, `Refunded`, `Nothing needed` — and three of them belonged to a step that was not next, sitting directly under the one that was; the one-primary rule held and was never the problem, the greys were. And the footer printed *"to do: Replacement or refund · Carrier settled"*, **naming two rows two and three lines above it** — the same words twice, in a block whose complaint was that there was too much to read. **THE FIX IS THREE CHANGES AND NO NEW BEHAVIOUR.** A later step's marker is its NUMBER, the NEXT pane's eyebrow carries `n/total`, and the blocker codes are worded as NUMERALS so the footer points at the rows instead of repeating them — `to do: 3 · 4`. A later step's controls FOLD, behind a chevron, one open at a time; an out-of-turn step stays reachable and costs a tap. **NOT A WORD WAS MINTED IN EITHER LANGUAGE** — numerals, a chevron and a dash, with `下一步` and `待办` already live — so `docs/tacet-delivery-vocabulary.md` is untouched and deliberately so; this is the *"a numeral or a name often needs no label at all"* preference taken rather than a composition declared. **THE n/a ROW STOPPED LOOKING FINISHED**: a case that will not claim drew its carrier step with a green tick and a `–` in the STAMP slot, which reads as a step somebody did; the dash is now the marker and the tick is gone, matching the count that has never counted it. **THE TWO SURFACES FOLD BY DIFFERENT MECHANISMS, ON PURPOSE, AND THIS IS THE ONE THING TO READ BEFORE TOUCHING EITHER.** The phone repaints on the 60-second live backstop, so its fold is `state.dcMore` or the row would close under the thumb of whoever opened it. The drawer does NOT repaint on a fold, and must not: its claim number and amounts are **inline inputs**, so calling `renderOpenOrder` to open a row would have thrown away a claim number half-typed two rows above — it flips two attributes and touches nothing else. Same panel, same picture, two correct answers. **Tests:** `scripts/test_mobile_delay_panel.js` 47 → **55 assertions across 11 cases**, gaining the fold, the numerals, the footer and a geometry measurement of the FRESH state — every measured case in that file until now drew a panel whose steps were all finished, so the numbered row and the chevron had never been measured at all. **Three breaks were confirmed red**: the fold removed, the numerals put back to circles, and the footer returned to labels. `scripts/test_delay_panel_rows.js` had **pinned `delayDone`'s ARITY** through a regex matching to the closing bracket, so a fourth argument read as the stamp-and-sentence fault that file exists to catch; it now matches up to `note`, which is what its own comment says it guards. 274 fast suites pass, 0 fail. A build under §98 and §125 with no rule reversed, hence a patch.
 
@@ -17650,3 +17652,77 @@ Two pairs composed, each two live words joined, declared in
 `scripts/test_mobile_recipes.js`. The load-bearing cases: the screen contains no
 write verb at all, it draws no money, the sheet cannot paint over the record
 underneath it, and neither invented block from the mockup is present.
+
+## §168 — THE FACILITY NAMES COME INTO ENGLISH, AND §30's "KEEP IT CHINESE" NARROWS TO ONE CASE
+
+Asked by Ash, 2026-09-17, looking at TC000761 on the English side: *"can we do
+city and provinces also in English?"* — then, to the recommendation below,
+*"build and once you done merge and deploy live"*.
+
+### WHAT WAS DECIDED BEFORE, AND WHY IT WAS WRONG
+
+Earlier the same day, shipping the carrier-event translator (PR #676), this
+session decided that FACILITY names inside an event sentence would stay in
+Chinese — `Arrived at 广州黄埔集货分拣中心` — on two arguments: they are proper
+nouns, and the Chinese is the string a customer needs if they ring the carrier.
+Administrative place names (`广州市`) were translated, facility names were not.
+
+**Both arguments fail on a real timeline.** A customer quotes a WAYBILL to a
+carrier, never a sorting centre; the facility name is not the string they need.
+And the line
+
+    Left 深圳航空分拣中心 — heading to 北京大兴航空分拣中心
+
+withholds the single most useful fact on the screen — the parcel flew from
+Shenzhen to Beijing — from precisely the reader the translation exists for.
+Half the sentence was English and the half carrying the geography was not.
+
+### THE DECISION: PARSE THEM, DO NOT TRANSLITERATE
+
+Chinese logistics facility names are structured, not arbitrary:
+`[city][district][type]`. So they are parsed against three tables — the city
+table already built for the location field, a district table, and a facility-type
+table (`集货分拣中心` → Consolidation Sorting Centre, `营业部` → Branch, `站` →
+Station, and so on) — and reassembled in English.
+
+    广州黄埔集货分拣中心   →  Guangzhou Huangpu Consolidation Sorting Centre
+    深圳航空分拣中心      →  Shenzhen Air Sorting Centre
+    广州黄村站           →  Guangzhou Huangcun Station
+
+**ALL OR NOTHING.** If any part is unknown, the WHOLE name stays Chinese.
+`广州市-保利天汇项目接驳点` contains a property development this cannot name, so
+it renders unchanged rather than as a half-English `Guangzhou 保利天汇项目
+Transfer Point`. This is the same rule the location field already follows, and
+it is what keeps a growing table from producing mixed-language lines while it
+grows.
+
+### WHAT STAYS CHINESE: PICKUP POINTS, AND ONLY PICKUP POINTS
+
+`菜鸟驿站`, `快递柜`, `代收点`, `自提点`. **The customer physically walks to one
+and has to match the name against a sign on a shopfront.** This is the one case
+the original "keep it Chinese" reasoning was actually right about, and it is now
+the whole of that rule rather than a blanket over every facility. The pickup
+rule does not call the facility translator; the transit rules do.
+
+### ALSO DECIDED HERE: AIR LEGS ARE EVENTS TOO
+
+TC000761's NEWEST event — the top line of the screen, the first thing a customer
+reads — was `您的快件在【深圳市飞往北京】的航班上,已起飞` and had no rule at all.
+Air legs now translate (`In flight — Shenzhen to Beijing, departed`), with the
+two names read as cities rather than facilities, because that is what they are.
+
+### WHAT THIS DOES NOT CHANGE
+
+§30 rule 3 and `docs/tacet-delivery-vocabulary.md` Rule 4 govern COMPOSING
+CHINESE. Nothing here composes any: every string added is English, read out of
+Chinese that the carrier wrote. The vocabulary lock is not engaged, and this
+section is not an amendment to it.
+
+### WHERE IT LIVES
+
+`lib/tracking.js` — `translateFacility()`, `FACILITY_TYPE_EN`, `DISTRICT_EN`,
+applied inside `TRANSLATION_RULES` via the `fac()` alias. Pinned by
+`scripts/test_tracking_translation.js` section 6, which previously asserted the
+opposite and now carries the reversal in its own comment so the change is
+readable rather than merely absent.
+
