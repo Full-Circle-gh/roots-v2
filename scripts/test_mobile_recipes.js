@@ -271,5 +271,110 @@ check('the two composed pairs are the ones declared in the vocabulary', () => {
   assert.match(MHTML, /'Could not load recipes\.','无法加载食谱。'/);
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+section('7. Making one (§167) — stage two');
+// ═══════════════════════════════════════════════════════════════════════════
+
+const MAKE  = slice('function screenRecipeMake()', 'function rcpMakeOnTop()');
+const SHEET = slice('function sheetRecipeStep()', 'SUBS.recipemake=');
+const MAKING = codeOnly(MAKE + SHEET);
+
+check('it is gated on `recipes:view` like the two screens it follows', () => {
+  assert.match(CAPS, /recipemake:'recipes:view'/);
+});
+
+// NOTHING IS WRITTEN. The scale and the ticks are facts about this afternoon,
+// not about the recipe. If this screen ever gains a save, it gains a way to
+// damage a recipe from a phone — and §164's addendum is what that costs.
+check('it writes nothing — no POST, no PUT, no save of any kind', () => {
+  assert.doesNotMatch(MAKING, /apiPost|apiSend|method:\s*'(POST|PUT|PATCH|DELETE)'/,
+    'Making one is read-only; the recipe on the server is untouched by scaling it');
+  assert.doesNotMatch(MAKING, /\bsave[A-Z]/);
+});
+
+check('and it draws no money either, the same as the two screens before it', () => {
+  for (const key of MONEY_READS) {
+    assert.ok(MAKING.indexOf(key) === -1, `${key} appears in Making one`);
+  }
+  assert.doesNotMatch(MAKING, /\bmoney0?\(|acMoney/);
+});
+
+check('the scale multiplies on screen and is never stored', () => {
+  assert.match(MHTML, /function rcpScaled\(v\)\{ return \(Number\(v\)\|\|0\)\*\(Number\(state\.rcp\.scale\)\|\|1\); \}/);
+  assert.match(MAKE, /rcpScaled\(l\.qty\)/, 'each line is scaled');
+  assert.match(MHTML, /rcpScaled\(rec\.batch_size\)/, 'and so is the batch');
+});
+
+// Half steps, because half a batch is the commonest thing anybody asks of a
+// recipe. Clamped at both ends — a multiplier with no ceiling prints a shopping
+// list nobody can carry.
+check('the stepper moves in halves and is clamped at both ends', () => {
+  const h = slice("reg('rcpScale'", "reg('rcpGot'");
+  assert.match(h, /Math\.max\(0\.5,Math\.min\(20,/);
+  assert.match(h, /Math\.round\(\(r\.scale\+0\.5\*Number\(d\)\)\*2\)\/2/);
+});
+
+check('entering resets the scale and the ticks — yesterday\'s half-gathered list is worse than none', () => {
+  const push = slice('function push(route){', 'function pop(){');
+  assert.match(push, /if\(route==='recipemake'\)\{ const r=state\.rcp; r\.scale=1; r\.got=\{\}; r\.step=null; \}/);
+});
+
+section('The step sheet');
+
+check('the step counter is the app\'s own live pair, not a new one', () => {
+  assert.match(SHEET, /'Step '\+\(i\+1\)\+' of '\+steps\.length,'第 '\+\(i\+1\)\+' 步,共 '\+steps\.length\+' 步'/);
+  // The broadcast composer has carried this pair since v1.x — asserted so a
+  // later edit there cannot silently orphan this one.
+  assert.match(MHTML, /T\('Step 1 of 4','第 1 步,共 4 步'\)/,
+    'the pair this lifts from must still be live');
+});
+
+check('Back, Next and Done are all lifted pairs', () => {
+  assert.match(MHTML, /T\('Back','返回'\)/);
+  assert.match(MHTML, /T\('Next','下一步'\)/);
+  assert.match(MHTML, /T\('Done','完成'\)/);
+});
+
+// THE MOCKUP DREW TWO THINGS THE DATA CANNOT BACK. recipe_steps holds id,
+// recipe_id, step_number, name and instructions — there is no step→ingredient
+// link and no timer. Drawing either would have been invention dressed as data.
+check('it invents no per-step ingredient list — the schema has no such link', () => {
+  assert.doesNotMatch(MAKING, /This step uses|本步用到|步骤用料/);
+});
+check('and no rest timer, for the same reason', () => {
+  assert.doesNotMatch(MAKING, /Rest \d|静置|计时/);
+});
+
+check('the sheet belongs to its screen and cannot paint over the record', () => {
+  assert.match(MHTML, /if\(state\.rcp\.step!=null && rcpMakeOnTop\(\)\) html \+= sheetRecipeStep\(\);/);
+  assert.match(MHTML, /function rcpMakeOnTop\(\)\{[\s\S]{0,200}top\.route==='recipemake'/);
+});
+
+section('The finish hands off rather than inventing a second write');
+
+// What a recipe PRODUCES is not settled: it may back a material, feed several
+// products at different pack sizes, or neither. logbatch already answers that
+// in product units and is tested doing it.
+check('it opens the existing Log a batch screen', () => {
+  assert.match(MAKE, /APP\.cmd\('push','logbatch'\)/);
+  assert.match(MAKE, /T\('Log a batch','登记批次'\)/, 'and reuses that row\'s own pair');
+});
+
+check('offered only to somebody who could actually use it', () => {
+  assert.match(MAKE, /canRoute\('logbatch'\)\?/,
+    'logbatch is gated on production:log, which a recipes:view holder need not have');
+});
+
+check('the way in is offered only when there is something to work through', () => {
+  const sub = slice('SUBS.recipeone=', 'reg(\'rcpSearch\'');
+  assert.match(sub, /cta:\(\)=>\{ const rec=state\.rcp\.rec;/);
+  assert.match(sub, /ingredients\.length\)\|\|\(Array\.isArray\(rec\.steps\)&&rec\.steps\.length\)/);
+});
+
+check('the two composed pairs are declared', () => {
+  assert.match(MHTML, /T\('Make it','开始制作'\)/);
+  assert.match(MHTML, /T\('Start the steps','开始步骤'\)/);
+});
+
 console.log('\n' + (failures ? `✗ ${failures} failed` : 'All assertions held.'));
 process.exit(failures ? 1 : 0);
