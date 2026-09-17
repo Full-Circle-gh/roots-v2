@@ -212,7 +212,12 @@ CASES.push(
   ['the fact sections', FULL + `APP.cmd('push','trend');`, [
     ['all four are offered', `['Sales','Customers','Products & traffic','Stores'].every(function(s){return txt('content').includes(s)})`],
     // A section that says only its name gives a thumb no reason to spend a tap.
-    ['each carries its first fact closed', `txt('content').includes('WeChat Pay share of revenue · 67%')`],
+    // "share of revenue" was a share of order revenue only — payRows folds in
+    // neither the wholesale ledger nor top-up cash, both of which ARE in the
+    // headline above it. The label names its own denominator now.
+    ['each carries its first fact closed',
+     `txt('content').includes('WeChat Pay share of order revenue') && txt('content').includes('67%')`],
+    ['and the share says which total it divided by', `!txt('content').includes('share of revenue ·')`],
     ['and the rest stay shut',             `!txt('content').includes('Given away in vouchers')`],
   ]],
   ['opening one', FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','sales');`, [
@@ -223,7 +228,7 @@ CASES.push(
     // The summary line is the CLOSED card's. Open, the same fact would be
     // printed twice — once as the summary and again as the first row under it.
     ['the summary line is not repeated under itself',
-     `txt('content').split('WeChat Pay share of revenue').length === 2`],
+     `txt('content').split('WeChat Pay share of order revenue').length === 2`],
   ]],
   ['the per-store breakdown is on the phone now', FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','stores');`, [
     ['the stores are named',    `txt('content').includes('Tianhe') && txt('content').includes('Panyu')`],
@@ -235,7 +240,13 @@ CASES.push(
     ['buyers are counted',   `txt('content').includes('People bought')`],
     ['new ones as a share',  `txt('content').includes('30%')`],
     ['the city is English on an English phone', `txt('content').includes('Guangzhou · 61 orders')`],
-    ['the seller is named',  `txt('content').includes('Falafel Wrap')`],
+    // topProducts is ORDER BY revenue DESC, so row one is the biggest EARNER and
+    // its unit count can be lower than the row beneath it. It was called "Top
+    // seller", which reads as a volume ranking it has never been.
+    ['the earner is named',  `txt('content').includes('Falafel Wrap')`],
+    ['and named as an earner, not a volume leader',
+     `txt('content').includes('Top earner') && !txt('content').includes('Top seller')`],
+    ['units carry the money they made', `txt('content').includes('140 · ¥2,800')`],
     // kpis.conversion_rate is the mini app's own, never all-channel orders
     // over sessions — the server fixed that at source and this reads it whole.
     ['conversion is the server\'s',  `txt('content').includes('6.3%')`],
@@ -248,21 +259,48 @@ CASES.push(
 
   // ── The money gate, now that there is more to gate ─────────────────────
   ['a warehouse account sees no money in the sections either',
-   `state.pos='warehouse'; ` + FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','sales'); APP.cmd('trendSection','stores');`, [
+   `state.pos='warehouse'; ` + FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','sales'); APP.cmd('trendSection','stores'); APP.cmd('trendSection','products');`, [
     ['not anywhere on the screen',       `!txt('content').includes('¥')`],
     // Dropped, not zeroed and not blurred: a row about revenue is a revenue
     // row even when it prints a percentage.
-    ['the payment mix is gone',          `!txt('content').includes('share of revenue')`],
+    ['the payment mix is gone',          `!txt('content').includes('share of order revenue')`],
     ['the voucher giveaway with it',     `!txt('content').includes('Given away in vouchers')`],
     ['and the top spender',              `!txt('content').includes('Top spender')`],
     ['what is not about money survives', `txt('content').includes('Busiest hour')`],
     ['stores are counted, not priced',   `txt('content').includes('52 orders')`],
+    ['and units carry no money either',   `txt('content').includes('Units sold') && !txt('content').includes('140 · ')`],
   ]],
   ['a section with nothing left in it is not drawn',
    `state.pos='warehouse'; ` + WEEK + `state.trendFull={payments:[{method:'wechat',orders:60,revenue:6000}]}; APP.cmd('push','trend');`, [
     // Every row this section could have held was money. An empty card headed
     // "Sales" is worse than no card.
     ['no empty card', `!txt('content').includes('Sales')`],
+  ]],
+
+  // ── Saying which channels each number is about ─────────────────────────
+  // Revenue and Orders are every channel; Visits is the mini app alone, and the
+  // customer figures are keyed on a customer_id the marketplaces never write.
+  // Three numbers in one screen describing three different populations, which
+  // the screen used to leave the reader to work out.
+  ['visits say they are one channel\'s', FULL + `APP.cmd('push','trend'); APP.cmd('trendMetric','visits');`, [
+    ['the limit is stated', `txt('content').includes('Mini app only')`],
+    ['and why',             `txt('content').includes('do not report visits')`],
+  ]],
+  ['revenue does not claim to be one channel\'s', FULL + `APP.cmd('push','trend');`, [
+    // Revenue IS every channel plus the wholesale ledger plus top-ups. The note
+    // belongs to Visits alone and must not follow the chip row around.
+    ['no mini-app caveat on money', `!txt('content').includes('Mini app only')`],
+  ]],
+  ['the customer count says who it counts', FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','customers');`, [
+    ['the marketplaces are named as absent', `txt('content').includes('Meituan and Eleme orders carry no customer')`],
+  ]],
+  ['the product ranking says what it leaves out', FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','products');`, [
+    // gzgrocery revenue is in the headline; its order lines are filtered out of
+    // topProducts. Stated rather than left to be found by adding rows up.
+    ['wholesale is named as excluded', `txt('content').includes('Wholesale pickups are not counted here')`],
+  ]],
+  ['a closed section does not print its note', FULL + `APP.cmd('push','trend');`, [
+    ['the note rides the open body', `!txt('content').includes('carry no customer')`],
   ]],
 
   // ── The two ends of the line, and the pattern behind them ──────────────

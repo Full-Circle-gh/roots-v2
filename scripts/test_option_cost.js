@@ -4,7 +4,7 @@
  *
  *   node scripts/test_option_cost.js
  *
- * §165 (Ash, 2026-09-17). Beet Salad offers a choice of two dressings and staff
+ * §166 (Ash, 2026-09-17). Beet Salad offers a choice of two dressings and staff
  * had put BOTH into the recipe, so the product carried ¥11.43 where the truth is
  * ¥8.31 or ¥9.33 — on every sale, not merely on the wasted ones. The fix models
  * the choice as a choice, and that moves the dressing's cost OUT of the recipe.
@@ -121,7 +121,7 @@ is(requiredOptionFloorYuan(db, 1),
    { yuan: 0, groups: 0, uncosted: 0 },
    'no option groups → a real, knowable zero (nearly every product today)');
 
-// Beet Salad as §165 says it should be: one required single, two dressings.
+// Beet Salad as §166 says it should be: one required single, two dressings.
 opt.run(1, 1, 'single', 1, 0);
 cho.run(1, 1, 10);      // Beet salad dressing 3.1143
 cho.run(2, 1, 11);      // Ginger Tahini       2.0983
@@ -200,7 +200,7 @@ is(requiredOptionFloorYuan(db, null),
 
 // ════════════════════════════════════════════════════════════════════════════
 section('3 · a handle with no options tables at all');
-// Every in-memory fixture predating §165 is this shape. It must read as "no
+// Every in-memory fixture predating §166 is this shape. It must read as "no
 // options" rather than disabling costing for everything downstream — the same
 // try/catch discipline lib/recipe-rollup.js holds around product_build_lines.
 const bare = new Database(':memory:');
@@ -212,7 +212,7 @@ is(chosenOptionCostYuan(bare, [{ stock_product_id: 1 }]).yuan, null,
    'and a link into an empty catalogue is unknown, not free');
 
 // ════════════════════════════════════════════════════════════════════════════
-section('4 · §165\'s worked example, end to end');
+section('4 · §166\'s worked example, end to end');
 // The numbers from the live diagnostic, so a future reader can check the module
 // against the report that justified it.
 const base = 6.2159;
@@ -220,7 +220,7 @@ const withBeet   = base + requiredOptionFloorYuan(db, 1).yuan;
 const soldTahini = base + chosenOptionCostYuan(db, [{ stock_product_id: 11 }]).yuan;
 is(Number(withBeet.toFixed(2)),   9.33, 'catalogue floor: ¥6.22 salad + dearest dressing = ¥9.33');
 is(Number(soldTahini.toFixed(2)), 8.31, 'a sale of the ginger tahini one: ¥8.31');
-// And the number the product carried before §165, which is neither of them.
+// And the number the product carried before §166, which is neither of them.
 is(Number((base + 3.1143 + 2.0983).toFixed(2)), 11.43,
    'both dressings in one recipe was ¥11.43 — the figure this section removes');
 

@@ -103,7 +103,7 @@ function makeSandbox(lang, products) {
     escapeHtml: (s) => String(s),
     paMoney: (n) => '¥' + Number(n || 0).toFixed(2),
     PA_PRODUCTS: products || [],
-    // §165: pdRenderMargin adds what the product's REQUIRED choices cost us.
+    // §166: pdRenderMargin adds what the product's REQUIRED choices cost us.
     // The variable is a page-level `let` declared beside optLoad(), which is
     // outside the slice above — so the sandbox supplies it exactly as the loaded
     // page does, at its initial value. A case wanting a different floor sets
@@ -279,7 +279,7 @@ it('public/retail-admin.html has #pd-cost-sanity between #pd-cost-alert and #pd-
 });
 
 // ════════════════════════════════════════════════════════════════════════════
-console.log('\n7. §165 — a REQUIRED choice is part of what the product costs');
+console.log('\n7. §166 — a REQUIRED choice is part of what the product costs');
 // ════════════════════════════════════════════════════════════════════════════
 //
 // Beet Salad's own numbers, because the direction of the error is the point.

@@ -1865,7 +1865,7 @@ function _paMarginFlagged(u, body) {
 //
 // This is the CATALOGUE LIST's margin cell, and it reads `unit_cost` off the
 // list payload — the product's own cost, with nothing added for a required
-// choice. pdRenderMargin() in the editor adds that floor (§165); this does not,
+// choice. pdRenderMargin() in the editor adds that floor (§166); this does not,
 // so the two can disagree for a product whose required choice costs us money.
 //
 // WHY IT IS LEFT, WRITTEN DOWN RATHER THAN QUIETLY: the floor is a per-product
@@ -1877,7 +1877,7 @@ function _paMarginFlagged(u, body) {
 // THE DISAGREEMENT IS ZERO TODAY and becomes real the moment a required choice
 // is linked to a costed product — nothing in the live catalogue is in that shape
 // yet. When one is, the cell here reads HIGH (the flattering direction), which
-// is the same trap §165 exists to close, so the honest fix is a batched floor on
+// is the same trap §166 exists to close, so the honest fix is a batched floor on
 // the list endpoint and not a second derivation in this file.
 function _paMarginCell(u) {
   const ms = (u.group ? u.members : [u.p])

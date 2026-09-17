@@ -432,7 +432,7 @@ xdb.exec(`
   i.run(5, 5, 50, 999, 1, 0, 8, null);  // excluded by the allow-list
   o.run(6, 'paid', 0, '2026-08-15 03:00:00', 1);
   i.run(6, 6, 9, 0, 1, 0, 8, null);     // §98 replacement — excluded
-  // ── §165's rows, in SEPTEMBER and one per day ─────────────────────────────
+  // ── §166's rows, in SEPTEMBER and one per day ─────────────────────────────
   // OUTSIDE the August window every assertion above is measured over, because
   // `COST` is the whole of August and a row added inside it moves figures that
   // were pinned deliberately. (Learned the hard way: dropping these on 08-20
@@ -457,7 +457,7 @@ it('the cost half takes the pack multiplier and the revenue half does not', () =
   assert.strictEqual(COST.line_rev, 130, 'revenue must NOT be multiplied by pack_units');
 });
 
-// ── §165 — a chosen extra costs money, and takes ONE of the two factors ────
+// ── §166 — a chosen extra costs money, and takes ONE of the two factors ────
 //
 // The gap this closes was written down in the route's own comment for months:
 // "OPTIONS carry a price delta with no cost counterpart." A choice carrying a
