@@ -20,6 +20,13 @@ const { recipeOwnsProductCost, fireRecompute } = require('../lib/recipe-rollup')
 const { bundleOwnsProductCost, bundleUnitCostYuan } = require('../lib/bundle-cost');
 const { productUnitCostYuan } = require('../lib/product-cost');
 const optionLimits = require('../lib/option-limits');
+// One answer for what a product page signs itself with, read here by BOTH the
+// operator route the editor asks and the public config the mini app asks (§156).
+const brandSignature = require('../lib/brand-signature');
+// The mini app's x-wx-appid → tenant id, with a storefront-host fallback. Same
+// resolver the ALS scope for /api/retail uses, so the colophon on the public
+// config cannot name a different shop than the data beside it.
+const { resolvePublicTenant } = require('../middleware/public-tenant');
 const { normaliseLimits } = optionLimits;
 // Read-only cost maths, used by the recipe-link endpoint to say whether the
 // recipe an operator just picked can actually yield a figure — the same
@@ -892,6 +899,25 @@ router.get('/api/retail/config', (req, res) => {
     cfg.reviews = cfg.reviews || {};
     if (!Array.isArray(cfg.reviews.tags) || !cfg.reviews.tags.length) {
       cfg.reviews.tags = DEFAULT_REVIEW_TAGS;
+    }
+    // THE COLOPHON THIS SHOP SIGNS ITS PRODUCT PAGES WITH (§158). Surfaced with defaults like everything else here, so the phone has
+    // one source of truth instead of a copy of Roots' cast written into a
+    // codebase that is published once per tenant.
+    //
+    // The tenant is resolved the same way the ALS scope above it was —
+    // resolvePublicTenant(req), which reads the mini app's x-wx-appid and falls
+    // back to the storefront host. NULL MEANS ROOTS, which is exactly the
+    // argument signatureFor() takes, so a customer request and an operator
+    // request cannot be answered differently.
+    try {
+      const _ptid = resolvePublicTenant(req);
+      const _trow = _ptid
+        ? db.prepare('SELECT id, name, brand_name FROM tenants WHERE id = ?').get(_ptid)
+        : null;
+      cfg.colophon = brandSignature.signatureFor(_trow);
+    } catch (e) {
+      // A colophon nobody can resolve is drawn as no colophon, never as Roots'.
+      cfg.colophon = brandSignature.signatureFor({ id: 0, name: '' });
     }
     // Same surface-with-defaults treatment for the Roots Club tier ladder.
     // Mini-app reads cfg.roots_club.tiers; we fall back to DEFAULT_ROOTS_CLUB_TIERS
@@ -23526,36 +23552,12 @@ router.get('/api/retail-admin/products/export.csv', requireRetailAdmin, (req, re
 // which already gives Roots its own brand sentence and every other tenant a
 // neutral one: an absent tenant and account #1 are the same answer, because the
 // kitchen realm has no tenant row and the kitchen IS account #1.
-const ROOTS_IP_CHARACTERS = [
-  { key: 'soilsoul',      label: 'Soil & Soul' },
-  { key: 'skater',        label: 'Skater'      },
-  { key: 'kombucha-gang', label: 'Kombucha'    },
-  { key: 'flex',          label: 'Flex'        },
-  { key: 'radishes',      label: 'Radishes'    },
-  { key: 'mushroom',      label: 'Mushroom'    },
-  { key: 'peas',          label: 'Peas'        },
-  { key: 'onion',         label: 'Onion'       },
-  { key: 'broccoli',      label: 'Broccoli'    },
-  { key: 'hula',          label: 'Hula'        },
-];
+// Roots' cast, the auto-map and the house line all live in lib/brand-signature
+// now, because the mini app needs the identical answer and a second copy of an
+// answer is a second answer — which is the fault §156 removed, repeating (§158).
 router.get('/api/retail-admin/brand/signature', requireRetailAdmin, (req, res) => {
   res.set('Cache-Control', 'no-store, must-revalidate');
-  const t = req.tenant;
-  const isRoots = !t || Number(t.id) === 1;
-  if (isRoots) {
-    // Byte-identical to what the editor printed before this route existed.
-    return res.json({
-      characters: ROOTS_IP_CHARACTERS,
-      tagline_en: 'From Soil to Soul', tagline_cn: '从土壤到灵魂',
-      house: 'Roots · ESTD 2017',
-    });
-  }
-  // EVERY OTHER SHOP GETS ITS OWN NAME AND NOTHING INVENTED. No cast, because
-  // it has none; no house line, because a slogan is not something the platform
-  // can supply; and the name only if the tenant row carries one — a colophon
-  // reading "undefined" is worse than a colophon with no name in it.
-  const name = String((t && (t.brand_name || t.name)) || '').trim();
-  res.json({ characters: [], tagline_en: '', tagline_cn: '', house: name });
+  res.json(brandSignature.signatureFor(req.tenant));
 });
 
 // GET /api/retail-admin/products/spec-usage — the spec-strip labels and values
