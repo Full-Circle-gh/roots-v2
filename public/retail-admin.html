@@ -5198,7 +5198,24 @@
                 <button type="button" title="Fullscreen · 全屏"     onmousedown="return false" onclick="pdRteFullscreen()"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3"/></svg></button>
               </div>
               <input type="file" id="pd-rte-img-file" accept="image/*" style="display:none;" onchange="pdRteImagePick(event)">
-              <div class="pd-desc-cols">
+              <!-- `data-no-i18n` IS LOAD-BEARING HERE — the 中文 column disappeared without it.
+                   These two columns are an EN box and a CN box side by side, which is the exact
+                   shape `tagBlockPair` in the i18n engine hunts for: same tag, adjacent, one all
+                   English and one all Chinese. It stamped data-lang-block on the pair and the
+                   injected `display:none!important` rule hid whichever side was not the active
+                   language — so an operator working in English had no 中文 box to type in, and one
+                   working in 中文 had no English box. It did not show on first load (both boxes are
+                   empty then, and the CN wrapper is under the 6-character floor); it appeared the
+                   moment a product was open AND the language toggle was pressed, because
+                   `applyLang` re-walks the whole body. The stamp then survives until reload.
+                   The attribute also keeps the walker out of the merchant's own words: `processNode`
+                   splits any text node on its first " · " when the right half is Chinese, which
+                   would silently halve a description written "Made fresh · 每日新鲜" — in an editor
+                   whose contents are saved back to the product. Same reasoning as the two Finance
+                   drill-downs (see the `data-no-i18n` note in 22-finance.js): text the walker sees
+                   here is data, not markup. There is nothing for it to translate — the two labels
+                   below are one word each and the boxes hold whatever was typed. -->
+              <div class="pd-desc-cols" data-no-i18n>
                 <div><div class="pd-desc-lang">English</div><div id="pd-rte-en" class="pd-rte" contenteditable="true"></div></div>
                 <div><div class="pd-desc-lang">中文</div><div id="pd-rte-cn" class="pd-rte" contenteditable="true"></div></div>
               </div>
@@ -13931,8 +13948,14 @@
     const t = el.textContent || '';
     return /[A-Za-z]/.test(t) && !/[一-鿿]/.test(t);
   }
+  // `[contenteditable]` joined that list on 2026-09-17: the product Description
+  // editor is an English box beside a 中文 box, same tag and adjacent, so the
+  // pairing rule read the two EDITORS as a translation pair and hid one of them
+  // outright — no box to type the other language into. A rich-text box is
+  // interactive chrome for the same reason a <button> is; it is only absent from
+  // the original list because the only two in the admin arrived after it.
   function isStructuralBlock(el) {
-    return !!el.querySelector('button, a, input, select, textarea, svg');
+    return !!el.querySelector('button, a, input, select, textarea, svg, [contenteditable]');
   }
   function tagBlockPair(cnEl) {
     if (cnEl.dataset.langBlock || (cnEl.textContent || '').trim().length < 6) return;

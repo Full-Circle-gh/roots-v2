@@ -1618,8 +1618,14 @@ cuApplyThemeIcon();
   // stamping data-lang-block on a structural container. The CSS then hides the
   // whole bar in the opposite language. Guard: never tag a container that holds
   // interactive/structural children.
+  // `[contenteditable]` joined that list on 2026-09-17: the product Description
+  // editor is an English box beside a 中文 box, same tag and adjacent, so the
+  // pairing rule read the two EDITORS as a translation pair and hid one of them
+  // outright — no box to type the other language into. A rich-text box is
+  // interactive chrome for the same reason a <button> is; it is only absent from
+  // the original list because the only two in the admin arrived after it.
   function isStructuralBlock(el) {
-    return !!el.querySelector('button, a, input, select, textarea, svg');
+    return !!el.querySelector('button, a, input, select, textarea, svg, [contenteditable]');
   }
   function tagBlockPair(cnEl) {
     if (cnEl.dataset.langBlock || (cnEl.textContent || '').trim().length < 6) return;
