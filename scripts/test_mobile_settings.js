@@ -282,6 +282,31 @@ CASES.push(['the four figures', AFF, [
   ['still earning is counted',  `txt('content').includes('within lifetime window')`],
 ]]);
 
+/* EACH NAME OPENS THAT PERSON'S RECORD, the way the desktop ledger has since
+   it shipped (10-extras.js afxRow, `cust:<id>`). The phone drew the same two
+   names as dead text, so "who is this?" meant leaving the screen for the
+   roster and searching a WeChat nickname the customer can change — or, for a
+   row with no nickname, retyping the digits of a `#1878` by hand.
+   The record rides over the ledger rather than replacing it: the chips and the
+   scroll are still there underneath, which is why the row can afford to open
+   it at all. */
+CASES.push(['a name opens the record', AFF, [
+  ['both names are controls, not one', `document.querySelectorAll('#content button[onclick*="openCustomer"]').length===6`],
+  ['the referrer carries the referrer id', `document.querySelectorAll('#content button[onclick*="openCustomer"]')[0].getAttribute('onclick').indexOf("openCustomer',1)")!==-1`],
+  ['the friend carries the friend id', `document.querySelectorAll('#content button[onclick*="openCustomer"]')[1].getAttribute('onclick').indexOf("openCustomer',2)")!==-1`],
+  ['tapping one opens that record', `document.querySelectorAll('#content button[onclick*="openCustomer"]')[1].click(), state.custId===2`],
+  ['and the ledger is still underneath', `txt('content').includes('CHEN24')`],
+]]);
+
+/* `affiliate:view` and `customers:view` are separate capabilities, so a
+   marketing role can hold this ledger and not the roster. The names stay —
+   they are what the row is about — but they stay as text, rather than as a
+   control that opens a record its holder is not meant to read. */
+CASES.push(['no roster, no link', `state.caps=['affiliate:view','dashboard:view'];state.capsLoaded=true;` + AFF, [
+  ['the names are still there', `txt('content').includes('Chen') && txt('content').includes('Ling')`],
+  ['but nothing to tap',        `document.querySelectorAll('#content button[onclick*="openCustomer"]').length===0`],
+]]);
+
 CASES.push(['nothing referred yet', `state.affiliateTried=true;
   state.affiliate={total:0,converted:0,paid_out:0}; state.affRows=[]; APP.cmd('push','affiliate');`, [
   ['says so',                    `txt('content').includes('No referrals yet')`],

@@ -5186,6 +5186,34 @@ function affNote(r){
   if(r.status==='void') return r.voided_reason||T('voided','已作废');
   return T('new customer','新顾客');
 }
+/* THE TWO NAMES ARE THE ROW'S ONLY HANDLES, and the phone printed them as
+   plain text. The desktop ledger has opened the customer record from both
+   since it shipped (10-extras.js afxRow, `cust:<id>`); here, an operator who
+   wanted to know who a referrer actually is had to leave the screen, open
+   Customers, and search a WeChat nickname — the one field a customer can
+   change at will, and one plenty of these rows do not have, where the name
+   falls back to `#1878` and the roster matches only the bare digits of it.
+   The ids ride the same rows the names are drawn from; there was never a
+   lookup to do.
+
+   The record is a sheet over whatever is underneath (see layers), so Back
+   puts this ledger straight back with its chip and scroll intact — opening it
+   from here costs the screen nothing.
+
+   GATED ON `customers:view`, NOT on reaching this screen: `affiliate:view` is
+   a separate capability, so a marketing role can hold the ledger and not the
+   roster. Without the cap the names render exactly as they did — same size,
+   same weight, no underline — rather than as a control that opens a record
+   its holder is not meant to read. */
+function affWho(id,name){
+  const txt=escAttr(name);
+  const clip='min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+  if(id==null||!mCan('customers:view')) return `<span style="${clip}">${txt}</span>`;
+  /* -6px of margin against 6px of padding: a 14.5px name is a thin thing to
+     find with a thumb, and this buys the tap target twelve more pixels of
+     height without moving the line it sits on. */
+  return `<button onclick="APP.cmd('openCustomer',${Number(id)})" style="${clip};background:none;border:0;padding:6px 0;margin:-6px 0;font-family:inherit;font-size:14.5px;font-weight:inherit;line-height:inherit;color:var(--text-primary);text-align:left;cursor:pointer;text-decoration:underline;text-decoration-color:var(--border-default);text-underline-offset:3px">${txt}</button>`;
+}
 function affRow(r){
   const ref=r.referrer_nickname||('#'+r.referrer_id);
   const inv=r.invitee_nickname||('#'+r.invitee_id);
@@ -5193,7 +5221,7 @@ function affRow(r){
   const amt=Number(r.reward_amount||0);
   return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
     <span style="display:flex;flex-direction:column;min-width:0">
-      <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(ref)} <span style="color:var(--text-secondary)">→</span> ${escAttr(inv)}</span>
+      <span style="display:flex;align-items:center;gap:6px;min-width:0;font-size:14.5px">${affWho(r.referrer_id,ref)}<span style="flex:none;color:var(--text-secondary)">→</span>${affWho(r.invitee_id,inv)}</span>
       <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(sub)}</span>
       ${r.code_used?`<span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(r.code_used)}${r.joined_at?' · '+fmtDay(r.joined_at):''}</span>`:''}
     </span>
