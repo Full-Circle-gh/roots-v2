@@ -3172,6 +3172,7 @@ async function pdOpen(id) {
   set('pd-low-stock', p && p.low_stock_threshold != null ? p.low_stock_threshold : '');
   { const ls = document.getElementById('pd-low-stock'); if (ls) ls.placeholder = cuT('Default', '默认') + ' ' + PA_LOW_STOCK; }
   pdFreeOfSet(p && p.free_of); set('pd-notes', p && p.notes); pdFactsSet(p && p.product_facts);
+  _pdFactsTouched = false;   // a new sitting: nothing has been set on this card yet
   const ck = (el, v) => { const n = document.getElementById(el); if (n) n.checked = !!v; };
   ck('pd-is-market', p && p.is_market === 1); ck('pd-is-batch-made', p && p.is_batch_made === 1); ck('pd-is-restock-only', p && p.is_restock_only === 1);
   ck('pd-ship-from-supplier', p && p.ship_from_supplier === 1);
@@ -5495,6 +5496,7 @@ async function pdFactsAutoFillQuiet(textEn, textCn) {
     const j = await r.json().catch(() => ({}));
     if (r.ok && j && j.success && j.data && j.data.facts && Object.keys(j.data.facts).length) {
       pdFactsSet({ ...pdFactsGet(), ...j.data.facts });
+      pdFactsMarkTouched();   // a programmatic fill sets no input event; without this it would never save
       pdScheduleAutosave();   // persist the freshly-filled boxes alongside the design
     }
   } catch (e) { /* best-effort — proceed to build without facts */ }
@@ -5792,6 +5794,22 @@ let _pdOpenBaseline = null;   // form snapshot captured when the product was ope
 // Structured product facts (the "Product details" card) ↔ the product_facts
 // JSON bag. Keys are <col>_en/_cn so the same bag fits any product type.
 const PD_FACT_FIELDS = [['origin','origin'],['ingredients','ingredients'],['storage','storage'],['shelflife','shelf_life'],['serving','serving']];
+// HAS ANYBODY ACTUALLY SET THESE BOXES IN THIS SITTING? (§154)
+//
+// The autosave sends the whole form, and an untouched Product-details card
+// collects as `{}` — which the route reads as "clear them". Open a product on
+// this screen, type one character in its name, and the empty boxes in front of
+// you are written over whatever the record holds. That was survivable while
+// this screen was the only thing filling them; the Product Page Editor now
+// fills them too (it composes the page from them), so the same autosave could
+// wipe a bag it never knew existed.
+//
+// So the facts travel exactly like `unit_cost` above: sent when the operator
+// touched them, absent otherwise, and an absent key means "not touched". An
+// EMPTY bag is still written when it was emptied on purpose — clearing a box is
+// a statement — which is why this is a touched-flag and not an is-it-empty test.
+let _pdFactsTouched = false;
+function pdFactsMarkTouched() { _pdFactsTouched = true; }
 function pdFactsGet() {
   const g = el => (document.getElementById(el) && document.getElementById(el).value || '').trim();
   const out = {};
@@ -5842,6 +5860,7 @@ async function pdFactsAutofill() {
     const facts = (j.data && j.data.facts) || {};
     if (!Object.keys(facts).length) { toast(cuT('No details found in the text', '未在文字中找到详情'), 'err'); return; }
     pdFactsSet({ ...pdFactsGet(), ...facts });
+    pdFactsMarkTouched();
     pdScheduleAutosave();
     toast(cuT('Filled in the details — review & tweak', '已填充详情,请核对'), 'ok');
   } catch (e) {
@@ -5914,7 +5933,10 @@ function pdCollectBody() {
         ? {} : { unit_cost: g('pd-cost').trim() }),
     low_stock_threshold: g('pd-low-stock').trim(),  // '' = clear override → use store default
     status: g('pd-status') || 'Active',
-    free_of: pdFreeOfGet(), notes: g('pd-notes'), product_facts: pdFactsGet(),
+    free_of: pdFreeOfGet(), notes: g('pd-notes'),
+    // See _pdFactsTouched — an untouched card must not write its empty boxes
+    // over facts another screen filled in.
+    ...(_pdFactsTouched ? { product_facts: pdFactsGet() } : {}),
     is_market: ckd('pd-is-market'), is_restock_only: ckd('pd-is-restock-only'), is_batch_made: ckd('pd-is-batch-made'),
     // Supplier-direct items are always available (stock ignored); the dropdown
     // is hidden for them, so force the policy rather than read the stale select.
@@ -6121,6 +6143,7 @@ function pdWireAutosave() {
     if (t.id === 'pd-price' || t.id === 'pd-cost') pdRenderMargin();
     // Editing the description or the Product details boxes makes a built design stale.
     if (t.closest('.pd-rte') || (t.id && t.id.indexOf('pd-fact-') === 0) || t.id === 'pd-name-en' || t.id === 'pd-name-cn' || t.id === 'pd-weight') pdMarkDesignStale();
+    if (t.id && t.id.indexOf('pd-fact-') === 0) pdFactsMarkTouched();
   };
   ed.addEventListener('input', onEdit);
   ed.addEventListener('change', onEdit);
@@ -6158,7 +6181,7 @@ function pdApplySnapshot(s) {
   { const c = document.getElementById('pd-cost'); if (c && !c.readOnly) set('pd-cost', s.cost); }
   pdRenderMargin();
   set('pd-sku', s.sku); set('pd-weight', s.weight); set('pd-status', s.status); pdFreeOfSet(s.free_of);
-  set('pd-notes', s.notes); set('pd-badge', s.badge); pdFactsSet(s.facts);
+  set('pd-notes', s.notes); set('pd-badge', s.badge); pdFactsSet(s.facts); pdFactsMarkTouched();
   ck('pd-is-market', s.is_market); ck('pd-is-batch-made', s.is_batch); ck('pd-is-restock-only', s.is_restock);
   ck('pd-ship-from-supplier', s.ship_supplier); ck('pd-supplier-paused', s.supplier_paused);
   ck('pd-cost-incomplete', s.cost_incomplete);

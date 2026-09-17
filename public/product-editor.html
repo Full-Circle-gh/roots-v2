@@ -2949,6 +2949,22 @@ async function peEnsureFacts(textEn, textCn) {
     const j = await r.json().catch(() => ({}));
     const facts = (j && j.success && j.data && j.data.facts) || null;
     if (!facts || !Object.keys(facts).length) return;
+    // ASK THE RECORD, NOT THE MOUNT, BEFORE WRITING. PA_CURRENT is as old as
+    // the page — minutes, on a tab left open — and the products sheet fills
+    // these same boxes. Extracting from a stale empty and PATCHing it would
+    // overwrite what somebody typed on the other screen in between. The compose
+    // below still gets the facts either way; only the WRITE is conditional.
+    let live = null;
+    try {
+      const cur = await fetch('/api/retail-admin/products/' + PA_CURRENT.id,
+                              { credentials: 'same-origin', cache: 'no-store' });
+      const cj = cur.ok ? await cur.json().catch(() => ({})) : {};
+      live = (cj && cj.success && cj.data) ? (cj.data.product_facts || null) : null;
+    } catch (e) { return; }   // could not check — do not write blind
+    if (live && typeof live === 'object' && Object.keys(live).length) {
+      PA_CURRENT.product_facts = live;   // somebody got there first; theirs wins
+      return;
+    }
     PA_CURRENT.product_facts = facts;
     // Persist on its own, not folded into the page save: the boxes are the
     // sheet's data and the office may never press Save here at all.
