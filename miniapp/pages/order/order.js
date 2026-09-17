@@ -378,8 +378,10 @@ Page({
       if (lastDoneIndex >= 0) timeline[lastDoneIndex].active = true;
 
       // Tracking events: server returns description_cn + description_en
-      // (the latter translated by a pattern-matching helper that covers
-      // the ~20 canonical Chinese phrases carriers actually emit). We
+      // and location + location_en (the EN halves built by a pattern-
+      // matching helper in lib/tracking.js covering the canonical Chinese
+      // phrases carriers actually emit, with an English status prefix when
+      // no pattern matches so a line is never unreadable). We
       // pick the one matching the current language so the customer sees
       // their preferred locale; fallback to Chinese if no EN exists.
       const tracking = data.tracking || null;
@@ -389,6 +391,12 @@ Page({
         description: L === 'cn'
           ? (ev.description_cn || ev.description_en || '')
           : (ev.description_en || ev.description_cn || ''),
+        // The place name is half of what the line says. It used to ride
+        // through as Chinese even for an EN customer whose event sentence
+        // had translated fine, so the row read "Arrived at … · 广州市".
+        location: L === 'cn'
+          ? (ev.location || '')
+          : (ev.location_en || ev.location || ''),
       }));
 
       // Split-package orders return shipments[] (one per parcel, each with its
@@ -428,7 +436,9 @@ Page({
               ? (latest.description_cn || latest.description_en || '')
               : (latest.description_en || latest.description_cn || ''),
             time: (latest.time || '').slice(0, 16),
-            location: latest.location || '',
+            location: L === 'cn'
+              ? (latest.location || '')
+              : (latest.location_en || latest.location || ''),
           } : null,
           items_str: (s.items || [])
             .map(it => `${lang.pick(it.name_en, it.name_cn, L)} ×${it.qty}`)
