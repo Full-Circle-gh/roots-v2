@@ -517,6 +517,20 @@ input,textarea{padding:12px 14px;border:1px solid var(--border-default);border-r
   color:var(--text-primary);font-size:15px;width:100%}
 input:focus,textarea:focus{outline:none;border-color:var(--border-focus)}
 
+/* THE SHOP NOTE'S SAVE/CANCEL PAIR, and the reason its layout is here rather
+   than in the style string beside it. The pair is meant to appear only once the
+   text differs from what is stored — the rule the desktop has carried since the
+   note was built — and the phone toggles it through the `hidden` attribute,
+   which the handlers set correctly and the probes assert on. But `hidden` is
+   only a UA rule (display:none), and an INLINE display out-ranks any rule in
+   any stylesheet, so a node written as style="display:flex" and hidden by the
+   attribute is not hidden at all. Cancel and Save note sat under every
+   untouched empty box; Ash's 2026-09-17 screenshot of the drawer is that bug.
+   With no display in the style string the attribute works, and the second rule
+   (id + attribute) out-specifies the first. */
+#mOrdNoteFoot{display:flex;gap:8px;margin-top:10px}
+#mOrdNoteFoot[hidden]{display:none}
+
 /* ── Receiving ────────────────────────────────────────────────────────────
    The quantity control on the receive screen. 52px because it is used one-
    handed with a box in the other, standing at a door — the 44px floor is a
@@ -732,6 +746,13 @@ const state = {
      and anything only in the DOM goes with it. Keyed by order id so a draft
      cannot follow you into the next order you open. */
   ordNote:null,
+  /* The order whose shop-note editor was asked for from the "…" sheet, or null.
+     An order with a note shows its editor without being asked; this is the one
+     case the drawer cannot work out for itself — an EMPTY note the operator
+     wants to type. It lives in state and not as a `hidden` node because the
+     phone repaints by rewriting the whole app's innerHTML, which a DOM flag
+     would not survive (the desktop, painting one drawer, can use the node). */
+  ordNoteOpen:null,
   /* The carriers the server will accept on a waybill, read once from
      /tracking/carriers. The server refuses a code it does not know
      (`invalid_carrier`), so this list is not a convenience — it is the only
@@ -1519,6 +1540,9 @@ reg('custRetry', ()=>{ state.custLoadErr=null; loadCustomers(); });
 reg('ordersClear', ()=>{ state.statusF='all'; state.channelF='all'; state.storeF='all'; state.orderQ=''; loadOrdersPage(); });
 reg('openOrder', id=>{ state.detailId=id; state.drag=0; render(); });
 reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null;
+  /* An editor opened and left empty is not a note. Clearing it here is what
+     stops a drawer reopened later from showing a box nobody asked for twice. */
+  state.ordNoteOpen=null;
   /* Both belong to the order, not to the app: leaving orderOverCust set
      would push the NEXT customer record under a sheet that is no longer
      there, and leaving detailFetch set would draw the loading shell over
@@ -1934,9 +1958,28 @@ reg('ordNoteTyped', v=>{
   const foot=document.getElementById('mOrdNoteFoot');
   if(foot) foot.hidden=(state.ordNote.text===(o.shopNote||''));
 });
+/* THE WAY IN TO A NOTE THAT DOES NOT EXIST YET, from the "…" sheet. An order
+   already carrying a note shows its editor unasked; this command is only for
+   the empty case, which until now put a labelled box and a placeholder on
+   every single drawer whether or not anyone would ever type in it. */
+reg('ordNoteOpen', ()=>{
+  const o=currentOrder(); state.detailActions=false;
+  if(!o||o._id==null){ render(); return; }
+  state.ordNoteOpen=o._id;
+  /* The textarea does not exist yet — the render below writes it — so the
+     caret is asked for through state.focus, which focuses after the paint.
+     A .focus() here would address the node this paint is about to replace. */
+  state.focus={id:'mOrdNote'};
+  render();
+});
 reg('ordNoteReset', ()=>{
   const o=currentOrder(); if(!o||o._id==null) return;
   state.ordNote=null;
+  /* CANCEL ON AN ORDER THAT HAD NO NOTE puts the drawer back the way it was
+     found: the card goes, and that needs the repaint. An order that HAS a note
+     keeps its card and loses only the edit — the DOM touch the comment above
+     ordNoteTyped explains, so nothing repaints under the caret. */
+  if(!(o.shopNote||'')){ state.ordNoteOpen=null; render(); return; }
   const box=document.getElementById('mOrdNote'); if(box) box.value=o.shopNote||'';
   const foot=document.getElementById('mOrdNoteFoot'); if(foot) foot.hidden=true;
 });
@@ -1958,6 +2001,11 @@ reg('ordNoteSave', ()=>{
     const saved=(j&&j.staff_note)||'';
     if(state.liveDetail&&state.liveDetail._id===o._id) state.liveDetail.shopNote=saved;
     state.ordNote=null;
+    /* The saved note is now what decides whether the card shows, so the "was
+       asked for" flag has done its job. Saving an EMPTY box clears the note —
+       the endpoint blanks whatever trims to nothing — and the card goes with
+       it, which is the same answer Cancel gives. */
+    state.ordNoteOpen=null;
     return T('Note saved','备注已保存');
   });
 });
@@ -13571,6 +13619,17 @@ function orderActs(o){
   // as the only exit from a mis-tap.
   if(st==='preparing'&&!orderHasWaybill(o))
     acts.push(['rotate-ccw',T('Undo preparing','撤销备货'),"APP.cmd('undoPreparing')"]);
+  /* LAST, AND ONLY WHEN THE EDITOR IS NOT ALREADY SHOWING. Appended rather than
+     placed among the rows above so no existing row moves — this sheet holds
+     Cancel and Refund, and a row that shifts under a thumb that knows where it
+     used to be is a mis-tap on money. The label is the card's own heading, so
+     what you pick and what appears say the same words.
+
+     shopNoteReady as well as not-shown: before the detail read lands the phone
+     does not yet know whether this order HAS a note, and a row that opens an
+     empty box over a note that exists is the exact wrong answer the card's own
+     comment was written about. Half a second later the row is there. */
+  if(shopNoteReady(o)&&!shopNoteShown(o)) acts.push(['pencil',T('Shop note','店铺备注'),"APP.cmd('ordNoteOpen')"]);
   return acts;
 }
 function orderNext(o){
@@ -15708,9 +15767,26 @@ function orderItemsBlock(o){
    A MIRRORED ORDER GETS NO NOTE, matching the desktop exactly: staffNoteBlock
    is called from renderOpenOrder and never from renderReadonlyOrder. A note on
    a platform's own order is a note on a record we do not own. */
+/* IS THE EDITOR ON SCREEN FOR THIS ORDER? One function owns the rule, because
+   the "…" sheet has to ask the same question — it offers the way in exactly
+   when the editor is not already showing — and two copies of a condition
+   written out separately is how the desktop's own note button and sheet drifted
+   apart (see orderActionRow's note on orderActs). */
+function shopNoteReady(o){
+  if(!o||o._id==null||o.viewOnly) return false;
+  /* The two guards the long comment above this pair explains: it waits for the
+     detail read, because the list row does not carry staff_note, and a mirrored
+     order gets no note at all. */
+  return !!(state.liveDetail&&state.liveDetail.id===state.detailId);
+}
+function shopNoteShown(o){
+  if(!shopNoteReady(o)) return false;
+  if(state.ordNoteOpen===o._id) return true;                       // asked for
+  if(state.ordNote&&state.ordNote.id===o._id) return true;         // being typed
+  return !!(o.shopNote||'');                                       // already has one
+}
 function shopNoteCard(o){
-  if(!o||o._id==null||o.viewOnly) return '';
-  if(!(state.liveDetail&&state.liveDetail.id===state.detailId)) return '';
+  if(!shopNoteShown(o)) return '';
   const saved=o.shopNote||'';
   const draft=(state.ordNote&&state.ordNote.id===o._id)?state.ordNote.text:saved;
   const dirty=draft!==saved;
@@ -15718,13 +15794,13 @@ function shopNoteCard(o){
   return `<div class="card" style="padding:14px">
     <div style="display:flex;align-items:center;gap:8px;color:var(--text-secondary)">${ic('pencil',16)}
       <span class="eyebrow">${T('Shop note','店铺备注')}</span></div>
-    <textarea id="mOrdNote" maxlength="2000" style="margin-top:10px;min-height:${(saved||dirty)?'84px':'46px'};resize:none"
+    <textarea id="mOrdNote" maxlength="2000" style="margin-top:10px;min-height:84px;resize:none"
       placeholder="${escAttr(T('Add a note for whoever handles this order','给处理这张订单的同事留个备注'))}"
       oninput="APP.cmd('ordNoteTyped',this.value)">${escAttr(draft)}</textarea>
     ${/* The footer appears only once something has actually changed — the
           desktop's rule. A Save button that is always there and does nothing
           four times out of five is noise. */''}
-    <div id="mOrdNoteFoot" ${dirty?'':'hidden'} style="display:flex;gap:8px;margin-top:10px">
+    <div id="mOrdNoteFoot" ${dirty?'':'hidden'}>
       <button class="btn2" style="flex:1" ${busy?'disabled':''} onclick="APP.cmd('ordNoteReset')">${T('Cancel','取消')}</button>
       <button class="btn2" style="flex:1" ${busy?'disabled':''} onclick="APP.cmd('ordNoteSave')">${busy?T('Saving…','保存中…'):T('Save note','保存备注')}</button>
     </div></div>`;
