@@ -3196,6 +3196,7 @@ async function pdOpen(id) {
   document.getElementById('pd-rte-cn').innerHTML = wasRich ? pdRichForEdit(p.description_cn) : pdPlainToHtml(p && p.description_cn);
   pdApplyDescMode();
   _pdUseBlockDesign = !!(p && p.use_block_design === 1);
+  _pdDesignExists = _paHasBlocks(p);
   _pdDesignStale = false; pdRenderDesignStale();
   pdRenderBlockDesignToggle();
   const modes = String((p && p.ship_modes) || 'air,land').toLowerCase();
@@ -5361,11 +5362,31 @@ function pdLightbox(start) {
   document.body.appendChild(box);
   show();
 }
-// "Product editor" — opens the full page designer in a new tab. Needs a saved
-// product (the editor loads it by id), so prompt to save a brand-new one first.
-function pdOpenPageDesign() {
+// "Product editor" — reveals the full page designer under the Editor tab (it is
+// an embedded iframe, not a new tab). Needs a saved product (the editor loads it
+// by id), so prompt to save a brand-new one first.
+async function pdOpenPageDesign() {
   const id = document.getElementById('pd-id').value;
   if (!id) { toast(cuT('Save the product first, then open the Product editor', '请先保存产品,再打开产品页编辑器'), 'err'); return; }
+  // Flush a pending autosave FIRST — the same three lines pdOpen() and
+  // pdRecipeLinkOpen() already use, and the one navigation out of this form
+  // that was missing them.
+  //
+  // The editor re-fetches the product from the server with cache:'no-store',
+  // so anything still sitting in the 800ms debounce is not in the row it
+  // reads: it opens on the values from BEFORE the last edits and looks like it
+  // ignored them. "Auto-fill from text" is the sharpest case, because it ends
+  // on pdScheduleAutosave() — clicking straight through to here lands inside
+  // that window every time.
+  if (_pdAutoTimer) {
+    clearTimeout(_pdAutoTimer); _pdAutoTimer = null;
+    try { await pdAutoSaveNow(); } catch (e) {
+      // Swallowed on purpose: pdAutoSaveNow() already reports its own failure —
+      // the save-status foot goes red and it toasts. Throwing on from here
+      // would only stop the operator reaching the editor, which is the one
+      // thing they asked for.
+    }
+  }
   openProductEditor(id);
 }
 // "🎨 Design" switch — the per-product `use_block_design` flag. ON makes the
@@ -5603,6 +5624,7 @@ async function pdAutoComposeBlocks(id, btn, skipConfirm) {
     const i2 = PA_PRODUCTS.findIndex(x => x.id === Number(id));
     if (i2 >= 0) PA_PRODUCTS[i2] = { ...PA_PRODUCTS[i2], ...(sj.data || {}), description_blocks: composed, use_block_design: 1 };
     _pdUseBlockDesign = true; pdRenderBlockDesignToggle();
+    _pdDesignExists = composed.length > 0;
     _pdDesignStale = false; pdRenderDesignStale();
     // Repaint the grid so the just-built design flips the card's Plain → Designed
     // pill immediately, without waiting for the operator to click another product.
@@ -6112,12 +6134,19 @@ async function pdAutoSaveNow() {
 // its content (description / Product details boxes / name / weight) makes that
 // snapshot stale until rebuilt. Reset on open + on a successful (re)build.
 let _pdDesignStale = false;
+let _pdDesignExists = false;   // does this product have designer sections at all
 function pdRenderDesignStale() {
   const el = document.getElementById('pd-design-stale');
   if (el) el.style.display = _pdDesignStale ? 'flex' : 'none';
 }
 function pdMarkDesignStale() {
-  if (!_pdUseBlockDesign || _pdDesignStale) return;   // only matters when a design exists
+  // Gated on whether a designed page EXISTS, not on whether the storefront is
+  // currently rendering it. use_block_design only decides which of the two
+  // descriptions the shop draws; the blocks are there either way, and the
+  // Product editor shows them either way. Reading the flag here meant a
+  // product with Design: Off could have its sections go stale — or arrive
+  // stale, straight off a duplicate — with nothing on screen saying so.
+  if (!_pdDesignExists || _pdDesignStale) return;
   _pdDesignStale = true;
   pdRenderDesignStale();
   pdRenderSummaries();   // the dock's Page row carries the same warning
