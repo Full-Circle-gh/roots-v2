@@ -47,6 +47,25 @@ const DATABASE_JS = read('database.js');
 const SCHEMA_SQL  = read('schema.sql');
 const PRODUCTS_JS = read('public', 'retail-admin', '09-products.js');
 const RECIPES_JS  = read('public', 'retail-admin', '19-recipes.js');
+
+// ── The money gate the screen now asks before printing any figure (§164) ──
+// SLICED FROM THE SHIPPED FILE, never stubbed, for the same reason
+// lineCostText is below: a stub would let the gate under test drift from the
+// one that ships. It FAILS CLOSED, so a sandbox missing it does not quietly
+// render a list without cost columns — it throws ReferenceError, which is how
+// its absence was found the first time.
+//
+// Both sandboxes below hold `recipes:costs`, so every assertion in this file
+// still describes the screen it was written against: the operator who may see
+// the money. That the gate is transparent when the capability IS held is what
+// these tests now additionally prove. What it hides when the capability is NOT
+// held is scripts/test_recipe_cost_visibility.js's subject, not this file's.
+const SHOW_MONEY_FN = (() => {
+  const at = RECIPES_JS.indexOf('const showMoney = () =>');
+  assert.notStrictEqual(at, -1, 'showMoney not found in the shipped file');
+  return RECIPES_JS.slice(at, RECIPES_JS.indexOf(';', at) + 1);
+})();
+const MONEY_CAPS = () => new Set(['recipes:view', 'recipes:costs', 'recipes:edit']);
 const RETAIL_JS   = read('routes', 'retail.js');
 const RECIPES_CSS = read('public', 'retail-admin.css');
 
@@ -522,10 +541,11 @@ check('the struck figure is display only — the CSS strikes it, nothing recompu
       RECIPE_UNITS: () => ['g', 'ml', 'pcs'],
       COST: () => require('../lib/recipe-cost'),
       I: { x: 'x' },
+      CAPS: MONEY_CAPS(),
       Number, String,
     };
     vm.createContext(sb);
-    vm.runInContext([YIELD_TITLE_FN, LINE_IN_YIELD_FN, LINE_COST_TEXT_FN, LINE_PER_TEXT_FN, LINE_ROW_FN,
+    vm.runInContext([SHOW_MONEY_FN, YIELD_TITLE_FN, LINE_IN_YIELD_FN, LINE_COST_TEXT_FN, LINE_PER_TEXT_FN, LINE_ROW_FN,
       'this.__row = lineRow;'].join('\n'), sb, { filename: '19-recipes.js#lineRow' });
     return sb.__row(l, idx);
   }
@@ -612,9 +632,10 @@ const RECIPES_ROUTE_JS = read('routes', 'retail-recipes.js');
       moneyU: n => '¥' + (Number(n) || 0).toFixed(4),
       I: { warn: '<svg id="the-triangle"></svg>', book: '', copy: '<svg id="the-copy"></svg>' },
       blockReasonText: () => '', Number, String,
+      CAPS: MONEY_CAPS(),
     };
     vm.createContext(sb2);
-    vm.runInContext(LIST_FNS + '\nthis.__t = tableHtml;', sb2, { filename: '19-recipes.js#tableHtml' });
+    vm.runInContext(SHOW_MONEY_FN + '\n' + LIST_FNS + '\nthis.__t = tableHtml;', sb2, { filename: '19-recipes.js#tableHtml' });
     return sb2.__t();
   }
   const R = extra => ({ id: 1, name_en: 'Quinoa salad dressing', category: 'Homemade',
