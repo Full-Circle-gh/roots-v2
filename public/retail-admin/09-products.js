@@ -3196,6 +3196,8 @@ async function pdOpen(id) {
   document.getElementById('pd-rte-cn').innerHTML = wasRich ? pdRichForEdit(p.description_cn) : pdPlainToHtml(p && p.description_cn);
   pdApplyDescMode();
   _pdUseBlockDesign = !!(p && p.use_block_design === 1);
+  _pdDesignExists = _paHasBlocks(p);
+  _pdDesignFromId = (p && p.blocks_from_product_id) || null;
   _pdDesignStale = false; pdRenderDesignStale();
   pdRenderBlockDesignToggle();
   const modes = String((p && p.ship_modes) || 'air,land').toLowerCase();
@@ -3920,12 +3922,16 @@ function pdRenderSummaries() {
   // The "design is out of date" nudge lives inside the block the dock hides,
   // so carry its warning up into the summary — otherwise editing a name or a
   // description in the dock would silently stale the page with nothing to say so.
-  const pageState = _pdDesignStale ? cuT('Designed page — out of date', '已设计页面 — 已过期')
+  // A copied page is out of date in the sense this row means — it does not
+  // describe this product. The compact row keeps the live pair; the bar below
+  // is where the two reasons are told apart and the source is named.
+  const pageOld = _pdDesignStale || !!_pdDesignFromId;
+  const pageState = pageOld ? cuT('Designed page — out of date', '已设计页面 — 已过期')
     : designed ? cuT('Designed page', '已设计页面')
     : cuT('Default template', '默认模板');
   set('pd-sum-page', '<div class="pd-sumcard">'
     + _pdSumRow(cuT('Shopper page', '顾客页面'), pageState, 'page',
-        _pdDesignStale ? cuT('Rebuild', '重新生成') : null)
+        pageOld ? cuT('Rebuild', '重新生成') : null)
     + _pdSumRow(cuT('Description', '描述'),
         written ? cuT('Written', '已填写') : cuT('Not written yet', '尚未填写'), 'page')
     + '</div>'
@@ -5361,11 +5367,31 @@ function pdLightbox(start) {
   document.body.appendChild(box);
   show();
 }
-// "Product editor" — opens the full page designer in a new tab. Needs a saved
-// product (the editor loads it by id), so prompt to save a brand-new one first.
-function pdOpenPageDesign() {
+// "Product editor" — reveals the full page designer under the Editor tab (it is
+// an embedded iframe, not a new tab). Needs a saved product (the editor loads it
+// by id), so prompt to save a brand-new one first.
+async function pdOpenPageDesign() {
   const id = document.getElementById('pd-id').value;
   if (!id) { toast(cuT('Save the product first, then open the Product editor', '请先保存产品,再打开产品页编辑器'), 'err'); return; }
+  // Flush a pending autosave FIRST — the same three lines pdOpen() and
+  // pdRecipeLinkOpen() already use, and the one navigation out of this form
+  // that was missing them.
+  //
+  // The editor re-fetches the product from the server with cache:'no-store',
+  // so anything still sitting in the 800ms debounce is not in the row it
+  // reads: it opens on the values from BEFORE the last edits and looks like it
+  // ignored them. "Auto-fill from text" is the sharpest case, because it ends
+  // on pdScheduleAutosave() — clicking straight through to here lands inside
+  // that window every time.
+  if (_pdAutoTimer) {
+    clearTimeout(_pdAutoTimer); _pdAutoTimer = null;
+    try { await pdAutoSaveNow(); } catch (e) {
+      // Swallowed on purpose: pdAutoSaveNow() already reports its own failure —
+      // the save-status foot goes red and it toasts. Throwing on from here
+      // would only stop the operator reaching the editor, which is the one
+      // thing they asked for.
+    }
+  }
   openProductEditor(id);
 }
 // "🎨 Design" switch — the per-product `use_block_design` flag. ON makes the
@@ -5501,7 +5527,19 @@ async function pdFactsAutoFillQuiet(textEn, textCn) {
     }
   } catch (e) { /* best-effort — proceed to build without facts */ }
 }
-async function pdAutoComposeBlocks(id, btn, skipConfirm) {
+// `keepFlag` — WHOSE BUSINESS use_block_design IS.
+//
+// That flag decides which of the two descriptions the SHOPFRONT draws, and it
+// is the operator's decision, made with the Design switch. It is not a side
+// effect of rebuilding sections. The two callers that genuinely mean "turn it
+// on" — the switch itself, and the wizard's "designed page" option — leave
+// keepFlag unset and it goes on as before. Rebuild passes it, because
+// refreshing stale sections on a product showing its classic description must
+// not quietly switch shoppers over to the designed page.
+//
+// This became reachable the moment the stale-design nudge stopped gating on
+// the flag: before that, Rebuild could not be pressed with Design: Off.
+async function pdAutoComposeBlocks(id, btn, skipConfirm, keepFlag) {
   const row = PA_PRODUCTS.find(x => x.id === Number(id)) || {};
   // The catalogue LIST endpoint omits the heavy description_blocks JSON and
   // ships only a `has_blocks` flag, so reading row.description_blocks here
@@ -5580,8 +5618,9 @@ async function pdAutoComposeBlocks(id, btn, skipConfirm) {
       toast(cuT("Couldn't build sections from this description — add more detail and try again", '未能从描述生成板块,补充内容后重试'), 'err');
       return;
     }
-    // Persist blocks (+ nutrition) and keep the flag on, in one PATCH.
-    const body = { description_blocks: composed, use_block_design: 1 };
+    // Persist blocks (+ nutrition) and settle the flag, in one PATCH.
+    const flag = keepFlag ? (_pdUseBlockDesign ? 1 : 0) : 1;
+    const body = { description_blocks: composed, use_block_design: flag };
     if (nutriBlock) {
       const nutrition = {
         basis_en: nutriBlock.basis_en || '', basis_cn: nutriBlock.basis_cn || '',
@@ -5601,8 +5640,13 @@ async function pdAutoComposeBlocks(id, btn, skipConfirm) {
       return;
     }
     const i2 = PA_PRODUCTS.findIndex(x => x.id === Number(id));
-    if (i2 >= 0) PA_PRODUCTS[i2] = { ...PA_PRODUCTS[i2], ...(sj.data || {}), description_blocks: composed, use_block_design: 1 };
-    _pdUseBlockDesign = true; pdRenderBlockDesignToggle();
+    if (i2 >= 0) PA_PRODUCTS[i2] = { ...PA_PRODUCTS[i2], ...(sj.data || {}), description_blocks: composed, use_block_design: flag };
+    _pdUseBlockDesign = flag === 1; pdRenderBlockDesignToggle();
+    _pdDesignExists = composed.length > 0;
+    // The PATCH above wrote description_blocks, which is what clears
+    // blocks_from_product_id server-side — these sections are this product's
+    // own now. Mirrored here so the bar goes without waiting for a reload.
+    _pdDesignFromId = null;
     _pdDesignStale = false; pdRenderDesignStale();
     // Repaint the grid so the just-built design flips the card's Plain → Designed
     // pill immediately, without waiting for the operator to click another product.
@@ -6112,12 +6156,47 @@ async function pdAutoSaveNow() {
 // its content (description / Product details boxes / name / weight) makes that
 // snapshot stale until rebuilt. Reset on open + on a successful (re)build.
 let _pdDesignStale = false;
+let _pdDesignExists = false;   // does this product have designer sections at all
+// The product these sections were COPIED from (store_products.blocks_from_
+// product_id), or null when they are this product's own. Duplicating carries
+// the whole designed page across — right for a size variant, and the reason a
+// copy could sit there holding another product's words with nothing saying so.
+// Unlike _pdDesignStale this survives a reload, because it is a fact about the
+// row rather than about this session's typing.
+let _pdDesignFromId = null;
+// The source's NAME, or null when it cannot be named — it may have been deleted
+// since. "came from —" says less than the plain out-of-date line, so in that
+// case we fall back to it rather than print a blank.
+function pdDesignFromName() {
+  if (!_pdDesignFromId) return null;
+  const src = (PA_PRODUCTS || []).find(x => x.id === Number(_pdDesignFromId));
+  if (!src) return null;
+  return cuT(src.name_en || src.name_cn || '', src.name_cn || src.name_en || '') || null;
+}
 function pdRenderDesignStale() {
   const el = document.getElementById('pd-design-stale');
-  if (el) el.style.display = _pdDesignStale ? 'flex' : 'none';
+  const from = pdDesignFromName();
+  // Two reasons to warn, one bar. Copied-from is the more specific of the two
+  // and names the product, so it wins when both are true: an operator who has
+  // edited a copy is better served by "this page came from X" than by "content
+  // changed", which would leave them to work out which content.
+  const show = _pdDesignStale || !!from;
+  if (el) el.style.display = show ? 'flex' : 'none';
+  const txt = document.getElementById('pd-design-stale-text');
+  if (txt && show) {
+    txt.textContent = from
+      ? cuT('Designed page came from ' + from, '设计页来自 ' + from)
+      : cuT('Designed page is out of date — content changed since it was built', '设计页已过期 — 内容已更改');
+  }
 }
 function pdMarkDesignStale() {
-  if (!_pdUseBlockDesign || _pdDesignStale) return;   // only matters when a design exists
+  // Gated on whether a designed page EXISTS, not on whether the storefront is
+  // currently rendering it. use_block_design only decides which of the two
+  // descriptions the shop draws; the blocks are there either way, and the
+  // Product editor shows them either way. Reading the flag here meant a
+  // product with Design: Off could have its sections go stale — or arrive
+  // stale, straight off a duplicate — with nothing on screen saying so.
+  if (!_pdDesignExists || _pdDesignStale) return;
   _pdDesignStale = true;
   pdRenderDesignStale();
   pdRenderSummaries();   // the dock's Page row carries the same warning
@@ -6125,7 +6204,9 @@ function pdMarkDesignStale() {
 function pdRebuildDesign() {
   const id = document.getElementById('pd-id').value;
   if (!id) return;
-  pdAutoComposeBlocks(id, document.getElementById('pd-blockdesign-toggle'), true);
+  // keepFlag: rebuilding stale sections answers "are these words current?", not
+  // "should the shop show the designed page?" — see pdAutoComposeBlocks.
+  pdAutoComposeBlocks(id, document.getElementById('pd-blockdesign-toggle'), true, true);
 }
 function pdWireAutosave() {
   const ed = document.getElementById('pd-editor');

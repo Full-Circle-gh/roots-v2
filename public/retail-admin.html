@@ -5151,12 +5151,12 @@
             <label class="stacked">Description · 描述
               <span class="pd-desc-modebar">
                 <button type="button" class="pd-mode-btn active" data-mode="classic" onclick="pdDescMode()" title="Edit the description here with the rich-text toolbar · 在此用富文本工具栏编辑描述">Classic · 经典</button>
-                <button type="button" class="pd-mode-btn" onclick="pdOpenPageDesign()" title="Open the full Product Page Editor in a new tab · 在新标签页打开整页编辑器">Product editor · 产品页编辑器 ↗</button>
+                <button type="button" class="pd-mode-btn" onclick="pdOpenPageDesign()" title="Open the full Product Page Editor · 打开整页编辑器">Product editor · 产品页编辑器 ↗</button>
                 <button type="button" id="pd-blockdesign-toggle" class="pd-mode-btn pd-blockdesign-toggle" onclick="pdToggleBlockDesign()" title="When on, the storefront product page shows the Product editor design instead of this classic description · 开启后,店铺商品页将显示产品页设计而非经典描述"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M2.5 6.5h11M6.5 6.5v7"/></svg>Design: Off · 关</button>
               </span>
             </label>
             <div id="pd-design-stale" style="display:none;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0 2px;padding:7px 11px;border:1px solid var(--brass);border-radius:8px;background:rgba(201,149,74,.08);font-family:var(--f-sans);font-size:12px;">
-              <span style="color:var(--text-2);">Designed page is out of date — content changed since it was built · 设计页已过期 — 内容已更改</span>
+              <span id="pd-design-stale-text" style="color:var(--text-2);">Designed page is out of date — content changed since it was built · 设计页已过期 — 内容已更改</span>
               <button type="button" class="btn btn-sm" style="margin-left:auto;text-transform:none;letter-spacing:0;font-family:var(--f-sans);" onclick="pdRebuildDesign()"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5V5H11"/></svg>Rebuild · 重新生成</button>
             </div>
             <!-- Classic editor — rich-text toolbar + English | 中文 side by side -->
