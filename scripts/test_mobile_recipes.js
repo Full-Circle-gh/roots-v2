@@ -176,30 +176,35 @@ check('typing patches the list and leaves the input alone', () => {
   assert.match(h, /state\.focus=\{id:'mRcpQ'/, 'the caret is carried across the patch');
 });
 
-// REPORTED OFF A PHONE, 2026-09-17: "Spreads & Dips 涂抹酱和蘸酱 · 652.82 g ·
-// 4 ser…" — the row truncates, and the filing was eating the two facts somebody
-// opens this screen for. recipes.category is ONE TEXT column holding both
-// languages (unlike store_products' name/name_cn, which catName() can pick a
-// half from), so there is nothing to shorten. Ordering is the fix.
-check('the weight and the servings come before the category, so truncation eats the filing', () => {
-  const fn = slice('function rcpMeta(x)', 'function screenRecipes()');
-  const body = codeOnly(fn);
-  const batch = body.indexOf('x.batch_size');
-  const serv  = body.indexOf('x.servings');
-  const cat   = body.indexOf('x.category');
-  assert.ok(batch !== -1 && serv !== -1 && cat !== -1, 'all three parts must be on the line');
-  assert.ok(batch < cat, 'the batch weight must be pushed before the category');
-  assert.ok(serv  < cat, 'and so must the servings');
+// REPORTED OFF A PHONE, 2026-09-17, TWICE. First the category was first on this
+// line and pushed the two figures off the end — "Spreads & Dips 涂抹酱和蘸酱 ·
+// 652.82 g · 4 ser…". Reordering fixed that and left "· Spreads & …", which is
+// width spent on nothing. The category does not fit on this line in ANY form:
+// recipes.category is one TEXT column holding both languages at once, so there
+// is no short half to take, and even the English one overruns a 390px row.
+check('the row states the weight and the servings, and nothing else', () => {
+  const body = codeOnly(slice('function rcpMeta(x)', 'function screenRecipes()'));
+  assert.match(body, /x\.batch_size/, 'the batch weight is on the row');
+  assert.match(body, /x\.servings/, 'and the servings');
+  assert.ok(body.indexOf('x.category') === -1,
+    'the category is NOT on the row — a truncated label occupies the space of a fact while stating none');
+});
+
+// Dropping it from the row must not drop it from reach.
+check('the category is searchable instead, in either language', () => {
+  const rows = codeOnly(slice('function rcpRows()', 'function rcpMeta(x)'));
+  assert.match(rows, /x\.category/, 'search must still match the category');
+  assert.match(rows, /x\.name_en/);
+  assert.match(rows, /x\.name_cn/);
+  assert.match(rows, /x\.sku/);
 });
 
 // A row states what it has and omits what it does not — a recipe with no
-// serving count prints no "— servings", which on a truncating line would spend
-// the width that the weight needs.
+// serving count prints no "— servings".
 check('each part is dropped when it is not recorded, rather than dashed', () => {
   const body = codeOnly(slice('function rcpMeta(x)', 'function screenRecipes()'));
   assert.match(body, /if\(x\.batch_size\)/);
   assert.match(body, /if\(x\.servings\)/);
-  assert.match(body, /if\(x\.category\)/);
   assert.doesNotMatch(body, /'—'/);
 });
 
