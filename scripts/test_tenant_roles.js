@@ -330,9 +330,20 @@ function versionOf(tid) {
   // does: voiding a claim is what removes an already-posted row from
   // `expense_entries`, which is exactly the kind of change to what the
   // business has spent this marker exists to flag.
+  // 117 is `recipes:costs` (2026-09-17, §164) — and the SHOWS COUNT DOES NOT
+  // MOVE, which is the whole shape of that change. It did not add a
+  // money-marked key; it moved one. `recipes:view` was the only view key in
+  // this file carrying money:'shows', justified by "A recipe is a cost." —
+  // true of the screen as it stood, and exactly why the coin was on the wrong
+  // KEY rather than simply wrong. The coin came off `recipes:view` and went
+  // onto a `recipes:costs` of its own, so the kitchen can be handed what a
+  // thing is made from without the batch cost, the cost per gram and the
+  // margin. One key more, the same sixteen coins. If a later change makes this
+  // seventeen, something has been ADDED rather than split, and that is worth
+  // reading the diff for.
   is(caps.CAPABILITIES.filter(c => c.money === 'moves').length, 23, '23 capabilities move money');
   is(caps.CAPABILITIES.filter(c => c.money === 'shows').length, 16, '16 show it');
-  is(caps.CAPABILITIES.length, 116, 'across all 116');
+  is(caps.CAPABILITIES.length, 117, 'across all 117');
   // Seeing the waste ledger and reading what it cost are two permissions
   // (Ash, 2026-09-02). They were one, and `waste:view` carried the money
   // marker — so the two floor presets, whose job is recording what spoiled,

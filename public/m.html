@@ -262,10 +262,42 @@ button,input,textarea{font-family:inherit}
    where scrolling was always meant to happen. */
 html,body{overscroll-behavior:none;overflow:hidden}
 .content{overscroll-behavior-y:contain}
-/* Tapping a control should not paint its label blue and offer to copy it.
-   Selection stays ON everywhere else on purpose: an address, a phone number
-   and an order number are things people lift out of this app by hand. */
-button,.tabbar,.row,.chip,.pill,.eyebrow,h1,.grabber{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+/* NO BROWSER TEXT SELECTION ANYWHERE. This is a tool, not a page, and this is
+   the one block that says so for the whole app — the sibling surfaces carry the
+   same two rules and point back here rather than restating the reasoning.
+
+   What stood here was an ALLOWLIST — button, .tabbar, .row, .chip, .pill,
+   .eyebrow, h1, .grabber were unselectable and everything else was left
+   selectable on purpose, the note reading "an address, a phone number and an
+   order number are things people lift out of this app by hand". What it bought
+   in practice was Android Chrome. A long-press on anything the allowlist did
+   not name painted the text blue and threw Chrome's own "touch to search"
+   Google bar across the bottom of the app — reported against the customer
+   record sheet, where the name is a bare <span> (the header row below), but the
+   same was true of every stat figure and every section label. An allowlist can
+   only ever name the controls somebody remembered; every unclassed <span> in
+   21k lines was the hole, and there are thousands of them.
+
+   So the default inverts: none everywhere, opted back in only where it is
+   load-bearing. Copying is not lost and was already not selection's job — it is
+   Copy BUTTONS, which take the whole field in one tap rather than asking for
+   two blue handles to be dragged accurately over a line of Chinese: the order's
+   ship-to (copyAddr) and txn (copyTxn), the waybill (copyWaybill), and the
+   customer's phone and addresses (copyCustAddr, added with this change so the
+   record sheet keeps the one thing its long-press was genuinely used for).
+
+   Selection INHERITS, so html/body carries it and any element with a rule of
+   its own still wins — which is how the inputs opt back in, and they must, or
+   typing breaks. .sel is the escape hatch for anything that later needs real
+   selection.
+
+   Deliberately NOT applied to the customer-facing pages — shop.html,
+   storefront.html, full-circle.html. A visitor reading a shop or a marketing
+   landing page has every reason to select and copy, and none of the operator
+   chrome this protects. */
+html,body{-webkit-user-select:none;-moz-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
+  -webkit-user-select:text;-moz-user-select:text;user-select:text;-webkit-touch-callout:default}
 /* No 300ms wait on every tap for a double-tap-to-zoom that can't happen. */
 button,a,.row,.chip,.stepbtn{touch-action:manipulation}
 /* The refresh that replaces pull-to-reload: a ring in the gap the content
@@ -679,7 +711,8 @@ const state = {
   team:null, teamTried:false, teamErr:null, teamEnforce:false, teamBusy:null, teamActErr:null,
   roles:[],            /* the tenant's own roles, so a role is named the way its shop names it */
   caps:null,           /* the signed-in operator's effective permissions; null = unknown, treated as allowed */
-  trend:null, trendKey:null, trendErr:null, trendRange:'7', trendMetric:'revenue',
+  trend:null, trendFull:null, trendKey:null, trendErr:null, trendRange:'7', trendMetric:'revenue',
+  trendOpen:{},          // which Trend fact section is expanded, by key
   recap:null, recapTried:false, recapSince:0, reallyAway:false, pos:'default',
   /* The role's Dashboard cards, from the Roles editor — null until /me
      answers, and null FOREVER for a role whose owner never opened that
@@ -2076,6 +2109,22 @@ reg('copyTxn', ()=>{
   if(!o||!o.txn) return;   // nothing to copy is nothing to copy
   copyText(String(o.txn));
 });
+/* THE CUSTOMER RECORD'S OWN ADDRESS COPY. copyAddr above does this for an
+   ORDER, off state.liveDetail; a customer's addresses are a different list on a
+   different record, so this reads state.custDetail and finds the row by id.
+   It exists because the app stopped being text-selectable (see the selection
+   block in this file's <style>): lifting a ship-to out of the record sheet by
+   long-press was the one thing that gesture was genuinely used for here, so it
+   becomes a button rather than disappearing. Built like copyAddr — the parts
+   that EXIST, joined, with the em-dash placeholder dropped: a dash is something
+   for a reader to look at, never something to paste onto a courier label. */
+reg('copyCustAddr', id=>{
+  const list=(state.custDetail&&state.custDetail.addresses)||[];
+  const a=list.find(x=>String(x.id)===String(id));
+  if(!a) return;
+  const where=[a.province,a.city,a.district,a.address,a.detail].filter(Boolean).join(' ');
+  copyText([a.recipient_name, a.phone, where].filter(v=>v&&v!=='\u2014').join('\n'));
+});
 reg('openProduct', sku=>{
   state.productSku=sku; state.prodErr=null; state.prodBusy=false;
   const p=DB.products.find(x=>x.sku===sku);
@@ -3137,6 +3186,7 @@ reg('toggleFeature', k=>toggleFeature(k));
    beside the rules it enforces. */
 reg('trendRange', v=>{ state.trendRange=v; render(); loadTrend(); });
 reg('trendMetric', v=>{ state.trendMetric=v; render(); });
+reg('trendSection', k=>{ state.trendOpen[k]=!state.trendOpen[k]; render(); });
 reg('openChannel', k=>{ state.chanSheet=k; state.chanErr=null; render(); });
 reg('closeChannel', ()=>{ state.chanSheet=null; state.chanErr=null; render(); });
 /* One store on one channel. `next` arrives as '1' or '0' from the template —
@@ -15765,7 +15815,7 @@ function trendMetric(){
 function loadTrend(force){
   const key=state.trendRange;
   if(state.trendKey===key&&!force) return;
-  state.trendKey=key; state.trend=null; state.trendErr=null;
+  state.trendKey=key; state.trend=null; state.trendFull=null; state.trendErr=null;
   const to=shopToday().slice(0,10);
   /* THE WINDOW WAS ONE DAY TOO LONG IN GUANGZHOU, which is to say everywhere it
      actually runs. `new Date(to+'T00:00:00')` is LOCAL midnight and setDate
@@ -15789,6 +15839,10 @@ function loadTrend(force){
   api('/dashboard?from='+from+'&to='+to).then(d=>{
     if(state.trendKey!==key) return;   // a later range won the race
     state.trend=Array.isArray(d&&d.trend)?d.trend:[];
+    /* The WHOLE reply is kept now, not just its `trend` array. Everything the
+       fact sections below the line read comes out of this object — see the
+       block above trendSections() for what was being discarded and why. */
+    state.trendFull=d||null;
     render();
   }).catch(e=>{ if(String(e.message)==='auth') return;
     if(state.trendKey!==key) return;
@@ -15810,6 +15864,168 @@ function sparkline(vals,tone){
     <path d="M${pts.join(' L')}" fill="none" stroke="var(--${tone}-ink)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></path>
     <circle cx="${x(n-1).toFixed(1)}" cy="${y(vals[n-1]).toFixed(1)}" r="7" fill="var(--${tone}-ink)"></circle></svg>`;
 }
+/* ── The rest of the payload ───────────────────────────────────────────────
+   THIS SCREEN WAS THROWING AWAY ALMOST EVERYTHING IT FETCHED. /dashboard
+   answers with the window's whole report — the deltas against the previous
+   window, the per-store split, the payment mix, the day×hour heat, top
+   products and customers, the status funnel, the cohort tables — and this
+   screen read one key of it, `trend`, and dropped the object on the floor. It
+   then printed a note saying the per-store breakdown was on desktop, which was
+   true of the screen and had never been true of the response.
+
+   Everything below is drawn from the reply already in hand: no second request,
+   no new endpoint, and nothing recomputed here that the desktop computes
+   differently — where a figure exists there, its definition is ported rather
+   than re-derived, because a second definition of "retention" is a second
+   number to argue with.
+
+   FOUR SECTIONS, COLLAPSED. The line and the facts above them are still the
+   whole answer to "is this week better than last"; these are the follow-up
+   questions, one tap each, so the screen still opens as one glance rather than
+   as the desktop's Reports poured into a 390px column.
+
+   THE MONEY GATE REACHES IN HERE TOO, and it is the reason several rows are
+   absent rather than blank: every row that prints an amount — the payment mix,
+   the voucher giveaway, the top spender, each store's takings — is dropped
+   for a warehouse, dispatch or customer-service account. The share-of-revenue
+   row goes with them: it carries no ¥, but it is a fact ABOUT revenue and the
+   gate is about revenue, not about the currency sign. A section left with no
+   rows is not rendered at all. */
+
+/* Lifted whole from the desktop's DASH_PAY_NAMES and DASH_DOW_* (03-dashboard.js)
+   so a method and a weekday are named the same on both halves of the product. */
+const TREND_PAY={wechat:['WeChat Pay','微信支付'],alipay:['Alipay','支付宝'],meituan:['Meituan','美团'],
+  points:['Points','积分'],cash:['Cash','现金'],bank_transfer:['Bank transfer','银行转账'],
+  wechat_offline:['WeChat off-app','微信(线下)'],alipay_offline:['Alipay off-app','支付宝(线下)'],
+  other:['Other','其他'],unknown:['Unknown','未知']};
+const TREND_DOW=[['Sunday','周日'],['Monday','周一'],['Tuesday','周二'],['Wednesday','周三'],
+  ['Thursday','周四'],['Friday','周五'],['Saturday','周六']];
+function trendPayName(m){ const p=TREND_PAY[m]; return p?T(p[0],p[1]):String(m||''); }
+
+/* "Still buying a month later" — the desktop's weighted retention curve read at
+   offset 1 (03-dashboard.js, dashRenderCohorts). FULL HISTORY, NOT THE WINDOW:
+   `cohorts` is deliberately not window-clipped on the server, because a month
+   of retention cannot be read off seven days of orders. That makes it the one
+   row on this screen that does not change when the range chips do, which is
+   correct and worth knowing before anyone reports it as a bug. */
+function trendRetain1(){
+  const d=state.trendFull; if(!d) return null;
+  const sizes=d.cohortSizes||[], rows=d.cohorts||[]; if(!sizes.length) return null;
+  const byMonth={};
+  rows.forEach(c=>{ (byMonth[c.cohort_month]=byMonth[c.cohort_month]||{})[c.active_month]=c.active_customers; });
+  const sizeMap={}; sizes.forEach(c=>{ sizeMap[c.cohort_month]=c.size; });
+  const monthAdd=(mo,n)=>{ const p=mo.split('-').map(Number); const t=(p[1]-1)+n;
+    return (p[0]+Math.floor(t/12))+'-'+String(((t%12)+12)%12+1).padStart(2,'0'); };
+  const between=(a,b)=>{ const x=a.split('-').map(Number), y=b.split('-').map(Number);
+    return (y[0]-x[0])*12+(y[1]-x[1]); };
+  const todayYM=shopToday().slice(0,7);
+  let active=0,size=0;
+  for(const cm of sizes.map(c=>c.cohort_month)){
+    if(between(cm,todayYM)<1) continue;        // too young to have a month behind it
+    const s=sizeMap[cm]||0; if(!s) continue;
+    active+=(byMonth[cm]&&byMonth[cm][monthAdd(cm,1)])||0; size+=s;
+  }
+  return size>0?Math.round(active/size*1000)/10:null;
+}
+
+/* The weekday a shop is busiest on — and only once every weekday has had at
+   least two goes at it. On a seven-day window "best day of the week" is one
+   Saturday, which is not a pattern: it is the busiest day already named two
+   tiles up, wearing a label that claims more than it knows. Under fourteen days
+   the fact is absent rather than approximate. */
+function trendBestDow(vals){
+  const t=state.trend||[]; if(t.length<14) return null;
+  const sum=[0,0,0,0,0,0,0], n=[0,0,0,0,0,0,0];
+  t.forEach((p,i)=>{ const d=_date(p.bucket); if(!d) return;
+    const w=d.getDay(); sum[w]+=(Number(vals[i])||0); n[w]++; });
+  let b=-1;
+  for(let w=0;w<7;w++){ if(!n[w]) continue; if(b<0||sum[w]/n[w]>sum[b]/n[b]) b=w; }
+  return b<0?null:T(TREND_DOW[b][0],TREND_DOW[b][1]);
+}
+
+/* The four sections, built from the payload and from nothing else. A row whose
+   source is missing is not pushed; a section with no rows is not returned. */
+function trendSections(){
+  const d=state.trendFull; if(!d) return [];
+  const noMoney=recapNoMoney();
+  const mn=v=>money0(CUR,v);
+  const num=v=>Math.round(Number(v)||0).toLocaleString();
+  const nOrders=v=>T(num(v)+' orders',num(v)+' 单');
+  const out=[];
+
+  // ── Sales ──
+  const sales=[];
+  const pays=(d.payments||[]).filter(p=>Number(p.revenue)>0);
+  const payTotal=pays.reduce((a,p)=>a+Number(p.revenue||0),0);
+  if(!noMoney&&pays.length&&payTotal>0){
+    const nm=trendPayName(pays[0].method);
+    sales.push({t:T(nm+' share of revenue',nm+'占营收'),
+                v:Math.round(pays[0].revenue/payTotal*100)+'%'});
+  }
+  let hot=null; (d.heat||[]).forEach(h=>{ if(!hot||h.orders>hot.orders) hot=h; });
+  if(hot&&TREND_DOW[hot.dow]) sales.push({t:T('Busiest hour','最忙时段'),
+    v:T(TREND_DOW[hot.dow][0],TREND_DOW[hot.dow][1])+' '+String(hot.hour).padStart(2,'0')+':00'});
+  const fn=d.funnel||{};
+  if(fn.delivered&&fn.delivered.n) sales.push({t:T('Delivered','已送达'),
+    v:noMoney?num(fn.delivered.n):num(fn.delivered.n)+' · '+mn(fn.delivered.revenue)});
+  if(fn.cancelled&&fn.cancelled.n) sales.push({t:T('Cancelled','已取消'),
+    v:noMoney?num(fn.cancelled.n):num(fn.cancelled.n)+' · '+mn(fn.cancelled.revenue)});
+  const vou=(d.marketing&&d.marketing.vouchers)||[];
+  const vGiven=vou.reduce((a,v)=>a+Number(v.discount||0),0);
+  const vUses=vou.reduce((a,v)=>a+Number(v.uses||0),0);
+  if(!noMoney&&vGiven>0) sales.push({t:T('Given away in vouchers','优惠券让利'),
+    v:'−'+mn(vGiven)+' · '+nOrders(vUses)});
+  if(sales.length) out.push({key:'sales',icon:'trending-up',tone:'sage',title:T('Sales','销售'),rows:sales});
+
+  // ── Customers ──
+  const cust=[];
+  const nvr=d.new_vs_returning||{};
+  if(nvr.buyers) cust.push({t:T('People bought','购买人数'),v:num(nvr.buyers)});
+  if(nvr.buyers>0) cust.push({t:T('First-time buyers','新客占比'),
+    v:Math.round(Number(nvr.new_buyers||0)/nvr.buyers*100)+'%'});
+  const tc=(d.topCustomers||[])[0];
+  if(!noMoney&&tc) cust.push({t:T('Top spender','消费最高'),
+    v:(tc.nickname||('#'+tc.customer_id))+' · '+mn(tc.revenue)});
+  const gc=(d.geoCities||[])[0];
+  if(gc&&gc.city) cust.push({t:T('Top city','订单最多城市'),
+    v:(LANG==='en'?(gc.city_en||gc.city):gc.city)+' · '+nOrders(gc.orders)});
+  const r1=trendRetain1();
+  if(r1!=null) cust.push({t:T('Still buying a month later','一个月后仍回购'),v:Math.round(r1)+'%'});
+  if(cust.length) out.push({key:'customers',icon:'users',tone:'dusk',title:T('Customers','客户'),rows:cust});
+
+  // ── Products & traffic ──
+  const prod=[];
+  const tp=(d.topProducts||[])[0];
+  const tpName=tp?((LANG==='en'?(tp.name_en||tp.name_cn):(tp.name_cn||tp.name_en))||''):'';
+  if(tpName){
+    prod.push({t:T('Top seller','最热销'),v:tpName});
+    prod.push({t:T('Units sold','销量'),v:num(tp.units)});
+  }
+  const k=d.kpis||{};
+  /* The mini app's own conversion, and the server says so: kpis.conversion_rate
+     divides mini_app_orders by sessions, never the all-channel order count. */
+  if(k.conversion_rate!=null) prod.push({t:T('Sessions became orders','会话转化为订单'),
+    v:Number(k.conversion_rate).toFixed(1)+'%'});
+  const co=d.checkout||{};
+  if(co.abandoned) prod.push({t:T('Started checkout, did not pay','进入结算但未付款'),v:num(co.abandoned)});
+  if(prod.length) out.push({key:'products',icon:'package',tone:'amber',title:T('Products & traffic','商品与流量'),rows:prod});
+
+  // ── Stores ──
+  /* The breakdown the old note sent people to a desktop for. Six at most: a
+     seventh bar on a phone is a list, and a list of stores is the Stores
+     screen's job, not a fact card's. */
+  const st=(d.stores||[]).slice(0,6);
+  if(st.length){
+    const stMax=Math.max(1,...st.map(s=>Number(s.orders)||0));
+    out.push({key:'stores',icon:'store',tone:'brick',title:T('Stores','门店'),
+      rows:st.map(s=>({
+        t:(LANG==='en'?(s.name_en||s.name_cn):(s.name_cn||s.name_en))||T('Unnamed store','未命名门店'),
+        v:noMoney?nOrders(s.orders):num(s.orders)+' · '+mn(s.revenue),
+        bar:Math.round((Number(s.orders)||0)/stMax*100)}))});
+  }
+  return out;
+}
+
 function statusTrend(){
   const t=state.trend; if(!t||!t.length) return '';
   const m=trendMetric();
@@ -15842,25 +16058,75 @@ function screenTrend(){
   const days=vals.length;
   const fmt=v=>m==='revenue'?money0(CUR,v):Math.round(v).toLocaleString();
   // The best day is worth naming — it is the one a shop remembers, and it is
-  // the only point on the line the eye asks about.
-  let bi=0; for(let i=1;i<days;i++) if(vals[i]>vals[bi]) bi=i;
+  // the only point on the line the eye asks about. The quietest is worth naming
+  // beside it for the same reason in reverse: a week is read by its two ends,
+  // and the line shows where they are without saying what they were.
+  let bi=0, wi=0;
+  for(let i=1;i<days;i++){ if(vals[i]>vals[bi]) bi=i; if(vals[i]<vals[wi]) wi=i; }
   const tone=m==='revenue'?'sage':m==='orders'?'dusk':'amber';
   const fact=(label,value,sub)=>`<div style="min-width:0">
     <div style="font-size:13px;color:var(--text-secondary)">${label}</div>
     <div class="num" style="font-size:18px;font-weight:500;line-height:1.4;margin-top:2px">${value}</div>
     ${sub?`<div class="num" style="font-size:12.5px;color:var(--text-secondary)">${sub}</div>`:''}</div>`;
-  return `${head}<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+
+  /* THE ONE NUMBER THE SCREEN EXISTED TO PRODUCE AND NEVER PRINTED. "Is this
+     week better than last" was answerable only by switching the range chip,
+     remembering a figure, and switching back. The server has computed it all
+     along — `deltas`, one percentage per metric against the window immediately
+     before this one — and null when the previous window was empty, which is
+     silence here rather than a divide-by-zero dressed as growth. */
+  const dl=(state.trendFull&&state.trendFull.deltas)?state.trendFull.deltas[m]:null;
+  const up=Number(dl)>=0;
+  const deltaRow = dl==null ? '' : `<div style="display:flex;align-items:center;gap:8px;border-top:1px solid var(--border-default);margin-top:10px;padding-top:10px">
+    <span style="display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:4px 9px;font-size:13px;font-weight:500;
+      background:var(--${up?'sage':'brick'}-tint);color:var(--${up?'sage':'brick'}-ink)">
+      <span style="display:flex;transform:rotate(${up?0:180}deg)">${ic('arrow-up',13,2.5)}</span>
+      ${(up?'+':'−')+Math.abs(Number(dl))+'%'}</span>
+    <span style="font-size:13px;color:var(--text-secondary)">${
+      T('vs prior '+state.trendRange+' days','对比前 '+state.trendRange+' 天')}</span></div>`;
+
+  const bestDow=trendBestDow(vals);
+  const sections=trendSections();
+  const section=s=>{
+    const open=!!state.trendOpen[s.key];
+    return `<div class="card" style="overflow:hidden">
+      <button onclick="APP.cmd('trendSection','${s.key}')" style="display:flex;align-items:center;gap:12px;width:100%;padding:15px 16px;background:transparent;border:none;cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary)">
+        <span style="flex:none;width:32px;height:32px;border-radius:9px;background:var(--${s.tone}-tint);color:var(--${s.tone}-ink);display:flex;align-items:center;justify-content:center">${ic(s.icon,17)}</span>
+        <span style="flex:1;min-width:0">
+          <span style="display:block;font-size:15.5px;font-weight:500">${s.title}</span>
+          ${/* The first fact, as the CLOSED card's own line: a section that says
+                only its name gives a thumb no reason to spend a tap on it. It
+                goes when the card opens, or the same fact is printed twice —
+                once as a summary and again as the first row under it, which is
+                what it looked like on the first render of this screen. */''}
+          ${open?'':`<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(s.rows[0].t)} · ${escAttr(s.rows[0].v)}</span>`}</span>
+        <span style="flex:none;color:var(--text-secondary);display:flex">${ic(open?'chevron-down':'chevron-right')}</span></button>
+      ${open?`<div style="padding:0 16px 14px;display:flex;flex-direction:column;gap:11px">
+        ${s.rows.map(r=>`<div style="border-top:1px solid var(--border-default);padding-top:11px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+            <span style="font-size:14px;color:var(--text-secondary);min-width:0">${escAttr(r.t)}</span>
+            <span class="num" style="font-size:14.5px;font-weight:500;flex:none;text-align:right">${escAttr(r.v)}</span></div>
+          ${r.bar!=null?`<div style="margin-top:7px;height:6px;border-radius:3px;background:var(--surface-raised);overflow:hidden">
+            <div style="height:6px;border-radius:3px;width:${r.bar}%;background:var(--${s.tone}-ink)"></div></div>`:''}</div>`).join('')}
+      </div>`:''}</div>`;
+  };
+
+  return `${head}<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
     <div class="card" style="padding:16px 14px 12px">${sparkline(vals,tone)}
       <div class="num" style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-secondary);padding:8px 2px 0">
-        <span>${escAttr(fmtDateOnly(t[0].bucket))}</span><span>${escAttr(fmtDateOnly(t[days-1].bucket))}</span></div></div>
+        <span>${escAttr(fmtDateOnly(t[0].bucket))}</span><span>${escAttr(fmtDateOnly(t[days-1].bucket))}</span></div>
+      ${deltaRow}</div>
     <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">
       ${fact(T('Total','合计'),fmt(total))}
       ${fact(T('Busiest day','最高的一天'),fmt(vals[bi]),escAttr(fmtDateOnly(t[bi].bucket)))}
+      ${fact(T('Quietest day','最低的一天'),fmt(vals[wi]),escAttr(fmtDateOnly(t[wi].bucket)))}
       ${fact(T('A typical day','日均'),fmt(total/days))}
+      ${bestDow?fact(T('Best day of the week','一周中最旺的一天'),bestDow,T('on average','平均')):''}
       ${fact(T('Days counted','统计天数'),String(days))}
     </div>
+    ${sections.map(section).join('')}
     ${recapNoMoney()?noteBar(T('Revenue is not shown on this account.','此账号不显示营收。')):''}
-    ${noteBar(T('Charts, chapters and the per-store breakdown are on desktop.','图表、分章与分门店明细在电脑端。'))}</div>`;
+    ${noteBar(T('Hover charts, the cohort grid and the written read are on desktop.','悬停图表、留存矩阵与文字解读在电脑端。'))}</div>`;
 }
 
 /* ==========================================================================
@@ -17693,10 +17959,17 @@ function custAddresses(d){
       </div>
       <div style="font-size:14px;color:var(--text-secondary);line-height:1.55;margin-top:3px">${
         escAttr([a.province,a.city,a.district,a.address,a.detail].filter(Boolean).join(' ')||'—')}</div>
-      ${editable?`<div style="display:flex;gap:16px;margin-top:8px">
-        <button onclick="APP.cmd('caddrOpen','${a.id}')" style="background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Edit','编辑')}</button>
-        <button onclick="APP.cmd('caddrDelete','${a.id}')" style="background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--brick-ink)">${T('Delete','删除')}</button>
-      </div>`:''}
+      ${/* Copy sits OUTSIDE the editable gate and ahead of the two that mutate.
+            It is the read-only one, so a view-only operator — dispatch, customer
+            service — still gets it, and it lands in the same place for them as
+            for an editor rather than shifting under the row. It exists at all
+            because the app stopped being text-selectable: long-pressing a
+            ship-to out of this row was the real use of that gesture here. */''}
+      <div style="display:flex;gap:16px;margin-top:8px">
+        <button onclick="APP.cmd('copyCustAddr','${a.id}')" style="display:inline-flex;align-items:center;gap:5px;background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Copy','复制')} ${ic('copy',13)}</button>
+        ${editable?`<button onclick="APP.cmd('caddrOpen','${a.id}')" style="background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Edit','编辑')}</button>
+        <button onclick="APP.cmd('caddrDelete','${a.id}')" style="background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--brick-ink)">${T('Delete','删除')}</button>`:''}
+      </div>
     </div>`).join('');
   return custSection(T('Addresses','地址'), `<div class="list">${rows}</div>`, add);
 }
@@ -17834,7 +18107,13 @@ function sheetCustomer(){
           <span style="flex:1"></span>
           <button class="iconbtn" onclick="APP.cmd('closeCustomer')" aria-label="${T('Close','关闭')}">${ic('x',20,2)}</button>
         </div>
-        ${c.phone?`<div class="num" style="margin-top:4px;font-size:13px;color:var(--text-secondary)">${c.phone}</div>`:''}
+      ${/* TAP THE NUMBER TO COPY IT. It was plain text whose only way out was a
+            long-press, which is exactly the gesture that pulled Chrome's Google
+            bar over the sheet and is now off app-wide. A phone number is the
+            single most-lifted field on this record — it goes into a dialler or
+            a courier form — so it gets the same one-tap treatment the order
+            card's ship-to has, rather than becoming unreachable. */''}
+        ${c.phone?`<button class="num" onclick="APP.cmd('copyPlain','${escAttr(c.phone)}')" style="display:inline-flex;align-items:center;gap:6px;margin-top:4px;padding:2px 0;background:none;border:none;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-secondary)">${c.phone} ${ic('copy',12)}</button>`:''}
       ${/* Four labelled buttons, and Block is not one of them.
             This row was one worded button and four bare 44px squares —
             pencil, speech bubble, wallet, ban — with the words only in an

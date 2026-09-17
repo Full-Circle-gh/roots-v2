@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * diagnose_unpriced_extras.js — which products must be costed before §162's
+ * diagnose_unpriced_extras.js — which products must be costed before §165's
  * plumbing actually carries any money, in the order that moves the number most.
  *
  * WHY THIS EXISTS
  * ---------------
- * §162 built the pipe: a chosen option that draws down a real shelf
+ * §165 built the pipe: a chosen option that draws down a real shelf
  * (`stock_product_id`) now records what it cost us, in
  * `retail_order_items.options_cost_at_sale`, and routes/finance-summary.js adds
  * it to COGS. The pipe is not the money. 54 live choices carry a stock link and
@@ -28,7 +28,7 @@
  *
  * IT READS HISTORY THROUGH `options_json`, WHICH IS WHY IT CAN RANK AT ALL.
  * The column has been filled by the web and mini-app checkouts for as long as
- * either has had options, so the past is legible even though §162 deliberately
+ * either has had options, so the past is legible even though §165 deliberately
  * back-filled no costs into it. An entry's `stock_product_id` is preferred when
  * present and its `choice_id` is resolved against the live choice table when it
  * is not — older rows predate the link being carried on the line, and dropping
@@ -43,7 +43,7 @@
  * IT DECIDES NOTHING AND CHANGES NOTHING. Read-only, and it proves it: the
  * database is opened `readonly: true` and a write is attempted and REQUIRED to
  * fail before any query runs. Costs are read through productUnitCostYuan(), the
- * same accessor §162's module uses, so "can we price it" means here exactly what
+ * same accessor §165's module uses, so "can we price it" means here exactly what
  * it will mean at the till.
  *
  * HOW TO RUN IT
@@ -233,7 +233,7 @@ out('    BLOCKED by at least one unpriced extra   ' + String(linesBlocked).padSt
     + '   ' + pct(linesBlocked, linesWithLink));
 out();
 out('  Those blocked lines record NULL for their extras — unknown, never zero.');
-out('  They are not wrong. They are simply not yet counted, and §162 deliberately');
+out('  They are not wrong. They are simply not yet counted, and §165 deliberately');
 out('  prefers that to a sum that is quietly low.');
 
 // ════════════════════════════════════════════════════════════════════════════

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.299
+# Tacet shared-core consolidation — decisions record, v4.300
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,9 +23,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-17 · v4.299 — **§162 · A CHOICE THE CUSTOMER MAKES IS PART OF WHAT THE PRODUCT COSTS — AND A FEATURE THAT WAS ALREADY DESIGNED IS WITHDRAWN.** Ash reported a waste problem (*"fresh meals sometimes are waste without the dressing, we keep dressing many time in the freezer"*) and then, two turns later, the thing underneath it: *"beet salad is an example of a salad that we offer to choose 2 types of dressing. the staff made a mistake and put both of them inside the recipe."* **The second report killed the first fix.** A tick on the material and a *was the dressing kept?* question on the waste sheet was designed, measured against the live ledger (¥27.65 of ¥121.93 in thirteen days, `scripts/diagnose_dressing_waste.js`) and is now **withdrawn, not deferred**: it was a workaround for the dressing being buried in a recipe, and once the dressing is its own stocked product a binned salad is a binned salad. **Waste is the one reader this section does not change.** The real fault is not waste at all — Beet Salad carries ¥11.43 where the truth is ¥8.31 or ¥9.33, **20–27% too high on every sale at a ¥48 price**, and the live sweep found it is the ONLY genuine instance among five candidate recipes. The hole it opens is far wider than dressings: 54 option choices draw down a real shelf today and 15 can be priced, on 8.5% of all order lines, and `routes/finance-summary.js` had already written the gap down in its own words — *"OPTIONS carry a price delta with no cost counterpart"*. So `lib/option-cost.js` answers the two questions separately: a SALE takes the chosen choice's cost into the new `retail_order_items.options_cost_at_sale`, and the CATALOGUE takes the **dearest REQUIRED** choice, because nobody has chosen yet and a mean reads plausible while flattering. **A second column rather than a wider `unit_cost_at_sale`, and that is provable rather than tidy**: that column is multiplied by `pack_units` downstream while a linked choice is added once per unit bought, so one column would have charged a six-pack for six oat milks. **The direction of the error is the whole point** — taking the dressing out of the recipe replaces a cost that was too high with one that is too low, and too low is what gets a price cut, so the editor's margin ships in the same commit and a required choice nobody priced **blocks it outright** rather than falling back to the typed figure. Two pairs COMPOSED and declared in `docs/tacet-delivery-vocabulary.md` v1.114. `cost_coverage`, the channel ingest paths and `is_default` are all deliberately untouched, each for a stated reason. Covered by `scripts/test_option_cost.js` (23 checks).
+2026-09-17 · v4.300 — **§165 · A CHOICE THE CUSTOMER MAKES IS PART OF WHAT THE PRODUCT COSTS — AND A FEATURE THAT WAS ALREADY DESIGNED IS WITHDRAWN.** Ash reported a waste problem (*"fresh meals sometimes are waste without the dressing, we keep dressing many time in the freezer"*) and then, two turns later, the thing underneath it: *"beet salad is an example of a salad that we offer to choose 2 types of dressing. the staff made a mistake and put both of them inside the recipe."* **The second report killed the first fix.** A tick on the material and a *was the dressing kept?* question on the waste sheet was designed, measured against the live ledger (¥27.65 of ¥121.93 in thirteen days, `scripts/diagnose_dressing_waste.js`) and is now **withdrawn, not deferred**: it was a workaround for the dressing being buried in a recipe, and once the dressing is its own stocked product a binned salad is a binned salad. **Waste is the one reader this section does not change.** The real fault is not waste at all — Beet Salad carries ¥11.43 where the truth is ¥8.31 or ¥9.33, **20–27% too high on every sale at a ¥48 price**, and the live sweep found it is the ONLY genuine instance among five candidate recipes. The hole it opens is far wider than dressings: 54 option choices draw down a real shelf today and 15 can be priced, on 8.5% of all order lines, and `routes/finance-summary.js` had already written the gap down in its own words — *"OPTIONS carry a price delta with no cost counterpart"*. So `lib/option-cost.js` answers the two questions separately: a SALE takes the chosen choice's cost into the new `retail_order_items.options_cost_at_sale`, and the CATALOGUE takes the **dearest REQUIRED** choice, because nobody has chosen yet and a mean reads plausible while flattering. **A second column rather than a wider `unit_cost_at_sale`, and that is provable rather than tidy**: that column is multiplied by `pack_units` downstream while a linked choice is added once per unit bought, so one column would have charged a six-pack for six oat milks. **The direction of the error is the whole point** — taking the dressing out of the recipe replaces a cost that was too high with one that is too low, and too low is what gets a price cut, so the editor's margin ships in the same commit and a required choice nobody priced **blocks it outright** rather than falling back to the typed figure. Two pairs COMPOSED and declared in `docs/tacet-delivery-vocabulary.md` v1.116. `cost_coverage`, the channel ingest paths and `is_default` are all deliberately untouched, each for a stated reason. Covered by `scripts/test_option_cost.js` (23 checks).
 
-
+2026-09-17 · v4.299 — **§164 · A RECIPE IS NOT ONLY A COST, AND THE KITCHEN NEEDS THE HALF THAT ISN'T — ASKED BY ASH**, choosing how the desktop Recipes screen should reach the phone: *"the only thing is that cost section should be only accessable per role permission . kitchen staff for example can't reach there"*. **THERE IS ONE KEY WHERE THERE SHOULD BE TWO.** `lib/capabilities.js` gives materials, products and waste each a PAIR — a view key that opens the screen and a costs key that reveals the money on it, with `waste:costs` deliberately off in both floor presets — and gives Recipes only `recipes:view`, which **alone among the view keys carries `money: 'shows'`**, justified by MONEY_NOTES' `A recipe is a cost. · 食谱本身就是成本。`. That sentence is TRUE of the screen as it stands, which is why the coin is on the wrong KEY rather than simply wrong: with nothing else to carry it, opening Recipes at all IS seeing money, and a kitchen operator cannot be handed the ingredients and the steps without also being handed the batch cost, the cost per gram and the margin on everything the recipe makes. **THE DECISION: MINT `recipes:costs` AND MOVE THE COIN ONTO IT**, modelled line for line on `products:costs`; `recipes:view` loses its mark and the note is reworded onto the new key, which is now the thing the sentence is about. **THE COIN COMES OFF ONLY TOGETHER WITH THE GATE, IN ONE PR** — the list prints Cost, Cost per gram and the whole-batch fallback in columns of its own, and un-marking the key while those still paint would call it safe while it still shows money, which is worse than the state it replaces. **IT GOES ON THE DESKTOP, NOT ONLY ON THE PHONE**: `public/retail-admin/19-recipes.js` is 3,031 lines carrying exactly one capability check — `canEdit()` on `recipes:edit` — so Cost & Pricing is visible to everyone who can open the screen, and a gate added only to the phone is one a laptop steps around. **AND IT TAKES SOMETHING AWAY ON THE DAY IT SHIPS**, deliberately rather than as a side effect: `owner` holds everything, `admin` and `manager` are `ALL_KEYS` filters that pick the new key up on the same deploy, and no floor preset holds `recipes:view` at all — so what is left is operators ticked on **by name**, a list read off live data and acted on per person BEFORE the gate merges, because no session can see it from the repository. Does NOT decide the mobile Recipes build, which is its own decision and its own PR, and does not touch `lib/cap-routes.js`: GETs are open at that choke point, so this is a client-side read gate over data the endpoint already returns. One pair composed — `See recipe cost & margin · 查看食谱成本与毛利`, the live `products:costs` pair with its one noun swapped (产品 → 食谱, the noun `recipes:view` already carries) — declared in §164 with its sources and its rejected candidate, and locked in `docs/tacet-delivery-vocabulary.md` in the commit that ships the code, not before.
 
 2026-09-17 · v4.298 — **§161 · A DUPLICATED PRODUCT CARRIES ANOTHER PRODUCT'S PAGE, AND NOW SAYS SO — REPORTED BY ASH**, who duplicated a product, changed everything about the copy, pressed *Auto-fill from text*, opened the Product editor and found the ORIGINAL's words still there, behind a browser popup saying the page might not be saved: *"all info there still from the dublicate product, not the new iunformation i added"*. **THREE FAULTS WORE ONE SYMPTOM, AND TWO OF THEM MADE THE THIRD INVISIBLE.** `pdOpenPageDesign()` opened the editor without flushing the pending autosave — the editor re-fetches with `cache:'no-store'`, and *Auto-fill* ends on `pdScheduleAutosave()`, so clicking straight through landed inside the 800ms debounce every time; `pdOpen()` and `pdRecipeLinkOpen()` already flushed and this was the one exit that did not. `openProductEditor()` re-pointed the editor's **iframe** `src` with no word to the editor, so its own `beforeunload` fired and the browser asked its generic question — **that is the popup, and Cancel there ABORTS the navigation**, leaving the previous product on screen with nothing said, which is the other half of "it ignored my changes". **THE DECISION: DUPLICATE KEEPS COPYING THE PAGE, AND THE COPY IS MARKED INSTEAD.** Copying `description_blocks` is correct and stays — a 500g/1kg size variant wants the same page, which is most of what duplicate is for; **the rejected alternative was to stop copying it**, breaking the common case to fix the uncommon one. What was missing is that the copy had no way to SAY whose page it carried, since nothing in the classic product form writes to that column. **`store_products.blocks_from_product_id`**, an `INTEGER` added through `addColumn` per the README's convention, set by the duplicate endpoint **only when there were sections to copy** — stamping a copy of a pageless product would print "came from X" over nothing. **IT IS A FACT ABOUT THE ROW, AND THAT IS THE POINT:** the existing *"Designed page is out of date"* nudge answers a different question — *has this been edited since it was built?* — and dies on every reload, and a warning you have to re-earn by typing is not a warning about a duplicate, which arrives wrong before anybody types. **THE MARK IS THE SERVER'S TO SET AND TO CLEAR**: deliberately absent from `PRODUCT_PATCH_ALLOWED`, and cleared on **every** write of `description_blocks` rather than on a rebuild specifically — no write leaves it true, and a client that had to remember to clear it is one that will one day forget. **A FOURTH FAULT, CAUGHT REVIEWING THE FIX AGAINST ITS OWN CONSEQUENCES:** the nudge had gated on `use_block_design`, which only decides what the SHOPFRONT draws — the sections exist either way — so a copy whose source had *Design: Off* went unwarned; re-gating it on the sections existing then put its **Rebuild** button within reach of a product showing its classic description, where `pdAutoComposeBlocks()`'s hardcoded `use_block_design: 1` **would have quietly moved shoppers onto the designed page**. A button offering to refresh some words must not change what the shop shows; `keepFlag` now carries the live value, and the two callers that genuinely mean *turn it on* — the Design switch and the wizard's option — are unchanged. **COVERAGE:** `test_product_duplicate_fields.js` section 5 runs the SHIPPED duplicate handler against a real in-memory database (sections kept, source recorded, source itself unmarked, mark in the reply, and **not** marked when there was nothing to copy — `NULL` and `'[]'` both); the new `test_product_editor_open_freshness.js` asserts the flush, the iframe handover, the gate, `keepFlag` and that the clear rides on the `description_blocks` write itself. **Every case red-proofed against the tree before the fix.** **ONE PAIR COMPOSED** — `Designed page came from X · 设计页来自 X`, both halves lifted (`设计页` from the bar's own existing line, `来自` from the locked `来自仓库`), declared with its rejected live candidates in `docs/tacet-delivery-vocabulary.md` v1.112; the compact summary row keeps the existing locked pair. `test:fast` **274 suites, 0 failed** — the suite COUNT is unchanged because this adds cases to two existing files rather than a third: 6 to `test_product_duplicate_fields.js` and 10 to `test_product_editor_open_freshness.js`, which was itself added earlier in the same branch and is already in the 274. eslint 0 errors; doc-numbering PASS; swallowed-errors PASS at budget. **Schema: one idempotent `addColumn`, no rebuild, no backfill.** No change to `.gitignore` or CI.
 
@@ -17298,8 +17298,136 @@ freshness.js` asserts the rest against source — the flush, the iframe handover
 gate, `keepFlag`, and that the clear rides on the `description_blocks` write itself.
 Every case red-proofed against the tree before the fix.
 
+## §164 — A RECIPE IS NOT ONLY A COST, AND THE KITCHEN NEEDS THE HALF THAT ISN'T
 
-## §162 — A CHOICE THE CUSTOMER MAKES IS PART OF WHAT THE PRODUCT COSTS
+Asked by Ash, 2026-09-17, while choosing how the desktop Recipes screen should land
+on the phone: *"the only thing is that cost section should be only accessable per
+role permission . kitchen staff for example can't reach there"*.
+
+### THE FINDING: THERE IS ONE KEY WHERE THERE SHOULD BE TWO
+
+`lib/capabilities.js` gives every other section of this kind a PAIR — a view key that
+opens the screen, and a costs key that reveals the money on it:
+
+| opens the screen | reveals the money |
+| --- | --- |
+| `materials:view` | `materials:costs` |
+| `products:view` | `products:costs` |
+| `waste:view` | `waste:costs` — off in both floor presets |
+| `recipes:view` | **nothing** |
+
+And `recipes:view`, alone among the view keys, carries `money: 'shows'`. MONEY_NOTES
+says why:
+
+```
+'recipes:view': ['A recipe is a cost.', '食谱本身就是成本。']
+```
+
+**That sentence is true of the screen as it stands, which is why the coin is on the
+wrong KEY rather than simply wrong.** With no costs key to carry it, opening Recipes
+at all IS seeing money. So there is no way today to grant a kitchen operator the
+ingredients and the steps without also granting the batch cost, the cost per gram,
+and the margin on every product the recipe makes.
+
+### THE DECISION: MINT `recipes:costs`, AND MOVE THE COIN ONTO IT
+
+```js
+{ key: 'recipes:costs', group: 'run', section: 'recipes',
+  labelEn: 'See recipe cost & margin', labelCn: '查看食谱成本与毛利', money: 'shows' }
+```
+
+Placed beside `recipes:view`, modelled line for line on `products:costs`.
+`recipes:view` loses `money: 'shows'`, and `A recipe is a cost.` is retired from
+MONEY_NOTES — reworded onto the new key, which is now the thing that sentence is
+about.
+
+**THE COIN COMES OFF ONLY TOGETHER WITH THE GATE, IN ONE PR.** The Recipes list
+prints Cost, Cost per gram and the whole-batch fallback in columns of its own.
+Dropping the mark from `recipes:view` while those columns still paint would mark the
+key safe while it still shows money — worse than the state it replaces, because the
+role editor's coin is the one place an assigner is told what a key reveals.
+
+### IT GOES ON THE DESKTOP, NOT ONLY ON THE PHONE
+
+`public/retail-admin/19-recipes.js` is 3,031 lines and contains exactly one
+capability check:
+
+```js
+function canEdit() { return typeof can !== 'function' || can('recipes:edit'); }
+```
+
+Cost & Pricing is visible to everyone who can open the screen. A gate added only to
+the phone is a gate somebody steps around by opening a laptop, and it would be
+security theatre rather than a permission. Three surfaces, one PR: the desktop
+sub-tab, the desktop list's cost columns, and — when it is built — the phone's cost
+tab and its list columns.
+
+### WHAT THIS TAKES AWAY ON THE DAY IT SHIPS, AND FROM WHOM
+
+Adding a gate to a screen already in use removes something on deploy. `public/m.html`
+states the rule for its own rows: *"A new row can be born gated; an old one cannot be
+gated retroactively inside an unrelated build."* This IS that kind of change, made
+deliberately and on its own rather than folded into an unrelated build. The blast
+radius is small but not empty:
+
+- `owner` holds everything.
+- `admin` and `manager` are `ALL_KEYS` filters and pick `recipes:costs` up on the
+  same deploy that mints it.
+- No floor preset carries `recipes:view` at all — it is ticked on per person by name,
+  the way `PRESETS`' own note already says.
+
+What is left is the operators ticked on **by name** with `recipes:view`. **Before the
+gate ships, that list is read off live data and each person is granted
+`recipes:costs` or deliberately not.** No session can see that list from the
+repository; it is checked on the box.
+
+### WHAT THIS DOES NOT DECIDE
+
+Not the mobile Recipes build — that is its own decision and its own PR, and this one
+only says what the permission looks like when it arrives.
+
+And nothing in `lib/cap-routes.js`. `requiredCapFor()` returns `null` for GET, HEAD
+and OPTIONS — *reads open* — so `recipes:costs` is a CLIENT-SIDE read gate over data
+the same endpoint already returns. Whether the API should withhold cost fields per
+capability is a separate question nobody has asked yet, and inventing an answer here
+would gate a dozen live readers on a decision made in passing.
+
+### VOCABULARY
+
+One pair composed: `See recipe cost & margin · 查看食谱成本与毛利`.
+
+Both halves are the live `products:costs` pair — `See product cost & margin ·
+查看产品成本与毛利` — with its one noun swapped for the noun `recipes:view` already
+carries: 产品 → 食谱. Every character is lifted rather than minted: 查看 from five
+sibling view keys, 食谱 from `recipes:view`'s own `查看食谱`, and 成本与毛利 from
+`products:costs` untouched.
+
+**Rejected:** `成本与定价`, the desktop record's own Cost & Pricing sub-tab pair. It
+names a TAB, and this key is not the tab — it also gates the list's columns — and
+定价 claims a pricing write the key does not grant.
+
+The MONEY_NOTES sentence composed alongside it: `Recipes show batch cost, cost per
+gram and margin. · 食谱显示整批成本、每克成本与毛利。` — 显示 and the sentence shape
+from `products:costs`' own note, 整批 and 每克成本 from the Recipes list's live column
+headings.
+
+Composed by Claude under the fourth amendment's standing delegation. Both are
+declared HERE, with their sources and the rejected candidate, and **locked in
+`docs/tacet-delivery-vocabulary.md` in the commit that ships the code, not before** —
+that file records what is in the tree, and neither string is yet.
+
+### COVERAGE
+
+None yet: this is a decision ahead of its code, per CLAUDE.md's *decisions before
+code*. The PR that implements it carries
+
+- a test that `recipes:view` no longer carries `money` and that `recipes:costs` does;
+- a test that the desktop Cost & Pricing sub-tab and the list's cost columns are
+  absent without `recipes:costs` and present with it;
+- the by-name grant list above, read off live data and acted on before merge.
+
+
+## §165 — A CHOICE THE CUSTOMER MAKES IS PART OF WHAT THE PRODUCT COSTS
 
 Reported by Ash, 2026-09-17, working outward from the waste ledger: *"fresh meals
 sometimes are waste without the dressing, we keep dressing many time in the

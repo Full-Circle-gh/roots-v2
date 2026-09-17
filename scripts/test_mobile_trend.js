@@ -9,10 +9,13 @@
  * last?" is a question you ask standing in the shop and the phone could not
  * answer it at any length.
  *
- * It is deliberately NOT the desktop's Reports: no chapters, no hover columns,
- * no per-store breakdown. The endpoint's own `trend` array — one bucket per day
- * of {bucket, orders, revenue, visits} — was already being fetched for a single
- * day; this asks for a window and draws the shape plus four numbers.
+ * It is still not the desktop's Reports — no hover columns, no cohort grid, no
+ * written read — but it stopped being only a line and four numbers. The screen
+ * was reading ONE key of /dashboard's reply, `trend`, and discarding the rest of
+ * the object: the deltas against the previous window, the payment mix, the
+ * day×hour heat, the status funnel, the cohort tables and the per-store split
+ * the old note sent people to a desktop for. All of that is now on the phone,
+ * out of the same single request, in four sections that open one at a time.
  *
  * The money gate is the Recap's, and it is asserted hardest: a warehouse
  * account must not be offered Revenue, must not DEFAULT to it, and must not see
@@ -144,5 +147,139 @@ const CASES = [
     ['rather than empty', `!txt('content').includes('Nothing in this window')`],
   ]],
 ];
+
+/* ── The rest of the payload ───────────────────────────────────────────────
+ * The screen used to read one key of /dashboard's reply, `trend`, and drop the
+ * object. These cases hold the line on the four things that came off the floor
+ * with it: the delta against the previous window, the fact sections, the
+ * per-store split the old note sent people to a desktop for, and — hardest —
+ * the money gate reaching into all of it.
+ *
+ * The payload below is the reply's real shape, keys and all, so a server-side
+ * rename breaks a test here rather than a card on somebody's phone.
+ */
+const FULL = WEEK + `state.trendFull={
+  deltas:{revenue:12.5,orders:8,visits:-4.2},
+  payments:[{method:'wechat',orders:60,revenue:6000},{method:'cash',orders:30,revenue:3000}],
+  heat:[{dow:6,hour:18,orders:22,revenue:2200},{dow:1,hour:9,orders:4,revenue:400}],
+  funnel:{delivered:{n:84,revenue:8400},cancelled:{n:3,revenue:300}},
+  marketing:{vouchers:[{discount:250,uses:12}]},
+  new_vs_returning:{buyers:70,new_buyers:21,returning_buyers:49},
+  topCustomers:[{customer_id:5,nickname:'Mei',revenue:980,orders:6}],
+  geoCities:[{city:'广州',city_en:'Guangzhou',orders:61,revenue:6100}],
+  topProducts:[{product_id:2,name_en:'Falafel Wrap',name_cn:'法拉费卷',units:140,revenue:2800}],
+  kpis:{conversion_rate:6.25},
+  checkout:{started:40,converted:25,abandoned:15},
+  stores:[{store_id:1,name_en:'Tianhe',name_cn:'天河',orders:52,revenue:5200},
+          {store_id:2,name_en:'Panyu',name_cn:'番禺',orders:38,revenue:3800}],
+  cohortSizes:[], cohorts:[]};`;
+
+/* Fourteen days, worth 100 on a Saturday and 10 on anything else — built off
+ * the runner's clock for the same reason the week above is, and long enough
+ * that every weekday has had two goes at it. */
+const FORTNIGHT = CLOCK + `
+  var _v=function(off){ var d=new Date(_n.getFullYear(), _n.getMonth(), _n.getDate()+off); return d.getDay()===6?100:10; };
+  var _t=[]; for(var i=13;i>=0;i--){ _t.push({bucket:_day(-i),orders:_v(-i),revenue:_v(-i)*10,visits:_v(-i)*2}); }
+  state.trendRange='30'; state.trendKey='30'; state.trend=_t;`;
+
+/* Retention is the one figure on the screen that is NOT the window's — cohorts
+ * come back full-history — so its months are built off shopToday(), which is
+ * the clock trendRetain1 compares against, and not off the runner's local one. */
+const COHORTS = FULL + `
+  var _T=shopToday(), _sy=Number(_T.slice(0,4)), _sm=Number(_T.slice(5,7));
+  var _ym=function(off){ var t=(_sm-1)+off, y=_sy+Math.floor(t/12), mo=((t%12)+12)%12+1;
+    return y+'-'+String(mo).padStart(2,'0'); };
+  state.trendFull.cohortSizes=[{cohort_month:_ym(-2),size:100},{cohort_month:_ym(0),size:50}];
+  state.trendFull.cohorts=[{cohort_month:_ym(-2),active_month:_ym(-1),active_customers:40}];`;
+
+CASES.push(
+  ['the window before this one', FULL + `APP.cmd('push','trend');`, [
+    // "Is this week better than last" was answerable only by switching the
+    // range chip, remembering a figure and switching back. The server had
+    // computed it all along.
+    ['the change is stated', `txt('content').includes('+12.5%')`],
+    ['against a named window', `txt('content').includes('vs prior 7 days')`],
+  ]],
+  ['a fall reads as a fall', FULL + `APP.cmd('push','trend'); APP.cmd('trendMetric','visits');`, [
+    ['signed, not coloured only', `txt('content').includes('−4.2%')`],
+  ]],
+  ['no previous window, no claim', WEEK + `state.trendFull={deltas:{revenue:null}}; APP.cmd('push','trend');`, [
+    // null is the server saying the window before this one was empty. Silence,
+    // not a divide-by-zero dressed as growth.
+    ['nothing is said', `!txt('content').includes('vs prior')`],
+  ]],
+
+  ['the fact sections', FULL + `APP.cmd('push','trend');`, [
+    ['all four are offered', `['Sales','Customers','Products & traffic','Stores'].every(function(s){return txt('content').includes(s)})`],
+    // A section that says only its name gives a thumb no reason to spend a tap.
+    ['each carries its first fact closed', `txt('content').includes('WeChat Pay share of revenue · 67%')`],
+    ['and the rest stay shut',             `!txt('content').includes('Given away in vouchers')`],
+  ]],
+  ['opening one', FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','sales');`, [
+    ['the rows arrive',   `txt('content').includes('Given away in vouchers')`],
+    ['the hour is named', `txt('content').includes('Saturday 18:00')`],
+    ['the funnel too',    `txt('content').includes('84 · ¥8,400')`],
+    ['and the others are still shut', `!txt('content').includes('Top spender')`],
+    // The summary line is the CLOSED card's. Open, the same fact would be
+    // printed twice — once as the summary and again as the first row under it.
+    ['the summary line is not repeated under itself',
+     `txt('content').split('WeChat Pay share of revenue').length === 2`],
+  ]],
+  ['the per-store breakdown is on the phone now', FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','stores');`, [
+    ['the stores are named',    `txt('content').includes('Tianhe') && txt('content').includes('Panyu')`],
+    ['with what each one took', `txt('content').includes('52 · ¥5,200')`],
+    // The note used to promise this screen could not do it. It no longer says so.
+    ['and the note stops sending you to a desktop for it', `!txt('content').includes('per-store')`],
+  ]],
+  ['customers and products', FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','customers'); APP.cmd('trendSection','products');`, [
+    ['buyers are counted',   `txt('content').includes('People bought')`],
+    ['new ones as a share',  `txt('content').includes('30%')`],
+    ['the city is English on an English phone', `txt('content').includes('Guangzhou · 61 orders')`],
+    ['the seller is named',  `txt('content').includes('Falafel Wrap')`],
+    // kpis.conversion_rate is the mini app's own, never all-channel orders
+    // over sessions — the server fixed that at source and this reads it whole.
+    ['conversion is the server\'s',  `txt('content').includes('6.3%')`],
+  ]],
+  ['retention is full history, not the window', COHORTS + `APP.cmd('push','trend'); APP.cmd('trendSection','customers');`, [
+    // 40 of a 100-strong cohort still buying a month on; the cohort too young
+    // to have a month behind it is not counted in either half of the fraction.
+    ['the weighted curve is read at one month', `txt('content').includes('Still buying a month later') && txt('content').includes('40%')`],
+  ]],
+
+  // ── The money gate, now that there is more to gate ─────────────────────
+  ['a warehouse account sees no money in the sections either',
+   `state.pos='warehouse'; ` + FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','sales'); APP.cmd('trendSection','stores');`, [
+    ['not anywhere on the screen',       `!txt('content').includes('¥')`],
+    // Dropped, not zeroed and not blurred: a row about revenue is a revenue
+    // row even when it prints a percentage.
+    ['the payment mix is gone',          `!txt('content').includes('share of revenue')`],
+    ['the voucher giveaway with it',     `!txt('content').includes('Given away in vouchers')`],
+    ['and the top spender',              `!txt('content').includes('Top spender')`],
+    ['what is not about money survives', `txt('content').includes('Busiest hour')`],
+    ['stores are counted, not priced',   `txt('content').includes('52 orders')`],
+  ]],
+  ['a section with nothing left in it is not drawn',
+   `state.pos='warehouse'; ` + WEEK + `state.trendFull={payments:[{method:'wechat',orders:60,revenue:6000}]}; APP.cmd('push','trend');`, [
+    // Every row this section could have held was money. An empty card headed
+    // "Sales" is worse than no card.
+    ['no empty card', `!txt('content').includes('Sales')`],
+  ]],
+
+  // ── The two ends of the line, and the pattern behind them ──────────────
+  ['both ends of the week are named', WEEK + `APP.cmd('push','trend');`, [
+    ['the busiest',  `txt('content').includes('Busiest day')`],
+    ['the quietest', `txt('content').includes('Quietest day')`],
+  ]],
+  ['one Saturday is not a pattern', WEEK + `APP.cmd('push','trend');`, [
+    // Seven days gives every weekday exactly one go. "Best day of the week"
+    // would then be the busiest day already named above, wearing a label that
+    // claims more than it knows.
+    ['so the weekday is not claimed', `!txt('content').includes('Best day of the week')`],
+  ]],
+  ['two of each is', FORTNIGHT + `APP.cmd('push','trend'); APP.cmd('trendMetric','orders');`, [
+    ['the weekday is named', `txt('content').includes('Best day of the week')`],
+    ['and it is the right one', `txt('content').includes('Saturday')`],
+  ]],
+);
 
 run('trend', CASES);
