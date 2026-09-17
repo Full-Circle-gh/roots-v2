@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.298
+# Tacet shared-core consolidation — decisions record, v4.299
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-17 · v4.299 — **§162 · YUEXIU GETS ITS OWN RESIDENTIAL EXIT, AND THE GZ RUNG — INSTRUCTED BY ASH**, ahead of Yuexiu reopening onto the arrangement that produced **114 risk-control challenges against Tianhe's 0**. **TWO FAULTS WORE THAT ONE NUMBER AND ONLY ONE OF THEM WAS THE MISSING RUNG.** `residentialUrl()` took **no channel argument**, so both stores resolved `PROXY_RESIDENTIAL` and left through the ONE reverse-SSH tunnel — SOCKS5 on `127.0.0.1:1180`, listener owned by the `sshd` process serving user `tianheproxy`, over TCP/22 — which is why v4.71 found their UP periods identical to the second (63s, 675s). **So "Yuexiu's tunnel flapped" was never true: Tianhe's tunnel flapped and Yuexiu was on it**, one dropped TCP session taking both channels at once. **DECISION ONE:** `residentialUrl(channel)` reads **`PROXY_RESIDENTIAL_<CHANNEL>`** first, falling back to the shared value, so a channel with no dedicated exit behaves exactly as before — **it ships dark and goes live when the variable is set**, and provisioning need not land with the code. The variable holds a URL, not a tunnel: `socks5://` from an SSH tunnel and `http://user:pass@` from a paid provider both parse through `new URL()` with credentials carried, which is what lets decision three stay open. **DECISION TWO:** `candidates()` now returns **residential → GZ → direct for BOTH channels**; Yuexiu had no middle rung and landed on a Hong Kong IP, the country change 风控 answers with a 418. **Read v4.71's limit with it:** rung and channel are confounded, so this is **the experiment that separates them** — if the challenges stop while it stays on 闪购, the mechanism is confirmed; if not, the rung was never the variable. **DECISION THREE IS NOT MADE AND MUST NOT BE INFERRED FROM THE CODE:** whether Yuexiu's exit is a **paid static residential IP** or **a second SSH tunnel in the Tianhe pattern** is Ash's call and is open — a second tunnel is cheap and understood but inherits v4.71 wholesale (an sshd-owned listener is deleted by a blip, not degraded), a paid static IP removes that failure mode for money. **Decoupling does not make either tunnel steadier; it stops one store's flap from being both stores' flap.** **A COST THIS BUILD CREATES, RECORDED BECAUSE IT IS REAL:** both channels now fall back to the SAME GZ IP, and the 2026-06-28 outage is what one shared proxy serving both channels looks like when it wedges — the right trade today, but a trade, and `PROXY_GZ` is the seam if it ever needs splitting. **OUT OF SCOPE, DELIBERATELY:** `proxy-watchdog.js`'s one-sided hysteresis (`FAIL_THRESHOLD=2` down, **UP on the first success**) is untouched at Ash's instruction — **this build halves what a single flap costs, because only one channel now moves, but a channel whose own tunnel is marginal oscillates exactly as before.** **COVERAGE:** `scripts/test_proxy_failover.js` — the fake curl answers the two tunnels separately, matched by port since both are socks5h; asserted are the three rungs on both channels, per-channel URL resolution, the shared-fallback path, Yuexiu landing on GZ rather than 直连, 直连 still reachable when GZ is down too, and **in both directions, one tunnel dropping not moving the other channel** — the case that could not be expressed while there was one tunnel. Runbook for provisioning the second exit: `docs/yuexiu-residential-tunnel.md`. **No change to `.gitignore` or CI.** No schema change, no new route, no capability change.
 
 2026-09-17 · v4.298 — **§161 · A DUPLICATED PRODUCT CARRIES ANOTHER PRODUCT'S PAGE, AND NOW SAYS SO — REPORTED BY ASH**, who duplicated a product, changed everything about the copy, pressed *Auto-fill from text*, opened the Product editor and found the ORIGINAL's words still there, behind a browser popup saying the page might not be saved: *"all info there still from the dublicate product, not the new iunformation i added"*. **THREE FAULTS WORE ONE SYMPTOM, AND TWO OF THEM MADE THE THIRD INVISIBLE.** `pdOpenPageDesign()` opened the editor without flushing the pending autosave — the editor re-fetches with `cache:'no-store'`, and *Auto-fill* ends on `pdScheduleAutosave()`, so clicking straight through landed inside the 800ms debounce every time; `pdOpen()` and `pdRecipeLinkOpen()` already flushed and this was the one exit that did not. `openProductEditor()` re-pointed the editor's **iframe** `src` with no word to the editor, so its own `beforeunload` fired and the browser asked its generic question — **that is the popup, and Cancel there ABORTS the navigation**, leaving the previous product on screen with nothing said, which is the other half of "it ignored my changes". **THE DECISION: DUPLICATE KEEPS COPYING THE PAGE, AND THE COPY IS MARKED INSTEAD.** Copying `description_blocks` is correct and stays — a 500g/1kg size variant wants the same page, which is most of what duplicate is for; **the rejected alternative was to stop copying it**, breaking the common case to fix the uncommon one. What was missing is that the copy had no way to SAY whose page it carried, since nothing in the classic product form writes to that column. **`store_products.blocks_from_product_id`**, an `INTEGER` added through `addColumn` per the README's convention, set by the duplicate endpoint **only when there were sections to copy** — stamping a copy of a pageless product would print "came from X" over nothing. **IT IS A FACT ABOUT THE ROW, AND THAT IS THE POINT:** the existing *"Designed page is out of date"* nudge answers a different question — *has this been edited since it was built?* — and dies on every reload, and a warning you have to re-earn by typing is not a warning about a duplicate, which arrives wrong before anybody types. **THE MARK IS THE SERVER'S TO SET AND TO CLEAR**: deliberately absent from `PRODUCT_PATCH_ALLOWED`, and cleared on **every** write of `description_blocks` rather than on a rebuild specifically — no write leaves it true, and a client that had to remember to clear it is one that will one day forget. **A FOURTH FAULT, CAUGHT REVIEWING THE FIX AGAINST ITS OWN CONSEQUENCES:** the nudge had gated on `use_block_design`, which only decides what the SHOPFRONT draws — the sections exist either way — so a copy whose source had *Design: Off* went unwarned; re-gating it on the sections existing then put its **Rebuild** button within reach of a product showing its classic description, where `pdAutoComposeBlocks()`'s hardcoded `use_block_design: 1` **would have quietly moved shoppers onto the designed page**. A button offering to refresh some words must not change what the shop shows; `keepFlag` now carries the live value, and the two callers that genuinely mean *turn it on* — the Design switch and the wizard's option — are unchanged. **COVERAGE:** `test_product_duplicate_fields.js` section 5 runs the SHIPPED duplicate handler against a real in-memory database (sections kept, source recorded, source itself unmarked, mark in the reply, and **not** marked when there was nothing to copy — `NULL` and `'[]'` both); the new `test_product_editor_open_freshness.js` asserts the flush, the iframe handover, the gate, `keepFlag` and that the clear rides on the `description_blocks` write itself. **Every case red-proofed against the tree before the fix.** **ONE PAIR COMPOSED** — `Designed page came from X · 设计页来自 X`, both halves lifted (`设计页` from the bar's own existing line, `来自` from the locked `来自仓库`), declared with its rejected live candidates in `docs/tacet-delivery-vocabulary.md` v1.112; the compact summary row keeps the existing locked pair. `test:fast` **274 suites, 0 failed** — the suite COUNT is unchanged because this adds cases to two existing files rather than a third: 6 to `test_product_duplicate_fields.js` and 10 to `test_product_editor_open_freshness.js`, which was itself added earlier in the same branch and is already in the 274. eslint 0 errors; doc-numbering PASS; swallowed-errors PASS at budget. **Schema: one idempotent `addColumn`, no rebuild, no backfill.** No change to `.gitignore` or CI.
 
@@ -17293,3 +17295,95 @@ there was nothing to copy (`NULL` and `'[]'` both). `scripts/test_product_editor
 freshness.js` asserts the rest against source — the flush, the iframe handover, the
 gate, `keepFlag`, and that the clear rides on the `description_blocks` write itself.
 Every case red-proofed against the tree before the fix.
+
+---
+
+## §162 — YUEXIU GETS ITS OWN RESIDENTIAL EXIT, AND THE GZ RUNG — THE PROVIDER IS STILL ASH'S TO PICK
+
+**2026-09-17. Yuexiu is reopening, and it is reopening onto the arrangement that
+produced 114 risk-control challenges against Tianhe's 0.** Two separate faults
+wore that one number, and this entry separates them because only one of them is
+fully decided.
+
+### What was actually shared, confirmed against the tree
+
+`residentialUrl()` took **no channel argument**. Both stores resolved
+`PROXY_RESIDENTIAL` and left through the **one** reverse-SSH tunnel: SOCKS5 on
+`127.0.0.1:1180`, the listener owned by the `sshd` process serving user
+`tianheproxy`, over TCP/22. That is not an inference — v4.71 recorded the
+`ss -lntp` PID matching the flap minute exactly, and the 08-23 comparison notes
+the two channels showing **identical UP-period durations (63s, 675s)** for
+precisely this reason.
+
+**So "Yuexiu's tunnel flapped" was never true. Tianhe's tunnel flapped, and
+Yuexiu was on it.** One dropped TCP session took both channels at once.
+
+### Decision one: each channel resolves its own residential exit
+
+`residentialUrl(channel)` now reads **`PROXY_RESIDENTIAL_<CHANNEL>`** first and
+falls back to the shared `PROXY_RESIDENTIAL`. A channel with no dedicated value
+behaves exactly as it did, so this ships dark and goes live when the variable is
+set — the provisioning and the code do not have to land together.
+
+**The variable holds a URL, not a tunnel.** `socks5://host:port` from an SSH
+tunnel and `http://user:pass@host:port` from a paid provider are both parsed by
+`new URL()` and carried through by every consumer, credentials included. **That
+is deliberate, and it is what lets decision three stay open without blocking
+this one.**
+
+### Decision two: Yuexiu gets the GZ rung — Ash's instruction, 2026-09-17
+
+`candidates()` now returns **residential → GZ → direct for both channels**.
+Yuexiu had residential → direct, so a flap put a Guangzhou store on a Hong Kong
+IP, which is the country change 风控 answers with a 418.
+
+**Read v4.71's limit with this, not around it:** rung and channel are
+confounded — the stores run different daemons against different channels, and
+闪购 may simply enforce harder. **Giving Yuexiu the rung is the experiment that
+separates them.** If the challenges stop while it stays on 闪购, the channel is
+ruled out and the country-change mechanism is confirmed. If they do not, the
+rung was never the variable and the record should say so.
+
+### Decision three is NOT made, and must not be inferred from the code
+
+**Whether Yuexiu's dedicated exit is a paid static residential IP or a second
+SSH tunnel in the Tianhe pattern is Ash's call and is open.** The code is
+written so that either answer is one `.env` line. Nothing in this build should
+be read as having settled it.
+
+**The two arguments, stated once so the decision is made on them:** a second SSH
+tunnel is cheap and already understood, and inherits v4.71 wholesale — the
+listener is owned by an sshd session, so a blip deletes the proxy rather than
+degrading it. A paid static IP removes that failure mode entirely and costs
+money monthly. **Decoupling the channels does not make either tunnel steadier;
+it only stops one store's flap from being both stores' flap.**
+
+### A cost this build creates, recorded because it is real
+
+**Both channels now fall back to the SAME GZ datacenter IP.** Two Guangzhou
+stores sharing one datacenter exit during a flap is itself a fingerprint, and
+the 2026-06-28 outage is what one shared proxy serving both channels looks like
+when it wedges. It is the right trade today — a shared Guangzhou IP beats a Hong
+Kong one — but it is a trade, and if the GZ rung ever needs splitting, `PROXY_GZ`
+is the seam.
+
+### Out of scope, deliberately
+
+**`proxy-watchdog.js`'s one-sided hysteresis is untouched.** `FAIL_THRESHOLD=2`
+to go DOWN but **UP on the first success** is what lets a marginal tunnel
+oscillate — 4 transitions in 11 minutes, each relaunching two browsers — and the
+holders have no relaunch debounce to absorb it. It is a known issue with its own
+record (v4.71, v4.69) and Ash scoped it out of this brief. **This build makes it
+no better and no worse: it halves what a single flap costs, because only one
+channel now moves, but a channel whose own tunnel is marginal will still
+oscillate exactly as before.**
+
+### Coverage
+
+`scripts/test_proxy_failover.js` — the fake curl now answers the two tunnels
+separately, matched by port, because both are socks5h. Asserted: both channels
+carry all three rungs; each resolves its own residential URL; a channel with no
+dedicated variable still rides the shared one; Yuexiu's tunnel dying lands it on
+GZ and not on 直连; Yuexiu still reaches 直连 when GZ is down too; **and, in both
+directions, one tunnel dropping does not move the other channel** — the case
+that could not even be expressed while there was one tunnel.

@@ -41,12 +41,16 @@ async function it(name, fn) {
 // ── Fake curl: answers with a per-path status code and records its args ──────
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'proxyprobe-'));
 const LOG = path.join(TMP, 'calls.log');
+// The two residential tunnels answer SEPARATELY — matched by port, since both
+// are socks5h. That separation is the point of the build: one tunnel's session
+// dropping must not read as the other's.
 fs.writeFileSync(path.join(TMP, 'curl'), `#!/bin/sh
 echo "$*" >> "${LOG}"
 case "$*" in
-  *socks5h*) printf '%s' "\${FAKE_CODE_RES:-000}" ;;
-  *-x*)      printf '%s' "\${FAKE_CODE_GZ:-000}" ;;
-  *)         printf '%s' "\${FAKE_CODE_DIRECT:-000}" ;;
+  *socks5h://127.0.0.1:1181*) printf '%s' "\${FAKE_CODE_RES_YX:-000}" ;;
+  *socks5h*)                  printf '%s' "\${FAKE_CODE_RES:-000}" ;;
+  *-x*)                       printf '%s' "\${FAKE_CODE_GZ:-000}" ;;
+  *)                          printf '%s' "\${FAKE_CODE_DIRECT:-000}" ;;
 esac
 `, { mode: 0o755 });
 process.env.PATH = TMP + path.delimiter + process.env.PATH;
@@ -56,8 +60,9 @@ const clearCalls = () => { try { fs.unlinkSync(LOG); } catch (_) {} };
 // Config the module reads at require time.
 process.env.PROXY_PROBE_URL     = 'https://e.waimai.meituan.com/';
 process.env.PROXY_STATE_TTL_MS  = '60000';
-process.env.PROXY_RESIDENTIAL   = 'socks5://10.8.0.2:1080';
-process.env.PROXY_GZ            = 'http://user:pw@8.163.120.72:8888';
+process.env.PROXY_RESIDENTIAL        = 'socks5://10.8.0.2:1080';
+process.env.PROXY_RESIDENTIAL_YUEXIU = 'socks5://127.0.0.1:1181';
+process.env.PROXY_GZ                 = 'http://user:pw@8.163.120.72:8888';
 
 const pm = require('../lib/proxy-manager');
 
@@ -74,8 +79,11 @@ const restore = () => {
 };
 process.on('exit', restore);
 
-const setCodes = ({ res = '000', gz = '000', direct = '000' }) => {
+// resYx defaults to res: a test that predates the per-channel split says nothing
+// about yuexiu's tunnel and must keep meaning what it meant when there was one.
+const setCodes = ({ res = '000', resYx = res, gz = '000', direct = '000' }) => {
   process.env.FAKE_CODE_RES = res;
+  process.env.FAKE_CODE_RES_YX = resYx;
   process.env.FAKE_CODE_GZ = gz;
   process.env.FAKE_CODE_DIRECT = direct;
 };
@@ -122,9 +130,25 @@ await it('SOCKS5 is probed with remote DNS, and direct is probed with no -x', as
 });
 
 // ── 2. Election order ────────────────────────────────────────────────────────
-await it('tianhe (外卖) tries residential → GZ → direct; yuexiu (闪购) has no GZ', async () => {
+await it('BOTH channels try residential → GZ → direct', async () => {
   assert.deepStrictEqual(pm.candidates('tianhe').map(c => c.label), ['residential', 'gz', 'direct']);
-  assert.deepStrictEqual(pm.candidates('yuexiu').map(c => c.label), ['residential', 'direct']);
+  assert.deepStrictEqual(pm.candidates('yuexiu').map(c => c.label), ['residential', 'gz', 'direct'],
+    '闪购 without the middle rung lands on a Hong Kong IP — 114 challenges against 天河\u2019s 0');
+});
+
+await it('each channel leaves through its OWN residential tunnel', async () => {
+  const urlOf = (ch) => pm.candidates(ch).find(c => c.label === 'residential').url;
+  assert.strictEqual(urlOf('tianhe'), 'socks5://10.8.0.2:1080', 'tianhe keeps the shared default');
+  assert.strictEqual(urlOf('yuexiu'), 'socks5://127.0.0.1:1181', 'yuexiu takes PROXY_RESIDENTIAL_YUEXIU');
+  assert.notStrictEqual(urlOf('tianhe'), urlOf('yuexiu'),
+    'one tunnel for both is the coupling this build removes');
+});
+
+await it('a channel with no dedicated tunnel still rides the shared one', async () => {
+  const res = pm.candidates('tianhe').find(c => c.label === 'residential').url;
+  assert.strictEqual(res, pm.residentialUrl(), 'unprovisioned channels must not break');
+  assert.strictEqual(pm.residentialUrl(), 'socks5://10.8.0.2:1080',
+    'residentialUrl() with no channel is still the shared value');
 });
 
 await it('a redirecting residential exit WINS tianhe (it used to lose to 直连)', async () => {
@@ -223,6 +247,45 @@ await it('the rate limit is per channel — 闪购 is not held back by 外卖', 
   const elected = await pm.ensureFresh('yuexiu');
   assert.ok(elected && elected.label === 'residential', 'yuexiu must elect on its own clock');
   assert.ok(JSON.parse(fs.readFileSync(STATE, 'utf8')).tianhe, 'and must not wipe the other channel');
+});
+
+// ── 5. The two tunnels fail independently ────────────────────────────────────
+await it('yuexiu\u2019s tunnel dying lands it on GZ, not on the Hong Kong line', async () => {
+  setCodes({ res: '302', resYx: '000', gz: '200', direct: '200' });
+  const { active } = await pm.evaluate('yuexiu');
+  assert.strictEqual(active.label, 'gz',
+    'this is the rung tianhe had and yuexiu did not — the whole point of the build');
+});
+
+await it('yuexiu still reaches 直连 when BOTH its tunnel and GZ are down', async () => {
+  setCodes({ res: '302', resYx: '000', gz: '000', direct: '200' });
+  assert.strictEqual((await pm.evaluate('yuexiu')).active.label, 'direct',
+    'the last resort must survive — a store offline is worse than a store on HK');
+});
+
+await it('one tunnel dropping does not move the other channel', async () => {
+  // yuexiu's session drops; tianhe's is fine. Before the split there was one
+  // tunnel, so this could not even be expressed: both channels failed together,
+  // one second apart, which is exactly what the 08-23 record shows.
+  setCodes({ res: '302', resYx: '000', gz: '200', direct: '200' });
+  assert.strictEqual((await pm.evaluate('tianhe')).active.label, 'residential',
+    '天河 must not follow 越秀 down');
+  assert.strictEqual((await pm.evaluate('yuexiu')).active.label, 'gz');
+
+  // …and the other way round.
+  setCodes({ res: '000', resYx: '302', gz: '200', direct: '200' });
+  assert.strictEqual((await pm.evaluate('tianhe')).active.label, 'gz');
+  assert.strictEqual((await pm.evaluate('yuexiu')).active.label, 'residential',
+    '越秀 must not follow 天河 down');
+});
+
+await it('yuexiu is probed on its own tunnel, with remote DNS', async () => {
+  clearCalls();
+  setCodes({ res: '302', resYx: '302', gz: '200', direct: '200' });
+  await pm.evaluate('yuexiu');
+  const probed = calls().join('\n');
+  assert.match(probed, /-x socks5h:\/\/127\.0\.0\.1:1181/, 'yuexiu must probe ITS listener');
+  assert.ok(!/10\.8\.0\.2:1080/.test(probed), 'and must not probe tianhe\u2019s');
 });
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);

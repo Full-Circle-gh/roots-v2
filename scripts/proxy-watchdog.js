@@ -155,7 +155,18 @@ async function tick() {
 
 async function main() {
   console.log(`[proxy-watchdog] starting — channels: ${pm.CHANNELS.join(', ')}, check every ${CHECK_MS / 1000}s`);
-  console.log(`[proxy-watchdog] residential=${pm.residentialUrl() || '(unset)'} gz=${pm.gzUrl() ? 'set' : '(unset)'} webhook=${pm.envVal('PROXY_WATCHDOG_WEBHOOK') ? 'set' : 'MISSING'}`);
+  // Per channel, because each one now has its OWN residential exit
+  // (PROXY_RESIDENTIAL_<CHANNEL>). One line for both would hide the very thing
+  // this build exists to make true — that a flap on one tunnel is not a flap on
+  // the other. `shared` marks a channel still riding PROXY_RESIDENTIAL, so a
+  // half-provisioned box says so at startup instead of looking done.
+  const sharedRes = pm.residentialUrl();
+  for (const channel of pm.CHANNELS) {
+    const url = pm.residentialUrl(channel);
+    const own = url && url !== sharedRes ? 'dedicated' : 'shared';
+    console.log(`[proxy-watchdog] ${channel}: residential=${url || '(unset)'} (${own})`);
+  }
+  console.log(`[proxy-watchdog] gz=${pm.gzUrl() ? 'set' : '(unset)'} webhook=${pm.envVal('PROXY_WATCHDOG_WEBHOOK') ? 'set' : 'MISSING'}`);
   for (;;) {
     try { await tick(); } catch (e) { console.error('[proxy-watchdog] tick error:', e.message); }
     // A tick that throws writes no state, so the entry ages — which is now the
