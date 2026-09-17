@@ -10421,7 +10421,14 @@ function buildShipmentTrackingView(s) {
   if (s.tracking_events_json) {
     try {
       const raw = JSON.parse(s.tracking_events_json) || [];
-      events = raw.map(ev => ({ ...ev, description_en: tracking.translateEventDescription(ev.description_cn) }));
+      // location_en alongside description_en: the place name is half of what
+      // an event line says, and it used to ride through in Chinese even when
+      // the sentence beside it translated.
+      events = raw.map(ev => ({
+        ...ev,
+        description_en: tracking.translateEventDescription(ev.description_cn),
+        location_en:    tracking.translateLocation(ev.location),
+      }));
     } catch { events = []; }
   }
   // Prefer the status implied by the NEWEST carrier event over the carrier's
@@ -13285,6 +13292,7 @@ function buildTrackingView(o) {
       events = raw.map(ev => ({
         ...ev,
         description_en: tracking.translateEventDescription(ev.description_cn),
+        location_en:    tracking.translateLocation(ev.location),
       }));
     } catch { events = []; }
   }
@@ -30407,13 +30415,9 @@ router.get('/track/:orderNo/:trackingNumber', (req, res) => {
   const orderNo = String(req.params.orderNo || '');
   const number  = String(req.params.trackingNumber || '');
   const lang    = (req.query.lang === 'cn') ? 'cn' : 'en';
-  const o = tdb().prepare(
-    `SELECT order_no, status, tracking_carrier, tracking_number,
-            tracking_status, tracking_events_json, tracking_synced_at,
-            tracking_scenario_data_json
-       FROM retail_orders
-      WHERE order_no = ? AND tracking_number = ?`
-  ).get(orderNo, number);
+  // Same split-parcel resolution as the JSON API below — the old web-view
+  // page is still reachable and was 404ing on secondary parcels too.
+  const o = tracking.resolveTrackedParcel(tdb(), orderNo, number);
   res.type('html');
   if (!o) {
     return res.send(`<!doctype html><meta charset="utf-8"><title>404</title>
@@ -30432,6 +30436,9 @@ router.get('/track/:orderNo/:trackingNumber', (req, res) => {
         description: lang === 'cn'
           ? (ev.description_cn || '')
           : tracking.translateEventDescription(ev.description_cn),
+        location: lang === 'cn'
+          ? (ev.location || '')
+          : tracking.translateLocation(ev.location),
       }));
     } catch { return []; }
   })();
@@ -30553,13 +30560,11 @@ router.get('/api/retail/orders/:orderNo/tracking/:trackingNumber', requireRetail
   const orderNo = String(req.params.orderNo || '');
   const number  = String(req.params.trackingNumber || '');
   const lang    = (req.query.lang === 'cn') ? 'cn' : 'en';
-  const o = tdb().prepare(
-    `SELECT order_no, status, tracking_carrier, tracking_number,
-            tracking_status, tracking_events_json, tracking_synced_at,
-            customer_id
-       FROM retail_orders
-      WHERE order_no = ? AND tracking_number = ?`
-  ).get(orderNo, number);
+  // Resolve through the shipment rows as well as the order row: on a split
+  // order only the PRIMARY waybill is mirrored onto retail_orders, and the
+  // mini app's per-parcel "View full tracking" passes the parcel's own
+  // number, so every secondary parcel used to 404 here.
+  const o = tracking.resolveTrackedParcel(tdb(), orderNo, number);
   if (!o || o.customer_id !== req.customer.id) {
     return res.status(404).json({ success: false, error: 'not_found' });
   }
@@ -30570,7 +30575,9 @@ router.get('/api/retail/orders/:orderNo/tracking/:trackingNumber', requireRetail
   try { rawEvents = JSON.parse(o.tracking_events_json) || []; } catch { rawEvents = []; }
   const events = rawEvents.map(ev => ({
     time: (ev.time || '').slice(0, 16),
-    location: ev.location || '',
+    location: lang === 'cn'
+      ? (ev.location || '')
+      : tracking.translateLocation(ev.location),
     description: lang === 'cn'
       ? (ev.description_cn || '')
       : tracking.translateEventDescription(ev.description_cn),
