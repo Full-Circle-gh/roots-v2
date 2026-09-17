@@ -87,6 +87,33 @@
     : '¥' + (Number(n) || 0).toFixed(4));
   const dash = v => (v === null || v === undefined || v === '' ? '—' : v);
 
+  // ── Who may read what a recipe costs (§164, Ash, 2026-09-17) ──────────────
+  //
+  // `recipes:view` opens the screen — what a thing is made from, in what
+  // quantities, in what order. `recipes:costs` reads every figure of money on
+  // it: the list's two cost columns, each ingredient line's cost, the record's
+  // summary strip, the whole Cost & Pricing tab, the linked material's unit
+  // cost, the margin beside each product, and the costs in version history.
+  //
+  // FAILS CLOSED, unlike can() one screen over, which answers true on a null
+  // cap set so a resolution hiccup never locks an operator out of their own
+  // app. Money inverts that trade: the cost of failing closed is a missing
+  // column until the page is reloaded; the cost of failing open is the figure
+  // this capability exists to withhold, shown to the one person it was
+  // withheld from. Copied from 18-materials.js showMoney(), same reasoning.
+  //
+  // THIS IS A LAYOUT DECISION, NOT AN ENFORCEMENT BOUNDARY. Unlike materials
+  // — whose route declines to SEND a price to a caller without the capability
+  // — /api/retail-admin/recipes still returns every cost field to anyone who
+  // can read the list, because lib/cap-routes.js opens all GETs and §164
+  // deliberately left the server side out of scope rather than answering it in
+  // passing. So this hides the figures on the screen and does not put them
+  // beyond reach of the network tab. §164's "what this does not decide" is
+  // where that gap is recorded; closing it is its own decision.
+  const showMoney = () => (typeof CAPS !== 'undefined' && CAPS !== null)
+    ? CAPS.has('recipes:costs')
+    : false;
+
   const COST = () => (typeof window !== 'undefined' && window.RootsRecipeCost) || null;
   const ICOST = () => (typeof window !== 'undefined' && window.RootsIngredientCost) || null;
   const RECIPE_UNITS = () => {
@@ -439,6 +466,7 @@
             : T('A recipe is what you make and what it costs — ingredients, steps, batch size. Add the first one.', '食谱是你制作的东西及其成本 —— 原料、步骤、批量大小。新建第一份。'))}</p>
         </div>`;
     }
+    const withCost = showMoney();
     const rows = view.map(rcp => {
       const pc = primaryCost(rcp);
       // The whole-batch fallback explains itself differently depending on what
@@ -507,8 +535,8 @@
           <td class="rcp-fit">${esc(dash(rcp.category))}</td>
           <td class="right rcp-num rcp-fit">${rcp.batch_size ? esc(rcp.batch_size) + 'g' : '—'}</td>
           <td class="right rcp-num rcp-fit">${dash(rcp.servings)}</td>
-          <td class="right rcp-num rcp-fit">${costCell}</td>
-          <td class="right rcp-num rcp-fit">${gramCell}</td>
+          ${withCost ? `<td class="right rcp-num rcp-fit">${costCell}</td>
+          <td class="right rcp-num rcp-fit">${gramCell}</td>` : ''}
           <td class="rcp-fit">${matBadge}</td>
           <td class="rcp-actcell">${dupButton(rcp)}</td>
         </tr>`;
@@ -525,12 +553,23 @@
               <th class="rcp-fit">${esc(T('Category', '分类'))}</th>
               <th class="right rcp-fit">${esc(T('Batch size', '批量大小'))}</th>
               <th class="right rcp-fit">${esc(T('Servings', '份数'))}</th>
-              <th class="right rcp-fit">${esc(T('Cost', '成本'))}</th>
               ${/* Cost per gram · 每克成本 is the pair the record's cost breakdown
                     already prints for this same figure (breakdownHtml, this file),
                     copied rather than shortened: a heading of its own wording
-                    beside one that says Cost would read as a different quantity. */''}
-              <th class="right rcp-fit">${esc(T('Cost per gram', '每克成本'))}</th>
+                    beside one that says Cost would read as a different quantity.
+
+                    BOTH GO, HEADER AND CELLS, for an operator without
+                    `recipes:costs` — they are not dashed out. A dash on this
+                    screen means "no figure could be worked out for this recipe",
+                    which is a real state the list exists to surface (three of the
+                    four recipes in §29's build gate are in it); reusing it for
+                    "you may not see this" would make the two indistinguishable
+                    on the screen somebody is meant to fix the first one from.
+                    The table is auto-layout, so dropping two columns needs no
+                    width work — same call, same reasoning, as the materials
+                    masterlist's two money columns. */''}
+              ${withCost ? `<th class="right rcp-fit">${esc(T('Cost', '成本'))}</th>
+              <th class="right rcp-fit">${esc(T('Cost per gram', '每克成本'))}</th>` : ''}
               <th class="rcp-fit">${esc(T('Backs', '产出'))}</th>
               ${/* The action column carries no visible heading — a word above a
                     single icon button reads as another data column. The name is
@@ -1093,7 +1132,23 @@
     ['steps',       () => T('Steps', '步骤')],
     ['cost',        () => T('Cost & Pricing', '成本与定价')],
   ];
+  // The tabs THIS operator gets. Cost & Pricing is the whole money surface of
+  // the record — the breakdown, the margin, the suggested price — so without
+  // `recipes:costs` the tab is not rendered at all rather than rendered empty:
+  // a fourth tab that opens onto nothing is a worse answer than three tabs.
+  function subtabsFor() {
+    return showMoney() ? SUBTABS : SUBTABS.filter(([k]) => k !== 'cost');
+  }
+  // Nothing may leave the record sitting on a tab it will not paint. `keepTab`
+  // carries `_subtab` across a save (setRecord), and a session that had Cost
+  // open when the capability went away would reopen onto a hidden body with no
+  // tab to leave it by.
+  function subtabSafe() {
+    if (_subtab === 'cost' && !showMoney()) _subtab = 'details';
+    return _subtab;
+  }
   window.rcpSubtab = function (t) {
+    if (t === 'cost' && !showMoney()) return;
     _subtab = t;
     document.querySelectorAll('.rcp-subtab').forEach(b => b.classList.toggle('on', b.dataset.t === t));
     document.querySelectorAll('.rcp-subbody').forEach(b => { b.hidden = b.dataset.t !== t; });
@@ -1269,17 +1324,17 @@
     const subnav = document.getElementById('rcp-subtabs');
     if (subnav) {
       const missing = liveCost().zeroCostIngredientLines;
-      subnav.innerHTML = SUBTABS.map(([key, lbl]) => {
+      subnav.innerHTML = subtabsFor().map(([key, lbl]) => {
         const badge = key === 'ingredients' && missing > 0 ? `<span class="rcp-badge blocked">${missing}</span>` : '';
-        return `<button type="button" class="rcp-subtab${_subtab === key ? ' on' : ''}" data-t="${key}" onclick="rcpSubtab('${key}')">${esc(lbl())}${badge}</button>`;
+        return `<button type="button" class="rcp-subtab${subtabSafe() === key ? ' on' : ''}" data-t="${key}" onclick="rcpSubtab('${key}')">${esc(lbl())}${badge}</button>`;
       }).join('');
     }
 
     host.innerHTML = `
-      <div class="rcp-subbody" data-t="details" ${_subtab === 'details' ? '' : 'hidden'}>${detailsTab(m)}</div>
-      <div class="rcp-subbody" data-t="ingredients" ${_subtab === 'ingredients' ? '' : 'hidden'}>${ingredientsTab()}</div>
-      <div class="rcp-subbody" data-t="steps" ${_subtab === 'steps' ? '' : 'hidden'}>${stepsTab()}</div>
-      <div class="rcp-subbody" data-t="cost" ${_subtab === 'cost' ? '' : 'hidden'}>${costTab(m)}</div>
+      <div class="rcp-subbody" data-t="details" ${subtabSafe() === 'details' ? '' : 'hidden'}>${detailsTab(m)}</div>
+      <div class="rcp-subbody" data-t="ingredients" ${subtabSafe() === 'ingredients' ? '' : 'hidden'}>${ingredientsTab()}</div>
+      <div class="rcp-subbody" data-t="steps" ${subtabSafe() === 'steps' ? '' : 'hidden'}>${stepsTab()}</div>
+      ${showMoney() ? `<div class="rcp-subbody" data-t="cost" ${_subtab === 'cost' ? '' : 'hidden'}>${costTab(m)}</div>` : ''}
     `;
     try { applyCapGates(); } catch (_) {}
     // Same reason paintBreakdown is called here rather than inside costTab():
@@ -1684,6 +1739,11 @@
       + '无论是否勾选,该条成本均照常计入。');
 
   function lineCostText(l) {
+    // Empty, not '—'. A dash on this row means "this material has no cost
+    // recorded", which is the fault the warn class beside it exists to flag;
+    // handing the same dash to an operator who simply may not see money would
+    // make a priced line and a broken one identical.
+    if (!showMoney()) return '';
     const isFree = !!l.master_free;
     const hasCost = l.master_cost > 0 || isFree;
     return hasCost && !isFree ? money((Number(l.qty) || 0) * (l.master_cost || 0)) : (isFree ? esc(T('free', '免费')) : '—');
@@ -1694,6 +1754,7 @@
   // and a second copy of the same sentence is how a row's rate and its cost
   // come to disagree about the same material.
   function linePerText(l) {
+    if (!showMoney()) return '';
     const isFree = !!l.master_free;
     const hasCost = l.master_cost > 0 || isFree;
     return isFree ? T('free', '免费')
@@ -1715,7 +1776,7 @@
                write-back, an edit on the Materials screen. Painted as part of
                the sentence it used to be baked into, so nothing moves on
                screen; only the figure changes. -->
-          <div class="s${hasCost ? '' : ' warn'}">${esc(l.name_cn || '')}${l.name_cn ? ' · ' : ''}<span class="rcp-line-per" data-line="${idx}">${esc(per)}</span>${l.ingredient_id == null ? ' · ' + esc(T('material deleted', '物料已删除')) : ''}</div>
+          <div class="s${hasCost ? '' : ' warn'}">${esc(l.name_cn || '')}${l.name_cn && per ? ' · ' : ''}<span class="rcp-line-per" data-line="${idx}">${esc(per)}</span>${l.ingredient_id == null ? ((l.name_cn || per) ? ' · ' : '') + esc(T('material deleted', '物料已删除')) : ''}</div>
           <!-- The mark, on the line it is about. Painted here rather than only
                once per recipe because the summary pill names the CONDITION and
                this names the ROW — an operator who reads UNIT MISMATCH on the
@@ -1906,7 +1967,10 @@
           <span>${esc(m.name_en || '')}${m.name_cn ? ' · ' + esc(m.name_cn) : ''}</span>
           ${m.sku ? `<span class="rcp-pick-sku">${esc(m.sku)}</span>` : ''}
         </span>
-        <span class="s">${m.cost_per_unit > 0 ? moneyU(m.cost_per_unit) + '/' + esc(m.unit || '') : esc(T('no cost', '无成本'))}</span>
+        ${/* The rate beside each candidate is money, and it is the one part of
+              this picker that is. Blanked rather than dashed without
+              `recipes:costs`, the same as the line it is about to become. */''}
+        <span class="s">${!showMoney() ? '' : (m.cost_per_unit > 0 ? moneyU(m.cost_per_unit) + '/' + esc(m.unit || '') : esc(T('no cost', '无成本')))}</span>
       </div>`).join('') + `</div>`;
     const list = host.querySelector('.rcp-pick');
     // The list is position:absolute, so opening it near the bottom of
@@ -2220,7 +2284,13 @@
     const showM = f.showM;
     const mLbl = f.mLbl;
 
-    let html = `<div class="rcp-sumrow">
+    // EVERY FIGURE IN THIS ROW IS MONEY — batch cost, the per-unit cost, the
+    // product's price and the margin — so without `recipes:costs` the row is
+    // not built. The warning pills BELOW it are not money and stay: they carry
+    // a count and a cause, never an amount, and they are the half of this card
+    // that makes a fault fixable. Hiding those is how a fault stays unfixed,
+    // which is the call 18-materials.js makes in the same words.
+    let html = showMoney() ? `<div class="rcp-sumrow">
       <div class="rcp-sumfig"><span class="lbl">${esc(T('Batch cost', '整批成本'))}</span><span class="v">${money(c.batchCost)}</span></div>
       ${primary ? `<div class="rcp-sumfig"><span class="lbl">${esc(primary.lbl)}</span><span class="v">${primary.v}</span></div>`
                 : `<div class="rcp-sumfig"><span class="lbl">${esc(T('Per-unit cost', '单位成本'))}</span><span class="v dim">${esc(T('No batch size or servings recorded', '未记录批量大小或份数'))}</span></div>`}
@@ -2231,7 +2301,7 @@
           <span class="v">${esc(showM ? (showM.money < 0 ? '−' : '') + money(Math.abs(showM.money)) : '—')}</span>
           ${showM ? `<span class="pct">${esc(pctTxt(showM))}</span>` : ''}
         </span></div>` : ''}
-    </div>`;
+    </div>` : '';
 
     // The warnings — real number above, honest reason here. Never swap the
     // number out; only ever add these alongside it. Pills, not panels: a whole
@@ -2313,9 +2383,14 @@
     const blocked = mb && !mb.ok;
     const cpu = _rec.backsMaterial.cost_per_unit;
     const unitTxt = _rec.backsMaterial.unit || 'g';
-    const costTxt = cpu > 0 ? `${moneyU(cpu)}/${esc(unitTxt)}` : T('not yet costed', '尚未计算成本');
+    // The RATE is money; the FACT that this recipe also stocks as a material is
+    // not, and it is the half that explains why the record carries a frozen
+    // cost and an archive warning at all. So without `recipes:costs` the
+    // sentence keeps its material and loses its figure.
+    const costTxt = !showMoney() ? ''
+      : (cpu > 0 ? `${moneyU(cpu)}/${esc(unitTxt)}` : T('not yet costed', '尚未计算成本'));
     return `<div class="rcp-matline${blocked ? ' blocked' : ''}">`
-      + esc(T('Also stocked as a material: ', '同时作为物料备货:')) + `<b>${esc(_rec.backsMaterial.name_en)}</b> — ${costTxt}`
+      + esc(T('Also stocked as a material: ', '同时作为物料备货:')) + `<b>${esc(_rec.backsMaterial.name_en)}</b>${costTxt ? ' — ' + costTxt : ''}`
       + (blocked ? ` — ${esc(T('frozen at its last computed value.', '已冻结为最近一次计算的值。'))} ${esc(blockReasonText(mb.reason, mb.unpriced))}` : '')
       + `</div>`;
   }
@@ -2378,10 +2453,18 @@
     // ── several products: columns ───────────────────────────────────────
     // Right-aligned and tabular so the sizes can actually be compared, which
     // is the entire reason they are listed separately rather than blended.
+    // SELL PRICE SURVIVES, MARGIN DOES NOT. A price is what a customer is
+    // charged — it is on the shopfront, on the menu and on the receipt, and it
+    // is not what `recipes:costs` withholds. A margin is the sell price minus
+    // this recipe's cost, so printing it beside the price hands back the cost
+    // by subtraction. Exactly the split products:costs already makes in
+    // lib/product-cost-visibility.js: sell_price and compare_at_price stay,
+    // unit_cost and everything derived from it go.
+    const withCost = showMoney();
     const head = `<div class="rcp-prodrow rcp-prodhead" data-no-i18n>`
       + `<span class="nm">${esc(T('Makes', '产出'))}</span>`
       + `<span class="sells">${esc(T('Sells', '售价'))}</span>`
-      + `<span class="marg">${esc(T('Margin', '毛利'))}</span></div>`;
+      + (withCost ? `<span class="marg">${esc(T('Margin', '毛利'))}</span>` : '') + `</div>`;
 
     const body = rows.map(p => {
       const price = Number(p.sell_price) > 0 ? money(p.sell_price) : '—';
@@ -2394,7 +2477,7 @@
       return `<div class="rcp-prodrow" data-no-i18n>`
            + `<span class="nm">${link(p)}${size(p)}</span>`
            + `<span class="sells">${esc(price)}</span>`
-           + `<span class="marg${cls}">${fig}</span></div>`;
+           + (withCost ? `<span class="marg${cls}">${fig}</span>` : '') + `</div>`;
     }).join('');
 
     return head + body;
@@ -2557,7 +2640,10 @@
     const n = consumers.length;
     const namesEn = consumers.slice(0, 4).map(c => c.name_en).join(', ') + (n > 4 ? `, +${n - 4}` : '');
     const namesCn = consumers.slice(0, 4).map(c => c.name_cn || c.name_en).join('、') + (n > 4 ? `等 ${n} 个` : '');
-    const cost = m.cost_per_unit > 0 ? `${moneyU(m.cost_per_unit)}/${m.unit || 'g'}` : null;
+    // Null without `recipes:costs`, which both sentences below already handle:
+    // they were written to degrade for a material that has no cost yet, and
+    // "archiving freezes its cost" is the warning — the figure is the detail.
+    const cost = (showMoney() && m.cost_per_unit > 0) ? `${moneyU(m.cost_per_unit)}/${m.unit || 'g'}` : null;
     const usedEn = n > 0 ? `, used by ${n} recipe${n === 1 ? '' : 's'}${namesEn ? ' (' + namesEn + ')' : ''}` : '';
     const usedCn = n > 0 ? `,被 ${n} 个食谱使用${namesCn ? '(' + namesCn + ')' : ''}` : '';
     const whoEn = n === 0 ? 'nothing uses it yet, but anything that does' : (n === 1 ? 'that recipe' : 'those recipes');
@@ -2761,8 +2847,12 @@
           ${row(T('Servings', '份数'), r.servings)}
           ${row(T('Ingredients', '原料'), lines.length ? shown + more : T('none', '无'))}
           ${row(T('Steps', '步骤'), (snap.steps || []).length)}
-          ${row(T('Sell price', '售价'), cd.sell_price != null ? money(cd.sell_price) : null)}
-          ${row(T('Labour', '人工'), cd.labour != null ? money(cd.labour) : null)}
+          ${/* row() drops a row whose value is null, so the two money rows of a
+                snapshot simply are not listed without `recipes:costs`. What a
+                version CHANGED about the name, category, batch, ingredients and
+                steps is the rest of this list and is not money. */''}
+          ${row(T('Sell price', '售价'), showMoney() && cd.sell_price != null ? money(cd.sell_price) : null)}
+          ${row(T('Labour', '人工'), showMoney() && cd.labour != null ? money(cd.labour) : null)}
         </dl>`;
     }
 
@@ -2959,7 +3049,7 @@
       host.innerHTML = `<div class="rcp-mz-pick">` + mz.results.slice(0, 8).map(m => `
         <div class="rcp-mz-pick-item" data-id="${m.id}">
           <span>${esc(m.name_en || '')}${m.name_cn ? ' · ' + esc(m.name_cn) : ''}</span>
-          <span class="s">${m.cost_per_unit > 0 ? moneyU(m.cost_per_unit) + '/g' : esc(T('no cost', '无成本'))}</span>
+          <span class="s">${!showMoney() ? '' : (m.cost_per_unit > 0 ? moneyU(m.cost_per_unit) + '/g' : esc(T('no cost', '无成本')))}</span>
         </div>`).join('') + `</div>`;
       host.querySelectorAll('.rcp-mz-pick-item').forEach(el => el.addEventListener('click', () => {
         mz.selected = mz.results.find(m => m.id === Number(el.dataset.id)) || null;
