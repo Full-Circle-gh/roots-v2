@@ -10421,7 +10421,14 @@ function buildShipmentTrackingView(s) {
   if (s.tracking_events_json) {
     try {
       const raw = JSON.parse(s.tracking_events_json) || [];
-      events = raw.map(ev => ({ ...ev, description_en: tracking.translateEventDescription(ev.description_cn) }));
+      // location_en alongside description_en: the place name is half of what
+      // an event line says, and it used to ride through in Chinese even when
+      // the sentence beside it translated.
+      events = raw.map(ev => ({
+        ...ev,
+        description_en: tracking.translateEventDescription(ev.description_cn),
+        location_en:    tracking.translateLocation(ev.location),
+      }));
     } catch { events = []; }
   }
   // Prefer the status implied by the NEWEST carrier event over the carrier's
@@ -13285,6 +13292,7 @@ function buildTrackingView(o) {
       events = raw.map(ev => ({
         ...ev,
         description_en: tracking.translateEventDescription(ev.description_cn),
+        location_en:    tracking.translateLocation(ev.location),
       }));
     } catch { events = []; }
   }
@@ -30432,6 +30440,9 @@ router.get('/track/:orderNo/:trackingNumber', (req, res) => {
         description: lang === 'cn'
           ? (ev.description_cn || '')
           : tracking.translateEventDescription(ev.description_cn),
+        location: lang === 'cn'
+          ? (ev.location || '')
+          : tracking.translateLocation(ev.location),
       }));
     } catch { return []; }
   })();
@@ -30570,7 +30581,9 @@ router.get('/api/retail/orders/:orderNo/tracking/:trackingNumber', requireRetail
   try { rawEvents = JSON.parse(o.tracking_events_json) || []; } catch { rawEvents = []; }
   const events = rawEvents.map(ev => ({
     time: (ev.time || '').slice(0, 16),
-    location: ev.location || '',
+    location: lang === 'cn'
+      ? (ev.location || '')
+      : tracking.translateLocation(ev.location),
     description: lang === 'cn'
       ? (ev.description_cn || '')
       : tracking.translateEventDescription(ev.description_cn),

@@ -7896,12 +7896,17 @@ function renderShipmentTrackingCard(o, s, hoisted) {
   // block out and pick the live language ourselves via cuT().
   const renderEventRow = (ev) => {
     const desc = cuT(ev.description_en || ev.description_cn || '', ev.description_cn || ev.description_en || '');
+    // The place name gets the same EN/CN pick as the sentence beside it.
+    // It used to render raw, so an English-language office screen read
+    // "Arrived at 广州黄埔集货分拣中心 · 广州市" — and since the customer
+    // app reads the very same payload, that was their view too.
+    const evLoc = cuT(ev.location_en || ev.location || '', ev.location || ev.location_en || '');
     // Short time — drop the year and the trailing seconds (mockup: "07-06 12:41").
     const evTime = (ev.time || '').replace(/^\d{4}-/, '').replace(/:\d{2}$/, '');
     return `
           <div style="display:flex; gap:12px; font-size:12.5px; line-height:1.45;">
             <div class="muted" style="font-family: var(--f-mono); white-space:nowrap; min-width: 98px;">${escapeHtml(evTime)}</div>
-            <div style="flex:1;">${escapeHtml(desc)}${ev.location ? ` <span class="muted" style="font-size:11.5px;">· ${escapeHtml(ev.location)}</span>` : ''}</div>
+            <div style="flex:1;">${escapeHtml(desc)}${evLoc ? ` <span class="muted" style="font-size:11.5px;">· ${escapeHtml(evLoc)}</span>` : ''}</div>
           </div>`;
   };
   // Show only the newest event by default; tuck the rest behind a disclosure so
