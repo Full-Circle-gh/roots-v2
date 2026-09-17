@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.293
+# Tacet shared-core consolidation — decisions record, v4.294
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -20,6 +20,10 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+
+
+2026-09-17 · v4.294 — **§157 · THE SWEEP §155 ASKED FOR, AND THE TWO SHAPES IT FOUND THAT §155 DID NOT**, from Ash on that section's own scope note: *“ok do it”*. **SCOPE WAS ESTABLISHED BY GREPPING FOR THE ENGINE, NOT BY GUESSING**: three surfaces run a walker — the admin page, the modules that inject into it, and `public/product-editor.html`, which carries its own copy and would have been missed by looking at the admin alone. **16 elements fixed, 19 leaked text nodes**, all of them helper paragraphs with a `<b>`, `<em>`, `<strong>` or `<code>` inside the pair; the product editor was clean. **TWO SHAPES THE ORIGINAL SECTION DID NOT NAME**, which is the argument for sweeping rather than fixing what you were shown: a single Chinese glyph in the ENGLISH half (*“fill in both EN and 中”*) makes the walker refuse the node outright, stranding the whole sentence rather than its tail; and `${name}` inside the pair's Chinese half means the store's name renders in Chinese and is simply ABSENT in English, with nothing on either screen looking broken. **NEW GATE `scripts/check-glued-language.js`, two ratchets: 0 broken (structural, swept today) and 234 orphan** — Chinese in a node that is neither a pair nor shielded, which is a real backlog of three distinct kinds (a missing English half, a pair glued with no separator, and text that is correctly Chinese under §1.11's scope note, like a WeCom card preview). It is counted rather than failed because clearing it needs a person per string; counting it is what stops it growing. **PROVEN BY THREE MUTATIONS, one being the production markup restored verbatim — and an earlier pair that MISSED is recorded, because working out why exposed that the gate only failed the structural shape; the orphan ratchet exists because of it.** Nothing was minted: every Chinese string here is the one already in the tree, moved, so the vocabulary document is deliberately untouched. `test:fast` **272 on the merged head**; lint 0 errors. No schema, no server change, no change to `.gitignore` or CI; `package.json` gains the checker's npm alias.
 
 
 
@@ -16841,3 +16845,91 @@ Named so that silence is not read as coverage.
   That is a separate surface needing a WeChat release, and it is the more urgent
   of the two: the editor leak was seen by the office, this one is seen by the
   shopper.
+
+## §157 — THE SWEEP §155 ASKED FOR, AND THE TWO SHAPES IT FOUND THAT §155 DID NOT
+
+**Ash, on §155's own scope note — *"the same shape is almost certainly live
+elsewhere in the admin"* — 2026-09-17: *"ok do it"*.** This is that sweep.
+
+**SCOPE, established before anything was counted.** The bug needs the language
+walker, so only surfaces that run one can have it. Grepping for the engine's own
+`hasChinese` guard found **three**: `public/retail-admin.html` (the engine lives
+in `10-extras.js`, with a second copy inline in the page), the
+`public/retail-admin/*.js` modules that inject markup into it, and
+**`public/product-editor.html`, which carries its own copy of the same walker**
+and would not have been found by looking at the admin alone. Pages that do their
+own translation with `T()` — the mini app's `m.html`, `cms.html`, the storefront
+— cannot have this bug and were not scanned.
+
+**FOUND AND FIXED: 16 elements, 19 leaked text nodes.** Fifteen in
+`retail-admin.html`, one in `02-settings-ops.js`. Every one of them a helper or
+hint paragraph — Settings, Delivery, Shop, FAQ, Media, the mini-app pages — where
+a `<b>`, `<em>`, `<strong>` or `<code>` sat inside the pair. The product editor
+was clean.
+
+**THE SWEEP FOUND TWO SHAPES THE ORIGINAL SECTION DID NOT NAME**, which is the
+argument for sweeping rather than fixing the one you were shown:
+
+1. **A Chinese glyph in the English half.** *"…fill in both EN and 中. · 顾客会根据
+   微信语言偏好…"* — the walker's guard is `if (!hasChinese(cn) || hasChinese(en))
+   return;`, so a single 中 in the English half makes it **refuse the node
+   entirely** and both languages render. The tag shape strands the tail; this one
+   strands the whole sentence. Fixed by rewording the English to *"fill in both
+   the English and the Chinese"* — the Chinese half is untouched.
+2. **Dynamic data inside the pair's Chinese half.** `Stock staff · 库存员 —
+   ${name}` splits into `Stock staff` and `库存员 — 门店名`, so **the store's name
+   is present in Chinese and absent in English**. Nothing looks broken in either
+   language; the English screen is simply missing a fact. The name now sits
+   outside the pair, shielded with `data-no-i18n` as outside-system text.
+
+**THE GATE: `scripts/check-glued-language.js`, two ratchets.** It parses text
+nodes with an element stack, so a shield on an **ancestor** counts, and it scans
+each module's template literals **one at a time** — concatenating them, which the
+first draft did, invents elements that never shared a parent and produces a page
+of nonsense findings.
+
+| ratchet | budget | why |
+|---|---|---|
+| **broken** — Chinese stranded after a tag inside a pair | **0** | structural, unambiguous, swept today |
+| **orphan** — Chinese in a node that is neither a pair nor shielded | **234** | a real backlog that needs a person per string |
+
+**THE ORPHAN BACKLOG IS NAMED, NOT HIDDEN, AND IT IS NOT ZERO ON PURPOSE.** Those
+234 nodes are three different things and only a reader can tell them apart: a
+Chinese-only hint whose English half was never written (the Reviews page has
+several); a pair glued with no separator at all, so the walker never sees a pair
+(*"(for screen readers and SEO)(用于读屏与 SEO)"*, *"Body — 中文"*); and text that
+is **correctly** Chinese under §1.11's own scope note — the preview of a WeCom
+card, or a quoted WeChat menu path (*"mp.weixin.qq.com → 功能 → 订阅消息"*), where
+the reader of that surface cannot choose a language. Clearing it means writing
+new English strings and making a judgement per string, which is a separate pass.
+**Counting it at its current size is what stops it growing** while that pass
+waits, and that is the half that binds new work.
+
+**PROVEN BY THREE MUTATIONS, one of them the real thing:** the exact markup that
+shipped the production bug, restored verbatim — caught; a brand-new Chinese-only
+hint — caught; a Chinese tail injected from a module template — caught. **An
+earlier pair of mutations MISSED, and that is recorded because it changed the
+gate.** They removed a `data-lang-block` attribute, which does not recreate the
+bug — but working out why exposed that the gate as first written failed only on
+the structural shape and would have let a plain Chinese-only leak through. The
+orphan ratchet exists because a mutation that proved nothing about the code
+proved something about the test.
+
+**NOTHING WAS MINTED.** Every Chinese string in this change is the one that was
+already there, moved. The single copy edit is English. `docs/tacet-delivery-
+vocabulary.md` is deliberately untouched, and a reader looking for a v1.108 that
+matches this section will not find one because there is nothing to declare.
+
+**RENUMBERED FROM §156 WHILE THIS WAS BEING WRITTEN.** The product-editor
+session merged its own §156 (*The page is the form*) into main first, so this
+took the next free number rather than renumbering theirs — section numbers are
+permanent, and the one that lands first keeps it. Its changelog entry moved from
+v4.292 to v4.294 for the same reason. This is the third time the numbering rule
+has been exercised by two sessions building at once, which is what the
+enumerate-first rule in `CLAUDE.md` exists to make visible.
+
+`test:fast` **272 on the merged head** — this gate is one of the two suites added
+today, the other being the product-editor session's; lint 0 errors. No schema, no
+server change, no change to `.gitignore` or CI — `package.json` gains the checker's npm alias, matching
+`verify:swallowed-errors`, and that is the only line outside the sweep itself.
+

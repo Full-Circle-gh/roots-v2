@@ -764,10 +764,10 @@ function _opsStoreStaffRender(store, staff) {
   box.innerHTML = `
     <div style="margin-top:14px;padding:16px;background:var(--bg-elev-1);border:1px solid var(--line);border-radius:10px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <strong style="color:var(--text-1)">Stock staff · 库存员 — ${name}</strong>
+        <strong style="color:var(--text-1)">Stock staff · 库存员</strong><span style="color:var(--text-1)"> — <span data-no-i18n>${name}</span></span>
         <button class="btn" style="flex:none" onclick="document.getElementById('ops-store-staff').innerHTML='';document.getElementById('ops-store-staff').dataset.store=''">✕</button>
       </div>
-      <div class="muted" style="font-size:12px;margin-bottom:8px">These people can only open the Quick Stock app, and only for <strong>${name}</strong> — never another store. · 这些成员仅可使用快捷库存,且只能操作<strong>${name}</strong>,无法操作其他门店。</div>
+      <div class="muted" style="font-size:12px;margin-bottom:8px"><span data-lang-block="en">These people can only open the Quick Stock app, and only for <strong data-no-i18n>${name}</strong> — never another store.</span><span data-lang-block="cn">这些成员仅可使用快捷库存,且只能操作<strong data-no-i18n>${name}</strong>,无法操作其他门店。</span></div>
       ${rows}
       <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:12px">
         <div><label class="field-label">Name · 姓名</label><input type="text" id="oss_name" placeholder="张三"></div>
