@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.289
+# Tacet shared-core consolidation — decisions record, v4.290
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-17 · v4.290 — **§154 · THE PAGE IS THE FORM, AND EVERY SHOP FILLS ITS OWN LISTS — DECIDED BY ASH**, on the automatic design: *“seems that now need to fill up some information in product page editor so that the automatic design feature will work well. seems like waist of time.”* **THE MEASURED FAULT IS SMALLER THAN THE DECISION AND IS RECORDED FIRST.** Two doors reach the same compose endpoint carrying different loads: the products sheet (`pdAutoComposeBlocks`) fills the five Product-details boxes from the description via `/api/retail-admin/ai/extract-facts` and then posts the description AND the weight AND those boxes, while the product page editor (`peAutoFillFromKitchen`) posts the id, both names and the category and **nothing else** — although `GET /api/retail-admin/products/:id` handed it `product_facts` and `weight AS size` in the very response it mounted from, and the prompt in `routes/ai.js` names those facts the source of truth for `spec_strip`, `storage_box`, `ingredients_chips` and `how_to_use`. **The editor's design is worse because the editor forgets to send what it is already holding.** Three smaller faults in the same function, named so they are not read as style: the product joins `_peAutoFilledFor` BEFORE the fetch so a failure cannot retry in that session; every failure is silent by design; and no control anywhere in the editor runs the compose against the product's own description — `Smart paste` asks the office to paste text the database is already storing. **BUT THE DOORS ARE NOT THE DECISION.** A product's content lives in three places — the prose description, the five boxes, the designed page — and the machine copies the first into the second into the third, which sets a trap with no good exit: edit the description and the page is marked out of date, press Rebuild and **the rebuild replaces the page**, hand edits included; edit the page instead and the description drifts from what the customer reads. §144 already found nobody composes a page (the same nine sections on 73–99% of products, then a cliff to 8%) and §145 that the answers barely vary (Origin *Guangzhou, China* 109 of 156, Shelf Life *See packaging* 46 of 57, Diet *100% plant* 28 of 29) — **most of what the AI "generates" is a default that could have been filled for free, or a pick from a short list.** **WHAT IS DECIDED: THE SECTIONS ARE THE ONLY FORM.** A new product's page opens carrying what the platform knows (Net Wt from the weight field, Origin from the shop's own city, no AI call); one box of raw material; **one button that drafts ONLY the blank sections**, reading the raw material and the sections already filled, never touching a section carrying words; the plain description becomes **derived** from the sections on save so the not-yet-republished mini app and the `use_block_design: 0` fallback never render empty; and **"out of date" and "Rebuild" retire with the copying** — there is nothing left to be out of date with, and no pass that replaces work. **WHAT MAKES IT WORK FOR A TENANT THAT IS NOT ROOTS, asked for second and the half that decides whether this ships at all:** §145's `PA_SPEC_VALUES` is Roots' catalogue compiled into source, so a candle shop in Shanghai would be offered a Guangzhou origin and a vegan claim as its defaults — **the values therefore stop being source** and become a tenant-scoped count over that tenant's own spec cells, the same shape `/api/retail-admin/products/block-usage` already uses for *N% of your products say this*; Roots' list stops being code and becomes what the counter computes from Roots' own products, the same answers arrived at honestly. **Labels stay in source, values do not** — *Net Wt · 净含量*, *Origin · 产地* are what the section IS and are neutral in any trade. **The seed for a shop with no history is that shop's own setup**, `retail_stores.city` as the wizard wrote it, suggested and one tap to change; nothing else is pre-filled because nothing else is known. **The colophon is gated on having one** — `PA_IP_CHARACTERS` is ten of Roots' mascots backed by `public/brand/ip-*.jpg`, so a tenant with no characters sees no grid rather than an empty one, and never Roots' radishes on somebody else's page. The voice was already split by `composeSystem(shop)` and this does not re-open it. **WHAT A NEW TENANT SEES ON DAY ONE**, stated plainly because it is the test of the decision: nine empty sections, **no percentages** (nothing of theirs to count yet, and §144 rules a failed count prints no number rather than a wrong one), Net Wt from the weight they typed, Origin suggesting their own city, one box and one button — **no Guangzhou, no diet claim, no mascots, no Roots** — and by their tenth product their own answers are their defaults. **THE FOOD SHAPE IS NOT SOLVED AND IS NOT PRETENDED TO BE:** the nine sections are food sections and every tenant today sells food, so a non-food spine is a later decision with a real signup behind it rather than a guess made now. **WHAT DOES NOT MOVE:** §144's invariant (no stored block moves by rendering, typing or saving, held by `scripts/test_product_editor_doc.js`), §145's 66 cells that say `Type` (a learned default is offered on a NEW product, never written over an old one), and nutrition's two homes. **BUILD ORDER — three PRs, the first useful on its own:** the editor sends what it holds, with the fill-only-blanks control and loud retryable failure; then the shop fills its own lists (tenant-counted defaults, city seed, colophon gate); then the derived description on save, and only then the five boxes leave the sheet, once nothing reads them. No change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
 2026-09-16 · v4.289 — **§153 · A PICK-ANY QUESTION CAN NOW SAY HOW MANY — DECIDED BY ASH**, from a screenshot of the product editor showing a three-choice group headed *Choose 2 crunchy sides · 爽脆配菜（选2款）*: *“need to limit how many can choose. in this example can choose only 2 from the 3 option.”* **THE SENTENCE LIVED IN THE LABEL AND NOWHERE ELSE.** `type='multi'` took ANY number of answers, including none: a customer ticked one side or all three and checked out either way, and `is_required` — a yes/no — can say *at least one* but never *exactly two*. **TWO COLUMNS, NOT ONE, AND THE SECOND ONE WAS ARGUED FOR RATHER THAN ASSUMED:** a maximum alone is what was asked for and is NOT what shipped, because with `max 2` and no floor a customer ticks one cracker and checks out under a label promising two — the same complaint, one control later. `min_choices` + `max_choices` on `retail_product_options`, **0 on both = no limit**, which is what every row written before today carries, so nothing already authored changes shape. `is_required` and the floor are two faces of one rule and are kept in step on save. **THE FLOOR IS NOT ABSOLUTE, AND THAT IS THE WHOLE TRAP.** *Choose 2* whose stock-backed sides have sold down to one cannot be answered; an unanswerable required question does not make a product unbuyable here, it stops being a floor — the same principle §120 states for a question whose answers were all deleted. Both storefronts and the counter menu are served a floor **already clamped to the choices still pickable**, and every checkout measures pickability the same way. **Clamp one side and not the other and the endpoint refuses the very order the page told the customer to place**, with nothing on screen able to explain it; that is the assertion the new suite exists for. **ENFORCED ON BOTH CHECKOUT PATHS, not one** — the QR menu basket (`routes/shop-menu.js`) and customer order-create plus add-to-a-live-order (`routes/retail.js`) — because a limit enforced on one of two checkouts is not a limit. **A REPEATED CHOICE ID COUNTS ONCE**: a tick-box is on or off, so counting the repeat would refuse a correct line and counting it toward a floor would let one side satisfy a request for two. **ONE MODULE FOR THE RULE**, `lib/option-limits.js` — the save path normalises, the menu and both checkouts clamp, and **the browser clients get no copy of the arithmetic**, only the already-clamped numbers: a limit the client computes is a limit the client can compute differently. `addonAvailabilityById()` was extracted from the product response in `routes/retail.js` for the same reason — the floor needed to ask *is this extra still on the shelf* and a second copy would have been a second answer. **WHAT THE OPERATOR SETS:** two number boxes on a Pick-any row, hidden on Pick-one. **WHAT THE CUSTOMER READS:** *Choose 2* / 选 2 项 under the question, the tick-box that would break the ceiling greyed out (a ticked one stays live — untick is how you change your mind), and the Add button blocked under the floor naming the number. **FIVE COMPOSED CN STRINGS, declared in `docs/tacet-delivery-vocabulary.md` v1.99**, every one a live shape with a numeral swapped in; 不限 is a verbatim lift from four live admin strings, and **款 — Ash’s own word in the label that prompted this — was weighed and recorded as rejected** in favour of 项, which is what `至少选一项` already establishes as the counter for an option answer. **WHAT WAS DELIBERATELY LEFT ALONE, named so nobody reads silence as coverage:** the wizard offers no limit control; `routes/retail.js` order-create still does not enforce the older `is_required` flag (a pre-existing gap that a floor of 1+ now closes for pick-any groups, and a separate change otherwise); `public/shop.html` still does not grey out a sold-out paid extra although the server has answered `addon_available` since §120 — the mini app does; and there is no per-choice quantity, so two sides cannot both be corn chips. New suite `scripts/test_option_limits.js` **19/19**, nine of them pure rule tests and the rest driving the REAL router over HTTP. `test:fast` 265 → **266**; lint 0 errors. **REBASED THREE TIMES MID-BUILD, onto db7de6f, 9ef2400 and then 1480456** — three other sessions merged into this tree while it was being written, which is what the enumerate-first rule in `CLAUDE.md` exists to make visible. PR #640 landed first and took §151 and v1.97; PR #643 landed last and took v1.98 AND §152. This renumbered each time rather than renumbering theirs — section numbers are permanent. **§152 IS DELIBERATELY LEFT EMPTY IN THIS FILE**, not skipped by accident: PR #643's vocabulary entry cites §152 for the sign-out work but never wrote that section here, so the number is held for it rather than taken. A reader following v1.98's citation today lands on nothing, and that is a gap in #643 to close, not one to paper over by filling §152 with something else. PR #641 landed second, in the same admin file: it makes the WIZARD's Required tick visible on a pick-any question, which this reinforces rather than contradicts — a wizard-set required multi now normalises to `min_choices 1`, and a floor of 1 IS required. **One assertion of that PR's suite had to be updated**, and it is named here rather than quietly edited: `test_wizard_required_pick.js` pinned the web storefront's block to the literal `o.is_required && !selIds(o).length`, which the floor rewrote. The claim it makes is unchanged and still holds; the check no longer matches a whole expression, because a literal is exactly what makes a sound assertion go red for a correct change. No change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
@@ -16474,3 +16476,154 @@ the shelf" and a second copy would have been a second answer.
   different feature reaching the order lines, and nothing here walls it off.
 - No change to `.gitignore`, CI, or anything governing how sessions and builds
   work.
+
+## §154 — THE PAGE IS THE FORM, AND EVERY SHOP FILLS ITS OWN LISTS
+
+**2026-09-17 · Decided by Ash**, from the automatic design feature: *"seems that
+now need to fill up some information in product page editor so that the
+automatic design feature will work well. seems like waist of time."* Then, shown
+the survey and the proposal: *"this need to work for every tenant not just for
+roots, so how we do it if im a new tenant what i will see"* — and, on the
+answer: *"ok lets do it"*.
+
+### The measured fault, first, because it is smaller than the decision
+
+**Two doors reach the same compose endpoint and they do not carry the same
+load.** The products sheet (`pdAutoComposeBlocks`, `public/retail-admin/09-products.js`)
+fills the five Product-details boxes from the description first via
+`/api/retail-admin/ai/extract-facts`, then posts the description AND the weight
+AND those five boxes. The product page editor (`peAutoFillFromKitchen`,
+`public/product-editor.html`) posts the product id, both names and the category —
+and nothing else — although `GET /api/retail-admin/products/:id` has already
+handed it `product_facts` and `weight AS size` in the same response it mounted
+from.
+
+The compose prompt in `routes/ai.js` names those facts *the source of truth* for
+`spec_strip`, `storage_box`, `ingredients_chips` and `how_to_use`. So the
+editor's door asks the model to guess what the office already typed, three
+screens away. **That is the "waste of time" in one sentence: the editor's design
+is worse because the editor forgets to send what it is already holding.**
+
+Three smaller faults live in the same function and are named here so they are
+not read as style. It adds the product to `_peAutoFilledFor` **before** the
+fetch, so a failure cannot retry in that session. Every failure is silent by
+design — the catch is empty and commented as a convenience. And **no control
+anywhere in the editor runs the compose against the product's own description**:
+`Smart paste` asks the office to paste in text the database is already storing.
+
+### But the doors are not the decision
+
+Fixing the doors makes the current flow work as drawn. It does not remove what
+was complained about, because the shape is the fault.
+
+**A product's content lives in three places today**: the prose description, the
+five Product-details boxes, and the designed page. The machine copies the first
+into the second into the third. That is the whole "automatic design", and it
+sets a trap with no good exit — edit the description and the page is marked out
+of date, press Rebuild and **the rebuild replaces the page**, taking every hand
+edit with it; edit the page instead and the description drifts away from what
+the customer reads. The office keeps two documents in step by hand and the AI is
+the courier between them.
+
+Two measurements already in this file say what to do about it. §144 found the
+same nine sections on 73–99% of products and a cliff to 8% — **nobody composes a
+page, everybody fills in the same one.** §145 found the answers barely vary:
+Origin is *Guangzhou, China* on 109 of 156 cells, Shelf Life *See packaging* on
+46 of 57, Diet *100% plant* on 28 of 29. **Most of what the AI "generates" is
+either a default that could have been filled for free, or a pick from a short
+list.** The genuinely written part is three sections: the opening paragraph, the
+why, and the notes.
+
+### What is decided: the sections are the only form
+
+1. **A new product's page opens already carrying what the platform knows.** Net
+   Wt from the weight field. Origin from the shop's own city. No AI call, no
+   wait, and right most of the time.
+2. **One box of raw material** — *anything you have about this product*: a
+   supplier blurb, label text, scattered notes, either language or both. It is
+   material, not a second truth to keep in step.
+3. **One button: draft the empty sections.** The model writes **only what is
+   blank**, reading the raw material *and the sections already filled*. It never
+   touches a section carrying words. Pressed again next week it fills whatever
+   is still blank.
+4. **The plain description becomes derived** from the sections on save, in both
+   languages, so the not-yet-republished mini app and the `use_block_design: 0`
+   fallback never render an empty page. Derived, not authored — nothing to keep
+   in step.
+5. **"Out of date" and "Rebuild" retire with the copying.** There is nothing
+   left for the page to be out of date *with*, and no pass that replaces work.
+
+### What makes it work for a tenant that is not Roots
+
+This is the half that was asked for second, and it is the half that decides
+whether the feature ships at all.
+
+- **§145's value lists are Roots' catalogue compiled into source.**
+  `PA_SPEC_VALUES` in `public/product-editor.html` names *Guangzhou, China*,
+  *See packaging*, *100% plant*. A candle shop in Shanghai opening its first
+  product would be offered a Guangzhou origin and a vegan claim as its
+  defaults. **So the values stop being source.** They become a tenant-scoped
+  count over that tenant's own spec cells — the same shape
+  `/api/retail-admin/products/block-usage` already uses to print *N% of your
+  products say this*. Roots' list stops being code and becomes what the counter
+  computes from Roots' own products: the same answers as today, arrived at
+  honestly instead of typed in once.
+- **Labels stay in source; values do not.** *Net Wt · 净含量*, *Origin · 产地*,
+  *Shelf Life · 保质期* are what the section IS, and they are neutral in any
+  trade. The answers belong to the tenant.
+- **The seed for a shop with no history is that shop's own setup**, never
+  Roots'. `retail_stores.city` — what the setup wizard writes from its City box —
+  is what Origin suggests. Suggested, one tap to change. Nothing else is
+  pre-filled, because nothing else is known.
+- **The colophon is gated on having one.** `PA_IP_CHARACTERS` is ten of Roots'
+  own mascots backed by files under `public/brand/ip-*.jpg`. A tenant with no
+  characters sees no grid and the fold does not open — not an empty grid, and
+  never Roots' radishes on somebody else's page.
+- **The voice is already split and this does not re-open it.**
+  `composeSystem(shop)` in `routes/ai.js` gives Roots the plant-based Guangzhou
+  sentence and every other tenant a neutral one carrying their own brand name,
+  with the animal-emoji ban applied only where it is true.
+
+### What a new tenant sees on day one
+
+Stated plainly, because it is the test of the whole decision. Nine empty
+sections. **No percentages** — there is nothing of theirs to count yet, and §144
+already rules that a failed count prints no number rather than a wrong one. Net
+Wt filled from the weight they typed. Origin suggesting their own city. One box
+for whatever they have, and one button. **No Guangzhou, no diet claim, no
+mascots, no Roots.** By their tenth product, their own answers are their
+defaults.
+
+### The food shape is not solved and is not pretended to be
+
+The nine sections are food sections — allergens, ingredients, storage,
+nutrition. Every tenant on the platform today sells food, so that is what is
+built. A non-food tenant needs a second spine, and that is a later decision with
+a real signup behind it rather than a guess made now. Recorded so nobody reads
+silence as coverage.
+
+### What does not move
+
+- **§144's invariant is untouched.** No stored block moves by rendering, typing
+  or saving; `scripts/test_product_editor_doc.js` holds it, and the defaults
+  above are inserted at their canonical position exactly as `paDocWrite` already
+  inserts a written section.
+- **§145's 66 cells that say `Type` keep saying it.** Nothing here rewrites a
+  live page. A learned default is offered on a NEW product, never written over
+  an old one.
+- **Nutrition keeps both homes** — the block and the `nutrition` column —
+  exactly as §144 left it.
+
+### Build order — three PRs, and the first is useful on its own
+
+1. **The editor sends what it holds.** Weight and `product_facts` into the
+   compose call, the facts filled first when empty, a visible *draft the empty
+   sections* control with the fill-only-blanks rule, and failures that are loud
+   and retryable. Relief today, and step 3 of the new flow.
+2. **The shop fills its own lists.** Tenant-counted spec defaults replace the
+   compiled value lists; the city seed; the colophon gate.
+3. **The derived description on save**, and only then the five boxes leave the
+   sheet — last, once nothing reads them.
+
+No change to `.gitignore`, CI, or anything governing how sessions and builds
+work.

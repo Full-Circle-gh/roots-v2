@@ -197,12 +197,73 @@ check('the i18n registry lets go of nodes the preview replaced', () => {
     'the registry is only swept when somebody toggles the language, so it grows for the session');
 });
 
-check('auto-fill remembers every product it has already composed', () => {
+check('the auto draft remembers every product it has already composed', () => {
   assert.ok(/_peAutoFilledFor = new Set\(\)/.test(SRC),
     'a single remembered id means switching away and back fires a second AI compose');
-  const b = anchored('peAutoFillFromKitchen');
+  const b = anchored('peDraftEmptySections');
   assert.ok(/_peAutoFilledFor\.has\(p\.id\)/.test(b) && /_peAutoFilledFor\.add\(p\.id\)/.test(b),
-    'peAutoFillFromKitchen does not use the set');
+    'peDraftEmptySections does not use the set');
+  // The memory is the AUTO path's alone. A pressed button that could only be
+  // pressed once per product per session is not a retry, which is the whole
+  // reason the control exists (§154).
+  assert.ok(/if \(auto && _peAutoFilledFor\.has\(p\.id\)\) return;/.test(b),
+    'the once-per-session guard must be gated on `auto` or the button cannot be pressed twice');
+});
+
+// §154. The old code joined the set before the network call and NEVER LEFT IT,
+// so one failed pass meant that product got no draft for the rest of the
+// session and nothing on screen ever said why. The mark still has to be taken
+// before the request goes out — two mounts in quick succession would otherwise
+// both fire — so the fix is the other half: the failure path gives it back.
+check('a failed draft does not burn the product for the session', () => {
+  const b = anchored('peDraftEmptySections');
+  const marked = b.indexOf('_peAutoFilledFor.add(p.id)');
+  const fetched = b.indexOf("fetch('/api/retail-admin/ai/compose-blocks'");
+  assert.ok(marked > 0 && fetched > 0, 'the draft no longer marks, or no longer composes');
+  assert.ok(marked < fetched,
+    'the mark is taken after the request goes out, so a second mount can fire a duplicate compose');
+  assert.ok(/_peAutoFilledFor\.delete\(p\.id\)/.test(b),
+    'nothing gives the id back on failure, so one bad pass silences the product for the session');
+  // The give-back has to be ON the failure path, not somewhere it always runs.
+  const cat = b.slice(b.lastIndexOf('} catch'));
+  assert.ok(/_peAutoFilledFor\.delete\(p\.id\)/.test(cat),
+    'the id is handed back outside the catch — then a SUCCESSFUL draft re-fires on the next mount too');
+});
+
+// §154. The editor is handed product_facts and `weight AS size` in the very
+// response it mounts from, and routes/ai.js reads both as the source of truth
+// for the spec strip, storage, ingredients and how-to-use. Sending only the
+// name and category is what made the editor's design worse than the sheet's.
+check('every compose call sends the facts and the weight this editor is holding', () => {
+  const ctx = anchored('peComposeProduct');
+  for (const key of ['facts:', 'weight:', 'category:']) {
+    assert.ok(ctx.includes(key), `peComposeProduct omits ${key} — the prompt reads it by that name`);
+  }
+  assert.ok(/PA_CURRENT\.product_facts/.test(ctx) && /PA_CURRENT\.size/.test(ctx),
+    'the context is not built from the mounted product, so it cannot carry what the mount fetched');
+  // Both callers, not one: a second hand-rolled payload is a second answer.
+  const calls = SRC.match(/compose-blocks'[\s\S]{0,700}?\}\),/g) || [];
+  assert.ok(calls.length >= 2, `expected the draft and Smart paste to both compose, found ${calls.length}`);
+  const thin = calls.filter(c => !/product: peComposeProduct\(\)/.test(c));
+  assert.deepStrictEqual(thin, [],
+    `a compose call building its own product context:\n${thin.join('\n---\n')}`);
+});
+
+// §154's one rule. A draft that can overwrite a written section is the "rebuild
+// replaces the page" trap wearing a new label.
+check('a drafted section never lands on one that already carries words', () => {
+  const b = anchored('peDraftEmptySections');
+  assert.ok(/peFilledTypes\(\)/.test(b), 'nothing asks which types are already written');
+  assert.ok(/!filled\.has\(b\.type\)/.test(b),
+    'the composed blocks are not filtered against what the page already says');
+  const f = anchored('peFilledTypes');
+  assert.ok(/_paBlockHasWords\(b\)/.test(f),
+    'filled-ness must be measured by the same predicate the save uses, not by presence');
+  // Measured AFTER the call returns: the office may have typed while it flew.
+  const filt = b.indexOf('const filled = peFilledTypes();');
+  const resp = b.indexOf('await r.json()');
+  assert.ok(filt > resp && resp > 0,
+    'the page is read before the request goes out, so words typed during the call would be overwritten');
 });
 
 // ── 5. One language at a time, on every control ─────────────────────────

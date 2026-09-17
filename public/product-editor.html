@@ -1669,10 +1669,19 @@
           </details>
         </div>
         <!-- SHORTCUTS — the sections themselves live in the document (§144).
-             What stays here is the one thing that is not a section: pasting a
-             wall of copy and letting the editor split it. -->
+             What stays here is what is not a section: drafting the blank ones
+             from this product's own description, and pasting in a wall of copy
+             from somewhere else. -->
         <div class="pe-left-group">
           <div class="pe-left-grouptitle">Shortcuts · 快捷</div>
+          <!-- The product's OWN description, drafted into whichever sections are
+               still blank. This is the one the office wants nine times in ten;
+               Smart paste below it is for copy that lives somewhere else. Both
+               wear the same weight — the screen's one primary action is Save. -->
+          <button type="button" class="pe-smart-btn" id="pe-draft-btn" onclick="peDraftEmptySections()" title="Draft the sections that are still blank from this product's description · 根据本产品描述补全仍为空白的板块">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+            Draft the empty sections · 补全空白板块
+          </button>
           <button type="button" class="pe-smart-btn" onclick="peSmartOpen()" title="Paste text, let the editor split it into sections · 粘贴文字,自动拆分成板块">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 3l1.9 4.8L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.7L12 3z"/><path d="M19 14l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8.8-2z"/></svg>
             Smart paste · 智能粘贴
@@ -2793,9 +2802,11 @@ async function peSmartDivide() {
       credentials: 'same-origin',
       body: JSON.stringify({
         text_en: textEn, text_cn: textCn, translate,
-        product: PA_CURRENT
-          ? { id: PA_CURRENT.id, name_en: PA_CURRENT.name_en, name_cn: PA_CURRENT.name_cn, category: PA_CURRENT.category }
-          : {},
+        // The same full context the draft sends — weight and the Product-details
+        // boxes included. Smart paste was dropping them exactly as the draft
+        // was (§154), so a pasted wall of copy composed a worse spec strip than
+        // the identical text pasted on the products sheet.
+        product: peComposeProduct(),
       }),
     });
     if (r.status === 401 || r.status === 403) { peAuthBail(); return; }
@@ -2871,78 +2882,216 @@ function peSmartApply() {
   toast(msg);
 }
 
-// ── Auto-fill — Smart paste, but the source is the kitchen app's product
-// description (EN + CN) instead of a manual paste. This is the DEFAULT: when a
-// product opens with a blank design and the kitchen already carries both
-// languages, compose the sections automatically so the operator never has to
-// hand-copy the kitchen text into Smart paste. It only fires on an empty
-// canvas, so saved or hand-edited sections are never clobbered — once the page
-// has blocks, auto-fill stays out of the way. The result is left UNSAVED so the
-// operator reviews and commits it deliberately.
-const _peAutoFilledFor = new Set();   // product ids already auto-filled this session
+// ── DRAFTING THE EMPTY SECTIONS (§154) ────────────────────────────────────
+//
+// ONE PATH, TWO WAYS IN. The office either opens a product that has nothing on
+// its page (the draft runs by itself, as it always has) or presses "Draft the
+// empty sections" (it runs on demand, as often as they like). Both land here,
+// and both obey the same rule: THE MODEL ONLY EVER FILLS A BLANK. A section
+// carrying words is never rewritten, never reordered, never dropped. That rule
+// is what retires "rebuild replaces the page" — there is no pass here that can
+// take an edit away.
+//
+// WHAT IT READS is the product's own description, which is already loaded — the
+// office never pastes in text this page is holding. Smart paste stays for the
+// other case: copy that lives somewhere else entirely.
+//
+// WHAT IT SENDS is everything this editor knows, which is the fault §154 was
+// written about. GET /api/retail-admin/products/:id hands us product_facts and
+// `weight AS size` in the same response we mounted from, and the compose prompt
+// in routes/ai.js names those facts the source of truth for the spec strip,
+// storage, ingredients and how-to-use. Sending only the name and category asked
+// the model to guess what the office had already typed three screens away.
+//
+// The result is left UNSAVED, so it is reviewed and committed deliberately.
+const _peAutoFilledFor = new Set();   // products auto-drafted this session (manual runs are never blocked)
 function _peStripToText(html) {
   let s = String(html == null ? '' : html);
   if (!s.trim()) return '';
   // Turn block-level boundaries into newlines so paragraphs survive the strip.
   s = s.replace(/<\s*(br|\/p|\/div|\/li|\/h[1-6])\s*>/gi, '\n').replace(/<[^>]+>/g, '');
   const ta = document.createElement('textarea'); ta.innerHTML = s;  // decode entities
-  return ta.value.replace(/[  	]+/g, ' ')
+  return ta.value.replace(/[  \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n').split('\n').map(l => l.trim()).join('\n').trim();
 }
-async function peAutoFillFromKitchen(p) {
-  if (!p || _peAutoFilledFor.has(p.id)) return;
-  // A saved design (the product of earlier work) locks auto-fill out.
-  if (Array.isArray(p.description_blocks) && p.description_blocks.length) return;
+// The context the compose endpoint is built to read. `facts` and `weight` are
+// the two this editor was dropping on the floor; routes/ai.js reads them under
+// exactly these names (see the _factLines block in composeBlocksHandler).
+function peComposeProduct() {
+  if (!PA_CURRENT) return {};
+  const facts = (PA_CURRENT.product_facts && typeof PA_CURRENT.product_facts === 'object')
+    ? PA_CURRENT.product_facts : null;
+  return {
+    id: PA_CURRENT.id,
+    name_en: PA_CURRENT.name_en, name_cn: PA_CURRENT.name_cn,
+    category: PA_CURRENT.top_category || PA_CURRENT.category,
+    weight: PA_CURRENT.size || '',
+    facts: (facts && Object.keys(facts).length) ? facts : null,
+  };
+}
+// Fill the Product-details boxes from the description when they are still
+// empty, BEFORE composing — the same fold-in the products sheet does
+// (pdFactsAutoFillQuiet). Best-effort in every sense: AI off, a failure or no
+// text just proceeds, and an existing box is never clobbered. Persisted with a
+// PATCH so the office does not have to type them again on the other screen.
+async function peEnsureFacts(textEn, textCn) {
+  if (!PA_CURRENT) return;
+  const have = PA_CURRENT.product_facts;
+  if (have && typeof have === 'object' && Object.keys(have).length) return;
+  if (!textEn && !textCn) return;
+  try {
+    const r = await fetch('/api/retail-admin/ai/extract-facts', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text_en: textEn || '', text_cn: textCn || '' }),
+    });
+    if (!r.ok) return;
+    const j = await r.json().catch(() => ({}));
+    const facts = (j && j.success && j.data && j.data.facts) || null;
+    if (!facts || !Object.keys(facts).length) return;
+    PA_CURRENT.product_facts = facts;
+    // Persist on its own, not folded into the page save: the boxes are the
+    // sheet's data and the office may never press Save here at all.
+    await fetch('/api/retail-admin/products/' + PA_CURRENT.id, {
+      method: 'PATCH', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ product_facts: facts }),
+    }).catch(() => {});
+  } catch (e) { /* compose still runs, just without the boxes */ }
+}
+// Which types already carry words. A composed block of one of these is dropped
+// on arrival — that is the whole "only ever fills a blank" rule, enforced at
+// the one point where new blocks enter the stack.
+function peFilledTypes() {
+  paBlocksSyncFromDOM();
+  const out = new Set();
+  (window._paBlocks || []).forEach(b => { if (b && b.type && _paBlockHasWords(b)) out.add(b.type); });
+  return out;
+}
+// Insert at the section's canonical place in the spine rather than at the end,
+// the same arithmetic paDocWrite uses when the office clicks "Write it". Only
+// ever an INSERT: no stored block moves, which is §144's invariant.
+function peInsertAtSpine(blocks, b) {
+  const ci = PA_SPINE_AT[b.type];
+  let at = blocks.length;
+  if (ci != null) {
+    const found = blocks.findIndex(x => x && (x.type in PA_SPINE_AT) && PA_SPINE_AT[x.type] > ci);
+    if (found >= 0) at = found;
+  }
+  blocks.splice(at, 0, b);
+}
+// `auto` is the on-mount run: it stays quiet about the things a background
+// nicety has no business shouting (no description, nothing blank left), and it
+// runs once per product per session. A pressed button is never quiet and is
+// never blocked — the whole point of it is that it can be pressed again.
+async function peDraftEmptySections(opts) {
+  const auto = !!(opts && opts.auto);
+  const p = PA_CURRENT;
+  if (!p) return;
+  if (auto && _peAutoFilledFor.has(p.id)) return;
+  const btn = document.getElementById('pe-draft-btn');
+
   const textEn = _peStripToText(p.description_en);
   const textCn = _peStripToText(p.description_cn);
-  // Need at least ONE language — when only one is written, the AI drafts the
-  // other side itself in the brand voice (original, idiomatic, NOT a literal
-  // gloss), so a single-language kitchen description still produces a fully
-  // bilingual page for the operator to review.
-  if (!textEn && !textCn) return;
+  if (!textEn && !textCn) {
+    if (!auto) toast(cuT('Add a description to this product first, then draft · 请先填写描述', '请先填写描述'), 'err');
+    return;
+  }
+  // Only one language needed — the model drafts the other in the brand voice.
   const translate = !(textEn && textCn);
-  _peAutoFilledFor.add(p.id);
-  toast(cuT('Auto-filling sections from the kitchen description… · 正在根据厨房描述生成板块…', '正在根据厨房描述生成板块…'));
+
+  const already = peFilledTypes();
+  // On mount the draft only runs on a page with nothing on it, so opening a
+  // designed product never starts a background call. Pressed, it runs whatever
+  // the page looks like and lets the blank-only filter do the deciding.
+  if (auto && already.size) return;
+  if (!auto && PA_SPINE.every(t => already.has(t))) {
+    toast(cuT('Every section already has words · 没有空白板块需要补全', '没有空白板块需要补全'));
+    return;
+  }
+
+  if (auto) _peAutoFilledFor.add(p.id);
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+  const prog = auto ? null : _peComposeProgress();
+  if (auto) toast(cuT('Drafting the empty sections… · 正在补全空白板块…', '正在补全空白板块…'));
   try {
+    await peEnsureFacts(textEn, textCn);
     const r = await fetch('/api/retail-admin/ai/compose-blocks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
-      body: JSON.stringify({
-        text_en: textEn, text_cn: textCn, translate,
-        product: { id: p.id, name_en: p.name_en, name_cn: p.name_cn, category: p.category },
-      }),
+      body: JSON.stringify({ text_en: textEn, text_cn: textCn, translate, product: peComposeProduct() }),
     });
-    // No peAuthBail here. This is a background nicety fired from peMount, so a
-    // 401/403 would throw the operator out to the dashboard the instant they
-    // opened any product that has kitchen copy but no design yet — the editor
-    // looked like it crashed on that one product. Stay silent; a real expired
-    // session surfaces on the next save, which is a path worth bouncing.
-    if (r.status === 401 || r.status === 403) return;
+    // No peAuthBail on the AUTO path: it is fired from peMount, so a 401 there
+    // would throw the office out to the dashboard the instant they opened a
+    // product with copy and no page — the editor looked like it had crashed on
+    // that one product. A pressed button is a deliberate act and does bounce.
+    if (r.status === 401 || r.status === 403) {
+      if (auto) return;
+      peAuthBail(); return;
+    }
+    // AI OFF IS A SETTING, NOT A FAILURE. A shop with no key configured would
+    // otherwise be told its draft failed every single time a product was
+    // opened. The pressed button says it plainly — the office asked, so the
+    // office gets an answer — and the background run says nothing at all.
+    if (r.status === 503) {
+      if (prog) prog.done(false, cuT('AI is not configured yet · AI 尚未配置', 'AI 尚未配置'));
+      if (!auto) toast(cuT('AI is not configured yet · AI 尚未配置', 'AI 尚未配置'), 'err');
+      return;
+    }
     const j = await r.json().catch(() => ({}));
-    // Convenience step, not a required one — fail quietly (AI off, error, etc.).
-    if (!r.ok || !j.success) return;
-    const composed = (j.blocks || []).map(b => ({ ...b, id: paBlocksGenId() }));
-    if (!composed.length) return;
-    // Back off if the operator started composing while the call was in flight —
-    // only a lone synthesised nutrition block (no real design work) is OK.
-    paBlocksSyncFromDOM();
-    const cur = window._paBlocks || [];
-    if (cur.some(b => b.type !== 'nutrition_facts')) return;
-    const hasNutrition = cur.some(b => b.type === 'nutrition_facts');
-    const fresh = composed.filter(b => !(b.type === 'nutrition_facts' && hasNutrition));
-    window._paBlocks = fresh.concat(cur);   // composed sections first, keep nutrition after
-    PA_SELECTED_BLOCK_ID = window._paBlocks[0]?.id || null;
+    if (!r.ok || !j.success) throw new Error(j.error || 'compose_failed');
+
+    // THE BLANK-ONLY FILTER. Re-read the page here rather than trusting the set
+    // taken before the call: the office may have typed into a section while it
+    // was in flight, and their words win over a draft every time.
+    const filled = peFilledTypes();
+    const blocks = window._paBlocks || (window._paBlocks = []);
+    const fresh = (j.blocks || [])
+      .filter(b => b && b.type && !filled.has(b.type))
+      .map(b => ({ ...b, id: paBlocksGenId() }));
+    // A second composed block of a type already placed by this same pass is a
+    // duplicate, not a second section — the spine holds one of each.
+    const placed = new Set();
+    const added = [];
+    fresh.forEach(b => {
+      if (placed.has(b.type)) return;
+      placed.add(b.type);
+      // An EMPTY husk of a type already on the page (a spec strip with no cells,
+      // say) is what the filter above cannot see: it carries no words, so the
+      // type is not "filled", but the stack would end up with two of them.
+      const husk = blocks.findIndex(x => x && x.type === b.type);
+      if (husk >= 0) blocks.splice(husk, 1, b); else peInsertAtSpine(blocks, b);
+      added.push(b);
+    });
+    if (!added.length) {
+      if (prog) prog.done(false, cuT('Nothing to add · 没有可补全的板块', '没有可补全的板块'));
+      if (!auto) toast(cuT('Every section already has words · 没有空白板块需要补全', '没有空白板块需要补全'));
+      return;
+    }
+    PA_SELECTED_BLOCK_ID = added[0].id;
     paRenderAll();
+    if (prog) prog.done(true, cuT('Drafted ✓ · 已补全 ✓', '已补全 ✓'));
     const draftNote = translate
       ? (!textCn
           ? cuT(' (drafted the 中文 in the brand voice — give it a read)', '(已按品牌语气替你撰写中文,请校对)')
           : cuT(' (drafted the English in the brand voice — give it a read)', '(已按品牌语气替你撰写英文,请校对)'))
       : '';
     toast(cuT(
-      'Auto-filled ' + fresh.length + ' section' + (fresh.length === 1 ? '' : 's') + ' from the kitchen description' + draftNote + ' — review and save ✓',
-      '已根据厨房描述自动生成 ' + fresh.length + ' 个板块' + draftNote + ' — 请审阅后保存 ✓'));
-  } catch (e) { /* convenience feature — stay silent on failure */ }
+      'Drafted ' + added.length + ' section' + (added.length === 1 ? '' : 's') + draftNote + ' — review and save ✓',
+      '已补全 ' + added.length + ' 个板块' + draftNote + ' — 请审阅后保存 ✓'));
+  } catch (e) {
+    // A FAILURE IS NEVER SILENT ANY MORE, and never final: the product is only
+    // marked drafted on the auto path, and a pressed button can always be
+    // pressed again. The old code added to _peAutoFilledFor BEFORE the call, so
+    // one bad pass meant no draft for that product for the rest of the session
+    // and nothing on screen ever said why.
+    if (auto) _peAutoFilledFor.delete(p.id);
+    if (prog) prog.done(false, cuT("Couldn't draft · 生成失败", '生成失败'));
+    toast(cuT("Couldn't draft the sections — try again · 生成失败,请重试", '生成失败,请重试'), 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; }
+  }
 }
 
 function peMount(p) {
@@ -3032,10 +3181,11 @@ function peMount(p) {
   const _peEmpty = document.getElementById('pe-canvas-empty'); if (_peEmpty) _peEmpty.hidden = true;
   peRenderProdPicker();   // refresh left-pane list + current highlight
 
-  // Default behaviour: if this product has no design yet but the kitchen app
-  // already carries both EN + CN descriptions, compose the sections off that
-  // copy automatically (fire-and-forget — it leaves the page dirty for review).
-  peAutoFillFromKitchen(p);
+  // Default behaviour: a product with nothing on its page and a description
+  // already written gets its empty sections drafted off that description
+  // (fire-and-forget — it leaves the page dirty for review). The same path the
+  // "Draft the empty sections" button runs, in its quiet mode. §154.
+  peDraftEmptySections({ auto: true });
 }
 
 // ── WHERE THIS PRODUCT IS, AND THE ONE OF THOSE PLACES THIS PAGE CAN CHANGE ──
