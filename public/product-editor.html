@@ -3228,6 +3228,7 @@ function peMount(p) {
   if (!window._peShopLoaded) {
     window._peShopLoaded = true;
     paLoadSpecUsage();    // the spec labels + values THIS tenant already uses
+    paLoadStorageUsage(); // and the storage box's icons, heads, units and notes
     paLoadSignature();    // the cast, house line and name this tenant signs with
   }
 
@@ -4265,67 +4266,47 @@ function paSpecLabels() {
 // with and without the invisible variation selector U+FE0F. So does 🌡️ (18)
 // beside 🌡 (9). Nobody can see the difference, nobody can fix it by being
 // careful, and no amount of proofreading finds it. A picker ends it outright.
-const PA_STORAGE_ICONS = {
-  left:  ['❄️', '🌬️', '🫙', '🧊', '🌡️', '🏠'],          // 83 · 43 · 39 · 22 · 18(+9 as 🌡) · 2
-  right: ['❄️', '📅', '🔒', '📦', '🧊', '🫧', '⏱️'],     // 55(+5 as ❄) · 50 · 38 · 23 · 20 · 5 · 4
-};
-
-// MOST-USED WINS, which is the rule Ash set: whichever wording the catalogue
-// already carries more becomes the entry, the Chinese breaks a tie, and the
-// twin that loses is recorded in docs/tacet-delivery-vocabulary.md rather than
-// quietly dropped. Nothing rewrites a product that already says the loser.
-const PA_STORAGE_HEADS = {
-  left: [
-    { en: 'Refrigerate',      cn: '冷藏保存' },   // 52 / 59 — beats 'Keep refrigerated' 13, 冷藏 12
-    { en: 'Cool & Dry',       cn: '阴凉干燥' },   // 55 / 34 — beats 'Cool & dry', 置于阴凉干燥处 16
-    { en: 'Keep it dry',      cn: '干燥存放' },   // 19 / 17
-    { en: 'Keep Frozen',      cn: '冷冻保存' },   // 16 / 19 — beats 'Keep frozen'
-    { en: 'Room Temperature', cn: '常温保存' },   // 12 / 13
-    { en: 'Unopened',         cn: '未开封' },     // 11 / 17 — beats 'Before Opening' 6
-  ],
-  right: [
-    { en: 'Shelf Life',       cn: '保质期' },     // 57 / 57 exact — beats 'Shelf life'
-    { en: 'After Opening',    cn: '开封后' },     // 41 / 44 — beats 'After opening', 'Use After Opening' 16
-    { en: 'To keep longer',   cn: '延长保鲜' },   // 13 / 13 exact
-    { en: 'Refrigerated',     cn: '冷藏保存' },   // 12 / 13
-    { en: 'Freeze for longer', cn: '长期保存请冷冻' }, // 9 / 9 exact — beats 'Freeze' 8, 'Freezing' 7
-  ],
-};
-
-// The trailing phrase beside the big word: "0–4" + "°C at all times". A long
-// tail (49 and 64 distinct) with a strong head, so this is a list AND free
-// text, never a list alone.
-const PA_STORAGE_UNITS = {
-  left: [
-    { en: '°C at all times',                 cn: '°C 全程冷藏' },        // 49 / 42
-    { en: '°C away from sunlight',           cn: '°C 避免阳光直射' },    // 17 / 16
-    { en: 'Away from direct sunlight',       cn: '避免阳光直射' },       // 15 / 13
-    { en: 'Store away from heat and moisture', cn: '远离高温和潮湿' },   // 14 / 6
-    { en: 'Airtight, away from heat & light', cn: '密封,避免高温与阳光' }, // 12 / 11
-    { en: 'months',                          cn: '个月' },              // 12 / 12
-    { en: 'days — eat fresh',                cn: '天内尝鲜' },          // 7 / 7 exact
-  ],
-  right: [
-    { en: 'See packaging',                   cn: '见包装标示' },        // 37 / 31
-    { en: 'days for peak potency',           cn: '天内风味与效力最佳' }, // 16 / 17
-    { en: 'months, sealed',                  cn: '个月（密封）' },      // 15 / 15 exact
-    { en: 'Refrigerate or freeze — the oils stay fresh', cn: '冷藏或冷冻——油脂更不易氧化' }, // 13 / 12
-    { en: 'months',                          cn: '个月' },              // 12 / 13
-    { en: 'Up to 6 months',                  cn: '最长可保存6个月' },   // 9 / 9 exact
-    { en: 'days in the fridge',              cn: '天内（冷藏）' },      // 8 / 8 exact
-  ],
-};
-
-// ONLY TWO NOTES ARE OFFERED, AND THAT IS DELIBERATE. The note field has 77
-// distinct answers and the report truncated the long ones, so pairing an
-// English sentence to its Chinese would have meant GUESSING which 中文 belongs
-// to which — and a guessed pair is exactly what this method exists to avoid.
-// These two are short enough to have been printed whole and read as plainly the
-// same sentence. Everything else stays typed.
-const PA_STORAGE_NOTES = [
-  { en: 'Shelf life: see packaging.',   cn: '保质期：见包装标示。' },  // 27 / 21
-  { en: 'Reseal tightly after opening.', cn: '开封后请密封保存。' },   // 17 / 17 exact
-];
+// THE STORAGE BOX'S LISTS ARE THE SHOP'S, AND THEY ARE COUNTED (§159).
+//
+// §147 gave this block four pick lists the way §145 gave two to the spec strip,
+// and they carried the same fault one section along: the icons, both heads,
+// both unit tails and the notes were ROOTS' CATALOGUE COMPILED INTO THIS PAGE —
+// `Refrigerate · 冷藏保存`, `See packaging · 见包装标示`, `开封后请密封保存。` —
+// offered to every tenant on the platform, including one that sells nothing
+// perishable at all. §156 moved the spec strip's values out for exactly this
+// reason and recorded these three constants as the known remainder. This is it.
+//
+// Roots' lists are not lost. They are recomputed from the products they were
+// measured off in the first place, which is where every number in §147's
+// comments came from.
+//
+// Empty until GET /api/retail-admin/products/storage-usage answers, and empty
+// forever if it fails — every field is free text either way, and a field that
+// offers nothing is exactly what it was before §147. `let`, not `const`: the
+// pick-list resolver below reads these through closures, so a filled list is
+// picked up with no re-wiring.
+let PA_STORAGE_ICONS = { left: [], right: [] };
+let PA_STORAGE_HEADS = { left: [], right: [] };
+let PA_STORAGE_UNITS = { left: [], right: [] };
+let PA_STORAGE_NOTES = [];
+async function paLoadStorageUsage() {
+  try {
+    const r = await fetch('/api/retail-admin/products/storage-usage',
+                          { credentials: 'same-origin', cache: 'no-store' });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (!j || typeof j !== 'object') return;
+    const side = (o) => ({
+      left: Array.isArray(o && o.left) ? o.left : [],
+      right: Array.isArray(o && o.right) ? o.right : [],
+    });
+    PA_STORAGE_ICONS = side(j.icons);
+    PA_STORAGE_HEADS = side(j.heads);
+    PA_STORAGE_UNITS = side(j.units);
+    PA_STORAGE_NOTES = Array.isArray(j.notes) ? j.notes : [];
+    paRenderDoc();
+  } catch (e) { /* no lists offered; every storage field stays free text */ }
+}
 
 const PA_SPEC_CUSTOM = '__custom__';
 function paSpecValuesFor(labelEn) {
@@ -4834,6 +4815,20 @@ function paAllergenAdd(btn, en, cn, keyEn, keyCn) {
 // they always have, so the select is a convenience layer and never a second
 // writer. Free text is not a special case; it is what the control already was.
 function _paPickField({ list, keyEn, keyCn, valEn, valCn, label, attrs = '', phEn = '', phCn = '', onpick }) {
+  // NOTHING TO OFFER MEANS NO CONTROL, not an empty one (§159). These lists are
+  // counted per tenant now, so a shop on its first product has none — and a
+  // select whose only entry is "Something else" is a dropdown that cannot be
+  // used, sitting above the boxes it would have filled. Render the pair alone,
+  // which is exactly what this field was before §147 gave it a list.
+  if (!Array.isArray(list) || !list.length) {
+    return `
+    <div class="field">
+      <label class="stacked">${label}</label>
+    </div>
+    <div class="pa-spec-typed">
+      ${paPair({ label: '', keyEn, keyCn, valEn, valCn, phEn, phCn, attrs })}
+    </div>`;
+  }
   const idx = paSpecMatch(list, valEn);
   const custom = idx < 0;
   const opts = list.map((o, n) =>
@@ -4883,6 +4878,10 @@ function _paPickList(name) { const f = _PA_PICK_LISTS[name]; return f ? f() : nu
 // was already there for anything else.
 function _paIconChips(which, current, icons) {
   const cur = String(current || '');
+  // No icons counted yet (a shop on its first products) → no chip row at all.
+  // The emoji field and picker below it are the control; an empty chip row is
+  // just a gap under the label. §159.
+  if (!Array.isArray(icons) || !icons.length) return '';
   return `<div class="pa-icon-chips">${icons.map(ic =>
     `<button type="button" class="pa-icon-chip${ic === cur ? ' is-on' : ''}" title="${escapeAttr(ic)}"
        onclick="paPickIcon(this, '${escapeAttr(ic)}')">${escapeHtml(ic)}</button>`).join('')}</div>`;

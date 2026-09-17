@@ -69,18 +69,38 @@ const SPEC_HANDLER = (() => {
   return RETAIL_JS.slice(open + 1, i);
 })();
 
+// The block reader the handler walks, lifted out of the same file (§159 moved
+// the JSON.parse loop here so the spec strip and the storage box read the column
+// once). Lifted rather than stubbed: a stub would leave the real parsing — the
+// part that decides what counts as a block at all — untested.
+const BLOCKS_OF_TYPE = (() => {
+  const at = RETAIL_JS.indexOf('function* blocksOfType(');
+  assert.notStrictEqual(at, -1, 'blocksOfType has moved out of routes/retail.js');
+  let i = RETAIL_JS.indexOf('{', RETAIL_JS.indexOf(')', at)), depth = 0;
+  for (; i < RETAIL_JS.length; i++) {
+    if (RETAIL_JS[i] === '{') depth++;
+    else if (RETAIL_JS[i] === '}') { depth--; if (!depth) break; }
+  }
+  return RETAIL_JS.slice(at, i + 1);
+})();
+
 // Run the handler body against fixture rows. tdb() and res are stubbed; the
-// arithmetic between them is the shipped code, character for character.
+// counting module is the REAL one and the block reader is the shipped source,
+// so the arithmetic between them is the code that ships, character for
+// character.
 function countSpecs(rows) {
   let out = null;
   const sandbox = {
     console,
+    pairUsage: require(path.join(ROOT, 'lib', 'pair-usage.js')),
     tdb: () => ({ prepare: () => ({ all: () => rows }) }),
     res: { set() {}, json(v) { out = v; }, status() { return this; } },
     req: {},
     JSON, Map, Set, Array, String, Object,
   };
   vm.createContext(sandbox);
+  vm.runInContext(BLOCKS_OF_TYPE + "\nconst specStripBlocks = (db) => blocksOfType(db, 'spec_strip');",
+                  sandbox, { filename: 'blocksOfType' });
   vm.runInContext(SPEC_HANDLER, sandbox, { filename: 'spec-usage handler' });
   assert.ok(out, 'the handler answered nothing');
   return out;
