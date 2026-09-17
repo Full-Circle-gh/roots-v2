@@ -13404,6 +13404,50 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-recipes .rcp-tbl .right { text-align: right; }
   #tab-recipes .rcp-name { font-weight: 500; color: var(--td-text); }
 
+  /* ── column fit ──────────────────────────────────────────────────────────
+     ONE ELASTIC COLUMN, THE REST SIZED TO THEIR CONTENT. With no widths at
+     all, `table-layout: auto` shares the surplus of a 100%-wide table out in
+     proportion to what each column holds, so on a wide screen the two text
+     columns swallowed it: Category sat ~560px wide for a 24-character label
+     and the four number columns drifted apart across the middle of the row
+     with nothing between them. Figures that are meant to be compared down a
+     column were a scan apart across it.
+
+     width:1% + white-space:nowrap is the CSS idiom for "this column is
+     exactly as wide as its widest cell" — the 1% is below any column's
+     minimum so the algorithm floors it there — and width:100% on the one
+     name column makes it the only claimant on the slack. Result: the numbers
+     travel together at the right-hand side, the name takes the rest, and the
+     row reads left to right in one movement.
+
+     The action cell keeps its own width rule below; it is already 1%. */
+  #tab-recipes .rcp-tbl th.rcp-namecol,
+  #tab-recipes .rcp-tbl td.rcp-namecell { width: 100%; }
+  #tab-recipes .rcp-tbl th.rcp-fit,
+  #tab-recipes .rcp-tbl td.rcp-fit { width: 1%; white-space: nowrap; }
+
+  /* On a narrow screen the sum of eight shrink-to-fit columns is wider than the
+     card, and this table has no scrollport of its own to absorb that — the wrap
+     is overflow:visible on purpose (see the note above), so what does not fit
+     is clipped by the card, not scrolled to. A column was added here, so the
+     width it costs has to come back from somewhere.
+
+     IT COMES OUT OF THE WORDS, NEVER THE FIGURES. Below 900px the HEADINGS are
+     allowed to wrap — "Cost per gram" over two lines is still "Cost per gram",
+     and the heading was the widest thing in its column, not the ¥0.0342/g
+     under it — and Category, the one fitted column holding prose, wraps with
+     them. The cells keep their nowrap: a cost broken over two lines is not a
+     cost, and a batch size is not "652.82" above a "g". Measured on the pesto
+     list: the new column costs the table 125px of minimum width, and letting
+     the headings wrap gives 45px of that straight back — 577px before, 657px
+     now, which still fits the card on a phone with the rail folded. The other
+     80px is what a column carrying a real figure costs, and it is not
+     recoverable without dropping something the row is there to say. */
+  @media (max-width: 900px) {
+    #tab-recipes .rcp-tbl th.rcp-fit { white-space: normal; }
+    #tab-recipes .rcp-tbl td.rcp-fit:nth-child(2) { white-space: normal; min-width: 9ch; }
+  }
+
   /* "Backs material" — a quiet identity badge, not a status. Blocked adds the
      amber treatment (same tokens the missing-cost warning uses below) so a
      frozen figure reads differently from a live one at a glance in the list. */
