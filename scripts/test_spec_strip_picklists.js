@@ -24,6 +24,28 @@
 // HOW IT RUNS WITHOUT A BROWSER. The fast shard has no DOM and the slow shard
 // is not run at all. So the list DATA is asserted directly, and the handlers
 // are asserted at their source with anchors that fail loudly if renamed.
+//
+// AMENDED BY §154 — THE VALUES ARE NO LONGER IN THIS PAGE. They were Roots'
+// catalogue compiled into the editor's source, which on a platform offered a
+// shop in Shanghai a Guangzhou origin as its default. They are now counted per
+// tenant by GET /api/retail-admin/products/spec-usage, so the four checks here
+// that read a PA_SPEC_VALUES literal could no longer read anything — and this
+// file's `literal()` helper did exactly what it was built to do: it failed on
+// the anchor rather than passing against an empty object.
+//
+// WHAT THOSE FOUR CHECKS CLAIMED IS NOT WITHDRAWN, it moved. Every pair being
+// bilingual, values hanging off an offered label, Roots' three measured lists
+// surviving, and a field of one-off answers getting no list at all are now
+// asserted against the counter that produces them, in
+// scripts/test_spec_vocabulary_tenant.js, by running it over fixtures. What
+// stays here is everything about the LABEL list (still a literal in the page)
+// and every claim about the pick MECHANICS, which §154 did not touch.
+//
+// The one claim that genuinely changed shape is Net Wt's. §145 gave it no value
+// list by naming it; a per-tenant count cannot carry an exception for the words
+// "net wt", so the rule is now read off the data — an answer must have been
+// used twice before it is offered back. A field of 67 one-off weights still
+// collapses to nothing, which was the point.
 'use strict';
 
 const assert = require('assert');
@@ -69,7 +91,7 @@ function literal(name) {
 }
 
 const LABELS = literal('PA_SPEC_LABELS');
-const VALUES = literal('PA_SPEC_VALUES');
+// No VALUES literal any more — see the amendment above.
 
 section('Every offered answer is a PAIR, or the list is worse than typing');
 
@@ -83,22 +105,64 @@ check('every label carries both languages', () => {
   }
 });
 
-check('every value carries both languages', () => {
-  for (const [label, list] of Object.entries(VALUES)) {
-    assert.ok(Array.isArray(list) && list.length, label + ' has an empty value list');
-    for (const o of list) {
-      assert.ok(o.en && o.en.trim(), label + ': a value has no English');
-      assert.ok(o.cn && o.cn.trim(), label + ': "' + o.en + '" has no 中文');
-    }
+// The three checks that stood here read the PA_SPEC_VALUES literal: every pair
+// bilingual, every list hanging off an offered label, and the page never
+// consulting a value list on save. They are asserted against the counter now
+// (test_spec_vocabulary_tenant.js). What can still be checked HERE is that the
+// page holds no value list of its own and knows how to live without one.
+
+check('the page carries no value list of its own', () => {
+  assert.ok(!/const PA_SPEC_VALUES = \{/.test(SRC),
+    'a compiled value list is back — every tenant would be offered the shop it was measured from');
+  assert.ok(/let PA_SPEC_VALUES = null;/.test(SRC),
+    'PA_SPEC_VALUES is neither a literal nor the null it should start as');
+  /* `See packaging` is deliberately NOT in this list, and the omission is the
+     point: it is still in the page, inside PA_STORAGE_UNITS, because §154's
+     first pass migrated the spec strip and the colophon and not the storage
+     box. Asserting it here would either fail on work that has not been done or
+     have to be weakened later — both worse than naming it. The check below
+     holds the line instead. */
+  for (const roots of ['Guangzhou, China', '100% plant']) {
+    assert.ok(!SRC.includes("'" + roots + "'"),
+      `the editor still names "${roots}" as an offered answer — that is one shop's data`);
   }
 });
 
-check('every value list hangs off a label that is actually offered', () => {
-  const offered = new Set(LABELS.map(o => o.en.toLowerCase()));
-  for (const label of Object.keys(VALUES)) {
-    assert.ok(offered.has(label),
-      `values are offered under "${label}" but that label is not in the list — they can never be reached`);
-  }
+// §147's storage-box lists are the SAME fault one section over: PA_STORAGE_HEADS,
+// PA_STORAGE_UNITS and PA_STORAGE_NOTES are Roots' measured answers compiled
+// into the page, offered to every tenant. §154 migrated the spec strip first
+// and named these as next. This check exists so that stays a decision somebody
+// made rather than something everyone forgot — it fails the day a FOURTH list
+// is added, and it is deleted the day the three are counted like the spec's.
+check('the storage box\'s lists are the known remainder, and have not grown', () => {
+  const compiled = ['PA_STORAGE_HEADS', 'PA_STORAGE_UNITS', 'PA_STORAGE_NOTES']
+    .filter(n => new RegExp('const ' + n + ' = ').test(SRC));
+  assert.deepStrictEqual(compiled.sort(),
+    ['PA_STORAGE_HEADS', 'PA_STORAGE_NOTES', 'PA_STORAGE_UNITS'],
+    'the storage lists changed shape — if they were migrated, delete this check; ' +
+    'if one was added, it is a fourth list of one shop\'s answers shown to every shop');
+  assert.ok(!/const PA_[A-Z_]*_VALUES = \{/.test(SRC),
+    'a new compiled answer list appeared — count it per tenant instead');
+});
+
+check('the page asks for the values instead, and asks once', () => {
+  assert.ok(/\/api\/retail-admin\/products\/spec-usage/.test(SRC),
+    'nothing fetches the counted lists, so no cell will ever be offered a value');
+  const mount = anchored('peMount');
+  assert.ok(/paLoadSpecUsage\(\)/.test(mount), 'the mount never asks for the counts');
+  assert.ok(/_peShopLoaded/.test(mount),
+    'the count is re-fetched on every product switch — a request per click for an answer that cannot change');
+});
+
+check('a cell is offered nothing at all until the count lands', () => {
+  /* Null, not an empty object, and not a leftover from the last shop. A wrong
+     list is worse than no list, because nothing on screen says it is wrong —
+     the same posture §144's usage percentage takes. */
+  const b = anchored('paSpecValuesFor');
+  assert.ok(/if \(!PA_SPEC_VALUES\) return null;/.test(b),
+    'the lookup reads the bag before it exists');
+  assert.ok(/Array\.isArray\(list\) && list\.length/.test(b),
+    'an empty list would be handed to the renderer as though it were offered answers');
 });
 
 check('no duplicate labels, and none of them collide case-insensitively', () => {
@@ -127,25 +191,26 @@ check('"Net Weight" is not offered beside "Net Wt"', () => {
   assert.ok(!ens.includes('net weight'), '"Net Weight" is back — 163 vs 29 was the split this ends');
 });
 
-check('the three that pay for the change are on offer', () => {
-  /* Origin "Guangzhou, China" is 109 of 156 cells, Shelf Life "See packaging"
-     46 of 57, Diet "100% plant" 28 of 29 — 242 cells typed by hand. If any of
-     these three lists goes, the change stops being worth its own screen. */
-  for (const [label, want] of [['origin', 'Guangzhou, China'],
-                               ['shelf life', 'See packaging'],
-                               ['diet', '100% plant']]) {
-    const list = VALUES[label];
-    assert.ok(list, 'no value list for ' + label);
-    assert.ok(list.some(o => o.en === want), `${label} no longer offers "${want}"`);
-  }
-  assert.strictEqual(VALUES['origin'][0].cn, '中国广州', 'Origin’s first pair lost its 中文');
-});
+// §145's three measured lists — Origin "Guangzhou, China" 109 of 156, Shelf
+// Life "See packaging" 46 of 57, Diet "100% plant" 28 of 29 — are the reason
+// that change was worth its own screen, and they are still offered to Roots.
+// They are no longer ASSERTED here because they are no longer in this page:
+// test_spec_vocabulary_tenant.js proves the counter reproduces all three from
+// Roots-shaped rows, which is a stronger claim than a literal ever made.
+//
+// Net Wt's "no list" rule likewise: §145 named the field, §154 reads it off the
+// data, and the same file proves twenty one-off weights still yield nothing.
 
-check('a field whose answer is different every time gets NO list', () => {
-  /* Net Wt is 67 distinct weights across 163 cells. A list there would be a
-     dropdown nobody can find their product in. */
-  assert.ok(!VALUES['net wt'], 'Net Wt has grown a value list — 67 distinct weights is not a list');
-  assert.ok(!VALUES['certification'], 'Certification has a value list drawn from 13 cells — too thin');
+check('the label list is still the neutral half, and still measured', () => {
+  /* The labels stayed in the page ON PURPOSE. They name what a row IS — Net Wt,
+     Origin, Shelf Life — and are neutral in any trade, where the ANSWERS never
+     are. A label list that started naming answers would be the fault §154
+     removed, coming back one entry at a time. */
+  const ens = LABELS.map(o => o.en.toLowerCase()).join(' | ');
+  for (const answer of ['guangzhou', 'packaging', 'plant', 'vegan', 'china']) {
+    assert.ok(!ens.includes(answer),
+      `"${answer}" is an answer, not a row name — it does not belong in the label list`);
+  }
 });
 
 section('The pick is a convenience layer, never a second writer');
@@ -204,9 +269,15 @@ check('the pick lists are offered; no migration rides along', () => {
   /* 66 cells say "Type" today. They keep saying it. A list that silently
      rewrote them would be changing live customer pages on load, which is the
      §144 refusal in a smaller frame. */
-  assert.ok(!/PA_SPEC_LABELS/.test(anchored('peMount')),
+  /* peMount FETCHES the counted lists now (§154), which is not the same thing
+     as consulting them: what it must never do is read a list and rewrite a
+     stored cell against it. The check therefore names the list itself, not the
+     loader that asks for it. */
+  assert.ok(!/PA_SPEC_LABELS\b/.test(anchored('peMount')),
     'peMount consults the label list on load — that is a migration, not an offer');
-  assert.ok(!/PA_SPEC_LABELS|PA_SPEC_VALUES/.test(anchored('paBlocksCollect')),
+  assert.ok(!/PA_SPEC_VALUES\b/.test(anchored('peMount')),
+    'peMount reads the value bag on load — a pick list must be offered, never applied');
+  assert.ok(!/PA_SPEC_LABELS|PA_SPEC_VALUES|paSpecLabels\(\)/.test(anchored('paBlocksCollect')),
     'the save consults the pick lists — it must persist what is in the block, not what is on the list');
 });
 

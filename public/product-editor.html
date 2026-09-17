@@ -1654,7 +1654,10 @@
               <div class="field" style="margin-bottom:2px"><label class="stacked">Tagline CN · 标语(中文)</label><input id="pa-edit-tagline-cn" type="text" placeholder="例如:肠道值得更好的关怀"></div>
             </div>
           </details>
-          <details class="pa-left-acc" id="pe-acc-colophon">
+          <!-- Hidden until the platform says this tenant HAS a cast to sign with
+               (§154). Starting visible would flash a control at every shop that
+               has none, in the half-second before the answer lands. -->
+          <details class="pa-left-acc" id="pe-acc-colophon" hidden>
             <summary><span class="pe-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.24 12.24a6 6 0 0 0-8.49-8.49L5 10.5V19h8.5z"/><line x1="16" y1="8" x2="2" y2="22"/><line x1="17.5" y1="15" x2="9" y2="15"/></svg></span> Colophon · 片尾签名 <span id="pe-colophon-dot" class="pe-acc-dot"></span></summary>
             <div class="pa-left-acc-body">
               <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 6px;gap:8px;flex-wrap:wrap">
@@ -1662,8 +1665,10 @@
                 <button type="button" class="btn" style="padding:3px 8px;font-size:11px" onclick="paClearColophonChar()">Auto · 自动</button>
               </div>
               <div id="pa-colophon-grid" class="pa-colophon-grid"></div>
-              <div class="field" style="margin-top:10px"><label class="stacked">Tagline EN · 标语(英文)</label><input id="pa-edit-colophon-tagline-en" type="text" placeholder="From Soil to Soul"></div>
-              <div class="field" style="margin-bottom:2px"><label class="stacked">Tagline CN · 标语(中文)</label><input id="pa-edit-colophon-tagline-cn" type="text" placeholder="从土壤到灵魂"></div>
+              <!-- Placeholders are set by paLoadSignature from the tenant's own house line
+                   (§154): they were Roots' slogan, offered to every shop as a suggestion. -->
+              <div class="field" style="margin-top:10px"><label class="stacked">Tagline EN · 标语(英文)</label><input id="pa-edit-colophon-tagline-en" type="text" placeholder=""></div>
+              <div class="field" style="margin-bottom:2px"><label class="stacked">Tagline CN · 标语(中文)</label><input id="pa-edit-colophon-tagline-cn" type="text" placeholder=""></div>
               <input type="hidden" id="pa-edit-colophon-character" value="">
             </div>
           </details>
@@ -2015,18 +2020,41 @@ const PA_BLOCK_TYPES = [
   },
 ];
 
-const PA_IP_CHARACTERS = [
-  { key: 'soilsoul',       label: 'Soil & Soul' },
-  { key: 'skater',         label: 'Skater'      },
-  { key: 'kombucha-gang',  label: 'Kombucha'    },
-  { key: 'flex',           label: 'Flex'        },
-  { key: 'radishes',       label: 'Radishes'    },
-  { key: 'mushroom',       label: 'Mushroom'    },
-  { key: 'peas',           label: 'Peas'        },
-  { key: 'onion',          label: 'Onion'       },
-  { key: 'broccoli',       label: 'Broccoli'    },
-  { key: 'hula',           label: 'Hula'        },
-];
+// WHOSE CHARACTERS THESE ARE (§154). This was Roots' own illustrated cast,
+// named in the editor's source, which meant every tenant on the platform was
+// shown it and could sign a product page with somebody else's mascot. The
+// platform answers the question now — GET /api/retail-admin/brand/characters —
+// and the list starts EMPTY so a tenant who has none never sees a grid at all.
+// Roots' ten arrive from that route unchanged.
+let PA_IP_CHARACTERS = [];
+// The rest of the signature: the house line under the cast and the name on the
+// rule below it. BOTH WERE LITERALS IN THIS PAGE — `From Soil to Soul` and
+// `Roots · ESTD 2017` — so the preview signed every tenant's product page with
+// Roots' slogan and Roots' name. Empty until the route answers, and empty
+// forever for a shop that has no cast: a slogan is not something the platform
+// can supply, and printing one it invented is worse than printing none.
+let PA_SIGNATURE = { tagline_en: '', tagline_cn: '', house: '' };
+async function paLoadSignature() {
+  try {
+    const r = await fetch('/api/retail-admin/brand/signature',
+                          { credentials: 'same-origin', cache: 'no-store' });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (!j || !Array.isArray(j.characters)) return;
+    PA_IP_CHARACTERS = j.characters;
+    PA_SIGNATURE = {
+      tagline_en: j.tagline_en || '', tagline_cn: j.tagline_cn || '', house: j.house || '',
+    };
+  } catch (e) { /* nothing offered — the fold stays hidden and the rule stays bare */ }
+  // The house line doubles as the placeholder for the per-product override, so
+  // Roots keeps the suggestion it has always had and nobody else is shown it.
+  const ph = (id, v) => { const n = document.getElementById(id); if (n) n.placeholder = v || ''; };
+  ph('pa-edit-colophon-tagline-en', PA_SIGNATURE.tagline_en);
+  ph('pa-edit-colophon-tagline-cn', PA_SIGNATURE.tagline_cn);
+  paRenderColophonGrid();
+  paRenderPreview();
+  paRenderPresets();   // the template thumbnails carry the colophon too
+}
 
 // Product-page templates. Each entry is a self-contained design: an id (saved
 // to products.page_template), bilingual label/description, and the default
@@ -3192,6 +3220,16 @@ function peMount(p) {
 
   paWirePreviewClicks();  // clicking a block in the phone opens its section
   paLoadUsage();          // fills in "N% of your products say this" when it lands
+  // Both of these describe the SHOP, not the product, so they are fetched once
+  // per editor load and survive a switch between products (§154). The guard
+  // matters: switching products re-runs this whole mount, and re-counting the
+  // catalogue on every switch would be a request per click for an answer that
+  // cannot have changed.
+  if (!window._peShopLoaded) {
+    window._peShopLoaded = true;
+    paLoadSpecUsage();    // the spec labels + values THIS tenant already uses
+    paLoadSignature();    // the cast, house line and name this tenant signs with
+  }
 
   document.getElementById('pe-loading').classList.add('hide');
   const _peEmpty = document.getElementById('pe-canvas-empty'); if (_peEmpty) _peEmpty.hidden = true;
@@ -3360,6 +3398,17 @@ function peUpdatePageDot() {
 // ── Colophon ──
 function paRenderColophonGrid() {
   const grid = document.getElementById('pa-colophon-grid'); if (!grid) return;
+  // NO CAST, NO GRID, AND NO FOLD. An empty grid would read as "your characters
+  // have not loaded"; the whole control is hidden instead, and the taglines
+  // below it go with it — a colophon signature with nothing to sign it is two
+  // text boxes whose purpose is not on screen. The route decides, not the page.
+  const fold = document.getElementById('pe-acc-colophon');
+  if (!PA_IP_CHARACTERS.length) {
+    grid.innerHTML = '';
+    if (fold) { fold.hidden = true; fold.open = false; }
+    return;
+  }
+  if (fold) fold.hidden = false;
   const current = (document.getElementById('pa-edit-colophon-character').value || '').trim();
   grid.innerHTML = PA_IP_CHARACTERS.map(c => `
     <div class="pa-colophon-tile ${current === c.key ? 'active' : ''}" onclick="paPickColophonChar('${c.key}')" title="${escapeAttr(c.label)}">
@@ -3446,11 +3495,20 @@ function _paSampleScreen(sample, withColophon) {
   const name    = PL === 'cn' ? '芝麻酱' : 'Sesame Tahini';
   const sub     = PL === 'cn' ? 'Sesame Tahini · 石磨' : '芝麻酱 · stone-ground';
   const tagline = PL === 'cn' ? '一罐,一种原料' : 'One jar, one ingredient';
-  const colophon = withColophon ? `
+  // THE SAMPLE SIGNS WITH THIS SHOP'S SIGNATURE TOO (§154). The product in this
+  // thumbnail is openly a sample — a jar of tahini nobody sells — but the
+  // colophon under it is not read as sample: it is the footer the template will
+  // put on YOUR page, so a hard-coded Soil & Soul portrait over `Roots · ESTD
+  // 2017` told every other tenant their pages would be signed by a company they
+  // have never heard of. Same rule as the live preview: the shop's own cast,
+  // line and name, or nothing at all.
+  const sampleChar = (PA_IP_CHARACTERS[0] || {}).key || '';
+  const sampleTag  = (PL === 'cn' ? PA_SIGNATURE.tagline_cn : PA_SIGNATURE.tagline_en) || '';
+  const colophon = (withColophon && (sampleChar || sampleTag || PA_SIGNATURE.house)) ? `
     <div class="pa-prev-colophon">
-      <img class="pa-prev-colophon-img" src="/assets/brand/ip-soilsoul.jpg" alt="" onerror="this.style.display='none'">
-      <div class="pa-prev-colophon-tagline">${PL === 'cn' ? '从土壤到灵魂' : 'From Soil to Soul'}</div>
-      <div class="pa-prev-colophon-meta"><span class="pa-prev-colophon-rule"></span><span>Roots · ESTD 2017</span><span class="pa-prev-colophon-rule"></span></div>
+      ${sampleChar ? `<img class="pa-prev-colophon-img" src="/assets/brand/ip-${encodeURIComponent(sampleChar)}.jpg" alt="" onerror="this.style.display='none'">` : ''}
+      ${sampleTag ? `<div class="pa-prev-colophon-tagline">${escapeHtml(sampleTag)}</div>` : ''}
+      ${PA_SIGNATURE.house ? `<div class="pa-prev-colophon-meta"><span class="pa-prev-colophon-rule"></span><span>${escapeHtml(PA_SIGNATURE.house)}</span><span class="pa-prev-colophon-rule"></span></div>` : ''}
     </div>` : '';
   return `
     <div class="pa-prev-hero">🛍</div>
@@ -4152,57 +4210,50 @@ const PA_SPEC_LABELS = [
 // NET WT HAS NO LIST ON PURPOSE — 67 distinct weights across 163 cells is
 // exactly what a weight field should look like. So do Certification and
 // Storage, which are too thin to draw a list from.
-const PA_SPEC_VALUES = {
-  'origin': [
-    { en: 'Guangzhou, China',     cn: '中国广州' },        // 109
-    { en: 'China',                cn: '中国' },            // 15
-    { en: 'Yunnan, China',        cn: '中国云南' },        // 5 / 3
-    { en: 'Israel',               cn: '以色列' },          // 3
-    { en: 'Northeast China',      cn: '中国东北' },        // 2
-    { en: 'Tunisia, North Africa', cn: '突尼斯（北非）' }, // 2
-  ],
-  'shelf life': [
-    { en: 'See packaging',        cn: '见包装标示' },      // 46 / 38 (also 见包装 8, 请见包装标注 2)
-    { en: 'Up to 6 months frozen', cn: '冷冻最长保存6个月' }, // 5 / 3
-  ],
-  'diet': [
-    { en: '100% plant',           cn: '纯植物' },          // 28
-    { en: 'Vegan',                cn: '纯素' },            // 1
-  ],
-  'form': [
-    { en: 'Raw · whole',          cn: '生 · 整粒' },       // 6
-    { en: 'Dried · raw',          cn: '干豆 · 生' },       // 4
-    { en: 'Raw seeds',            cn: '生 · 籽' },         // 4
-    { en: 'Whole rolled',         cn: '整粒压片' },        // 2
-    { en: 'Organic powder',       cn: '有机粉' },          // 2
-  ],
-  'use': [
-    { en: 'Snack · bake · blend', cn: '直接吃·烘焙·打浆' }, // 6
-    { en: 'Sprinkle · blend · soak', cn: '撒·打浆·泡发' },  // 4
-    { en: 'No soak needed',       cn: '无需浸泡' },        // 2
-    { en: 'Rinse & cook',         cn: '冲洗后烹煮' },      // 2
-    { en: 'Soak & cook',          cn: '泡发后烹煮' },      // 2
-    { en: 'Cook in minutes',      cn: '几分钟煮好' },      // 2
-    { en: 'Season anything',      cn: '万物可调味' },      // 2
-  ],
-  'category': [
-    { en: 'Home & Body',          cn: '家居护理' },        // 6 / 4 (also 家居护肤, 家居与身体护理)
-    { en: 'Fresh & Deli',         cn: '鲜食与熟食' },      // 3 / 2
-    { en: 'Protein Powder',       cn: '蛋白粉' },          // 2
-    { en: 'Dry & Pantry',         cn: '干货 & 储备食材' }, // 2 / 1
-    { en: 'Chili Paste',          cn: '辣椒酱' },          // 2
-  ],
-  'product type': [
-    { en: 'Ready-to-eat spread',  cn: '即食抹酱' },        // 9
-    { en: 'Ready-to-eat nut butter', cn: '即食坚果酱' },   // 8
-    { en: 'Dried Fruit',          cn: '干果' },            // 4 / 3
-    { en: 'Ready-to-eat refrigerated food', cn: '即食冷藏食品' }, // 3
-    { en: 'Frozen · heat to eat', cn: '冷冻 · 加热食用' }, // 3
-    { en: 'Fresh Food',           cn: '鲜食' },            // 2
-    { en: 'Glass Cleaner',        cn: '玻璃清洁液' },      // 2
-    { en: 'Laundry Liquid',       cn: '洗衣液' },          // 2
-  ],
-};
+// THE VALUES ARE THE TENANT'S, AND THEY ARE COUNTED, NOT COMPILED (§154).
+//
+// This was Roots' catalogue written into the editor: Guangzhou on Origin, "See
+// packaging" on Shelf Life, "100% plant" on Diet. Those were real measurements
+// — 109 of 156, 46 of 57, 28 of 29 — and they are still exactly right FOR
+// ROOTS. They are nonsense for anybody else, and a platform that offers a
+// candle shop in Shanghai a Guangzhou origin as its default has put a guess in
+// the same control as a measured fact, where nothing on screen tells them apart.
+//
+// So the measurement moved to where it can be taken for whoever is asking:
+// GET /api/retail-admin/products/spec-usage counts this tenant's own cells.
+// Roots' list is not lost, it is recomputed from the products it was read off
+// in the first place. A NEW TENANT IS OFFERED NOTHING, which is the honest
+// answer on day one and stops being the answer by their tenth product.
+//
+// Null until the count lands, and null forever if it fails — the same posture
+// §144's usage percentage takes, for the same reason.
+let PA_SPEC_VALUES = null;
+let PA_SPEC_LABELS_OWN = [];      // labels this tenant uses that the house list has no name for
+async function paLoadSpecUsage() {
+  try {
+    const r = await fetch('/api/retail-admin/products/spec-usage',
+                          { credentials: 'same-origin', cache: 'no-store' });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (!j || typeof j.values !== 'object' || !j.values) return;
+    PA_SPEC_VALUES = j.values;
+    // A label the tenant already uses is offered even when the house list has
+    // never heard of it — otherwise a shop that says "Fabric" is told, by a
+    // dropdown reading "Something else", that its own vocabulary is irregular.
+    const known = new Set(PA_SPEC_LABELS.map(o => o.en.toLowerCase()));
+    PA_SPEC_LABELS_OWN = (Array.isArray(j.labels) ? j.labels : [])
+      .filter(o => o && o.en && o.cn && !known.has(String(o.en).toLowerCase()))
+      .map(o => ({ en: o.en, cn: o.cn }));
+    paRenderDoc();
+  } catch (e) { /* no lists offered; every cell stays free text */ }
+}
+// The labels a cell may be given: the house's neutral set plus whatever this
+// tenant already says. Free text remains what it always was — the fallback, not
+// a special case.
+function paSpecLabels() {
+  return PA_SPEC_LABELS_OWN.length ? PA_SPEC_LABELS.concat(PA_SPEC_LABELS_OWN) : PA_SPEC_LABELS;
+}
+
 
 // ── §147 · THE STORAGE BOX, SAME METHOD ────────────────────────────────────
 //
@@ -4278,7 +4329,9 @@ const PA_STORAGE_NOTES = [
 
 const PA_SPEC_CUSTOM = '__custom__';
 function paSpecValuesFor(labelEn) {
-  return PA_SPEC_VALUES[String(labelEn || '').trim().toLowerCase()] || null;
+  if (!PA_SPEC_VALUES) return null;   // not counted yet, or the count failed
+  const list = PA_SPEC_VALUES[String(labelEn || '').trim().toLowerCase()];
+  return (Array.isArray(list) && list.length) ? list : null;
 }
 // Does this cell's current wording match one of the offered pairs? Matched on
 // the ENGLISH only, and loosely: a cell that says "Net wt" is the same answer
@@ -4613,7 +4666,7 @@ function paPair({ label, keyEn, keyCn, valEn = '', valCn = '', phEn = '', phCn =
 // backwards (§142), and free text is not a special case — it is what the
 // control already was, merely hidden while a list answer is in force.
 function _paSpecCell(b, c, i, total) {
-  const labelIdx = paSpecMatch(PA_SPEC_LABELS, c.k_en);
+  const labelIdx = paSpecMatch(paSpecLabels(), c.k_en);
   const vList    = paSpecValuesFor(c.k_en);
   const valueIdx = vList ? paSpecMatch(vList, c.v_en) : -1;
   const kCustom  = labelIdx < 0;
@@ -4633,7 +4686,7 @@ function _paSpecCell(b, c, i, total) {
         <label class="stacked" data-no-i18n><span data-lang-block="en">Label</span><span data-lang-block="cn">标签</span></label>
         <select class="pa-spec-sel" onchange="paSpecPickLabel(this, '${b.id}', ${i})">
           <option value="${PA_SPEC_CUSTOM}" ${kCustom ? 'selected' : ''}>Something else — type it · 其他 — 手动输入</option>
-          ${opts(PA_SPEC_LABELS, labelIdx)}
+          ${opts(paSpecLabels(), labelIdx)}
         </select>
       </div>
       <div class="pa-spec-typed" ${kCustom ? '' : 'hidden'}>
@@ -4676,7 +4729,7 @@ function _paPickInputs(sel, key) {
 function paSpecPickLabel(sel, blockId, idx) {
   const io = _paPickInputs(sel, 'k'); if (!io || !io.en) return;
   if (sel.value !== PA_SPEC_CUSTOM) {
-    const o = PA_SPEC_LABELS[+sel.value]; if (!o) return;
+    const o = paSpecLabels()[+sel.value]; if (!o) return;
     io.en.value = o.en; io.cn.value = o.cn;
   } else {
     io.en.value = ''; io.cn.value = '';
@@ -5423,11 +5476,29 @@ const PA_COLOPHON_AUTO_MAP = [
   [/(onion|allium|garlic|leek)/,           'onion'],
   [/(broccoli|cabbage|leafy|green)/,       'broccoli'],
 ];
+// THE AUTO-PICK CAN ONLY EVER PICK SOMETHING THIS SHOP HAS (§154). The map
+// below is Roots' cast filed by what Roots sells, and the fallback was a
+// literal `soilsoul` — so a tenant who had never chosen a character, on a page
+// nobody had touched, got Roots' Soil & Soul drawn onto their product. That is
+// worse than the grid this commit hides, because it needed no operator action
+// at all: it was the default.
+//
+// The map stays where it is and keeps working for the shop it was written for.
+// What changes is that every answer it gives is checked against the cast the
+// platform actually handed this editor, and an unmatched one is no character.
+function _paHasCharacter(key) {
+  return !!key && PA_IP_CHARACTERS.some(c => c.key === key);
+}
 function _paResolveColophonChar(override, category) {
+  // An override is still honoured even when the cast has not landed yet — it is
+  // this product's stored choice, and blanking it on a slow fetch would repaint
+  // a page the office had already signed.
   if (override) return override;
+  if (!PA_IP_CHARACTERS.length) return '';
   const cat = (category || '').toLowerCase();
   const hit = PA_COLOPHON_AUTO_MAP.find(([rx]) => rx.test(cat));
-  return hit ? hit[1] : 'soilsoul';
+  const key = hit ? hit[1] : 'soilsoul';
+  return _paHasCharacter(key) ? key : '';
 }
 // Switch the phone preview between the EN and 中文 customer view. Independent
 // of the top-bar chrome toggle — re-renders the preview in the chosen language.
@@ -5471,8 +5542,13 @@ function paRenderPreview() {
   const colTagEN = (document.getElementById('pa-edit-colophon-tagline-en').value || '').trim();
   const colTagCN = (document.getElementById('pa-edit-colophon-tagline-cn').value || '').trim();
   const colResChar = _paResolveColophonChar(colChar, p.category);
-  const colResTag  = pick(colTagEN, colTagCN) || (PL === 'cn' ? '从土壤到灵魂' : 'From Soil to Soul');
+  // The operator's own tagline first; the house line only if this shop HAS one.
+  const colResTag  = pick(colTagEN, colTagCN)
+    || (PL === 'cn' ? PA_SIGNATURE.tagline_cn : PA_SIGNATURE.tagline_en) || '';
   const colIsAuto  = !colChar;
+  // A colophon with no character, no line and no name is three empty elements
+  // and a rule. It is not drawn at all.
+  const colShow    = !!(colResChar || colResTag || PA_SIGNATURE.house);
   const img = p.image_data || p.image_url || '';
   const heroStyle = img ? `background-image:url('${escapeAttr(img)}'); background-color:transparent;` : '';
   const blocksHtml = (window._paBlocks || []).map(b => {
@@ -5490,12 +5566,12 @@ function paRenderPreview() {
         ${tagline ? `<div class="pa-prev-tagline">${escapeHtml(tagline)}</div>` : ''}
       </div>
       ${blocksHtml || (!keywords && !tagline ? `<div class="pa-prev-empty">${_paPreviewLang === 'cn' ? '还没有板块,点上方“添加板块”开始排版。' : 'No designer sections yet. Add one to compose the page.'}</div>` : '')}
-      <div class="pa-prev-colophon">
-        <img class="pa-prev-colophon-img" src="/assets/brand/ip-${encodeURIComponent(colResChar)}.jpg" alt="" onerror="this.style.display='none'">
-        <div class="pa-prev-colophon-tagline">${escapeHtml(colResTag)}</div>
-        <div class="pa-prev-colophon-meta"><span class="pa-prev-colophon-rule"></span><span>Roots · ESTD 2017</span><span class="pa-prev-colophon-rule"></span></div>
-        ${colIsAuto ? '<div class="pa-prev-colophon-auto">auto · 自动</div>' : ''}
-      </div>
+      ${colShow ? `<div class="pa-prev-colophon">
+        ${colResChar ? `<img class="pa-prev-colophon-img" src="/assets/brand/ip-${encodeURIComponent(colResChar)}.jpg" alt="" onerror="this.style.display='none'">` : ''}
+        ${colResTag ? `<div class="pa-prev-colophon-tagline">${escapeHtml(colResTag)}</div>` : ''}
+        ${PA_SIGNATURE.house ? `<div class="pa-prev-colophon-meta"><span class="pa-prev-colophon-rule"></span><span>${escapeHtml(PA_SIGNATURE.house)}</span><span class="pa-prev-colophon-rule"></span></div>` : ''}
+        ${colIsAuto && colResChar ? '<div class="pa-prev-colophon-auto">auto · 自动</div>' : ''}
+      </div>` : ''}
     </div>`;
 }
 
