@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.302
+# Tacet shared-core consolidation — decisions record, v4.303
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,7 +23,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-17 · v4.302 — **§98 ADDENDUM 7 · THE FOUR STEPS ARE NUMBERED, AND THE THREE THAT ARE NOT NEXT STOP SHOUTING — REPORTED BY ASH** from the phone, against TC000716 with the case open on screen: *"not clear, maybe step by step better?"*. **THE PANEL WAS ASKED FOR A WIZARD AND DID NOT GET ONE, AND THAT REFUSAL IS THE DECISION HERE.** One step at a time was put up and rejected on three grounds, recorded because it is the intuitive answer: the steps are **not strictly ordered** — the carrier rings while the remedy is still open, which is ordinary, and the renderers have carried controls for an out-of-turn step since §98 precisely so it is reachable; a wizard **costs the glance**, and seeing where a case stands without tapping is the whole reason the panel exists rather than a page; and it would **undo the weight pass** §98 addendum 6 shipped off Ash's own *"can make a better design?"*. Ash chose the alternative. **WHAT WAS ACTUALLY UNCLEAR, MEASURED OFF THE PHOTOGRAPH, WAS THREE THINGS.** The header counted `✓ 1/4` and **no row on screen carried a 1, a 2, a 3 or a 4** for it to be counting. **Six controls were visible at once** — `Claim filed`, `Not claiming`, `Add photo`, `Send replacement`, `Refunded`, `Nothing needed` — and three of them belonged to a step that was not next, sitting directly under the one that was; the one-primary rule held and was never the problem, the greys were. And the footer printed *"to do: Replacement or refund · Carrier settled"*, **naming two rows two and three lines above it** — the same words twice, in a block whose complaint was that there was too much to read. **THE FIX IS THREE CHANGES AND NO NEW BEHAVIOUR.** A later step's marker is its NUMBER, the NEXT pane's eyebrow carries `n/total`, and the blocker codes are worded as NUMERALS so the footer points at the rows instead of repeating them — `to do: 3 · 4`. A later step's controls FOLD, behind a chevron, one open at a time; an out-of-turn step stays reachable and costs a tap. **NOT A WORD WAS MINTED IN EITHER LANGUAGE** — numerals, a chevron and a dash, with `下一步` and `待办` already live — so `docs/tacet-delivery-vocabulary.md` is untouched and deliberately so; this is the *"a numeral or a name often needs no label at all"* preference taken rather than a composition declared. **THE n/a ROW STOPPED LOOKING FINISHED**: a case that will not claim drew its carrier step with a green tick and a `–` in the STAMP slot, which reads as a step somebody did; the dash is now the marker and the tick is gone, matching the count that has never counted it. **THE TWO SURFACES FOLD BY DIFFERENT MECHANISMS, ON PURPOSE, AND THIS IS THE ONE THING TO READ BEFORE TOUCHING EITHER.** The phone repaints on the 60-second live backstop, so its fold is `state.dcMore` or the row would close under the thumb of whoever opened it. The drawer does NOT repaint on a fold, and must not: its claim number and amounts are **inline inputs**, so calling `renderOpenOrder` to open a row would have thrown away a claim number half-typed two rows above — it flips two attributes and touches nothing else. Same panel, same picture, two correct answers. **Tests:** `scripts/test_mobile_delay_panel.js` 47 → **55 assertions across 11 cases**, gaining the fold, the numerals, the footer and a geometry measurement of the FRESH state — every measured case in that file until now drew a panel whose steps were all finished, so the numbered row and the chevron had never been measured at all. **Three breaks were confirmed red**: the fold removed, the numerals put back to circles, and the footer returned to labels. `scripts/test_delay_panel_rows.js` had **pinned `delayDone`'s ARITY** through a regex matching to the closing bracket, so a fourth argument read as the stamp-and-sentence fault that file exists to catch; it now matches up to `note`, which is what its own comment says it guards. 274 fast suites pass, 0 fail. A build under §98 and §125 with no rule reversed, hence a patch.
+2026-09-17 · v4.303 — **§98 ADDENDUM 7 · THE FOUR STEPS ARE NUMBERED, AND THE THREE THAT ARE NOT NEXT STOP SHOUTING — REPORTED BY ASH** from the phone, against TC000716 with the case open on screen: *"not clear, maybe step by step better?"*. **THE PANEL WAS ASKED FOR A WIZARD AND DID NOT GET ONE, AND THAT REFUSAL IS THE DECISION HERE.** One step at a time was put up and rejected on three grounds, recorded because it is the intuitive answer: the steps are **not strictly ordered** — the carrier rings while the remedy is still open, which is ordinary, and the renderers have carried controls for an out-of-turn step since §98 precisely so it is reachable; a wizard **costs the glance**, and seeing where a case stands without tapping is the whole reason the panel exists rather than a page; and it would **undo the weight pass** §98 addendum 6 shipped off Ash's own *"can make a better design?"*. Ash chose the alternative. **WHAT WAS ACTUALLY UNCLEAR, MEASURED OFF THE PHOTOGRAPH, WAS THREE THINGS.** The header counted `✓ 1/4` and **no row on screen carried a 1, a 2, a 3 or a 4** for it to be counting. **Six controls were visible at once** — `Claim filed`, `Not claiming`, `Add photo`, `Send replacement`, `Refunded`, `Nothing needed` — and three of them belonged to a step that was not next, sitting directly under the one that was; the one-primary rule held and was never the problem, the greys were. And the footer printed *"to do: Replacement or refund · Carrier settled"*, **naming two rows two and three lines above it** — the same words twice, in a block whose complaint was that there was too much to read. **THE FIX IS THREE CHANGES AND NO NEW BEHAVIOUR.** A later step's marker is its NUMBER, the NEXT pane's eyebrow carries `n/total`, and the blocker codes are worded as NUMERALS so the footer points at the rows instead of repeating them — `to do: 3 · 4`. A later step's controls FOLD, behind a chevron, one open at a time; an out-of-turn step stays reachable and costs a tap. **NOT A WORD WAS MINTED IN EITHER LANGUAGE** — numerals, a chevron and a dash, with `下一步` and `待办` already live — so `docs/tacet-delivery-vocabulary.md` is untouched and deliberately so; this is the *"a numeral or a name often needs no label at all"* preference taken rather than a composition declared. **THE n/a ROW STOPPED LOOKING FINISHED**: a case that will not claim drew its carrier step with a green tick and a `–` in the STAMP slot, which reads as a step somebody did; the dash is now the marker and the tick is gone, matching the count that has never counted it. **THE TWO SURFACES FOLD BY DIFFERENT MECHANISMS, ON PURPOSE, AND THIS IS THE ONE THING TO READ BEFORE TOUCHING EITHER.** The phone repaints on the 60-second live backstop, so its fold is `state.dcMore` or the row would close under the thumb of whoever opened it. The drawer does NOT repaint on a fold, and must not: its claim number and amounts are **inline inputs**, so calling `renderOpenOrder` to open a row would have thrown away a claim number half-typed two rows above — it flips two attributes and touches nothing else. Same panel, same picture, two correct answers. **Tests:** `scripts/test_mobile_delay_panel.js` 47 → **55 assertions across 11 cases**, gaining the fold, the numerals, the footer and a geometry measurement of the FRESH state — every measured case in that file until now drew a panel whose steps were all finished, so the numbered row and the chevron had never been measured at all. **Three breaks were confirmed red**: the fold removed, the numerals put back to circles, and the footer returned to labels. `scripts/test_delay_panel_rows.js` had **pinned `delayDone`'s ARITY** through a regex matching to the closing bracket, so a fourth argument read as the stamp-and-sentence fault that file exists to catch; it now matches up to `note`, which is what its own comment says it guards. 274 fast suites pass, 0 fail. A build under §98 and §125 with no rule reversed, hence a patch.
+
+2026-09-17 · v4.302 — **§167 · MAKING ONE: SCALE IT, GATHER IT, WORK THE STEPS — AND WRITE NOTHING — ASKED BY ASH.** Stage two of §164's phone screen, option C of the mockups. A recipe gains *Make it*: a batch multiplier in halves (clamped 0.5–20), the ingredient list scaled live and tickable as it is gathered, and a full-height step sheet that covers the tab bar because nothing else on the phone is wanted while somebody is working a step. **NOTHING IS WRITTEN, and that is the design rather than a limitation.** The scale and the ticks are facts about this afternoon, not about the recipe; the row on the server is untouched by doubling it, so the screen needs no write capability and carries no save. One week after §164's addendum found that hiding a tab whose inputs a save still read had armed a silent data loss, a new phone screen that writes to recipes is not what this needs. **THE FINISH HANDS OFF INSTEAD OF LOGGING A BATCH OF ITS OWN.** What a recipe PRODUCES is not a settled question — it may back a material, feed several products at different pack sizes, or neither — and `logbatch` already answers that in product units and is tested doing it. So the foot of the screen OPENS that screen, gated on `canRoute('logbatch')` because `production:log` is a different key from `recipes:view` and the button would otherwise open onto a refusal. Inventing a second, recipe-shaped write beside a tested one would have been answering the material-versus-product question in passing. **TWO THINGS THE MOCKUP DREW WERE NOT BUILT, because the data cannot back them:** `recipe_steps` holds id, recipe_id, step_number, name and instructions — there is no step→ingredient link and no timer, so the per-step *This step uses* block and the rest-timer note are both absent, and the test asserts their absence rather than leaving it to memory. Vocabulary: `Step N of M · 第 N 步,共 M 步` is LIFTED from the broadcast composer, and Back, Next and Done are the app's own live pairs; only `Make it · 开始制作` and `Start the steps · 开始步骤` are composed, each two live words joined. Coverage: `scripts/test_mobile_recipes.js` grows to cover it, including that the screen contains no write verb at all.
 
 2026-09-17 · v4.301 — **§166 · A CHOICE THE CUSTOMER MAKES IS PART OF WHAT THE PRODUCT COSTS — AND A FEATURE THAT WAS ALREADY DESIGNED IS WITHDRAWN.** Ash reported a waste problem (*"fresh meals sometimes are waste without the dressing, we keep dressing many time in the freezer"*) and then, two turns later, the thing underneath it: *"beet salad is an example of a salad that we offer to choose 2 types of dressing. the staff made a mistake and put both of them inside the recipe."* **The second report killed the first fix.** A tick on the material and a *was the dressing kept?* question on the waste sheet was designed, measured against the live ledger (¥27.65 of ¥121.93 in thirteen days, `scripts/diagnose_dressing_waste.js`) and is now **withdrawn, not deferred**: it was a workaround for the dressing being buried in a recipe, and once the dressing is its own stocked product a binned salad is a binned salad. **Waste is the one reader this section does not change.** The real fault is not waste at all — Beet Salad carries ¥11.43 where the truth is ¥8.31 or ¥9.33, **20–27% too high on every sale at a ¥48 price**, and the live sweep found it is the ONLY genuine instance among five candidate recipes. The hole it opens is far wider than dressings: 54 option choices draw down a real shelf today and 15 can be priced, on 8.5% of all order lines, and `routes/finance-summary.js` had already written the gap down in its own words — *"OPTIONS carry a price delta with no cost counterpart"*. So `lib/option-cost.js` answers the two questions separately: a SALE takes the chosen choice's cost into the new `retail_order_items.options_cost_at_sale`, and the CATALOGUE takes the **dearest REQUIRED** choice, because nobody has chosen yet and a mean reads plausible while flattering. **A second column rather than a wider `unit_cost_at_sale`, and that is provable rather than tidy**: that column is multiplied by `pack_units` downstream while a linked choice is added once per unit bought, so one column would have charged a six-pack for six oat milks. **The direction of the error is the whole point** — taking the dressing out of the recipe replaces a cost that was too high with one that is too low, and too low is what gets a price cut, so the editor's margin ships in the same commit and a required choice nobody priced **blocks it outright** rather than falling back to the typed figure. Two pairs COMPOSED and declared in `docs/tacet-delivery-vocabulary.md` v1.117. `cost_coverage`, the channel ingest paths and `is_default` are all deliberately untouched, each for a stated reason. Covered by `scripts/test_option_cost.js` (23 checks).
 
@@ -17574,3 +17576,77 @@ rather than contributing nothing, a required multi takes its `min_choices` deare
 optional group never counts toward the floor, and the two nulls (nothing linked vs
 nothing priceable) are told apart by `linked`. Every case red-proofed against the tree
 before the fix.
+
+## §167 — MAKING ONE: SCALE IT, GATHER IT, WORK THE STEPS — AND WRITE NOTHING
+
+Asked by Ash, 2026-09-17, after stage one shipped: *"do it"* — option C of the
+mockups, the bench tool.
+
+### WHAT IT IS
+
+*Make it* on a recipe opens a screen with a batch multiplier in halves, the
+ingredient list scaled live and tickable as each thing is gathered, and a
+full-height step sheet that works one step at a time. The sheet covers the tab
+bar on purpose: nothing else on the phone is wanted while both hands are busy.
+
+### THE DECISION: IT WRITES NOTHING
+
+The scale and the ticks are facts about **this afternoon**, not about the
+recipe. Doubling a batch to cook for a party does not make the recipe twice the
+size, so nothing here is stored — not the multiplier, not which lines have been
+gathered, not which step somebody reached. The screen needs no write capability
+and carries no save.
+
+**This is a decision and not an omission.** §164's addendum, a few hours old at
+the time of writing, records what happened the last time a phone-side change met
+a save path: hiding the Cost & Pricing tab left `draftCostData()` reading inputs
+that were no longer there, and an ordinary autosave after a NAME correction
+wiped labour, overhead and sell price. A new screen that writes to recipes from
+a phone is not what this wants next. If stage three ever needs one, it gets its
+own decision and its own survey of what reads those columns.
+
+### THE FINISH HANDS OFF RATHER THAN INVENTING A SECOND WRITE
+
+The mockup's third screen logged a recipe-shaped batch: a yield in grams, a
+serving count, what it took off the shelf. That is **not built**, and the reason
+is that it presumes an answer to a question nobody has settled: what does a
+recipe PRODUCE? It may back a material (~27 do), feed several products at
+different pack sizes, or neither. `logbatch` already answers that question in
+product units, and `scripts/test_production_log.js` holds it to it.
+
+So the foot of the screen OPENS `logbatch` — gated on `canRoute('logbatch')`,
+because `production:log` is a different key from `recipes:view` and a kitchen
+operator holding the second need not hold the first. A button that 403s is
+worse than no button.
+
+### TWO THINGS THE MOCKUP DREW THAT THE DATA CANNOT BACK
+
+`recipe_steps` holds `id`, `recipe_id`, `step_number`, `name`, `instructions`.
+That is all.
+
+- **The per-step ingredient list** (*"This step uses — Lemon-herb dressing 720 g"*)
+  has no link behind it. There is no step→ingredient relation anywhere in the
+  schema, so drawing one would have been invention dressed as data.
+- **The rest timer** (*"Rest 10 minutes before the next step"*) likewise: no
+  column holds it.
+
+Both are absent, and `scripts/test_mobile_recipes.js` asserts their absence
+rather than leaving it to whoever reads the mockup next. Adding either means
+adding a column first, which is its own decision.
+
+### VOCABULARY
+
+Mostly lifted, and the best find is that the step counter already existed:
+`Step N of M · 第 N 步,共 M 步` is the broadcast composer's own pair, and the
+test asserts that pair is still live so an edit there cannot silently orphan
+this one. `Back · 返回`, `Next · 下一步`, `Done · 完成`, `None · 无` and
+`Log a batch · 登记批次` are all the app's own.
+
+Two pairs composed, each two live words joined, declared in
+`docs/tacet-delivery-vocabulary.md` with their rejected candidates.
+
+### COVERAGE
+
+`scripts/test_mobile_recipes.js`. The load-bearing cases: the screen contains no
+write verb at all, it draws no money, the sheet cannot paint over the record
+underneath it, and neither invented block from the mockup is present.

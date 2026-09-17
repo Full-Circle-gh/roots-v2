@@ -26,13 +26,14 @@
  * 'we never captured an order' into a five-minute follow-up". This is that
  * follow-up. No request to Eleme, no new column, no behaviour change.
  *
- * WHAT A NEGATIVE RESULT DOES NOT PROVE. shapeDigest stops at depth 4, keeps the
- * first 40 keys of any object, and the stored digest is truncated at 4000 chars.
- * A user id nested deeper, sitting past the fortieth key, or falling off the end
- * of the cap is invisible here and still real. The script reports each of those
- * limits as it hits them, so "no identity field found" can be read as what it is
- * — no identity field found WITHIN THE CAPTURED SHAPE — rather than as proof
- * that Eleme sends none.
+ * WHAT A NEGATIVE RESULT DOES NOT PROVE. The first run of this hit both limits of
+ * the shallow capture: `userInfo` came back as a bare {...} at depth 4 and the
+ * tail was gone at 4000 chars, so it could say an identity-shaped key EXISTS and
+ * nothing about what is inside it. The deep capture — twelve levels, 300 keys,
+ * 200KB, same payload, same pass — exists for exactly that, and this prefers it
+ * where a store has one. The limits are still reported as they are hit, so "no
+ * identity field found" reads as what it is: none found WITHIN THE CAPTURED
+ * SHAPE, rather than proof that Eleme sends none.
  *
  * FIELD NAMES ONLY. The digests hold no values by construction; the script
  * asserts that before printing anything, and refuses to print a token carrying
@@ -85,9 +86,9 @@ function safe(token) { return !CJK.test(token) && !LONG_DIGITS.test(token); }
 
 // ── Pull the recorded shapes ─────────────────────────────────────────────────
 const rows = db.prepare(`
-  SELECT store_code, detail, created_at
+  SELECT store_code, event_type, detail, created_at
     FROM eleme_sync_log
-   WHERE event_type = 'order_shape'
+   WHERE event_type IN ('order_shape', 'order_shape_deep')
    ORDER BY created_at ASC`).all();
 
 if (!rows.length) {
@@ -100,14 +101,19 @@ if (!rows.length) {
   process.exit(0);
 }
 
-// detail is JSON: { kind, digest }. Group by kind, newest wins per store.
-const shapes = new Map();   // `${store}:${kind}` -> { store, kind, digest, at }
+// detail is JSON: { kind, digest }. One per store×kind — the DEEP capture wins
+// over the shallow one, and newest wins within a kind.
+const shapes = new Map();
 let unparsed = 0;
 for (const r of rows) {
   let d;
   try { d = JSON.parse(r.detail); } catch (e) { unparsed++; continue; }
   if (!d || !d.kind || typeof d.digest !== 'string') { unparsed++; continue; }
-  shapes.set(`${r.store_code}:${d.kind}`, { store: r.store_code, kind: d.kind, digest: d.digest, at: r.created_at });
+  const key = `${r.store_code}:${d.kind}`;
+  const deep = r.event_type === 'order_shape_deep';
+  const prev = shapes.get(key);
+  if (prev && prev.deep && !deep) continue;     // never let a shallow row displace a deep one
+  shapes.set(key, { store: r.store_code, kind: d.kind, digest: d.digest, at: r.created_at, deep });
 }
 
 console.log(`${rows.length} order_shape row(s); ${shapes.size} distinct store×kind shape(s)`
@@ -139,12 +145,36 @@ for (const s of [...shapes.values()].sort((a, b) => (a.store + a.kind).localeCom
   personHitsTotal += person.length;
   repeatHitsTotal += repeat.length;
 
-  console.log(`── ${s.store} · ${s.kind} · recorded ${s.at}`);
+  console.log(`── ${s.store} · ${s.kind} · recorded ${s.at} · ${s.deep ? 'DEEP capture' : 'shallow capture'}`);
   console.log(`   ${uniq.length} distinct key name(s), digest ${s.digest.length} chars`);
 
-  // The three caps, each reported where it bites — see the header.
-  if (s.digest.length >= 4000) console.log('   ⚠ digest hit the 4000-char cap: the tail of this payload is NOT in here');
-  if (s.digest.includes('{...}')) console.log('   ⚠ contains {...}: shapeDigest stopped at depth 4, deeper keys are NOT in here');
+  // The caps, each reported where it bites — see the header.
+  if (s.digest.length >= (s.deep ? 200000 : 4000)) console.log('   ⚠ digest hit its size cap: the tail of this payload is NOT in here');
+  if (s.digest.includes('{...}')) console.log(`   ⚠ contains {...}: shapeDigest stopped at depth ${s.deep ? 12 : 4}, deeper keys are NOT in here`);
+  if (!s.deep) console.log('   ⚠ shallow only — this store\'s daemon has not restarted since the deep capture shipped');
+
+  /* AND THE SUBTREE THE FIRST RUN COULD NOT OPEN. `userInfo` was a bare {...} at
+     depth 4 — we learned a person-shaped container exists and nothing about what
+     identifies anybody inside it. Its keys are the answer to "can an Eleme buyer
+     be counted", so they are pulled out and shown on their own rather than left
+     to be spotted in a list of 200. Brace-matched out of the digest because the
+     digest is shapeDigest's own grammar, not JSON, and a truncated one is not
+     valid in that grammar either — which is exactly the case worth reading. */
+  for (const container of uniq.filter(k => /^(userInfo|customerInfo|buyerInfo|userVo|customerVo)$/i.test(k))) {
+    const at = s.digest.indexOf(container + ':{');
+    if (at < 0) { console.log(`   ${container} → present, but not as an object here`); continue; }
+    let i = at + container.length + 1, depth = 0, end = -1;
+    for (; i < s.digest.length; i++) {
+      const c = s.digest[i];
+      if (c === '{' || c === '[') depth++;
+      else if (c === '}' || c === ']') { depth--; if (depth === 0) { end = i; break; } }
+    }
+    const sub = s.digest.slice(at, end < 0 ? s.digest.length : end + 1);
+    const inner = [...new Set(sub.match(/([A-Za-z_][A-Za-z0-9_]*)\s*:/g) || [])]
+      .map(t => t.replace(/\s*:$/, '')).filter(k => k !== container && safe(k));
+    console.log(`   ${container} → ${inner.length} key(s)${end < 0 ? ' (TRUNCATED — the digest ends inside it)' : ''}`);
+    console.log(`     ${inner.length ? inner.join(', ') : '(opaque — still {...} at this depth)'}`);
+  }
 
   console.log(`   person-identity keys : ${person.length ? person.join(', ') : '(none)'}`);
   console.log(`   repeat/label keys    : ${repeat.length ? repeat.join(', ') : '(none)'}`);
