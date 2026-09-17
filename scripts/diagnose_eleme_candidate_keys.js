@@ -22,20 +22,27 @@
  * prints which of them the live payload has ever agreed with.
  *
  * NOTHING IS CAPTURED HERE. It reads the digests scripts/eleme-daemon.js already
- * writes to eleme_sync_log (event_type='order_shape'), produced by shapeDigest(),
- * which keeps key names and strips every value. No request to Eleme, no new
- * column, no behaviour change.
+ * writes to eleme_sync_log — 'order_shape' and, since the deep capture shipped,
+ * 'order_shape_deep' — both produced by shapeDigest(), which keeps key names and
+ * strips every value. No request to Eleme, no new column, no behaviour change.
  *
  * IT READS THE REAL LISTS. lib/eleme-browser.js exports CANDIDATE_KEYS for this
  * script rather than the script holding a copy: a copy drifts within a release
  * and then reports confidently on a list the parser no longer uses, which is a
  * worse failure than no audit.
  *
- * WHAT A MISS DOES AND DOES NOT MEAN. shapeDigest stops at depth 4, keeps 40 keys
- * per object, and the stored digest is capped at 4000 chars. A key past any of
- * those is invisible here and still real, so a list reported as matching nothing
- * is a STRONG LEAD, not a verdict — the caps that were hit are printed above the
- * table so a miss can be weighed against them. A list that matches is settled.
+ * WHAT A MISS DOES AND DOES NOT MEAN. The deep digest reaches twelve levels and
+ * 300 keys per object; the shallow one stops at four and forty. A key past
+ * whichever was recorded is invisible here and still real, so the table prints
+ * which shapes are deep and which caps were hit, and a miss is weighed against
+ * them rather than read as a verdict. A list that MATCHES is settled either way.
+ *
+ * AND A MISS IS NOT A FAULT WHEN A PATH COVERS IT. Eight lists have a companion
+ * *_PATHS constant that is what actually reads the field — INCOME_KEYS misses,
+ * settlementInfo.expectedIncomeInfo.total hits, and the income is correct. The
+ * first run of this audit called fourteen lists faulty without knowing that.
+ * CANDIDATE_PATHS travels with the key lists now and the verdict column says
+ * which is which.
  *
  * FIELD NAMES ONLY. The digests carry no values by construction; this refuses to
  * print a token carrying CJK or a long digit run rather than trusting that.
@@ -68,25 +75,33 @@ console.log('db: ' + DB_PATH + '\n');
 // The parser's own lists. ROOTS_HOME is where ro-query.yml stages lib/ on the
 // box; falling back to a relative require keeps the script runnable from a
 // checkout.
-let CANDIDATE_KEYS;
+let CANDIDATE_KEYS, CANDIDATE_PATHS;
 try {
-  ({ CANDIDATE_KEYS } = require((process.env.ROOTS_HOME || '..') + '/lib/eleme-browser'));
+  ({ CANDIDATE_KEYS, CANDIDATE_PATHS } = require((process.env.ROOTS_HOME || '..') + '/lib/eleme-browser'));
 } catch (e) {
-  ({ CANDIDATE_KEYS } = require('../lib/eleme-browser'));
+  ({ CANDIDATE_KEYS, CANDIDATE_PATHS } = require('../lib/eleme-browser'));
 }
 if (!CANDIDATE_KEYS) {
   console.error('FATAL: lib/eleme-browser.js exports no CANDIDATE_KEYS. Nothing to audit.');
   process.exit(2);
 }
+CANDIDATE_PATHS = CANDIDATE_PATHS || {};
 
 const CJK = /[一-鿿㐀-䶿]/;
 const LONG_DIGITS = /\d{6,}/;
 const safe = t => !CJK.test(t) && !LONG_DIGITS.test(t);
 
+/* THE DEEP DIGEST WHERE THERE IS ONE. The shallow artefact stops at depth 4 and
+   4000 chars, and the first run of this audit could not tell a list that guessed
+   wrong from one whose field simply sat past the cut — the item-row keys are four
+   levels down inside items[] and were invisible for that reason alone. The deep
+   capture is the same payload recorded wider in the same pass. Both are read, the
+   deep one preferred per store×kind, so this keeps working on a tenant whose
+   daemon has not restarted since the deep capture shipped. */
 const rows = db.prepare(`
-  SELECT store_code, detail, created_at
+  SELECT store_code, event_type, detail, created_at
     FROM eleme_sync_log
-   WHERE event_type = 'order_shape'
+   WHERE event_type IN ('order_shape', 'order_shape_deep')
    ORDER BY created_at ASC`).all();
 
 if (!rows.length) {
@@ -96,24 +111,40 @@ if (!rows.length) {
   process.exit(0);
 }
 
-// Union every recorded shape: a key seen in ANY payload is a key the parser can
-// meet, and the lists are read against all three kinds.
-const real = new Set();
-const caps = { truncated: [], depth: [] };
-let kinds = 0;
+/* One digest per store×kind, the deep one winning over the shallow, then unioned:
+   a key seen in ANY payload is a key the parser can meet, and the lists are read
+   against all three kinds. */
+const best = new Map();
 for (const r of rows) {
   let d;
   try { d = JSON.parse(r.detail); } catch (e) { continue; }
   if (!d || typeof d.digest !== 'string') continue;
-  kinds++;
-  if (d.digest.length >= 4000) caps.truncated.push(`${r.store_code}:${d.kind}`);
-  if (d.digest.includes('{...}')) caps.depth.push(`${r.store_code}:${d.kind}`);
-  const re = /([A-Za-z_][A-Za-z0-9_]*)\s*:/g;
-  let m;
-  while ((m = re.exec(d.digest)) !== null) if (safe(m[1])) real.add(m[1]);
+  const key = `${r.store_code}:${d.kind}`;
+  const deep = r.event_type === 'order_shape_deep';
+  const prev = best.get(key);
+  if (!prev || (deep && !prev.deep)) best.set(key, { key, deep, digest: d.digest });
 }
 
-console.log(`${rows.length} order_shape row(s), ${kinds} digest(s), ${real.size} distinct real key name(s)`);
+const real = new Set();
+const caps = { truncated: [], depth: [] };
+let deepCount = 0;
+for (const b of best.values()) {
+  if (b.deep) deepCount++;
+  // The shallow cap is 4000; the deep one is 200000. Either tells us the tail
+  // is missing, and only a digest at its own ceiling is truncated.
+  if (b.digest.length >= (b.deep ? 200000 : 4000)) caps.truncated.push(b.key);
+  if (b.digest.includes('{...}')) caps.depth.push(b.key);
+  const re = /([A-Za-z_][A-Za-z0-9_]*)\s*:/g;
+  let m;
+  while ((m = re.exec(b.digest)) !== null) if (safe(m[1])) real.add(m[1]);
+}
+const kinds = best.size;
+
+console.log(`${rows.length} shape row(s) → ${kinds} store×kind, ${deepCount} of them DEEP, ${real.size} distinct real key name(s)`);
+if (deepCount < kinds) {
+  console.log(`⚠ ${kinds - deepCount} shape(s) are the shallow capture only — their daemon has not restarted since`);
+  console.log('  the deep capture shipped. A miss on those is weaker evidence than a miss on a deep one.');
+}
 if (caps.truncated.length) console.log(`⚠ hit the 4000-char cap: ${[...new Set(caps.truncated)].join(', ')} — their tails are NOT in this union`);
 if (caps.depth.length) console.log(`⚠ stopped at depth 4: ${[...new Set(caps.depth)].join(', ')} — deeper keys are NOT in this union`);
 console.log('');
@@ -121,25 +152,43 @@ console.log('');
 const names = Object.keys(CANDIDATE_KEYS).sort();
 const width = Math.max(...names.map(n => n.length));
 const misses = [];
+const coveredByPath = [];
 
-console.log('list'.padEnd(width) + '  matched / total   keys the payload actually has');
-console.log('─'.repeat(width) + '  ───────────────   ' + '─'.repeat(40));
+console.log('list'.padEnd(width) + '  matched / total  verdict      keys the payload actually has');
+console.log('─'.repeat(width) + '  ───────────────  ───────────  ' + '─'.repeat(40));
 for (const name of names) {
   const list = CANDIDATE_KEYS[name];
   const hit = list.filter(k => real.has(k));
-  if (!hit.length) misses.push(name);
+  /* A LIST WHOSE FIELD IS READ BY A PATH IS NOT A FAULT WHEN ITS KEYS MISS.
+     INCOME_KEYS matches nothing and settlementInfo.expectedIncomeInfo.total
+     hits, and the income is read correctly — reporting that as a bug sends
+     somebody after a field that was never broken. The first run of this audit
+     called fourteen lists faulty; several were this. */
+  const paths = CANDIDATE_PATHS[name] || [];
+  const verdict = hit.length ? 'ok'
+    : paths.length ? 'path covers'
+    : 'NOTHING';
+  if (!hit.length && paths.length) coveredByPath.push(name);
+  if (!hit.length && !paths.length) misses.push(name);
   console.log(
     name.padEnd(width)
-    + '  ' + String(hit.length).padStart(7) + ' / ' + String(list.length).padEnd(5)
-    + '   ' + (hit.length ? hit.join(', ') : '— nothing —'));
+    + '  ' + String(hit.length).padStart(7) + ' / ' + String(list.length).padEnd(4)
+    + '  ' + verdict.padEnd(11)
+    + '  ' + (hit.length ? hit.join(', ') : (paths.length ? paths.join(', ') : '— nothing —')));
 }
 
 console.log('');
 console.log('────────────────────────────────────────────────────────────');
+if (coveredByPath.length) {
+  console.log(`${coveredByPath.length} list(s) miss on keys but are read by a path — not faults:`);
+  console.log('  ' + coveredByPath.join(', '));
+  console.log('');
+}
 if (!misses.length) {
-  console.log('Every candidate list matches at least one real key. Nothing to chase.');
+  console.log('Every candidate list either matches a real key or is read by a path.');
+  console.log('Nothing to chase.');
 } else {
-  console.log(`${misses.length} list(s) match NOTHING in the captured shape:`);
+  console.log(`${misses.length} list(s) match NOTHING and have no path behind them:`);
   console.log('  ' + misses.join(', '));
   console.log('');
   console.log('Each is reading a field that is either absent from Eleme\'s payload or');
