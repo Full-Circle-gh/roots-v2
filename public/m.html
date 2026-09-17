@@ -11722,36 +11722,39 @@ function rcpRows(){
   const r=state.rcp, q=String(r.q||'').trim().toLowerCase();
   let rows=r.rows||[];
   if(r.type) rows=rows.filter(x=>(x.recipe_type||'made')===r.type);
+  /* THE CATEGORY IS SEARCHED EVEN THOUGH THE ROW NO LONGER PRINTS IT — that
+     is the trade rcpMeta() above describes. It is one bilingual string, so
+     "spreads" and "涂抹酱" both reach the same rows. */
   if(q) rows=rows.filter(x=>String(x.name_en||'').toLowerCase().indexOf(q)>=0
                          || String(x.name_cn||'').toLowerCase().indexOf(q)>=0
-                         || String(x.sku||'').toLowerCase().indexOf(q)>=0);
+                         || String(x.sku||'').toLowerCase().indexOf(q)>=0
+                         || String(x.category||'').toLowerCase().indexOf(q)>=0);
   return rows;
 }
 /* The one line under a name. Category, then the two facts a person standing at
    a bench actually asks — how much it makes and how many that is. Each is
    dropped when it is not recorded rather than printed as a dash: a row reading
    "— g" says nothing and costs a line's width. */
+/* THE ROW STATES THE TWO FACTS AND STOPS. Ash, off a phone, twice: first the
+   category was FIRST on this line and pushed the weight and the servings off
+   the end — "Spreads & Dips 涂抹酱和蘸酱 · 652.82 g · 4 ser…" — and then, with
+   the order fixed, what was left of it read "· Spreads & …", which is width
+   spent on nothing.
+   THE CATEGORY DOES NOT FIT ON THIS LINE IN ANY FORM, and that is the finding.
+   `recipes.category` is a single TEXT column holding both languages at once —
+   "Spreads & Dips 涂抹酱和蘸酱" — so there is no short half to take; even the
+   English one gives "652.82 g · 4 servings · Spreads & Dips", which still
+   overruns a 390px row. A truncated label is worse than no label: it occupies
+   the space of a fact while stating none.
+   IT IS NOT LOST. rcpRows() matches it, so typing "spreads" or "涂抹酱" filters
+   the list to that category — the category became a way to search rather than
+   a thing to squint at. */
 function rcpMeta(x){
-  /* THE NUMBERS COME FIRST, AND THE CATEGORY LAST, because this line is one
-     row of a 205-row list and it truncates. Reported by Ash off a phone:
-     "Spreads & Dips 涂抹酱和蘸酱 · 652.82 g · 4 ser…" — the two facts somebody
-     opens this screen for had been pushed off the end by the filing.
-     `recipes.category` is a single TEXT column holding BOTH languages in one
-     string, unlike store_products' separate name/name_cn that catName() reads,
-     so there is no half to drop and nothing to shorten: a recipe category is
-     "Spreads & Dips 涂抹酱和蘸酱" and that is 24 characters before the first
-     figure. Ordering is the whole fix — the ellipsis now eats the filing
-     instead of the weight, and the category still reads on the shorter ones.
-     Splitting that string on its first CJK character was considered and
-     rejected: it is tenant data, "Homemade in the Kitchen 厨房自制" and a
-     Chinese-only category are both real, and a heuristic that is wrong on one
-     of them silently mislabels a row. */
   const bits=[];
   if(x.batch_size) bits.push(rcpNum(x.batch_size)+' g');
   if(x.servings) bits.push(LANG==='en'
     ? (x.servings+(x.servings===1?' serving':' servings'))
     : (x.servings+' 份'));
-  if(x.category) bits.push(String(x.category));
   return bits.join(' · ');
 }
 function screenRecipes(){
