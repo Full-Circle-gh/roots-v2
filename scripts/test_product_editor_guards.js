@@ -205,12 +205,12 @@ check('the auto draft remembers every product it has already composed', () => {
     'peDraftEmptySections does not use the set');
   // The memory is the AUTO path's alone. A pressed button that could only be
   // pressed once per product per session is not a retry, which is the whole
-  // reason the control exists (§155).
+  // reason the control exists (§156).
   assert.ok(/if \(auto && _peAutoFilledFor\.has\(p\.id\)\) return;/.test(b),
     'the once-per-session guard must be gated on `auto` or the button cannot be pressed twice');
 });
 
-// §155. The old code joined the set before the network call and NEVER LEFT IT,
+// §156. The old code joined the set before the network call and NEVER LEFT IT,
 // so one failed pass meant that product got no draft for the rest of the
 // session and nothing on screen ever said why. The mark still has to be taken
 // before the request goes out — two mounts in quick succession would otherwise
@@ -230,7 +230,7 @@ check('a failed draft does not burn the product for the session', () => {
     'the id is handed back outside the catch — then a SUCCESSFUL draft re-fires on the next mount too');
 });
 
-// §155. The editor is handed product_facts and `weight AS size` in the very
+// §156. The editor is handed product_facts and `weight AS size` in the very
 // response it mounts from, and routes/ai.js reads both as the source of truth
 // for the spec strip, storage, ingredients and how-to-use. Sending only the
 // name and category is what made the editor's design worse than the sheet's.
@@ -249,7 +249,7 @@ check('every compose call sends the facts and the weight this editor is holding'
     `a compose call building its own product context:\n${thin.join('\n---\n')}`);
 });
 
-// §155's one rule. A draft that can overwrite a written section is the "rebuild
+// §156's one rule. A draft that can overwrite a written section is the "rebuild
 // replaces the page" trap wearing a new label.
 check('a drafted section never lands on one that already carries words', () => {
   const b = anchored('peDraftEmptySections');

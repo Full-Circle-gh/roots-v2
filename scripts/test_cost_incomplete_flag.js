@@ -307,7 +307,7 @@ check('the server accepts the field on a product PATCH', () =>
 // ═══════════════════════════════════════════════════════════════════════════
 section('5. The Product-details boxes ride the same omit-when-untouched rule');
 // ═══════════════════════════════════════════════════════════════════════════
-// §155. The autosave posts the whole form, and an untouched Product-details
+// §156. The autosave posts the whole form, and an untouched Product-details
 // card collects as {} — which the route reads as "clear them". Type one
 // character in a name with that card untouched and the empty boxes in front of
 // you are written over whatever the record holds. Survivable while this screen

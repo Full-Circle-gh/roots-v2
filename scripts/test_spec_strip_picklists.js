@@ -25,7 +25,7 @@
 // is not run at all. So the list DATA is asserted directly, and the handlers
 // are asserted at their source with anchors that fail loudly if renamed.
 //
-// AMENDED BY §155 — THE VALUES ARE NO LONGER IN THIS PAGE. They were Roots'
+// AMENDED BY §156 — THE VALUES ARE NO LONGER IN THIS PAGE. They were Roots'
 // catalogue compiled into the editor's source, which on a platform offered a
 // shop in Shanghai a Guangzhou origin as its default. They are now counted per
 // tenant by GET /api/retail-admin/products/spec-usage, so the four checks here
@@ -39,7 +39,7 @@
 // asserted against the counter that produces them, in
 // scripts/test_spec_vocabulary_tenant.js, by running it over fixtures. What
 // stays here is everything about the LABEL list (still a literal in the page)
-// and every claim about the pick MECHANICS, which §155 did not touch.
+// and every claim about the pick MECHANICS, which §156 did not touch.
 //
 // The one claim that genuinely changed shape is Net Wt's. §145 gave it no value
 // list by naming it; a per-tenant count cannot carry an exception for the words
@@ -117,7 +117,7 @@ check('the page carries no value list of its own', () => {
   assert.ok(/let PA_SPEC_VALUES = null;/.test(SRC),
     'PA_SPEC_VALUES is neither a literal nor the null it should start as');
   /* `See packaging` is deliberately NOT in this list, and the omission is the
-     point: it is still in the page, inside PA_STORAGE_UNITS, because §155's
+     point: it is still in the page, inside PA_STORAGE_UNITS, because §156's
      first pass migrated the spec strip and the colophon and not the storage
      box. Asserting it here would either fail on work that has not been done or
      have to be weakened later — both worse than naming it. The check below
@@ -130,7 +130,7 @@ check('the page carries no value list of its own', () => {
 
 // §147's storage-box lists are the SAME fault one section over: PA_STORAGE_HEADS,
 // PA_STORAGE_UNITS and PA_STORAGE_NOTES are Roots' measured answers compiled
-// into the page, offered to every tenant. §155 migrated the spec strip first
+// into the page, offered to every tenant. §156 migrated the spec strip first
 // and named these as next. This check exists so that stays a decision somebody
 // made rather than something everyone forgot — it fails the day a FOURTH list
 // is added, and it is deleted the day the three are counted like the spec's.
@@ -198,13 +198,13 @@ check('"Net Weight" is not offered beside "Net Wt"', () => {
 // test_spec_vocabulary_tenant.js proves the counter reproduces all three from
 // Roots-shaped rows, which is a stronger claim than a literal ever made.
 //
-// Net Wt's "no list" rule likewise: §145 named the field, §155 reads it off the
+// Net Wt's "no list" rule likewise: §145 named the field, §156 reads it off the
 // data, and the same file proves twenty one-off weights still yield nothing.
 
 check('the label list is still the neutral half, and still measured', () => {
   /* The labels stayed in the page ON PURPOSE. They name what a row IS — Net Wt,
      Origin, Shelf Life — and are neutral in any trade, where the ANSWERS never
-     are. A label list that started naming answers would be the fault §155
+     are. A label list that started naming answers would be the fault §156
      removed, coming back one entry at a time. */
   const ens = LABELS.map(o => o.en.toLowerCase()).join(' | ');
   for (const answer of ['guangzhou', 'packaging', 'plant', 'vegan', 'china']) {
@@ -269,7 +269,7 @@ check('the pick lists are offered; no migration rides along', () => {
   /* 66 cells say "Type" today. They keep saying it. A list that silently
      rewrote them would be changing live customer pages on load, which is the
      §144 refusal in a smaller frame. */
-  /* peMount FETCHES the counted lists now (§155), which is not the same thing
+  /* peMount FETCHES the counted lists now (§156), which is not the same thing
      as consulting them: what it must never do is read a list and rewrite a
      stored cell against it. The check therefore names the list itself, not the
      loader that asks for it. */

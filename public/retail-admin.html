@@ -8620,15 +8620,21 @@
         <div class="vot-set-head">
           <div class="vot-set-id">
             <span class="t">Page settings · 页面设置</span>
-            <span class="d">The line under the headline, and whether customers see vote counts. · “你说了算”标题下方的文字,以及顾客是否看到票数。</span>
+            <span class="d">Two settings for the whole Your say page in the mini app — not for one poll. · 小程序“你说了算”整页的两项设置 —— 不针对单个投票。</span>
           </div>
           <button class="btn" id="vot-set-toggle" onclick="votToggleSettings()">Open · 展开</button>
         </div>
         <div class="vot-set-body" id="vot-set-body" hidden>
           <div class="vot-split">
             <div class="k">
-              <span class="t">Line under the headline · 标题下方的文字</span>
-              <span class="vot-hint">Write <code>{pts}</code> where the points number goes — it fills in from the featured poll's reward. Saved on its own; the mini app picks it up with no republish. · 在需要显示积分数字的位置写 <code>{pts}</code> —— 它会自动填入精选投票的奖励分值。单独保存,小程序无需重新发布。</span>
+              <span class="t">The line under “Your say” · “你说了算”下方的一行字</span>
+              <!-- This copy carries markup, so it cannot be an `English · 中文`
+                   pair: the pair must be ONE text node and a tag inside it
+                   splits the node, leaving the half after the tag rendering in
+                   both languages. One block per language instead; the engine
+                   hides the one that is not current. See decisions §155. -->
+              <span class="vot-hint" data-lang-block="en">The first thing customers read on the Your say page, under its headline. Write <code>{pts}</code> anywhere in it and the points the featured poll pays are filled in for you, so the line stays true when you change the reward. Saving here is live at once — you do not republish the mini app.</span>
+              <span class="vot-hint" data-lang-block="cn">顾客打开“你说了算”页面后,在标题下方最先读到的一行。在文中任意位置写 <code>{pts}</code>,系统会自动填入精选投票的奖励积分,改了奖励这行字也不会说错。此处保存后立即生效 —— 无需重新发布小程序。</span>
             </div>
             <div class="v">
               <div class="vot-field">
@@ -8644,7 +8650,7 @@
 
           <div class="vot-split">
             <div class="k">
-              <span class="t">Vote counts · 票数</span>
+              <span class="t">The numbers customers see · 顾客看到的数字</span>
               <span class="vot-hint" id="vot-counts-state"></span>
             </div>
             <div class="v">
@@ -8652,7 +8658,7 @@
                 <input type="checkbox" id="vot-show-counts" onchange="votCountsStateSync()"/>
                 <span>Show vote counts to customers · 向顾客显示票数</span>
               </label>
-              <div class="vot-hint" style="margin-top: 6px;">When off, the poll still marks which option is winning, but hides every number. Your own figures here never change. · 关闭后,投票仍会标出领先的选项,但隐藏所有数字。后台看到的数字始终不变。</div>
+              <div class="vot-hint" style="margin-top: 6px;">Turn it off while a poll is young and the turnout is thin: customers still see which option is in front, just not how few votes it took. What you see on this page is always the real count, either way. · 投票刚开始、票数还少时可以关闭:顾客仍能看到哪个选项领先,只是看不到票数有多少。无论开关如何,本页显示的始终是真实票数。</div>
             </div>
           </div>
 
