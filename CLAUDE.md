@@ -57,6 +57,18 @@ Four rules, in the order they fire:
 - **Code conventions** (bilingual UI mechanics, migrations, tenant scoping)
   are in the README's "Conventions" section. They are not repeated here.
 
+## Communication style
+
+How a session answers Ash, in every brief:
+
+- **Plain words.** No jargon unless it is asked for.
+- **The point first.** Skip the long technical explanation unless the question
+  is "why" or "how".
+- **Examples short and concrete**, when one is needed at all.
+- **End with a recommendation.** Say what to do, not just the options.
+- **Say so when a request is a bad idea**, and say why, before doing it. The
+  flag comes first; the work still gets done unless Ash changes course.
+
 ## Citations
 
 - **A finding filed as `file:line` is where it was found, not the extent of
