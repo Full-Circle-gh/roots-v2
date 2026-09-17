@@ -109,4 +109,32 @@ function bodyOf(src, name) {
     'pdOpen() must set _pdDesignExists from _paHasBlocks(p), or the nudge answers about the previous product');
 }
 
+// ── 4. Rebuild refreshes the sections without switching the shopfront over ──
+//
+// Falls out of (3): once the nudge stops gating on use_block_design, its
+// Rebuild button is reachable on a product showing its CLASSIC description.
+// pdAutoComposeBlocks() hardcoded use_block_design:1, so pressing it there
+// would have quietly moved shoppers onto the designed page — a change to what
+// the shop shows, from a button that only offered to refresh some words.
+{
+  const rebuild = bodyOf(PRODUCTS, 'pdRebuildDesign');
+  assert.ok(/pdAutoComposeBlocks\(/.test(rebuild), 'pdRebuildDesign() no longer calls pdAutoComposeBlocks()');
+  // Matched to the end of the statement rather than to the first ')', because
+  // the btn argument is itself a call and a lazy match stops inside it.
+  assert.ok(/pdAutoComposeBlocks\([^;]*,\s*true\s*,\s*true\s*\)\s*;/.test(rebuild),
+    'pdRebuildDesign() must pass keepFlag (the 4th argument) as true, so a rebuild leaves use_block_design alone');
+
+  const compose = bodyOf(PRODUCTS, 'pdAutoComposeBlocks');
+  assert.ok(/async\s+function\s+pdAutoComposeBlocks\s*\([^)]*keepFlag/.test(PRODUCTS),
+    'pdAutoComposeBlocks() must take a keepFlag argument');
+  assert.ok(!/use_block_design:\s*1\s*\}/.test(compose),
+    'pdAutoComposeBlocks() must not hardcode use_block_design:1 in the PATCH body — that is the operator\'s switch, not the builder\'s');
+  assert.ok(/keepFlag\s*\?\s*\(_pdUseBlockDesign/.test(compose),
+    'with keepFlag set, pdAutoComposeBlocks() must carry the live use_block_design through rather than forcing it on');
+  // The two callers that DO mean "turn it on" must keep meaning it.
+  const toggle = bodyOf(PRODUCTS, 'pdToggleBlockDesign');
+  assert.ok(/pdAutoComposeBlocks\(id,\s*btn\)/.test(toggle),
+    'the Design switch must still call pdAutoComposeBlocks() without keepFlag — turning it on is the whole point there');
+}
+
 console.log('ok — Product editor opens on the current product (autosave flushed, exit handed over, stale design declared)');

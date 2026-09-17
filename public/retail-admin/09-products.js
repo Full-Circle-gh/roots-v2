@@ -5522,7 +5522,19 @@ async function pdFactsAutoFillQuiet(textEn, textCn) {
     }
   } catch (e) { /* best-effort — proceed to build without facts */ }
 }
-async function pdAutoComposeBlocks(id, btn, skipConfirm) {
+// `keepFlag` — WHOSE BUSINESS use_block_design IS.
+//
+// That flag decides which of the two descriptions the SHOPFRONT draws, and it
+// is the operator's decision, made with the Design switch. It is not a side
+// effect of rebuilding sections. The two callers that genuinely mean "turn it
+// on" — the switch itself, and the wizard's "designed page" option — leave
+// keepFlag unset and it goes on as before. Rebuild passes it, because
+// refreshing stale sections on a product showing its classic description must
+// not quietly switch shoppers over to the designed page.
+//
+// This became reachable the moment the stale-design nudge stopped gating on
+// the flag: before that, Rebuild could not be pressed with Design: Off.
+async function pdAutoComposeBlocks(id, btn, skipConfirm, keepFlag) {
   const row = PA_PRODUCTS.find(x => x.id === Number(id)) || {};
   // The catalogue LIST endpoint omits the heavy description_blocks JSON and
   // ships only a `has_blocks` flag, so reading row.description_blocks here
@@ -5601,8 +5613,9 @@ async function pdAutoComposeBlocks(id, btn, skipConfirm) {
       toast(cuT("Couldn't build sections from this description — add more detail and try again", '未能从描述生成板块,补充内容后重试'), 'err');
       return;
     }
-    // Persist blocks (+ nutrition) and keep the flag on, in one PATCH.
-    const body = { description_blocks: composed, use_block_design: 1 };
+    // Persist blocks (+ nutrition) and settle the flag, in one PATCH.
+    const flag = keepFlag ? (_pdUseBlockDesign ? 1 : 0) : 1;
+    const body = { description_blocks: composed, use_block_design: flag };
     if (nutriBlock) {
       const nutrition = {
         basis_en: nutriBlock.basis_en || '', basis_cn: nutriBlock.basis_cn || '',
@@ -5622,8 +5635,8 @@ async function pdAutoComposeBlocks(id, btn, skipConfirm) {
       return;
     }
     const i2 = PA_PRODUCTS.findIndex(x => x.id === Number(id));
-    if (i2 >= 0) PA_PRODUCTS[i2] = { ...PA_PRODUCTS[i2], ...(sj.data || {}), description_blocks: composed, use_block_design: 1 };
-    _pdUseBlockDesign = true; pdRenderBlockDesignToggle();
+    if (i2 >= 0) PA_PRODUCTS[i2] = { ...PA_PRODUCTS[i2], ...(sj.data || {}), description_blocks: composed, use_block_design: flag };
+    _pdUseBlockDesign = flag === 1; pdRenderBlockDesignToggle();
     _pdDesignExists = composed.length > 0;
     _pdDesignStale = false; pdRenderDesignStale();
     // Repaint the grid so the just-built design flips the card's Plain → Designed
@@ -6154,7 +6167,9 @@ function pdMarkDesignStale() {
 function pdRebuildDesign() {
   const id = document.getElementById('pd-id').value;
   if (!id) return;
-  pdAutoComposeBlocks(id, document.getElementById('pd-blockdesign-toggle'), true);
+  // keepFlag: rebuilding stale sections answers "are these words current?", not
+  // "should the shop show the designed page?" — see pdAutoComposeBlocks.
+  pdAutoComposeBlocks(id, document.getElementById('pd-blockdesign-toggle'), true, true);
 }
 function pdWireAutosave() {
   const ed = document.getElementById('pd-editor');
