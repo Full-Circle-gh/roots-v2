@@ -323,6 +323,41 @@ is(vm.runInContext('votPick("Beetroot", "")', ctx2), 'Beetroot',
    'and falls back to the other half when the merchant filled only one');
 vm.runInContext('cuLang = () => "en"; window.cuLang = cuLang;', ctx2);
 
+// ── §10 · a bilingual pair is one text node ───────────────────────────────
+section('10 · no region renders both languages at once (§1.11, decisions §155)');
+
+/* THE BUG THIS EXISTS FOR, seen in production 2026-09-17. The walker splits a
+   text node on " · " when the left half is Chinese-free and the right half is
+   not. Put a tag inside the pair — <code>{pts}</code> in the middle of a hint —
+   and the pair is no longer one text node: the walker swaps the part it can
+   reach and the Chinese AFTER the tag renders in both languages, on a screen
+   the operator set to English. Nothing errors. So the rule is mechanical, and
+   so is the check: every run of Chinese in this section is either inside a
+   proper pair, or inside a block marked as the Chinese half. */
+const stripped = SEC.replace(/<style[\s\S]*?<\/style>/g, '').replace(/<!--[\s\S]*?-->/g, '');
+const langBlocks = { en: 0, cn: 0 };
+for (const m of stripped.matchAll(/data-lang-block="(en|cn)"/g)) langBlocks[m[1]]++;
+// A declared Chinese block is allowed to be Chinese throughout, tags and all,
+// so take its whole contents out before looking for leaks. Removing the block
+// rather than testing each text node's parent is what makes this right for the
+// markup INSIDE it — which is the case that produced the bug.
+const scan = stripped.replace(/<span[^>]*data-lang-block="cn"[^>]*>[\s\S]*?<\/span>/g, '');
+const leaks = [];
+for (const m of scan.matchAll(/>([^<]+)</g)) {
+  const text = m[1];
+  if (!cjk.test(text)) continue;
+  if (text.trim() === '中文') continue;                     // the language picker itself
+  const [left] = text.split(' · ');
+  if (text.includes(' · ') && !cjk.test(left)) continue;   // a proper pair
+  leaks.push(text.trim().slice(0, 60));
+}
+is(leaks.length, 0, 'every Chinese run is either half of a pair or a declared language block',
+   leaks.join(' | '));
+
+is(langBlocks.en, langBlocks.cn, 'language blocks come in pairs — one English, one Chinese');
+yes(!/data-lang-block="[^"]*"[^>]*>[^<]* · [^<]*</.test(stripped),
+    'a declared language block does not also carry a glued pair inside it');
+
 // ── done ──────────────────────────────────────────────────────────────────
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.290
+# Tacet shared-core consolidation — decisions record, v4.291
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-17 · v4.291 — **§155 · A BILINGUAL PAIR IS ONE TEXT NODE, AND A TAG INSIDE IT BREAKS THE PAIR**, found in production by Ash hours after §154 shipped: *“there is some chinese here.”* An English screen was rendering a Chinese sentence. **THE PAIR WAS WRITTEN CORRECTLY AND STILL LEAKED**: §1.11's walker works on TEXT NODES, and a `<code>{pts}</code>` in the middle of the hint made it five nodes instead of one — the node holding the ` · ` split correctly, and the node AFTER the tag, having no ` · ` of its own, rendered in both languages permanently. Nothing errors, and only the English reader ever sees it. **THE RULE: a pair is one text node, plain text, no elements inside it; copy that needs markup is written as two blocks, one per language, marked `data-lang-block`** — a mechanism the i18n engine already had. It is the opposite of `data-no-i18n`, and reaching for the shield instead would have glued both languages permanently, which is the very bug. **CHECKED, NOT REMEMBERED:** `scripts/test_voting_page.js` §10 scans every text node in the section and is proven by re-introducing the broken markup. Scope is the Voting section only and the same shape is likely live elsewhere in the admin — named as a separate pass, not quietly folded in. Shipped with a copy pass Ash asked for in the same breath (*“it need to be super clear for the tenant”*): twelve explanations rewritten to state the consequence rather than describe the control, declared in `docs/tacet-delivery-vocabulary.md` v1.107. `test:fast` 270, lint 0 errors. No schema, no server change, no change to `.gitignore` or CI.
 
 2026-09-17 · v4.290 — **§154 · A POLL IS SOMETHING YOU MADE, NOT A SETTING — DECIDED BY ASH**, who was shown three page directions drawn against the design system and picked one: *“lets go with c”*. **THE IA BLUEPRINT'S ARCHETYPE FOR VOTING IS AMENDED** — §4 row 24 files it as an A4 Console and it is a Library with a Composer, because a poll is authored, published and closed rather than configured. **THE PROOF IS THAT THE CONSOLE COULD NOT BE DRAWN WITHOUT INVENTING A CONTROL**: a Console opens on a master switch and Voting has never had one. The admin Voting tab is rebuilt from scratch — the live poll and its bars own the page, the rest of the polls are a shelf below, the two settings fold away at the foot, and authoring moved into a full-page takeover with a phone preview. Uppercase pills, the purpose paragraph, the error-red *open* state and the black-on-lime featured chip all go. The doubled EN/中文 fields are replaced by one language picker (§1.11's licensed exception). **EVERY ECHO OF MERCHANT TEXT NOW WEARS `data-no-i18n`** — an English question beside a Chinese option label is exactly the shape the language walker splits, so half of it would have vanished in the language nobody had open. Write controls capture their button synchronously (§1.12 shape C; four of five paths confirm first). Front end only: no schema, no migration, no server change, mini app untouched. **96 pairs, 38 lifted and 58 composed, declared in `docs/tacet-delivery-vocabulary.md` v1.106.** New suite `scripts/test_voting_page.js` **69/69**, proven non-vacuous by four mutations (an amber open pill, a write that never disables its button, a leader on a poll with no votes, and a display floor that shrinks real turnout — all four caught); its render half drives the real templates in a sandbox because this repo does not run browser suites. `test:fast` 269 → **270**; lint 0 errors. No change to `.gitignore`, CI, or anything governing how sessions and builds work.
 
@@ -16572,3 +16574,60 @@ browser shard is not run here and a template that throws on its first real poll
 is exactly what static checks cannot see. `test:fast` 269 → **270**; lint 0
 errors. No change to `.gitignore`, CI, or anything else governing how sessions
 and builds work.
+
+## §155 — A BILINGUAL PAIR IS ONE TEXT NODE, AND A TAG INSIDE IT BREAKS THE PAIR
+
+**Found in production 2026-09-17**, hours after §154 shipped, by Ash looking at
+the page: *"there is some chinese here."* An English screen was rendering a
+Chinese sentence.
+
+**THE MECHANISM, because the symptom looks like a translation bug and is not.**
+§1.11's walker works on **text nodes**. It considers a node only if it contains
+` · ` (space-middot-space), and splits it when the left half is Chinese-free and
+the right half is not. The hint that leaked was written correctly as a pair —
+but with markup in the middle of it:
+
+```html
+<span>Write <code>{pts}</code> where the points number goes … no republish. ·
+      在需要显示积分数字的位置写 <code>{pts}</code> —— 它会自动填入…</span>
+```
+
+That is not one text node. It is five. The third one holds the ` · ` and gets
+split correctly, so the English half looked right and the swap appeared to work.
+The **fifth** — everything after the second `</code>` — contains no ` · ` at
+all, so the walker never touches it, and it renders in **both** languages
+forever. Half a sentence in Chinese, sitting under an English label, on a screen
+the operator explicitly set to English.
+
+**Nothing errors, nothing logs, and the English reader is the one who sees it.**
+The Chinese reader sees a screen that is entirely Chinese and correct, which is
+why this can survive review by whoever can actually read it.
+
+**THE RULE.** An `English · 中文` pair is **one text node**: plain text, no
+elements inside it. Copy that needs markup — `<code>`, `<b>`, a link — is not
+written as a pair at all. It is written as **two blocks, one per language**,
+each marked `data-lang-block="en"` / `data-lang-block="cn"`; the i18n engine
+already hides whichever is not current (`10-extras.js`, the `html[data-ui-lang]`
+rule it injects at init). That mechanism existed and was in use elsewhere; what
+was missing was the reason to reach for it.
+
+**This is not the same failure as `data-no-i18n`, and the two are opposites.**
+`data-no-i18n` shields text the walker must NOT touch (outside-system strings).
+`data-lang-block` declares text the walker does not need to touch because the
+markup already carries both halves separately. Reaching for the shield here
+would have produced the same bug it was meant to prevent: both languages glued,
+permanently.
+
+**IT IS CHECKED, not remembered.** `scripts/test_voting_page.js` §10 scans every
+text node in the Voting section: each run of Chinese must either sit in a proper
+pair (left half Chinese-free) or inside a declared `data-lang-block="cn"`. The
+language picker's own `中文` label is the single allowed exception, and it is
+named in the check rather than pattern-matched. The check was proven by
+re-introducing the exact broken markup, which it catches.
+
+**Scope, stated honestly:** the check covers the Voting section only. The same
+shape is almost certainly live elsewhere in the admin — any hint that puts a
+`<code>` or a `<b>` inside a bilingual pair has it. Widening the scan is a
+separate pass on a separate ratchet, not something to bolt onto this one; what
+this section buys is that the next person meeting the symptom has the mechanism
+written down instead of rediscovering it from a screenshot.
