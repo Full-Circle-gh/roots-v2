@@ -252,7 +252,7 @@ function noteLoginResult(storeCode, ok) {
   if (!alerts[key]) {
     alerts[key] = true;
     logSync(storeCode, 'auth_required', 'error', null, 'Eleme session missing/expired — needs a manual login');
-    alertMerchant(ACCOUNT, `🔴 饿了么 ${storeCode} 需要人工登录（浏览器自动化），库存同步已暂停\nEleme ${storeCode} needs a manual login (browser automation) — stock sync paused. Run: node scripts/eleme-login.js ${storeCode} <shopId>`);
+    alertMerchant(ACCOUNT, `🔴 饿了么 ${storeCode} 需要人工登录（浏览器自动化），库存同步已暂停\nEleme ${storeCode} needs someone to log in by hand. Stock is not syncing until then. On the box: node scripts/eleme-login.js ${storeCode} <shopId>`);
   }
 }
 
@@ -262,12 +262,12 @@ function noteVerifyResult(storeCode, challenged) {
     if (!alerts[key]) {
       alerts[key] = true;
       logSync(storeCode, 'verify_required', 'error', null, 'Eleme risk-control challenge — a human must clear it; sync paused');
-      alertMerchant(ACCOUNT, `🔴 饿了么 ${storeCode} 风控验证，库存同步已暂停，需要人工处理\nEleme ${storeCode} hit a risk-control challenge — stock sync paused, needs a human`);
+      alertMerchant(ACCOUNT, `🔴 饿了么 ${storeCode} 风控验证，库存同步已暂停，需要人工处理\nEleme ${storeCode} is blocked by a security check. Stock is not syncing until someone clears it on the box.`);
     }
   } else if (alerts[key]) {
     alerts[key] = false;
     logSync(storeCode, 'verify_cleared', 'ok', null, 'verification cleared — sync resumed');
-    alertMerchant(ACCOUNT, `✅ 饿了么 ${storeCode} 风控已清除，同步恢复\nEleme ${storeCode} verification cleared — sync resumed`);
+    alertMerchant(ACCOUNT, `✅ 饿了么 ${storeCode} 风控已清除，同步恢复\nEleme ${storeCode} is past the security check — syncing again`);
   }
 }
 
@@ -285,7 +285,7 @@ function noteOrderPollResult(storeCode, ok, errMsg) {
     if (alerts[key]) {
       alerts[key] = false;
       logSync(storeCode, 'order_poll_recovered', 'ok', null, 'Eleme order polling recovered');
-      alertMerchant(ACCOUNT, `✅ 饿了么 ${storeCode} 订单读取已恢复\nEleme ${storeCode} order polling recovered`);
+      alertMerchant(ACCOUNT, `✅ 饿了么 ${storeCode} 订单读取已恢复\nEleme ${storeCode} is reading orders again`);
     }
     return;
   }
@@ -294,7 +294,7 @@ function noteOrderPollResult(storeCode, ok, errMsg) {
   if (alerts[key]) return;
   alerts[key] = true;
   logSync(storeCode, 'order_poll_down', 'error', null, errMsg || 'Eleme order polling failing');
-  alertMerchant(ACCOUNT, `🔴 饿了么 ${storeCode} 订单已超过30分钟读取失败，新订单可能未入库\nEleme ${storeCode} order polling has been failing for 30+ min — new orders may not be mirrored`);
+  alertMerchant(ACCOUNT, `🔴 饿了么 ${storeCode} 订单已超过30分钟读取失败，新订单可能未入库\nEleme ${storeCode} has not been able to read orders for over 30 min. New orders may be missing from the system.`);
 }
 
 // ── Order polling ────────────────────────────────────────────────────────────

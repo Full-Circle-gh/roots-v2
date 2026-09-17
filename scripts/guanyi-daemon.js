@@ -801,7 +801,7 @@ function autoHeal(storeCode, listing) {
   const summary = parts.join('; ');
   log(storeCode, `auto-heal: ${summary}`);
   logSync(storeCode, 'autoheal', 'ok', { reenabled, revived, resynced });
-  alertMerchant(ACCOUNT, `🩹 管易 ${storeCode} 库存同步已自动修复：${total} 个商品重新推送\nGuanyi ${storeCode} auto-healed — ${summary}`);
+  alertMerchant(ACCOUNT, `🩹 管易 ${storeCode} 库存同步已自动修复：${total} 个商品重新推送\nGuanyi ${storeCode} fixed itself — ${summary}`);
 }
 
 // Probe the login on a timer, regardless of whether anything is queued: an
@@ -854,7 +854,7 @@ async function processSessionHealth() {
         logSync(storeCode, 'needs_login', 'error', null, 'Guanyi session expired — stock push STOPPED');
         alertMerchant(ACCOUNT, 
           `🔴 管易 ${storeCode} 登录已失效，库存推送已停止！gzgrocery 仍按旧库存下单，请在盒子上运行 scripts/guanyi-login.js 重新登录\n` +
-          `Guanyi ${storeCode} session expired — stock push STOPPED. gzgrocery is still ordering against stale numbers; re-run scripts/guanyi-login.js on the box.`
+          `Guanyi ${storeCode} has been logged out, so stock has STOPPED going out. gzgrocery is still ordering against old numbers. Log in again on the box: node scripts/guanyi-login.js`
         );
       }
       continue;
@@ -924,9 +924,9 @@ async function processSessionHealth() {
             // "at your convenience", which is both alarming and useless.
             alertMerchant(ACCOUNT, leftMs <= SESSION_WARN_NOW_MS
               ? `🟠 管易 ${storeCode} 登录将在${cn}后过期，请尽快重新登录（过期后库存推送会停止）\n` +
-                `Guanyi ${storeCode} login expires in ${en} — re-login NOW from the ops screen; stock push stops when it goes.`
+                `Guanyi ${storeCode} login runs out in ${en}. Log in again NOW from the ops screen — stock stops going out when it does.`
               : `🟡 管易 ${storeCode} 登录将在${cn}后过期，请在方便时重新登录（现在同步仍正常）\n` +
-                `Guanyi ${storeCode} login expires in ${en} — re-login at your convenience from the ops screen; sync is still fine for now.`);
+                `Guanyi ${storeCode} login runs out in ${en}. Log in again from the ops screen when it suits — everything is still working for now.`);
           }
         } else if (leftMs > SESSION_WARN_MS) {
           lastExpiryWarn[storeCode] = 0;   // healthy again after a re-login

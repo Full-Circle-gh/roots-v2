@@ -363,7 +363,7 @@ function noteBrowserHealth(storeCode, ok, errMsg) {
     const mins = Math.round((now - s.since) / 60000);
     logSync(storeCode, 'browser_down', 'error', null,
       `browser keeps crashing (~${mins} min) — auto-relaunch not sticking, may need the box`);
-    alertBoth(ACCOUNT, `🔴 美团外卖 ${storeCode} 浏览器持续崩溃 ~${mins} 分钟，库存/订单同步已停，可能需要在盒子上处理\nMeituan 外卖 ${storeCode} browser keeps crashing for ~${mins} min — stock/order sync down, auto-relaunch isn't sticking, may need hands-on the box`);
+    alertBoth(ACCOUNT, `🔴 美团外卖 ${storeCode} 浏览器持续崩溃 ~${mins} 分钟，库存/订单同步已停，可能需要在盒子上处理\nMeituan 外卖 ${storeCode}: the browser has been crashing for about ${mins} min and restarting it is not helping. Stock and orders are not syncing. Someone needs to look at the box.`);
   }
 }
 
@@ -395,7 +395,7 @@ function noteVerifyResult(storeCode, challenged) {
       verifyFlagged['verify:' + storeCode] = true;
       logSync(storeCode, 'verify_required', 'error', null,
         `Meituan 验证中心 challenge — a human must pass the captcha; backing off ~${Math.round(wait / 60000)} min`);
-      alertMerchant(ACCOUNT, `🔴 美团外卖 ${storeCode} 掉线：验证中心风控，同步已暂停，需要人工验证\nMeituan 外卖 ${storeCode} disconnected (验证中心) — sync paused, needs a human to pass the captcha`);
+      alertMerchant(ACCOUNT, `🔴 美团外卖 ${storeCode} 掉线：验证中心风控，同步已暂停，需要人工验证\nMeituan 外卖 ${storeCode} is blocked by Meituan's security check. Syncing is paused until someone passes it on the box.`);
     }
     log(storeCode, `verification challenge — cooling down ~${Math.round(wait / 60000)} min (strike ${s.strikes})`);
   } else {
@@ -439,7 +439,7 @@ function noteBindingResult(storeCode, lost) {
   if (!lost) {
     if (alerts[latch]) {
       logSync(storeCode, 'binding_cleared', 'ok', null, 'store binding restored — sync resumed');
-      alertMerchant(ACCOUNT, `✅ 美团外卖 ${storeCode} 门店绑定已恢复，库存/订单同步继续\nMeituan 外卖 ${storeCode} store binding restored — stock/order sync resumed`);
+      alertMerchant(ACCOUNT, `✅ 美团外卖 ${storeCode} 门店绑定已恢复，库存/订单同步继续\nMeituan 外卖 ${storeCode} knows its shop again — stock and orders are syncing`);
     }
     s.since = null; alerts[latch] = false;
     return;
@@ -450,7 +450,7 @@ function noteBindingResult(storeCode, lost) {
     alerts[latch] = true;
     logSync(storeCode, 'binding_lost', 'error', null,
       'session authed but lost store binding (acctId/region) — needs re-login');
-    alertMerchant(ACCOUNT, `🔴 美团外卖 ${storeCode} 掉了门店绑定（acctId/区域丢失），库存和订单同步已停，需要重新登录（ops-screen 扫码后选回门店）\nMeituan 外卖 ${storeCode} lost its store binding (acctId/region) — stock + order sync DOWN, needs a re-login (ops-screen QR, then re-select the store).`);
+    alertMerchant(ACCOUNT, `🔴 美团外卖 ${storeCode} 掉了门店绑定，库存和订单同步已停，需要重新登录（ops-screen 扫码后选回门店）\nMeituan 外卖 ${storeCode} has forgotten which shop it is logged in to. Stock and orders have STOPPED syncing. Log in again on the ops screen, then pick the shop back.`);
   }
 }
 
@@ -481,7 +481,7 @@ function heartbeatTick(storeCode) {
     heartbeatFlagged['heartbeat:' + storeCode] = true;
     const mins = Math.round((now - lastOrderFetchOk[storeCode]) / 60000);
     logSync(storeCode, 'sync_stalled', 'error', null, `no successful order read in ~${mins} min during open hours`);
-    alertMerchant(ACCOUNT, `🔴 美团外卖 ${storeCode} 同步疑似卡住：营业时间内约 ${mins} 分钟没有一次成功的订单读取，请检查\nMeituan 外卖 ${storeCode} sync looks stalled — no successful order read in ~${mins} min during open hours; please check`);
+    alertMerchant(ACCOUNT, `🔴 美团外卖 ${storeCode} 同步疑似卡住：营业时间内约 ${mins} 分钟没有一次成功的订单读取，请检查\nMeituan 外卖 ${storeCode} has not picked up an order for about ${mins} min during opening hours. Please check.`);
   } else if (!stale && heartbeatFlagged['heartbeat:' + storeCode]) {
     heartbeatFlagged['heartbeat:' + storeCode] = false;
     logSync(storeCode, 'sync_resumed', 'ok', null, 'order reads succeeding again');
@@ -557,7 +557,7 @@ function queueStallTick(stores) {
       alerts[key] = true;
       logSync(storeCode, 'queue_stalled', 'error', { pending: d.pending },
         `oldest stock push waiting ~${d.waitedMin} min of open time (queued ~${d.ageMin} min ago)`);
-      alertMerchant(ACCOUNT, `🔴 美团外卖 ${storeCode} 库存推送卡住：${d.pending} 条待推送，最早一条在营业时间内已等待约 ${d.waitedMin} 分钟没有推出去，美团上的库存已过期\nMeituan 外卖 ${storeCode} stock pushes are stuck — ${d.pending} queued, the oldest has sat ~${d.waitedMin} min of TRADING time without going out; listings on Meituan are stale`);
+      alertMerchant(ACCOUNT, `🔴 美团外卖 ${storeCode} 库存推送卡住：${d.pending} 条待推送，最早一条在营业时间内已等待约 ${d.waitedMin} 分钟没有推出去，美团上的库存已过期\nMeituan 外卖 ${storeCode}: stock updates are stuck. ${d.pending} are waiting to go out and the oldest has waited about ${d.waitedMin} min of opening hours. The numbers customers see on Meituan are out of date.`);
     } else if (d.alert === 'clear') {
       alerts[key] = false;
       // An empty window is not proof the pushes landed: a row that burns its third
@@ -569,11 +569,11 @@ function queueStallTick(stores) {
       if (gaveUp) {
         logSync(storeCode, 'queue_resumed', 'error', null,
           'queue emptied by failed pushes, not successful ones — drift sweep will retry');
-        alertMerchant(ACCOUNT, `🟠 美团外卖 ${storeCode} 库存推送队列已清空，但最早一条是推送失败退出的，不是成功推出去的——美团上的库存仍然不对，等待补偿扫描重新入队\nMeituan 外卖 ${storeCode} stock push queue is empty, but the oldest row left by FAILING, not by landing — Meituan stock is still wrong until the drift sweep re-queues it`);
+        alertMerchant(ACCOUNT, `🟠 美团外卖 ${storeCode} 库存推送队列已清空，但最早一条是推送失败退出的，不是成功推出去的——美团上的库存仍然不对，等待补偿扫描重新入队\nMeituan 外卖 ${storeCode}: nothing is waiting to go out, but the last stock update gave up instead of landing. The numbers on Meituan are still wrong until the automatic re-check sends them again.`);
       } else {
         logSync(storeCode, 'queue_resumed', 'ok', { pending: d.pending },
           d.pending ? 'stock push queue moving again' : 'stock push queue drained');
-        alertMerchant(ACCOUNT, `✅ 美团外卖 ${storeCode} 库存推送恢复正常\nMeituan 外卖 ${storeCode} stock pushes moving again`);
+        alertMerchant(ACCOUNT, `✅ 美团外卖 ${storeCode} 库存推送恢复正常\nMeituan 外卖 ${storeCode} is sending stock updates again`);
       }
     }
   }

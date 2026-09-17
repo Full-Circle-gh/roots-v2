@@ -86,8 +86,17 @@ console.log('\nF · the alert text');
   check('carries the order number', t.includes('EL20260908172919'), t);
   check('names the channel in Chinese', t.includes('饿了么'), t);
   check('says the stock was not deducted, in Chinese', t.includes('库存未扣减'), t);
-  check('says it in English too', t.includes('NOT deducted'), t);
-  check('reports the oversell both ways', t.includes('库存不足') && t.includes('clamped at 0'), t);
+  check('says it in English too', t.includes('no stock came off the shelf'), t);
+  check('reports the oversell both ways',
+    t.includes('库存不足') && t.includes('sold with nothing left on the shelf'), t);
+  // THE ENGLISH HALF IS FOR THE SHOP FLOOR. It shipped as `1 line(s) exceeded
+  // on-hand and were clamped at 0` and was unreadable to the person it pages;
+  // the module header records the day and the reason. These are the four words
+  // that made it unreadable, and none of them may come back.
+  check('no payload vocabulary survives in the English half',
+    !/\bline\(s\)|\bon-hand\b|clamp|deducted/i.test(t.split('\n')[1]), t);
+  check('and it ends with the one thing to go and do',
+    t.includes('Count the shelf and correct it.'), t);
   check('is two lines, 中文 then English', t.split('\n').length === 2, JSON.stringify(t));
 
   const mt = alertText({
@@ -128,9 +137,10 @@ console.log('\nG · a shelf our own commit took below zero');
   // that is not missing, where the truth sends them to recount a shelf.
   check('a till sale is reported as a miscount, in Chinese',
     till.includes('可能是数错了'), till);
-  check('…and in English', till.includes('likely counted wrong'), till);
+  check('…and in English', till.includes('nearly always means a miscount'), till);
+  check('…and it ends by naming the repair', till.endsWith('Recount the shelf.'), till);
   check('a till sale NEVER claims a customer is waiting',
-    !till.includes('有客户订单等待') && !till.includes('are now owed'), till);
+    !till.includes('有客户订单等待') && !/waiting on items|are now owed/.test(till), till);
   check('the English reads as one sentence, with no stray space before the comma',
     !/ ,/.test(till), till);
   // THE ONE THING THIS MUST NEVER SAY. The platform alert's wording is "已按 0
@@ -138,7 +148,7 @@ console.log('\nG · a shelf our own commit took below zero');
   // wrote the negative deliberately; borrowing that sentence would report a
   // completed deduction as a refused one.
   check('never claims the line was clamped',
-    !till.includes('已按 0 计') && !till.includes('clamped'), till);
+    !till.includes('已按 0 计') && !/clamp|nothing left on the shelf/i.test(till), till);
   check('is two lines, 中文 then English', till.split('\n').length === 2, JSON.stringify(till));
 
   // Each half names the product in its OWN language — alertText cannot, because
@@ -157,9 +167,10 @@ console.log('\nG · a shelf our own commit took below zero');
   // to make or re-order the units. Same alert, the other cause.
   check('a delivery says somebody is owed, in Chinese',
     web.includes('有客户订单等待'), web);
-  check('…and in English', web.includes('are now owed'), web);
+  check('…and in English', web.includes('customers are waiting on items we do not have'), web);
+  check('…and it ends by naming the repair', web.endsWith('Make or re-order them.'), web);
   check('a delivery is NOT reported as a miscount',
-    !web.includes('可能是数错了') && !web.includes('counted wrong'), web);
+    !web.includes('可能是数错了') && !/miscount|counted wrong/i.test(web), web);
   check('both causes keep the same shape around the clause that differs',
     web.includes('库存已为负数') && till.includes('库存已为负数')
       && web.includes('请检查') && till.includes('请检查'), web);

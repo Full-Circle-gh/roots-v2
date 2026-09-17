@@ -220,8 +220,8 @@ function noteVerifyResult(storeCode, challenged) {
           ? `青云 验证中心 challenge right after a browser relaunch — session intact; backing off ~${mins} min`
           : `青云 验证中心 challenge — a human must pass the captcha; backing off ~${mins} min`);
       alertMerchant(ACCOUNT, cold
-        ? `🟠 青云聚信 ${storeCode} 风控/验证（浏览器刚重启，登录未掉），配送跟踪暂停约 ${mins} 分钟后自动恢复，无需操作\nQingyun ${storeCode} risk-control right after a browser restart — NOT logged out, tracking auto-resumes in ~${mins} min, no action needed`
-        : `🔴 青云聚信 ${storeCode} 风控/验证，配送跟踪已暂停，需要在盒子上重新登录\nQingyun ${storeCode} risk-control — delivery tracking paused, needs re-login`);
+        ? `🟠 青云聚信 ${storeCode} 风控/验证（浏览器刚重启，登录未掉），配送跟踪暂停约 ${mins} 分钟后自动恢复，无需操作\nQingyun ${storeCode} hit a security check right after the browser restarted. We are still logged in and tracking starts again by itself in about ${mins} min. Nothing to do.`
+        : `🔴 青云聚信 ${storeCode} 风控/验证，配送跟踪已暂停，需要在盒子上重新登录\nQingyun ${storeCode} is blocked by a security check. Delivery tracking is paused until someone logs in again on the box.`);
     }
     log(storeCode, `verification challenge — cooling down ~${Math.round(wait / 60000)} min (strike ${s.strikes})`);
   } else {
@@ -279,11 +279,11 @@ function heartbeatTick(storeCode) {
     const mins = Math.round((now - lastPollOk[storeCode]) / 60000);
     logSync(storeCode, 'poll_stalled', 'error', null,
       `no clean poll in ~${mins} min, not explained by login/verify/proxy — the Chrome process is likely crash-looping`);
-    alertBoth(ACCOUNT, `🔴 青云聚信 ${storeCode} 约 ${mins} 分钟没有一次成功轮询（非登录/验证/代理原因），浏览器可能在反复崩溃，请检查\nQingyun ${storeCode} — no successful poll in ~${mins} min, not explained by login/verify/proxy — the Chrome process may be crash-looping; please check`);
+    alertBoth(ACCOUNT, `🔴 青云聚信 ${storeCode} 约 ${mins} 分钟没有一次成功轮询（非登录/验证/代理原因），浏览器可能在反复崩溃，请检查\nQingyun ${storeCode} has read nothing for about ${mins} min. It is not a login, a security check or the internet — the browser is most likely crashing over and over. Someone needs to look at the box.`);
   } else if (!stale && heartbeatFlagged['stall:' + storeCode]) {
     heartbeatFlagged['stall:' + storeCode] = false;
     logSync(storeCode, 'poll_resumed', 'ok', null, 'polling succeeding again');
-    alertMerchant(ACCOUNT, `✅ 青云聚信 ${storeCode} 轮询已恢复\nQingyun ${storeCode} polling back to normal`);
+    alertMerchant(ACCOUNT, `✅ 青云聚信 ${storeCode} 轮询已恢复\nQingyun ${storeCode} is reading again — back to normal`);
   }
 }
 
@@ -895,7 +895,7 @@ async function pollStore(storeCode) {
         bootstrapFlagged['bootstrap:' + storeCode] = true;
         const mins = Math.round((Date.now() - bootstrapSince[storeCode]) / 60000);
         const why = reason ? ` [${reason}]` : '';
-        alertBoth(ACCOUNT, `🔴 青云聚信 ${storeCode} 订单接口连续约 ${mins} 分钟失败，自动修复无效，配送跟踪已停止 — 请在盒子上打开青云订单页，确认仍处于登录状态${why}\nQingyun ${storeCode} order/list failing for ~${mins} min and self-heal didn't fix it — tracking stopped; open the Qingyun order page on the box and check it's still logged in${why}`);
+        alertBoth(ACCOUNT, `🔴 青云聚信 ${storeCode} 订单接口连续约 ${mins} 分钟失败，自动修复无效，配送跟踪已停止 — 请在盒子上打开青云订单页，确认仍处于登录状态${why}\nQingyun ${storeCode} has not been able to load its order page for about ${mins} min and fixing itself did not work. Delivery tracking has stopped. Open the Qingyun order page on the box and check it is still logged in${why}`);
       }
       log(storeCode, `order/list unavailable — self-heal did not restore it${reason ? ` (${reason})` : ''}`);
       logSync(storeCode, 'bootstrap', 'error', null, `order/list unavailable — self-heal did not restore it${reason ? ` (${reason})` : ''}`);
@@ -903,7 +903,7 @@ async function pollStore(storeCode) {
     }
     if (bootstrapFlagged['bootstrap:' + storeCode] && alertsAllowed(storeCode)) {
       bootstrapFlagged['bootstrap:' + storeCode] = false;
-      alertMerchant(ACCOUNT, `✅ 青云聚信 ${storeCode} 订单接口已恢复，配送跟踪继续\nQingyun ${storeCode} order/list answering again — tracking resumed`);
+      alertMerchant(ACCOUNT, `✅ 青云聚信 ${storeCode} 订单接口已恢复，配送跟踪继续\nQingyun ${storeCode} can load its order page again — tracking resumed`);
     }
     bootstrapSince[storeCode] = 0;
     if (!ok) return;
