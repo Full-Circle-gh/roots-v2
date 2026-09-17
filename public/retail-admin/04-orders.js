@@ -2845,8 +2845,20 @@ function awaitingRestockStore(o) {
 // refuses a request carrying no status transition. "Customer rang, leave it
 // next door" had nowhere to go.
 //
-// Collapsed to a single line when empty so it costs nothing on a drawer nobody
-// needs it on; the Save button appears only once the text differs from what is
+// NOT SHOWN AT ALL WHEN EMPTY. It used to collapse to a single line, which is
+// still a labelled box and a placeholder on every drawer, most of which will
+// never carry a note — Ash's reading of it was that the drawer was asking a
+// question nobody had asked. An order WITH a note shows the editor exactly as
+// before, note in it; an order without one is reached through the header's "…"
+// menu, which reveals this same block rather than opening a second surface, so
+// there is one shop-note editor and it always looks the same.
+//
+// The block stays in the DOM and is only `hidden`, never withheld from the
+// markup: every handler below finds it by `.ord-note[data-order-id]`, and the
+// drawer is painted in one innerHTML pass, so revealing it must not need a
+// repaint the drawer cannot give without losing the caret.
+//
+// The Save button still appears only once the text differs from what is
 // stored, so an operator reading an order never sees an action they have no
 // reason to take.
 /* ══════════════════════════════════════════════════════════════════════════
@@ -2962,9 +2974,9 @@ async function ordRenotify(id, btn) {
 
 function staffNoteBlock(o) {
   const note = o.staff_note || '';
-  return `<div class="full ord-note" data-order-id="${o.id}">
+  return `<div class="full ord-note" data-order-id="${o.id}"${note ? '' : ' hidden'}>
     <div class="kicker">Shop note · 店铺备注</div>
-    <textarea class="ord-note-in" rows="${note ? 3 : 1}" maxlength="2000"
+    <textarea class="ord-note-in" rows="3" maxlength="2000"
       data-ph-en="Add a note for whoever handles this order" data-ph-cn="给处理这张订单的同事留个备注"
       placeholder="Add a note for whoever handles this order"
       oninput="ordNoteChanged(${o.id})">${escapeHtml(note)}</textarea>
@@ -2990,6 +3002,28 @@ function ordNoteReset(id) {
   if (!wrap) return;
   wrap.querySelector('.ord-note-in').value = _ordNoteOriginal();
   ordNoteChanged(id);
+  // Cancel on an order that had no note puts the drawer back the way it was
+  // found — the block goes away again. Cancel on an order that HAS one only
+  // throws away the edit: hiding a stored note would be hiding a fact.
+  if (!_ordNoteOriginal()) wrap.hidden = true;
+}
+// Reveal the block from the "…" menu and put the caret in it. No repaint: the
+// drawer is one innerHTML pass, so a re-render here would be the whole drawer.
+function ordNoteOpen(id) {
+  const wrap = document.querySelector(`.ord-note[data-order-id="${id}"]`);
+  if (!wrap) return;
+  wrap.hidden = false;
+  const el = wrap.querySelector('.ord-note-in');
+  if (el) {
+    try { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {
+      // Swallowed on purpose: the options form of scrollIntoView is refused
+      // outright by older WebViews, and a browser that cannot scroll the box
+      // into view has still been GIVEN the box. focus() below is the part that
+      // matters and runs either way — failing the reveal over a nicety would
+      // be the worse answer.
+    }
+    el.focus();
+  }
 }
 async function ordNoteSave(id, ev) {
   const wrap = document.querySelector(`.ord-note[data-order-id="${id}"]`);
@@ -3006,6 +3040,10 @@ async function ordNoteSave(id, ev) {
     if (_OPEN_ORDER && _OPEN_ORDER.id === id) _OPEN_ORDER.staff_note = j.staff_note || '';
     el.value = j.staff_note || '';
     ordNoteChanged(id);
+    // Saving an empty box CLEARS the note (the endpoint blanks whatever trims
+    // to nothing), so the drawer goes back to carrying no note — and a drawer
+    // carrying no note does not show the block.
+    if (!(j.staff_note || '')) wrap.hidden = true;
     toast(cuT('Note saved', '备注已保存'));
   } catch (e) { /* adminWrite has already said what went wrong */ }
 }
@@ -6848,6 +6886,14 @@ function orderHeadMore(o) {
   if (document.body.classList.contains('ord-box-label')
       && !['pending_payment', 'cancelled', 'refunded'].includes(o.status)) {
     items.push(`<button class="odh-item" onclick="orderMoreClose(); printBoxLabel(${o.id})" title="${escapeAttr(cuT('Sticker for the parcel: order no, name, phone', '箱贴:订单号、姓名、电话'))}">${cuT('Box label', '打印箱贴')}</button>`);
+  }
+  // THE WAY IN TO A NOTE THAT DOES NOT EXIST YET. Offered only while the block
+  // is hidden — an order that already carries a note is showing its editor a
+  // few lines down the drawer, and a menu row pointing at something already on
+  // screen is the noise this change removed. The row's label is the block's own
+  // heading, so what you pick and what appears say the same words.
+  if (!(o.staff_note || '')) {
+    items.push(`<button class="odh-item" onclick="orderMoreClose(); ordNoteOpen(${o.id})">Shop note · 店铺备注</button>`);
   }
   if (!items.length) return '';
   return `
