@@ -35,6 +35,17 @@
   .hidden { display:none; }
   .foot { font-size:11.5px; color:#9a9384; margin-top:20px; }
 </style>
+<style>
+/* NO BROWSER TEXT SELECTION — this is a tool, not a page. A long-press on any
+   text an allowlist did not name pops Android Chrome's "touch to search" Google
+   bar over the app. The default is none, inputs opt back in (or typing breaks),
+   and .sel is the escape hatch. Copying lives on Copy buttons, not on dragging
+   blue handles. Full reasoning, and why the customer-facing pages are
+   deliberately excluded, sits beside the same two rules in public/m.html. */
+html,body{-webkit-user-select:none;-moz-user-select:none;user-select:none;-webkit-touch-callout:none}
+input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
+  -webkit-user-select:text;-moz-user-select:text;user-select:text;-webkit-touch-callout:default}
+</style>
 </head>
 <body>
 <div class="wrap">
