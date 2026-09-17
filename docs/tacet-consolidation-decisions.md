@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.300
+# Tacet shared-core consolidation — decisions record, v4.301
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,7 +23,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-17 · v4.300 — **§165 · A CHOICE THE CUSTOMER MAKES IS PART OF WHAT THE PRODUCT COSTS — AND A FEATURE THAT WAS ALREADY DESIGNED IS WITHDRAWN.** Ash reported a waste problem (*"fresh meals sometimes are waste without the dressing, we keep dressing many time in the freezer"*) and then, two turns later, the thing underneath it: *"beet salad is an example of a salad that we offer to choose 2 types of dressing. the staff made a mistake and put both of them inside the recipe."* **The second report killed the first fix.** A tick on the material and a *was the dressing kept?* question on the waste sheet was designed, measured against the live ledger (¥27.65 of ¥121.93 in thirteen days, `scripts/diagnose_dressing_waste.js`) and is now **withdrawn, not deferred**: it was a workaround for the dressing being buried in a recipe, and once the dressing is its own stocked product a binned salad is a binned salad. **Waste is the one reader this section does not change.** The real fault is not waste at all — Beet Salad carries ¥11.43 where the truth is ¥8.31 or ¥9.33, **20–27% too high on every sale at a ¥48 price**, and the live sweep found it is the ONLY genuine instance among five candidate recipes. The hole it opens is far wider than dressings: 54 option choices draw down a real shelf today and 15 can be priced, on 8.5% of all order lines, and `routes/finance-summary.js` had already written the gap down in its own words — *"OPTIONS carry a price delta with no cost counterpart"*. So `lib/option-cost.js` answers the two questions separately: a SALE takes the chosen choice's cost into the new `retail_order_items.options_cost_at_sale`, and the CATALOGUE takes the **dearest REQUIRED** choice, because nobody has chosen yet and a mean reads plausible while flattering. **A second column rather than a wider `unit_cost_at_sale`, and that is provable rather than tidy**: that column is multiplied by `pack_units` downstream while a linked choice is added once per unit bought, so one column would have charged a six-pack for six oat milks. **The direction of the error is the whole point** — taking the dressing out of the recipe replaces a cost that was too high with one that is too low, and too low is what gets a price cut, so the editor's margin ships in the same commit and a required choice nobody priced **blocks it outright** rather than falling back to the typed figure. Two pairs COMPOSED and declared in `docs/tacet-delivery-vocabulary.md` v1.116. `cost_coverage`, the channel ingest paths and `is_default` are all deliberately untouched, each for a stated reason. Covered by `scripts/test_option_cost.js` (23 checks).
+2026-09-17 · v4.301 — **§165 · A CHOICE THE CUSTOMER MAKES IS PART OF WHAT THE PRODUCT COSTS — AND A FEATURE THAT WAS ALREADY DESIGNED IS WITHDRAWN.** Ash reported a waste problem (*"fresh meals sometimes are waste without the dressing, we keep dressing many time in the freezer"*) and then, two turns later, the thing underneath it: *"beet salad is an example of a salad that we offer to choose 2 types of dressing. the staff made a mistake and put both of them inside the recipe."* **The second report killed the first fix.** A tick on the material and a *was the dressing kept?* question on the waste sheet was designed, measured against the live ledger (¥27.65 of ¥121.93 in thirteen days, `scripts/diagnose_dressing_waste.js`) and is now **withdrawn, not deferred**: it was a workaround for the dressing being buried in a recipe, and once the dressing is its own stocked product a binned salad is a binned salad. **Waste is the one reader this section does not change.** The real fault is not waste at all — Beet Salad carries ¥11.43 where the truth is ¥8.31 or ¥9.33, **20–27% too high on every sale at a ¥48 price**, and the live sweep found it is the ONLY genuine instance among five candidate recipes. The hole it opens is far wider than dressings: 54 option choices draw down a real shelf today and 15 can be priced, on 8.5% of all order lines, and `routes/finance-summary.js` had already written the gap down in its own words — *"OPTIONS carry a price delta with no cost counterpart"*. So `lib/option-cost.js` answers the two questions separately: a SALE takes the chosen choice's cost into the new `retail_order_items.options_cost_at_sale`, and the CATALOGUE takes the **dearest REQUIRED** choice, because nobody has chosen yet and a mean reads plausible while flattering. **A second column rather than a wider `unit_cost_at_sale`, and that is provable rather than tidy**: that column is multiplied by `pack_units` downstream while a linked choice is added once per unit bought, so one column would have charged a six-pack for six oat milks. **The direction of the error is the whole point** — taking the dressing out of the recipe replaces a cost that was too high with one that is too low, and too low is what gets a price cut, so the editor's margin ships in the same commit and a required choice nobody priced **blocks it outright** rather than falling back to the typed figure. Two pairs COMPOSED and declared in `docs/tacet-delivery-vocabulary.md` v1.116. `cost_coverage`, the channel ingest paths and `is_default` are all deliberately untouched, each for a stated reason. Covered by `scripts/test_option_cost.js` (23 checks).
+
+2026-09-17 · v4.300 — **§164 ADDENDUM · THE WIRE IS CLOSED, AND CLOSING IT FOUND A LIVE DATA LOSS THE SCREEN GATE HAD CREATED — ASKED BY ASH**, who was told the figures were still one devtools tab away and said to close it. `routes/retail-recipes.js` now strips money from all four reads and 403s the one write, through `lib/recipe-cost-visibility.js` — EXTRACTED like `lib/product-cost-visibility.js` beside it, so the rules can be held to a contract without standing up a database. Same three rules as waste and materials, deliberately: **fails closed** (a null cap set is not a grant), **keys DELETED not zeroed** (a 0 reads as free), **a FIELD refused, never a request** — with `costs_hidden: true` on the envelope so a client can tell *withheld* from *there was none*. The computed cost object is **ALLOW-LISTED, not deny-listed**, and that is the one shape here that differs in kind: `computeRecipeCost()` returns thirty-odd keys, fifteen of them money, and it GROWS (`materialCostPerGram` and `embeddedOverhead` both arrived after the first of them), so a deny-list is a list of the money keys that existed the day it was written. Percentages go with the amounts — `foodCostPct`, `overheadPct` and `targetFoodCost` print no currency sign and are still cost — and the three COUNTS stay, because a count and a cause are what make a fault fixable. **AND THE REAL FINDING: §164's screen gate had quietly armed a data loss.** `draftCostData()` reads the Cost & Pricing inputs out of the DOM; §164 stopped rendering that tab; `v()` returns null for an element that is not there and `parseFloat(null) || 0` is **0** — so an operator holding `recipes:edit` without `recipes:costs` who corrected a recipe's NAME would have PUT `{labour: 0, overhead_pct: 0, sell_price: 0, target_food_cost: 30}` and wiped the labour, the overhead and the sell price, taking every margin built on that recipe with them. Live from the moment #669 deployed; no preset holds edit-without-costs, so the exposure was the by-name grants alone. **OMITTING THE KEYS WOULD NOT HAVE FIXED IT**, which is the trap worth naming: `lib/recipe-cost-data-write.js` grants preserve-on-absent to `packaging_type_id` ALONE and says in terms that "an absent `labour` still writes 0, an absent `target_food_cost` still writes 30" — the packaging comment in `draftCostData()` is about that one column and does not generalise. Not sending the REQUEST is the only shape that preserves what is stored, and the route refuses it anyway for a tab left open across the deploy, a retry, or a hand-rolled request. Coverage: `scripts/test_recipe_cost_visibility.js` grows to 106 assertions, including that a money key invented tomorrow does not leak, that the sell price survives, and that no GET 403s.
 
 2026-09-17 · v4.299 — **§164 · A RECIPE IS NOT ONLY A COST, AND THE KITCHEN NEEDS THE HALF THAT ISN'T — ASKED BY ASH**, choosing how the desktop Recipes screen should reach the phone: *"the only thing is that cost section should be only accessable per role permission . kitchen staff for example can't reach there"*. **THERE IS ONE KEY WHERE THERE SHOULD BE TWO.** `lib/capabilities.js` gives materials, products and waste each a PAIR — a view key that opens the screen and a costs key that reveals the money on it, with `waste:costs` deliberately off in both floor presets — and gives Recipes only `recipes:view`, which **alone among the view keys carries `money: 'shows'`**, justified by MONEY_NOTES' `A recipe is a cost. · 食谱本身就是成本。`. That sentence is TRUE of the screen as it stands, which is why the coin is on the wrong KEY rather than simply wrong: with nothing else to carry it, opening Recipes at all IS seeing money, and a kitchen operator cannot be handed the ingredients and the steps without also being handed the batch cost, the cost per gram and the margin on everything the recipe makes. **THE DECISION: MINT `recipes:costs` AND MOVE THE COIN ONTO IT**, modelled line for line on `products:costs`; `recipes:view` loses its mark and the note is reworded onto the new key, which is now the thing the sentence is about. **THE COIN COMES OFF ONLY TOGETHER WITH THE GATE, IN ONE PR** — the list prints Cost, Cost per gram and the whole-batch fallback in columns of its own, and un-marking the key while those still paint would call it safe while it still shows money, which is worse than the state it replaces. **IT GOES ON THE DESKTOP, NOT ONLY ON THE PHONE**: `public/retail-admin/19-recipes.js` is 3,031 lines carrying exactly one capability check — `canEdit()` on `recipes:edit` — so Cost & Pricing is visible to everyone who can open the screen, and a gate added only to the phone is one a laptop steps around. **AND IT TAKES SOMETHING AWAY ON THE DAY IT SHIPS**, deliberately rather than as a side effect: `owner` holds everything, `admin` and `manager` are `ALL_KEYS` filters that pick the new key up on the same deploy, and no floor preset holds `recipes:view` at all — so what is left is operators ticked on **by name**, a list read off live data and acted on per person BEFORE the gate merges, because no session can see it from the repository. Does NOT decide the mobile Recipes build, which is its own decision and its own PR, and does not touch `lib/cap-routes.js`: GETs are open at that choke point, so this is a client-side read gate over data the endpoint already returns. One pair composed — `See recipe cost & margin · 查看食谱成本与毛利`, the live `products:costs` pair with its one noun swapped (产品 → 食谱, the noun `recipes:view` already carries) — declared in §164 with its sources and its rejected candidate, and locked in `docs/tacet-delivery-vocabulary.md` in the commit that ships the code, not before.
 
@@ -17426,15 +17428,57 @@ code*. The PR that implements it carries
   absent without `recipes:costs` and present with it;
 - the by-name grant list above, read off live data and acted on before merge.
 
+### ADDENDUM, 2026-09-17 — the wire, and the data loss the screen gate armed
+§164 above records that it deliberately did not gate the server: *"whether the
+API should withhold cost fields per capability is a separate question nobody has
+asked yet."* Ash asked, on being told the figures were still readable in the
+network tab. This is that decision, and what implementing it turned up.
+**THE WIRE.** All four reads strip money; the one write refuses it. The rules
+live in `lib/recipe-cost-visibility.js`, extracted from the route the way
+`lib/product-cost-visibility.js` was and for the same reason: a rule reachable
+only by standing up a database is a rule that gets tested loosely or not at all.
+Waste's and materials' three rules are followed to the letter so all three read
+alike — fail closed, delete rather than zero, refuse a field rather than a
+request — and `costs_hidden: true` rides the envelope.
+**THE COST OBJECT IS ALLOW-LISTED.** Every other shape is built in the route, in
+sight, where a `delete` beside its construction stays honest. `computeRecipeCost()`
+is not: thirty-odd keys, fifteen of them money, and it has grown twice since the
+first of them. A deny-list is a list of what was money on the day it was written.
+**THE ONE 403.** Every column `PUT /:id/cost` writes is money, so a caller
+without the capability has nothing legitimate to say there. That is the only
+request in the file that is refused rather than answered with less.
+**AND THE FINDING THAT MATTERED MORE THAN THE GAP.** §164's screen gate had
+armed a silent data loss, live from the moment #669 deployed. `draftCostData()`
+reads the Cost & Pricing inputs out of the DOM; §164 stopped rendering that tab;
+an absent element reads `null`, and `parseFloat(null) || 0` is `0`. So an
+ordinary autosave — after correcting a recipe's NAME — sent
+`{labour: 0, overhead_pct: 0, sell_price: 0, target_food_cost: 30}`, and the
+writer stored it. Labour, overhead and sell price wiped; every margin built on
+that recipe with them.
+No preset holds `recipes:edit` without `recipes:costs`, so the exposure was the
+by-name grants alone — the same list §164 already asks to be read off live data.
+**It should still be read now, and any recipe those operators saved between
+#669 and this fix should be checked against its version history**, which is
+intact: the loss goes through the ordinary cost write, so `recipe_versions`
+holds the displaced state.
+**OMITTING THE KEYS WOULD NOT HAVE FIXED IT.** `lib/recipe-cost-data-write.js`
+grants preserve-on-absent to `packaging_type_id` alone and says so in terms:
+*"an absent `labour` still writes 0, an absent `target_food_cost` still writes
+30."* The packaging comment inside `draftCostData()` is about that one column
+and does not generalise — reading it as a general rule is exactly how this bug
+would have been "fixed" and left live. Not sending the request is the only shape
+that preserves what is stored.
+**COVERAGE.** `scripts/test_recipe_cost_visibility.js` — 106 assertions:
+the registry, the presets, the screen, the wire, and both halves of the write
+fix. Including that a money key added to `computeRecipeCost()` tomorrow does not
+leak, that the product's sell price survives, and that no GET in the file 403s.
 
 ## §165 — A CHOICE THE CUSTOMER MAKES IS PART OF WHAT THE PRODUCT COSTS
-
 Reported by Ash, 2026-09-17, working outward from the waste ledger: *"fresh meals
 sometimes are waste without the dressing, we keep dressing many time in the
 freezer"*, and then, on Beet Salad: *"beet salad is an example of a salad that we
 offer to choose 2 types of dressing. the staff made a mistake and put both of them
 inside the recipe."*
-
 **THE SECOND REPORT SUPERSEDED THE FIRST, AND KILLED A FEATURE THAT WAS ALREADY
 DESIGNED.** The first proposal was a tick on the material (*packed separately, can be
 kept*) and a two-chip question on the waste sheet that subtracted the dressing's share
@@ -17445,12 +17489,9 @@ It was a workaround for the dressing being buried inside a recipe, and once the
 dressing is its own stocked product a binned salad is a binned salad and a binned
 dressing is its own record. No tick, no question, no subtraction. **Waste is the one
 reader this section does not change.**
-
 ### WHAT THE LIVE DATA SAID
-
 `scripts/diagnose_dressing_waste.js` and `scripts/diagnose_option_cost_gap.js`, both
 read-only against production:
-
 - **Beet Salad is the only genuine instance.** Five recipes carry two or more
   dressing-ish lines; the other four (Tabbouleh Bowl, Marinated Tempeh, Seitan,
   Ginger Tahini) genuinely contain all of theirs. The data fault is ONE product.
@@ -17463,12 +17504,9 @@ read-only against production:
   and only 15 can be priced at all. 542 of 6,393 order lines (8.5%) carry options.
   `routes/finance-summary.js` had already written the gap down in its own words:
   *"OPTIONS carry a price delta with no cost counterpart."*
-
 ### THE DECISION: MODEL THE CHOICE AS A CHOICE, AND GIVE ITS COST SOMEWHERE TO LAND
-
 A recipe describes one fixed thing. A choice is not a recipe line, and a recipe
 holding every branch of one is wrong in a way that cannot be rounded away. So:
-
 1. **The recipe holds the salad WITHOUT the dressing.** Each dressing becomes a real
    product and a stock-linked option choice. This is DATA work, and it is Ash's:
    neither `Beet salad dressing` nor `Ginger Tahini` exists as a product yet.
@@ -17480,9 +17518,7 @@ holding every branch of one is wrong in a way that cannot be rounded away. So:
    has chosen, and a mean reads plausible while flattering. **Only REQUIRED groups
    count**: an optional *Add extras?* is revenue the customer volunteered, and
    charging every unit for it would be the same error in the other direction.
-
 ### WHY A SECOND COLUMN RATHER THAN A WIDER `unit_cost_at_sale`
-
 The smaller change was to fold the extras into the existing column, and it is
 **provably wrong**. `unit_cost_at_sale` is multiplied by `pack_units` downstream — a
 Meituan qty of 1 against a 6瓶 listing is six units off the shelf — while
@@ -17491,9 +17527,7 @@ anywhere in it. One column cannot be multiplied by `pack_units` and left unmulti
 by it in the same breath: a six-pack would have been charged for six oat milks. The
 COGS sum therefore takes the refund factor on both terms and the pack factor on only
 one, and both ends carry the warning.
-
 ### THE DIRECTION OF THE ERROR IS THE WHOLE POINT
-
 Taking the dressing out of the recipe fixes a cost that was too HIGH and, on its own,
 replaces it with one that is too LOW — the salad's price still includes a dressing its
 cost no longer does. **Too high makes an operator cautious; too low gets a price cut
@@ -17502,9 +17536,7 @@ modelling advice rather than after it, why the floor is the dearest rather than 
 mean, and why a required choice nobody has priced **blocks the margin outright**
 instead of falling back to the typed cost. An em dash is the honest answer; a
 confident number built on a partial sum is not.
-
 ### WHAT DOES NOT CHANGE, DELIBERATELY
-
 - **Waste.** See above. The first design is withdrawn, not deferred.
 - **`cost_coverage`.** The fraction still asks only whether `unit_cost_at_sale` is
   present, so a line whose product is costed and whose oat milk is not still counts
@@ -17515,32 +17547,25 @@ confident number built on a partial sum is not.
   no link to price and nothing to write. Left alone rather than wired to return null.
 - **Nothing reads `is_default` for cost.** A default is what the customer is shown
   first, not what we are obliged to hand over, and the floor is about obligation.
-
 ### ONE GAP LEFT OPEN ON PURPOSE, AND IT LEANS THE WRONG WAY
-
 **The catalogue LIST's margin column carries no floor.** `_paMarginCell()` reads
 `unit_cost` off the list payload; only the editor's `pdRenderMargin()` adds the
 required choices. The floor is a per-product derivation over two more tables, priced
 through `productUnitCostYuan()` so a bundle chosen as an extra resolves, and 261
 active products would be 261 of those on every list paint. The list is a scan; the
 editor is where a price is set, and that is the one this ships for.
-
 **The disagreement is zero today** — nothing live has a required choice linked to a
 costed product — **and when it appears the list will read HIGH**, which is the same
 flattering direction this whole section exists to close. So it is written down at the
 call site as well as here, and the fix when it is wanted is a batched floor on the
 list endpoint, never a second derivation in the browser.
-
 ### LANGUAGE
-
 Two pairs COMPOSED under Rule 4's fourth amendment and declared in
 `docs/tacet-delivery-vocabulary.md` v1.114 with every lifted half named and the live
 candidates rejected: `含必选项 ¥X` and `毛利 — 必选项暂无成本`. `必选` is lifted from
 the checkbox that sets the very flag being read, on the same screen; `暂无成本` from
 the waste screen's own words for the identical fact.
-
 ### COVERAGE
-
 `scripts/test_option_cost.js` drives `lib/option-cost.js` against a real in-memory
 database: a label-only choice costs a real zero, a linked-but-unpriced choice blocks
 rather than contributing nothing, a required multi takes its `min_choices` dearest, an

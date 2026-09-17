@@ -899,9 +899,33 @@
       // Save) updates this recipe instead of creating a second one.
       _rec.id = recipeId;
     }
-    const cost = draftCostData();
-    cost.save_source = source;
-    await api('/api/retail-admin/recipes/' + recipeId + '/cost', { method: 'PUT', body: cost });
+    // ── THE COST REQUEST IS NOT MADE AT ALL WITHOUT `recipes:costs` ─────────
+    //
+    // DATA LOSS, not tidiness. draftCostData() reads the Cost & Pricing inputs
+    // out of the DOM — and §164 stopped rendering that tab for an operator who
+    // may not see money. `v()` returns null for an element that is not there,
+    // `parseFloat(null) || 0` is 0, and the four keys are sent as
+    // {labour: 0, overhead_pct: 0, sell_price: 0, target_food_cost: 30}. So an
+    // operator holding `recipes:edit` without `recipes:costs` would have wiped
+    // the labour, the overhead and the sell price of any recipe whose NAME they
+    // corrected — and every margin built on it with them.
+    //
+    // OMITTING THE KEYS DOES NOT FIX IT, which is the trap worth naming:
+    // lib/recipe-cost-data-write.js grants preserve-on-absent to
+    // `packaging_type_id` ALONE and says so in terms — "an absent `labour`
+    // still writes 0, an absent `target_food_cost` still writes 30". The
+    // packaging comment in draftCostData() is about that one column and does
+    // not generalise. Not sending the REQUEST is the only shape that preserves
+    // what is stored.
+    //
+    // The server refuses this write for the same caller anyway
+    // (routes/retail-recipes.js), so this is the half that keeps a legitimate
+    // save from turning into a 403 rather than the half that protects the data.
+    if (showMoney()) {
+      const cost = draftCostData();
+      cost.save_source = source;
+      await api('/api/retail-admin/recipes/' + recipeId + '/cost', { method: 'PUT', body: cost });
+    }
     const fresh = await api('/api/retail-admin/recipes/' + recipeId);
     return { ok: true, id: recipeId, created: wasNew, fresh: fresh.data, mismatched: mismatchedLines() };
   }

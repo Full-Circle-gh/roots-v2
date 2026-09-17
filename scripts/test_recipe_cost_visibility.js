@@ -43,6 +43,8 @@ let pass = 0, fail = 0;
 const ok  = (m) => { pass++; console.log('  ✓ ' + m); };
 const bad = (m, extra) => { fail++; console.log('  ✗ ' + m + (extra ? '\n      ' + extra : '')); };
 const is  = (a, e, m) => (JSON.stringify(a) === JSON.stringify(e) ? ok(m) : bad(m, 'expected ' + JSON.stringify(e) + '\n      got      ' + JSON.stringify(a)));
+const absent  = (o, k, m) => (o && !(k in o) ? ok(m) : bad(m, k + ' is present: ' + JSON.stringify(o && o[k])));
+const present = (o, k, m) => (o && (k in o) ? ok(m) : bad(m, k + ' is missing'));
 const truthy = (v, m) => (v ? ok(m) : bad(m, 'got ' + JSON.stringify(v)));
 const falsy  = (v, m) => (!v ? ok(m) : bad(m, 'expected nothing, got ' + JSON.stringify(v)));
 const section = (t) => console.log('\n' + t);
@@ -185,6 +187,140 @@ truthy(/ingredient\$\{c\.zeroCostIngredientLines === 1 \? '' : 's'\} missing cos
   'the "N ingredients missing cost" pill still paints — it carries a count and a cause, never an amount');
 truthy(/'UNIT MISMATCH', '单位不符'/.test(src),
   'the locked UNIT MISMATCH pair still paints');
+
+// ═══ 4. THE WIRE ═══════════════════════════════════════════════════════════
+//
+// §164 shipped the screen gate and recorded that it had deliberately not gated
+// the wire. Ash asked for the gap closed, so these are the rules that close it —
+// lib/recipe-cost-visibility.js, extracted from the route for exactly this
+// reason, the way lib/product-cost-visibility.js was.
+const V = require('../lib/recipe-cost-visibility');
+
+section('The gate on the wire');
+const reqWith    = { caps: new Set(['recipes:view', 'recipes:costs', 'recipes:edit']) };
+const reqWithout = { caps: new Set(['recipes:view', 'recipes:edit']) };
+
+truthy(V.canSeeCosts(reqWith), 'a caller holding `recipes:costs` may read money');
+falsy(V.canSeeCosts(reqWithout), 'one holding view and edit but not costs may not');
+falsy(V.canSeeCosts({ caps: null }), 'FAILS CLOSED on a null cap set — a degraded request is not a grant');
+falsy(V.canSeeCosts({}), 'and on a request with no caps at all');
+falsy(V.canSeeCosts(undefined), 'and on no request at all');
+
+section('A list row');
+const listRow = () => ({
+  id: 7, name_en: 'Quinoa Salad', name_cn: '藜麦沙拉', sku: 'RCP-7', category: 'Homemade',
+  batch_size: 3179, servings: 12, recipe_type: 'made', is_active: 1,
+  batchCost: 127.07, costPerServing: 10.59, costPerGram: 0.04,
+  zeroCostIngredientLines: 2, unreconciledUnitLines: 1,
+  backsMaterial: { id: 3, name_en: 'Quinoa base', cost_per_unit: 0.04, unit: 'g' },
+});
+const stripped = V.stripListRow(listRow());
+absent(stripped, 'batchCost', 'batchCost is gone');
+absent(stripped, 'costPerServing', 'costPerServing is gone');
+absent(stripped, 'costPerGram', 'costPerGram is gone');
+absent(stripped.backsMaterial, 'cost_per_unit', 'the linked material\'s rate is gone with them');
+
+// DELETED, NOT ZEROED — the rule all three gates share. A 0 reads as free.
+is(stripped.batchCost, undefined, 'and it is DELETED, not zeroed — a 0 would read as free');
+
+present(stripped, 'name_en', 'the recipe\'s name survives');
+present(stripped, 'batch_size', 'its batch size survives — a weight is not money');
+present(stripped, 'servings', 'its servings likewise');
+present(stripped.backsMaterial, 'name_en', 'the material keeps its name');
+is(stripped.zeroCostIngredientLines, 2, 'the missing-cost COUNT survives — it is a count and a cause, never an amount');
+is(stripped.unreconciledUnitLines, 1, 'the unit-mismatch count survives for the same reason');
+
+// The original must not be mutated: the route maps over rows it may also serve
+// to a caller who IS allowed them.
+const original = listRow();
+V.stripListRow(original);
+is(original.batchCost, 127.07, 'the caller\'s own row is not mutated — the strip copies');
+
+section('The computed cost object');
+// Every key computeRecipeCost() returns today, so a money key added later is
+// caught by the allow-list rather than leaking past a deny-list.
+const fullCost = {
+  recipe_id: 7, hasCostRow: 1, costDataUpdatedAt: '2026-09-17', sku: 'RCP-7',
+  name_en: 'Quinoa Salad', name_cn: '藜麦沙拉', category: 'Homemade',
+  servings: 12, batchSize: 3179, batchSizeAuto: 1, servingsAuto: 1, servingsLeftover: 0, yield: {},
+  ingredientCost: 100, ingredientLines: 7, zeroCostIngredientLines: 2, unreconciledUnitLines: 1,
+  lines: [{ cost: 12 }],
+  labour: 10, packaging: 2, packagingTotal: 4, overheadPct: 15, overheadAmount: 17,
+  embeddedOverhead: 1, overheadBase: 110, sellPrice: 38, targetFoodCost: 30,
+  batchCost: 127.07, costPerServing: 10.59, costPerGram: 0.04,
+  materialBatchCost: 120, materialCostPerGram: 0.038,
+  marginPerServing: 27.41, foodCostPct: 27.8, suggestedSellPrice: 35.3,
+};
+const safeCost = V.stripCostObject(fullCost);
+
+for (const k of ['ingredientCost', 'labour', 'packaging', 'packagingTotal', 'overheadAmount',
+                 'embeddedOverhead', 'overheadBase', 'sellPrice', 'batchCost', 'costPerServing',
+                 'costPerGram', 'materialBatchCost', 'materialCostPerGram', 'marginPerServing',
+                 'suggestedSellPrice', 'lines']) {
+  absent(safeCost, k, `${k} is gone`);
+}
+// The three that carry no currency sign and are still cost.
+absent(safeCost, 'overheadPct', 'overheadPct goes — a percentage of cost is cost');
+absent(safeCost, 'targetFoodCost', 'targetFoodCost goes — it is a costing input');
+absent(safeCost, 'foodCostPct', 'foodCostPct goes — against a known price it IS the cost');
+
+for (const k of ['batchSize', 'servings', 'ingredientLines', 'zeroCostIngredientLines',
+                 'unreconciledUnitLines', 'name_en', 'yield']) {
+  present(safeCost, k, `${k} survives`);
+}
+
+// THE ALLOW-LIST IS THE POINT: a money key invented tomorrow must not ride out.
+const withNewMoneyKey = V.stripCostObject({ ...fullCost, someNewMarginFigure: 99 });
+absent(withNewMoneyKey, 'someNewMarginFigure',
+  'a money key added to computeRecipeCost() LATER does not leak — the list allows, it does not deny');
+
+is(V.stripCostObject(null), null, 'a null cost object passes through untouched');
+
+section('An ingredient line, and a product');
+const line = V.stripLine({ id: 1, ingredient_id: 4, qty: 1200, unit: 'g', notes: 'rinse',
+                           master_cost: 0.012, master_unit: 'g', master_name_en: 'Quinoa' });
+absent(line, 'master_cost', 'the material\'s rate is gone from the line');
+is(line.qty, 1200, 'the quantity stays — it is the recipe, not its price');
+is(line.unit, 'g', 'the unit stays');
+present(line, 'master_name_en', 'the material\'s name stays');
+
+const prod = V.stripProduct({ id: 9, name_en: 'Quinoa Salad 150g', size: '150g',
+                              sell_price: 38, unit_cost: 10.59, build_line_count: 0 });
+absent(prod, 'unit_cost', 'the product\'s unit cost is gone');
+is(prod.sell_price, 38,
+  'THE SELL PRICE SURVIVES — it is what a customer is charged, not what this key withholds');
+is(prod.build_line_count, 0, 'and the build-line count, which is a count');
+
+section('The write that would have wiped what it cannot see');
+// draftCostData() reads the Cost & Pricing inputs out of the DOM, and §164
+// stopped rendering that tab for these operators: v() returns null for an
+// element that is not there, parseFloat(null) || 0 is 0, and an ordinary
+// autosave after a NAME correction sent {labour: 0, overhead_pct: 0,
+// sell_price: 0, target_food_cost: 30}. Both halves are asserted because
+// neither alone is enough — the client stops sending it, and the route refuses
+// it anyway for a tab left open across the deploy, a retry, or a hand-rolled
+// request.
+const routeSrc = fs.readFileSync(path.join(__dirname, '..', 'routes', 'retail-recipes.js'), 'utf8');
+truthy(/recipes_costs_required/.test(routeSrc),
+  'PUT /:id/cost refuses a caller without `recipes:costs`');
+truthy(/if \(!canSeeCosts\(req\)\) \{[\s\S]{0,40}return res\.status\(403\)/.test(routeSrc),
+  'it refuses with 403 — the one write here where every column is money');
+
+truthy(/if \(showMoney\(\)\) \{[\s\S]{0,260}recipes\/' \+ recipeId \+ '\/cost'/.test(src),
+  'and the client does not make the request at all rather than sending zeros');
+
+// The trap worth naming: omitting the keys would NOT have been enough.
+const writerSrc = fs.readFileSync(path.join(__dirname, '..', 'lib', 'recipe-cost-data-write.js'), 'utf8');
+truthy(/an absent `labour` still writes 0/.test(writerSrc),
+  'the writer still grants preserve-on-absent to packaging_type_id ALONE — omitting keys is not a fix, and this is the line that says so');
+
+section('The reads refuse a field, never a request');
+truthy(/costs_hidden: true/.test(routeSrc),
+  'the envelope says so, so a client can tell "withheld" from "there was none"');
+const four = (routeSrc.match(/costs_hidden: true/g) || []).length;
+truthy(four >= 3, `every gated read carries the flag (${four} sites)`);
+falsy(/status\(403\)[\s\S]{0,120}recipes_costs_required[\s\S]{0,400}router\.get/.test(routeSrc),
+  'no GET in the file 403s for lacking the capability');
 
 console.log('\n' + (fail ? `✗ ${fail} failed, ${pass} passed` : `✓ all ${pass} passed`));
 process.exit(fail ? 1 : 0);

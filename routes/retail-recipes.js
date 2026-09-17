@@ -61,6 +61,17 @@ const { listWindow, windowMeta } = require('../lib/list-window');
 
 const router = express.Router();
 
+// Who may read what a recipe COSTS, and what is left when they may not.
+// The rules live in lib/recipe-cost-visibility.js — extracted rather than
+// written inline for the reason lib/product-cost-visibility.js was: they are
+// the contract a test has to hold this route to, and a rule that can only be
+// reached by standing up a database is a rule that gets tested loosely or not
+// at all. scripts/test_recipe_cost_visibility.js drives them directly.
+const {
+  canSeeCosts, stripListRow, stripCostObject, stripLine, stripProduct,
+} = require('../lib/recipe-cost-visibility');
+
+
 // Mirrors routes/recipes.js's cycle guard line for line (routes/recipes.js:28
 // cycleRefusal) — kept as its own copy rather than imported, because the two
 // doors return errors in different shapes (this one JSON `{success:false}`,
@@ -272,7 +283,13 @@ router.get('/api/retail-admin/recipes', requireRetailAdmin, (req, res) => {
       materialBlock: material ? materialBlockState(r.id) : null,
     };
   });
-  res.json({ success: true, data: rows, ...windowMeta({ total, limit, offset, returned: rows.length }) });
+  const hide = !canSeeCosts(req);
+  res.json({
+    success: true,
+    data: hide ? rows.map(stripListRow) : rows,
+    ...(hide ? { costs_hidden: true } : {}),
+    ...windowMeta({ total, limit, offset, returned: rows.length }),
+  });
 });
 
 router.get('/api/retail-admin/recipes/meta/categories', requireRetailAdmin, (req, res) => {
@@ -363,11 +380,22 @@ router.get('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
   // material as an ingredient line. Only fetched when there's a material to
   // report on; feeds the archive-warning's "used by N recipes" — naming the
   // actual consequence rather than a generic confirm.
-  res.json({ success: true, data: {
-    ...recipe, ingredients, steps, costData, cost,
-    backsMaterial: material ? { ...material, consumers: materialConsumers(tdb(), material.id) } : null,
+  // `costData` is the recipe_cost_data row — labour, packaging, overhead, sell
+  // price, target food cost. It is money end to end, so it is not sent at all
+  // rather than emptied: an object of nulls would read as "nothing recorded",
+  // which is a different and wrong claim about a recipe somebody has costed.
+  const hide = !canSeeCosts(req);
+  const mat = material ? { ...material, consumers: materialConsumers(tdb(), material.id) } : null;
+  if (hide && mat) delete mat.cost_per_unit;
+  res.json({ success: true, ...(hide ? { costs_hidden: true } : {}), data: {
+    ...recipe,
+    ingredients: hide ? ingredients.map(stripLine) : ingredients,
+    steps,
+    costData: hide ? null : costData,
+    cost: hide ? stripCostObject(cost) : cost,
+    backsMaterial: mat,
     materialBlock: material ? materialBlockState(recipe.id) : null,
-    products,
+    products: hide ? products.map(stripProduct) : products,
   } });
 });
 
@@ -497,6 +525,37 @@ router.put('/api/retail-admin/recipes/:id', requireRetailAdmin, (req, res) => {
 
 // ═══ Cost data ═════════════════════════════════════════════════════════════
 router.put('/api/retail-admin/recipes/:id/cost', requireRetailAdmin, (req, res) => {
+  // ── A WRITE OF MONEY BY SOMEBODY WHO MAY NOT SEE MONEY IS REFUSED ─────────
+  //
+  // THE ONE PLACE IN THIS FILE THAT 403s, and the exception is deliberate: the
+  // read gates above refuse a FIELD rather than a request, because a reader
+  // lacking the capability still has business on the screen. This is not a
+  // read. Every column this endpoint writes is money — labour, overhead, sell
+  // price, target food cost — so a caller without `recipes:costs` has nothing
+  // legitimate to say here, and the request can only be a mistake or a forgery.
+  //
+  // IT IS ALSO WHAT STOPS REAL DATA LOSS. §164 stopped rendering the Cost &
+  // Pricing tab for these operators; the client's draftCostData() reads that
+  // tab out of the DOM and turns absent inputs into zeros, so an ordinary
+  // autosave after a name correction sent {labour: 0, overhead_pct: 0,
+  // sell_price: 0, target_food_cost: 30} and the writer stored it. The client
+  // no longer makes the request. This is why it cannot be made anyway — by a
+  // tab left open across the deploy that fixed it, by a retry, or by hand.
+  //
+  // Omitting the keys would NOT have been enough: lib/recipe-cost-data-write.js
+  // grants preserve-on-absent to `packaging_type_id` alone, and says in terms
+  // that "an absent `labour` still writes 0, an absent `target_food_cost` still
+  // writes 30".
+  //
+  // FAILS CLOSED like its read siblings — a null cap set refuses. This is the
+  // one request in the file where that costs an operator a save rather than a
+  // figure, and a degraded resolution is exactly when a money write should wait.
+  if (!canSeeCosts(req)) {
+    return res.status(403).json({
+      success: false, error: 'recipes_costs_required',
+      message: 'Recipe costs are not yours to change.',
+    });
+  }
   // The existence guard reads the same database the cost row is written to —
   // otherwise a tenant's save is admitted or refused on Roots' recipe list.
   const existing = tdb().prepare('SELECT id FROM recipes WHERE id = ?').get(req.params.id);
@@ -559,6 +618,21 @@ router.get('/api/retail-admin/recipes/:id/versions', requireRetailAdmin, (req, r
 router.get('/api/retail-admin/recipes/:id/versions/:versionId', requireRetailAdmin, (req, res) => {
   const v = getVersion(tdb(), req.params.id, req.params.versionId);
   if (!v) return res.status(404).json({ success: false, error: 'not_found' });
+  // A VERSION IS A WHOLE RECIPE AS IT WAS, cost inputs included — the snapshot
+  // is what a restore writes back through saveRecipeCostData. So the same two
+  // things go here as on the record itself: the cost row, and each line's
+  // material rate. What a version CHANGED about the name, the category, the
+  // batch, the lines and the steps is the rest of the snapshot and is not money.
+  //
+  // The version LIST one route up needs no strip — listVersions selects id,
+  // source, actor, the two names and the two counts, and never touches the
+  // snapshot blob. Checked rather than assumed.
+  if (!canSeeCosts(req) && v.snapshot && typeof v.snapshot === 'object') {
+    const snap = { ...v.snapshot };
+    if ('costData' in snap) snap.costData = null;
+    if (Array.isArray(snap.ingredients)) snap.ingredients = snap.ingredients.map(stripLine);
+    return res.json({ success: true, costs_hidden: true, data: { ...v, snapshot: snap } });
+  }
   res.json({ success: true, data: v });
 });
 
