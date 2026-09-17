@@ -532,59 +532,6 @@
     _wstep = 1; _lineSort = null; _lineDrag = null; _screen = 'wizard'; paint();
   };
 
-  // ── A NEW ORDER THAT STARTS ON THE FINANCE SCREEN (§111 part two) ─────────
-  // Somebody typing money out answered "this was ordered from a supplier", so
-  // the cost they typed arrives here instead of becoming a ledger row: one TYPED
-  // LINE (part one's, and the reason part one had to ship first) carrying the
-  // description as its name, the amount as its price and the category they were
-  // filing it under.
-  //
-  // **IT OPENS ON STEP 1, NOT ON THE LINES.** Supplier and store are the two
-  // things Finance's form has no field for — §36 records that it never had a
-  // location box because the ledger has no column for one — and the store is
-  // required by the create route. So the buyer meets exactly the questions the
-  // ledger row could not answer, with the part it could already filled in.
-  //
-  // **NOTHING IS WRITTEN UNTIL THEY SAVE.** No draft is created on the way here,
-  // which is the honest reading of "no ledger row": if the person walks away,
-  // nothing was recorded in either place — the same as abandoning the Finance
-  // form itself, and better than an orphan draft nobody returns to.
-  //
-  // Reached from another tab, so it carries puOpenPO's cold-start await for the
-  // same reason: on the first open this module has never loaded, and puInit ends
-  // by painting the LIST, which would land on top of the wizard opened here.
-  window.puNewOrderFrom = async function (seed) {
-    if (!_init && typeof window.puInit === 'function') {
-      try { await window.puInit(); } catch (_) { /* open anyway; paint() follows */ }
-    }
-    const s = seed || {};
-    window.puNewOrder();
-    if (s.date) _edit.date = s.date;
-    const name = String(s.name == null ? '' : s.name).trim();
-    const amount = parseFloat(s.amount) || 0;
-    // A NAME IS NOT INVENTED WHEN THERE IS NONE. A Finance row can carry no
-    // description and no category at all; the line then arrives with an empty
-    // name box, which is a question the buyer can answer in one word — and which
-    // the save refuses to go past (lineUnnamed). Naming it "Expense" to fill the
-    // gap would put that word on the supplier's order.
-    _edit.items.push({
-      store_product_id: null, ingredient_id: null,
-      ...typedNameHalves(name), sku: null,
-      // THE WHOLE AMOUNT AT QUANTITY ONE. Finance's form records a sum, never a
-      // rate and a count — it has no quantity field — so one unit at that price
-      // is the only reading of it that cannot be wrong. The buyer splits it into
-      // real quantities on the next step if it was ever more than one thing.
-      qty: 1, unit: 'pcs', cost_per_unit: amount,
-      expense_category: s.category || '', purchase_channel: '',
-      current_stock: null, supplier_name: '', note: '',
-    });
-    expenseCategories();   // warm the line's category menu
-    // puNewOrder painted step 1 before any of this landed. Step 1 shows neither
-    // the date nor the lines, so nothing on screen is stale — but a second paint
-    // costs nothing on a path taken once and removes the question.
-    paint();
-  };
-
   // ═══════════════════════════════════════════════════════════════════════════
   //  COPY FROM KITCHEN — pulling a PO-#### order in as a retail draft
   // ═══════════════════════════════════════════════════════════════════════════
