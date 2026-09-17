@@ -332,6 +332,53 @@ section('H2 · the real consignee names parse');
   ok('an empty list is null', o3.phoneMasked === null, o3.phoneMasked);
 }
 
+// ── H2b. The deep digest: wider, and still carrying no values ────────────────
+// The shallow digest stops at depth 4 and 4000 chars. Read back on 2026-09-17 it
+// had hit BOTH on the detail payload — `userInfo` came out as a bare {...} and
+// the tail was gone — so fourteen candidate lists matched nothing with no way to
+// tell a wrong guess from a field past the cut. The deep one is the same payload
+// in the same pass, and the only thing that must not widen with it is what it
+// reveals: names, never values.
+section('H2b · the deep digest goes further and still strips every value');
+{
+  const fresh = new ElemeBrowser('test3', '1');
+  fresh._log = () => {};
+  // Seven levels down, which the shallow digest cannot reach.
+  const payload = {
+    orders: [{
+      orderId: '2000123456789012',
+      userInfo: { profile: { identity: { account: { token: { inner: { userId: '88991122' } } } } } },
+      consigneeAddress: '天河区**大厦 3*号',
+      consigneePhones: ['188****1234'],
+      description: '不要辣，谢谢',
+    }],
+  };
+  fresh._noteOrderShape('detail', payload);
+  const shallow = fresh.orderShapes.detail;
+  const deep = fresh.orderShapesDeep.detail;
+
+  ok('both digests produced', typeof shallow === 'string' && typeof deep === 'string');
+  ok('the shallow one gives up', shallow.includes('{...}'), shallow);
+  ok('the deep one does not', !deep.includes('{...}'), deep);
+  // The whole point: the key the shallow digest could not reach.
+  ok('the deep one reaches the buried key', deep.includes('userId'), deep);
+  ok('...which the shallow one never saw', !shallow.includes('userId'));
+  ok('the deep one is wider', deep.length > shallow.length);
+
+  // The rule that must not relax as the capture widens.
+  ok('no customer note leaked', !deep.includes('不要辣'));
+  ok('no address leaked',       !deep.includes('天河'));
+  ok('no phone leaked',         !deep.includes('188'));
+  ok('no id VALUE leaked',      !deep.includes('88991122'));
+  ok('no order id leaked',      !deep.includes('2000123456789012'));
+  // Names, though, are the entire product.
+  ok('the names are all there',
+    ['userInfo', 'consigneeAddress', 'consigneePhones', 'orderId'].every(k => deep.includes(k)), deep);
+
+  fresh._noteOrderShape('detail', { somethingElse: 1 });
+  ok('only the FIRST payload is recorded, deep included', fresh.orderShapesDeep.detail === deep);
+}
+
 // ── H3. The candidate lists are exported, and stay in step with the audit ────
 // scripts/diagnose_eleme_candidate_keys.js reads these rather than copying them.
 // A copy drifts within a release and then reports on a list the parser no longer
@@ -352,6 +399,16 @@ section('H3 · the candidate lists are exported for the audit');
   ok('the guesses are kept behind them',
     CANDIDATE_KEYS.ADDRESS_KEYS.includes('deliveryAddress')
     && CANDIDATE_KEYS.PHONE_KEYS.includes('privacyPhone'));
+
+  // A list whose field is really read by a PATH is not a fault when its keys
+  // miss, and the audit cannot know that unless the paths travel with them.
+  const { CANDIDATE_PATHS } = require('../lib/eleme-browser');
+  ok('the paths are exported too', !!CANDIDATE_PATHS && typeof CANDIDATE_PATHS === 'object');
+  ok('every path entry names a real key list',
+    Object.keys(CANDIDATE_PATHS).every(k => Array.isArray(CANDIDATE_KEYS[k])),
+    Object.keys(CANDIDATE_PATHS));
+  ok('income and ETA — the two whose keys miss and whose paths hit — are covered',
+    Array.isArray(CANDIDATE_PATHS.INCOME_KEYS) && Array.isArray(CANDIDATE_PATHS.ETA_KEYS));
 }
 
 // ── I. Void classification — the guards that decide whether stock moves ──────
