@@ -16529,6 +16529,59 @@ function trendSections(){
     v:'−'+mn(vGiven)+' · '+nOrders(vUses)});
   if(sales.length) out.push({key:'sales',icon:'trending-up',tone:'sage',title:T('Sales','销售'),rows:sales});
 
+  /* ── Channels ─────────────────────────────────────────────────────────────
+     Ash: "sales show revenue only of mini app, why not showing each channel
+     revenue?". It never showed only the mini app — the payment share above is
+     every channel, split by how the money ARRIVED. What did not exist anywhere
+     for a window was a split by where the order CAME FROM: /sales/summary has
+     one and is pinned to today, and /dashboard had splits by store, by delivery
+     mode and by payment method and none by channel.
+
+     EVERY NAME HERE IS THE CHANNEL'S OWN. CHAN_META already carries the pair
+     this app shows on the Sales board, keyed by the same value the server
+     groups on, so a channel is named identically on both screens and this
+     section mints no vocabulary at all. A channel the server reports and this
+     table does not know is printed as the server's own key rather than dropped:
+     an unnamed row is a question, a missing one is silence. */
+  const rbc=d.revenue_by_channel||null;
+  if(rbc&&Array.isArray(rbc.rows)&&rbc.rows.length){
+    const byKey={};
+    Object.keys(CHAN_META).forEach(k=>{ byKey[CHAN_META[k].key]=CHAN_META[k]; });
+    /* 'manual' is a real channel and CHAN_META has no card for it: the Sales
+       board shows the six channels a shop switches on and off, and an order an
+       operator typed in is not one of those. It is one HERE, because this asks
+       where the money came from and a typed-in order is somewhere. Named from
+       the Orders filter's own live pair rather than left to print as a raw key
+       — which is what the fallback below would have done. */
+    byKey.manual={en:'Manual',zh:'手动'};
+    /* THE BAR AND THE FIGURE MUST BE THE SAME NUMBER. The server sorts by
+       revenue because revenue is the question — but an account that may not see
+       money reads order counts, and a list ranked on a figure it is not allowed
+       to see is the fault just fixed on the product ranking. So the gate picks
+       the measure, and the order, the bar and the value all follow it. */
+    const val=r=>noMoney?(Number(r.orders)||0):(Number(r.revenue)||0);
+    const chRows=rbc.rows.filter(r=>Number(r.revenue)>0||Number(r.orders)>0)
+      .sort((a2,b2)=>val(b2)-val(a2)).slice(0,8);
+    if(chRows.length){
+      const chMax=Math.max(1,...chRows.map(val));
+      out.push({key:'channels',icon:'layers',tone:'amber',title:T('Channels','渠道'),
+        rows:chRows.map(r=>{
+          const m=byKey[r.channel];
+          return {t:m?T(m.en,m.zh):String(r.channel||''),
+                  v:noMoney?nOrders(r.orders):mn(r.revenue)+' · '+num(r.orders),
+                  bar:Math.round(val(r)/chMax*100)};
+        }),
+        /* The rows do not add up to the headline, and this is why rather than a
+           rounding error: wallet top-up cash is real money in, booked the day it
+           lands, and a top-up is not an order on any channel. Folding it into
+           the mini app would make the sum look right and the rows wrong. */
+        note:(!noMoney&&Number(rbc.topups_unassigned)>0)
+          ? T('Wallet top-ups ('+mn(rbc.topups_unassigned)+') are in the total above but belong to no channel.',
+              '钱包充值（'+mn(rbc.topups_unassigned)+'）计入上方合计，但不属于任何渠道。')
+          : ''});
+    }
+  }
+
   // ── Customers ──
   const cust=[];
   const nvr=d.new_vs_returning||{};
