@@ -400,6 +400,11 @@ CASES.push(['the note is read from the order, not invented',
    above this one — and an order without one is reached from the "…" sheet,
    which reveals this same card rather than opening a second surface. */
 const noteRow = (o) => `orderActs(${o}).some(function(a){return a[2].indexOf('ordNoteOpen')>=0})`;
+/* Computed display, not the `hidden` attribute: both nodes sit under author
+   rules (#mOrdNoteFoot, .btn2) that out-rank the UA's [hidden], so the attribute
+   being set has never been the same fact as the thing being off the screen. */
+const FOOT = `getComputedStyle(document.getElementById('mOrdNoteFoot')).display`;
+const SAVE = `getComputedStyle(document.getElementById('mOrdNoteSave')).display`;
 
 CASES.push(['an order with no note shows no box, and says where the box is',
   detailOrder(`{}`), [
@@ -411,8 +416,12 @@ CASES.push(['asking for it from the sheet draws the card, empty',
   detailOrder(`{}`) + `APP.cmd('ordNoteOpen');`, [
   ['the card is drawn',     `document.getElementById('mOrdNote')!==null`],
   ['empty',                 `document.getElementById('mOrdNote').value===''`],
-  ['nothing to save yet',   `document.getElementById('mOrdNoteFoot').hidden===true`],
-  ['and not drawn',         `getComputedStyle(document.getElementById('mOrdNoteFoot')).display==='none'`],
+  /* These two used to assert the footer was hidden here, and that assertion was
+     the bug written down: a box opened from the sheet with no way to close it.
+     What is right is Cancel without Save — see "an opened empty box can always
+     be put away" below for the rule on its own. */
+  ['a way out is offered',  `${FOOT}==='flex'`],
+  ['nothing to save yet',   `${SAVE}==='none'`],
   ['the sheet closed',      `state.detailActions===false`],
   // One way in, offered once: a row pointing at something already on screen is
   // the noise this change removed.
@@ -437,6 +446,76 @@ CASES.push(['the row waits for the detail read, exactly as the card does',
   ['the order is actionable', `orderActs(window.__o).length>0`],
   ['the note is not known',   `shopNoteReady(window.__o)===false`],
   ['so no row',               `!(${noteRow('window.__o')})`],
+]]);
+
+/* ══════════════════════════════════════════════════════════════════════════
+   THE BOX YOU COULD NOT PUT DOWN (Ash, 2026-09-18: "after adding a note even
+   if it's blank can't remove it").
+
+   Two holes, both opened by the "…" row that reveals the editor:
+
+     • The footer appeared on `dirty` alone, so a box opened from the sheet and
+       left untouched carried NO control — nothing to close it with.
+     • shopNoteShown counted any draft for the order, `''` included, and
+       state.ordNote survives the drawer closing on purpose. So typing a letter
+       and deleting it left an empty draft that pinned an empty, buttonless card
+       to that order for the rest of the session — it came back on every reopen.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+CASES.push(['an opened empty box can always be put away',
+  detailOrder(`{}`) + `APP.cmd('ordNoteOpen');`, [
+  ['the card is up',        `document.getElementById('mOrdNote')!==null`],
+  // The whole of the fix: a way out, arriving WITH the box and not after the
+  // first keystroke.
+  ['Cancel is offered',     `${FOOT}==='flex'`],
+  // And nothing to save, because nothing has been typed.
+  ['but Save is not',       `${SAVE}==='none'`],
+]]);
+
+CASES.push(['typing into it offers Save, deleting it back takes Save away again',
+  detailOrder(`{}`) + `APP.cmd('ordNoteOpen');
+    document.getElementById('mOrdNote').value='x'; APP.cmd('ordNoteTyped','x');
+    window.__withText=${SAVE};
+    document.getElementById('mOrdNote').value=''; APP.cmd('ordNoteTyped','');`, [
+  ['Save arrived with the text',  `window.__withText==='flex'`],
+  ['and left with it',            `${SAVE}==='none'`],
+  // The way out does NOT leave with it. This is the state Ash was stuck in.
+  ['Cancel is still there',       `${FOOT}==='flex'`],
+]]);
+
+CASES.push(['a draft emptied and left behind does not pin the card to the order',
+  detailOrder(`{}`) + `APP.cmd('ordNoteOpen');
+    APP.cmd('ordNoteTyped','half a thought');
+    APP.cmd('ordNoteTyped','');
+    APP.cmd('closeOrder');
+    state.detailId=window.__o.id; render();`, [
+  // closeOrder clears ordNoteOpen but deliberately keeps the draft, so before
+  // the fix this reopened onto an empty card with nothing to dismiss it.
+  ['an empty draft is still held', `state.ordNote && state.ordNote.text===''`],
+  ['but the card is gone',         `document.getElementById('mOrdNote')===null`],
+  ['and the row is back',          noteRow('currentOrder()')],
+]]);
+
+/* The other half of that rule: a draft that still HOLDS something keeps the
+   card, because losing typed words to a closed drawer would be worse than an
+   extra card. */
+CASES.push(['a draft with words in it survives the drawer closing',
+  detailOrder(`{}`) + `APP.cmd('ordNoteOpen');
+    APP.cmd('ordNoteTyped','call before the van leaves');
+    APP.cmd('closeOrder');
+    state.detailId=window.__o.id; render();`, [
+  ['the card came back',   `document.getElementById('mOrdNote')!==null`],
+  ['with the words in it', `document.getElementById('mOrdNote').value==='call before the van leaves'`],
+  ['and Save offered',     `${SAVE}==='flex'`],
+]]);
+
+/* A STORED NOTE IS NOT DISMISSIBLE, and that is not the same hole. There is
+   nothing to cancel and nothing to save while it is merely being read, so the
+   footer stays away — the rule this card has always had. Emptying it and
+   SAVING is how a note is removed. */
+CASES.push(['a stored note being read offers nothing, and still cannot be dismissed by Cancel',
+  detailOrder(`{staff_note:'Call before the van leaves'}`), [
+  ['no footer', `${FOOT}==='none'`],
 ]]);
 
 CASES.push(['cancel on an order that had no note takes the card away again',
