@@ -51,8 +51,9 @@
  *     the number and the name staff call and the item to make — and NOT again
  *     when the cashier settles it, because a second slip is indistinguishable
  *     from a second order to whoever picks it up. The printer is stubbed at
- *     lib/feie.js's module object, so everything up to the wire is the real
- *     path: real printer resolution, real rows, real renderer.
+ *     the Feie ADAPTER's module object (lib/printers/feie.js), so everything
+ *     up to the wire is the real path: real brand resolution, real printer
+ *     resolution, real rows, real renderer.
  * 11. The once-only guard is NARROW, held by its paired opposite. A non-QR
  *     order that already printed still prints at paid, and a QR order whose
  *     submit print FAILED still gets its chance — losing the ticket entirely
@@ -802,23 +803,32 @@ const soldOut = (row) => /class="sold"/.test(row);
     // ─── The ticket prints on submit, and only once (§44) ────────────────
     //
     // THE PRINTER IS STUBBED AT THE MODULE OBJECT, not at the network. Both
-    // routes/retail.js and this suite hold the SAME lib/feie.js module object,
-    // and printOrderById calls `_feie.printContent(...)` — a property lookup at
-    // call time — so replacing the property here reaches the real code path.
-    // Everything before the POST is genuine: the printer is resolved from the
-    // tenant's own config, the order and its lines are read back from the
-    // database, and lib/feie's real renderer builds the slip. Only the wire is
-    // fake. A stub of printOrderById itself would have proved nothing.
+    // routes/retail.js and this suite hold the SAME lib/printers/feie.js module
+    // object, and the send resolves the row's BRAND and then calls
+    // `vendor.printContent(...)` — a property lookup at call time — so
+    // replacing the property here reaches the real code path.
+    //
+    // THE SEAM IS THE ADAPTER, NOT lib/feie.js, SINCE §171. It moved with the
+    // call site when printing went multi-vendor, and the move widened what
+    // this stub covers rather than narrowing it: brand resolution and the
+    // per-vendor credential lookup are now INSIDE the span being tested.
+    //
+    // Everything before the POST is genuine: the brand and printer are resolved
+    // from the tenant's own config, the order and its lines are read back from
+    // the database, and lib/feie's real renderer builds the slip. Only the wire
+    // is fake. A stub of printOrderById itself would have proved nothing.
     console.log('\nThe kitchen ticket prints on submit, and once (§44)');
-    const feieMod = require(path.join(ROOT, 'lib', 'feie.js'));
+    const feieMod = require(path.join(ROOT, 'lib', 'printers', 'feie.js'));
     const realPrint = feieMod.printContent;
-    const realEnabled = feieMod.feieEnabled;
+    const realEnabled = feieMod.enabled;
     const slips = [];
-    feieMod.feieEnabled = () => true;
+    feieMod.enabled = () => true;
     feieMod.printContent = (content, opts) => {
       slips.push({ content: String(content || ''), sn: opts && opts.sn });
       return Promise.resolve({ ok: true });
     };
+    // No `vendor` on the row — exactly as every row saved before §171 reads,
+    // so this also pins that such a row still routes to Feie.
     setConfig('printer.by_store', { [String(LOC_LIVE)]: { sn: 'TEST-SN-9861', copies: 1, template: 'receipt' } });
 
     // The print is fire-and-forget: the response returns before the (stubbed)
@@ -949,7 +959,7 @@ const soldOut = (row) => /class="sold"/.test(row);
     });
 
     feieMod.printContent = realPrint;
-    feieMod.feieEnabled = realEnabled;
+    feieMod.enabled = realEnabled;
 
     // THIS SECTION USED TO ASSERT THE OPPOSITE, and the reversal is the point.
     // Through steps 5a and 5b parts 1-3 it held that the page carried NO cart —
@@ -1123,7 +1133,7 @@ const soldOut = (row) => /class="sold"/.test(row);
     // The printer stub again — this section asserts on which submits print, and
     // the block above restored the real functions.
     const paySlips = [];
-    feieMod.feieEnabled = () => true;
+    feieMod.enabled = () => true;
     feieMod.printContent = (content, opts) => {
       paySlips.push({ content: String(content || ''), sn: opts && opts.sn });
       return Promise.resolve({ ok: true });

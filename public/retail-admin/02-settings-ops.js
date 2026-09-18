@@ -870,6 +870,20 @@ async function loadShippingIntegrations() {
     if (fUkey) fUkey.placeholder = f.ukey_masked
       ? cuT(f.ukey_masked + ' — leave blank to keep', f.ukey_masked + ' — 留空保持不变')
       : cuT('paste USERKEY from dev console', '从开发者后台粘贴 USERKEY');
+    // 商鹏 (Shangpeng) — the second printer brand (§171). Same shape as Feie:
+    // an account-level id + secret from the vendor's developer console.
+    const sp = j.data?.spyun || {};
+    const spId = document.getElementById('spyun-appid');
+    const spSec = document.getElementById('spyun-appsecret');
+    if (spId) spId.value = sp.appid || '';
+    if (spSec) spSec.placeholder = sp.appsecret_masked
+      ? cuT(sp.appsecret_masked + ' — leave blank to keep', sp.appsecret_masked + ' — 留空保持不变')
+      : cuT('paste APPSECRET from dev console', '从开发者后台粘贴 APPSECRET');
+    const spChip = document.getElementById('spyun-chip');
+    if (spChip) spChip.innerHTML = sp.enabled
+      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE · 已启用</span>'
+      : '<span style="background:#e5e7eb;color:#4b5563;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">— NOT SET · 未配置</span>';
+
     const fChip = document.getElementById('feie-chip');
     if (fChip) fChip.innerHTML = f.enabled
       ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE · 已启用</span>'
@@ -972,7 +986,21 @@ function _printerTab(storeId) {
   });
 }
 
-// Printer behaviour prefs + one row per store (SN + template + copies).
+// Printer behaviour prefs + one row per store (SN + brand + template + copies).
+//
+// THE BRAND IS PER STORE (decisions §171). A tenant buys printers one shop at
+// a time and may well run three Feie and one Shangpeng. The options come from
+// the API rather than a constant here, so adding a third adapter server-side
+// needs no edit to this file. The fallback matches lib/printers' own default
+// for the case where an older server answers without the list.
+let _PRINTER_VENDORS = [{ id: 'feie', label_en: 'Feie', label_cn: '飞鹅' }];
+
+function _vendorOptions(selected) {
+  return _PRINTER_VENDORS.map(v =>
+    `<option value="${escapeHtml(v.id)}" ${String(selected) === v.id ? 'selected' : ''}>${
+      escapeHtml(v.label_cn)} · ${escapeHtml(v.label_en)}</option>`).join('');
+}
+
 const _FEIE_TEMPLATES = [
   { id: 'receipt', label: 'Customer receipt · 顾客小票' },
   { id: 'packing', label: 'Packing slip · 配货单' },
@@ -984,6 +1012,7 @@ async function loadPrinterPrefs() {
     const r = await fetch('/api/retail-admin/printer');
     if (!r.ok) return;
     const p = (await r.json()).data || {};
+    if (Array.isArray(p.vendors) && p.vendors.length) _PRINTER_VENDORS = p.vendors;
     const auto = document.getElementById('feie-auto');
     const autoAddon = document.getElementById('feie-auto-addon');
     const autoRefund = document.getElementById('feie-auto-refund');
@@ -998,6 +1027,8 @@ async function loadPrinterPrefs() {
     const kSn = document.getElementById('feie-kitchen-sn');
     const kWhen = document.getElementById('feie-kitchen-when');
     const kCopies = document.getElementById('feie-kitchen-copies');
+    const kVendor = document.getElementById('feie-kitchen-vendor');
+    if (kVendor) kVendor.innerHTML = _vendorOptions(p.kitchen_vendor || 'feie');
     if (kSn) kSn.value = p.kitchen_sn || '';
     if (kWhen) kWhen.value = p.kitchen_print_on || 'sent';
     if (kCopies) kCopies.value = Number(p.kitchen_copies) || 1;
@@ -1025,10 +1056,14 @@ async function loadPrinterPrefs() {
           return `
           <div data-store="${s.id}" id="ppanel-${s.id}" style="display:${i === 0 ? 'block' : 'none'};border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--bg-elev-1)">
             <div style="font-weight:700;font-size:15px;margin-bottom:10px;color:var(--text-1)">🏪 ${primary}${secondary ? ` <span style="font-weight:600;font-size:12px;color:var(--text-3)">${secondary}</span>` : ''}${codeTag}</div>
-            <div style="display:grid;grid-template-columns:2fr 1.4fr 0.8fr;gap:10px;align-items:end">
+            <div style="display:grid;grid-template-columns:1.6fr 1fr 1.2fr 0.7fr;gap:10px;align-items:end">
               <div>
                 <label style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);display:block;margin-bottom:3px">Printer SN · 编号</label>
                 <input type="text" class="feie-store-sn" value="${escapeHtml(s.sn)}" style="width:100%;font-family:monospace;font-size:12px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg-input);color:var(--text-1)" placeholder="e.g. 550540977">
+              </div>
+              <div>
+                <label style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);display:block;margin-bottom:3px">Brand · 品牌</label>
+                <select class="feie-store-vendor" style="width:100%;font-size:12px;padding:7px 9px;border:1px solid var(--line);border-radius:6px;background:var(--bg-input);color:var(--text-1)">${_vendorOptions(s.vendor || 'feie')}</select>
               </div>
               <div>
                 <label style="font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-3);display:block;margin-bottom:3px">Template · 模板</label>
@@ -1110,6 +1145,7 @@ function _collectPrinterByStore() {
     const id = row.getAttribute('data-store');
     by_store[id] = {
       sn:       row.querySelector('.feie-store-sn')?.value.trim() || '',
+      vendor:   row.querySelector('.feie-store-vendor')?.value || 'feie',
       template: row.querySelector('.feie-store-tpl')?.value || 'receipt',
       copies:   parseInt(row.querySelector('.feie-store-copies')?.value, 10) || 1,
     };
@@ -1118,7 +1154,9 @@ function _collectPrinterByStore() {
 }
 
 async function _savePrinter() {
-  await _saveIntegration('feie');
+  // Every vendor's credentials save together — a tenant fills in the brands
+  // they own and leaves the rest blank (§171).
+  for (const v of _PRINTER_VENDORS) await _saveIntegration(v.id, { quiet: true });
   try {
     const body = {
       auto_print: document.getElementById('feie-auto')?.checked,
@@ -1126,6 +1164,7 @@ async function _savePrinter() {
       auto_print_refund: document.getElementById('feie-auto-refund')?.checked,
       shop_name:  document.getElementById('feie-shop')?.value || '',
       kitchen_sn: document.getElementById('feie-kitchen-sn')?.value || '',
+      kitchen_vendor: document.getElementById('feie-kitchen-vendor')?.value || 'feie',
       kitchen_print_on: document.getElementById('feie-kitchen-when')?.value || 'sent',
       kitchen_copies: document.getElementById('feie-kitchen-copies')?.value || 1,
       by_store:   _collectPrinterByStore(),
@@ -1137,6 +1176,7 @@ async function _savePrinter() {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     toast('✅ Printer settings saved · 已保存', 'success');
     loadPrinterPrefs();
+    loadShippingIntegrations();   // repaints each brand's LIVE / NOT SET chip
   } catch (e) { toast('Failed · 操作失败: ' + e.message, 'error'); }
 }
 
@@ -1152,7 +1192,12 @@ async function _testPrinter(storeId) {
   } catch (e) { toast('Test failed · 测试失败: ' + e.message, 'error'); }
 }
 
-async function _saveIntegration(svc) {
+// `quiet` suppresses this function's own toast and reload. _savePrinter saves
+// EVERY printer vendor in one go (§171), and without this the operator got one
+// "✅ Saved feie" and one "✅ Saved spyun" stacked under the single "Printer
+// settings saved" they actually asked for — three toasts and two redundant
+// reloads for one button.
+async function _saveIntegration(svc, { quiet = false } = {}) {
   // Empty string for password fields = "keep current" (backend treats undefined
   // as keep, null/"" as clear).
   const v = (id) => document.getElementById(id)?.value;
@@ -1177,7 +1222,16 @@ async function _saveIntegration(svc) {
       user: v('feie-user').trim() || null,
       ukey: v('feie-ukey') || undefined,
     };
+  } else if (svc === 'spyun') {
+    payload.spyun = {
+      appid:     (v('spyun-appid') || '').trim() || null,
+      appsecret: v('spyun-appsecret') || undefined,
+    };
   }
+  // A vendor whose panel is not on this page saves nothing rather than PUTting
+  // an empty body — _savePrinter loops over every registered vendor, and an
+  // adapter can be registered server-side before its fields land here.
+  if (!Object.keys(payload).length) return;
   try {
     const r = await fetch('/api/retail-admin/integrations', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
@@ -1185,11 +1239,12 @@ async function _saveIntegration(svc) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const j = await r.json();
     if (!j.success) throw new Error(j.error || 'save failed');
-    toast(`✅ Saved ${svc} · 已保存`, 'success');
+    if (!quiet) toast(`✅ Saved ${svc} · 已保存`, 'success');
     if (svc === 'kd100') { document.getElementById('kd100-key').value = ''; document.getElementById('kd100-secret').value = ''; }
     if (svc === 'jd')    { document.getElementById('jd-app_secret').value = ''; document.getElementById('jd-access_token').value = ''; }
     if (svc === 'feie')  { document.getElementById('feie-ukey').value = ''; }
-    loadShippingIntegrations();
+    if (svc === 'spyun') { const el = document.getElementById('spyun-appsecret'); if (el) el.value = ''; }
+    if (!quiet) loadShippingIntegrations();
   } catch (e) { toast('Failed · 操作失败: ' + e.message, 'error'); }
 }
 
