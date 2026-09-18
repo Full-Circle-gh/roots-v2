@@ -4310,7 +4310,9 @@ function dashRenderFacts() {
       mt.new_buyers ? `${dashNum(mt.buyers)} · ${dashNum(mt.new_buyers)} ${cuT('new', '新客')}`
                     : dashNum(mt.buyers)));
     const wh = b.bbc.wholesale || {};
-    if (wh.buyers) c.push(dashFactRow(cuT('Bought wholesale', '批发购买'), dashNum(wh.buyers)));
+    // Named for the channel, not for the kind of trade — every other row here
+    // names where the order came from.
+    if (wh.buyers) c.push(dashFactRow(cuT('Bought on gzgrocery', 'gzgrocery 购买'), dashNum(wh.buyers)));
     // Eleme is deliberately absent rather than a zero: its payload carries a
     // consignee, not a customer. A 0 would say nobody bought.
   }

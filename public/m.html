@@ -16555,7 +16555,11 @@ function trendSections(){
       v:mt.new_buyers?T(num(mt.buyers)+' · '+num(mt.new_buyers)+' new',num(mt.buyers)+' · '+num(mt.new_buyers)+' 新客')
                      :num(mt.buyers)});
     const wh=bbc.wholesale||{};
-    if(wh.buyers) cust.push({t:T('Bought wholesale','批发购买'),v:num(wh.buyers)});
+    /* NAMED FOR THE CHANNEL, not for the kind of trade it is. Every other row
+       on this card names where the order came from — the shop, Meituan — and
+       "wholesale" answered a different question from the two it sits between.
+       Ash: "bought on gzgrocery I would call it as the channel name". */
+    if(wh.buyers) cust.push({t:T('Bought on gzgrocery','gzgrocery 购买'),v:num(wh.buyers)});
   }
   const tc=(d.topCustomers||[])[0];
   if(!noMoney&&tc) cust.push({t:T('Top spender','消费最高'),
@@ -16581,12 +16585,27 @@ function trendSections(){
      channel_customer_id has only been stored since 2026-09-15, so a longer
      window reads low and will climb; a figure that says so is honest, one that
      quietly under-reports is not. */
+  /* THE MEITUAN DATE IS A CAVEAT, SO IT ONLY PRINTS WHEN THERE IS ONE TO MAKE.
+     `since` is the earliest day in THIS WINDOW carrying a wmUserId, and when
+     that equals the window's own first day there is nothing to warn about —
+     "Meituan from Sep 12" on a window that starts Sep 12 reads as a limit and
+     is only restating the range. It says so when the id genuinely starts later,
+     and is silent otherwise.
+
+     And the floor moves on its own: routes/meituan-internal.js backfills the
+     column with COALESCE(channel_customer_id, ?) every time it re-reads an
+     order, so orders older than the column fill in as the daemon sees them
+     again. The date is read from the data rather than pinned to the day the
+     column shipped, which is why it can precede it. */
+  const mtSince=(bbc&&bbc.meituan&&bbc.meituan.since)||null;
+  const winFrom=(d.window&&d.window.from)||null;
+  const saySince=mtSince&&(!winFrom||mtSince>winFrom);
   if(cust.length) out.push({key:'customers',icon:'users',tone:'dusk',title:T('Customers','客户'),rows:cust,
     note:bbc
       ? T('Counted separately — the same person on two channels cannot be matched. Eleme shares no customer'
-          + ((bbc.meituan&&bbc.meituan.since)?'; Meituan from '+fmtDateOnly(bbc.meituan.since):'')+'.',
+          + (saySince?'; Meituan from '+fmtDateOnly(mtSince):'')+'.',
           '分渠道统计 —— 同一个人在不同渠道无法匹配。饿了么不提供顾客信息'
-          + ((bbc.meituan&&bbc.meituan.since)?'；美团自 '+fmtDateOnly(bbc.meituan.since)+' 起':'')+'。')
+          + (saySince?'；美团自 '+fmtDateOnly(mtSince)+' 起':'')+'。')
       : T('Mini app, web and in-store only — Meituan and Eleme orders carry no customer.',
           '仅小程序、网页与门店 —— 美团、饿了么订单没有顾客。')});
 
