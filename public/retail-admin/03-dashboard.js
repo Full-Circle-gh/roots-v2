@@ -3493,8 +3493,31 @@ function dashRenderKpis() {
   const span = Number(w.span_days) || 0;
   const priorNote = span > 1 ? cuT(`vs prior ${span} days`, `对比前${span}天`)
     : span === 1 ? cuT('vs yesterday', '对比昨天') : '';
+  // ── THE REVENUE CARD SAYS THAT TOP-UPS ARE IN IT (§182) ─────────────────
+  // This figure is CASH RECEIVED: order takings, gzgrocery's ledger takings,
+  // and wallet top-up cash booked on the day it lands. Finance's Revenue row
+  // answers a different question — what customers paid ON ORDERS, with wallet
+  // money recognised at the sale instead — so the two legitimately differ for
+  // the same window, and a reader with both screens open used to have nothing
+  // to tell them apart with. The top-up slice is the larger half of that gap
+  // and the only half this card can name in its own words, so it names it.
+  //
+  // THE PAIR IS LIFTED, NOT COMPOSED. `incl. ¥X top-ups · 含充值 ¥X` is the
+  // Sales summary's own note under its own cash-basis revenue figure
+  // (01-core.js), which is the same sentence about the same fold — and the ' · '
+  // join is that line's too. Rule 4 prefers a live pair over a new one, and
+  // here one screen had already said this well.
+  //
+  // ONLY WHEN THERE ARE TOP-UPS, because a note naming ¥0 of them describes a
+  // fold that did not happen and would sit on the card every quiet week. When
+  // there are none, the two screens' revenue differs by gzgrocery alone and
+  // this caption would point at the wrong half.
+  const tuRecv = Number((DASH_DATA.topups || {}).received || 0);
+  const revSub = [d.revenue == null ? '' : priorNote,
+                  tuRecv > 0 ? cuT(`incl. ${dashMoney(tuRecv)} top-ups`, `含充值 ${dashMoney(tuRecv)}`) : '']
+    .filter(Boolean).join(' · ');
   const cards = [
-    { lbl: 'Revenue · 营收',        val: dashMoney(k.revenue),       num: k.revenue,         fmt: 'money',  delta: d.revenue,       sub: d.revenue == null ? '' : priorNote },
+    { lbl: 'Revenue · 营收',        val: dashMoney(k.revenue),       num: k.revenue,         fmt: 'money',  delta: d.revenue,       sub: revSub },
     { lbl: 'Orders · 订单',         val: dashNum(k.orders),          num: k.orders,          fmt: 'num',    delta: d.orders,        sub: '' },
     { lbl: 'Average order · 客单价', val: dashMoney(k.aov, 2),        num: k.aov,             fmt: 'money2', delta: d.aov,           sub: '' },
     { lbl: 'New customers · 新客户', val: dashNum(k.new_customers),   num: k.new_customers,   fmt: 'num',    delta: null,            sub: cuT(`of ${dashNum(k.visitors)} visitors`, `共 ${dashNum(k.visitors)} 访客`) },

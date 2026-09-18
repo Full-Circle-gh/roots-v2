@@ -285,6 +285,11 @@ const rdb = new Database(':memory:');
 rdb.exec(`
   CREATE TABLE retail_orders (
     id INTEGER PRIMARY KEY, status TEXT, channel TEXT, total REAL,
+    -- §182. REAL DEFAULT 0 is database.js:4593's own declaration, not a
+    -- fixture convenience: the shipped revenue query reads this column now, and
+    -- a fixture that defaulted it NULL would exercise a state production does
+    -- not have while hiding the one it does.
+    balance_used REAL DEFAULT 0,
     paid_at DATETIME, placed_at DATETIME, replacement_for_order_id INTEGER);
 `);
 [[1, 'paid', 'wechat', 1000], [2, 'paid', 'meituan', 400],
@@ -315,21 +320,32 @@ function shippedRevenue() {
 const revRows = rdb.prepare(shippedRevenue()).all(FROM, TO);
 
 it('the channel lines ADD UP to the revenue headline — one read, one total', () => {
-  // 1000 + 400 + 250 + 50 + 500 + 70 = 2270.
+  // 1000 + 400 + 250 + 50 + 500 + 70 = 2270. Every row here settles in cash, so
+  // the §182 term adds nothing to it — which is the point of leaving them
+  // alone: the wallet arithmetic gets its own fixture below, and these numbers
+  // go on proving the cash path did not move when it landed.
   const sum = revRows.reduce((a, r) => a + r.amount, 0);
   const head = rdb.prepare(
-    `SELECT COALESCE(SUM(total),0) AS r FROM retail_orders WHERE ${PAID} AND ${ODATE} BETWEEN ? AND ?`
+    `SELECT COALESCE(SUM(COALESCE(total,0) + COALESCE(balance_used,0)),0) AS r FROM retail_orders
+      WHERE ${PAID} AND ${ODATE} BETWEEN ? AND ?`
   ).get(FROM, TO).r;
   assert.strictEqual(sum, 2270);
   assert.strictEqual(sum, head, 'the breakdown must equal the figure it opens from');
 });
 
 it('the headline is FOLDED OUT of the grouped read, never summed beside it', () => {
-  // The route must hold exactly one SUM(total) over retail_orders. A second one
+  // The route must hold exactly one revenue SUM over retail_orders. A second one
   // is a second place the arithmetic is done, and the day the two disagree the
   // card shows a total its own disclosure contradicts.
-  const sums = ROUTE_CODE.match(/SUM\(total\)/g) || [];
+  //
+  // §182 CHANGED WHAT THE SUM IS, NOT HOW MANY THERE MAY BE. The expression is
+  // now `total + balance_used`, so this guard names that; and a BARE `SUM(total)`
+  // reappearing anywhere in the route would be the old cash-only figure back as
+  // a second opinion, which is why zero of them is asserted rather than ignored.
+  const sums = ROUTE_CODE.match(/SUM\(COALESCE\(total, 0\) \+ COALESCE\(balance_used, 0\)\)/g) || [];
   assert.strictEqual(sums.length, 1, 'revenue is being summed in more than one place');
+  assert.strictEqual((ROUTE_CODE.match(/SUM\(total\)/g) || []).length, 0,
+    'a bare SUM(total) is the pre-§182 cash-only revenue, and it drops wallet sales');
   assert.match(ROUTE_CODE, /const revenue = money\.fromMinor\(revMinor\)/,
     'the headline must be the grouped read folded up, in minor units');
 });
@@ -367,6 +383,74 @@ it('unpaid, refunded and out-of-window orders are absent from the channels too',
 it('the heaviest channel is first — the operator is asking which one earned it', () => {
   const amounts = revRows.map(r => r.amount);
   assert.deepStrictEqual(amounts, [...amounts].sort((a, b) => b - a), 'ORDER BY amount DESC is gone');
+});
+
+// ── §182 · wallet money is revenue AT THE SALE ─────────────────────────────
+// A SEPARATE DATABASE, ON PURPOSE. The rows above are every one of them settled
+// in cash, and they are left that way so they keep proving the cash path did not
+// move when this landed; mixing wallet rows into them would have re-baselined
+// six assertions at once and made a regression there indistinguishable from this
+// change. The query is the SHIPPED one either way — `shippedRevenue()` again,
+// sliced out of the route, never transcribed.
+console.log('\n2a · §182 — the wallet half of a bill');
+
+const wdb = new Database(':memory:');
+wdb.exec(`
+  CREATE TABLE retail_orders (
+    id INTEGER PRIMARY KEY, status TEXT, channel TEXT, total REAL,
+    balance_used REAL DEFAULT 0, points_amount REAL DEFAULT 0,
+    paid_at DATETIME, placed_at DATETIME, replacement_for_order_id INTEGER);
+`);
+// The gross a customer paid is `points_amount + balance_used + total` (§93), and
+// each row below settles a ¥300 bill a different way.
+[// id  status  channel    total  balance  points
+  [1, 'paid', 'wechat',   300,   0,    0],    // all cash
+  [2, 'paid', 'wechat',     0, 300,    0],    // all wallet — invisible before §182
+  [3, 'paid', 'meituan',  100,  50,    0],    // mixed
+  [4, 'paid', 'manual',     0,   0,  300],    // all POINTS — never revenue
+  [5, 'paid', 'web',      200, null,   0],    // NULL balance, as an old row carries
+].forEach(([id, st, ch, t, b, pts]) => wdb.prepare(
+  `INSERT INTO retail_orders (id,status,channel,total,balance_used,points_amount,paid_at,placed_at)
+   VALUES (?,?,?,?,?,?,'2026-08-10 03:00:00',NULL)`).run(id, st, ch, t, b, pts));
+
+const wRows = wdb.prepare(shippedRevenue()).all(FROM, TO);
+const wOf = (ch) => (wRows.find(r => r.channel === ch) || { amount: 0 }).amount;
+
+it('a bill settled from the wallet is revenue — the §182 hole', () => {
+  // THE BUG THIS CLOSES, stated as arithmetic. `total` is the CASH RESIDUAL, so
+  // order 2 carried ¥0 of it; Finance summed `total` alone and showed nothing
+  // for a ¥300 sale whose goods had left the shelf — while the cost read below,
+  // which never asks how a bill was settled, charged the card their full cost.
+  // Counted at the SALE and not at the top-up, which is the rule the route
+  // header always stated and the code did not keep.
+  assert.strictEqual(wOf('wechat'), 600, '300 cash + 300 wallet; pre-§182 this was 300');
+});
+
+it('a part-wallet bill counts both halves, once each', () => {
+  assert.strictEqual(wOf('meituan'), 150, '100 cash + 50 wallet');
+});
+
+it('POINTS are NOT revenue, and that asymmetry is the decision', () => {
+  // `points_amount` is a discount the shop granted itself — no customer ever
+  // paid it. A points-settled sale earns nothing and costs real stock, and that
+  // is the truth about a giveaway rather than a gap left half-closed.
+  assert.strictEqual(wOf('manual'), 0, 'a points-settled bill must earn no revenue');
+  assert.ok(!/points_amount/.test(shippedRevenue()),
+    'the revenue query must not reach for the points tender');
+});
+
+it('a NULL balance_used does not null the channel it is on', () => {
+  // `a + NULL` is NULL in SQLite, and an outer COALESCE(SUM(...),0) cannot see
+  // that it happened — one legacy row would have zeroed a whole channel line.
+  assert.strictEqual(wOf('web'), 200, 'a NULL balance swallowed the cash beside it');
+});
+
+it('the wallet term rides the SAME grouped read — still one total', () => {
+  // The headline is folded out of these rows (§36), so a wallet term added to
+  // the lines but not the total, or the reverse, would show a card whose own
+  // disclosure contradicts it.
+  const sum = wRows.reduce((a, r) => a + r.amount, 0);
+  assert.strictEqual(sum, 950, '300 + 300 + 150 + 0 + 200');
 });
 
 it('an uncategorised expense keeps its own line rather than a minted bucket', () => {
