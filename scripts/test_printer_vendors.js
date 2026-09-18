@@ -234,6 +234,38 @@ it('a remapped tag is rewritten on BOTH the open and the close', () => {
   } finally { spyun.TAG_MAP.BOLD = saved; }
 });
 
+it('NO house tag reaches a Shangpeng head as literal text', () => {
+  // THE DEFECT THIS PINS, read off a real slip on 2026-09-18: <BOLD> and <L>
+  // are Feie-only, and Shangpeng printed them as the characters <BOLD> and
+  // </BOLD> in the middle of the customer's receipt (§171 addendum 3).
+  // Whatever the map says, nothing that looks like a house tag may survive
+  // translation — that is the property, not the individual entries.
+  const out = spyun.translate(SLIP);
+  assert.ok(!/<\/?(CB|BOLD|B|L|C)>/.test(out.replace(/<\/?(CB|B|C)>/g, '')),
+    'a house tag survived translation and would print as text on the paper');
+});
+
+it('the two Feie-only tags are dropped, and the three shared ones are not', () => {
+  // Read off the paper, element by element: <CB> (shop name, order code),
+  // <B> (PKG n/m, SKU, Items) and <C> (address, Thank you) were honoured;
+  // <BOLD> (shipment label, item names) and <L> (TOTAL) were not.
+  assert.strictEqual(spyun.TAG_MAP.CB, 'CB');
+  assert.strictEqual(spyun.TAG_MAP.B,  'B');
+  assert.strictEqual(spyun.TAG_MAP.C,  'C');
+  assert.strictEqual(spyun.TAG_MAP.L,    '', '<L> is Feie-only — it printed literally');
+  assert.strictEqual(spyun.TAG_MAP.BOLD, '', '<BOLD> is Feie-only — it printed literally');
+});
+
+it('a dropped tag does not disturb the line it wrapped', () => {
+  // The renderer has already wrapped item names and built the TOTAL row to
+  // WIDTH columns. Dropping the tag must leave that arithmetic alone — which
+  // is also why <BOLD>/<L> are not mapped to <B>: an enlarged line holds
+  // BIG_WIDTH, and a 31-column TOTAL row would fold mid-price.
+  const total = 'TOTAL                      \uFFE5330.00';
+  assert.strictEqual(spyun.translate(`<L>${total}</L>`), total);
+  assert.strictEqual(spyun.translate('<BOLD>\u828d\u679c\u86cb\u767d\u7403</BOLD>'), '\u828d\u679c\u86cb\u767d\u7403');
+});
+
 it('every house tag the renderers emit has an entry in the map', () => {
   // Read the tags OUT OF the renderer rather than restating them, so a new tag
   // added to a slip fails here instead of printing raw at a counter.
