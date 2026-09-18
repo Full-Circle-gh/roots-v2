@@ -117,6 +117,7 @@ let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
 const _feie = require('../lib/feie');   // Feie cloud-printer client (order auto-print)
 const _kprint = require('../lib/kitchen-print');  // the kitchen queue's own slip — same rail, its own SN
+const _printers = require('../lib/printers');  // which BRAND of cloud printer a row points at (§171)
 const _nuonuo = require('../lib/nuonuo'); // 诺诺发票 e-fapiao auto-issue (dormant until creds)
 const _aliyunSms = require('../lib/aliyun-sms'); // 阿里云短信 delivered-notice SMS (dormant until creds)
 const _emailSender = require('../lib/email-sender'); // credential-gated email for web sign-in codes
@@ -28442,6 +28443,14 @@ const INTEGRATION_KEYS = {
     ukey: { env: 'FEIE_UKEY', secret: true,  cred: CRED_KEYS.FEIE_UKEY, bkey: 'ukey' },  // USERKEY from dev console
     // Printer SNs are per-store — see storefront_config `printer.by_store`.
   },
+  // 商鹏 (Shangpeng) — the second printer vendor (§171). Account-level creds
+  // from the spyun.net developer console, exactly like Feie's pair; the
+  // 密钥/KEY on the device label is a BINDING key and is never sent by us.
+  // Which stores print on which brand is `printer.by_store[].vendor`.
+  spyun: {
+    appid:     { env: 'SPYUN_APPID',     secret: false, cred: CRED_KEYS.SPYUN_APPID,     bkey: 'appid'     },
+    appsecret: { env: 'SPYUN_APPSECRET', secret: true,  cred: CRED_KEYS.SPYUN_APPSECRET, bkey: 'appsecret' },
+  },
   // WeCom (企业微信) self-built app — pushes the new-order card to the owner's
   // WeCom app. corp_id (我的企业→企业ID), agent_id + secret (自建应用).
   wecom_app: {
@@ -28499,6 +28508,7 @@ router.get('/api/retail-admin/integrations', requireRetailAdmin, (req, res) => {
   out.kd100.enabled = tracking.kd100Enabled(kd100Creds());
   out.jd.enabled    = jd.jdEnabled(ci.jd);
   out.feie.enabled  = _feie.feieEnabled(ci.feie);
+  out.spyun.enabled = _printers.resolve('spyun').enabled(ci.spyun);
   out.wecom_app.enabled = !!(ci.wecom_app && ci.wecom_app.corpId && ci.wecom_app.agentId && ci.wecom_app.secret);
   out.nuonuo.enabled = _nuonuo.nuonuoEnabled(ci.nuonuo);
   out.aliyun_sms.enabled = _aliyunSms.aliyunSmsEnabled(ci.aliyun_sms);
@@ -29854,6 +29864,9 @@ function loadPrinterPrefs() {
     // themselves: 'sent' (Roots' answer — paper when work arrives), 'prepared',
     // 'both', or 'off'. lib/kitchen-print.js is what reads these.
     kitchen_sn: String(get('printer.kitchen_sn', '') || '').trim(),
+    // Which BRAND the kitchen's printer is (§171). Absent means Feie, which
+    // is what every kitchen SN saved before §171 is.
+    kitchen_vendor: _printers.resolve(get('printer.kitchen_vendor', null)).id,
     kitchen_print_on: get('printer.kitchen_print_on', _kprint.DEFAULT_PRINT_ON),
     kitchen_copies: get('printer.kitchen_copies', 1),
     shop_name:  get('printer.shop_name', tenantBrandLabel()),
@@ -29921,8 +29934,11 @@ function printerForOrder(order, prefs) {
 // synchronous (tenant DB stays bound); the returned promise covers only the
 // network POST. `pcfg` overrides the resolved store printer (used by tests).
 function printOrderById(orderId, prefs, pcfg) {
-  const fc = integ().feie;   // the fulfilling tenant's own Feieyun account
-  if (!_feie.feieEnabled(fc)) return Promise.resolve({ ok: false, msg: 'not_configured' });
+  // The fulfilling tenant's own printer accounts — one per vendor. Which one
+  // is used is decided by the resolved printer ROW's `vendor` (§171), so a
+  // tenant running Feie at one shop and Shangpeng at another prints at both.
+  const ci = integ();
+  if (!_printers.anyEnabled(ci)) return Promise.resolve({ ok: false, msg: 'not_configured' });
   const order = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(orderId);
   if (!order) return Promise.resolve({ ok: false, msg: 'order_not_found' });
   const p = prefs || loadPrinterPrefs();
@@ -29948,7 +29964,7 @@ function printOrderById(orderId, prefs, pcfg) {
   const shipments = tdb().prepare('SELECT id, mode, label FROM retail_shipments WHERE order_id = ? ORDER BY id ASC').all(orderId);
   const tpl = _feie.TEMPLATE_IDS.includes(printer.template) ? printer.template : 'receipt';
   const content = _feie.renderOrder(tpl, order, items, p.shop_name, shipments, { credit: tenantPrintCredit(), taxNumber: taxSettings().number });
-  return _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 }, fc);
+  return _printers.printContent(content, printer, ci);
 }
 
 // Persist the auto-print outcome on the order so the backend can show whether a
@@ -29966,7 +29982,7 @@ function recordPrintResult(db, orderId, result) {
               printed_at   = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE printed_at END
         WHERE id = ?`
     ).run(ok ? 'printed' : 'failed', err, ok ? 1 : 0, orderId);
-  } catch (e) { console.warn('[feie print record]', e.message); }
+  } catch (e) { console.warn('[print record]', e.message); }
 }
 
 // Fire the store's auto-print for a paid order and record the outcome. Shared by
@@ -29977,7 +29993,7 @@ function autoPrintOrder(orderId) {
   const db = tdb();   // capture synchronously — the async callback may lose the ALS scope
   try {
     const pp = loadPrinterPrefs();
-    if (!pp.auto_print || !_feie.feieEnabled(integ().feie)) return;
+    if (!pp.auto_print || !_printers.anyEnabled(integ())) return;
     // ONE TICKET PER ORDER, AND A QR ORDER'S ALREADY PRINTED.
     //
     // §44 puts the QR ticket at SUBMIT, not at paid: the kitchen starts making
@@ -30011,20 +30027,20 @@ function autoPrintOrder(orderId) {
       'SELECT shop_entry_method, print_status FROM retail_orders WHERE id = ?'
     ).get(orderId);
     if (prior && prior.shop_entry_method === 'qr' && prior.print_status === 'printed') {
-      console.log('[feie print]', orderId, 'skipped — QR ticket already printed on submit');
+      console.log('[print order]', orderId, 'skipped — QR ticket already printed on submit');
       return;
     }
     printOrderById(orderId, pp)
       .then(r => {
-        if (r.ok) console.log('[feie print]', orderId, 'ok');
-        else console.warn('[feie print]', orderId, r.msg);
+        if (r.ok) console.log('[print order]', orderId, 'ok');
+        else console.warn('[print order]', orderId, r.msg);
         recordPrintResult(db, orderId, r);
       })
       .catch(e => {
-        console.warn('[feie print]', orderId, e.message);
+        console.warn('[print order]', orderId, e.message);
         recordPrintResult(db, orderId, { ok: false, msg: e.message });
       });
-  } catch (e) { console.warn('[feie print setup]', e.message); }
+  } catch (e) { console.warn('[print setup]', e.message); }
 }
 
 // Print a focused "add-on" slip for items added to an already-paid order.
@@ -30038,13 +30054,13 @@ function autoPrintAddon(orderId, newItemIds, addonPaidAt) {
     // Gated on its OWN toggle (auto_print_addon), independent of the main
     // order auto-print — a store can want the add-on slip on while the main
     // slip is off, or vice versa.
-    if (pp.auto_print_addon === false || !_feie.feieEnabled(integ().feie)) return;
+    if (pp.auto_print_addon === false || !_printers.anyEnabled(integ())) return;
     if (!Array.isArray(newItemIds) || !newItemIds.length) return;
     const order = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(orderId);
     if (!order) return;
     order.addon_paid_at = addonPaidAt || null;
     const printer = printerForOrder(order, pp);
-    if (!printer || !printer.sn) { console.warn('[feie addon]', orderId, 'no_printer_for_store'); return; }
+    if (!printer || !printer.sn) { console.warn('[print addon]', orderId, 'no_printer_for_store'); return; }
     const ph = newItemIds.map(() => '?').join(',');
     const items = tdb().prepare(
       `SELECT oi.*, p.bundle_items
@@ -30061,10 +30077,10 @@ function autoPrintAddon(orderId, newItemIds, addonPaidAt) {
       delete it.bundle_items;
     }
     const content = _feie.renderAddon(order, items, pp.shop_name);
-    _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 }, integ().feie)
-      .then(r => console.log('[feie addon]', orderId, r.ok ? 'ok' : r.msg))
-      .catch(e => console.warn('[feie addon]', orderId, e.message));
-  } catch (e) { console.warn('[feie addon setup]', e.message); }
+    _printers.printContent(content, printer, integ())
+      .then(r => console.log('[print addon]', orderId, printer.vendor || 'feie', r.ok ? 'ok' : r.msg))
+      .catch(e => console.warn('[print addon]', orderId, e.message));
+  } catch (e) { console.warn('[print addon setup]', e.message); }
 }
 
 // Turn a refund-line spec ([{item_id, qty, amount?}]) into rows a slip can
@@ -30095,16 +30111,16 @@ function autoPrintRefundRequest(orderId, lines) {
   try {
     const pp = loadPrinterPrefs();
     // Own toggle, default ON — independent of the order / add-on auto-prints.
-    if (pp.auto_print_refund === false || !_feie.feieEnabled(integ().feie)) return;
+    if (pp.auto_print_refund === false || !_printers.anyEnabled(integ())) return;
     const order = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(orderId);
     if (!order) return;
     const printer = printerForOrder(order, pp);
-    if (!printer || !printer.sn) { console.warn('[feie refund]', orderId, 'no_printer_for_store'); return; }
+    if (!printer || !printer.sn) { console.warn('[print refund]', orderId, 'no_printer_for_store'); return; }
     const content = _feie.renderRefundRequest(order, enrichRefundLines(lines), pp.shop_name);
-    _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 }, integ().feie)
-      .then(r => console.log('[feie refund]', orderId, r.ok ? 'ok' : r.msg))
-      .catch(e => console.warn('[feie refund]', orderId, e.message));
-  } catch (e) { console.warn('[feie refund setup]', e.message); }
+    _printers.printContent(content, printer, integ())
+      .then(r => console.log('[print refund]', orderId, printer.vendor || 'feie', r.ok ? 'ok' : r.msg))
+      .catch(e => console.warn('[print refund]', orderId, e.message));
+  } catch (e) { console.warn('[print refund setup]', e.message); }
 }
 
 // Print the SETTLED refund slip — the paper counterpart to the money actually
@@ -30131,11 +30147,11 @@ function autoPrintRefundReceipt(orderId) {
     const pp = loadPrinterPrefs();
     // Same toggle as the request slip: an operator who turned refund printing
     // off does not want the settled slip either.
-    if (pp.auto_print_refund === false || !_feie.feieEnabled(integ().feie)) return;
+    if (pp.auto_print_refund === false || !_printers.anyEnabled(integ())) return;
     const order = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(orderId);
     if (!order) return;
     const printer = printerForOrder(order, pp);
-    if (!printer || !printer.sn) { console.warn('[feie refund receipt]', orderId, 'no_printer_for_store'); return; }
+    if (!printer || !printer.sn) { console.warn('[print refund receipt]', orderId, 'no_printer_for_store'); return; }
     // Claim last, so a store with no printer does not burn the stamp.
     const claim = tdb().prepare(
       'UPDATE retail_orders SET refund_printed_at = CURRENT_TIMESTAMP WHERE id = ? AND refund_printed_at IS NULL'
@@ -30146,18 +30162,18 @@ function autoPrintRefundReceipt(orderId) {
     let lines = [];
     try { lines = JSON.parse(order.refund_lines_json || '[]') || []; } catch (e) { lines = []; }
     const content = _feie.renderRefundReceipt(order, enrichRefundLines(lines), pp.shop_name);
-    _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 }, integ().feie)
+    _printers.printContent(content, printer, integ())
       .then((r) => {
-        console.log('[feie refund receipt]', orderId, r.ok ? 'ok' : r.msg);
+        console.log('[print refund receipt]', orderId, printer.vendor || 'feie', r.ok ? 'ok' : r.msg);
         if (!r.ok) releaseRefundPrintStamp(orderId);
       })
-      .catch((e) => { console.warn('[feie refund receipt]', orderId, e.message); releaseRefundPrintStamp(orderId); });
-  } catch (e) { console.warn('[feie refund receipt setup]', e.message); }
+      .catch((e) => { console.warn('[print refund receipt]', orderId, e.message); releaseRefundPrintStamp(orderId); });
+  } catch (e) { console.warn('[print refund receipt setup]', e.message); }
 }
 
 function releaseRefundPrintStamp(orderId) {
   try { tdb().prepare('UPDATE retail_orders SET refund_printed_at = NULL WHERE id = ?').run(orderId); }
-  catch (e) { console.warn('[feie refund receipt unstamp]', e.message); }
+  catch (e) { console.warn('[print refund receipt unstamp]', e.message); }
 }
 
 // Print a short "date changed" slip when a customer reschedules an order whose
@@ -30188,7 +30204,7 @@ function autoPrintDateChange(orderId, prev) {
     // Rides the main order auto-print toggle rather than minting a new config
     // key: this slip is an amendment to the receipt that toggle produced, so a
     // store that prints no receipts wants no corrections to them either.
-    if (!pp.auto_print || !_feie.feieEnabled(integ().feie)) return;
+    if (!pp.auto_print || !_printers.anyEnabled(integ())) return;
     const order = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(orderId);
     if (!order || !order.printed_at) return;
     const p = prev || {};
@@ -30198,14 +30214,14 @@ function autoPrintDateChange(orderId, prev) {
     // Same printer the original receipt went to — out-of-GZ orders print at the
     // designated out-of-city store, everything else at the order's own store.
     const printer = printerForOrder(order, pp);
-    if (!printer || !printer.sn) { console.warn('[feie datechange]', orderId, 'no_printer_for_store'); return; }
+    if (!printer || !printer.sn) { console.warn('[print datechange]', orderId, 'no_printer_for_store'); return; }
     order.prev_scheduled_for  = p.scheduled_for || null;
     order.prev_slot_label     = p.delivery_slot_label || null;
     const content = _feie.renderOrder('datechange', order, [], pp.shop_name, []);
-    _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 }, integ().feie)
-      .then(r => console.log('[feie datechange]', orderId, r.ok ? 'ok' : r.msg))
-      .catch(e => console.warn('[feie datechange]', orderId, e.message));
-  } catch (e) { console.warn('[feie datechange setup]', e.message); }
+    _printers.printContent(content, printer, integ())
+      .then(r => console.log('[print datechange]', orderId, printer.vendor || 'feie', r.ok ? 'ok' : r.msg))
+      .catch(e => console.warn('[print datechange]', orderId, e.message));
+  } catch (e) { console.warn('[print datechange setup]', e.message); }
 }
 
 router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
@@ -30219,6 +30235,9 @@ router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
     return {
       id: s.id, code: s.code, name_en: s.name_en, name_cn: s.name_cn,
       sn: cfg.sn || '', template: cfg.template || 'receipt', copies: cfg.copies || 1,
+      // Absent on every row saved before §171, and every one of those is a
+      // Feie — resolve() is what makes that true rather than assumed.
+      vendor: _printers.resolve(cfg.vendor).id,
     };
   });
   // Suggest the Tianhe store as the out-of-city default when nothing is saved
@@ -30234,10 +30253,15 @@ router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
     auto_print_addon: prefs.auto_print_addon,
     auto_print_refund: prefs.auto_print_refund,
     kitchen_sn: prefs.kitchen_sn,
+    kitchen_vendor: prefs.kitchen_vendor,
     kitchen_print_on: prefs.kitchen_print_on,
     kitchen_copies: prefs.kitchen_copies,
     shop_name:  prefs.shop_name,
-    enabled:    _feie.feieEnabled(integ().feie),
+    // "Is printing switched on at all?" is ANY vendor being configured, not
+    // Feie being configured (§171) — otherwise a Shangpeng-only tenant is
+    // told printing is off while their printer sits there working.
+    enabled:    _printers.anyEnabled(integ()),
+    vendors:    _printers.vendorOptions(),
     templates:  _feie.TEMPLATE_IDS,
     stores,
     out_of_city_store_id: oocStore,
@@ -30266,6 +30290,10 @@ router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), asyn
     if (b.kitchen_sn !== undefined) {
       upsert.run('printer.kitchen_sn', JSON.stringify(String(b.kitchen_sn || '').trim().slice(0, 40)), req.user.id);
     }
+    if (b.kitchen_vendor !== undefined) {
+      upsert.run('printer.kitchen_vendor',
+        JSON.stringify(_printers.resolve(b.kitchen_vendor).id), req.user.id);
+    }
     if (b.kitchen_print_on !== undefined) {
       const v = String(b.kitchen_print_on || '');
       upsert.run('printer.kitchen_print_on',
@@ -30285,6 +30313,10 @@ router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), asyn
           sn,
           template: _feie.TEMPLATE_IDS.includes(cfg.template) ? cfg.template : 'receipt',
           copies: Math.max(1, Math.min(5, parseInt(cfg.copies, 10) || 1)),
+          // An unknown or missing brand resolves to Feie rather than being
+          // stored as-is — a typo here would otherwise silently stop a
+          // counter printing (§171).
+          vendor: _printers.resolve(cfg.vendor).id,
         };
       }
       upsert.run('printer.by_store', JSON.stringify(clean), req.user.id);
@@ -30368,7 +30400,7 @@ router.get('/api/retail-admin/printer/preview', requireRetailAdmin, (req, res) =
 // Test print to ONE store's printer. Body: { store_id }. Prints the latest
 // real order for that store if there is one, otherwise a sample slip.
 router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, res) => {
-  if (!_feie.feieEnabled(integ().feie)) return res.json({ ok: false, error: 'not_configured' });
+  if (!_printers.anyEnabled(integ())) return res.json({ ok: false, error: 'not_configured' });
   const prefs = loadPrinterPrefs();
   const storeId = parseInt(req.body?.store_id, 10);
   const printer = prefs.by_store[String(storeId)];
@@ -30384,7 +30416,7 @@ router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, re
   } else {
     const { order, items, shipments } = _sampleOrderForPreview();
     const content = _feie.renderOrder(tpl, order, items, prefs.shop_name, shipments, { credit: tenantPrintCredit(), taxNumber: taxSettings().number });
-    r = await _feie.printContent(content, { sn: printer.sn, copies: 1 }, integ().feie);
+    r = await _printers.printContent(content, { ...printer, copies: 1 }, integ());
   }
   if (r.ok) return res.json({ ok: true });
   res.json({ ok: false, error: r.msg || 'print_failed' });
@@ -30402,7 +30434,7 @@ router.post('/api/retail-admin/orders/:id/print', requireRetailAdmin, express.js
   if (!tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id)) {
     return res.status(404).json({ success: false, error: 'not_found' });
   }
-  if (!_feie.feieEnabled(integ().feie)) return res.json({ success: true, ok: false, error: 'not_configured' });
+  if (!_printers.anyEnabled(integ())) return res.json({ success: true, ok: false, error: 'not_configured' });
   const prefs = loadPrinterPrefs();
   // Optional explicit store override from the drawer picker.
   let override = null;

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.308
+# Tacet shared-core consolidation — decisions record, v4.309
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,11 +23,12 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-18 · v4.308 — **§171 ADDENDUM · THE WRITE END: A CONTROL THAT DOES NOT NAME ITSELF — REPORTED BY ASH**, on the customer page with the cursor inches from it: *“im on customer page wher is it”*. An empty Know block collapsed to a bare `Edit` under the name and said nothing about the two things behind it. It now shows `What we know · 备注与标签` — **not a new string**: the heading the phone's customer record already used for this same block, already locked, arriving on its second surface. **Shown only while the block is empty**, so the space saving that collapsed the old 210px card is kept. **The rejected empty-state stays rejected** — `暂无备注。` names the absence, the heading names the control, and that distinction is the part to keep. `docs/tacet-delivery-vocabulary.md` v1.125 locks nothing new. Covered by `scripts/test_customer_standing_note.js`, including the stylesheet's own `[hidden]` guard — the trap `test_admin_install.js` exists for.
+2026-09-18 · v4.309 — **§172 ADDENDUM · THE WRITE END: A CONTROL THAT DOES NOT NAME ITSELF — REPORTED BY ASH**, on the customer page with the cursor inches from it: *“im on customer page wher is it”*. An empty Know block collapsed to a bare `Edit` under the name and said nothing about the two things behind it. It now shows `What we know · 备注与标签` — **not a new string**: the heading the phone's customer record already used for this same block, already locked, arriving on its second surface. **Shown only while the block is empty**, so the space saving that collapsed the old 210px card is kept. **The rejected empty-state stays rejected** — `暂无备注。` names the absence, the heading names the control, and that distinction is the part to keep. `docs/tacet-delivery-vocabulary.md` v1.125 locks nothing new. Covered by `scripts/test_customer_standing_note.js`, including the stylesheet's own `[hidden]` guard — the trap `test_admin_install.js` exists for.
 
-2026-09-18 · v4.307 — **§171 · WHAT THE SHOP KNOWS ABOUT A PERSON IS READ ON EVERY ORDER, AND IS EDITED IN ONE PLACE — DECIDED BY ASH.** Ash, on TC000750's drawer: *“an order note will appear only for that order. however we need a note that will appear for this customer order everytime he place an order”*. **NO STORAGE IS ADDED — A READ IS.** `retail_customers.note` and `.tags` have existed since the customer drawer's Know block and no order ever looked at them, so the knowledge sat in the right place and reached nobody at the moment it was needed. **THREE NOTES, NOT ONE**: `customer_note` is the BUYER's, for that order; `staff_note` is the SHOP's, for that order; `customer_standing_note` (aliased from `retail_customers.note` on the order read) is the shop's, about the PERSON, on every order they place. **THE COPY RULE IS THE ARCHITECTURE**: the note is READ through the `LEFT JOIN retail_customers` that `GET /api/retail-admin/orders/:id` already made for the nickname and phone, and never stamped onto an order — correct it once and every order past, open and future reads the correction, because one copy exists. **READ-ONLY IN THE DRAWER**, Edit navigates to the customer: an editable box there sits pixels from the per-order Shop note under a near-identical label, which is how “no ice THIS time” gets typed into a note that follows a person for a year. **IT NEVER REACHES THE CUSTOMER** — `loadOrderForCustomer` names its columns by hand and does not select it, deliberately and load-bearingly. **NOTHING RENDERS WITHOUT A PERSON**: walk-ins and most channel orders carry no `customer_id`, so it is null and absent, with no empty state. **THREE SURFACES, ONE ENDPOINT**: the desktop drawer, the mirrored channel drawer and the phone's order detail; the Orders LIST and the kitchen print were considered and left to their own change under one-PR-per-change. **NO CHINESE IS MINTED** — `About this customer · 关于该顾客的备注` lifts its Chinese half whole from the live aria-label on the textarea the text is typed into, recorded as `docs/tacet-delivery-vocabulary.md` v1.124.
+2026-09-18 · v4.308 — **§172 · WHAT THE SHOP KNOWS ABOUT A PERSON IS READ ON EVERY ORDER, AND IS EDITED IN ONE PLACE — DECIDED BY ASH.** Ash, on TC000750's drawer: *“an order note will appear only for that order. however we need a note that will appear for this customer order everytime he place an order”*. **NO STORAGE IS ADDED — A READ IS.** `retail_customers.note` and `.tags` have existed since the customer drawer's Know block and no order ever looked at them, so the knowledge sat in the right place and reached nobody at the moment it was needed. **THREE NOTES, NOT ONE**: `customer_note` is the BUYER's, for that order; `staff_note` is the SHOP's, for that order; `customer_standing_note` (aliased from `retail_customers.note` on the order read) is the shop's, about the PERSON, on every order they place. **THE COPY RULE IS THE ARCHITECTURE**: the note is READ through the `LEFT JOIN retail_customers` that `GET /api/retail-admin/orders/:id` already made for the nickname and phone, and never stamped onto an order — correct it once and every order past, open and future reads the correction, because one copy exists. **READ-ONLY IN THE DRAWER**, Edit navigates to the customer: an editable box there sits pixels from the per-order Shop note under a near-identical label, which is how “no ice THIS time” gets typed into a note that follows a person for a year. **IT NEVER REACHES THE CUSTOMER** — `loadOrderForCustomer` names its columns by hand and does not select it, deliberately and load-bearingly. **NOTHING RENDERS WITHOUT A PERSON**: walk-ins and most channel orders carry no `customer_id`, so it is null and absent, with no empty state. **THREE SURFACES, ONE ENDPOINT**: the desktop drawer, the mirrored channel drawer and the phone's order detail; the Orders LIST and the kitchen print were considered and left to their own change under one-PR-per-change. **NO CHINESE IS MINTED** — `About this customer · 关于该顾客的备注` lifts its Chinese half whole from the live aria-label on the textarea the text is typed into, recorded as `docs/tacet-delivery-vocabulary.md` v1.124.
 
 2026-09-18 · v4.306 — **§170 · THE WAIT GETS A DATE ON THE CARD, AND §108's “a pill cannot” IS OVERTURNED — DECIDED BY ASH**, reading Shop from a Shenzhen address at 10:04 on a batch morning: *“our real issue isn't the tag — it's that a Shenzhen shopper sees NEXT BATCH with no date attached until they're deep in checkout. The word alone sounds like an indefinite wait.”* **THE REPORTED ROW WAS NOT A BUG** — shelf at zero, today genuinely on the cadence (anchor 2026-06-16, interval 2, verified through `lib/batch-cadence.js`), before the 11:00 ready hour, and a Shenzhen address so §108's local-run silence correctly did not fire. Honest, and still the wrong thing to show. **§108's ruling that the word describes the ITEM stands untouched**; what is overturned is its second half, that a date *“belongs in the checkout notice ... not in a pill, which cannot”*. It can: `local_fresh_date` has ridden every browse row since §80 and only the one transit day was missing. **A customer decides whether to tap on the CARD**, so answering three screens later was the defect. **THE CARD NAMES THE ARRIVAL, WHICH DIFFERS BY SHOPPER** — the local run is served the make day, a couriered order the day after — and both are stamped SERVER-SIDE (`fresh_ship_date`, `local_fresh_in_days`) for §82's reason: no handset clock decides whether a date is tomorrow. The client adds one to an integer and formats a string it was handed. **BOUNDED AT TWO DAYS**: `TODAY · 今天` and `TOMORROW · 明天` need no reading, past that the date itself (`SEP 20 · 9月20日`) rather than a count the shopper must do arithmetic on. **NO CHINESE IS COMPOSED** — both forms are lifted whole from live pairs (`checkout.wxml:400`, `checkout.js:1911`) — so Rule 4 is not amended; the lift is recorded as `docs/tacet-delivery-vocabulary.md` v1.123. **ALL SEVEN BROWSE SURFACES MOVE TOGETHER**, which is §108's own lesson and not an enlarged brief: dating the grid alone would rebuild the exact screenshot-pair bug §108 was written for. One derivation (`miniapp/utils/fresh-eta.js`); `public/shop.html` holds the only second copy because it is a standalone storefront that requires nothing, and its copy names the original. **The add toasts, `add-to-order` and the checkout notice are untouched** — the last answers a harder question (cart, store, zero-stock roll-forward) and stays binding where the two differ, which is the safe direction. Covered by `scripts/test_fresh_batch_eta.js`.
+2026-09-18 · v4.307 — **§171 · A PRINTER IS A BRAND, NOT A CONSTANT — ASKED BY ASH.** Ash, with a 商鹏 SP-T6-H for the new Yuexiu shop: *"we need to add this printer as well to our system"*, then, against a recommendation to return it for a Feie unit: *"think about different tenant, not all of them will use the same printer brand, so adding more printer options its better"*. **The second message overrides the first recommendation, which was argued on Roots' costs alone and was wrong on the product** — a tenant arrives with the printer already screwed to the counter. **The objection that survived is that slip templates must not exist twice**, and the shape answers it: `lib/feie.js` is 1210 lines of which ~120 are transport and ~1090 are 58mm layout, so there is **one renderer emitting house markup and a translation table at the wire**, per vendor, forever. **The house markup is Feie's tag set deliberately** — `<CB> <B> <L> <BOLD> <C>` — so the Feie adapter is a pass-through and no renderer moved. **The vendor is a per-store field** (`printer.by_store[].vendor`, `printer.kitchen_vendor`) because a four-shop tenant buys printers one shop at a time; **absent means `feie`**, which every saved row already is, so there is no migration. `integrations.spyun = { appid, appsecret }` rides the existing secret-box, and the global gate stops being `feieEnabled()` and becomes "is ANY vendor configured?" or a Shangpeng-only tenant is told printing is off while their printer works. **A chat-time claim that Shangpeng authenticates per-device off the label is CORRECTED here before it becomes folklore**: it is account-level like Feie, and the label's KEY binds the device once in the console — the same warning the Feie panel has carried since it was written, one vendor over. Endpoints and both signature shapes (`sha1(user+ukey+stime)` / sorted-params `MD5(…&appsecret=…)`) were **read off the published `@xesam/cloud-vendor-spyun` client and cross-checked against the base URL compiled into Shangpeng's own console bundle, not recalled**. **One thing is explicitly unverified**: Shangpeng's tag NAMES, because both vendor doc sites are client-rendered and would not open through this session's proxy — so the map ships as a commented one-screen table defaulting to pass-through, a one-line fix if a test print returns literal `<CB>`, and `BIG_WIDTH` moves into the adapter for the same reason. The SP-T6-H has **no auto-cutter** where the FP-V58-D does; nothing depends on it, recorded so the first "the printer is broken" finds the answer. **No Chinese composed** — the picker shows the vendors' own names 飞鹅 and 商鹏 — so Rule 4 is not engaged. Label printing and status polling are deliberately NOT in the contract.
 
 2026-09-17 · v4.305 — **§169 · BUYERS ARE A BREAKDOWN, NOT A NUMBER — ASKED BY ASH.** Ash, reading the phone's Trend screen: *"people bought I see low number it can't be all channels"*. It could not, and the reason is that every customer figure on both halves of the product is keyed on `retail_orders.customer_id`, which `routes/meituan-internal.js` and `routes/eleme-internal.js` have never written — so `COUNT(DISTINCT customer_id)` silently skips every marketplace order while the revenue four tiles above counts them. 79 buyers under ¥149,344. **THE DECISION IS THAT THEY STAY SEPARATE.** Summing the channels into one "people bought" would count the same human twice the moment they order in the mini app and on Meituan, and no join exists that could ever detect it — the identity spaces do not reconcile and never will. A breakdown is the closest to real that is also true. **THREE CHANNELS CAN BE COUNTED AND ONE CANNOT.** Storefront is exact on `customer_id`; Meituan is exact on `channel_customer_id` (wmUserId, "the only stable customer identity Meituan gives a merchant", stored since 2026-09-15); wholesale is countable on the real unmasked `recipient_phone` the gzgrocery daemon writes. **Eleme cannot, and that is now evidenced rather than assumed**: the shape digest was read back on 2026-09-17 and its `userInfo` object — the only person-shaped container in 189 field names — holds 33 keys that are consignee name, phones, address, distance and IM state, and no id of any kind. It identifies a DELIVERY, not a customer. **NEW-VS-RETURNING IS NOT ONE DEFINITION ACROSS THE THREE, and the doc says so rather than the screen implying otherwise**: storefront's *new* means first-ever paid order falling inside the window, which we compute; Meituan's means `channel_customer_orders = 1`, which is MEITUAN'S OWN lifetime count at the moment the order arrived and covers business done before this daemon existed. They are both honest and they are not the same question, so they are labelled by channel and never added together. **THE MEITUAN COUNT UNDER-REPORTS UNTIL MID-SEPTEMBER AND IS SHOWN ANYWAY, WITH ITS DATE.** `channel_customer_id` has only been stored since 2026-09-15, so a 30- or 90-day window reads low and will climb as history accrues; backfilling means re-reading every historical order from Meituan and is not done. A figure carrying *from 15 Sep* is honest; one silently reading 3 is not. **NOTHING ELSE MOVES.** Revenue, orders, products, stores, payments and visits are untouched — this section decides the customer figures and only those. Covered on the phone by `scripts/test_mobile_trend.js` and asserted against the payload's real key names so a server-side rename breaks a test rather than a card.
 
@@ -17888,8 +17889,110 @@ zero-stock roll-forward — and the two can differ legitimately, the card being 
 optimistic per-item answer and the checkout the binding per-order one. Where they
 differ the checkout is right, which is the safe direction: the card can only ever
 name a date the checkout then confirms or pushes back, never one it pulls in.
+## §171 — A PRINTER IS A BRAND, NOT A CONSTANT: THE SLIP RAIL TAKES A SECOND VENDOR
 
-## §171 — WHAT THE SHOP KNOWS ABOUT A PERSON IS READ ON EVERY ORDER, AND IS EDITED IN ONE PLACE
+**2026-09-18 · Asked by Ash**, holding a 商鹏 SP-T6-H bought for the new Yuexiu
+shop: *"we need to add this printer as well to our system"*, and then, against a
+recommendation to send it back and buy a Feie unit: *"think about different
+tenant, not all of them will use the same printer brand, so adding more printer
+options its better"*. **The second message is the decision and it overrides the
+first recommendation, which was argued on Roots' costs alone and was wrong on
+the product.** Roots is one tenant of a platform. A tenant arrives with the
+printer already screwed to the counter, and "buy a different printer" is not a
+thing an onboarding can say.
+
+**THE RECOMMENDATION THAT WAS OVERRULED IS RECORDED BECAUSE ITS ONE GOOD
+ARGUMENT SURVIVED.** The case against a second vendor was that the slip
+templates would exist twice — two renderers for two brands of the same 58mm
+paper, drifting the first time somebody edits one and not the other. That
+objection was correct about the danger and wrong about the necessity, and the
+shape below exists to answer it: **there is exactly one renderer and there will
+only ever be one.**
+
+**WHAT IS ACTUALLY VENDOR-SPECIFIC IS SMALL.** `lib/feie.js` is 1210 lines and
+reads as one thing; it is two. Roughly 120 lines are transport — the endpoint,
+the signature, the byte cap, the success test. The remaining ~1090 are 58mm
+layout: column arithmetic, the bilingual name join, slot absolutisation, the
+full-width yuan sign, the five markup tags. **Only the tags touch the vendor.**
+So the split is not "a renderer per brand", it is **one renderer emitting house
+markup, and a translation table at the wire.**
+
+**THE HOUSE MARKUP IS FEIE'S TAG SET, DELIBERATELY, AND THAT IS NOT LAZINESS.**
+`<CB> <B> <L> <BOLD> <C>` become the canonical vocabulary every slip is written
+in, and the Feie adapter is a pass-through. The alternative — a neutral
+intermediate form, invented here — would have rewritten every renderer in the
+file on day one to gain nothing a translation table does not already give, and
+would have put a second untested layer under the one surface in this product
+that a customer holds in their hand. **A vendor adapter translates house markup
+into its own on the way out. That is the whole contract.**
+
+**THE VENDOR IS A PER-STORE FIELD, NOT A TENANT-WIDE ONE.** A tenant with four
+shops may well have three Feie and one Shangpeng, because printers are bought
+one at a time by whoever opened that shop. So `printer.by_store` rows take an
+optional `vendor`, the kitchen takes `printer.kitchen_vendor`, and **an absent
+`vendor` means `feie`** — which is what every row saved before today is, so
+there is no migration and no backfill, and a tenant who never touches this
+notices nothing.
+
+**THE CREDENTIALS ARE PER VENDOR AND PER TENANT, ON THE RAIL THAT ALREADY
+EXISTS.** `integrations.spyun = { appid, appsecret }` sits beside
+`integrations.feie = { user, ukey }`, through the same secret-box and the same
+boot hydration as every other integration. A tenant configures the brands they
+own and leaves the rest blank. **The global "is printing on?" gate stops being
+`feieEnabled()` and becomes "is ANY vendor configured?"** — otherwise a
+Shangpeng-only tenant is told printing is unconfigured while their printer sits
+there working.
+
+**WHAT THE DEVICE LABEL IS FOR, CORRECTED.** An earlier reading of this in
+chat had Shangpeng authenticating per-device on the SN + KEY printed on the
+label. **That was wrong and is corrected here before it becomes folklore.**
+Shangpeng authenticates exactly as Feie does: an account-level pair from the
+developer console (`appid` + `appsecret`), with the device's SN naming which
+printer to print at. The label's KEY (`pkey`) binds the device to the account
+once, in the console or the app, and the server never sends it. **This is the
+same mistake the Feie block in the admin screen has warned about since it was
+written** — *"the USERKEY is from your developer console, not the secret on the
+label"* — and it is the same warning, for the same reason, one vendor over.
+
+**THE SIGNATURES DIFFER AND THAT IS ALL THE TRANSPORT REALLY IS.** Feie:
+`sha1(user + ukey + stime)`, form-posted to `api.feieyun.cn`, success is
+`ret === 0`. Shangpeng: every parameter sorted by key, joined `k=v` with `&`,
+`&appsecret=…` appended, MD5'd, posted to `open.spyun.net/v1/printer/print`,
+success is `errorcode === 0`. Both endpoints and both signature shapes were read
+off the published `@xesam/cloud-vendor-spyun` client and cross-checked against
+the base URL compiled into Shangpeng's own developer console bundle, **not
+recalled** — the vendor's documentation sites are client-rendered and would not
+open through this session's proxy.
+
+**ONE THING IS NOT VERIFIED AND IS MARKED AS SUCH IN THE CODE.** Shangpeng's
+markup tag names could not be read from a primary source for the reason just
+given. The adapter's translation table therefore ships as an explicit,
+one-screen map with every entry commented, defaulting to pass-through on the
+reading that the Chinese cloud-printer vendors share this convention. **It is a
+table, not a belief** — if a test print comes back with literal `<CB>` on the
+paper, the fix is one line in one file and no renderer moves. **The enlarged-line
+width is the same class of unknown**: `BIG_WIDTH = 16` was measured off a Feie
+FP-V58-D head and is not promised to hold on an SP-T6-H, so it moves into the
+adapter where a per-vendor value can live.
+
+**THE SP-T6-H HAS NO AUTO-CUTTER** (`自动切纸:不支持` on its label), where the
+FP-V58-D does. Nothing in the code depends on this — the slip is the same
+bytes either way — but the Yuexiu counter tears by hand and it is recorded so
+the first person told "the printer is broken, it doesn't cut" can find out here
+that it never did.
+
+**NO CHINESE WAS COMPOSED.** The admin screen gains a vendor picker whose two
+options are the vendors' own registered names — 飞鹅 and 商鹏 — and the labels
+around it reuse strings already live on that panel. `docs/tacet-delivery-vocabulary.md`
+Rule 4 is not engaged.
+
+**WHAT IS NOT DECIDED HERE.** Label printing, order-status polling and the
+queue-clearing calls that both vendors expose are not wired: nothing in this
+product asks for them, and an adapter contract wide enough to cover a feature
+nobody has asked for is how the interface gets fixed wrong before the second
+implementation arrives. The contract is `enabled` and `printContent`, and it
+grows when a third vendor or a real requirement makes it grow.
+## §172 — WHAT THE SHOP KNOWS ABOUT A PERSON IS READ ON EVERY ORDER, AND IS EDITED IN ONE PLACE
 
 **DECIDED BY ASH, 2026-09-18**, looking at TC000750's drawer: *"an order note
 will appear only for that order. however we need a note that will appear for
@@ -17954,7 +18057,7 @@ the very textarea this text is typed into, in the customer drawer. Same string,
 same thing, both screens. Recorded in `docs/tacet-delivery-vocabulary.md`
 v1.124, which locks nothing new.
 
-**ADDENDUM, 2026-09-18 (v4.308) — THE WRITE END. A NOTE NOBODY CAN FIND IS
+**ADDENDUM, 2026-09-18 (v4.309) — THE WRITE END. A NOTE NOBODY CAN FIND IS
 WORTH NOTHING.** Ash, minutes after the read end was built, on the customer
 page with the control three inches from the cursor: *“im on customer page wher
 is it”*. With nothing stored, the Know block collapses to a bare `Edit` under
@@ -17971,4 +18074,3 @@ an empty block can see; the heading names the CONTROL. That distinction is the
 whole of this addendum and is the thing to keep if either is ever revisited.
 Recorded as `docs/tacet-delivery-vocabulary.md` v1.125, which locks nothing
 new. Covered by the same suite as the read end.
-

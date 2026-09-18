@@ -11400,10 +11400,17 @@
           <!-- ── Fulfillment: 飞鹅 cloud printer ── -->
           <div class="group-card">
             <div class="group-card-head">
-              <h3>Receipt printing — Feie cloud printer · 飞鹅云打印出单 <span id="feie-chip"></span></h3>
-              <div class="muted">Auto-prints a ticket at the store the moment an order is paid — no PC needed, the printer also voice-announces it. Bind the printer in the Feie app, then get your <b>USERKEY</b> from a developer app at <a href="https://www.feieyun.com" target="_blank" style="color:var(--accent)">feieyun.com</a>. · 付款后自动在门店打印小票并语音播报。</div>
+              <h3>Receipt printing — cloud printers · 云打印出单</h3>
+              <div class="muted" data-lang-block="en">Auto-prints a ticket at the store the moment an order is paid — no PC needed, the printer also voice-announces it. Fill in the account for whichever brands you own, then pick each store's brand and <b>SN</b> below.</div>
+              <div class="muted" data-lang-block="cn">付款后自动在门店打印小票并语音播报。填写你所用品牌的账号,再为每家门店选择品牌与编号。</div>
             </div>
-            <div class="muted" style="font-size:11px;margin-bottom:12px;background:var(--bg-elev-1);border-radius:6px;padding:8px 10px">⚠ The <b>USERKEY</b> is from your feieyun.com developer console — <em>not</em> the secret/KEY on the device label. One account holds all printers; each store's <b>SN</b> is set per-store below. · <b>USERKEY</b> 来自你的 feieyun.com 开发者后台 —— <em>不是</em>设备标签上的 secret/KEY。一个账号管理所有打印机;各门店的 <b>SN</b> 在下方逐店设置。</div>
+            <div class="muted" style="font-size:11px;margin-bottom:12px;background:var(--bg-elev-1);border-radius:6px;padding:8px 10px">
+              <div data-lang-block="en">⚠ For <b>both</b> brands the credentials come from the vendor's <b>developer console</b> — <em>not</em> the 密钥/KEY printed on the device label. That label key only binds the printer to your account, once, in the vendor's own app. One account holds all your printers of that brand; each store's <b>SN</b> is set per-store below.</div>
+              <div data-lang-block="cn">⚠ 两个品牌的凭据都来自厂商<b>开发者后台</b> —— <em>不是</em>设备标签上的 密钥/KEY(标签密钥只用于在厂商 App 里绑定设备一次)。一个账号管理该品牌的所有打印机;各门店的编号在下方逐店设置。</div>
+            </div>
+            <div class="field-label" style="margin-bottom:6px">飞鹅 Feie <span id="feie-chip"></span></div>
+            <div class="muted" style="font-size:11px;margin-bottom:8px" data-lang-block="en">Bind the printer in the Feie app, then take your <b>USERKEY</b> from a developer app at <a href="https://www.feieyun.com" target="_blank" style="color:var(--accent)">feieyun.com</a>.</div>
+            <div class="muted" style="font-size:11px;margin-bottom:8px" data-lang-block="cn">在飞鹅 App 里绑定打印机,再从 <a href="https://www.feieyun.com" target="_blank" style="color:var(--accent)">feieyun.com</a> 开发者应用取得 <b>USERKEY</b>。</div>
             <div class="ops-grid">
               <div>
                 <label for="feie-user" class="field-label">Account · 账号 (USER)</label>
@@ -11413,6 +11420,20 @@
                 <label for="feie-ukey" class="field-label">USERKEY · 用户密钥 (UKEY)</label>
                 <input type="password" id="feie-ukey" data-ph-en="paste USERKEY from dev console" data-ph-cn="粘贴开发者后台的 USERKEY" placeholder="paste USERKEY from dev console">
               </div>
+              <div style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:12px;margin-top:2px">
+                <div class="field-label" style="margin-bottom:6px">商鹏 Shangpeng <span id="spyun-chip"></span></div>
+                <div class="muted" style="font-size:11px" data-lang-block="en">Bind the printer in the Shangpeng app, then take your <b>APPID</b> and <b>APPSECRET</b> from the developer console at <a href="https://developer.spyun.net" target="_blank" style="color:var(--accent)">developer.spyun.net</a>. Leave blank if you own no Shangpeng printers.</div>
+                <div class="muted" style="font-size:11px" data-lang-block="cn">在商鹏 App 里绑定打印机,再从 <a href="https://developer.spyun.net" target="_blank" style="color:var(--accent)">developer.spyun.net</a> 开发者后台取得 <b>APPID</b> 与 <b>APPSECRET</b>。没有商鹏打印机则留空。</div>
+              </div>
+              <div>
+                <label for="spyun-appid" class="field-label">APPID · 开发者ID</label>
+                <input type="text" id="spyun-appid" style="font-family:monospace" data-ph-en="APPID from dev console" data-ph-cn="开发者后台的 APPID" placeholder="APPID from dev console">
+              </div>
+              <div>
+                <label for="spyun-appsecret" class="field-label">APPSECRET · 开发者密钥</label>
+                <input type="password" id="spyun-appsecret" data-ph-en="paste APPSECRET from dev console" data-ph-cn="粘贴开发者后台的 APPSECRET" placeholder="paste APPSECRET from dev console">
+              </div>
+              <div style="grid-column:1/-1;border-top:1px solid var(--line);padding-top:12px;margin-top:2px"></div>
               <div style="grid-column:1/-1;display:flex;align-items:center;gap:10px">
                 <input type="checkbox" id="feie-auto" style="width:18px;height:18px">
                 <label for="feie-auto" style="font-size:13px;color:var(--text-1)">Auto-print every paid order at its store · 付款后在对应门店自动打印</label>
@@ -11439,10 +11460,14 @@
             <div style="border-top:1px solid var(--line);margin:4px 0 14px"></div>
             <div class="field-label">Kitchen printer · 厨房打印机</div>
             <div class="muted" style="font-size:12px;margin-bottom:10px">The kitchen prints its own request slip when a job lands in the production queue — the paper copy of the notification, for a room where nobody is watching a phone. Leave the SN blank if the kitchen has no printer. · 制作请求进入队列时,厨房自动打印制作单;没有打印机则留空。</div>
-            <div style="display:grid;grid-template-columns:2fr 1.6fr 0.8fr;gap:10px;align-items:end;margin-bottom:14px">
+            <div style="display:grid;grid-template-columns:1.6fr 1fr 1.4fr 0.7fr;gap:10px;align-items:end;margin-bottom:14px">
               <div>
                 <label for="feie-kitchen-sn" class="field-label" style="font-size:10px">Printer SN · 编号</label>
                 <input type="text" id="feie-kitchen-sn" style="font-family:monospace" data-ph-en="e.g. 550540977" data-ph-cn="例如 550540977" placeholder="e.g. 550540977">
+              </div>
+              <div>
+                <label for="feie-kitchen-vendor" class="field-label" style="font-size:10px">Brand · 品牌</label>
+                <select id="feie-kitchen-vendor"></select>
               </div>
               <div>
                 <label for="feie-kitchen-when" class="field-label" style="font-size:10px">When it prints · 何时打印</label>

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * The customer's STANDING note reaches every order, and never the customer (§171).
+ * The customer's STANDING note reaches every order, and never the customer (§172).
  *
  *   node scripts/test_customer_standing_note.js
  *
- * §171 added no storage. `retail_customers.note` and `.tags` already existed;
+ * §172 added no storage. `retail_customers.note` and `.tags` already existed;
  * what it added is a READ, on the join `GET /api/retail-admin/orders/:id`
  * already made for the nickname and phone. Three things can break that quietly,
  * and each is a case below:
@@ -121,7 +121,7 @@ check('the desktop drawer reads customer_standing_note', deskSrc.includes('custo
 check('the desktop drawer reads customer_standing_tags', deskSrc.includes('customer_standing_tags'));
 check('the phone reads both too',
       phoneSrc.includes('customer_standing_note') && phoneSrc.includes('customer_standing_tags'));
-check('the desktop Edit button navigates rather than opening a field (§171)',
+check('the desktop Edit button navigates rather than opening a field (§172)',
       /custStandingNoteRow[\s\S]{0,1600}orderGotoCustomer/.test(deskSrc)
       && !/custStandingNoteRow[\s\S]{0,1600}<textarea/.test(deskSrc));
 
