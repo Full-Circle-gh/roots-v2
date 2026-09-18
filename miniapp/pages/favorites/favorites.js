@@ -6,6 +6,7 @@ const api      = require('../../utils/api');
 const cart     = require('../../utils/cart');
 const lang     = require('../../utils/lang');
 const delivery = require('../../utils/delivery');
+const freshEta = require('../../utils/fresh-eta');
 
 const COPY_EN = {
   kicker: 'FAVORITES',
@@ -148,8 +149,11 @@ Page({
            made today, on the run   → orderable, and SILENT
            a fresh meal not yet made → NEXT BATCH · 下批现做, for EVERY shopper
                                        (§108: same wait, same word, wherever
-                                       they are; only the date differs, and the
-                                       date lives in the checkout notice)
+                                       they are; only the date differs — and
+                                       since §170 that date is APPENDED here
+                                       rather than held back for the checkout,
+                                       by the one helper every browse surface
+                                       shares)
            anything else reservable  → PRE-ORDER · 可预订, unchanged — a grocery
                                        tile names no batch, none being cooked
          `preorder` STAYS TRUE in all three. It is what keeps the tile out of
@@ -161,7 +165,7 @@ Page({
          never compares a date against the handset's clock. */
       const today = preorder && !!this._onLocalRun && !!p.local_fresh_today;
       const preText = (!preorder || today) ? ''
-        : p.is_batch_made ? copy.nextBatch
+        : p.is_batch_made ? freshEta.withFreshArrival(copy.nextBatch, p, this._onLocalRun, L)
                           : copy.preorder;
       const priceDrop = flash && reg > eff ? Math.round(reg - eff) : 0;
       const name = L === 'cn' ? (p.name_cn || p.name_en) : (p.name_en || p.name_cn);

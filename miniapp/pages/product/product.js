@@ -10,6 +10,7 @@ const cart     = require('../../utils/cart');
 const track    = require('../../utils/track');
 const delivery = require('../../utils/delivery');
 const config   = require('../../utils/config');
+const freshEta = require('../../utils/fresh-eta');
 
 // WHICH CHARACTER SIGNS THIS PAGE — the mini app's half of lib/brand-signature
 // resolveCharacter(). A WeChat bundle cannot require from lib/, so this is a
@@ -614,7 +615,11 @@ Page({
           preorder = !this._onLocalRun;
           preKind = _preKind(p, this._onLocalRun);
           if (preKind === 'batch') {
-            stockTag = L === 'cn' ? '下批现做' : 'NEXT BATCH';
+            // §170 — and WHEN it arrives, so the wait is a date rather than an
+            // open question. utils/fresh-eta owns the choice between the make
+            // day (local run) and the day after it (couriered).
+            stockTag = freshEta.withFreshArrival(
+              L === 'cn' ? '下批现做' : 'NEXT BATCH', p, this._onLocalRun, L);
             stockTagKind = 'pre';
           } else if (preKind === 'preorder') {
             stockTag = L === 'cn' ? '可预订' : 'PRE-ORDER';
@@ -892,7 +897,13 @@ Page({
         : hasVariants
           ? (L === 'cn' ? '选择规格' : 'CHOOSE A SIZE')
           : preKind === 'batch'
-            ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
+            // §170 — the badge's date comes down to the button too, and this is
+            // the one surface where it is doing more than informing: this is the
+            // tap that commits, so "arrives tomorrow" belongs on it more than
+            // anywhere else on the page. §108's rule is unbroken — the WORD is
+            // still the badge's word, and both still come off one `preKind`.
+            ? freshEta.withFreshArrival(
+                L === 'cn' ? '下批现做' : 'NEXT BATCH', p, this._onLocalRun, L)
             : preKind === 'preorder'
               ? (L === 'cn' ? '预订' : 'PRE-ORDER')
               : (L === 'cn' ? '加入购物车' : 'ADD TO BASKET'),
@@ -1245,7 +1256,8 @@ Page({
          word because one shared `preLabel` cannot say two things at once. */
       const rowKind = _preKind(m, this._onLocalRun);
       const preorder = !!rowKind;
-      const preTxt = rowKind === 'batch' ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
+      const preTxt = rowKind === 'batch'
+        ? freshEta.withFreshArrival(L === 'cn' ? '下批现做' : 'NEXT BATCH', m, this._onLocalRun, L)
         : rowKind === 'preorder' ? (L === 'cn' ? '可预订' : 'PRE-ORDER')
         : '';
       const soldOut = out && !orderable;

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.305
+# Tacet shared-core consolidation — decisions record, v4.306
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-18 · v4.306 — **§170 · THE WAIT GETS A DATE ON THE CARD, AND §108's “a pill cannot” IS OVERTURNED — DECIDED BY ASH**, reading Shop from a Shenzhen address at 10:04 on a batch morning: *“our real issue isn't the tag — it's that a Shenzhen shopper sees NEXT BATCH with no date attached until they're deep in checkout. The word alone sounds like an indefinite wait.”* **THE REPORTED ROW WAS NOT A BUG** — shelf at zero, today genuinely on the cadence (anchor 2026-06-16, interval 2, verified through `lib/batch-cadence.js`), before the 11:00 ready hour, and a Shenzhen address so §108's local-run silence correctly did not fire. Honest, and still the wrong thing to show. **§108's ruling that the word describes the ITEM stands untouched**; what is overturned is its second half, that a date *“belongs in the checkout notice ... not in a pill, which cannot”*. It can: `local_fresh_date` has ridden every browse row since §80 and only the one transit day was missing. **A customer decides whether to tap on the CARD**, so answering three screens later was the defect. **THE CARD NAMES THE ARRIVAL, WHICH DIFFERS BY SHOPPER** — the local run is served the make day, a couriered order the day after — and both are stamped SERVER-SIDE (`fresh_ship_date`, `local_fresh_in_days`) for §82's reason: no handset clock decides whether a date is tomorrow. The client adds one to an integer and formats a string it was handed. **BOUNDED AT TWO DAYS**: `TODAY · 今天` and `TOMORROW · 明天` need no reading, past that the date itself (`SEP 20 · 9月20日`) rather than a count the shopper must do arithmetic on. **NO CHINESE IS COMPOSED** — both forms are lifted whole from live pairs (`checkout.wxml:400`, `checkout.js:1911`) — so Rule 4 is not amended; the lift is recorded as `docs/tacet-delivery-vocabulary.md` v1.123. **ALL SEVEN BROWSE SURFACES MOVE TOGETHER**, which is §108's own lesson and not an enlarged brief: dating the grid alone would rebuild the exact screenshot-pair bug §108 was written for. One derivation (`miniapp/utils/fresh-eta.js`); `public/shop.html` holds the only second copy because it is a standalone storefront that requires nothing, and its copy names the original. **The add toasts, `add-to-order` and the checkout notice are untouched** — the last answers a harder question (cart, store, zero-stock roll-forward) and stays binding where the two differ, which is the safe direction. Covered by `scripts/test_fresh_batch_eta.js`.
 
 2026-09-17 · v4.305 — **§169 · BUYERS ARE A BREAKDOWN, NOT A NUMBER — ASKED BY ASH.** Ash, reading the phone's Trend screen: *"people bought I see low number it can't be all channels"*. It could not, and the reason is that every customer figure on both halves of the product is keyed on `retail_orders.customer_id`, which `routes/meituan-internal.js` and `routes/eleme-internal.js` have never written — so `COUNT(DISTINCT customer_id)` silently skips every marketplace order while the revenue four tiles above counts them. 79 buyers under ¥149,344. **THE DECISION IS THAT THEY STAY SEPARATE.** Summing the channels into one "people bought" would count the same human twice the moment they order in the mini app and on Meituan, and no join exists that could ever detect it — the identity spaces do not reconcile and never will. A breakdown is the closest to real that is also true. **THREE CHANNELS CAN BE COUNTED AND ONE CANNOT.** Storefront is exact on `customer_id`; Meituan is exact on `channel_customer_id` (wmUserId, "the only stable customer identity Meituan gives a merchant", stored since 2026-09-15); wholesale is countable on the real unmasked `recipient_phone` the gzgrocery daemon writes. **Eleme cannot, and that is now evidenced rather than assumed**: the shape digest was read back on 2026-09-17 and its `userInfo` object — the only person-shaped container in 189 field names — holds 33 keys that are consignee name, phones, address, distance and IM state, and no id of any kind. It identifies a DELIVERY, not a customer. **NEW-VS-RETURNING IS NOT ONE DEFINITION ACROSS THE THREE, and the doc says so rather than the screen implying otherwise**: storefront's *new* means first-ever paid order falling inside the window, which we compute; Meituan's means `channel_customer_orders = 1`, which is MEITUAN'S OWN lifetime count at the moment the order arrived and covers business done before this daemon existed. They are both honest and they are not the same question, so they are labelled by channel and never added together. **THE MEITUAN COUNT UNDER-REPORTS UNTIL MID-SEPTEMBER AND IS SHOWN ANYWAY, WITH ITS DATE.** `channel_customer_id` has only been stored since 2026-09-15, so a 30- or 90-day window reads low and will climb as history accrues; backfilling means re-reading every historical order from Meituan and is not done. A figure carrying *from 15 Sep* is honest; one silently reading 3 is not. **NOTHING ELSE MOVES.** Revenue, orders, products, stores, payments and visits are untouched — this section decides the customer figures and only those. Covered on the phone by `scripts/test_mobile_trend.js` and asserted against the payload's real key names so a server-side rename breaks a test rather than a card.
 
@@ -17815,3 +17817,70 @@ question from who bought. Left for its own decision.
 "returning?" with a label rather than an id. Settling it means reading tag
 VALUES, which the shape digest deliberately strips. That is a different
 permission from reading field names and is not taken in passing.
+
+## §170 — THE WAIT GETS A DATE ON THE CARD, AND §108's "A PILL CANNOT" IS OVERTURNED
+
+**DECIDED BY ASH, 2026-09-18**, reading the mini app Shop from a Shenzhen
+address at 10:04 on a batch morning: *"our real issue isn't the tag — it's that
+a Shenzhen shopper sees NEXT BATCH with no date attached until they're deep in
+checkout. The word alone sounds like an indefinite wait."*
+
+**NOTHING WAS BROKEN, AND THAT IS WHY THIS IS A DECISION AND NOT A FIX.** The
+reported row — a sold-out Tabbouleh Bowl carrying `NEXT BATCH` on a day the
+kitchen was cooking — was three correct rules meeting. The shelf was at zero, so
+`_stockState` made the row reservable rather than dead. Today WAS on the cadence
+(anchor 2026-06-16, interval 2 → 2026-09-18 is a batch day, confirmed against
+`lib/batch-cadence.js` rather than by hand) and the hour was before the 11:00
+ready hour, so the server stamped `local_fresh_today`. And the address was
+Shenzhen, so `local_run` was false and §108's silence — which belongs to the
+local run alone — correctly did not fire. That shopper genuinely waits for a
+courier. The label was honest and it was still the wrong thing to show.
+
+**WHAT §108 GOT RIGHT AND WHAT IT GOT WRONG.** Right: *the word describes the
+item, not the shopper* — a meal not yet made is `NEXT BATCH` to everybody, and
+that stands here untouched. Wrong: *"the DATE ... belongs in the checkout
+notice, which states it, not in a pill, which cannot."* The pill can. The date
+was already on the wire when §108 was written — `decorateFreshBatch` has stamped
+`local_fresh_date` on every browse row since §80 — and the only thing missing was
+the one day of transit between the make day and a couriered arrival. **A
+customer decides whether to tap on the card, not in the checkout**, so putting
+the answer three screens after the question was the defect, and it was a design
+choice rather than a limit.
+
+**THE CARD NAMES THE ARRIVAL, NOT THE MAKE DAY**, and those are different dates
+for different shoppers: the local run is served the day the batch is made, a
+couriered order the day after. Both are computed on the SERVER and stamped per
+row — `fresh_ship_date` and `local_fresh_in_days` beside the existing pair — for
+exactly §82's reason. "Is this tomorrow" is a question about the tenant's
+calendar, and a handset in another zone, or with a wrong clock, must not be the
+thing that answers it. The client adds one to an INTEGER and formats a string it
+was handed; it performs no date arithmetic and reads no clock.
+
+**THE WORD IS BOUNDED AT TWO DAYS.** `TODAY · 今天` and `TOMORROW · 明天` are
+worth more than a date because they need no reading; past that a relative count
+("in 3 days") makes a shopper do the arithmetic the card was supposed to save
+them, so the card prints the date itself — `SEP 20 · 9月20日`. Both forms are
+LIFTED whole from live pairs (`checkout.wxml:400` for the two day words,
+`checkout.js:1911` for the Chinese date), so **no Chinese is composed** and
+`docs/tacet-delivery-vocabulary.md` Rule 4 is not engaged as an amendment; the
+lift is recorded there as v1.123 so the pairs can be found from either end.
+
+**ALL SEVEN BROWSE SURFACES MOVE TOGETHER, and that is the whole of §108's
+lesson rather than an enlargement of the brief.** Ash asked for the card. The
+card is one of seven places the word is drawn — the shop grid, the shop size
+sheet, the PDP badge, the PDP button, the PDP size rows, the favourites tile and
+the web shop card — and §108 exists BECAUSE two of them disagreed and Ash caught
+it in a screenshot pair. Dating one and not the rest would rebuild that bug with
+the same two products. One derivation answers all of them
+(`miniapp/utils/fresh-eta.js`); `public/shop.html` carries the only second copy
+because it is a standalone single-file storefront that requires nothing, and its
+copy names the original.
+
+**THE ADD TOASTS AND `add-to-order` STAY OUT**, keeping §108's own carve-out: a
+toast is read after the decision it would inform, and the add-on picker is not a
+browse surface. **THE CHECKOUT NOTICE IS UNTOUCHED.** It answers a harder
+question than the card does — it knows the cart, the fulfilling store and the
+zero-stock roll-forward — and the two can differ legitimately, the card being the
+optimistic per-item answer and the checkout the binding per-order one. Where they
+differ the checkout is right, which is the safe direction: the card can only ever
+name a date the checkout then confirms or pushes back, never one it pulls in.
