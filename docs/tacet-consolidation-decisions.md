@@ -23,7 +23,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-18 · v4.311 — **§172 CORRECTION · A HEADING AT ONE END AND A BUTTON AT THE OTHER ARE NOT ONE CONTROL — REPORTED BY ASH**, on the shipped version: *“its not clear. look where text positioned”*. v4.309's label took the line with `flex: 1` and pushed its button to the far edge of the drawer, rebuilding in a new shape the confusion it was added to end. **The two now sit together**; the Edit button keeps its right-hand seat only once a note exists, where it belongs beside the note line. **The verb changes with the state too** — `Edit · 编辑` is a lie on an empty block, so a bare one offers `Add · 添加`, the live pair the tag row's own button already uses. Nothing minted; `flex: none` and the verb are both asserted in `scripts/test_customer_standing_note.js` so neither is tidied back. Vocabulary v1.128.
+2026-09-18 · v4.311 — **§172 CORRECTION · A HEADING AT ONE END AND A BUTTON AT THE OTHER ARE NOT ONE CONTROL — REPORTED BY ASH**, on the shipped version: *“its not clear. look where text positioned”*. v4.309's label took the line with `flex: 1` and pushed its button to the far edge of the drawer, rebuilding in a new shape the confusion it was added to end. **The two now sit together**; the Edit button keeps its right-hand seat only once a note exists, where it belongs beside the note line. **The verb changes with the state too** — `Edit · 编辑` is a lie on an empty block, so a bare one offers `Add · 添加`, the live pair the tag row's own button already uses. Nothing minted; `flex: none` and the verb are both asserted in `scripts/test_customer_standing_note.js` so neither is tidied back. Vocabulary v1.130.
 
 2026-09-18 · v4.310 — **§171 ADDENDUM 1 · THE SIGNATURE WAS WRONG IN THE CASE, AND ONLY THE LIVE API SAID SO.** Hours after §171 shipped, with Ash's Shangpeng credentials in hand, a read-only `GET v1/printer/info` probe — run deliberately BEFORE any test print — returned `{"errorcode":-4,"errormsg":"签名错误"}`. **The algorithm was right and the case was wrong**: the MD5 must be **UPPERCASE**. Twelve conventions were put to the live endpoint; eleven were refused and exactly one got through, the uppercase form of the one already shipped. **This corrects §171's own sourcing claim**, which offered "read off the published `@xesam/cloud-vendor-spyun` client … not recalled" as grounds for trust: that client delegates hashing to an injected signer and so fixes the input string while saying nothing about the output format — a source can be primary and still not answer the question asked of it. 签名错误 names no field and, against freshly-typed credentials, reads exactly like a mistyped APPSECRET, so the wrong thing would have been debugged for hours. `scripts/test_printer_vendors.js` now pins the case **three ways**, one test named for the bug, so deleting an "unnecessary" `.toUpperCase()` fails the build rather than the printer; the lowercase revert was confirmed red. **The transferable part is the probe**: where a vendor's documentation cannot be read — both Shangpeng doc sites are client-rendered and would not open through this session's proxy, which is why the tag map shipped flagged — **the API can still be asked**, in one request, before the hardware is blamed. The tag map remains unverified and still expects a test print. **A second finding, not ours to fix**: with the signature accepted the probe returned `{"errorcode":2,"errormsg":"打印机不存在"}` — the device is not yet bound to the account, an app-side step with the label's KEY, recorded because that message against correct credentials is otherwise alarming to read.
 2026-09-18 · v4.309 — **§172 ADDENDUM · THE WRITE END: A CONTROL THAT DOES NOT NAME ITSELF — REPORTED BY ASH**, on the customer page with the cursor inches from it: *“im on customer page wher is it”*. An empty Know block collapsed to a bare `Edit` under the name and said nothing about the two things behind it. It now shows `What we know · 备注与标签` — **not a new string**: the heading the phone's customer record already used for this same block, already locked, arriving on its second surface. **Shown only while the block is empty**, so the space saving that collapsed the old 210px card is kept. **The rejected empty-state stays rejected** — `暂无备注。` names the absence, the heading names the control, and that distinction is the part to keep. `docs/tacet-delivery-vocabulary.md` v1.125 locks nothing new. Covered by `scripts/test_customer_standing_note.js`, including the stylesheet's own `[hidden]` guard — the trap `test_admin_install.js` exists for.
@@ -18302,3 +18302,59 @@ a line off is defensible, and it is a different question: it needs a channel, an
 a rule about what is worth interrupting a cook mid-service for. The record
 (`declined_at`, `declined_by_name`) is being kept either way, so that decision is
 not blocked by this one.
+
+## §176 — THE KITCHEN'S ASK CARRIES ITS OWN URGENCY, PER LINE, AND THE DATE IS THE OTHER END OF THE SAME DIAL
+
+**Decided by Ash, 2026-09-18.** Three asks in one brief, from the kitchen:
+*"need to add a mark that mention urgent order so buying department will know
+to priorities"*, and then *"each item add an option to add buying date, kitchen
+staff basiclly can tell the buying deparmtent that this item can be bought
+later, its not urgent"*.
+
+**THE SHAPE WAS PUT AS THREE OPTIONS AND ASH CHOSE C.** Both marks sit on the
+LINE, not on the request: each item carries its own `urgent` flag and its own
+`needed_by` date, and a request has neither of its own. The alternatives were
+A — one urgent switch for the whole request plus a per-line date, which is the
+brief read literally — and B — one "when do you need it" control per line, with
+the soonest bucket standing in for urgent.
+
+**THE OBJECTION WAS RAISED BEFORE THE CHOICE AND IS RECORDED HERE BECAUSE IT
+SURVIVES IT.** Urgent and "this can wait until the 30th" are the two ends of
+one dial, and C lets a line say both at once: `urgent = 1` with
+`needed_by = next Tuesday` is a line whose two fields disagree, and nothing in
+the schema or the route can stop it. Ash chose C with that stated. So the
+contradiction is a fact about the data from this section on, and the rule is
+that **THE URGENT FLAG WINS WHEREVER THE TWO DISAGREE**: the buyer's list sorts
+on `urgent` first and `needed_by` only within it, and the row prints both marks
+rather than resolving them, because a screen that silently picked one would be
+deciding something the kitchen said twice. A buyer seeing "Urgent · by 30 Sep"
+is being told the truth about a request that contains one.
+
+**NEITHER MARK IS REQUIRED, AND NEITHER IS PREFILLED.** §39's no-prefill rule
+applies for §39's reason: an urgency nobody claimed is an urgency nobody meant.
+A line with neither is the ordinary case and must stay one tap — which is why
+both controls appear only on a row that already has a quantity, and why a
+request of plain lines looks exactly as it did before this section.
+
+**THE MERGE IS THE SAFE DIRECTION, NOT THE LAST ONE.** §86's one-material-one-line
+rule adds the quantities when the same material arrives twice in one request.
+The new fields cannot be added, so: `urgent` is OR-ed, and `needed_by` takes the
+EARLIER of the two, with a missing date treated as later than any date. Both
+rules err toward buying sooner. The opposite — last-write-wins — would let the
+second of two identical lines quietly cancel the first's urgency, which is the
+one failure a kitchen would never see coming.
+
+**NO UNIT ARITHMETIC AND NO STATUS ARITHMETIC.** `needed_by` is a plain date the
+kitchen typed. It is not a deadline the system enforces, nothing expires on it,
+and a date in the past is accepted rather than refused: a line that was needed
+yesterday is late, which is information, and refusing it would only mean the
+kitchen writes the real date somewhere the buyer cannot see. §86's rollup is
+untouched — `sourced` still means every line has a PO, and urgency has no
+bearing on it.
+
+**WHAT IS NOT DECIDED HERE.** No notification, no push, no escalation and no
+rail-dot colour: the dot §171's neighbour put on the Purchasing rail counts the
+queue, and whether an urgent line should change its colour is that section's
+question, not this one. No urgency on the purchase order either — a PO is the
+buyer's document and its priority is the buyer's to set, which is the same line
+§86 drew when it refused to let a cook's tap reach the books.

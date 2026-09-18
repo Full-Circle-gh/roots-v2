@@ -366,6 +366,81 @@ async function main() {
      'no cost of any kind reaches the kitchen');
   ok(everyLine.every(l => !('sourced_po_id' in l)), 'and no purchase order number either');
 
+console.log('\n══ 14 · §176 · a line carries its own urgency and its own wanted-by day ══');
+  // SHAPE C, chosen by Ash over one switch for the whole request: both marks sit
+  // on the LINE. Neither is required and neither is prefilled (§39).
+  r = await call('POST', '/api/retail-admin/material-requests',
+                 { send: true, items: [{ ingredient_id: 12, qty: 6, urgent: true },
+                                       { ingredient_id: 11, qty: 2, needed_by: '2026-12-24' }] });
+  eq(r.status, 200, 'a request with marks is accepted');
+  const marked = r.body.data;
+  const oil = marked.items.find(i => i.ingredient_id === 12);
+  const fl  = marked.items.find(i => i.ingredient_id === 11);
+  eq(oil.urgent, 1, 'the urgent line is stored urgent');
+  eq(oil.needed_by, null, 'and claims no day, because none was given');
+  eq(fl.urgent, 0, 'the dated line is not urgent');
+  eq(fl.needed_by, '2026-12-24', 'and keeps the day exactly as typed');
+
+  console.log('\n══ 15 · a plain line still writes nothing, which is what §39 means ══');
+  r = await call('POST', '/api/retail-admin/material-requests', { send: true, items: [{ ingredient_id: 11, qty: 1 }] });
+  eq(r.body.data.items[0].urgent, 0, 'no urgency is claimed for anybody');
+  eq(r.body.data.items[0].needed_by, null, 'and no day is invented');
+
+  console.log('\n══ 16 · the merge errs toward buying SOONER, never last-write-wins ══');
+  // §86 adds the quantities when one request names a material twice. These two
+  // cannot be added: urgent is OR-ed, and the EARLIER day wins. Last-write-wins
+  // would let the second line silently cancel the first's urgency.
+  r = await call('POST', '/api/retail-admin/material-requests',
+                 { send: true, items: [{ ingredient_id: 11, qty: 3, urgent: true, needed_by: '2026-11-30' },
+                                       { ingredient_id: 11, qty: 2, needed_by: '2026-10-01' }] });
+  const mergedLine = r.body.data.items;
+  eq(mergedLine.length, 1, 'one material is still one line');
+  eq(mergedLine[0].qty, 5, 'the quantities add');
+  eq(mergedLine[0].urgent, 1, 'the urgency survives a later line that did not claim it');
+  eq(mergedLine[0].needed_by, '2026-10-01', 'and the EARLIER day wins');
+  // The other direction, so the rule is not passing by accident of argument order.
+  r = await call('POST', '/api/retail-admin/material-requests',
+                 { send: true, items: [{ ingredient_id: 11, qty: 1, needed_by: '2026-10-01' },
+                                       { ingredient_id: 11, qty: 1, urgent: true }] });
+  eq(r.body.data.items[0].urgent, 1, 'urgency claimed second also survives');
+  eq(r.body.data.items[0].needed_by, '2026-10-01', 'and a line with no day never erases one');
+
+  console.log('\n══ 17 · a day that is not a day is refused, and refused BEFORE anything is written ══');
+  const countBefore = db.prepare('SELECT COUNT(*) AS c FROM material_requests').get().c;
+  for (const bad of ['30-09-2026', '2026-9-30', 'soon', '2026-02-31']) {
+    r = await call('POST', '/api/retail-admin/material-requests',
+                   { send: true, items: [{ ingredient_id: 11, qty: 1, needed_by: bad }] });
+    eq(r.status, 400, `${bad} is refused`);
+    eq(r.body.error, 'needed_by_invalid', 'by name');
+  }
+  eq(db.prepare('SELECT COUNT(*) AS c FROM material_requests').get().c, countBefore,
+     'and not one half-written request was left behind');
+  // A DATE IN THE PAST IS INFORMATION, NOT AN ERROR (§176): a line needed
+  // yesterday is late, and refusing it only moves the real date out of sight.
+  r = await call('POST', '/api/retail-admin/material-requests',
+                 { send: true, items: [{ ingredient_id: 11, qty: 1, needed_by: '2020-01-01' }] });
+  eq(r.status, 200, 'a day in the past is accepted');
+  eq(r.body.data.items[0].needed_by, '2020-01-01', 'and stored as given');
+
+  console.log('\n══ 18 · the buyer\'s list is SORTED by the marks, which is where prioritising happens ══');
+  r = await call('GET', '/api/retail-admin/material-requests/pending-lines');
+  eq(r.status, 200, 'responds 200');
+  const lines = r.body.data;
+  ok(lines.length > 4, `there is a queue to sort (${lines.length} lines)`);
+  const firstPlain = lines.findIndex(l => !Number(l.urgent));
+  ok(firstPlain === -1 || !lines.slice(firstPlain).some(l => Number(l.urgent)),
+     'every urgent line sorts above every line that is not');
+  // Within the plain tail, a dated line outranks an undated one and earlier
+  // outranks later. SQLite sorts NULL first by default, which is the fault the
+  // `needed_by IS NULL` key in the ORDER BY exists to correct.
+  const tail = firstPlain === -1 ? [] : lines.slice(firstPlain);
+  const lastDated = tail.map(l => !!l.needed_by).lastIndexOf(true);
+  ok(lastDated === -1 || tail.slice(0, lastDated + 1).every(l => !!l.needed_by),
+     'dated lines come before undated ones, never after');
+  const days = tail.filter(l => l.needed_by).map(l => l.needed_by);
+  eq(days.join(','), days.slice().sort().join(','), 'and the dated ones run earliest first');
+
+
   console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
   server.close();
   process.exit(fail ? 1 : 0);

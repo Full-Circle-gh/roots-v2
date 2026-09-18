@@ -624,6 +624,23 @@ CREATE TABLE IF NOT EXISTS material_request_items (
   -- arithmetic anywhere on this path.
   unit          TEXT,
   notes         TEXT,
+  -- §176. BOTH MARKS SIT ON THE LINE, and a request has neither of its own —
+  -- Ash chose that shape over one urgent switch for the whole request. Neither
+  -- is required and neither is prefilled (§39): a line with both NULL/0 is the
+  -- ordinary case and is exactly what this table held before §176.
+  --
+  -- THEY CAN DISAGREE, and the schema cannot stop them: urgent = 1 with a
+  -- needed_by three weeks out is a line saying two things. §176 records that
+  -- the objection was raised before the shape was chosen, and fixes the rule
+  -- that follows from it — THE URGENT FLAG WINS. The buyer's list sorts on
+  -- urgent first and needed_by only within it; no screen quietly resolves the
+  -- pair, because the kitchen said both.
+  --
+  -- needed_by IS NOT A DEADLINE THE SYSTEM ENFORCES. Nothing expires on it, and
+  -- a date in the past is stored rather than refused: a line needed yesterday
+  -- is late, which is information the buyer wants.
+  urgent        INTEGER DEFAULT 0,
+  needed_by     DATE,
   -- The purchase order this line was turned into, and the refusal that stops a
   -- second buyer raising the same flour twice. DELIBERATELY NOT A FOREIGN KEY:
   -- a buyer must stay able to delete a draft PO, and an FK would either refuse
