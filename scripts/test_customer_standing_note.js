@@ -151,9 +151,19 @@ check('it is rendered hidden the moment a note or a tag exists',
    global [hidden] rule, so every hidden-able element needs its own guard. */
 check('the stylesheet guards [hidden] itself, as everything else here must',
       /\.cu-knowhint\[hidden\]\s*\{[^}]*display\s*:\s*none/.test(adminCss));
+/* The first cut pinned the label left and the button right with the drawer's
+   whole width between them — "its not clear. look where text positioned".
+   They are one thing and must sit as one. */
+check('the label does not take the line and push the button to the far edge',
+      /\.cu-knowhint\s*\{[^}]*flex\s*:\s*none/.test(adminCss));
+/* And an empty block cannot offer to Edit what is not there yet. */
+check('a bare block offers Add, not Edit',
+      /\(note \|\| tags\.length\) \? cuT\('Edit'[\s\S]{0,40}: cuT\('Add', '\u6dfb\u52a0'\)/.test(custSrc));
+check('and the verb is re-decided wherever the block can fill or empty',
+      (custSrc.match(/cuT\('Add', '\u6dfb\u52a0'\)/g) || []).length >= 3);
 check('both paths that can fill the block re-sync it',
-      /function cuNotesEdit[\s\S]{0,900}_cuKnowHintSync\(\)/.test(custSrc)
-      && /function cuNotesRepaint[\s\S]{0,900}_cuKnowHintSync\(\)/.test(custSrc));
+      /function cuNotesEdit[\s\S]{0,1600}_cuKnowHintSync\(\)/.test(custSrc)
+      && /function cuNotesRepaint[\s\S]{0,1600}_cuKnowHintSync\(\)/.test(custSrc));
 
 db.close();
 fs.rmSync(dir, { recursive: true, force: true });

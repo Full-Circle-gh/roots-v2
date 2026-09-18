@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.309
+# Tacet shared-core consolidation — decisions record, v4.310
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-18 · v4.310 — **§172 CORRECTION · A HEADING AT ONE END AND A BUTTON AT THE OTHER ARE NOT ONE CONTROL — REPORTED BY ASH**, on the shipped version: *“its not clear. look where text positioned”*. v4.309's label took the line with `flex: 1` and pushed its button to the far edge of the drawer, rebuilding in a new shape the confusion it was added to end. **The two now sit together**; the Edit button keeps its right-hand seat only once a note exists, where it belongs beside the note line. **The verb changes with the state too** — `Edit · 编辑` is a lie on an empty block, so a bare one offers `Add · 添加`, the live pair the tag row's own button already uses. Nothing minted; `flex: none` and the verb are both asserted in `scripts/test_customer_standing_note.js` so neither is tidied back. Vocabulary v1.126.
 
 2026-09-18 · v4.309 — **§172 ADDENDUM · THE WRITE END: A CONTROL THAT DOES NOT NAME ITSELF — REPORTED BY ASH**, on the customer page with the cursor inches from it: *“im on customer page wher is it”*. An empty Know block collapsed to a bare `Edit` under the name and said nothing about the two things behind it. It now shows `What we know · 备注与标签` — **not a new string**: the heading the phone's customer record already used for this same block, already locked, arriving on its second surface. **Shown only while the block is empty**, so the space saving that collapsed the old 210px card is kept. **The rejected empty-state stays rejected** — `暂无备注。` names the absence, the heading names the control, and that distinction is the part to keep. `docs/tacet-delivery-vocabulary.md` v1.125 locks nothing new. Covered by `scripts/test_customer_standing_note.js`, including the stylesheet's own `[hidden]` guard — the trap `test_admin_install.js` exists for.
 
@@ -18074,3 +18076,20 @@ an empty block can see; the heading names the CONTROL. That distinction is the
 whole of this addendum and is the thing to keep if either is ever revisited.
 Recorded as `docs/tacet-delivery-vocabulary.md` v1.125, which locks nothing
 new. Covered by the same suite as the read end.
+
+**CORRECTION, same day (v4.310), shipped and seen before it was right.** The
+first cut gave the label `flex: 1`, which pinned it to the left edge of the
+drawer and threw the button to the right with the whole width between them.
+Ash: *"its not clear. look where text positioned"*. A heading at one end and a
+button at the other are two unrelated-looking controls — the very confusion
+the label was added to end, rebuilt in a different shape. **They sit together
+now**, separated by the line's own gap and nothing else. The Edit button keeps
+its right-hand seat once a note EXISTS, because there it belongs beside the
+note line rather than to a heading.
+
+**And the verb changes with the state**, which is the other half of the same
+mistake: `Edit · 编辑` is a lie on an empty block, because there is nothing
+there to edit. A bare block now offers `Add · 添加` — the live pair the tag
+row's own button uses eight lines below it, so nothing is minted for this
+either. Both are asserted, including the `flex: none`, so neither can be
+tidied back.
