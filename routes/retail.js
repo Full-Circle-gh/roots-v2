@@ -15148,6 +15148,48 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
         ON fo.customer_id = o.customer_id
      WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?`).get(from, to, from, to);
 
+  /* ── Buyers, PER CHANNEL, because one number is not available (§169) ──────
+     `nvr` above counts DISTINCT customer_id, and routes/meituan-internal.js and
+     routes/eleme-internal.js have never written that column — their INSERTs do
+     not carry it. SQL skips NULL in COUNT(DISTINCT), so every marketplace order
+     is invisible to it while the revenue above counts every one. That is how
+     79 buyers comes to sit under ¥149,344: neither figure is wrong, they
+     describe different populations, and nothing said so.
+
+     THEY ARE NOT SUMMED, AND THAT IS THE DECISION RATHER THAN A LIMITATION. Our
+     customer_id, Meituan's wmUserId and a wholesale phone are three identity
+     spaces that do not reconcile. A single total would count the same human
+     twice the moment they order in the mini app and on Meituan, and no join
+     exists that could ever detect it. A breakdown is the closest to real that
+     is also true.
+
+     ELEME IS ABSENT AND THAT IS EVIDENCED. Its payload's only person-shaped
+     container, userInfo, holds 33 keys — consignee name, phones, address,
+     distance, IM state — and no id of any kind. It identifies a delivery, not
+     a customer. */
+  const mtBuyers = tdb().prepare(`
+    SELECT COUNT(DISTINCT channel_customer_id) AS buyers,
+           /* Meituan's OWN lifetime count at the moment the order arrived
+              ("下单 N 次"), so a 1 means first-ever with us on that channel —
+              including business done before this daemon existed, which our own
+              first_day cannot see. A different question from storefront's own
+              new-buyer count, and never added to it. */
+           COUNT(DISTINCT CASE WHEN channel_customer_orders = 1 THEN channel_customer_id END) AS new_buyers,
+           MIN(${PDATE}) AS since
+      FROM retail_orders
+     WHERE ${PAID_ALL} AND ${PDATE} BETWEEN ? AND ?
+       AND channel = 'meituan' AND COALESCE(channel_customer_id, '') != ''`).get(from, to);
+
+  /* The wholesale channel writes a real, unmasked phone (gzgrocery-order-daemon.js),
+     which is an identity in a way neither marketplace's is. No new/returning
+     split: we hold no first-seen date for a wholesale buyer that is not simply
+     the first order we imported. */
+  const gyBuyers = tdb().prepare(`
+    SELECT COUNT(DISTINCT recipient_phone) AS buyers
+      FROM retail_orders
+     WHERE ${PAID_ALL} AND ${PDATE} BETWEEN ? AND ?
+       AND channel = 'gzgrocery' AND COALESCE(recipient_phone, '') != ''`).get(from, to);
+
   // ── Loyalty-tier distribution (active customer base snapshot) ──
   const tiers = tdb().prepare(`
     SELECT COALESCE(tier_key, 'seed') AS tier, COUNT(*) AS n
@@ -15438,6 +15480,35 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
         buyers: nvr.buyers || 0,
         new_buyers: nvr.new_buyers || 0,
         returning_buyers: (nvr.buyers || 0) - (nvr.new_buyers || 0),
+      },
+      /* WHO BOUGHT, BY CHANNEL — §169. A block rather than more keys on
+         new_vs_returning, for the reason mini_app below is one: a screen reads
+         the whole of it and says which channel over each figure, or it reads
+         none of it. Mixing one of these into a row of all-channel numbers is
+         the fault the block exists to end.
+
+         `eleme: null` is load-bearing and is not an oversight or a zero. Zero
+         would say nobody bought; null says the channel does not tell us, which
+         is the true and permanent answer. A reader that cannot render null
+         should print nothing rather than a 0.
+
+         `meituan.since` is the earliest day in this window that carries a
+         wmUserId at all. channel_customer_id has only been stored since
+         2026-09-15, so a 30- or 90-day window reads low and climbs as history
+         accrues; the date travels with the figure so a screen can say so
+         instead of quietly under-reporting. */
+      buyers_by_channel: {
+        storefront: {
+          buyers: nvr.buyers || 0,
+          new_buyers: nvr.new_buyers || 0,
+        },
+        meituan: {
+          buyers: mtBuyers.buyers || 0,
+          new_buyers: mtBuyers.new_buyers || 0,
+          since: mtBuyers.since || null,
+        },
+        wholesale: { buyers: gyBuyers.buyers || 0 },
+        eleme: null,
       },
       // ONE CHANNEL, READ FOUR WAYS — the block behind the phone's Mini app card.
       // It is deliberately a block rather than four more keys in `kpis`: a
