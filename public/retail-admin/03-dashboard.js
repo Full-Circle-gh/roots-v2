@@ -3842,6 +3842,20 @@ function dashRenderSplits() {
   let html = pay.length ? dashBarList(pay.map(p => ({ k: payLabel(p.method), value: dashMoney(p.revenue), frac: p.revenue }))) : '<div class="db-muted">—</div>';
   html += '<div class="db-bars-gap"></div>';
   html += del.length ? dashBarList(del.map(p => ({ k: delLabel(p.mode), value: `${dashNum(p.orders)} ${cuT(Number(p.orders) === 1 ? 'order' : 'orders', '单')}`, frac: p.orders, muted: true }))) : '<div class="db-muted">—</div>';
+  /* A third group: WHERE THE ORDER CAME FROM. The two above split the same money
+     by how it arrived and how it travelled; neither says which channel sold it,
+     and until now nothing did for a window — /sales/summary has a channel split
+     and is pinned to today. Named from the same table the phone reads, so a
+     channel reads identically on both. A till sale gets its own row: counter
+     fulfilment can carry a storefront channel, and grouped naively every one of
+     them would count as a mini-app sale. */
+  const ch = (DASH_DATA.revenue_by_channel || {}).rows || [];
+  const chLabel = c => ({ wechat: 'Mini app · 小程序', web: 'Web store · 网店', meituan: 'Meituan · 美团',
+    eleme: 'Eleme · 饿了么', gzgrocery: 'gzgrocery ERP · gzgrocery', pos: 'In store · 门店' }[c] || c);
+  if (ch.length) {
+    html += '<div class="db-bars-gap"></div>';
+    html += dashBarList(ch.map(c => ({ k: chLabel(c.channel), value: dashMoney(c.revenue), frac: c.revenue })));
+  }
   $('#db-splits').innerHTML = html;
 }
 

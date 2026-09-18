@@ -15094,6 +15094,43 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       LEFT JOIN retail_stores s ON s.id = o.store_id
      WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?
      GROUP BY o.store_id ORDER BY orders DESC`).all(from, to);
+  /* ── Revenue per CHANNEL, which nothing has ever answered for a window ────
+     Ash: "sales show revenue only of mini app, why not showing each channel
+     revenue?". It never did show only the mini app — the payment mix beside it
+     is every channel, split by how the money arrived. But a split by WHERE THE
+     ORDER CAME FROM did not exist for a window at all: /sales/summary has one
+     and is pinned to today, and this endpoint had splits by store, by delivery
+     mode and by payment method, and none by channel.
+
+     TWO THINGS THE GROUPING HAS TO GET RIGHT, and a plain GROUP BY channel gets
+     both wrong:
+
+     A mini-app order carries NO channel — the column is empty and 'wechat' is
+     the convention everywhere else (order-channel-counts, /sales/summary), so
+     it is defaulted rather than left to group under ''.
+
+     A TILL SALE CAN CARRY A STOREFRONT CHANNEL. Counter fulfilment is its own
+     way of selling and the channel column does not say so, which is why the
+     MINI predicate above excludes it by fulfillment_type. Grouped naively, every
+     till sale would be counted as a mini-app order. It gets its own row, named
+     for the way CHAN_META already names it.
+
+     gzgrocery is NOT here: its mirror rows are excluded by PAID like everywhere
+     else on this endpoint, and its takings arrive by their own ledger. It is
+     appended below from that ledger, so the row means the same thing the
+     headline does. */
+  const channelRows = tdb().prepare(`
+    SELECT CASE WHEN COALESCE(fulfillment_type, '') = 'counter' THEN 'pos'
+                ELSE COALESCE(NULLIF(channel, ''), 'wechat') END AS channel,
+           COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
+      FROM retail_orders
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
+     GROUP BY channel`).all(from, to);
+  if (gySales.revenue > 0 || gySales.orders > 0) {
+    channelRows.push({ channel: 'gzgrocery', orders: gySales.orders, revenue: gySales.revenue });
+  }
+  channelRows.sort((a, b) => b.revenue - a.revenue);
+
   const routing = tdb().prepare(`
     SELECT COALESCE(routing_reason, 'unknown') AS reason, COUNT(*) AS orders
       FROM retail_orders
@@ -15531,6 +15568,17 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
           ? Math.round((miniRefunded / (miniOrders + miniRefunded)) * 1000) / 10 : 0,
       },
       payments, delivery, stores, routing,
+      /* WHERE THE ORDER CAME FROM, for the window. Sorted by revenue, which is
+         what the question was. `topups_unassigned` is the piece that belongs to
+         no channel and is here so a screen can say why the rows do not add up
+         to the headline: wallet top-up cash is real money in, booked the day it
+         lands, and a top-up is not an order on any channel. Naming it null, or
+         quietly folding it into the mini app, would make the sum look right and
+         the rows wrong. */
+      revenue_by_channel: {
+        rows: channelRows,
+        topups_unassigned: tuSales.received || 0,
+      },
       topProducts, topCustomers, tiers,
       geoCities, geoDistricts,
       marketing: { vouchers, points },

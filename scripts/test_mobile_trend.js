@@ -179,6 +179,17 @@ const FULL = WEEK + `state.trendFull={
      future so the comparison is decided by the fixture rather than by the clock
      the suite happens to run on. */
   window:{from:'2999-01-01',to:'2999-01-07',span_days:7,granularity:'day'},
+  /* Where the order came from. Server-sorted by revenue. The pos row is counter
+     fulfilment, which carries a storefront channel and would otherwise be
+     counted as a mini-app sale. topups_unassigned is the money that belongs to
+     no channel, which is why these rows do not add up to the headline. */
+  revenue_by_channel:{
+    rows:[{channel:'wechat',orders:312,revenue:9640},
+          {channel:'meituan',orders:88,revenue:1622},
+          {channel:'pos',orders:41,revenue:1210},
+          {channel:'eleme',orders:19,revenue:418},
+          {channel:'gzgrocery',orders:7,revenue:1206}],
+    topups_unassigned:880},
   topCustomers:[{customer_id:5,nickname:'Mei',revenue:980,orders:6}],
   geoCities:[{city:'广州',city_en:'Guangzhou',orders:61,revenue:6100}],
   topProducts:[{product_id:2,name_en:'Falafel Wrap',name_cn:'法拉费卷',units:140,revenue:2800}],
@@ -336,6 +347,37 @@ CASES.push(
     // belongs to Visits alone and must not follow the chip row around.
     ['no mini-app caveat on money', `!txt('content').includes('Mini app only')`],
   ]],
+  // ── Where the order came from ──────────────────────────────────────────
+  ['revenue is split by channel', FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','channels');`, [
+    ['every channel is named by its own name',
+     `['Mini app','Meituan','In store','Eleme','gzgrocery ERP'].every(function(n){return txt('content').includes(n)})`],
+    ['with money and orders on each',  `txt('content').includes('¥9,640 · 312')`],
+    // Counter fulfilment carries a storefront channel; grouped naively every
+    // till sale would count as a mini-app sale.
+    ['the till is its own row, not the mini app', `txt('content').includes('In store') && txt('content').includes('¥1,210')`],
+    // The rows cannot add up to the headline and the card says why rather than
+    // leaving somebody to check the arithmetic.
+    ['top-ups are named as belonging to no channel',
+     `txt('content').includes('belong to no channel') && txt('content').includes('¥880')`],
+  ]],
+  ['a warehouse account gets the channels without the money',
+   `state.pos='warehouse'; ` + FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','channels');`, [
+    ['the channels are still named', `txt('content').includes('Mini app') && txt('content').includes('Meituan')`],
+    ['counted, not priced',          `txt('content').includes('312 orders')`],
+    ['no money anywhere',            `!txt('content').includes('¥')`],
+    // The server sorts by revenue. An account reading ORDER counts must be
+    // ranked on orders, or the list is ordered by a figure it cannot see —
+    // the same fault the product ranking carried.
+    ['and ranked on what it can see',
+     `(function(){var t=txt('content');return t.indexOf('In store') < t.indexOf('gzgrocery');})()`],
+    ['no top-up note either',        `!txt('content').includes('belong to no channel')`],
+  ]],
+  ['no channel block, no channel card', WEEK + `state.trendFull={payments:[{method:'wechat',orders:5,revenue:50}]};
+    APP.cmd('push','trend');`, [
+    // A server predating the block must not draw an empty card.
+    ['nothing is drawn', `!txt('content').includes('Channels')`],
+  ]],
+
   ['the customer count says who it counts', FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','customers');`, [
     ['the channels are said to be separate', `txt('content').includes('Counted separately')`],
     ['Eleme is named as sharing nothing',     `txt('content').includes('Eleme shares no customer')`],
