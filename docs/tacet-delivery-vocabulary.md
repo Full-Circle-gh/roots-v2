@@ -7316,3 +7316,58 @@ Rejected, and why:
 The button appears only on a parcel that is still here, is not supplier-direct,
 and sits on an order that is `paid`, `preparing` or `dispatched`. On
 `awaiting_restock` it is absent by design (§136 moves no stock; §180 says why).
+
+## The shop switch, on the phone (2026-09-18)
+
+The counter till at 越秀 read *Closed* however often it was opened: a shop-wide
+close outranks every channel cell, the phone had no control for it and no word
+for it either. This is the vocabulary for the switch that was missing and for
+the state that was never named. Register: OPERATOR (Rule 1) throughout — every
+string is read in the back office by whoever is opening or closing a shop.
+
+**Most of it is LIFTED.** The phone had five of these sentences already, in the
+per-channel confirm right next to the new one; the shop switch says the same
+kind of thing about a bigger unit, so it says it in the same words.
+
+| key | EN | CN | provenance |
+|---|---|---|---|
+| section header | Shops | 门店 | **COPIED** — `CHAN_META.pos.zh`, the In store channel's own name, live since the channel joined the grid |
+| blocked-row pill | Shop closed | 门店已关闭 | **COPIED** — `public/retail-admin/04-orders.js` `改派 · 门店已关闭`, the reroute chip's reason |
+| queued Meituan change | change queued | 变更排队中 | **COPIED** — `public/retail-admin/02-settings-ops.js`, the desktop's own word for a `target_open` the daemon has not applied. The phone dropped the fact; it did not need a new word for it |
+| failed read | The sales board did not load. | 加载失败，请重试。 | **COPIED** whole — the live failure line used across this app. **Rejected:** a minted `销售看板加载失败。` — `销售看板` is not a term this product has; the screen is `销售` |
+| retry | Try again | 重试 | **COPIED** — live in 24 files |
+| acknowledge | OK | 知道了 | **COPIED** — `public/m.html` install sheet, `27-keyboard.js` |
+| toasts | X is open / X is closed | X 已开启 / X 已关闭 | **COPIED** — the per-channel toast one line above, which already names a shop this way |
+| confirm buttons | Open / Close | 开启 / 关闭 | **COPIED** — the per-channel confirm's own labels |
+
+**Two are RESTRUCTURED**, Rule 4's first preference: the live sentence with its
+unit changed from channel-at-a-shop to the shop.
+
+| key | EN | CN | provenance |
+|---|---|---|---|
+| shop confirm title | Open X? / Close X? | 开启 X？/ 关闭 X？ | **RESTRUCTURED** from the live `在 X 开启 Y？` — the channel clause drops out because the shop is the whole unit |
+| screen footer | Closing a whole channel everywhere is on desktop | 一次性关闭整个渠道在电脑端 | **RESTRUCTURED** from the sheet's live `一次性关闭整个渠道请在电脑端操作。` The footer it replaces said opening and closing a channel was on desktop at all, which the sheet above it had already stopped being true |
+
+**Five are COMPOSED, by Claude, under Rule 4's standing delegation.** Four of
+them exist because nothing in this product has ever had to say *this shop is
+shut, so nothing here sells* — the state was real and had no sentence. Each is
+assembled from live fragments.
+
+| key | EN | CN | provenance |
+|---|---|---|---|
+| head, one shop shut | X is closed — no channel sells there | X 已关闭 — 所有渠道均不营业 | **COMPOSED** — live `已关闭` + live `所有渠道` (`所有渠道均已开启`, the line this one replaces) + `均不营业`, the live `营业` negated on the pattern of that same line's `均已开启`. **Rejected:** `全部关闭` — live, but it is the whole-channel phrase (`已全部关闭`) and would read as every channel everywhere, which is the opposite unit |
+| head, several shut | N shops are closed — no channel sells at them | N 家门店已关闭 — 所有渠道均不营业 | **COMPOSED** — the same, with the live counter `N 家门店` (`N 家门店中 M 家营业`, the sheet's subtitle) |
+| blocked-row explainer | The whole shop is shut, so every channel there is closed and none can be opened on its own. Open X under Shops on the Sales screen first. | 整家门店已关闭，因此该门店的所有渠道均为关闭状态，也无法单独开启。请先在销售页面的「门店」中开启 X。 | **COMPOSED** — live `门店已关闭` + live `所有渠道` + live `页面` + live `销售`, the Sales screen's own nav label, + the section header `门店` quoted in 「」 so it names what is on screen. **Rejected:** `店铺` — not this product's word for a shop anywhere; `门店` is used throughout |
+| shop confirm, opening | Every sales channel at this shop opens, and it takes orders, pickups and counter sales again. Meituan follows within about a minute. | 该门店的所有销售渠道将开启，恢复接单、自提与门店收银。美团约一分钟内跟随。 | **COMPOSED** — live `恢复接单` (`public/m.html`, holiday mode) + live `自提` + live `收银` + live `美团约一分钟内` (`02-settings-ops.js` `门店约一分钟内恢复营业`). **Rejected:** stopping at `所有销售渠道将开启` — true and useless: the till and pickup are the half an operator is standing at the counter worrying about |
+| shop confirm, closing | Every sales channel at this shop closes, the counter till stops selling, and orders route to the other shop. Orders already placed are not affected. | 该门店的所有销售渠道将关闭，门店收银台停止销售，订单将转由其他门店处理。已下单的订单不受影响。 | **COMPOSED** — live `收银台` + live `已下单的订单不受影响。` taken whole from the per-channel confirm beside it. **Rejected:** omitting the reroute clause — closing a shop moves its delivery and pickup to the other one, and an operator who learns that afterwards learns it from a customer |
+
+**THE LAST SENTENCE OF BOTH CONFIRMS IS THE POINT OF THEM.** This switch writes
+every channel at the shop *and* the shop-wide fulfilment flag — it is the
+bluntest control in the app, and the screen it now sits on is a phone. Naming
+the till, the pickups and the reroute is what stops *close this shop* being read
+as *close this shop's website*.
+
+**Nothing is retired** except the footer sentence restructured above.
+
+**Ash should correct any of the five composed pairs if they read wrong to a
+Chinese operator; nothing depends on the exact phrasing.**

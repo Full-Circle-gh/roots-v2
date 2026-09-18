@@ -1131,9 +1131,19 @@ router.get('/api/retail-admin/channel-status', requireRetailAdmin, (req, res) =>
   try {
     const stores = db.prepare("SELECT code, name_en, name_cn, COALESCE(name_cn,name_en,code) AS name FROM retail_stores WHERE is_active=1 ORDER BY sort_order,id").all();
     const mt = {}; for (const r of db.prepare('SELECT * FROM store_business_status').all()) mt[r.store_code] = r;
+    // The shop-wide switch, reported as its own fact rather than only folded
+    // into every cell. csCellOpen returns false for EVERY channel at a store
+    // whose fulfillment_open is 0, so without this a client cannot tell "the
+    // operator closed this channel here" from "this shop is not trading at
+    // all" — and a per-channel Open it offers on the second one writes a row
+    // the very next read masks straight back to closed. That is the loop that
+    // read as a till which closed itself: the write landed, the answer did not
+    // change, and nothing on screen said why.
+    const shopOpen = (code) => !(mt[code] && mt[code].fulfillment_open === 0);
     const channels = GRID_CHANNELS.map((ch) => {
       const cells = csStores(db, ch).map((s) => {
-        const cell = { storeCode: s.code, name: s.name, nameEn: s.name_en || s.name, nameCn: s.name_cn || s.name, open: csCellOpen(db, ch, s.code) };
+        const cell = { storeCode: s.code, name: s.name, nameEn: s.name_en || s.name, nameCn: s.name_cn || s.name,
+                       open: csCellOpen(db, ch, s.code), shopOpen: shopOpen(s.code) };
         if (ch === 'meituan') { const r = mt[s.code] || {}; cell.readOk = r.read_ok === 1; cell.pending = r.target_open != null; cell.statusDesc = r.status_desc || null; }
         return cell;
       });
@@ -1142,9 +1152,10 @@ router.get('/api/retail-admin/channel-status', requireRetailAdmin, (req, res) =>
     });
     const locations = stores.map((s) => {
       const applies = GRID_CHANNELS.filter((ch) => ch !== 'gzgrocery' || s.code === 'tianhe');
-      return { storeCode: s.code, name: s.name, nameEn: s.name_en || s.name, nameCn: s.name_cn || s.name, allOpen: applies.every((ch) => csCellOpen(db, ch, s.code)) };
+      return { storeCode: s.code, name: s.name, nameEn: s.name_en || s.name, nameCn: s.name_cn || s.name,
+               allOpen: applies.every((ch) => csCellOpen(db, ch, s.code)), shopOpen: shopOpen(s.code) };
     });
-    res.json({ success: true, stores, channels, locations });
+    res.json({ success: true, stores: stores.map((s) => ({ ...s, shopOpen: shopOpen(s.code) })), channels, locations });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
@@ -1191,6 +1202,19 @@ router.post('/api/retail-admin/channel-status/cell', requireRetailAdmin, express
   const { channel, storeCode, open } = req.body || {};
   if (!GRID_CHANNELS.includes(channel) || !storeCode || typeof open !== 'boolean') return res.status(400).json({ success: false, error: 'channel, storeCode, open (boolean) required' });
   if (channel === 'gzgrocery' && storeCode !== 'tianhe') return res.status(400).json({ success: false, error: 'gzgrocery is tianhe-only' });
+  // A channel cannot be opened at a shop that is not trading. csCellOpen masks
+  // EVERY channel closed while fulfillment_open is 0, so accepting this write
+  // would store a row the next read hides — the toggle reports success, the
+  // grid comes back Closed, and the operator is left believing the app undid
+  // what they just did. Refused by name so the client can offer the switch
+  // that actually applies: the location master below.
+  if (open && channel !== 'meituan') {
+    const f = db.prepare('SELECT fulfillment_open FROM store_business_status WHERE store_code=?').get(storeCode);
+    if (f && f.fulfillment_open === 0) {
+      return res.status(409).json({ success: false, error: 'shop_closed',
+        message: 'This shop is closed. Open the shop before opening a channel at it.' });
+    }
+  }
   try { csSetCell(db, channel, storeCode, open, csBy(req)); res.json({ success: true }); }
   catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });

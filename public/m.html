@@ -3441,20 +3441,79 @@ reg('chanCell', (channel, storeCode, next)=>{
     confirmLabel: open?T('Open','开启'):T('Close','关闭'), danger:!open,
     run:()=>{
       state.chanBusy=channel+'|'+storeCode; state.chanErr=null; render();
+      // RE-READ, never patch. Writing `cell.open=open` locally made the row
+      // agree with the tap whatever the server had actually stored — and for a
+      // channel at a shop that is closed shop-wide the server stores a row its
+      // own next read hides, so the row said Open until the app was restarted
+      // and then said Closed. The toggle looked like it undid itself; it had
+      // never taken in the first place.
       apiWrite('/channel-status/cell',{channel,storeCode,open},'POST').then(()=>{
-        cell.open=open;
-        c.cardOpen=(c.cells||[]).some(x=>x.open);
-        state.chanBusy=null; render();
+        state.chanBusy=null;
         showToast(open?T('Open at '+store,store+' 已开启'):T('Closed at '+store,store+' 已关闭'));
+        loadChannels(true);
       }).catch(e=>{
         state.chanBusy=null;
         if(String(e.message)==='auth') return;
-        state.chanErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+        state.chanErr = e.code==='shop_closed'
+          ? E(store+' is closed as a shop, so no channel can open there. Open the shop first — it is on the Sales screen, under Shops.',
+              store+' 门店已关闭，任何渠道都无法在此开启。请先在销售页面的「门店」中开启该门店。')
+          : E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+        render();
+        if(e.code==='shop_closed') loadChannels(true);
+      });
+    }};
+  render();
+});
+/* Tapping a channel row at a shop that is shut. The write it would have sent is
+   refused by the server now, so the row does not send one: it says what is in
+   the way and where the switch is, which is two taps up the same screen. */
+reg('chanShopShut', (channel, storeCode)=>{
+  const d=state.chan, c=((d&&d.channels)||[]).find(x=>x.channel===channel);
+  const cell=c&&(c.cells||[]).find(x=>x.storeCode===storeCode); if(!cell) return;
+  const store=chanStoreName(cell);
+  state.ask={
+    title:T(store+' is closed','门店 '+store+' 已关闭'),
+    body:T('The whole shop is shut, so every channel there is closed and none can be opened on its own. Open '+store+' under Shops on the Sales screen first.',
+           '整家门店已关闭，因此该门店的所有渠道均为关闭状态，也无法单独开启。请先在销售页面的「门店」中开启 '+store+'。'),
+    confirmLabel:T('OK','知道了'),
+    run:()=>{ state.chanSheet=null; render(); }};
+  render();
+});
+/* THE SHOP SWITCH — the desktop Sales page's location master, on the phone.
+   Both directions, as asked, and it is the bluntest control in the app: it
+   writes every channel at that shop AND the shop-wide fulfilment flag, which
+   is what takes the shop out of delivery routing, pickup and the till. So the
+   confirm names all three rather than saying "close this shop" and leaving an
+   operator to find out at the counter. */
+reg('shopOpen', (storeCode, next)=>{
+  if(state.shopBusy) return;
+  const loc=((state.chan&&state.chan.locations)||[]).find(x=>x.storeCode===storeCode); if(!loc) return;
+  const open=String(next)==='1';
+  const store=chanStoreName(loc);
+  state.ask={
+    title: open ? T('Open '+store+'?', '开启 '+store+'？') : T('Close '+store+'?', '关闭 '+store+'？'),
+    body: open ? T('Every sales channel at this shop opens, and it takes orders, pickups and counter sales again. Meituan follows within about a minute.',
+                   '该门店的所有销售渠道将开启，恢复接单、自提与门店收银。美团约一分钟内跟随。')
+               : T('Every sales channel at this shop closes, the counter till stops selling, and orders route to the other shop. Orders already placed are not affected.',
+                   '该门店的所有销售渠道将关闭，门店收银台停止销售，订单将转由其他门店处理。已下单的订单不受影响。'),
+    confirmLabel: open?T('Open','开启'):T('Close','关闭'), danger:!open,
+    run:()=>{
+      state.shopBusy=storeCode; state.shopErr=null; render();
+      apiWrite('/channel-status/location',{storeCode,open},'POST').then(()=>{
+        state.shopBusy=null;
+        showToast(open?T(store+' is open',store+' 已开启'):T(store+' is closed',store+' 已关闭'));
+        loadChannels(true);
+      }).catch(e=>{
+        state.shopBusy=null;
+        if(String(e.message)==='auth') return;
+        state.shopErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
         render();
       });
     }};
   render();
 });
+/* The Sales board's own retry, for the read that failed. */
+reg('reloadChannels', ()=>{ state.chanTried=false; state.chanLoadErr=null; render(); loadChannels(true); });
 /* Holiday mode, one direction. See the comment on the button in screenDelivery
    for why ON stays on the desktop. */
 reg('resumeDelivery', ()=>{
@@ -4599,8 +4658,13 @@ function sheetChannel(){
          <span style="font-size:14px;color:var(--brick-ink)">${state.chanErr}</span></div>`:''}
        <div class="list">${cells.map((cell,i)=>{
          const busy=state.chanBusy===key+'|'+cell.storeCode;
+         // A shop that is not trading outranks this row, so the row says so
+         // instead of showing a bare "Closed" next to an Open it cannot
+         // deliver. Tapping it explains and points at the shop switch rather
+         // than posting a write the server now refuses by name.
+         const shopShut=cell.shopOpen===false&&key!=='meituan';
          return `${i?'<div class="sep" style="margin-left:14px"></div>':''}
-         <button ${busy||state.chanBusy?'disabled':''} onclick="APP.cmd('chanCell','${escAttr(key)}','${escAttr(cell.storeCode)}',${cell.open?'0':'1'})"
+         <button ${busy||state.chanBusy?'disabled':''} onclick="APP.cmd('${shopShut?'chanShopShut':'chanCell'}','${escAttr(key)}','${escAttr(cell.storeCode)}',${cell.open?'0':'1'})"
            style="display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:14px;background:transparent;border:none;cursor:pointer;font-family:inherit;text-align:left;${state.chanBusy&&!busy?'opacity:.5':''}">
            <span style="font-size:15px;color:var(--text-primary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(chanStoreName(cell))}</span>
            ${/* The state, and a chevron — not the state AND the verb. The row
@@ -4609,8 +4673,15 @@ function sheetChannel(){
                  two states. The row IS the control; what tapping it does is
                  named in the confirm, where there is room to say it properly. */''}
            <span style="display:flex;align-items:center;gap:9px;flex:none">
-             <span class="pill" style="background:${cell.open?PILL.success[0]:PILL.danger[0]};color:${cell.open?PILL.success[1]:PILL.danger[1]}">${
-               busy?T('Saving…','保存中…'):(cell.open?T('Open','营业中'):T('Closed','已关闭'))}</span>
+             ${/* Meituan is command-then-observe: the pill is the POI's last
+                  CONFIRMED state, and a toggle sits queued until the daemon
+                  applies it about a minute later. The phone dropped that fact
+                  entirely, so a Meituan row read unchanged right after you
+                  changed it — the desktop has said "change queued" here all
+                  along. */''}
+             ${cell.pending?`<span style="font-size:12px;color:var(--amber-ink)">${T('change queued','变更排队中')}</span>`:''}
+             <span class="pill" style="background:${shopShut?PILL.muted[0]:cell.open?PILL.success[0]:PILL.danger[0]};color:${shopShut?PILL.muted[1]:cell.open?PILL.success[1]:PILL.danger[1]}">${
+               busy?T('Saving…','保存中…'):shopShut?T('Shop closed','门店已关闭'):(cell.open?T('Open','营业中'):T('Closed','已关闭'))}</span>
              <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span></button>`;
        }).join('')}</div>
        ${m.mirror?`<button class="btn2" style="width:100%" onclick="APP.cmd('mirror','${m.mirror}')">${
@@ -4626,6 +4697,12 @@ function statusSales(){
 function screenSales(){
   loadChannels();
   const d=state.chan;
+  // A read that failed is a screen with a button on it, not a spinner that
+  // never stops. Retry re-arms the same load rather than reloading the app.
+  if(!d&&state.chanLoadErr) return `<div style="padding:40px 24px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:14px">
+    <span style="color:var(--brick-ink);display:flex">${ic('triangle-alert',26)}</span>
+    <span style="font-size:15px;color:var(--text-primary)">${state.chanLoadErr}</span>
+    <button class="btn2" onclick="APP.cmd('reloadChannels')">${T('Try again','重试')}</button></div>`;
   if(!d) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const chans=(d.channels||[]).filter(c=>CHAN_META[c.channel]);
   if(!chans.length) return nothingYet(T('No channels yet','还没有渠道'),
@@ -4633,7 +4710,20 @@ function screenSales(){
   // The line above the cards states what the grid actually says: every channel
   // open everywhere, or exactly which ones are not.
   const closed=chans.filter(c=>c.integrated!==false&&!c.cardOpen);
-  const head = closed.length
+  // A SHUT SHOP IS THE HEADLINE, ahead of any per-channel count. Every channel
+  // at a shop that is not trading reads closed, so the line that only counted
+  // channels described the symptom and never the cause: with Yuexiu shut it
+  // said "Every channel is open" whenever the other shop still had them all
+  // on, which is the opposite of what the cards underneath were showing.
+  const locs=(d.locations||[]);
+  const shutShops=locs.filter(l=>l.shopOpen===false);
+  const head = shutShops.length
+    ? {sev:'amber', text:T(shutShops.length===1
+        ? chanStoreName(shutShops[0])+' is closed — no channel sells there'
+        : shutShops.length+' shops are closed — no channel sells at them',
+        shutShops.length===1 ? chanStoreName(shutShops[0])+' 已关闭 — 所有渠道均不营业'
+                             : shutShops.length+' 家门店已关闭 — 所有渠道均不营业')}
+    : closed.length
     ? {sev:'amber', text:T(closed.length===1
         ? CHAN_META[closed[0].channel].en+' is closed everywhere'
         : closed.length+' channels are closed everywhere',
@@ -4643,6 +4733,32 @@ function screenSales(){
     <div style="display:flex;align-items:center;gap:10px;background:var(--surface-raised);border-radius:14px;padding:13px 16px">
       <span style="width:8px;height:8px;border-radius:50%;background:var(--${head.sev==='sage'?'sage':'amber'});flex:none"></span>
       <span style="font-size:14px;font-weight:500;min-width:0">${head.text}</span></div>
+    ${/* THE SHOP SWITCH, which this screen did not have at all. The channel
+         cards below it are per-channel-per-shop, and a shop-wide close beats
+         every one of them — so the phone could show six channels closed at a
+         shop and offer nothing that would reopen any of them. The switch that
+         applies lived only on the desktop Sales page, which is not where
+         anybody is standing when a shop needs opening.
+
+         Shops first, channels second, because that is the order the states
+         override in: nothing a channel row says survives its shop being
+         shut. */''}
+    ${locs.length>1||shutShops.length?`<div class="card" style="padding:4px 0;display:flex;flex-direction:column">
+      <div style="padding:12px 16px 8px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Shops','门店')}</div>
+      ${locs.map((l,i)=>{
+        const on=l.shopOpen!==false;
+        const busy=state.shopBusy===l.storeCode;
+        return `${i?'<div class="sep" style="margin-left:16px"></div>':''}
+        <button ${busy||state.shopBusy?'disabled':''} onclick="APP.cmd('shopOpen','${escAttr(l.storeCode)}',${on?'0':'1'})"
+          style="display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:13px 16px;background:transparent;border:none;cursor:pointer;font-family:inherit;text-align:left;${state.shopBusy&&!busy?'opacity:.5':''}">
+          <span style="font-size:15px;color:var(--text-primary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(chanStoreName(l))}</span>
+          <span style="display:flex;align-items:center;gap:9px;flex:none">
+            <span class="pill" style="background:${on?PILL.success[0]:PILL.danger[0]};color:${on?PILL.success[1]:PILL.danger[1]}">${
+              busy?T('Saving…','保存中…'):(on?T('Open','营业中'):T('Closed','已关闭'))}</span>
+            <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span></button>`;
+      }).join('')}
+      ${state.shopErr?`<div style="padding:0 16px 12px;font-size:13px;color:var(--brick-ink)">${state.shopErr}</div>`:''}
+    </div>`:''}
     ${chans.map(c=>{
       const m=CHAN_META[c.channel];
       const cells=c.cells||[];
@@ -4696,7 +4812,13 @@ function screenSales(){
             (!notIntegrated&&cells.length)?T('Open or close','开关门店'):T('View','查看')
             }<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>`:''}</div>`:''}
       </${Tag}>`;}).join('')}
-    <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Opening and closing a channel is on desktop','渠道的开启与关闭在电脑端')}</div>
+    ${/* This used to read "Opening and closing a channel is on desktop", which
+         had stopped being true: the card above it opens a sheet whose rows do
+         exactly that, per shop. A footer that denies the control directly
+         above it teaches an operator to stop trying. What IS still desktop-only
+         is the whole-channel flip — every shop at once — and the sheet's own
+         note already says so, where it applies. */''}
+    <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Closing a whole channel everywhere is on desktop','一次性关闭整个渠道在电脑端')}</div>
   </div>`;
 }
 
@@ -15029,13 +15151,24 @@ async function loadGeo(){
    fetched for the Orders chips. Whether the shop is OPEN on Meituan right now
    is the most phone-shaped question in the app; changing it is not, so this
    reads and says where the switch is. */
-async function loadChannels(){
-  if(state.chanTried) return; state.chanTried=true;
+async function loadChannels(force){
+  // `force` is what every write on this screen passes. The board used to patch
+  // the one cell it had just written and never ask the server again for the
+  // life of the session — so a write the server declined to honour still read
+  // as done until the app was reloaded, and the screen's own figures aged all
+  // day without a way to refresh them.
+  if(state.chanTried&&!force) return; state.chanTried=true;
   // Two reads, two different questions: the grid says whether the shop is OPEN
   // on each channel, the summary says what each SOLD today. The board used to
   // answer only the second, and only once /sales/summary had landed — before
   // that it showed the mock's "28 orders · ¥7,120".
-  try{ state.chan=await apiRaw('/channel-status'); }catch(e){}
+  //
+  // A FAILED READ SAYS SO. It used to be swallowed whole: state.chan stayed
+  // null, screenSales returned its "Loading…" line, and chanTried was already
+  // true — so a single bad response left the Sales screen loading forever with
+  // nothing to tap and no way back short of restarting the app.
+  try{ state.chan=await apiRaw('/channel-status'); state.chanLoadErr=null; }
+  catch(e){ if(String(e.message)!=='auth') state.chanLoadErr=E('The sales board did not load.','加载失败，请重试。'); }
   render();
   // The endpoint answers {channels, summary} and only `channels` was kept, so
   // the day's total — the one number this screen exists to give you — was
