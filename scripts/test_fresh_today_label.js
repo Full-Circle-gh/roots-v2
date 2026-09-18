@@ -141,6 +141,14 @@ function webCtx(onRun, lang = 'en') {
   };
   vm.createContext(ctx);
   vm.runInContext(
+    // §170 — the band is now the word PLUS the arrival, so the appender is part
+    // of the decider path and has to run here too. Every fixture in this file
+    // predates it and carries no `local_fresh_in_days`, so it returns the bare
+    // word throughout and the cases below go on testing what they were written
+    // for. scripts/test_fresh_batch_eta.js is where the dated shapes are pinned.
+    sliceBlock(SHOP, 'function freshArrivalLabel(p,onRun)') + '\n' +
+    sliceBlock(SHOP, 'function withFreshArrival(base,p,onRun)') + '\n' +
+    'const SL_MONTHS_EN=[];\n' +
     sliceBlock(SHOP, 'function slStock(m)') + '\n' +
     sliceBlock(SHOP, 'function stockState(p)') + '\n' +
     'this.slStock = slStock; this.stockState = stockState;', ctx);
@@ -262,7 +270,9 @@ section('3 · the mini app — the surface the report came from');
     // the `data` block's plain default.
     const at = MPROD.indexOf('addBtnLabel: soldOut');
     assert.notStrictEqual(at, -1, 'the computed button label is still where it was');
-    const btn = MPROD.slice(at, at + 500);
+    // 500 was enough until §170 put a six-line comment inside this expression;
+    // the window has to reach the preorder branch or the case passes vacuously.
+    const btn = MPROD.slice(at, at + 1200);
     assert.ok(/preKind === 'batch'/.test(btn) && /'下批现做' : 'NEXT BATCH'/.test(btn));
     assert.ok(/preKind === 'preorder'/.test(btn) && /'预订' : 'PRE-ORDER'/.test(btn));
     assert.ok(!/: preorder$/m.test(btn), 'the button no longer forks on the run');
@@ -270,7 +280,9 @@ section('3 · the mini app — the surface the report came from');
   it('the size rows keep their OWN word, since one shared label cannot say two', () => {
     assert.ok(/const rowKind = _preKind\(m, this\._onLocalRun\);/.test(MPROD),
       'and they ask the same rule the hero does');
-    assert.ok(/rowKind === 'batch' \? \(L === 'cn' \? '下批现做' : 'NEXT BATCH'\)/.test(MPROD));
+    // §170 hands the same word to the shared appender rather than drawing it
+    // bare; the WORD, and that it is chosen by `rowKind`, is what this pins.
+    assert.ok(/rowKind === 'batch'\s*\n\s*\? freshEta\.withFreshArrival\(L === 'cn' \? '下批现做' : 'NEXT BATCH'/.test(MPROD));
     assert.ok(/\{\{opt\.preTxt \|\| preLabel\}\}/.test(
       fs.readFileSync(path.join(ROOT, 'miniapp/pages/product/product.wxml'), 'utf8')));
   });
@@ -345,8 +357,13 @@ section('4 · the clock that decides is the SHOP\'s (§82)');
       'the PDP stamps its hero and its sizes');
     assert.strictEqual((RETAIL.match(/r.local_fresh_today =/g) || []).length, 1,
       'and exactly ONE place decides it');
-    assert.ok(/const isToday = !!d && d === toYmdLocal\(new Date\(\)\)/.test(RETAIL),
+    // §170 hoisted the zone into a local and reuses it for the two dates it
+    // added; `toYmdLocal`'s default IS deliveryTz(), so passing it explicitly is
+    // the same resolution said out loud, not a different one.
+    assert.ok(/const todayIso = toYmdLocal\(new Date\(\), tz\)/.test(RETAIL) &&
+              /const isToday = !!d && d === todayIso/.test(RETAIL),
       'and it is resolved in the tenant zone, through toYmdLocal');
+    assert.ok(/const tz = deliveryTz\(\);/.test(RETAIL), 'from the tenant, never the host');
   });
   it('EVERY route that offers a reservation also dates the batch', () => {
     /* THE INVARIANT, not three spot checks. A route may stamp `oos_preorder`

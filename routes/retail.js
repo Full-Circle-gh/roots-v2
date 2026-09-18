@@ -1249,12 +1249,48 @@ function isLocalRunPreorder(pol) {
 // must not be the thing that decides whether a customer is told to pre-order.
 function decorateFreshBatch(rows) {
   const list = Array.isArray(rows) ? rows : [rows];
+  const tz = deliveryTz();
   const d = nextFreshBatchDate();
-  const isToday = !!d && d === toYmdLocal(new Date());
+  const todayIso = toYmdLocal(new Date(), tz);
+  const isToday = !!d && d === todayIso;
+  /* §170 — AND WHEN IT REACHES THEM, which is not the same date for everybody:
+     the same-day local run is served on the day the batch is MADE, a couriered
+     order the day after it. The card needs the arrival, not the make day — a
+     shopper is deciding whether to tap, and "when do I eat this" is the
+     question the band was failing to answer (§108 had put the date three
+     screens later, in the checkout notice, on the ground that a pill "cannot"
+     carry one; §170 overturns exactly that half).
+
+     BOTH HALVES ARE COMPUTED HERE FOR §82'S REASON, which has not softened:
+     "is this date tomorrow" is a question about the TENANT'S calendar, and a
+     handset in another zone — or with a wrong clock — must not be the thing
+     that answers it. The client is handed an integer to add one to and a
+     string to format; it does no date arithmetic and reads no clock.
+
+     `local_fresh_in_days` is counted between two MIDDAY anchors (parseYmdLocal
+     pins 12:00), so a DST boundary inside the interval cannot round it to the
+     wrong whole day — the same anchoring the cadence itself uses, for the same
+     reason.
+
+     NEITHER FIELD IS THE CHECKOUT'S ANSWER, deliberately. This one knows the
+     cadence and the clock; computeBatchNotice also knows the cart, the
+     fulfilling store and the zero-stock roll-forward, and stays binding where
+     they differ. The card can only ever name a date the checkout then confirms
+     or pushes back — never one it pulls in, which is the safe direction. */
+  const shipIso = d
+    ? toYmdLocal(new Date(parseYmdLocal(d, tz).getTime() + 86400000), tz)
+    : null;
+  const inDays = d
+    ? Math.round((parseYmdLocal(d, tz).getTime() - parseYmdLocal(todayIso, tz).getTime()) / 86400000)
+    : null;
   for (const r of list) {
     if (!r) continue;
     r.local_fresh_date  = (d && r.is_batch_made) ? d : null;
     r.local_fresh_today = !!(r.local_fresh_date && isToday);
+    // Both ride with `local_fresh_date` and are null wherever it is, so a
+    // grocery row — which names no batch — carries no arrival either.
+    r.fresh_ship_date     = r.local_fresh_date ? shipIso : null;
+    r.local_fresh_in_days = r.local_fresh_date ? inDays  : null;
   }
   return rows;
 }
