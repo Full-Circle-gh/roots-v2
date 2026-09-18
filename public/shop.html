@@ -4913,7 +4913,8 @@ function slStock(m){
      which is the checkout notice's job, not a pill's. A reservable grocery size
      keeps PRE-ORDER: no batch is being cooked for it to name. */
   const kind=!pre||preToday?'':(m.is_batch_made?'batch':'preorder');
-  const preTxt=kind==='batch'?(state.lang==='cn'?'下批现做':'NEXT BATCH')
+  /* §170 — …and the date is no longer the checkout notice's alone. */
+  const preTxt=kind==='batch'?withFreshArrival(state.lang==='cn'?'下批现做':'NEXT BATCH',m,shopperOnLocalRun())
     :kind==='preorder'?(state.lang==='cn'?'可预订':'PRE-ORDER'):'';
   return {out,pre,preToday,kind,preTxt,soldOut:out&&!pre,stock};
 }
@@ -4995,7 +4996,7 @@ function slToRows(products){
       priceWas=wasN>0?slMoney(wasN):'';
       subline=(p.size||'').toString().trim();
     }
-    const batchTxt=p.is_batch_made?(L==='cn'?'下批现做':'NEXT BATCH'):(L==='cn'?'现订现发':'SHIPS SOON');
+    const batchTxt=p.is_batch_made?withFreshArrival(L==='cn'?'下批现做':'NEXT BATCH',p,onLocalRun):(L==='cn'?'现订现发':'SHIPS SOON');
     return {id:p.id,name:pick(p.name_en,p.name_cn),subline,badge:slPickBadge(p.tags),
       soldCaption:soldUnits>0?(L==='cn'?'已售 '+soldUnits:soldUnits+' SOLD'):'',
       outOfStock,nextBatch,batchToday,batchTxt,oosLabel:state.lang==='cn'?'售罄':'SOLD OUT',
@@ -5459,6 +5460,44 @@ function oosPreorderLocal(p){
 // beside `same_city` on the addresses in GET /api/retail/customer), and the
 // address that counts is the default — the one checkout pre-selects. Signed
 // out / no saved address → false, the permissive default we've always had.
+/* §170 — WHEN A `NEXT BATCH` ROW REACHES THE SHOPPER. THE ONLY SECOND COPY OF
+   miniapp/utils/fresh-eta.js, and it exists because this storefront is one
+   static file that can `require` nothing. Keep the two identical: the whole
+   point of the miniapp having ONE derivation is that seven surfaces cannot
+   drift, and this is the eighth. If you change the day words, the two-day
+   bound or the date shape, change them there first and copy them here.
+
+   No clock is read and no date is parsed. The server sent `local_fresh_in_days`
+   (whole days from the TENANT'S today to the make day, §82) and both arrival
+   dates; adding one for a couriered order is integer arithmetic, and the date
+   is printed by splitting the string that was sent. `new Date(ymd)` would read
+   this browser's zone back into an answer the server already settled.
+
+   Both forms are LIFTED live — the day words from the miniapp checkout's
+   slot-day chip, `9月20日` from its express slot. Nothing is composed; see
+   docs/tacet-delivery-vocabulary.md v1.123. */
+const SL_MONTHS_EN=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+function freshArrivalLabel(p,onRun){
+  if(!p)return'';
+  const days=p.local_fresh_in_days;
+  if(days==null)return'';
+  const n=Number(days)+(onRun?0:1);
+  if(!isFinite(n))return'';
+  const cn=state.lang==='cn';
+  if(n<=0)return cn?'今天':'TODAY';
+  if(n===1)return cn?'明天':'TOMORROW';
+  const parts=String((onRun?p.local_fresh_date:p.fresh_ship_date)||'').split('-');
+  const m=Number(parts[1]),d=Number(parts[2]);
+  if(!(m>=1&&m<=12)||!(d>=1&&d<=31))return'';
+  return cn?(m+'月'+d+'日'):(SL_MONTHS_EN[m-1]+' '+d);
+}
+/* Appends only: the §108 word keeps its own vocabulary and '' is a real
+   answer (a grocery row names no batch, so there is no date to name). */
+function withFreshArrival(base,p,onRun){
+  if(!base)return base||'';
+  const eta=freshArrivalLabel(p,onRun);
+  return eta?(base+' · '+eta):base;
+}
 function shopperOnLocalRun(){
   const addrs=(state.customer&&Array.isArray(state.customer.addresses))?state.customer.addresses:[];
   if(!addrs.length)return false;
@@ -5519,7 +5558,7 @@ function stockState(p){
   const preLocal=(vs&&vs.length>1)?vs.some(v=>oosPreorderLocal(v)):oosPreorderLocal(p);
   if(oosBackorder(p)&&onRun&&fresh&&freshToday) return {oos:false,soldOut:false,localFresh:false,badge:''};
   if(oosBackorder(p)&&(!onRun||fresh||preLocal)) return {oos:true,soldOut:false,localFresh:onRun&&fresh,preLocal,
-    badge:p.is_batch_made?(state.lang==='cn'?'下批现做':'NEXT BATCH'):(state.lang==='cn'?'现订现发':'SHIPS SOON')};
+    badge:p.is_batch_made?withFreshArrival(state.lang==='cn'?'下批现做':'NEXT BATCH',p,onRun):(state.lang==='cn'?'现订现发':'SHIPS SOON')};
   return {oos:true,soldOut:true,localFresh:false,badge:state.lang==='cn'?'售罄':'SOLD OUT'};
 }
 function cardHtml(p){

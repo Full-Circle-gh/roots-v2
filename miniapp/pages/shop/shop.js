@@ -17,6 +17,7 @@ const lang     = require('../../utils/lang');
 const cart     = require('../../utils/cart');
 const config   = require('../../utils/config');
 const delivery = require('../../utils/delivery');
+const freshEta = require('../../utils/fresh-eta');
 
 function absUrl(u) {
   if (!u) return '';
@@ -731,9 +732,14 @@ Page({
         // now, the kitchen serves it inside the customer's own window, and a
         // band promising a future batch would be describing a wait that is not
         // happening (§80).
+        // §170 appends WHEN it arrives — the make day for a shopper the local
+        // run serves, the day after for a couriered order. The server settled
+        // both dates; utils/fresh-eta picks between them and does the wording.
+        // SHIPS SOON keeps its bare word: a grocery row names no batch, so
+        // there is no date to name and the helper returns '' for it anyway.
         preText: preToday ? ''
           : p.is_batch_made
-            ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
+            ? freshEta.withFreshArrival(L === 'cn' ? '下批现做' : 'NEXT BATCH', p, onLocalRun, L)
             : (L === 'cn' ? '现订现发' : 'SHIPS SOON'),
         // image_data may now be a streamed-image URL (/api/retail/products/:id/
         // image) since the list omits inline base64 — absUrl() resolves it
@@ -1297,7 +1303,8 @@ Page({
          is a real answer there, not a missing one. Do not restore an
          "|| preLabel" fallback: it reads '' as absent and prints a word the
          silent case exists to withhold. */
-      const preText = kind === 'batch' ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
+      const preText = kind === 'batch'
+        ? freshEta.withFreshArrival(L === 'cn' ? '下批现做' : 'NEXT BATCH', m, onLocalRun, L)
         : kind === 'preorder' ? (L === 'cn' ? '可预订' : 'PRE-ORDER')
         : '';
       return {

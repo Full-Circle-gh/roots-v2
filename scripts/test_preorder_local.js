@@ -651,7 +651,13 @@ console.log('\nweb storefront — stockState / slStock');
     // §128's oosPreorderLocal is sliced in AS SHIPPED, like the four beside it:
     // stockState and slStock both call it now, and a stub here would let the
     // page and this suite disagree about the one question it answers.
+    // §170's appender is sliced in AS SHIPPED for the same reason: the band is
+    // the word plus the arrival now, so it is part of stockState's and
+    // slStock's own path. Fixtures here carry no `local_fresh_in_days`, so it
+    // returns the bare word and every case below reads exactly as it did.
     [grab('oosBackorder'), grab('oosPreorderLocal'), grab('shopperOnLocalRun'),
+      grab('freshArrivalLabel'), grab('withFreshArrival'),
+      'const SL_MONTHS_EN=[];',
       grab('stockState'), grab('slStock')].join('\n'),
     sandbox,
   );
