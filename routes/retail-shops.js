@@ -34,6 +34,9 @@ const { menuUrlFor } = require('../lib/shop-qr');
 const { currentTenantId } = require('../lib/tenant-db');
 const qrpng = require('../lib/qrpng');
 const inventory = require('../lib/inventory');
+// §182 — the questions a product asks (hot or iced, extra shot, sugar), shared
+// with the QR menu so the counter and the phone ask the same things.
+const productOptions = require('../lib/product-options');
 const { requireRetailAdmin } = require('./retail');
 const { logActivity } = require('../middleware/auth');
 
@@ -684,13 +687,25 @@ router.get('/api/retail-admin/stores/:id/counter-catalogue', requireRetailAdmin,
   // against. It is still the number 0 on the glass.
   const avail = inventory.getAvailableMap(locationId);
 
+  // §182 — THE SIZE IS READ, and the omission is the whole of the first half of
+  // the bug. Variants are independent product rows linked by variant_group_id,
+  // so a drink sold in two sizes is two rows carrying the SAME name_en and
+  // name_cn. This query never read variant_label, so the till drew two tiles
+  // reading "Latte" and "Latte" at two prices with the size written nowhere,
+  // and a cashier could tell them apart only by guessing at the money. §129
+  // found and fixed exactly this on the QR menu; the counter kept it.
+  //
+  // variant_sort is the operator's own drag-to-reorder position in the back
+  // office and is what keeps Regular before Large on the glass.
   const products = tdb().prepare(`
     SELECT id, name_en, name_cn, sku, top_category, sell_price,
+           variant_group_id, variant_label, variant_label_cn, variant_sort,
            COALESCE(is_published, 0)    AS is_published,
            COALESCE(is_restock_only, 0) AS is_restock_only
       FROM store_products
      WHERE COALESCE(is_active, 1) = 1
-     ORDER BY COALESCE(NULLIF(name_en, ''), name_cn) COLLATE NOCASE ASC`).all();
+     ORDER BY COALESCE(NULLIF(name_en, ''), name_cn) COLLATE NOCASE ASC,
+              COALESCE(variant_sort, 0) ASC, id ASC`).all();
 
   const rows = [];
   for (const p of products) {
@@ -723,6 +738,12 @@ router.get('/api/retail-admin/stores/:id/counter-catalogue', requireRetailAdmin,
     rows.push({
       product_id: p.id,
       name_en: p.name_en, name_cn: p.name_cn, sku: p.sku,
+      // Null on a product that has no siblings, which is most of them — the
+      // till prints the label only when there is one, so an ordinary product
+      // gains no stray separator.
+      variant_label: p.variant_label || null,
+      variant_label_cn: p.variant_label_cn || null,
+      variant_group_id: p.variant_group_id || null,
       top_category: p.top_category,
       price,
       // The till posts unit_price on these and only these: the listing price is
@@ -744,6 +765,51 @@ router.get('/api/retail-admin/stores/:id/counter-catalogue', requireRetailAdmin,
     if (a.on_menu) return (a.sort_position - b.sort_position) || (a.product_id - b.product_id);
     return 0;                                   // already name-ordered by SQL
   });
+
+  /* §182 — THE QUESTIONS THE COUNTER WOULD HAVE ASKED, which until now only the
+     QR menu could ask (§120). Hot or iced, extra shot, how much sugar: rows in
+     retail_product_options + retail_product_option_choices, read here by the
+     same module routes/shop-menu.js reads them with, so the counter and the
+     phone ask the same questions in the same order with the same limits.
+
+     THE SHELF IS THIS LOCATION'S, and it is the same `avail` map the tiles are
+     already gated by — one read, both jobs. §47 governs the verdict: an absent
+     shelf record IS sold out, not "untracked", so an oat milk nobody has ever
+     counted here is greyed in the sheet rather than sold blind.
+
+     ASKED OF THE ROWS THAT SURVIVED, not of the whole catalogue. A product the
+     loop above dropped — restock-only, switched off for the day, unpriced — is
+     not on the glass and its questions are nobody's business. */
+  const rowByProduct = new Map(rows.map(r => [r.product_id, r]));
+  if (rowByProduct.size) {
+    // `avail` is the map the tiles above are already gated by — the same
+    // figure, read once. A second call here would ask this location the same
+    // question twice and could answer it differently under load.
+    const isChoiceSoldOut = (c) => {
+      const a = avail.get(c.stock_product_id);
+      return !a || a.available <= 0;            // absent shelf record IS sold out — §47
+    };
+    // withStockLink: the till mirrors this location's shelf locally between
+    // catalogue reads, so an extra that is ALSO sold as a product of its own
+    // has a tile here to keep honest after a sale. This is a staff endpoint
+    // behind requireRetailAdmin; the public QR menu asks for no such thing.
+    const byProduct = productOptions.questionsForProducts(
+      tdb(), [...rowByProduct.keys()], { isChoiceSoldOut, withStockLink: true }
+    );
+    for (const [pid, qs] of byProduct) {
+      const row = rowByProduct.get(pid);
+      if (!row || !qs.length) continue;
+      row.options = qs;
+      // A REQUIRED QUESTION WITH NO ANSWER LEFT TAKES THE PRODUCT WITH IT —
+      // §120's rule 1A, which the QR menu already obeys. A drink whose required
+      // "milk?" has run out of every milk cannot be made, and the honest answer
+      // on a tile is the sold-out state it already knows how to draw, not a
+      // sheet the cashier cannot satisfy. Expressed as a zero shelf because
+      // that is the only "cannot sell this" the till's tiles understand, and a
+      // made-here row (stock null) would otherwise never gate at all.
+      if (productOptions.requiredQuestionIsUnanswerable(qs)) row.stock = 0;
+    }
+  }
 
   ok(res, { has_shop: !!shop, shop_id: shop ? shop.id : null, rows });
 });

@@ -181,8 +181,11 @@ function extractFunction(code, name) {
 const BODY = sliceHandler(RETAIL_SRC);
 
 function fixture(taxCfg) {
+  // The two option tables arrive with §182: the line resolver now asks what a
+  // line's answers cost through lib/product-options, which reads both.
   const db = openTablesDb(DB_SRC, ['retail_customers', 'retail_orders', 'retail_order_items',
-                                   'retail_payments', 'retail_stores', 'storefront_config']);
+                                   'retail_payments', 'retail_stores', 'storefront_config',
+                                   'retail_product_options', 'retail_product_option_choices']);
   addForkedStoreProducts(db, SCHEMA_SRC, DB_SRC);
   db.prepare("INSERT INTO store_products (id, name_en, name_cn, sku, weight, sell_price, is_active) VALUES (1,'Tofu','豆腐','SKU1','500g',50,1)").run();
   db.prepare("INSERT INTO retail_stores (id, code, name_en) VALUES (1, 'MAIN', 'Main')").run();
@@ -202,9 +205,23 @@ function handlerFor(db) {
       `${extractFunction(RETAIL_SRC, 'createOrReuseManualCustomer')}\nreturn createOrReuseManualCustomer;`
     )(() => db, require('crypto'), (e) => (e == null ? '' : String(e).trim().toLowerCase())),
     nextOrderNo: new Function('tdb', `${extractFunction(RETAIL_SRC, 'nextOrderNo')}\nreturn nextOrderNo;`)(() => db),
-    resolveManualOrderLines: new Function('tdb', 'productUnitCostYuan',
-      `${extractFunction(RETAIL_SRC, 'costAtSale')}\n${extractFunction(RETAIL_SRC, 'resolveManualOrderLines')}\nreturn resolveManualOrderLines;`
-    )(() => db, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan),
+    // §182 added two dependencies to this resolver's chain — what a line's
+    // answers cost (productOptions) and whether a stock-backed extra may be
+    // sold at all (manualOrderAddonSoldOut). Both real: a stub would decide
+    // the very base this suite taxes.
+    resolveManualOrderLines: new Function('tdb', 'productUnitCostYuan', 'productOptions', 'inventory',
+      `${extractFunction(RETAIL_SRC, 'costAtSale')}\n${extractFunction(RETAIL_SRC, 'manualOrderAddonSoldOut')}\n`
+      + `${extractFunction(RETAIL_SRC, 'resolveManualOrderLines')}\nreturn resolveManualOrderLines;`
+    )(() => db, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan,
+      require(path.join(ROOT, 'lib', 'product-options')),
+      require(path.join(ROOT, 'lib', 'inventory'))),
+    // §182 — what the chosen extras COST us, snapshotted beside the price on
+    // every line the INSERT writes. Real, like costAtSale: it swallows its own
+    // errors and answers null, so leaving it undefined would throw inside the
+    // transaction and look like a rollback defect rather than a missing stub.
+    optionsCostAtSale: new Function('chosenOptionCostYuan',
+      `${extractFunction(RETAIL_SRC, 'optionsCostAtSale')}\nreturn optionsCostAtSale;`
+    )(require(path.join(ROOT, 'lib', 'option-cost')).chosenOptionCostYuan),
     posClosedForStore: new Function('tdb', `${extractFunction(RETAIL_SRC, 'posClosedForStore')}\nreturn posClosedForStore;`)(() => db),
     /* Store credit (§93). THE REAL FUNCTION AND ITS WHOLE CHAIN, not a stub
        returning zero — this suite's question is what the create route STORES,
@@ -582,9 +599,13 @@ async function place(taxCfg, body) {
       const scope = {
         tdb: () => db, tax, money,
         ORDER_FULFILLMENT_TYPES: ['delivery', 'pickup', 'counter'],
-        resolveManualOrderLines: new Function('tdb', 'productUnitCostYuan',
-          `${extractFunction(RETAIL_SRC, 'costAtSale')}\n${extractFunction(RETAIL_SRC, 'resolveManualOrderLines')}\nreturn resolveManualOrderLines;`
-        )(() => db, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan),
+        // §182's two extra dependencies — see the create-route scope above.
+        resolveManualOrderLines: new Function('tdb', 'productUnitCostYuan', 'productOptions', 'inventory',
+          `${extractFunction(RETAIL_SRC, 'costAtSale')}\n${extractFunction(RETAIL_SRC, 'manualOrderAddonSoldOut')}\n`
+          + `${extractFunction(RETAIL_SRC, 'resolveManualOrderLines')}\nreturn resolveManualOrderLines;`
+        )(() => db, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan,
+          require(path.join(ROOT, 'lib', 'product-options')),
+          require(path.join(ROOT, 'lib', 'inventory'))),
         // The fee engine is stubbed — this suite is about the tax, and the zone
         // matcher wants a delivery-zone catalogue that says nothing about it.
         manualOrderFees: () => ({ shippingFee: 10, packingFee: 5, freeShipping: false, zone: null, error: null }),
@@ -607,9 +628,13 @@ async function place(taxCfg, body) {
       const db2 = fixture(null);
       const scope2 = { ...scope, tdb: () => db2,
         taxSettings: new Function('tdb', 'tax', `${extractFunction(RETAIL_SRC, 'taxSettings')}\nreturn taxSettings;`)(() => db2, tax),
-        resolveManualOrderLines: new Function('tdb', 'productUnitCostYuan',
-          `${extractFunction(RETAIL_SRC, 'costAtSale')}\n${extractFunction(RETAIL_SRC, 'resolveManualOrderLines')}\nreturn resolveManualOrderLines;`
-        )(() => db2, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan) };
+        // §182's two extra dependencies — see the sibling scope above.
+        resolveManualOrderLines: new Function('tdb', 'productUnitCostYuan', 'productOptions', 'inventory',
+          `${extractFunction(RETAIL_SRC, 'costAtSale')}\n${extractFunction(RETAIL_SRC, 'manualOrderAddonSoldOut')}\n`
+          + `${extractFunction(RETAIL_SRC, 'resolveManualOrderLines')}\nreturn resolveManualOrderLines;`
+        )(() => db2, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan,
+          require(path.join(ROOT, 'lib', 'product-options')),
+          require(path.join(ROOT, 'lib', 'inventory'))) };
       const k2 = Object.keys(scope2);
       const quote2 = new Function(...k2, `return (req, res) => {${sliceRoute("router.post('/api/retail-admin/order-fees', requireRetailAdmin, express.json(), (req, res) => {")}};`)(...k2.map((k) => scope2[k]));
       quote2({ body: { fulfillment_type: 'delivery', items: [{ product_id: 1, qty: 2 }] } }, off);

@@ -529,9 +529,12 @@ function extractFunction(name) {
 const BODY = sliceHandler();
 
 function liveFixture() {
+  // The two option tables arrive with §182: the line resolver now asks what a
+  // line's answers cost through lib/product-options, which reads both.
   const d = openTables2(DB_SRC, ['retail_customers', 'retail_orders', 'retail_order_items',
                                  'retail_payments', 'retail_stores', 'storefront_config',
-                                 'retail_points_transactions', 'retail_topup_transactions']);
+                                 'retail_points_transactions', 'retail_topup_transactions',
+                                 'retail_product_options', 'retail_product_option_choices']);
   addForkedStoreProducts(d, SCHEMA_SRC, DB_SRC);
   d.prepare("INSERT INTO store_products (id, name_en, name_cn, sku, weight, sell_price, is_active) VALUES (1,'Tofu','豆腐','SKU1','500g',50,1)").run();
   d.prepare("INSERT INTO retail_stores (id, code, name_en) VALUES (1, 'MAIN', 'Main')").run();
@@ -552,9 +555,20 @@ function handlerFor(d) {
       `${extractFunction('createOrReuseManualCustomer')}\nreturn createOrReuseManualCustomer;`
     )(() => d, require('crypto'), (e) => (e == null ? '' : String(e).trim().toLowerCase())),
     nextOrderNo: new Function('tdb', `${extractFunction('nextOrderNo')}\nreturn nextOrderNo;`)(() => d),
-    resolveManualOrderLines: new Function('tdb', 'productUnitCostYuan',
-      `${extractFunction('costAtSale')}\n${extractFunction('resolveManualOrderLines')}\nreturn resolveManualOrderLines;`
-    )(() => d, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan),
+    // §182 added productOptions and manualOrderAddonSoldOut to this resolver's
+    // chain — what a line's answers cost, and whether a stock-backed extra may
+    // be sold. Both real for the same reason costAtSale is: a stub would decide
+    // the price these cases assert.
+    resolveManualOrderLines: new Function('tdb', 'productUnitCostYuan', 'productOptions', 'inventory',
+      `${extractFunction('costAtSale')}\n${extractFunction('manualOrderAddonSoldOut')}\n`
+      + `${extractFunction('resolveManualOrderLines')}\nreturn resolveManualOrderLines;`
+    )(() => d, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan,
+      require(path.join(ROOT, 'lib', 'product-options')),
+      require(path.join(ROOT, 'lib', 'inventory'))),
+    // The cost of those answers, snapshotted beside the price — see the INSERT.
+    optionsCostAtSale: new Function('chosenOptionCostYuan',
+      `${extractFunction('optionsCostAtSale')}\nreturn optionsCostAtSale;`
+    )(require(path.join(ROOT, 'lib', 'option-cost')).chosenOptionCostYuan),
     posClosedForStore: new Function('tdb', `${extractFunction('posClosedForStore')}\nreturn posClosedForStore;`)(() => d),
     taxSettings: new Function('tdb', 'tax', `${extractFunction('taxSettings')}\nreturn taxSettings;`)(() => d, taxLib),
     // The subject. Real, with its whole chain.

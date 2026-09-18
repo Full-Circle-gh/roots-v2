@@ -290,6 +290,24 @@ button{font:inherit;color:inherit;margin:0}
   font-size:14px;font-weight:500;line-height:1.3;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
 }
+/* §182 — the size, under the name. Its own line rather than appended, because
+   .tile .nm clips at two lines and a long product name would otherwise eat the
+   one word that tells two tiles apart. Same weight as the name, dimmer, so the
+   pair reads as one label and not as two facts. */
+.tile .vl{
+  display:block;font-style:normal;font-size:13px;font-weight:400;
+  color:var(--td-text2);margin-top:2px;
+}
+.tile.out .vl{color:var(--td-text2)}
+/* A product that asks something before it can be made. The dot is the whole
+   signal: a cashier learns in one shift that a dotted tile opens a sheet, and
+   a word here would be the third thing on a tile that already carries a name,
+   a size, a code and a price. */
+.tile .ask{
+  position:absolute;top:10px;right:10px;width:6px;height:6px;border-radius:50%;
+  background:var(--td-text2);
+}
+.tile{position:relative}
 .tile .ft{display:flex;align-items:center;justify-content:space-between;gap:8px}
 /* On a tile the code sits left of the price and yields first: a long name
    already clamps to two lines, and the price must never be the thing that
@@ -535,6 +553,41 @@ button{font:inherit;color:inherit;margin:0}
   border-radius:var(--r-control);padding:10px 14px;
 }
 .terr[hidden]{display:none}
+
+/* ---- §182 option sheet: the store picker's sheet, with questions in it ----
+   Same .ssheet body as every other decision on this till, so the sheet a
+   cashier meets for "hot or iced" is the sheet they already know from the
+   store and customer pickers. Wider, because a question plus its answers plus
+   a price is three columns where a store name was one. */
+.opt-sheet{max-width:460px;gap:6px}
+.opt-nm{font-size:17px;font-weight:500;margin-bottom:6px}
+.opt-q{
+  display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+  font-size:13px;color:var(--td-text2);margin:10px 0 2px;
+}
+.opt-q .req,.opt-q .lim{font-style:normal;font-size:12px}
+.opt-q .req{color:var(--td-amber-ink);background:var(--td-amber-tint);border-radius:var(--r-pill);padding:1px 8px}
+.opt-c{min-height:52px}
+.opt-c .ol{flex:1;min-width:0}
+.opt-c .od{flex:none;font-size:14px;color:var(--td-text2);font-variant-numeric:tabular-nums}
+/* A sold-out extra greys and stays in place — §120 rule 1A, and the same
+   reasoning the grid uses for a sold-out tile: a row that vanishes reshuffles
+   every row under it and takes the cashier's place on the screen with it. */
+.opt-c.out{border-style:dashed;opacity:.65}
+.opt-c.out .ol{color:var(--td-text2)}
+.opt-c .od.out{color:var(--td-brick-ink);background:var(--td-brick-tint);border-radius:var(--r-pill);padding:1px 8px;font-size:12px}
+.opt-err{
+  margin-top:10px;font-size:13px;text-align:center;
+  color:var(--td-brick-ink);background:var(--td-brick-tint);
+  border-radius:var(--r-control);padding:8px 12px;
+}
+.opt-ft{display:flex;gap:8px;margin-top:14px}
+.opt-ft .ccancel{flex:none}
+.opt-go{
+  flex:1;min-height:52px;border-radius:var(--r-control);
+  border:1px solid var(--td-text);background:var(--td-text);color:var(--td-paper);
+  font:inherit;font-size:16px;font-weight:500;font-variant-numeric:tabular-nums;
+}
 
 /* ---- customer picker: the store picker's sheet, with a search in it ---- */
 .cust-sheet{max-width:460px;gap:10px}
@@ -914,6 +967,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   <div class="sscrim" id="storepick" hidden></div>
   <div class="sscrim" id="custpick" hidden></div>
   <div class="sscrim" id="leavepick" hidden></div>
+  <div class="sscrim" id="optpick" hidden></div>
 </div>
 <div class="boot" id="boot"><p id="boot-msg"></p></div>
 
@@ -1050,7 +1104,33 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
                    '把 Tacet 添加到主屏幕 — 全屏，无浏览器。'],   // m.html:19221
     installAdd:   ['Add', '添加'],                     // m.html:19223
     installOff:   ['Dismiss', '忽略'],                 // m.html:19224
-    installHere:  ['Add to home screen', '添加到主屏幕']   // m.html:12808
+    installHere:  ['Add to home screen', '添加到主屏幕'],  // m.html:12808
+    /* §182 — THE QUESTIONS THE COUNTER CAN NOW ASK. Every pair below is COPIED
+       from a live one and NOT ONE CHARACTER IS COMPOSED, so the vocabulary
+       document is not touched: §120 and §129 established the same thing for the
+       QR menu's own picker, and copying a locked pair into the second screen
+       that needs it is not composing. The cashier reading these words at the
+       counter and the customer reading them on their phone are being asked the
+       same question in the same characters, which is the point.
+
+       'Add' is this file's own installAdd pair, reused rather than re-minted.
+       The QR menu says 'Add to basket · 加入购物车' for the same act, and the
+       basket metaphor is the one thing that does not survive the crossing: a
+       till has a bill and lines, never a basket. The bare verb is what is left
+       when the metaphor goes, and it was already here. */
+    chooseOpts:   ['Choose your options', '选择选项'],  // shop-menu.js:2188 ← miniapp product.js
+    optRequired:  ['Required', '必选'],                // admin: 09-products.js:4878
+    pleaseChoose: ['Please choose: ', '请选择 '],       // shop-menu.js:2159 (storefront + miniapp)
+    // HOW MANY a pick-any question takes, in PIECES because the numeral is not
+    // known until the sheet opens — the server clamps the floor against what is
+    // still pickable, so a group authored as "choose 2" asks for one when only
+    // one side is left. §153 locked these four shapes and shop-menu.js:2174-2181
+    // carries them; the counter is 项 and the brackets are full-width in 中文.
+    optChoose:    ['Choose ', '选 '],                  // shop-menu.js:2174
+    optUpTo:      ['Up to ', '最多 '],                 // shop-menu.js:2176
+    optAtLeast:   ['At least ', '至少 '],              // shop-menu.js:2177
+    optCount:     ['', ' 项'],                         // shop-menu.js:2175 (L_N_CN)
+    optAdd:       ['Add', '添加']                      // m.html:19223, as installAdd above
   };
   function T(k) { var p = STRINGS[k]; return cuT(p[0], p[1]); }
 
@@ -1113,6 +1193,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     stores: [], storeId: null, storeName: '', pickOpen: false,
     posOpen: null,             // storeCode -> bool, or null when unknown
     custOpen: false, custQ: '', custRows: null,   // null = nothing searched yet
+    /* §182 — the question sheet. null when shut; otherwise the product being
+       configured, the answers ticked so far as {option_id: [choice_id]}, and
+       the question a blocked Add is waiting on. */
+    opts: null,
     sheetOpen: false,          // phone only: is the order sheet up?
     products: [], stock: {}, cats: [], cat: '', q: '',
     lines: [], sel: null,
@@ -1208,6 +1292,25 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       });
   }
   function pname(p) { return cuT(p.name_en || p.name_cn || '', p.name_cn || p.name_en || ''); }
+  /* §182 — THE SIZE, as its own word. Empty for a product with no siblings,
+     which is what keeps an ordinary tile free of a stray separator. */
+  function vlabel(p) {
+    if (!p) return '';
+    return (cuT(p.variant_label || p.variant_label_cn || '',
+                p.variant_label_cn || p.variant_label || '') || '').trim();
+  }
+  /* What a tile and a bill line CALL the thing. The name, then the size after a
+     middle dot — the shape the back office already uses everywhere it lists variants
+     (11-meituan.js, 12-guanyi.js, 29-channel-sync.js all print `Name · Label`),
+     so a cashier who has seen a product list in the office meets the same
+     rendering at the counter. */
+  function fullName(p) {
+    var v = vlabel(p);
+    return v ? (pname(p) + ' · ' + v) : pname(p);
+  }
+  // Does this product ask anything? An empty or absent list is a tile that adds
+  // on one tap, which is the great majority of them.
+  function asks(p) { return !!(p && p.options && p.options.length); }
 
   // ---- money. One place, so the rail and the settle screen cannot disagree.
   function subtotal() {
@@ -1255,8 +1358,29 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   // ---- stock. Per STORE, not the catalogue's cross-store sum: a till may only
   // sell what is on ITS shelf, and effective_stock adds up every store's.
   function stockOf(id) { var v = S.stock[id]; return v == null ? null : v; }
-  function inCart(id) { var l = findLine(id); return l ? l.qty : 0; }
-  function findLine(id) { for (var i = 0; i < S.lines.length; i++) if (S.lines[i].id === id) return S.lines[i]; return null; }
+  /* §182 — A PRODUCT MAY NOW HOLD SEVERAL LINES, and both of these changed
+     shape for it. One latte hot and one latte iced are two lines and ONE shelf,
+     so what is "in the cart" for the purpose of gating a tile is the sum across
+     every line carrying that product — not the first one found, which is what
+     this used to return and which would have let a two-line product sell twice
+     past the shelf. routes/shop-menu.js has counted it this way since §120 for
+     exactly the same reason. */
+  function inCart(id) {
+    var n = 0;
+    for (var i = 0; i < S.lines.length; i++) if (S.lines[i].id === id) n += S.lines[i].qty;
+    return n;
+  }
+  /* A LINE IS A PRODUCT PLUS ITS ANSWERS, and the key is what says so. Two taps
+     that chose the same things merge into one line and show ×2; two taps that
+     chose differently stay apart, because they are different things to make.
+     Sorted, so the key does not depend on the order the cashier ticked. */
+  function lineKey(id, choices) {
+    return String(id) + '|' + (choices || []).slice().sort(function (a, b) { return a - b; }).join(',');
+  }
+  function findLine(key) {
+    for (var i = 0; i < S.lines.length; i++) if (S.lines[i].key === key) return S.lines[i];
+    return null;
+  }
 
   /* ---- boot ------------------------------------------------------------ */
   function boot(msg) { $('boot').hidden = false; $('app').hidden = true; $('boot-msg').innerHTML = msg; }
@@ -1527,11 +1651,23 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         return {
           id: row.product_id,
           name_en: row.name_en, name_cn: row.name_cn, sku: row.sku,
+          // §182 — THE SIZE. Two sizes of one drink are two product rows
+          // carrying the same name; without this the grid drew "Latte" twice
+          // and the cashier picked by price. Null on a product with no
+          // siblings, which is most of them.
+          variant_label: row.variant_label || null,
+          variant_label_cn: row.variant_label_cn || null,
           top_category: row.top_category,
           // The price this till QUOTES and, on a menu row, the price it POSTS.
           price: Number(row.price) || 0,
           on_menu: !!row.on_menu,
-          fulfilment_mode: row.fulfilment_mode || null
+          fulfilment_mode: row.fulfilment_mode || null,
+          // §182 — THE QUESTIONS. Hot or iced, extra shot, how much sugar, in
+          // the shape routes/shop-menu.js hands its own picker, clamped by the
+          // server against what is still on this shelf. Absent on the great
+          // majority of products, and an absent list is a tile that adds on
+          // one tap exactly as it always has.
+          options: Array.isArray(row.options) ? row.options : null
         };
       });
       var seen = {}; var cats = [];
@@ -1744,6 +1880,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     }
     renderPicker();
     renderCustPicker();
+    renderOpts();
     renderLeave();
     $('hd-lang').textContent = _lang === 'cn' ? 'EN' : '中文';
     renderInstall();
@@ -1762,6 +1899,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // settle takeover would put a scrim and a second pay button under a screen
     // whose whole point is that nothing of the till stays readable.
     if (S.view !== 'till') S.sheetOpen = false;
+    // §182 — and neither does the question sheet. A settle takeover that left
+    // it standing would put a second Add button under the screen whose whole
+    // point is that nothing of the till stays readable behind it.
+    if (S.view !== 'till') S.opts = null;
     document.getElementById('app').classList.toggle('sheet-open', S.sheetOpen);
     $('sheet-scrim').hidden = !S.sheetOpen;
     $('settle').hidden = (S.view === 'till');
@@ -1783,7 +1924,12 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       if (!q) return true;
       return (p.name_en || '').toLowerCase().indexOf(q) >= 0
           || (p.name_cn || '').indexOf(S.q.trim()) >= 0
-          || (p.sku || '').toLowerCase().indexOf(q) >= 0;
+          || (p.sku || '').toLowerCase().indexOf(q) >= 0
+          // §182 — the size is searchable, so "large" and "500" reach the tile
+          // they name. Without it a cashier who types the size gets every
+          // sibling or none, which is the search half of the same bug.
+          || (p.variant_label || '').toLowerCase().indexOf(q) >= 0
+          || (p.variant_label_cn || '').indexOf(S.q.trim()) >= 0;
     });
   }
 
@@ -1798,7 +1944,13 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       var inc = inCart(p.id);
       h += '<button class="tile' + (out ? ' out' : '') + '" type="button" data-add="' + p.id + '"' + (out ? ' disabled' : '') + '>'
          + (inc > 0 ? '<span class="incart">' + inc + '</span>' : '')
-         + '<span class="nm">' + esc(pname(p)) + '</span>'
+         // §182 — this one asks something before it can be made.
+         + (!out && asks(p) ? '<span class="ask"></span>' : '')
+         + '<span class="nm">' + esc(pname(p))
+         // §182 — THE SIZE, ON ITS OWN LINE. Not appended to the name: a tile
+         // clips at two lines and a long product name would eat the one word
+         // that tells two tiles apart. Its own row is the row that survives.
+         + (vlabel(p) ? '<i class="vl">' + esc(vlabel(p)) + '</i>' : '') + '</span>'
          + '<span class="ft">'
          + (out
               // Sold out: the reason replaces the price it would have crowded.
@@ -2125,8 +2277,8 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   // cashier nothing, and the kitchen ticket beside them prints it the same way
   // (lib/feie.js). The admin endpoint backfills the question for older rows, so
   // an entry with no question left is drawn as its answer alone rather than as
-  // a stray colon. Nothing here is emitted for a till sale: its lines carry no
-  // options and `opts` is an empty array.
+  // a stray colon. §182 — a TILL sale now reaches this too: until it, a counter
+  // line carried no options and this ran only for a recalled QR order.
   function optsHtml(opts) {
     if (!opts || !opts.length) return '';
     var h = '';
@@ -2173,7 +2325,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       // the stepper under its line instead of inline as the mockup drew it.
       {
         var st = stockOf(l.id);
-        var capped = st != null && l.qty >= st;
+        // §182 — the SHELF, across every line carrying this product. One latte
+        // hot and one latte iced are two lines and one shelf, and a cap that
+        // measured this line alone would let the pair walk past it.
+        var capped = st != null && inCart(l.id) >= st;
         h += '<div class="lctl' + (sel ? ' sel' : '') + '" data-for="' + i + '">'
            + '<span class="qgrp">'
            + '<button class="step" type="button" data-q="-1" data-i="' + i + '">&minus;</button>'
@@ -2449,19 +2604,56 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     if (S.recall) return;
     var p = S.products.filter(function (x) { return x.id === id; })[0];
     if (!p) return;
+    /* §182 — A PRODUCT THAT ASKS SOMETHING OPENS ITS SHEET INSTEAD OF ADDING.
+       Every tap on such a tile opens it, including the second and third: two
+       lattes on one bill may be a hot one and an iced one, and a tile that
+       silently incremented the first line could not say so. Answering the
+       questions the same way twice still merges, because the line key is the
+       product plus its answers — see addAnswered. */
+    if (asks(p)) return openOpts(p);
+    addAnswered(p, [], []);
+  }
+
+  /* The other half of addLine, and the only place a line is born. `choices` is
+     what gets POSTed — ids and nothing else, because a delta that arrived from
+     a till is not a delta and the server resolves every one of them from its
+     own tables. `opts` is the same answer set in the shape renderLines already
+     draws and lib/feie.js already prints. */
+  function addAnswered(p, choices, opts) {
+    var id = p.id;
     var st = stockOf(id);
-    var l = findLine(id);
-    var have = l ? l.qty : 0;
-    if (st != null && have >= st) return;          // never sell past the shelf
+    // The SHELF, not this line: one latte hot and one latte iced are two lines
+    // and one shelf, so the gate counts every line carrying this product.
+    if (st != null && inCart(id) >= st) return;    // never sell past the shelf
+    var key = lineKey(id, choices);
+    var l = findLine(key);
     if (l) l.qty += 1;
     // `menu` rides the line to the submit: a listing's price is the one figure
     // the order endpoint cannot resolve for itself (§42 puts it on the listing,
     // not on the product), so those lines and only those lines post a
     // unit_price. Everything else stays server-priced, which is what keeps a
     // catalogue price corrected in the office from being charged stale here.
-    else S.lines.push({ id: id, name: pname(p), sku: p.sku || '',
-                        price: Number(p.price) || 0, qty: 1, menu: !!p.on_menu });
+    //
+    // THE PRICE ON THE LINE IS BASE PLUS DELTAS, and `base` is kept beside it
+    // because the two are posted differently: the server is handed the BASE and
+    // adds the deltas back from its own price_delta columns. Posting the summed
+    // figure would have the till pricing an extra shot, which is exactly what
+    // §182 refuses to let either client do.
+    else S.lines.push({ key: key, id: id, name: fullName(p), sku: p.sku || '',
+                        base: Number(p.price) || 0,
+                        price: Math.round((Number(p.price) || 0) * 100 +
+                                          optsDelta(opts) * 100) / 100,
+                        qty: 1, menu: !!p.on_menu,
+                        choices: choices.slice(), opts: opts.slice() });
     render();
+  }
+
+  // What the answers add to one unit. Display only: the server recomputes it
+  // from the same columns, and the two agree because neither invented a number.
+  function optsDelta(opts) {
+    var d = 0;
+    for (var i = 0; i < (opts || []).length; i++) d += Number(opts[i].delta) || 0;
+    return Math.round(d * 100) / 100;
   }
   function bumpQty(d, idx) {
     if (S.recall) return;                 // read-only; see addLine
@@ -2478,7 +2670,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     var st = stockOf(l.id);
     var next = l.qty + Number(d);
     if (next <= 0) return drop();
-    if (st != null && next > st) return;
+    // Measured across the product's other lines too — see renderLines. This
+    // replaces the old `next > st`, which is the same test for a product with
+    // one line and too generous for one with two.
+    if (st != null && (inCart(l.id) - l.qty + next) > st) return;
     l.qty = next; render();
   }
 
@@ -2518,8 +2713,15 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       recipient_name: S.customer ? (S.customer.nickname || 'Guest') : 'Guest',
       items: S.lines.map(function (l) {
         var it = { product_id: l.id, qty: l.qty };
-        // See addLine: the menu's price, and never the catalogue's.
-        if (l.menu) it.unit_price = l.price;
+        // See addAnswered: the menu's price, and never the catalogue's — and
+        // the BASE of it, never the figure with the deltas already in. The
+        // server adds those back from its own price_delta columns (§182), so a
+        // till that posted the summed price would be pricing an extra shot
+        // itself and would silently double it.
+        if (l.menu) it.unit_price = (l.base != null ? l.base : l.price);
+        // §182 — the answers, as ids and nothing else. Every label, question
+        // and delta is resolved server-side from this tenant's own tables.
+        if (l.choices && l.choices.length) it.choices = l.choices;
         return it;
       })
     }, mode.payload(S), creditBody());
@@ -2548,6 +2750,14 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       // tiles are honest without a full reload.
       S.lines.forEach(function (l) {
         if (S.stock[l.id] != null) S.stock[l.id] = Math.max(0, S.stock[l.id] - l.qty);
+        // §182 — a chosen extra is a real thing off a real shelf, one per unit
+        // bought, and the server has just taken it. An add-on that is also sold
+        // as a product of its own has a tile on this grid, and without this its
+        // count would sit stale until the next catalogue read.
+        (l.opts || []).forEach(function (o) {
+          var sid = o.stock_product_id;
+          if (sid && S.stock[sid] != null) S.stock[sid] = Math.max(0, S.stock[sid] - l.qty);
+        });
       });
       render();
     }).catch(function (e) {
@@ -2779,6 +2989,190 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   // THE SHELL IS BUILT ONCE, on open. Re-rendering it on every keystroke would
   // replace the <input> the cashier is typing into and drop the caret — the
   // classic way a search box becomes unusable. Only the result list redraws.
+  /* ==================================================================
+     §182 · THE QUESTIONS THE COUNTER CAN NOW ASK.
+
+     Hot or iced, extra shot, how much sugar. The QR menu has asked these since
+     §120 and the counter could not — not because nobody had drawn the buttons,
+     but because the road behind them stopped: routes/retail.js dropped the
+     answer on the floor and the order line had no column to keep it in. Both
+     are built now (lib/product-options.js, and options_json on the manual
+     order), so a tap here reaches the kitchen ticket, the price and the shelf.
+
+     THE RULES ARE THE SERVER'S, NOT THIS SCREEN'S. Which questions exist, how
+     many answers each takes, which extras are still on the shelf and what any
+     of it costs all arrive in the catalogue payload already clamped. This file
+     renders them and blocks on them; it does not compute them. A limit the
+     client computes is a limit the client can compute differently, and the two
+     clients would then differ — which is the entire reason the rules moved into
+     one module in the first place.
+
+     WHY A SHEET AND NOT MORE TILES. A "Latte (iced, extra shot)" tile per
+     combination is a grid nobody can scan, and it multiplies: three questions
+     of three answers is twenty-seven tiles for one drink. Sizes stay as tiles
+     because a size is a different PRODUCT with its own price and its own shelf;
+     an answer is not.                                                        */
+  function openOpts(p) {
+    // Pre-ticked defaults, which is what is_default is for: the common answer
+    // is already chosen and a cashier who agrees taps Add once. A default that
+    // has sold out is not pre-ticked — it is not an answer anybody can give.
+    var sel = {};
+    (p.options || []).forEach(function (o) {
+      var pre = [];
+      (o.choices || []).forEach(function (c) {
+        if (!c.def || c.out) return;
+        // A single-answer question takes ONE default even if the data carries
+        // two, which it should not but can after an edit.
+        if (!o.multi && pre.length) return;
+        pre.push(c.id);
+      });
+      // A ceiling binds a default set exactly as it binds a tapped one.
+      if (o.max && pre.length > o.max) pre = pre.slice(0, o.max);
+      sel[o.id] = pre;
+    });
+    S.opts = { p: p, sel: sel, err: '' };
+    render();
+  }
+  function closeOpts() { S.opts = null; render(); }
+
+  // Ticking. A single-answer question REPLACES; a pick-any toggles, and its
+  // ceiling refuses the tick that would break it rather than silently dropping
+  // somebody else's — the cashier untucks one and picks the other, which is the
+  // same thing the QR menu's sheet does with a greyed-out box.
+  function tickOpt(oid, cid) {
+    if (!S.opts) return;
+    var o = (S.opts.p.options || []).filter(function (x) { return x.id === oid; })[0];
+    if (!o) return;
+    var c = (o.choices || []).filter(function (x) { return x.id === cid; })[0];
+    if (!c || c.out) return;                       // sold out is not an answer
+    var cur = S.opts.sel[oid] || [];
+    if (!o.multi) { S.opts.sel[oid] = (cur.length === 1 && cur[0] === cid) && !o.req ? [] : [cid]; }
+    else {
+      var at = cur.indexOf(cid);
+      if (at >= 0) cur.splice(at, 1);
+      else if (o.max && cur.length >= o.max) return;
+      else cur.push(cid);
+      S.opts.sel[oid] = cur;
+    }
+    S.opts.err = '';
+    render();
+  }
+
+  // The first question that is not answered yet, or null. Drives both the
+  // blocked Add and the line of red under it — naming the question is the
+  // difference between "you cannot add this" and a cashier knowing why.
+  function optsMissing() {
+    if (!S.opts) return null;
+    var qs = S.opts.p.options || [];
+    for (var i = 0; i < qs.length; i++) {
+      var o = qs[i];
+      var n = (S.opts.sel[o.id] || []).length;
+      if (o.min && n < o.min) return o;
+      if (o.req && !n) return o;
+    }
+    return null;
+  }
+
+  // "(Choose 2)" / "（选 2 项）" and its two siblings, built from the pieces
+  // §153 locked because the numeral is not known until the sheet is open.
+  function optsLimitText(o) {
+    if (o.min && o.max && o.min === o.max) return T('optChoose') + o.min + T('optCount');
+    if (o.min) return T('optAtLeast') + o.min + T('optCount');
+    if (o.max) return T('optUpTo') + o.max + T('optCount');
+    return '';
+  }
+
+  function renderOpts() {
+    var el = $('optpick');
+    el.hidden = !S.opts;
+    if (!S.opts) { el.innerHTML = ''; return; }
+    /* THE SCROLL SURVIVES A REBUILD, and it has to. render() runs on the
+       fifteen-second pending-orders poll and on every push from the doorbell,
+       so a sheet with three questions in it would jump back to the top under a
+       cashier mid-way down it — for a reason that has nothing to do with this
+       screen. The ticks themselves live in S.opts.sel and were never at risk;
+       only the position was. */
+    var prev = el.querySelector('.opt-sheet');
+    var top = prev ? prev.scrollTop : 0;
+    var p = S.opts.p;
+    var miss = optsMissing();
+    // The running price, so the extra shot is visible BEFORE the line is made.
+    var unit = Math.round(((Number(p.price) || 0) + optsDelta(chosenOpts())) * 100) / 100;
+    if (!(unit >= 0)) unit = 0;
+
+    var h = '<div class="ssheet opt-sheet">'
+          + '<div class="hd">' + esc(T('chooseOpts')) + '</div>'
+          + '<div class="opt-nm">' + esc(fullName(p)) + '</div>';
+    (p.options || []).forEach(function (o) {
+      var lim = optsLimitText(o);
+      h += '<div class="opt-q">' + esc(cuT(o.q_en, o.q_cn))
+         + (o.req ? '<i class="req">' + esc(T('optRequired')) + '</i>' : '')
+         + (lim ? '<i class="lim">' + esc(lim) + '</i>' : '')
+         + '</div>';
+      (o.choices || []).forEach(function (c) {
+        var on = (S.opts.sel[o.id] || []).indexOf(c.id) >= 0;
+        var d = Number(c.d) || 0;
+        h += '<button class="srow opt-c' + (on ? ' on' : '') + (c.out ? ' out' : '') + '" type="button"'
+           + (c.out ? ' disabled' : ' data-opt="tick" data-o="' + o.id + '" data-c="' + c.id + '"')
+           + '>'
+           + '<svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>'
+           + '<span class="ol">' + esc(cuT(c.en, c.cn)) + '</span>'
+           // Sold out replaces the money it would have crowded, exactly as a
+           // sold-out tile replaces its price with the reason.
+           + (c.out ? '<span class="od out">' + esc(T('outOfStock')) + '</span>'
+                    : (d ? '<span class="od">' + (d > 0 ? '+' : '\u2212') + money(Math.abs(d)) + '</span>' : ''))
+           + '</button>';
+      });
+    });
+    // The refusal names the question, in the storefront's own words.
+    if (S.opts.err && miss) {
+      h += '<div class="opt-err">' + esc(T('pleaseChoose') + cuT(miss.q_en, miss.q_cn)
+           + (optsLimitText(miss) ? cuT(' (', '（') + optsLimitText(miss) + cuT(')', '）') : '')) + '</div>';
+    }
+    h += '<div class="opt-ft">'
+       + '<button class="ccancel" type="button" data-opt="close">' + esc(T('cancel')) + '</button>'
+       + '<button class="opt-go" type="button" data-opt="add">'
+       + esc(T('optAdd')) + ' ' + money(unit) + '</button>'
+       + '</div></div>';
+    el.innerHTML = h;
+    if (top) {
+      var next = el.querySelector('.opt-sheet');
+      if (next) next.scrollTop = top;
+    }
+  }
+
+  // The ticked answers, in the order the questions were asked — which is the
+  // order they will be posted in and the order the ticket prints them.
+  function chosenOpts() {
+    if (!S.opts) return [];
+    var out = [];
+    (S.opts.p.options || []).forEach(function (o) {
+      (S.opts.sel[o.id] || []).forEach(function (cid) {
+        var c = (o.choices || []).filter(function (x) { return x.id === cid; })[0];
+        if (!c) return;
+        // The SAME shape routes/shop-menu.js snapshots and renderLines draws.
+        // The server writes its own copy from its own tables; this one only has
+        // to survive as far as the bill on the glass.
+        out.push({ option_id: o.id, choice_id: c.id,
+                   label: c.en, label_cn: c.cn,
+                   question_en: o.q_en, question_cn: o.q_cn,
+                   delta: Number(c.d) || 0,
+                   // Which shelf this extra comes off, so the local mirror
+                   // after a sale can keep that extra's OWN tile honest.
+                   stock_product_id: c.stock_product_id || null });
+      });
+    });
+    return out;
+  }
+
+  function commitOpts() {
+    if (!S.opts) return;
+    if (optsMissing()) { S.opts.err = '1'; return render(); }
+    var p = S.opts.p, opts = chosenOpts();
+    S.opts = null;
+    addAnswered(p, opts.map(function (o) { return o.choice_id; }), opts);
+  }
+
   function renderCustPicker() {
     var el = $('custpick');
     el.hidden = !S.custOpen;
@@ -2845,8 +3239,22 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       // Tapping away from the leave question is staying, the same dismissal the
       // store picker takes — and the safe answer is the one a stray tap gives.
       if (S.leaveOpen && ev.target.id === 'leavepick') { S.leaveOpen = false; return render(); }
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-cancel-order]');
+      // Tapping away from the questions is cancelling the line — nothing has
+      // been added yet, so the safe answer a stray tap gives is "no line".
+      if (S.opts && ev.target.id === 'optpick') return closeOpts();
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-cancel-order],[data-opt]');
       if (!t) return;
+      // §182 — the question sheet. Answered before anything else on the screen:
+      // while it is up it is the only thing the cashier is being asked.
+      if (t.hasAttribute('data-opt')) {
+        var oa = t.getAttribute('data-opt');
+        if (oa === 'close') return closeOpts();
+        if (oa === 'add') return commitOpts();
+        if (oa === 'tick') {
+          return tickOpt(Number(t.getAttribute('data-o')), Number(t.getAttribute('data-c')));
+        }
+        return;
+      }
       // Choosing a pane. The flag is what stops the next poll from defaulting
       // the cashier back off the face they just asked for.
       if (t.hasAttribute('data-pane')) {
