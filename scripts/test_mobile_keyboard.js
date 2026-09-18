@@ -29,7 +29,17 @@
  *   3. a tap puts the keyboard down ONLY where the tap did not move focus
  *      itself. A tap on another field, or on a <label> that hands focus to
  *      one, must leave the browser alone — blurring there would shut the
- *      keyboard the tap had just opened.
+ *      keyboard the tap had just opened. AND THAT INCLUDES A FIELD THE TAP
+ *      OPENED: the count on Ask to buy, and every control like it, repaints
+ *      its row into an <input> and focuses it inside its own onclick, so the
+ *      tap target is gone and the focused field is brand new by the time the
+ *      rule runs. Blurring there committed and shut the field in the same tap,
+ *      which is why free-typing a quantity did nothing at all — "i cant add a
+ *      number manually", of a field that opens, focuses and closes correctly
+ *      when called directly. That is the shape of this defect: every function
+ *      test around it passed, because no click bubbles in a function test.
+ *      What the rule closes is a keyboard that was ALREADY OPEN, so it reads
+ *      the focus as of touch-down (kbMark) and compares.
  *
  * No browser and no network: the real functions are SLICED OUT OF THE SHIPPED
  * public/m.html and driven against a hand-built DOM, the technique
@@ -112,13 +122,28 @@ const app = {
 const sandbox = { document: doc, app, console, String, Number, Object };
 vm.createContext(sandbox);
 vm.runInContext(sliceConst('KB_NOT_TYPED'), sandbox, { filename: 'm.html#KB_NOT_TYPED' });
-for (const fn of ['kbField', 'kbHints', 'kbEnterDown', 'kbTapAway']) {
+/* The one binding the tap rule keeps between touch-down and click. Lifted from
+ * the shipped line rather than declared here: a second `let kbWas` in this file
+ * would be a copy of the source, and the whole technique of this suite is that
+ * there are none. */
+function sliceLet(name) {
+  const m = SRC.match(new RegExp(`^let ${name}=.*$`, 'm'));
+  if (!m) throw new Error(`let ${name} not found in m.html`);
+  return m[0];
+}
+vm.runInContext(sliceLet('kbWas'), sandbox, { filename: 'm.html#kbWas' });
+for (const fn of ['kbField', 'kbHints', 'kbEnterDown', 'kbMark', 'kbTapAway']) {
   vm.runInContext(sliceFn(fn), sandbox, { filename: `m.html#${fn}` });
 }
-const { kbField, kbHints, kbEnterDown, kbTapAway } = sandbox;
+const { kbField, kbHints, kbEnterDown, kbMark, kbTapAway } = sandbox;
 
 const input = (attrs) => new El('input', attrs);
-const focus = (el) => { doc.activeElement = el; return el; };
+/* FOCUS AS OF TOUCH-DOWN, which is what a real tap gives the rule: the browser
+ * fires pointerdown before the control's own handler runs, so kbMark() has been
+ * and gone by the time anything is clicked. A case that wants the other
+ * situation — a tap that moved focus itself — calls kbMark() first and moves
+ * focus after, which is the order a real one happens in. */
+const focus = (el) => { doc.activeElement = el; kbMark(); return el; };
 
 console.log('\n══ 1 · what a soft keyboard belongs to ══');
 ok(kbField(input({})) !== null, 'a bare <input> is a typed field');
@@ -207,6 +232,44 @@ doc.activeElement = focus(input({}));
 kbTapAway({});
 eq(doc.activeElement.blurs, 0, 'and an event with no target does nothing rather than throwing');
 
+console.log('\n══ 4b · a field the tap itself opened is NOT closed by that tap ══');
+/* THE DEFECT, in the state a real tap leaves behind. Nothing was focused when
+   the finger went down; the count's own onclick repainted the row, which threw
+   the tapped button out of the document, and focused the <input> it had just
+   written. The old rule saw a focused field and a target that was neither the
+   field nor a field, and blurred — mbTypeCommit then shut the field on the way
+   out, so the tap did nothing visible and no quantity could be typed. */
+doc.activeElement = body; kbMark();                // finger down on a row at rest
+const gone = new El('button'); gone.isConnected = false;   // repainted away by its own handler
+const opened = input({ id: 'mbnum-54' }); doc.activeElement = opened;
+kbTapAway({ target: gone });
+eq(opened.blurs, 0, 'the count field opened by the tap survives the tap that opened it');
+eq(doc.activeElement, opened, '...and still has the caret, so the keyboard is up on digits');
+
+/* The same thing where the tap came from a field: a search box focused, and a
+   control that opens a number field on the row below it. Focus moved DURING the
+   tap, so the rule has nothing to say. */
+const searching = focus(input({ id: 'mMbQ' }));
+const opened2 = input({ id: 'mbnum-54' }); doc.activeElement = opened2;
+kbTapAway({ target: new El('div') });
+eq(opened2.blurs, 0, 'a tap that moved focus from one field to another leaves both alone');
+eq(searching.blurs, 0, '...and does not reach back for the field it came from');
+
+/* A click with no touch-down before it — a synthetic .click(), a button pressed
+   with Enter — closes nothing. The safe direction for a rule that only ever
+   takes a keyboard away. */
+sandbox.kbWas = null;
+const untouched = input({ id: 'mExpNote' }); doc.activeElement = untouched;
+kbTapAway({ target: new El('div') });
+eq(untouched.blurs, 0, 'a click with no tap behind it takes no keyboard away');
+
+/* AND THE RULE STILL FIRES ON THE ORDINARY TAP. Same field before and after, so
+   the tap took nothing from the browser and the keyboard is the tap's to close —
+   this is the complaint the whole section was written for. */
+const covered = focus(input({ id: 'mExpNote' }));
+kbTapAway({ target: new El('div') });
+eq(covered.blurs, 1, 'a keyboard that was already open still goes down on a tap on the page');
+
 console.log('\n══ 5 · the rules are wired into the shipped app ══');
 ok(/\n\s*kbHints\(\);/.test(SRC.slice(SRC.indexOf('function render('))),
    'render() asks for the Done keys after every paint');
@@ -216,6 +279,11 @@ ok(/document\.addEventListener\('click',\s*kbTapAway\)/.test(SRC),
    "the tap rule listens on 'click' — resolved at touch-UP, after the control's own handler");
 ok(!/document\.addEventListener\('(pointerdown|touchstart)',\s*kbTapAway/.test(SRC),
    '...and NOT at touch-down, which is the defect the scrim rule above it records');
+ok(/document\.addEventListener\('pointerdown',\s*kbMark,\s*true\)/.test(SRC)
+   && /document\.addEventListener\('mousedown',\s*kbMark,\s*true\)/.test(SRC),
+   'touch-down only RECORDS which field the keyboard was on, in both spellings, in capture');
+ok(/function kbMark\(\)\{\s*kbWas=kbField\(document\.activeElement\);\s*\}/.test(SRC),
+   '...and records it by reading focus, so a tap that moves focus can be told apart');
 
 console.log('\n══ 6 · the two screens the complaint came from ══');
 // Read off the shipped markup: neither field declares a key of its own, so both

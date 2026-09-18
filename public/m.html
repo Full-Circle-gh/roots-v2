@@ -1340,10 +1340,39 @@ function kbEnterDown(e){
   if(!el||String(el.tagName).toUpperCase()!=='INPUT'||!kbField(el)) return;
   if(el.blur) el.blur();
 }
-/* 3 · a tap that is not on a field puts the keyboard down. */
+/* 3 · a tap that is not on a field puts the keyboard down.
+
+   IT CLOSES A KEYBOARD THAT WAS ALREADY OPEN, which is NOT the same question as
+   "is a field focused now that the tap has finished". A control on this page
+   repaints and then focuses, inside its own onclick: the count on Ask to buy
+   replaces its row with an <input> and puts the caret in it, qsTypeOpen does it
+   through render() and state.focus, ordNoteOpen the same. By the time this rule
+   runs on the way up, the focused field is one THE TAP ITSELF OPENED, and the
+   thing that was tapped has been thrown away with the markup it lived in.
+   Neither test below can see that — the target is a button, so it is not the
+   field and it is not a field — so the rule blurred the field the tap had just
+   opened, its onblur committed and shut it, and the tap looked ignored.
+   FREE-TYPING A QUANTITY WAS THEREFORE IMPOSSIBLE on every screen that offers
+   it. Reported by Ash, of the Ask to buy count: "i cant add a number manually".
+   The function tests pass and always did: they call mbTypeOpen directly, where
+   no click ever bubbles.
+
+   WHAT TOUCH-DOWN RECORDS IS A FACT, NOT A DECISION. The decision stays at
+   `click`, for every reason the scrim rule above gives; `kbWas` only remembers
+   which field the keyboard belonged to BEFORE the tap, which is the one thing
+   `click` can no longer find out. A tap that moved focus itself — to another
+   field, through a <label>, or into a field it opened — leaves the two
+   disagreeing, and disagreement means leave the browser alone. A click that
+   arrives with no touch-down before it (a synthetic .click(), a button pressed
+   with Enter) closes nothing, which is the safe direction: this rule only ever
+   takes a keyboard away. */
+let kbWas=null;
+function kbMark(){ kbWas=kbField(document.activeElement); }
 function kbTapAway(e){
+  const was=kbWas; kbWas=null;
   const on=kbField(document.activeElement);
   if(!on) return;                                  // nothing open to close
+  if(on!==was) return;                             // this tap opened or moved it
   const t=e&&e.target;
   if(!t||t===on) return;                           // the tap was in the field
   if(t.closest&&t.closest('label')) return;        // a label hands focus on
@@ -1351,6 +1380,12 @@ function kbTapAway(e){
   if(on.blur) on.blur();
 }
 document.addEventListener('keydown', kbEnterDown);
+/* Capture, so a control that stops the event reaching document still has its
+   touch-down seen — and both spellings, because pointerdown is absent on older
+   webviews and mousedown follows a tap on every one of them. Both fire BEFORE
+   the browser moves focus, so what they read is the state before the tap. */
+document.addEventListener('pointerdown', kbMark, true);
+document.addEventListener('mousedown', kbMark, true);
 document.addEventListener('click', kbTapAway);
 
 /* Quick Stock is a separate PWA; reaching it is a navigation, not a push. */

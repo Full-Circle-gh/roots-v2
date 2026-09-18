@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.316
+# Tacet shared-core consolidation — decisions record, v4.317
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-18 · v4.317 — **§113 ADDENDUM · THE RULE THAT CLOSES A KEYBOARD WAS CLOSING THE FIELD THAT HAD JUST BEEN OPENED — REPORTED BY ASH**, of the Ask to buy count with a red circle drawn round it: *"i cant add a number manually"*. **The field was right, the rule above it was wrong.** Tapping the count runs `mbTypeOpen`, which repaints the row into an `<input>` and puts the caret in it — inside its own `onclick`. §113 rule 3 then ran on the way up, saw a focused field and a tap target that was neither the field nor a field (a button, and by then a button thrown out of the document with the markup it lived in), and blurred; `mbTypeCommit` shut the field on the way out. **One tap, opened and closed, nothing on screen** — so free-typing a quantity was impossible on every screen that offers it: Ask to buy, Quick Stock's count, the order note. **Rule 3 asked the wrong question**, and the fix is to ask the right one: what it exists to close is a keyboard that was ALREADY OPEN, not "is something focused now the tap has finished". `kbMark` records, at touch-down, which field the keyboard belonged to; `kbTapAway` blurs only when that is still the field focused at `click`. **The decision stays at `click`** for every reason §113 rule 3 and the scrim rule give — touch-down only records a fact that `click` can no longer find out — and the test that forbids moving the decision to `pointerdown` is kept and joined by one that pins where the recording happens. A click with no touch-down behind it (a synthetic `.click()`, a button pressed with Enter) now closes nothing, which is the safe direction for a rule that only ever takes a keyboard away. **WHY EVERY TEST PASSED THROUGH THIS.** `scripts/test_ask_to_buy_keyboard.js` has 84 assertions over exactly these functions and all 84 were green: they call `mbTypeOpen` directly, and **no click bubbles in a function test**. The defect lived in the gap between two correct pieces of code, which is where only a real click can find it — reproduced, before the fix, in headless Chromium through `scripts/lib/m-probe` on both screens (field absent after the tap on Ask to buy and on Quick Stock) and confirmed gone after it. **What holds it now**: `scripts/test_mobile_keyboard.js` — **55 assertions across 7 sections**, fast shard, no browser — with the defect written as the state a real tap leaves behind (nothing focused at touch-down, the target detached, a brand-new field focused) plus the case that must not regress: a keyboard already open still goes down on a tap on the page. No field's markup changed and no Chinese string was touched. Two suites failed on the first `test:fast` of a fresh checkout and pass individually before and after this change — `data/roots.db` does not exist until something requires `database.js`; second run 286/286. No change to `.gitignore` or CI.
 
 2026-09-18 · v4.316 — **§177 ADDED: A MENU MOVES BETWEEN LOCATIONS; THE SHOP RECORD AND ITS CODE DO NOT — DECIDED by Ash.** From a screenshot of Sales → Locations: *"the shop menu should move form tianhe to yuexiu."* **The button in that screenshot was never the thing to move** — `csRenderLocations()` paints `Shop menu →` on every location card from one code path, so both cards already had it; what differs is whether there is a menu behind it. **Put as three options and Ash chose B**: the listings move, the destination ends up with the products, prices, modes and menu order, and the source's menu is emptied. **Option C — repointing `shops.location_id` — is refused and the lock it would have broken is restated rather than softened**: the `public_code` is the only thing a QR carries (§44), so a repointed record would make every QR already stuck to a table in Tianhe serve Yuexiu's menu, silently, to customers. **The cost of choosing B is a reprint and it is named on the confirm dialog** — one new QR at the destination, one dead QR at the source — because the alternative is finding out at a table. **The source shop is switched off, not deleted**: `resolveShop()` already requires an active shop, so the old code resolves to nothing and serves the existing not-found page, while the row, its code and its history stay readable; turning it back on gives an empty menu, not the old one. **The destination's own switch is not touched**, on v4.312's reasoning — that entry paid for a save which took a live printer off the air as an invisible side effect — and which of create-or-reuse happened is reported back so nobody guesses whether the new menu is live. **A destination that already has a menu is refused**, because merging two priced menus asks whose price wins and that is not decided here; the test is the listing count, so an empty shop is a valid destination and is reused. All or nothing, in one transaction. **Option A — copy, both keep a menu — is recorded as considered and not taken**, because a second location opening alongside the first will ask for it and this control is deliberately not that. Vocabulary v1.133: four pairs verbatim, four lifted, four composed. §177 is new and supersedes nothing.
 
@@ -12898,6 +12900,59 @@ key, if the tap rule is ever moved to `pointerdown`/`touchstart`, or if
 sweep (`scripts/test_mobile_screens.js`) re-renders all 147 screens warm, cold
 and in Chinese with the pass running on every paint — 441 renders, no uncaught
 errors.
+
+### ADDENDUM 1 (2026-09-18) — rule 3 was closing the keyboard the tap had just opened
+
+**Reported by Ash**, a screenshot of Ask to buy with a red circle round the `1`
+in a row's stepper: ***"i cant add a number manually"***. The count on that row
+is a button that opens a number field; it had been one for weeks, and it could
+not be used.
+
+**What happened, in order, on one tap.** `mbTypeOpen` repaints the row through
+`mbPatch()` — which rewrites `#mMbBody` — and focuses the `<input>` it has just
+written, all inside the button's own `onclick`. The click then reaches
+`document`, where rule 3 runs. It found a focused field; it found a target that
+was not that field and was not a field (a `<button>`, and by then one detached
+from the document with the markup it came from); so it blurred, `onblur` ran
+`mbTypeCommit`, and the field closed in the same tap that opened it. **Nothing
+visible happened at all.**
+
+**The rule asked the wrong question.** "Is a field focused now the tap has
+finished" is not the same as "was a keyboard open before this tap" — and the
+second is the only one rule 3 was ever about. Every control on this page
+repaints before it focuses, so the first question has a misleading answer on
+every one of them: `qsTypeOpen` (Quick Stock's count, §46) and `ordNoteOpen`
+(the order note) reach it through `render()` and `state.focus`, and both were
+broken the same way and by the same line.
+
+**The fix.** `kbMark` records, at touch-down in capture, which field the
+keyboard belonged to; `kbTapAway` blurs only if that is still the field focused
+at `click`. **The decision has not moved** — it is still taken at `click`, for
+the scrim reason rule 3 gives, and the assertion forbidding
+`pointerdown`/`touchstart` for the decision is kept — because what touch-down
+does here is *record a fact*, not decide anything. A tap that moved focus
+itself, into a field it opened or across to another, leaves the two
+disagreeing, and disagreement means leave the browser alone. A `click` with no
+touch-down behind it closes nothing, which is the safe direction for a rule
+that only ever takes a keyboard away.
+
+**Why the tests were green, and this is the part worth keeping.**
+`scripts/test_ask_to_buy_keyboard.js` holds 84 assertions over exactly these
+functions, including six on typing a free quantity, and all 84 passed
+throughout: they call `mbTypeOpen` directly, and **no click bubbles in a
+function test**. Both pieces of code were correct on their own; the defect was
+in the event that joins them, which only a real click can produce. It was
+reproduced before the fix in headless Chromium through `scripts/lib/m-probe` —
+tap the count, no `#mbnum-54` on Ask to buy and no `#qsnum-7` on Quick Stock —
+and confirmed gone after, along with a typed `120` landing on the row.
+
+**What holds it now**: `scripts/test_mobile_keyboard.js`, **55 assertions across
+7 sections**, still fast-shard and still no browser, with the defect written as
+the state a real tap leaves behind — nothing focused at touch-down, a detached
+target, a brand-new focused field — beside the case that must not regress: a
+keyboard that was already open still goes down on a tap on the page. Removing
+the fix takes the suite red. No `<input>`'s markup changed, and no Chinese
+string was touched.
 ## §114 — A PURCHASE THAT HAS NOT ARRIVED IS TRACKED AS AN ORDER, WHOEVER PAID FOR IT
 
 Ruling (Ash, 2026-09-13), on a case that breaks §111 part three: *"an employee use the
