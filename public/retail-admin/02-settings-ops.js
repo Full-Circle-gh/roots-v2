@@ -1187,8 +1187,19 @@ async function _testPrinter(storeId) {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ store_id: storeId }),
     });
     const j = await r.json();
-    if (j.ok) toast('🖨 Test sent — check that store\'s printer · 已发送', 'success');
-    else      toast('Print failed · 打印失败: ' + (j.error || 'unknown'), 'error');
+    if (j.ok) { toast('🖨 Test sent — check that store\'s printer · 已发送', 'success'); return; }
+    // NAME THE BRAND AND THE SN. The likeliest mistake on this screen is a
+    // store left on the wrong brand, and "printer does not exist" from the
+    // other vendor's cloud reads like broken hardware. Showing what was
+    // actually tried turns that into an obvious mismatch. §171 addendum 2.
+    const where = (j.vendor_label && j.sn) ? ` — ${j.vendor_label} · SN ${j.sn}` : '';
+    toast('Print failed · 打印失败: ' + (j.error || 'unknown') + where, 'error');
+    if (j.code === 'unknown_printer') {
+      toast(cuT(
+        `SN ${j.sn} is not registered on your ${j.vendor_label} account. Is the BRAND right for this store?`,
+        `编号 ${j.sn} 未注册在你的${j.vendor_label}账号下。这家门店的品牌选对了吗?`
+      ), 'error');
+    }
   } catch (e) { toast('Test failed · 测试失败: ' + e.message, 'error'); }
 }
 
