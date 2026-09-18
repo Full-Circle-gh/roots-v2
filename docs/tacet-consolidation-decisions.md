@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.322
+# Tacet shared-core consolidation — decisions record, v4.323
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-18 · v4.323 — **§181 · A SHOP-WIDE CLOSE OUTRANKS EVERY CHANNEL CELL, AND THE SWITCH THAT APPLIES BELONGS WHEREVER THE MASKED STATE IS SHOWN — REPORTED BY ASH:** *"in store I believe that's counter till? when I open yuexiu it close automatic. I can't open counter till for yuexiu now. it shows closed"*, then *"I want to have same feature of closing and open shop as I have on PC should work on the phone. also overviews all those options because right now seems that the sales section where all those toggles channels are in not working properly. audit that page... check for dead ends, errors"*. The till was never opening: `csCellOpen` reports every channel at a shop with `fulfillment_open = 0` as closed, so the write landed and the next read hid it. Four defects in one loop — the hidden write is now refused by name (`409 shop_closed`), the shop-wide state is reported (`shopOpen` on every cell, store and location), the phone re-reads instead of patching its own copy, and the phone gains the shop switch it never had. The audit Ash asked for found three more on the same screen: a failed read left it loading forever, a queued Meituan change was not shown, and the footer denied the control directly above it. A fifth bug was found by the new suite's own log line and fixed here — `refillQueueForCell`'s SELECT carried `//` comments inside the SQL literal, so every Meituan reopen ever made queued nothing. `docs/tacet-delivery-vocabulary.md` v1.137 records the Chinese.
 
 2026-09-18 · v4.322 — **§180 · A BOX THAT IS PACKED IS NOT A BOX THAT HAS LEFT — REPORTED BY ASH:** *"when order has 2 split package one shipped one parked at \"paid\". right now i dont have the option to change the status of the parked package to \"prepared\" status. it create a problem with stock managment."* **THE CONTROL WAS NEVER HIDDEN; IT WAS NEVER BUILT.** A parcel's state is derived from two timestamps in `shipmentState` and has exactly three values — pending, dispatched, delivered. `paid` and `preparing` are ORDER words, one status column, and the forward buttons in the drawer are a pure function of `o.status`. So the first parcel out flips the order to `dispatched` (`POST /shipments/:sid/dispatch`), `NEXT_STATUS['dispatched']` offers only *Mark delivered* and *Refund*, and *Start preparing* leaves the screen for good — `STATUS_TRANSITIONS.preparing.prev` is `['paid','awaiting_restock']` and `undo-dispatch` is refused once any parcel carries a waybill, which is exactly the reported case. **PREPARED IS A SEPARATE AXIS, NOT A FOURTH VALUE OF `state`, and that is the whole design decision.** A packed box has NOT left: every guard that reads `state === 'pending'` to mean "still here" — `canDispatch`, `canSplit`, the local-ETA card, the per-shipment tracking card, `parcelsStillInTheBuilding`, `buildOrderFulfillment`'s partial rollup — must keep answering the same way for a prepared parcel, and a fourth value would have required editing every one of them correctly on pain of a silent wrong answer. `shipmentState` is therefore UNCHANGED and a `prepared_at` column plus a derived `prepared` flag ride beside it. §24's eight-week shadowed route is the standing argument for not widening a value that six call sites already switch on. **THE STOCK IS THE POINT AND IT IS THE §58-ADDENDUM CALL SHAPE, REUSED VERBATIM**: `POST /shipments/:sid/prepare` stamps `prepared_at` and calls `prepareCommitUnreservedOrder(id, { shipmentId: sid })` — the same scoped commit the parcel-dispatch route already makes, so the parked box's own goods come off the count and a fresh line riding a parcel that is still in the building keeps waiting. Nothing new was invented for the deduction; the box that could not reach the existing door is now given the door. **THE ORDER IS NOT ROLLED BACKWARDS, AND THE ONE-LINE FIX THAT WOULD HAVE IS REFUSED**: widening `STATUS_TRANSITIONS.preparing.prev` to accept `dispatched` was the smaller change and would have told a customer watching parcel one in transit that their order is 备货中 again, flipped `deriveStatusFromOrder`, and fought both undo guards — a customer-facing lie to settle a warehouse count. **THE SIGNAL IS HALF THE DEFECT AND IS FIXED WITH IT**: `isStockPending` opens `if (status !== 'paid') return false`, so the *Stock pending · 库存待扣* note goes dark on exactly the orders this is about, the moment parcel one leaves — the hazard the dispatch route's own comment names and then leaves standing. It now also answers for `preparing` and `dispatched`, gated behind one indexed existence check for a parcel that is neither prepared nor gone, so the orders list pays nothing on the common case. **NO UNDO, STATED RATHER THAN OVERLOOKED**: `undo-preparing` does not reverse stock either, so a parcel-level undo would be the first reversal of its kind in this machine and is a separate decision with a separate ledger question. **CHINESE IS LIFTED, NOT COMPOSED** — `已备货` is `reference/roots_v1.html`'s own word for this exact state and `标记此包裹已备货` is the live sibling button with one word swapped; vocabulary v1.136 records both, and records the parcel pills that shipped unregistered. **LEFT OPEN AND NAMED:** a NON-batch-made line sitting in the parked parcel is still deducted by the sibling's dispatch, because the §58 addendum's hold-back is fresh-only and whole-product; that is the same complaint one layer down and is not fixed here.
 
@@ -19063,3 +19065,114 @@ in this product as `备货中` and `单待备货`. The button is the live siblin
 `标记此包裹已发货` with one word swapped. `docs/tacet-delivery-vocabulary.md`
 v1.136 records both, and registers the three parcel pills that have been shipping
 unrecorded since split packages landed.
+
+## §181 — A SHOP-WIDE CLOSE OUTRANKS EVERY CHANNEL CELL, AND THE SWITCH THAT APPLIES BELONGS WHEREVER THE MASKED STATE IS SHOWN
+
+**Decided 2026-09-18 by Ash**, on the report: *"in store I believe that's counter
+till? when I open yuexiu it close automatic. I can't open counter till for yuexiu
+now. it shows closed"*, and then, on the finding below being put to him:
+*"I want to have same feature of closing and open shop as I have on PC should
+work on the phone. also overviews all those options because right now seems that
+the sales section where all those toggles channels are in not working properly.
+audit that page... check for dead ends, errors"*.
+
+### What was actually wrong
+
+Not the till. **Two switches sit over one shop and only one of them was ever
+visible.**
+
+`channel_status` holds channel × shop — the rows the Sales sheet toggles.
+`store_business_status.fulfillment_open` holds *this shop is not trading at all*,
+and `csCellOpen` returns false for **every** non-Meituan channel at such a shop
+whatever its own row says. That mask is correct and load-bearing: `lib/inventory`
+drops the store from every routing pool, and `routes/retail.js posClosedForStore`
+refuses the till, so a cell reading "open" underneath it would describe a shop
+that cannot take an order.
+
+What was wrong is that the mask was **silent, and had no counterpart control**:
+
+1. `POST /channel-status/cell` accepted an open at such a shop and returned 200.
+2. The row landed in `channel_status`, genuinely written.
+3. The next `GET /channel-status` masked it back to closed.
+4. Nothing in the response said the shop was shut, so no client could tell the
+   two closures apart even if it wanted to.
+5. The phone made it worse by patching `cell.open` locally and never re-reading,
+   so the lie survived until the app was restarted — at which point the row
+   flipped back on its own.
+
+"I open it and it closes automatically" was the only reading available.
+
+### The decision
+
+**A closure that cannot be lifted where it is shown is a dead end, so the state
+names itself and the switch that applies travels with it.**
+
+Three parts, in the order they fire:
+
+- **Refuse, do not store.** `POST /channel-status/cell` returns `409 shop_closed`
+  for an open at a shop with `fulfillment_open = 0`. Nothing is written that the
+  next read would contradict. Closing stays allowed — an operator may well want
+  the cell off for when the shop comes back. Meituan is exempt, because its cell
+  is read from the POI rather than masked.
+- **Report the reason, not only the result.** `shopOpen` rides on every cell,
+  store and location in `GET /channel-status`. A client that only ever sees
+  `open: false` cannot distinguish *this channel is off here* from *this shop is
+  not trading*, and a screen that cannot distinguish them cannot explain either.
+- **Put the switch where the state is.** The phone's Sales screen gains shops
+  above the channel cards, both directions, through the same
+  `/channel-status/location` endpoint the desktop Sales page already uses. Shops
+  are listed first because that is the order the states override in: nothing a
+  channel row says survives its shop being shut.
+
+**Why the location master and not a narrower flag.** A new endpoint writing only
+`fulfillment_open` would be more precise and would leave the channel cells at
+whatever they were. It was rejected: the shop switch on the desktop Sales page
+already writes both, Ash asked for parity with the PC in those words, and a
+phone control that reopens a shop while leaving three channels invisibly off is
+a second version of this same bug.
+
+**The cost, stated.** This is the bluntest control in the app and it is now on a
+phone. Reopening a shop turns on channels an operator may have deliberately shut,
+and closing one stops the till, the pickups and the routing together. That is why
+both confirms name all three rather than saying "close this shop" and letting the
+operator find out at the counter.
+
+### Found in the same audit, fixed here
+
+- A failed `/channel-status` read left the Sales screen on "Loading…" **forever**:
+  `state.chan` stayed null with `chanTried` already true, and nothing retried.
+- A queued Meituan change (`target_open` pending) was not shown on the phone,
+  though the desktop has shown it since the daemon existed — so a Meituan row
+  read unchanged immediately after being changed, which is this same confusion
+  from a different cause.
+- The screen footer said opening and closing a channel was on desktop, directly
+  beneath a card that does exactly that per shop.
+
+### A fifth bug, found by the new suite's own log line
+
+`lib/store-close.js refillQueueForCell` carried three `//` comment lines **inside**
+its SQL template literal. SQLite comments are `--`, so `prepare()` threw on every
+call and `setChannelOpen`'s best-effort catch logged `queue step failed` and moved
+on. **Every Meituan reopen ever made queued nothing at all** — the refill that
+function exists for had never once run.
+
+It is fixed in this section's change rather than its own because reopening a shop,
+which §181 puts on the phone, runs straight through it. The catch that hid it is
+correct and stays: the flag write is what the operator asked for and must land
+even if the queue work trips. What was missing was anything that would ever read
+the log line, which is what `scripts/test_channel_shop_close.js` §4 now is.
+
+### Not done
+
+**The Meituan cell is still not masked by `fulfillment_open`.** `csCellOpen`
+returns the POI's own state before the shop check, so a shop that is closed
+shop-wide can show Meituan "open" beside five closed channels. That is arguably
+honest — it is what Meituan reports — but it is a second reading of the same
+screen and it is not resolved here.
+
+### Chinese
+
+Eight pairs copied, two restructured, five composed.
+`docs/tacet-delivery-vocabulary.md` v1.137 records them with the rejects, including
+one string minted and then thrown out — `销售看板加载失败。` — for the live
+`加载失败，请重试。`, because `销售看板` is not a term this product has.
