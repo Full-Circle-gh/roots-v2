@@ -1341,10 +1341,16 @@ const FEATURE_HOMES = {
   // Low-stock suggestions (§178) sit inside the purchase-order editor, which
   // is a wizard step, not a page with room for a settings bar — so the switch
   // goes where Production's does, Settings → Operations, next to the other
-  // things a tenant turns on or off wholesale. Its host holds the switch and
-  // nothing else: there is no configuration to hide when it is off, which is
-  // why that host carries no data-feat and the CSS has no .feat-off rule for
-  // it. The injected "off" card stays hidden by the default .feat-off rule.
+  // things a tenant turns on or off wholesale. That host carries no data-feat
+  // and the CSS has no .feat-off rule for it, so its card reads the same
+  // whichever way the switch is set; the injected "off" card stays hidden by
+  // the default .feat-off rule.
+  //
+  // THE HOST IS NOT EMPTY, and it was: a host with no `.group-card-head h3`
+  // and no `.muted` line is invisible to indexCards() (02-settings-ops.js),
+  // which is what builds Settings search — so the switch could not be found by
+  // searching for it. Both hosts below carry that heading now. Whatever else a
+  // host does, it has to be findable.
   lowStockHints: '#lowstock-settings-home',
 };
 let _cfgCache = {};
