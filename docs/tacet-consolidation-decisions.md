@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.312
+# Tacet shared-core consolidation — decisions record, v4.313
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-18 · v4.313 — **§171 ADDENDUM 3 · THE TAG MAP, READ OFF PAPER: SHANGPENG'S SET IS SMALLER.** Ash, holding the first Shangpeng slip: *"it prints but have a problem, it doesn't look the same when tianhe printer print"* — the receipt carried `<BOLD>Air shipment · 空运</BOLD>` and `<L>TOTAL …</L>` as **literal characters**, in front of a customer. **Shangpeng's tag vocabulary is a SUBSET of Feie's**, read element by element off the paper: `<CB>` (shop name, order code), `<B>` (PKG n/m, SKU, Items 件数) and `<C>` (address, Thank you) are honoured; `<BOLD>` (shipment label, item names) and `<L>` (TOTAL) are not. **Dropping the two is the complete answer, not a fallback** — there is no Shangpeng bold and no Shangpeng double-height to map them to, so nothing the device could have done is given up. **The tempting fix is wrong and a test now says so**: mapping them to `<B>` to keep the emphasis fails on arithmetic, because `<B>` is ENLARGE, an enlarged line holds `BIG_WIDTH` not `WIDTH`, and the renderer has already wrapped item names and built the TOTAL row to 31 — a 16-column line would fold a price in half. A plain line that fits beats an emphasised one that folds. **§171's hedge was the right shape and is now spent**: that section shipped this table flagged and isolated with the promise that a wrong entry would be "a one-line fix and no renderer moves", and it was exactly that — two entries, zero renderer lines, one file. The hedge made a wrong guess cheap; the paper made it right, and the pairing is the rule worth keeping. **Accepted difference between the two shops**: Tianhe's item names are bold and its TOTAL double-height, Yuexiu's are plain — same words, same layout, same widths. Making them identical would mean giving up the emphasis on Feie too, a worse trade. 46 assertions, two sabotages confirmed red including the `<L>`→`<B>` "improvement".
 
 2026-09-18 · v4.312 — **§171 ADDENDUM 2 · THE WRONG BRAND LOOKS EXACTLY LIKE A BROKEN PRINTER.** Ash, on the first real test print: *"i test from the website of the printer, it prints, when i try from the system it show failed"*. Printer fine, system fine — **the Tianhe row had been left on 商鹏 with Tianhe's FEIE serial in it**, so a good SN went to the wrong vendor's cloud, which answered `打印机不存在`, and the screen said only `Print failed`. **This is the mistake the screen will keep inviting**: §171 put a brand dropdown on every store row, the panel opens on the first store's tab, and the instruction being followed is "set the brand to Shangpeng" — doing it on whichever tab is open is the shape of the screen, not carelessness. A per-store setting that is usually uniform gets got right by never touching it, and wrong exactly once. **The fix is the diagnosis, not the freedom**: the brand stays per-store, because a tenant really does run two; a failed test now echoes back **the brand and SN it actually tried** (`打印机不存在 — 商鹏 · SN 550540977`) and an `unknown_printer` answer adds one plain line, *is the BRAND right for this store?* **Only the two vendor codes seen first-hand against the live API are normalised** — `2` → unknown_printer, `-4` → bad_signature — and a test pins that restraint, because confident wrong advice beats no advice only when it is right. **The costly part was the silence, not the outage**: saving the brand also took Tianhe's real printer off the air, instantly, reversibly in one dropdown, and invisibly until someone at a counter notices no paper. A tenant-wide brand with a per-store override is recorded as the alternative **considered and not taken** — it trades a rare mistake for a permanently more confusing model. 43 assertions, two sabotages confirmed red. **The tag map remains unverified**: no slip has yet come out of a Shangpeng head.
 
@@ -18082,6 +18084,54 @@ diagnosis fix addresses the same failure without that trade.
 **STILL UNVERIFIED, AND UNCHANGED BY ANY OF THIS:** the markup tag map. No
 slip has yet come out of a Shangpeng head, so nothing is known about the tags
 that was not known when §171 shipped.
+
+### §171 ADDENDUM 3 — THE TAG MAP, READ OFF PAPER: SHANGPENG'S SET IS SMALLER
+
+**2026-09-18. The unverified thing is now verified, by the only means that was
+ever going to settle it.** Ash, holding the first Shangpeng slip: *"it prints
+but have a problem, it doesn't look the same when tianhe printer print"*. The
+receipt carried `<BOLD>Air shipment · 空运</BOLD>` and `<L>TOTAL … </L>` as
+LITERAL CHARACTERS, in the middle of a customer's receipt.
+
+**SHANGPENG'S TAG VOCABULARY IS A SUBSET OF FEIE'S.** Read element by element
+off the paper against what `lib/feie.js` emits:
+
+| tag | where it lands | SP-T6-H |
+|---|---|---|
+| `<CB>` | shop name, order code | honoured |
+| `<B>`  | `PKG n/m`, SKU line, `Items 件数` | honoured |
+| `<C>`  | address, `Thank you!` | honoured |
+| `<BOLD>` | shipment label, item names | **printed as text** |
+| `<L>` | the `TOTAL` line | **printed as text** |
+
+**DROPPING THE TWO IS THE COMPLETE ANSWER, NOT A FALLBACK.** There is no
+Shangpeng bold and no Shangpeng double-height to map them to, so nothing the
+device could have done is being given up. `<BOLD>` and `<L>` map to `''`; the
+lines print plain.
+
+**THE TEMPTING FIX IS WRONG AND A TEST NOW SAYS SO.** Mapping them to `<B>` to
+keep the emphasis fails on arithmetic, not taste: `<B>` is ENLARGE, an
+enlarged line holds `BIG_WIDTH` columns rather than `WIDTH`, and the renderer
+has *already* wrapped item names and built the `TOTAL` row to 31. Pushing
+those through a 16-column line re-wraps them at the head's own arithmetic and
+lands the break anywhere — a price folded in half. **A plain line that fits
+beats an emphasised one that folds mid-price**, and the sabotage run confirms
+the test catches that specific "improvement".
+
+**§171's HEDGE WAS THE RIGHT SHAPE AND IS NOW SPENT.** That section shipped
+this table flagged, isolated to one screen, with the promise that a wrong
+entry would be "a one-line fix and no renderer moves". It was exactly that:
+two entries changed, zero renderer lines touched, one file. **The hedge is
+what made a wrong guess cheap; the paper is what made it right.** What
+survives as a rule is the pairing — where a vendor's documentation cannot be
+read, isolate the guess to a table, ship it flagged, and treat the first real
+output as the primary source it is.
+
+**WHAT IS NOW KNOWN TO DIFFER BETWEEN THE TWO SHOPS' SLIPS**, and is accepted:
+Tianhe's item names are bold and its TOTAL is double-height; Yuexiu's are
+plain. Same words, same layout, same widths. **A tenant who wants them
+identical would have to give up the emphasis on Feie too**, which is a worse
+trade than two shops whose receipts differ in weight.
 ## §172 — WHAT THE SHOP KNOWS ABOUT A PERSON IS READ ON EVERY ORDER, AND IS EDITED IN ONE PLACE
 
 **DECIDED BY ASH, 2026-09-18**, looking at TC000750's drawer: *"an order note
