@@ -111,6 +111,37 @@ function getListing(shopId, id) {
   return tdb().prepare(LISTING_SELECT + ' WHERE sl.shop_id = ? AND sl.id = ?').get(shopId, id) || null;
 }
 
+// MINTING A SHOP ROW, in one place. Re-rolls on a UNIQUE collision, the
+// referral-code shape. Eight attempts over a 32^8 keyspace is not a real
+// limit; it is there so a broken random source fails loudly rather than
+// spinning.
+//
+// EXTRACTED FOR THE MOVE (§177), which has to create the destination's shop
+// when the location has none. It calls this rather than growing a second
+// minter: a code minted two ways is a code with two sets of properties, and
+// §44 rests on there being one.
+//
+// Returns { id } or { error, status } — the caller answers with it, so a
+// losing race reads identically however the insert was reached.
+function mintShop(locationId, nameEn, nameCn) {
+  for (let i = 0; i < 8; i++) {
+    const code = newShopCode();
+    try {
+      const info = tdb().prepare(
+        'INSERT INTO shops (location_id, public_code, display_name_en, display_name_cn) VALUES (?, ?, ?, ?)'
+      ).run(locationId, code, nameEn == null ? null : nameEn, nameCn == null ? null : nameCn);
+      return { id: info.lastInsertRowid };
+    } catch (e) {
+      // Only a public_code collision is retried. A location_id collision means
+      // a concurrent create won the race — answer as the pre-check would have.
+      if (/shops\.public_code/.test(e.message)) continue;
+      if (/shops\.location_id/.test(e.message)) return { error: 'shop_exists', status: 409 };
+      throw e;
+    }
+  }
+  return { error: 'code_mint_failed', status: 500 };
+}
+
 // ─── Shops ──────────────────────────────────────────────────────────────
 
 // Every location, with its shop if it has one. The Sales → Locations cards
@@ -154,26 +185,9 @@ router.post('/api/retail-admin/shops', requireRetailAdmin, requireStoresEdit, ex
   const nameEn = coerceName(b.display_name_en);
   const nameCn = coerceName(b.display_name_cn);
 
-  // Re-roll on a UNIQUE collision, the referral-code shape. Eight attempts over
-  // a 32^8 keyspace is not a real limit; it is there so a broken random source
-  // fails loudly rather than spinning.
-  let shopId = null;
-  for (let i = 0; i < 8 && shopId === null; i++) {
-    const code = newShopCode();
-    try {
-      const info = tdb().prepare(
-        'INSERT INTO shops (location_id, public_code, display_name_en, display_name_cn) VALUES (?, ?, ?, ?)'
-      ).run(locationId, code, nameEn, nameCn);
-      shopId = info.lastInsertRowid;
-    } catch (e) {
-      // Only a public_code collision is retried. A location_id collision means
-      // a concurrent create won the race — answer as the pre-check would have.
-      if (/shops\.public_code/.test(e.message)) continue;
-      if (/shops\.location_id/.test(e.message)) return bad(res, 409, 'shop_exists');
-      throw e;
-    }
-  }
-  if (shopId === null) return bad(res, 500, 'code_mint_failed');
+  const minted = mintShop(locationId, nameEn, nameCn);
+  if (minted.error) return bad(res, minted.status, minted.error);
+  const shopId = minted.id;
 
   logActivity(req.user.id, req.user.username, 'create', 'shop', shopId, { location_id: locationId }, req.ip);
   ok(res, { shop: getShop(shopId), listings: [] }, 201);
@@ -202,6 +216,121 @@ router.patch('/api/retail-admin/shops/:id', requireRetailAdmin, requireStoresEdi
   logActivity(req.user.id, req.user.username, 'update', 'shop', id, b, req.ip);
   ok(res, { shop: getShop(id) });
 });
+
+// MOVE A MENU TO ANOTHER LOCATION — §177 (2026-09-18, decided by Ash).
+//
+// THE LISTINGS MOVE; THE SHOP RECORD AND ITS CODE DO NOT. That is the whole
+// shape of this route, and the never-writable list at the head of this file is
+// why: `location_id` is not editable because a printed QR is a promise about
+// the code attached to it. Repointing the record would have been the smaller
+// diff and it is refused — it would make every QR already stuck to a table at
+// the SOURCE serve the DESTINATION's menu, silently, to customers.
+//
+// So a move costs a reprint, by construction: the destination gets its OWN
+// shop (minted here when it has none, with its own code) and the source keeps
+// its code over an emptied menu. The admin says both of those out loud before
+// it calls this; nothing here is reachable without that confirmation.
+//
+// THE SOURCE SHOP IS SWITCHED OFF, NOT DELETED. `resolveShop()` in
+// routes/shop-menu.js already requires an active shop, so the old code stops
+// resolving and the public page serves the same not-found page it serves a
+// wrong code — no new public behaviour. Deleting the row would instead free
+// the location for a shop with a NEW code and destroy the record of what the
+// old one was, which is the evidence a reader needs to understand a dead QR.
+//
+// THE DESTINATION'S OWN SWITCH IS NOT TOUCHED. A shop that was off before the
+// move is off after it, carrying its new menu; one created BY the move is
+// active, because that is what creating one has always done. The answer
+// carries both shops in full, so the caller can say which happened rather
+// than the operator guessing whether the new menu is live.
+router.post('/api/retail-admin/shops/:id/move', requireRetailAdmin, requireStoresEdit, express.json(), (req, res) => {
+  const id = intParam(req.params.id);
+  const from = id && getShop(id);
+  if (!from) return bad(res, 404, 'not_found');
+
+  const toLocationId = intParam((req.body || {}).to_location_id);
+  if (!toLocationId) return bad(res, 400, 'to_location_id_required');
+  if (toLocationId === from.location_id) return bad(res, 409, 'same_location');
+  const toLoc = tdb().prepare('SELECT id FROM retail_stores WHERE id = ?').get(toLocationId);
+  if (!toLoc) return bad(res, 404, 'location_not_found');
+
+  // ALL OR NOTHING, AND THAT INCLUDES EVERY REFUSAL THAT READS THE DATA.
+  //
+  // A half-move — products at both locations or at neither — is the one
+  // outcome an operator could not reason about from either screen, so the
+  // copy, the delete, the switch and the mint are one transaction. The two
+  // REFUSALS that depend on a count are inside it as well, which is not
+  // tidiness: read outside, each one is a race whose loser is a corrupted
+  // move rather than an error. A destination counted as empty and filled a
+  // moment later would hit UNIQUE(shop_id, store_product_id) mid-copy and
+  // report a 500 for a case this route has a sentence for, and a product added
+  // to the SOURCE after its menu was read would be deleted without ever being
+  // copied. Both are ordinary refusals from in here.
+  //
+  // mintShop() answers rather than throwing, so its refusal is re-thrown by
+  // hand to leave the transaction the same way the others do — a shop minted
+  // for a move that then failed would leave a location holding a code nobody
+  // printed.
+  const fail = (code, status, extra) =>
+    Object.assign(new Error(code), { httpCode: code, httpStatus: status, extra });
+  let toShopId = null;
+  let created = false;
+  let rows = [];
+  const tx = tdb().transaction(() => {
+    // These rows are what move. `sort_position` comes across verbatim, so the
+    // menu arrives in the order it was built in rather than in insert order.
+    rows = listListings(id);
+    if (!rows.length) throw fail('nothing_to_move', 409);
+
+    // REFUSED BY LISTING COUNT, NOT BY THE PRESENCE OF A SHOP (§177). Merging
+    // two priced menus asks whose price wins on a product listed at both, and
+    // that question is not answered here. A location set up and never filled
+    // is a valid destination and its empty shop is REUSED — `location_id` is
+    // UNIQUE, so a second one could not be created anyway.
+    const existing = tdb().prepare('SELECT id FROM shops WHERE location_id = ?').get(toLocationId);
+    if (existing) {
+      const n = tdb().prepare('SELECT COUNT(*) AS n FROM shop_listings WHERE shop_id = ?').get(existing.id).n;
+      if (n) throw fail('destination_has_menu', 409, { listing_count: n });
+      toShopId = existing.id;
+    } else {
+      const minted = mintShop(toLocationId, null, null);
+      if (minted.error) throw fail(minted.error, minted.status);
+      toShopId = minted.id;
+      created = true;
+    }
+
+    const ins = tdb().prepare(
+      'INSERT INTO shop_listings (shop_id, store_product_id, price, fulfilment_mode, is_available, sort_position)'
+      + ' VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    for (const r of rows) ins.run(toShopId, r.store_product_id, r.price, r.fulfilment_mode, r.is_available, r.sort_position);
+    tdb().prepare('DELETE FROM shop_listings WHERE shop_id = ?').run(id);
+    tdb().prepare('UPDATE shops SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  });
+  try {
+    tx();
+  } catch (e) {
+    if (e && e.httpCode) return bad(res, e.httpStatus, e.httpCode, e.extra);
+    throw e;
+  }
+
+  // Logged against BOTH shops. The source's entry is the only record of why a
+  // live menu went empty and a printed code went dead; the destination's is
+  // the only record of where its menu came from.
+  logActivity(req.user.id, req.user.username, 'update', 'shop', id,
+    { moved_to_shop_id: toShopId, moved_to_location_id: toLocationId, listings: rows.length, switched_off: true }, req.ip);
+  logActivity(req.user.id, req.user.username, 'update', 'shop', toShopId,
+    { moved_from_shop_id: id, moved_from_location_id: from.location_id, listings: rows.length, shop_created: created }, req.ip);
+
+  ok(res, {
+    from: getShop(id),
+    to: getShop(toShopId),
+    listings: listListings(toShopId),
+    moved: rows.length,
+    created,
+  });
+});
+
 
 // ─── Listings ───────────────────────────────────────────────────────────
 

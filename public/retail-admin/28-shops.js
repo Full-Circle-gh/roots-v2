@@ -91,6 +91,12 @@
   let _loc = null;        // { id, code, name_en, name_cn, is_active }
   let _shop = null;       // the shops row, or null when the location has none
   let _rows = [];         // listings
+  // EVERY location with its shop, as GET /shops answers it — the same fetch
+  // load() already makes to resolve a location code, kept instead of
+  // discarded. §177's move needs to know which OTHER locations could take
+  // this menu, and asking again would be a second call for data this page is
+  // already holding.
+  let _locs = [];
   let _loading = false;
   let _err = '';
   let _pickerOpen = false;
@@ -127,6 +133,22 @@
     return lang() === 'cn' ? esc(cn) : esc(en);
   };
   const locName = () => _loc ? nameOf(_loc.name_en || _loc.code, _loc.name_cn || _loc.code) : '';
+
+  // WHERE THIS MENU COULD GO — §177. A destination is any OTHER location whose
+  // shop carries no listings, including one with no shop at all, which the
+  // move creates. The test is the LISTING COUNT and not the presence of a
+  // shop: a location set up and never filled is a fine destination, while
+  // merging two priced menus asks whose price wins on a product listed at
+  // both, and §177 does not answer that.
+  //
+  // COMPUTED FROM WHAT THE PAGE ALREADY LOADED, and that is also what hides
+  // the control: nowhere to go means no button, so the screen never offers an
+  // action whose only possible answer is a refusal. The list is as old as the
+  // page, so the server re-checks it — this decides what to SHOW, not what is
+  // allowed.
+  const moveTargets = () => (_loc && _locs.length
+    ? _locs.filter(x => x.location && x.location.id !== _loc.id && !(x.shop && x.shop.listing_count > 0))
+    : []);
 
   const I = {
     back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14 18-6-6 6-6"/></svg>',
@@ -188,7 +210,8 @@
     _loading = true; _err = ''; paint();
     try {
       const all = await api('/api/retail-admin/shops');
-      const hit = (all.data || []).find(x => x.location && x.location.code === storeCode);
+      _locs = all.data || [];
+      const hit = _locs.find(x => x.location && x.location.code === storeCode);
       if (!hit) throw Object.assign(new Error(''), { code: 'location_not_found' });
       _loc = hit.location;
       if (hit.shop) {
@@ -268,9 +291,17 @@
 
   // §1.7a: back link IS the eyebrow · title · at most two exits, one Dusk.
   function head() {
+    // THE SECOND EXIT — §1.7a allows two and at most one Dusk, and Add product
+    // holds the Dusk (§1.8 rule 1). Move products is therefore Secondary, the
+    // bare .shp-btn, which is also what §1.7a says a non-committing exit is.
+    // It appears only on a menu that HAS something to move and only when
+    // there is somewhere to move it to — see moveTargets().
+    const moveBtn = (_shop && _rows.length && moveTargets().length)
+      ? `<button type="button" class="shp-btn" id="shp-move" data-cap="stores:edit" onclick="shpMove(this)">${esc(T('Move products', '移动商品'))}</button>`
+      : '';
     const cta = !_loc ? ''
       : _shop
-        ? `<button type="button" class="shp-btn primary" id="shp-add" data-cap="stores:edit" onclick="shpPickerToggle()">${esc(T('+ Add product', '+ 添加商品'))}</button>`
+        ? moveBtn + `<button type="button" class="shp-btn primary" id="shp-add" data-cap="stores:edit" onclick="shpPickerToggle()">${esc(T('+ Add product', '+ 添加商品'))}</button>`
         : `<button type="button" class="shp-btn primary" id="shp-create" data-cap="stores:edit" onclick="shpCreate(this)">${esc(T('Set up', '设置'))}</button>`;
     const code = _shop
       ? `<div class="shp-code"><code>${esc(_shop.public_code)}</code></div>`   // unlabelled on purpose — see header
@@ -613,6 +644,79 @@
       toast(errText(e, 'save_failed'), 'err');
     }
     _busy.delete('shop'); paint();
+  };
+
+  // MOVE THIS MENU TO ANOTHER LOCATION — §177 (Ash, 2026-09-18). Two dialogs,
+  // in this order: pick where, then confirm what it costs. The second one is
+  // the whole reason this is not a one-tap control — a move empties this menu,
+  // switches this shop off and kills the QR already printed on the tables
+  // here, and none of that is guessable from a button reading Move products.
+  //
+  // THE SHOP RECORD DOES NOT MOVE and the button does not pretend it does.
+  // "Move products" is the honest name: §41 attaches the shop to its location
+  // and §44 makes its code a promise a printed QR carries, so the destination
+  // gets its own shop and its own code. That is why the confirm names a
+  // reprint.
+  //
+  // IT LANDS ON THE DESTINATION, not back here. The operator's next question
+  // is always "is it live over there?", and the destination's own page answers
+  // it with no string at all: its switch, its code and its QR, or the Inactive
+  // pill standing where the QR would be. Repainting this page instead would
+  // leave them reading an empty menu and wondering where the products went.
+  //
+  // WHICH NAMES ARE ESCAPED AND WHICH ARE NOT is not a detail here. A dialog
+  // title and body are inserted as HTML, so a location name going into one is
+  // esc()'d; askChoice escapes its own option labels, so those are passed
+  // RAW — escaping them twice would print the entities.
+  window.shpMove = async function (btn) {
+    if (!_shop || !_rows.length || RO()) return;
+    if (typeof askChoice !== 'function' || typeof askConfirm !== 'function') return;
+    const targets = moveTargets();
+    if (!targets.length) return;
+
+    // The name in one language, the plain data value. ' · ' is the separator
+    // the page's own language walker splits these dialogs on, so a name
+    // carrying one would cut the sentence in the wrong place — collapsed here
+    // rather than left to garble a danger dialog.
+    const nameFor = (l, cn) => String((cn ? (l.name_cn || l.name_en) : (l.name_en || l.name_cn)) || l.code || '')
+      .replace(/ · /g, ' - ');
+
+    const picked = await askChoice({
+      titleEn: 'Move products to another location?', titleCn: '移动商品到其他门店？',
+      labelEn: 'Location', labelCn: '门店',
+      options: targets.map(x => ({ value: String(x.location.id), label: nameFor(x.location, lang() === 'cn') })),
+      submitEn: 'Move', submitCn: '移动',
+      cancelEn: 'Cancel', cancelCn: '取消',
+    });
+    if (!picked) return;
+    const target = targets.find(x => String(x.location.id) === String(picked));
+    if (!target) return;
+
+    const n = _rows.length;
+    const toEn = esc(nameFor(target.location, false));
+    const toCn = esc(nameFor(target.location, true));
+    const agreed = await askConfirm({
+      titleEn: `Move ${n} product${n === 1 ? '' : 's'} to ${toEn}?`,
+      titleCn: `移动 ${n} 个商品到${toCn}？`,
+      bodyEn: `This menu is emptied and this shop switches off, so the QR already printed here stops working. ${toEn} has its own code, so a new QR has to be printed there.`,
+      bodyCn: `此门店的商品将被清空,门店将停用,已打印的二维码将失效。${toCn} 有自己的编码,需要重新打印二维码。`,
+      confirmEn: 'Move', confirmCn: '移动',
+      cancelEn: 'Cancel', cancelCn: '取消',
+      danger: true,
+    });
+    if (!agreed) return;
+
+    if (btn) { btn.disabled = true; btn.textContent = T('Saving…', '保存中…'); }
+    try {
+      await api('/api/retail-admin/shops/' + _shop.id + '/move', {
+        method: 'POST', body: { to_location_id: target.location.id },
+      });
+      toast(T('Moved', '已移动'), 'ok');
+      window.shopMenuOpen(target.location.code);
+    } catch (e) {
+      if (btn) { btn.disabled = false; btn.textContent = T('Move products', '移动商品'); }
+      toast(errText(e, 'save_failed'), 'err');
+    }
   };
 
   window.shpPickerToggle = function () {

@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.131 · 2026-09-18 · THE BUYER'S WANTED-BY DAY READS `订购`, NOT `截止` — RETIRING ONE LIFT FOR ANOTHER, COMPOSING NOTHING.** Ash, reading the Ask to buy list: *"中文“截止”改成“订购”"*. v1.129 lifted `截止` from `10-extras.js`'s vote row, where it closes a poll; on a purchasing queue that same word reads as a cutoff after which the line lapses, and a kitchen ask does not lapse. `订购` is LIFTED WHOLE from this same file's own receiving column (`Ordered · 订购` in `public/retail-admin/16-purchasing.js`, and `ordered · 订购` in `public/m.html`'s receiving rows), where it already names the buying act. The word order is unchanged and still the live one — day first, word after (`2026-09-30 订购`) — so the cell stays a whole phrase per language against the English `by 30 Sep`. FLAGGED AND NOT CHANGED: the English side still reads `by`, a deadline, while the Chinese now names the act; `2026-09-30 前订购` would carry both, and Ash asked for the single word. `截止` is retired from the purchasing cell only and is untouched everywhere else — the vote row, the coupon end date and the shipping header still carry it. Nothing is composed. Rules 1 to 7 unchanged. **v1.130 · 2026-09-18 · AN EMPTY BLOCK OFFERS `Add`, NOT `Edit` — REUSING A LIVE PAIR, COMPOSING NOTHING.** v1.125's heading shipped beside a button still reading `Edit · 编辑`, which on an empty block names an action that cannot be performed — there is nothing there to edit. A bare Know block now reads `Add · 添加`, **the same pair the tag row's own Add button uses eight lines below it** in `public/retail-admin/08-customers.js`. `编辑` is unchanged and returns the moment a note or tag exists. No new pair, no amendment, nothing retired. Rules 1 to 7 unchanged. **v1.129 · 2026-09-18 · §176 puts urgency and a wanted-by day on every Ask to buy line, LIFTING THREE PAIRS AND COMPOSING THREE.** Ash: *"need to add a mark that mention urgent order so buying department will know to priorities"*, then *"each item add an option to add buying date... this item can be bought later, its not urgent"*. Shape C was chosen from three; §176 carries the reasoning and the objection that survives it. LIFTED WHOLE: `Urgent · 加急` from this file's own `加急订单` in `public/m.html`'s kitchen purpose picker, where it already means a claim on somebody else's queue position; `Pick a date · 选日期` from `public/retail-admin/05-marketing.js`'s end-date chips; and `截止` from `10-extras.js`'s vote row, which prints it AFTER the day (`${votCloses(p)} 截止`) — that word order is the live one and is why the buyer's cell carries a whole phrase per language (`by 30 Sep` / `2026-09-30 截止`) rather than one word glued to a date. THREE ARE COMPOSED, by Claude, under the fourth amendment's standing delegation: `什么时候要` — the buyer's column heading, built from the live `什么时候` (`public/shop.html`'s `什么时候送`, `public/m.html`'s `什么时候发送？`) and `要`; it names a question rather than a field because the column holds either mark, and the candidates rejected for it were the live `截止日期`, which names only one of the two and is empty on an urgent line, and `需要日期`. `需要日期` — the aria-label on the phone's day field, where a heading's question shape reads wrong on a control and the label must name what the field holds. `项加急` — the foot's urgent count, from the live `项` this tally already uses for its item count and the lifted `加急`, so that `2 项 · 1 项加急` reads in one measure word throughout; `1 个加急` was rejected for mixing two. NO CHINESE IS MINTED for the day itself: `9月30日` is a numeral and two characters every calendar in the app already uses. Nothing is retired. Rules 1 to 7 unchanged.
+**v1.133 · 2026-09-18 · §177 MOVES A MENU TO ANOTHER LOCATION, LIFTING FOUR PAIRS AND COMPOSING FOUR.** Ash, on a screenshot of Sales → Locations: *"the shop menu should move form tianhe to yuexiu."* Four pairs are verbatim — `Location · 门店`, `Cancel · 取消`, `Saving… · 保存中…` and the success toast `Moved · 已移动`, **taken from `catMoveProduct`, which moves a product between shelves** and is the nearest live act in the product to this one. **The button reads `Move products · 移动商品`, never `Move menu`**: §177 refuses to move the shop record, so a button promising the menu would promise the thing the section refuses and the operator would learn otherwise from a dead QR. **One verb throughout** — 移动 in all four places rather than 迁移 in some, because the toast it ends on is the live `已移动`, and `没有可迁移的角色` is therefore lifted for its 没有可…的 shape and not for its verb. **The one long composition, the cost warning, is assembled from live clauses**: 将被清空 whole from `16-purchasing.js`'s undo-receiving warning, 停用 from this screen's own Inactive pill put in the future tense, and 二维码 / 编码 / 重新打印 all already live — what is composed is the order they come in. **A second live candidate was rejected and the rejection is recorded**: `暂无其他门店开通同城配送` was considered for a "nowhere to move this" line and is not needed at all, because the control is hidden when no destination is eligible — a string with no screen to sit on beats a string explaining why a button did nothing. Three of the four composed pairs are `TD_ERR` refusals; the public QR menu gains no string, since a moved-away shop serves the not-found page it already had. Rules 1 to 7 unchanged. **v1.131 · 2026-09-18 · THE BUYER'S WANTED-BY DAY READS `订购`, NOT `截止` — RETIRING ONE LIFT FOR ANOTHER, COMPOSING NOTHING.** Ash, reading the Ask to buy list: *"中文“截止”改成“订购”"*. v1.129 lifted `截止` from `10-extras.js`'s vote row, where it closes a poll; on a purchasing queue that same word reads as a cutoff after which the line lapses, and a kitchen ask does not lapse. `订购` is LIFTED WHOLE from this same file's own receiving column (`Ordered · 订购` in `public/retail-admin/16-purchasing.js`, and `ordered · 订购` in `public/m.html`'s receiving rows), where it already names the buying act. The word order is unchanged and still the live one — day first, word after (`2026-09-30 订购`) — so the cell stays a whole phrase per language against the English `by 30 Sep`. FLAGGED AND NOT CHANGED: the English side still reads `by`, a deadline, while the Chinese now names the act; `2026-09-30 前订购` would carry both, and Ash asked for the single word. `截止` is retired from the purchasing cell only and is untouched everywhere else — the vote row, the coupon end date and the shipping header still carry it. Nothing is composed. Rules 1 to 7 unchanged. **v1.130 · 2026-09-18 · AN EMPTY BLOCK OFFERS `Add`, NOT `Edit` — REUSING A LIVE PAIR, COMPOSING NOTHING.** v1.125's heading shipped beside a button still reading `Edit · 编辑`, which on an empty block names an action that cannot be performed — there is nothing there to edit. A bare Know block now reads `Add · 添加`, **the same pair the tag row's own Add button uses eight lines below it** in `public/retail-admin/08-customers.js`. `编辑` is unchanged and returns the moment a note or tag exists. No new pair, no amendment, nothing retired. Rules 1 to 7 unchanged. **v1.129 · 2026-09-18 · §176 puts urgency and a wanted-by day on every Ask to buy line, LIFTING THREE PAIRS AND COMPOSING THREE.** Ash: *"need to add a mark that mention urgent order so buying department will know to priorities"*, then *"each item add an option to add buying date... this item can be bought later, its not urgent"*. Shape C was chosen from three; §176 carries the reasoning and the objection that survives it. LIFTED WHOLE: `Urgent · 加急` from this file's own `加急订单` in `public/m.html`'s kitchen purpose picker, where it already means a claim on somebody else's queue position; `Pick a date · 选日期` from `public/retail-admin/05-marketing.js`'s end-date chips; and `截止` from `10-extras.js`'s vote row, which prints it AFTER the day (`${votCloses(p)} 截止`) — that word order is the live one and is why the buyer's cell carries a whole phrase per language (`by 30 Sep` / `2026-09-30 截止`) rather than one word glued to a date. THREE ARE COMPOSED, by Claude, under the fourth amendment's standing delegation: `什么时候要` — the buyer's column heading, built from the live `什么时候` (`public/shop.html`'s `什么时候送`, `public/m.html`'s `什么时候发送？`) and `要`; it names a question rather than a field because the column holds either mark, and the candidates rejected for it were the live `截止日期`, which names only one of the two and is empty on an urgent line, and `需要日期`. `需要日期` — the aria-label on the phone's day field, where a heading's question shape reads wrong on a control and the label must name what the field holds. `项加急` — the foot's urgent count, from the live `项` this tally already uses for its item count and the lifted `加急`, so that `2 项 · 1 项加急` reads in one measure word throughout; `1 个加急` was rejected for mixing two. NO CHINESE IS MINTED for the day itself: `9月30日` is a numeral and two characters every calendar in the app already uses. Nothing is retired. Rules 1 to 7 unchanged.
 
 **v1.128 · 2026-09-18 · the Ask to buy picker prints the material's unit in Chinese, LIFTING FIFTEEN PAIRS WHOLE AND COMPOSING NOTHING.** Ash, from the kitchen: *"chinese version need to show chinese unit"*. `ingredients.buy_unit` is stored in English because `lib/ingredient-cost.js` validates it and `firePriceAlertsForPO` matches a purchase-order line's price write-back on it — so the value stays English on the wire and only the PRINTED word changes. Every one of the fifteen is LIFTED verbatim from `PO_UNIT_CN` in `public/retail-admin/16-purchasing.js`, which has carried them since the printed purchase order fixed the same leak for itself: `kg 公斤`, `g 克`, `L 升`, `ml 毫升`, `lb 磅`, `oz 盎司`, `bottle 瓶`, `bag 包`, `box 盒`, `can 罐`, `jar 罐`, `case 箱`, `pack 包`, `tub 桶`, `pcs 件`. Nothing is minted and nothing is retired. THE TWO MAPS ARE NOW A PAIR THAT MUST MOVE TOGETHER: a unit added to `MEASURE_BUY_UNITS` or `CONTAINER_BUY_UNITS` and to only one of them prints English on a Chinese row, so `scripts/test_ask_to_buy_keyboard.js` case 14 reads both lists out of `lib/ingredient-cost.js` and fails on the first unmapped one. An unmapped unit falls through to its English self rather than disappearing — the right failure, and still a wrong-looking row. Rules 1 to 7 unchanged.
 
@@ -7089,6 +7089,92 @@ ordinary word for waiting, but `待处理` is the pair already shipping on the
 kitchen's other "what happened to my request" screen, one row up in the same
 menu group. Two words for one state across two adjacent screens is the defect
 Rule 1 names; the live pair wins.
+
+**Ash should correct any of the four composed pairs if they read wrong to a
+Chinese operator; nothing depends on the exact phrasing.**
+
+## Moving a menu to another location — the shop menu (2026-09-18, §177)
+
+The `Move products` exit `public/retail-admin/28-shops.js` gained under
+`docs/tacet-consolidation-decisions.md` §177, with its two dialogs and the
+three refusals `TD_ERR` answers them with. Register: OPERATOR (Rule 1)
+throughout — every string here is read by an operator in the admin, and
+nothing on this path is customer-facing. The public QR menu gains no string at
+all: a moved-away shop resolves to nothing and serves the not-found page it
+already had.
+
+**Four pairs are verbatim, four lift a live term, four are composed.** The
+composed four are the ones nothing in this product has ever had to say: that a
+menu is about to leave the location it is on, and what that costs in printed
+paper.
+
+### Taken verbatim (no new Chinese)
+
+`Location · 门店` (the picker's field label — the same pair this file's own
+column heading uses), `Cancel · 取消` and `Saving… · 保存中…` (both already on
+this screen), and `Moved · 已移动` — **the success toast, taken from
+`catMoveProduct` in `01-core.js`, which moves a product between shelves.** That
+is the nearest live act in the product to this one, and an operator who has
+moved a product between shelves meets the same word when they move a menu
+between locations.
+
+### A live TERM, a new pair
+
+| key | EN | CN | the live source of the term |
+|---|---|---|---|
+| `shpMoveBtn` | Move products | 移动商品 | `移动到其他分类` (Move to another shelf) for 移动; 商品 from this screen's own `+ 添加商品` and its title 门店商品 |
+| `shpMoveVerb` | Move | 移动 | the same 移动 — the bare verb on both dialogs' commit button |
+| `shpMoveWhere` | Move products to another location? | 移动商品到其他门店？ | `改到其他门店` (`04-orders.js`, changing which location a pickup happens at) supplies 其他门店 |
+| `nothing_to_move` | There is nothing on this menu to move. | 没有可移动的商品。 | `没有可迁移的角色` (`02-settings-ops.js`, "there is nowhere to move them") gives the 没有可…的 shape, with this flow's own 移动 standing where that one has 迁移 |
+
+**The button says `Move products`, not `Move menu`, and the Chinese says
+商品 rather than 门店商品 for the same reason.** §177 refuses to move the shop
+record: the listings move and the shop and its code stay where they were. A
+button reading `Move menu` would promise the thing the section refuses, and the
+operator would learn otherwise from a dead QR code.
+
+**One verb, not two.** 移动 and 迁移 both ship in this admin for moving things.
+This flow uses 移动 in all four places — button, both commit buttons, and the
+refusal — because the toast it ends on is the live `已移动`, and a flow whose
+refusal and whose success used different verbs would read as two features.
+
+### Composed
+
+| key | EN | CN |
+|---|---|---|
+| `shpMoveCount` | Move N products to X? | 移动 N 个商品到 X？ |
+| `shpMoveCost` | This menu is emptied and this shop switches off, so the QR already printed here stops working. X has its own code, so a new QR has to be printed there. | 此门店的商品将被清空,门店将停用,已打印的二维码将失效。X 有自己的编码,需要重新打印二维码。 |
+| `destination_has_menu` | That location already has a menu of its own. | 该门店已有商品,请选择其他门店。 |
+| `same_location` | The menu is already at that location. | 商品已在该门店。 |
+
+**`shpMoveCost` is assembled from live clauses rather than written fresh, and
+that is what keeps a four-clause warning readable.** 将被清空 is lifted whole
+from `16-purchasing.js`'s undo-receiving warning (`实收与破损数量将被清空`),
+which is the same kind of sentence — here is what this button empties. 停用 is
+the state word this very screen already prints as `已停用` under its Inactive
+pill, put in the future tense for a thing about to happen. 二维码, 编码 and
+重新打印 are all live in this admin. **Nothing in the Chinese sentence is a
+word an operator has not already read somewhere in this product**; what is
+composed is the order they come in.
+
+**`shpMoveCount` and `shpMoveCost` are INTERPOLATED and must not be glued.**
+The count and the destination's name are values, and each language places them
+itself — `移动 N 个商品到 X？` puts the name against 到 with no space, where the
+English needs one. Same terms as `categorySubtotals` in the Finance section.
+
+**The English plural is chosen and the Chinese has none**: `Move 1 product` /
+`Move 14 products` against one 个商品 for both, which is the house treatment of
+a counted noun everywhere else in this file.
+
+**Two live candidates were considered and rejected, and both rejections are
+recorded so the search is not repeated.** `没有可迁移的角色` was the obvious
+source for the empty-handed refusal and is NOT reused as-is: it names roles,
+and swapping the noun would have left 迁移 in a flow whose other four strings
+say 移动 (see above). And `暂无其他门店开通同城配送。` (`04-orders.js`) was
+considered for a "nowhere to move this" message and is not needed at all — the
+control is hidden when there is no eligible destination, so the sentence has no
+place to appear. **A string that no longer has a screen to sit on is better
+than a string that explains why a button did nothing.**
 
 **Ash should correct any of the four composed pairs if they read wrong to a
 Chinese operator; nothing depends on the exact phrasing.**
