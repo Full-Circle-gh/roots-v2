@@ -94,6 +94,19 @@ const wechatOa = require('../lib/wechat-oa');
 const { allocateShopOrderCode } = require('../lib/shop-order-code');
 const { nutritionRows } = require('../lib/nutrition-rows');
 const blockRead = require('../lib/product-blocks-read');
+// WHAT A PRODUCT PAGE SIGNS ITSELF WITH (§158). The same module the mini app's
+// storefront config and the product editor read, so this page cannot sign a
+// product differently from the phone: one cast, one auto-map, one house line.
+const brandSignature = require('../lib/brand-signature');
+// The door that put this request into its tenant's data scope in server.js.
+// Asked again here so the catalogue the page read and the signature it signs
+// with can never come from two different shops.
+const { resolvePublicTenant } = require('../middleware/public-tenant');
+// The GLOBAL db, and `tenants` is the only thing read from it here: that table
+// is not tenant-scoped, so tdb() cannot answer whose shop this is. Routed
+// through the seam like every other file on the covered side of that boundary.
+const { seam } = require('../lib/db-seam');
+const mainDb = seam(require('../database'));
 const moneyLib = require('../lib/money');   // the money MATHS; money() below is this page's formatter
 const tax = require('../lib/tax');
 const rateLimit = require('express-rate-limit');
@@ -447,6 +460,17 @@ function buildMenu(shop) {
            -- this sheet read both and would have asserted an allergen nobody
            -- declared.
            p.description_blocks, p.nutrition,
+           -- §179 — WHAT SIGNS THE SHEET. The colophon is NOT a block and never
+           -- was: it is three columns on the product row over the shop's own
+           -- signature. That is why the per-block "hide on the QR menu" switch
+           -- does not reach it, and why the §132 sweep that brought every block
+           -- here left it behind -- a rule about blocks could not see it.
+           -- NOTE, and the file's own warning one screen up says why: no
+           -- backtick may appear in this template literal, comments included.
+           -- The category column is read for the AUTO pick alone and nowhere
+           -- else on this page; the pick belongs to lib/brand-signature.
+           p.category, p.colophon_character,
+           p.colophon_tagline_en, p.colophon_tagline_cn,
            -- §129 — THE SIZES, WHICH §120 DECIDED NOT TO READ AND ASH REVERSED.
            -- Variants are independent product rows linked by variant_group_id,
            -- and an operator lists each one separately. Without variant_label
@@ -934,6 +958,39 @@ img{display:block;max-width:100%}
 .pb-faq .pb-faq-m .l-minus{display:none}
 .pb-faq[open] .pb-faq-m .l-minus{display:inline}
 .pb-faq-a{padding:0 0 calc(15 * var(--u));font-size:calc(14 * var(--u));line-height:calc(22 * var(--u));overflow-wrap:anywhere}
+
+/* +7 · THE COLOPHON — the signature at the foot of the page (§179).
+   NOT a block, which is why §132 missed it: the other fourteen rules in this
+   sheet convert a block component and this one converts .colophon out of
+   miniapp/pages/product/product.wxss, at the same rpx times 0.52.
+
+   A FOURTH SUBSTITUTION, on top of the three named at the head of §132. The
+   mini app fills this slab with --oat against a --paper page, and THIS sheet's
+   own panel is already --oat, so an oat slab here would be no slab at all. It
+   takes rgba(0,0,0,.04) instead, which is what .pb-qt does with the same
+   problem one block up. The 60% ink of the meta line becomes var(--olive) by
+   the rule already stated; the 30% ink of the two rules becomes rgba(0,0,0,.3),
+   close enough to 30% ink in any palette a tenant can set.
+
+   IT BLEEDS THROUGH .sheet-b's OWN PADDING like the other slabs, so the fill
+   reaches both edges of the phone and the words inside it line back up with
+   the column above. */
+.pb-colo{margin:calc(29 * var(--u)) -14px 0;padding:calc(37 * var(--u)) 14px calc(29 * var(--u));
+  background:rgba(0,0,0,.04);text-align:center;display:flex;flex-direction:column;
+  align-items:center;gap:calc(15 * var(--u))}
+.pb-colo-ch{width:calc(125 * var(--u));height:calc(125 * var(--u))}
+/* mix-blend-mode DROPS THE WHITE SQUARE off the b-and-w line art, which is the
+   component's own trick and the reason the character sits ON the slab rather
+   than in a box of its own. object-fit:contain keeps a non-square file whole. */
+.pb-colo-ch img{width:100%;height:100%;object-fit:contain;display:block;
+  mix-blend-mode:multiply}
+.pb-colo-t{font-family:var(--f-bear);font-size:calc(23 * var(--u));line-height:1;
+  letter-spacing:-.005em;overflow-wrap:anywhere}
+.pb-colo-m{display:flex;align-items:center;justify-content:center;gap:calc(10 * var(--u));
+  font-family:var(--f-bear);font-size:calc(10 * var(--u));letter-spacing:.32em;
+  text-transform:uppercase;color:var(--olive);overflow-wrap:anywhere}
+.pb-colo-r{flex:none;display:block;width:calc(23 * var(--u));height:1px;
+  background:rgba(0,0,0,.3)}
 /* THE KICKER WEARS A SHORT RULE, which is the mini app's own .pb-hero-kicker:
    a 19px bar in --forest before the words, with the words themselves in that
    same forest rather than the olive every other kicker on this page uses. It
@@ -2781,6 +2838,28 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
   `paintBar();` +
   `})();`;
 
+// ─── WHOSE SIGNATURE THIS MENU SIGNS WITH (§179) ────────────────────────
+//
+// NULL MEANS ROOTS, which is exactly the argument signatureFor() takes, and is
+// how routes/retail.js already answers the mini app's own config: a customer
+// request and an operator request must not be answered differently.
+//
+// A TENANT THAT CANNOT BE RESOLVED IS SIGNED WITH NOTHING, never with Roots'.
+// signatureFor({id:0}) answers no cast, no tagline and no house line, which
+// draws no colophon at all. §158's whole finding was that the failure mode of
+// this resolution used to be somebody else's mascot on a stranger's product.
+function menuSignature(req) {
+  try {
+    const tid = resolvePublicTenant(req);
+    const row = tid
+      ? mainDb.prepare('SELECT id, name, brand_name FROM tenants WHERE id = ?').get(tid)
+      : null;
+    return brandSignature.signatureFor(row);
+  } catch (e) {
+    return brandSignature.signatureFor({ id: 0, name: '' });
+  }
+}
+
 // ─── What a product's detail sheet knows ────────────────────────────────
 //
 // EVERY LABEL IS THE MINI APP'S OWN, copied from its product-blocks component:
@@ -2793,7 +2872,7 @@ const TOGGLE_SCRIPT = `(function(){var K='shop_menu_lang';` +
 // The sheet's body for one product. Returns '' when the product has nothing to
 // say — the caller then renders no sheet at all and the card stays untappable,
 // because an empty panel is worse than a card that does not respond.
-function detailBody(it, code, listed) {
+function detailBody(it, code, listed, sig) {
   /* §132 — EVERY BLOCK THE OFFICE WROTE, IN THE ORDER IT WROTE THEM.
      §120 read two block types, §129 added the paragraph and the note, and this
      reads all thirteen. The order is no longer this function's: it was a fixed
@@ -3017,6 +3096,65 @@ function detailBody(it, code, listed) {
     return '';
   };
 
+  /* §179 · THE SIGNATURE AT THE FOOT OF THE PAGE, which this menu never drew.
+     §132 brought all thirteen of the office's BLOCKS here on Ash's "same as the
+     mini app", and the colophon is not one of them -- it is three columns on the
+     product row over the shop's own signature -- so a rule written about blocks
+     could not see it. The phone drew it, the editor's preview drew it, and the
+     one surface a customer actually scans at a counter drew nothing. Reported by
+     Ash against a new product: the preview showed a character, the menu did not.
+
+     IT NEVER OPENS A SHEET BY ITSELF, and that is the load-bearing half of this.
+     §120's rule -- a product with nothing to say does not open, because an empty
+     panel is worse than a card that does not respond -- is tested ABOVE, against
+     the blocks, the nutrition and the sizes, and every line below runs after it.
+     Built any earlier, EVERY product on EVERY menu would have become tappable
+     onto a panel holding a mascot and the shop's own name, which is precisely
+     the empty sheet that rule exists to refuse.
+
+     NOTHING IS MAPPED HERE. The character comes back from lib/brand-signature:
+     an override the office picked wins, an AUTO pick can only ever be a
+     character this shop HAS, and a shop with no cast draws none. A second copy
+     of Roots' category map on a third surface is the exact fault §158 exists to
+     have ended, and writing one here would have re-opened it. */
+  const rawKey = brandSignature.resolveCharacter(sig || {}, it.colophon_character, it.category);
+  /* THE KEY BECOMES A FILENAME AND A PUBLIC URL, so it is held to a filename's
+     alphabet at this one edge. resolveCharacter honours an operator's override
+     verbatim by design -- that is its rule and the right one, since blanking a
+     page somebody deliberately signed is worse -- but the mini app spends that
+     value inside its own package and this page spends it inside an attribute on
+     a page anyone can scan. Anything outside the cast's alphabet is not a
+     character this shop has, and is simply not drawn. */
+  const ipKey = /^[a-z0-9-]{1,40}$/.test(String(rawKey || '')) ? String(rawKey) : '';
+  /* THE TAGLINE, PER LANGUAGE, exactly as the phone resolves it: the product's
+     own override first; failing that the OTHER language, so an office that
+     filled only one half still reads in both views; and only then the shop's
+     house line. BOTH halves are emitted and CSS picks, because that is what
+     this page is -- the phone picks one because it knows which one it is in. */
+  const ovEn = String(it.colophon_tagline_en || '').trim();
+  const ovCn = String(it.colophon_tagline_cn || '').trim();
+  const coloTag = bi(ovEn || ovCn || String((sig && sig.tagline_en) || ''),
+                     ovCn || ovEn || String((sig && sig.tagline_cn) || ''));
+  /* The name on the hairline rule is the shop's own and is NOT bilingual: a
+     tenant has one name. Empty for a tenant that carries none -- a rule reading
+     "undefined" is worse than a rule with nothing on it (lib/brand-signature). */
+  const coloHouse = String((sig && sig.house) || '').trim();
+  /* Nothing to sign with, no slab. Three empty elements and two hairlines is
+     not a colophon -- the mini app's own test, in its own words. */
+  const colophon = (ipKey || coloTag || coloHouse)
+    ? `<div class="pb-colo">` +
+      (ipKey
+        ? `<div class="pb-colo-ch"><img src="/assets/brand/ip-${ipKey}.jpg" alt=""` +
+          ` loading="lazy" decoding="async"></div>`
+        : '') +
+      (coloTag ? `<div class="pb-colo-t">${coloTag}</div>` : '') +
+      (coloHouse
+        ? `<div class="pb-colo-m"><span class="pb-colo-r"></span>` +
+          `<span>${esc(coloHouse)}</span><span class="pb-colo-r"></span></div>`
+        : '') +
+      `</div>`
+    : '';
+
   return `<div class="dt-top">` +
       (it.has_photo
         ? `<button type="button" class="dt-ph" data-big="${it.store_product_id}"` +
@@ -3044,7 +3182,9 @@ function detailBody(it, code, listed) {
                   label: { en: r.label_en || '', cn: r.label_cn || '' },
                   value: r.value, kind: r.kind,
                 }))))
-      : '');
+      : '') +
+    /* LAST, UNDER EVERYTHING, which is where a signature goes. */
+    colophon;
 }
 // EN / 中 — the storefront's own toggle labels, reused verbatim.
 function toggle(lang) {
@@ -3216,6 +3356,10 @@ router.get('/s/:shopCode', (req, res) => {
   }
   const wxPay = oaReady();
   const brand = brandText();
+  /* §179 — ONCE PER REQUEST, not once per card. Every product on this menu is
+     signed by the same shop, and a per-card lookup would put one identical
+     query behind every tile on the page. */
+  const sig = menuSignature(req);
 
   const head = `<div class="bar"><div class="nm">${bi(name.en, name.cn)}</div>${toggle(lang)}</div>`;
 
@@ -3311,7 +3455,7 @@ router.get('/s/:shopCode', (req, res) => {
     // ingredients, no nutrition and no allergen flags opens a sheet saying
     // nothing, which is worse than a card that does not respond — so the whole
     // detail apparatus is absent for it rather than empty.
-    const detail = detailBody(it, code, listed);
+    const detail = detailBody(it, code, listed, sig);
     const tap = detail
       ? ` data-open="${it.store_product_id}" role="button" tabindex="0"` : '';
     return `<div class="it${it.sold_out ? ' out' : ''}${detail ? ' has-dt' : ''}"${tap}>` +

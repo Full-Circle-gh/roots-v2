@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.317
+# Tacet shared-core consolidation — decisions record, v4.318
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -57,6 +57,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-09-17 · v4.301 — **§166 · A CHOICE THE CUSTOMER MAKES IS PART OF WHAT THE PRODUCT COSTS — AND A FEATURE THAT WAS ALREADY DESIGNED IS WITHDRAWN.** Ash reported a waste problem (*"fresh meals sometimes are waste without the dressing, we keep dressing many time in the freezer"*) and then, two turns later, the thing underneath it: *"beet salad is an example of a salad that we offer to choose 2 types of dressing. the staff made a mistake and put both of them inside the recipe."* **The second report killed the first fix.** A tick on the material and a *was the dressing kept?* question on the waste sheet was designed, measured against the live ledger (¥27.65 of ¥121.93 in thirteen days, `scripts/diagnose_dressing_waste.js`) and is now **withdrawn, not deferred**: it was a workaround for the dressing being buried in a recipe, and once the dressing is its own stocked product a binned salad is a binned salad. **Waste is the one reader this section does not change.** The real fault is not waste at all — Beet Salad carries ¥11.43 where the truth is ¥8.31 or ¥9.33, **20–27% too high on every sale at a ¥48 price**, and the live sweep found it is the ONLY genuine instance among five candidate recipes. The hole it opens is far wider than dressings: 54 option choices draw down a real shelf today and 15 can be priced, on 8.5% of all order lines, and `routes/finance-summary.js` had already written the gap down in its own words — *"OPTIONS carry a price delta with no cost counterpart"*. So `lib/option-cost.js` answers the two questions separately: a SALE takes the chosen choice's cost into the new `retail_order_items.options_cost_at_sale`, and the CATALOGUE takes the **dearest REQUIRED** choice, because nobody has chosen yet and a mean reads plausible while flattering. **A second column rather than a wider `unit_cost_at_sale`, and that is provable rather than tidy**: that column is multiplied by `pack_units` downstream while a linked choice is added once per unit bought, so one column would have charged a six-pack for six oat milks. **The direction of the error is the whole point** — taking the dressing out of the recipe replaces a cost that was too high with one that is too low, and too low is what gets a price cut, so the editor's margin ships in the same commit and a required choice nobody priced **blocks it outright** rather than falling back to the typed figure. Two pairs COMPOSED and declared in `docs/tacet-delivery-vocabulary.md` v1.117. `cost_coverage`, the channel ingest paths and `is_default` are all deliberately untouched, each for a stated reason. Covered by `scripts/test_option_cost.js` (23 checks).
 
 2026-09-17 · v4.300 — **§164 ADDENDUM · THE WIRE IS CLOSED, AND CLOSING IT FOUND A LIVE DATA LOSS THE SCREEN GATE HAD CREATED — ASKED BY ASH**, who was told the figures were still one devtools tab away and said to close it. `routes/retail-recipes.js` now strips money from all four reads and 403s the one write, through `lib/recipe-cost-visibility.js` — EXTRACTED like `lib/product-cost-visibility.js` beside it, so the rules can be held to a contract without standing up a database. Same three rules as waste and materials, deliberately: **fails closed** (a null cap set is not a grant), **keys DELETED not zeroed** (a 0 reads as free), **a FIELD refused, never a request** — with `costs_hidden: true` on the envelope so a client can tell *withheld* from *there was none*. The computed cost object is **ALLOW-LISTED, not deny-listed**, and that is the one shape here that differs in kind: `computeRecipeCost()` returns thirty-odd keys, fifteen of them money, and it GROWS (`materialCostPerGram` and `embeddedOverhead` both arrived after the first of them), so a deny-list is a list of the money keys that existed the day it was written. Percentages go with the amounts — `foodCostPct`, `overheadPct` and `targetFoodCost` print no currency sign and are still cost — and the three COUNTS stay, because a count and a cause are what make a fault fixable. **AND THE REAL FINDING: §164's screen gate had quietly armed a data loss.** `draftCostData()` reads the Cost & Pricing inputs out of the DOM; §164 stopped rendering that tab; `v()` returns null for an element that is not there and `parseFloat(null) || 0` is **0** — so an operator holding `recipes:edit` without `recipes:costs` who corrected a recipe's NAME would have PUT `{labour: 0, overhead_pct: 0, sell_price: 0, target_food_cost: 30}` and wiped the labour, the overhead and the sell price, taking every margin built on that recipe with them. Live from the moment #669 deployed; no preset holds edit-without-costs, so the exposure was the by-name grants alone. **OMITTING THE KEYS WOULD NOT HAVE FIXED IT**, which is the trap worth naming: `lib/recipe-cost-data-write.js` grants preserve-on-absent to `packaging_type_id` ALONE and says in terms that "an absent `labour` still writes 0, an absent `target_food_cost` still writes 30" — the packaging comment in `draftCostData()` is about that one column and does not generalise. Not sending the REQUEST is the only shape that preserves what is stored, and the route refuses it anyway for a tab left open across the deploy, a retry, or a hand-rolled request. Coverage: `scripts/test_recipe_cost_visibility.js` grows to 106 assertions, including that a money key invented tomorrow does not leak, that the sell price survives, and that no GET 403s.
+
+2026-09-18 · v4.318 — **§179 · THE COLOPHON IS NOT A BLOCK, WHICH IS WHY THE QR MENU NEVER SIGNED A PAGE — DECIDED BY ASH:** *"ok do it"*, on a recommendation put with its own case against. **TWO QUESTIONS, ONE ANSWER.** Ash asked why the editor's Colophon controls are not one of the cards, and why a new product whose preview shows an IP character shows none on the QR menu. The cards are entries in `description_blocks` — addable, reorderable, switchable per channel; the colophon is three columns on the product row over the tenant's signature, one per page, always last. **§144's spine is the nine block types 73–99% of products carry and the colophon was never one because it is not one**, so §132 — which brought all thirteen block types to the QR menu on *"build the blocks of the product description same as the mini app"* — could not reach it. Measured: before this change the colophon was drawn in exactly TWO places in the repo, `miniapp/pages/product/product.wxml` and the editor's own preview. Not the QR menu, not `public/shop.html`. **THE QR MENU NOW DRAWS IT**, converted from the component at the same rpx times 0.52 the rest of §132 used, with a fourth substitution named beside the three already there (the mini app's --oat slab sits on an --oat sheet here, so it takes .pb-qt's rgba(0,0,0,.04)). **IT NEVER OPENS A SHEET BY ITSELF, and that is the load-bearing half:** every product has a colophon, so one built before §120's gate would have made EVERY card on EVERY menu tappable onto a panel holding a mascot and the shop's name — the empty sheet that rule exists to refuse. **NOTHING IS MAPPED HERE:** the character comes from `lib/brand-signature` and the tenant from `resolvePublicTenant(req)`, the same door that set the data scope, so §158's fault cannot reappear on a third surface; an unresolvable tenant is signed with nothing, never with Roots'. **ONE NARROWING IS NEW:** the stored character becomes a filename on a public URL here, so a value outside the cast's alphabet draws no image — at that one edge, not in the module, which still honours an override verbatim and should. **NO CHINESE COMPOSED** — everything printed is data, and both languages are emitted because this page ships both and CSS picks. New suite `scripts/test_shop_menu_colophon.js` **12/12**, proven non-vacuous by four mutations (the filename guard dropped, every shop signed as Roots, the override's cross-language fallback removed, the colophon allowed to open its own sheet) each caught by the check written for it; `test:fast` 286 → **287**; lint 0 errors. Node's `fetch` silently DROPS a Host header a caller sets, which is recorded because the tenant check passed for the wrong reason until the harness moved to `http.request`. No schema, no migration, no change to the mini app, the web storefront, the editor, `.gitignore` or CI. **LEFT OPEN AND NAMED:** `public/shop.html` draws no colophon either, though `_paChannelEditorHtml`'s note assumes it renders the same stack as the mini app.
 
 2026-09-17 · v4.299 — **§164 · A RECIPE IS NOT ONLY A COST, AND THE KITCHEN NEEDS THE HALF THAT ISN'T — ASKED BY ASH**, choosing how the desktop Recipes screen should reach the phone: *"the only thing is that cost section should be only accessable per role permission . kitchen staff for example can't reach there"*. **THERE IS ONE KEY WHERE THERE SHOULD BE TWO.** `lib/capabilities.js` gives materials, products and waste each a PAIR — a view key that opens the screen and a costs key that reveals the money on it, with `waste:costs` deliberately off in both floor presets — and gives Recipes only `recipes:view`, which **alone among the view keys carries `money: 'shows'`**, justified by MONEY_NOTES' `A recipe is a cost. · 食谱本身就是成本。`. That sentence is TRUE of the screen as it stands, which is why the coin is on the wrong KEY rather than simply wrong: with nothing else to carry it, opening Recipes at all IS seeing money, and a kitchen operator cannot be handed the ingredients and the steps without also being handed the batch cost, the cost per gram and the margin on everything the recipe makes. **THE DECISION: MINT `recipes:costs` AND MOVE THE COIN ONTO IT**, modelled line for line on `products:costs`; `recipes:view` loses its mark and the note is reworded onto the new key, which is now the thing the sentence is about. **THE COIN COMES OFF ONLY TOGETHER WITH THE GATE, IN ONE PR** — the list prints Cost, Cost per gram and the whole-batch fallback in columns of its own, and un-marking the key while those still paint would call it safe while it still shows money, which is worse than the state it replaces. **IT GOES ON THE DESKTOP, NOT ONLY ON THE PHONE**: `public/retail-admin/19-recipes.js` is 3,031 lines carrying exactly one capability check — `canEdit()` on `recipes:edit` — so Cost & Pricing is visible to everyone who can open the screen, and a gate added only to the phone is one a laptop steps around. **AND IT TAKES SOMETHING AWAY ON THE DAY IT SHIPS**, deliberately rather than as a side effect: `owner` holds everything, `admin` and `manager` are `ALL_KEYS` filters that pick the new key up on the same deploy, and no floor preset holds `recipes:view` at all — so what is left is operators ticked on **by name**, a list read off live data and acted on per person BEFORE the gate merges, because no session can see it from the repository. Does NOT decide the mobile Recipes build, which is its own decision and its own PR, and does not touch `lib/cap-routes.js`: GETs are open at that choke point, so this is a client-side read gate over data the endpoint already returns. One pair composed — `See recipe cost & margin · 查看食谱成本与毛利`, the live `products:costs` pair with its one noun swapped (产品 → 食谱, the noun `recipes:view` already carries) — declared in §164 with its sources and its rejected candidate, and locked in `docs/tacet-delivery-vocabulary.md` in the commit that ships the code, not before.
 
@@ -18756,3 +18758,77 @@ catalogue's.
 **Who may do it:** `stores:edit`, the same capability every other write in
 `routes/retail-shops.js` takes. Nothing here is public and nothing here is a
 customer-facing string.
+
+## §179 — THE COLOPHON IS NOT A BLOCK, AND THAT IS WHY THE QR MENU NEVER SIGNED A PAGE
+
+**Decided by Ash, 2026-09-18.** Asked as two questions against the product page
+editor, with a screenshot of a new product: why the Colophon controls are not
+one of the cards, and *"now when i make a new product and in previouw it show me
+an ip i cant see it on the live product page qr code menu"*. Put back as a
+recommendation to draw it on the QR menu, with the case against; answered
+*"ok do it"*.
+
+**THE TWO QUESTIONS HAVE ONE ANSWER.** The cards in the editor's middle column
+are entries in one list on the product — `description_blocks` — which is why
+each can be added, reordered and switched off per channel. The colophon is not
+in that list: it is three columns on the product row (`colophon_character`,
+`colophon_tagline_en`, `colophon_tagline_cn`) over the tenant's own signature,
+one per page, always last, never moved. It sits in the editor's Page panel with
+Card chrome for the same reason. **§144's spine is the nine block types that
+73–99% of products carry, and the colophon was never one of them because it is
+not one of them** — so §132, which brought all thirteen block types to the QR
+menu on *"build the blocks of the product description same as the mini app"*,
+could not see it. A rule written about blocks cannot reach a thing that is not
+a block. It has been drawn in exactly two places since it shipped: the mini app
+product page and the editor's own preview. Not the QR menu, and not the web
+storefront.
+
+**WHAT IS DECIDED: THE QR MENU DRAWS IT.** A character picker whose result only
+mini-app shoppers ever see is work spent on an audience that may not be there;
+the customer standing at the counter with a phone is. **THE CASE AGAINST IS
+RECORDED AND WAS PUT BEFORE THE BUILD:** this sheet is read in a few seconds
+while deciding what to order, and three lines of brand at the very bottom will
+not sell anything there. It is a signature, not a feature. That is an argument
+about weight, not about correctness, and it is why the colophon sits under
+everything else and adds no control to the sheet.
+
+**IT NEVER OPENS A SHEET BY ITSELF, AND THAT IS THE LOAD-BEARING RULE.** §120:
+a product with nothing to say does not open at all, because an empty panel is
+worse than a card that does not respond. Every product has a colophon — the
+shop's own name alone is enough to draw one — so a colophon that counted as
+"something to say" would have made EVERY card on EVERY menu tappable onto a
+panel holding a mascot and a name. The gate is tested against the blocks, the
+nutrition and the sizes, exactly as before, and the colophon is built after it.
+`scripts/test_shop_menu_colophon.js` holds that with a product carrying nothing
+else, and the mutation that moves the build one line earlier goes red.
+
+**NOTHING IS MAPPED ON THIS PAGE.** The character comes back from
+`lib/brand-signature`, which §158 created precisely so a second copy of Roots'
+category map could not exist on a second surface — an override the office
+picked wins, an AUTO pick can only ever be a character the shop HAS, and a shop
+with no cast draws none. The tenant is resolved through
+`resolvePublicTenant(req)`, the same door that put the request into its data
+scope, so the catalogue the page read and the signature it signs with cannot
+come from two different shops; a tenant that cannot be resolved is signed with
+NOTHING, never with Roots'.
+
+**ONE THING IS NEW RATHER THAN CONVERTED, and it is a narrowing.** The stored
+character becomes a filename on a public URL here, where on the phone it is
+spent inside an app package, so a value outside the cast's alphabet draws no
+image. `resolveCharacter` still honours an override verbatim and should —
+blanking a page somebody deliberately signed is the worse failure — and this
+guard is at the one edge that needs it, not in the module.
+
+**NO STRING WAS COMPOSED, in either language.** Everything the block prints is
+data: the product's own tagline, the shop's own tagline, the shop's own name.
+Both languages are emitted and CSS picks, because that is what this page is —
+the phone picks one because it knows which one it is in, and copying that would
+have rendered half the readers a blank line.
+
+**NOT DONE, so it is not assumed.** No schema and no migration — every column
+read already existed. No switch to hide the colophon on the QR menu: the
+per-block channel control is a block's, and giving a non-block one would be a
+second mechanism for one idea. No change to the mini app, the web storefront,
+the editor, `.gitignore` or CI. **The web storefront still does not draw a
+colophon either**, which the note in `_paChannelEditorHtml` assumes it does;
+that is a separate finding and a separate change.
