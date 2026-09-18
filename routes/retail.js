@@ -30462,7 +30462,21 @@ router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, re
     r = await _printers.printContent(content, { ...printer, copies: 1 }, integ());
   }
   if (r.ok) return res.json({ ok: true });
-  res.json({ ok: false, error: r.msg || 'print_failed' });
+  // SAY WHAT WAS ACTUALLY TRIED. A bare "Print failed" plus a vendor string
+  // does not tell an operator which cloud the slip was sent to, and the most
+  // likely mistake on this screen is the BRAND — an SN belonging to the other
+  // vendor's cloud is rejected as "printer does not exist", which reads like a
+  // broken printer rather than a wrong dropdown. Echoing the brand and SN back
+  // makes the mismatch visible without the operator knowing anything about
+  // either API. §171 addendum 2.
+  res.json({
+    ok: false,
+    error: r.msg || 'print_failed',
+    code: r.code || null,
+    vendor: _printers.resolve(printer.vendor).id,
+    vendor_label: _printers.resolve(printer.vendor).label_cn,
+    sn: printer.sn,
+  });
 });
 
 // Reprint ONE order's slip on demand from the order drawer. By default it

@@ -1302,6 +1302,19 @@ function cuTagChipsHtml(list) {
 // vocabulary, so the two screens now call it the same thing and no Chinese
 // is minted to do it.
 //
+// THE LABEL AND ITS BUTTON SIT TOGETHER. The first cut of this gave the label
+// `flex: 1`, which pinned it to the left edge and the button to the right with
+// the drawer's whole width between them: two unrelated-looking controls, which
+// is the problem it was meant to fix. Ash, seeing it live: *"its not clear.
+// look where text positioned"*. They are one thing and they now read as one.
+// The Edit button keeps its right-hand seat once there IS a note, because
+// there it belongs to the note line beside it rather than to a heading.
+//
+// The verb changes with the state, which is the other half of the same fix:
+// `Edit · 编辑` is a lie on an empty block — there is nothing to edit yet — so
+// a bare block offers `Add · 添加`, the live pair the tag row's own button
+// already uses eight lines below.
+//
 // It shows only while there is nothing stored, which is the only state that
 // was ambiguous: a note prints its own line and tags print chips, and beside
 // either the button's job is obvious. The block therefore costs one line when
@@ -1320,7 +1333,7 @@ function cuKnowHtml(c) {
         </div>
         <span class="cu-knowhint" id="cu-knowhint"${(note || tags.length) ? ' hidden' : ''}>${escapeHtml(cuT('What we know', '备注与标签'))}</span>
         <button type="button" class="cux-ghost btn btn-sm" id="cu-note-toggle"
-                onclick="cuNotesEdit()">${escapeHtml(cuT('Edit', '编辑'))}</button>
+                onclick="cuNotesEdit()">${escapeHtml((note || tags.length) ? cuT('Edit', '编辑') : cuT('Add', '添加'))}</button>
       </div>
       <div class="cu-noteedit" id="cu-noteedit" hidden>
         <div class="cu-tagadd">
@@ -1366,7 +1379,11 @@ function cuNotesEdit(on) {
   // text, and it comes back only if there is a note to show.
   if (line) line.hidden = open || !_cuSavedNote();
   const btn = document.getElementById('cu-note-toggle');
-  if (btn) btn.textContent = open ? cuT('Close', '关闭') : cuT('Edit', '编辑');
+  if (btn) {
+    const bare = !_cuSavedNote() && !_cuDraftTags().length;
+    btn.textContent = open ? cuT('Close', '关闭')
+                           : (bare ? cuT('Add', '添加') : cuT('Edit', '编辑'));
+  }
   _cuKnowHintSync();
   if (open) { const ta = document.getElementById('cu-note'); if (ta) ta.focus(); }
 }
@@ -1425,6 +1442,10 @@ function cuNotesRepaint() {
   const line = document.getElementById('cu-noteline');
   const ed = document.getElementById('cu-noteedit');
   if (line) line.hidden = !saved || !(ed && ed.hidden);
+  const btn = document.getElementById('cu-note-toggle');
+  if (btn && ed && ed.hidden) {
+    btn.textContent = (saved || list.length) ? cuT('Edit', '编辑') : cuT('Add', '添加');
+  }
   _cuKnowHintSync();
   cuNoteChanged();
 }

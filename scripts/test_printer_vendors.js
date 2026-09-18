@@ -234,6 +234,38 @@ it('a remapped tag is rewritten on BOTH the open and the close', () => {
   } finally { spyun.TAG_MAP.BOLD = saved; }
 });
 
+it('NO house tag reaches a Shangpeng head as literal text', () => {
+  // THE DEFECT THIS PINS, read off a real slip on 2026-09-18: <BOLD> and <L>
+  // are Feie-only, and Shangpeng printed them as the characters <BOLD> and
+  // </BOLD> in the middle of the customer's receipt (§171 addendum 3).
+  // Whatever the map says, nothing that looks like a house tag may survive
+  // translation — that is the property, not the individual entries.
+  const out = spyun.translate(SLIP);
+  assert.ok(!/<\/?(CB|BOLD|B|L|C)>/.test(out.replace(/<\/?(CB|B|C)>/g, '')),
+    'a house tag survived translation and would print as text on the paper');
+});
+
+it('the two Feie-only tags are dropped, and the three shared ones are not', () => {
+  // Read off the paper, element by element: <CB> (shop name, order code),
+  // <B> (PKG n/m, SKU, Items) and <C> (address, Thank you) were honoured;
+  // <BOLD> (shipment label, item names) and <L> (TOTAL) were not.
+  assert.strictEqual(spyun.TAG_MAP.CB, 'CB');
+  assert.strictEqual(spyun.TAG_MAP.B,  'B');
+  assert.strictEqual(spyun.TAG_MAP.C,  'C');
+  assert.strictEqual(spyun.TAG_MAP.L,    '', '<L> is Feie-only — it printed literally');
+  assert.strictEqual(spyun.TAG_MAP.BOLD, '', '<BOLD> is Feie-only — it printed literally');
+});
+
+it('a dropped tag does not disturb the line it wrapped', () => {
+  // The renderer has already wrapped item names and built the TOTAL row to
+  // WIDTH columns. Dropping the tag must leave that arithmetic alone — which
+  // is also why <BOLD>/<L> are not mapped to <B>: an enlarged line holds
+  // BIG_WIDTH, and a 31-column TOTAL row would fold mid-price.
+  const total = 'TOTAL                      \uFFE5330.00';
+  assert.strictEqual(spyun.translate(`<L>${total}</L>`), total);
+  assert.strictEqual(spyun.translate('<BOLD>\u828d\u679c\u86cb\u767d\u7403</BOLD>'), '\u828d\u679c\u86cb\u767d\u7403');
+});
+
 it('every house tag the renderers emit has an entry in the map', () => {
   // Read the tags OUT OF the renderer rather than restating them, so a new tag
   // added to a slip fails here instead of printing raw at a counter.
@@ -425,8 +457,73 @@ const ready = (async () => {
   });
 })();
 
-ready.then(() => {
+// An async `it`, for checks that await a stubbed round trip.
+async function itA(name, fn) {
+  try { await fn(); pass++; console.log(`  \u2713 ${name}`); }
+  catch (e) { fail++; console.log(`  \u2717 ${name}\n      ${e.message}`); }
+}
+
+// One stubbed reply, whatever the vendor answers.
+function withReply(json, fn) {
+  const real = global.fetch;
+  global.fetch = async () => ({ json: async () => json });
+  return Promise.resolve(fn()).finally(() => { global.fetch = real; });
+}
+
+ready.then(async () => {
   for (const [name, fn] of e2e) it(name, fn);
+
+  // ── 9 · a failure has to be actionable ─────────────────────────────────
+  section('9 · the wrong brand is a diagnosable mistake, not a dead end');
+
+  // THE FAILURE THAT PROMPTED THIS. A store row left on the wrong BRAND sends
+  // a perfectly good SN to the other vendor's cloud, which answers "printer
+  // does not exist". On the screen that reads as broken hardware, and it is a
+  // dropdown. §171 addendum 2.
+  await itA('a vendor "unknown printer" answer is normalised to a code', () =>
+    withReply({ errorcode: 2, errormsg: '打印机不存在' }, async () => {
+      const r = await printers.printContent('x', { sn: 'WRONG-CLOUD', vendor: 'spyun' }, BAG);
+      assert.strictEqual(r.ok, false);
+      assert.strictEqual(r.code, 'unknown_printer',
+        'the UI keys its "is the brand right?" hint off this code');
+      assert.strictEqual(r.msg, '打印机不存在', "the vendor's own words must still come through");
+    }));
+
+  await itA('a signature rejection is normalised too — it must never be silent', () =>
+    withReply({ errorcode: -4, errormsg: '签名错误' }, async () => {
+      const r = await printers.printContent('x', { sn: '1', vendor: 'spyun' }, BAG);
+      assert.strictEqual(r.code, 'bad_signature');
+    }));
+
+  await itA('an UNOBSERVED vendor code gets NO code — no invented advice', () =>
+    // Guessing at the rest of Shangpeng's catalogue would put confident wrong
+    // advice in front of an operator, which is worse than the raw message.
+    withReply({ errorcode: 99, errormsg: '某种未知错误' }, async () => {
+      const r = await printers.printContent('x', { sn: '1', vendor: 'spyun' }, BAG);
+      assert.strictEqual(r.ok, false);
+      assert.strictEqual(r.code, undefined, 'only first-hand codes may be named');
+      assert.strictEqual(r.msg, '某种未知错误');
+    }));
+
+  it('the test endpoint hands the UI the brand and SN it tried', () => {
+    // The operator could not see WHICH cloud was called, and that was the
+    // whole difficulty.
+    const src = fs.readFileSync(path.join(__dirname, '..', 'routes', 'retail.js'), 'utf8');
+    const i = src.indexOf('/api/retail-admin/printer/test');
+    assert.ok(i > 0, 'test endpoint not found');
+    const body = src.slice(i, i + 3000);
+    for (const key of ['vendor_label', 'sn:', 'code:']) {
+      assert.ok(body.includes(key), `the test endpoint no longer returns ${key}`);
+    }
+  });
+
+  it('the admin screen shows the brand it tried, and asks about it', () => {
+    const src = fs.readFileSync(
+      path.join(__dirname, '..', 'public', 'retail-admin', '02-settings-ops.js'), 'utf8');
+    assert.ok(src.includes('vendor_label'), 'the failure toast no longer names the brand');
+    assert.ok(src.includes('unknown_printer'), 'the "is the BRAND right?" hint is gone');
+  });
+
   console.log(`\n  ${pass} passed, ${fail} failed\n`);
   process.exitCode = fail === 0 ? 0 : 1;
 });

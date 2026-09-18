@@ -976,6 +976,12 @@ const state = {
      `unit` is not stored here: it belongs to the material, is read with it, and
      is sent back untouched — see mbItems. */
   mb:{materials:null,tried:false,q:'',qty:{},busy:false,err:'',sent:null,
+      /* §176's TWO MARKS, PER LINE. `urg` holds the ids flagged urgent; `by`
+         holds an ISO day per id. Both are sparse — a row absent from either is
+         a row that claimed nothing, which is the ordinary case and is what §39
+         means by not prefilling. `dating` holds the ids whose date field is
+         OPEN, the same open/shut shape `typing` uses one line down. */
+      urg:{},by:{},dating:{},
       /* TYPING A QUANTITY (§46's keypad, on this screen). `typing` holds what is
          in an OPEN field, as a string and nothing more — never a number, because
          "1." and "" are things somebody is in the middle of writing and a number
@@ -1155,7 +1161,11 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      it is the catalogue, not the basket, and re-reading it on every entry is a
      wait for nothing. Exactly the split the `rq` screens make. */
   if(route==='askbuy'){ const m=state.mb; m.qty={}; m.q=''; m.err=''; m.sent=null; m.busy=false;
-    m.typing={}; m.typeErr={}; }
+    m.typing={}; m.typeErr={};
+    /* THE MARKS ARE PART OF THE BASKET AND DIE WITH IT. A quantity cleared on
+       the way in while an urgency survived would put yesterday's emergency on
+       today's ask, silently. */
+    m.urg={}; m.by={}; m.dating={}; }
   /* The list is re-read on every entry and the seen-stamp re-armed: it is a
      record of what the kitchen finished, and one taken at boot would be stale
      by the time somebody opened it. */
@@ -1410,6 +1420,15 @@ reg('mbType', id=>mbTypeOpen(Number(id)));
    keyboard on a real phone. */
 reg('mbTyped', (id,v)=>{ state.mb.typing[Number(id)]=String(v==null?'':v); });
 reg('mbTypeCommit', id=>mbTypeCommit(Number(id)));
+reg('mbUrgent', id=>mbUrgent(Number(id)));
+reg('mbDateOpen', id=>mbDateOpen(Number(id)));
+/* CLOSES ON CHANGE AND NEVER ON BLUR. A date <input> fires `change` when the
+   native picker commits, and on some browsers a blur handler that repaints gets
+   there first and destroys the element before its own change can land. So the
+   field shuts when a day is chosen and otherwise simply stays open: an open
+   empty field is untidy, a dropped date is a wrong order. An empty value is a
+   cleared date, which is how a line loses one. */
+reg('mbDateSet', (id,v)=>mbDateSet(Number(id),v));
 reg('mbSend', ()=>mbSend());
 reg('rqSendKitchen', ()=>rqSendKitchen());
 reg('rqSendStock', ()=>rqSendStock());
@@ -9160,10 +9179,88 @@ function mbCountCell(p){
       oninput="APP.cmd('mbTyped',${id},this.value)"
       onblur="APP.cmd('mbTypeCommit',${id})"
       onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`;
-  return `<button class="num" style="width:44px;text-align:center;font-size:18px;font-weight:500;
-    background:none;border:0;padding:0;font-family:inherit;color:var(--text-primary)"
+  /* THE COUNT IS A CONTROL AND HAS TO LOOK LIKE ONE — the same finding, and the
+     same fix, as `.qsnum` on the Quick Stock card a few thousand lines up. It
+     opened a keypad from the day §46 built it and wore `background:none;border:0`,
+     which made it indistinguishable from the SKU line above it, which is a
+     label. Reported by Ash looking straight at it: "need also to have the option
+     to enter free number if staff want" — of a field that had been there for
+     weeks. An affordance nobody can see is not one.
+     WIDER THAN THE KEYS, not square, for the reason .qsnum gives: at the same
+     44px it reads as a third button rather than as the field between two. */
+  return `<button class="num" style="width:58px;height:44px;border-radius:8px;
+    background:var(--surface-raised);border:1.5px solid var(--edge);padding:0;
+    text-align:center;font-size:18px;font-weight:500;font-family:inherit;color:var(--text-primary);flex:none"
     onclick="APP.cmd('mbType',${id})"
     aria-label="${escAttr(T('How many?','数量'))}">${m.qty[id]||0}</button>`;
+}
+
+/* ── §176's TWO MARKS, ON THE ROW THAT CARRIES THEM ─────────────────────────
+ *
+ * Ash chose shape C: urgency AND a wanted-by day, both per LINE. §176 holds the
+ * reasoning and the objection that outlived the choice — the two can contradict
+ * each other, and where they do the urgent flag wins, which is settled in the
+ * buyer's ORDER BY rather than by a screen quietly dropping one of them.
+ *
+ * THEY APPEAR ONLY ON A ROW THAT ALREADY HAS A QUANTITY. A picker of two
+ * hundred materials with two extra buttons on every row is a different screen,
+ * and the ordinary line — a number and nothing else — has to stay one tap. A
+ * row at zero is exactly the row it was before this section.
+ */
+function mbDateLabel(iso){
+  // A NUMERAL AND A MONTH, which needs no sentence in either language: `30 Sep`
+  // and `9月30日`. Parsed by hand rather than through Date, because
+  // `new Date('2026-09-30')` is UTC midnight and prints as the 29th anywhere
+  // west of Greenwich — a wanted-by day that moves with the reader's clock is
+  // the one thing this label must not do.
+  const p=String(iso||'').split('-'); if(p.length!==3) return '';
+  const mo=Number(p[1]), d=Number(p[2]);
+  const EN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return T(`${d} ${EN[mo-1]||''}`, `${mo}月${d}日`);
+}
+function mbUrgent(id){
+  const m=state.mb;
+  if(m.urg[id]) delete m.urg[id]; else m.urg[id]=1;
+  mbPatch();
+}
+function mbDateOpen(id){
+  state.mb.dating[id]=1;
+  mbPatch();
+  const inp=document.getElementById('mbday-'+id);
+  if(inp){ inp.focus(); try{ inp.showPicker(); }catch(e){} }
+}
+function mbDateSet(id,v){
+  const m=state.mb;
+  const raw=String(v==null?'':v).trim();
+  if(raw) m.by[id]=raw; else delete m.by[id];
+  delete m.dating[id];
+  mbPatch();
+}
+/* The pair of buttons. URGENT WEARS THE DAMAGE COLOUR WHEN CHOSEN and not the
+   plain inversion the rest of this file uses for a selected chip — the same
+   decision, for the same reason, that the kitchen request's own Urgent option
+   made: claiming a place at the front of somebody else's queue should not look
+   like any other answer. */
+function mbMarksHtml(p){
+  const id=p.id, m=state.mb;
+  const on=!!m.urg[id], by=m.by[id]||'';
+  const urgent=`<button class="row" style="flex:1 1 0;min-width:0;height:42px;padding:0 10px;border-radius:10px;
+    border:1.5px solid ${on?'var(--brick)':'var(--edge)'};background:${on?'var(--brick-tint)':'var(--surface-card)'};
+    color:${on?'var(--brick-ink)':'var(--text-secondary)'};font-size:13.5px;font-weight:${on?600:400};
+    display:flex;align-items:center;justify-content:center;gap:6px"
+    aria-pressed="${on?'true':'false'}" onclick="APP.cmd('mbUrgent',${id})">${ic('triangle-alert',16)}${T('Urgent','加急')}</button>`;
+  const day = m.dating[id]!=null
+    ? `<input id="mbday-${id}" type="date" value="${escAttr(by)}" style="flex:1 1 0;min-width:0;height:42px;
+        padding:0 10px;border-radius:10px;border:1.5px solid var(--accent);background:var(--surface-card);
+        color:var(--text-primary);font-family:inherit;font-size:13.5px"
+        aria-label="${escAttr(T('Needed by','需要日期'))}"
+        onchange="APP.cmd('mbDateSet',${id},this.value)">`
+    : `<button class="row" style="flex:1 1 0;min-width:0;height:42px;padding:0 10px;border-radius:10px;
+        border:1.5px ${by?'solid':'dashed'} var(--edge);background:${by?'var(--surface-raised)':'var(--surface-card)'};
+        color:${by?'var(--text-primary)':'var(--text-secondary)'};font-size:13.5px;font-weight:${by?600:400};
+        display:flex;align-items:center;justify-content:center;gap:6px"
+        onclick="APP.cmd('mbDateOpen',${id})">${ic('calendar',16)}${by?mbDateLabel(by):T('Pick a date','选日期')}</button>`;
+  return `<div style="display:flex;gap:8px;margin-top:10px">${urgent}${day}</div>`;
 }
 /* Opening the field seeds it with what is already on the row — the field IS the
    amount, so a row at 12 opens showing 12 and can be corrected rather than
@@ -9213,6 +9310,32 @@ function mbBump(id,d){
   state.mb.qty[id]=n>0?n:0;
   mbPatch();
 }
+/* ── THE UNIT READS IN THE LANGUAGE THE REST OF THE ROW IS IN ───────────────
+ *
+ * `ingredients.buy_unit` is stored in English ('kg', 'pcs', 'bottle') because
+ * that is the value lib/ingredient-cost.js validates and firePriceAlertsForPO
+ * matches on. On the Chinese app the row around it is Chinese — the material's
+ * name, the SKU label, the heading — and a raw `pcs` beside them is one language
+ * leaking into another, which is the fault §1.7 names and which the printed PO
+ * fixed for itself over in 16-purchasing.js.
+ *
+ * THE VOCABULARY IS COPIED FROM THERE VERBATIM, not written again: that file's
+ * PO_UNIT_CN is the live pair for every unit in lib/ingredient-cost.js's two
+ * lists (MEASURE_BUY_UNITS + CONTAINER_BUY_UNITS), and a second translation of
+ * the same fifteen words is how `件` and `个` end up meaning the same unit on
+ * two screens. If a unit is ever added to those lists, it must be added to BOTH
+ * maps — an unmapped unit falls through to its English self rather than
+ * disappearing, which is the right failure but still a wrong-looking row.
+ *
+ * DISPLAY ONLY. mbItems() sends the ingredient id and the number; the unit the
+ * server stores is `ingredients.buy_unit` read from the database, untouched by
+ * this map. There is no path from here to what gets written. */
+const MB_UNIT_CN={
+  kg:'公斤', g:'克', L:'升', ml:'毫升', lb:'磅', oz:'盎司',
+  bottle:'瓶', bag:'包', box:'盒', can:'罐', jar:'罐',
+  case:'箱', pack:'包', tub:'桶', pcs:'件',
+};
+function mbUnit(u){ return u?T(u,MB_UNIT_CN[u]||u):''; }
 /* THE UNIT TRAVELS WITH THE LINE AND IS NEVER CONVERTED. It is the material's
    own `buy_unit`, read from the server with the material and sent back
    untouched — Ash's "they order according to the unit setup of that material".
@@ -9220,7 +9343,17 @@ function mbBump(id,d){
    firePriceAlertsForPO refuses to write a price back when the two disagree, so
    a gram figure invented here would end as a price silently not landing. */
 function mbItems(){
-  return mbChosen().map(p=>({ingredient_id:p.id, qty:state.mb.qty[p.id]}));
+  const m=state.mb;
+  /* §176's MARKS TRAVEL WITH THE LINE. Both are omitted when unclaimed rather
+     than sent as false and null: the server reads absent as absent, so a
+     request of plain lines puts exactly the payload on the wire that it did
+     before that section. */
+  return mbChosen().map(p=>{
+    const it={ingredient_id:p.id, qty:m.qty[p.id]};
+    if(m.urg[p.id]) it.urgent=true;
+    if(m.by[p.id])  it.needed_by=m.by[p.id];
+    return it;
+  });
 }
 function mbSend(){
   const m=state.mb;
@@ -9279,16 +9412,21 @@ function mbBodyHtml(){
      digit. The product screens can leave it off; this one cannot. */
   return `<div>${rows.map(p=>{
     const n=m.qty[p.id]||0;
-    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-top:1px solid var(--border-default)">
+    /* THE ROW STACKS NOW: the name-and-stepper line, and §176's two marks under
+       it on the rows that carry them. A row at zero renders the first line only
+       and is byte-for-byte the row this screen drew before that section. */
+    return `<div style="padding:12px 16px;border-top:1px solid var(--border-default)">
+      <div style="display:flex;align-items:center;gap:10px">
       <span style="flex:1;min-width:0">
         <span style="display:block;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rqName(p))}</span>
-        <span style="display:block;font-size:12.5px;color:var(--text-secondary)">${p.sku?`<span class="num">${escAttr(p.sku)}</span> · `:''}${escAttr(p.buy_unit||'')}</span>
+        <span style="display:block;font-size:12.5px;color:var(--text-secondary)">${p.sku?`<span class="num">${escAttr(p.sku)}</span> · `:''}${escAttr(mbUnit(p.buy_unit))}</span>
       </span>
       <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('mbBump',${p.id},-1)"${n<=0?' disabled':''}
         aria-label="${T('Less','减少')}">${ic('minus',18)}</button>
       ${mbCountCell(p)}
       <button class="stepbtn" style="width:44px;height:44px" onclick="APP.cmd('mbBump',${p.id},1)"
         aria-label="${T('More','增加')}">${ic('plus',18)}</button>
+      </div>${n>0?mbMarksHtml(p):''}
     </div>${m.typeErr[p.id]?`<div style="padding:0 16px 10px;font-size:13px;color:var(--brick-ink)">${escAttr(m.typeErr[p.id])}</div>`:''}`;
   }).join('')}</div>`;
 }
@@ -9296,9 +9434,16 @@ function mbBodyHtml(){
    with rqFoot. Adding two bags to three bottles gives five of nothing; the
    product screens can sum their pieces because every piece is a piece. */
 function mbFootHtml(){
-  const m=state.mb, n=mbChosen().length;
+  const m=state.mb, chosen=mbChosen(), n=chosen.length;
+  /* THE URGENT COUNT IS THE ONLY THING ADDED TO THE TALLY, and it counts CHOSEN
+     rows rather than the `urg` table — a row flagged urgent and then stepped
+     back to zero is not in the request and must not be in its count. No date
+     total beside it: "3 dated" is not a fact anybody acts on, where "1 urgent"
+     is the sentence the buyer is about to be handed. */
+  const u=chosen.filter(p=>m.urg[p.id]).length;
   return `<span style="flex:1;min-width:0;font-size:13px;color:var(--text-secondary)">
-      <b class="num" style="color:var(--text-primary)">${n}</b> ${T('items','项')}</span>
+      <b class="num" style="color:var(--text-primary)">${n}</b> ${T('items','项')}${
+      u?` · <span style="color:var(--brick-ink);font-weight:600"><span class="num">${u}</span> ${T('urgent','项加急')}</span>`:''}</span>
     <button class="btn2" style="width:auto;padding:11px 26px"${(n&&!m.busy)?'':' disabled'}
       onclick="APP.cmd('mbSend')">${m.busy?T('Sending…','发送中…'):T('Send','发送')}</button>`;
 }

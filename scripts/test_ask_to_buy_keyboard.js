@@ -35,6 +35,8 @@
  *   5. a step patches the list AND the tally, still without render()
  *   6. with no patch target (screen not painted) both fall back to render()
  *   7. the empty state tells a load failure apart from a search miss
+ *  14. the unit reads in Chinese on the Chinese app, and the map is complete
+ *  15-20. §176's urgency and wanted-by day, and the count that looks tappable
  */
 
 'use strict';
@@ -76,6 +78,21 @@ function sliceHandler(name) {
   }
   throw new Error(`unbalanced braces slicing handler ${name}`);
 }
+/* The same brace-match, for a top-level `const NAME={ … }`. mbUnit reads a
+ * module-level table, and a function sliced without the table it reads is a
+ * ReferenceError at the first row rather than a wrong answer — which is how
+ * this case was found. */
+function sliceConst(name) {
+  const start = SRC.indexOf(`const ${name}={`);
+  if (start < 0) throw new Error(`const ${name} not found in m.html`);
+  let i = SRC.indexOf('{', start), depth = 0;
+  for (let j = i; j < SRC.length; j++) {
+    const c = SRC[j];
+    if (c === '{') depth++;
+    else if (c === '}') { depth--; if (depth === 0) return SRC.slice(start, j + 1) + ';'; }
+  }
+  throw new Error(`unbalanced braces slicing const ${name}`);
+}
 
 // ── the sandbox ───────────────────────────────────────────────────────────
 // A node records every innerHTML assignment AND keeps an identity, so "was the
@@ -92,6 +109,10 @@ function node(id) {
       set innerHTML(v) { html = v; this.writes++; },
       focus() { this.focused = (this.focused || 0) + 1; },
       setSelectionRange() {},
+      // mbDateOpen asks the browser to raise the native day picker. Not every
+      // browser has it and the shipped code already swallows that, so the stub
+      // records the ask rather than pretending it cannot happen.
+      showPicker() { this.picked = (this.picked || 0) + 1; },
     });
   }
   return nodes.get(id);
@@ -107,8 +128,13 @@ const sandbox = {
   console, Number, String, Array, Object, JSON,
 };
 vm.createContext(sandbox);
-for (const fn of ['mbLines', 'mbChosen', 'mbCountCell', 'mbBodyHtml', 'mbFootHtml',
-                  'mbPatch', 'mbTypeOpen', 'mbTypeCommit', 'mbBump']) {
+vm.runInContext(sliceConst('MB_UNIT_CN'), sandbox, { filename: 'm.html#MB_UNIT_CN' });
+// A `const` in a vm context is a lexical binding, not a property of the sandbox
+// object, so it is read back explicitly rather than off `sandbox`.
+const UNIT_CN = vm.runInContext('MB_UNIT_CN', sandbox);
+for (const fn of ['mbUnit', 'mbLines', 'mbChosen', 'mbCountCell', 'mbBodyHtml', 'mbFootHtml',
+                  'mbPatch', 'mbTypeOpen', 'mbTypeCommit', 'mbBump',
+                  'mbDateLabel', 'mbUrgent', 'mbDateOpen', 'mbDateSet', 'mbMarksHtml', 'mbItems']) {
   vm.runInContext(sliceFn(fn), sandbox, { filename: `m.html#${fn}` });
 }
 // The handler body, wrapped so it can be called with the typed value.
@@ -122,7 +148,7 @@ const MATS = [
 ];
 const reset = () => {
   sandbox.state.mb = { materials: MATS.slice(), tried: true, q: '', qty: {}, busy: false, err: '', sent: null,
-                       typing: {}, typeErr: {} };
+                       typing: {}, typeErr: {}, urg: {}, by: {}, dating: {} };
   renderCalls = 0; missingNode = false; nodes.clear();
 };
 // The typed-value handler is one line inside reg(); mirrored here rather than
@@ -272,6 +298,115 @@ eq(sandbox.state.mb.qty[11], 7, 'the second call is a no-op, not a reset');
 sandbox.mbTypeOpen(12); type(12, '99');
 sandbox.mbBump(12, 1);
 eq(sandbox.state.mb.qty[12], 100, 'stepping a row being typed into keeps the figure and adds to it');
+
+console.log('\n══ 14 · the unit reads in the language the rest of the row is in ══');
+// `ingredients.buy_unit` is stored in English because lib/ingredient-cost.js
+// validates it and firePriceAlertsForPO matches on it. The row around it is
+// Chinese, and a raw `pcs` under a Chinese name is one language leaking into
+// another. T() here returns the ENGLISH half (the stub at the top), so the
+// checks below read the map directly rather than through a render.
+reset();
+eq(sandbox.mbUnit('pcs'), 'pcs', 'the English app is unchanged');
+eq(UNIT_CN.pcs, '件', 'pcs has its Chinese word');
+eq(UNIT_CN.kg, '公斤', 'and so does kg');
+eq(sandbox.mbUnit(''), '', 'a material with no buy unit prints nothing, not a stray word');
+eq(sandbox.mbUnit('firkin'), 'firkin', 'an unmapped unit falls through to itself rather than vanishing');
+// THE MAP MUST COVER EVERY UNIT THE MATERIAL EDITOR CAN SET. lib/ingredient-cost.js
+// owns the two lists; a unit added there and not here would print English on a
+// Chinese row, which is the exact fault this locks.
+const COST = fs.readFileSync(path.join(__dirname, '..', 'lib', 'ingredient-cost.js'), 'utf8');
+const unitsIn = (name) => {
+  const m = COST.match(new RegExp(name + '\\s*=\\s*\\[([^\\]]*)\\]'));
+  return m ? m[1].split(',').map(x => x.trim().replace(/^['\"]|['\"]$/g, '')).filter(Boolean) : [];
+};
+const everyUnit = unitsIn('MEASURE_BUY_UNITS').concat(unitsIn('CONTAINER_BUY_UNITS'));
+ok(everyUnit.length >= 15, `the two buy-unit lists were found (${everyUnit.length} units)`);
+const unmapped = everyUnit.filter(u => !UNIT_CN[u]);
+eq(unmapped.join(','), '', 'every buy unit the editor offers has a Chinese word');
+// And the row actually uses it rather than printing p.buy_unit raw.
+ok(/mbUnit\(p\.buy_unit\)/.test(SRC), 'the picker row calls mbUnit rather than printing buy_unit raw');
+// DISPLAY ONLY: what is sent is still the id and the number.
+ok(!/MB_UNIT_CN/.test(sliceFn('mbItems')), 'mbItems never touches the map — the wire is unchanged');
+
+console.log('\n══ 15 · §176 · the two marks live on the row, and only on a row with a number ══');
+// Ash chose shape C: urgency AND a wanted-by day, both per LINE. The ordinary
+// line must stay one tap, so the controls appear only once a quantity exists.
+reset();
+ok(!/mbMarksHtml/.test(sandbox.mbBodyHtml()), 'a list of empty rows draws no marks at all');
+sandbox.mbBump(11, 1);
+const marksHtml = node('mMbBody').innerHTML;
+ok(marksHtml.includes("APP.cmd('mbUrgent',11)"), 'the row with a number gains an Urgent control');
+ok(marksHtml.includes("APP.cmd('mbDateOpen',11)"), 'and a day control');
+ok(!marksHtml.includes("APP.cmd('mbUrgent',12)"), 'the row still at zero gains neither');
+// ...and loses them again when it goes back to zero, or a request could carry an
+// urgency belonging to a line nobody ordered.
+sandbox.mbBump(11, -1);
+ok(!/mbUrgent/.test(node('mMbBody').innerHTML), 'stepping back to zero takes them away');
+
+console.log('\n══ 16 · the marks reach the wire, and an unclaimed mark sends nothing ══');
+reset();
+sandbox.mbBump(11, 4); sandbox.mbBump(12, 2);
+sandbox.mbUrgent(11);
+sandbox.mbDateSet(12, '2026-12-24');
+const items = sandbox.mbItems();
+eq(items.length, 2, 'both chosen lines are sent');
+const a = items.find(i => i.ingredient_id === 11), b = items.find(i => i.ingredient_id === 12);
+eq(a.urgent, true, 'the urgent line says so');
+eq('needed_by' in a, false, 'and carries no day key at all, rather than a null');
+eq(b.needed_by, '2026-12-24', 'the dated line carries its day');
+eq('urgent' in b, false, 'and no urgency key — absent means absent (§39)');
+// A MARK ON A ROW THAT IS NOT IN THE REQUEST IS NOT IN THE REQUEST.
+sandbox.mbBump(11, -4);
+ok(!sandbox.mbItems().some(i => i.ingredient_id === 11), 'a row stepped to zero leaves the payload');
+
+console.log('\n══ 17 · urgent toggles, a day is set and cleared, and neither repaints the app ══');
+reset();
+sandbox.mbBump(11, 1);
+renderCalls = 0;
+sandbox.mbUrgent(11);
+eq(!!sandbox.state.mb.urg[11], true, 'the first tap claims urgency');
+sandbox.mbUrgent(11);
+eq(!!sandbox.state.mb.urg[11], false, 'the second gives it back');
+sandbox.mbDateSet(11, '2026-10-01');
+eq(sandbox.state.mb.by[11], '2026-10-01', 'a day is stored as the ISO string the input gives');
+sandbox.mbDateSet(11, '');
+eq(sandbox.state.mb.by[11], undefined, 'and an empty value clears it, which is how a line loses its day');
+eq(renderCalls, 0, 'none of it called render() — this screen patches, it does not repaint');
+// Opening the field asks for the native picker rather than drawing a calendar.
+sandbox.mbDateOpen(11);
+eq(sandbox.state.mb.dating[11], 1, 'the field opens');
+ok((node('mbday-11').picked || 0) > 0, 'and the browser is asked to raise its own day picker');
+
+console.log('\n══ 18 · the day reads as a day, in both languages, without moving ══');
+// `new Date('2026-09-30')` is UTC midnight and prints as the 29th anywhere west
+// of Greenwich. A wanted-by day that shifts with the reader's clock is the one
+// thing this label must not do, so it is parsed by hand.
+eq(sandbox.mbDateLabel('2026-09-30'), '30 Sep', 'the English label names the day it was given');
+eq(sandbox.mbDateLabel('2026-01-01'), '1 Jan', 'and the turn of the year');
+eq(sandbox.mbDateLabel(''), '', 'no day, no label');
+eq(sandbox.mbDateLabel('nonsense'), '', 'and nothing invented from rubbish');
+
+console.log('\n══ 19 · the tally counts urgent lines, over what is CHOSEN ══');
+reset();
+sandbox.mbBump(11, 2); sandbox.mbUrgent(11);
+sandbox.mbBump(12, 1);
+sandbox.mbPatch();
+ok(node('mMbFoot').innerHTML.includes('>1</span> urgent'), 'one urgent line is counted');
+// Flagged, then stepped off the list: it is not in the request, so it is not in
+// the count. Counting `urg` directly would have printed 1 here.
+sandbox.mbBump(11, -2);
+ok(!/urgent/.test(node('mMbFoot').innerHTML), 'and a flagged row stepped to zero is counted by nobody');
+
+console.log('\n══ 20 · the count wears an edge, because an invisible affordance is not one ══');
+// It opened a keypad from the day §46 built it and looked exactly like the SKU
+// line above it, which is a label. Ash asked for a feature that was already
+// there. Same finding, same fix, as .qsnum on the Quick Stock card.
+reset();
+const cell = sandbox.mbCountCell(MATS[0]);
+ok(/border:1\.5px solid var\(--edge\)/.test(cell), 'the closed count carries the edge every control here has');
+ok(/background:var\(--surface-raised\)/.test(cell), 'and the raised ground that goes with it');
+ok(!/border:0/.test(cell), 'and no longer declares itself borderless');
+ok(/APP\.cmd\('mbType'/.test(cell), 'while still being the button that opens the keypad');
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
