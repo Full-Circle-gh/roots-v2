@@ -240,30 +240,49 @@ it('NO house tag reaches a Shangpeng head as literal text', () => {
   // </BOLD> in the middle of the customer's receipt (§171 addendum 3).
   // Whatever the map says, nothing that looks like a house tag may survive
   // translation — that is the property, not the individual entries.
-  const out = spyun.translate(SLIP);
-  assert.ok(!/<\/?(CB|BOLD|B|L|C)>/.test(out.replace(/<\/?(CB|B|C)>/g, '')),
-    'a house tag survived translation and would print as text on the paper');
+  // Strip everything Shangpeng actually honours, then nothing tag-shaped may
+  // remain. <BOLD> and <L> are the two that came out as literal characters.
+  const left = spyun.translate(SLIP).replace(/<\/?(CB|C|B|W|H)>/g, '');
+  assert.ok(!/<\/?[A-Z]+>/.test(left),
+    `a house tag survived translation and would print as text: ${left}`);
 });
 
-it('the two Feie-only tags are dropped, and the three shared ones are not', () => {
-  // Read off the paper, element by element: <CB> (shop name, order code),
-  // <B> (PKG n/m, SKU, Items) and <C> (address, Thank you) were honoured;
-  // <BOLD> (shipment label, item names) and <L> (TOTAL) were not.
+it('the map follows MEANING, not spelling — the trap that got this wrong twice', () => {
+  // Read off two diagnostic slips (§171 addendum 4). Shangpeng's vocabulary is
+  // a DIFFERENT CUT of the same capabilities, not Feie's with pieces missing:
+  //   Shangpeng <B> is BOLD          — Feie's <B> is ENLARGE
+  //   Shangpeng <H> is double HEIGHT — Feie spells that <L>
+  //   Shangpeng <W> is double WIDTH  — Feie has no separate width tag
+  // Passing <B> through because the spelling matched silently downgraded every
+  // enlarged line on the slip to merely bold. It printed, it looked
+  // deliberate, and it did not match the other shop.
+  assert.strictEqual(spyun.TAG_MAP.BOLD, 'B', 'Feie bold must become Shangpeng bold');
+  assert.strictEqual(spyun.TAG_MAP.L,    'H', 'Feie double-height must become Shangpeng double-height');
+  assert.notStrictEqual(spyun.TAG_MAP.B, 'B',
+    'Feie <B> is ENLARGE; Shangpeng <B> is BOLD — passing it through is the bug');
   assert.strictEqual(spyun.TAG_MAP.CB, 'CB');
-  assert.strictEqual(spyun.TAG_MAP.B,  'B');
   assert.strictEqual(spyun.TAG_MAP.C,  'C');
-  assert.strictEqual(spyun.TAG_MAP.L,    '', '<L> is Feie-only — it printed literally');
-  assert.strictEqual(spyun.TAG_MAP.BOLD, '', '<BOLD> is Feie-only — it printed literally');
+});
+
+it('a tag mapped to a nest unwinds in the right order', () => {
+  // Feie's enlarge is double width AND height; Shangpeng splits those, so one
+  // house tag emits two. Closing tags must unwind inner-first or the nest is
+  // malformed and the head is entitled to print anything at all.
+  const out = spyun.translate('<B>x3  SKU 3-50</B>');
+  assert.match(out, /^<W><H>x3  SKU 3-50<\/H><\/W>$/,
+    `nest malformed: ${out}`);
 });
 
 it('a dropped tag does not disturb the line it wrapped', () => {
-  // The renderer has already wrapped item names and built the TOTAL row to
-  // WIDTH columns. Dropping the tag must leave that arithmetic alone — which
-  // is also why <BOLD>/<L> are not mapped to <B>: an enlarged line holds
-  // BIG_WIDTH, and a 31-column TOTAL row would fold mid-price.
-  const total = 'TOTAL                      \uFFE5330.00';
-  assert.strictEqual(spyun.translate(`<L>${total}</L>`), total);
-  assert.strictEqual(spyun.translate('<BOLD>\u828d\u679c\u86cb\u767d\u7403</BOLD>'), '\u828d\u679c\u86cb\u767d\u7403');
+  // Kept as a property of the mechanism even though nothing is dropped today:
+  // the moment a third vendor lacks one of these, '' must still leave the
+  // renderer's column arithmetic alone rather than eat a character.
+  const saved = spyun.TAG_MAP.L;
+  try {
+    spyun.TAG_MAP.L = '';
+    const total = 'TOTAL                      \uFFE5330.00';
+    assert.strictEqual(spyun.translate(`<L>${total}</L>`), total);
+  } finally { spyun.TAG_MAP.L = saved; }
 });
 
 it('every house tag the renderers emit has an entry in the map', () => {
