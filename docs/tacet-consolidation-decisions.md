@@ -17989,7 +17989,7 @@ nobody has asked for is how the interface gets fixed wrong before the second
 implementation arrives. The contract is `enabled` and `printContent`, and it
 grows when a third vendor or a real requirement makes it grow.
 
-## §172 — A BUYER CAN SAY "NOT THIS ONE", AND THE GRAIN IS THE LINE
+## §174 — A BUYER CAN SAY "NOT THIS ONE", AND THE GRAIN IS THE LINE
 
 **Ash, 2026-09-18, on the From-the-kitchen box:** *"cant delete the request
 directly in this box"*. Asked whether that meant one line or the whole request,
@@ -18073,14 +18073,14 @@ when, and nothing shows it to the cook who asked — the kitchen has no screen f
 its own sent requests at all today. Building one is a different brief; the record
 is being kept now so that screen has something true to show when it exists.
 
-## §173 — THE COOK IS TOLD WHAT BECAME OF THE ASK
+## §175 — THE COOK IS TOLD WHAT BECAME OF THE ASK
 
-**Ash, 2026-09-18, on §172's own flagged gap:** *"the silence is the weak point,
+**Ash, 2026-09-18, on §174's own flagged gap:** *"the silence is the weak point,
 not the delete"* — and *"ok do it"*.
 
-### THE GAP §172 OPENED, AND THE ONE IT ONLY MADE VISIBLE
+### THE GAP §174 OPENED, AND THE ONE IT ONLY MADE VISIBLE
 
-§172 gave the buyer a way to refuse a line. It did not create the silence: the
+§174 gave the buyer a way to refuse a line. It did not create the silence: the
 kitchen has never had a screen for its own sent requests. A cook taps Send, sees
 *Sent to the buyer*, and from that moment learns nothing — not that it was
 ordered, not that it was refused, not that the whole request was withdrawn.
@@ -18102,7 +18102,7 @@ that makes the other three legible.
 
 ### THE GRAIN IS THE LINE, AGAIN, AND A REQUEST-LEVEL WORD WOULD HAVE TO LIE
 
-§86 part two made the line the unit of sourcing; §172 made it the unit of
+§86 part two made the line the unit of sourcing; §174 made it the unit of
 refusal. So one MR can be part ordered, part waiting and part struck off at the
 same time, and any single word printed on the request as a whole is wrong about
 at least one of its lines. **Every line carries its own state**, and the request

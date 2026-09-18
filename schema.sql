@@ -632,7 +632,7 @@ CREATE TABLE IF NOT EXISTS material_request_items (
   -- outstanding list — the correct behaviour rather than a consolation.
   sourced_po_id INTEGER,
   sourced_at    DATETIME,
-  -- The buyer struck this line off: it will not be bought (§172). ONE-WAY, and
+  -- The buyer struck this line off: it will not be bought (§174). ONE-WAY, and
   -- §86's "withdrawn and raised again" is why — the kitchen owns the ask, so
   -- putting a line back is the kitchen raising it, not the buyer restoring it.
   -- declined_by is a plain audit integer and never an FK, for created_by's

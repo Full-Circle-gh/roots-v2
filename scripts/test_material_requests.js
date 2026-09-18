@@ -268,7 +268,7 @@ async function main() {
      'and the line the buyer is reading is unchanged');
 
   console.log('\n══ 11 · the buyer strikes ONE line off, and the rollup ignores it ══');
-  // §172. The grain is the line: this request has one line on an order and one
+  // §174. The grain is the line: this request has one line on an order and one
   // outstanding, and striking the outstanding one must not touch the other.
   const sourcedLine = db.prepare(
     'SELECT id FROM material_request_items WHERE request_id = ? AND sourced_po_id IS NOT NULL').get(req1.id);
@@ -324,7 +324,7 @@ async function main() {
   eq(r.body.data.length, 0, 'the buyer’s list is empty');
 
   console.log('\n══ 13 · the cook is told what became of the ask ══');
-  // §173. The kitchen's own side of this module: a cook tapped Send and, until
+  // §175. The kitchen's own side of this module: a cook tapped Send and, until
   // /mine existed, learned nothing ever again.
   // SOMEBODY ELSE'S REQUEST MUST NOT APPEAR. Written straight to the table
   // because the stubbed operator is always id 7 — the scoping is the claim under
@@ -358,7 +358,7 @@ async function main() {
   const m3 = mine.find(x => x.id === gone.id);
   eq(m3.items[0].state, 'waiting', 'a line nobody has acted on is still waiting');
 
-  // §86's rule is the server's, not a screen's discretion — and §173 keeps the
+  // §86's rule is the server's, not a screen's discretion — and §175 keeps the
   // purchase order number off the kitchen's screen the same way.
   const everyLine = mine.flatMap(x => x.items || []);
   ok(everyLine.length > 0, 'there are lines to check');

@@ -837,7 +837,7 @@
     rows.forEach(l => { if (allOn) _mrPick.delete(l.id); else _mrPick.add(l.id); });
     renderMrBody();
   };
-  // STRIKING A LINE OFF — the buyer says this one is not being bought (§172).
+  // STRIKING A LINE OFF — the buyer says this one is not being bought (§174).
   //
   // THE LINE, NOT THE REQUEST. One kitchen request arrives here as several rows,
   // and a buyer who will not buy the desiccant still wants the containers. The

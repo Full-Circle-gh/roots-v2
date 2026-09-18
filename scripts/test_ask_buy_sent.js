@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * "A cook whose ask is struck off is never told." (§173)
+ * "A cook whose ask is struck off is never told." (§175)
  *
  *   node scripts/test_ask_buy_sent.js
  *
- * §172 gave the buyer a way to refuse one line of a kitchen request. It did not
+ * §174 gave the buyer a way to refuse one line of a kitchen request. It did not
  * create the silence around that refusal — the kitchen has never had a screen
  * for its own sent requests at all — but it made the silence worth fixing: a
  * cook could be refused, ordered and withdrawn all week and learn none of it.
@@ -16,7 +16,7 @@
  * tidy-up that "simplifies" this screen to one status per request would pass a
  * render test and lie to the kitchen; case 2 is what refuses it.
  *
- * It also locks the two things §86 and §173 keep OFF this screen — a price and a
+ * It also locks the two things §86 and §175 keep OFF this screen — a price and a
  * purchase order number — at the render, not only at the route. The route test
  * (scripts/test_material_requests.js case 13) proves the server sends neither;
  * this proves the screen would not print them if it ever did.

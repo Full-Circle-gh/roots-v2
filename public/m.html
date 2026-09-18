@@ -981,7 +981,7 @@ const state = {
          "1." and "" are things somebody is in the middle of writing and a number
          cannot hold either. A row is absent from it when its field is shut. */
       typing:{},typeErr:{}},
-  /* WHAT BECAME OF WHAT YOU ASKED FOR (§173). Its own bag rather than a corner
+  /* WHAT BECAME OF WHAT YOU ASKED FOR (§175). Its own bag rather than a corner
      of `mb`, for `mb`'s own stated reason one level up: that one is a BASKET
      being built and this is a record coming back, and a screen reset that
      empties the basket must not also throw away the answer. */
@@ -4701,12 +4701,12 @@ const MORE_GROUPS=[
        answer coming back. A fourth value for "you get told" would spend the
        scarcity that makes the other three legible. */
     ['kitchenready','circle-check','Ready from the kitchen','厨房已完成'],
-    /* THE SECOND ANSWER COMING BACK (§173), and it earns its place here for the
+    /* THE SECOND ANSWER COMING BACK (§175), and it earns its place here for the
        row above it's reason rather than a new one: these are the REQUESTER's
        side, how the thing you asked for is going. `askbuy` three rows up is the
        only screen in this group whose answer had nowhere to arrive — a cook
        tapped Send and learned nothing ever again, not even that a buyer had
-       struck a line off (§172).
+       struck a line off (§174).
        NO PILL, for kitchenready's stated reason: a fourth value for "you get
        told" would spend the scarcity that makes the other three legible.
        BORN GATED on `production`, the same switch `askbuy` carries — the screen
@@ -9300,13 +9300,13 @@ function screenAskBuy(){
   return intro+search+body+foot;
 }
 
-/* ══ WHAT BECAME OF WHAT YOU ASKED FOR (§173) ══════════════════════════════
+/* ══ WHAT BECAME OF WHAT YOU ASKED FOR (§175) ══════════════════════════════
    The answer coming back from the buyer, and the only screen in this file
    written about material requests rather than for raising one.
 
    THE LINE CARRIES THE STATE, NOT THE REQUEST. One request can be part ordered,
    part waiting and part struck off at the same time — §86 part two made the line
-   the unit of sourcing and §172 made it the unit of refusal — so a single word
+   the unit of sourcing and §174 made it the unit of refusal — so a single word
    on the request as a whole would be wrong about at least one of its lines. The
    header carries only what is genuinely request-level: its number, its day, and
    whether the whole thing was withdrawn.
@@ -9315,7 +9315,7 @@ function screenAskBuy(){
    pill and does not recompute it from nulls. Two screens each deciding what a
    null means is how they come to disagree.
 
-   NO PRICE AND NO ORDER NUMBER — see §86 for the first and §173 for the second.
+   NO PRICE AND NO ORDER NUMBER — see §86 for the first and §175 for the second.
    `/mine` sends neither, so neither can leak through a screen's oversight. */
 function loadMbSent(force){
   const m=state.mbs;
@@ -19450,7 +19450,7 @@ const ROUTE_CAP={
      asks the company to spend with a supplier, and the server gates it the same
      way (lib/cap-routes.js). */
   askbuy:'production:request',
-  /* THE SAME KEY, AND kitchenready's REASONING VERBATIM (§173): this is the
+  /* THE SAME KEY, AND kitchenready's REASONING VERBATIM (§175): this is the
      REQUESTER's side — how the thing you asked for is going. Anybody who can
      raise one of these has something to be told about; nobody else does. It is
      deliberately NOT a purchasing key: reading what became of your own ask is

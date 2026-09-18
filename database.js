@@ -7598,7 +7598,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_material_request_items_src ON material_request_items(sourced_po_id);
 `);
 
-// §172: the buyer strikes one line off the kitchen's ask. The grain is the LINE,
+// §174: the buyer strikes one line off the kitchen's ask. The grain is the LINE,
 // like sourcing (§86 part two) — a buyer drops the desiccant and still buys the
 // containers, which whole-request withdrawal (archived_at, above) cannot do.
 //

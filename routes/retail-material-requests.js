@@ -87,7 +87,7 @@ function positiveNumber(v) {
 function rollUp(requestId) {
   const r = tdb().prepare('SELECT status, archived_at FROM material_requests WHERE id = ?').get(requestId);
   if (!r || r.status === 'draft') return;
-  // A STRUCK-OFF LINE IS SETTLED, NOT OUTSTANDING (§172), so it leaves the sum
+  // A STRUCK-OFF LINE IS SETTLED, NOT OUTSTANDING (§174), so it leaves the sum
   // entirely rather than counting as done. Counting it as done would flip the
   // request to 'sourced' — "every line reached a purchase order" — for lines
   // nobody ever bought, and 'sourced' is a word the books are read through.
@@ -156,7 +156,7 @@ router.get('/api/retail-admin/material-requests/materials', requireRetailAdmin, 
  *
  * Drafts are excluded because a draft is somebody still typing. Archived
  * requests are excluded because archiving is how a request is withdrawn, and
- * struck-off lines (§172) are excluded because refusing to buy one is the buyer
+ * struck-off lines (§174) are excluded because refusing to buy one is the buyer
  * saying it is finished with — the same "not outstanding" the other two mean. */
 router.get('/api/retail-admin/material-requests/pending-lines', requireRetailAdmin, (req, res) => {
   const rows = tdb().prepare(`
@@ -173,19 +173,19 @@ router.get('/api/retail-admin/material-requests/pending-lines', requireRetailAdm
   res.json({ success: true, data: rows });
 });
 
-/* ── What became of what YOU asked for (§173) ───────────────────────────────
+/* ── What became of what YOU asked for (§175) ───────────────────────────────
  *
  * The cook's side of this module, and the only route here written for the
  * kitchen rather than for the buyer. A cook tapped Send and, until this existed,
  * learned nothing ever again — not that it was ordered, not that a buyer struck
- * a line off (§172), not that the whole request was withdrawn.
+ * a line off (§174), not that the whole request was withdrawn.
  *
  * SCOPED TO THE CALLER by `created_by`, the column the request already stamps.
  * It is *your* requests. A kitchen sharing one login sees everything that login
  * raised, which is the true answer to the question the screen is asking.
  *
  * THE LINE CARRIES THE STATE, NOT THE REQUEST. §86 part two made the line the
- * unit of sourcing and §172 made it the unit of refusal, so one request can be
+ * unit of sourcing and §174 made it the unit of refusal, so one request can be
  * part ordered, part waiting and part struck off at once — any single word
  * printed on the request as a whole is wrong about at least one of its lines.
  * The only genuinely request-level fact is whether it was withdrawn, and that is
@@ -197,7 +197,7 @@ router.get('/api/retail-admin/material-requests/pending-lines', requireRetailAdm
  *
  * NO PRICE, AND NO PURCHASE ORDER NUMBER. The first is §86's rule and the
  * columns below are the gate rather than a screen's discretion. The second is
- * §173's own call: a cook needs to know the thing is ON ORDER, and which order
+ * §175's own call: a cook needs to know the thing is ON ORDER, and which order
  * is the buyer's business. */
 router.get('/api/retail-admin/material-requests/mine', requireRetailAdmin, (req, res) => {
   const me = (req.user && req.user.id) || null;
@@ -219,11 +219,11 @@ router.get('/api/retail-admin/material-requests/mine', requireRetailAdmin, (req,
     const byReq = new Map(rows.map(r => [r.id, []]));
     for (const l of lines) {
       // ORDER MATTERS AND IS NOT ARBITRARY: a line cannot be struck off once it
-      // is on an order (§172 refuses it), so the two are already exclusive —
+      // is on an order (§174 refuses it), so the two are already exclusive —
       // but reading sourced first means that if one ever did carry both, the
       // cook is told the thing was BOUGHT rather than that it was refused.
       l.state = l.sourced_po_id ? 'ordered' : (l.declined_at ? 'removed' : 'waiting');
-      delete l.sourced_po_id;   // the order is the buyer's business (§173)
+      delete l.sourced_po_id;   // the order is the buyer's business (§175)
       byReq.get(l.request_id).push(l);
     }
     rows.forEach(r => { r.items = byReq.get(r.id) || []; r.withdrawn = !!r.archived_at; });
@@ -412,7 +412,7 @@ router.put('/api/retail-admin/material-requests/:id/archive', requireRetailAdmin
 
 /* ── Strike one line off ────────────────────────────────────────────────────
  *
- * §172. The buyer, looking at the kitchen's asks, says "we are not buying this
+ * §174. The buyer, looking at the kitchen's asks, says "we are not buying this
  * one". THE GRAIN IS THE LINE, matching §86 part two's grain for sourcing and
  * for the same reason: a buyer drops the desiccant and still buys the
  * containers. Archiving (above) is the whole-request answer and cannot do that.

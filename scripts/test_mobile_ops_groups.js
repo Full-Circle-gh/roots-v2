@@ -71,7 +71,7 @@ it('eight groups, each with a heading in both languages', () => {
 });
 
 /* TWENTY-FOUR SINCE 2026-09-18, and the count moved for the one reason it may:
-   a row was ADDED, not lost, duplicated or swapped. `askbuysent` (§173, what
+   a row was ADDED, not lost, duplicated or swapped. `askbuysent` (§175, what
    became of what you asked the buyer for) joins Ask someone else beside
    `kitchenready` — the group's other "answer coming back". It was
    twenty-three from 2026-09-17, when `recipes` (§164's read-only screen) joined
