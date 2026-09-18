@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.314
+# Tacet shared-core consolidation — decisions record, v4.315
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-18 · v4.315 — **§171 ADDENDUM 4 · THE SAME SPELLING MEANT TWO DIFFERENT THINGS, AND ADDENDUM 3 IS WITHDRAWN.** Ash refused addendum 3's conclusion — *"I want the same as tianhe, like this"* — and was right to. That addendum said Shangpeng has no bold and no double-height; **it has both**. The evidence was never more than *Feie's names* for them printing literally, and concluding the capability was absent from the name being wrong is the whole error. **One diagnostic slip of thirteen candidate tags settled it**: Shangpeng's vocabulary is a DIFFERENT CUT of the same capabilities, and the spelling overlaps — Shangpeng `<B>` is **bold** where Feie's is **enlarge**; `<W>` is double width; `<H>` is what Feie spells `<L>`; `<CB>`/`<C>` agree. A second slip confirmed `<W>`/`<H>` **nest** to give enlarge. **The `<B>` collision was a live bug for three rounds and was invisible**: passing it through because the spelling matched downgraded every enlarged line — SKU rows, `PKG n/m`, `Items 件数` — to merely bold. It printed, it looked deliberate, and three rounds of reading the tag table missed it because the table was wrong about a MEANING, not a name. Tests now assert the map **by meaning**, and pin that a nested value unwinds inner-first. **Addendum 3's "accepted difference" is WITHDRAWN** — there was no trade, the slips are identical now, and that paragraph rationalised a bug; it is left in place unedited because a record that deletes its wrong turns teaches nothing, and this one is worth keeping: *absence of evidence, under a name you chose yourself, is not evidence of absence*. **Also asked in the same breath**: `Time`, `To`, `Tel` and the address — the smallest type on a slip taped to a parcel and read at arm's length — now ride `<L>`. **`<L>` not `<B>`, on arithmetic not taste**: `<L>` is double HEIGHT at `WIDTH` columns, while `<B>` enlarges to `BIG_WIDTH` and would re-wrap a real address into three ragged pieces. Scoped to `receipt` (`packing` has a different reader); both shops get it, which is what was wanted. `verify-fulfilment-types.js`'s `/^To {4}/m` matcher now tolerates a wrapping tag, keeps its anchor, and was confirmed still red with the line removed. 47 assertions, 284 fast suites pass.
 
 2026-09-18 · v4.313 — **§171 ADDENDUM 3 · THE TAG MAP, READ OFF PAPER: SHANGPENG'S SET IS SMALLER.** Ash, holding the first Shangpeng slip: *"it prints but have a problem, it doesn't look the same when tianhe printer print"* — the receipt carried `<BOLD>Air shipment · 空运</BOLD>` and `<L>TOTAL …</L>` as **literal characters**, in front of a customer. **Shangpeng's tag vocabulary is a SUBSET of Feie's**, read element by element off the paper: `<CB>` (shop name, order code), `<B>` (PKG n/m, SKU, Items 件数) and `<C>` (address, Thank you) are honoured; `<BOLD>` (shipment label, item names) and `<L>` (TOTAL) are not. **Dropping the two is the complete answer, not a fallback** — there is no Shangpeng bold and no Shangpeng double-height to map them to, so nothing the device could have done is given up. **The tempting fix is wrong and a test now says so**: mapping them to `<B>` to keep the emphasis fails on arithmetic, because `<B>` is ENLARGE, an enlarged line holds `BIG_WIDTH` not `WIDTH`, and the renderer has already wrapped item names and built the TOTAL row to 31 — a 16-column line would fold a price in half. A plain line that fits beats an emphasised one that folds. **§171's hedge was the right shape and is now spent**: that section shipped this table flagged and isolated with the promise that a wrong entry would be "a one-line fix and no renderer moves", and it was exactly that — two entries, zero renderer lines, one file. The hedge made a wrong guess cheap; the paper made it right, and the pairing is the rule worth keeping. **Accepted difference between the two shops**: Tianhe's item names are bold and its TOTAL double-height, Yuexiu's are plain — same words, same layout, same widths. Making them identical would mean giving up the emphasis on Feie too, a worse trade. 46 assertions, two sabotages confirmed red including the `<L>`→`<B>` "improvement".
 
@@ -18210,6 +18212,82 @@ Tianhe's item names are bold and its TOTAL is double-height; Yuexiu's are
 plain. Same words, same layout, same widths. **A tenant who wants them
 identical would have to give up the emphasis on Feie too**, which is a worse
 trade than two shops whose receipts differ in weight.
+
+### §171 ADDENDUM 4 — THE SAME SPELLING MEANT TWO DIFFERENT THINGS, AND ADDENDUM 3 IS WITHDRAWN
+
+**2026-09-18. Ash refused the conclusion of addendum 3** — *"I want the same
+as tianhe, like this"* — and he was right to. That addendum said Shangpeng
+has no bold and no double-height. **It has both.** The evidence behind the
+claim was never more than this: FEIE'S NAMES for them print literally on a
+Shangpeng head. Concluding the capability was absent from the name being
+wrong is the whole of the error, and it survived because the slip it produced
+looked deliberate.
+
+**A DIAGNOSTIC SLIP OF THIRTEEN CANDIDATE TAGS SETTLED IT IN ONE PRINT.**
+Shangpeng's vocabulary is not Feie's with pieces missing; it is a **different
+cut of the same capabilities**, and the overlap in spelling is a trap:
+
+| | Shangpeng | Feie |
+|---|---|---|
+| `<B>` | **bold** | **enlarge** |
+| `<W>` | double width | *(no such tag)* |
+| `<H>` | double height | spelled `<L>` |
+| `<CB>` | centre + large | same |
+| `<C>` | centre | same |
+
+Nothing else tested rendered: `BOLD L N HB WB BIG RIGHT D E T` all printed as
+text. A second slip confirmed `<W>` and `<H>` **nest** to give Feie's enlarge.
+
+**THE `<B>` COLLISION WAS A LIVE BUG FOR THREE ROUNDS AND NOBODY COULD SEE
+IT.** Passing Feie's `<B>` through unchanged — because the spelling matched —
+silently downgraded every enlarged line on the Shangpeng slip to merely bold:
+the SKU rows, `PKG n/m`, `Items 件数`. It printed. It looked intentional. It
+was the difference being reported, and three rounds of looking at the tag
+table did not find it, because the table was not wrong about a NAME, it was
+wrong about a MEANING. **The tests now assert the map by meaning** — Feie bold
+becomes Shangpeng bold, and Feie `<B>` must NOT stay `<B>` — so the collision
+cannot come back as a tidy-up.
+
+**`TAG_MAP` VALUES MAY NOW BE A NESTED LIST**, written outer-first, because
+one house tag can need two vendor tags. Closing tags unwind inner-first or the
+nest is malformed and the head may print anything at all; a test pins that.
+
+**ADDENDUM 3'S "ACCEPTED DIFFERENCE" IS WITHDRAWN.** It recorded that Tianhe's
+item names would be bold and Yuexiu's plain, and argued that making them
+identical was a worse trade. There was no trade: the slips are now identical,
+and the paragraph was a rationalisation of a bug. **It is left in place rather
+than edited, because a record that quietly deletes its wrong turns teaches
+nothing** — and the wrong turn here is worth keeping: *absence of evidence,
+under a name you chose yourself, is not evidence of absence.*
+
+**SEPARATELY, AND ASKED FOR IN THE SAME BREATH: THE RECEIPT'S HEADER GREW.**
+*"I need the name with time and address one size bigger as well"*. `Time`,
+`To`, `Tel` and the address were the smallest type on a slip that gets taped
+to a parcel and read at arm's length by a driver. They now ride `<L>`.
+
+**`<L>` AND NOT `<B>`, AND THE REASON IS ARITHMETIC, NOT TASTE.** `<L>` is
+double HEIGHT and keeps the line at `WIDTH` columns. `<B>` enlarges to
+`BIG_WIDTH`, so a 31-column address re-wraps at 16 and a real one lands in
+three ragged pieces with the break wherever the head's own column maths puts
+it. **Taller without moving a single column boundary.** `Tel` rides with the
+name though only the name was asked for: a phone number left small between two
+enlarged lines reads as a mistake, and it is the other half of *who is
+receiving this*.
+
+**SCOPED TO THE `receipt` TEMPLATE, AND BOTH SHOPS GET IT.** `packing` has its
+own recipient block and a different reader; enlarging a picking list is a
+separate question nobody has asked. One renderer serves both vendors by
+construction (§171), so Tianhe's receipts change too — called out rather than
+slipped in, and correct: the entire thread was *"I want the same as tianhe"*,
+and diverging the two would mean two templates drifting forever, which is the
+outcome §171 exists to prevent.
+
+`scripts/verify-fulfilment-types.js` matched the recipient line with
+`/^To {4}/m`, which a wrapping tag breaks. The matcher now allows an optional
+leading tag and keeps both the anchor and the four-space label discipline —
+the check is about WHETHER a hand-over recipient is named, not how it is
+styled — and was confirmed still red with the `To` line removed, so it has not
+been loosened into a pass.
 ## §172 — WHAT THE SHOP KNOWS ABOUT A PERSON IS READ ON EVERY ORDER, AND IS EDITED IN ONE PLACE
 
 **DECIDED BY ASH, 2026-09-18**, looking at TC000750's drawer: *"an order note
