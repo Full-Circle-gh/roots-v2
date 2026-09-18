@@ -35,6 +35,7 @@
  *   5. a step patches the list AND the tally, still without render()
  *   6. with no patch target (screen not painted) both fall back to render()
  *   7. the empty state tells a load failure apart from a search miss
+ *  14. the unit reads in Chinese on the Chinese app, and the map is complete
  */
 
 'use strict';
@@ -76,6 +77,21 @@ function sliceHandler(name) {
   }
   throw new Error(`unbalanced braces slicing handler ${name}`);
 }
+/* The same brace-match, for a top-level `const NAME={ … }`. mbUnit reads a
+ * module-level table, and a function sliced without the table it reads is a
+ * ReferenceError at the first row rather than a wrong answer — which is how
+ * this case was found. */
+function sliceConst(name) {
+  const start = SRC.indexOf(`const ${name}={`);
+  if (start < 0) throw new Error(`const ${name} not found in m.html`);
+  let i = SRC.indexOf('{', start), depth = 0;
+  for (let j = i; j < SRC.length; j++) {
+    const c = SRC[j];
+    if (c === '{') depth++;
+    else if (c === '}') { depth--; if (depth === 0) return SRC.slice(start, j + 1) + ';'; }
+  }
+  throw new Error(`unbalanced braces slicing const ${name}`);
+}
 
 // ── the sandbox ───────────────────────────────────────────────────────────
 // A node records every innerHTML assignment AND keeps an identity, so "was the
@@ -107,7 +123,11 @@ const sandbox = {
   console, Number, String, Array, Object, JSON,
 };
 vm.createContext(sandbox);
-for (const fn of ['mbLines', 'mbChosen', 'mbCountCell', 'mbBodyHtml', 'mbFootHtml',
+vm.runInContext(sliceConst('MB_UNIT_CN'), sandbox, { filename: 'm.html#MB_UNIT_CN' });
+// A `const` in a vm context is a lexical binding, not a property of the sandbox
+// object, so it is read back explicitly rather than off `sandbox`.
+const UNIT_CN = vm.runInContext('MB_UNIT_CN', sandbox);
+for (const fn of ['mbUnit', 'mbLines', 'mbChosen', 'mbCountCell', 'mbBodyHtml', 'mbFootHtml',
                   'mbPatch', 'mbTypeOpen', 'mbTypeCommit', 'mbBump']) {
   vm.runInContext(sliceFn(fn), sandbox, { filename: `m.html#${fn}` });
 }
@@ -272,6 +292,35 @@ eq(sandbox.state.mb.qty[11], 7, 'the second call is a no-op, not a reset');
 sandbox.mbTypeOpen(12); type(12, '99');
 sandbox.mbBump(12, 1);
 eq(sandbox.state.mb.qty[12], 100, 'stepping a row being typed into keeps the figure and adds to it');
+
+console.log('\n══ 14 · the unit reads in the language the rest of the row is in ══');
+// `ingredients.buy_unit` is stored in English because lib/ingredient-cost.js
+// validates it and firePriceAlertsForPO matches on it. The row around it is
+// Chinese, and a raw `pcs` under a Chinese name is one language leaking into
+// another. T() here returns the ENGLISH half (the stub at the top), so the
+// checks below read the map directly rather than through a render.
+reset();
+eq(sandbox.mbUnit('pcs'), 'pcs', 'the English app is unchanged');
+eq(UNIT_CN.pcs, '件', 'pcs has its Chinese word');
+eq(UNIT_CN.kg, '公斤', 'and so does kg');
+eq(sandbox.mbUnit(''), '', 'a material with no buy unit prints nothing, not a stray word');
+eq(sandbox.mbUnit('firkin'), 'firkin', 'an unmapped unit falls through to itself rather than vanishing');
+// THE MAP MUST COVER EVERY UNIT THE MATERIAL EDITOR CAN SET. lib/ingredient-cost.js
+// owns the two lists; a unit added there and not here would print English on a
+// Chinese row, which is the exact fault this locks.
+const COST = fs.readFileSync(path.join(__dirname, '..', 'lib', 'ingredient-cost.js'), 'utf8');
+const unitsIn = (name) => {
+  const m = COST.match(new RegExp(name + '\\s*=\\s*\\[([^\\]]*)\\]'));
+  return m ? m[1].split(',').map(x => x.trim().replace(/^['\"]|['\"]$/g, '')).filter(Boolean) : [];
+};
+const everyUnit = unitsIn('MEASURE_BUY_UNITS').concat(unitsIn('CONTAINER_BUY_UNITS'));
+ok(everyUnit.length >= 15, `the two buy-unit lists were found (${everyUnit.length} units)`);
+const unmapped = everyUnit.filter(u => !UNIT_CN[u]);
+eq(unmapped.join(','), '', 'every buy unit the editor offers has a Chinese word');
+// And the row actually uses it rather than printing p.buy_unit raw.
+ok(/mbUnit\(p\.buy_unit\)/.test(SRC), 'the picker row calls mbUnit rather than printing buy_unit raw');
+// DISPLAY ONLY: what is sent is still the id and the number.
+ok(!/MB_UNIT_CN/.test(sliceFn('mbItems')), 'mbItems never touches the map — the wire is unchanged');
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
