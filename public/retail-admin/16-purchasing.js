@@ -281,8 +281,89 @@
     try {
       const r = await api('/api/retail-admin/material-requests/pending-lines');
       _mrLines = r.data || [];
+      // The rail dot and the chip are the same number, so the dot drops the
+      // moment a buyer turns lines into a draft rather than up to a poll later.
+      // Painted inside the try only: a failed read must leave the dot exactly
+      // as it was — see mrPaintDot's note on a dropped wifi packet.
+      mrPaintDot(_mrLines.length);
     } catch (e) { _mrLines = []; }
   }
+
+  /* ── THE RAIL DOT ───────────────────────────────────────────────
+     A cook raises a request on the phone (§86) and nothing outside this screen
+     says so. The "From the kitchen" chip above already carries the count — but
+     a chip inside the page is invisible to everybody who is not already on the
+     page it is trying to summon them to, which is nobody. That is the same
+     argument the Finance approvals dot makes for itself (finAprPaintDot,
+     22-finance.js) and this is deliberately the same dot: the shared
+     `.tab-badge` component, so it inherits the rail's house rule
+     (`.tabs .tab-badge` in retail-admin.css — calm amber, never the red, no
+     pulse) and any later change to it. A kitchen ask is attention, not an
+     error.
+
+     IT COUNTS THE QUEUE, NOT WHAT IS UNREAD — and that is the one place it
+     parts company with the Orders badge next door. A new order is news, so
+     looking at it clears it. A kitchen request is WORK: it clears when the
+     lines become a draft order, which is the only thing that answers the
+     kitchen. A buyer who opens Purchasing, reads eleven requests and has not
+     picked a supplier yet must still find them waiting tomorrow morning.
+
+     THE COUNT SHOWS FROM TWO UP, a bare dot at one — the same threshold the
+     orders and approvals badges use, for the same reason: volume is the thing
+     worth a number, and "1" beside a single request is chrome for its own
+     sake.
+
+     DEFENSIVE ABOUT THE DOM because it is reached from loadMaterialRequests,
+     which four suites in scripts/ drive inside a `vm` context whose document
+     stub has getElementById and no querySelector. A painter that throws there
+     would take the picker suites down at a line that has nothing to do with
+     them. */
+  let _mrDotN = 0;
+  function mrPaintDot(n) {
+    _mrDotN = Number(n) || 0;
+    if (typeof document === 'undefined' || typeof document.querySelector !== 'function') return;
+    const btn   = document.querySelector('.tabs [data-tab="purchasing"]');
+    const badge = document.getElementById('purchasingTabBadge');
+    if (!btn || !badge || !badge.classList) return;
+    btn.classList.toggle('has-unseen', _mrDotN > 0);
+    badge.textContent = _mrDotN > 1 ? (_mrDotN > 99 ? '99+' : String(_mrDotN)) : '';
+  }
+
+  /* ── THE POLLER ─────────────────────────────────────────────
+     The whole job of a rail dot is to appear for somebody who never opens the
+     screen, so the count is pulled on a timer rather than at puInit().
+
+     GATED THE WAY THE CHIP IS. `production` is the tenant switch the chip
+     itself carries (data-feat="production"), and it fails CLOSED like every
+     other feature read here: a tenant with production off has no kitchen
+     raising requests, so there is no queue to point at. `purchasing:view` is
+     what TAB_CAP hangs the rail row on (01-core.js) — no dot on a row that is
+     not there. can() fails OPEN before /api/backend/me lands, which is why the
+     feature class is checked too and why the first pull sits at 2.5s: both
+     signals are on the body by then, and a tick that arrives early costs
+     nothing but the next one.
+
+     NO 403 STOP-POLL, unlike the approvals dot. GET
+     /material-requests/pending-lines is a read, and reads are open server-side
+     (lib/cap-routes.js: "enforce MUTATIONS, leave reads open"), so there is no
+     403 to settle the question with. The capability check IS the gate here.
+
+     A FAILED PULL LEAVES THE DOT ALONE. Offline, a 500, a dropped packet —
+     none of them are evidence that the kitchen stopped asking. */
+  async function mrPollDot() {
+    if (typeof document === 'undefined' || document.hidden) return;
+    if (typeof can === 'function' && !can('purchasing:view')) return;
+    if (!materialsFeatureOn()) { mrPaintDot(0); return; }
+    try {
+      const r = await api('/api/retail-admin/material-requests/pending-lines');
+      mrPaintDot((r.data || []).length);
+    } catch (e) { /* leave the dot as it was */ }
+  }
+  // The seam. Exposed so the dot can be refreshed on demand — by a screen that
+  // has just changed what the kitchen is waiting on, and by
+  // scripts/test_purchasing_kitchen_dot.js, which drives it rather than waiting
+  // fifteen seconds for a timer it deliberately does not start.
+  window.puMrPollDot = mrPollDot;
   async function products(storeId) {
     if (!_prodCache[storeId]) {
       const r = await api('/api/retail-admin/stores/' + storeId + '/stock');
@@ -4641,6 +4722,29 @@
     await loadSuppliers();
     _imp = null; _screen = 'suppliers'; paint();
   };
+
+  /* Starts the rail dot. Guarded on the APIs the body actually uses rather
+     than on an "am I a browser" sniff, so the check cannot drift from what it
+     needs — the finance poller's precedent, and for the same reason: the four
+     picker/print suites in scripts/ run this file in a `vm` context that has
+     setTimeout and no setInterval at all, and an unguarded timer here would
+     take all four down at REQUIRE time, before an assertion ran.
+
+     2500ms, behind the orders badge at 400 and approvals at 600. It is not a
+     race for the first paint: it is waiting for applyFeatureGates and
+     /api/backend/me to put the two signals mrPollDot reads onto the body. */
+  (function _startKitchenDotPoller() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    if (typeof setTimeout !== 'function' || typeof setInterval !== 'function') return;
+    if (typeof window.addEventListener !== 'function'
+        || typeof document.addEventListener !== 'function') return;
+    if (window._puMrDotPollerWired) return;
+    window._puMrDotPollerWired = true;
+    setTimeout(mrPollDot, 2500);
+    setInterval(mrPollDot, 15000);
+    window.addEventListener('focus', mrPollDot);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) mrPollDot(); });
+  })();
 
   // Close the wizard product-picker on an outside click.
   document.addEventListener('click', (e) => {
