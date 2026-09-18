@@ -2972,6 +2972,59 @@ async function ordRenotify(id, btn) {
   setTimeout(() => { try { openOrder(id, { instant: true }); } catch (e) {} }, 2500);
 }
 
+// ─── WHAT THE SHOP KNOWS ABOUT THIS PERSON ──────────────────────────────────
+// Three notes can sit on one order and they are NOT the same note:
+//
+//   customer_note           the BUYER typed it at checkout, for THIS order
+//   staff_note              the SHOP typed it, for THIS order (staffNoteBlock)
+//   customer_standing_note  the SHOP typed it on the CUSTOMER — every order
+//
+// The third is the one below. It is stored once on `retail_customers.note`
+// and read on every order that person places, which is the whole point: an
+// allergy or a delivery quirk is true of the person, not of one parcel.
+//
+// READ-ONLY here, and deliberately. Editing lives in one place — the customer
+// drawer — so there is one copy to correct. Put an editable box for it in the
+// order drawer and it sits a few pixels from the per-order Shop note, where
+// "no ice THIS time" gets typed into the note that follows someone for a
+// year. The Edit button navigates; it does not open a field.
+//
+// Nothing renders when the order has no customer linked (walk-ins, most
+// channel orders): `customer_standing_note` is simply null. That is correct,
+// not a gap to fill with an empty state.
+// `opts.full` picks the host grid: the main drawer's `.od-facts` is a
+// label|value two-column grid (the row overrides itself to one column so a
+// sentence is not squeezed into 120px), while the mirrored drawer's
+// `.order-detail` spans with `.full` and stacks its own children. One
+// function, because the note and its rules are the same on both.
+function custStandingNoteRow(o, opts) {
+  const note = String(o.customer_standing_note || '').trim();
+  if (!note) return '';
+  const full = !!(opts && opts.full);
+  // The Chinese is LIFTED WHOLE from the live pair on the field this text is
+  // typed into (`08-customers.js` — the note textarea's aria-label). Same
+  // string, same thing, both screens; no Chinese is minted here.
+  const label = cuT('About this customer', '关于该顾客的备注');
+  return `<div${full ? ' class="full"' : ' style="grid-template-columns: 1fr;"'}>
+    <div class="kicker" style="grid-column: 1; display: flex; align-items: center; gap: 7px; color: var(--brass-hi);">
+      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      <span>${escapeHtml(label)}</span>
+      ${o.customer_id ? `<button class="btn btn-sm" style="margin-left: auto;" onclick="orderGotoCustomer(${o.customer_id})">${escapeHtml(cuT('Edit', '编辑'))}</button>` : ''}
+    </div>
+    <div class="val" data-no-i18n style="grid-column: 1; font-weight: 700; color: var(--text-1); font-size: 14px; line-height: 1.5; white-space: pre-wrap; margin-top: 4px;">${escapeHtml(note)}</div>
+  </div>`;
+}
+
+// The same knowledge in its scannable form. Tags are set on the customer and
+// print exactly as stored — they are the operator's words, in whichever
+// language they typed. Parsed with the customer drawer's own `cuTagList`, so
+// the two screens can never disagree about what counts as a tag.
+function custStandingTagsHtml(o) {
+  const list = cuTagList(o.customer_standing_tags);
+  if (!list.length) return '';
+  return list.map(t => `<span data-no-i18n style="display: inline-flex; align-items: center; background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 1px 9px; font-size: 11.5px; font-weight: 700; color: var(--text-2); margin-left: 6px; vertical-align: 1px;">${escapeHtml(t)}</span>`).join('');
+}
+
 function staffNoteBlock(o) {
   const note = o.staff_note || '';
   return `<div class="full ord-note" data-order-id="${o.id}"${note ? '' : ' hidden'}>
@@ -6429,9 +6482,10 @@ function renderReadonlyOrder(o) {
           <div class="sub" data-no-i18n>${escapeHtml(o.address_full)}</div>
         </div>` : hasCust ? `<div>
           <div class="kicker">Customer · 顾客</div>
-          <div class="val" data-no-i18n><b>${escapeHtml(cust.name)}</b></div>
+          <div class="val" data-no-i18n><b>${escapeHtml(cust.name)}</b>${custStandingTagsHtml(o)}</div>
           ${cust.phone ? `<div class="sub" data-no-i18n>${escapeHtml(cust.phone)}</div>` : ''}
         </div>` : ''}
+        ${custStandingNoteRow(o, { full: true })}
         <div>
           <div class="kicker">Total · 合计</div>
           <div class="val"><b>${acMoney(o.total)}</b></div>
@@ -6659,8 +6713,9 @@ function renderOpenOrder(o) {
           <div class="od-facts">
             <div${o.customer_id ? ` onclick="orderGotoCustomer(${o.customer_id})" style="cursor: pointer;" title="View customer · 查看顾客"` : ''}>
               <div class="kicker">Customer · 顾客</div>
-              <div class="val" data-no-i18n><b>${escapeHtml(o.nickname || o.recipient_name || '—')}</b>${o.customer_id ? ` <span style="color: var(--text-3); font-weight: 600;">› #${o.customer_id}</span>` : ''}</div>
+              <div class="val" data-no-i18n><b>${escapeHtml(o.nickname || o.recipient_name || '—')}</b>${o.customer_id ? ` <span style="color: var(--text-3); font-weight: 600;">› #${o.customer_id}</span>` : ''}${custStandingTagsHtml(o)}</div>
             </div>
+            ${custStandingNoteRow(o)}
             ${(() => { const _pmt = primaryPayment(o); return `
             <div>
               <div class="kicker">Payment · 付款 ${_pmt?.transaction_id ? copyChip(_pmt.transaction_id, 'Txn ID') : ''}</div>

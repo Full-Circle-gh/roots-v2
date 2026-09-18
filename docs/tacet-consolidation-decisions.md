@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.306
+# Tacet shared-core consolidation — decisions record, v4.307
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-18 · v4.307 — **§171 · WHAT THE SHOP KNOWS ABOUT A PERSON IS READ ON EVERY ORDER, AND IS EDITED IN ONE PLACE — DECIDED BY ASH.** Ash, on TC000750's drawer: *“an order note will appear only for that order. however we need a note that will appear for this customer order everytime he place an order”*. **NO STORAGE IS ADDED — A READ IS.** `retail_customers.note` and `.tags` have existed since the customer drawer's Know block and no order ever looked at them, so the knowledge sat in the right place and reached nobody at the moment it was needed. **THREE NOTES, NOT ONE**: `customer_note` is the BUYER's, for that order; `staff_note` is the SHOP's, for that order; `customer_standing_note` (aliased from `retail_customers.note` on the order read) is the shop's, about the PERSON, on every order they place. **THE COPY RULE IS THE ARCHITECTURE**: the note is READ through the `LEFT JOIN retail_customers` that `GET /api/retail-admin/orders/:id` already made for the nickname and phone, and never stamped onto an order — correct it once and every order past, open and future reads the correction, because one copy exists. **READ-ONLY IN THE DRAWER**, Edit navigates to the customer: an editable box there sits pixels from the per-order Shop note under a near-identical label, which is how “no ice THIS time” gets typed into a note that follows a person for a year. **IT NEVER REACHES THE CUSTOMER** — `loadOrderForCustomer` names its columns by hand and does not select it, deliberately and load-bearingly. **NOTHING RENDERS WITHOUT A PERSON**: walk-ins and most channel orders carry no `customer_id`, so it is null and absent, with no empty state. **THREE SURFACES, ONE ENDPOINT**: the desktop drawer, the mirrored channel drawer and the phone's order detail; the Orders LIST and the kitchen print were considered and left to their own change under one-PR-per-change. **NO CHINESE IS MINTED** — `About this customer · 关于该顾客的备注` lifts its Chinese half whole from the live aria-label on the textarea the text is typed into, recorded as `docs/tacet-delivery-vocabulary.md` v1.124.
 
 2026-09-18 · v4.306 — **§170 · THE WAIT GETS A DATE ON THE CARD, AND §108's “a pill cannot” IS OVERTURNED — DECIDED BY ASH**, reading Shop from a Shenzhen address at 10:04 on a batch morning: *“our real issue isn't the tag — it's that a Shenzhen shopper sees NEXT BATCH with no date attached until they're deep in checkout. The word alone sounds like an indefinite wait.”* **THE REPORTED ROW WAS NOT A BUG** — shelf at zero, today genuinely on the cadence (anchor 2026-06-16, interval 2, verified through `lib/batch-cadence.js`), before the 11:00 ready hour, and a Shenzhen address so §108's local-run silence correctly did not fire. Honest, and still the wrong thing to show. **§108's ruling that the word describes the ITEM stands untouched**; what is overturned is its second half, that a date *“belongs in the checkout notice ... not in a pill, which cannot”*. It can: `local_fresh_date` has ridden every browse row since §80 and only the one transit day was missing. **A customer decides whether to tap on the CARD**, so answering three screens later was the defect. **THE CARD NAMES THE ARRIVAL, WHICH DIFFERS BY SHOPPER** — the local run is served the make day, a couriered order the day after — and both are stamped SERVER-SIDE (`fresh_ship_date`, `local_fresh_in_days`) for §82's reason: no handset clock decides whether a date is tomorrow. The client adds one to an integer and formats a string it was handed. **BOUNDED AT TWO DAYS**: `TODAY · 今天` and `TOMORROW · 明天` need no reading, past that the date itself (`SEP 20 · 9月20日`) rather than a count the shopper must do arithmetic on. **NO CHINESE IS COMPOSED** — both forms are lifted whole from live pairs (`checkout.wxml:400`, `checkout.js:1911`) — so Rule 4 is not amended; the lift is recorded as `docs/tacet-delivery-vocabulary.md` v1.123. **ALL SEVEN BROWSE SURFACES MOVE TOGETHER**, which is §108's own lesson and not an enlarged brief: dating the grid alone would rebuild the exact screenshot-pair bug §108 was written for. One derivation (`miniapp/utils/fresh-eta.js`); `public/shop.html` holds the only second copy because it is a standalone storefront that requires nothing, and its copy names the original. **The add toasts, `add-to-order` and the checkout notice are untouched** — the last answers a harder question (cart, store, zero-stock roll-forward) and stays binding where the two differ, which is the safe direction. Covered by `scripts/test_fresh_batch_eta.js`.
 
@@ -17884,3 +17886,68 @@ zero-stock roll-forward — and the two can differ legitimately, the card being 
 optimistic per-item answer and the checkout the binding per-order one. Where they
 differ the checkout is right, which is the safe direction: the card can only ever
 name a date the checkout then confirms or pushes back, never one it pulls in.
+
+## §171 — WHAT THE SHOP KNOWS ABOUT A PERSON IS READ ON EVERY ORDER, AND IS EDITED IN ONE PLACE
+
+**DECIDED BY ASH, 2026-09-18**, looking at TC000750's drawer: *"an order note
+will appear only for that order. however we need a note that will appear for
+this customer order everytime he place an order."*
+
+**THE FIELD ALREADY EXISTED AND WAS NOT READ.** `retail_customers.note` and
+`.tags` have been on the customer since the drawer's Know block was built — free
+text the operator types, plus a comma-separated tag list, both editable in the
+customer drawer and searchable from the Customers list. Nothing on an order ever
+looked at them. So the knowledge existed, in the right place, and reached nobody
+at the moment it was needed: the person packing the parcel. This decision adds
+no storage. It adds a read.
+
+**THREE NOTES CAN SIT ON ONE ORDER AND THEY ARE NOT THE SAME NOTE.**
+`customer_note` is what the BUYER typed at checkout, for that order.
+`staff_note` is what the SHOP typed, for that order. The third —
+`retail_customers.note`, aliased `customer_standing_note` on the order read — is
+what the shop knows about the PERSON, and it is true of every order they place.
+An allergy, a lift that does not work, invoicing monthly: none of those are
+facts about a parcel.
+
+**THE COPY RULE, WHICH IS THE WHOLE ARCHITECTURE.** The note is READ from the
+customer on every order and never copied onto one. `GET
+/api/retail-admin/orders/:id` already `LEFT JOIN`ed `retail_customers` for the
+nickname and phone; the note and tags ride the same join. Correct the note once
+on the customer page and every order — past, open and future — reads the
+corrected text, because there is only ever one copy. Had it been stamped onto
+the order at checkout, an order would keep a note the customer page had already
+retired, and no one reading the order could tell which was true.
+
+**READ-ONLY IN THE ORDER DRAWER, AND THIS IS THE PART TO NOT UNDO.** The Edit
+button navigates to the customer; it does not open a field. The alternative —
+an editable box in the drawer — puts a permanent note a few pixels from the
+per-order Shop note, wearing nearly the same label. The failure is not
+hypothetical: it is "no ice **this time**" typed into the note that then follows
+a person for a year, invisible to whoever typed it. One copy, one place to
+change it, and the place is the one screen that is about the person.
+
+**IT DOES NOT GO TO THE CUSTOMER.** The customer-facing read is
+`loadOrderForCustomer`, which names its columns by hand and does not select
+this one. That is deliberate and load-bearing: the standing note is what the
+shop says about a customer, and some of it — chases, disputes, "check the
+address twice" — is not written to be read by them. A future session widening
+that column list widens it past this note.
+
+**NOT SHOWN WHERE THERE IS NO PERSON.** Walk-ins and most channel orders carry
+no `customer_id`, so the note is null and nothing renders. No empty state, no
+placeholder: §160's rule that a control which does nothing is worse than no
+control applies to labels that say "no note" just as well.
+
+**WHERE IT LANDS, AND WHAT WAS LEFT OUT ON PURPOSE.** The desktop order drawer
+(both the main one and the mirrored channel view) and the phone app's order
+detail, all three off the one endpoint. The Orders LIST and the kitchen/packing
+print were considered and deliberately left for their own change — the list is
+where tag filtering would earn its keep, and the print is where an allergy note
+does, but each is a separate surface and a separate PR under the one-PR-per-
+change rule.
+
+**NO CHINESE IS MINTED.** The label pair is `About this customer ·
+关于该顾客的备注`, and its Chinese half is LIFTED WHOLE from the live aria-label on
+the very textarea this text is typed into, in the customer drawer. Same string,
+same thing, both screens. Recorded in `docs/tacet-delivery-vocabulary.md`
+v1.124, which locks nothing new.
