@@ -632,6 +632,14 @@ CREATE TABLE IF NOT EXISTS material_request_items (
   -- outstanding list — the correct behaviour rather than a consolation.
   sourced_po_id INTEGER,
   sourced_at    DATETIME,
+  -- The buyer struck this line off: it will not be bought (§171). ONE-WAY, and
+  -- §86's "withdrawn and raised again" is why — the kitchen owns the ask, so
+  -- putting a line back is the kitchen raising it, not the buyer restoring it.
+  -- declined_by is a plain audit integer and never an FK, for created_by's
+  -- reason on the parent table.
+  declined_at   DATETIME,
+  declined_by   INTEGER,
+  declined_by_name TEXT,
   sort_order    INTEGER DEFAULT 0,
   FOREIGN KEY (request_id)    REFERENCES material_requests(id) ON DELETE CASCADE,
   FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)

@@ -7,6 +7,7 @@
 //   GET  /api/retail-admin/material-requests/pending-lines
 //   PUT  /api/retail-admin/material-requests/:id
 //   PUT  /api/retail-admin/material-requests/:id/archive
+//   PUT  /api/retail-admin/material-requests/lines/:lineId/decline
 //   POST /api/retail-admin/purchases/from-material-requests
 //   DELETE /api/retail-admin/purchases/:id            (releases the lines again)
 //
@@ -29,6 +30,9 @@
 //   8. deleting the draft gives the lines back and rolls the request BACK
 //   9. archiving is refused while a line is on an order
 //  10. a sent request cannot be edited underneath the buyer
+//  11. the buyer strikes ONE line off: it leaves the list, cannot be ordered,
+//      cannot be struck once it is on an order, and the rollup ignores it
+//  12. every line struck off and nothing bought — the request is withdrawn
 
 'use strict';
 
@@ -259,6 +263,62 @@ async function main() {
   eq(r.body.error, 'not_draft', 'by name');
   eq(db.prepare('SELECT qty FROM material_request_items WHERE request_id = ?').get(draft.id).qty, 3,
      'and the line the buyer is reading is unchanged');
+
+  console.log('\n══ 11 · the buyer strikes ONE line off, and the rollup ignores it ══');
+  // §171. The grain is the line: this request has one line on an order and one
+  // outstanding, and striking the outstanding one must not touch the other.
+  const sourcedLine = db.prepare(
+    'SELECT id FROM material_request_items WHERE request_id = ? AND sourced_po_id IS NOT NULL').get(req1.id);
+  r = await call('PUT', `/api/retail-admin/material-requests/lines/${sourcedLine.id}/decline`);
+  eq(r.status, 409, 'a line already on an order cannot be struck off');
+  eq(r.body.error, 'already_sourced', 'by name');
+  eq(db.prepare('SELECT declined_at FROM material_request_items WHERE id = ?').get(sourcedLine.id).declined_at,
+     null, 'and nothing was struck');
+
+  r = await call('GET', '/api/retail-admin/material-requests/pending-lines');
+  const live = r.body.data.find(l => l.request_id === req1.id);
+  ok(!!live, 'the outstanding line is on the list before we strike it');
+  r = await call('PUT', `/api/retail-admin/material-requests/lines/${live.id}/decline`);
+  eq(r.status, 200, 'the outstanding line strikes off');
+  const struckRow = db.prepare('SELECT * FROM material_request_items WHERE id = ?').get(live.id);
+  ok(!!struckRow.declined_at, 'the refusal is stamped');
+  eq(struckRow.declined_by_name, 'Mei', 'and records who refused it');
+  eq(struckRow.sourced_po_id, null, 'striking it off did not put it on an order');
+  r = await call('GET', '/api/retail-admin/material-requests/pending-lines');
+  ok(!r.body.data.some(l => l.id === live.id), 'it has left the buyer’s list');
+  // The rollup counts only lines still outstanding. Counting a struck line as
+  // DONE would say 'sourced' — "every line reached a purchase order" — over a
+  // line nobody bought; leaving it in the total would hold the request open
+  // forever against a line nobody will ever buy.
+  row = db.prepare('SELECT * FROM material_requests WHERE id = ?').get(req1.id);
+  eq(row.status, 'sourced', 'with the struck line out of the sum, the request closes on the one that WAS bought');
+  eq(row.archived_at, null, 'and a request that bought something is not withdrawn');
+
+  // A tick made before another buyer struck it off reaches the conversion.
+  r = await call('POST', '/api/retail-admin/purchases/from-material-requests',
+                 { line_ids: [live.id], store_id: 1 });
+  eq(r.status, 409, 'a struck line cannot be turned into an order');
+  eq(r.body.error, 'line_declined', 'by name');
+  // Idempotent, like the send: a second press must not move the stamp that
+  // records WHEN the buyer refused it.
+  const stampWas = struckRow.declined_at;
+  r = await call('PUT', `/api/retail-admin/material-requests/lines/${live.id}/decline`);
+  eq(r.status, 200, 'a second press answers success');
+  eq(db.prepare('SELECT declined_at FROM material_request_items WHERE id = ?').get(live.id).declined_at,
+     stampWas, 'and leaves the original stamp alone');
+
+  console.log('\n══ 12 · strike off every line and the ask is withdrawn ══');
+  // Nothing bought, nothing outstanding — the request is withdrawn, which is
+  // what archived_at has meant here since §86. Left open it would sit in the
+  // buyer's list forever with nothing on it.
+  const lastLine = db.prepare('SELECT id FROM material_request_items WHERE request_id = ?').get(draft.id);
+  r = await call('PUT', `/api/retail-admin/material-requests/lines/${lastLine.id}/decline`);
+  eq(r.status, 200, 'the last outstanding line strikes off');
+  row = db.prepare('SELECT * FROM material_requests WHERE id = ?').get(draft.id);
+  ok(!!row.archived_at, 'the request with nothing left on it is withdrawn');
+  ok(row.status !== 'sourced', 'and is NOT called sourced — nobody bought anything');
+  r = await call('GET', '/api/retail-admin/material-requests/pending-lines');
+  eq(r.body.data.length, 0, 'the buyer’s list is empty');
 
   console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
   server.close();

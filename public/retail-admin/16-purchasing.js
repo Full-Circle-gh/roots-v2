@@ -701,10 +701,12 @@
             '厨房端原单保留。复制件是同一笔采购,不是第二笔——标记"已下单"后,由它接管账目与发票跟进,原单同时退出。')
         : T('Tick the orders you need here.', '勾选需要导入的采购单。'))}</span>
       <span class="spacer"></span>
-      <button class="pu2-btn ghost" onclick="puKitchenClose()">${esc(T('Cancel', '取消'))}</button>
-      <button class="pu2-btn primary" ${n && _kStore && !_kBusy ? '' : 'disabled'} onclick="puKitchenCopy()">${esc(_kBusy
-        ? T('Copying…', '复制中…')
-        : (n ? T(`Copy ${n} order${n === 1 ? '' : 's'}`, `复制 ${n} 张采购单`) : T('Copy', '复制')))}</button>`;
+      <span class="pu2-footacts">
+        <button class="pu2-btn ghost" onclick="puKitchenClose()">${esc(T('Cancel', '取消'))}</button>
+        <button class="pu2-btn primary" ${n && _kStore && !_kBusy ? '' : 'disabled'} onclick="puKitchenCopy()">${esc(_kBusy
+          ? T('Copying…', '复制中…')
+          : (n ? T(`Copy ${n} order${n === 1 ? '' : 's'}`, `复制 ${n} 张采购单`) : T('Copy', '复制')))}</button>
+      </span>`;
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -754,6 +756,40 @@
     rows.forEach(l => { if (allOn) _mrPick.delete(l.id); else _mrPick.add(l.id); });
     renderMrBody();
   };
+  // STRIKING A LINE OFF — the buyer says this one is not being bought (§171).
+  //
+  // THE LINE, NOT THE REQUEST. One kitchen request arrives here as several rows,
+  // and a buyer who will not buy the desiccant still wants the containers. The
+  // whole-request answer (withdraw) would take both.
+  //
+  // IT DOES NOT COME BACK, and the confirm says so rather than the route comment
+  // saying it alone. The ask belongs to the kitchen: §86's rule for a sent
+  // request that needs changing is that the kitchen raises it again, and a buyer
+  // restoring a line would be the buyer re-raising somebody else's request.
+  window.puMrDecline = async function (lineId) {
+    if (_mrBusy) return;
+    if (!(await askConfirm({
+      title: T('Remove this line?', '移除该行？'),
+      body: T('The kitchen asked for it and it will not be bought. It leaves this list for good — if it is still needed, the kitchen asks again.',
+              '厨房申请的该物料将不会采购，并永久离开此列表。如仍需要，请厨房重新申请。'),
+      confirmLabel: T('Remove', '移除'),
+      danger: true,
+    }))) return;
+    try {
+      await api('/api/retail-admin/material-requests/lines/' + lineId + '/decline', { method: 'PUT', body: {} });
+      // Untick it before the reload: the id is gone from the list, and a tick
+      // left behind would be counted by the footer and sent by Draft — a line
+      // the server would then refuse, over a row nobody can see.
+      _mrPick.delete(lineId);
+      toast(T('Removed ✓', '已移除 ✓'), 'ok');
+      await loadMaterialRequests();
+      // The whole box repaints, not just the table: emptying the last row swaps
+      // the table for the empty line, and the counter on the button behind the
+      // modal is read from the same _mrLines this reload just replaced.
+      if (document.getElementById('pu2-mrmodal')) renderMrBody();
+      if (_screen === 'orders') paint();
+    } catch (e) { toast(e.message, 'err'); }
+  };
   window.puMrSearch = function (v) { _mrSearch = v || ''; renderMrBody(); };
   window.puMrStore = function (v) { _mrStore = parseInt(v, 10) || null; renderMrFoot(); };
   window.puMrSupplier = function (v) { _mrSupplier = v || ''; };
@@ -783,6 +819,13 @@
       const dup = e && e.code === 'already_sourced' ? (e.data && e.data.lines) : null;
       if (dup && dup.length) {
         toast(T('Already ordered: ', '已下单:') + dup.map(d => `${d.name_en || ''} → ${d.po_number || ''}`).join(', '), 'err', 6000);
+        await loadMaterialRequests();
+        renderMrBody();
+      } else if (e && e.code === 'line_declined') {
+        // Another buyer struck one of these off while this screen sat open. The
+        // list is reloaded for the same reason the duplicate case reloads it:
+        // the row is gone, and leaving it on screen invites the same press.
+        toast(e.message, 'err', 6000);
         await loadMaterialRequests();
         renderMrBody();
       } else {
@@ -834,6 +877,7 @@
           <th>${esc(T('Material', '物料'))}</th>
           <th class="right">${esc(T('Quantity', '数量'))}</th>
           <th>${esc(T('Asked by', '申请人'))}</th>
+          <th style="width:44px"></th>
         </tr></thead>
         <tbody>${rows.map(l => {
           const on = _mrPick.has(l.id);
@@ -846,9 +890,17 @@
             <td class="right pu2-num">${esc(String(l.qty))} <span class="sub">${esc(l.unit || '')}</span></td>
             <td><div class="pu2-mono">${esc(l.mr_number)}</div>
                 <div class="sub">${esc(l.created_by_name || '')}${l.date ? ` · ${esc(l.date)}` : ''}</div></td>
+            <td class="right"><button class="pu2-btn ghost sm danger" data-cap="purchasing:edit"
+                title="${esc(T('Remove', '移除'))}"
+                onclick="event.stopPropagation(); puMrDecline(${l.id})">✕</button></td>
           </tr>`;
         }).join('')}</tbody>
       </table>`;
+    // The ✕ is gated like every other write on this surface. The box can only be
+    // opened from a purchasing:edit button, so this is belt and braces — but a
+    // gate that holds only because of how you got here is one refactor from not
+    // holding at all.
+    try { applyCapGates(); } catch (_) { /* gates are a narrowing, never a blocker */ }
     renderMrFoot();
   }
 
@@ -873,10 +925,12 @@
             '这里只生成草稿。标记「已下单」后才会正式下单并记入账目。')
         : T('Tick the lines you are buying.', '勾选要采购的物料。'))}</span>
       <span class="spacer"></span>
-      <button class="pu2-btn ghost" onclick="puMrClose()">${esc(T('Cancel', '取消'))}</button>
-      <button class="pu2-btn primary" ${n && _mrStore && !_mrBusy ? '' : 'disabled'} onclick="puMrMake()">${esc(_mrBusy
-        ? T('Working…', '处理中…')
-        : (n ? T(`Draft ${n} line${n === 1 ? '' : 's'}`, `生成草稿 (${n} 行)`) : T('Make draft', '生成草稿')))}</button>`;
+      <span class="pu2-footacts">
+        <button class="pu2-btn ghost" onclick="puMrClose()">${esc(T('Cancel', '取消'))}</button>
+        <button class="pu2-btn primary" ${n && _mrStore && !_mrBusy ? '' : 'disabled'} onclick="puMrMake()">${esc(_mrBusy
+          ? T('Working…', '处理中…')
+          : (n ? T(`Draft ${n} line${n === 1 ? '' : 's'}`, `生成草稿 (${n} 行)`) : T('Make draft', '生成草稿')))}</button>
+      </span>`;
   }
 
   window.puOpenPO = async function (id) {

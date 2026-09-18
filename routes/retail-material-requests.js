@@ -85,16 +85,37 @@ function positiveNumber(v) {
  * maintained at only one of its two edges is how a request ends up permanently
  * closed against lines that are outstanding again. */
 function rollUp(requestId) {
-  const r = tdb().prepare('SELECT status FROM material_requests WHERE id = ?').get(requestId);
+  const r = tdb().prepare('SELECT status, archived_at FROM material_requests WHERE id = ?').get(requestId);
   if (!r || r.status === 'draft') return;
+  // A STRUCK-OFF LINE IS SETTLED, NOT OUTSTANDING (§171), so it leaves the sum
+  // entirely rather than counting as done. Counting it as done would flip the
+  // request to 'sourced' — "every line reached a purchase order" — for lines
+  // nobody ever bought, and 'sourced' is a word the books are read through.
   const n = tdb().prepare(`
     SELECT COUNT(*) AS total, SUM(CASE WHEN sourced_po_id IS NOT NULL THEN 1 ELSE 0 END) AS done
-      FROM material_request_items WHERE request_id = ?`).get(requestId);
+      FROM material_request_items WHERE request_id = ? AND declined_at IS NULL`).get(requestId);
   const all = n.total > 0 && n.done === n.total;
   if (all && r.status !== 'sourced') {
     tdb().prepare("UPDATE material_requests SET status = 'sourced', sourced_at = CURRENT_TIMESTAMP WHERE id = ?").run(requestId);
   } else if (!all && r.status === 'sourced') {
     tdb().prepare("UPDATE material_requests SET status = 'sent', sourced_at = NULL WHERE id = ?").run(requestId);
+  }
+  // EVERY LINE STRUCK OFF AND NOTHING BOUGHT — the ask is withdrawn, which is
+  // what archived_at has meant here since §86, so it is set rather than a second
+  // flag invented for the same fact. Left alone, such a request would sit in the
+  // open tab forever with nothing outstanding on it: a row that costs a click
+  // and says nothing, which is the shape this module already refuses at POST.
+  //
+  // SAFE BECAUSE STRIKING OFF IS ONE-WAY. There is no restore to leave a request
+  // wrongly archived, and a line already on a purchase order cannot be struck
+  // off at all — so `total === 0` here means every line was refused by a buyer,
+  // never that a bought one was hidden.
+  if (!r.archived_at && n.total === 0) {
+    const anySourced = tdb().prepare(
+      'SELECT COUNT(*) AS c FROM material_request_items WHERE request_id = ? AND sourced_po_id IS NOT NULL').get(requestId);
+    if (!anySourced.c) {
+      tdb().prepare('UPDATE material_requests SET archived_at = CURRENT_TIMESTAMP WHERE id = ?').run(requestId);
+    }
   }
 }
 
@@ -134,7 +155,9 @@ router.get('/api/retail-admin/material-requests/materials', requireRetailAdmin, 
  * a list of demand, not at a list of requests they must open one by one.
  *
  * Drafts are excluded because a draft is somebody still typing. Archived
- * requests are excluded because archiving is how a request is withdrawn. */
+ * requests are excluded because archiving is how a request is withdrawn, and
+ * struck-off lines (§171) are excluded because refusing to buy one is the buyer
+ * saying it is finished with — the same "not outstanding" the other two mean. */
 router.get('/api/retail-admin/material-requests/pending-lines', requireRetailAdmin, (req, res) => {
   const rows = tdb().prepare(`
     SELECT i.id, i.request_id, i.ingredient_id, i.name_en, i.name_cn, i.sku,
@@ -145,6 +168,7 @@ router.get('/api/retail-admin/material-requests/pending-lines', requireRetailAdm
      WHERE r.status IN ('sent', 'sourced')
        AND r.archived_at IS NULL
        AND i.sourced_po_id IS NULL
+       AND i.declined_at IS NULL
      ORDER BY r.sent_at DESC, r.id DESC, i.sort_order, i.id`).all();
   res.json({ success: true, data: rows });
 });
@@ -326,6 +350,49 @@ router.put('/api/retail-admin/material-requests/:id/archive', requireRetailAdmin
   logActivity(req.user?.id, req.user?.username, archived ? 'material_request_archived' : 'material_request_restored',
               'material_request', id, { mr_number: r.mr_number }, req.ip);
   res.json({ success: true, data: requestWithItems(id) });
+});
+
+/* ── Strike one line off ────────────────────────────────────────────────────
+ *
+ * §171. The buyer, looking at the kitchen's asks, says "we are not buying this
+ * one". THE GRAIN IS THE LINE, matching §86 part two's grain for sourcing and
+ * for the same reason: a buyer drops the desiccant and still buys the
+ * containers. Archiving (above) is the whole-request answer and cannot do that.
+ *
+ * ONE-WAY, AND DELIBERATELY SO. There is no un-strike, because §86's own rule
+ * for a sent request that needs changing is that it is withdrawn and RAISED
+ * AGAIN: the ask belongs to the kitchen, so a buyer putting a line back would be
+ * the buyer re-raising somebody else's request. It is also what makes rollUp's
+ * auto-archive safe to read — see its comment.
+ *
+ * A LINE ALREADY ON A PURCHASE ORDER STOPS THIS, for archiving's reason at the
+ * line's grain: striking it off would hide the ask while its purchase stands,
+ * leaving the buyer holding a PO line whose origin has left the list it came
+ * from. The order is deleted first, which releases the line, and then it can be
+ * struck off. */
+router.put('/api/retail-admin/material-requests/lines/:lineId/decline', requireRetailAdmin, express.json(), (req, res) => {
+  const lineId = parseInt(req.params.lineId, 10);
+  const line = tdb().prepare(`
+    SELECT i.*, r.mr_number
+      FROM material_request_items i
+      JOIN material_requests r ON r.id = i.request_id
+     WHERE i.id = ?`).get(lineId);
+  if (!line) return res.status(404).json({ success: false, error: 'not_found' });
+  if (line.sourced_po_id) return res.status(409).json({ success: false, error: 'already_sourced' });
+  // Idempotent, like the send above: a second press on a stale screen answers
+  // success without moving `declined_at`, which is the record of when the buyer
+  // actually refused it.
+  if (!line.declined_at) {
+    const actor = req.user || {};
+    tdb().prepare(`
+      UPDATE material_request_items
+         SET declined_at = CURRENT_TIMESTAMP, declined_by = ?, declined_by_name = ?
+       WHERE id = ?`).run(actor.id || null, actor.display_name || actor.username || null, lineId);
+    rollUp(line.request_id);
+    logActivity(actor.id, actor.username, 'material_request_line_declined', 'material_request', line.request_id,
+                { mr_number: line.mr_number, line_id: lineId, name_en: line.name_en, qty: line.qty }, req.ip);
+  }
+  res.json({ success: true, data: requestWithItems(line.request_id) });
 });
 
 module.exports = router;
