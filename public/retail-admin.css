@@ -7567,6 +7567,11 @@
      landing on it later would out-rank a UA rule and put the box back on
      every drawer. */
   .ord-note[hidden] { display: none; }
+  /* And the Save button one level down, for the same reason: .btn sets
+     display:inline-flex, an AUTHOR rule, which out-ranks the UA's [hidden].
+     The button is in the markup on every block and shown only once the text
+     differs from what is stored, so without this it is always visible. */
+  .ord-note-save[hidden] { display: none; }
   /* Info labels — mono, wider tracking, to match the design's field labels. */
   .order-detail .kicker {
     font-family: var(--f-mono);

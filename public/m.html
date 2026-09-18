@@ -530,6 +530,11 @@ input:focus,textarea:focus{outline:none;border-color:var(--border-focus)}
    (id + attribute) out-specifies the first. */
 #mOrdNoteFoot{display:flex;gap:8px;margin-top:10px}
 #mOrdNoteFoot[hidden]{display:none}
+/* And the Save button inside it, for the same reason and one level down:
+   .btn2 sets display:inline-flex, an AUTHOR rule, which out-ranks the UA's
+   [hidden] just as the footer's old inline style did. Without this the button
+   is in the markup on every open box and `hidden` says nothing. */
+#mOrdNoteSave[hidden]{display:none}
 
 /* ── Receiving ────────────────────────────────────────────────────────────
    The quantity control on the receive screen. 52px because it is used one-
@@ -1978,8 +1983,15 @@ function currentOrder(){
 reg('ordNoteTyped', v=>{
   const o=currentOrder(); if(!o||o._id==null) return;
   state.ordNote={id:o._id, text:String(v==null?'':v)};
+  /* The same two rules shopNoteCard renders with, applied to the two nodes
+     rather than by repainting: Save when the text differs from what is stored,
+     Cancel whenever there is nothing stored to go back to. */
+  const saved=o.shopNote||'';
+  const dirty=state.ordNote.text!==saved;
   const foot=document.getElementById('mOrdNoteFoot');
-  if(foot) foot.hidden=(state.ordNote.text===(o.shopNote||''));
+  if(foot) foot.hidden=!(dirty||!saved);
+  const save=document.getElementById('mOrdNoteSave');
+  if(save) save.hidden=!dirty;
 });
 /* THE WAY IN TO A NOTE THAT DOES NOT EXIST YET, from the "…" sheet. An order
    already carrying a note shows its editor unasked; this command is only for
@@ -2004,7 +2016,11 @@ reg('ordNoteReset', ()=>{
      ordNoteTyped explains, so nothing repaints under the caret. */
   if(!(o.shopNote||'')){ state.ordNoteOpen=null; render(); return; }
   const box=document.getElementById('mOrdNote'); if(box) box.value=o.shopNote||'';
+  /* Back to a stored note being merely read: nothing to cancel, nothing to
+     save. This branch is only reached when a note IS stored, so the whole
+     footer goes — the canDismiss case above returned already. */
   const foot=document.getElementById('mOrdNoteFoot'); if(foot) foot.hidden=true;
+  const save=document.getElementById('mOrdNoteSave'); if(save) save.hidden=true;
 });
 reg('ordNoteSave', ()=>{
   const o=currentOrder(); if(!o||o._id==null) return;
@@ -15977,9 +15993,18 @@ function shopNoteReady(o){
 }
 function shopNoteShown(o){
   if(!shopNoteReady(o)) return false;
+  if(o.shopNote||'') return true;                                  // already has one
   if(state.ordNoteOpen===o._id) return true;                       // asked for
-  if(state.ordNote&&state.ordNote.id===o._id) return true;         // being typed
-  return !!(o.shopNote||'');                                       // already has one
+  /* A DRAFT KEEPS THE CARD UP ONLY WHILE IT STILL HOLDS WORDS. This read
+     `state.ordNote.id===o._id` and nothing more, and state.ordNote is NOT
+     cleared when the drawer closes — deliberately, so a draft survives a trip
+     away and back. But a draft typed and then deleted back to nothing is an
+     EMPTY draft on an order with no stored note, and that combination pinned an
+     empty, buttonless box to the order for the rest of the session: closing the
+     drawer cleared ordNoteOpen and left this, so it came back every time the
+     order was opened, with nothing to dismiss it. Ash, 2026-09-18: "after
+     adding a note even if it's blank can't remove it." */
+  return !!(state.ordNote&&state.ordNote.id===o._id&&state.ordNote.text!=='');
 }
 function shopNoteCard(o){
   if(!shopNoteShown(o)) return '';
@@ -15987,18 +16012,28 @@ function shopNoteCard(o){
   const draft=(state.ordNote&&state.ordNote.id===o._id)?state.ordNote.text:saved;
   const dirty=draft!==saved;
   const busy=state.orderBusy==='note';
+  /* THE WAY BACK OUT. The footer used to appear only once the text had changed,
+     which is right for an order whose note is stored and merely being read —
+     nothing to cancel, nothing to save. It is NOT right for a box the operator
+     opened from the "…" sheet and then thought better of: there was no control
+     on it at all, so an empty editor could be opened and never closed. With
+     nothing stored, Cancel is always offered and puts the card away. */
+  const canDismiss=!saved;
   return `<div class="card" style="padding:14px">
     <div style="display:flex;align-items:center;gap:8px;color:var(--text-secondary)">${ic('pencil',16)}
       <span class="eyebrow">${T('Shop note','店铺备注')}</span></div>
     <textarea id="mOrdNote" maxlength="2000" style="margin-top:10px;min-height:84px;resize:none"
       placeholder="${escAttr(T('Add a note for whoever handles this order','给处理这张订单的同事留个备注'))}"
       oninput="APP.cmd('ordNoteTyped',this.value)">${escAttr(draft)}</textarea>
-    ${/* The footer appears only once something has actually changed — the
-          desktop's rule. A Save button that is always there and does nothing
-          four times out of five is noise. */''}
-    <div id="mOrdNoteFoot" ${dirty?'':'hidden'}>
+    ${/* SAVE appears only once something has actually changed — the desktop's
+          rule, and a Save button that is always there and does nothing four
+          times out of five is noise. CANCEL appears whenever there is a box to
+          put away. Both are in the markup either way and toggled by attribute,
+          never added or removed: ordNoteTyped runs on every keystroke and must
+          not rebuild anything the caret is sitting in. */''}
+    <div id="mOrdNoteFoot" ${(dirty||canDismiss)?'':'hidden'}>
       <button class="btn2" style="flex:1" ${busy?'disabled':''} onclick="APP.cmd('ordNoteReset')">${T('Cancel','取消')}</button>
-      <button class="btn2" style="flex:1" ${busy?'disabled':''} onclick="APP.cmd('ordNoteSave')">${busy?T('Saving…','保存中…'):T('Save note','保存备注')}</button>
+      <button id="mOrdNoteSave" class="btn2" style="flex:1" ${dirty?'':'hidden'} ${busy?'disabled':''} onclick="APP.cmd('ordNoteSave')">${busy?T('Saving…','保存中…'):T('Save note','保存备注')}</button>
     </div></div>`;
 }
 function orderActionRow(o,isPO){

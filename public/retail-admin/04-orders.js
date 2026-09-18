@@ -2982,20 +2982,31 @@ function staffNoteBlock(o) {
       oninput="ordNoteChanged(${o.id})">${escapeHtml(note)}</textarea>
     <div class="ord-note-foot" id="ord-note-foot-${o.id}" hidden>
       <button class="btn btn-sm" type="button" onclick="ordNoteReset(${o.id})">${cuT('Cancel', '取消')}</button>
-      <button class="btn btn-sm btn-primary" type="button" onclick="ordNoteSave(${o.id}, event)">${cuT('Save note', '保存备注')}</button>
+      <button class="btn btn-sm btn-primary ord-note-save" type="button" hidden onclick="ordNoteSave(${o.id}, event)">${cuT('Save note', '保存备注')}</button>
     </div>
   </div>`;
 }
-// Show the footer only when the text has actually changed. `_ordNoteOriginal`
-// is read from the open order rather than stashed at render time, so reopening
-// the drawer can never leave a stale baseline behind.
+// `_ordNoteOriginal` is read from the open order rather than stashed at render
+// time, so reopening the drawer can never leave a stale baseline behind.
 function _ordNoteOriginal() { return (_OPEN_ORDER && _OPEN_ORDER.staff_note) || ''; }
+// TWO RULES, ONE PLACE. SAVE appears only when the text differs from what is
+// stored. CANCEL appears whenever there is a block to put away — which is any
+// block with nothing stored behind it.
+//
+// That second rule is the fix for a hole the "…" menu opened: the footer used
+// to appear on `dirty` alone, so a block revealed from the menu and then left
+// untouched carried no control at all and could not be closed again. Right for
+// a stored note being merely read, wrong for an empty box somebody opened by
+// mistake.
 function ordNoteChanged(id) {
   const wrap = document.querySelector(`.ord-note[data-order-id="${id}"]`);
   const foot = document.getElementById('ord-note-foot-' + id);
   if (!wrap || !foot) return;
   const el = wrap.querySelector('.ord-note-in');
-  foot.hidden = (el.value === _ordNoteOriginal());
+  const dirty = el.value !== _ordNoteOriginal();
+  foot.hidden = !(dirty || !_ordNoteOriginal());
+  const save = foot.querySelector('.ord-note-save');
+  if (save) save.hidden = !dirty;
 }
 function ordNoteReset(id) {
   const wrap = document.querySelector(`.ord-note[data-order-id="${id}"]`);
@@ -3013,6 +3024,8 @@ function ordNoteOpen(id) {
   const wrap = document.querySelector(`.ord-note[data-order-id="${id}"]`);
   if (!wrap) return;
   wrap.hidden = false;
+  // The way back out arrives with the box, not after the first keystroke.
+  ordNoteChanged(id);
   const el = wrap.querySelector('.ord-note-in');
   if (el) {
     try { el.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {
