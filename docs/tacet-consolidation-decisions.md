@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.315
+# Tacet shared-core consolidation — decisions record, v4.316
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-18 · v4.316 — **§177 ADDED: A MENU MOVES BETWEEN LOCATIONS; THE SHOP RECORD AND ITS CODE DO NOT — DECIDED by Ash.** From a screenshot of Sales → Locations: *"the shop menu should move form tianhe to yuexiu."* **The button in that screenshot was never the thing to move** — `csRenderLocations()` paints `Shop menu →` on every location card from one code path, so both cards already had it; what differs is whether there is a menu behind it. **Put as three options and Ash chose B**: the listings move, the destination ends up with the products, prices, modes and menu order, and the source's menu is emptied. **Option C — repointing `shops.location_id` — is refused and the lock it would have broken is restated rather than softened**: the `public_code` is the only thing a QR carries (§44), so a repointed record would make every QR already stuck to a table in Tianhe serve Yuexiu's menu, silently, to customers. **The cost of choosing B is a reprint and it is named on the confirm dialog** — one new QR at the destination, one dead QR at the source — because the alternative is finding out at a table. **The source shop is switched off, not deleted**: `resolveShop()` already requires an active shop, so the old code resolves to nothing and serves the existing not-found page, while the row, its code and its history stay readable; turning it back on gives an empty menu, not the old one. **The destination's own switch is not touched**, on v4.312's reasoning — that entry paid for a save which took a live printer off the air as an invisible side effect — and which of create-or-reuse happened is reported back so nobody guesses whether the new menu is live. **A destination that already has a menu is refused**, because merging two priced menus asks whose price wins and that is not decided here; the test is the listing count, so an empty shop is a valid destination and is reused. All or nothing, in one transaction. **Option A — copy, both keep a menu — is recorded as considered and not taken**, because a second location opening alongside the first will ask for it and this control is deliberately not that. Vocabulary v1.133: four pairs verbatim, four lifted, four composed. §177 is new and supersedes nothing.
 
 2026-09-18 · v4.315 — **§171 ADDENDUM 4 · THE SAME SPELLING MEANT TWO DIFFERENT THINGS, AND ADDENDUM 3 IS WITHDRAWN.** Ash refused addendum 3's conclusion — *"I want the same as tianhe, like this"* — and was right to. That addendum said Shangpeng has no bold and no double-height; **it has both**. The evidence was never more than *Feie's names* for them printing literally, and concluding the capability was absent from the name being wrong is the whole error. **One diagnostic slip of thirteen candidate tags settled it**: Shangpeng's vocabulary is a DIFFERENT CUT of the same capabilities, and the spelling overlaps — Shangpeng `<B>` is **bold** where Feie's is **enlarge**; `<W>` is double width; `<H>` is what Feie spells `<L>`; `<CB>`/`<C>` agree. A second slip confirmed `<W>`/`<H>` **nest** to give enlarge. **The `<B>` collision was a live bug for three rounds and was invisible**: passing it through because the spelling matched downgraded every enlarged line — SKU rows, `PKG n/m`, `Items 件数` — to merely bold. It printed, it looked deliberate, and three rounds of reading the tag table missed it because the table was wrong about a MEANING, not a name. Tests now assert the map **by meaning**, and pin that a nested value unwinds inner-first. **Addendum 3's "accepted difference" is WITHDRAWN** — there was no trade, the slips are identical now, and that paragraph rationalised a bug; it is left in place unedited because a record that deletes its wrong turns teaches nothing, and this one is worth keeping: *absence of evidence, under a name you chose yourself, is not evidence of absence*. **Also asked in the same breath**: `Time`, `To`, `Tel` and the address — the smallest type on a slip taped to a parcel and read at arm's length — now ride `<L>`. **`<L>` not `<B>`, on arithmetic not taste**: `<L>` is double HEIGHT at `WIDTH` columns, while `<B>` enlarges to `BIG_WIDTH` and would re-wrap a real address into three ragged pieces. Scoped to `receipt` (`packing` has a different reader); both shops get it, which is what was wanted. `verify-fulfilment-types.js`'s `/^To {4}/m` matcher now tolerates a wrapping tag, keeps its anchor, and was confirmed still red with the line removed. 47 assertions, 284 fast suites pass.
 
@@ -18603,3 +18605,99 @@ queue, and whether an urgent line should change its colour is that section's
 question, not this one. No urgency on the purchase order either — a PO is the
 buyer's document and its priority is the buyer's to set, which is the same line
 §86 drew when it refused to let a cook's tap reach the books.
+## §177 — A MENU MOVES BETWEEN LOCATIONS; THE SHOP RECORD AND ITS CODE DO NOT
+
+**Decided by Ash, 2026-09-18.** From a screenshot of Sales → Locations, with
+both cards in it: *"the shop menu should move form tianhe to yuexiu."*
+
+**THE SHAPE WAS PUT AS THREE OPTIONS AND ASH CHOSE B.** The listings move:
+Yuexiu ends up with Tianhe's products, prices, modes and menu order, and
+Tianhe's menu is emptied. A — copy, both locations keep a menu — and C —
+repoint the shop record itself — were the alternatives.
+
+**WHAT MOVES IS THE LISTINGS, AND ONLY THE LISTINGS.** Each row carries its
+`store_product_id`, its `price`, its `fulfilment_mode`, its `is_available`
+switch and its `sort_position` across unchanged, so the menu arrives in the
+order it was built in and at the prices it was selling at. Nothing about the
+location itself moves — its channels, hours, stock, till and the product
+catalogue are all untouched. **A move is a menu operation, not a location
+operation**, and that is the whole reason it can be one control.
+
+**OPTION C IS REFUSED, AND THE REASON IS THE PRINTED QR.** §41 attaches a shop
+to a location and §44 makes its `public_code` the only thing a QR carries;
+`routes/retail-shops.js` has said since it was written that `location_id` is
+never writable, *because a printed QR is a promise about it*. Repointing the
+record would keep the code and change what it opens, so **every QR already
+stuck to a table in Tianhe would start serving Yuexiu's menu** — silently, to
+customers, with nothing on either screen saying so. That is not a variant of
+this feature; it is the defect the lock exists to prevent, and the lock stands.
+
+**SO A MOVE ALWAYS COSTS A REPRINT, AND THE OPERATOR IS TOLD BEFORE, NOT
+AFTER.** The destination gets its own shop record — minted on the move if it
+has none, with its own code — and the source's code stays with the source. A
+move therefore means one new QR to print at the destination and one dead QR to
+take down at the source. **Both consequences are named on the confirm dialog**,
+because the alternative is discovering them at a table with a customer holding
+a phone.
+
+**THE SOURCE SHOP IS SWITCHED OFF, NOT DELETED.** `is_active = 0` is enough:
+`resolveShop()` in `routes/shop-menu.js` requires an active shop, so the old
+code resolves to nothing and the public page serves its one not-found page for
+this exactly as for a wrong code. **What that page says happens to be exactly
+right for this case** — branded, bilingual, *No products yet. Check back soon.
+· 暂无商品 · 请稍后再来* — so a customer who scans a taken-down QR reads a shop
+between menus rather than an error, and no new customer-facing string is
+needed. It is an HTTP 404 underneath and uncached, which is what lets the same
+code go live again if a shop is ever set up there afresh. Deleting the row instead would free the
+location for a new shop with a new code and destroy the record of what the old
+one was, and the emptied shop is the evidence a reader needs to understand why
+a printed code went dead. **Turning that switch back on gives an empty menu,
+not the old one** — the products are at the destination now, and bringing them
+back is a second move, not an undo.
+
+**THE DESTINATION'S OWN SWITCH IS NOT TOUCHED EITHER.** A shop that was off
+before the move is off after it, carrying its new menu. v4.312 paid for the
+opposite: a save that took a live printer off the air as a side effect, and
+stayed invisible until somebody at a counter noticed no paper. A shop created
+BY the move is active, because that is what creating one has always done and
+the schema default says so. Which of the two happened is reported back when the
+move lands, so the operator is never guessing whether the new menu is live.
+
+**THE COUNTER AT THE SOURCE KEEPS SELLING, AND WHAT IT LOSES IS NAMED HERE SO
+NOBODY REDISCOVERS IT AT A TILL.** §150 gives the counter its catalogue from
+these same listings, and that route ignores shop `is_active` on purpose —
+switching a shop off is a statement about a public URL, not about whether the
+counter can ring up a coffee. So a move does NOT take the source's till down:
+every product falls through to the catalogue, which is the right failure
+direction. **Three things go with the listings, though**, and an operator moving
+a menu away from a location that is still trading should be told them: the
+LISTING PRICE (the till falls back to `store_products.sell_price`, so a
+shop-specific price is gone), the FULFILMENT MODE (a made-here item reads as
+stocked and the till starts drawing a shelf count for it), and the MENU ORDER.
+A product that is neither published nor counted there drops off that till
+altogether. **None of this is a reason to change the move** — it is what
+emptying a menu means — but it is the reason a location still selling at its
+counter probably wants the copy of §177's option A rather than this.
+
+**A DESTINATION THAT ALREADY HAS A MENU IS REFUSED.** Merging two priced menus
+asks whose price wins on a product listed at both, and that question is not
+answered here. The refusal is by listing count and not by the presence of a
+shop record, so a location that was set up and never filled is a valid
+destination and an empty shop is reused rather than duplicated — `location_id`
+is UNIQUE and a second one could not be created anyway.
+
+**ALL OR NOTHING.** The copy, the delete and the switch are one transaction. A
+half-move — products at both locations, or at neither — would be the one
+outcome an operator could not reason about from either screen.
+
+**OPTION A IS RECORDED AS CONSIDERED AND NOT TAKEN, because somebody will ask
+for it.** A second location opening alongside the first wants the menu COPIED,
+not moved, and this control is not that: what makes it a move is exactly the
+emptying and the switch-off that a copy must not do. When a copy is wanted it
+is a separate decision and a separate control, and it will have its own
+question to answer — whether the copy keeps the source's prices or takes the
+catalogue's.
+
+**Who may do it:** `stores:edit`, the same capability every other write in
+`routes/retail-shops.js` takes. Nothing here is public and nothing here is a
+customer-facing string.

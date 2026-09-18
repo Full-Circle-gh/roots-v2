@@ -15448,7 +15448,9 @@ body.shp-viewing #tab-shop-menu .shp-scroll { flex: 1; min-height: 0; overflow: 
   color: var(--td-text2); background: var(--td-raised);
   border: 1px solid var(--td-border); border-radius: 8px; padding: 5px 9px;
 }
-#tab-shop-menu .shp-head-r { flex-shrink: 0; padding-top: 28px; }
+/* TWO EXITS NOW, ONE DUSK — §1.7a. §177 put Move products beside Add product;
+   a header that had only ever held one button needed the gap. */
+#tab-shop-menu .shp-head-r { flex-shrink: 0; padding-top: 28px; display: flex; gap: 8px; }
 
 /* ── buttons ──────────────────────────────────────────────────────────────── */
 #tab-shop-menu .shp-btn {

@@ -212,6 +212,12 @@ const TD_ERR = {
   already_used_or_missing:['That has already been used, or is no longer there.', '已使用或已不存在。'],
   already_reset:          ['That customer has already been reset — they are waiting to arrive as a new customer.', '该顾客已重置，正等待以新顾客身份进入。'],
   already_receiving:      ['Somebody is already receiving that order.', '已有人正在收货。'],
+  // §177, the shop menu move. A destination is refused on its LISTING COUNT,
+  // so this is the sentence for a location that has a menu of its own — not
+  // for one that merely has a shop record.
+  destination_has_menu:   ['That location already has a menu of its own.', '该门店已有商品,请选择其他门店。'],
+  nothing_to_move:        ['There is nothing on this menu to move.', '没有可移动的商品。'],
+  same_location:          ['The menu is already at that location.', '商品已在该门店。'],
   courier_already_called: ['A courier has already been called for this order.', '该订单已呼叫运力。'],
   refund_already_processing: ['A refund is being processed for this order right now — try again in a moment.', '该订单正在处理退款,请稍后重试。'],
   code_exists:            ['That code is already in use.', '该编码已存在。'],
