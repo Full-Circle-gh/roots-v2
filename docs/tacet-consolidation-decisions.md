@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.310
+# Tacet shared-core consolidation — decisions record, v4.311
 # Tacet shared-core consolidation — decisions record, v4.310
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
@@ -23,6 +23,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-18 · v4.311 — **§171 ADDENDUM 2 · THE WRONG BRAND LOOKS EXACTLY LIKE A BROKEN PRINTER.** Ash, on the first real test print: *"i test from the website of the printer, it prints, when i try from the system it show failed"*. Printer fine, system fine — **the Tianhe row had been left on 商鹏 with Tianhe's FEIE serial in it**, so a good SN went to the wrong vendor's cloud, which answered `打印机不存在`, and the screen said only `Print failed`. **This is the mistake the screen will keep inviting**: §171 put a brand dropdown on every store row, the panel opens on the first store's tab, and the instruction being followed is "set the brand to Shangpeng" — doing it on whichever tab is open is the shape of the screen, not carelessness. A per-store setting that is usually uniform gets got right by never touching it, and wrong exactly once. **The fix is the diagnosis, not the freedom**: the brand stays per-store, because a tenant really does run two; a failed test now echoes back **the brand and SN it actually tried** (`打印机不存在 — 商鹏 · SN 550540977`) and an `unknown_printer` answer adds one plain line, *is the BRAND right for this store?* **Only the two vendor codes seen first-hand against the live API are normalised** — `2` → unknown_printer, `-4` → bad_signature — and a test pins that restraint, because confident wrong advice beats no advice only when it is right. **The costly part was the silence, not the outage**: saving the brand also took Tianhe's real printer off the air, instantly, reversibly in one dropdown, and invisibly until someone at a counter notices no paper. A tenant-wide brand with a per-store override is recorded as the alternative **considered and not taken** — it trades a rare mistake for a permanently more confusing model. 43 assertions, two sabotages confirmed red. **The tag map remains unverified**: no slip has yet come out of a Shangpeng head.
 
 2026-09-18 · v4.310 — **§171 ADDENDUM 1 · THE SIGNATURE WAS WRONG IN THE CASE, AND ONLY THE LIVE API SAID SO.** Hours after §171 shipped, with Ash's Shangpeng credentials in hand, a read-only `GET v1/printer/info` probe — run deliberately BEFORE any test print — returned `{"errorcode":-4,"errormsg":"签名错误"}`. **The algorithm was right and the case was wrong**: the MD5 must be **UPPERCASE**. Twelve conventions were put to the live endpoint; eleven were refused and exactly one got through, the uppercase form of the one already shipped. **This corrects §171's own sourcing claim**, which offered "read off the published `@xesam/cloud-vendor-spyun` client … not recalled" as grounds for trust: that client delegates hashing to an injected signer and so fixes the input string while saying nothing about the output format — a source can be primary and still not answer the question asked of it. 签名错误 names no field and, against freshly-typed credentials, reads exactly like a mistyped APPSECRET, so the wrong thing would have been debugged for hours. `scripts/test_printer_vendors.js` now pins the case **three ways**, one test named for the bug, so deleting an "unnecessary" `.toUpperCase()` fails the build rather than the printer; the lowercase revert was confirmed red. **The transferable part is the probe**: where a vendor's documentation cannot be read — both Shangpeng doc sites are client-rendered and would not open through this session's proxy, which is why the tag map shipped flagged — **the API can still be asked**, in one request, before the hardware is blamed. The tag map remains unverified and still expects a test print. **A second finding, not ours to fix**: with the signature accepted the probe returned `{"errorcode":2,"errormsg":"打印机不存在"}` — the device is not yet bound to the account, an app-side step with the label's KEY, recorded because that message against correct credentials is otherwise alarming to read.
 
@@ -18043,6 +18045,49 @@ probe returned `{"errorcode":2,"errormsg":"打印机不存在"}` — SN 15526345
 not bound to the account. That is an app-side binding step with the label's
 KEY, not a code defect, and it is recorded here because "printer does not
 exist" against correct credentials is otherwise an alarming thing to read.
+
+### §171 ADDENDUM 2 — THE WRONG BRAND LOOKS EXACTLY LIKE A BROKEN PRINTER
+
+**2026-09-18, the first real test print.** Ash: *"i test from the website of
+the printer, it prints, when i try from the system it show failed"*. The
+printer was fine and the system was fine. **The Tianhe row had been left on
+商鹏, with Tianhe's FEIE serial in it** — so a good SN went to the wrong
+vendor's cloud, which answered `打印机不存在`, and the screen said `Print
+failed`.
+
+**THE MISTAKE IS THE ONE THIS SCREEN WILL KEEP INVITING, AND SAYING SO IS THE
+DECISION.** §171 put a BRAND dropdown on every store row, the panel opens on
+the first store's tab, and the instruction a person is following at that
+moment is "set the brand to Shangpeng". Doing it on whichever tab is already
+open is not carelessness; it is the shape of the screen. **A per-store setting
+that is usually uniform is a setting most people will get right by never
+touching it and wrong exactly once** — and the once is silent, because nothing
+about `Print failed` says which cloud was called.
+
+**WHAT IS FIXED IS THE DIAGNOSIS, NOT THE FREEDOM.** The brand stays
+per-store; that is §171 and a tenant really does run two brands. A failed test
+print now echoes back **the brand and the SN it actually tried** — `打印机不存在
+— 商鹏 · SN 550540977` names the mismatch to someone who knows nothing about
+either API — and an `unknown_printer` answer adds one plain line: *is the BRAND
+right for this store?* Two vendor codes are normalised, and **only the two seen
+first-hand against the live API**: `2` → `unknown_printer`, `-4` →
+`bad_signature`. The rest of Shangpeng's catalogue is not guessed at, because
+confident wrong advice in front of an operator is worse than the raw Chinese
+message they already get; a test pins that restraint.
+
+**THE COSTLY PART WAS NOT THE OUTAGE BUT THE SILENCE.** Saving the brand also
+took Tianhe's real printer off the air — "Save & test this store" saves every
+row before it tests — and nothing anywhere said so. That is the shape of this
+class of bug: the damage is instant, reversible in one dropdown, and invisible
+until somebody at a counter notices paper stopped coming out. **A tenant-wide
+brand with a per-store override would have made the common case unbreakable**;
+it is recorded as the alternative considered and NOT taken, because it trades
+a rare mistake for a permanently more confusing settings model, and the
+diagnosis fix addresses the same failure without that trade.
+
+**STILL UNVERIFIED, AND UNCHANGED BY ANY OF THIS:** the markup tag map. No
+slip has yet come out of a Shangpeng head, so nothing is known about the tags
+that was not known when §171 shipped.
 ## §172 — WHAT THE SHOP KNOWS ABOUT A PERSON IS READ ON EVERY ORDER, AND IS EDITED IN ONE PLACE
 
 **DECIDED BY ASH, 2026-09-18**, looking at TC000750's drawer: *"an order note
