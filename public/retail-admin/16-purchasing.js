@@ -838,12 +838,15 @@
     // through Date: `new Date('2026-09-30')` is UTC midnight and renders as the
     // 29th for any reader west of Greenwich, and a wanted-by day that moves
     // with the reader's clock is the one thing this cell must not do.
-    // `截止` GOES AFTER THE DAY AND `by` BEFORE IT, which is why this is a whole
-    // phrase per language rather than one word glued to a date: 10-extras.js's
-    // vote row already prints `${votCloses(p)} 截止` and that word order is the
-    // live one.
+    // `订购` GOES AFTER THE DAY AND `by` BEFORE IT, which is why this is a whole
+    // phrase per language rather than one word glued to a date: the day-then-word
+    // order is the live one, the same order 10-extras.js's vote row prints
+    // (`${votCloses(p)} 截止`). Ash replaced §176's lifted `截止` with `订购` on
+    // 2026-09-18: on a buyer's queue `截止` reads as a cutoff after which the line
+    // lapses, which is what it means on a poll; `订购` names the act the buyer is
+    // being asked for. v1.131 of the vocabulary carries it.
     const when = day
-      ? `<div class="sub pu2-mono"${hot ? ' style="margin-top:3px"' : ''}>${esc(T('by ' + day, day + ' 截止'))}</div>`
+      ? `<div class="sub pu2-mono"${hot ? ' style="margin-top:3px"' : ''}>${esc(T('by ' + day, day + ' 订购'))}</div>`
       : '';
     return pill + when;
   }
