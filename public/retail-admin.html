@@ -4092,7 +4092,11 @@
          cuKnowHtml). It takes the space the note line would have, so the Edit
          button sits where it always sits and does not jump when the first note
          lands. */
-      #cu-drawer .cu-knowhint { flex: 1; min-width: 0; font-size: 13px; color: var(--text-3); line-height: 1.55; }
+      /* flex: NONE. With flex:1 the label took the whole line and threw the
+         button to the far edge, which reads as two unrelated controls — the
+         exact confusion the label exists to end. They sit together now, and
+         the line's own gap is all that separates them. */
+      #cu-drawer .cu-knowhint { flex: none; min-width: 0; font-size: 13px; color: var(--text-3); line-height: 1.55; }
       #cu-drawer .cu-knowhint[hidden] { display: none; }
       #cu-drawer .cu-noteline .ic { flex: none; color: var(--text-4); font-size: 11px; }
       #cu-drawer .cu-noteline .tx { min-width: 0; overflow-wrap: anywhere; }
