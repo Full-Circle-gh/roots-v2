@@ -24,6 +24,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 2026-09-18 · v4.319 — **§32 ADDENDUM · THE WASTE SWITCH HAD NOWHERE TO MOUNT, SO WASTE COULD NOT BE TURNED OFF BY ANYBODY.** Found while building §178's switch, on the same list. `waste` has had a `FEATURE_CATALOG` entry since §32 and **no `FEATURE_HOMES` entry**, so `mountFeatureControls()` never visited it and no `.feat-bar` was ever injected anywhere. **Nothing failed.** No page threw, no console error, no suite went red — a feature that cannot be turned off is indistinguishable from a feature nobody has turned off, and the Settings list said otherwise, which is the part that costs trust. **TWO PIECES OF THE PRODUCT WERE ALREADY WRITTEN FOR A CONTROL THAT DID NOT EXIST**, which is how long this had been true: `retail-admin.css` hides the Waste rail row rather than dimming it *"because its switch lives in Settings → Operations, not on the Waste page"* — it did not — and `routes/retail-waste.js`'s reader carried *"There is no Settings UI for this yet; the reader exists so the switch has one meaning the day the control is added."* **The fix is one line and one empty div**: a `FEATURE_HOMES` entry and the host `#waste-settings-home` in Settings → Operations, beside Production's and where the CSS has claimed it was all along. **No new behaviour, no new Chinese** — §32's catalog copy, its `descOn`/`descOff` and the server-side reader are all unchanged and were written for exactly this. **The host is switch-only** (no `data-feat`, no `.feat-off` rule), same shape as §178's, because there is no configuration under the bar to hide. **TURNING IT OFF NOW REALLY CLOSES THE DOOR**: `requireWasteEnabled` returns 403 `waste_disabled`, which has been live and unreachable since §32. Nothing changes for any tenant that leaves it alone — absent config still means on. **What holds it: `scripts/test_feature_switches_mount.js` — 25 assertions, fast shard, no browser**, asserting the three files that must agree to mount one switch (catalog key, home selector, host div) for EVERY feature, not just this one, because any of the three missing is silent. An exemption is a named place and is verified too: `affiliate` owns its switch on its own page, and the suite checks that the file named there really writes `features.affiliate`. Verified red with the one line removed. §32 is unchanged in substance; this is its missing control, not a new decision. **THIS ENTRY IS v4.319 AND SKIPS v4.318 DELIBERATELY** — v4.318 is §178 on a branch open at the same time, and both entries were written against the same main. Two branches claiming one version is the failure `.github/workflows/doc-numbering.yml` was built for after it reached main once: git merges two sides that changed a line to the SAME bytes without a conflict, so the duplicate is created by the merge and exists in neither input. Numbered around it rather than discovered by the gate. If this lands first, §178 is rebased before it merges.
 
+2026-09-18 · v4.318 — **§178 ADDED: "RUNNING LOW HERE" BECOMES A TENANT SWITCH — DECIDED by Ash.** From a screenshot of RPO-0046 with the strip in it: *"i want this feature to be able to open and close for each tenant. roots doesnt ned it."* **Scope was put as three options and Ash chose the narrow one**: the strip inside the purchase-order editor only. The **Reorder tab is NOT gated** and keeps working for every tenant, including Roots — it was offered in the same breath and declined, and it is recorded here so the next session does not "finish the job". **Its OWN switch, not folded into Production**, on §32's reasoning applied the other way round: Production is about MAKING things and this is about BUYING them, and the tenants the strip is noise for are exactly the ones that make what they sell — a shelf restocked from your own kitchen fills the strip with finished goods no supplier sells you, which is what the screenshot shows (yogurt, juice, cake, a noodle salad). **ON by default**, like every switch on that list: a tenant that buys what it sells wants it, and shipping it off would take a live control away from everyone to suit one account. **UI-only, no server gate**, following §28 addendum item 1 exactly: the strip reads `/stores/:id/stock`, reads are open server-side, and hiding a suggestion is not closing a door. **The switch lives in Settings → Operations**, next to Production's, because a wizard step has no room for a settings bar; its host `#lowstock-settings-home` deliberately carries **no `data-feat` and gets no `.feat-off` CSS rule** — there is no configuration under the bar to hide, so the card must read the same either way. **Two sentences had to move with it**, and this is the part that would have been missed: the line-table empty state ("search or pick a suggestion above") and the no-orders onboarding card ("running-low items are suggested for you") both POINT AT the strip, and with it off they send the operator looking for a control that is not there. Both now follow the switch; both Chinese halves are the live sentence with that clause dropped, not new copy (vocabulary v1.134 — **the title copied whole, three sentences restructured, three composed for the switch itself**). **Found in passing and NOT fixed here** (one PR per change): `waste` has a `FEATURE_CATALOG` entry and **no `FEATURE_HOMES` entry**, so its switch mounts nowhere and the feature cannot be turned off by anyone — it is on by server default and that is the only state it has. New suite `scripts/test_purchasing_low_stock_hints.js`, 22 assertions, fast shard, no browser; the wiring half exists because a key, a home and a host div that disagree mount no switch at all, which is precisely the state `waste` is in. §178 is new and supersedes nothing.
+
 2026-09-18 · v4.317 — **§113 ADDENDUM · THE RULE THAT CLOSES A KEYBOARD WAS CLOSING THE FIELD THAT HAD JUST BEEN OPENED — REPORTED BY ASH**, of the Ask to buy count with a red circle drawn round it: *"i cant add a number manually"*. **The field was right, the rule above it was wrong.** Tapping the count runs `mbTypeOpen`, which repaints the row into an `<input>` and puts the caret in it — inside its own `onclick`. §113 rule 3 then ran on the way up, saw a focused field and a tap target that was neither the field nor a field (a button, and by then a button thrown out of the document with the markup it lived in), and blurred; `mbTypeCommit` shut the field on the way out. **One tap, opened and closed, nothing on screen** — so free-typing a quantity was impossible on every screen that offers it: Ask to buy, Quick Stock's count, the order note. **Rule 3 asked the wrong question**, and the fix is to ask the right one: what it exists to close is a keyboard that was ALREADY OPEN, not "is something focused now the tap has finished". `kbMark` records, at touch-down, which field the keyboard belonged to; `kbTapAway` blurs only when that is still the field focused at `click`. **The decision stays at `click`** for every reason §113 rule 3 and the scrim rule give — touch-down only records a fact that `click` can no longer find out — and the test that forbids moving the decision to `pointerdown` is kept and joined by one that pins where the recording happens. A click with no touch-down behind it (a synthetic `.click()`, a button pressed with Enter) now closes nothing, which is the safe direction for a rule that only ever takes a keyboard away. **WHY EVERY TEST PASSED THROUGH THIS.** `scripts/test_ask_to_buy_keyboard.js` has 84 assertions over exactly these functions and all 84 were green: they call `mbTypeOpen` directly, and **no click bubbles in a function test**. The defect lived in the gap between two correct pieces of code, which is where only a real click can find it — reproduced, before the fix, in headless Chromium through `scripts/lib/m-probe` on both screens (field absent after the tap on Ask to buy and on Quick Stock) and confirmed gone after it. **What holds it now**: `scripts/test_mobile_keyboard.js` — **55 assertions across 7 sections**, fast shard, no browser — with the defect written as the state a real tap leaves behind (nothing focused at touch-down, the target detached, a brand-new field focused) plus the case that must not regress: a keyboard already open still goes down on a tap on the page. No field's markup changed and no Chinese string was touched. Two suites failed on the first `test:fast` of a fresh checkout and pass individually before and after this change — `data/roots.db` does not exist until something requires `database.js`; second run 286/286. No change to `.gitignore` or CI.
 
 2026-09-18 · v4.316 — **§177 ADDED: A MENU MOVES BETWEEN LOCATIONS; THE SHOP RECORD AND ITS CODE DO NOT — DECIDED by Ash.** From a screenshot of Sales → Locations: *"the shop menu should move form tianhe to yuexiu."* **The button in that screenshot was never the thing to move** — `csRenderLocations()` paints `Shop menu →` on every location card from one code path, so both cards already had it; what differs is whether there is a menu behind it. **Put as three options and Ash chose B**: the listings move, the destination ends up with the products, prices, modes and menu order, and the source's menu is emptied. **Option C — repointing `shops.location_id` — is refused and the lock it would have broken is restated rather than softened**: the `public_code` is the only thing a QR carries (§44), so a repointed record would make every QR already stuck to a table in Tianhe serve Yuexiu's menu, silently, to customers. **The cost of choosing B is a reprint and it is named on the confirm dialog** — one new QR at the destination, one dead QR at the source — because the alternative is finding out at a table. **The source shop is switched off, not deleted**: `resolveShop()` already requires an active shop, so the old code resolves to nothing and serves the existing not-found page, while the row, its code and its history stay readable; turning it back on gives an empty menu, not the old one. **The destination's own switch is not touched**, on v4.312's reasoning — that entry paid for a save which took a live printer off the air as an invisible side effect — and which of create-or-reuse happened is reported back so nobody guesses whether the new menu is live. **A destination that already has a menu is refused**, because merging two priced menus asks whose price wins and that is not decided here; the test is the listing count, so an empty shop is a valid destination and is reused. All or nothing, in one transaction. **Option A — copy, both keep a menu — is recorded as considered and not taken**, because a second location opening alongside the first will ask for it and this control is deliberately not that. Vocabulary v1.133: four pairs verbatim, four lifted, four composed. §177 is new and supersedes nothing.
@@ -18758,3 +18760,100 @@ catalogue's.
 **Who may do it:** `stores:edit`, the same capability every other write in
 `routes/retail-shops.js` takes. Nothing here is public and nothing here is a
 customer-facing string.
+
+## §178 — A SUGGESTION IS A FEATURE, AND A TENANT THAT MAKES WHAT IT SELLS DOES NOT WANT IT
+
+**Decided by Ash, 2026-09-18**, from a screenshot of purchase order RPO-0046:
+*"i want this feature to be able to open and close for each tenant. roots
+doesnt ned it."*
+
+**What the strip is.** `renderSuggestions` in
+`public/retail-admin/16-purchasing.js` paints a kicker — *Running low here ·
+此门店库存偏低* — above the line table of a draft order, listing up to four
+products the delivery store is furthest under its safety buffer on, each with
+an `Add` button. It is the one thing on that screen that offers to fill the
+order for you.
+
+**Why one tenant does not want it.** Roots' shelves are restocked from its own
+kitchen, not from a supplier. The four rows in the screenshot are a coconut
+yogurt, a carrot-ginger juice, a fire spice cake and a noodle salad — all things
+Roots MAKES. A purchase order is a list of what somebody sells you, so the
+strip's whole suggestion is unbuyable, every time, on every order. It is not
+wrong; it is aimed at a different kind of business.
+
+### The four calls
+
+**1 · Scope is the strip, not the idea.** "Products running low" exists twice in
+Purchasing: this strip, and the **Reorder tab**, which groups low stock across
+every store by the supplier you would buy it from. Both were put to Ash and
+**only the strip is gated**. The Reorder tab keeps working for every tenant,
+Roots included. That is recorded here because the symmetry is inviting and
+acting on it later would take away a screen nobody asked to lose.
+
+**2 · Its own switch, not Production's.** §32 refused to fold Waste into
+Production because a retail account that makes nothing still wastes stock. The
+same argument runs the other way here: Production is about MAKING, this is about
+BUYING, and the tenants this is noise for are precisely the ones Production is
+built for. Folding it in would mean a tenant could not have Materials without
+also having a strip full of its own cakes.
+
+**3 · On by default.** Every switch on that list defaults on and this one does
+too. The strip has shipped to every tenant for months; a default of off would
+take it away from all of them to suit one account, silently, on deploy.
+
+**4 · UI-only, no server gate** — §28 addendum item 1, unchanged. The strip's
+read is `GET /api/retail-admin/stores/:id/stock`, reads are open server-side
+(`lib/cap-routes.js`: enforce mutations, leave reads open), and there is nothing
+to enforce: this hides a suggestion, it does not close a door. The gate is
+`body.feat-lowStockHints`, exactly as `materialsFeatureOn()` reads
+`body.feat-production` eight lines above it.
+
+### Where the switch lives, and the shape of its host
+
+**Settings → Operations**, beside Production's, for Production's reason: the
+thing it governs lives inside a wizard step, which has no room for a settings
+bar, and a switch you cannot find is a switch that does not exist.
+
+Its host is `<div id="lowstock-settings-home"></div>` — **empty, carrying no
+`data-feat`, with no `.feat-off` rule in the CSS.** Every other feature home
+wraps configuration that must disappear when the feature is off; this one has
+none, so the bar its `descOn`/`descOff` carries is the whole control and must
+read the same whichever way it is set. The `.feat-off` card
+`mountFeatureControls()` injects stays hidden by the default
+`.feat-off { display: none }`, which is correct and not an oversight.
+
+### The two sentences that point at it
+
+This is the part a narrow reading would have missed. Two strings on this screen
+DESCRIBE the strip:
+
+- the line-table empty state — *"Nothing yet — search or pick a suggestion
+  above."*
+- the no-orders onboarding card, step 1 — *"Pick a supplier and add products —
+  running-low items are suggested for you."*
+
+With the strip off, both send an operator looking for a control that is not on
+the screen, and there is no way for them to discover why. Both now ask
+`lowStockHintsOn()` first. **No Chinese was minted for either**: each short form
+is the live sentence with its trailing clause removed (vocabulary v1.134).
+
+### Found in passing, not fixed here
+
+`waste` (§32) has a `FEATURE_CATALOG` entry and **no `FEATURE_HOMES` entry**, so
+`mountFeatureControls()` never visits it and its switch mounts nowhere. The
+feature is on by the server default in `routes/retail-waste.js` and that is the
+only state it has ever had. One PR per change, so it is named here rather than
+repaired inside this one.
+
+### What holds it
+
+`scripts/test_purchasing_low_stock_hints.js` — **22 assertions, fast shard, no
+browser.** Three halves: the WIRING (catalog key, home, host div, default on),
+because a key/home/host that disagree mount no switch at all and `waste` proves
+that failure is invisible; the BEHAVIOUR, which opens a real draft through
+`puNewOrder` → `puWizStep(2)` so the strip is painted by the path that paints it
+in the product, and asks for the stock read **with the cache cold**, because
+`products()` memoises per store and the same question asked later answers itself;
+and the COPY, which pins both sentences above in both languages.
+
+§178 is new and supersedes nothing.

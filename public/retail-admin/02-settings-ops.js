@@ -2125,6 +2125,20 @@ const FEATURE_CATALOG = [
     desc: 'Recording waste moves stock: the on-hand count goes down and the sales channels are told. Voiding an entry puts the stock back. When off, the Waste tab is hidden and nothing can be recorded. · 登记损耗会变动库存:库存数量相应减少,并同步至各销售渠道。作废一条记录会把库存退回。关闭后“损耗”标签隐藏,也无法登记。',
     descOn:  'On. Staff can record what was lost and why, and every entry moves the shelf count. · 已开启:员工可登记损耗及其原因,每条记录都会变动库存。',
     descOff: 'Off. The Waste tab is hidden. Nothing already recorded is deleted, and stock already moved stays moved. · 已关闭:“损耗”标签已隐藏。已登记的记录不会删除,已变动的库存也不会恢复。' },
+  // Low-stock suggestions (§178) — the "Running low here" strip at the top of a
+  // purchase order, which offers the products that store is shortest of. Its
+  // OWN switch, deliberately not folded into Production: this one is about
+  // BUYING, and the tenants it is noise for are exactly the ones that MAKE
+  // what they sell — a shelf restocked from your own kitchen fills the strip
+  // with finished goods no supplier sells you. ON by default, like every
+  // switch above: a tenant who buys what it sells wants it, and shipping it
+  // off would take a live control away from everyone to suit one account.
+  // The English title is copied word for word from the strip itself, so the
+  // switch names the thing it switches and nobody has to guess.
+  { key: 'lowStockHints', en: 'Running low here', cn: '此门店库存偏低', def: true,
+    desc: 'Suggestions at the top of a purchase order: the products that store is running low on, each with an Add button. · 采购单顶部的推荐:该门店库存偏低的商品,可直接添加。',
+    descOn:  'On. Every purchase order suggests the products that store is short of, so the usual restock is one tap. · 已开启:每张采购单会推荐该门店库存偏低的商品,可直接添加。',
+    descOff: 'Off. Purchase orders suggest nothing — search for what you want to buy. Nothing else on the order changes. · 已关闭:采购单不再推荐商品,自行搜索添加即可。采购单的其余部分不受影响。' },
 ];
 let ENTITLEMENTS = {};
 (async () => {

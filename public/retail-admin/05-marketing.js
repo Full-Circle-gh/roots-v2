@@ -1338,6 +1338,14 @@ const FEATURE_HOMES = {
   // no separate entry here on purpose (§28: one switch, not two) — its rail
   // tab is gated by the same data-feat="production" attribute as Materials'.
   production:  '#mat-settings-home',
+  // Low-stock suggestions (§178) sit inside the purchase-order editor, which
+  // is a wizard step, not a page with room for a settings bar — so the switch
+  // goes where Production's does, Settings → Operations, next to the other
+  // things a tenant turns on or off wholesale. Its host holds the switch and
+  // nothing else: there is no configuration to hide when it is off, which is
+  // why that host carries no data-feat and the CSS has no .feat-off rule for
+  // it. The injected "off" card stays hidden by the default .feat-off rule.
+  lowStockHints: '#lowstock-settings-home',
 };
 let _cfgCache = {};
 // Inject an on/off bar + an "off / enable" card at the top of each feature's home
