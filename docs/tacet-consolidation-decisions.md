@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.319
+# Tacet shared-core consolidation — decisions record, v4.320
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-18 · v4.320 — **§179 · THE COLOPHON IS NOT A BLOCK, WHICH IS WHY THE QR MENU NEVER SIGNED A PAGE — DECIDED BY ASH:** *"ok do it"*, on a recommendation put with its own case against. **TWO QUESTIONS, ONE ANSWER.** Ash asked why the editor's Colophon controls are not one of the cards, and why a new product whose preview shows an IP character shows none on the QR menu. The cards are entries in `description_blocks` — addable, reorderable, switchable per channel; the colophon is three columns on the product row over the tenant's signature, one per page, always last. **§144's spine is the nine block types 73–99% of products carry and the colophon was never one because it is not one**, so §132 — which brought all thirteen block types to the QR menu on *"build the blocks of the product description same as the mini app"* — could not reach it. Measured: before this change the colophon was drawn in exactly TWO places in the repo, `miniapp/pages/product/product.wxml` and the editor's own preview. Not the QR menu, not `public/shop.html`. **THE QR MENU NOW DRAWS IT**, converted from the component at the same rpx times 0.52 the rest of §132 used, with a fourth substitution named beside the three already there (the mini app's --oat slab sits on an --oat sheet here, so it takes .pb-qt's rgba(0,0,0,.04)). **IT NEVER OPENS A SHEET BY ITSELF, and that is the load-bearing half:** every product has a colophon, so one built before §120's gate would have made EVERY card on EVERY menu tappable onto a panel holding a mascot and the shop's name — the empty sheet that rule exists to refuse. **NOTHING IS MAPPED HERE:** the character comes from `lib/brand-signature` and the tenant from `resolvePublicTenant(req)`, the same door that set the data scope, so §158's fault cannot reappear on a third surface; an unresolvable tenant is signed with nothing, never with Roots'. **ONE NARROWING IS NEW:** the stored character becomes a filename on a public URL here, so a value outside the cast's alphabet draws no image — at that one edge, not in the module, which still honours an override verbatim and should. **NO CHINESE COMPOSED** — everything printed is data, and both languages are emitted because this page ships both and CSS picks. New suite `scripts/test_shop_menu_colophon.js` **12/12**, proven non-vacuous by four mutations (the filename guard dropped, every shop signed as Roots, the override's cross-language fallback removed, the colophon allowed to open its own sheet) each caught by the check written for it; `test:fast` 286 → **287**; lint 0 errors. Node's `fetch` silently DROPS a Host header a caller sets, which is recorded because the tenant check passed for the wrong reason until the harness moved to `http.request`. No schema, no migration, no change to the mini app, the web storefront, the editor, `.gitignore` or CI. **LEFT OPEN AND NAMED:** `public/shop.html` draws no colophon either, though `_paChannelEditorHtml`'s note assumes it renders the same stack as the mini app.
 
 2026-09-18 · v4.319 — **§32 ADDENDUM · THE WASTE SWITCH HAD NOWHERE TO MOUNT, SO WASTE COULD NOT BE TURNED OFF BY ANYBODY.** Found while building §178's switch, on the same list. `waste` has had a `FEATURE_CATALOG` entry since §32 and **no `FEATURE_HOMES` entry**, so `mountFeatureControls()` never visited it and no `.feat-bar` was ever injected anywhere. **Nothing failed.** No page threw, no console error, no suite went red — a feature that cannot be turned off is indistinguishable from a feature nobody has turned off, and the Settings list said otherwise, which is the part that costs trust. **TWO PIECES OF THE PRODUCT WERE ALREADY WRITTEN FOR A CONTROL THAT DID NOT EXIST**, which is how long this had been true: `retail-admin.css` hides the Waste rail row rather than dimming it *"because its switch lives in Settings → Operations, not on the Waste page"* — it did not — and `routes/retail-waste.js`'s reader carried *"There is no Settings UI for this yet; the reader exists so the switch has one meaning the day the control is added."* **The fix is one line and one empty div**: a `FEATURE_HOMES` entry and the host `#waste-settings-home` in Settings → Operations, beside Production's and where the CSS has claimed it was all along. **No new behaviour, no new Chinese** — §32's catalog copy, its `descOn`/`descOff` and the server-side reader are all unchanged and were written for exactly this. **The host is switch-only** (no `data-feat`, no `.feat-off` rule), same shape as §178's, because there is no configuration under the bar to hide. **TURNING IT OFF NOW REALLY CLOSES THE DOOR**: `requireWasteEnabled` returns 403 `waste_disabled`, which has been live and unreachable since §32. Nothing changes for any tenant that leaves it alone — absent config still means on. **What holds it: `scripts/test_feature_switches_mount.js` — 25 assertions, fast shard, no browser**, asserting the three files that must agree to mount one switch (catalog key, home selector, host div) for EVERY feature, not just this one, because any of the three missing is silent. An exemption is a named place and is verified too: `affiliate` owns its switch on its own page, and the suite checks that the file named there really writes `features.affiliate`. Verified red with the one line removed. §32 is unchanged in substance; this is its missing control, not a new decision. **THIS ENTRY IS v4.319 AND SKIPS v4.318 DELIBERATELY** — v4.318 is §178 on a branch open at the same time, and both entries were written against the same main. Two branches claiming one version is the failure `.github/workflows/doc-numbering.yml` was built for after it reached main once: git merges two sides that changed a line to the SAME bytes without a conflict, so the duplicate is created by the merge and exists in neither input. Numbered around it rather than discovered by the gate. If this lands first, §178 is rebased before it merges.
 
@@ -18857,3 +18859,77 @@ in the product, and asks for the stock read **with the cache cold**, because
 and the COPY, which pins both sentences above in both languages.
 
 §178 is new and supersedes nothing.
+
+## §179 — THE COLOPHON IS NOT A BLOCK, AND THAT IS WHY THE QR MENU NEVER SIGNED A PAGE
+
+**Decided by Ash, 2026-09-18.** Asked as two questions against the product page
+editor, with a screenshot of a new product: why the Colophon controls are not
+one of the cards, and *"now when i make a new product and in previouw it show me
+an ip i cant see it on the live product page qr code menu"*. Put back as a
+recommendation to draw it on the QR menu, with the case against; answered
+*"ok do it"*.
+
+**THE TWO QUESTIONS HAVE ONE ANSWER.** The cards in the editor's middle column
+are entries in one list on the product — `description_blocks` — which is why
+each can be added, reordered and switched off per channel. The colophon is not
+in that list: it is three columns on the product row (`colophon_character`,
+`colophon_tagline_en`, `colophon_tagline_cn`) over the tenant's own signature,
+one per page, always last, never moved. It sits in the editor's Page panel with
+Card chrome for the same reason. **§144's spine is the nine block types that
+73–99% of products carry, and the colophon was never one of them because it is
+not one of them** — so §132, which brought all thirteen block types to the QR
+menu on *"build the blocks of the product description same as the mini app"*,
+could not see it. A rule written about blocks cannot reach a thing that is not
+a block. It has been drawn in exactly two places since it shipped: the mini app
+product page and the editor's own preview. Not the QR menu, and not the web
+storefront.
+
+**WHAT IS DECIDED: THE QR MENU DRAWS IT.** A character picker whose result only
+mini-app shoppers ever see is work spent on an audience that may not be there;
+the customer standing at the counter with a phone is. **THE CASE AGAINST IS
+RECORDED AND WAS PUT BEFORE THE BUILD:** this sheet is read in a few seconds
+while deciding what to order, and three lines of brand at the very bottom will
+not sell anything there. It is a signature, not a feature. That is an argument
+about weight, not about correctness, and it is why the colophon sits under
+everything else and adds no control to the sheet.
+
+**IT NEVER OPENS A SHEET BY ITSELF, AND THAT IS THE LOAD-BEARING RULE.** §120:
+a product with nothing to say does not open at all, because an empty panel is
+worse than a card that does not respond. Every product has a colophon — the
+shop's own name alone is enough to draw one — so a colophon that counted as
+"something to say" would have made EVERY card on EVERY menu tappable onto a
+panel holding a mascot and a name. The gate is tested against the blocks, the
+nutrition and the sizes, exactly as before, and the colophon is built after it.
+`scripts/test_shop_menu_colophon.js` holds that with a product carrying nothing
+else, and the mutation that moves the build one line earlier goes red.
+
+**NOTHING IS MAPPED ON THIS PAGE.** The character comes back from
+`lib/brand-signature`, which §158 created precisely so a second copy of Roots'
+category map could not exist on a second surface — an override the office
+picked wins, an AUTO pick can only ever be a character the shop HAS, and a shop
+with no cast draws none. The tenant is resolved through
+`resolvePublicTenant(req)`, the same door that put the request into its data
+scope, so the catalogue the page read and the signature it signs with cannot
+come from two different shops; a tenant that cannot be resolved is signed with
+NOTHING, never with Roots'.
+
+**ONE THING IS NEW RATHER THAN CONVERTED, and it is a narrowing.** The stored
+character becomes a filename on a public URL here, where on the phone it is
+spent inside an app package, so a value outside the cast's alphabet draws no
+image. `resolveCharacter` still honours an override verbatim and should —
+blanking a page somebody deliberately signed is the worse failure — and this
+guard is at the one edge that needs it, not in the module.
+
+**NO STRING WAS COMPOSED, in either language.** Everything the block prints is
+data: the product's own tagline, the shop's own tagline, the shop's own name.
+Both languages are emitted and CSS picks, because that is what this page is —
+the phone picks one because it knows which one it is in, and copying that would
+have rendered half the readers a blank line.
+
+**NOT DONE, so it is not assumed.** No schema and no migration — every column
+read already existed. No switch to hide the colophon on the QR menu: the
+per-block channel control is a block's, and giving a non-block one would be a
+second mechanism for one idea. No change to the mini app, the web storefront,
+the editor, `.gitignore` or CI. **The web storefront still does not draw a
+colophon either**, which the note in `_paChannelEditorHtml` assumes it does;
+that is a separate finding and a separate change.
