@@ -16547,6 +16547,13 @@ function trendSections(){
   if(rbc&&Array.isArray(rbc.rows)&&rbc.rows.length){
     const byKey={};
     Object.keys(CHAN_META).forEach(k=>{ byKey[CHAN_META[k].key]=CHAN_META[k]; });
+    /* 'manual' is a real channel and CHAN_META has no card for it: the Sales
+       board shows the six channels a shop switches on and off, and an order an
+       operator typed in is not one of those. It is one HERE, because this asks
+       where the money came from and a typed-in order is somewhere. Named from
+       the Orders filter's own live pair rather than left to print as a raw key
+       — which is what the fallback below would have done. */
+    byKey.manual={en:'Manual',zh:'手动'};
     /* THE BAR AND THE FIGURE MUST BE THE SAME NUMBER. The server sorts by
        revenue because revenue is the question — but an account that may not see
        money reads order counts, and a list ranked on a figure it is not allowed

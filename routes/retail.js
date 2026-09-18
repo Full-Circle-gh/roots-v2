@@ -15109,11 +15109,17 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
      the convention everywhere else (order-channel-counts, /sales/summary), so
      it is defaulted rather than left to group under ''.
 
-     A TILL SALE CAN CARRY A STOREFRONT CHANNEL. Counter fulfilment is its own
-     way of selling and the channel column does not say so, which is why the
-     MINI predicate above excludes it by fulfillment_type. Grouped naively, every
-     till sale would be counted as a mini-app order. It gets its own row, named
-     for the way CHAN_META already names it.
+     A TILL SALE AND A TYPED-IN PHONE ORDER ARE BOTH channel='manual', and the
+     column cannot tell them apart — /sales/summary's POS card says so in its own
+     comment and keys on fulfillment_type for exactly this reason. Grouped by
+     channel alone the two merge into one row, which is two different ways of
+     selling under one name. Counter fulfilment gets its own row; what is left
+     under 'manual' is the typed-in order, and it keeps that name.
+
+     (An earlier draft of this comment claimed a till sale would be counted as a
+     mini-app order. It would not: 'manual' is not '' and so is never defaulted
+     to 'wechat'. The split is worth making because two ways of selling share a
+     channel, not because either was being misattributed.)
 
      gzgrocery is NOT here: its mirror rows are excluded by PAID like everywhere
      else on this endpoint, and its takings arrive by their own ledger. It is

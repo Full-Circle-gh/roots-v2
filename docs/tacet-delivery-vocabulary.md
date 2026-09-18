@@ -6957,6 +6957,7 @@ store, by delivery mode and by payment method, and none by channel.
 | Eleme | 饿了么 | LIVE — `public/m.html`, CHAN_META |
 | gzgrocery ERP | gzgrocery | LIVE — `public/m.html`, CHAN_META |
 | In store | 门店 | LIVE — `public/m.html`, CHAN_META |
+| Manual | 手动 | LIVE — `public/m.html`, the Orders screen's own channel filter. NOT in CHAN_META, which carries the six channels a shop switches on and off; a typed-in order is not one of those. It is a channel HERE, because this card asks where the money came from and a typed-in order is somewhere |
 
 The names are read out of CHAN_META by the same key the server groups on, so a
 channel is named identically here and on the Sales board, and a rename in that
@@ -6972,10 +6973,17 @@ question somebody can ask, a missing one is silence.
 
 ### Not a Chinese change, and the reason the card is honest
 
-A till sale can carry a storefront channel — counter fulfilment is its own way
-of selling and the channel column does not say so. Grouped naively, every one of
-them would have counted as a mini-app sale. It gets its own row, named by the
-same table.
+A till sale and a typed-in phone order are **both** `channel='manual'`, and the
+column cannot tell them apart — `/sales/summary`'s POS card says so in its own
+comment and keys on `fulfillment_type` for that reason. Grouped by channel alone
+the two merge into one row: two ways of selling under one name. Counter
+fulfilment is split out, and what remains under `manual` keeps the Orders
+filter's name.
+
+To be exact about what that split does and does not buy: a till sale was never
+going to be counted as a mini-app sale. `manual` is not empty, so it is never
+defaulted to `wechat`. The split is worth making because two ways of selling
+share a channel — not because either was being misattributed.
 
 And the ranking follows the figure on show: the server sorts by revenue, but an
 account that may not see money reads order counts, so the gate picks the

@@ -188,7 +188,11 @@ const FULL = WEEK + `state.trendFull={
           {channel:'meituan',orders:88,revenue:1622},
           {channel:'pos',orders:41,revenue:1210},
           {channel:'eleme',orders:19,revenue:418},
-          {channel:'gzgrocery',orders:7,revenue:1206}],
+          {channel:'gzgrocery',orders:7,revenue:1206},
+          // A typed-in phone order. It shares channel='manual' with a till sale,
+          // which is why the till is split out by fulfillment_type server-side —
+          // and why what is left still needs a name of its own.
+          {channel:'manual',orders:5,revenue:210}],
     topups_unassigned:880},
   topCustomers:[{customer_id:5,nickname:'Mei',revenue:980,orders:6}],
   geoCities:[{city:'广州',city_en:'Guangzhou',orders:61,revenue:6100}],
@@ -354,7 +358,12 @@ CASES.push(
     ['with money and orders on each',  `txt('content').includes('¥9,640 · 312')`],
     // Counter fulfilment carries a storefront channel; grouped naively every
     // till sale would count as a mini-app sale.
-    ['the till is its own row, not the mini app', `txt('content').includes('In store') && txt('content').includes('¥1,210')`],
+    // Both carry channel='manual' and the column cannot tell them apart, so the
+    // till is split out by fulfillment_type and the typed-in order keeps the
+    // name the Orders filter gives it. Two ways of selling, two rows.
+    ['the till is its own row',        `txt('content').includes('In store') && txt('content').includes('¥1,210')`],
+    ['the typed-in order has a name',  `txt('content').includes('Manual') && txt('content').includes('¥210')`],
+    ['and no raw server key is shown', `!txt('content').includes('manual')`],
     // The rows cannot add up to the headline and the card says why rather than
     // leaving somebody to check the arithmetic.
     ['top-ups are named as belonging to no channel',

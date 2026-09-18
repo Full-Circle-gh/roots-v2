@@ -3851,7 +3851,11 @@ function dashRenderSplits() {
      them would count as a mini-app sale. */
   const ch = (DASH_DATA.revenue_by_channel || {}).rows || [];
   const chLabel = c => ({ wechat: 'Mini app · 小程序', web: 'Web store · 网店', meituan: 'Meituan · 美团',
-    eleme: 'Eleme · 饿了么', gzgrocery: 'gzgrocery ERP · gzgrocery', pos: 'In store · 门店' }[c] || c);
+    eleme: 'Eleme · 饿了么', gzgrocery: 'gzgrocery ERP · gzgrocery', pos: 'In store · 门店',
+    // A typed-in order shares channel='manual' with a till sale; the till is
+    // split out by fulfillment_type, and what remains keeps the name the Orders
+    // filter already gives it.
+    manual: 'Manual · 手动' }[c] || c);
   if (ch.length) {
     html += '<div class="db-bars-gap"></div>';
     html += dashBarList(ch.map(c => ({ k: chLabel(c.channel), value: dashMoney(c.revenue), frac: c.revenue })));
