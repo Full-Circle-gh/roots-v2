@@ -25,7 +25,8 @@
 //   1. every catalog key has a home, or a named and verified exemption
 //   2. every home selector resolves to a host that exists in the markup
 //   3. no home points at a key the catalog does not carry
-//   4. the exemptions still hold — the file named still writes that key
+//   4. a switch mounted in Settings carries the heading Settings search needs
+//   5. the exemptions still hold — the file named still writes that key
 
 'use strict';
 
@@ -82,7 +83,46 @@ for (const k of Object.keys(HOMES)) {
   ok(KEYS.includes(k), `${k} is still in FEATURE_CATALOG`);
 }
 
-console.log('\n══ 4 · the exemptions still hold ══');
+console.log('\n══ 4 · a switch in Settings can be FOUND in Settings ══');
+// Settings search is built by indexCards() (02-settings-ops.js): for each
+// `#sub-*` panel it walks `.group-card-head h3, .group-card > h3, .card > h3`
+// and takes the heading plus the `.muted`/`label` text beside it as keywords.
+// A host with neither is in no search result at all — which is how both hosts
+// added for §178 and the §32 addendum shipped, and it bites hardest in the one
+// state that matters: with Waste off, gatedOff() drops its rail row from the
+// index too, so "waste" found nothing, including the switch to turn it back on.
+// Only hosts inside #tab-config are asked: a host that IS a top-level tab
+// section (#tab-reviews and friends) is indexed by the rail walk instead.
+function hostMarkup(sel) {
+  const id = sel.slice(1);
+  const open = html.indexOf('id="' + id + '"');
+  if (open < 0) return null;
+  let i = html.lastIndexOf('<', open);
+  // walk forward to this div's matching close
+  let depth = 0, j = i;
+  const tag = /<(\/?)div\b[^>]*?(\/?)>/g;
+  tag.lastIndex = i;
+  let m;
+  while ((m = tag.exec(html))) {
+    if (m[2] === '/') continue;            // self-closing, ignore
+    depth += m[1] === '/' ? -1 : 1;
+    if (depth === 0) { j = m.index + m[0].length; break; }
+  }
+  return html.slice(i, j);
+}
+// `#tab-<something>` is a top-level tab section; anything else is a host inside
+// a Settings sub-panel. That is the whole distinction, and it is the one
+// indexCards() makes too — it is called once per tab and once per `#sub-*`.
+for (const [k, sel] of Object.entries(HOMES)) {
+  if (sel.startsWith('#tab-')) { ok(true, `${k} — its home is a tab section, indexed by the rail walk`); continue; }
+  const markup = hostMarkup(sel);
+  ok(!!markup && /<h3[^>]*>[^<]/.test(markup),
+     `${k} → ${sel} carries a heading, so Settings search can reach the switch`);
+  ok(!!markup && /class="muted"/.test(markup),
+     `and a description line, so it matches more than its own title`);
+}
+
+console.log('\n══ 5 · the exemptions still hold ══');
 for (const [k, file] of Object.entries(EXEMPT)) {
   ok(KEYS.includes(k), `${k} is a real catalog key`);
   ok(read(...file.split('/')).includes(`'features.${k}'`),

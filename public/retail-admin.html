@@ -11373,19 +11373,35 @@
           </div>
 
           <!-- ── Waste (损耗) — §32 addendum ── -->
-          <!-- Switch only. mountFeatureControls() (05-marketing.js) injects the
-               .feat-bar here; its descOn/descOff say what each state means and
-               there is no configuration under it to hide, so this host carries
-               NO data-feat and the CSS needs no .feat-off show rule for it —
-               the injected "off" card stays hidden by the default
-               `.feat-off { display: none }`.
+          <!-- mountFeatureControls() (05-marketing.js) injects the .feat-bar as
+               this host's FIRST child; the card below it is the "what is this"
+               the bar's own descOn/descOff cannot be, because they say what
+               STATE it is in.
+               THE CARD IS NOT DECORATION — IT IS HOW THE SWITCH IS FOUND.
+               Settings search is built by indexCards() (02-settings-ops.js)
+               from `.group-card-head h3` and the `.muted` text beside it. This
+               host shipped EMPTY, so neither was there and the switch was in no
+               search result at all. That bites hardest in the one state where
+               it matters: with Waste off, gatedOff() drops the rail row from
+               the index too, so "waste" / "损耗" found nothing whatsoever —
+               including the only control that turns it back on.
+               NO data-feat ON THIS HOST, deliberately, and that is the
+               difference from #mat-settings-home below: a card that vanishes
+               when the feature is off cannot be what an operator reads to
+               decide to turn it back on. The injected "off" card stays hidden
+               by the default `.feat-off { display: none }`.
                THE SWITCH LIVES HERE AND NOT ON THE WASTE PAGE, which is the
                reason retail-admin.css hides the Waste rail row when the feature
                is off instead of dimming it: a dimmed row leads to a page that
-               still works wearing a badge saying it does not. That rule has
-               been in the CSS since §32 describing a switch that was never
-               mounted anywhere. -->
-          <div id="waste-settings-home"></div>
+               still works wearing a badge saying it does not. -->
+          <div id="waste-settings-home">
+            <div class="group-card">
+              <div class="group-card-head">
+                <h3>Waste · 损耗</h3>
+                <div class="muted">Recording waste moves stock: the on-hand count goes down and the sales channels are told. · 登记损耗会变动库存:库存数量相应减少,并同步至各销售渠道。</div>
+              </div>
+            </div>
+          </div>
 
           <!-- ── Materials (物料) ── -->
           <!-- The on/off switch (.feat-bar) and the "off" card are injected at
@@ -11403,14 +11419,23 @@
           </div>
 
           <!-- ── Low-stock suggestions (此门店库存偏低) — §178 ── -->
-          <!-- Switch only. mountFeatureControls() (05-marketing.js) injects the
-               .feat-bar here, and its descOn/descOff say what the two states
-               mean; there is no configuration under it to hide, so this host
-               carries NO data-feat and the CSS has no .feat-off show rule for
-               it — the injected "off" card stays hidden by the default
-               `.feat-off { display: none }`. An empty host is correct: if the
-               bar fails to mount, no half-control is left behind. -->
-          <div id="lowstock-settings-home"></div>
+          <!-- Same shape as the Waste host above, for the same reason: the card
+               carries the heading and the `.muted` line indexCards() reads, so
+               the switch is reachable from Settings search. This one has no
+               rail row of its own at all, so before the card it could not be
+               found by searching for anything.
+               "An empty host is correct" is what the comment here used to say.
+               It was wrong: a control nobody can find is not a control. NO
+               data-feat, so the card reads the same whichever way the switch is
+               set. -->
+          <div id="lowstock-settings-home">
+            <div class="group-card">
+              <div class="group-card-head">
+                <h3>Running low here · 此门店库存偏低</h3>
+                <div class="muted">Suggestions at the top of a purchase order: the products that store is running low on, each with an Add button. · 采购单顶部的推荐:该门店库存偏低的商品,可直接添加。</div>
+              </div>
+            </div>
+          </div>
 
           <!-- ── Order routing: Maps geocoding ── -->
           <div class="group-card">
