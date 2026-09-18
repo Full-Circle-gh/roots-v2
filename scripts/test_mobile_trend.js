@@ -165,6 +165,14 @@ const FULL = WEEK + `state.trendFull={
   funnel:{delivered:{n:84,revenue:8400},cancelled:{n:3,revenue:300}},
   marketing:{vouchers:[{discount:250,uses:12}]},
   new_vs_returning:{buyers:70,new_buyers:21,returning_buyers:49},
+  /* §169. Three channels that CAN be counted and one that cannot. Eleme is null
+     rather than 0 on purpose: 0 says nobody bought, null says the channel does
+     not tell us, which is the true and permanent answer. */
+  buyers_by_channel:{
+    storefront:{buyers:70,new_buyers:21},
+    meituan:{buyers:34,new_buyers:12,since:'2026-09-15'},
+    wholesale:{buyers:6},
+    eleme:null},
   topCustomers:[{customer_id:5,nickname:'Mei',revenue:980,orders:6}],
   geoCities:[{city:'广州',city_en:'Guangzhou',orders:61,revenue:6100}],
   topProducts:[{product_id:2,name_en:'Falafel Wrap',name_cn:'法拉费卷',units:140,revenue:2800}],
@@ -237,8 +245,17 @@ CASES.push(
     ['and the note stops sending you to a desktop for it', `!txt('content').includes('per-store')`],
   ]],
   ['customers and products', FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','customers'); APP.cmd('trendSection','products');`, [
-    ['buyers are counted',   `txt('content').includes('People bought')`],
+    // Three channels, three rows, NEVER a total — our customer_id, Meituan's
+    // wmUserId and a wholesale phone do not reconcile, so one sum would count
+    // the same person twice with no way to detect it.
+    ['the shop itself is counted', `txt('content').includes('Bought in the shop') && txt('content').includes('70')`],
     ['new ones as a share',  `txt('content').includes('30%')`],
+    ['Meituan is counted too', `txt('content').includes('Bought on Meituan') && txt('content').includes('34')`],
+    ['...with its own new count, not folded into the percentage',
+     `txt('content').includes('12 new')`],
+    ['wholesale is counted',  `txt('content').includes('Bought wholesale') && txt('content').includes('6')`],
+    ['and nothing is summed', `!txt('content').includes('110')`],
+    ['Eleme is absent, not zero', `!txt('content').includes('Bought on Eleme')`],
     ['the city is English on an English phone', `txt('content').includes('Guangzhou · 61 orders')`],
     // topProducts is ORDER BY revenue DESC, so row one is the biggest EARNER and
     // its unit count can be lower than the row beneath it. It was called "Top
@@ -250,6 +267,14 @@ CASES.push(
     // kpis.conversion_rate is the mini app's own, never all-channel orders
     // over sessions — the server fixed that at source and this reads it whole.
     ['conversion is the server\'s',  `txt('content').includes('6.3%')`],
+  ]],
+  ['an older payload with no breakdown still counts buyers',
+   WEEK + `state.trendFull={new_vs_returning:{buyers:70,new_buyers:21}}; APP.cmd('push','trend'); APP.cmd('trendSection','customers');`, [
+    // buyers_by_channel is new. A tenant whose server has not caught up yet
+    // gets the old single figure under its old label rather than an empty card.
+    ['the old label comes back', `txt('content').includes('People bought') && txt('content').includes('70')`],
+    ['and the old note with it',  `txt('content').includes('carry no customer')`],
+    ['not the new one',           `!txt('content').includes('Counted separately')`],
   ]],
   ['retention is full history, not the window', COHORTS + `APP.cmd('push','trend'); APP.cmd('trendSection','customers');`, [
     // 40 of a 100-strong cohort still buying a month on; the cohort too young
@@ -292,7 +317,12 @@ CASES.push(
     ['no mini-app caveat on money', `!txt('content').includes('Mini app only')`],
   ]],
   ['the customer count says who it counts', FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','customers');`, [
-    ['the marketplaces are named as absent', `txt('content').includes('Meituan and Eleme orders carry no customer')`],
+    ['the channels are said to be separate', `txt('content').includes('Counted separately')`],
+    ['Eleme is named as sharing nothing',     `txt('content').includes('Eleme shares no customer')`],
+    // channel_customer_id has only been stored since 2026-09-15, so a longer
+    // window reads low. The date travels with the figure rather than the screen
+    // quietly under-reporting.
+    ['Meituan carries the date it starts from', `txt('content').includes('Meituan from')`],
   ]],
   ['the product ranking says what it leaves out', FULL + `APP.cmd('push','trend'); APP.cmd('trendSection','products');`, [
     // gzgrocery revenue is in the headline; its order lines are filtered out of
@@ -300,7 +330,7 @@ CASES.push(
     ['wholesale is named as excluded', `txt('content').includes('Wholesale pickups are not counted here')`],
   ]],
   ['a closed section does not print its note', FULL + `APP.cmd('push','trend');`, [
-    ['the note rides the open body', `!txt('content').includes('carry no customer')`],
+    ['the note rides the open body', `!txt('content').includes('Counted separately')`],
   ]],
 
   // ── The two ends of the line, and the pattern behind them ──────────────
