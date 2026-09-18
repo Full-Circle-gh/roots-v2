@@ -5274,6 +5274,8 @@ try {
     'integrations.jd.env':           'JD_API_ENV',
     'integrations.feie.user':        'FEIE_USER',
     'integrations.feie.ukey':        'FEIE_UKEY',
+    'integrations.spyun.appid':      'SPYUN_APPID',
+    'integrations.spyun.appsecret':  'SPYUN_APPSECRET',
     'integrations.wecom_app.corp_id':  'WECOM_CORP_ID',
     'integrations.wecom_app.agent_id': 'WECOM_AGENT_ID',
     'integrations.wecom_app.secret':   'WECOM_SECRET',
