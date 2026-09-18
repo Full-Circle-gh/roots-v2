@@ -235,8 +235,12 @@ const pickSlip = slipFor(2);
 const cntrSlip = slipFor(3);
 
 // A hand-over recipient is meaningless when the buyer is at the till holding it.
+// The optional leading tag is markup, not meaning: the recipient block rides
+// <L> since the §171-era slip work (driver-legible time/name/address), and this
+// check is about WHETHER a hand-over recipient is named, not how it is styled.
+// The line anchor and the four-space label discipline are both kept.
 check('receipt To/Tel: delivery yes, pickup yes, counter no',
-  [delSlip, pickSlip, cntrSlip].map(s => /^To {4}/m.test(s)), [true, true, false]);
+  [delSlip, pickSlip, cntrSlip].map(s => /^(?:<[A-Z]+>)?To {4}/m.test(s)), [true, true, false]);
 
 // …EXCEPT THE ONE COUNTER SALE WHERE THE NAME IS THE POINT — §44, §49. A QR
 // order's customer is sitting down waiting to be called, not standing at the
