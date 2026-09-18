@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.313
+# Tacet shared-core consolidation — decisions record, v4.314
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -28,6 +28,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 2026-09-18 · v4.311 — **§172 CORRECTION · A HEADING AT ONE END AND A BUTTON AT THE OTHER ARE NOT ONE CONTROL — REPORTED BY ASH**, on the shipped version: *“its not clear. look where text positioned”*. v4.309's label took the line with `flex: 1` and pushed its button to the far edge of the drawer, rebuilding in a new shape the confusion it was added to end. **The two now sit together**; the Edit button keeps its right-hand seat only once a note exists, where it belongs beside the note line. **The verb changes with the state too** — `Edit · 编辑` is a lie on an empty block, so a bare one offers `Add · 添加`, the live pair the tag row's own button already uses. Nothing minted; `flex: none` and the verb are both asserted in `scripts/test_customer_standing_note.js` so neither is tidied back. Vocabulary v1.130.
 
+
+2026-09-18 · v4.314 — **§98 ADDENDUM 8 · THE REPLACEMENT IS PICKED LINE BY LINE, ITS FREIGHT IS TYPED, AND THE SLIP PRINTS — ALL THREE REPORTED BY ASH** against TC000750 with the case open on screen: *"automatic create an order for all products, maybe the replacement is only for few items?"*, *"didnt ask me for shipping fee, this need to add manually according to our shipping fee for the replacement items"*, and *"didnt print a recipet"*. **THREE FAULTS, ONE ROUTE, AND THE THIRD WAS A HOLE NOBODY HAD LOOKED FOR.** Stage three copied EVERY line of the late parcel at full quantity, so a six-product box with two spoiled salads put six products back on a van and four of them left the shelf for nothing; the browser `confirm()` it asked through could not have asked which. The cost snapshot counted GOODS ONLY, so the figure the carrier's payment is set against — the one question §98 says the case exists to answer — left out the freight, which on a partial replacement is not the whole box's rate and is the half nobody can derive. And the replacement order is **INSERTed `paid` rather than transitioned into it**, so it passed BOTH `autoPrintOrder` call sites (the WeChat callback's and the mark-paid route's) and the counter was asked to pack goods no slip had ever named. **THE SHEET IS THE FIX FOR THE FIRST TWO AND IT DEFAULTS TO THE OLD BEHAVIOUR**: every quantity starts at what went out, so the whole-parcel case — which is the common one — is still one tap, and a partial replacement is the operator typing DOWN rather than up. The original line is the ceiling, on both screens and again on the server, because a sheet is not a rule. **`items` ABSENT IS EVERY LINE AT FULL QUANTITY**, deliberately: a phone that has not been reloaded since the deploy keeps working rather than starting to refuse. **THE FREIGHT IS A COST, NOT A FEE, AND THE DISTINCTION IS THE DECISION.** Ash chose it against putting a `shipping_fee` on the replacement order: that order is ¥0 because nothing is owed, so a fee there would either bill a customer for our own mistake or leave `subtotal + shipping != total` on a paid order, and it would reach the finance delivery-fee sums. `remedy_cost` stays THE TOTAL — goods plus freight — so every reader that predates this keeps reading the right number, and a new `remedy_shipping_cost` carries the breakdown so a total nobody can take apart is not what the carrier's payment gets compared against. **TYPED, NEVER CALCULATED**, which is §98's own rule for the claim amounts and the same reason: every carrier prices a parcel differently and a rate engine here would serve one tenant. **THE RULE IS A PURE FUNCTION** — `resolveReplacementLines` and `replacementCost` in `lib/delay-case.js`, so the two screens and the route cannot drift about what a valid pick is and a test can run it without booting the app. **Tests:** `scripts/test_delay_replacement_lines.js` is new, **15 assertions**, and the two it exists for are the silent ones — a quantity above what was ordered (a giveaway nobody authorised) and a pick resolving to nothing (an empty order with a waybill and no goods in it). **Three breaks were confirmed red**: the ceiling removed, the absent-`items` default changed to a refusal, and the cost taken at the ordered quantity rather than the picked one. **The phone needed one payload change**: `ITEM_TUPLE` had dropped the line's id, so the sheet there could only ever have sent the whole parcel; it is APPENDED at index 6, never inserted, because every other reader indexes 0–5 positionally. **Chinese:** `docs/tacet-delivery-vocabulary.md` v1.132 — four pairs copied whole, one RESTRUCTURED (the live confirm minus `发出同样商品`, which stopped being true), five composed from live fragments. `运费` is **not retired**: it is the fee a customer pays and `运费成本` is what the parcel costs us, which is why the composed word is two characters longer rather than one word doing two jobs. **NOT DONE, and named so it is not assumed:** the replacement still cannot be raised for goods that were not on the original order, nothing books the freight to the ledger (§98's rule that the carrier's payment is the one row this case posts is untouched), and no backfill — a case raised before this deploy has a `remedy_cost` that is goods only and stays that way. A build under an existing decision, hence a patch. No change to `.gitignore` or CI.
 2026-09-18 · v4.310 — **§171 ADDENDUM 1 · THE SIGNATURE WAS WRONG IN THE CASE, AND ONLY THE LIVE API SAID SO.** Hours after §171 shipped, with Ash's Shangpeng credentials in hand, a read-only `GET v1/printer/info` probe — run deliberately BEFORE any test print — returned `{"errorcode":-4,"errormsg":"签名错误"}`. **The algorithm was right and the case was wrong**: the MD5 must be **UPPERCASE**. Twelve conventions were put to the live endpoint; eleven were refused and exactly one got through, the uppercase form of the one already shipped. **This corrects §171's own sourcing claim**, which offered "read off the published `@xesam/cloud-vendor-spyun` client … not recalled" as grounds for trust: that client delegates hashing to an injected signer and so fixes the input string while saying nothing about the output format — a source can be primary and still not answer the question asked of it. 签名错误 names no field and, against freshly-typed credentials, reads exactly like a mistyped APPSECRET, so the wrong thing would have been debugged for hours. `scripts/test_printer_vendors.js` now pins the case **three ways**, one test named for the bug, so deleting an "unnecessary" `.toUpperCase()` fails the build rather than the printer; the lowercase revert was confirmed red. **The transferable part is the probe**: where a vendor's documentation cannot be read — both Shangpeng doc sites are client-rendered and would not open through this session's proxy, which is why the tag map shipped flagged — **the API can still be asked**, in one request, before the hardware is blamed. The tag map remains unverified and still expects a test print. **A second finding, not ours to fix**: with the signature accepted the probe returned `{"errorcode":2,"errormsg":"打印机不存在"}` — the device is not yet bound to the account, an app-side step with the label's KEY, recorded because that message against correct credentials is otherwise alarming to read.
 
 2026-09-18 · v4.309 — **§172 ADDENDUM · THE WRITE END: A CONTROL THAT DOES NOT NAME ITSELF — REPORTED BY ASH**, on the customer page with the cursor inches from it: *“im on customer page wher is it”*. An empty Know block collapsed to a bare `Edit` under the name and said nothing about the two things behind it. It now shows `What we know · 备注与标签` — **not a new string**: the heading the phone's customer record already used for this same block, already locked, arriving on its second surface. **Shown only while the block is empty**, so the space saving that collapsed the old 210px card is kept. **The rejected empty-state stays rejected** — `暂无备注。` names the absence, the heading names the control, and that distinction is the part to keep. `docs/tacet-delivery-vocabulary.md` v1.125 locks nothing new. Covered by `scripts/test_customer_standing_note.js`, including the stylesheet's own `[hidden]` guard — the trap `test_admin_install.js` exists for.
@@ -10633,6 +10635,82 @@ back. There is no equivalent for the alert's *neighbours*, and there could not
 easily be: they are not copies of the predicate, they are things that have to
 agree with it. The cheap defence is the one now taken — one definition, and
 everything that reads it reads it from there.
+
+### §98 addendum 8 — which goods go back out, what the freight cost, and the slip nobody printed (2026-09-18)
+
+Reported by Ash off the live drawer, three faults in one screenshot of TC000750.
+All three are in stage three, which has been in production since 2026-09-11 and
+had never been used on a parcel where only part of it spoiled.
+
+#### 1. It sent the whole parcel, always
+
+The route copied every line of the late parcel at full quantity. That is right
+when the whole parcel spoiled and wrong every other time — Ash's own case was
+two salads in a six-product box, and the other four products left the shelf for
+nothing. **The control could not have asked which**: it was a browser
+`confirm()`, which takes a yes and nothing else.
+
+It is a sheet now, on both surfaces, and **every quantity starts at what went
+out**. The common case stays one tap; a partial replacement is the operator
+typing down. The original line is the ceiling — a replacement is goods being
+re-sent, and more than went out is a new order somebody should raise on purpose.
+
+**`items` absent means every line at full quantity.** That is what the route did
+before, and a client that has not been reloaded since the deploy must keep
+working rather than start refusing to send replacements.
+
+#### 2. The cost left out the freight
+
+`remedy_cost` counted goods only. §98 says the figure exists to answer whether
+the carrier's payment covered putting it right, and the parcel's freight is half
+of what putting it right costs — more of it, proportionally, on a partial
+replacement than on a whole one.
+
+**It is typed, never calculated**, which is §98's rule for the claim amounts and
+the same reason: every carrier prices a parcel differently, and a rate engine
+here would serve one tenant and configure badly for the rest.
+
+**It is a COST, not a FEE, and Ash chose that reading against the alternative.**
+Putting a `shipping_fee` on the replacement order was the other option and it is
+recorded as rejected: the order is ¥0 because nothing is owed, so a fee on it
+either bills a customer for our own mistake or leaves `subtotal + shipping !=
+total` on a paid order, and it would land in the finance delivery-fee sums.
+
+`remedy_cost` **stays the total** — goods plus freight — because every reader
+that predates this column reads it as "what it cost" and would otherwise start
+reading a smaller number. `remedy_shipping_cost` is the breakdown, so the total
+the carrier's payment is compared against can be taken apart by whoever compares
+them.
+
+#### 3. No slip printed, and this one was a hole rather than a change of mind
+
+Every other order reaches the printer on the **transition into `paid`** —
+`autoPrintOrder`, called from the WeChat callback and from the mark-paid route.
+The replacement order is INSERTed `paid` in one statement, so it passed both, and
+the counter was asked to pack goods no ticket had ever named.
+
+It now calls `autoPrintOrder` after `ensureShipments`, fire-and-forget with the
+outcome recorded on the new order, exactly as the other two sites do it — a dead
+printer leaves a reprintable order rather than failing the send.
+
+#### The rule is a pure function, and the phone needed a payload change
+
+`resolveReplacementLines` and `replacementCost` live in `lib/delay-case.js` so
+the drawer, the phone and the route cannot drift about what a valid pick is, and
+so the test runs without booting the app.
+
+`ITEM_TUPLE` on the phone had dropped the line's id, so a sheet there could only
+ever have sent the whole parcel. The id is **appended at index 6, never
+inserted**: `itemRow` and every other reader index 0–5 positionally.
+
+#### Still open, and named so it is not assumed
+
+The replacement cannot carry goods that were not on the original order (a
+substitute for a product now out of stock is still a hand-made order). Nothing
+books the freight to the ledger — §98's rule that the carrier's payment is the
+one row this case posts is untouched. And there is no backfill: a case raised
+before this deploy has a `remedy_cost` that is goods only, and it stays that way,
+because a past incident must not be restated by a later figure.
 
 ## §99 — THE FAPIAO CHASE: A REQUEST NOBODY ISSUED ASKS AGAIN, AND ONLY ISSUING IT STOPS THE ASKING
 

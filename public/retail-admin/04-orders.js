@@ -7700,6 +7700,13 @@ function renderDelayCase(o, s, delayDays) {
   if (dc && dc.remedy_at)   remedyBits.push(escapeHtml(String(dc.remedy_at).slice(0, 16)));
   if (dc && dc.remedy_cost != null) {
     remedyBits.push(cuT(`cost ${ordMoney(dc.remedy_cost)}`, `成本 ${ordMoney(dc.remedy_cost)}`));
+    // THE FREIGHT IS NAMED WHEN THERE IS ONE. `remedy_cost` is the total —
+    // goods plus what it cost to send them — and a total nobody can break down
+    // is the figure the carrier's payment gets compared against in the dark.
+    if (dc.remedy_shipping_cost != null) {
+      remedyBits.push(cuT(`shipping ${ordMoney(dc.remedy_shipping_cost)}`,
+                          `运费 ${ordMoney(dc.remedy_shipping_cost)}`));
+    }
   }
   const remedyNote = (dc && dc.remedy_note) ? escapeHtml(dc.remedy_note) : '';
   // THE THIRD ANSWER IS AN OPT-OUT, NOT A THIRD BUTTON (§125). A customer who
@@ -7931,18 +7938,31 @@ async function delayRemoveEvidence(orderId, sid, fileId) {
   } catch {}
 }
 
-// Raise the ¥0 replacement order (§98 stage three). Unlike every other step
-// this one CREATES something — real stock leaves the building — so it confirms
-// first, and the toast names the order it made rather than saying "saved".
+// Raise the ¥0 replacement order (§98 stage three, addendum 8). Unlike every
+// other step this one CREATES something — real stock leaves the building — so
+// it asks first, and the toast names the order it made rather than "saved".
+//
+// IT USED TO BE A `confirm()` AND SEND THE WHOLE PARCEL. Ash, against TC000750:
+// *"maybe the replacement is only for few items?"* — two spoiled salads in a
+// six-product box sent six products back out. The browser confirm could not ask
+// which, so it is a sheet now: a quantity per line (defaulting to everything,
+// which is the old behaviour one tap away) and the freight typed beside it.
 async function delayReplacement(orderId, sid, ev) {
-  if (!confirm(cuT(
-      'Send a replacement? This creates a no-charge order for the same goods and takes them off the shelf.',
-      '确认补发?将新建一笔零元订单发出同样商品,并从库存中扣除。'))) return;
+  // The lines of the parcel that was late, read off the order already on
+  // screen. Empty means a single-parcel order whose items were never assigned
+  // to a shipment — the whole order IS the parcel, which is the same fallback
+  // the server takes.
+  const o = _OPEN_ORDER && _OPEN_ORDER.id === orderId ? _OPEN_ORDER : null;
+  const ship = o ? (o.shipments || []).find(x => x.id === sid) : null;
+  const lines = (ship && ship.items && ship.items.length) ? ship.items : ((o && o.items) || []);
+  const picked = await pickReplacementLines(lines);
+  if (!picked) return;
   try {
     const j = await adminWrite({
       btn: ev?.currentTarget,
       url: `/api/retail-admin/orders/${orderId}/delay-case/replacement`,
-      method: 'POST', body: { shipment_id: sid },
+      method: 'POST',
+      body: { shipment_id: sid, items: picked.items, shipping_cost: picked.shipping_cost },
       errLabelEn: 'Could not create the replacement', errLabelCn: '补发失败',
     });
     const no = j?.data?.order_no;
@@ -7951,6 +7971,110 @@ async function delayReplacement(orderId, sid, ev) {
     openOrder(orderId, { instant: true });
     loadOrders();
   } catch {}
+}
+
+// The sheet behind Send replacement: WHICH goods, HOW MANY of each, and what
+// the freight costs us. Resolves null when the operator backs out, so the
+// caller's "did they confirm?" is the same question it always asked.
+//
+// EVERY QUANTITY STARTS AT WHAT WENT OUT, so the common case — the whole parcel
+// spoiled — is still one tap, and a partial replacement is the operator typing
+// down rather than up. The ceiling is the original line; the server enforces it
+// again, because a sheet is not a rule.
+//
+// `lines` EMPTY IS NOT A REASON TO REFUSE. A drawer that never loaded its items
+// would strand the operator with no way to send anything, so the sheet asks for
+// the freight alone and posts no `items` — which the route reads as every line
+// at full quantity, exactly as it behaved before this existed.
+function pickReplacementLines(lines) {
+  return new Promise((resolve) => {
+    const rows = (lines || []).map((it) => {
+      const nm  = orderItemNames(it).primary || ('#' + it.id);
+      const max = Number(it.qty) || 1;
+      return `<div class="dcr-row" style="display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--border, #E7E2D8);">
+          <span style="flex:1; min-width:0; font-size:13px;">${escapeHtml(nm)}</span>
+          <input type="number" min="0" max="${max}" step="1" value="${max}"
+                 data-line="${it.id}" data-max="${max}" inputmode="numeric"
+                 style="width:62px; text-align:right;">
+          <span class="muted" style="font-size:12px; min-width:30px;">/ ${max}</span>
+        </div>`;
+    }).join('');
+    const bg = document.createElement('div');
+    bg.className = 'pu-editor-bg tacet';
+    bg.style.display = 'flex';
+    bg.innerHTML = `
+      <div class="pu-editor" style="width: 460px; max-width: 92vw;" role="dialog" aria-modal="true">
+        <div class="pu-editor-head">
+          <div><h3 style="margin:0; font-size:14px;">${cuT('Send replacement', '补发')}</h3></div>
+          <button class="btn" data-cancel>${cuT('Cancel', '取消')}</button>
+        </div>
+        <div class="pu-editor-body" style="grid-template-columns: 1fr; padding:16px 18px; display:block;">
+          <div class="muted" style="font-size:12px; margin-bottom:10px;">${cuT(
+            'This creates a no-charge order and takes the goods off the shelf.',
+            '将新建一笔零元订单,并从库存中扣除。')}</div>
+          ${rows ? `<div style="display:flex; justify-content:space-between; font-size:11px; letter-spacing:.04em; text-transform:uppercase;" class="muted">
+              <span>${cuT('In this parcel', '此包裹内含')}</span><span>${cuT('Qty', '数量')}</span>
+            </div>${rows}` : ''}
+          <label style="display:block; margin-top:14px;">
+            <span style="font-size:12px; font-weight:600;">${cuT('Shipping cost', '运费成本')}</span>
+            <input type="number" min="0" step="0.01" value="" data-shipping inputmode="decimal"
+                   placeholder="0.00" style="width:100%; margin-top:4px;">
+          </label>
+          <div class="dcr-err" style="display:none; color:var(--danger); font-size:12px; margin-top:8px;"></div>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:8px; padding:0 18px 18px;">
+          <button class="btn btn-primary" data-send>${cuT('Send replacement', '补发')}</button>
+        </div>
+      </div>`;
+    mountFloatingPuModal(bg);
+
+    let done = false;
+    const finish = (val) => {
+      if (done) return; done = true;
+      document.removeEventListener('keydown', onKey);
+      bg.remove();
+      resolve(val);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') finish(null); };
+    const err = (msg) => {
+      const box = bg.querySelector('.dcr-err');
+      box.textContent = msg; box.style.display = '';
+    };
+    bg.addEventListener('mousedown', (e) => { if (e.target === bg) finish(null); });
+    bg.querySelectorAll('[data-cancel]').forEach(b => b.addEventListener('click', () => finish(null)));
+    bg.querySelector('[data-send]').addEventListener('click', () => {
+      const shipRaw = String(bg.querySelector('[data-shipping]').value || '').trim();
+      let shipping = 0;
+      if (shipRaw !== '') {
+        shipping = Number(shipRaw);
+        if (!isFinite(shipping) || shipping < 0) {
+          return err(cuT('Enter a shipping cost of 0 or more.', '运费成本需为 0 或以上。'));
+        }
+      }
+      const items = [];
+      let bad = false;
+      bg.querySelectorAll('[data-line]').forEach((el) => {
+        const qty = parseInt(String(el.value || '').trim(), 10);
+        const max = parseInt(el.getAttribute('data-max'), 10);
+        if (!Number.isFinite(qty) || qty < 0 || qty > max) { bad = true; return; }
+        if (qty > 0) items.push({ item_id: parseInt(el.getAttribute('data-line'), 10), qty });
+      });
+      if (bad) return err(cuT('Every line needs a quantity of 1 or more.', '每行数量需为 1 或以上。'));
+      // No lines on screen at all → post none and let the route send the parcel
+      // whole, which is what it did before this sheet existed.
+      const hasRows = !!bg.querySelector('[data-line]');
+      if (hasRows && !items.length) {
+        return err(cuT('Pick at least one line.', '请至少选择一行。'));
+      }
+      finish({ items: hasRows ? items : undefined, shipping_cost: shipping || undefined });
+    });
+    document.addEventListener('keydown', onKey);
+    const first = bg.querySelector('[data-line]') || bg.querySelector('[data-shipping]');
+    // Focus is a convenience: a sheet the operator has to tap into still works,
+    // and an input removed from the DOM between the timer and the tick (they
+    // hit Escape inside 30ms) must not throw into the console.
+    if (first) setTimeout(() => { try { first.focus(); first.select?.(); } catch (e) { /* focus is a convenience, never a failure */ } }, 30);
+  });
 }
 
 // How late this parcel was — READ FROM THE SERVER, not recomputed here.
