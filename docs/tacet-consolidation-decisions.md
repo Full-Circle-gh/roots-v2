@@ -17884,3 +17884,87 @@ zero-stock roll-forward — and the two can differ legitimately, the card being 
 optimistic per-item answer and the checkout the binding per-order one. Where they
 differ the checkout is right, which is the safe direction: the card can only ever
 name a date the checkout then confirms or pushes back, never one it pulls in.
+
+## §171 — A BUYER CAN SAY "NOT THIS ONE", AND THE GRAIN IS THE LINE
+
+**Ash, 2026-09-18, on the From-the-kitchen box:** *"cant delete the request
+directly in this box"*. Asked whether that meant one line or the whole request,
+he chose **one line**.
+
+### WHAT WAS ALREADY TRUE
+
+§86 gave the kitchen's ask exactly one way out: `PUT
+/material-requests/:id/archive`, a soft delete of the WHOLE request. **No screen
+in the product had ever called it.** A buyer looking at the box could tick lines
+into a draft order and do nothing else — a material asked for in error, or
+already sitting in the store room, stayed on the list until somebody bought it.
+
+### THE DECISION
+
+**The buyer strikes off ONE LINE.** `material_request_items.declined_at` (plus
+`declined_by`, `declined_by_name`), set by `PUT
+/material-requests/lines/:lineId/decline`, and the line leaves the buyer's list.
+
+**The grain is §86 part two's grain, for §86 part two's reason.** The line is
+already the unit of sourcing because a buyer splits a morning's flour and oil
+across two suppliers as a matter of course. Refusing works the same way: in the
+box Ash was looking at, one request held a food container and a desiccant, and a
+buyer who will not buy the desiccant still wants the containers. Whole-request
+withdrawal cannot express that, which is why it was not what got built.
+
+**Withdrawal is not replaced.** `archived_at` still means the request is gone,
+and the archive route is untouched.
+
+### IT IS ONE-WAY, AND THAT IS §86's OWN RULE, NOT A SHORTCUT
+
+There is no un-strike. §86 already says what happens when a sent request needs
+changing: *"A sent request is withdrawn (archived) and raised again."* The ask
+belongs to the kitchen, so a buyer putting a line back would be the buyer
+re-raising somebody else's request. It also keeps the rollup's auto-archive
+below unambiguous — there is no state where a request is archived because its
+lines were struck and then un-struck underneath it.
+
+### THE ROLLUP: A STRUCK LINE LEAVES THE SUM, IT DOES NOT COUNT AS DONE
+
+`rollUp` counts only lines with `declined_at IS NULL`. The alternative — counting
+a struck line as done — would flip a request to `sourced`, whose meaning is
+*every line reached a purchase order*, over lines nobody bought. `sourced` is a
+word the books are read through and it is not being loosened.
+
+**And when nothing is left: the request is withdrawn.** Every line struck off
+with none ever sourced sets `archived_at`. Left alone, such a request would sit
+in the open tab forever with nothing outstanding on it — a row that costs a click
+and says nothing, which is the shape this module already refuses at POST. It is
+safe to do automatically precisely because striking off is one-way and a line on
+a purchase order cannot be struck at all.
+
+### TWO REFUSALS, BOTH STALE-SCREEN CASES
+
+A line already on a purchase order **cannot be struck off** (409
+`already_sourced`) — for archiving's reason at the line's grain: it would hide
+the ask while its purchase stands. Delete the order first, which releases the
+line, then strike it.
+
+A struck line **cannot be turned into an order** (409 `line_declined`, from
+`POST /purchases/from-material-requests`). It left the picker when it was
+struck, so this is the second-buyer case: a tick made before somebody else
+refused it. Reported by name, never skipped — silence on a ticked line reads as
+"ordered".
+
+### THE OTHER HALF OF THE SAME BRIEF — A FOOTER NOBODY COULD READ
+
+Ash's first point was *"one button is not clear on the buttom left"*. The
+From-the-kitchen modal (`#pu2-mrmodal`) was built on the copy-from-kitchen
+picker's shell but was **left out of that shell's CSS block**, which only ever
+named `#pu2-kmodal`. So its footer stayed one unwrapped flex row holding six
+items in a 680px modal: the store picker was squeezed until its label broke over
+three lines and its select was too narrow to read a store's name in. Both ids are
+now named in every rule of that block. **A layout fix written for one picker and
+not its twin is the same bug waiting** — which is what this was.
+
+### NOT DECIDED HERE
+
+**Whether the kitchen is told.** `declined_at` records who refused a line and
+when, and nothing shows it to the cook who asked — the kitchen has no screen for
+its own sent requests at all today. Building one is a different brief; the record
+is being kept now so that screen has something true to show when it exists.
