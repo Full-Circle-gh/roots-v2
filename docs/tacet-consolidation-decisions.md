@@ -18285,3 +18285,59 @@ a line off is defensible, and it is a different question: it needs a channel, an
 a rule about what is worth interrupting a cook mid-service for. The record
 (`declined_at`, `declined_by_name`) is being kept either way, so that decision is
 not blocked by this one.
+
+## §176 — THE KITCHEN'S ASK CARRIES ITS OWN URGENCY, PER LINE, AND THE DATE IS THE OTHER END OF THE SAME DIAL
+
+**Decided by Ash, 2026-09-18.** Three asks in one brief, from the kitchen:
+*"need to add a mark that mention urgent order so buying department will know
+to priorities"*, and then *"each item add an option to add buying date, kitchen
+staff basiclly can tell the buying deparmtent that this item can be bought
+later, its not urgent"*.
+
+**THE SHAPE WAS PUT AS THREE OPTIONS AND ASH CHOSE C.** Both marks sit on the
+LINE, not on the request: each item carries its own `urgent` flag and its own
+`needed_by` date, and a request has neither of its own. The alternatives were
+A — one urgent switch for the whole request plus a per-line date, which is the
+brief read literally — and B — one "when do you need it" control per line, with
+the soonest bucket standing in for urgent.
+
+**THE OBJECTION WAS RAISED BEFORE THE CHOICE AND IS RECORDED HERE BECAUSE IT
+SURVIVES IT.** Urgent and "this can wait until the 30th" are the two ends of
+one dial, and C lets a line say both at once: `urgent = 1` with
+`needed_by = next Tuesday` is a line whose two fields disagree, and nothing in
+the schema or the route can stop it. Ash chose C with that stated. So the
+contradiction is a fact about the data from this section on, and the rule is
+that **THE URGENT FLAG WINS WHEREVER THE TWO DISAGREE**: the buyer's list sorts
+on `urgent` first and `needed_by` only within it, and the row prints both marks
+rather than resolving them, because a screen that silently picked one would be
+deciding something the kitchen said twice. A buyer seeing "Urgent · by 30 Sep"
+is being told the truth about a request that contains one.
+
+**NEITHER MARK IS REQUIRED, AND NEITHER IS PREFILLED.** §39's no-prefill rule
+applies for §39's reason: an urgency nobody claimed is an urgency nobody meant.
+A line with neither is the ordinary case and must stay one tap — which is why
+both controls appear only on a row that already has a quantity, and why a
+request of plain lines looks exactly as it did before this section.
+
+**THE MERGE IS THE SAFE DIRECTION, NOT THE LAST ONE.** §86's one-material-one-line
+rule adds the quantities when the same material arrives twice in one request.
+The new fields cannot be added, so: `urgent` is OR-ed, and `needed_by` takes the
+EARLIER of the two, with a missing date treated as later than any date. Both
+rules err toward buying sooner. The opposite — last-write-wins — would let the
+second of two identical lines quietly cancel the first's urgency, which is the
+one failure a kitchen would never see coming.
+
+**NO UNIT ARITHMETIC AND NO STATUS ARITHMETIC.** `needed_by` is a plain date the
+kitchen typed. It is not a deadline the system enforces, nothing expires on it,
+and a date in the past is accepted rather than refused: a line that was needed
+yesterday is late, which is information, and refusing it would only mean the
+kitchen writes the real date somewhere the buyer cannot see. §86's rollup is
+untouched — `sourced` still means every line has a PO, and urgency has no
+bearing on it.
+
+**WHAT IS NOT DECIDED HERE.** No notification, no push, no escalation and no
+rail-dot colour: the dot §171's neighbour put on the Purchasing rail counts the
+queue, and whether an urgent line should change its colour is that section's
+question, not this one. No urgency on the purchase order either — a PO is the
+buyer's document and its priority is the buyer's to set, which is the same line
+§86 drew when it refused to let a cook's tap reach the books.

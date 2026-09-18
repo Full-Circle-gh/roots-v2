@@ -56,6 +56,11 @@ addColumn('production_batches', 'qty_made',    'REAL');
 addColumn('production_batches', 'qty_shelved', 'REAL');
 addColumn('production_batches', 'gap_reason',  'TEXT');
 addColumn('production_batches', 'request_id',  'INTEGER');
+// §176 — the kitchen's ask carries its own urgency and its own date, PER LINE.
+// Both nullable with a benign default: every row written before this section is
+// a line with no urgency and no date, which is exactly what it meant.
+addColumn('material_request_items', 'urgent',    'INTEGER DEFAULT 0');
+addColumn('material_request_items', 'needed_by', 'DATE');
 // Created HERE and not in schema.sql: that file runs before these ALTERs, so on
 // an existing database the index would name a column that does not exist yet
 // and refuse — taking the boot with it. Asked of the store and the day, which
