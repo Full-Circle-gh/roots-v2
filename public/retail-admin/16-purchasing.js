@@ -1246,7 +1246,8 @@
 
         <div id="pu2-sortbar"></div>
 
-        <table class="pu2-tbl pu2-lines" style="margin-top:10px">
+        <div class="pu2-linescroll">
+        <table class="pu2-tbl pu2-lines">
           <thead><tr>
             <th class="pu2-c-grip"></th>
             <th>${esc(T('Product', '商品'))}</th>
@@ -1254,10 +1255,11 @@
             <th>${esc(T('Quantity', '数量'))}</th>
             <th class="right">${esc(T('Cost each', '单价'))}</th>
             <th class="right">${esc(T('Line total', '小计'))}</th>
-            <th></th>
+            <th class="pu2-c-rm"></th>
           </tr></thead>
           <tbody id="pu2-linebody"></tbody>
         </table>
+        </div>
 
         <div class="pu2-wizfoot">
           <button class="pu2-btn ghost" onclick="puWizStep(1)">${esc(T('Back', '上一步'))}</button>
@@ -1330,7 +1332,11 @@
       // retail PO history at all — rendered as dead text with no way to set
       // or change its supplier.
       const supOpen = _supLine === i;
-      const supBlock = `<div class="pu2-supline"><span class="pu2-supchip${supOpen ? ' on' : ''}" onclick="puLineSup(${i})">${supLabel} <span class="swap">▾</span></span></div>`;
+      // The name sits in its own span because the chip is capped at the column's
+      // width (see .pu2-supchip) and only an element can be ellipsised — a bare
+      // text node inside the flex chip would just overflow it. The full name
+      // goes on the title, so a truncated one is still readable on hover.
+      const supBlock = `<div class="pu2-supline"><span class="pu2-supchip${supOpen ? ' on' : ''}" title="${supLabel}" onclick="puLineSup(${i})"><span class="nm">${supLabel}</span><span class="swap">▾</span></span></div>`;
       const noteBlock = `<input class="pu2-input pu2-linenote" type="text" value="${esc(it.note || '')}"
         placeholder="${esc(T('Note', '备注'))}" onchange="puLine(${i},'note',this.value)">`;
       // A TYPED LINE — neither catalogue behind it — is the one line whose name,
@@ -1373,7 +1379,7 @@
         : `<span class="pu2-costunit">/${esc(unitLabel(it.unit || 'pcs'))}</span>`;
       return `<tr ondragover="puLineDragOver(event,${i})" ondragleave="puLineDragLeave(event)" ondrop="puLineDrop(event,${i})" ondragend="puLineDragEnd()">
         <td class="pu2-c-grip"><span class="pu2-grip" draggable="true" title="${esc(T('Drag to reorder', '拖动排序'))}" ondragstart="puLineDragStart(event,${i})">⠿</span></td>
-        <td>${nameBlock}
+        <td class="pu2-c-prod">${nameBlock}
           ${supBlock}${catBlock}${noteBlock}</td>
         <td class="right pu2-num" style="color:var(--td-text2)">${it.current_stock != null ? it.current_stock : '—'}</td>
         <td>
@@ -1388,7 +1394,7 @@
           ${lastPaid(it)}
         </td>
         <td class="right pu2-num">${money(lineTotal)}</td>
-        <td class="right"><button class="pu2-btn ghost sm" title="${esc(T('Remove', '移除'))}" onclick="puRemoveLine(${i})">✕</button></td>
+        <td class="right pu2-c-rm"><button class="pu2-btn ghost sm" title="${esc(T('Remove', '移除'))}" onclick="puRemoveLine(${i})">✕</button></td>
       </tr>${supOpen ? `<tr class="pu2-supedit"><td colspan="7">${supPickerHtml(it)}</td></tr>` : ''}`;
     }).join('');
     const total = _edit.items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.cost_per_unit) || 0), 0);

@@ -11094,9 +11094,23 @@
 
   /* per-line supplier chip */
   #prod-view-purchasing .pu2-supline { margin-top: 6px; }
+  /* THE CHIP IS CAPPED BECAUSE THE TABLE AROUND IT CANNOT BE. A supplier name
+     is a company's registered name, not a label anyone chose for this screen —
+     "Dongguan Meitian Packaging Products Co., Ltd." is 330px of nowrap text.
+     An auto-layout table cannot lay a column narrower than its widest
+     unbreakable child, so that one chip set the Product column's floor, the
+     table grew to 907px inside an 824px card, and the ✕ column was pushed out
+     onto the page background beside the card. Capped at the same 220px the
+     note, name and category boxes below it already use, so the column keeps
+     one width down its whole height; the name that no longer fits is not lost,
+     it is on the chip's title and in the picker the chip opens. */
   #prod-view-purchasing .pu2-supchip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--td-text);
     border: 1px solid var(--td-border); border-radius: 999px; padding: 3px 10px; background: var(--td-surface, #fff);
-    cursor: pointer; white-space: nowrap; transition: border-color .2s cubic-bezier(.16,1,.3,1); }
+    cursor: pointer; white-space: nowrap; max-width: 220px; transition: border-color .2s cubic-bezier(.16,1,.3,1); }
+  #prod-view-purchasing .pu2-supchip .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  /* The caret is the affordance — it is what says the chip opens something —
+     so it is never the part that gets squeezed out to make room for the name. */
+  #prod-view-purchasing .pu2-supchip .swap { flex: none; }
   #prod-view-purchasing .pu2-supchip:hover { border-color: var(--td-text2); }
   #prod-view-purchasing .pu2-supchip.on { border-color: var(--td-dusk); }
   /* the picker opens in the line's own row, right under the chip that opened
@@ -11316,7 +11330,39 @@
   #prod-view-purchasing .pu2-sugrow .pu2-btn { margin-left: auto; }
 
   /* line editor */
+  /* THE LAST RESORT, NOT THE FIRST. Every other column in this table holds a
+     control of fixed size — the stepper, the cost box, the caps above — so
+     below roughly 850px of card there is no width left to give back and the
+     table has to go somewhere. Scrolling inside the card is the only place
+     that is not ON TOP OF THE PAGE: what spilled before was the remove ✕,
+     sitting out on the background beside the card with nothing to say it
+     belonged to the row. At the card's own 880px nothing here fires — the
+     table fits and no scrollbar appears. Safe to make a scroll container
+     because the one menu that could be clipped by it, .pu2-suggest-menu, is
+     position:fixed on <body> by design (see its note above); the supplier
+     picker is an ordinary row inside the table and scrolls with it. */
+  #prod-view-purchasing .pu2-linescroll { overflow-x: auto; margin-top: 10px; }
   #prod-view-purchasing .pu2-lines td { vertical-align: middle; }
+  /* The product cell is the only elastic column in this table — every other one
+     holds a control of fixed size — so it is the one that absorbs a long name
+     rather than handing the width on to the table. `break-word` and NOT
+     `anywhere`, which was tried first and made the names worse: `anywhere`
+     counts toward intrinsic sizing, so min-content for the column dropped to a
+     single character, the auto table layout handed the column far less width
+     than it had before, and a name that used to read over three lines broke
+     over four in a narrower ribbon. `break-word` leaves the column's natural
+     width alone and only breaks a token that would otherwise spill. A part
+     number with no space in it can therefore still be wider than the column;
+     that case lands in the scroll container below rather than on the page. */
+  #prod-view-purchasing .pu2-lines td.pu2-c-prod { overflow-wrap: break-word; }
+  /* Shrink-to-fit, so the remove column takes the button's width and no share
+     of whatever is left over — the ✕ stays against the last number instead of
+     drifting away from the row it belongs to. On its own class and not
+     `td:last-child`, which would also catch the two full-width rows this table
+     carries — the supplier picker and the empty state, both colspan=7 — and set
+     them nowrap. */
+  #prod-view-purchasing .pu2-lines th.pu2-c-rm,
+  #prod-view-purchasing .pu2-lines td.pu2-c-rm { width: 1%; white-space: nowrap; }
 
   /* Reordering the lines: chips put the WHOLE order in one order, the grip
      moves ONE line. The chip goes dark the moment a line is dragged, because
