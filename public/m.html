@@ -15159,6 +15159,11 @@ function sheetOrderDetail(){
          <span style="font-size:14px;color:var(--brick-ink)">${state.orderErr}</span></div>`:''}
        ${orderHeadMarks(o)}
        ${refundPanel(o)}
+       ${(o.custStanding||(o.custTags&&o.custTags.length))?`<div class="card" style="padding:14px;border-color:var(--amber-ink)">
+         <div style="display:flex;align-items:center;gap:8px;color:var(--amber-ink)">${ic('pencil',16)}<span class="eyebrow" style="color:var(--amber-ink)">${T('About this customer','关于该顾客的备注')}</span>
+           ${o.custId!=null?`<button class="btn2" style="margin-left:auto;padding:4px 12px;min-height:34px" onclick="APP.cmd('openCustomerFromOrder',${Number(o.custId)})">${T('Edit','编辑')}</button>`:''}</div>
+         ${o.custStanding?`<div style="font-size:14.5px;line-height:1.55;margin-top:8px;white-space:pre-wrap">${escAttr(o.custStanding)}</div>`:''}
+         ${o.custTags&&o.custTags.length?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">${o.custTags.map(t=>`<span class="pill" style="background:var(--amber-tint);color:var(--amber-ink)">${escAttr(t)}</span>`).join('')}</div>`:''}</div>`:''}
        ${o.custNote?`<div class="card" style="padding:14px;border-color:var(--accent)">
          <div style="display:flex;align-items:center;gap:8px;color:var(--accent)">${ic('message-square-text',16)}<span class="eyebrow" style="color:var(--accent)">${T('Customer note','顾客备注')}</span></div>
          <div style="font-size:14.5px;line-height:1.55;margin-top:8px;white-space:pre-wrap">${escAttr(o.custNote)}</div></div>`:''}
@@ -22000,6 +22005,13 @@ function mapDetail(o){
   // The facts the desktop drawer carries and this one did not. Every one of
   // them is already in the payload — the drawer was simply not reading them.
   base.custNote=(o.customer_note||'').trim()||null;         // what the CUSTOMER asked for
+  /* What the SHOP knows about the PERSON, not this order: typed once on the
+     customer page (`retail_customers.note`/`.tags`) and read on every order
+     they place. Read-only here — the Edit button opens the customer, so there
+     stays exactly one copy to correct. Null whenever no customer is linked
+     (walk-ins, most channel orders), which renders nothing at all. */
+  base.custStanding=(o.customer_standing_note||'').trim()||null;
+  base.custTags=String(o.customer_standing_tags||'').split(',').map(t=>t.trim()).filter(Boolean);
   /* What the SHOP told itself about this order. NOT trimmed: this is the
      baseline the editor compares against to decide whether anything changed,
      and the server stores the string as given (blanking it only when it trims
