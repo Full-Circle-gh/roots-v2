@@ -28199,12 +28199,34 @@ router.delete('/api/retail-admin/orders/:id/delay-case/evidence/:fileId',
 // order — the order's lines are ¥0, which is what makes it a replacement, so
 // the order cannot answer the one question worth asking: did the carrier's
 // payment cover putting this right.
+//
+// THREE THINGS THE OPERATOR NOW SAYS, AND ALL THREE ARE §98 ADDENDUM 8.
+// `items` — which lines go back out and how many of each, because a six-product
+// box with two spoiled salads used to send six products. `shipping_cost` — what
+// the freight costs us, typed, because a partial replacement is not the whole
+// box's rate and nothing here could work it out. And the SLIP PRINTS: the order
+// is INSERTed 'paid' rather than transitioned into it, so neither of the two
+// autoPrintOrder call sites ever fired and the counter got no ticket for goods
+// it was expected to pack.
+//
+// `items` ABSENT IS EVERY LINE AT FULL QUANTITY — what this route did before,
+// kept so a client that has not been reloaded since the deploy still works.
 router.post('/api/retail-admin/orders/:id/delay-case/replacement',
   requireRetailAdmin, express.json(), (req, res) => {
   const id  = parseInt(req.params.id, 10);
   const sid = parseInt(req.body?.shipment_id, 10);
   if (!Number.isInteger(id) || !Number.isInteger(sid)) {
     return res.status(400).json({ success: false, error: 'bad_request' });
+  }
+  // Typed, never calculated — §98's rule for the claim amounts, and the same
+  // reason: every carrier prices a parcel differently.
+  let shippingCost = 0;
+  if (req.body?.shipping_cost != null && req.body.shipping_cost !== '') {
+    shippingCost = Number(req.body.shipping_cost);
+    if (!Number.isFinite(shippingCost) || shippingCost < 0) {
+      return res.status(400).json({ success: false, error: 'bad_shipping_cost' });
+    }
+    shippingCost = Math.round(shippingCost * 100) / 100;
   }
   const src = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(id);
   if (!src) return res.status(404).json({ success: false, error: 'not_found' });
@@ -28228,6 +28250,16 @@ router.post('/api/retail-admin/orders/:id/delay-case/replacement',
     lines = tdb().prepare('SELECT * FROM retail_order_items WHERE order_id = ?').all(id);
   }
   if (!lines.length) return res.status(400).json({ success: false, error: 'no_items' });
+
+  // WHICH OF THEM, AND HOW MANY. The rule lives in lib/delay-case.js so a test
+  // can run it without booting the app, and so the two screens and this route
+  // cannot drift about what a valid pick is.
+  const pickResult = delayCase.resolveReplacementLines(
+    lines, req.body?.items === undefined ? null : req.body.items);
+  if (pickResult.error) {
+    return res.status(400).json({ success: false, error: pickResult.error });
+  }
+  const picked = pickResult.picked;
 
   const actor = { id: req.user.id, label: req.user.username || null };
   let out;
@@ -28256,9 +28288,10 @@ router.post('/api/retail-admin/orders/:id/delay-case/replacement',
           (order_id, product_id, name_en, name_cn, sku, size, image_url,
            qty, unit_price, line_total, options_json, ship_modes, needs_ice_pack)
         VALUES (?,?,?,?,?,?,?,?,0,0,?,?,?)`);
-      for (const l of lines) {
+      for (const p of picked) {
+        const l = p.line;
         ins.run(newId, l.product_id, l.name_en, l.name_cn, l.sku, l.size, l.image_url,
-                l.qty, l.options_json, l.ship_modes, l.needs_ice_pack || 0);
+                p.qty, l.options_json, l.ship_modes, l.needs_ice_pack || 0);
       }
       return { newId, orderNo };
     });
@@ -28267,17 +28300,13 @@ router.post('/api/retail-admin/orders/:id/delay-case/replacement',
     return res.status(500).json({ success: false, error: 'save_failed' });
   }
 
-  // What it cost us, snapshot now. Best-effort per line: a product with no cost
-  // on file contributes nothing rather than blocking the replacement, and the
-  // figure is a comparison aid, never a ledger entry.
-  let cost = 0;
-  for (const l of lines) {
-    try {
-      const unit = l.product_id ? productUnitCostYuan(l.product_id) : 0;
-      if (unit > 0) cost += unit * (Number(l.qty) || 0);
-    } catch (e) { /* uncosted line — see above */ }
-  }
-  cost = Math.round(cost * 100) / 100;
+  // What it cost us, snapshot now — goods at the quantities actually sent, plus
+  // the typed freight. Best-effort per line: a product with no cost on file
+  // contributes nothing rather than blocking the replacement, and the figure is
+  // a comparison aid, never a ledger entry.
+  const costs = delayCase.replacementCost(
+    picked, (pid) => productUnitCostYuan(pid), shippingCost);
+  const cost = costs.total;
 
   try {
     delayCase.applyStep(tdb(), {
@@ -28285,16 +28314,30 @@ router.post('/api/retail-admin/orders/:id/delay-case/replacement',
       payload: { kind: 'replacement', note: out.orderNo }, actor,
     });
     tdb().prepare(
-      'UPDATE retail_delay_cases SET remedy_order_id = ?, remedy_cost = ? WHERE shipment_id = ?'
-    ).run(out.newId, cost > 0 ? cost : null, sid);
+      `UPDATE retail_delay_cases
+          SET remedy_order_id = ?, remedy_cost = ?, remedy_shipping_cost = ?
+        WHERE shipment_id = ?`
+    ).run(out.newId, cost != null && cost > 0 ? cost : null, costs.shipping, sid);
   } catch (e) { console.error('[delay-case remedy]', id, sid, e && e.message); }
 
   // Plan the parcel so the operator lands on an order that already has a
   // shipment to put a waybill on, exactly as any other order would.
   try { ensureShipments(out.newId); } catch (e) { /* planned on first read instead */ }
 
+  // THE COUNTER GETS ITS TICKET. Every other order reaches the printer on the
+  // transition INTO 'paid' — the WeChat callback's or the mark-paid route's
+  // autoPrintOrder — and this one is INSERTed 'paid', so it passed both and the
+  // packer was asked for goods no slip had ever named. Fire-and-forget with the
+  // outcome recorded on the new order, exactly as the other two sites do it, so
+  // a dead printer leaves a reprintable order rather than failing the send.
+  try { autoPrintOrder(out.newId); } catch (e) { /* recorded on the order */ }
+
   logActivity(req.user.id, req.user.username, 'delay_case_replacement', 'retail_order', id,
-    { shipment_id: sid, replacement_order_id: out.newId, order_no: out.orderNo, cost }, req.ip);
+    { shipment_id: sid, replacement_order_id: out.newId, order_no: out.orderNo, cost,
+      shipping_cost: costs.shipping,
+      lines: picked.map(p => ({ item_id: p.line.id, qty: p.qty })),
+      partial: picked.length !== lines.length ||
+               picked.some(p => p.qty !== (Number(p.line.qty) || 0)) }, req.ip);
   res.json({ success: true, data: {
     order_id: out.newId, order_no: out.orderNo, cost,
     case: delayCase.forScreen(tdb(), delayCase.readCase(tdb(), sid)),

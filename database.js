@@ -4191,6 +4191,23 @@ addColumn('retail_delay_cases', 'settled_by',         'TEXT');
 addColumn('retail_delay_cases', 'remedy_order_id', 'INTEGER');
 addColumn('retail_delay_cases', 'remedy_cost',     'REAL');
 
+// The freight half of `remedy_cost` (§98 addendum 8). Ash: the replacement's
+// shipping "need to add manually according to our shipping fee for the
+// replacement items" — a partial replacement costs a different freight from
+// the whole box, and no rate this repository holds could tell us which.
+//
+// IT IS A BREAKDOWN, NOT A SECOND FIGURE. `remedy_cost` stays the TOTAL cost
+// of putting it right, which is what the carrier's payment is set against, so
+// every reader that predates this column keeps reading the right number. This
+// one exists only so a screen can say what that total is made of.
+//
+// NOT `retail_orders.shipping_fee` ON THE REPLACEMENT, and the distinction is
+// the decision: the replacement is a ¥0 order because nothing is owed, and a
+// shipping fee on it would either bill a customer for our own mistake or leave
+// `subtotal + shipping != total` on a paid order. This is what the freight
+// COST US, and cost belongs on the case (§98's own rule).
+addColumn('retail_delay_cases', 'remedy_shipping_cost', 'REAL');
+
 // ── The evidence sent to the carrier (§98) ──────────────────────────────────
 // Photographs of the spoiled goods, the tracking record, whatever was attached
 // to the claim. §98 left this open: the claim reference and the amounts were in
