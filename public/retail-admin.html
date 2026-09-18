@@ -11372,6 +11372,21 @@
             </div>
           </div>
 
+          <!-- ── Waste (损耗) — §32 addendum ── -->
+          <!-- Switch only. mountFeatureControls() (05-marketing.js) injects the
+               .feat-bar here; its descOn/descOff say what each state means and
+               there is no configuration under it to hide, so this host carries
+               NO data-feat and the CSS needs no .feat-off show rule for it —
+               the injected "off" card stays hidden by the default
+               `.feat-off { display: none }`.
+               THE SWITCH LIVES HERE AND NOT ON THE WASTE PAGE, which is the
+               reason retail-admin.css hides the Waste rail row when the feature
+               is off instead of dimming it: a dimmed row leads to a page that
+               still works wearing a badge saying it does not. That rule has
+               been in the CSS since §32 describing a switch that was never
+               mounted anywhere. -->
+          <div id="waste-settings-home"></div>
+
           <!-- ── Materials (物料) ── -->
           <!-- The on/off switch (.feat-bar) and the "off" card are injected at
                the top of #mat-settings-home by mountFeatureControls()

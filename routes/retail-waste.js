@@ -103,9 +103,15 @@ const W_COLS = ROW_COLS.split(',').map(c => c.trim()).filter(Boolean).map(c => '
 // row is also ON — a loss must not silently fail to record because a config read
 // hiccuped.
 //
-// There is no Settings UI for this yet (see the PR description); the reader
-// exists so the switch has one meaning the day the control is added, rather than
-// being invented twice.
+// THE CONTROL NOW EXISTS, and this comment used to say it did not: "There is no
+// Settings UI for this yet — the reader exists so the switch has one meaning the
+// day the control is added." That day was a long time coming. `waste` sat in the
+// client's FEATURE_CATALOG with no FEATURE_HOMES entry, so no switch was ever
+// mounted and this reader answered ON for every account, always. It is in
+// Settings → Operations now (`#waste-settings-home`), writing this same
+// `features.waste` key, which is what the reader was built to wait for.
+// scripts/test_feature_switches_mount.js fails if a catalog entry loses its
+// mounting point again.
 function wasteEnabled(db) {
   try {
     const row = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'features.waste'").get();
