@@ -1953,12 +1953,22 @@ function prepareCommitUnreservedOrder(orderId, { actorUserId = null, actorLabel 
 //
 // A supplier (drop-ship) parcel is not special-cased. It holds nothing the
 // kitchen makes, so it never carries a line this can hold back.
+//
+// §180 — A PACKED PARCEL IS NOT STILL IN THE BUILDING, for this question. What
+// this holds back is food that has not come out of the fridge, and packing a box
+// is exactly when it does: the prepare route takes that box's stock on the way
+// past. Without `prepared_at IS NULL` here, a fresh product split across TWO
+// parked boxes is held back by each one on behalf of the other and settles on
+// neither — it would wait for a dispatch, which is the count staying wrong for
+// as long as both boxes sit there packed. That is the case this section was
+// reported for.
 function parcelsStillInTheBuilding(orderId, shipmentId) {
   const sid = parseInt(shipmentId, 10) || 0;
   return new Set(
     tdb().prepare(
       `SELECT id FROM retail_shipments
         WHERE order_id = ? AND id != ?
+          AND prepared_at IS NULL
           AND dispatched_at IS NULL AND delivered_at IS NULL`
     ).all(orderId, sid).map((r) => r.id)
   );
@@ -10261,10 +10271,27 @@ function mergeAddonItemsIntoShipments(orderId, newItemIds) {
 
 // Per-shipment fulfillment state, derived purely from the timestamp columns
 // (no stored status column). delivered wins over dispatched wins over pending.
+//
+// §180 — 'prepared' IS DELIBERATELY NOT A FOURTH VALUE HERE. A packed box has
+// not left, and half a dozen call sites read `state === 'pending'` to mean
+// "still in the building": canDispatch and canSplit on both screens, the
+// local-ETA and per-shipment tracking cards, and the partial rollup below. All
+// of them must keep answering the same way for a packed parcel — a fourth value
+// would have needed every one edited correctly, and the failure mode is a
+// prepared box nobody can dispatch. Packed-ness rides beside this as its own
+// flag (shipmentPrepared), not inside it.
 function shipmentState(s) {
   if (s.delivered_at)  return 'delivered';
   if (s.dispatched_at) return 'dispatched';
   return 'pending';
+}
+
+// §180 — is this parcel packed and still here? The timestamp is kept once the
+// parcel ships (it is a record of when the box was made up), but the FLAG is
+// only meaningful while the box is still in the building, because that is the
+// only time the pill and the button have anything to say.
+function shipmentPrepared(s) {
+  return !!s.prepared_at && !s.dispatched_at && !s.delivered_at;
 }
 
 // Roll the per-shipment states up into one order-level fulfillment summary so
@@ -27052,6 +27079,8 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     local_eta:     s.local_eta || null,   // 'HH:MM' arrival time for local delivery (no waybill)
     eta_source:    s.eta_source || null,  // 'auto' = from Qingyun courier, 'manual' = operator-set
     state: shipmentState(s),
+    prepared_at: s.prepared_at || null,   // §180 — when this box was packed
+    prepared:    shipmentPrepared(s),     // packed AND still here (drives pill + button)
     items: o.items.filter(it => it.shipment_id === s.id),
     tracking: buildShipmentTrackingView(s),
   }));
@@ -27927,6 +27956,77 @@ router.post('/api/retail-admin/orders/:id/address/apply-chinese',
 // existing status machine); subsequent parcels just stamp their own
 // dispatched_at. Waybills are attached afterwards through the per-shipment
 // tracking card (PUT /tracking), which is unlocked once the order is dispatched.
+// §180 — MARK ONE PARCEL PACKED. The step that did not exist.
+//
+// A split order's second parcel had no way forward once the first one left: the
+// order is 'dispatched' by then, so the drawer's order-level "Start preparing"
+// is gone and cannot return (STATUS_TRANSITIONS.preparing.prev is
+// ['paid','awaiting_restock'], and undo-dispatch is refused once any parcel
+// carries a waybill — exactly the case this is for). The box sat there, and its
+// stock sat on the count with it.
+//
+// WHAT THIS DOES TO STOCK IS THE WHOLE POINT, and it is not a new mechanism:
+// packing a parcel is a forward step into fulfilment just as dispatching one is,
+// so it makes the SAME scoped commit the dispatch route makes (§58 addendum) —
+// this box's goods come off, and a batch-made line riding a parcel that is still
+// here keeps waiting for the day that parcel moves. Idempotent through
+// commitUnreservedOrder's per-product guard, so the later dispatch is a no-op
+// for whatever this already took.
+//
+// THE ORDER'S OWN STATUS IS NOT TOUCHED. Unlike /dispatch, packing a box is not
+// news to the customer and must not become any: rolling the order back to
+// 'preparing' while parcel one is genuinely in transit would tell the buyer
+// their order is 备货中 again. §180 records the refusal.
+//
+// awaiting_restock is excluded on purpose — §136 made that state move no stock
+// at all, and packing a box out of a restock hold would take goods that have not
+// landed.
+router.post('/api/retail-admin/orders/:id/shipments/:sid/prepare',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id  = parseInt(req.params.id, 10);
+  const sid = parseInt(req.params.sid, 10);
+  const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  // Same window as /dispatch: a dispatched order still has parcels in the
+  // building in the partial case, which is the case this route exists for.
+  if (!['paid', 'preparing', 'dispatched'].includes(o.status)) {
+    return res.status(409).json({ success: false, error: 'not_preparable', status: o.status });
+  }
+  const ship = tdb().prepare('SELECT * FROM retail_shipments WHERE id = ? AND order_id = ?').get(sid, id);
+  if (!ship) return res.status(404).json({ success: false, error: 'shipment_not_found' });
+  // A supplier (drop-ship) parcel is never packed by us — it is made up and sent
+  // by the supplier, and marked shipped by entering their tracking number.
+  if (ship.mode === 'supplier') {
+    return res.status(409).json({ success: false, error: 'supplier_parcel_no_prepare' });
+  }
+  if (ship.dispatched_at || ship.delivered_at) {
+    return res.status(409).json({ success: false, error: 'already_dispatched' });
+  }
+  // Atomic: only stamp if STILL unpacked, so a double-click or a second operator
+  // cannot make the stock commit run twice on a race. (The commit itself is
+  // idempotent per product; this keeps the log honest about who packed it.)
+  const upd = tdb().prepare(
+    "UPDATE retail_shipments SET prepared_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND prepared_at IS NULL"
+  ).run(sid);
+  if (upd.changes !== 1) {
+    return res.status(409).json({ success: false, error: 'already_prepared' });
+  }
+
+  // SCOPED TO THIS PARCEL (§58 addendum), same call shape as the dispatch route.
+  try { prepareCommitUnreservedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null, shipmentId: sid }); }
+  catch (e) { console.error('[inventory.prepareCommit (parcel prepare)]', e); }
+
+  logActivity(req.user.id, req.user.username, 'shipment_prepared', 'retail_order', id,
+    { shipment_id: sid, mode: ship.mode }, req.ip);
+
+  const fresh = tdb().prepare('SELECT * FROM retail_shipments WHERE id = ?').get(sid);
+  res.json({ success: true, data: {
+    fulfillment:  buildOrderFulfillment(id),
+    order_status: o.status,                 // unchanged, deliberately
+    shipment:     { id: sid, state: shipmentState(fresh), prepared: shipmentPrepared(fresh), prepared_at: fresh.prepared_at },
+  } });
+});
+
 router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch',
   requireRetailAdmin, express.json(), (req, res) => {
   const id  = parseInt(req.params.id, 10);

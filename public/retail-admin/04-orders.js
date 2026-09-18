@@ -4037,6 +4037,12 @@ function shipmentStatePill(s) {
     dispatched: ['st-dispatched', 'Dispatched · 已发货'],
     delivered:  ['st-delivered',  'Delivered · 已送达'],
   };
+  // §180 — a packed box is still 'pending' to every guard that asks whether it
+  // has LEFT, and must stay that way; what changes is only what it says here.
+  // Prepared replaces "Not shipped", never "Dispatched".
+  if (st === 'pending' && s.prepared) {
+    return `<span class="pill st-preparing"><span class="dot"></span>Prepared · 已备货</span>`;
+  }
   const [cls, label] = map[st] || map.pending;
   return `<span class="pill ${cls}"><span class="dot"></span>${label}</span>`;
 }
@@ -4091,11 +4097,19 @@ function renderShipmentCard(o, s) {
   // parcel). Only show the per-parcel button once the order actually has 2+
   // parcels, where it's needed to ship them independently.
   const showParcelDispatch = canDispatch && (o.shipments?.length || 0) > 1;
+  // §180 — "Mark this parcel prepared". THE STEP THAT DID NOT EXIST: once the
+  // first parcel of a split order leaves, the order is 'dispatched' and the
+  // header's "Start preparing" is gone for good, so the parked box had no way
+  // forward and its stock stayed on the count. Same window as dispatch, plus
+  // "not already packed". Single-parcel orders are excluded for the same reason
+  // dispatch is — the header button already does exactly this for them.
+  const showParcelPrepare = canDispatch && !s.prepared && (o.shipments?.length || 0) > 1;
   // "Ship part later" splits this parcel in two. Only meaningful when the
   // parcel is still pending and holds 2+ lines (must leave one behind).
   const canSplit = state === 'pending' && lines >= 2;
-  const actions = (showParcelDispatch || canSplit) ? `
+  const actions = (showParcelDispatch || showParcelPrepare || canSplit) ? `
       <div class="row" style="gap:8px; flex-wrap:wrap; margin-top: var(--s3);">
+        ${showParcelPrepare ? `<button class="btn btn-sm" onclick="prepareShipment(${o.id}, ${s.id}, event)">Mark this parcel prepared · 标记此包裹已备货</button>` : ''}
         ${showParcelDispatch ? `<button class="btn btn-primary btn-sm" onclick="dispatchShipment(${o.id}, ${s.id})">Mark this parcel dispatched · 标记此包裹已发货</button>` : ''}
         ${canSplit ? `<button class="btn btn-sm" onclick="toggleSplitPanel(${s.id})">Ship part later · 分批发货</button>` : ''}
       </div>
@@ -8891,6 +8905,28 @@ async function dispatchShipment(orderId, shipmentId, ev) {
     openOrder(orderId, { instant: true });
     loadOrders();
   } catch {}
+}
+
+// §180 — mark ONE parcel packed. Takes this box's stock off the count through
+// the same scoped commit a parcel dispatch makes; deliberately does NOT move the
+// order's status, so a customer watching the sibling parcel in transit is told
+// nothing new.
+async function prepareShipment(orderId, shipmentId, ev) {
+  try {
+    await adminWrite({
+      btn: ev?.currentTarget,
+      url: `/api/retail-admin/orders/${orderId}/shipments/${shipmentId}/prepare`,
+      method: 'POST',
+      errLabelEn: 'Could not mark prepared', errLabelCn: '标记备货失败',
+    });
+    toast('Parcel prepared · 包裹已备货');
+    openOrder(orderId, { instant: true });
+    loadOrders();
+  } catch {
+    // adminWrite has already shown the operator the failure and left the button
+    // in its pre-click state; nothing was written, so there is nothing to undo
+    // and no second message worth printing over the one they can see.
+  }
 }
 
 // Mark a late-air food-safety alert handled (operator has contacted the
