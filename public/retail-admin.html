@@ -11387,6 +11387,16 @@
             </div>
           </div>
 
+          <!-- ── Low-stock suggestions (此门店库存偏低) — §178 ── -->
+          <!-- Switch only. mountFeatureControls() (05-marketing.js) injects the
+               .feat-bar here, and its descOn/descOff say what the two states
+               mean; there is no configuration under it to hide, so this host
+               carries NO data-feat and the CSS has no .feat-off show rule for
+               it — the injected "off" card stays hidden by the default
+               `.feat-off { display: none }`. An empty host is correct: if the
+               bar fails to mount, no half-control is left behind. -->
+          <div id="lowstock-settings-home"></div>
+
           <!-- ── Order routing: Maps geocoding ── -->
           <div class="group-card">
             <div class="group-card-head">
