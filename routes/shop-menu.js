@@ -964,24 +964,41 @@ img{display:block;max-width:100%}
    sheet convert a block component and this one converts .colophon out of
    miniapp/pages/product/product.wxss, at the same rpx times 0.52.
 
-   A FOURTH SUBSTITUTION, on top of the three named at the head of §132. The
-   mini app fills this slab with --oat against a --paper page, and THIS sheet's
-   own panel is already --oat, so an oat slab here would be no slab at all. It
-   takes rgba(0,0,0,.04) instead, which is what .pb-qt does with the same
-   problem one block up. The 60% ink of the meta line becomes var(--olive) by
-   the rule already stated; the 30% ink of the two rules becomes rgba(0,0,0,.3),
-   close enough to 30% ink in any palette a tenant can set.
+   NO FILL, AND THE FILL IT USED TO CARRY WAS REPORTED FROM A PHONE. The mini
+   app fills this slab with --oat against a --paper page — one gentle warm step
+   off the ground it sits on. THIS sheet's own panel is already --oat, so an oat
+   slab here would be no slab at all, and the first pass took rgba(0,0,0,.04)
+   instead to keep a slab visible. That is a wash of PURE BLACK over a warm
+   surface: same hue, a shade darker, and read against the surface beside it as
+   grey. On the phone it is a taupe rectangle behind the character, and the
+   character looks like it arrived in a box of somebody else's colour. The
+   brand's own next step down is warm rather than grey (--oat-deep, in
+   product-blocks), but that is NOT a token themeToCssVars emits, and a literal
+   hex here would put one tenant's cream on every tenant's page — the §158
+   fault again.
 
-   IT BLEEDS THROUGH .sheet-b's OWN PADDING like the other slabs, so the fill
-   reaches both edges of the phone and the words inside it line back up with
-   the column above. */
-.pb-colo{margin:calc(29 * var(--u)) -14px 0;padding:calc(37 * var(--u)) 14px calc(29 * var(--u));
-  background:rgba(0,0,0,.04);text-align:center;display:flex;flex-direction:column;
+   So: no fill. The colophon sits on the panel's own ground, which is the colour
+   the mini app's slab was reaching for anyway. It is still unmistakably a
+   sign-off — the character, the house line in the brand serif, the name between
+   two hairlines — and it no longer wears a rectangle. The 60% ink of the meta
+   line becomes var(--olive) by the rule already stated; the 30% ink of the two
+   rules becomes rgba(0,0,0,.3), close enough to 30% ink in any palette a tenant
+   can set.
+
+   WITH NO FILL THERE IS NOTHING TO BLEED, so the -14px/+14px pair that pushed
+   the old slab out through .sheet-b's padding and pulled its words back is
+   gone too. The column lines up with the blocks above it by simply staying in
+   the column. */
+.pb-colo{margin:calc(29 * var(--u)) 0 0;padding:calc(37 * var(--u)) 0 calc(29 * var(--u));
+  text-align:center;display:flex;flex-direction:column;
   align-items:center;gap:calc(15 * var(--u))}
 .pb-colo-ch{width:calc(125 * var(--u));height:calc(125 * var(--u))}
 /* mix-blend-mode DROPS THE WHITE SQUARE off the b-and-w line art, which is the
-   component's own trick and the reason the character sits ON the slab rather
-   than in a box of its own. object-fit:contain keeps a non-square file whole. */
+   component's own trick and the reason the character sits ON the page rather
+   than in a box of its own. It is what makes a no-fill colophon possible at
+   all: the files under public/brand/ are JPEGs on a pure white square, and
+   multiply turns that square into whatever it is standing on.
+   object-fit:contain keeps a non-square file whole. */
 .pb-colo-ch img{width:100%;height:100%;object-fit:contain;display:block;
   mix-blend-mode:multiply}
 .pb-colo-t{font-family:var(--f-bear);font-size:calc(23 * var(--u));line-height:1;
