@@ -170,9 +170,15 @@ const FULL = WEEK + `state.trendFull={
      not tell us, which is the true and permanent answer. */
   buyers_by_channel:{
     storefront:{buyers:70,new_buyers:21},
-    meituan:{buyers:34,new_buyers:12,since:'2026-09-15'},
+    meituan:{buyers:34,new_buyers:12,since:'2999-01-02'},
     wholesale:{buyers:6},
     eleme:null},
+  /* The window the figures cover. The Meituan date is a CAVEAT and only earns
+     its place when the id starts LATER than this — equal to it, it restates the
+     range and reads as a limit that is not there. The fixture dates are far
+     future so the comparison is decided by the fixture rather than by the clock
+     the suite happens to run on. */
+  window:{from:'2999-01-01',to:'2999-01-07',span_days:7,granularity:'day'},
   topCustomers:[{customer_id:5,nickname:'Mei',revenue:980,orders:6}],
   geoCities:[{city:'广州',city_en:'Guangzhou',orders:61,revenue:6100}],
   topProducts:[{product_id:2,name_en:'Falafel Wrap',name_cn:'法拉费卷',units:140,revenue:2800}],
@@ -253,7 +259,11 @@ CASES.push(
     ['Meituan is counted too', `txt('content').includes('Bought on Meituan') && txt('content').includes('34')`],
     ['...with its own new count, not folded into the percentage',
      `txt('content').includes('12 new')`],
-    ['wholesale is counted',  `txt('content').includes('Bought wholesale') && txt('content').includes('6')`],
+    // Named for the CHANNEL — every other row on this card names where the
+    // order came from, and "wholesale" answered a different question.
+    ['gzgrocery is counted by its own name',
+     `txt('content').includes('Bought on gzgrocery') && txt('content').includes('6')`],
+    ['not by the kind of trade', `!txt('content').includes('Bought wholesale')`],
     ['and nothing is summed', `!txt('content').includes('110')`],
     ['Eleme is absent, not zero', `!txt('content').includes('Bought on Eleme')`],
     ['the city is English on an English phone', `txt('content').includes('Guangzhou · 61 orders')`],
@@ -267,6 +277,16 @@ CASES.push(
     // kpis.conversion_rate is the mini app's own, never all-channel orders
     // over sessions — the server fixed that at source and this reads it whole.
     ['conversion is the server\'s',  `txt('content').includes('6.3%')`],
+  ]],
+  ['the Meituan date is silent when it is just the window start',
+   FULL + `state.trendFull.buyers_by_channel.meituan.since='2999-01-01';
+           APP.cmd('push','trend'); APP.cmd('trendSection','customers');`, [
+    // since === window.from means every Meituan order in range carries an id.
+    // "Meituan from Jan 1" on a window starting Jan 1 warns about nothing and
+    // reads as a limit that is not there.
+    ['no date is printed',              `!txt('content').includes('Meituan from')`],
+    ['the rest of the note still is',   `txt('content').includes('Eleme shares no customer')`],
+    ['and Meituan is still counted',    `txt('content').includes('Bought on Meituan')`],
   ]],
   ['an older payload with no breakdown still counts buyers',
    WEEK + `state.trendFull={new_vs_returning:{buyers:70,new_buyers:21}}; APP.cmd('push','trend'); APP.cmd('trendSection','customers');`, [
