@@ -981,6 +981,11 @@ const state = {
          "1." and "" are things somebody is in the middle of writing and a number
          cannot hold either. A row is absent from it when its field is shut. */
       typing:{},typeErr:{}},
+  /* WHAT BECAME OF WHAT YOU ASKED FOR (§175). Its own bag rather than a corner
+     of `mb`, for `mb`'s own stated reason one level up: that one is a BASKET
+     being built and this is a record coming back, and a screen reset that
+     empties the basket must not also throw away the answer. */
+  mbs:{list:null,tried:false,err:''},
   /* AN EXPENSE CLAIM (§87 step two). What one employee spent on the shop's
      behalf, before anybody has approved it — so nothing on this screen is money
      in the books, and the copy says so rather than leaving it to be assumed.
@@ -1154,6 +1159,10 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   /* The list is re-read on every entry and the seen-stamp re-armed: it is a
      record of what the kitchen finished, and one taken at boot would be stale
      by the time somebody opened it. */
+  /* Reopened means re-read: a cook comes back to this screen precisely because
+     something may have changed since they last looked, which is the opposite of
+     the basket screens that must survive a reopen intact. */
+  if(route==='askbuysent'){ const m=state.mbs; m.tried=false; m.list=null; m.err=''; }
   if(route==='kitchenready'){ const k=state.kr; k.tried=false; k.pendingTried=false; k.seen=false; k.order=null; k.orderId=null; k.err=''; }
   if(route==='receivexfer'){ const x=state.xfr; x.tried=false; x.order=null; x.orderId=null; x.step='list'; x.held=null; x.err=''; }
   if(route==='pick'){ const k=state.pik; k.tried=false; k.list=null; k.step='list'; k.result=null; k.err=''; k.dest='all';
@@ -4691,7 +4700,18 @@ const MORE_GROUPS=[
        NO PILL, deliberately: the three rows above it ask, and this one is the
        answer coming back. A fourth value for "you get told" would spend the
        scarcity that makes the other three legible. */
-    ['kitchenready','circle-check','Ready from the kitchen','厨房已完成']]},
+    ['kitchenready','circle-check','Ready from the kitchen','厨房已完成'],
+    /* THE SECOND ANSWER COMING BACK (§175), and it earns its place here for the
+       row above it's reason rather than a new one: these are the REQUESTER's
+       side, how the thing you asked for is going. `askbuy` three rows up is the
+       only screen in this group whose answer had nowhere to arrive — a cook
+       tapped Send and learned nothing ever again, not even that a buyer had
+       struck a line off (§174).
+       NO PILL, for kitchenready's stated reason: a fourth value for "you get
+       told" would spend the scarcity that makes the other three legible.
+       BORN GATED on `production`, the same switch `askbuy` carries — the screen
+       that raises these and the screen that reports on them are one feature. */
+    ['askbuysent','clipboard-list','Your buying requests','我的采购申请',null,'production']]},
   {h:['Record and review','登记与审批'],rows:[
     ['waste','trash','Waste','损耗'],
     /* §87 — what somebody spent out of their own pocket for work. It sits
@@ -9280,6 +9300,79 @@ function screenAskBuy(){
   return intro+search+body+foot;
 }
 
+/* ══ WHAT BECAME OF WHAT YOU ASKED FOR (§175) ══════════════════════════════
+   The answer coming back from the buyer, and the only screen in this file
+   written about material requests rather than for raising one.
+
+   THE LINE CARRIES THE STATE, NOT THE REQUEST. One request can be part ordered,
+   part waiting and part struck off at the same time — §86 part two made the line
+   the unit of sourcing and §174 made it the unit of refusal — so a single word
+   on the request as a whole would be wrong about at least one of its lines. The
+   header carries only what is genuinely request-level: its number, its day, and
+   whether the whole thing was withdrawn.
+
+   THE WORD IS THE SERVER'S. `state` arrives decided; this screen maps it to a
+   pill and does not recompute it from nulls. Two screens each deciding what a
+   null means is how they come to disagree.
+
+   NO PRICE AND NO ORDER NUMBER — see §86 for the first and §175 for the second.
+   `/mine` sends neither, so neither can leak through a screen's oversight. */
+function loadMbSent(force){
+  const m=state.mbs;
+  if(m.tried&&!force) return;
+  m.tried=true;
+  api('/material-requests/mine').then(rows=>{
+    m.list=Array.isArray(rows)?rows:[]; m.err=''; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    /* AN EMPTY LIST AND A LIST THAT COULD NOT BE READ ARE DIFFERENT THINGS, and
+       mbBodyHtml records why one must never be drawn as the other: telling a
+       cook they have asked for nothing, when in fact the read failed, is the
+       wrong thing to be told and the wrong thing to act on. */
+    m.list=[]; m.err=T('That list could not be read. Try again.','无法读取列表，请重试。');
+    render();
+  });
+}
+const MBS_PILL={ordered:'success', removed:'danger', waiting:'clear'};
+function mbsWord(st){
+  return st==='ordered' ? T('Ordered','已下单')
+       : st==='removed' ? T('Removed','已移除')
+       :                  T('Waiting','待处理');
+}
+function screenAskBuySent(){
+  loadMbSent();
+  const m=state.mbs;
+  if(!m.list) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(m.err) return `<div style="padding:34px 24px;text-align:center;font-size:15px;color:var(--brick-ink)">${escAttr(m.err)}</div>`;
+  if(!m.list.length) return nothingYet(T('Nothing asked for yet','还没有申请'),
+    T('What you ask the buyer for shows up here, and what became of it.','你向采购提交的申请及其进展会显示在这里。'));
+  return `<div>${m.list.map(r=>{
+    const items=r.items||[];
+    return `<div style="border-top:1px solid var(--border-default);padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="num" style="flex:1;min-width:0;font-size:15px;font-weight:500">${escAttr(r.mr_number||('#'+r.id))}</span>
+        ${r.withdrawn?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('Withdrawn','已撤回')}</span>`:''}
+        <span style="font-size:13px;color:var(--text-secondary)">${escAttr(fmtDay(r.sent_at||r.date)||'')}</span>
+      </div>
+      ${items.map(l=>{
+        const [bg,fg]=PILL[MBS_PILL[l.state]||'clear'];
+        /* THE NAME OF WHOEVER STRUCK IT OFF, BARE AND UNLABELLED — the same way
+           the buyer's own box prints who asked, and the reason a struck line is
+           worth showing at all: "removed" with nobody attached to it is an event
+           with no one to go and ask about. */
+        const who=(l.state==='removed'&&l.declined_by_name)?escAttr(l.declined_by_name):'';
+        return `<div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+          <span style="flex:1;min-width:0">
+            <span style="display:block;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(rqName(l))}</span>
+            <span style="display:block;font-size:12.5px;color:var(--text-secondary)"><span class="num">${escAttr(String(l.qty))}</span> ${escAttr(l.unit||'')}${who?' · '+who:''}</span>
+          </span>
+          <span class="pill" style="background:${bg};color:${fg}">${mbsWord(l.state)}</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('')}</div>`;
+}
+
 function rqSendKitchen(){
   const r=state.rq;
   // The purpose is mandatory and the server refuses a request without it by
@@ -12022,6 +12115,7 @@ SUBS.kitchenready={title:['Ready from the kitchen','厨房已完成'],render:()=
 SUBS.askkitchen={title:['Ask the kitchen','向厨房下单'],render:()=>screenAskKitchen()};
 SUBS.askstock={title:['Ask for stock','申请补货'],render:()=>screenAskStock()};
 SUBS.askbuy={title:['Ask to buy','采购申请'],render:()=>screenAskBuy()};
+SUBS.askbuysent={title:['Your buying requests','我的采购申请'],render:()=>screenAskBuySent()};
 
 /* ══════════════════════════════════════════════════════════════════════════
    AN EXPENSE CLAIM (§87 step two) — Ash chose ONE CARD, every field visible.
@@ -19361,6 +19455,12 @@ const ROUTE_CAP={
      asks the company to spend with a supplier, and the server gates it the same
      way (lib/cap-routes.js). */
   askbuy:'production:request',
+  /* THE SAME KEY, AND kitchenready's REASONING VERBATIM (§175): this is the
+     REQUESTER's side — how the thing you asked for is going. Anybody who can
+     raise one of these has something to be told about; nobody else does. It is
+     deliberately NOT a purchasing key: reading what became of your own ask is
+     not reading the buying department. */
+  askbuysent:'production:request',
   /* SAYING WHAT YOU SPENT IS NOT READING THE BOOKS (§87 part five). The screen
      is gated on the key its own Submit is gated on server-side
      (lib/cap-routes.js), and that key is deliberately NOT `finance:record` —

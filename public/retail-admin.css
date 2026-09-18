@@ -11228,18 +11228,39 @@
   #prod-view-purchasing .pu2-chk svg { width: 11px; height: 11px; }
   #prod-view-purchasing .pu2-chk.on { background: var(--td-text); border-color: var(--td-text); }
 
-  /* Copy-from-kitchen picker — the same modal shell, but it holds a LIST that
-     can run to dozens of orders. So the shell stops scrolling as one block and
-     the body scrolls inside it: the store picker, the double-row warning and
-     the Copy button stay on screen however far down the list the buyer is. */
-  #prod-view-purchasing .pu2-modal#pu2-kmodal { width: min(880px, calc(100vw - 32px));
+  /* The two kitchen pickers — copy-from-kitchen (#pu2-kmodal) and From the
+     kitchen (#pu2-mrmodal). The same modal shell, but each holds a LIST that can
+     run to dozens of rows. So the shell stops scrolling as one block and the
+     body scrolls inside it: the store picker, the warning line and the action
+     button stay on screen however far down the list the buyer is.
+     BOTH ARE NAMED IN EVERY RULE BELOW. #pu2-mrmodal was built on this shell but
+     left out of this block, so its footer stayed one unwrapped flex row — six
+     items in a 680px modal, which squeezed the store picker down to three
+     wrapped words and a select too narrow to read a store's name in. A layout
+     fix written for one picker and not the other is the same bug waiting. */
+  #prod-view-purchasing .pu2-modal#pu2-kmodal,
+  #prod-view-purchasing .pu2-modal#pu2-mrmodal { width: min(880px, calc(100vw - 32px));
     display: flex; flex-direction: column; overflow: hidden; }
-  #prod-view-purchasing #pu2-kmodal .pu2-modal-body { overflow: auto; flex: 1 1 auto; }
-  #prod-view-purchasing #pu2-kmodal .pu2-toolbar { flex-wrap: wrap; }
-  #prod-view-purchasing #pu2-kmodal .pu2-modal-foot { flex-wrap: wrap; }
-  #prod-view-purchasing #pu2-kmodal .pu2-modal-foot .pu2-f { min-width: 200px; }
+  #prod-view-purchasing #pu2-kmodal .pu2-modal-body,
+  #prod-view-purchasing #pu2-mrmodal .pu2-modal-body { overflow: auto; flex: 1 1 auto; }
+  #prod-view-purchasing #pu2-kmodal .pu2-toolbar,
+  #prod-view-purchasing #pu2-mrmodal .pu2-toolbar { flex-wrap: wrap; }
+  #prod-view-purchasing #pu2-kmodal .pu2-modal-foot,
+  #prod-view-purchasing #pu2-mrmodal .pu2-modal-foot { flex-wrap: wrap; }
+  #prod-view-purchasing #pu2-kmodal .pu2-modal-foot .pu2-f,
+  #prod-view-purchasing #pu2-mrmodal .pu2-modal-foot .pu2-f { min-width: 200px; }
+  /* Cancel and the action button are ONE flex item, and keep to the RIGHT once
+     the footer wraps. Two loose buttons after the `.spacer` come apart as the
+     modal narrows — the spacer pushes only within its own line, so Cancel ends
+     up right on one line and the button that COMMITS the screen drops to the
+     next one, hard left under the store picker. Wrapped, they stay a pair and
+     land together wherever the wrap puts them. */
+  #prod-view-purchasing #pu2-kmodal .pu2-modal-foot .pu2-footacts,
+  #prod-view-purchasing #pu2-mrmodal .pu2-modal-foot .pu2-footacts {
+    display: flex; align-items: center; gap: 10px; margin-left: auto; }
   /* The tick column is a cell, not a grid child like the allocation rows. */
-  #prod-view-purchasing #pu2-kmodal .pu2-tbl td .pu2-chk { vertical-align: middle; }
+  #prod-view-purchasing #pu2-kmodal .pu2-tbl td .pu2-chk,
+  #prod-view-purchasing #pu2-mrmodal .pu2-tbl td .pu2-chk { vertical-align: middle; }
   @media (max-width: 820px) {
     #prod-view-purchasing .pu2-metricrow { grid-template-columns: 1fr 1fr; }
     #prod-view-purchasing .pu2-billcols { grid-template-columns: 1fr; }
