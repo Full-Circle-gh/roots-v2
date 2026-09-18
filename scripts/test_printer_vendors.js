@@ -158,10 +158,24 @@ section('4 · sorted-params MD5, computed independently');
 
 it('sign() matches a hand-computed digest', () => {
   const params = { sn: '1552634520', content: 'hello', appid: 'APP', timestamp: '1700000000' };
-  // Independently: sort keys, join k=v with &, append &appsecret=<secret>, md5.
+  // Independently: sort keys, join k=v with &, append &appsecret=<secret>, md5,
+  // UPPERCASE.
   const expectBase = 'appid=APP&content=hello&sn=1552634520&timestamp=1700000000&appsecret=SECRET';
-  const expect = crypto.createHash('md5').update(expectBase).digest('hex');
+  const expect = crypto.createHash('md5').update(expectBase).digest('hex').toUpperCase();
   assert.strictEqual(spyun.sign(params, 'SECRET'), expect);
+});
+
+it('THE DIGEST IS UPPERCASE — the bug this file exists to have caught', () => {
+  // This is not style. A lowercase digest is rejected by Shangpeng with
+  // `{"errorcode":-4,"errormsg":"签名错误"}`, a flat auth failure that names
+  // nothing and reads exactly like bad credentials — so a regression here
+  // would present as "the new printer doesn't work" and cost an afternoon.
+  // It shipped lowercase once, off a published client library, and was found
+  // by putting twelve candidate algorithms to the live API: eleven were
+  // refused, this one was not.
+  const sig = spyun.sign({ a: '1' }, 'S');
+  assert.strictEqual(sig, sig.toUpperCase(), 'the signature must be UPPERCASE hex');
+  assert.notStrictEqual(sig, sig.toLowerCase(), 'a hex digest of all digits would not prove this — pick another input');
 });
 
 it('key order in the input object does NOT change the signature', () => {
@@ -175,8 +189,8 @@ it('the secret actually participates', () => {
   assert.notStrictEqual(spyun.sign(p, 'S1'), spyun.sign(p, 'S2'));
 });
 
-it('it is a 32-char lowercase hex md5', () => {
-  assert.match(spyun.sign({ a: '1' }, 'S'), /^[0-9a-f]{32}$/);
+it('it is a 32-char uppercase hex md5', () => {
+  assert.match(spyun.sign({ a: '1' }, 'S'), /^[0-9A-F]{32}$/);
 });
 
 // ── 5 · markup translation loses styling, never words ────────────────────
