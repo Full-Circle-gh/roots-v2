@@ -382,6 +382,18 @@
   function materialsFeatureOn() {
     return document.body.classList.contains('feat-production');
   }
+  // The "Running low here" strip at the top of an order (renderSuggestions).
+  // Gated by the 'lowStockHints' tenant feature (body.feat-lowStockHints,
+  // switch in Settings → Operations, §178). UI-ONLY, exactly like
+  // materialsFeatureOn above: the /stock read behind the strip is a read, and
+  // reads are open server-side — this hides a suggestion, it does not close a
+  // door. OFF IS A REAL ANSWER, not a loading state: the class is seeded from
+  // the catalog default at boot (02-settings-ops.js) before the operator's
+  // saved preference lands, so a tenant with it ON never sees the strip blink
+  // out, and a tenant with it OFF sees it for one paint at most.
+  function lowStockHintsOn() {
+    return document.body.classList.contains('feat-lowStockHints');
+  }
   async function materials() {
     if (!materialsFeatureOn()) return [];
     if (!_matCache) {
@@ -584,7 +596,9 @@
       <p>${esc(T('An order is a list of what you’re buying from one supplier for one store. Tacet does the bookkeeping for you.', '一张采购单就是你向某个供应商、为某家门店采购的清单。记账的事交给 Tacet。'))}</p>
       <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puNewOrder()">${esc(T('Start your first order', '创建第一张采购单'))}</button>
       <div class="pu2-empty-steps">
-        <div class="pu2-empty-step"><div class="ico">${I.plus}</div><b>${esc(T('1 · Build it', '1 · 建单'))}</b>${esc(T('Pick a supplier and add products — running-low items are suggested for you.', '选择供应商并添加商品——库存偏低的会自动推荐。'))}</div>
+        <div class="pu2-empty-step"><div class="ico">${I.plus}</div><b>${esc(T('1 · Build it', '1 · 建单'))}</b>${esc(lowStockHintsOn()
+          ? T('Pick a supplier and add products — running-low items are suggested for you.', '选择供应商并添加商品——库存偏低的会自动推荐。')
+          : T('Pick a supplier and add products.', '选择供应商并添加商品。'))}</div>
         <div class="pu2-empty-step"><div class="ico">${I.send}</div><b>${esc(T('2 · Place it', '2 · 下单'))}</b>${esc(T('Mark it ordered. The cost posts to Finance on its own.', '标记已下单,采购金额会自动记入财务。'))}</div>
         <div class="pu2-empty-step"><div class="ico">${I.check}</div><b>${esc(T('3 · Tick it in', '3 · 收货'))}</b>${esc(T('When the boxes arrive, confirm the counts — stock updates everywhere.', '到货时确认数量——库存自动同步到各处。'))}</div>
       </div>
@@ -1282,6 +1296,10 @@
   async function renderSuggestions() {
     const host = document.getElementById('pu2-suggest');
     if (!host) return;
+    // Feature off for this tenant — clear the strip and don't even ask the
+    // server for the stock list, which is the only reason this read happens
+    // on an order that has not been searched yet.
+    if (!lowStockHintsOn()) { host.innerHTML = ''; return; }
     let list = [];
     try { list = await products(_edit.store_id); } catch (_) { return; }
     const have = new Set(_edit.items.map(it => it.store_product_id));
@@ -1313,9 +1331,19 @@
       if (el) _supDraft = el.value;
     }
     if (!_edit.items.length) {
-      const emptyMsg = materialsFeatureOn()
-        ? T('Nothing yet — search or pick a suggestion above.', '还没有内容——在上方搜索或选择推荐。')
-        : T('No products yet — search or pick a suggestion above.', '还没有商品——在上方搜索或选择推荐。');
+      // Four phrasings, not two. The NOUN follows the Production switch
+      // (materials on the order, or products only); the trailing CLAUSE
+      // follows lowStockHints — with the strip off there is no suggestion
+      // above to pick, and an empty state that points at one sends the
+      // operator looking for a control that isn't there. Both short CN
+      // sentences are the live one with that clause dropped, not new copy.
+      const emptyMsg = lowStockHintsOn()
+        ? (materialsFeatureOn()
+            ? T('Nothing yet — search or pick a suggestion above.', '还没有内容——在上方搜索或选择推荐。')
+            : T('No products yet — search or pick a suggestion above.', '还没有商品——在上方搜索或选择推荐。'))
+        : (materialsFeatureOn()
+            ? T('Nothing yet — search above.', '还没有内容——在上方搜索。')
+            : T('No products yet — search above.', '还没有商品——在上方搜索。'));
       body.innerHTML = `<tr class="pu2-noline"><td colspan="7">${esc(emptyMsg)}</td></tr>`;
       return;
     }

@@ -1317,6 +1317,17 @@ const FEATURE_HOMES = {
   feedback:    '#tab-feedback',
   socialProof: '#tab-social',
   faq:         '#tab-faq',
+  // Waste (§32) had a FEATURE_CATALOG entry and NO entry here, so
+  // mountFeatureControls() never visited it and its switch mounted nowhere:
+  // the feature was on by the server default in routes/retail-waste.js and
+  // that was the only state it had. The CSS has assumed this line exists
+  // since §32 — `body.ent-waste:not(.feat-waste) .tabs [data-feat="waste"]`
+  // hides the rail row rather than dimming it, on the stated grounds that
+  // "its switch lives in Settings → Operations, not on the Waste page". It
+  // did not. It does now. Its host holds the switch and nothing else, so it
+  // carries no data-feat and has no .feat-off rule, same shape as the
+  // Production host's content-bearing one minus the content.
+  waste:       '#waste-settings-home',
   // quickStock / kitchenAdd are NOT here, and their catalogue entries are gone
   // too (§53). #qs-home and #ka-home remain as plain cards carrying the staff
   // link; with no FEATURE_CATALOG entry, mountFeatureControls() never visits
@@ -1327,6 +1338,14 @@ const FEATURE_HOMES = {
   // no separate entry here on purpose (§28: one switch, not two) — its rail
   // tab is gated by the same data-feat="production" attribute as Materials'.
   production:  '#mat-settings-home',
+  // Low-stock suggestions (§178) sit inside the purchase-order editor, which
+  // is a wizard step, not a page with room for a settings bar — so the switch
+  // goes where Production's does, Settings → Operations, next to the other
+  // things a tenant turns on or off wholesale. Its host holds the switch and
+  // nothing else: there is no configuration to hide when it is off, which is
+  // why that host carries no data-feat and the CSS has no .feat-off rule for
+  // it. The injected "off" card stays hidden by the default .feat-off rule.
+  lowStockHints: '#lowstock-settings-home',
 };
 let _cfgCache = {};
 // Inject an on/off bar + an "off / enable" card at the top of each feature's home
