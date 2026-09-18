@@ -24,12 +24,16 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 2026-09-18 · v4.316 — **§177 ADDED: A MENU MOVES BETWEEN LOCATIONS; THE SHOP RECORD AND ITS CODE DO NOT — DECIDED by Ash.** From a screenshot of Sales → Locations: *"the shop menu should move form tianhe to yuexiu."* **The button in that screenshot was never the thing to move** — `csRenderLocations()` paints `Shop menu →` on every location card from one code path, so both cards already had it; what differs is whether there is a menu behind it. **Put as three options and Ash chose B**: the listings move, the destination ends up with the products, prices, modes and menu order, and the source's menu is emptied. **Option C — repointing `shops.location_id` — is refused and the lock it would have broken is restated rather than softened**: the `public_code` is the only thing a QR carries (§44), so a repointed record would make every QR already stuck to a table in Tianhe serve Yuexiu's menu, silently, to customers. **The cost of choosing B is a reprint and it is named on the confirm dialog** — one new QR at the destination, one dead QR at the source — because the alternative is finding out at a table. **The source shop is switched off, not deleted**: `resolveShop()` already requires an active shop, so the old code resolves to nothing and serves the existing not-found page, while the row, its code and its history stay readable; turning it back on gives an empty menu, not the old one. **The destination's own switch is not touched**, on v4.312's reasoning — that entry paid for a save which took a live printer off the air as an invisible side effect — and which of create-or-reuse happened is reported back so nobody guesses whether the new menu is live. **A destination that already has a menu is refused**, because merging two priced menus asks whose price wins and that is not decided here; the test is the listing count, so an empty shop is a valid destination and is reused. All or nothing, in one transaction. **Option A — copy, both keep a menu — is recorded as considered and not taken**, because a second location opening alongside the first will ask for it and this control is deliberately not that. Vocabulary v1.133: four pairs verbatim, four lifted, four composed. §177 is new and supersedes nothing.
 
+2026-09-18 · v4.315 — **§171 ADDENDUM 4 · THE SAME SPELLING MEANT TWO DIFFERENT THINGS, AND ADDENDUM 3 IS WITHDRAWN.** Ash refused addendum 3's conclusion — *"I want the same as tianhe, like this"* — and was right to. That addendum said Shangpeng has no bold and no double-height; **it has both**. The evidence was never more than *Feie's names* for them printing literally, and concluding the capability was absent from the name being wrong is the whole error. **One diagnostic slip of thirteen candidate tags settled it**: Shangpeng's vocabulary is a DIFFERENT CUT of the same capabilities, and the spelling overlaps — Shangpeng `<B>` is **bold** where Feie's is **enlarge**; `<W>` is double width; `<H>` is what Feie spells `<L>`; `<CB>`/`<C>` agree. A second slip confirmed `<W>`/`<H>` **nest** to give enlarge. **The `<B>` collision was a live bug for three rounds and was invisible**: passing it through because the spelling matched downgraded every enlarged line — SKU rows, `PKG n/m`, `Items 件数` — to merely bold. It printed, it looked deliberate, and three rounds of reading the tag table missed it because the table was wrong about a MEANING, not a name. Tests now assert the map **by meaning**, and pin that a nested value unwinds inner-first. **Addendum 3's "accepted difference" is WITHDRAWN** — there was no trade, the slips are identical now, and that paragraph rationalised a bug; it is left in place unedited because a record that deletes its wrong turns teaches nothing, and this one is worth keeping: *absence of evidence, under a name you chose yourself, is not evidence of absence*. **Also asked in the same breath**: `Time`, `To`, `Tel` and the address — the smallest type on a slip taped to a parcel and read at arm's length — now ride `<L>`. **`<L>` not `<B>`, on arithmetic not taste**: `<L>` is double HEIGHT at `WIDTH` columns, while `<B>` enlarges to `BIG_WIDTH` and would re-wrap a real address into three ragged pieces. Scoped to `receipt` (`packing` has a different reader); both shops get it, which is what was wanted. `verify-fulfilment-types.js`'s `/^To {4}/m` matcher now tolerates a wrapping tag, keeps its anchor, and was confirmed still red with the line removed. 47 assertions, 284 fast suites pass.
+
 2026-09-18 · v4.313 — **§171 ADDENDUM 3 · THE TAG MAP, READ OFF PAPER: SHANGPENG'S SET IS SMALLER.** Ash, holding the first Shangpeng slip: *"it prints but have a problem, it doesn't look the same when tianhe printer print"* — the receipt carried `<BOLD>Air shipment · 空运</BOLD>` and `<L>TOTAL …</L>` as **literal characters**, in front of a customer. **Shangpeng's tag vocabulary is a SUBSET of Feie's**, read element by element off the paper: `<CB>` (shop name, order code), `<B>` (PKG n/m, SKU, Items 件数) and `<C>` (address, Thank you) are honoured; `<BOLD>` (shipment label, item names) and `<L>` (TOTAL) are not. **Dropping the two is the complete answer, not a fallback** — there is no Shangpeng bold and no Shangpeng double-height to map them to, so nothing the device could have done is given up. **The tempting fix is wrong and a test now says so**: mapping them to `<B>` to keep the emphasis fails on arithmetic, because `<B>` is ENLARGE, an enlarged line holds `BIG_WIDTH` not `WIDTH`, and the renderer has already wrapped item names and built the TOTAL row to 31 — a 16-column line would fold a price in half. A plain line that fits beats an emphasised one that folds. **§171's hedge was the right shape and is now spent**: that section shipped this table flagged and isolated with the promise that a wrong entry would be "a one-line fix and no renderer moves", and it was exactly that — two entries, zero renderer lines, one file. The hedge made a wrong guess cheap; the paper made it right, and the pairing is the rule worth keeping. **Accepted difference between the two shops**: Tianhe's item names are bold and its TOTAL double-height, Yuexiu's are plain — same words, same layout, same widths. Making them identical would mean giving up the emphasis on Feie too, a worse trade. 46 assertions, two sabotages confirmed red including the `<L>`→`<B>` "improvement".
 
 2026-09-18 · v4.312 — **§171 ADDENDUM 2 · THE WRONG BRAND LOOKS EXACTLY LIKE A BROKEN PRINTER.** Ash, on the first real test print: *"i test from the website of the printer, it prints, when i try from the system it show failed"*. Printer fine, system fine — **the Tianhe row had been left on 商鹏 with Tianhe's FEIE serial in it**, so a good SN went to the wrong vendor's cloud, which answered `打印机不存在`, and the screen said only `Print failed`. **This is the mistake the screen will keep inviting**: §171 put a brand dropdown on every store row, the panel opens on the first store's tab, and the instruction being followed is "set the brand to Shangpeng" — doing it on whichever tab is open is the shape of the screen, not carelessness. A per-store setting that is usually uniform gets got right by never touching it, and wrong exactly once. **The fix is the diagnosis, not the freedom**: the brand stays per-store, because a tenant really does run two; a failed test now echoes back **the brand and SN it actually tried** (`打印机不存在 — 商鹏 · SN 550540977`) and an `unknown_printer` answer adds one plain line, *is the BRAND right for this store?* **Only the two vendor codes seen first-hand against the live API are normalised** — `2` → unknown_printer, `-4` → bad_signature — and a test pins that restraint, because confident wrong advice beats no advice only when it is right. **The costly part was the silence, not the outage**: saving the brand also took Tianhe's real printer off the air, instantly, reversibly in one dropdown, and invisibly until someone at a counter notices no paper. A tenant-wide brand with a per-store override is recorded as the alternative **considered and not taken** — it trades a rare mistake for a permanently more confusing model. 43 assertions, two sabotages confirmed red. **The tag map remains unverified**: no slip has yet come out of a Shangpeng head.
 
 2026-09-18 · v4.311 — **§172 CORRECTION · A HEADING AT ONE END AND A BUTTON AT THE OTHER ARE NOT ONE CONTROL — REPORTED BY ASH**, on the shipped version: *“its not clear. look where text positioned”*. v4.309's label took the line with `flex: 1` and pushed its button to the far edge of the drawer, rebuilding in a new shape the confusion it was added to end. **The two now sit together**; the Edit button keeps its right-hand seat only once a note exists, where it belongs beside the note line. **The verb changes with the state too** — `Edit · 编辑` is a lie on an empty block, so a bare one offers `Add · 添加`, the live pair the tag row's own button already uses. Nothing minted; `flex: none` and the verb are both asserted in `scripts/test_customer_standing_note.js` so neither is tidied back. Vocabulary v1.130.
 
+
+2026-09-18 · v4.314 — **§98 ADDENDUM 8 · THE REPLACEMENT IS PICKED LINE BY LINE, ITS FREIGHT IS TYPED, AND THE SLIP PRINTS — ALL THREE REPORTED BY ASH** against TC000750 with the case open on screen: *"automatic create an order for all products, maybe the replacement is only for few items?"*, *"didnt ask me for shipping fee, this need to add manually according to our shipping fee for the replacement items"*, and *"didnt print a recipet"*. **THREE FAULTS, ONE ROUTE, AND THE THIRD WAS A HOLE NOBODY HAD LOOKED FOR.** Stage three copied EVERY line of the late parcel at full quantity, so a six-product box with two spoiled salads put six products back on a van and four of them left the shelf for nothing; the browser `confirm()` it asked through could not have asked which. The cost snapshot counted GOODS ONLY, so the figure the carrier's payment is set against — the one question §98 says the case exists to answer — left out the freight, which on a partial replacement is not the whole box's rate and is the half nobody can derive. And the replacement order is **INSERTed `paid` rather than transitioned into it**, so it passed BOTH `autoPrintOrder` call sites (the WeChat callback's and the mark-paid route's) and the counter was asked to pack goods no slip had ever named. **THE SHEET IS THE FIX FOR THE FIRST TWO AND IT DEFAULTS TO THE OLD BEHAVIOUR**: every quantity starts at what went out, so the whole-parcel case — which is the common one — is still one tap, and a partial replacement is the operator typing DOWN rather than up. The original line is the ceiling, on both screens and again on the server, because a sheet is not a rule. **`items` ABSENT IS EVERY LINE AT FULL QUANTITY**, deliberately: a phone that has not been reloaded since the deploy keeps working rather than starting to refuse. **THE FREIGHT IS A COST, NOT A FEE, AND THE DISTINCTION IS THE DECISION.** Ash chose it against putting a `shipping_fee` on the replacement order: that order is ¥0 because nothing is owed, so a fee there would either bill a customer for our own mistake or leave `subtotal + shipping != total` on a paid order, and it would reach the finance delivery-fee sums. `remedy_cost` stays THE TOTAL — goods plus freight — so every reader that predates this keeps reading the right number, and a new `remedy_shipping_cost` carries the breakdown so a total nobody can take apart is not what the carrier's payment gets compared against. **TYPED, NEVER CALCULATED**, which is §98's own rule for the claim amounts and the same reason: every carrier prices a parcel differently and a rate engine here would serve one tenant. **THE RULE IS A PURE FUNCTION** — `resolveReplacementLines` and `replacementCost` in `lib/delay-case.js`, so the two screens and the route cannot drift about what a valid pick is and a test can run it without booting the app. **Tests:** `scripts/test_delay_replacement_lines.js` is new, **15 assertions**, and the two it exists for are the silent ones — a quantity above what was ordered (a giveaway nobody authorised) and a pick resolving to nothing (an empty order with a waybill and no goods in it). **Three breaks were confirmed red**: the ceiling removed, the absent-`items` default changed to a refusal, and the cost taken at the ordered quantity rather than the picked one. **The phone needed one payload change**: `ITEM_TUPLE` had dropped the line's id, so the sheet there could only ever have sent the whole parcel; it is APPENDED at index 6, never inserted, because every other reader indexes 0–5 positionally. **Chinese:** `docs/tacet-delivery-vocabulary.md` v1.132 — four pairs copied whole, one RESTRUCTURED (the live confirm minus `发出同样商品`, which stopped being true), five composed from live fragments. `运费` is **not retired**: it is the fee a customer pays and `运费成本` is what the parcel costs us, which is why the composed word is two characters longer rather than one word doing two jobs. **NOT DONE, and named so it is not assumed:** the replacement still cannot be raised for goods that were not on the original order, nothing books the freight to the ledger (§98's rule that the carrier's payment is the one row this case posts is untouched), and no backfill — a case raised before this deploy has a `remedy_cost` that is goods only and stays that way. A build under an existing decision, hence a patch. No change to `.gitignore` or CI.
 2026-09-18 · v4.310 — **§171 ADDENDUM 1 · THE SIGNATURE WAS WRONG IN THE CASE, AND ONLY THE LIVE API SAID SO.** Hours after §171 shipped, with Ash's Shangpeng credentials in hand, a read-only `GET v1/printer/info` probe — run deliberately BEFORE any test print — returned `{"errorcode":-4,"errormsg":"签名错误"}`. **The algorithm was right and the case was wrong**: the MD5 must be **UPPERCASE**. Twelve conventions were put to the live endpoint; eleven were refused and exactly one got through, the uppercase form of the one already shipped. **This corrects §171's own sourcing claim**, which offered "read off the published `@xesam/cloud-vendor-spyun` client … not recalled" as grounds for trust: that client delegates hashing to an injected signer and so fixes the input string while saying nothing about the output format — a source can be primary and still not answer the question asked of it. 签名错误 names no field and, against freshly-typed credentials, reads exactly like a mistyped APPSECRET, so the wrong thing would have been debugged for hours. `scripts/test_printer_vendors.js` now pins the case **three ways**, one test named for the bug, so deleting an "unnecessary" `.toUpperCase()` fails the build rather than the printer; the lowercase revert was confirmed red. **The transferable part is the probe**: where a vendor's documentation cannot be read — both Shangpeng doc sites are client-rendered and would not open through this session's proxy, which is why the tag map shipped flagged — **the API can still be asked**, in one request, before the hardware is blamed. The tag map remains unverified and still expects a test print. **A second finding, not ours to fix**: with the signature accepted the probe returned `{"errorcode":2,"errormsg":"打印机不存在"}` — the device is not yet bound to the account, an app-side step with the label's KEY, recorded because that message against correct credentials is otherwise alarming to read.
 
 2026-09-18 · v4.309 — **§172 ADDENDUM · THE WRITE END: A CONTROL THAT DOES NOT NAME ITSELF — REPORTED BY ASH**, on the customer page with the cursor inches from it: *“im on customer page wher is it”*. An empty Know block collapsed to a bare `Edit` under the name and said nothing about the two things behind it. It now shows `What we know · 备注与标签` — **not a new string**: the heading the phone's customer record already used for this same block, already locked, arriving on its second surface. **Shown only while the block is empty**, so the space saving that collapsed the old 210px card is kept. **The rejected empty-state stays rejected** — `暂无备注。` names the absence, the heading names the control, and that distinction is the part to keep. `docs/tacet-delivery-vocabulary.md` v1.125 locks nothing new. Covered by `scripts/test_customer_standing_note.js`, including the stylesheet's own `[hidden]` guard — the trap `test_admin_install.js` exists for.
@@ -10636,6 +10640,82 @@ easily be: they are not copies of the predicate, they are things that have to
 agree with it. The cheap defence is the one now taken — one definition, and
 everything that reads it reads it from there.
 
+### §98 addendum 8 — which goods go back out, what the freight cost, and the slip nobody printed (2026-09-18)
+
+Reported by Ash off the live drawer, three faults in one screenshot of TC000750.
+All three are in stage three, which has been in production since 2026-09-11 and
+had never been used on a parcel where only part of it spoiled.
+
+#### 1. It sent the whole parcel, always
+
+The route copied every line of the late parcel at full quantity. That is right
+when the whole parcel spoiled and wrong every other time — Ash's own case was
+two salads in a six-product box, and the other four products left the shelf for
+nothing. **The control could not have asked which**: it was a browser
+`confirm()`, which takes a yes and nothing else.
+
+It is a sheet now, on both surfaces, and **every quantity starts at what went
+out**. The common case stays one tap; a partial replacement is the operator
+typing down. The original line is the ceiling — a replacement is goods being
+re-sent, and more than went out is a new order somebody should raise on purpose.
+
+**`items` absent means every line at full quantity.** That is what the route did
+before, and a client that has not been reloaded since the deploy must keep
+working rather than start refusing to send replacements.
+
+#### 2. The cost left out the freight
+
+`remedy_cost` counted goods only. §98 says the figure exists to answer whether
+the carrier's payment covered putting it right, and the parcel's freight is half
+of what putting it right costs — more of it, proportionally, on a partial
+replacement than on a whole one.
+
+**It is typed, never calculated**, which is §98's rule for the claim amounts and
+the same reason: every carrier prices a parcel differently, and a rate engine
+here would serve one tenant and configure badly for the rest.
+
+**It is a COST, not a FEE, and Ash chose that reading against the alternative.**
+Putting a `shipping_fee` on the replacement order was the other option and it is
+recorded as rejected: the order is ¥0 because nothing is owed, so a fee on it
+either bills a customer for our own mistake or leaves `subtotal + shipping !=
+total` on a paid order, and it would land in the finance delivery-fee sums.
+
+`remedy_cost` **stays the total** — goods plus freight — because every reader
+that predates this column reads it as "what it cost" and would otherwise start
+reading a smaller number. `remedy_shipping_cost` is the breakdown, so the total
+the carrier's payment is compared against can be taken apart by whoever compares
+them.
+
+#### 3. No slip printed, and this one was a hole rather than a change of mind
+
+Every other order reaches the printer on the **transition into `paid`** —
+`autoPrintOrder`, called from the WeChat callback and from the mark-paid route.
+The replacement order is INSERTed `paid` in one statement, so it passed both, and
+the counter was asked to pack goods no ticket had ever named.
+
+It now calls `autoPrintOrder` after `ensureShipments`, fire-and-forget with the
+outcome recorded on the new order, exactly as the other two sites do it — a dead
+printer leaves a reprintable order rather than failing the send.
+
+#### The rule is a pure function, and the phone needed a payload change
+
+`resolveReplacementLines` and `replacementCost` live in `lib/delay-case.js` so
+the drawer, the phone and the route cannot drift about what a valid pick is, and
+so the test runs without booting the app.
+
+`ITEM_TUPLE` on the phone had dropped the line's id, so a sheet there could only
+ever have sent the whole parcel. The id is **appended at index 6, never
+inserted**: `itemRow` and every other reader index 0–5 positionally.
+
+#### Still open, and named so it is not assumed
+
+The replacement cannot carry goods that were not on the original order (a
+substitute for a product now out of stock is still a hand-made order). Nothing
+books the freight to the ledger — §98's rule that the carrier's payment is the
+one row this case posts is untouched. And there is no backfill: a case raised
+before this deploy has a `remedy_cost` that is goods only, and it stays that way,
+because a past incident must not be restated by a later figure.
+
 ## §99 — THE FAPIAO CHASE: A REQUEST NOBODY ISSUED ASKS AGAIN, AND ONLY ISSUING IT STOPS THE ASKING
 
 **2026-09-11 · Asked from the phone, with a screenshot of the Invoices screen:
@@ -18134,6 +18214,82 @@ Tianhe's item names are bold and its TOTAL is double-height; Yuexiu's are
 plain. Same words, same layout, same widths. **A tenant who wants them
 identical would have to give up the emphasis on Feie too**, which is a worse
 trade than two shops whose receipts differ in weight.
+
+### §171 ADDENDUM 4 — THE SAME SPELLING MEANT TWO DIFFERENT THINGS, AND ADDENDUM 3 IS WITHDRAWN
+
+**2026-09-18. Ash refused the conclusion of addendum 3** — *"I want the same
+as tianhe, like this"* — and he was right to. That addendum said Shangpeng
+has no bold and no double-height. **It has both.** The evidence behind the
+claim was never more than this: FEIE'S NAMES for them print literally on a
+Shangpeng head. Concluding the capability was absent from the name being
+wrong is the whole of the error, and it survived because the slip it produced
+looked deliberate.
+
+**A DIAGNOSTIC SLIP OF THIRTEEN CANDIDATE TAGS SETTLED IT IN ONE PRINT.**
+Shangpeng's vocabulary is not Feie's with pieces missing; it is a **different
+cut of the same capabilities**, and the overlap in spelling is a trap:
+
+| | Shangpeng | Feie |
+|---|---|---|
+| `<B>` | **bold** | **enlarge** |
+| `<W>` | double width | *(no such tag)* |
+| `<H>` | double height | spelled `<L>` |
+| `<CB>` | centre + large | same |
+| `<C>` | centre | same |
+
+Nothing else tested rendered: `BOLD L N HB WB BIG RIGHT D E T` all printed as
+text. A second slip confirmed `<W>` and `<H>` **nest** to give Feie's enlarge.
+
+**THE `<B>` COLLISION WAS A LIVE BUG FOR THREE ROUNDS AND NOBODY COULD SEE
+IT.** Passing Feie's `<B>` through unchanged — because the spelling matched —
+silently downgraded every enlarged line on the Shangpeng slip to merely bold:
+the SKU rows, `PKG n/m`, `Items 件数`. It printed. It looked intentional. It
+was the difference being reported, and three rounds of looking at the tag
+table did not find it, because the table was not wrong about a NAME, it was
+wrong about a MEANING. **The tests now assert the map by meaning** — Feie bold
+becomes Shangpeng bold, and Feie `<B>` must NOT stay `<B>` — so the collision
+cannot come back as a tidy-up.
+
+**`TAG_MAP` VALUES MAY NOW BE A NESTED LIST**, written outer-first, because
+one house tag can need two vendor tags. Closing tags unwind inner-first or the
+nest is malformed and the head may print anything at all; a test pins that.
+
+**ADDENDUM 3'S "ACCEPTED DIFFERENCE" IS WITHDRAWN.** It recorded that Tianhe's
+item names would be bold and Yuexiu's plain, and argued that making them
+identical was a worse trade. There was no trade: the slips are now identical,
+and the paragraph was a rationalisation of a bug. **It is left in place rather
+than edited, because a record that quietly deletes its wrong turns teaches
+nothing** — and the wrong turn here is worth keeping: *absence of evidence,
+under a name you chose yourself, is not evidence of absence.*
+
+**SEPARATELY, AND ASKED FOR IN THE SAME BREATH: THE RECEIPT'S HEADER GREW.**
+*"I need the name with time and address one size bigger as well"*. `Time`,
+`To`, `Tel` and the address were the smallest type on a slip that gets taped
+to a parcel and read at arm's length by a driver. They now ride `<L>`.
+
+**`<L>` AND NOT `<B>`, AND THE REASON IS ARITHMETIC, NOT TASTE.** `<L>` is
+double HEIGHT and keeps the line at `WIDTH` columns. `<B>` enlarges to
+`BIG_WIDTH`, so a 31-column address re-wraps at 16 and a real one lands in
+three ragged pieces with the break wherever the head's own column maths puts
+it. **Taller without moving a single column boundary.** `Tel` rides with the
+name though only the name was asked for: a phone number left small between two
+enlarged lines reads as a mistake, and it is the other half of *who is
+receiving this*.
+
+**SCOPED TO THE `receipt` TEMPLATE, AND BOTH SHOPS GET IT.** `packing` has its
+own recipient block and a different reader; enlarging a picking list is a
+separate question nobody has asked. One renderer serves both vendors by
+construction (§171), so Tianhe's receipts change too — called out rather than
+slipped in, and correct: the entire thread was *"I want the same as tianhe"*,
+and diverging the two would mean two templates drifting forever, which is the
+outcome §171 exists to prevent.
+
+`scripts/verify-fulfilment-types.js` matched the recipient line with
+`/^To {4}/m`, which a wrapping tag breaks. The matcher now allows an optional
+leading tag and keeps both the anchor and the four-space label discipline —
+the check is about WHETHER a hand-over recipient is named, not how it is
+styled — and was confirmed still red with the `To` line removed, so it has not
+been loosened into a pass.
 ## §172 — WHAT THE SHOP KNOWS ABOUT A PERSON IS READ ON EVERY ORDER, AND IS EDITED IN ONE PLACE
 
 **DECIDED BY ASH, 2026-09-18**, looking at TC000750's drawer: *"an order note

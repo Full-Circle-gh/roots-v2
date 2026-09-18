@@ -1731,15 +1731,53 @@ reg('dcMore', (sid,i)=>{
    building — so unlike every other one it asks first. The sheet is the phone's
    confirm; the desktop's is a browser confirm() for the same reason. */
 reg('dcReplacement', sid=>{
+  const od=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  /* WHICH GOODS, AND HOW MANY OF EACH (§98 addendum 8). It sent the whole
+     parcel until now, so two spoiled salads in a six-product box put six
+     products back on a van. One field per line, each starting at what went out
+     — the whole-parcel case is still one tap — and the freight typed beside
+     them, because a partial replacement is not the whole box's rate. A parcel
+     whose lines we cannot see (an older cached payload with no ids) asks for
+     the freight alone and posts no lines, which the route reads as all of them:
+     the behaviour this replaces. */
+  const sp=od&&(od.shipments||[]).find(x=>x.id===sid);
+  const lines=((sp&&sp.items&&sp.items.length)?sp.items:((od&&od.items)||[]))
+    .filter(t=>t&&t[6]!=null)
+    .map(t=>({id:t[6], qty:Number(t[0])||1, name:Array.isArray(t[1])?T(t[1][0],t[1][1]):String(t[1]||'')}));
+  const fields=lines.map(l=>({id:'q'+l.id, label:l.name+' · / '+l.qty, numeric:true, value:String(l.qty)}));
+  fields.push({id:'ship', label:T('Shipping cost','运费成本'), numeric:true, value:''});
   state.ask={title:T('Send replacement','补发'),
-    body:T('This creates a no-charge order for the same goods and takes them off the shelf.',
-           '将新建一笔零元订单发出同样商品,并从库存中扣除。'),
+    body:T('This creates a no-charge order and takes the goods off the shelf.',
+           '将新建一笔零元订单,并从库存中扣除。'),
     confirmLabel:T('Send replacement','补发'),
-    run:()=>{
+    fields,
+    validate:v=>{
+      const sr=String(v.ship||'').trim();
+      if(sr!==''&&!(/^\d+(\.\d{1,2})?$/.test(sr)))
+        return T('Enter a shipping cost of 0 or more.','运费成本需为 0 或以上。');
+      let any=false;
+      for(const l of lines){
+        const raw=String(v['q'+l.id]||'').trim();
+        if(!/^\d+$/.test(raw)) return T('Every line needs a quantity of 1 or more.','每行数量需为 1 或以上。');
+        const n=parseInt(raw,10);
+        if(n>l.qty) return T('Every line needs a quantity of 1 or more.','每行数量需为 1 或以上。');
+        if(n>0) any=true;
+      }
+      if(lines.length&&!any) return T('Pick at least one line.','请至少选择一行。');
+      return null;
+    },
+    run:(v)=>{
       const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
       if(!o||o._id==null||state.parcelBusy) return;
+      const body={shipment_id:sid};
+      if(lines.length){
+        body.items=lines.map(l=>({item_id:l.id, qty:parseInt(String(v['q'+l.id]||'0').trim(),10)}))
+          .filter(x=>x.qty>0);
+      }
+      const sr=String((v&&v.ship)||'').trim();
+      if(sr!=='') body.shipping_cost=Number(sr);
       state.parcelBusy='dc'+sid; state.orderErr=null; render();
-      apiWrite('/orders/'+o._id+'/delay-case/replacement',{shipment_id:sid}).then(j=>{
+      apiWrite('/orders/'+o._id+'/delay-case/replacement',body).then(j=>{
         state.parcelBusy=null;
         const no=j&&j.data&&j.data.order_no;
         showToast(no?T('Replacement created · '+no,'已补发 · '+no):T('Replacement created','已补发'));
@@ -14084,6 +14122,13 @@ function orderErrorText(e){
      still owes an answer, and saying so is the whole point of the case. */
   if(e.code==='case_not_closeable') return T('The carrier claim is not finished yet.','承运商赔偿尚未完成。');
   if(e.code==='replacement_exists') return T('A replacement has already been sent for this parcel.','该包裹已补发。');
+  /* §98 addendum 8 — the replacement sheet's own four refusals, worded for the
+     stale-page case that reaches them; the sheet itself catches them first. */
+  if(e.code==='bad_item'||e.code==='bad_items'||e.code==='duplicate_item')
+    return T('That line is not in this parcel.','该商品不在此包裹内。');
+  if(e.code==='bad_qty')           return T('Every line needs a quantity of 1 or more.','每行数量需为 1 或以上。');
+  if(e.code==='qty_too_high')      return T('A replacement cannot send more than went out.','补发不能超过已发出的数量。');
+  if(e.code==='bad_shipping_cost') return T('Enter a shipping cost of 0 or more.','运费成本需为 0 或以上。');
   if(e.code==='unknown_carrier')    return T('That carrier is not one the system knows.','承运商不正确。');
   /* Both of these are the desktop catalogue's own sentences for the same two
      codes, carried across word for word rather than reworded for the phone. */
@@ -15602,6 +15647,9 @@ function delayCaseCard(o,sp){
   const rb=[];
   if(dc&&dc.remedy_at) rb.push(escAttr(String(dc.remedy_at).slice(5,16)));
   if(dc&&dc.remedy_cost!=null) rb.push(T('cost ','成本 ')+money(CUR,dc.remedy_cost));
+  /* The freight half of that total, named when there is one — a cost nobody can
+     break down is what the carrier's payment gets set against in the dark. */
+  if(dc&&dc.remedy_shipping_cost!=null) rb.push(T('shipping ','运费 ')+money(CUR,dc.remedy_shipping_cost));
   const rnote=(dc&&dc.remedy_note)?escAttr(dc.remedy_note):'';
   /* THE THIRD ANSWER IS A LINK, NOT A THIRD BUTTON (§125). The customer opened
      a late parcel and the food was fine, so nothing is owed — before this the
@@ -16307,7 +16355,7 @@ function sheetAsk(){
        <div style="font-size:18px;font-weight:500">${a.title}</div>
        ${a.body?`<div style="font-size:15px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${a.body}</div>`:''}
      </div>
-     ${a.fields?`<div style="padding:8px 20px 0;display:flex;flex-direction:column;gap:16px">
+     ${a.fields?`<div style="padding:8px 20px 0;display:flex;flex-direction:column;gap:16px;max-height:46vh;overflow:auto">
        ${a.fields.map(f=>`<label style="display:block">
          <span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${f.label}</span>
          ${/* A THIRD SHAPE: a fixed set of answers. A native <select> renders as
@@ -22076,7 +22124,12 @@ const ITEM_TUPLE=it=>[it.qty||it.quantity||1,
      with nothing under its name, so two sizes of one product read as the same
      thing twice. Same slot, same renderer: whichever the row actually has.
      `size` is one stored string, not a translated pair, so both sides get it. */
-  itemOpts(it)||(it.size?[String(it.size),String(it.size)]:null)];
+  itemOpts(it)||(it.size?[String(it.size),String(it.size)]:null),
+  /* [6] THE LINE'S OWN ID, appended for §98 addendum 8: the replacement sheet
+     posts which lines go back out, and a tuple that had dropped the id could
+     only ever send the whole parcel. Appended, never inserted — itemRow and
+     every other reader index 0–5 positionally. */
+  it.id!=null?it.id:null];
 function mapDetail(o){
   const base=mapOrderRow(o);
   base.items=(o.items||[]).map(ITEM_TUPLE);

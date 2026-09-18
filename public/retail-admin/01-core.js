@@ -284,6 +284,15 @@ const TD_ERR = {
   // second copy would be two sentences for one code drifting apart.
   case_not_closeable:     ['The carrier claim is not finished yet.', '承运商赔偿尚未完成。'],
   replacement_exists:     ['A replacement has already been sent for this parcel.', '该包裹已补发。'],
+  // §98 addendum 8 — the sheet checks all four of these before it posts, so
+  // reaching one means a stale page or a hand-made request. They are worded
+  // anyway: a silent refusal on a screen that sends real stock is worse.
+  bad_item:               ['That line is not in this parcel.', '该商品不在此包裹内。'],
+  bad_items:              ['That line is not in this parcel.', '该商品不在此包裹内。'],
+  duplicate_item:         ['That line is not in this parcel.', '该商品不在此包裹内。'],
+  bad_qty:                ['Every line needs a quantity of 1 or more.', '每行数量需为 1 或以上。'],
+  qty_too_high:           ['A replacement cannot send more than went out.', '补发不能超过已发出的数量。'],
+  bad_shipping_cost:      ['Enter a shipping cost of 0 or more.', '运费成本需为 0 或以上。'],
   unknown_carrier:        ['That carrier is not one the system knows.', '承运商不正确。'],
 
   // ── Not set up ──
