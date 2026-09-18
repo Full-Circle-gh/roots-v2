@@ -1327,7 +1327,7 @@ router.post('/api/retail-admin/purchases/from-material-requests', requireRetailA
     return res.status(409).json({ success: false, error: 'not_sent',
       lines: notSent.map(l => ({ id: l.id, mr_number: l.mr_number })) });
   }
-  // A LINE THE BUYER STRUCK OFF IS NOT BOUGHT (§171). It left the picker when it
+  // A LINE THE BUYER STRUCK OFF IS NOT BOUGHT (§172). It left the picker when it
   // was struck, so this is the stale-screen case: the tick was made before
   // another buyer refused it. Reported by name, never skipped — silence on a
   // ticked line reads as "ordered", which is this route's own rule above.

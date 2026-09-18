@@ -17885,7 +17885,7 @@ optimistic per-item answer and the checkout the binding per-order one. Where the
 differ the checkout is right, which is the safe direction: the card can only ever
 name a date the checkout then confirms or pushes back, never one it pulls in.
 
-## §171 — A BUYER CAN SAY "NOT THIS ONE", AND THE GRAIN IS THE LINE
+## §172 — A BUYER CAN SAY "NOT THIS ONE", AND THE GRAIN IS THE LINE
 
 **Ash, 2026-09-18, on the From-the-kitchen box:** *"cant delete the request
 directly in this box"*. Asked whether that meant one line or the whole request,
@@ -17968,3 +17968,79 @@ not its twin is the same bug waiting** — which is what this was.
 when, and nothing shows it to the cook who asked — the kitchen has no screen for
 its own sent requests at all today. Building one is a different brief; the record
 is being kept now so that screen has something true to show when it exists.
+
+## §173 — THE COOK IS TOLD WHAT BECAME OF THE ASK
+
+**Ash, 2026-09-18, on §172's own flagged gap:** *"the silence is the weak point,
+not the delete"* — and *"ok do it"*.
+
+### THE GAP §172 OPENED, AND THE ONE IT ONLY MADE VISIBLE
+
+§172 gave the buyer a way to refuse a line. It did not create the silence: the
+kitchen has never had a screen for its own sent requests. A cook taps Send, sees
+*Sent to the buyer*, and from that moment learns nothing — not that it was
+ordered, not that it was refused, not that the whole request was withdrawn.
+
+**Asking twice is the cheap failure. Giving up on the screen is the expensive
+one**, and it is the one that actually happens: a cook who cannot tell whether
+anyone acted goes back to telling somebody in person, and the request screen
+becomes a thing that gets typed into and ignored.
+
+### THE SCREEN
+
+A new phone route, `askbuysent` — **Your buying requests** — in the *Ask someone
+else* group, directly under *Ready from the kitchen*. That group's own comment
+already describes this row's shape and earns it the place: *"the three rows above
+it ask, and this one is the answer coming back."* This is the second answer
+coming back — from the buyer rather than from the kitchen. **NO PILL**, for that
+row's stated reason: a fourth value for "you get told" would spend the scarcity
+that makes the other three legible.
+
+### THE GRAIN IS THE LINE, AGAIN, AND A REQUEST-LEVEL WORD WOULD HAVE TO LIE
+
+§86 part two made the line the unit of sourcing; §172 made it the unit of
+refusal. So one MR can be part ordered, part waiting and part struck off at the
+same time, and any single word printed on the request as a whole is wrong about
+at least one of its lines. **Every line carries its own state**, and the request
+above them carries only its number, its date, and the one fact that is genuinely
+request-level: whether it was withdrawn.
+
+### THREE WORDS, DECIDED ON THE SERVER
+
+`waiting`, `ordered`, `removed`, derived in `GET /material-requests/mine` from
+`sourced_po_id` and `declined_at` — the same two columns the buyer's screen reads
+— and sent as a field. **Not derived on the phone**: two screens each deciding
+what a null means is how they come to disagree, and this is Rule 6's "labels have
+one definition site" applied to a state rather than to a label.
+
+### WHO REFUSED IT IS SHOWN. THE PRICE STILL IS NOT.
+
+`declined_by_name` goes on the row, because "removed" without a name is an event
+with no one to ask about it. **§86's rule that no cost column reaches the kitchen
+is untouched** — `/mine` selects no price of any kind.
+
+**The purchase order number is deliberately left off too.** What a cook needs to
+know is that the thing is on order; which order it is on is the buyer's business,
+and a PO number on a kitchen screen is an invitation to go and look at one.
+
+### SCOPED TO THE CALLER
+
+`created_by = ` the signed-in operator. It is *your* requests, and it is the same
+column the request already stamps. A kitchen where everyone shares one login sees
+everything that login raised — which is the true answer to the question that
+screen is asking.
+
+### GATE
+
+`production:request` — the key that RAISES these requests, not a view key. The
+reasoning is `kitchenready`'s, verbatim in its own comment: this is the
+REQUESTER's side, how the thing you asked for is going. Anyone who can raise one
+can see what became of it; nobody else has a request to be told about.
+
+### NOT DECIDED HERE
+
+**Notifying.** This is a screen you open, not a push. A push when a buyer strikes
+a line off is defensible, and it is a different question: it needs a channel, and
+a rule about what is worth interrupting a cook mid-service for. The record
+(`declined_at`, `declined_by_name`) is being kept either way, so that decision is
+not blocked by this one.

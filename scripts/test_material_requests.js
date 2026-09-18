@@ -8,6 +8,7 @@
 //   PUT  /api/retail-admin/material-requests/:id
 //   PUT  /api/retail-admin/material-requests/:id/archive
 //   PUT  /api/retail-admin/material-requests/lines/:lineId/decline
+//   GET  /api/retail-admin/material-requests/mine
 //   POST /api/retail-admin/purchases/from-material-requests
 //   DELETE /api/retail-admin/purchases/:id            (releases the lines again)
 //
@@ -33,6 +34,8 @@
 //  11. the buyer strikes ONE line off: it leaves the list, cannot be ordered,
 //      cannot be struck once it is on an order, and the rollup ignores it
 //  12. every line struck off and nothing bought — the request is withdrawn
+//  13. /mine tells the cook what became of the ask: scoped to the caller, the
+//      state on the LINE, who removed it, and no price or PO number
 
 'use strict';
 
@@ -265,7 +268,7 @@ async function main() {
      'and the line the buyer is reading is unchanged');
 
   console.log('\n══ 11 · the buyer strikes ONE line off, and the rollup ignores it ══');
-  // §171. The grain is the line: this request has one line on an order and one
+  // §172. The grain is the line: this request has one line on an order and one
   // outstanding, and striking the outstanding one must not touch the other.
   const sourcedLine = db.prepare(
     'SELECT id FROM material_request_items WHERE request_id = ? AND sourced_po_id IS NOT NULL').get(req1.id);
@@ -319,6 +322,49 @@ async function main() {
   ok(row.status !== 'sourced', 'and is NOT called sourced — nobody bought anything');
   r = await call('GET', '/api/retail-admin/material-requests/pending-lines');
   eq(r.body.data.length, 0, 'the buyer’s list is empty');
+
+  console.log('\n══ 13 · the cook is told what became of the ask ══');
+  // §173. The kitchen's own side of this module: a cook tapped Send and, until
+  // /mine existed, learned nothing ever again.
+  // SOMEBODY ELSE'S REQUEST MUST NOT APPEAR. Written straight to the table
+  // because the stubbed operator is always id 7 — the scoping is the claim under
+  // test, so it needs a row this caller did not create.
+  db.prepare(`INSERT INTO material_requests (mr_number, date, status, sent_at, created_by, created_by_name)
+              VALUES ('MR-9999', DATE('now'), 'sent', CURRENT_TIMESTAMP, 99, 'Someone else')`).run();
+  const otherId = db.prepare("SELECT id FROM material_requests WHERE mr_number = 'MR-9999'").get().id;
+  db.prepare(`INSERT INTO material_request_items (request_id, ingredient_id, name_en, qty, unit, sort_order)
+              VALUES (?, 11, 'Flour', 1, 'bag', 0)`).run(otherId);
+
+  r = await call('GET', '/api/retail-admin/material-requests/mine');
+  eq(r.status, 200, 'responds 200');
+  const mine = r.body.data;
+  ok(!mine.some(x => x.mr_number === 'MR-9999'), 'somebody else’s request is not mine');
+  ok(mine.every(x => x.status !== 'draft'), 'a draft nobody has sent is not an answer to anything');
+
+  const m1 = mine.find(x => x.id === req1.id);
+  ok(!!m1, 'the request with history on it comes back');
+  // THE LINE CARRIES THE STATE, NOT THE REQUEST: this one is part bought and
+  // part refused at the same moment, which is exactly what no single word on
+  // the request as a whole could say.
+  const states = (m1.items || []).map(l => l.state).sort();
+  eq(JSON.stringify(states), JSON.stringify(['ordered', 'removed']),
+     'one line reads ordered and the other reads removed, on the same request');
+  const removedLine = m1.items.find(l => l.state === 'removed');
+  eq(removedLine.declined_by_name, 'Mei', 'and the cook is told WHO removed it');
+
+  const m2 = mine.find(x => x.id === draft.id);
+  eq(m2.withdrawn, true, 'a request with every line struck off reads as withdrawn');
+  eq(m2.items[0].state, 'removed', 'and its line says why');
+  const m3 = mine.find(x => x.id === gone.id);
+  eq(m3.items[0].state, 'waiting', 'a line nobody has acted on is still waiting');
+
+  // §86's rule is the server's, not a screen's discretion — and §173 keeps the
+  // purchase order number off the kitchen's screen the same way.
+  const everyLine = mine.flatMap(x => x.items || []);
+  ok(everyLine.length > 0, 'there are lines to check');
+  ok(everyLine.every(l => !('buy_price' in l) && !('cost_per_unit' in l) && !('price' in l)),
+     'no cost of any kind reaches the kitchen');
+  ok(everyLine.every(l => !('sourced_po_id' in l)), 'and no purchase order number either');
 
   console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
   server.close();

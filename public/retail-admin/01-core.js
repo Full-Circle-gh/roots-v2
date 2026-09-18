@@ -314,7 +314,7 @@ const TD_ERR = {
   not_mapped:             ['Somebody else changed this while you had it open — reload and try again.', '该记录已被他人修改,请刷新后重试。'],
   not_syncing:            ['Somebody else changed this while you had it open — reload and try again.', '该记录已被他人修改,请刷新后重试。'],
   cycle:                  ['That would make something contain itself.', '该操作会造成循环引用。'],
-  /* §171 — the two line-level refusals the kitchen's ask can give a buyer. BOTH
+  /* §172 — the two line-level refusals the kitchen's ask can give a buyer. BOTH
      ARE STALE-SCREEN FACTS: the row was acted on by somebody else, or in
      another tab, since this box was painted. They are not row_moved's sentence,
      because reloading is not the remedy — the line is settled either way, and
