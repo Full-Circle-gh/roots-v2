@@ -18643,7 +18643,12 @@ a phone.
 **THE SOURCE SHOP IS SWITCHED OFF, NOT DELETED.** `is_active = 0` is enough:
 `resolveShop()` in `routes/shop-menu.js` requires an active shop, so the old
 code resolves to nothing and the public page serves its one not-found page for
-this exactly as for a wrong code. Deleting the row instead would free the
+this exactly as for a wrong code. **What that page says happens to be exactly
+right for this case** — branded, bilingual, *No products yet. Check back soon.
+· 暂无商品 · 请稍后再来* — so a customer who scans a taken-down QR reads a shop
+between menus rather than an error, and no new customer-facing string is
+needed. It is an HTTP 404 underneath and uncached, which is what lets the same
+code go live again if a shop is ever set up there afresh. Deleting the row instead would free the
 location for a new shop with a new code and destroy the record of what the old
 one was, and the emptied shop is the evidence a reader needs to understand why
 a printed code went dead. **Turning that switch back on gives an empty menu,
