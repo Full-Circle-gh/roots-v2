@@ -7598,6 +7598,23 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_material_request_items_src ON material_request_items(sourced_po_id);
 `);
 
+// §174: the buyer strikes one line off the kitchen's ask. The grain is the LINE,
+// like sourcing (§86 part two) — a buyer drops the desiccant and still buys the
+// containers, which whole-request withdrawal (archived_at, above) cannot do.
+//
+// ONE-WAY, AND THE MODEL ALREADY SAYS WHY. §86's own rule for a sent request
+// that needs changing is "withdrawn and raised again": the kitchen owns the ask,
+// so a buyer un-removing a line would be the buyer re-raising somebody else's
+// request. There is deliberately no restore, which is also what keeps the
+// auto-archive in rollUp unambiguous — see routes/retail-material-requests.js.
+//
+// A PLAIN AUDIT INTEGER, NEVER A FOREIGN KEY — material_requests.created_by's
+// reason, verbatim: this table is cloned into tenant databases and `users` is
+// control-plane, so an FK here fails every insert on a tenant file.
+addColumn('material_request_items', 'declined_at',      'DATETIME');
+addColumn('material_request_items', 'declined_by',      'INTEGER');
+addColumn('material_request_items', 'declined_by_name', 'TEXT');
+
 // §90: voiding an approved staff claim. New columns rather than reusing
 // decided_by/decided_at/decided_note, so the record still says who approved a
 // claim after somebody else reverses that decision — see schema.sql.

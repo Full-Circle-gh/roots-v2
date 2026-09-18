@@ -314,6 +314,13 @@ const TD_ERR = {
   not_mapped:             ['Somebody else changed this while you had it open — reload and try again.', '该记录已被他人修改,请刷新后重试。'],
   not_syncing:            ['Somebody else changed this while you had it open — reload and try again.', '该记录已被他人修改,请刷新后重试。'],
   cycle:                  ['That would make something contain itself.', '该操作会造成循环引用。'],
+  /* §174 — the two line-level refusals the kitchen's ask can give a buyer. BOTH
+     ARE STALE-SCREEN FACTS: the row was acted on by somebody else, or in
+     another tab, since this box was painted. They are not row_moved's sentence,
+     because reloading is not the remedy — the line is settled either way, and
+     the operator needs to know WHICH way before they go looking for it. */
+  already_sourced:        ['That line is already on a purchase order.', '该行已在采购单上。'],
+  line_declined:          ['That line was removed and is no longer being bought.', '该行已移除，不再采购。'],
 };
 
 /* The sentence to SHOW for a failure. `code` is the server's stable error code;

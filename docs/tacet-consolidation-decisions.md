@@ -18074,3 +18074,163 @@ an empty block can see; the heading names the CONTROL. That distinction is the
 whole of this addendum and is the thing to keep if either is ever revisited.
 Recorded as `docs/tacet-delivery-vocabulary.md` v1.125, which locks nothing
 new. Covered by the same suite as the read end.
+
+## §174 — A BUYER CAN SAY "NOT THIS ONE", AND THE GRAIN IS THE LINE
+
+**Ash, 2026-09-18, on the From-the-kitchen box:** *"cant delete the request
+directly in this box"*. Asked whether that meant one line or the whole request,
+he chose **one line**.
+
+### WHAT WAS ALREADY TRUE
+
+§86 gave the kitchen's ask exactly one way out: `PUT
+/material-requests/:id/archive`, a soft delete of the WHOLE request. **No screen
+in the product had ever called it.** A buyer looking at the box could tick lines
+into a draft order and do nothing else — a material asked for in error, or
+already sitting in the store room, stayed on the list until somebody bought it.
+
+### THE DECISION
+
+**The buyer strikes off ONE LINE.** `material_request_items.declined_at` (plus
+`declined_by`, `declined_by_name`), set by `PUT
+/material-requests/lines/:lineId/decline`, and the line leaves the buyer's list.
+
+**The grain is §86 part two's grain, for §86 part two's reason.** The line is
+already the unit of sourcing because a buyer splits a morning's flour and oil
+across two suppliers as a matter of course. Refusing works the same way: in the
+box Ash was looking at, one request held a food container and a desiccant, and a
+buyer who will not buy the desiccant still wants the containers. Whole-request
+withdrawal cannot express that, which is why it was not what got built.
+
+**Withdrawal is not replaced.** `archived_at` still means the request is gone,
+and the archive route is untouched.
+
+### IT IS ONE-WAY, AND THAT IS §86's OWN RULE, NOT A SHORTCUT
+
+There is no un-strike. §86 already says what happens when a sent request needs
+changing: *"A sent request is withdrawn (archived) and raised again."* The ask
+belongs to the kitchen, so a buyer putting a line back would be the buyer
+re-raising somebody else's request. It also keeps the rollup's auto-archive
+below unambiguous — there is no state where a request is archived because its
+lines were struck and then un-struck underneath it.
+
+### THE ROLLUP: A STRUCK LINE LEAVES THE SUM, IT DOES NOT COUNT AS DONE
+
+`rollUp` counts only lines with `declined_at IS NULL`. The alternative — counting
+a struck line as done — would flip a request to `sourced`, whose meaning is
+*every line reached a purchase order*, over lines nobody bought. `sourced` is a
+word the books are read through and it is not being loosened.
+
+**And when nothing is left: the request is withdrawn.** Every line struck off
+with none ever sourced sets `archived_at`. Left alone, such a request would sit
+in the open tab forever with nothing outstanding on it — a row that costs a click
+and says nothing, which is the shape this module already refuses at POST. It is
+safe to do automatically precisely because striking off is one-way and a line on
+a purchase order cannot be struck at all.
+
+### TWO REFUSALS, BOTH STALE-SCREEN CASES
+
+A line already on a purchase order **cannot be struck off** (409
+`already_sourced`) — for archiving's reason at the line's grain: it would hide
+the ask while its purchase stands. Delete the order first, which releases the
+line, then strike it.
+
+A struck line **cannot be turned into an order** (409 `line_declined`, from
+`POST /purchases/from-material-requests`). It left the picker when it was
+struck, so this is the second-buyer case: a tick made before somebody else
+refused it. Reported by name, never skipped — silence on a ticked line reads as
+"ordered".
+
+### THE OTHER HALF OF THE SAME BRIEF — A FOOTER NOBODY COULD READ
+
+Ash's first point was *"one button is not clear on the buttom left"*. The
+From-the-kitchen modal (`#pu2-mrmodal`) was built on the copy-from-kitchen
+picker's shell but was **left out of that shell's CSS block**, which only ever
+named `#pu2-kmodal`. So its footer stayed one unwrapped flex row holding six
+items in a 680px modal: the store picker was squeezed until its label broke over
+three lines and its select was too narrow to read a store's name in. Both ids are
+now named in every rule of that block. **A layout fix written for one picker and
+not its twin is the same bug waiting** — which is what this was.
+
+### NOT DECIDED HERE
+
+**Whether the kitchen is told.** `declined_at` records who refused a line and
+when, and nothing shows it to the cook who asked — the kitchen has no screen for
+its own sent requests at all today. Building one is a different brief; the record
+is being kept now so that screen has something true to show when it exists.
+
+## §175 — THE COOK IS TOLD WHAT BECAME OF THE ASK
+
+**Ash, 2026-09-18, on §174's own flagged gap:** *"the silence is the weak point,
+not the delete"* — and *"ok do it"*.
+
+### THE GAP §174 OPENED, AND THE ONE IT ONLY MADE VISIBLE
+
+§174 gave the buyer a way to refuse a line. It did not create the silence: the
+kitchen has never had a screen for its own sent requests. A cook taps Send, sees
+*Sent to the buyer*, and from that moment learns nothing — not that it was
+ordered, not that it was refused, not that the whole request was withdrawn.
+
+**Asking twice is the cheap failure. Giving up on the screen is the expensive
+one**, and it is the one that actually happens: a cook who cannot tell whether
+anyone acted goes back to telling somebody in person, and the request screen
+becomes a thing that gets typed into and ignored.
+
+### THE SCREEN
+
+A new phone route, `askbuysent` — **Your buying requests** — in the *Ask someone
+else* group, directly under *Ready from the kitchen*. That group's own comment
+already describes this row's shape and earns it the place: *"the three rows above
+it ask, and this one is the answer coming back."* This is the second answer
+coming back — from the buyer rather than from the kitchen. **NO PILL**, for that
+row's stated reason: a fourth value for "you get told" would spend the scarcity
+that makes the other three legible.
+
+### THE GRAIN IS THE LINE, AGAIN, AND A REQUEST-LEVEL WORD WOULD HAVE TO LIE
+
+§86 part two made the line the unit of sourcing; §174 made it the unit of
+refusal. So one MR can be part ordered, part waiting and part struck off at the
+same time, and any single word printed on the request as a whole is wrong about
+at least one of its lines. **Every line carries its own state**, and the request
+above them carries only its number, its date, and the one fact that is genuinely
+request-level: whether it was withdrawn.
+
+### THREE WORDS, DECIDED ON THE SERVER
+
+`waiting`, `ordered`, `removed`, derived in `GET /material-requests/mine` from
+`sourced_po_id` and `declined_at` — the same two columns the buyer's screen reads
+— and sent as a field. **Not derived on the phone**: two screens each deciding
+what a null means is how they come to disagree, and this is Rule 6's "labels have
+one definition site" applied to a state rather than to a label.
+
+### WHO REFUSED IT IS SHOWN. THE PRICE STILL IS NOT.
+
+`declined_by_name` goes on the row, because "removed" without a name is an event
+with no one to ask about it. **§86's rule that no cost column reaches the kitchen
+is untouched** — `/mine` selects no price of any kind.
+
+**The purchase order number is deliberately left off too.** What a cook needs to
+know is that the thing is on order; which order it is on is the buyer's business,
+and a PO number on a kitchen screen is an invitation to go and look at one.
+
+### SCOPED TO THE CALLER
+
+`created_by = ` the signed-in operator. It is *your* requests, and it is the same
+column the request already stamps. A kitchen where everyone shares one login sees
+everything that login raised — which is the true answer to the question that
+screen is asking.
+
+### GATE
+
+`production:request` — the key that RAISES these requests, not a view key. The
+reasoning is `kitchenready`'s, verbatim in its own comment: this is the
+REQUESTER's side, how the thing you asked for is going. Anyone who can raise one
+can see what became of it; nobody else has a request to be told about.
+
+### NOT DECIDED HERE
+
+**Notifying.** This is a screen you open, not a push. A push when a buyer strikes
+a line off is defensible, and it is a different question: it needs a channel, and
+a rule about what is worth interrupting a cook mid-service for. The record
+(`declined_at`, `declined_by_name`) is being kept either way, so that decision is
+not blocked by this one.
