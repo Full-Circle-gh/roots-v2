@@ -1317,6 +1317,17 @@ const FEATURE_HOMES = {
   feedback:    '#tab-feedback',
   socialProof: '#tab-social',
   faq:         '#tab-faq',
+  // Waste (§32) had a FEATURE_CATALOG entry and NO entry here, so
+  // mountFeatureControls() never visited it and its switch mounted nowhere:
+  // the feature was on by the server default in routes/retail-waste.js and
+  // that was the only state it had. The CSS has assumed this line exists
+  // since §32 — `body.ent-waste:not(.feat-waste) .tabs [data-feat="waste"]`
+  // hides the rail row rather than dimming it, on the stated grounds that
+  // "its switch lives in Settings → Operations, not on the Waste page". It
+  // did not. It does now. Its host holds the switch and nothing else, so it
+  // carries no data-feat and has no .feat-off rule, same shape as the
+  // Production host's content-bearing one minus the content.
+  waste:       '#waste-settings-home',
   // quickStock / kitchenAdd are NOT here, and their catalogue entries are gone
   // too (§53). #qs-home and #ka-home remain as plain cards carrying the staff
   // link; with no FEATURE_CATALOG entry, mountFeatureControls() never visits
