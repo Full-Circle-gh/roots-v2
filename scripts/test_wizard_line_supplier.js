@@ -172,10 +172,15 @@ async function main() {
   sandbox.puNewOrder();
   sandbox.puWizNext(2);
 
+  // THE CHIP'S SHAPE IS PINNED ON PURPOSE below: the name lives in its own
+  // .nm span and the whole name on the chip's title, because the chip is
+  // width-capped and only an element can be ellipsised. Read `<span
+  // class="nm">NAME</span>` as "this name reached the line, trimmed" — the
+  // assertion it replaced read `>NAME <`, against a bare text node.
   console.log('\n1. a product with no purchase history — the reported defect');
   await sandbox.puPick(340);
   ok(lines().includes('Almonds (Raw)'), 'the line is on the order');
-  ok(/pu2-supchip[^"]*" onclick="puLineSup\(0\)/.test(lines()), 'its supplier chip is wired to the picker');
+  ok(/class="pu2-supchip[^"]*"[^>]*onclick="puLineSup\(0\)"/.test(lines()), 'its supplier chip is wired to the picker');
   ok(picker() === '', 'nothing is open before the chip is clicked');
   await sandbox.puLineSup(0);
   ok(picker().includes('pu2-supname'), 'the chip opens a picker even with no history to show');
@@ -205,7 +210,7 @@ async function main() {
   ok(node('pu2-supname').value === 'Nut House 坚果屋', 'and picking puts it in the box whole');
   type('  Nut House 坚果屋  ');
   sandbox.puLineSupSave();
-  ok(lines().includes('>Nut House 坚果屋 <'), 'a typed name lands on the line, trimmed');
+  ok(lines().includes('<span class="nm">Nut House 坚果屋</span>'), 'a typed name lands on the line, trimmed');
   ok(picker() === '', 'and the picker closes behind it');
   ok(/value="0"/.test(lines()), 'a typed name sets no price — we have no figure for a supplier we never bought from');
 
@@ -232,7 +237,7 @@ async function main() {
   console.log('\n4. a material line — it had no control on it at all');
   await sandbox.puPickMaterial(20);
   ok(lines().includes('Black Bean Tempeh'), 'the material is on the order');
-  ok(/pu2-supchip[^"]*" onclick="puLineSup\(1\)/.test(lines()), 'its supplier is a chip now, not dead text');
+  ok(/class="pu2-supchip[^"]*"[^>]*onclick="puLineSup\(1\)"/.test(lines()), 'its supplier is a chip now, not dead text');
   ok(lines().includes('Precious Soe'), 'defaulted from the material master, as before');
   await sandbox.puLineSup(1);
   ok(picker().includes('pu2-supname'), 'the picker opens for a material too');
@@ -252,7 +257,7 @@ async function main() {
   ok(picker().includes('cheapest'), 'the cheapest of them is flagged');
   ok(picker().includes('puPriceHistory(341)'), 'and price history is one click away');
   sandbox.puLineSupUse(1);
-  ok(lines().includes('>Bean Bros <'), 'taking another supplier retargets the line');
+  ok(lines().includes('<span class="nm">Bean Bros</span>'), 'taking another supplier retargets the line');
   ok(lines().includes('value="29"'), 'and brings their last price with it');
 
   console.log('\n6. the picker is addressed by line index, so a removal must close it');
@@ -368,7 +373,7 @@ async function main() {
   ok(menu().includes('Abaxiang Whole Grains Store'), '中文 narrows the line’s book the same way');
   type('阿巴香杂粮店');
   sandbox.puLineSupSave();
-  ok(lines().includes('>Abaxiang Whole Grains Store <'),
+  ok(lines().includes('<span class="nm">Abaxiang Whole Grains Store</span>'),
      'and saving a 中文 name files the line under the stored one — the only name the server knows');
   await sandbox.puLineSup(0);
   type('Some One-Off Guy');
