@@ -1327,6 +1327,15 @@ router.post('/api/retail-admin/purchases/from-material-requests', requireRetailA
     return res.status(409).json({ success: false, error: 'not_sent',
       lines: notSent.map(l => ({ id: l.id, mr_number: l.mr_number })) });
   }
+  // A LINE THE BUYER STRUCK OFF IS NOT BOUGHT (§174). It left the picker when it
+  // was struck, so this is the stale-screen case: the tick was made before
+  // another buyer refused it. Reported by name, never skipped — silence on a
+  // ticked line reads as "ordered", which is this route's own rule above.
+  const struck = lines.filter(l => l.declined_at);
+  if (struck.length) {
+    return res.status(409).json({ success: false, error: 'line_declined',
+      lines: struck.map(l => ({ id: l.id, mr_number: l.mr_number, name_en: l.name_en })) });
+  }
   // THE LINE-LEVEL REFUSAL THAT STOPS THE SAME FLOUR BEING BOUGHT TWICE. Two
   // buyers on the same list, or one buyer on a stale screen, both reach here.
   const already = lines.filter(l => l.sourced_po_id);

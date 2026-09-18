@@ -1,4 +1,5 @@
-# Tacet shared-core consolidation — decisions record, v4.308
+# Tacet shared-core consolidation — decisions record, v4.310
+# Tacet shared-core consolidation — decisions record, v4.310
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -23,10 +24,15 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 
 
 
-2026-09-18 · v4.306 — **§170 · THE WAIT GETS A DATE ON THE CARD, AND §108's “a pill cannot” IS OVERTURNED — DECIDED BY ASH**, reading Shop from a Shenzhen address at 10:04 on a batch morning: *“our real issue isn't the tag — it's that a Shenzhen shopper sees NEXT BATCH with no date attached until they're deep in checkout. The word alone sounds like an indefinite wait.”* **THE REPORTED ROW WAS NOT A BUG** — shelf at zero, today genuinely on the cadence (anchor 2026-06-16, interval 2, verified through `lib/batch-cadence.js`), before the 11:00 ready hour, and a Shenzhen address so §108's local-run silence correctly did not fire. Honest, and still the wrong thing to show. **§108's ruling that the word describes the ITEM stands untouched**; what is overturned is its second half, that a date *“belongs in the checkout notice ... not in a pill, which cannot”*. It can: `local_fresh_date` has ridden every browse row since §80 and only the one transit day was missing. **A customer decides whether to tap on the CARD**, so answering three screens later was the defect. **THE CARD NAMES THE ARRIVAL, WHICH DIFFERS BY SHOPPER** — the local run is served the make day, a couriered order the day after — and both are stamped SERVER-SIDE (`fresh_ship_date`, `local_fresh_in_days`) for §82's reason: no handset clock decides whether a date is tomorrow. The client adds one to an integer and formats a string it was handed. **BOUNDED AT TWO DAYS**: `TODAY · 今天` and `TOMORROW · 明天` need no reading, past that the date itself (`SEP 20 · 9月20日`) rather than a count the shopper must do arithmetic on. **NO CHINESE IS COMPOSED** — both forms are lifted whole from live pairs (`checkout.wxml:400`, `checkout.js:1911`) — so Rule 4 is not amended; the lift is recorded as `docs/tacet-delivery-vocabulary.md` v1.123. **ALL SEVEN BROWSE SURFACES MOVE TOGETHER**, which is §108's own lesson and not an enlarged brief: dating the grid alone would rebuild the exact screenshot-pair bug §108 was written for. One derivation (`miniapp/utils/fresh-eta.js`); `public/shop.html` holds the only second copy because it is a standalone storefront that requires nothing, and its copy names the original. **The add toasts, `add-to-order` and the checkout notice are untouched** — the last answers a harder question (cart, store, zero-stock roll-forward) and stays binding where the two differ, which is the safe direction. Covered by `scripts/test_fresh_batch_eta.js`.
-2026-09-18 · v4.308 — **§171 ADDENDUM 1 · THE SIGNATURE WAS WRONG IN THE CASE, AND ONLY THE LIVE API SAID SO.** Hours after §171 shipped, with Ash's Shangpeng credentials in hand, a read-only `GET v1/printer/info` probe — run deliberately BEFORE any test print — returned `{"errorcode":-4,"errormsg":"签名错误"}`. **The algorithm was right and the case was wrong**: the MD5 must be **UPPERCASE**. Twelve conventions were put to the live endpoint; eleven were refused and exactly one got through, the uppercase form of the one already shipped. **This corrects §171's own sourcing claim**, which offered "read off the published `@xesam/cloud-vendor-spyun` client … not recalled" as grounds for trust: that client delegates hashing to an injected signer and so fixes the input string while saying nothing about the output format — a source can be primary and still not answer the question asked of it. 签名错误 names no field and, against freshly-typed credentials, reads exactly like a mistyped APPSECRET, so the wrong thing would have been debugged for hours. `scripts/test_printer_vendors.js` now pins the case **three ways**, one test named for the bug, so deleting an "unnecessary" `.toUpperCase()` fails the build rather than the printer; the lowercase revert was confirmed red. **The transferable part is the probe**: where a vendor's documentation cannot be read — both Shangpeng doc sites are client-rendered and would not open through this session's proxy, which is why the tag map shipped flagged — **the API can still be asked**, in one request, before the hardware is blamed. The tag map remains unverified and still expects a test print. **A second finding, not ours to fix**: with the signature accepted the probe returned `{"errorcode":2,"errormsg":"打印机不存在"}` — the device is not yet bound to the account, an app-side step with the label's KEY, recorded because that message against correct credentials is otherwise alarming to read.
+2026-09-18 · v4.310 — **§171 ADDENDUM 1 · THE SIGNATURE WAS WRONG IN THE CASE, AND ONLY THE LIVE API SAID SO.** Hours after §171 shipped, with Ash's Shangpeng credentials in hand, a read-only `GET v1/printer/info` probe — run deliberately BEFORE any test print — returned `{"errorcode":-4,"errormsg":"签名错误"}`. **The algorithm was right and the case was wrong**: the MD5 must be **UPPERCASE**. Twelve conventions were put to the live endpoint; eleven were refused and exactly one got through, the uppercase form of the one already shipped. **This corrects §171's own sourcing claim**, which offered "read off the published `@xesam/cloud-vendor-spyun` client … not recalled" as grounds for trust: that client delegates hashing to an injected signer and so fixes the input string while saying nothing about the output format — a source can be primary and still not answer the question asked of it. 签名错误 names no field and, against freshly-typed credentials, reads exactly like a mistyped APPSECRET, so the wrong thing would have been debugged for hours. `scripts/test_printer_vendors.js` now pins the case **three ways**, one test named for the bug, so deleting an "unnecessary" `.toUpperCase()` fails the build rather than the printer; the lowercase revert was confirmed red. **The transferable part is the probe**: where a vendor's documentation cannot be read — both Shangpeng doc sites are client-rendered and would not open through this session's proxy, which is why the tag map shipped flagged — **the API can still be asked**, in one request, before the hardware is blamed. The tag map remains unverified and still expects a test print. **A second finding, not ours to fix**: with the signature accepted the probe returned `{"errorcode":2,"errormsg":"打印机不存在"}` — the device is not yet bound to the account, an app-side step with the label's KEY, recorded because that message against correct credentials is otherwise alarming to read.
+
+2026-09-18 · v4.309 — **§172 ADDENDUM · THE WRITE END: A CONTROL THAT DOES NOT NAME ITSELF — REPORTED BY ASH**, on the customer page with the cursor inches from it: *“im on customer page wher is it”*. An empty Know block collapsed to a bare `Edit` under the name and said nothing about the two things behind it. It now shows `What we know · 备注与标签` — **not a new string**: the heading the phone's customer record already used for this same block, already locked, arriving on its second surface. **Shown only while the block is empty**, so the space saving that collapsed the old 210px card is kept. **The rejected empty-state stays rejected** — `暂无备注。` names the absence, the heading names the control, and that distinction is the part to keep. `docs/tacet-delivery-vocabulary.md` v1.125 locks nothing new. Covered by `scripts/test_customer_standing_note.js`, including the stylesheet's own `[hidden]` guard — the trap `test_admin_install.js` exists for.
+
+2026-09-18 · v4.308 — **§172 · WHAT THE SHOP KNOWS ABOUT A PERSON IS READ ON EVERY ORDER, AND IS EDITED IN ONE PLACE — DECIDED BY ASH.** Ash, on TC000750's drawer: *“an order note will appear only for that order. however we need a note that will appear for this customer order everytime he place an order”*. **NO STORAGE IS ADDED — A READ IS.** `retail_customers.note` and `.tags` have existed since the customer drawer's Know block and no order ever looked at them, so the knowledge sat in the right place and reached nobody at the moment it was needed. **THREE NOTES, NOT ONE**: `customer_note` is the BUYER's, for that order; `staff_note` is the SHOP's, for that order; `customer_standing_note` (aliased from `retail_customers.note` on the order read) is the shop's, about the PERSON, on every order they place. **THE COPY RULE IS THE ARCHITECTURE**: the note is READ through the `LEFT JOIN retail_customers` that `GET /api/retail-admin/orders/:id` already made for the nickname and phone, and never stamped onto an order — correct it once and every order past, open and future reads the correction, because one copy exists. **READ-ONLY IN THE DRAWER**, Edit navigates to the customer: an editable box there sits pixels from the per-order Shop note under a near-identical label, which is how “no ice THIS time” gets typed into a note that follows a person for a year. **IT NEVER REACHES THE CUSTOMER** — `loadOrderForCustomer` names its columns by hand and does not select it, deliberately and load-bearingly. **NOTHING RENDERS WITHOUT A PERSON**: walk-ins and most channel orders carry no `customer_id`, so it is null and absent, with no empty state. **THREE SURFACES, ONE ENDPOINT**: the desktop drawer, the mirrored channel drawer and the phone's order detail; the Orders LIST and the kitchen print were considered and left to their own change under one-PR-per-change. **NO CHINESE IS MINTED** — `About this customer · 关于该顾客的备注` lifts its Chinese half whole from the live aria-label on the textarea the text is typed into, recorded as `docs/tacet-delivery-vocabulary.md` v1.124.
 
 2026-09-18 · v4.307 — **§171 · A PRINTER IS A BRAND, NOT A CONSTANT — ASKED BY ASH.** Ash, with a 商鹏 SP-T6-H for the new Yuexiu shop: *"we need to add this printer as well to our system"*, then, against a recommendation to return it for a Feie unit: *"think about different tenant, not all of them will use the same printer brand, so adding more printer options its better"*. **The second message overrides the first recommendation, which was argued on Roots' costs alone and was wrong on the product** — a tenant arrives with the printer already screwed to the counter. **The objection that survived is that slip templates must not exist twice**, and the shape answers it: `lib/feie.js` is 1210 lines of which ~120 are transport and ~1090 are 58mm layout, so there is **one renderer emitting house markup and a translation table at the wire**, per vendor, forever. **The house markup is Feie's tag set deliberately** — `<CB> <B> <L> <BOLD> <C>` — so the Feie adapter is a pass-through and no renderer moved. **The vendor is a per-store field** (`printer.by_store[].vendor`, `printer.kitchen_vendor`) because a four-shop tenant buys printers one shop at a time; **absent means `feie`**, which every saved row already is, so there is no migration. `integrations.spyun = { appid, appsecret }` rides the existing secret-box, and the global gate stops being `feieEnabled()` and becomes "is ANY vendor configured?" or a Shangpeng-only tenant is told printing is off while their printer works. **A chat-time claim that Shangpeng authenticates per-device off the label is CORRECTED here before it becomes folklore**: it is account-level like Feie, and the label's KEY binds the device once in the console — the same warning the Feie panel has carried since it was written, one vendor over. Endpoints and both signature shapes (`sha1(user+ukey+stime)` / sorted-params `MD5(…&appsecret=…)`) were **read off the published `@xesam/cloud-vendor-spyun` client and cross-checked against the base URL compiled into Shangpeng's own console bundle, not recalled**. **One thing is explicitly unverified**: Shangpeng's tag NAMES, because both vendor doc sites are client-rendered and would not open through this session's proxy — so the map ships as a commented one-screen table defaulting to pass-through, a one-line fix if a test print returns literal `<CB>`, and `BIG_WIDTH` moves into the adapter for the same reason. The SP-T6-H has **no auto-cutter** where the FP-V58-D does; nothing depends on it, recorded so the first "the printer is broken" finds the answer. **No Chinese composed** — the picker shows the vendors' own names 飞鹅 and 商鹏 — so Rule 4 is not engaged. Label printing and status polling are deliberately NOT in the contract.
+
+2026-09-18 · v4.306 — **§170 · THE WAIT GETS A DATE ON THE CARD, AND §108's “a pill cannot” IS OVERTURNED — DECIDED BY ASH**, reading Shop from a Shenzhen address at 10:04 on a batch morning: *“our real issue isn't the tag — it's that a Shenzhen shopper sees NEXT BATCH with no date attached until they're deep in checkout. The word alone sounds like an indefinite wait.”* **THE REPORTED ROW WAS NOT A BUG** — shelf at zero, today genuinely on the cadence (anchor 2026-06-16, interval 2, verified through `lib/batch-cadence.js`), before the 11:00 ready hour, and a Shenzhen address so §108's local-run silence correctly did not fire. Honest, and still the wrong thing to show. **§108's ruling that the word describes the ITEM stands untouched**; what is overturned is its second half, that a date *“belongs in the checkout notice ... not in a pill, which cannot”*. It can: `local_fresh_date` has ridden every browse row since §80 and only the one transit day was missing. **A customer decides whether to tap on the CARD**, so answering three screens later was the defect. **THE CARD NAMES THE ARRIVAL, WHICH DIFFERS BY SHOPPER** — the local run is served the make day, a couriered order the day after — and both are stamped SERVER-SIDE (`fresh_ship_date`, `local_fresh_in_days`) for §82's reason: no handset clock decides whether a date is tomorrow. The client adds one to an integer and formats a string it was handed. **BOUNDED AT TWO DAYS**: `TODAY · 今天` and `TOMORROW · 明天` need no reading, past that the date itself (`SEP 20 · 9月20日`) rather than a count the shopper must do arithmetic on. **NO CHINESE IS COMPOSED** — both forms are lifted whole from live pairs (`checkout.wxml:400`, `checkout.js:1911`) — so Rule 4 is not amended; the lift is recorded as `docs/tacet-delivery-vocabulary.md` v1.123. **ALL SEVEN BROWSE SURFACES MOVE TOGETHER**, which is §108's own lesson and not an enlarged brief: dating the grid alone would rebuild the exact screenshot-pair bug §108 was written for. One derivation (`miniapp/utils/fresh-eta.js`); `public/shop.html` holds the only second copy because it is a standalone storefront that requires nothing, and its copy names the original. **The add toasts, `add-to-order` and the checkout notice are untouched** — the last answers a harder question (cart, store, zero-stock roll-forward) and stays binding where the two differ, which is the safe direction. Covered by `scripts/test_fresh_batch_eta.js`.
 
 2026-09-17 · v4.305 — **§169 · BUYERS ARE A BREAKDOWN, NOT A NUMBER — ASKED BY ASH.** Ash, reading the phone's Trend screen: *"people bought I see low number it can't be all channels"*. It could not, and the reason is that every customer figure on both halves of the product is keyed on `retail_orders.customer_id`, which `routes/meituan-internal.js` and `routes/eleme-internal.js` have never written — so `COUNT(DISTINCT customer_id)` silently skips every marketplace order while the revenue four tiles above counts them. 79 buyers under ¥149,344. **THE DECISION IS THAT THEY STAY SEPARATE.** Summing the channels into one "people bought" would count the same human twice the moment they order in the mini app and on Meituan, and no join exists that could ever detect it — the identity spaces do not reconcile and never will. A breakdown is the closest to real that is also true. **THREE CHANNELS CAN BE COUNTED AND ONE CANNOT.** Storefront is exact on `customer_id`; Meituan is exact on `channel_customer_id` (wmUserId, "the only stable customer identity Meituan gives a merchant", stored since 2026-09-15); wholesale is countable on the real unmasked `recipient_phone` the gzgrocery daemon writes. **Eleme cannot, and that is now evidenced rather than assumed**: the shape digest was read back on 2026-09-17 and its `userInfo` object — the only person-shaped container in 189 field names — holds 33 keys that are consignee name, phones, address, distance and IM state, and no id of any kind. It identifies a DELIVERY, not a customer. **NEW-VS-RETURNING IS NOT ONE DEFINITION ACROSS THE THREE, and the doc says so rather than the screen implying otherwise**: storefront's *new* means first-ever paid order falling inside the window, which we compute; Meituan's means `channel_customer_orders = 1`, which is MEITUAN'S OWN lifetime count at the moment the order arrived and covers business done before this daemon existed. They are both honest and they are not the same question, so they are labelled by channel and never added together. **THE MEITUAN COUNT UNDER-REPORTS UNTIL MID-SEPTEMBER AND IS SHOWN ANYWAY, WITH ITS DATE.** `channel_customer_id` has only been stored since 2026-09-15, so a 30- or 90-day window reads low and will climb as history accrues; backfilling means re-reading every historical order from Meituan and is not done. A figure carrying *from 15 Sep* is honest; one silently reading 3 is not. **NOTHING ELSE MOVES.** Revenue, orders, products, stores, payments and visits are untouched — this section decides the customer figures and only those. Covered on the phone by `scripts/test_mobile_trend.js` and asserted against the payload's real key names so a server-side rename breaks a test rather than a card.
 
@@ -18037,3 +18043,245 @@ probe returned `{"errorcode":2,"errormsg":"打印机不存在"}` — SN 15526345
 not bound to the account. That is an app-side binding step with the label's
 KEY, not a code defect, and it is recorded here because "printer does not
 exist" against correct credentials is otherwise an alarming thing to read.
+## §172 — WHAT THE SHOP KNOWS ABOUT A PERSON IS READ ON EVERY ORDER, AND IS EDITED IN ONE PLACE
+
+**DECIDED BY ASH, 2026-09-18**, looking at TC000750's drawer: *"an order note
+will appear only for that order. however we need a note that will appear for
+this customer order everytime he place an order."*
+
+**THE FIELD ALREADY EXISTED AND WAS NOT READ.** `retail_customers.note` and
+`.tags` have been on the customer since the drawer's Know block was built — free
+text the operator types, plus a comma-separated tag list, both editable in the
+customer drawer and searchable from the Customers list. Nothing on an order ever
+looked at them. So the knowledge existed, in the right place, and reached nobody
+at the moment it was needed: the person packing the parcel. This decision adds
+no storage. It adds a read.
+
+**THREE NOTES CAN SIT ON ONE ORDER AND THEY ARE NOT THE SAME NOTE.**
+`customer_note` is what the BUYER typed at checkout, for that order.
+`staff_note` is what the SHOP typed, for that order. The third —
+`retail_customers.note`, aliased `customer_standing_note` on the order read — is
+what the shop knows about the PERSON, and it is true of every order they place.
+An allergy, a lift that does not work, invoicing monthly: none of those are
+facts about a parcel.
+
+**THE COPY RULE, WHICH IS THE WHOLE ARCHITECTURE.** The note is READ from the
+customer on every order and never copied onto one. `GET
+/api/retail-admin/orders/:id` already `LEFT JOIN`ed `retail_customers` for the
+nickname and phone; the note and tags ride the same join. Correct the note once
+on the customer page and every order — past, open and future — reads the
+corrected text, because there is only ever one copy. Had it been stamped onto
+the order at checkout, an order would keep a note the customer page had already
+retired, and no one reading the order could tell which was true.
+
+**READ-ONLY IN THE ORDER DRAWER, AND THIS IS THE PART TO NOT UNDO.** The Edit
+button navigates to the customer; it does not open a field. The alternative —
+an editable box in the drawer — puts a permanent note a few pixels from the
+per-order Shop note, wearing nearly the same label. The failure is not
+hypothetical: it is "no ice **this time**" typed into the note that then follows
+a person for a year, invisible to whoever typed it. One copy, one place to
+change it, and the place is the one screen that is about the person.
+
+**IT DOES NOT GO TO THE CUSTOMER.** The customer-facing read is
+`loadOrderForCustomer`, which names its columns by hand and does not select
+this one. That is deliberate and load-bearing: the standing note is what the
+shop says about a customer, and some of it — chases, disputes, "check the
+address twice" — is not written to be read by them. A future session widening
+that column list widens it past this note.
+
+**NOT SHOWN WHERE THERE IS NO PERSON.** Walk-ins and most channel orders carry
+no `customer_id`, so the note is null and nothing renders. No empty state, no
+placeholder: §160's rule that a control which does nothing is worse than no
+control applies to labels that say "no note" just as well.
+
+**WHERE IT LANDS, AND WHAT WAS LEFT OUT ON PURPOSE.** The desktop order drawer
+(both the main one and the mirrored channel view) and the phone app's order
+detail, all three off the one endpoint. The Orders LIST and the kitchen/packing
+print were considered and deliberately left for their own change — the list is
+where tag filtering would earn its keep, and the print is where an allergy note
+does, but each is a separate surface and a separate PR under the one-PR-per-
+change rule.
+
+**NO CHINESE IS MINTED.** The label pair is `About this customer ·
+关于该顾客的备注`, and its Chinese half is LIFTED WHOLE from the live aria-label on
+the very textarea this text is typed into, in the customer drawer. Same string,
+same thing, both screens. Recorded in `docs/tacet-delivery-vocabulary.md`
+v1.124, which locks nothing new.
+
+**ADDENDUM, 2026-09-18 (v4.309) — THE WRITE END. A NOTE NOBODY CAN FIND IS
+WORTH NOTHING.** Ash, minutes after the read end was built, on the customer
+page with the control three inches from the cursor: *“im on customer page wher
+is it”*. With nothing stored, the Know block collapses to a bare `Edit` under
+the customer's name — correct about space and silent about purpose. It now
+carries `What we know · 备注与标签`, which is not a new string but this
+block's own heading, live on the phone's customer record for the same block
+and already locked. Shown ONLY while the block is empty, which is the only
+state that was ambiguous: a note prints its own line, tags print chips, and
+beside either the button's job is plain. The block costs one line when empty
+and not a pixel more once used, so the saving that collapsed the old 210px
+card stands. **The empty-state string this block once rejected is still
+rejected**: `暂无备注。` names the ABSENCE of a note, which anyone looking at
+an empty block can see; the heading names the CONTROL. That distinction is the
+whole of this addendum and is the thing to keep if either is ever revisited.
+Recorded as `docs/tacet-delivery-vocabulary.md` v1.125, which locks nothing
+new. Covered by the same suite as the read end.
+
+## §174 — A BUYER CAN SAY "NOT THIS ONE", AND THE GRAIN IS THE LINE
+
+**Ash, 2026-09-18, on the From-the-kitchen box:** *"cant delete the request
+directly in this box"*. Asked whether that meant one line or the whole request,
+he chose **one line**.
+
+### WHAT WAS ALREADY TRUE
+
+§86 gave the kitchen's ask exactly one way out: `PUT
+/material-requests/:id/archive`, a soft delete of the WHOLE request. **No screen
+in the product had ever called it.** A buyer looking at the box could tick lines
+into a draft order and do nothing else — a material asked for in error, or
+already sitting in the store room, stayed on the list until somebody bought it.
+
+### THE DECISION
+
+**The buyer strikes off ONE LINE.** `material_request_items.declined_at` (plus
+`declined_by`, `declined_by_name`), set by `PUT
+/material-requests/lines/:lineId/decline`, and the line leaves the buyer's list.
+
+**The grain is §86 part two's grain, for §86 part two's reason.** The line is
+already the unit of sourcing because a buyer splits a morning's flour and oil
+across two suppliers as a matter of course. Refusing works the same way: in the
+box Ash was looking at, one request held a food container and a desiccant, and a
+buyer who will not buy the desiccant still wants the containers. Whole-request
+withdrawal cannot express that, which is why it was not what got built.
+
+**Withdrawal is not replaced.** `archived_at` still means the request is gone,
+and the archive route is untouched.
+
+### IT IS ONE-WAY, AND THAT IS §86's OWN RULE, NOT A SHORTCUT
+
+There is no un-strike. §86 already says what happens when a sent request needs
+changing: *"A sent request is withdrawn (archived) and raised again."* The ask
+belongs to the kitchen, so a buyer putting a line back would be the buyer
+re-raising somebody else's request. It also keeps the rollup's auto-archive
+below unambiguous — there is no state where a request is archived because its
+lines were struck and then un-struck underneath it.
+
+### THE ROLLUP: A STRUCK LINE LEAVES THE SUM, IT DOES NOT COUNT AS DONE
+
+`rollUp` counts only lines with `declined_at IS NULL`. The alternative — counting
+a struck line as done — would flip a request to `sourced`, whose meaning is
+*every line reached a purchase order*, over lines nobody bought. `sourced` is a
+word the books are read through and it is not being loosened.
+
+**And when nothing is left: the request is withdrawn.** Every line struck off
+with none ever sourced sets `archived_at`. Left alone, such a request would sit
+in the open tab forever with nothing outstanding on it — a row that costs a click
+and says nothing, which is the shape this module already refuses at POST. It is
+safe to do automatically precisely because striking off is one-way and a line on
+a purchase order cannot be struck at all.
+
+### TWO REFUSALS, BOTH STALE-SCREEN CASES
+
+A line already on a purchase order **cannot be struck off** (409
+`already_sourced`) — for archiving's reason at the line's grain: it would hide
+the ask while its purchase stands. Delete the order first, which releases the
+line, then strike it.
+
+A struck line **cannot be turned into an order** (409 `line_declined`, from
+`POST /purchases/from-material-requests`). It left the picker when it was
+struck, so this is the second-buyer case: a tick made before somebody else
+refused it. Reported by name, never skipped — silence on a ticked line reads as
+"ordered".
+
+### THE OTHER HALF OF THE SAME BRIEF — A FOOTER NOBODY COULD READ
+
+Ash's first point was *"one button is not clear on the buttom left"*. The
+From-the-kitchen modal (`#pu2-mrmodal`) was built on the copy-from-kitchen
+picker's shell but was **left out of that shell's CSS block**, which only ever
+named `#pu2-kmodal`. So its footer stayed one unwrapped flex row holding six
+items in a 680px modal: the store picker was squeezed until its label broke over
+three lines and its select was too narrow to read a store's name in. Both ids are
+now named in every rule of that block. **A layout fix written for one picker and
+not its twin is the same bug waiting** — which is what this was.
+
+### NOT DECIDED HERE
+
+**Whether the kitchen is told.** `declined_at` records who refused a line and
+when, and nothing shows it to the cook who asked — the kitchen has no screen for
+its own sent requests at all today. Building one is a different brief; the record
+is being kept now so that screen has something true to show when it exists.
+
+## §175 — THE COOK IS TOLD WHAT BECAME OF THE ASK
+
+**Ash, 2026-09-18, on §174's own flagged gap:** *"the silence is the weak point,
+not the delete"* — and *"ok do it"*.
+
+### THE GAP §174 OPENED, AND THE ONE IT ONLY MADE VISIBLE
+
+§174 gave the buyer a way to refuse a line. It did not create the silence: the
+kitchen has never had a screen for its own sent requests. A cook taps Send, sees
+*Sent to the buyer*, and from that moment learns nothing — not that it was
+ordered, not that it was refused, not that the whole request was withdrawn.
+
+**Asking twice is the cheap failure. Giving up on the screen is the expensive
+one**, and it is the one that actually happens: a cook who cannot tell whether
+anyone acted goes back to telling somebody in person, and the request screen
+becomes a thing that gets typed into and ignored.
+
+### THE SCREEN
+
+A new phone route, `askbuysent` — **Your buying requests** — in the *Ask someone
+else* group, directly under *Ready from the kitchen*. That group's own comment
+already describes this row's shape and earns it the place: *"the three rows above
+it ask, and this one is the answer coming back."* This is the second answer
+coming back — from the buyer rather than from the kitchen. **NO PILL**, for that
+row's stated reason: a fourth value for "you get told" would spend the scarcity
+that makes the other three legible.
+
+### THE GRAIN IS THE LINE, AGAIN, AND A REQUEST-LEVEL WORD WOULD HAVE TO LIE
+
+§86 part two made the line the unit of sourcing; §174 made it the unit of
+refusal. So one MR can be part ordered, part waiting and part struck off at the
+same time, and any single word printed on the request as a whole is wrong about
+at least one of its lines. **Every line carries its own state**, and the request
+above them carries only its number, its date, and the one fact that is genuinely
+request-level: whether it was withdrawn.
+
+### THREE WORDS, DECIDED ON THE SERVER
+
+`waiting`, `ordered`, `removed`, derived in `GET /material-requests/mine` from
+`sourced_po_id` and `declined_at` — the same two columns the buyer's screen reads
+— and sent as a field. **Not derived on the phone**: two screens each deciding
+what a null means is how they come to disagree, and this is Rule 6's "labels have
+one definition site" applied to a state rather than to a label.
+
+### WHO REFUSED IT IS SHOWN. THE PRICE STILL IS NOT.
+
+`declined_by_name` goes on the row, because "removed" without a name is an event
+with no one to ask about it. **§86's rule that no cost column reaches the kitchen
+is untouched** — `/mine` selects no price of any kind.
+
+**The purchase order number is deliberately left off too.** What a cook needs to
+know is that the thing is on order; which order it is on is the buyer's business,
+and a PO number on a kitchen screen is an invitation to go and look at one.
+
+### SCOPED TO THE CALLER
+
+`created_by = ` the signed-in operator. It is *your* requests, and it is the same
+column the request already stamps. A kitchen where everyone shares one login sees
+everything that login raised — which is the true answer to the question that
+screen is asking.
+
+### GATE
+
+`production:request` — the key that RAISES these requests, not a view key. The
+reasoning is `kitchenready`'s, verbatim in its own comment: this is the
+REQUESTER's side, how the thing you asked for is going. Anyone who can raise one
+can see what became of it; nobody else has a request to be told about.
+
+### NOT DECIDED HERE
+
+**Notifying.** This is a screen you open, not a push. A push when a buyer strikes
+a line off is defensible, and it is a different question: it needs a channel, and
+a rule about what is worth interrupting a cook mid-service for. The record
+(`declined_at`, `declined_by_name`) is being kept either way, so that decision is
+not blocked by this one.

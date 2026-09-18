@@ -1289,10 +1289,24 @@ function cuTagChipsHtml(list) {
 // cuNotesSave keep working with no change at all. Only where the block sits,
 // and whether the editor is showing, is new.
 //
-// With no note there is NO note line, just the Edit button. The alternative
-// was an empty-state string, and "暂无备注" is not a pair this product uses
-// anywhere — inventing one to label the absence of a note is more Chinese than
-// the situation needs.
+// With no note there is NO note line — but the block NAMES ITSELF, because a
+// bare "Edit" floating under someone's name does not say what it edits. Ash,
+// 2026-09-18, on this screen and unable to find the note field: *"im on
+// customer page wher is it"*. The button was three inches from the cursor.
+//
+// This is NOT the empty-state string the first version of this comment
+// rejected, and that rejection still stands: "暂无备注" labels the ABSENCE of
+// a note, which tells an operator nothing they cannot see. `What we know ·
+// 备注与标签` names the CONTROL — it is this block's own heading, live on the
+// phone's customer record for this same block and locked in the delivery
+// vocabulary, so the two screens now call it the same thing and no Chinese
+// is minted to do it.
+//
+// It shows only while there is nothing stored, which is the only state that
+// was ambiguous: a note prints its own line and tags print chips, and beside
+// either the button's job is obvious. The block therefore costs one line when
+// empty and not a pixel more once used — the space saving that collapsed the
+// old 210px card is kept.
 function cuKnowHtml(c) {
   const tags = cuTagList(c.tags);
   const note = String(c.note || '');
@@ -1304,6 +1318,7 @@ function cuKnowHtml(c) {
           <span class="ic" aria-hidden="true">&#9998;</span>
           <span class="tx" id="cu-noteline-tx" data-no-i18n>${escapeHtml(note)}</span>
         </div>
+        <span class="cu-knowhint" id="cu-knowhint"${(note || tags.length) ? ' hidden' : ''}>${escapeHtml(cuT('What we know', '备注与标签'))}</span>
         <button type="button" class="cux-ghost btn btn-sm" id="cu-note-toggle"
                 onclick="cuNotesEdit()">${escapeHtml(cuT('Edit', '编辑'))}</button>
       </div>
@@ -1328,6 +1343,17 @@ function cuKnowHtml(c) {
 }
 
 // The editor is collapsed until asked for. Called with no argument it toggles.
+// The hint is on screen only while the block is genuinely bare AND closed.
+// Both of the two paths that can change that — opening/closing the editor, and
+// adding the first tag or saving the first note — end here, so the header can
+// never be caught naming a block that has since filled up.
+function _cuKnowHintSync() {
+  const hint = document.getElementById('cu-knowhint');
+  if (!hint) return;
+  const ed = document.getElementById('cu-noteedit');
+  hint.hidden = !(!_cuSavedNote() && !_cuDraftTags().length && !!(ed && ed.hidden));
+}
+
 function cuNotesEdit(on) {
   const know = document.getElementById('cu-know');
   const ed   = document.getElementById('cu-noteedit');
@@ -1341,6 +1367,7 @@ function cuNotesEdit(on) {
   if (line) line.hidden = open || !_cuSavedNote();
   const btn = document.getElementById('cu-note-toggle');
   if (btn) btn.textContent = open ? cuT('Close', '关闭') : cuT('Edit', '编辑');
+  _cuKnowHintSync();
   if (open) { const ta = document.getElementById('cu-note'); if (ta) ta.focus(); }
 }
 
@@ -1398,6 +1425,7 @@ function cuNotesRepaint() {
   const line = document.getElementById('cu-noteline');
   const ed = document.getElementById('cu-noteedit');
   if (line) line.hidden = !saved || !(ed && ed.hidden);
+  _cuKnowHintSync();
   cuNoteChanged();
 }
 

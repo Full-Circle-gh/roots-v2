@@ -26839,10 +26839,26 @@ function gzMethodToggleAllowed(address) {
   return GZ_METHOD_TOGGLE_DISTRICTS.has(String(address.district || '').replace(/区$/, '').trim());
 }
 
+// The customer's STANDING note and tags (`retail_customers.note` / `.tags`,
+// typed on the customer page) ride along on this read. They belong to the
+// PERSON, not the order, so they are read here rather than copied onto an
+// order: edit once on the customer and every order — past, open and future —
+// reads the corrected text. A copy would let one order keep a note the
+// customer page has already retired, which is the failure this avoids.
+//
+// Aliased `customer_standing_*` on purpose: `o.*` already carries
+// `customer_note`, which is a different thing — what the BUYER typed at
+// checkout, for THAT order. Two fields one character apart in meaning is how
+// staff put "no ice this time" somewhere it follows a person for a year.
+//
+// NOT on the customer-facing read. That one is `loadOrderForCustomer`, which
+// lists its columns by hand; this note is what the shop says about the
+// customer and never goes back to them. Keep it that way.
 router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const o = tdb().prepare(
     `SELECT o.*, c.nickname, c.avatar_url, c.phone AS customer_phone,
+            c.note AS customer_standing_note, c.tags AS customer_standing_tags,
             s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn,
             z.zone_type AS zone_type,
             z.day_only AS zone_day_only, z.same_day_surcharge AS zone_same_day_surcharge
