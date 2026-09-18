@@ -77,6 +77,54 @@ function positiveNumber(v) {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/* ── §176's TWO MARKS ON A LINE ──────────────────────────────────────────────
+ *
+ * Ash chose shape C: urgency AND a wanted-by date, both per LINE, neither on
+ * the request. §176 carries the reasoning and the objection that survives it —
+ * the two can disagree, nothing here can stop them, and THE URGENT FLAG WINS
+ * wherever they do. That rule is expressed in the ORDER BY of the buyer's list,
+ * not by editing either value on the way in: a route that quietly cleared a
+ * date because the line was urgent would be deciding something the kitchen
+ * said twice.
+ *
+ * BOTH ARE OPTIONAL AND NEITHER IS PREFILLED (§39). Absent means absent: a
+ * request of plain lines writes 0 and NULL and reads exactly as it did before
+ * this section.
+ */
+function urgentFlag(v) {
+  // Anything truthy from a JSON client, and nothing clever: the phone sends a
+  // boolean, and `0`, `''`, null and undefined all mean "not urgent".
+  return v === true || v === 1 || v === '1' || v === 'true' ? 1 : 0;
+}
+/* A PLAIN CALENDAR DAY, VALIDATED FOR SHAPE AND FOR EXISTENCE. `2026-02-31`
+ * parses in every naive check and is not a day, so the round trip through Date
+ * is the test: a string that does not come back as itself never existed.
+ *
+ * A DATE IN THE PAST IS ACCEPTED, deliberately (§176). A line needed yesterday
+ * is late, which is information the buyer wants; refusing it would only mean
+ * the kitchen writes the real date somewhere nobody can see. */
+function neededBy(v) {
+  if (v == null || v === '') return null;
+  const raw = String(v).slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return undefined;     // undefined = REFUSE
+  const d = new Date(raw + 'T00:00:00Z');
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== raw) return undefined;
+  return raw;
+}
+/* THE MERGE ERRS TOWARD BUYING SOONER, which is §176's rule and the reason it
+ * is a named function rather than two lines inlined at each of its two call
+ * sites. §86 adds the quantities when one request names the same material
+ * twice; these two cannot be added, so `urgent` is OR-ed and `needed_by` takes
+ * the EARLIER, with a missing date treated as later than any date.
+ *
+ * LAST-WRITE-WINS WOULD BE THE DANGEROUS ONE: the second of two identical lines
+ * would silently cancel the first's urgency, and the kitchen would never see it
+ * happen. */
+function mergeMarks(seen, add) {
+  seen.urgent = seen.urgent || add.urgent ? 1 : 0;
+  if (add.needed_by && (!seen.needed_by || add.needed_by < seen.needed_by)) seen.needed_by = add.needed_by;
+}
+
 /* Roll the request up from its lines.
  *
  * A REQUEST IS 'sourced' ONLY WHEN EVERY LINE IS, and it rolls BACK when a line
@@ -150,9 +198,18 @@ router.get('/api/retail-admin/material-requests/materials', requireRetailAdmin, 
 
 /* ── What the buyer works from ──────────────────────────────────────────────
  *
- * Every line that has been SENT and not yet sourced, newest request first, each
- * carrying enough of its parent to be read on its own — the buyer is looking at
- * a list of demand, not at a list of requests they must open one by one.
+ * Every line that has been SENT and not yet sourced, each carrying enough of
+ * its parent to be read on its own — the buyer is looking at a list of demand,
+ * not at a list of requests they must open one by one.
+ *
+ * URGENT FIRST, THEN WANTED SOONEST, THEN NEWEST REQUEST (§176). This is where
+ * "the buying department will know to prioritise" actually happens: the marks
+ * would be decoration if the list they arrive in still read newest-first. A
+ * line with no date sorts after every line that has one — `needed_by IS NULL`
+ * ahead of `needed_by` in the key, because SQLite sorts NULL first otherwise
+ * and "no date" is the loosest claim on the buyer's morning, not the tightest.
+ * Urgency outranks both, which is §176's rule for a line whose two marks
+ * disagree.
  *
  * Drafts are excluded because a draft is somebody still typing. Archived
  * requests are excluded because archiving is how a request is withdrawn, and
@@ -162,6 +219,7 @@ router.get('/api/retail-admin/material-requests/pending-lines', requireRetailAdm
   const rows = tdb().prepare(`
     SELECT i.id, i.request_id, i.ingredient_id, i.name_en, i.name_cn, i.sku,
            i.qty, i.unit, i.notes,
+           COALESCE(i.urgent, 0) AS urgent, i.needed_by,
            r.mr_number, r.date, r.created_by_name, r.notes AS request_notes
       FROM material_request_items i
       JOIN material_requests r ON r.id = i.request_id
@@ -169,7 +227,9 @@ router.get('/api/retail-admin/material-requests/pending-lines', requireRetailAdm
        AND r.archived_at IS NULL
        AND i.sourced_po_id IS NULL
        AND i.declined_at IS NULL
-     ORDER BY r.sent_at DESC, r.id DESC, i.sort_order, i.id`).all();
+     ORDER BY COALESCE(i.urgent, 0) DESC,
+              (i.needed_by IS NULL), i.needed_by,
+              r.sent_at DESC, r.id DESC, i.sort_order, i.id`).all();
   res.json({ success: true, data: rows });
 });
 
@@ -286,7 +346,13 @@ router.post('/api/retail-admin/material-requests', requireRetailAdmin, express.j
     if (!ing) return res.status(400).json({ success: false, error: 'material_not_found', ingredient_id: raw.ingredient_id });
     const qty = positiveNumber(raw.qty);
     if (qty == null) return res.status(400).json({ success: false, error: 'qty_invalid', ingredient_id: ing.id });
-    resolved.push({ ing, qty, notes: raw.notes ? String(raw.notes).slice(0, 500) : null });
+    // REFUSED BEFORE THE TRANSACTION, like every other bad line here: a date
+    // that is not a day must cost the whole request rather than be dropped, or
+    // the kitchen gets a success for an ask it did not make.
+    const by = neededBy(raw.needed_by);
+    if (by === undefined) return res.status(400).json({ success: false, error: 'needed_by_invalid', ingredient_id: ing.id });
+    resolved.push({ ing, qty, notes: raw.notes ? String(raw.notes).slice(0, 500) : null,
+                    urgent: urgentFlag(raw.urgent), needed_by: by });
   }
   // ONE MATERIAL, ONE LINE. Two lines for the same flour reach the buyer as two
   // rows to tick and two lines on the PO for one thing; the quantities are
@@ -295,7 +361,7 @@ router.post('/api/retail-admin/material-requests', requireRetailAdmin, express.j
   const merged = [];
   for (const r of resolved) {
     const seen = merged.find(m => m.ing.id === r.ing.id);
-    if (seen) { seen.qty += r.qty; if (!seen.notes) seen.notes = r.notes; }
+    if (seen) { seen.qty += r.qty; if (!seen.notes) seen.notes = r.notes; mergeMarks(seen, r); }
     else merged.push(r);
   }
 
@@ -309,10 +375,11 @@ router.post('/api/retail-admin/material-requests', requireRetailAdmin, express.j
       .run(number, send ? 'sent' : 'draft', b.notes ? String(b.notes).slice(0, 1000) : null,
            actor.id || null, actor.display_name || actor.username || null);
     const ins = tdb().prepare(`
-      INSERT INTO material_request_items (request_id, ingredient_id, name_en, name_cn, sku, qty, unit, notes, sort_order)
-      VALUES (?,?,?,?,?,?,?,?,?)`);
+      INSERT INTO material_request_items (request_id, ingredient_id, name_en, name_cn, sku, qty, unit, notes, sort_order, urgent, needed_by)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
     merged.forEach((r, i) => {
-      ins.run(info.lastInsertRowid, r.ing.id, r.ing.name_en, r.ing.name_cn, r.ing.sku, r.qty, r.ing.buy_unit, r.notes, i);
+      ins.run(info.lastInsertRowid, r.ing.id, r.ing.name_en, r.ing.name_cn, r.ing.sku, r.qty, r.ing.buy_unit, r.notes, i,
+              r.urgent, r.needed_by);
     });
     return { id: info.lastInsertRowid, mr_number: number };
   })();
@@ -347,9 +414,14 @@ router.put('/api/retail-admin/material-requests/:id', requireRetailAdmin, expres
       if (!ing) return res.status(400).json({ success: false, error: 'material_not_found', ingredient_id: raw.ingredient_id });
       const qty = positiveNumber(raw.qty);
       if (qty == null) return res.status(400).json({ success: false, error: 'qty_invalid', ingredient_id: ing.id });
+      const by = neededBy(raw.needed_by);
+      if (by === undefined) return res.status(400).json({ success: false, error: 'needed_by_invalid', ingredient_id: ing.id });
+      const mark = { urgent: urgentFlag(raw.urgent), needed_by: by };
       const seen = resolved.find(m => m.ing.id === ing.id);
-      if (seen) seen.qty += qty;
-      else resolved.push({ ing, qty, notes: raw.notes ? String(raw.notes).slice(0, 500) : null });
+      // THE SAME MERGE AS THE POST, through the same function. Two copies of
+      // "OR the flag, keep the earlier date" drift the first time one is fixed.
+      if (seen) { seen.qty += qty; mergeMarks(seen, mark); }
+      else resolved.push({ ing, qty, notes: raw.notes ? String(raw.notes).slice(0, 500) : null, ...mark });
     }
   }
 
@@ -361,9 +433,10 @@ router.put('/api/retail-admin/material-requests/:id', requireRetailAdmin, expres
     if (resolved) {
       tdb().prepare('DELETE FROM material_request_items WHERE request_id = ?').run(id);
       const ins = tdb().prepare(`
-        INSERT INTO material_request_items (request_id, ingredient_id, name_en, name_cn, sku, qty, unit, notes, sort_order)
-        VALUES (?,?,?,?,?,?,?,?,?)`);
-      resolved.forEach((x, i) => ins.run(id, x.ing.id, x.ing.name_en, x.ing.name_cn, x.ing.sku, x.qty, x.ing.buy_unit, x.notes, i));
+        INSERT INTO material_request_items (request_id, ingredient_id, name_en, name_cn, sku, qty, unit, notes, sort_order, urgent, needed_by)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
+      resolved.forEach((x, i) => ins.run(id, x.ing.id, x.ing.name_en, x.ing.name_cn, x.ing.sku, x.qty, x.ing.buy_unit, x.notes, i,
+                                         x.urgent, x.needed_by));
     }
   })();
   res.json({ success: true, data: requestWithItems(id) });

@@ -813,6 +813,41 @@
     return _mrLines.filter(l => `${l.name_en || ''} ${l.name_cn || ''} ${l.sku || ''} ${l.mr_number || ''} ${l.created_by_name || ''}`
       .toLowerCase().includes(q));
   }
+  /* ── §176's TWO MARKS, AS THE BUYER READS THEM ────────────────────────────
+     "a mark that mention urgent order so buying department will know to
+     priorities", and its other half — a day by which a line is wanted, which is
+     how the kitchen says "this one can wait".
+
+     BOTH ARE PRINTED, AND NEITHER IS RESOLVED INTO THE OTHER. §176 records that
+     a line can carry `urgent` AND a date three weeks out, that nothing can stop
+     it, and that the urgent flag wins — which is settled in the server's ORDER
+     BY, where this list arrives already sorted. A screen that dropped the date
+     from an urgent line would be hiding half of what the kitchen said; so an
+     urgent line with a day shows "Urgent · by 30 Sep" and means it.
+
+     A LINE WITH NEITHER PRINTS A DASH, not an empty cell: a blank in a column
+     that sometimes carries a warning reads as a column that failed to load. */
+  function mrWhenCell(l) {
+    const hot  = !!Number(l.urgent);
+    const day  = l.needed_by ? String(l.needed_by) : '';
+    if (!hot && !day) return '<span class="sub">—</span>';
+    const pill = hot
+      ? `<span class="pill" style="color:#B4533E;border-color:#B4533E55;background:#B4533E14;font-weight:700">${esc(T('Urgent', '加急'))}</span>`
+      : '';
+    // The day is the kitchen's own string and is printed as stored. NOT passed
+    // through Date: `new Date('2026-09-30')` is UTC midnight and renders as the
+    // 29th for any reader west of Greenwich, and a wanted-by day that moves
+    // with the reader's clock is the one thing this cell must not do.
+    // `截止` GOES AFTER THE DAY AND `by` BEFORE IT, which is why this is a whole
+    // phrase per language rather than one word glued to a date: 10-extras.js's
+    // vote row already prints `${votCloses(p)} 截止` and that word order is the
+    // live one.
+    const when = day
+      ? `<div class="sub pu2-mono"${hot ? ' style="margin-top:3px"' : ''}>${esc(T('by ' + day, day + ' 截止'))}</div>`
+      : '';
+    return pill + when;
+  }
+
   window.puMrOpen = async function () {
     _mrPick = new Set(); _mrSearch = ''; _mrBusy = false; _mrSupplier = '';
     _mrStore = _stores[0]?.id || null;
@@ -957,18 +992,21 @@
           <th style="width:34px"></th>
           <th>${esc(T('Material', '物料'))}</th>
           <th class="right">${esc(T('Quantity', '数量'))}</th>
+          <th style="width:130px">${esc(T('When', '什么时候要'))}</th>
           <th>${esc(T('Asked by', '申请人'))}</th>
           <th style="width:44px"></th>
         </tr></thead>
         <tbody>${rows.map(l => {
           const on = _mrPick.has(l.id);
           const name = [l.name_en, l.name_cn].filter(Boolean).join(' · ');
-          return `<tr onclick="puMrToggle(${l.id})" style="cursor:pointer">
+          const hot = !!Number(l.urgent);
+          return `<tr onclick="puMrToggle(${l.id})" style="cursor:pointer${hot ? '; background:var(--brick-tint, #F6E7E3)' : ''}">
             <td><span class="pu2-chk${on ? ' on' : ''}">${on ? I.check : ''}</span></td>
             <td><div>${esc(name)}</div>
                 ${l.sku ? `<div class="sub pu2-mono">${esc(l.sku)}</div>` : ''}
                 ${l.notes ? `<div class="sub">${esc(l.notes)}</div>` : ''}</td>
-            <td class="right pu2-num">${esc(String(l.qty))} <span class="sub">${esc(l.unit || '')}</span></td>
+            <td class="right pu2-num">${esc(String(l.qty))} <span class="sub">${esc(unitLabel(l.unit))}</span></td>
+            <td>${mrWhenCell(l)}</td>
             <td><div class="pu2-mono">${esc(l.mr_number)}</div>
                 <div class="sub">${esc(l.created_by_name || '')}${l.date ? ` · ${esc(l.date)}` : ''}</div></td>
             <td class="right"><button class="pu2-btn ghost sm danger" data-cap="purchasing:edit"
