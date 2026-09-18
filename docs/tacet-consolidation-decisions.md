@@ -18663,6 +18663,22 @@ BY the move is active, because that is what creating one has always done and
 the schema default says so. Which of the two happened is reported back when the
 move lands, so the operator is never guessing whether the new menu is live.
 
+**THE COUNTER AT THE SOURCE KEEPS SELLING, AND WHAT IT LOSES IS NAMED HERE SO
+NOBODY REDISCOVERS IT AT A TILL.** §150 gives the counter its catalogue from
+these same listings, and that route ignores shop `is_active` on purpose —
+switching a shop off is a statement about a public URL, not about whether the
+counter can ring up a coffee. So a move does NOT take the source's till down:
+every product falls through to the catalogue, which is the right failure
+direction. **Three things go with the listings, though**, and an operator moving
+a menu away from a location that is still trading should be told them: the
+LISTING PRICE (the till falls back to `store_products.sell_price`, so a
+shop-specific price is gone), the FULFILMENT MODE (a made-here item reads as
+stocked and the till starts drawing a shelf count for it), and the MENU ORDER.
+A product that is neither published nor counted there drops off that till
+altogether. **None of this is a reason to change the move** — it is what
+emptying a menu means — but it is the reason a location still selling at its
+counter probably wants the copy of §177's option A rather than this.
+
 **A DESTINATION THAT ALREADY HAS A MENU IS REFUSED.** Merging two priced menus
 asks whose price wins on a product listed at both, and that question is not
 answered here. The refusal is by listing count and not by the presence of a

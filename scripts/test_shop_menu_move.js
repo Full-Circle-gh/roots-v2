@@ -17,7 +17,7 @@
  * stubs it, and logActivity is stubbed to a RECORDER rather than a no-op,
  * because two of its entries are part of what this section promises.
  *
- * SIX THINGS ARE HELD HERE THAT A READING OF THE CODE CANNOT PROVE.
+ * SEVEN THINGS ARE HELD HERE THAT A READING OF THE CODE CANNOT PROVE.
  *
  *   1. THE SHOP RECORD AND ITS CODE DO NOT MOVE. Both shops keep the
  *      `location_id` and `public_code` they had, the destination's code is its
@@ -41,6 +41,13 @@
  *   6. THE PUBLIC PAGE NEEDS NO NEW BEHAVIOUR. The moved-away code fails
  *      `resolveShop()`'s own predicate and the destination's passes it, so the
  *      dead QR serves the not-found page that was already there.
+ *   7. THE COUNTER TILL DOES NOT GO BLANK, AND WHAT IT LOSES IS PINNED. §150
+ *      gives the till its catalogue from these same listings, and that route
+ *      deliberately ignores shop `is_active` — so the move leaves the counter
+ *      selling, falling back to the CATALOGUE price, with the listing price,
+ *      the made-here mode and the menu order gone with the listings. P4's
+ *      fixture is priced 9.99 on the menu against 25 in the catalogue so the
+ *      fallback is visible rather than asserted about equal numbers.
  */
 'use strict';
 
@@ -369,6 +376,49 @@ const MENU = [
     check('a destination left switched off does NOT resolve, menu or no menu', () => {
       assert.strictEqual(resolvesPublicly(shopAt(OFF_DEST).public_code), false);
       assert.strictEqual(countAt(OFF_DEST), 2, 'the menu is there; only the switch is off');
+    });
+
+    // ── What the COUNTER sees, which is not what the QR page sees ──────────
+    console.log('\nThe counter till does not go blank — it falls back to the catalogue (§150)');
+
+    const counterRow = async (loc, productId) => {
+      const r = await call('GET', `/api/retail-admin/stores/${loc}/counter-catalogue`);
+      assert.strictEqual(r.status, 200, JSON.stringify(r.json));
+      const rows = (r.json.data && r.json.data.rows) || r.json.data || [];
+      return (Array.isArray(rows) ? rows : []).find(x => x.product_id === productId) || null;
+    };
+
+    // §150 gives the till its catalogue from shop_listings, and the route says
+    // shop `is_active` is deliberately NOT consulted there — switching the shop
+    // off is a statement about a public URL, not about whether the counter can
+    // ring up a coffee. So the move does NOT take the till down, and what it
+    // DOES do is the consequence worth pinning: the listing price goes with the
+    // listings, and the counter falls back to the catalogue price.
+    //
+    // P4's fixture makes that visible on purpose: its listing said 9.99 and its
+    // catalogue price is 25.
+    await checkAsync('the source till still sells the product, at the CATALOGUE price now', async () => {
+      const row = await counterRow(SRC, P4);
+      assert.ok(row, 'the product fell off the source till entirely');
+      assert.strictEqual(row.on_menu, false, 'it still claims to be on a menu');
+      assert.strictEqual(row.price, 25, 'the till did not fall back to the catalogue price');
+      assert.strictEqual(row.fulfilment_mode, null);
+      assert.strictEqual(row.sort_position, null);
+    });
+
+    await checkAsync('and the destination till now sells it at the price that moved', async () => {
+      const row = await counterRow(FRESH, P4);
+      assert.ok(row, 'the moved product is not on the destination till');
+      assert.strictEqual(row.on_menu, true);
+      assert.strictEqual(row.price, 9.99, 'the listing price did not move');
+    });
+
+    await checkAsync('a made-here item loses its mode at the source and keeps it at the destination', async () => {
+      const src = await counterRow(SRC, P3);
+      const dest = await counterRow(FRESH, P3);
+      assert.ok(src && dest);
+      assert.strictEqual(src.fulfilment_mode, null, 'the source still calls it made here');
+      assert.strictEqual(dest.fulfilment_mode, 'made_here');
     });
 
     // ── The lock, read off the source ──────────────────────────────────────
