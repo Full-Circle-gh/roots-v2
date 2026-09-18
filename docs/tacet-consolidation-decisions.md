@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.321
+# Tacet shared-core consolidation — decisions record, v4.322
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-18 · v4.322 — **§180 · A BOX THAT IS PACKED IS NOT A BOX THAT HAS LEFT — REPORTED BY ASH:** *"when order has 2 split package one shipped one parked at \"paid\". right now i dont have the option to change the status of the parked package to \"prepared\" status. it create a problem with stock managment."* **THE CONTROL WAS NEVER HIDDEN; IT WAS NEVER BUILT.** A parcel's state is derived from two timestamps in `shipmentState` and has exactly three values — pending, dispatched, delivered. `paid` and `preparing` are ORDER words, one status column, and the forward buttons in the drawer are a pure function of `o.status`. So the first parcel out flips the order to `dispatched` (`POST /shipments/:sid/dispatch`), `NEXT_STATUS['dispatched']` offers only *Mark delivered* and *Refund*, and *Start preparing* leaves the screen for good — `STATUS_TRANSITIONS.preparing.prev` is `['paid','awaiting_restock']` and `undo-dispatch` is refused once any parcel carries a waybill, which is exactly the reported case. **PREPARED IS A SEPARATE AXIS, NOT A FOURTH VALUE OF `state`, and that is the whole design decision.** A packed box has NOT left: every guard that reads `state === 'pending'` to mean "still here" — `canDispatch`, `canSplit`, the local-ETA card, the per-shipment tracking card, `parcelsStillInTheBuilding`, `buildOrderFulfillment`'s partial rollup — must keep answering the same way for a prepared parcel, and a fourth value would have required editing every one of them correctly on pain of a silent wrong answer. `shipmentState` is therefore UNCHANGED and a `prepared_at` column plus a derived `prepared` flag ride beside it. §24's eight-week shadowed route is the standing argument for not widening a value that six call sites already switch on. **THE STOCK IS THE POINT AND IT IS THE §58-ADDENDUM CALL SHAPE, REUSED VERBATIM**: `POST /shipments/:sid/prepare` stamps `prepared_at` and calls `prepareCommitUnreservedOrder(id, { shipmentId: sid })` — the same scoped commit the parcel-dispatch route already makes, so the parked box's own goods come off the count and a fresh line riding a parcel that is still in the building keeps waiting. Nothing new was invented for the deduction; the box that could not reach the existing door is now given the door. **THE ORDER IS NOT ROLLED BACKWARDS, AND THE ONE-LINE FIX THAT WOULD HAVE IS REFUSED**: widening `STATUS_TRANSITIONS.preparing.prev` to accept `dispatched` was the smaller change and would have told a customer watching parcel one in transit that their order is 备货中 again, flipped `deriveStatusFromOrder`, and fought both undo guards — a customer-facing lie to settle a warehouse count. **THE SIGNAL IS HALF THE DEFECT AND IS FIXED WITH IT**: `isStockPending` opens `if (status !== 'paid') return false`, so the *Stock pending · 库存待扣* note goes dark on exactly the orders this is about, the moment parcel one leaves — the hazard the dispatch route's own comment names and then leaves standing. It now also answers for `preparing` and `dispatched`, gated behind one indexed existence check for a parcel that is neither prepared nor gone, so the orders list pays nothing on the common case. **NO UNDO, STATED RATHER THAN OVERLOOKED**: `undo-preparing` does not reverse stock either, so a parcel-level undo would be the first reversal of its kind in this machine and is a separate decision with a separate ledger question. **CHINESE IS LIFTED, NOT COMPOSED** — `已备货` is `reference/roots_v1.html`'s own word for this exact state and `标记此包裹已备货` is the live sibling button with one word swapped; vocabulary v1.136 records both, and records the parcel pills that shipped unregistered. **LEFT OPEN AND NAMED:** a NON-batch-made line sitting in the parked parcel is still deducted by the sibling's dispatch, because the §58 addendum's hold-back is fresh-only and whole-product; that is the same complaint one layer down and is not fixed here.
 
 2026-09-18 · v4.321 — **§178 ADDENDUM · A SWITCH NOBODY CAN FIND IS NOT A CONTROL — REPORTED BY ASH**, of the Waste toggle shipped one hour earlier: *"can you fix waste toggle now ?"* **The switch mounted correctly and did nothing wrong; it could not be FOUND.** Both hosts added that morning — `#waste-settings-home` (§32 addendum) and `#lowstock-settings-home` (§178) — shipped as EMPTY divs, on the reasoning that the injected `.feat-bar` was the whole control and an empty host left no half-control behind if it failed to mount. That reasoning missed what a host is also for. **Settings search is built by `indexCards()`** (`public/retail-admin/02-settings-ops.js`), which walks each `#sub-*` panel for `.group-card-head h3, .group-card > h3, .card > h3` and takes the heading plus the neighbouring `.muted`/`label` text as its keywords. **A host with neither is in no search result at all** — so typing "waste", "损耗" or "running low" found the switch nowhere, and the only route to it was knowing to open Settings → Operations and scroll. **THE FAILURE IS WORST IN THE ONE STATE THAT MATTERS.** With Waste off, `gatedOff()` correctly drops its rail row from the index as well, so a search for "waste" returned NOTHING WHATSOEVER — including the only control that turns it back on. The feature was one click from being unreachable by any means a normal operator has. **The fix is a `group-card` with a heading and one `.muted` line in each host**, which is the shape `#mat-settings-home` has carried since §28 and the reason Materials was always searchable. **No `data-feat` on either host, deliberately, and that is the difference from Materials**: a card that vanishes with the feature off cannot be what an operator reads to decide to turn it back on. **No new Chinese** — the Waste line is the first sentence of §32's own catalog `desc` and the low-stock line is §178's `desc` entire, both lifted verbatim from copy already shipping (vocabulary v1.135 records the two lifts and mints nothing). **`scripts/test_feature_switches_mount.js` grows a fourth section**, 39 assertions now: every home that is not a `#tab-*` section must carry a heading and a description line, because that is exactly what Settings search reads. Verified red against the state that shipped (4 failures). **The lesson is narrower than "test more" and worth keeping**: the earlier suite asserted the switch would MOUNT, and it did — all three files agreed, on every feature. Mounting was never the question an operator asks. §178 and §32 stand; the hosts they specified were incomplete, not wrong.
 
@@ -18935,3 +18937,129 @@ second mechanism for one idea. No change to the mini app, the web storefront,
 the editor, `.gitignore` or CI. **The web storefront still does not draw a
 colophon either**, which the note in `_paChannelEditorHtml` assumes it does;
 that is a separate finding and a separate change.
+
+## §180 — A BOX THAT IS PACKED IS NOT A BOX THAT HAS LEFT
+
+**Decided 2026-09-18 by Ash**, on the report: *"when order has 2 split package
+one shipped one parked at 'paid'. right now i dont have the option to change the
+status of the parked package to 'prepared' status. it create a problem with stock
+managment"*, and then *"go ahead do it"* on the recommendation below, which was
+put with the cheaper alternative named and argued against.
+
+### What was actually wrong
+
+Not a hidden button. **There is no package-level status in this product at all.**
+
+`shipmentState(s)` derives a parcel's state from two timestamp columns and
+returns one of three words — `pending`, `dispatched`, `delivered`. `paid` and
+`preparing` are order-level values in the single `retail_orders.status` column,
+and the drawer's forward buttons are a pure function of that column.
+
+So a split order behaves like this:
+
+1. Parcel one is dispatched. `POST /shipments/:sid/dispatch` flips the **whole
+   order** to `dispatched`, by design — that is what protects it from cancel and
+   what tells the customer it is moving.
+2. The drawer now renders `NEXT_STATUS['dispatched']`, which is *Mark delivered*
+   and *Refund*. **Start preparing is gone.**
+3. It cannot return. `STATUS_TRANSITIONS.preparing.prev` is
+   `['paid', 'awaiting_restock']`, and the one door back —
+   `POST /orders/:id/undo-dispatch` — is refused the moment any parcel carries a
+   waybill, which is precisely the reported situation. It would also wipe
+   `dispatched_at` off the parcel that genuinely shipped.
+
+Parcel two is therefore unreachable by any control that exists.
+
+### The decision
+
+**A parcel gains its own prepared step, and `prepared` is a separate axis rather
+than a fourth value of `state`.**
+
+This is the load-bearing half of the design. A packed box **has not left**, so
+every guard that reads `state === 'pending'` as "still in the building" must keep
+answering exactly as it does today for a prepared parcel. Those guards are:
+`canDispatch` and `canSplit` and the local-ETA and tracking cards on both
+screens, `parcelsStillInTheBuilding`, and `buildOrderFulfillment`'s partial
+rollup. A fourth value of `state` would have required all of them edited
+correctly, each one a place to be silently wrong, and the failure mode is a
+prepared box that can no longer be dispatched.
+
+So: `shipmentState` is **unchanged**. A `prepared_at` column is added to
+`retail_shipments` and a derived `prepared` flag rides beside `state` in the
+drawer payload. The pill reads the flag; every guard reads `state` and is
+untouched.
+
+§24 — the `/shipments/split` route shadowed by a duplicate registration for eight
+weeks, live and destructive — is the standing argument in this file for not
+widening a value that six call sites already switch on.
+
+### The stock effect, which is what was actually reported
+
+`POST /orders/:id/shipments/:sid/prepare` stamps `prepared_at` and calls
+`prepareCommitUnreservedOrder(id, { shipmentId: sid })`.
+
+**That is the §58-addendum call shape, reused verbatim** — the same scoped commit
+the parcel-dispatch route has made since the addendum. Nothing new is invented
+for the deduction. The parked box's own goods come off the count when the box is
+packed; a batch-made line riding a parcel that is still here keeps waiting for
+the day that parcel moves, and the last parcel out still sweeps up whatever the
+earlier ones held back.
+
+Guards on the route mirror `/dispatch`: order in `paid`/`preparing`/`dispatched`,
+parcel belongs to the order, not supplier-direct, not already gone, not already
+prepared. `awaiting_restock` is **excluded deliberately** — §136 made that state
+move no stock at all, and preparing a parcel out of a restock hold would take
+goods that have not landed.
+
+### What was refused, and why it is written down
+
+**Widening `STATUS_TRANSITIONS.preparing.prev` to accept `dispatched`.** One
+line, and it was the tempting one. It would roll a whole order backwards while a
+parcel is genuinely in transit: the customer watching parcel one move would see
+`配送中` become `备货中`, `deriveStatusFromOrder` would rewrite the carrier
+status underneath it, and both undo guards would be fighting it. A
+customer-facing lie to settle a warehouse count is the wrong trade, and the
+premise is the error — the order does not have one state, it has two boxes
+moving at different speeds.
+
+**A bare "deduct stock for this parcel" button.** It fixes the number and leaves
+the warehouse with nothing on screen saying which boxes are packed, which is half
+of what was asked for.
+
+### The signal is half the defect and is fixed with it
+
+`isStockPending(orderId, status, channel)` opens with
+`if (status !== 'paid') return false`.
+
+So the *Stock pending · 库存待扣* note goes dark on exactly the orders this
+section is about, at exactly the moment they become interesting — parcel one
+leaves, the order stops being `paid`, and the one indicator that an order still
+owes a deduction switches itself off. **The parcel-dispatch route's own comment
+names this hazard and then leaves it standing.** An operator given a new button
+and no signal telling them to press it is not much better off.
+
+It now answers for `preparing` and `dispatched` as well, gated behind a single
+indexed existence check for a parcel that is neither prepared nor gone. That
+check runs only on the non-`paid` statuses, so the orders list — which calls this
+once per row — pays nothing on the common case. The per-product ledger test
+behind it is unchanged.
+
+### Stated, not overlooked
+
+**There is no undo.** `POST /orders/:id/undo-preparing` does not reverse stock
+either, so a parcel-level undo would be the first stock reversal of its kind in
+this machine. It is a separate decision with a separate ledger question and is
+not taken here.
+
+**A non-batch-made line in the parked parcel is still deducted by the sibling's
+dispatch.** The §58 addendum's hold-back is fresh-only and whole-product. That is
+the same complaint one layer down, it is real, and it is not fixed here.
+
+### Chinese
+
+Lifted, not composed. `已备货` is `reference/roots_v1.html`'s own word for this
+exact state — goods picked and ready, not yet moved — and `备货` is already live
+in this product as `备货中` and `单待备货`. The button is the live sibling
+`标记此包裹已发货` with one word swapped. `docs/tacet-delivery-vocabulary.md`
+v1.136 records both, and registers the three parcel pills that have been shipping
+unrecorded since split packages landed.

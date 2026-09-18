@@ -105,6 +105,7 @@ db.exec(`
   );
   CREATE TABLE retail_shipments (
     id INTEGER PRIMARY KEY, order_id INTEGER, mode TEXT,
+    prepared_at DATETIME,           -- §180 — packed, and still here
     dispatched_at DATETIME, delivered_at DATETIME
   );
   CREATE TABLE store_products (
@@ -136,6 +137,9 @@ const SALAD = 310, WRAP = 440, JAR = 700, BOX = 900;
 // A second set, for the split-parcel assertions. Their own products so the
 // running shelf counts of the four above stay readable line by line.
 const SALAD2 = 311, WRAP2 = 441, JAR2 = 701, BOX2 = 901;
+// §180's own fresh product, for the two-parked-boxes case. Separate again for
+// the same reason: the shelf count below has to stay readable line by line.
+const SALAD3 = 312;
 const mkProduct = db.prepare(
   'INSERT INTO store_products (id, bundle_items, is_batch_made) VALUES (?,?,?)');
 mkProduct.run(SALAD, null, 1);
@@ -146,6 +150,7 @@ mkProduct.run(SALAD2, null, 1);
 mkProduct.run(WRAP2, null, 1);
 mkProduct.run(JAR2, null, 0);
 mkProduct.run(BOX2, JSON.stringify([{ id: SALAD2, qty: 1 }]), 0);
+mkProduct.run(SALAD3, null, 1);
 
 const STORE = 1;
 const setStock = db.prepare(
@@ -156,6 +161,7 @@ setStock.run(STORE, JAR, 3);
 setStock.run(STORE, SALAD2, 5);
 setStock.run(STORE, WRAP2, 0);   // sold out, pre-orderable — the screenshot's wrap
 setStock.run(STORE, JAR2, 3);
+setStock.run(STORE, SALAD3, 6);   // §180 — two parked boxes share this one
 
 const qty = (pid) => db.prepare(
   'SELECT physical_qty AS q FROM retail_store_stock WHERE store_id = ? AND product_id = ?'
@@ -191,6 +197,12 @@ function putOnParcel(orderId, pid, sid) {
 // The stamp every parcel-level route writes BEFORE it reaches the commit.
 function shipParcel(sid) {
   db.prepare("UPDATE retail_shipments SET dispatched_at = '2026-09-11 18:22:00' WHERE id = ?").run(sid);
+}
+// §180 — the stamp the PREPARE route writes. A packed box has not left, so it
+// keeps dispatched_at NULL; what it stops doing is holding other parcels' fresh
+// lines back, because packing it is when its own food came out of the fridge.
+function packParcel(sid) {
+  db.prepare("UPDATE retail_shipments SET prepared_at = '2026-09-11 09:05:00' WHERE id = ?").run(sid);
 }
 // The kitchen making the batch. A sold-out fresh line is pre-ordered against a
 // named day; on that day the food exists before the parcel leaves.
@@ -368,6 +380,53 @@ if (!missing.length) {
   check('nothing is owed once the last parcel has left',
     inventory.isStockPending(split, 'paid', 'wechat'), false);
 
+  // ── §180: PACKING A BOX RELEASES WHAT IT WAS HOLDING BACK ────────────────
+  // The reported case, and it only bites when ONE FRESH PRODUCT RIDES BOTH
+  // BOXES — the hold-back is whole-product, so before §180 each parked box held
+  // that product back on behalf of the other and it settled on NEITHER. It then
+  // waited for a dispatch that may be days out, with the food already packed.
+  // (A product sitting entirely on one box was the first shape tried here and
+  // proves nothing: the other box has none of it to hold back.)
+  const both = mkOrder('delivery', [[SALAD3, 1]]);
+  const boxA = mkParcel(both, 'air');
+  const boxB = mkParcel(both, 'land');
+  // A second line of the SAME fresh product, so one unit rides each box.
+  db.prepare("INSERT INTO retail_order_items (order_id, product_id, qty, options_json) VALUES (?,?,1,'[]')")
+    .run(both, SALAD3);
+  const [rowA, rowB] = db.prepare(
+    'SELECT rowid AS r FROM retail_order_items WHERE order_id = ? AND product_id = ? ORDER BY rowid'
+  ).all(both, SALAD3).map((x) => x.r);
+  const onParcel = db.prepare('UPDATE retail_order_items SET shipment_id = ? WHERE rowid = ?');
+  onParcel.run(boxA, rowA);
+  onParcel.run(boxB, rowB);
+
+  atPayment(both);
+  check('§180 — a fresh line riding both parked boxes is held whole at payment', qty(SALAD3), 6);
+
+  // Box B is packed first. Box A is untouched, so ITS unit stays in the fridge —
+  // and the hold-back is whole-product, so neither unit moves.
+  packParcel(boxB);
+  const rB = atParcel(both, boxB);
+  check('§180 — packing one box takes nothing while the other is still unpacked',
+    [rB && rB.skipped, qty(SALAD3)], ['fresh_on_another_parcel', 6]);
+  // Packing did NOT ship it. Every guard asking whether it has left must keep
+  // answering no — the reason prepared is a separate axis rather than a fourth
+  // value of shipmentState().
+  check('§180 — and a packed box has NOT been dispatched',
+    db.prepare('SELECT dispatched_at FROM retail_shipments WHERE id = ?').get(boxB).dispatched_at, null);
+
+  // Box A is packed too. Nothing is left in the fridge now, so the count settles
+  // WITH NO DISPATCH AT ALL. This is the assertion the whole section exists for:
+  // drop `prepared_at IS NULL` from parcelsStillInTheBuilding and box B is still
+  // counted as holding its unit back, so this stays at 6 and the shelf lies for
+  // as long as both boxes sit there packed.
+  packParcel(boxA);
+  atParcel(both, boxA);
+  check('§180 — packing the last box settles BOTH units, with no dispatch at all',
+    qty(SALAD3), 4);
+  check('§180 — and the order stops reading "stock pending" once both are packed',
+    inventory.isStockPending(both, 'dispatched', 'wechat'), false);
+
   // The hold-back says so BY NAME when it is the whole of what was asked for.
   // A "(to follow · 后补)" parcel really can carry no items of its own, so this
   // is the shape rather than a contrivance.
@@ -517,11 +576,13 @@ check('the rider auto-deliver sweep does too',
   /Auto · delivered \(rider\)/.test(ROUTES_SRC), true);
 check('both sweeps claim from paid, which is why they owe it',
   /AUTO_DELIVER_FROM_STATUSES = \['paid', 'preparing', 'dispatched', 'rider_pickup'\]/.test(ROUTES_SRC), true);
-// ── §58 ADDENDUM: THE THREE ROUTES THAT SHIP ONE PARCEL MUST SAY WHICH ──────
+// ── §58 ADDENDUM: EVERY ROUTE THAT ACTS ON ONE PARCEL MUST SAY WHICH ────────
 // Behaviour above, wiring here — and this half is the one that actually failed.
 // The rule was right and complete; three call sites handed it the ORDER when
-// what had left was a parcel. A fourth such route added later and wired the same
-// way fails here rather than on a shelf.
+// what had left was a parcel. A further such route added later and wired the
+// same way fails here rather than on a shelf — which is what happened: §180's
+// prepare route is the fourth, and it is the first that acts on a parcel
+// WITHOUT shipping it.
 // A parcel-level call site is identified by the label in its OWN catch line, and
 // the question asked of it is whether the call above that line named a parcel.
 // An index scan rather than one long regex: the thing under test is a call-site
@@ -537,16 +598,21 @@ const parcelSite = (label) => {
 check('the parcel-dispatch route names the parcel that left', parcelSite('parcel dispatch'), true);
 check('so does the parcel-deliver route', parcelSite('parcel deliver'), true);
 check('and minting a JD waybill for one parcel takes one parcel of stock', parcelSite('jd waybill'), true);
-check('exactly three call sites are parcel-scoped — the three that ship one box',
-  (ROUTES_SRC.match(/shipmentId: [A-Za-z.]+ \}\)/g) || []).length, 3);
+// §180 — packing one box is a forward step into fulfilment for THAT box, and
+// the first parcel-scoped call site that is not a departure.
+check('and packing one box takes one box of stock', parcelSite('parcel prepare'), true);
+check('exactly four call sites are parcel-scoped — the ones that act on one box',
+  (ROUTES_SRC.match(/shipmentId: [A-Za-z.]+ \}\)/g) || []).length, 4);
 // The backstop, stated as a test because the deferral is only ever safe while
 // something downstream takes what it held: the whole-order transition passes no
 // shipmentId and therefore no parcel can narrow it.
 check('the whole-order status transition still takes everything',
   /\['preparing', 'dispatched', 'delivered'\]\.includes\(status\)[\s\S]{0,300}?prepareCommitUnreservedOrder\(id, \{ actorUserId: req\.user\.id, actorLabel: req\.user\.display_name \|\| req\.user\.username \|\| null \}\)/.test(ROUTES_SRC), true);
-// The parcel is excluded by ITS OWN STAMP, not by having been passed in: all
-// three routes write dispatched_at before they call, so a route that forgets to
-// would still be caught by the id test, and vice versa.
+// The parcel is excluded by ITS OWN STAMP, not by having been passed in: the
+// three shipping routes write dispatched_at before they call, so a route that
+// forgets to would still be caught by the id test, and vice versa. §180's
+// prepare route stamps prepared_at instead and leans on the id test alone —
+// which is the reason that test is there rather than implied.
 check('a parcel that has already gone out never holds anything back',
   /dispatched_at IS NULL AND delivered_at IS NULL/.test(
     extractFn('parcelsStillInTheBuilding', ROUTES_SRC) || ''), true);

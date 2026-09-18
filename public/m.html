@@ -639,6 +639,9 @@ const PILL = {
 };
 const KIND2PILL = {paid:'clear',pending:'clear',preparing:'clear',cancelled:'clear',draft:'clear',
   delivered:'success',dispatched:'success',live:'success',on:'success',
+  /* §180 — amber, matching the desktop's st-preparing. NOT 'clear': a packed
+     box that wears the same pill as an untouched one says nothing. */
+  prepared:'warning',
   restock:'warning',gold:'warning',refund:'danger',view:'muted',off:'muted'};
 function pill(kind, label){ const [bg,fg]=PILL[KIND2PILL[kind]||'clear']; return `<span class="pill" style="background:${bg};color:${fg}">${label}</span>`; }
 function toggle(on, onClick){
@@ -1881,6 +1884,27 @@ reg('dispatchParcel', sid=>{
     // Re-read the order: the parcel's state, the order's status and the list's
     // rollup all move together, and guessing any of them here would put the
     // drawer and the row it came from out of step.
+    api('/orders/'+o._id).then(d=>{ if(state.detailId===o.id){ state.liveDetail=mapDetail(d); render(); } }).catch(()=>render());
+    loadOrdersPage();
+  }).catch(e=>{
+    state.parcelBusy=null;
+    if(String(e.message)==='auth') return;
+    state.orderErr=E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
+    render();
+  });
+});
+/* §180 — one parcel is packed. Takes THIS box's stock off the count through the
+   same scoped commit a parcel dispatch makes. The order's own status is not
+   moved and no customer is told anything: packing a box is warehouse news. */
+reg('prepareParcel', sid=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  if(!o||o._id==null||state.parcelBusy) return;
+  state.parcelBusy=sid; state.orderErr=null; render();
+  apiWrite('/orders/'+o._id+'/shipments/'+sid+'/prepare',{}).then(()=>{
+    state.parcelBusy=null;
+    showToast(T('Parcel prepared','包裹已备货'));
+    /* Re-read rather than guess, for the reason dispatchParcel gives: the
+       parcel's flag and the list row's stock note move together server-side. */
     api('/orders/'+o._id).then(d=>{ if(state.detailId===o.id){ state.liveDetail=mapDetail(d); render(); } }).catch(()=>render());
     loadOrdersPage();
   }).catch(e=>{
@@ -16228,12 +16252,17 @@ const PARCEL_MODE={
 };
 const PARCEL_STATE={
   pending:{en:'Not shipped',zh:'未发货',kind:'clear'},
+  /* §180 — reached through the `prepared` flag, not through sp.state, which
+     stays 'pending' for a box that is packed but has not gone. */
+  prepared:{en:'Prepared',zh:'已备货',kind:'prepared'},
   dispatched:{en:'Dispatched',zh:'已发货',kind:'success'},
   delivered:{en:'Delivered',zh:'已送达',kind:'success'},
 };
 function parcelCard(o,sp,i,n){
   const m=PARCEL_MODE[sp.mode]||PARCEL_MODE.local;
-  const st=PARCEL_STATE[sp.state]||PARCEL_STATE.pending;
+  // §180 — a packed box is still 'pending' to everything that asks whether it
+  // has LEFT. Prepared replaces "Not shipped" on the pill, never "Dispatched".
+  const st=(sp.state==='pending'&&sp.prepared)?PARCEL_STATE.prepared:(PARCEL_STATE[sp.state]||PARCEL_STATE.pending);
   const busy=state.parcelBusy===sp.id;
   // Per-parcel dispatch, on the desktop's own conditions: this parcel has not
   // gone, it is not supplier-direct (which ships when its waybill is entered),
@@ -16241,6 +16270,11 @@ function parcelCard(o,sp,i,n){
   // with one, the header button already does exactly this.
   const canDispatch = sp.state==='pending' && sp.mode!=='supplier' && n>1
     && ['paid','preparing','dispatched'].includes(o.rawStatus) && !o.viewOnly && o._id!=null;
+  // §180 — the step that did not exist. Once the first parcel of a split order
+  // leaves, the order is 'dispatched' and the header's "Start preparing" is gone
+  // for good, so the parked box had no way forward and its stock stayed on the
+  // count. Same conditions as dispatch, plus "not already packed".
+  const canPrepare = canDispatch && !sp.prepared;
   return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
       <span style="display:flex;align-items:center;gap:8px;min-width:0;color:var(--text-secondary)">${ic(m.icon,17)}
@@ -16249,6 +16283,7 @@ function parcelCard(o,sp,i,n){
       ${pill(st.kind,T(st.en,st.zh))}</div>
     ${sp.items.length?`<div style="display:flex;flex-direction:column;gap:8px">${sp.items.map(itemRow).join('')}</div>`:''}
     ${sp.trk&&sp.trk.number?`<div style="padding-top:10px;border-top:1px solid var(--border-default);font-size:12.5px;color:var(--text-secondary)">${T('Tracking is at the top of this order','物流信息在本单顶部')}</div>`:''}
+    ${canPrepare?`<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('prepareParcel',${sp.id})">${busy?T('Marking…','处理中…'):T('Mark this parcel prepared','标记此包裹已备货')}</button>`:''}
     ${canDispatch?`<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('dispatchParcel',${sp.id})">${busy?T('Marking…','处理中…'):T('Mark this parcel dispatched','标记此包裹已发货')}</button>`:''}
   </div>`;
 }
@@ -22195,6 +22230,10 @@ function mapDetail(o){
     // server validates the code against lib/tracking.js.
     carrierCode:sp.tracking_carrier||null,
     dispatchedAt:sp.dispatched_at||null, deliveredAt:sp.delivered_at||null,
+    // §180 — packed and still here. A SEPARATE AXIS from state, which stays
+    // 'pending' for a packed box because it has not left; every guard asking
+    // whether it has gone must keep answering no.
+    prepared:!!sp.prepared, preparedAt:sp.prepared_at||null,
   }));
   base.airDelayed=!!o.air_delivery_delayed;
   // Anything not assigned to a parcel yet still has to show, or a line silently

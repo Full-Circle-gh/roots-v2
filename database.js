@@ -4058,6 +4058,18 @@ addColumn('retail_shipments', 'package_count', 'INTEGER');
 // it handled after they've contacted the customer / filed the JD claim. These
 // stamp WHEN and WHO cleared it; NULL = still open. Once set, the list badge and
 // the dashboard card both drop the order.
+// §180 — WHEN THIS BOX WAS PACKED. A parcel that is packed has NOT left, so
+// this is a SEPARATE AXIS from dispatched_at/delivered_at and deliberately not a
+// fourth value of shipmentState(): every guard that reads state === 'pending' to
+// mean "still in the building" must keep answering the same way for a packed
+// box, or a prepared parcel becomes one nobody can dispatch. NULL = not packed.
+//
+// Stamping it is what takes this box's stock off the count, through the same
+// scoped commit the parcel dispatch makes (§58 addendum). A split order whose
+// first parcel has gone leaves the second unreachable without it: the order is
+// 'dispatched' by then, so the order-level "Start preparing" is gone for good.
+addColumn('retail_shipments', 'prepared_at', 'DATETIME');
+
 addColumn('retail_shipments', 'air_delay_cleared_at', 'DATETIME');
 addColumn('retail_shipments', 'air_delay_cleared_by', 'TEXT');
 
