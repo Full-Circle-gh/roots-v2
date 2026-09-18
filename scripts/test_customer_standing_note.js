@@ -132,6 +132,29 @@ check('it is live on the customer drawer’s note field', read('public/retail-ad
 check('the order drawer uses that same string',              deskSrc.includes(ZH));
 check('and so does the phone',                               phoneSrc.includes(ZH));
 
+/* ── The other end: a note nobody can find is worth nothing ──────────────── */
+/* Ash, on the customer page, looking straight at the control: "im on customer
+   page wher is it". With nothing stored the Know block collapsed to a bare
+   "Edit" under the name, which does not say what it edits. It now names
+   itself, with the heading its own twin on the phone already used. */
+console.log('\nWhere the note is typed says what it is');
+const custSrc  = read('public/retail-admin/08-customers.js');
+const adminCss = read('public/retail-admin.html');
+const HINT_ZH = '\u5907\u6ce8\u4e0e\u6807\u7b7e';
+check('the desktop block carries the heading',
+      /cu-knowhint[\s\S]{0,200}What we know/.test(custSrc) && custSrc.includes(HINT_ZH));
+check('it is the SAME pair the phone uses for this block, not a second one',
+      /T\('What we know','\u5907\u6ce8\u4e0e\u6807\u7b7e'\)/.test(phoneSrc));
+check('it is rendered hidden the moment a note or a tag exists',
+      /id="cu-knowhint"\$\{\(note \|\| tags\.length\) \? ' hidden' : ''\}/.test(custSrc));
+/* The trap test_admin_install.js was written for: this stylesheet has no
+   global [hidden] rule, so every hidden-able element needs its own guard. */
+check('the stylesheet guards [hidden] itself, as everything else here must',
+      /\.cu-knowhint\[hidden\]\s*\{[^}]*display\s*:\s*none/.test(adminCss));
+check('both paths that can fill the block re-sync it',
+      /function cuNotesEdit[\s\S]{0,900}_cuKnowHintSync\(\)/.test(custSrc)
+      && /function cuNotesRepaint[\s\S]{0,900}_cuKnowHintSync\(\)/.test(custSrc));
+
 db.close();
 fs.rmSync(dir, { recursive: true, force: true });
 

@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.307
+# Tacet shared-core consolidation — decisions record, v4.308
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-09-18 · v4.308 — **§171 ADDENDUM · THE WRITE END: A CONTROL THAT DOES NOT NAME ITSELF — REPORTED BY ASH**, on the customer page with the cursor inches from it: *“im on customer page wher is it”*. An empty Know block collapsed to a bare `Edit` under the name and said nothing about the two things behind it. It now shows `What we know · 备注与标签` — **not a new string**: the heading the phone's customer record already used for this same block, already locked, arriving on its second surface. **Shown only while the block is empty**, so the space saving that collapsed the old 210px card is kept. **The rejected empty-state stays rejected** — `暂无备注。` names the absence, the heading names the control, and that distinction is the part to keep. `docs/tacet-delivery-vocabulary.md` v1.125 locks nothing new. Covered by `scripts/test_customer_standing_note.js`, including the stylesheet's own `[hidden]` guard — the trap `test_admin_install.js` exists for.
 
 2026-09-18 · v4.307 — **§171 · WHAT THE SHOP KNOWS ABOUT A PERSON IS READ ON EVERY ORDER, AND IS EDITED IN ONE PLACE — DECIDED BY ASH.** Ash, on TC000750's drawer: *“an order note will appear only for that order. however we need a note that will appear for this customer order everytime he place an order”*. **NO STORAGE IS ADDED — A READ IS.** `retail_customers.note` and `.tags` have existed since the customer drawer's Know block and no order ever looked at them, so the knowledge sat in the right place and reached nobody at the moment it was needed. **THREE NOTES, NOT ONE**: `customer_note` is the BUYER's, for that order; `staff_note` is the SHOP's, for that order; `customer_standing_note` (aliased from `retail_customers.note` on the order read) is the shop's, about the PERSON, on every order they place. **THE COPY RULE IS THE ARCHITECTURE**: the note is READ through the `LEFT JOIN retail_customers` that `GET /api/retail-admin/orders/:id` already made for the nickname and phone, and never stamped onto an order — correct it once and every order past, open and future reads the correction, because one copy exists. **READ-ONLY IN THE DRAWER**, Edit navigates to the customer: an editable box there sits pixels from the per-order Shop note under a near-identical label, which is how “no ice THIS time” gets typed into a note that follows a person for a year. **IT NEVER REACHES THE CUSTOMER** — `loadOrderForCustomer` names its columns by hand and does not select it, deliberately and load-bearingly. **NOTHING RENDERS WITHOUT A PERSON**: walk-ins and most channel orders carry no `customer_id`, so it is null and absent, with no empty state. **THREE SURFACES, ONE ENDPOINT**: the desktop drawer, the mirrored channel drawer and the phone's order detail; the Orders LIST and the kitchen print were considered and left to their own change under one-PR-per-change. **NO CHINESE IS MINTED** — `About this customer · 关于该顾客的备注` lifts its Chinese half whole from the live aria-label on the textarea the text is typed into, recorded as `docs/tacet-delivery-vocabulary.md` v1.124.
 
@@ -17951,3 +17953,22 @@ change rule.
 the very textarea this text is typed into, in the customer drawer. Same string,
 same thing, both screens. Recorded in `docs/tacet-delivery-vocabulary.md`
 v1.124, which locks nothing new.
+
+**ADDENDUM, 2026-09-18 (v4.308) — THE WRITE END. A NOTE NOBODY CAN FIND IS
+WORTH NOTHING.** Ash, minutes after the read end was built, on the customer
+page with the control three inches from the cursor: *“im on customer page wher
+is it”*. With nothing stored, the Know block collapses to a bare `Edit` under
+the customer's name — correct about space and silent about purpose. It now
+carries `What we know · 备注与标签`, which is not a new string but this
+block's own heading, live on the phone's customer record for the same block
+and already locked. Shown ONLY while the block is empty, which is the only
+state that was ambiguous: a note prints its own line, tags print chips, and
+beside either the button's job is plain. The block costs one line when empty
+and not a pixel more once used, so the saving that collapsed the old 210px
+card stands. **The empty-state string this block once rejected is still
+rejected**: `暂无备注。` names the ABSENCE of a note, which anyone looking at
+an empty block can see; the heading names the CONTROL. That distinction is the
+whole of this addendum and is the thing to keep if either is ever revisited.
+Recorded as `docs/tacet-delivery-vocabulary.md` v1.125, which locks nothing
+new. Covered by the same suite as the read end.
+

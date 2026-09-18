@@ -4088,6 +4088,12 @@
          so the line has to opt back out by hand — without this it stays on
          screen while the editor is open, repeating the textarea underneath it. */
       #cu-drawer .cu-noteline[hidden] { display: none; }
+      /* The block's own heading, shown only while nothing is stored (see
+         cuKnowHtml). It takes the space the note line would have, so the Edit
+         button sits where it always sits and does not jump when the first note
+         lands. */
+      #cu-drawer .cu-knowhint { flex: 1; min-width: 0; font-size: 13px; color: var(--text-3); line-height: 1.55; }
+      #cu-drawer .cu-knowhint[hidden] { display: none; }
       #cu-drawer .cu-noteline .ic { flex: none; color: var(--text-4); font-size: 11px; }
       #cu-drawer .cu-noteline .tx { min-width: 0; overflow-wrap: anywhere; }
       #cu-drawer #cu-note-toggle { margin-left: auto; flex: none; }
