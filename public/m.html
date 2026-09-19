@@ -16401,8 +16401,13 @@ function parcelCard(o,sp,i,n){
   // gone, it is not supplier-direct (which ships when its waybill is entered),
   // the order is somewhere it can ship from, and there is more than one parcel —
   // with one, the header button already does exactly this.
+  // §187 — a parked order's parcels are sendable when the parcel itself is not
+  // short. `held_lines` is the server's count of this box's waiting lines (0 for
+  // every order that is not parked), so the phone asks the same question the
+  // desktop and the route ask, without needing the pid list it has never carried.
   const canDispatch = sp.state==='pending' && sp.mode!=='supplier' && n>1
-    && ['paid','preparing','dispatched'].includes(o.rawStatus) && !o.viewOnly && o._id!=null;
+    && ['paid','preparing','dispatched','awaiting_restock'].includes(o.rawStatus)
+    && !(sp.held_lines>0) && !o.viewOnly && o._id!=null;
   // §180 — the step that did not exist. Once the first parcel of a split order
   // leaves, the order is 'dispatched' and the header's "Start preparing" is gone
   // for good, so the parked box had no way forward and its stock stayed on the
@@ -22367,6 +22372,10 @@ function mapDetail(o){
     // 'pending' for a packed box because it has not left; every guard asking
     // whether it has gone must keep answering no.
     prepared:!!sp.prepared, preparedAt:sp.prepared_at||null,
+    // §187 — how many of this box's lines the order is parked on. 0 for every
+    // order that is not awaiting restock, and the one thing that decides whether
+    // a parked order's parcel may still be packed and sent.
+    held_lines:sp.held_lines||0,
   }));
   base.airDelayed=!!o.air_delivery_delayed;
   // Anything not assigned to a parcel yet still has to show, or a line silently

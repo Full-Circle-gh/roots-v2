@@ -1892,7 +1892,9 @@ function expandStockLines(resolvedLines) {
 // whole order — see parcelsStillInTheBuilding below. A whole-order caller passes
 // nothing and takes everything, exactly as it always did.
 function prepareCommitUnreservedOrder(orderId, { actorUserId = null, actorLabel = null, atPayment = false, shipmentId = null } = {}) {
-  const o = tdb().prepare('SELECT id, order_no, fulfillment_type FROM retail_orders WHERE id = ?').get(orderId);
+  const o = tdb().prepare(
+    'SELECT id, order_no, fulfillment_type, status, awaiting_restock_pids FROM retail_orders WHERE id = ?'
+  ).get(orderId);
   if (!o) return;
   const items = tdb().prepare(
     'SELECT product_id, qty, options_json, shipment_id FROM retail_order_items WHERE order_id = ?'
@@ -1939,6 +1941,35 @@ function prepareCommitUnreservedOrder(orderId, { actorUserId = null, actorLabel 
       if (!lines.length) return { skipped: 'fresh_on_another_parcel' };
     }
   }
+  /* §187 — A SHELF THAT IS SHORT CANNOT PAY FOR THE BOX THAT IS LEAVING.
+     Sending the land parcel of a parked order is a forward transition and owes
+     the shelf that parcel's stock, exactly as every other dispatch does — but
+     the products the order is PARKED ON are, by definition, not there. Committed
+     anyway they write an honest-looking negative (commitUnreservedOrder writes
+     one for every non-counter order, correctly, per §84) for units nobody ever
+     picked, and lib/batch-owed.js would read that negative as food to cook.
+
+     EXPANDED, for the reason the two branches above are: a bundle wrapper can be
+     what the order waits on while the components carry the ids the commit sees.
+     The raw pids are unioned in because a park can also name an option's
+     stock_product_id, which no expansion of the LINES produces.
+
+     Empty for every order that is not parked right now — orderWaitingPids gates
+     on the live status — so this changes nothing about any other commit. The
+     awaiting_restock → preparing transition is unaffected too: the PATCH writes
+     the new status BEFORE it calls this, so by the time the operator's
+     "Restocked → Start preparing" reaches here the order is 'preparing' and its
+     restocked lines commit in full. */
+  const parkedOn = orderWaitingPids(o);
+  if (parkedOn.size) {
+    const held = new Set([
+      ...parkedOn,
+      ...expandStockLines(resolved.filter((r) => parkedOn.has(r.product && r.product.id)))
+        .map((l) => l.product_id),
+    ]);
+    lines = lines.filter((l) => !held.has(l.product_id));
+    if (!lines.length) return { skipped: 'awaiting_restock' };
+  }
   return inventory.commitUnreservedOrder(orderId, lines, { actorUserId, actorLabel, note: o.order_no });
 }
 // §58 ADDENDUM — the order's OTHER parcels that have not left yet.
@@ -1975,6 +2006,55 @@ function parcelsStillInTheBuilding(orderId, shipmentId) {
           AND prepared_at IS NULL
           AND dispatched_at IS NULL AND delivered_at IS NULL`
     ).all(orderId, sid).map((r) => r.id)
+  );
+}
+/* §187 — THE PRODUCTS AN ORDER IS PARKED ON, and whether one parcel carries any
+   of them. Two questions, one place, because five guards ask them — the two
+   parcel routes, the scoped commit above, the cancel reversal and the drawer
+   payload — and a disagreement between those guards is either a box nobody can
+   send or a shelf that gives up stock it does not have.
+
+   GATED ON THE LIVE STATUS, NOT ON THE COLUMN. `awaiting_restock_pids` is kept
+   after the order releases, deliberately, as the audit trail — so an order that
+   shipped weeks ago still names products here. Read the column alone and every
+   guard below would fire on an order that has not waited on anything since
+   August. That is the same rule awaitingRestockPids() states on the drawer side,
+   and it is why the set is EMPTY for every order that is not parked right now:
+   nothing in this section can change what a normal order does. */
+function orderWaitingPids(order) {
+  if (!order || order.status !== 'awaiting_restock') return new Set();
+  let pids = [];
+  try { pids = JSON.parse(order.awaiting_restock_pids || '[]') || []; } catch { pids = []; }
+  if (!Array.isArray(pids)) return new Set();
+  return new Set(pids.map((n) => parseInt(n, 10)).filter(Boolean));
+}
+
+// How many of THIS parcel's lines are waiting on stock. 0 is the licence to send
+// it: a box holding none of the short products is a box the shortage has nothing
+// to say about, and the land leg going days ahead of the air leg is how a split
+// order was always meant to work (see parcelsStillInTheBuilding above, which
+// says so in §58's words).
+function parcelHeldLines(orderId, shipmentId, waiting) {
+  if (!waiting || !waiting.size) return 0;
+  return tdb().prepare(
+    'SELECT product_id FROM retail_order_items WHERE order_id = ? AND shipment_id = ?'
+  ).all(orderId, shipmentId).filter((it) => waiting.has(it.product_id)).length;
+}
+
+// The products this order has already taken off the count and cannot put back:
+// everything on a parcel that is packed, gone, or landed. §180 established that
+// packing is when the stock leaves, so prepared_at counts exactly as
+// dispatched_at does. Used by the cancel reversal, which must not credit the
+// shelf with units that are in a box or in a customer's hands.
+function orderShippedPids(orderId) {
+  return new Set(
+    tdb().prepare(
+      `SELECT DISTINCT i.product_id
+         FROM retail_order_items i
+         JOIN retail_shipments s ON s.id = i.shipment_id
+        WHERE i.order_id = ? AND i.product_id IS NOT NULL
+          AND (s.prepared_at IS NOT NULL OR s.dispatched_at IS NOT NULL OR s.delivered_at IS NOT NULL)`
+    ).all(orderId).map((r) => r.product_id)
   );
 }
 // §58 — does this order hold its kitchen lines back at payment?
@@ -27265,6 +27345,13 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   // the (now irrelevant) kd100 flag.
   const jdLiveOn = jd.jdEnabled(integ().jd);
 
+  /* §187 — WHICH PRODUCTS THIS ORDER IS PARKED ON, resolved ONCE for the whole
+     payload. The per-parcel `held_lines` below is its projection, and it is
+     computed here rather than on each screen because the desktop drawer and the
+     phone both gate a dispatch button on it and the phone has never carried the
+     pid list at all. One rule, one answer, two screens. */
+  const waitingPids = orderWaitingPids(o);
+
   // Hydrate each shipment with its assigned items + tracking view.
   o.shipments = shipmentRows.map(s => ({
     id: s.id, order_id: s.order_id, mode: s.mode, label: s.label,
@@ -27299,6 +27386,11 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     state: shipmentState(s),
     prepared_at: s.prepared_at || null,   // §180 — when this box was packed
     prepared:    shipmentPrepared(s),     // packed AND still here (drives pill + button)
+    // §187 — how many of THIS parcel's lines the order is waiting on. 0 means
+    // the shortage has nothing to say about this box, and it may be packed and
+    // sent while the order stays parked. Always 0 for an order that is not
+    // parked right now, so nothing outside the restock queue reads differently.
+    held_lines: parcelHeldLines(id, s.id, waitingPids),
     items: o.items.filter(it => it.shipment_id === s.id),
     tracking: buildShipmentTrackingView(s),
   }));
@@ -28203,15 +28295,22 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/prepare',
   requireRetailAdmin, express.json(), (req, res) => {
   const id  = parseInt(req.params.id, 10);
   const sid = parseInt(req.params.sid, 10);
-  const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
+  const o = tdb().prepare(
+    'SELECT id, status, awaiting_restock_pids FROM retail_orders WHERE id = ?'
+  ).get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   // Same window as /dispatch: a dispatched order still has parcels in the
   // building in the partial case, which is the case this route exists for.
-  if (!['paid', 'preparing', 'dispatched'].includes(o.status)) {
+  // §187 adds 'awaiting_restock' on the same condition /dispatch does — the
+  // parcel must carry none of the short lines. See the block there.
+  if (!['paid', 'preparing', 'dispatched', 'awaiting_restock'].includes(o.status)) {
     return res.status(409).json({ success: false, error: 'not_preparable', status: o.status });
   }
   const ship = tdb().prepare('SELECT * FROM retail_shipments WHERE id = ? AND order_id = ?').get(sid, id);
   if (!ship) return res.status(404).json({ success: false, error: 'shipment_not_found' });
+  if (parcelHeldLines(id, sid, orderWaitingPids(o))) {
+    return res.status(409).json({ success: false, error: 'parcel_awaiting_restock' });
+  }
   // A supplier (drop-ship) parcel is never packed by us — it is made up and sent
   // by the supplier, and marked shipped by entering their tracking number.
   if (ship.mode === 'supplier') {
@@ -28249,15 +28348,32 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch',
   requireRetailAdmin, express.json(), (req, res) => {
   const id  = parseInt(req.params.id, 10);
   const sid = parseInt(req.params.sid, 10);
-  const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
+  const o = tdb().prepare(
+    'SELECT id, status, awaiting_restock_pids FROM retail_orders WHERE id = ?'
+  ).get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
-  // Only a paid/preparing/dispatched order can have parcels go out. (A
-  // dispatched order may still have un-shipped parcels in the partial case.)
-  if (!['paid', 'preparing', 'dispatched'].includes(o.status)) {
+  /* §187 — A PARKED ORDER IS PARKED ON PRODUCTS, NOT ON PARCELS, AND THE LAND
+     BOX WAS NEVER SHORT. An order waiting on one fresh line was refused here
+     outright, so every OTHER parcel on it — four shelf products in their own
+     box, nothing to do with the shortage — had no way out of the drawer: no
+     dispatch, no prepare, only "Ship part later", which splits a parcel it
+     still cannot send. That is the reported case (TC000784) and it is not a
+     hidden button; the window simply never named this status.
+
+     THE TEST IS THE PARCEL, NOT THE ORDER: a box holding a short line stays
+     refused, and parcelHeldLines is the one place that asks. Nothing below
+     weakens the shortage — the order STAYS 'awaiting_restock' (see the flip
+     further down), its stock commit holds the short products back
+     (prepareCommitUnreservedOrder), and the release still has to find real
+     stock before anything moves. */
+  if (!['paid', 'preparing', 'dispatched', 'awaiting_restock'].includes(o.status)) {
     return res.status(409).json({ success: false, error: 'not_shippable', status: o.status });
   }
   const ship = tdb().prepare('SELECT * FROM retail_shipments WHERE id = ? AND order_id = ?').get(sid, id);
   if (!ship) return res.status(404).json({ success: false, error: 'shipment_not_found' });
+  if (parcelHeldLines(id, sid, orderWaitingPids(o))) {
+    return res.status(409).json({ success: false, error: 'parcel_awaiting_restock' });
+  }
   // A supplier (drop-ship) parcel isn't dispatched from our warehouse — it's
   // marked shipped by entering the supplier's tracking number instead.
   if (ship.mode === 'supplier') {
@@ -28274,8 +28390,26 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch',
   // First parcel out → advance the whole order so it's protected from cancel
   // and the customer hears "on the way". Reuse the order's dispatched_at if a
   // prior status flip already stamped it.
+  //
+  /* §187 — EXCEPT WHEN THE ORDER IS PARKED, AND THIS IS THE LOAD-BEARING HALF
+     OF THE SECTION. 'awaiting_restock' is not a step on the way to 'dispatched';
+     it is the record that stock is missing, and exactly one reader acts on it:
+     checkAwaitingRestockForRestock scans `status = 'awaiting_restock'` and
+     nothing else. Flip the order here and the fresh line's release never runs
+     again — the restock lands, the sweep looks straight past the order, and it
+     sits "dispatched" forever with food nobody was told to make. The header's
+     "Restocked → Start preparing" would go with it (NEXT_STATUS is keyed on the
+     status) and the order would leave the awaiting-restock worklist while it was
+     still, in every real sense, waiting.
+
+     So the parcel's own dispatched_at is the whole of the write, and the
+     customer push is skipped with it: "your order is on the way" is not true of
+     an order whose kitchen lines have not been made. The parcel carries its own
+     tracking and says so on both screens. Whether a parked order should send a
+     per-parcel notification of its own is a question for Ash, not something to
+     invent here. */
   let firstDispatch = false;
-  if (o.status !== 'dispatched') {
+  if (o.status !== 'dispatched' && o.status !== 'awaiting_restock') {
     tdb().prepare(
       "UPDATE retail_orders SET status = 'dispatched', dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ?"
     ).run(id);
@@ -28303,7 +28437,11 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch',
     try { notifyOrderStatusChange(id, 'dispatched'); } catch (e) { /* best-effort */ }
   }
 
-  res.json({ success: true, data: { fulfillment: buildOrderFulfillment(id), order_status: 'dispatched' } });
+  // §187 — the status the order ACTUALLY holds, not the literal 'dispatched'
+  // this used to return unconditionally. A parked order keeps its park, and
+  // both drawers re-render off this value.
+  const after = tdb().prepare('SELECT status FROM retail_orders WHERE id = ?').get(id)?.status || o.status;
+  res.json({ success: true, data: { fulfillment: buildOrderFulfillment(id), order_status: after } });
 });
 
 // Mark a late-air food-safety alert handled (or re-open it). A delivered order
@@ -31844,8 +31982,15 @@ const STATUS_TRANSITIONS = {
   awaiting_restock: { col: null, prev: ['paid'] },
   dispatched: { col: 'dispatched_at', prev: ['preparing', 'paid'] },
   delivered:  { col: 'delivered_at',  prev: ['dispatched'] },
-  // awaiting_restock cancels refund the (already-paid) customer; there's no
-  // committed stock to reverse, so the reversal below is a harmless no-op.
+  /* An awaiting_restock cancel refunds the (already-paid) customer.
+     THE OLD NOTE HERE — "there's no committed stock to reverse, so the reversal
+     below is a harmless no-op" — WAS TRUE ONLY OF THE ORIGINAL PARK AND IS NOW
+     WRONG TWICE OVER. §136's operator park comes from 'paid', where the order
+     was already committed; §187 lets a parked order pack and send a parcel that
+     carries none of the short lines. Both cases reach the reversal with real
+     committed stock, and the §187 case reaches it with stock that has physically
+     left. The reversal is scoped accordingly — see the §187 block at the cancel
+     branch. */
   cancelled:  { col: 'cancelled_at',  prev: ['pending_payment', 'paid', 'preparing', 'awaiting_restock'] },
   refunded:   { col: null,            prev: ['paid', 'preparing', 'dispatched', 'delivered'] },
 };
@@ -32412,6 +32557,40 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
         const anyRefunded = tdb().prepare(
           'SELECT 1 FROM retail_order_items WHERE order_id = ? AND COALESCE(refunded_qty, 0) > 0 LIMIT 1'
         ).get(id);
+        /* §187 — WHAT IS ALREADY IN A BOX DOES NOT COME BACK TO THE SHELF, AND
+           THE COMMENT ABOVE THIS BRANCH USED TO SAY IT COULD NOT HAPPEN.
+           "awaiting_restock cancels… there's no committed stock to reverse, so
+           the reversal below is a harmless no-op" was written when a parked
+           order could not move at all. §136's operator park already ended that
+           (an order parked from 'paid' HAS committed stock — correctly, and it
+           is all still here, so reversing it is right), and §187 ends the
+           stronger form: a parked order can now have a parcel that is packed or
+           gone. Those units are with a courier or a customer. Crediting them
+           back would tell the shelf it holds stock it does not, and
+           lib/batch-owed.js and every availability check read that number.
+
+           'dispatched' is not in cancelled.prev for exactly this reason, which
+           is the argument for the scoping rather than for a refusal: the money
+           side is untouched — a cancel still refunds in full, because the shop
+           failed to deliver the order — and only the COUNT stops lying. Goods
+           already with the customer are a return-to-sender matter this system
+           does not track; that is flagged in §187, not invented here.
+
+           Empty for every order with no packed or shipped parcel, which is every
+           order this branch saw before today. */
+        const gone = orderShippedPids(id);
+        /* AN EMPTY LIST IS NOT "REVERSE NOTHING" TO reverseOrderStock — it falls
+           through to reverseCommittedOrder, which reverses the WHOLE order. So
+           when the scoping leaves nothing behind (every product on the order is
+           packed or gone) the call is skipped outright rather than made with
+           []. This is the sharpest edge in the section and the one a later
+           refactor is most likely to file off. */
+        const stillHere = (rows) => rows.filter((r) => !gone.has(r.product_id));
+        const reverseScoped = (rows, note) => {
+          const lines = stillHere(rows);
+          if (!lines.length) return;
+          reverseOrderStock(id, { lines, ...actor, note });
+        };
         if (anyRefunded) {
           const remaining = tdb().prepare(
             `SELECT product_id, SUM(qty - COALESCE(refunded_qty, 0)) AS qty
@@ -32419,7 +32598,15 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
               WHERE order_id = ? AND product_id IS NOT NULL
               GROUP BY product_id HAVING qty > 0`
           ).all(id);
-          reverseOrderStock(id, { lines: remaining, ...actor, note: reason || 'cancel — remaining units after partial refund' });
+          reverseScoped(remaining, reason || 'cancel — remaining units after partial refund');
+        } else if (gone.size) {
+          const remaining = tdb().prepare(
+            `SELECT product_id, SUM(qty) AS qty
+               FROM retail_order_items
+              WHERE order_id = ? AND product_id IS NOT NULL
+              GROUP BY product_id`
+          ).all(id);
+          reverseScoped(remaining, reason || 'cancel — units not yet packed or shipped');
         } else {
           reverseOrderStock(id, { ...actor, note: reason || null });
         }

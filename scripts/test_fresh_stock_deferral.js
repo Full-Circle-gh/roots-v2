@@ -81,7 +81,10 @@ const INVENTORY_SRC = fs.readFileSync(path.join(__dirname, '..', 'lib', 'invento
 
 const ROUTE_FNS = ['prepareCommitUnreservedOrder', 'freshLinesDeferred',
   'batchMadeProductIds', 'expandStockLines', 'parseBundleItems',
-  'parcelsStillInTheBuilding'];
+  'parcelsStillInTheBuilding',
+  // §187 — the parked-products reader prepareCommitUnreservedOrder calls. Named
+  // here rather than stubbed so the hold-back under test is the live one.
+  'orderWaitingPids'];
 const INV_FNS = ['commitUnreservedOrder', 'reverseCommittedLedger',
   'isStockPending', 'hasUndeductedFreshLine'];
 
@@ -97,7 +100,14 @@ check('every function under test was found in its source (extraction is intact)'
 db.exec(`
   CREATE TABLE retail_orders (
     id INTEGER PRIMARY KEY, order_no TEXT, status TEXT, fulfillment_type TEXT,
-    store_id INTEGER, channel TEXT
+    store_id INTEGER, channel TEXT,
+    -- §187 — the products a parked order waits on. prepareCommitUnreservedOrder
+    -- now reads it to hold those lines back from a parcel dispatch, so a table
+    -- without it fails at prepare() rather than at an assertion. The whole
+    -- §187 behaviour is owned by test_restock_parcel_dispatch.js; what this
+    -- suite needs is the column, and one assertion that the hold-back does not
+    -- disturb the §58 rules above.
+    awaiting_restock_pids TEXT
   );
   CREATE TABLE retail_order_items (
     id INTEGER PRIMARY KEY, order_id INTEGER, product_id INTEGER, qty INTEGER,
@@ -168,11 +178,11 @@ const qty = (pid) => db.prepare(
 ).get(STORE, pid).q;
 
 let nextOrder = 5000;
-function mkOrder(ft, lines, { channel = 'wechat', status = 'paid' } = {}) {
+function mkOrder(ft, lines, { channel = 'wechat', status = 'paid', parkedOn = null } = {}) {
   const id = ++nextOrder;
   db.prepare(
-    'INSERT INTO retail_orders (id, order_no, status, fulfillment_type, store_id, channel) VALUES (?,?,?,?,?,?)'
-  ).run(id, 'TC00' + id, status, ft, STORE, channel);
+    'INSERT INTO retail_orders (id, order_no, status, fulfillment_type, store_id, channel, awaiting_restock_pids) VALUES (?,?,?,?,?,?,?)'
+  ).run(id, 'TC00' + id, status, ft, STORE, channel, parkedOn ? JSON.stringify(parkedOn) : null);
   for (const [pid, n] of lines) {
     db.prepare(
       'INSERT INTO retail_order_items (order_id, product_id, qty, options_json) VALUES (?,?,?,?)'
@@ -553,6 +563,48 @@ if (!missing.length) {
     "SELECT COUNT(*) AS n FROM retail_stock_ledger WHERE ref_id = ? AND reason = 'counter_miscount'"
   ).get(post).n;
   check('…and writes no correction for it', postRows, 0);
+
+  /* ── 17. §187 — THE PARK HOLDS ITS OWN LINES BACK, AND NOTHING ELSE ──────
+     The reason this suite gained `awaiting_restock_pids`. §187 lets a parked
+     order send the parcel that carries none of its short lines, and that
+     dispatch reaches the very function this file is about. If it committed the
+     order whole it would decrement the product the shelf is SHORT of — an
+     honest negative (§84) for units nobody picked, which lib/batch-owed.js
+     reads as food to cook. The §187 suite owns the routes and the release; what
+     is checked here is that the hold-back lands in the commit and stops there.
+
+     JAR2 is not batch-made, so §58's own deferral has nothing to say about it —
+     which is the point: before §187 it was the short product that committed
+     anyway. */
+  db.prepare('UPDATE retail_store_stock SET physical_qty = 0 WHERE store_id = ? AND product_id = ?')
+    .run(STORE, JAR2);
+  db.prepare('UPDATE retail_store_stock SET physical_qty = 4 WHERE store_id = ? AND product_id = ?')
+    .run(STORE, SALAD3);
+  const parked = mkOrder('delivery', [[JAR2, 2], [SALAD3, 1]],
+    { status: 'awaiting_restock', parkedOn: [JAR2] });
+  const pAir  = mkParcel(parked, 'air');
+  const pLand = mkParcel(parked, 'land');
+  putOnParcel(parked, JAR2, pAir);
+  putOnParcel(parked, SALAD3, pLand);
+  shipParcel(pLand);
+  atParcel(parked, pLand);
+  check('§187: sending the land box of a parked order leaves the short line on the shelf',
+    qty(JAR2), 0);
+  check('§187: …and takes the line that box actually carries', qty(SALAD3), 3);
+  check('§187: …writing no ledger row against the product the order waits on',
+    db.prepare('SELECT COUNT(*) AS n FROM retail_stock_ledger WHERE ref_id = ? AND product_id = ?')
+      .get(parked, JAR2).n, 0);
+
+  // AND THE PARK IS THE ONLY THING THAT HOLDS IT. The same order, released to
+  // 'preparing' the way the operator's "Restocked → Start preparing" does —
+  // PATCH /status writes the new status BEFORE it calls the commit — must take
+  // the line in full. A hold-back that outlived the park would strand the stock.
+  db.prepare("UPDATE retail_orders SET status = 'preparing' WHERE id = ?").run(parked);
+  db.prepare('UPDATE retail_store_stock SET physical_qty = 5 WHERE store_id = ? AND product_id = ?')
+    .run(STORE, JAR2);
+  atFulfilment(parked);
+  check('§187: once released, the restocked line comes off the shelf in full',
+    qty(JAR2), 3);
 }
 
 // ── The rule as it is spelled at the two call sites ─────────────────────────

@@ -137,6 +137,7 @@
     "test:addon-stock": "node scripts/test_addon_stock_gate.js",
     "test:addon-available": "node scripts/test_addon_available.js",
     "test:fresh-stock-deferral": "node scripts/test_fresh_stock_deferral.js",
+    "test:restock-parcel": "node scripts/test_restock_parcel_dispatch.js",
     "test:cost-incomplete": "node scripts/test_cost_incomplete_flag.js",
     "test:product-duplicate": "node scripts/test_product_duplicate_fields.js",
     "test:sync-start": "node scripts/test_sync_start_time.js",
