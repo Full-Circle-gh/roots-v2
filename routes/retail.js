@@ -14881,6 +14881,14 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const PAID_ALL = financeWindow.PAID;
   const PAID  = `${PAID_ALL} AND ${NOTGZ}`;
   const PAIDO = `${financeWindow.PAID_O} AND ${NOTGZO}`;
+  // §185: the same allow-list WITHOUT the gzgrocery exclusion, for the line-level
+  // reads where Ash has decided wholesale counts. It is a SECOND constant rather
+  // than a widening of `PAIDO`, because `PAIDO` also carries the customer reads
+  // below (top customers, new-vs-returning, the cohort subqueries) and those ask
+  // a different question: a gzgrocery mirror has no `customer_id` at all, so
+  // folding it in there would either change nothing or, where it did, count a
+  // wholesale pickup as a person.
+  const PAIDO_ALL = financeWindow.PAID_O;
   // Revenue date = day payment landed (see header note). PDATE for bare-table
   // queries, PDATEO when the orders table is aliased `o`, PHOUR for the hourly
   // bucket of a single-day view.
@@ -15324,6 +15332,16 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
      GROUP BY reason ORDER BY orders DESC`).all(from, to);
 
   // ── Top products (by revenue) ──
+  // §185, DECIDED BY ASH — *"should wholesale count in top products?"* / *"yes"*.
+  // `PAIDO_ALL`, so a case picked up at the Tianhe warehouse ranks beside a
+  // bottle sold through checkout. The channel was excluded here from the first
+  // commit and never on a stated reason; with §184 putting gzgrocery's revenue
+  // in the headline on this very payload, a Top products list that omitted it
+  // was a ranking of a different set of sales than the figure above it.
+  //
+  // IT IS THE MIRROR'S ORDER LINES, NOT THE LEDGER. The mirror carries
+  // `line_total` and `unit_price` written at the sale, so the ranking is by the
+  // price of the day — §184's whole finding, applied one level down.
   // image_url snapshotted on the order item is usually NULL, so resolve the
   // photo from the live product (same fallback chain as the funnel/order-item
   // endpoints): order-item snapshot -> product.image_url -> byte-stream URL
@@ -15339,7 +15357,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       FROM retail_order_items i
       JOIN retail_orders o ON o.id = i.order_id
       LEFT JOIN store_products p ON p.id = i.product_id
-     WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?
+     WHERE ${PAIDO_ALL} AND ${PDATEO} BETWEEN ? AND ?
      GROUP BY i.product_id ORDER BY revenue DESC LIMIT 15`).all(from, to).map(r => {
     let image_url = r.oi_image_url || r.p_image_url || '';
     if (!image_url && r.has_image) {
@@ -15788,15 +15806,15 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
 
 // ── Catalogue highlights — the "Your catalogue" summary's second band ──────
 // Five glanceable, product-only facts an owner reads every morning, computed
-// from data we already keep (retail order lines + gzgrocery wholesale ledger
-// for sales, store_products fields for completeness, flash_* columns for
-// promotions):
-//   bestSeller     — most units sold in the trailing 7 days (storefront + gzgrocery)
+// from data we already keep (retail order lines for sales — gzgrocery's mirrors
+// among them since §185, so the wholesale ledger is no longer read here at all —
+// store_products fields for completeness, flash_* columns for promotions):
+//   bestSeller     — most units sold in the trailing 7 days (every channel)
 //   rising         — biggest % jump in units this week vs the week before
-//                    (storefront only — the gzgrocery ledger's occasional
-//                    same-week reverse would otherwise fake a spike)
+//                    (every channel as of §185 — the hazard that held gzgrocery
+//                    out belonged to the stock ledger, not to the channel)
 //   goingNowhere   — live products with zero sales in the last 30 days
-//                    (storefront + gzgrocery — a wholesale-only mover isn't dead)
+//                    (every channel — a wholesale-only mover isn't dead)
 //   needsAttention — live products missing a photo, price or category
 //   onPromotion    — live products with an active flash sale right now
 // Each is a headline, not a report: the client makes the whole band tappable so
@@ -15806,8 +15824,14 @@ const _catHiCache = new Map();   // tenant → { at, body }
 const CAT_HI_TTL = 60 * 1000;
 router.get('/api/retail-admin/products/highlights', requireRetailAdmin, (req, res) => {
   const TZ = shopSqlShift();
-  const NOTGZO = "COALESCE(o.channel,'') != 'gzgrocery'";
-  const PAIDO  = `${financeWindow.PAID_O} AND ${NOTGZO}`;
+  // §185: gzgrocery is INSIDE this predicate now, and the separate ledger read
+  // that used to carry it is gone. Wholesale always counted for bestSeller and
+  // goingNowhere — Ash confirmed it should — but it arrived through
+  // `retail_stock_ledger`, which §184 established is the wrong record: it is
+  // dated by when the daemon wrote the row rather than by the order, and it
+  // carries no money, so a units tile and a revenue tile disagreed about which
+  // week a case belonged to. The mirror's order lines carry both.
+  const PAIDO  = financeWindow.PAID_O;
   const PDATEO = `date(COALESCE(o.paid_at, o.placed_at), '${TZ}')`;
 
   const memoKey = String(currentTenantId() || ROOTS_TENANT_ID);
@@ -15825,8 +15849,8 @@ router.get('/api/retail-admin/products/highlights', requireRetailAdmin, (req, re
 
   const LIVE = "p.is_published = 1 AND COALESCE(p.is_active, 1) = 1";
 
-  // Units per published product over a date window (retail order lines only —
-  // this catalogue's own sales).
+  // Units per published product over a date window — every channel's order
+  // lines, gzgrocery's mirrors included (§185).
   const unitsSql = `
     SELECT i.product_id AS id, p.name_en, p.name_cn, COALESCE(SUM(i.qty), 0) AS units
       FROM retail_order_items i
@@ -15837,27 +15861,11 @@ router.get('/api/retail-admin/products/highlights', requireRetailAdmin, (req, re
   const rows7    = tdb().prepare(unitsSql).all(win7From, today);
   const rowsPrev = tdb().prepare(unitsSql).all(prev7From, prev7To);
 
-  // gzgrocery wholesale pickups, this week — a unit picked up at the Tianhe
-  // warehouse is exactly as real as one sold through checkout, so it counts
-  // toward bestSeller/goingNowhere. Left OUT of rising: the ledger sometimes
-  // carries a same-week reverse (a corrected drift read), and folding that
-  // into a %-jump metric risks painting a false spike from a sync hiccup.
-  const gzUnitsSql = `
-    SELECT l.product_id AS id, p.name_en, p.name_cn, COALESCE(SUM(-l.delta), 0) AS units
-      FROM retail_stock_ledger l
-      JOIN store_products p ON p.id = l.product_id
-     WHERE l.reason IN ('gzgrocery_order','gzgrocery_order_reverse')
-       AND date(l.created_at, '${TZ}') BETWEEN ? AND ? AND ${LIVE}
-     GROUP BY l.product_id`;
-  const gzRows7 = tdb().prepare(gzUnitsSql).all(win7From, today);
-
-  // bestSeller — most units this week, storefront + gzgrocery combined.
+  // bestSeller — most units this week, every channel. The gzgrocery ledger read
+  // that used to be merged in here is GONE (§185): `rows7` already carries the
+  // channel, off the same order lines as everything else, so the merge was a
+  // second source for one of the seven channels on this tile.
   const unitsById = new Map(rows7.map(r => [r.id, { id: r.id, name_en: r.name_en, name_cn: r.name_cn, units: Number(r.units) || 0 }]));
-  for (const r of gzRows7) {
-    const cur = unitsById.get(r.id);
-    if (cur) cur.units += Number(r.units) || 0;
-    else unitsById.set(r.id, { id: r.id, name_en: r.name_en, name_cn: r.name_cn, units: Number(r.units) || 0 });
-  }
   let bestSeller = null;
   for (const r of unitsById.values()) {
     if (!bestSeller || r.units > bestSeller.units) {
@@ -15866,6 +15874,15 @@ router.get('/api/retail-admin/products/highlights', requireRetailAdmin, (req, re
   }
 
   // rising — biggest positive % jump in units, this week vs the week before.
+  //
+  // §185: gzgrocery IS IN THIS NOW, and the reason it was not is gone rather
+  // than overruled. It was held out because the LEDGER "sometimes carries a
+  // same-week reverse (a corrected drift read), and folding that into a %-jump
+  // metric risks painting a false spike from a sync hiccup". Read off the
+  // mirrors instead, a reversed order is flipped to `cancelled` by the daemon
+  // and `PAID_O` drops it from BOTH windows — there is no half-counted week
+  // left to spike. The hazard belonged to the record, not to the channel.
+  //
   // Guard against tiny-number noise: need a real base last week and a
   // meaningful count this week before a % is worth showing.
   const prevById = new Map(rowsPrev.map(r => [r.id, Number(r.units) || 0]));
@@ -15900,9 +15917,16 @@ router.get('/api/retail-admin/products/highlights', requireRetailAdmin, (req, re
   // the count and the filter reading from one source of truth.
   const ID_CAP = 1000;
 
-  // goingNowhere — live products with zero sales in 30 days, storefront OR
-  // gzgrocery wholesale. New products (added within the window) get a pass
-  // so a fresh listing isn't branded dead on day one.
+  // goingNowhere — live products with zero sales in 30 days, on any channel. New
+  // products (added within the window) get a pass so a fresh listing isn't
+  // branded dead on day one.
+  //
+  // §185: THE SECOND `NOT IN` IS GONE. It excused a product from the dead list
+  // when the stock ledger showed a gzgrocery pickup, which the first `NOT IN`
+  // now does on its own — the mirror's order line is in `PAIDO`. Two exclusions
+  // reading two records for one channel is how the tile came to disagree with
+  // bestSeller about the same week; a wholesale-only mover is still not dead,
+  // and now one query says so.
   const goingNowhereIds = tdb().prepare(`
     SELECT p.id FROM store_products p
      WHERE ${LIVE}
@@ -15912,12 +15936,8 @@ router.get('/api/retail-admin/products/highlights', requireRetailAdmin, (req, re
            FROM retail_order_items i
            JOIN retail_orders o ON o.id = i.order_id
           WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ? AND i.product_id IS NOT NULL)
-       AND p.id NOT IN (
-         SELECT l.product_id FROM retail_stock_ledger l
-          WHERE l.reason = 'gzgrocery_order'
-            AND date(l.created_at, '${TZ}') BETWEEN ? AND ? AND l.product_id IS NOT NULL)
      LIMIT ${ID_CAP}
-  `).all(win30From, win30From, today, win30From, today).map(r => r.id);
+  `).all(win30From, win30From, today).map(r => r.id);
 
   // needsAttention — live listings that look unfinished to a shopper: no photo
   // (self or variant sibling), no/zero price, or no category.
@@ -24334,14 +24354,17 @@ router.get('/api/retail-admin/products/:id/variant-store-stocks', requireRetailA
 // GET /api/retail-admin/products/:id/sales — units/revenue/rank for this one
 // product over a date window, plus a zero-filled daily units series. Backs
 // the product editor's Sales card and mirrors the dashboard's topProducts
-// aggregation (same PAIDO/PDATEO filters, see /api/retail-admin/dashboard)
+// aggregation (same PAIDO_ALL/PDATEO filters, see /api/retail-admin/dashboard)
 // but scoped to a single product instead of a top-15 ranked list.
 router.get('/api/retail-admin/products/:id/sales', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
   const TZ = shopSqlShift();
-  const NOTGZO = "COALESCE(o.channel,'') != 'gzgrocery'";
-  const PAIDO  = `${financeWindow.PAID_O} AND ${NOTGZO}`;
+  // §185: gzgrocery counts here too. This card is one product's slice of the
+  // dashboard's Top products list and its header promises the same filters, so
+  // an exclusion kept here alone would have a product's own Sales card
+  // contradict the ranking it was opened from.
+  const PAIDO  = financeWindow.PAID_O;
   const PDATEO = `date(COALESCE(o.paid_at, o.placed_at), '${TZ}')`;
 
   const nowGz = new Date(Date.now() + 8 * 3600 * 1000);
