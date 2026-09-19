@@ -7288,17 +7288,36 @@ function notifyOrderStatusChange(orderId, newStatus) {
 
    ONCE PER PARCEL, for free: a shipment can only be dispatched once (the route
    refuses `already_dispatched` above), so there is no stamp to keep. */
-function notifyParcelShippedWhileParked(orderId) {
+/* §190 — WHICH BOX. The customer of a split order has two parcels coming on
+   different days, and "one of the parcels" makes them count boxes to work out
+   which one landed. The word is free: every mode already has a locked pair, and
+   `Air · 空运` / `Land · 陆运` are customer-facing on the printed slip
+   (lib/feie.js says so in its own comment).
+
+   FALLS BACK RATHER THAN GUESSES. A mode with no entry keeps §188's generic
+   sentence — which is not dead code for a supplier parcel (the dispatch route
+   refuses those outright) but the honest answer for any mode added later, whose
+   customer word would not exist yet. A new mode should read slightly vague, not
+   wrong. */
+const PARCEL_MODE_WORD = {
+  air:   { en: 'air',       cn: '空运' },
+  land:  { en: 'land',      cn: '陆运' },
+  local: { en: 'same-city', cn: '同城' },
+};
+function notifyParcelShippedWhileParked(orderId, mode) {
   const o = tdb().prepare(
     'SELECT id, fulfillment_type, channel FROM retail_orders WHERE id = ?'
   ).get(orderId);
   if (!o || shipsNothing(o)) return;
+  const w = PARCEL_MODE_WORD[String(mode || '').toLowerCase()] || null;
+  const whichEn = w ? `the ${w.en} parcel has shipped` : 'one of the parcels has shipped';
+  const whichCn = w ? `${w.cn}包裹已发货` : '其中一个包裹已发货';
   notifyForOrder(orderId, (row) => ({
     category: 'order', type: 'order_parcel_shipped',
     title_en: 'Part of your order has shipped',
     title_cn: '订单部分已发货',
-    body_en: `Order ${row.order_no} — one of the parcels has shipped. The rest follows once the remaining items are back in stock.`,
-    body_cn: `订单 ${row.order_no} — 其中一个包裹已发货，其余商品待补货后发货。`,
+    body_en: `Order ${row.order_no} — ${whichEn}. The rest follows once the remaining items are back in stock.`,
+    body_cn: `订单 ${row.order_no} — ${whichCn}，其余商品待补货后发货。`,
   }));
 }
 
@@ -28585,7 +28604,7 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch',
      that push deliberately does not cover. Best-effort like its sibling: a
      failed notification must never undo a dispatch that has already happened. */
   if (o.status === 'awaiting_restock') {
-    try { notifyParcelShippedWhileParked(id); }
+    try { notifyParcelShippedWhileParked(id, ship.mode); }
     catch (e) {
       // Swallowed on purpose: the parcel is already stamped as gone and the
       // stock already committed, so throwing here would fail a dispatch that

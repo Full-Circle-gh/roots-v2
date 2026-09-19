@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.141 · 2026-09-19 · §190 NAMES THE BOX IN §188's NOTIFICATION — COMPOSING THREE SENTENCES AND NO NEW WORDS.** *"one of the parcels"* made a split order's customer count boxes to work out which one had landed. Every mode already has a locked pair and two of them are already customer-facing on the printed slip, so each sentence is a live mode word in front of §188's live `包裹已发货`. The generic line survives as the fallback for a mode added later. See *Which box has gone*.
+
 **v1.140 · 2026-09-19 · §189 NAMES THE BOX THAT WENT OUT ON A CANCELLED ORDER — COPYING ONE PAIR AND COMPOSING SEVEN ON IT.** §187 stopped a cancel crediting the shelf with units in a courier's van, which made the count honest and told nobody. `收回` is live and is exactly this verb about exactly this object, so everything here is built on it; `退回` is kept for what the STOCK does, and the two are deliberately not collapsed. See *A box that went out on an order that was cancelled*.
 
 **v1.139 · 2026-09-19 · §188 TELLS THE PARKED ORDER'S CUSTOMER THAT ONE BOX HAS GONE — COMPOSING TWO PAIRS FROM LIVE PARTS.** §187 let a parked order send the parcels its shortage does not touch and said nothing to the customer, because the order keeps its park and the `dispatched` line never fires. A box arriving unannounced days before the rest reads as a short delivery. Two composed pairs, every word in them live; in-app only, no WeChat push, so `ORDER_STATUS_NOTIF` is untouched. See *One box of a parked order has left*.
@@ -7521,3 +7523,40 @@ Rejected, and why:
 has had no entry since §98 and has been showing an English chip in a Chinese
 admin ever since. Recorded here because it is a live gap somebody should close,
 and because not repeating it was a decision rather than an accident.
+
+## Which box has gone (2026-09-19, §190)
+
+§188 told the customer of a parked order that *one of the parcels* had shipped.
+On a split order that is two boxes arriving on different days, so the sentence
+made them count boxes to work out which one had landed. Ash: *"ok do it"*, on
+the flag §188 left.
+
+**Register: CUSTOMER** (Rule 1). **Nothing here is a new word** — every mode
+already has a locked pair, and `Air · 空运` / `Land · 陆运` are already
+customer-facing on the printed slip (`lib/feie.js`, whose own comment says the
+receipt is customer-facing). Only the three sentences are composed, and each is
+a live mode word in front of §188's live `包裹已发货`.
+
+| mode | EN | CN | source |
+|---|---|---|---|
+| `air` | the air parcel has shipped | 空运包裹已发货 | **COMPOSED**, 2026-09-19 — live `空运` + §188's live `包裹已发货` |
+| `land` | the land parcel has shipped | 陆运包裹已发货 | **COMPOSED**, 2026-09-19 — live `陆运` + the same |
+| `local` | the same-city parcel has shipped | 同城包裹已发货 | **COMPOSED**, 2026-09-19 — live `同城` (`public/m.html` parcel word) + the same |
+| *anything else* | one of the parcels has shipped | 其中一个包裹已发货 | §188, unchanged |
+
+**THE FALLBACK IS NOT DEAD CODE AND IS NOT A GUESS.** A supplier parcel cannot
+reach this sentence — the dispatch route refuses those outright — so the branch
+exists for a mode added LATER, whose customer word will not exist on the day it
+is added. A new mode should read slightly vague rather than wrong, and a
+fallback is what stops the next person inventing a pair in a hurry to fill it.
+
+**同城 RATHER THAN 同城配送.** The longer form is live too, in the operator
+drawer's mode pill (`Local delivery · 同城配送`), and it is the OPERATOR
+register's word for the shipping method. The customer is being told about a box,
+not about a method, and `public/m.html` already shortens it to `同城` for exactly
+that reading. Rule 1: the cross-register difference is deliberate.
+
+**THE TITLE IS UNCHANGED** — `Part of your order has shipped · 订单部分已发货`.
+The mode belongs in the body beside the order number, where the customer is
+already reading a specific fact about a specific parcel; a title that varied by
+mode would give one notification three shapes in the list.
