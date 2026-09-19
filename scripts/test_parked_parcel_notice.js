@@ -56,6 +56,9 @@ if (SABOTAGE) {
     "  if (o.status === 'awaiting_restock') {\n    try { notifyParcelShippedWhileParked(id); }",
     "  if (false) {\n    try { notifyParcelShippedWhileParked(id); }");
   ROUTES = ROUTES.replace(
+    "const whichCn = w ? `${w.cn}包裹已发货` : '其中一个包裹已发货';",
+    "const whichCn = '其中一个包裹已发货';");                 // §190 — the mode word dropped
+  ROUTES = ROUTES.replace(
     "  refunded:   { en: 'Your order was refunded',      cn: '订单已退款' },",
     "  refunded:   { en: 'Your order was refunded',      cn: '订单已退款' },\n  order_parcel_shipped: { en: 'Part of your order has shipped', cn: '订单部分已发货' },");
 }
@@ -79,12 +82,28 @@ function extractFn(name, src) {
   }
   return null;
 }
+/* §190's mode table is a const, not a function, so the extractor above cannot
+   see it — and a copy written here would pass while the product broke, which is
+   the one thing this file's extraction style exists to prevent. Pulled from the
+   real source by name, through the closing `};` in column one. */
+function extractConst(name, src) {
+  const lines = src.split('\n');
+  const start = lines.findIndex((l) => l.startsWith(`const ${name} = {`));
+  if (start === -1) return null;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^\};/.test(lines[i])) return lines.slice(start, i + 1).join('\n');
+  }
+  return null;
+}
+const MODE_TABLE = extractConst('PARCEL_MODE_WORD', ROUTES);
+
 const FNS = ['notifyParcelShippedWhileParked', 'notifyForOrder', 'notifyCustomer'];
 const src = {};
 for (const n of FNS) src[n] = extractFn(n, ROUTES);
 
 section('── 0. Extraction');
 check('every function under test was found in its source', FNS.filter((n) => !src[n]), []);
+check('…and §190\'s mode table came from the real source, not a copy', !!MODE_TABLE, true);
 
 // ── A throwaway database with only the columns these assertions read ────────
 const dbPath = path.join(os.tmpdir(), `parked-notice-${process.pid}.sqlite`);
@@ -116,6 +135,7 @@ const notif = new Function('db', 'state', 'pushes', `
   // If the notifier ever reaches for the push, this records it and the
   // assertion below fails by name instead of a consent being spent in silence.
   const sendSubscribeMessage = (...a) => { pushes.push(a); return Promise.resolve(); };
+  ${MODE_TABLE || ''}
   ${FNS.map((n) => src[n]).join('\n')}
   return { ${FNS.join(', ')} };
 `)(db, { get categoryEnabled() { return categoryEnabled; } }, pushes);
@@ -135,7 +155,7 @@ const rowsFor = (id) => db.prepare(
 section('── 1. A delivery customer is told, once, in both languages');
 
 const courier = mkOrder();
-notif.notifyParcelShippedWhileParked(courier);
+notif.notifyParcelShippedWhileParked(courier, 'land');
 const got = rowsFor(courier);
 check('one notification row is written', got.length, 1);
 check('…filed against the order, so the app can open it',
@@ -147,8 +167,8 @@ check('…with the declared pair as its title',
   ['Part of your order has shipped', '订单部分已发货']);
 check('…and a body that names the order and says what is still coming',
   [got[0].body_en, got[0].body_cn],
-  ['Order TC00401 — one of the parcels has shipped. The rest follows once the remaining items are back in stock.',
-   '订单 TC00401 — 其中一个包裹已发货，其余商品待补货后发货。']);
+  ['Order TC00401 — the land parcel has shipped. The rest follows once the remaining items are back in stock.',
+   '订单 TC00401 — 陆运包裹已发货，其余商品待补货后发货。']);
 
 /* NO PUSH. This is the claim that is silent when broken: a consent spent here
    is a consent missing from the message that says the whole order is on its
@@ -160,20 +180,58 @@ section('── 2. Rule 5 — who is NOT told');
 
 for (const ft of ['pickup', 'counter']) {
   const o = mkOrder({ ft });
-  notif.notifyParcelShippedWhileParked(o);
+  notif.notifyParcelShippedWhileParked(o, 'land');
   check(`a ${ft} order sends nothing — no parcel of ours leaves`, rowsFor(o).length, 0);
 }
 // A guest order has nobody to tell. notifyForOrder already refuses it; asserted
 // so a later rewrite of this notifier does not lose the guard.
 const guest = mkOrder({ customer: null });
-notif.notifyParcelShippedWhileParked(guest);
+notif.notifyParcelShippedWhileParked(guest, 'land');
 check('an order with no customer sends nothing', rowsFor(guest).length, 0);
 // The operator's category mute is a real switch and must reach this line too.
 categoryEnabled = false;
 const muted = mkOrder();
-notif.notifyParcelShippedWhileParked(muted);
+notif.notifyParcelShippedWhileParked(muted, 'land');
 check('a muted order category sends nothing', rowsFor(muted).length, 0);
 categoryEnabled = true;
+
+// ─────────────────────────────────────────────────────────────────────────────
+section('── 2b. §190 — which box, named');
+
+/* A split order is two boxes on different days, so "one of the parcels" made the
+   customer count boxes to work out which had landed. Every mode already has a
+   locked pair; nothing here is a new word. */
+for (const [mode, en, cn] of [
+  ['air',   'the air parcel has shipped',       '空运包裹已发货'],
+  ['land',  'the land parcel has shipped',      '陆运包裹已发货'],
+  ['local', 'the same-city parcel has shipped', '同城包裹已发货'],
+]) {
+  const o = mkOrder();
+  notif.notifyParcelShippedWhileParked(o, mode);
+  const r = rowsFor(o)[0] || {};
+  check(`a ${mode} parcel names itself in both languages`,
+    [(r.body_en || '').includes(en), (r.body_cn || '').includes(cn)], [true, true]);
+}
+/* THE FALLBACK IS NOT DEAD CODE. A supplier parcel cannot reach this sentence —
+   the dispatch route refuses those — so the branch is for a mode added LATER,
+   whose customer word will not exist on the day it is added. A new mode should
+   read slightly vague, never wrong, and the fallback is what stops the next
+   person inventing a pair in a hurry. */
+for (const mode of ['supplier', '', null, 'something_new']) {
+  const o = mkOrder();
+  notif.notifyParcelShippedWhileParked(o, mode);
+  const r = rowsFor(o)[0] || {};
+  check(`an unknown mode (${JSON.stringify(mode)}) keeps the generic sentence`,
+    [(r.body_en || '').includes('one of the parcels has shipped'),
+     (r.body_cn || '').includes('其中一个包裹已发货')], [true, true]);
+}
+// The title does NOT vary — one notification with three shapes in the list
+// would read as three different things.
+check('the title is the same whatever the mode',
+  /title_en: 'Part of your order has shipped',[\s\S]{0,80}title_cn: '订单部分已发货',/.test(ROUTES), true);
+// The route hands the mode in; without this the whole section is unreachable.
+check('the dispatch route passes the parcel it just sent',
+  /notifyParcelShippedWhileParked\(id, ship\.mode\)/.test(ROUTES), true);
 
 // ─────────────────────────────────────────────────────────────────────────────
 section('── 3. The wiring, and the map that must stay untouched');
@@ -181,7 +239,7 @@ section('── 3. The wiring, and the map that must stay untouched');
 const disp = ROUTES.indexOf("router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch'");
 const dispBody = ROUTES.slice(disp, disp + 7000);
 check('the dispatch route calls it for a parked order',
-  /if \(o\.status === 'awaiting_restock'\) \{\s*\n\s*try \{ notifyParcelShippedWhileParked\(id\); \}/.test(dispBody), true);
+  /if \(o\.status === 'awaiting_restock'\) \{\s*\n\s*try \{ notifyParcelShippedWhileParked\(id, ship\.mode\); \}/.test(dispBody), true);
 // Best-effort, like its sibling: a failed notification must never undo a
 // dispatch that has already happened.
 /* SWALLOWED ON PURPOSE, AND SAYING SO IS A GATE, NOT A COURTESY:
@@ -227,6 +285,14 @@ check('…marked composed, per the standing delegation',
 // next session repeating the search and re-deciding it differently.
 check('…and records the candidates it turned down',
   ['`分批发货`', '`订单已发货`', '`部分发货`'].filter((t) => !VOCAB.includes(t)), []);
+check('§190 declares the three composed sentences',
+  ['空运包裹已发货', '陆运包裹已发货', '同城包裹已发货'].filter((t) => !VOCAB.includes(t)), []);
+// 同城 rather than 同城配送: the longer form is the OPERATOR register's word for
+// the shipping METHOD, and the customer is being told about a box.
+check('…and says why it shortens the same-city word',
+  /\*\*同城 RATHER THAN 同城配送\.\*\*/.test(VOCAB), true);
+check('§190 is recorded before the code that depends on it',
+  /\*\*§190 · THE NOTIFICATION NAMES WHICH BOX/.test(DECIDE), true);
 check('§188 is recorded before the code that depends on it',
   /\*\*§188 · THE PARKED ORDER'S CUSTOMER IS TOLD THAT ONE BOX HAS GONE/.test(DECIDE), true);
 
