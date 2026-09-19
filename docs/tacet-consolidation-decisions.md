@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.327
+# Tacet shared-core consolidation — decisions record, v4.328
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+2026-09-19 · v4.328 — **§186 · THE SALES PAGE READS gzgrocery FROM THE ORDER RECORD, THE LEDGER READER IS DELETED, AND §184's ACCOUNT OF THE DRIFT LOG IS CORRECTED — Ash: *"fix what opened"***, the last item §184 flagged and §185 left standing. `/api/retail-admin/sales/summary`'s gzgrocery card called `guanyiPickupSales()`, which values `retail_stock_ledger`: no price on the row, so the figure was looked up LIVE on every request, and dated by when the daemon wrote it rather than by the order — which on a TODAY card decides whether a sale appears at all. It now uses `storeAgg` and `storeItems`, the same two helpers the mini app, web and POS cards use, so all four answer from one query shape. **THE 4th METRIC WAS WRONG TOO AND IS FIXED IN PASSING:** it printed `gy.lines`, a count of LEDGER ROWS, under the heading every other owned-store card fills with UNITS SOLD. **THE FUNCTION IS DELETED, NOT LEFT UNUSED.** With §184 moving the dashboard and this moving Sales, `guanyiPickupSales()` had no callers; an unused revenue reader is one the next session finds and calls, and calling it is the defect both sections removed. Its six surviving comment references are rewritten rather than left pointing at nothing. **§184's ACCOUNT OF `guanyi_pickup_log` IS CORRECTED HERE AND THE CORRECTION MATTERS:** §184 called it history "inferred before the order read existed". `scripts/guanyi-daemon.js` STILL WRITES IT — only `GUANYI_PICKUP_MODE`, which defaults to `off`, decides whether it does. **The fold is DORMANT, NOT VESTIGIAL**, and the difference is what stops a future session deleting it as dead code and silently under-reporting the day that switch is turned on. The suite asserts the daemon's INSERT and the mode gate directly, so the claim is checked rather than believed. **THE RESIDUAL IS UNTOUCHED** — `claimedBy` already named `channel='gzgrocery'`, so Direct refused these rows before and still does; the six buckets stay a true partition. `scripts/test_sales_gzgrocery.js` is new and mutant-verified in both halves. No Chinese, no schema, no migration, no change to `.gitignore` or CI.
 2026-09-19 · v4.327 — **§185 · WHOLESALE COUNTS IN THE PRODUCT RANKINGS, AND THEY READ THE ORDER RECORD LIKE EVERYTHING ELSE — DECIDED BY ASH**, asked in terms at the end of §184 — *"should wholesale count in top products? Right now gzgrocery is excluded from those two product screens entirely"* — and answered *"yes"*. **THE QUESTION WAS RIGHT AND THE PREMISE BEHIND IT WAS HALF WRONG, which changed the work.** Top products on the dashboard and a product's own Sales card did drop gzgrocery outright, and that is the half Ash decided. Catalogue highlights already counted it — but off `retail_stock_ledger`, the record §184 established is the wrong one: dated by when the daemon wrote the row rather than by the order, and carrying no money at all. So the same case could land in one week on the units tile and another on a revenue figure, and `goingNowhere` needed a SECOND `NOT IN` to ask one question. **ALL THREE NOW READ THE MIRROR'S ORDER LINES**, which carry `line_total` written at the sale, so a ranking is by the price of the day. **`rising` GAINS THE CHANNEL AND ITS OLD REASON IS GONE RATHER THAN OVERRULED:** it was held out because the ledger "sometimes carries a same-week reverse… risks painting a false spike", and a reversed order read off the mirror is flipped to `cancelled` and dropped from BOTH windows by `PAID_O` — the hazard belonged to the record, not the channel. **THE CUSTOMER READS KEEP THE EXCLUSION, and that is why `PAIDO_ALL` is a SECOND constant rather than `PAIDO` widened:** a gzgrocery mirror carries no `customer_id`, so top customers, new-vs-returning and the cohort subqueries would either see nothing or, where they did, count a pallet as a person. `scripts/test_product_wholesale.js` is new and mutant-verified in both halves — and its FIRST draft was not, because one binder mapped `${PAIDO}` and `${PAIDO_ALL}` to the same predicate and could not tell the regression from the fix; that is recorded below. No Chinese, no schema, no migration, no change to `.gitignore` or CI.
 2026-09-19 · v4.326 — **§184 · gzgrocery IS READ FROM THE ORDER RECORD ON THE REPORTS DASHBOARD, AND THE LEDGER VALUATION BESIDE IT IS GONE — the second half of Ash's §182 report:** *"the 30 days revenue in finance section are not identital to the total revenue in report"*. §182 closed the wallet half and FLAGGED this one rather than fixing it, on a reason that turned out to be wrong: that mirror rows exist only from the day `GZGROCERY_MIRROR_ORDERS` was switched on, so repointing Reports would zero earlier periods. **`backfillGzMirrors()` mirrors the whole `gzgrocery_orders` table at startup**, so the history was already there and the blocker was not real; that correction is what made this a one-PR change. **THE DAEMON WRITES TWO RECORDS FOR ONE ORDER, IN ONE BRANCH, ALWAYS TOGETHER** — a `retail_stock_ledger` row (reason `gzgrocery_order`) and a `retail_orders` mirror — so the question was never whether to count the channel but WHICH record to read. Finance read the mirror; the dashboard excluded the mirror from every revenue SUM and folded `guanyiPickupSales()` back in, which values the LEDGER. **The ledger loses on three counts:** it carries no price, so the figure was looked up LIVE on every request and a gz price change moved a past month's reported revenue; it is dated by when the daemon wrote the row rather than by the order's own date, so takings landed in the wrong day and sometimes the wrong month; and it carries no cost, while the mirror's items carry `unit_cost_at_sale`. **NOT A DOUBLE COUNT — a substitution**, and that is why nothing was inflated before, only misvalued and misdated. **THE LEGACY HALF SURVIVES, AND IS THE WHOLE REASON FOR A NEW FUNCTION:** `guanyi_pickup_log` holds drift pickups inferred before the order read existed, which have no order behind them to mirror, so deleting the fold outright would have deleted real history from the curve. `guanyiLegacyPickupSales()` reads that source and no other. **AOV LOSES ITS gzgrocery CASE TOO, as a correction:** `orders` counted the mirrors all along via `PAID_ALL`, so the old AVG was a mean over a different population than its own denominator. **FLAGGED AND NOT TOUCHED:** `/api/retail-admin/sales/summary`'s gzgrocery card and the two product-level aggregations still read the ledger or exclude the channel — their own screens, their own questions, and one PR per change. `scripts/test_dashboard_gzgrocery.js` is new, mutant-verified red in three places. No Chinese: no string on any screen changed, so `docs/tacet-delivery-vocabulary.md` is untouched. No schema and no migration. No change to `.gitignore` or CI.
 2026-09-19 · v4.325 — **§183 · THE COUNTER ASKS WHAT THE MENU ASKS, AND THE ANSWER HAS SOMEWHERE TO GO — REPORTED BY ASH:** *"the till doesn't show the variants of the products"*, then, when offered a choice between labelled tiles and a collapsing picker, the report that set the scope: *"the problem with your option 1 is that there are few options customers need to do it's not just size . stuff like hot or iced , extra shoot etc"*. **TWO DEFECTS, AND THE SECOND IS NOT A UI DEFECT.** The counter-catalogue query never selected `variant_label`, so two sizes of one drink drew two tiles with the same name — §129's finding on the QR menu, kept one surface over. And the till asked none of §120's questions, which drawing buttons would not have fixed: `resolveManualOrderLines` ignored `choices` and the manual-order INSERT was **the last writer of order lines in this machine still leaving `options_json` and `options_cost_at_sale` null**, so a collected answer would have been dropped between the cashier's tap and the kitchen's ticket — no iced on the slip, no ¥6 for the shot, no oat milk off the shelf. A button that silently forgets is worse than no button, which is why the road was built before the buttons. **`lib/product-options.js` is new and both routes call it**; the rules came OUT of `routes/shop-menu.js` rather than being copied, because two copies of what an extra costs drift into a counter charging a different price from the QR menu for the same coffee. Sizes stay as tiles (`Name · Label`, searchable in both languages) and only the QUESTIONS get a sheet: a size is a different product with its own price and shelf, an answer is not, and collapsing costs a tap on every sale. **A line is now a product PLUS its answers**, so every stock gate was re-read — `inCart` sums across a product's lines, which is a defect the feature would otherwise have introduced. **A bug in this work was caught by an existing suite:** the INSERT first read the option cost through the ambient `tdb()` inside the transaction, and `test_tx_conversion_manual_order`'s §24 source assertion refused it. **No Chinese was composed** — all nine pairs are copied from locked live ones, so `docs/tacet-delivery-vocabulary.md` is untouched. `scripts/test_till_options.js` (fast shard, mutant-verified) is new; `scripts/test_till_back.js`, already red on clean main because its stub never learned §150's route, is fixed here and called out.
@@ -19649,3 +19650,86 @@ ranking is wrong" teaches the next reader to distrust it.
 
 `npm run test:fast` 294/294 green. No Chinese — no string on any screen changed.
 No schema, no migration, no change to `.gitignore` or CI.
+
+## §186 — THE SALES PAGE READS gzgrocery FROM THE ORDER RECORD, AND THE LEDGER READER IS DELETED
+
+**Ash: *"fix what opened"*** — the last item §184 flagged, after §185 took the
+product half.
+
+### The same defect, on its own endpoint
+
+`/api/retail-admin/sales/summary`'s gzgrocery card called
+`guanyiPickupSales()`. §184 records why that is the wrong record and every word
+of it applies here: a `retail_stock_ledger` row carries no price, so the card's
+value was **looked up live on every request** — change a gzgrocery price and
+yesterday's card moved — and it is dated by `l.created_at`, when the daemon
+wrote the row, rather than by the order. On a card that shows **today**, that
+second point is not a rounding difference: it decides whether a sale appears at
+all.
+
+The card now reads `storeAgg("channel='gzgrocery'")` and
+`storeItems("o.channel='gzgrocery'")` — the same two helpers behind the mini
+app, web and POS cards — so all four answer from one query shape against one
+record.
+
+**THE 4th METRIC WAS ALSO WRONG.** It printed `gy.lines`, a count of ledger
+ROWS, in the slot every other owned-store card fills with UNITS SOLD. Fixed in
+passing because it is the same read.
+
+### DECIDED: delete `guanyiPickupSales()` rather than leave it unused
+
+§184 moved the dashboard off it; this moves Sales. That left the function with
+no callers anywhere, exported from nothing, referenced only in prose.
+
+**An unused revenue reader is one the next session finds and calls**, and
+calling it is precisely the defect §184 and §185 and this section removed. It is
+deleted, with a note in its place saying what happened and where gzgrocery
+revenue comes from now. Its six surviving comment references are rewritten, not
+left pointing at a function that no longer exists.
+
+### §184's ACCOUNT OF THE DRIFT LOG WAS WRONG, AND THE CORRECTION IS THE POINT
+
+§184 described `guanyi_pickup_log` as drift "inferred before the order read
+existed" — history, kept so old windows would not go blank.
+
+**That is not what it is.** `scripts/guanyi-daemon.js` still writes it, in two
+places. What stops rows arriving is `GUANYI_PICKUP_MODE`, which defaults to
+`off` and short-circuits the whole pickup sweep when it is.
+
+So the fold is **dormant, not vestigial**, and the distinction decides what a
+future reader does with it. Read as history, it looks like dead weight a tidy-up
+should remove — and removing it would under-report silently on the day that
+switch is turned on, which is the worst shape a reporting bug can take. Read as
+gated, it is a live path that happens to be quiet.
+
+`scripts/test_sales_gzgrocery.js` asserts the daemon's own `INSERT INTO
+guanyi_pickup_log` and the `|| 'off'` gate **directly against
+`scripts/guanyi-daemon.js`**, so the claim this section rests on is checked on
+every run rather than believed. If the daemon ever stops writing it, that
+assertion fails and says so, which is the moment the fold may be retired.
+
+Drift lifts **revenue only** on this card, never the order count or the AOV: an
+inferred pickup is not an order, and dividing real money by a count that never
+happened is how an AOV comes to describe nothing.
+
+### The residual is untouched
+
+`claimedBy` already named `channel='gzgrocery'`, so Direct refused these rows
+before this change and still does. It refused them for a reason that has now
+changed — they were claimed by a ledger fold, they are claimed by the card
+itself — so the comment is rewritten while the predicate stays put. The six
+buckets remain a true partition of the day's paid orders, which is what lets the
+residual reconcile Sales with the dashboard at all.
+
+### Held by
+
+`scripts/test_sales_gzgrocery.js`, new, auto-discovered into the fast shard. It
+slices the route's own `storeAgg` out and runs it against mirror rows including
+a cancelled one, and asserts the deletion, the drift fold, the revenue-only
+treatment and the partition.
+
+**MUTANT-VERIFIED IN BOTH HALVES** — stubbing the drift fold goes red; stubbing
+the order-record read goes red.
+
+`npm run test:fast` 295/295 green on `c2c4849`. No Chinese, no schema, no
+migration, no change to `.gitignore` or CI.
