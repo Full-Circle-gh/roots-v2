@@ -77,6 +77,8 @@ if (SABOTAGE) {
     'function parcelHeldLines(orderId, shipmentId, waiting) {\n  if (!waiting || !waiting.size) return 0;',
     'function parcelHeldLines(orderId, shipmentId, waiting) {\n  if (true) return 0;\n  if (!waiting || !waiting.size) return 0;');
   INV     = INV.replace('if (goneOut.has(pid) && alreadyTaken.has(pid)) return true;', '');
+  // The units-vs-ids regression: filtering the whole product back out.
+  ROUTES  = ROUTES.replace('qty: r.qty - (gone.get(r.product_id) || 0)', 'qty: r.qty');
   DESKTOP = DESKTOP.replace("'dispatched', 'awaiting_restock'].includes(o.status)", "'dispatched'].includes(o.status)");
   MOBILE  = MOBILE.replace("'dispatched','awaiting_restock'].includes(o.rawStatus)", "'dispatched'].includes(o.rawStatus)");
 }
@@ -105,7 +107,7 @@ function extractFn(name, src) {
   return null;
 }
 
-const ROUTE_FNS = ['orderWaitingPids', 'parcelHeldLines', 'orderShippedPids',
+const ROUTE_FNS = ['orderWaitingPids', 'parcelHeldLines', 'orderShippedQty',
   'prepareCommitUnreservedOrder', 'freshLinesDeferred', 'batchMadeProductIds',
   'expandStockLines', 'parseBundleItems', 'parcelsStillInTheBuilding'];
 const INV_FNS = ['checkAwaitingRestockForRestock', 'orderStockNeed',
@@ -383,8 +385,14 @@ section('── 6. A cancel does not credit the shelf with what has gone');
    order has no committed stock — true of the original checkout park, false since
    §136's operator park, and false in a new way here: a parked order can now have
    a box that is packed or gone. */
-check('the reversal knows which products have left',
-  /const gone = orderShippedPids\(id\);/.test(ROUTES), true);
+check('the reversal knows how many units have left',
+  /const gone = orderShippedQty\(id\);/.test(ROUTES), true);
+/* UNITS, NOT IDS. A product on BOTH parcels of a split order — one unit gone,
+   one on the bench — is the case a set of ids gets wrong: it drops the whole
+   product and the unit still here is never returned. Silent, and on the order
+   least likely to be looked at again. */
+check('…and subtracts them rather than dropping the whole product',
+  /qty: r\.qty - \(gone\.get\(r\.product_id\) \|\| 0\)/.test(ROUTES), true);
 /* AN EMPTY LIST IS NOT "REVERSE NOTHING" to reverseOrderStock — it falls through
    to reverseCommittedOrder, which reverses the WHOLE order. This is the sharpest
    edge in the section and the one a later refactor is most likely to file off. */
@@ -393,12 +401,27 @@ check('…and skips the call entirely rather than passing an empty list',
 check('…which the stale "no committed stock to reverse" note no longer claims',
   /there's no\s*\n?\s*\/\/ committed stock to reverse/.test(ROUTES), false);
 
-// The real predicate, on the real fixture: the land box left, the air box did not.
-check('what has gone is the shipped box, and only it',
-  [...routes.orderShippedPids(tc)].sort((a, b) => a - b),
-  [SUNFLOWER, ALMOND, PUMPKIN, CRISP].sort((a, b) => a - b));
+// The real predicate, on the real fixture: the land box left, the air box did
+// not. SUNFLOWER was ordered ×2 and both units rode the land box, so the count
+// is what it is rather than one-per-product.
+check('what has gone is the shipped box, counted in units',
+  [...routes.orderShippedQty(tc).entries()].sort((a, b) => a[0] - b[0]),
+  [[SUNFLOWER, 2], [ALMOND, 1], [PUMPKIN, 1], [CRISP, 1]].sort((a, b) => a[0] - b[0]));
 check('…so the pita, still here, is what a cancel would put back',
-  [PITA, ALMOND].filter((p) => !routes.orderShippedPids(tc).has(p)), [PITA]);
+  routes.orderShippedQty(tc).has(PITA), false);
+
+/* THE SPLIT-PRODUCT CASE, which a set of ids gets wrong and a count gets right.
+   One crisp in the box that went, one on the bench: exactly one comes back. */
+const split = mkOrder([[CRISP, 2]], { parkedOn: [PITA] });
+const splitGone = mkParcel(split, 'land', []);
+const splitHere = mkParcel(split, 'air', []);
+db.prepare('INSERT INTO retail_order_items (order_id, product_id, qty, options_json, shipment_id) VALUES (?,?,?,?,?)')
+  .run(split, CRISP, 1, '[]', splitGone);
+db.prepare('UPDATE retail_order_items SET qty = 1, shipment_id = ? WHERE order_id = ? AND shipment_id IS NULL')
+  .run(splitHere, split);
+shipParcel(splitGone);
+check('a product split across a gone box and a parked one counts only the gone units',
+  routes.orderShippedQty(split).get(CRISP), 1);
 
 // ─────────────────────────────────────────────────────────────────────────────
 section('── 7. The decision is on the record');

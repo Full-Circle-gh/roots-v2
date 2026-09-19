@@ -2041,21 +2041,30 @@ function parcelHeldLines(orderId, shipmentId, waiting) {
   ).all(orderId, shipmentId).filter((it) => waiting.has(it.product_id)).length;
 }
 
-// The products this order has already taken off the count and cannot put back:
-// everything on a parcel that is packed, gone, or landed. §180 established that
-// packing is when the stock leaves, so prepared_at counts exactly as
-// dispatched_at does. Used by the cancel reversal, which must not credit the
-// shelf with units that are in a box or in a customer's hands.
-function orderShippedPids(orderId) {
-  return new Set(
-    tdb().prepare(
-      `SELECT DISTINCT i.product_id
-         FROM retail_order_items i
-         JOIN retail_shipments s ON s.id = i.shipment_id
-        WHERE i.order_id = ? AND i.product_id IS NOT NULL
-          AND (s.prepared_at IS NOT NULL OR s.dispatched_at IS NOT NULL OR s.delivered_at IS NOT NULL)`
-    ).all(orderId).map((r) => r.product_id)
-  );
+/* HOW MANY UNITS OF EACH PRODUCT THIS ORDER HAS ALREADY PUT IN A BOX and cannot
+   put back: everything on a parcel that is packed, gone, or landed. §180
+   established that packing is when the stock leaves, so prepared_at counts
+   exactly as dispatched_at does. Used by the cancel reversal, which must not
+   credit the shelf with units that are in a box or in a customer's hands.
+
+   UNITS, NOT PRODUCT IDS, and the difference is a real case rather than
+   tidiness. A product can sit on BOTH parcels of a split order — one unit in
+   the land box that went, one in the air box still on the bench. Asked as a set
+   of ids, the whole product is excluded and the unit still in the building is
+   never returned to the shelf: a silent loss of one, on the order least likely
+   to be looked at again. Asked as a count, the reversal returns exactly what is
+   still here. */
+function orderShippedQty(orderId) {
+  const m = new Map();
+  for (const r of tdb().prepare(
+    `SELECT i.product_id AS pid, SUM(i.qty) AS qty
+       FROM retail_order_items i
+       JOIN retail_shipments s ON s.id = i.shipment_id
+      WHERE i.order_id = ? AND i.product_id IS NOT NULL
+        AND (s.prepared_at IS NOT NULL OR s.dispatched_at IS NOT NULL OR s.delivered_at IS NOT NULL)
+      GROUP BY i.product_id`
+  ).all(orderId)) m.set(r.pid, Number(r.qty) || 0);
+  return m;
 }
 // §58 — does this order hold its kitchen lines back at payment?
 //
@@ -32578,14 +32587,23 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
 
            Empty for every order with no packed or shipped parcel, which is every
            order this branch saw before today. */
-        const gone = orderShippedPids(id);
+        const gone = orderShippedQty(id);
         /* AN EMPTY LIST IS NOT "REVERSE NOTHING" TO reverseOrderStock — it falls
            through to reverseCommittedOrder, which reverses the WHOLE order. So
-           when the scoping leaves nothing behind (every product on the order is
+           when the scoping leaves nothing behind (every unit on the order is
            packed or gone) the call is skipped outright rather than made with
            []. This is the sharpest edge in the section and the one a later
-           refactor is most likely to file off. */
-        const stillHere = (rows) => rows.filter((r) => !gone.has(r.product_id));
+           refactor is most likely to file off.
+
+           SUBTRACTED, NOT FILTERED: a product with one unit in the box that
+           left and one still on the bench returns the one that is here. On a
+           partially-refunded order the two subtractions can overlap, and that
+           is left as it is deliberately — it can only UNDER-return, and the
+           whole point of this scoping is never to credit the shelf with units
+           it does not hold. */
+        const stillHere = (rows) => rows
+          .map((r) => ({ product_id: r.product_id, qty: r.qty - (gone.get(r.product_id) || 0) }))
+          .filter((r) => r.qty > 0);
         const reverseScoped = (rows, note) => {
           const lines = stillHere(rows);
           if (!lines.length) return;
