@@ -14561,6 +14561,64 @@ function guanyiPickupSales(db, from, to, opts) {
   return out;
 }
 
+// ── gzgrocery, the LEGACY half only — drift pickups with no order behind them ──
+//
+// §184. `guanyiPickupSales()` above reads TWO sources and they are no longer the
+// same kind of thing. Its first is `retail_stock_ledger` rows written with reason
+// `gzgrocery_order`, and those are written by the SAME branch of
+// scripts/gzgrocery-order-daemon.js that calls `ensureGzMirror` — one ledger row
+// and one `retail_orders` mirror per order, always both. Valuing the ledger half
+// is therefore valuing a second time, at today's prices, something the order
+// record already holds at the price of the day.
+//
+// Its second source has no such sibling. `guanyi_pickup_log` holds DRIFT
+// PICKUPS inferred before the order read existed: stock that went out with no
+// order behind it to mirror. Nothing else in the database knows about them, so
+// dropping this half to fix the first would delete real history from the
+// revenue curve — which is why this function exists rather than the fold simply
+// being deleted.
+//
+// THE SAME PRICING FALLBACK AND THE SAME SHAPE as the function above, so a
+// caller folds it the same way. It keeps the live price lookup, and that is a
+// known and accepted flaw here rather than an oversight: for a drift row there
+// is no price of the day recorded anywhere to prefer over it. §184 records it.
+function guanyiLegacyPickupSales(db, from, to, opts) {
+  const out = { revenue: 0, lines: 0, orders: 0, byBucket: {} };
+  try {
+    if (!db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_pickup_log'`).get()) return out;
+    const TZ = shopSqlShift();
+    const hourly = !!(opts && opts.hourly);
+    const bkP = hourly ? `strftime('%H', pl.created_at, '${TZ}')` : `date(pl.created_at, '${TZ}')`;
+    const hasPricing = !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_product_pricing'`).get();
+    const owed = hasPricing
+      ? 'COALESCE(pp.excel_gz_price, pp.excel_retail, sp.sell_price, 0)'
+      : 'COALESCE(sp.sell_price, 0)';
+    const rows = db.prepare(`
+      SELECT ${bkP} AS bucket,
+             CASE WHEN pl.action='drift_up' THEN -ABS(COALESCE(pl.drift,0)) ELSE COALESCE(pl.inferred_pickup,0) END AS units,
+             ${owed} AS owed
+        FROM guanyi_pickup_log pl
+        LEFT JOIN store_products sp ON sp.id = pl.product_id
+        ${hasPricing ? 'LEFT JOIN guanyi_product_pricing pp ON pp.product_id = pl.product_id' : ''}
+       WHERE (pl.action IN ('decremented','drift_up') OR (pl.action='capped' AND pl.resolution='applied'))
+         AND date(pl.created_at, '${TZ}') BETWEEN ? AND ?
+    `).all(from, to);
+    for (const r of rows) {
+      const units = Number(r.units) || 0;
+      if (!units) continue;
+      const rev = units * (Number(r.owed) || 0);
+      out.revenue += rev;
+      if (units > 0) out.lines += 1;
+      const b = out.byBucket[r.bucket] || { revenue: 0, lines: 0 };
+      b.revenue += rev;
+      if (units > 0) b.lines += 1;
+      out.byBucket[r.bucket] = b;
+    }
+    out.revenue = +out.revenue.toFixed(2);
+  } catch (e) { /* tenant without the legacy pickup log → zeros */ }
+  return out;
+}
+
 // ── Wallet top-up CASH received (cash-basis revenue) ───────────────────────
 // Real external money a customer loads into their prepaid wallet — settled
 // top-ups paid through a payment gateway (payment_method IN ('wechat','alipay'),
@@ -14780,15 +14838,28 @@ function dashMemoBust(tenantId) {
 
 router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const TZ    = shopSqlShift();
-  // gzgrocery is a wholesale pickup channel whose revenue is folded in via the
-  // Guanyi/order-read ledger (guanyiPickupSales, below). Its display-only mirror
-  // rows in retail_orders (channel='gzgrocery') must therefore be excluded from
-  // every retail_orders revenue/order aggregation here, or its takings would be
-  // counted twice. (Meituan, by contrast, IS sourced from retail_orders and stays
-  // included.) Order COUNTS are the exception: the gzgrocery daemon's mirror rows
-  // are real fulfilled orders (see gzgrocery-order-daemon.js), so the headline
-  // "orders today" / trend / AOV use PAID_ALL (all channels) to count them — only
-  // the revenue SUM stays gzgrocery-excluded to avoid double-booking its takings.
+  // ── gzgrocery COMES FROM THE ORDER RECORD HERE, AS OF §184 ────────────────
+  // It is a wholesale pickup channel, and its revenue USED to be folded in from
+  // the Guanyi/order-read ledger while its mirror rows in `retail_orders`
+  // (channel='gzgrocery') were excluded from every revenue SUM on this route, so
+  // the takings were not counted twice. Both records are written by one branch
+  // of scripts/gzgrocery-order-daemon.js — a `retail_stock_ledger` row and a
+  // mirror, always together — so the question was never whether to count the
+  // channel but WHICH of the two to read, and the ledger lost:
+  //
+  //   • it carries NO PRICE, so its value was looked up LIVE on every request —
+  //     changing a gz price moved a past month's reported revenue;
+  //   • it is dated by when the daemon wrote the row, not by the order's own
+  //     date, so takings landed in the wrong day and sometimes the wrong month;
+  //   • it carries no cost, while the mirror's order items carry
+  //     `unit_cost_at_sale` (the daemon reads it beside the price).
+  //
+  // Finance (routes/finance-summary.js) has always read the mirror rows, which
+  // is why the two screens disagreed about this channel for the same window.
+  // They now read one record. (Meituan was always sourced from retail_orders and
+  // is unaffected.) `NOTGZ` survives below because the status funnel and the
+  // product aggregations still use it — those are their own questions, not this
+  // one; see §184 on why they were left alone.
   const NOTGZ  = "COALESCE(channel,'') != 'gzgrocery'";
   const NOTGZO = "COALESCE(o.channel,'') != 'gzgrocery'";
   // ── THE MINI APP IS THE ONLY CHANNEL THAT HAS SESSIONS ──────────────────
@@ -14838,10 +14909,27 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const prevFrom = new Date(new Date(from).getTime() - spanDays * 86400000).toISOString().slice(0, 10);
 
   // ── Headline KPIs (current + previous window) ──
+  //
+  // ── §184 · gzgrocery IS IN THIS SUM NOW, AND ITS LEDGER FOLD IS GONE ──────
+  // The CASE that used to blank gzgrocery here existed to stop double-booking
+  // against `guanyiPickupSales()`, which was added back below. Both halves are
+  // written by one branch of the daemon — a ledger row and a `retail_orders`
+  // mirror, always together — so the choice was never whether to count the
+  // channel but WHICH RECORD to count it from, and the ledger is the worse of
+  // the two: it carries no price, so its value had to be looked up LIVE on
+  // every request, which moved a past month's revenue whenever a gz price
+  // changed. The mirror carries the price of the day and the cost beside it.
+  //
+  // AOV LOSES THE CASE TOO, and that is a correction rather than a widening.
+  // `orders` on the line above has counted gzgrocery mirrors all along
+  // (`PAID_ALL`), so an AOV that skipped them was already a mean over a
+  // different population than its own denominator; with revenue now on the
+  // order record as well, revenue ÷ orders and this AVG finally describe one
+  // set of rows.
   const kpiSql = `
     SELECT COUNT(*) AS orders,
-           COALESCE(SUM(CASE WHEN ${NOTGZ} THEN total ELSE 0 END), 0) AS revenue,
-           COALESCE(AVG(CASE WHEN ${NOTGZ} THEN total END), 0) AS aov,
+           COALESCE(SUM(total), 0) AS revenue,
+           COALESCE(AVG(total), 0) AS aov,
            COUNT(DISTINCT customer_id) AS buyers
       FROM retail_orders
      WHERE ${PAID_ALL} AND ${PDATE} BETWEEN ? AND ?`;
@@ -14852,8 +14940,14 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // gzgrocery is a wholesale pickup channel with no storefront order/customer,
   // so by design it lifts REVENUE only — never the order count, AOV, or any
   // customer metric (those stay storefront-only).
-  const gySales     = guanyiPickupSales(tdb(), from, to, { hourly });
-  const gySalesPrev = guanyiPickupSales(tdb(), prevFrom, prevTo, { hourly: false });
+  //
+  // §184: THE LEGACY HALF ONLY. Drift pickups inferred before the order read
+  // existed have no order behind them to mirror, so nothing else in the
+  // database knows about them and dropping them with the ledger fold would
+  // have deleted real history from the curve. Everything the order read has
+  // seen since arrives through `kpiSql` above, on the order record.
+  const gySales     = guanyiLegacyPickupSales(tdb(), from, to, { hourly });
+  const gySalesPrev = guanyiLegacyPickupSales(tdb(), prevFrom, prevTo, { hourly: false });
   kpi.revenue     = +(Number(kpi.revenue || 0) + gySales.revenue).toFixed(2);
   kpiPrev.revenue = +(Number(kpiPrev.revenue || 0) + gySalesPrev.revenue).toFixed(2);
 
@@ -14978,7 +15072,11 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       // exactly as the headline blends them into today — otherwise the delta
       // would compare a blended today against a storefront-only past. Orders
       // stay storefront-only on both sides, as they are everywhere else here.
-      const gy = guanyiPickupSales(tdb(), d, d, { hourly: clip });
+      // §184: the legacy half, matching the headline above it. `k.revenue` now
+      // carries gzgrocery's mirrored orders on both sides of the comparison, so
+      // folding the ledger here as well would have counted the channel twice in
+      // the baseline and flattered every delta against it.
+      const gy = guanyiLegacyPickupSales(tdb(), d, d, { hourly: clip });
       const tu = topupCashReceived(tdb(), d, d, { hourly: clip });
       const rev = Number(k.revenue || 0)
                 + (clip ? revUpToNow(gy.byBucket) : gy.revenue)
@@ -15040,7 +15138,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   if (hourly) {
     const o = tdb().prepare(`
       SELECT CAST(${PHOUR} AS INTEGER) AS b,
-             COUNT(*) AS orders, COALESCE(SUM(CASE WHEN ${NOTGZ} THEN total ELSE 0 END), 0) AS revenue
+             COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
         FROM retail_orders
        WHERE ${PAID_ALL} AND ${PDATE} = ?
        GROUP BY b`).all(from);
@@ -15069,7 +15167,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   } else {
     const o = tdb().prepare(`
       SELECT ${PDATE} AS b,
-             COUNT(*) AS orders, COALESCE(SUM(CASE WHEN ${NOTGZ} THEN total ELSE 0 END), 0) AS revenue
+             COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
         FROM retail_orders
        WHERE ${PAID_ALL} AND ${PDATE} BETWEEN ? AND ?
        GROUP BY b`).all(from, to);
@@ -15198,10 +15296,24 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
                 ELSE COALESCE(NULLIF(channel, ''), 'wechat') END AS channel,
            COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
-     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
+     WHERE ${PAID_ALL} AND ${PDATE} BETWEEN ? AND ?
      GROUP BY channel`).all(from, to);
-  if (gySales.revenue > 0 || gySales.orders > 0) {
-    channelRows.push({ channel: 'gzgrocery', orders: gySales.orders, revenue: gySales.revenue });
+  // §184: `PAID_ALL`, so gzgrocery arrives as a grouped row like every other
+  // channel — the same rows the headline summed, which is the only way the
+  // breakdown and the figure it opens from can agree. It used to be pushed on
+  // afterwards from the ledger, valued live, against a total that had excluded
+  // the order rows; the row and the headline were then two different readings
+  // of one channel that happened to sit on one card.
+  //
+  // THE LEGACY DRIFT RIDES THE SAME ROW rather than a second one. It is the
+  // same channel's money and the headline carries it, so a separate line would
+  // name a channel twice and a dropped one would leave the lines short of the
+  // total above them. Creating the row when the window holds drift and no
+  // mirrored order keeps that true at the edge.
+  if (gySales.revenue > 0) {
+    const gz = channelRows.find(r => r.channel === 'gzgrocery');
+    if (gz) gz.revenue = +(Number(gz.revenue || 0) + gySales.revenue).toFixed(2);
+    else channelRows.push({ channel: 'gzgrocery', orders: 0, revenue: gySales.revenue });
   }
   channelRows.sort((a, b) => b.revenue - a.revenue);
 
