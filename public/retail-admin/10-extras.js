@@ -1485,6 +1485,12 @@ cuApplyThemeIcon();
     'Delivered': '已送达',
     'Awaiting restock': '等待补货',
     'Cancelled': '已取消',
+    // §189 — the parcel-recovery chip. Registered here rather than left to the
+    // English fallback: its neighbour 'Needs a call' has no entry and has been
+    // showing an English chip in a Chinese admin since §98, which is the gap
+    // this deliberately does not repeat. 收回 is the live pair from the coupon
+    // take-back in 05-marketing.js.
+    'To recover': '待收回',
     'Refunded': '已退款',
     'Refund queue': '退款队列',
     'Refresh': '刷新',

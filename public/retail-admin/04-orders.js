@@ -4134,6 +4134,7 @@ function renderShipmentCard(o, s) {
         ${shipHoldPill(o, s, waiting)}
       </div>
       ${renderItemsTable(s.items, false, waiting)}
+      ${renderParcelRecovery(o, s)}
       ${actions}
       ${mode === 'local'
         ? (!['dispatched', 'delivered'].includes(s.state || 'pending') && ['paid', 'preparing'].includes(o.status) && !courierCardHoisted(o, s) ? renderLocalEtaCard(o, s) : '')
@@ -4149,6 +4150,78 @@ function renderShipmentCard(o, s) {
   // Local same-city parcels do the same once dispatched: their ETA card hoists
   // to the top (it's the rider's arrival time the operator watches). Before
   // dispatch (paid/preparing) it stays inline here so the time can be set early.
+}
+
+/* §189 — THE BOX THAT WAS ALREADY OUT WHEN THE ORDER WAS CANCELLED.
+   §187 stopped the cancel's reversal crediting the shelf with units in a
+   courier's van, which made the count honest and told nobody. This is the
+   telling: on the parcel itself, because the parcel is what somebody has to go
+   and chase, and above the actions row so it is read before anything else on
+   the card.
+
+   TWO OUTCOMES AND NO DEFAULT, which is Ash's decision rather than a missing
+   convenience: goods back from a customer are not automatically sellable —
+   fresh food least of all — so only the person holding the box can say whether
+   the shelf gets it. "It came back" returns this parcel's units; "It did not"
+   moves nothing and records the loss. Closing is one-way; the undo for a
+   mistake is Quick stock, which leaves a name on a ledger row.
+
+   ABSENT ON EVERY PARCEL OF EVERY ORDER THAT ENDS NORMALLY — recovery_needed_at
+   is stamped only by the cancel branch, only on boxes that were packed or gone. */
+function renderParcelRecovery(o, s) {
+  if (!s || !s.recovery_needed_at) return '';
+  if (s.recovery_outcome) {
+    const back = s.recovery_outcome === 'recovered';
+    const who = s.recovery_closed_by ? ` · ${escapeHtml(s.recovery_closed_by)}` : '';
+    return `<div class="parcel-recovery done">
+      <span class="pill ${back ? 'st-delivered' : 'st-cancelled'}"><span class="dot"></span>`
+      + `${back ? cuT('Recovered', '已收回') : cuT('Not recovered', '未收回')}</span>`
+      + `<span class="pr-meta">${tdWhen(s.recovery_closed_at, 'dateTime')}${who}</span>
+    </div>`;
+  }
+  return `<div class="parcel-recovery open">
+    <div class="pr-head">${cuT('This parcel was already out when the order was cancelled',
+                               '订单取消时此包裹已发货')}</div>
+    <div class="pr-sub">${cuT('Say what became of it. Only "it came back" puts the stock on the shelf.',
+                              '请确认其去向。仅“已收回”会把库存退回货架。')}</div>
+    <div class="row" style="gap:8px; flex-wrap:wrap; margin-top: var(--s3);">
+      <button class="btn btn-primary btn-sm" onclick="closeParcelRecovery(${o.id}, ${s.id}, 'recovered', event)">${cuT('It came back', '已收回')}</button>
+      <button class="btn btn-sm" onclick="closeParcelRecovery(${o.id}, ${s.id}, 'not_recovered', event)">${cuT('It did not come back', '未收回')}</button>
+    </div>
+  </div>`;
+}
+
+// Close one parcel's recovery case. The drawer re-reads the order rather than
+// patching the card in place: answering "it came back" moves stock, and the
+// hold pill, the items table and the order's own badges all read off that.
+async function closeParcelRecovery(orderId, shipmentId, outcome, ev) {
+  const back = outcome === 'recovered';
+  const ok = await askConfirm({
+    title: back ? cuT('Put this parcel back on the shelf?', '把此包裹退回货架?')
+                : cuT('Record this parcel as not recovered?', '登记此包裹未收回?'),
+    body: back ? cuT('Its units go back on the count, and a ledger row records who said so.',
+                     '其数量将计回库存,并在台账中记录操作人。')
+               : cuT('No stock moves. The units stay gone and the loss is recorded.',
+                     '库存不变。该批数量计为损失并留存记录。'),
+    confirmLabel: back ? cuT('It came back', '已收回') : cuT('It did not come back', '未收回'),
+    danger: !back,
+  });
+  if (!ok) return;
+  try {
+    await adminWrite({
+      btn: ev?.currentTarget,
+      url: `/api/retail-admin/orders/${orderId}/shipments/${shipmentId}/recovery`,
+      method: 'POST',
+      body: { outcome },
+      errLabelEn: 'Could not close this', errLabelCn: '处理失败',
+    });
+    toast(back ? cuT('Parcel recovered', '包裹已收回') : cuT('Recorded', '已登记'));
+    openOrder(orderId, { instant: true });
+    loadOrders();
+  } catch {
+    // adminWrite has already shown the operator the failure and restored the
+    // button; a second message here would say the same thing twice.
+  }
 }
 
 // Once a parcel is on its way, the thing the operator watches — its waybill, or

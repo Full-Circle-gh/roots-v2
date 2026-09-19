@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.140 · 2026-09-19 · §189 NAMES THE BOX THAT WENT OUT ON A CANCELLED ORDER — COPYING ONE PAIR AND COMPOSING SEVEN ON IT.** §187 stopped a cancel crediting the shelf with units in a courier's van, which made the count honest and told nobody. `收回` is live and is exactly this verb about exactly this object, so everything here is built on it; `退回` is kept for what the STOCK does, and the two are deliberately not collapsed. See *A box that went out on an order that was cancelled*.
+
 **v1.139 · 2026-09-19 · §188 TELLS THE PARKED ORDER'S CUSTOMER THAT ONE BOX HAS GONE — COMPOSING TWO PAIRS FROM LIVE PARTS.** §187 let a parked order send the parcels its shortage does not touch and said nothing to the customer, because the order keeps its park and the `dispatched` line never fires. A box arriving unannounced days before the rest reads as a short delivery. Two composed pairs, every word in them live; in-app only, no WeChat push, so `ORDER_STATUS_NOTIF` is untouched. See *One box of a parked order has left*.
 
 **v1.138 · 2026-09-18 · §182 SAYS UNDER THE FINANCE REVENUE ROW WHEN A WALLET YUAN IS COUNTED — LIFTING ONE PAIR WHOLE AND COMPOSING ONE.** Ash, with both screens open: *"the 30 days revenue in finance section are not identital to the total revenue in report"*. They were not, they still are not, and neither was wrong — the two answer different questions, and until now neither said so. **THE REPORTS HALF COMPOSES NOTHING.** `incl. ¥X top-ups · 含充值 ¥X` is taken CHARACTER FOR CHARACTER from `public/retail-admin/01-core.js`, where it already sits under the Sales summary's own cash-basis revenue figure disclosing the same fold — the ' · ' join is that line's too. Rule 4's first preference, and here one screen had already said this well; the only change is which card it sits on. **ONE PAIR IS COMPOSED, by Claude, under the fourth amendment's standing delegation** — `仅计订单 —— 储值在消费时计入，充值时不计入。` — because nothing in this product has ever had to say *this figure counts the sale, not the top-up*. The state was real and had no sentence. Every fragment is live: `仅计` from `仅计成本` in the recipe cost lines, `计入` and `不计入` from the six live cost-and-stock sentences that use the pair (`其成本不计入`, `破损数量不计入库存`, `已登记发票，未计入上方`), and `储值` from `储值消费` — the Sales summary's own word for store credit spent, so the two screens spend a wallet with the same character. The `——` is `finCoverageNote`'s own dash, eleven lines up the same file. **THREE CANDIDATES WERE REJECTED AND THE REJECTIONS ARE RECORDED:** `含充值`, live and lifted for the OTHER screen in this same change, which states the opposite fact and on this row would be false; `未计入上方数字`, live in this very file, which reads as a warning that something is missing from the total rather than a statement of which question it answers; and `收入`, which Ruling 1 reserves for Income in the Finance table and which is not this row's word — the row is `营收`. **NOTHING IS RETIRED.** Rules 1 to 7 unchanged. See *When a wallet yuan is counted* at the end.
@@ -7466,3 +7468,56 @@ does not hold.
 every mode word is already a locked pair (`陆运`, `空运`), but the notification
 body is a single sentence in two languages and the mode belongs to the parcel,
 not the order. Worth doing if Ash wants it; not invented here.
+
+## A box that went out on an order that was cancelled (2026-09-19, §189)
+
+§187 stopped a cancel crediting the shelf with units sitting in a courier's van.
+That made the count honest and told nobody: the money went back, the number was
+right, and a box on its way to a person who is no longer a customer had no screen
+anywhere saying so. This is the telling, and the answer to it.
+
+**Register: OPERATOR** (Rule 1) — the shipment card in the order drawer, the
+orders chip, and the Needs-you row on Home. Nothing here reaches a customer:
+they have already been refunded and told the order was cancelled.
+
+**ALMOST ALL OF IT IS COPIED.** 收回 is a live pair and it is exactly this verb
+about exactly this kind of object — something the shop handed out, being taken
+back — so the only composing is the two words built on it.
+
+| where | EN | CN | source |
+|---|---|---|---|
+| card heading | This parcel was already out when the order was cancelled | 订单取消时此包裹已发货 | **COMPOSED**, 2026-09-19 — from live `已取消`, live `此包裹已发货` (the parcel dispatch button) |
+| card sub | Say what became of it. Only "it came back" puts the stock on the shelf. | 请确认其去向。仅“已收回”会把库存退回货架。 | **COMPOSED**, 2026-09-19 — `退回` is the live waste-void wording for stock going back |
+| button / closed pill | It came back / Recovered | 已收回 | live: `Taken back · 已收回`, `public/retail-admin/05-marketing.js` |
+| button / closed pill | It did not come back / Not recovered | 未收回 | **COMPOSED**, 2026-09-19 — the live `收回` negated |
+| orders chip | To recover | 待收回 | **COMPOSED**, 2026-09-19 — live `收回` with the live `待` of `待补货` / `待分配` |
+| Needs-you row | Parcels to recover | 待收回包裹 | **COMPOSED**, 2026-09-19 — the chip plus live `包裹` |
+| confirm (recovered) | Put this parcel back on the shelf? | 把此包裹退回货架? | **COMPOSED**, 2026-09-19 |
+| confirm (not recovered) | Record this parcel as not recovered? | 登记此包裹未收回? | **COMPOSED**, 2026-09-19 — `登记` is the live waste verb for writing a movement down |
+
+**WHY 收回 AND NOT 退回.** Both are live. `退回` is what STOCK does — the waste
+void "puts the stock back", 库存退回 — and it is used here for exactly that, in
+the confirm body and nowhere else. `收回` is what the SHOP does to a thing it
+handed out, which is the coupon take-back's own sense and is the action being
+asked about. One verb for the goods moving, one for the shop retrieving them;
+collapsing the two would make "did it come back" and "does the shelf get it"
+read as the same question, and the whole point of this control is that they are
+not.
+
+Rejected, and why:
+
+- **`退回中`** — live, and tempting: it is the tracking status *Returning to
+  sender* on this very screen. It names a parcel the CARRIER is already
+  returning, which is one way a box comes back and not the only one, and it is a
+  state the system observes rather than a question it is asking. A control
+  labelled with an observed state would read as a claim about where the box is.
+- **`召回`** — recall, in the product-safety sense. Wrong register entirely and
+  frightening on an order screen.
+- **`作废`** — live (waste void), but it means voiding a RECORD, not retrieving
+  goods.
+
+**THE CHIP IS REGISTERED IN THE ADMIN DICTIONARY**
+(`public/retail-admin/10-extras.js`), which its neighbour is not: `Needs a call`
+has had no entry since §98 and has been showing an English chip in a Chinese
+admin ever since. Recorded here because it is a live gap somebody should close,
+and because not repeating it was a decision rather than an accident.
