@@ -708,6 +708,45 @@ function finChannelLabel(key) {
    being redrawn rather than by being rewritten in place. That is the same
    reason `data-no-i18n` sits on the dashboard greeting — text assembled
    language-aware in JS is text the walker must keep its hands off. */
+/* ── The sentence under Revenue (§182) ──────────────────────────────────────
+   WHY THE ROW NEEDS ONE AT ALL. Reports shows a revenue figure for the same
+   window that does not match this one, and a reader with both open has no way
+   to tell which is wrong — the honest answer being neither. The two screens ask
+   different questions: this row is what customers paid ON ORDERS, recognised at
+   the sale; the Reports card is CASH RECEIVED, which books a wallet top-up on
+   the day the money lands and values gzgrocery off the stock ledger. Before
+   §182 that difference was undocumented on either screen, and the first person
+   to notice it reasonably assumed a bug.
+
+   IT NAMES THE HALF A READER CANNOT SEE. The channel lines above already say
+   where the money came from; what they cannot show is WHEN a wallet yuan was
+   counted, because the timing is the whole of the disagreement with Reports.
+   So the sentence spends its words on that and not on restating the breakdown.
+
+   UNCONDITIONAL, like the Transactions tile's pointer and unlike
+   `finCoverageNote` above. It is not one of §1.12's states and does not qualify
+   a shortfall: it is true at ¥0 and true at ¥144,854, because what it describes
+   is which question the row answers, and that does not move with the figure.
+
+   `.td-notrec` IS THE HOUSE REMARK TREATMENT, not a state marker, whatever its
+   name suggests — its own CSS note calls it "the same weight as any other true
+   remark about the number above it", which is exactly this. `finCoverageNote`
+   already uses it for a remark that qualifies a presence rather than explaining
+   an absence, so this is the second such use and not a new liberty.
+
+   THE CHINESE IS COMPOSED (Rule 4, standing delegation) and declared in
+   docs/tacet-delivery-vocabulary.md v1.138 with the live candidates weighed
+   against it. `仅计` is lifted from `仅计成本`, `计入` / `不计入` from the six
+   live cost and stock lines that use the pair, and `储值` from `储值消费`, the
+   Sales summary's own word for store credit spent — so the row says "spent"
+   with the character the screen next door already spends it with. */
+function finRevNote() {
+  return `<p class="td-notrec">${escapeHtml(cuT(
+    'Orders only — wallet money counts when spent, not when topped up.',
+    '仅计订单 —— 储值在消费时计入，充值时不计入。'
+  ))}</p>`;
+}
+
 function finRevBreakdown(rows) {
   if (!rows || !rows.length) return '';
   return '<div class="fin-breakdown" data-no-i18n>'
@@ -847,6 +886,7 @@ function finRender() {
         + `<span class="fin-fig">${escapeHtml(finMoney(d.revenue))}</span>`
         + `</summary>${revBreakdown}</details>`
       : finRow(revLabel, finMoney(d.revenue)))
+    + finRevNote()
     // Tax collected (audit I-03), and ONLY where a shop has charged some: the
     // block is null otherwise, so nothing about this screen changes for a shop
     // that charges none. It sits with revenue because that is

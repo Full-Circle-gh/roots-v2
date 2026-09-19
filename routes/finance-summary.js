@@ -29,9 +29,29 @@
 //   • Wallet top-ups are EXCLUDED here. A top-up is money received before any
 //     sale. §36 defines revenue as coming from the order record and rules
 //     settlement receipts out entirely; a top-up is a third thing. Money
-//     becomes revenue when an order consumes it, not when it arrives — and
-//     `retail_orders.total` already excludes `balance_used`, so the yuan is
-//     counted exactly once, at the sale.
+//     becomes revenue when an order consumes it, not when it arrives.
+//
+//     **AND THAT SENTENCE WAS NOT TRUE OF THE CODE UNDER IT UNTIL §182.** It
+//     continued "— and `retail_orders.total` already excludes `balance_used`,
+//     so the yuan is counted exactly once, at the sale", which inverts its own
+//     premise: `total` is the CASH RESIDUAL, the gross a customer paid being
+//     `points_amount + balance_used + total` (§93, and this file's own tax
+//     block reads it that way twelve lines down). A revenue line summing
+//     `total` alone therefore counted wallet money **never** — not at the
+//     top-up, which this file rules out, and not at the sale, which `total`
+//     had already netted off. §182 adds `balance_used` back at the sale, which
+//     is where the header always said it belonged.
+//
+//     THE COST SIDE IS WHY IT MATTERED RATHER THAN A TIDINESS POINT. The cost
+//     read below does not ask how a bill was settled, so a wallet-paid order
+//     brought its full cost into this card and no revenue at all, and gross
+//     profit was understated by the whole of store-credit spend, every period.
+//
+//     POINTS STAY OUT, and that is a decision rather than the same oversight
+//     left half-fixed. `points_amount` is the yuan value of a discount the
+//     shop granted itself; no customer ever paid it. A points-settled sale
+//     earns no revenue and costs real stock, and showing it that way is the
+//     truth about a giveaway — §182 records the reasoning.
 //   • gzgrocery IS INCLUDED, on both halves, and the dashboard's exclusion is
 //     NOT inherited (§36, *gzgrocery counts, on both halves*). That exclusion
 //     exists to stop double-booking against takings this file never reads:
@@ -159,9 +179,35 @@ router.get('/api/retail-admin/finance/summary', requireRetailAdmin, (req, res) =
     // `channel='manual'`, so it lands on the Manual line here, which is what
     // the order record says it is. The rule is the expense breakdown's rule:
     // group what the total summed, and do not reshape it on the way out.
+    //
+    // ── THE FIGURE IS `total + balance_used`, NOT `total` (§182) ──────────
+    // `total` is the CASH RESIDUAL of a bill, not the bill: §93 stores the
+    // credit tenders BESIDE the cash (`points_amount`, `balance_used`) rather
+    // than folded into it, precisely so a refund can return each ¥ to the
+    // tender it came from. So a wallet-settled sale carries `total` = 0, and
+    // a revenue line summing `total` alone showed nothing for it — while the
+    // cost block below, which never asks how a bill was settled, charged the
+    // card the full cost of the goods that left the shelf.
+    //
+    // `balance_used` IS REAL CUSTOMER MONEY, recognised HERE rather than at
+    // the top-up, which is exactly the rule the header states: the cash landed
+    // in the wallet earlier and becomes revenue when an order consumes it.
+    // Counted once, at the sale, and the Reports card's cash-basis reading of
+    // the same yuan at top-up time is the OTHER screen's question — see §182
+    // on why the two are labelled apart rather than reconciled.
+    //
+    // `points_amount` IS DELIBERATELY ABSENT. It is a discount the shop
+    // granted, not money anyone paid; adding it would book revenue against a
+    // giveaway. The asymmetry is the point, not an omission to be tidied.
+    //
+    // BOTH TERMS COALESCE. `balance_used` is NULL on every order that predates
+    // the column and on every order that used no credit, and `a + NULL` is
+    // NULL in SQLite — one such row would have made the whole channel's SUM
+    // null, and `COALESCE(SUM(...), 0)` on the outside cannot see that it did.
     const revGrouped = db.prepare(`
       SELECT COALESCE(NULLIF(channel, ''), 'wechat') AS channel,
-             COALESCE(SUM(total), 0) AS amount, COUNT(*) AS orders
+             COALESCE(SUM(COALESCE(total, 0) + COALESCE(balance_used, 0)), 0) AS amount,
+             COUNT(*) AS orders
         FROM retail_orders
        WHERE ${PAID} AND ${odateFor(sqlDayShiftForShop(tdb()))} BETWEEN ? AND ?
        GROUP BY COALESCE(NULLIF(channel, ''), 'wechat')
