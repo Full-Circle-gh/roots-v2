@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.142 · 2026-09-19 · §193 GIVES `parcel_awaiting_restock` THE SENTENCE IT NEVER HAD — LIFTING TWO LIVE FRAGMENTS AND COMPOSING NOTHING.** §187 minted the error code and registered no pair for it, so a Chinese admin has read the bare code in English ever since; §193 makes the JD label route a third caller, which is the busiest of the three. Both halves are live verbatim and only the join is new. See *A parcel the shortage is holding*.
+
 **v1.141 · 2026-09-19 · §190 NAMES THE BOX IN §188's NOTIFICATION — COMPOSING THREE SENTENCES AND NO NEW WORDS.** *"one of the parcels"* made a split order's customer count boxes to work out which one had landed. Every mode already has a locked pair and two of them are already customer-facing on the printed slip, so each sentence is a live mode word in front of §188's live `包裹已发货`. The generic line survives as the fallback for a mode added later. See *Which box has gone*.
 
 **v1.140 · 2026-09-19 · §189 NAMES THE BOX THAT WENT OUT ON A CANCELLED ORDER — COPYING ONE PAIR AND COMPOSING SEVEN ON IT.** §187 stopped a cancel crediting the shelf with units in a courier's van, which made the count honest and told nobody. `收回` is live and is exactly this verb about exactly this object, so everything here is built on it; `退回` is kept for what the STOCK does, and the two are deliberately not collapsed. See *A box that went out on an order that was cancelled*.
@@ -7560,3 +7562,44 @@ that reading. Rule 1: the cross-register difference is deliberate.
 The mode belongs in the body beside the order number, where the customer is
 already reading a specific fact about a specific parcel; a title that varied by
 mode would give one notification three shapes in the list.
+
+
+## A parcel the shortage is holding (2026-09-19, §193)
+
+§187 gave the parked order's healthy box its dispatch button back and refused
+the box that carries a short line by name — `parcel_awaiting_restock`. The code
+went to the UI and **no pair was registered for it**, so `tdErrorText` fell
+through to its last resort and printed *Parcel awaiting restock* in English, in
+a Chinese admin, on both routes that raise it. §193 makes the JD waybill route a
+third caller and the busiest one, which is what turned a quiet gap into a
+sentence somebody reads.
+
+**Register: OPERATOR** (Rule 1). **Nothing here is composed.** Both halves are
+live verbatim and the pair is their join.
+
+| EN | CN | source |
+|---|---|---|
+| That parcel is waiting on a restock. | 该包裹正在等待补货。 | **LIFTED**, 2026-09-19 — `该包裹` from `invalid_shipment_id` in the same dictionary (`该包裹不属于此订单。`); `正在等待补货。` verbatim from `lib/push-events.js` (`顾客已付款，或订单正在等待补货。`) |
+
+**THE SUBJECT IS THE BOX, NOT THE LINE INSIDE IT.** What the server actually
+knows is that this parcel holds one or more products the order is parked on —
+`parcelHeldLines` counts them. A sentence naming the count was considered and
+dropped: the operator has the hold pill on the same screen for that
+(`待补货 — N 项`, live since §187), the toast is the refusal and not the report,
+and an error string that has to be built from a number is one more place for the
+two to disagree about one parcel.
+
+Rejected, and why:
+
+- **`该订单正在等待补货。`** — the order, not the parcel. Live-adjacent and
+  wrong in the one way this whole section exists to prevent: §187's rule is that
+  a parked ORDER is not a parked BOX, and an error saying *the order* is waiting
+  would tell the operator the opposite of what the button beside it does.
+- **`该包裹尚不可发货。`** — lifted from `not_shippable`'s live
+  `该订单尚不可发货。` by swapping the noun. Readable, and it names the refusal
+  without naming the cause, which is the exact complaint that produced §193: the
+  operator's next question is *why*, and `待补货` is the word every other
+  control on that screen already answers it with.
+- **`缺货`** — live in the product-stock sense (*out of stock*). It describes
+  the shelf, not this order's wait, and the admin already reserves `待补货` /
+  `等待补货` for the wait.

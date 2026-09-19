@@ -271,14 +271,45 @@ for (const [label, marker] of [['prepare', '/prepare'], ['dispatch', '/dispatch'
   check(`…reading awaiting_restock_pids off the order to do it`,
     /SELECT id, status, awaiting_restock_pids FROM retail_orders/.test(body), true);
 }
-// The JD waybill route shares the literal window and is deliberately NOT
-// widened: minting a label is shipping the whole order, not one box, and a
-// parked order has nothing to ship whole. Asserted so a later reader does not
-// "finish the job" by copying the list across.
+/* §193 REVERSES WHAT THIS BLOCK USED TO ASSERT, and the reversal is the point.
+   It read "the JD waybill route keeps the narrow window — it ships the ORDER",
+   on the reading that minting a label ships the whole order rather than one
+   box. That reading was already false when it was written: the route resolves
+   ONE shipment, stamps THAT shipment's tracking, and commits THAT shipment's
+   stock with `shipmentId` (§58 addendum). What it ships is a box.
+
+   The cost was the same order this file is named after. TC000784's ambient box
+   got its dispatch button back from §187 and still could not be labelled: the
+   drawer offers "Create JD label" on any parcel without a waybill, the operator
+   fills the dialog, and the server answers 409 not_shippable — "That order is
+   not ready to ship", about a box that is ready. The only way out was a waybill
+   bought elsewhere, which is the free JD tracking this route exists to get.
+
+   So the JD route now answers the same three questions the two above do, and
+   two more that only it can get wrong. */
 const jd = ROUTES.indexOf("router.post('/api/retail-admin/orders/:id/jd-waybill'");
-check('the JD waybill route keeps the narrow window — it ships the ORDER',
-  /\['paid', 'preparing', 'dispatched'\]\.includes\(o\.status\)/
-    .test(ROUTES.slice(jd, jd + 1200)), true);
+const jdEnd = ROUTES.indexOf('\n});', jd);
+const jdBody = ROUTES.slice(jd, jdEnd === -1 ? jd + 12000 : jdEnd);
+check('the JD waybill route admits a parked order',
+  /'paid', 'preparing', 'dispatched', 'awaiting_restock'/.test(jdBody), true);
+check('…and refuses the parcel that carries a short line',
+  /parcelHeldLines\(id, shipment\.id, orderWaitingPids\(o\)\)[\s\S]{0,140}parcel_awaiting_restock/.test(jdBody), true);
+check('…reading awaiting_restock_pids off the order to do it',
+  /awaiting_restock_pids\n\s+FROM retail_orders WHERE id = \?/.test(jdBody), true);
+/* THE TWO ONLY THIS ROUTE CAN GET WRONG. A label is minted mid-handler and the
+   order flip sits below it, so the tempting shape — "we just shipped it, mark
+   it dispatched" — is right there; §187 section 3 is the whole reason it must
+   not fire on a parked order. And the response is what both drawers re-render
+   off, so a hard-coded 'dispatched' would show the order leaving its park on a
+   screen the database disagrees with. */
+check('…and leaves a parked order where it is, exactly as parcel dispatch does',
+  /if \(o\.status !== 'dispatched' && o\.status !== 'awaiting_restock'\) \{/.test(jdBody), true);
+check('…and answers with the status the order actually holds',
+  /order_status: afterStatus \}/.test(jdBody), true);
+// The customer push still rides on firstDispatch, which the guard above never
+// sets for a parked order — §188 owns what that customer is told instead.
+check('…telling the customer nothing on the "order dispatched" line',
+  /if \(firstDispatch\) \{ try \{ notifyOrderStatusChange\(id, 'dispatched'\)/.test(jdBody), true);
 
 // ─────────────────────────────────────────────────────────────────────────────
 section('── 3. The park survives the parcel leaving');
@@ -454,6 +485,22 @@ check('…and states all four consequences it turns on',
   ['MUST NOT LEAVE ITS PARK', 'MUST HOLD THE SHORT LINES BACK',
    'MUST NOT BE GATED ON WHAT HAS LEFT', 'FOUND RATHER THAN DESIGNED']
     .filter((t) => !DECIDE.includes(t)), []);
+/* §193 OVERRIDES ONE OF §187's CLAIMS, so the override has to be as findable as
+   the claim. §187's entry is historical and says in so many words that the JD
+   route is deliberately not widened; a reader who greps this file for "JD
+   waybill" and stops at the first hit gets last week's answer. */
+check('§193 is recorded', /\*\*§193 · A PARKED ORDER'S OTHER BOX GETS ITS JD LABEL/.test(DECIDE), true);
+check('…and says it reverses §187 rather than quietly differing from it',
+  /THIS REVERSES A DECISION §187 MADE EXPLICITLY/.test(DECIDE), true);
+check('…and states the two things only this route can get wrong',
+  ['THE PARK SURVIVES THE LABEL', 'SECOND DOOR'].filter((t) => !DECIDE.includes(t)), []);
+// The Chinese is declared where every other string on this screen is declared.
+const VOCAB = read('docs/tacet-delivery-vocabulary.md');
+check('…and the error sentence is declared with its provenance',
+  /该包裹正在等待补货。/.test(VOCAB) && /\*\*LIFTED\*\*, 2026-09-19/.test(VOCAB), true);
+check('…and is the pair the admin dictionary actually ships',
+  /parcel_awaiting_restock: \['That parcel is waiting on a restock\.', '该包裹正在等待补货。'\]/
+    .test(read('public/retail-admin/01-core.js')), true);
 
 // ── Report ──────────────────────────────────────────────────────────────────
 db.close();

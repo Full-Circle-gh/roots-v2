@@ -253,6 +253,42 @@ check('…swallowed on purpose, so a failed notice cannot undo a dispatch that h
 check('…and the order-level push still rides on firstDispatch, which §187 never sets here',
   /if \(firstDispatch\) \{\s*\n\s*try \{ notifyOrderStatusChange\(id, 'dispatched'\)/.test(dispBody), true);
 
+/* §193 — THE SECOND DOOR. Minting a JD waybill stamps the parcel's
+   dispatched_at itself, so a box can leave without ever going through the
+   dispatch route above: the drawer offers "Create JD label" and "Mark this
+   parcel dispatched" side by side and the operator may take either first.
+   §193 opened that route to parked orders, which handed §188's silence a way
+   back in — the box goes, the customer hears nothing, because firstDispatch is
+   false for a parked order there too.
+
+   ONCE PER PARCEL IS NOW A GUARD RATHER THAN A FREEBIE. This notice used to be
+   once per parcel for nothing, because `already_dispatched` made the dispatch
+   route unrepeatable. With two doors it takes the flag below: the JD route
+   reads the parcel's dispatched_at BEFORE its own UPDATE and speaks only when
+   that read was empty, so the customer is told once whichever door the box
+   left by, and twice by neither. */
+const jdAt = ROUTES.indexOf("router.post('/api/retail-admin/orders/:id/jd-waybill'");
+const jdEnd = ROUTES.indexOf('\n});', jdAt);
+const jdBody = ROUTES.slice(jdAt, jdEnd === -1 ? jdAt + 12000 : jdEnd);
+check('the JD label route calls it for a parked order too',
+  /if \(o\.status === 'awaiting_restock' && !parcelAlreadyOut\) \{\s*\n\s*try \{ notifyParcelShippedWhileParked\(id, shipment\.mode\); \}/.test(jdBody), true);
+check('…reading the parcel\'s dispatched_at BEFORE its own UPDATE stamps it',
+  jdBody.indexOf('const parcelAlreadyOut = !!shipment.dispatched_at;') <
+  jdBody.indexOf('dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP)'), true);
+check('…so the dispatch route\'s own call stays the only one for a box already out',
+  /parcelAlreadyOut/.test(dispBody), false);
+// The helper's own note is the place a third door would be told about this.
+check('the notifier says once-per-parcel now takes a guard',
+  /ONCE PER PARCEL, and §193 is why/.test(ROUTES), true);
+/* SWALLOWED ON PURPOSE, AND THE REASON IS DIFFERENT FROM ITS SIBLING'S, which
+   is why it is asserted separately rather than by the same regex. On the
+   dispatch route a throw would fail a dispatch that happened; here it would
+   report a failure for a waybill JD has already issued, and the operator's
+   retry would mint a SECOND one. check-swallowed-errors.js holds the ceiling
+   this would otherwise have raised. */
+check('…swallowed on purpose, and says a retry would mint a second waybill',
+  /catch \(e\) \{\s*\n\s*\/\/ Swallowed on purpose: the waybill is minted at JD[\s\S]{0,400}mint a SECOND waybill/.test(jdBody), true);
+
 /* ORDER_STATUS_NOTIF IS KEYED ON THE STATUS COLUMN. A key added there fires the
    WeChat push, and the order's status is deliberately not this. */
 const mapAt = ROUTES.indexOf('const ORDER_STATUS_NOTIF = {');
