@@ -529,7 +529,7 @@ function extractFunction(name) {
 const BODY = sliceHandler();
 
 function liveFixture() {
-  // The two option tables arrive with §182: the line resolver now asks what a
+  // The two option tables arrive with §183: the line resolver now asks what a
   // line's answers cost through lib/product-options, which reads both.
   const d = openTables2(DB_SRC, ['retail_customers', 'retail_orders', 'retail_order_items',
                                  'retail_payments', 'retail_stores', 'storefront_config',
@@ -555,7 +555,7 @@ function handlerFor(d) {
       `${extractFunction('createOrReuseManualCustomer')}\nreturn createOrReuseManualCustomer;`
     )(() => d, require('crypto'), (e) => (e == null ? '' : String(e).trim().toLowerCase())),
     nextOrderNo: new Function('tdb', `${extractFunction('nextOrderNo')}\nreturn nextOrderNo;`)(() => d),
-    // §182 added productOptions and manualOrderAddonSoldOut to this resolver's
+    // §183 added productOptions and manualOrderAddonSoldOut to this resolver's
     // chain — what a line's answers cost, and whether a stock-backed extra may
     // be sold. Both real for the same reason costAtSale is: a stub would decide
     // the price these cases assert.

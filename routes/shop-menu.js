@@ -67,7 +67,7 @@ const { isShopCode } = require('../lib/shop-code');
 const { getCategoryTree } = require('../lib/category-tree');
 const { themeToCssVars, sanitizeTheme } = require('../lib/brand-theme');
 const inventory = require('../lib/inventory');
-// §182 — what a product asks and whether an answer is allowed, shared with the
+// §183 — what a product asks and whether an answer is allowed, shared with the
 // counter till. Both rule sets used to live in this file: which choices a
 // product still offers, and whether a posted answer is allowed. They moved
 // rather than being copied; the module header says why. lib/option-limits is
@@ -352,7 +352,7 @@ function attachOptions(shop, listings) {
   const pids = listings.map(r => r.store_product_id);
   if (!pids.length) return;
 
-  // THE SHELF IS THIS SHOP'S, and it is the half §182 left with the caller.
+  // THE SHELF IS THIS SHOP'S, and it is the half §183 left with the caller.
   // A choice carrying a stock_product_id is a real thing on a real shelf here;
   // a sugar level has none and is never asked about. §47 governs the verdict —
   // an absent shelf record IS sold out, not "untracked" — and the online
@@ -3800,7 +3800,7 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
     wanted.set(pid, (wanted.get(pid) || 0) + qty);
   }
 
-  // ── THE ANSWERS, CHECKED AGAINST THE QUESTIONS (§120; moved out in §182) ─
+  // ── THE ANSWERS, CHECKED AGAINST THE QUESTIONS (§120; moved out in §183) ─
   // Every rule that used to be written out here — a choice belongs to the
   // product it was posted for, a single-answer question takes exactly one
   // answer, a pick-any group's floor and ceiling bind, a required question must

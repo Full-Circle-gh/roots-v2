@@ -244,7 +244,7 @@ const rowFor = (rows, id) => rows.filter(r => r.product_id === id)[0] || null;
       // §42 puts a listing's price somewhere it cannot see. Posting unit_price
       // on EVERY line would charge a stale figure whenever the office corrects
       // a catalogue price between two reloads of this tablet.
-      // §182 CHANGED WHAT IS POSTED AND NOT WHETHER IT IS POSTED. The line's
+      // §183 CHANGED WHAT IS POSTED AND NOT WHETHER IT IS POSTED. The line's
       // own `price` now carries the chosen extras (an extra shot, oat milk) so
       // the bill on the glass adds up; the server adds those same deltas back
       // from its own price_delta columns. Posting the summed figure would have

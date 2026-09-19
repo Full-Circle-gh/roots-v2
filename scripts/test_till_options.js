@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The counter asks the questions the QR menu asks — §182.
+ * The counter asks the questions the QR menu asks — §183.
  *
  *   node scripts/test_till_options.js
  *

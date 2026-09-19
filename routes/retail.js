@@ -23,7 +23,7 @@ const { productUnitCostYuan } = require('../lib/product-cost');
 // extra's cost had nowhere to land until this existed.
 const { chosenOptionCostYuan, requiredOptionFloorYuan } = require('../lib/option-cost');
 const optionLimits = require('../lib/option-limits');
-// §182 — the questions a product asks, and whether an answer is allowed. Shared
+// §183 — the questions a product asks, and whether an answer is allowed. Shared
 // with routes/shop-menu.js so a counter sale and a QR sale are priced by one
 // piece of code; see the module header.
 const productOptions = require('../lib/product-options');
@@ -25449,7 +25449,7 @@ function manualOrderFees({ fulfillmentType, address, subtotal, totalQty, lines, 
 function resolveManualOrderLines(items, { storeId = null } = {}) {
   const list = Array.isArray(items) ? items : [];
 
-  /* §182 — THE ANSWERS, WHICH THIS FUNCTION USED TO DROP ON THE FLOOR.
+  /* §183 — THE ANSWERS, WHICH THIS FUNCTION USED TO DROP ON THE FLOOR.
      "Hot or iced? Extra shot?" is asked by the QR menu (§120) and was asked
      nowhere else: this resolver read product_id, qty and unit_price and ignored
      `choices` entirely, and the INSERT below carried no options_json column. So
@@ -25673,7 +25673,7 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
   // catalog sell_price; staff may override per line (negotiated/wholesale). ──
   const items = Array.isArray(b.items) ? b.items : [];
   if (!items.length) return res.status(400).json({ success: false, error: 'no_items' });
-  // WHICH COUNTER IS SELLING, read early and only to gate §182's stock-backed
+  // WHICH COUNTER IS SELLING, read early and only to gate §183's stock-backed
   // extras. The authoritative store validation is further down — it refuses a
   // bad id, a missing store and a counter sale with no store at all, and it is
   // deliberately NOT moved up here: reordering a live route's refusals to suit
@@ -26105,7 +26105,7 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
       // prints the supplier-direct flag off ship_from_supplier, and a later edit
       // to the product must not rewrite how a past order was fulfilled — which is
       // the whole reason they are snapshot columns rather than a join.
-      // §182 — options_json AND options_cost_at_sale, the two columns this path
+      // §183 — options_json AND options_cost_at_sale, the two columns this path
       // was the last writer of order lines to leave null. database.js describes
       // the first as "chosen option labels + price deltas, for the receipt"; the
       // web, mini-app and QR checkouts have all filled it for as long as any of

@@ -74,7 +74,7 @@ const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*
 // have exercised the catch that silently charges nothing — which is the one
 // branch that must not be the one under test.
 //
-// The two option tables arrive with §182: the route now resolves a line's
+// The two option tables arrive with §183: the route now resolves a line's
 // answers — what they cost and what they snapshot — through
 // lib/product-options, which reads both. Absent, every case here failed with
 // "no such table", which reads like a conversion defect and is not one.
@@ -184,7 +184,7 @@ function makeHandler(db, spies) {
        row sets. Given a stub they would have asserted the stub.
        It carries costAtSale, its own dependency, extracted the same way — the
        cost snapshot the operator cannot override. */
-    /* §182 added two more of its own dependencies, and BOTH are the real thing
+    /* §183 added two more of its own dependencies, and BOTH are the real thing
        for the reason the note below gives about costAtSale. productOptions
        decides what a line's answers cost and what it snapshots into
        options_json; manualOrderAddonSoldOut decides whether a stock-backed
@@ -203,7 +203,7 @@ function makeHandler(db, spies) {
     )(() => db, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan,
       require(path.join(ROOT, 'lib', 'product-options')),
       require(path.join(ROOT, 'lib', 'inventory'))),
-    /* §182 — WHAT THE CHOSEN EXTRAS COST US, snapshotted onto the line beside
+    /* §183 — WHAT THE CHOSEN EXTRAS COST US, snapshotted onto the line beside
        the price. Real, and for the same reason costAtSale above is real: it
        swallows its own errors and answers null, so leaving it undefined would
        not have failed loudly — it would have thrown inside the transaction and

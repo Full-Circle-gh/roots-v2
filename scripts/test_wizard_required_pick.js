@@ -54,7 +54,7 @@ const section = (t) => console.log('\n' + t);
 const PROD = fs.readFileSync(path.join(ROOT, 'public/retail-admin/09-products.js'), 'utf8');
 const MENU = fs.readFileSync(path.join(ROOT, 'routes/shop-menu.js'), 'utf8');
 const SHOP = fs.readFileSync(path.join(ROOT, 'public/shop.html'), 'utf8');
-// §182 moved the server-side answer check out of routes/shop-menu.js and into a
+// §183 moved the server-side answer check out of routes/shop-menu.js and into a
 // module the counter till obeys too. The rule did not change and nothing about
 // this suite's claim changed; only where the rule is written did.
 const OPTS = fs.readFileSync(path.join(ROOT, 'lib/product-options.js'), 'utf8');
@@ -137,7 +137,7 @@ section('5 · a ticked box is read in all three places that matter');
     'the QR menu finds the first required question with nothing live ticked');
   yes(/L_PICK_EN\+miss\.q_en/.test(MENU),
     'and refuses Add to basket naming that question');
-  // THE RULE IS IN THE MODULE AND THE ROUTE CALLS IT — §182. Both halves are
+  // THE RULE IS IN THE MODULE AND THE ROUTE CALLS IT — §183. Both halves are
   // asserted, because either alone would pass a refactor that broke the other:
   // a rule nobody calls enforces nothing, and a call into a module that no
   // longer carries the rule enforces nothing either.

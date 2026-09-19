@@ -2663,7 +2663,7 @@ check('a numeric search finds the customer id itself',
 // that produced a match was the one thing the screen would not show back. It
 // appears on the tile and on the order line, and the LINE has to carry it:
 // S.lines held only id/name/price/qty, so there was nothing to render from.
-// §182 moved the line's birth into addAnswered() and gave it fullName(), which
+// §183 moved the line's birth into addAnswered() and gave it fullName(), which
 // is pname() plus the variant label when the product has siblings — the fix for
 // two sizes drawing the same word twice. The property this case is for is
 // unchanged: a line carries the CODE, not only a name.

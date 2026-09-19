@@ -181,7 +181,7 @@ function extractFunction(code, name) {
 const BODY = sliceHandler(RETAIL_SRC);
 
 function fixture(taxCfg) {
-  // The two option tables arrive with §182: the line resolver now asks what a
+  // The two option tables arrive with §183: the line resolver now asks what a
   // line's answers cost through lib/product-options, which reads both.
   const db = openTablesDb(DB_SRC, ['retail_customers', 'retail_orders', 'retail_order_items',
                                    'retail_payments', 'retail_stores', 'storefront_config',
@@ -205,7 +205,7 @@ function handlerFor(db) {
       `${extractFunction(RETAIL_SRC, 'createOrReuseManualCustomer')}\nreturn createOrReuseManualCustomer;`
     )(() => db, require('crypto'), (e) => (e == null ? '' : String(e).trim().toLowerCase())),
     nextOrderNo: new Function('tdb', `${extractFunction(RETAIL_SRC, 'nextOrderNo')}\nreturn nextOrderNo;`)(() => db),
-    // §182 added two dependencies to this resolver's chain — what a line's
+    // §183 added two dependencies to this resolver's chain — what a line's
     // answers cost (productOptions) and whether a stock-backed extra may be
     // sold at all (manualOrderAddonSoldOut). Both real: a stub would decide
     // the very base this suite taxes.
@@ -215,7 +215,7 @@ function handlerFor(db) {
     )(() => db, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan,
       require(path.join(ROOT, 'lib', 'product-options')),
       require(path.join(ROOT, 'lib', 'inventory'))),
-    // §182 — what the chosen extras COST us, snapshotted beside the price on
+    // §183 — what the chosen extras COST us, snapshotted beside the price on
     // every line the INSERT writes. Real, like costAtSale: it swallows its own
     // errors and answers null, so leaving it undefined would throw inside the
     // transaction and look like a rollback defect rather than a missing stub.
@@ -599,7 +599,7 @@ async function place(taxCfg, body) {
       const scope = {
         tdb: () => db, tax, money,
         ORDER_FULFILLMENT_TYPES: ['delivery', 'pickup', 'counter'],
-        // §182's two extra dependencies — see the create-route scope above.
+        // §183's two extra dependencies — see the create-route scope above.
         resolveManualOrderLines: new Function('tdb', 'productUnitCostYuan', 'productOptions', 'inventory',
           `${extractFunction(RETAIL_SRC, 'costAtSale')}\n${extractFunction(RETAIL_SRC, 'manualOrderAddonSoldOut')}\n`
           + `${extractFunction(RETAIL_SRC, 'resolveManualOrderLines')}\nreturn resolveManualOrderLines;`
@@ -628,7 +628,7 @@ async function place(taxCfg, body) {
       const db2 = fixture(null);
       const scope2 = { ...scope, tdb: () => db2,
         taxSettings: new Function('tdb', 'tax', `${extractFunction(RETAIL_SRC, 'taxSettings')}\nreturn taxSettings;`)(() => db2, tax),
-        // §182's two extra dependencies — see the sibling scope above.
+        // §183's two extra dependencies — see the sibling scope above.
         resolveManualOrderLines: new Function('tdb', 'productUnitCostYuan', 'productOptions', 'inventory',
           `${extractFunction(RETAIL_SRC, 'costAtSale')}\n${extractFunction(RETAIL_SRC, 'manualOrderAddonSoldOut')}\n`
           + `${extractFunction(RETAIL_SRC, 'resolveManualOrderLines')}\nreturn resolveManualOrderLines;`

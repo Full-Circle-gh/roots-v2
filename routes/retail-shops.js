@@ -34,7 +34,7 @@ const { menuUrlFor } = require('../lib/shop-qr');
 const { currentTenantId } = require('../lib/tenant-db');
 const qrpng = require('../lib/qrpng');
 const inventory = require('../lib/inventory');
-// §182 — the questions a product asks (hot or iced, extra shot, sugar), shared
+// §183 — the questions a product asks (hot or iced, extra shot, sugar), shared
 // with the QR menu so the counter and the phone ask the same things.
 const productOptions = require('../lib/product-options');
 const { requireRetailAdmin } = require('./retail');
@@ -687,7 +687,7 @@ router.get('/api/retail-admin/stores/:id/counter-catalogue', requireRetailAdmin,
   // against. It is still the number 0 on the glass.
   const avail = inventory.getAvailableMap(locationId);
 
-  // §182 — THE SIZE IS READ, and the omission is the whole of the first half of
+  // §183 — THE SIZE IS READ, and the omission is the whole of the first half of
   // the bug. Variants are independent product rows linked by variant_group_id,
   // so a drink sold in two sizes is two rows carrying the SAME name_en and
   // name_cn. This query never read variant_label, so the till drew two tiles
@@ -766,7 +766,7 @@ router.get('/api/retail-admin/stores/:id/counter-catalogue', requireRetailAdmin,
     return 0;                                   // already name-ordered by SQL
   });
 
-  /* §182 — THE QUESTIONS THE COUNTER WOULD HAVE ASKED, which until now only the
+  /* §183 — THE QUESTIONS THE COUNTER WOULD HAVE ASKED, which until now only the
      QR menu could ask (§120). Hot or iced, extra shot, how much sugar: rows in
      retail_product_options + retail_product_option_choices, read here by the
      same module routes/shop-menu.js reads them with, so the counter and the

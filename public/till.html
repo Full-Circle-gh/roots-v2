@@ -290,7 +290,7 @@ button{font:inherit;color:inherit;margin:0}
   font-size:14px;font-weight:500;line-height:1.3;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
 }
-/* §182 — the size, under the name. Its own line rather than appended, because
+/* §183 — the size, under the name. Its own line rather than appended, because
    .tile .nm clips at two lines and a long product name would otherwise eat the
    one word that tells two tiles apart. Same weight as the name, dimmer, so the
    pair reads as one label and not as two facts. */
@@ -554,7 +554,7 @@ button{font:inherit;color:inherit;margin:0}
 }
 .terr[hidden]{display:none}
 
-/* ---- §182 option sheet: the store picker's sheet, with questions in it ----
+/* ---- §183 option sheet: the store picker's sheet, with questions in it ----
    Same .ssheet body as every other decision on this till, so the sheet a
    cashier meets for "hot or iced" is the sheet they already know from the
    store and customer pickers. Wider, because a question plus its answers plus
@@ -1105,7 +1105,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     installAdd:   ['Add', '添加'],                     // m.html:19223
     installOff:   ['Dismiss', '忽略'],                 // m.html:19224
     installHere:  ['Add to home screen', '添加到主屏幕'],  // m.html:12808
-    /* §182 — THE QUESTIONS THE COUNTER CAN NOW ASK. Every pair below is COPIED
+    /* §183 — THE QUESTIONS THE COUNTER CAN NOW ASK. Every pair below is COPIED
        from a live one and NOT ONE CHARACTER IS COMPOSED, so the vocabulary
        document is not touched: §120 and §129 established the same thing for the
        QR menu's own picker, and copying a locked pair into the second screen
@@ -1193,7 +1193,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     stores: [], storeId: null, storeName: '', pickOpen: false,
     posOpen: null,             // storeCode -> bool, or null when unknown
     custOpen: false, custQ: '', custRows: null,   // null = nothing searched yet
-    /* §182 — the question sheet. null when shut; otherwise the product being
+    /* §183 — the question sheet. null when shut; otherwise the product being
        configured, the answers ticked so far as {option_id: [choice_id]}, and
        the question a blocked Add is waiting on. */
     opts: null,
@@ -1292,7 +1292,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       });
   }
   function pname(p) { return cuT(p.name_en || p.name_cn || '', p.name_cn || p.name_en || ''); }
-  /* §182 — THE SIZE, as its own word. Empty for a product with no siblings,
+  /* §183 — THE SIZE, as its own word. Empty for a product with no siblings,
      which is what keeps an ordinary tile free of a stray separator. */
   function vlabel(p) {
     if (!p) return '';
@@ -1358,7 +1358,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   // ---- stock. Per STORE, not the catalogue's cross-store sum: a till may only
   // sell what is on ITS shelf, and effective_stock adds up every store's.
   function stockOf(id) { var v = S.stock[id]; return v == null ? null : v; }
-  /* §182 — A PRODUCT MAY NOW HOLD SEVERAL LINES, and both of these changed
+  /* §183 — A PRODUCT MAY NOW HOLD SEVERAL LINES, and both of these changed
      shape for it. One latte hot and one latte iced are two lines and ONE shelf,
      so what is "in the cart" for the purpose of gating a tile is the sum across
      every line carrying that product — not the first one found, which is what
@@ -1651,7 +1651,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         return {
           id: row.product_id,
           name_en: row.name_en, name_cn: row.name_cn, sku: row.sku,
-          // §182 — THE SIZE. Two sizes of one drink are two product rows
+          // §183 — THE SIZE. Two sizes of one drink are two product rows
           // carrying the same name; without this the grid drew "Latte" twice
           // and the cashier picked by price. Null on a product with no
           // siblings, which is most of them.
@@ -1662,7 +1662,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
           price: Number(row.price) || 0,
           on_menu: !!row.on_menu,
           fulfilment_mode: row.fulfilment_mode || null,
-          // §182 — THE QUESTIONS. Hot or iced, extra shot, how much sugar, in
+          // §183 — THE QUESTIONS. Hot or iced, extra shot, how much sugar, in
           // the shape routes/shop-menu.js hands its own picker, clamped by the
           // server against what is still on this shelf. Absent on the great
           // majority of products, and an absent list is a tile that adds on
@@ -1899,7 +1899,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // settle takeover would put a scrim and a second pay button under a screen
     // whose whole point is that nothing of the till stays readable.
     if (S.view !== 'till') S.sheetOpen = false;
-    // §182 — and neither does the question sheet. A settle takeover that left
+    // §183 — and neither does the question sheet. A settle takeover that left
     // it standing would put a second Add button under the screen whose whole
     // point is that nothing of the till stays readable behind it.
     if (S.view !== 'till') S.opts = null;
@@ -1925,7 +1925,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       return (p.name_en || '').toLowerCase().indexOf(q) >= 0
           || (p.name_cn || '').indexOf(S.q.trim()) >= 0
           || (p.sku || '').toLowerCase().indexOf(q) >= 0
-          // §182 — the size is searchable, so "large" and "500" reach the tile
+          // §183 — the size is searchable, so "large" and "500" reach the tile
           // they name. Without it a cashier who types the size gets every
           // sibling or none, which is the search half of the same bug.
           || (p.variant_label || '').toLowerCase().indexOf(q) >= 0
@@ -1944,10 +1944,10 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       var inc = inCart(p.id);
       h += '<button class="tile' + (out ? ' out' : '') + '" type="button" data-add="' + p.id + '"' + (out ? ' disabled' : '') + '>'
          + (inc > 0 ? '<span class="incart">' + inc + '</span>' : '')
-         // §182 — this one asks something before it can be made.
+         // §183 — this one asks something before it can be made.
          + (!out && asks(p) ? '<span class="ask"></span>' : '')
          + '<span class="nm">' + esc(pname(p))
-         // §182 — THE SIZE, ON ITS OWN LINE. Not appended to the name: a tile
+         // §183 — THE SIZE, ON ITS OWN LINE. Not appended to the name: a tile
          // clips at two lines and a long product name would eat the one word
          // that tells two tiles apart. Its own row is the row that survives.
          + (vlabel(p) ? '<i class="vl">' + esc(vlabel(p)) + '</i>' : '') + '</span>'
@@ -2277,7 +2277,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   // cashier nothing, and the kitchen ticket beside them prints it the same way
   // (lib/feie.js). The admin endpoint backfills the question for older rows, so
   // an entry with no question left is drawn as its answer alone rather than as
-  // a stray colon. §182 — a TILL sale now reaches this too: until it, a counter
+  // a stray colon. §183 — a TILL sale now reaches this too: until it, a counter
   // line carried no options and this ran only for a recalled QR order.
   function optsHtml(opts) {
     if (!opts || !opts.length) return '';
@@ -2325,7 +2325,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       // the stepper under its line instead of inline as the mockup drew it.
       {
         var st = stockOf(l.id);
-        // §182 — the SHELF, across every line carrying this product. One latte
+        // §183 — the SHELF, across every line carrying this product. One latte
         // hot and one latte iced are two lines and one shelf, and a cap that
         // measured this line alone would let the pair walk past it.
         var capped = st != null && inCart(l.id) >= st;
@@ -2604,7 +2604,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     if (S.recall) return;
     var p = S.products.filter(function (x) { return x.id === id; })[0];
     if (!p) return;
-    /* §182 — A PRODUCT THAT ASKS SOMETHING OPENS ITS SHEET INSTEAD OF ADDING.
+    /* §183 — A PRODUCT THAT ASKS SOMETHING OPENS ITS SHEET INSTEAD OF ADDING.
        Every tap on such a tile opens it, including the second and third: two
        lattes on one bill may be a hot one and an iced one, and a tile that
        silently incremented the first line could not say so. Answering the
@@ -2638,7 +2638,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
     // because the two are posted differently: the server is handed the BASE and
     // adds the deltas back from its own price_delta columns. Posting the summed
     // figure would have the till pricing an extra shot, which is exactly what
-    // §182 refuses to let either client do.
+    // §183 refuses to let either client do.
     else S.lines.push({ key: key, id: id, name: fullName(p), sku: p.sku || '',
                         base: Number(p.price) || 0,
                         price: Math.round((Number(p.price) || 0) * 100 +
@@ -2715,11 +2715,11 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
         var it = { product_id: l.id, qty: l.qty };
         // See addAnswered: the menu's price, and never the catalogue's — and
         // the BASE of it, never the figure with the deltas already in. The
-        // server adds those back from its own price_delta columns (§182), so a
+        // server adds those back from its own price_delta columns (§183), so a
         // till that posted the summed price would be pricing an extra shot
         // itself and would silently double it.
         if (l.menu) it.unit_price = (l.base != null ? l.base : l.price);
-        // §182 — the answers, as ids and nothing else. Every label, question
+        // §183 — the answers, as ids and nothing else. Every label, question
         // and delta is resolved server-side from this tenant's own tables.
         if (l.choices && l.choices.length) it.choices = l.choices;
         return it;
@@ -2750,7 +2750,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       // tiles are honest without a full reload.
       S.lines.forEach(function (l) {
         if (S.stock[l.id] != null) S.stock[l.id] = Math.max(0, S.stock[l.id] - l.qty);
-        // §182 — a chosen extra is a real thing off a real shelf, one per unit
+        // §183 — a chosen extra is a real thing off a real shelf, one per unit
         // bought, and the server has just taken it. An add-on that is also sold
         // as a product of its own has a tile on this grid, and without this its
         // count would sit stale until the next catalogue read.
@@ -2990,7 +2990,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
   // replace the <input> the cashier is typing into and drop the caret — the
   // classic way a search box becomes unusable. Only the result list redraws.
   /* ==================================================================
-     §182 · THE QUESTIONS THE COUNTER CAN NOW ASK.
+     §183 · THE QUESTIONS THE COUNTER CAN NOW ASK.
 
      Hot or iced, extra shot, how much sugar. The QR menu has asked these since
      §120 and the counter could not — not because nobody had drawn the buttons,
@@ -3244,7 +3244,7 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
       if (S.opts && ev.target.id === 'optpick') return closeOpts();
       var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-cred],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet],[data-back],[data-leave],[data-pane],[data-recall],[data-recall-cancel],[data-cancel-order],[data-opt]');
       if (!t) return;
-      // §182 — the question sheet. Answered before anything else on the screen:
+      // §183 — the question sheet. Answered before anything else on the screen:
       // while it is up it is the only thing the cashier is being asked.
       if (t.hasAttribute('data-opt')) {
         var oa = t.getAttribute('data-opt');

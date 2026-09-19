@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.324
+# Tacet shared-core consolidation — decisions record, v4.325
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,8 +22,9 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
-2026-09-18 · v4.324 — **§182 · THE COUNTER ASKS WHAT THE MENU ASKS, AND THE ANSWER HAS SOMEWHERE TO GO — REPORTED BY ASH:** *"the till doesn't show the variants of the products"*, then, when offered a choice between labelled tiles and a collapsing picker, the report that set the scope: *"the problem with your option 1 is that there are few options customers need to do it's not just size . stuff like hot or iced , extra shoot etc"*. **TWO DEFECTS, AND THE SECOND IS NOT A UI DEFECT.** The counter-catalogue query never selected `variant_label`, so two sizes of one drink drew two tiles with the same name — §129's finding on the QR menu, kept one surface over. And the till asked none of §120's questions, which drawing buttons would not have fixed: `resolveManualOrderLines` ignored `choices` and the manual-order INSERT was **the last writer of order lines in this machine still leaving `options_json` and `options_cost_at_sale` null**, so a collected answer would have been dropped between the cashier's tap and the kitchen's ticket — no iced on the slip, no ¥6 for the shot, no oat milk off the shelf. A button that silently forgets is worse than no button, which is why the road was built before the buttons. **`lib/product-options.js` is new and both routes call it**; the rules came OUT of `routes/shop-menu.js` rather than being copied, because two copies of what an extra costs drift into a counter charging a different price from the QR menu for the same coffee. Sizes stay as tiles (`Name · Label`, searchable in both languages) and only the QUESTIONS get a sheet: a size is a different product with its own price and shelf, an answer is not, and collapsing costs a tap on every sale. **A line is now a product PLUS its answers**, so every stock gate was re-read — `inCart` sums across a product's lines, which is a defect the feature would otherwise have introduced. **A bug in this work was caught by an existing suite:** the INSERT first read the option cost through the ambient `tdb()` inside the transaction, and `test_tx_conversion_manual_order`'s §24 source assertion refused it. **No Chinese was composed** — all nine pairs are copied from locked live ones, so `docs/tacet-delivery-vocabulary.md` is untouched. `scripts/test_till_options.js` (fast shard, mutant-verified) is new; `scripts/test_till_back.js`, already red on clean main because its stub never learned §150's route, is fixed here and called out.
+2026-09-19 · v4.325 — **§183 · THE COUNTER ASKS WHAT THE MENU ASKS, AND THE ANSWER HAS SOMEWHERE TO GO — REPORTED BY ASH:** *"the till doesn't show the variants of the products"*, then, when offered a choice between labelled tiles and a collapsing picker, the report that set the scope: *"the problem with your option 1 is that there are few options customers need to do it's not just size . stuff like hot or iced , extra shoot etc"*. **TWO DEFECTS, AND THE SECOND IS NOT A UI DEFECT.** The counter-catalogue query never selected `variant_label`, so two sizes of one drink drew two tiles with the same name — §129's finding on the QR menu, kept one surface over. And the till asked none of §120's questions, which drawing buttons would not have fixed: `resolveManualOrderLines` ignored `choices` and the manual-order INSERT was **the last writer of order lines in this machine still leaving `options_json` and `options_cost_at_sale` null**, so a collected answer would have been dropped between the cashier's tap and the kitchen's ticket — no iced on the slip, no ¥6 for the shot, no oat milk off the shelf. A button that silently forgets is worse than no button, which is why the road was built before the buttons. **`lib/product-options.js` is new and both routes call it**; the rules came OUT of `routes/shop-menu.js` rather than being copied, because two copies of what an extra costs drift into a counter charging a different price from the QR menu for the same coffee. Sizes stay as tiles (`Name · Label`, searchable in both languages) and only the QUESTIONS get a sheet: a size is a different product with its own price and shelf, an answer is not, and collapsing costs a tap on every sale. **A line is now a product PLUS its answers**, so every stock gate was re-read — `inCart` sums across a product's lines, which is a defect the feature would otherwise have introduced. **A bug in this work was caught by an existing suite:** the INSERT first read the option cost through the ambient `tdb()` inside the transaction, and `test_tx_conversion_manual_order`'s §24 source assertion refused it. **No Chinese was composed** — all nine pairs are copied from locked live ones, so `docs/tacet-delivery-vocabulary.md` is untouched. `scripts/test_till_options.js` (fast shard, mutant-verified) is new; `scripts/test_till_back.js`, already red on clean main because its stub never learned §150's route, is fixed here and called out.
 
+2026-09-18 · v4.324 — **§182 · WALLET MONEY IS REVENUE AT THE SALE, AND THE TWO REVENUE FIGURES ARE LABELLED APART — REPORTED BY ASH:** *"the 30 days revenue in finance section are not identital to the total revenue in report"*. Finance read ¥144,854 against Reports' ¥155,793 for the same thirty days. **Most of the gap was legitimate and the rest was a hole nobody had found.** `retail_orders.total` is the CASH RESIDUAL of a bill — §93 stores the credit tenders beside it rather than folded into it, so a refund can return each ¥ to the tender it came from — and Finance's revenue line summed `total` alone. Wallet money was therefore counted NEVER: not at the top-up, which §36 rules out, and not at the sale, which `total` had already netted off. The cost read has no such gap, so a wallet-settled order brought its full cost of goods into the card and no revenue at all, and gross profit was understated by the whole of store-credit spend, every period. Revenue is now `total + balance_used`, recognised at the sale, which is the rule the route header had stated since §36 and the code had never kept. **Points stay out and that is a decision:** `points_amount` is a discount the shop granted itself, no customer paid it, and a points-settled sale earning nothing while costing real stock is the truth about a giveaway. **The remaining difference is not a defect and is now disclosed on both screens** — Reports is cash-basis (top-ups booked on the day they land, gzgrocery valued off the stock ledger), Finance is order-basis. `docs/tacet-delivery-vocabulary.md` v1.138 records the Chinese. **gzgrocery's own two valuations are FLAGGED AND NOT TOUCHED** — see the section's last paragraph for why that is a separate change.
 2026-09-18 · v4.323 — **§181 · A SHOP-WIDE CLOSE OUTRANKS EVERY CHANNEL CELL, AND THE SWITCH THAT APPLIES BELONGS WHEREVER THE MASKED STATE IS SHOWN — REPORTED BY ASH:** *"in store I believe that's counter till? when I open yuexiu it close automatic. I can't open counter till for yuexiu now. it shows closed"*, then *"I want to have same feature of closing and open shop as I have on PC should work on the phone. also overviews all those options because right now seems that the sales section where all those toggles channels are in not working properly. audit that page... check for dead ends, errors"*. The till was never opening: `csCellOpen` reports every channel at a shop with `fulfillment_open = 0` as closed, so the write landed and the next read hid it. Four defects in one loop — the hidden write is now refused by name (`409 shop_closed`), the shop-wide state is reported (`shopOpen` on every cell, store and location), the phone re-reads instead of patching its own copy, and the phone gains the shop switch it never had. The audit Ash asked for found three more on the same screen: a failed read left it loading forever, a queued Meituan change was not shown, and the footer denied the control directly above it. A fifth bug was found by the new suite's own log line and fixed here — `refillQueueForCell`'s SELECT carried `//` comments inside the SQL literal, so every Meituan reopen ever made queued nothing. `docs/tacet-delivery-vocabulary.md` v1.137 records the Chinese.
 
 2026-09-18 · v4.322 — **§180 · A BOX THAT IS PACKED IS NOT A BOX THAT HAS LEFT — REPORTED BY ASH:** *"when order has 2 split package one shipped one parked at \"paid\". right now i dont have the option to change the status of the parked package to \"prepared\" status. it create a problem with stock managment."* **THE CONTROL WAS NEVER HIDDEN; IT WAS NEVER BUILT.** A parcel's state is derived from two timestamps in `shipmentState` and has exactly three values — pending, dispatched, delivered. `paid` and `preparing` are ORDER words, one status column, and the forward buttons in the drawer are a pure function of `o.status`. So the first parcel out flips the order to `dispatched` (`POST /shipments/:sid/dispatch`), `NEXT_STATUS['dispatched']` offers only *Mark delivered* and *Refund*, and *Start preparing* leaves the screen for good — `STATUS_TRANSITIONS.preparing.prev` is `['paid','awaiting_restock']` and `undo-dispatch` is refused once any parcel carries a waybill, which is exactly the reported case. **PREPARED IS A SEPARATE AXIS, NOT A FOURTH VALUE OF `state`, and that is the whole design decision.** A packed box has NOT left: every guard that reads `state === 'pending'` to mean "still here" — `canDispatch`, `canSplit`, the local-ETA card, the per-shipment tracking card, `parcelsStillInTheBuilding`, `buildOrderFulfillment`'s partial rollup — must keep answering the same way for a prepared parcel, and a fourth value would have required editing every one of them correctly on pain of a silent wrong answer. `shipmentState` is therefore UNCHANGED and a `prepared_at` column plus a derived `prepared` flag ride beside it. §24's eight-week shadowed route is the standing argument for not widening a value that six call sites already switch on. **THE STOCK IS THE POINT AND IT IS THE §58-ADDENDUM CALL SHAPE, REUSED VERBATIM**: `POST /shipments/:sid/prepare` stamps `prepared_at` and calls `prepareCommitUnreservedOrder(id, { shipmentId: sid })` — the same scoped commit the parcel-dispatch route already makes, so the parked box's own goods come off the count and a fresh line riding a parcel that is still in the building keeps waiting. Nothing new was invented for the deduction; the box that could not reach the existing door is now given the door. **THE ORDER IS NOT ROLLED BACKWARDS, AND THE ONE-LINE FIX THAT WOULD HAVE IS REFUSED**: widening `STATUS_TRANSITIONS.preparing.prev` to accept `dispatched` was the smaller change and would have told a customer watching parcel one in transit that their order is 备货中 again, flipped `deriveStatusFromOrder`, and fought both undo guards — a customer-facing lie to settle a warehouse count. **THE SIGNAL IS HALF THE DEFECT AND IS FIXED WITH IT**: `isStockPending` opens `if (status !== 'paid') return false`, so the *Stock pending · 库存待扣* note goes dark on exactly the orders this is about, the moment parcel one leaves — the hazard the dispatch route's own comment names and then leaves standing. It now also answers for `preparing` and `dispatched`, gated behind one indexed existence check for a parcel that is neither prepared nor gone, so the orders list pays nothing on the common case. **NO UNDO, STATED RATHER THAN OVERLOOKED**: `undo-preparing` does not reverse stock either, so a parcel-level undo would be the first reversal of its kind in this machine and is a separate decision with a separate ledger question. **CHINESE IS LIFTED, NOT COMPOSED** — `已备货` is `reference/roots_v1.html`'s own word for this exact state and `标记此包裹已备货` is the live sibling button with one word swapped; vocabulary v1.136 records both, and records the parcel pills that shipped unregistered. **LEFT OPEN AND NAMED:** a NON-batch-made line sitting in the parked parcel is still deducted by the sibling's dispatch, because the §58 addendum's hold-back is fresh-only and whole-product; that is the same complaint one layer down and is not fixed here.
@@ -19179,7 +19180,122 @@ Eight pairs copied, two restructured, five composed.
 one string minted and then thrown out — `销售看板加载失败。` — for the live
 `加载失败，请重试。`, because `销售看板` is not a term this product has.
 
-## §182 — THE COUNTER ASKS WHAT THE MENU ASKS, AND THE ANSWER HAS SOMEWHERE TO GO
+## §182 — WALLET MONEY IS REVENUE AT THE SALE, AND THE TWO REVENUE FIGURES ARE LABELLED APART
+
+**REPORTED BY ASH, from two screenshots side by side:** *"the 30 days revenue in
+finance section are not identital to the total revenue in report"*. Finance →
+Summary showed ¥144,854 for 20 Aug – 18 Sep. Reports → Overview showed ¥155,793
+for the same window. Then, on being told the gap was by design: *"if we do so top
+up will not become part of revenue? only once spend the wallet balance or points
+it will become revene?"* — which is the question that found the bug.
+
+### The two figures were asking different questions, and one of them was wrong
+
+`routes/retail.js`'s dashboard revenue is CASH RECEIVED, and it is three sources
+added up: order totals with gzgrocery's mirror rows excluded, gzgrocery takings
+read from `retail_stock_ledger`, and wallet top-up cash booked on the day it
+lands. `routes/finance-summary.js` is ORDER-BASIS and reads the order record
+alone. Both are defensible; they cannot match, and neither screen said so.
+
+**That part is not the defect.** The defect is what Finance's own half was doing.
+
+### `total` IS THE CASH RESIDUAL, NOT THE BILL
+
+§93 stores the credit tenders BESIDE the cash — `points_used`, `points_amount`,
+`balance_used` on the order row — and records why in terms: *"Folding the credit
+into `total` would have made every refund all-cash, returning money the shop
+never took."* The gross a customer paid is `points_amount + balance_used +
+total`, which this same file's tax block already reads that way twelve lines
+below the revenue query.
+
+The revenue line summed `total`. So a ¥300 bill settled entirely from a wallet
+carried `total` = 0 and showed **nothing**:
+
+- not at the top-up, because §36 rules a top-up out of revenue — correctly: it is
+  money received before any sale, and recognising it there would book revenue
+  against no cost;
+- not at the sale, because `total` had already netted it off.
+
+**Counted never, in a file whose own header said "counted exactly once, at the
+sale".** The header was right about the rule and wrong about the code under it;
+the sentence that made it wrong is quoted and corrected in place.
+
+**THE COST SIDE IS WHY THIS MATTERED RATHER THAN A TIDINESS POINT.** The cost read
+does not ask how a bill was settled. A wallet-paid order brought its full cost of
+goods into the card and no revenue beside it, so gross profit was understated by
+the whole of store-credit spend, in every period, and the cost-coverage note
+beneath it — which measures line revenue, not this figure — could not show it.
+
+### DECIDED: revenue is `total + balance_used`, recognised at the sale
+
+Which is the rule §36 already stated. The cash landed in the wallet earlier and
+becomes revenue when an order consumes it; the Reports card's reading of the same
+yuan at top-up time is the other screen's question, and the two are now labelled
+apart rather than reconciled into one number that answers neither.
+
+Both terms COALESCE. `balance_used` is `REAL DEFAULT 0` (`database.js:4593`) but
+NULL on rows that predate the migration, and `a + NULL` is NULL in SQLite — one
+legacy row would have nulled a whole channel's SUM, and the outer
+`COALESCE(SUM(…), 0)` cannot see that it did.
+
+**POINTS STAY OUT, AND THE ASYMMETRY IS THE DECISION.** `points_amount` is the
+yuan value of a discount the shop granted itself; no customer ever paid it.
+Booking it as revenue would earn the shop money for a giveaway. A points-settled
+sale earns nothing and costs real stock, and showing it that way is the truth
+about what a bonus-points promotion costs.
+
+**Worked through against Ash's own scheme, which is what settles it.** A ¥4,000
+top-up credits ¥4,000 to the wallet and 500 bonus points, and
+`points.redeemRate` is 1 — so the customer holds ¥4,500 of spending power for
+¥4,000 of cash. As they spend, Finance recognises the ¥4,000 of wallet and ¥0 of
+points: **exactly the cash that was paid, no more and no less.** The 500 points
+land later as cost with no revenue beside them, which is the ~11% discount
+finally appearing where it always was.
+
+### Both screens now say which question they answer
+
+Finance's Revenue row carries one unconditional sentence — orders only, wallet
+money counted when spent rather than when topped up — because the channel lines
+above it already say where the money came from and cannot say *when*. The Reports
+Revenue card names the top-up slice in the Sales summary's own live words. See
+`docs/tacet-delivery-vocabulary.md` v1.138.
+
+### FLAGGED AND DELIBERATELY NOT FIXED: gzgrocery is valued twice
+
+The rest of the gap is gzgrocery, and it is a second disagreement with a worse
+shape. Finance counts the daemon's mirror order rows, priced and cost-stamped at
+the moment the order lands. Reports ignores those rows and values the stock
+ledger at **today's** price, looked up live on every page load — so changing a
+gzgrocery price moves a past month's reported revenue. The two are also dated
+differently: the mirror by gzgrocery's own order date, the ledger by whenever the
+daemon wrote the row. Reports additionally counts legacy `guanyi_pickup_log`
+drift that was never mirrored.
+
+**Finance's is the sounder figure and Reports should move to it — but not here.**
+Mirror rows exist only from the day `GZGROCERY_MIRROR_ORDERS` was switched on;
+repointing Reports at them would zero every period before that. That date has to
+be established first, and this repo's rule is one PR per change. Recorded so the
+next session inherits the finding rather than re-deriving it.
+
+### Held by
+
+`scripts/test_finance_summary.js` gains block **2a**, on its own fixture: five
+orders settling a ¥300 bill five ways — all cash, all wallet, mixed, all points,
+and a NULL balance on a legacy row. The SQL is SLICED OUT OF THE LIVE ROUTE by
+`shippedRevenue()` and run, never transcribed, so a future edit to the route is
+tested rather than a copy of it. The existing cash-only fixture is left untouched
+on purpose: mixing wallet rows into it would have re-baselined six assertions at
+once and made a regression there indistinguishable from this change.
+
+The "one read, one total" guard now names the expression that ships and asserts
+that a bare `SUM(total)` appears **zero** times in the route — a reappearance
+would be the pre-§182 cash-only figure back as a second opinion.
+
+`npm run test:fast` 291/291 green on `ee96408` (`test_finance_summary.js` 102 →
+107, `test_finance_presentation.js` 31 unchanged). No schema change and no
+migration — `balance_used` is a column `database.js` already carries. No change
+to `.gitignore` or CI.
+## §183 — THE COUNTER ASKS WHAT THE MENU ASKS, AND THE ANSWER HAS SOMEWHERE TO GO
 
 **2026-09-18 · Ash reported it, twice, and the second report is the one that
 set the scope.**
