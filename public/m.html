@@ -1914,6 +1914,41 @@ reg('prepareParcel', sid=>{
     render();
   });
 });
+/* THE TWO HALVES OF ONE DECISION — everything went in one box, or it did not.
+   Both ask first, in the desktop's own words, because each rewrites what the
+   customer will track: a combine collapses two waybills-to-be into one, and the
+   undo puts the Air/Land split back by re-running the planner. Neither is
+   offered once a waybill exists (parcelMergeBlock), and the route refuses it
+   anyway if this screen is stale. */
+reg('combineParcels', ()=>{
+  const o=currentOrder();
+  if(!o||o._id==null){ render(); return; }
+  state.ask={title:T('Combine all parcels into one shipment? The customer will track a single parcel.',
+                     '将所有包裹合并为一个发货?顾客将只追踪一个包裹。'),
+    confirmLabel:T('Combine','合并'),
+    run:()=>orderWrite('merge', async()=>{
+      await apiWrite('/orders/'+o._id+'/shipments/combine',{});
+      return T('Combined into one parcel','已合并为一个包裹');
+    })};
+  render();
+});
+/* NO BODY ON THIS ONE, and that is load-bearing rather than tidy. The split
+   route branches on whether `item_ids` is PRESENT: with it the request is a
+   "ship part later" split, without it the undo-combine. Sending `{item_ids:[]}`
+   here would be answered with a 400, and sending a populated one would move
+   lines this screen never asked to move. apiWrite posts `{}` when given no
+   body, which is the shape the undo branch reads. */
+reg('splitParcels', ()=>{
+  const o=currentOrder();
+  if(!o||o._id==null){ render(); return; }
+  state.ask={title:T('Split back into separate Air / Land parcels?','拆分回独立的空运 / 陆运包裹?'),
+    confirmLabel:T('Split','拆分'),
+    run:()=>orderWrite('merge', async()=>{
+      await apiWrite('/orders/'+o._id+'/shipments/split',{});
+      return T('Split into separate parcels','已拆分为多个包裹');
+    })};
+  render();
+});
 /* The forward step the status machine allows from where this order is. Reached
    from the drawer's primary button, and from the More sheet for the one step
    that skips a rung (paid → dispatched). */
@@ -16435,6 +16470,54 @@ function countLabel(lines,units){
     ? T(lines+(lines===1?' product · ':' products · ')+units+' units', lines+' 款 · '+units+' 件')
     : T(lines+(lines===1?' product':' products'), lines+' 款');
 }
+/* COMBINE / SPLIT, THE DESKTOP'S CONTROL ON A PHONE. The system splits an
+   out-of-Guangzhou order into Air + Land, but the packer often puts the lot in
+   one box — and until now only the desktop could say so, which meant an
+   operator holding a phone in the packing room had to walk to a computer to
+   stop the customer tracking two parcels that do not exist.
+
+   EVERY CONDITION IS THE DESKTOP'S, including the two that live on its call
+   sites rather than in shipmentMergeControls itself:
+
+     * `outsideGz` — the control belongs to the split the SYSTEM made. A "ship
+       part later" split is an operator's own arrangement, and offering to
+       collapse it would undo work somebody did on purpose.
+     * A WAYBILL ANYWHERE LOCKS BOTH WAYS, and the route refuses it too
+       (409 has_tracking): combining after a label is printed strands that
+       label. Where a split still shows we say why, in the desktop's words;
+       on a combined parcel there is nothing to say, so nothing is said.
+     * `合并` in the kept parcel's label is how a combine is recognised — the
+       stamp the route writes — and the only thing that offers the undo.
+
+   No status gate, again the desktop's rule: the route is the authority on what
+   it will refuse, and a second opinion here that disagreed with it would be a
+   button that vanishes for a reason the server never gave. */
+function parcelMergeBlock(o,ships){
+  if(!o||o._id==null||o.viewOnly||!o.outsideGz) return '';
+  const hasWaybill=ships.some(s=>s&&((s.trk&&s.trk.number)||s.carrierCode));
+  const combined=ships.length===1&&String(ships[0].label||'').includes('合并');
+  /* orderBusy, not parcelBusy: this acts on the ORDER's whole arrangement of
+     parcels, not on one box, and it is orderWrite that carries it — which is
+     also what puts a failure where the operator is looking. */
+  const busy=state.orderBusy==='merge';
+  if(hasWaybill){
+    return ships.length>1
+      ? `<div class="card" style="padding:12px 14px;font-size:12.5px;color:var(--text-secondary)">${T('Clear the waybills to combine into one parcel','清除运单后才能合并为一个包裹')}</div>`
+      : '';
+  }
+  if(ships.length>1){
+    return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">
+      <div style="font-size:12.5px;color:var(--text-secondary)">${T('Destination outside Guangzhou','目的地在广州以外')}</div>
+      <button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('combineParcels')">${busy?T('Marking…','处理中…'):T('Combine into one parcel','合并为一个包裹')}</button></div>`;
+  }
+  if(combined){
+    return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">
+      <div><div style="font-size:14.5px;font-weight:500;color:var(--text-primary)">${T('Combined into one parcel','已合并为一个包裹')}</div>
+        <div style="font-size:12.5px;color:var(--text-secondary);margin-top:3px">${T('Customer tracks a single shipment','顾客只追踪一个包裹')}</div></div>
+      <button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('splitParcels')">${busy?T('Marking…','处理中…'):T('Split into separate parcels','拆分为多个包裹')}</button></div>`;
+  }
+  return '';
+}
 function orderItemsBlock(o){
   /* Same rule as hoistedTracking: a mirrored order has no parcels of ours
      (§53), so its lines are one flat manifest — which is what the desktop's
@@ -16458,6 +16541,7 @@ function orderItemsBlock(o){
           <span style="font-size:14.5px;font-weight:500;color:var(--text-primary)">${T('Not yet in a parcel','待分配包裹')}</span>
           <span class="num" style="font-size:12.5px">${countLabel(loose.length,loose.reduce((t,it)=>t+(Number(it[0])||0),0))}</span></div>
         <div style="display:flex;flex-direction:column;gap:8px">${loose.map(itemRow).join('')}</div></div>`:''}
+      ${parcelMergeBlock(o,ships)}
     </div></div>`;
 }
 /* THE SHOP'S OWN NOTE ON AN ORDER — read and written, which it has never been
@@ -22347,6 +22431,12 @@ function mapDetail(o){
   // "which box is this in, and has it gone?" had no answer here at all.
   base.shipments=(o.shipments||[]).map(sp=>({
     id:sp.id, mode:sp.mode||'local', state:sp.state||'pending',
+    /* THE PARCEL'S OWN LABEL, and the one thing that says a combine already
+       happened: the combine route stamps `Combined shipment · 合并发货` on the
+       parcel it keeps, and that stamp is how both screens know to offer the
+       undo rather than the combine. The phone mapped every other column on the
+       row and not this one, so it could not have told the two apart. */
+    label:sp.label||'',
     items:(sp.items||[]).map(ITEM_TUPLE),
     units:(sp.items||[]).reduce((n,it)=>n+(Number(it.qty||it.quantity)||0),0),
     // The whole tracking view, not two raw column values. The drawer used to
@@ -22378,6 +22468,11 @@ function mapDetail(o){
     held_lines:sp.held_lines||0,
   }));
   base.airDelayed=!!o.air_delivery_delayed;
+  /* WHETHER THE SYSTEM SPLIT THIS ORDER BECAUSE OF WHERE IT IS GOING. Set by
+     the server off the shipping city; the desktop gates its combine/split
+     control on it so the control never appears over a "ship part later" split,
+     which is an operator's arrangement and not the system's. Same gate here. */
+  base.outsideGz=!!o.outside_guangzhou;
   // Anything not assigned to a parcel yet still has to show, or a line silently
   // vanishes from the order it was bought on.
   const inParcel=new Set();
