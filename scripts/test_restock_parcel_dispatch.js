@@ -290,7 +290,12 @@ section('── 3. The park survives the parcel leaving');
 check('the release sweep finds parked orders by status alone',
   /WHERE o\.status = 'awaiting_restock' AND o\.store_id = \?/.test(INV), true);
 const disp = ROUTES.indexOf("router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch'");
-const dispBody = ROUTES.slice(disp, disp + 6000);
+/* THE WINDOW IS SIZED FROM THE HANDLER'S END, NOT GUESSED. It was a flat 6000
+   characters and §188 added a block inside this route, which pushed the
+   response line past it — the assertion below went red on code that was
+   perfectly correct, which is the rot this suite's siblings warn about. */
+const dispEnd = ROUTES.indexOf('\n});', disp);
+const dispBody = ROUTES.slice(disp, dispEnd === -1 ? disp + 9000 : dispEnd);
 check('so the dispatch route leaves a parked order where it is',
   /if \(o\.status !== 'dispatched' && o\.status !== 'awaiting_restock'\) \{/.test(dispBody), true);
 // The customer push rides on firstDispatch, which the guard above never sets for
