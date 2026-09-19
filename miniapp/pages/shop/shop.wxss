@@ -530,6 +530,11 @@
   display: flex; align-items: center; gap: 24rpx;
   padding: 28rpx 32rpx;
   border-bottom: 2rpx solid rgba(0,0,0,.08);
+  /* Wraps so the NEXT BATCH band can take a line of its own below the row —
+     see .row-pre. Nothing else in the row wraps: the image is fixed, the
+     body is flex:1 and the price column is narrow, so the three of them always
+     fit on the first line. */
+  flex-wrap: wrap;
 }
 .row-compact { padding: 32rpx; gap: 0; }
 .row-img { width: 176rpx; height: 212rpx; background: var(--oat); overflow: hidden; flex-shrink: 0; position: relative; }
@@ -575,11 +580,29 @@
   padding: 2rpx 12rpx;
   font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.1em;
 }
-.row-pre {
-  display: inline-block; margin-top: 10rpx; margin-left: 8rpx;
+/* THE BAND GETS THE WHOLE ROW'S WIDTH, NOT THE TEXT COLUMN'S.
+   The text column in this pane is under 200rpx once the rail, the image and
+   the price column have taken theirs, and `NEXT BATCH · SEP 21` wants about
+   275rpx — so it broke in two and the date fell under the word. Reported by
+   Ash from the shop list, 2026-09-19.
+
+   .row-pre IS THE LINE; .row-pre-tag IS THE PILL, and splitting them is what
+   buys the width: the line is a wrapped flex item on .row, so it gets the
+   row's full content width (~500rpx, which the longest band clears with room
+   to spare at any font scale), while the pill inside it still shrinks to its
+   own text and keeps the shape it has always had.
+   The row's own 24rpx gap spaces the line in .row; .row-compact sets gap:0,
+   so it says its own spacing rather than inheriting none. */
+.row-pre { flex-basis: 100%; width: 100%; }
+.row-compact .row-pre { margin-top: 16rpx; }
+.row-pre-tag {
+  display: inline-block;
   background: var(--olive); color: #fff;
   padding: 2rpx 12rpx; border-radius: 999rpx;
   font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.08em; font-weight: 700;
+  /* Belt and braces: the line is wide enough for the longest band we draw,
+     and this says out loud that it must never break in two again. */
+  white-space: nowrap;
 }
 .row-right { text-align: right; min-width: 88rpx; display: flex; flex-direction: column; align-items: flex-end; }
 .row-price { font-size: calc(32rpx * var(--font-scale)); color: var(--ink); letter-spacing: 0.04em; line-height: 1; }

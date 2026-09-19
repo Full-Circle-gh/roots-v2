@@ -208,7 +208,20 @@
                     <view wx:if="{{item.isFlash}}" class="row-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
                     <view wx:if="{{item.badge}}" class="row-badge f-gothic">{{item.badge}}</view>
                     <view wx:if="{{item.outOfStock}}" class="row-oos f-toni">{{oosLabel}}</view>
-                    <!-- §80 follow-up — AN EMPTY preText IS A VALUE, NOT A MISSING ONE.
+                  </view>
+                  <view class="row-right">
+                    <view class="row-price-stack">
+                      <view wx:if="{{item.priceWas}}" class="row-was f-aleo">{{item.priceWas}}</view>
+                      <view wx:if="{{item.pricePrefix}}" class="row-price-prefix f-toni">{{item.pricePrefix}}</view>
+                      <view class="row-price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</view>
+                    </view>
+                    <view wx:if="{{!item.outOfStock}}"
+                          class="row-plus"
+                          id="plus-{{item.id}}"
+                          data-id="{{item.id}}"
+                          catchtap="addToCart"></view>
+                  </view>
+                  <!-- §80 follow-up — AN EMPTY preText IS A VALUE, NOT A MISSING ONE.
                          A row made TODAY is orderable and says nothing, so shop.js
                          sets preText to the empty string while `preorder` STAYS TRUE
                          — that flag is also what keeps the row out of SOLD OUT, so
@@ -225,21 +238,25 @@
                          was all that stood between them and a blank pill, so it was
                          left alone; they carry their own word now, and it is gated on
                          the text like every band here.
-                         Same shape at .card-pre and .gal-pre. -->
-                    <view wx:elif="{{item.preorder && item.preText}}" class="row-pre f-toni">{{item.preText}}</view>
-                  </view>
-                  <view class="row-right">
-                    <view class="row-price-stack">
-                      <view wx:if="{{item.priceWas}}" class="row-was f-aleo">{{item.priceWas}}</view>
-                      <view wx:if="{{item.pricePrefix}}" class="row-price-prefix f-toni">{{item.pricePrefix}}</view>
-                      <view class="row-price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</view>
-                    </view>
-                    <view wx:if="{{!item.outOfStock}}"
-                          class="row-plus"
-                          id="plus-{{item.id}}"
-                          data-id="{{item.id}}"
-                          catchtap="addToCart"></view>
-                  </view>
+                         Same shape at .card-pre and .gal-pre.
+
+                         IT SITS ON ITS OWN LINE, OUTSIDE .row-body, AND THAT IS
+                         NOT COSMETIC. The list pane is only ~563rpx wide (the
+                         rail takes 184rpx of 750), and the image and price
+                         column leave the text column under 200rpx. `NEXT BATCH
+                         · SEP 21` needs about 275rpx, so inside .row-body the
+                         band broke across two lines and the date landed under
+                         the word. There is no font size that fixes that and
+                         stays readable — the line has to be wider than the text
+                         column, so .row-pre is a wrapped flex item on .row that
+                         takes the full row width, and the pill inside it
+                         (.row-pre-tag) shrinks to its text as before. Reported
+                         by Ash from the shop list, 2026-09-19.
+
+                         The wx:elif it used to carry is spelled out here, since
+                         it is no longer a sibling of .row-oos: SOLD OUT wins,
+                         and a sold-out row draws no band. -->
+                  <view wx:if="{{!item.outOfStock && item.preorder && item.preText}}" class="row-pre f-toni"><text class="row-pre-tag">{{item.preText}}</text></view>
                 </view>
               </block>
               <view wx:else class="grid {{layout === 'grid-3col' ? 'grid-3' : 'grid-2'}}">

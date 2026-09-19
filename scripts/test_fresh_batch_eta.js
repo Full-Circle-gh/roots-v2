@@ -259,5 +259,56 @@ section('7 · THE VOCABULARY IS LIFTED, NOT COMPOSED');
   });
 }
 
+// ── The dated band has to FIT on the surface that draws it ──────────────────
+// §170 roughly doubled the band: `NEXT BATCH` became `NEXT BATCH · SEP 21`,
+// and nothing checked that the longest of the seven surfaces still had a line
+// wide enough for it. The shop list did not. Its text column sits between a
+// 184rpx category rail, a 176rpx thumbnail and the price column — under 200rpx
+// of the 750 — so the band broke in two and the date landed on its own line
+// under the word, which is the §170 report back again in a new shape: a date
+// the shopper has to reassemble. Reported by Ash from the shop list,
+// 2026-09-19.
+//
+// The fix is width, not type size: at a readable size the band needs about
+// 275rpx and no font that fits 200rpx can be read at arm's length. So the band
+// is a wrapped flex item on .row taking the whole row's width, with the pill
+// inside it. These cases pin the three pieces that make that true — take any
+// one away and the band silently folds again.
+section('6 · THE SHOP LIST HAS A LINE WIDE ENOUGH TO DRAW IT ON');
+{
+  const WXML = read('miniapp/pages/shop/shop.wxml');
+  const WXSS = read('miniapp/pages/shop/shop.wxss');
+  const rowPre = WXSS.match(/^\.row-pre \{[^}]*\}/m);
+  const rowPreTag = WXSS.match(/^\.row-pre-tag \{[^}]*\}/m);
+
+  it('the band is a child of .row, not of the narrow .row-body', () => {
+    // The body block ends before the band begins; if the band is ever moved
+    // back inside it, this ordering breaks and so does the layout.
+    const body = WXML.indexOf('<view class="row-body">');
+    const bodyEnd = WXML.indexOf('<view class="row-right">', body);
+    const band = WXML.indexOf('class="row-pre f-toni"');
+    assert.ok(body > 0 && bodyEnd > body && band > bodyEnd,
+      'the list band must sit outside .row-body, where the full row width is');
+  });
+  it('.row wraps, so the band drops to a line of its own', () => {
+    const r = WXSS.match(/^\.row \{[^}]*\}/m);
+    assert.ok(r && /flex-wrap:\s*wrap/.test(r[0]),
+      'without wrap the band is squeezed onto the first line beside the price');
+  });
+  it('…and the band claims that whole line', () => {
+    assert.ok(rowPre && /flex-basis:\s*100%/.test(rowPre[0]),
+      '.row-pre is the LINE — a full basis is what pushes it below the row');
+    assert.ok(!/background/.test(rowPre[0]),
+      'the line paints nothing; the pill inside it does');
+  });
+  it('the pill inside still shrinks to its text, and never breaks in two', () => {
+    assert.ok(rowPreTag, '.row-pre-tag must exist — it is the pill itself');
+    assert.ok(/display:\s*inline-block/.test(rowPreTag[0]),
+      'a full-width olive bar on every batch row is not what this is');
+    assert.ok(/white-space:\s*nowrap/.test(rowPreTag[0]),
+      'the line is wide enough; say so, so no later tightening folds it again');
+  });
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
