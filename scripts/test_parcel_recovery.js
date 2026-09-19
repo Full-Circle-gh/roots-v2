@@ -68,6 +68,10 @@ if (SABOTAGE) {
     'WHERE id = ? AND recovery_needed_at IS NOT NULL AND recovery_outcome IS NULL',
     'WHERE id = ?');                                         // the race guard
   HTML    = HTML.replace('data-status="recover_parcel"', 'data-status="recover_parcelX"');
+  // §191 — the scoping dropped, which is the double-credit regression.
+  ROUTES  = ROUTES.replace(
+    'const lines = base\n    .map((r) => ({ product_id: r.product_id, qty: r.qty - (gone.get(r.product_id) || 0) }))',
+    'const lines = base\n    .map((r) => ({ product_id: r.product_id, qty: r.qty }))');
 }
 
 let failures = 0;
@@ -88,7 +92,12 @@ function extractFn(name, src) {
   }
   return null;
 }
-const FNS = ['flagParcelsForRecovery', 'parcelStockLines', 'orderShippedQty'];
+const FNS = ['flagParcelsForRecovery', 'parcelStockLines', 'orderShippedQty',
+  // §191 — RUN, not read. The assertions below used to read orderShippedQty
+  // and reason about the helper; dropping the helper's subtraction left every
+  // one of them green, which is a test that cannot fail about the exact
+  // regression it was written for.
+  'reverseOrderStockStillHere'];
 const src = {};
 for (const n of FNS) src[n] = extractFn(n, ROUTES);
 
@@ -114,11 +123,15 @@ db.exec(`
     updated_at DATETIME
   );
 `);
-const routes = new Function('db', `
+// Every call the helper makes to reverseOrderStock is recorded here, so what it
+// hands the shelf is observed rather than inferred from its source.
+const reversals = [];
+const routes = new Function('db', 'reversals', `
   const tdb = () => db;
+  const reverseOrderStock = (orderId, opts) => reversals.push({ orderId, lines: opts.lines || null });
   ${FNS.map((n) => src[n]).join('\n')}
   return { ${FNS.join(', ')} };
-`)(db);
+`)(db, reversals);
 
 const ALMOND = 340, PITA = 251, CRISP = 800;
 let nextOrder = 600, nextShip = 700;
@@ -249,6 +262,93 @@ check('…and the stock move is stamped with who said so',
 check('the cancel branch opens the cases', /flagParcelsForRecovery\(id\);/.test(ROUTES), true);
 
 // ─────────────────────────────────────────────────────────────────────────────
+section('── 4b. §191 — a refund chases boxes too, and cannot pay for them twice');
+
+/* THE HAZARD THIS SECTION EXISTS FOR, and it is why §191 could not be "add one
+   call". Every refund path reversed the WHOLE order's stock, including units
+   already with the customer. Open a recovery case on top of that and "it came
+   back" returns the same units a SECOND time — the shop credited twice for one
+   box. So the reversal had to be scoped in the same change, not after it. */
+check('the shared helper is what every path reverses through',
+  /function reverseOrderStockStillHere\(orderId, rows, opts\) \{/.test(ROUTES), true);
+check('…and no refund path reverses the whole order unscoped any more',
+  (ROUTES.match(/reverseOrderStock\(id, \{/g) || []).length, 1);   // §189's recovery close, which must
+check('…which is §189\'s recovery close, the one call that SHOULD return what has gone',
+  /note: `parcel recovered — \$\{o\.order_no\} parcel \$\{sid\}`/.test(ROUTES), true);
+
+/* THE FAST PATH IS PRESERVED AND IS NOT AN OPTIMISATION. With nothing shipped,
+   rows pass through untouched — including null, which reverseOrderStock turns
+   into reverseCommittedOrder and ledger reason 'order_reverse'. The scoped form
+   writes 'order_reverse_partial', whose rows reverseCommittedOrder's idempotency
+   guard cannot see. Routing the ordinary refund down the scoped path would
+   change the ledger reason on the overwhelming majority of refunds for nothing. */
+check('an order with nothing shipped still takes the unscoped reverse',
+  /if \(!gone\.size\) \{ reverseOrderStock\(orderId, \{ lines: rows, \.\.\.opts \}\); return; \}/.test(ROUTES), true);
+
+/* FULL REFUNDS FLAG, PARTIAL ONES DO NOT, and that is a judgement stated out
+   loud rather than an omission. A partial refund of a delivered order is a
+   goodwill or short-shipment adjustment — the shop is not asking for the box
+   back, and a chase job for one would be work nobody wants done. */
+for (const [label, marker] of [
+  ['the approve path', "note: 'refund approved (full)' });"],
+  ['the direct path',  "note: 'refund (direct full)' });"],
+  ['the completing remainder', "note: 'refund (direct completing remainder)' });"],
+]) {
+  const at = ROUTES.indexOf(marker);
+  check(`${label} opens the recovery cases`,
+    at !== -1 && /^\s*flagParcelsForRecovery\(id\);/.test(ROUTES.slice(at + marker.length, at + marker.length + 60)), true);
+}
+for (const marker of ["note: 'refund approved (partial lines)' });", "note: 'refund (direct partial lines)' });"]) {
+  const at = ROUTES.indexOf(marker);
+  check('a partial refund does not ask for the box back',
+    at !== -1 && !/flagParcelsForRecovery/.test(ROUTES.slice(at, at + 200)), true);
+}
+
+/* ON REAL NUMBERS: a full refund of an order whose box has gone returns only
+   what is still here, and the recovery returns the rest — each unit once. The
+   fixture reuses §189's order above, where ALMOND ×2 and CRISP ×2 went and
+   PITA ×1 did not. */
+const refunded = mkOrder();
+const rGone = mkParcel(refunded, [[ALMOND, 3]], { dispatched: true });
+mkParcel(refunded, [[PITA, 2]]);
+const rShipped = routes.orderShippedQty(refunded);
+const rWhole = db.prepare(
+  `SELECT product_id, SUM(qty) AS qty FROM retail_order_items
+    WHERE order_id = ? AND product_id IS NOT NULL GROUP BY product_id`).all(refunded);
+check('a full refund returns only the units still on the bench',
+  rWhole.map((r) => [r.product_id, r.qty - (rShipped.get(r.product_id) || 0)]).filter(([, q]) => q > 0),
+  [[PITA, 2]]);
+check('…and the refund opens a case for the box that went',
+  [routes.flagParcelsForRecovery(refunded), !!shipRow(rGone).recovery_needed_at], [1, true]);
+check('…whose recovery returns the other three, so each unit moves exactly once',
+  routes.parcelStockLines(refunded, rGone).map((r) => [r.product_id, r.qty]), [[ALMOND, 3]]);
+
+/* AND THE HELPER IS RUN, not reasoned about. This is the assertion that fails
+   when the subtraction is dropped — the double-credit regression, which every
+   source-reading assertion above stayed green through. */
+reversals.length = 0;
+routes.reverseOrderStockStillHere(refunded, null, { note: 'full refund' });
+check('the helper hands the shelf only the units still here',
+  reversals.map((r) => (r.lines || []).map((l) => [l.product_id, l.qty])), [[[PITA, 2]]]);
+
+// The fast path, observed: nothing shipped means rows pass through untouched,
+// null included, so the ordinary refund keeps its 'order_reverse' ledger reason.
+const clean = mkOrder();
+mkParcel(clean, [[CRISP, 1]]);
+reversals.length = 0;
+routes.reverseOrderStockStillHere(clean, null, { note: 'full refund' });
+check('…and passes null straight through when nothing has shipped',
+  reversals.map((r) => r.lines), [null]);
+
+// Every unit on the order already gone → the call is SKIPPED, never made with
+// [], which reverseOrderStock would read as "reverse the whole order".
+const allGone = mkOrder();
+mkParcel(allGone, [[CRISP, 4]], { dispatched: true });
+reversals.length = 0;
+routes.reverseOrderStockStillHere(allGone, null, { note: 'full refund' });
+check('…and reverses nothing at all when every unit has gone', reversals.length, 0);
+
+// ─────────────────────────────────────────────────────────────────────────────
 section('── 5. Three screens, and the chip that is load-bearing');
 
 check('the parcel payload carries the case', /recovery_needed_at: s\.recovery_needed_at \|\| null/.test(ROUTES), true);
@@ -296,6 +396,8 @@ check('…and keeps 收回 and 退回 apart, on the record',
   /\*\*WHY 收回 AND NOT 退回\.\*\*/.test(VOCAB), true);
 check('…recording the candidates it turned down',
   ['`退回中`', '`召回`', '`作废`'].filter((t) => !VOCAB.includes(t)), []);
+check('§191 is recorded before the code that depends on it',
+  /\*\*§191 · A REFUND CHASES ITS BOXES TOO/.test(DECIDE), true);
 check('§189 is recorded before the code that depends on it',
   /\*\*§189 · A BOX THAT WENT OUT ON AN ORDER THAT WAS THEN CANCELLED IS SOMEBODY'S JOB/.test(DECIDE), true);
 
