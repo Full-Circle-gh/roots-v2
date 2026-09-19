@@ -14484,86 +14484,21 @@ router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), 
 // heatmap, cohorts, checkout abandonment, visits) stay on placed_at — they
 // measure when demand ARRIVES, not when cash settles.
 // ─────────────────────────────────────────────────────────────────────────
-// gzgrocery wholesale takings for a date range — the inferred "they owe you"
-// revenue that never touches retail_orders. Source = live order-read sales
-// (retail_stock_ledger reason=gzgrocery_order, units=-delta; reverses subtract)
-// UNIONed with the legacy drift pickups (guanyi_pickup_log) for pre-order-read
-// history. Revenue = units × (gz price → retail → sell_price). Returns
-// { revenue, lines, orders, byBucket } bucketed by day (or hour, opts.hourly).
-// Folds into REVENUE only — never the customer counts (wholesale, no storefront
-// customer). No-op for a tenant without these tables.
+// gzgrocery wholesale takings USED TO BE COMPUTED HERE, by a function that
+// valued `retail_stock_ledger` at whatever the price happened to be when the
+// page was loaded. §184 moved the Reports dashboard off it and §186 moved the
+// Sales page, which left it with no callers at all; it is DELETED rather than
+// left standing, because an unused revenue reader is one the next session
+// finds and calls, and calling it is the defect both sections removed.
 //
-// `lines` vs `orders` is the distinction this function used to collapse, and the
-// collapse is why the Sales page and the dashboard disagreed on the order count.
-// A ledger row is one PRODUCT LINE of one gzgrocery order, so counting rows
-// reported a 3-product order as three orders. `lines` keeps that number (it is
-// the honest "units picked" figure the Sales card shows as Pickups); `orders`
-// counts the daemon's mirror rows in retail_orders — the SAME rows the dashboard
-// counts — so both pages now answer "how many orders" from one source. With
-// mirroring off there are no mirror rows and both report 0 orders against folded
-// revenue, which is consistent rather than merely non-zero.
-function guanyiPickupSales(db, from, to, opts) {
-  const out = { revenue: 0, lines: 0, orders: 0, byBucket: {} };
-  try {
-    const TZ = shopSqlShift();
-    const hourly = !!(opts && opts.hourly);
-    const bkL = hourly ? `strftime('%H', l.created_at, '${TZ}')`  : `date(l.created_at, '${TZ}')`;
-    const bkP = hourly ? `strftime('%H', pl.created_at, '${TZ}')` : `date(pl.created_at, '${TZ}')`;
-    const hasPricing = !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_product_pricing'`).get();
-    const owed = hasPricing
-      ? 'COALESCE(pp.excel_gz_price, pp.excel_retail, sp.sell_price, 0)'
-      : 'COALESCE(sp.sell_price, 0)';
-    const all = [];
-    // Live order-read sales (authoritative).
-    all.push(...db.prepare(`
-      SELECT ${bkL} AS bucket, -l.delta AS units, ${owed} AS owed
-        FROM retail_stock_ledger l
-        LEFT JOIN store_products sp ON sp.id = l.product_id
-        ${hasPricing ? 'LEFT JOIN guanyi_product_pricing pp ON pp.product_id = l.product_id' : ''}
-       WHERE l.reason IN ('gzgrocery_order','gzgrocery_order_reverse')
-         AND date(l.created_at, '${TZ}') BETWEEN ? AND ?
-    `).all(from, to));
-    // Legacy drift pickups (pre-order-read history).
-    if (db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_pickup_log'`).get()) {
-      all.push(...db.prepare(`
-        SELECT ${bkP} AS bucket,
-               CASE WHEN pl.action='drift_up' THEN -ABS(COALESCE(pl.drift,0)) ELSE COALESCE(pl.inferred_pickup,0) END AS units,
-               ${owed} AS owed
-          FROM guanyi_pickup_log pl
-          LEFT JOIN store_products sp ON sp.id = pl.product_id
-          ${hasPricing ? 'LEFT JOIN guanyi_product_pricing pp ON pp.product_id = pl.product_id' : ''}
-         WHERE (pl.action IN ('decremented','drift_up') OR (pl.action='capped' AND pl.resolution='applied'))
-           AND date(pl.created_at, '${TZ}') BETWEEN ? AND ?
-      `).all(from, to));
-    }
-    for (const r of all) {
-      const units = Number(r.units) || 0;
-      if (!units) continue;
-      const rev = units * (Number(r.owed) || 0);
-      out.revenue += rev;
-      if (units > 0) out.lines += 1;
-      const b = out.byBucket[r.bucket] || { revenue: 0, lines: 0 };
-      b.revenue += rev;
-      if (units > 0) b.lines += 1;
-      out.byBucket[r.bucket] = b;
-    }
-    out.revenue = +out.revenue.toFixed(2);
-    // Real order count — the daemon's mirror rows, counted on the same date
-    // expression and the same paid-status set the dashboard uses, so the two
-    // pages cannot drift apart. Cancelled mirrors are excluded by that set.
-    out.orders = db.prepare(`
-      SELECT COUNT(*) AS n FROM retail_orders
-       WHERE channel='gzgrocery'
-         AND ${financeWindow.PAID}
-         AND date(COALESCE(paid_at, placed_at), '${TZ}') BETWEEN ? AND ?
-    `).get(from, to)?.n || 0;
-  } catch (e) { /* tenant without the gzgrocery ledger → zeros */ }
-  return out;
-}
+// gzgrocery revenue now comes from the daemon's mirror rows in `retail_orders`
+// — priced and cost-stamped at the sale, dated by the order — exactly like
+// every other channel. The one part with no order behind it survives as
+// `guanyiLegacyPickupSales()` below.
 
 // ── gzgrocery, the LEGACY half only — drift pickups with no order behind them ──
 //
-// §184. `guanyiPickupSales()` above reads TWO sources and they are no longer the
+// §184, AMENDED BY §186. The deleted `guanyiPickupSales()` read TWO sources and
 // same kind of thing. Its first is `retail_stock_ledger` rows written with reason
 // `gzgrocery_order`, and those are written by the SAME branch of
 // scripts/gzgrocery-order-daemon.js that calls `ensureGzMirror` — one ledger row
@@ -14632,7 +14567,7 @@ function guanyiLegacyPickupSales(db, from, to, opts) {
 // then spent later via balance_used on an order; that spend is deliberately
 // NOT re-counted as revenue (order.total already excludes balance_used), so the
 // same yuan is recognised exactly once. Returns { received, byBucket } bucketed
-// by day (or hour, opts.hourly), mirroring guanyiPickupSales so callers fold it
+// by day (or hour, opts.hourly), the shape the deleted reader had, so callers fold it
 // in the same way. No-op (zeros) for a tenant without the top-up table.
 function topupCashReceived(db, from, to, opts) {
   const out = { received: 0, byBucket: {} };
@@ -14680,7 +14615,7 @@ function storeCreditRedeemed(db, from, to) {
 // Powers the Sales overview page (#tab-sales): today's per-channel revenue /
 // orders / AOV plus a folded all-channel summary. Meituan orders are mirrored
 // into retail_orders (channel='meituan'); gzgrocery is the wholesale pickup
-// channel read via guanyiPickupSales(); Eleme isn't connected yet → zeros.
+// channel read from its mirror rows (§186); Eleme isn't connected yet → zeros.
 // "Today" is GZ-local (UTC+8), same convention as the dashboard.
 router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => {
   try {
@@ -14739,9 +14674,35 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
     const wcItems = storeItems(`COALESCE(NULLIF(o.channel,''),'wechat')='wechat' AND ${NOT_COUNTERO}`);
     const wbItems = storeItems(`o.channel='web' AND ${NOT_COUNTERO}`);
 
-    // gzgrocery — wholesale pickup channel (revenue + order count from the ledger).
-    const gy = guanyiPickupSales(tdb(), today, today);
-    const gyAov = gy.orders ? +(gy.revenue / gy.orders).toFixed(2) : 0;
+    // ── gzgrocery — the ORDER RECORD, like every other card here (§186) ──────
+    // This card read the now-deleted `guanyiPickupSales()` until now, which valued
+    // `retail_stock_ledger`. §184 moved Reports off that record and left this
+    // screen flagged; this is that change, on the same reasoning. A ledger row
+    // carries no price, so its value had to be looked up LIVE — change a gz
+    // price and yesterday's card moved — and it is dated by when the daemon
+    // wrote the row rather than by the order, which on a TODAY card is the
+    // difference between a sale showing and not showing.
+    //
+    // IT USES `storeAgg` AND `storeItems`, the same two helpers the mini app,
+    // web and POS cards use, so all four now answer from one query shape. That
+    // also fixes the 4th metric quietly: it was `gy.lines`, a count of LEDGER
+    // ROWS, sitting under a heading the other owned-store cards fill with UNITS.
+    //
+    // THE RESIDUAL IS UNAFFECTED. `claimedBy` below already names
+    // `channel='gzgrocery'`, so these rows were excluded from Direct before this
+    // change and still are — the six buckets stay a true partition.
+    const gy = storeAgg("channel='gzgrocery'");
+    const gyItems = storeItems("o.channel='gzgrocery'");
+    // The drift half, which has no order behind it to read (§184). It is NOT
+    // dead history: `scripts/guanyi-daemon.js` still writes `guanyi_pickup_log`,
+    // and only `GUANYI_PICKUP_MODE` — which defaults to `off` — decides whether
+    // it does. So the fold is DORMANT RATHER THAN VESTIGIAL, and a card that
+    // dropped it would start under-reporting the day that switch is turned on
+    // rather than failing loudly. Revenue only: a drift row is an inferred
+    // pickup, not an order, so it must not move the order count or the AOV.
+    const gyDrift = guanyiLegacyPickupSales(tdb(), today, today);
+    const gyRevenue = +(Number(gy.revenue || 0) + Number(gyDrift.revenue || 0)).toFixed(2);
+    const gyAov = +Number(gy.aov || 0).toFixed(2);
 
     // POS — sales rung up at the counter till (/till).
     //
@@ -14773,8 +14734,10 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
     // drop revenue: whatever the other buckets don't take lands here by
     // construction, so the two pages reconcile permanently.
     //
-    // gzgrocery mirror rows stay out because their revenue is folded in from the
-    // ledger (guanyiPickupSales) — counting the mirrors too would double-book.
+    // gzgrocery mirror rows stay out because the gzgrocery card above claims
+    // them (§186 — it reads those very rows now, where it used to read the
+    // ledger). Either way they are claimed, so Direct must not take them: the
+    // six buckets are a partition or the residual stops reconciling.
     const claimedBy = (p) => `(
          ${p}channel='meituan'
       OR ${p}channel='gzgrocery'
@@ -14788,7 +14751,7 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
       wechat:    { connected: true,  revenue: +Number(wc.revenue || 0).toFixed(2), orders: wc.orders || 0, aov: +Number(wc.aov || 0).toFixed(2), extra: wcItems },
       web:       { connected: true,  revenue: +Number(wb.revenue || 0).toFixed(2), orders: wb.orders || 0, aov: +Number(wb.aov || 0).toFixed(2), extra: wbItems },
       meituan:   { connected: true,  revenue: +Number(mt.revenue || 0).toFixed(2), orders: mt.orders || 0, aov: +Number(mt.aov || 0).toFixed(2), extra: mtPushes },
-      gzgrocery: { connected: true,  revenue: gy.revenue || 0, orders: gy.orders || 0, aov: gyAov, extra: gy.lines || 0 },
+      gzgrocery: { connected: true,  revenue: gyRevenue, orders: gy.orders || 0, aov: gyAov, extra: gyItems },
       eleme:     { connected: false, revenue: 0, orders: 0, aov: 0, extra: 0 },
       pos:       { connected: true,  revenue: +Number(ps.revenue || 0).toFixed(2), orders: ps.orders || 0, aov: +Number(ps.aov || 0).toFixed(2), extra: psItems },
       // Not a connectable channel — nothing to switch on, nothing to configure —
@@ -14920,7 +14883,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   //
   // ── §184 · gzgrocery IS IN THIS SUM NOW, AND ITS LEDGER FOLD IS GONE ──────
   // The CASE that used to blank gzgrocery here existed to stop double-booking
-  // against `guanyiPickupSales()`, which was added back below. Both halves are
+  // against the ledger reader that was added back below (deleted in §186). Both halves are
   // written by one branch of the daemon — a ledger row and a `retail_orders`
   // mirror, always together — so the choice was never whether to count the
   // channel but WHICH RECORD to count it from, and the ledger is the worse of
@@ -16773,7 +16736,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
     // retail_orders. Surface each as a feed row so the dashboard reflects this
     // channel like the gzgrocery billing tab does. Source = live order-read
     // ledger (reason=gzgrocery_order; reverses = returns) + legacy drift
-    // pickups, with the SAME pricing fallback as guanyiPickupSales so feed +
+    // pickups, with the SAME pricing fallback the gz readers use so feed +
     // revenue agree. No-op for tenants without these tables.
     try {
       const hasPricing = !!tdb().prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_product_pricing'`).get();
