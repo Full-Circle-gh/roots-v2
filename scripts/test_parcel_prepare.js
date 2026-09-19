@@ -113,12 +113,25 @@ check('preparing is still not reachable from dispatched at order level',
   /preparing:\s*\{ col: 'preparing_at',\s*prev: \['paid', 'awaiting_restock'\] \}/.test(ROUTES), true);
 
 // ── 4. The guards ──────────────────────────────────────────────────────────
-check('only a paid / preparing / dispatched order can have a box packed',
-  /\['paid', 'preparing', 'dispatched'\]\.includes\(o\.status\)/.test(BODY), true);
-// awaiting_restock is absent DELIBERATELY: §136 made that state move no stock,
-// and packing a box out of a restock hold takes goods that have not landed.
-check('awaiting_restock is not in that window',
-  /awaiting_restock/.test(BODY), false);
+/* §187 WIDENED THIS WINDOW BY ONE STATUS, AND THE OLD ASSERTION HERE WAS RIGHT
+   ABOUT THE DANGER AND WRONG ABOUT THE UNIT. It read:
+
+     "awaiting_restock is absent DELIBERATELY: §136 made that state move no
+      stock, and packing a box out of a restock hold takes goods that have not
+      landed."
+
+   The goods that have not landed are the SHORT ONES. A parked order's other
+   parcels — TC000784's land box of four shelf products, beside an air box
+   holding the one fresh line — carry nothing the shortage touches, and refusing
+   them left that box with no control at all. So the window admits the status and
+   `parcelHeldLines` carries the refusal instead, per parcel. What the old
+   assertion was protecting is protected by the pair below, more exactly: a box
+   holding a short line is still refused, and the commit behind it still cannot
+   take goods that have not landed (test_fresh_stock_deferral.js §17). */
+check('a paid / preparing / dispatched / parked order can have a box packed',
+  /\['paid', 'preparing', 'dispatched', 'awaiting_restock'\]\.includes\(o\.status\)/.test(BODY), true);
+check('…but a parcel carrying a line the order waits on is refused by name',
+  /parcelHeldLines\(id, sid, orderWaitingPids\(o\)\)[\s\S]{0,140}parcel_awaiting_restock/.test(BODY), true);
 check('the parcel must belong to the order',
   /FROM retail_shipments WHERE id = \? AND order_id = \?/.test(BODY), true);
 check('a supplier drop-ship parcel is refused',

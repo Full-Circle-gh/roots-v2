@@ -7316,8 +7316,19 @@ Rejected, and why:
   that sells food it reads as takeaway packaging.
 
 The button appears only on a parcel that is still here, is not supplier-direct,
-and sits on an order that is `paid`, `preparing` or `dispatched`. On
-`awaiting_restock` it is absent by design (§136 moves no stock; §180 says why).
+and sits on an order that is `paid`, `preparing` or `dispatched`.
+
+**AMENDED BY §187 (2026-09-19): `awaiting_restock` NOW APPEARS IN THAT LIST, and
+the sentence this replaces is recorded rather than deleted** — it read *"On
+`awaiting_restock` it is absent by design (§136 moves no stock; §180 says
+why)."* That was right about the danger and wrong about the unit. The goods that
+have not landed are the SHORT ones; a parked order's OTHER parcels carry nothing
+the shortage touches, and refusing them left TC000784's 陆运 box of four shelf
+products with no control at all. The refusal now sits on the parcel
+(`parcelHeldLines`), not the order: a box holding a short line is still refused,
+and the commit behind the button still cannot take goods that have not landed.
+**No word on this screen changed** — the button and the pill keep the pairs
+above; only when they are reachable did.
 
 ## The shop switch, on the phone (2026-09-18)
 

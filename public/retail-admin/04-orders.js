@@ -4052,11 +4052,14 @@ function shipmentStatePill(s) {
 // landed. Name the hold instead — but only on the parcels that actually carry a
 // short line, and only while the parcel is still pending. A parcel already on
 // its way keeps its own state; that is what the operator is tracking.
+// §187 — THE COUNT COMES FROM THE SERVER NOW (`held_lines`), not from a second
+// pass over the parcel's items here. The same number decides whether this box
+// may be dispatched, and the pill saying "held" beside a live dispatch button
+// would be the two answers disagreeing on one screen. `waiting` is still taken
+// so the caller reads the same way; it now only decides whether to ask at all.
 function shipHoldPill(o, s, waiting) {
   const state = s.state || 'pending';
-  const held = (waiting && waiting.size && state === 'pending')
-    ? (s.items || []).filter(it => waiting.has(it.product_id)).length
-    : 0;
+  const held = (waiting && waiting.size && state === 'pending') ? (s.held_lines || 0) : 0;
   if (!held) return shipmentStatePill(s);
   return `<span class="pill st-awaiting_restock"><span class="dot"></span>`
     + `${cuT(`Held — ${held} line${held === 1 ? '' : 's'} waiting`, `待补货 — ${held} 项`)}</span>`;
@@ -4088,9 +4091,18 @@ function renderShipmentCard(o, s) {
   // partially-shipped order keeps un-shipped parcels actionable.
   // A supplier parcel is never "dispatched" from our warehouse — it ships from
   // the supplier and is marked shipped by entering its tracking number instead.
+  /* §187 — AND A PARKED ORDER'S PARCELS THAT ARE NOT THEMSELVES SHORT. An order
+     waiting on one fresh line had every parcel frozen, including the land box of
+     four shelf products that the shortage never touched: no dispatch button, no
+     prepare button, just "Ship part later" splitting a parcel it still could not
+     send (reported on TC000784). `held_lines` is the server's count of THIS
+     parcel's waiting lines and is the same number the hold pill reads — 0 means
+     the shortage has nothing to say about this box. The route asks the same
+     question of the database and refuses anything this misses. */
   const canDispatch = state === 'pending' &&
     mode !== 'supplier' &&
-    ['paid', 'preparing', 'dispatched'].includes(o.status) &&
+    ['paid', 'preparing', 'dispatched', 'awaiting_restock'].includes(o.status) &&
+    !(s.held_lines > 0) &&
     !ordShipsNothing(o);
   // With a single parcel the per-parcel dispatch button just duplicates the
   // header "Mark dispatched" (which dispatches the whole order = this one

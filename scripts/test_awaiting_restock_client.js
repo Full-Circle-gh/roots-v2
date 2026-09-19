@@ -194,17 +194,27 @@ section('6 · The parcel header names the hold, but only when it holds one');
 {
   const o = parked();
   const waiting = new Set(awaitingRestockPids(o));
-  const shortParcel = { state: 'pending', items: [ITEMS[2], ITEMS[1]] };
-  const cleanParcel = { state: 'pending', items: [ITEMS[0], ITEMS[1]] };
+  /* §187 — THE COUNT COMES FROM THE SERVER NOW (`held_lines`), and these
+     fixtures carry it for the same reason the pill reads it: the number that
+     decides whether this box may be DISPATCHED must be the number the pill
+     shows, or one screen gives two answers about one parcel. The items stay on
+     each fixture because the rest of the card still renders from them. */
+  const shortParcel = { state: 'pending', held_lines: 1, items: [ITEMS[2], ITEMS[1]] };
+  const cleanParcel = { state: 'pending', held_lines: 0, items: [ITEMS[0], ITEMS[1]] };
   has(shipHoldPill(o, shortParcel, waiting), 'Held — 1 line waiting',
       'a pending parcel carrying the short line names the hold');
   has(shipHoldPill(o, cleanParcel, waiting), 'STATE-pending',
       'a parcel carrying none keeps its own state pill');
-  has(shipHoldPill(o, { state: 'dispatched', items: [ITEMS[2]] }, waiting), 'STATE-dispatched',
+  has(shipHoldPill(o, { state: 'dispatched', held_lines: 1, items: [ITEMS[2]] }, waiting), 'STATE-dispatched',
       'and a parcel already moving keeps its state — that is what is tracked');
   const two = new Set([20, 360]);
-  has(shipHoldPill(o, { state: 'pending', items: [ITEMS[2], ITEMS[4]] }, two),
+  has(shipHoldPill(o, { state: 'pending', held_lines: 2, items: [ITEMS[2], ITEMS[4]] }, two),
       'Held — 2 lines waiting', 'two short lines pluralise');
+  // The order's park is still what decides whether the question is asked at all:
+  // a count arriving on a parcel of an order that waits on nothing is ignored,
+  // which is what keeps the kept-for-audit column from holding a shipped order.
+  has(shipHoldPill(o, { state: 'pending', held_lines: 3, items: [ITEMS[2]] }, new Set()),
+      'STATE-pending', 'a held count on an unparked order names no hold');
 }
 
 section('7 · Both languages render, and neither renders glued');
