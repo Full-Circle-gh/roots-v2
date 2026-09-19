@@ -2101,6 +2101,40 @@ function orderShippedQty(orderId) {
   ).all(orderId)) m.set(r.pid, Number(r.qty) || 0);
   return m;
 }
+/* §191 — REVERSE WHAT IS STILL HERE, AND NEVER WHAT HAS GONE. §187 wrote this
+   rule inline in the cancel branch; a refund needs the same one, so it moves
+   here and the cancel calls it. Five call sites, one rule — five copies of a
+   subtraction is how the refund path and the cancel path come to disagree about
+   the same shelf.
+
+   THE FAST PATH IS PRESERVED DELIBERATELY AND IS NOT AN OPTIMISATION. With
+   nothing shipped, `rows` passes through untouched — including `null`, which
+   reverseOrderStock turns into reverseCommittedOrder, writing ledger reason
+   'order_reverse'. The scoped form goes through reverseCommittedLines, which
+   writes 'order_reverse_partial', and reverseCommittedOrder's idempotency guard
+   only recognises the first. Routing every order down the scoped path would
+   change the ledger reason on the ordinary case — the overwhelming majority of
+   refunds and cancels, where nothing has left — for no gain at all.
+
+   AN EMPTY RESULT IS A SKIP, NOT AN EMPTY LIST: reverseOrderStock reads `[]` as
+   "no lines given" and falls through to reversing the WHOLE order, which is the
+   exact opposite of what an empty scope means. §187 called this the sharpest
+   edge in its branch; it is sharper here, with five callers. */
+function reverseOrderStockStillHere(orderId, rows, opts) {
+  const gone = orderShippedQty(orderId);
+  if (!gone.size) { reverseOrderStock(orderId, { lines: rows, ...opts }); return; }
+  const base = rows || tdb().prepare(
+    `SELECT product_id, SUM(qty) AS qty
+       FROM retail_order_items
+      WHERE order_id = ? AND product_id IS NOT NULL
+      GROUP BY product_id`
+  ).all(orderId);
+  const lines = base
+    .map((r) => ({ product_id: r.product_id, qty: r.qty - (gone.get(r.product_id) || 0) }))
+    .filter((r) => r.qty > 0);
+  if (!lines.length) return;
+  reverseOrderStock(orderId, { lines, ...opts });
+}
 // §58 — does this order hold its kitchen lines back at payment?
 //
 // A counter sale does not: the goods left in the same instant the money arrived,
@@ -32841,7 +32875,6 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
 
            Empty for every order with no packed or shipped parcel, which is every
            order this branch saw before today. */
-        const gone = orderShippedQty(id);
         /* §189 — AND SOMEBODY IS TOLD THOSE UNITS ARE OUT THERE. §187 stopped
            the reversal crediting the shelf with them, which made the count
            honest and told nobody: a box on its way to a person who is no longer
@@ -32849,27 +32882,17 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
            parcels that were packed or gone at the moment of the cancel, because
            this is the only point that knows both facts at once. */
         flagParcelsForRecovery(id);
-        /* AN EMPTY LIST IS NOT "REVERSE NOTHING" TO reverseOrderStock — it falls
-           through to reverseCommittedOrder, which reverses the WHOLE order. So
-           when the scoping leaves nothing behind (every unit on the order is
-           packed or gone) the call is skipped outright rather than made with
-           []. This is the sharpest edge in the section and the one a later
-           refactor is most likely to file off.
+        /* §191 — THE SUBTRACTION MOVED TO reverseOrderStockStillHere AND THIS
+           BRANCH CALLS IT. §187 wrote the rule here; a refund needs the same
+           one, and two copies of it is how the refund path and the cancel path
+           come to disagree about one shelf. Behaviour is unchanged — the helper
+           keeps §187's fast path, so an order with nothing shipped still takes
+           the plain whole-order reverse and its 'order_reverse' ledger reason.
 
-           SUBTRACTED, NOT FILTERED: a product with one unit in the box that
-           left and one still on the bench returns the one that is here. On a
-           partially-refunded order the two subtractions can overlap, and that
-           is left as it is deliberately — it can only UNDER-return, and the
+           On a partially-refunded order the two subtractions can overlap, and
+           that is left as it is deliberately: it can only UNDER-return, and the
            whole point of this scoping is never to credit the shelf with units
            it does not hold. */
-        const stillHere = (rows) => rows
-          .map((r) => ({ product_id: r.product_id, qty: r.qty - (gone.get(r.product_id) || 0) }))
-          .filter((r) => r.qty > 0);
-        const reverseScoped = (rows, note) => {
-          const lines = stillHere(rows);
-          if (!lines.length) return;
-          reverseOrderStock(id, { lines, ...actor, note });
-        };
         if (anyRefunded) {
           const remaining = tdb().prepare(
             `SELECT product_id, SUM(qty - COALESCE(refunded_qty, 0)) AS qty
@@ -32877,17 +32900,10 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
               WHERE order_id = ? AND product_id IS NOT NULL
               GROUP BY product_id HAVING qty > 0`
           ).all(id);
-          reverseScoped(remaining, reason || 'cancel — remaining units after partial refund');
-        } else if (gone.size) {
-          const remaining = tdb().prepare(
-            `SELECT product_id, SUM(qty) AS qty
-               FROM retail_order_items
-              WHERE order_id = ? AND product_id IS NOT NULL
-              GROUP BY product_id`
-          ).all(id);
-          reverseScoped(remaining, reason || 'cancel — units not yet packed or shipped');
+          reverseOrderStockStillHere(id, remaining,
+            { ...actor, note: reason || 'cancel — remaining units after partial refund' });
         } else {
-          reverseOrderStock(id, { ...actor, note: reason || null });
+          reverseOrderStockStillHere(id, null, { ...actor, note: reason || null });
         }
       } catch (e) { console.error('[inventory.reverse (cancel)]', e); }
     }
@@ -33003,8 +33019,10 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     try { reverseOrderBalance(id); } catch (e) { console.error('[reverseOrderBalance]', e); }
     try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral]', e); }
     try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission]', e); }
-    try { reverseOrderStock(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null, note: reason || null }); }
-    catch (e) { console.error('[inventory.reverse (refund)]', e); }
+    try {
+      reverseOrderStockStillHere(id, null, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null, note: reason || null });
+      flagParcelsForRecovery(id);
+    } catch (e) { console.error('[inventory.reverse (refund)]', e); }
     // Mirror onto retail_payments for the audit trail.
     try {
       tdb().prepare(
@@ -33364,9 +33382,10 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
   try {
     const _actorLabel = req.user.display_name || req.user.username || null;
     if (isFull) {
-      reverseOrderStock(id, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund approved (full)' });
+      reverseOrderStockStillHere(id, null, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund approved (full)' });
+      flagParcelsForRecovery(id);
     } else if (lines) {
-      reverseOrderStock(id, { lines, actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund approved (partial lines)' });
+      reverseOrderStockStillHere(id, lines, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund approved (partial lines)' });
     }
   } catch (e) { console.error('[inventory.reverse (approve)]', e); }
   // Mark refunded units (see direct path) — at approval, where stock is released
@@ -33710,9 +33729,10 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
       'SELECT 1 FROM retail_order_items WHERE order_id = ? AND COALESCE(refunded_qty, 0) > 0 LIMIT 1'
     ).get(id);
     if (isFull && !_priorRefundedUnits) {
-      reverseOrderStock(id, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund (direct full)' });
+      reverseOrderStockStillHere(id, null, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund (direct full)' });
+      flagParcelsForRecovery(id);
     } else if (lines) {
-      reverseOrderStock(id, { lines, actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund (direct partial lines)' });
+      reverseOrderStockStillHere(id, lines, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund (direct partial lines)' });
     } else if (isFull) {
       // A COMPLETING refund with no lines named, after an earlier partial — the
       // case the isFull fix above just made reachable. The whole-order reverse
@@ -33738,7 +33758,8 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
           GROUP BY product_id
          HAVING SUM(qty - COALESCE(refunded_qty, 0)) > 0`
       ).all(id);
-      reverseOrderStock(id, { lines: remaining, actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund (direct completing remainder)' });
+      reverseOrderStockStillHere(id, remaining, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund (direct completing remainder)' });
+      flagParcelsForRecovery(id);
     }
   } catch (e) { console.error('[inventory.reverse (direct)]', e); }
   // Mark the refunded units on each line so the drawer strikes them, the packing
