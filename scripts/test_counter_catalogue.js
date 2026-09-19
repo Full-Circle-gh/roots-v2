@@ -244,7 +244,15 @@ const rowFor = (rows, id) => rows.filter(r => r.product_id === id)[0] || null;
       // §42 puts a listing's price somewhere it cannot see. Posting unit_price
       // on EVERY line would charge a stale figure whenever the office corrects
       // a catalogue price between two reloads of this tablet.
-      assert.match(till, /if \(l\.menu\) it\.unit_price = l\.price;/);
+      // §183 CHANGED WHAT IS POSTED AND NOT WHETHER IT IS POSTED. The line's
+      // own `price` now carries the chosen extras (an extra shot, oat milk) so
+      // the bill on the glass adds up; the server adds those same deltas back
+      // from its own price_delta columns. Posting the summed figure would have
+      // the till pricing the extras AND the server pricing them again, which
+      // is a double charge on every answered line. So the BASE goes up, and
+      // `l.base` is the base — falling back to `l.price` for a line born
+      // before it existed, and for every line that answered nothing.
+      assert.match(till, /if \(l\.menu\) it\.unit_price = \(l\.base != null \? l\.base : l\.price\);/);
       assert.doesNotMatch(till, /product_id: l\.id, qty: l\.qty, unit_price/);
     });
 

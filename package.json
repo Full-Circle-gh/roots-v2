@@ -93,6 +93,7 @@
     "test:mobile-ask-strip": "node scripts/test_mobile_ask_strip.js",
     "test:mobile-ops-groups": "node scripts/test_mobile_ops_groups.js",
     "test:till": "node scripts/test_till_back.js",
+    "test:till-options": "node scripts/test_till_options.js",
     "test:app-home": "node scripts/test_app_home.js",
     "test:mobile-customers": "node scripts/test_mobile_customers.js",
     "test:mobile-customer-record": "node scripts/test_mobile_customer_record.js",

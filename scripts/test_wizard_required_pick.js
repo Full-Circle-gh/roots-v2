@@ -54,6 +54,10 @@ const section = (t) => console.log('\n' + t);
 const PROD = fs.readFileSync(path.join(ROOT, 'public/retail-admin/09-products.js'), 'utf8');
 const MENU = fs.readFileSync(path.join(ROOT, 'routes/shop-menu.js'), 'utf8');
 const SHOP = fs.readFileSync(path.join(ROOT, 'public/shop.html'), 'utf8');
+// §183 moved the server-side answer check out of routes/shop-menu.js and into a
+// module the counter till obeys too. The rule did not change and nothing about
+// this suite's claim changed; only where the rule is written did.
+const OPTS = fs.readFileSync(path.join(ROOT, 'lib/product-options.js'), 'utf8');
 
 // The slice is taken by name rather than by line number: CLAUDE.md's citation
 // rule — a line number in this file would drift and quietly stop asserting.
@@ -133,9 +137,19 @@ section('5 · a ticked box is read in all three places that matter');
     'the QR menu finds the first required question with nothing live ticked');
   yes(/L_PICK_EN\+miss\.q_en/.test(MENU),
     'and refuses Add to basket naming that question');
-  yes(/q\.is_required && !answered\.has\(q\.id\)/.test(MENU)
-    && /choice_required/.test(MENU),
-    'the order route refuses it again on the server, so the block is not cosmetic');
+  // THE RULE IS IN THE MODULE AND THE ROUTE CALLS IT — §183. Both halves are
+  // asserted, because either alone would pass a refactor that broke the other:
+  // a rule nobody calls enforces nothing, and a call into a module that no
+  // longer carries the rule enforces nothing either.
+  yes(/q\.is_required && !answered\.has\(q\.id\)/.test(OPTS)
+    && /choice_required/.test(OPTS),
+    'the shared module refuses it on the server, so the block is not cosmetic');
+  yes(/productOptions\.resolveAnswers\(/.test(MENU),
+    'and the QR order route actually calls it');
+  // And so does the counter till, which is the whole of why the rule moved.
+  const RETAIL = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+  yes(/productOptions\.resolveAnswers\(/.test(RETAIL),
+    'and so does the counter till, on the same copy of the rule');
   // §152 gave a pick-any group a floor (min_choices), so this block now reads
   // "required with nothing ticked, OR fewer than the floor". The claim is
   // unchanged and the check is deliberately NOT pinned to the whole expression

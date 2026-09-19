@@ -67,6 +67,12 @@ const PRODUCTS = [{ id: 7, sku: '2-450', name_en: 'Hazelnut Spread', name_cn: '�
 // buffer and live holds); a row without it counts as an empty shelf, and an
 // empty shelf refuses the tap that would add the line.
 const STOCK = [{ product_id: 7, available_wechat: 5, physical_qty: 5 }];
+// What /stores/:id/counter-catalogue answers (§150): the three sources already
+// joined server-side, with the shelf figure carried per row. `stock` is a
+// number, not null — these cases need a tile that can be tapped.
+const CATALOGUE = [{ product_id: 7, sku: '2-450', name_en: 'Hazelnut Spread', name_cn: '榛子酱',
+                     top_category: 'Dry', price: 98, on_menu: false,
+                     fulfilment_mode: null, stock: 5, sort_position: null }];
 
 const ME_HOME = { user: { id: 1, username: 'a', role: 'manager', caps: null,
   home: '/m', homeLabel: { en: 'Manager', cn: '经理' } } };
@@ -132,6 +138,14 @@ function stub(me) {
       var u = String(url), body = { success: true, data: [] };
       if (u.indexOf('/api/backend/me') === 0) body = window.__me;
       else if (/\\/stores\\/\\d+\\/stock/.test(u)) body = { success: true, data: ${JSON.stringify(STOCK)} };
+      // THE CATALOGUE, AND IT MUST BE MATCHED BEFORE THE STORES PREFIX BELOW.
+      // §150 moved the till off /products onto this route, and the arm was never
+      // added: '/api/retail-admin/stores/1/counter-catalogue' fell through to
+      // the stores arm, which answers a LIST where the till reads data.rows, so
+      // every tile silently vanished and five cases died on a null [data-add].
+      // It went unnoticed because this suite lives in the slow shard, which is
+      // not run (CLAUDE.md, Ash's standing instruction).
+      else if (/\\/stores\\/\\d+\\/counter-catalogue/.test(u)) body = { success: true, data: { rows: ${JSON.stringify(CATALOGUE)} } };
       else if (u.indexOf('/api/retail-admin/stores') === 0) body = { success: true, data: ${JSON.stringify(STORES)} };
       else if (u.indexOf('/api/retail-admin/products') === 0) body = { success: true, data: ${JSON.stringify(PRODUCTS)} };
       else if (u.indexOf('/api/retail-admin/channel-status') === 0) body = { success: true, channels: [] };

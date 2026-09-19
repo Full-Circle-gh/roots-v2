@@ -23,6 +23,10 @@ const { productUnitCostYuan } = require('../lib/product-cost');
 // extra's cost had nowhere to land until this existed.
 const { chosenOptionCostYuan, requiredOptionFloorYuan } = require('../lib/option-cost');
 const optionLimits = require('../lib/option-limits');
+// §183 — the questions a product asks, and whether an answer is allowed. Shared
+// with routes/shop-menu.js so a counter sale and a QR sale are priced by one
+// piece of code; see the module header.
+const productOptions = require('../lib/product-options');
 // One answer for what a product page signs itself with, read here by BOTH the
 // operator route the editor asks and the public config the mini app asks (§156).
 const brandSignature = require('../lib/brand-signature');
@@ -25442,9 +25446,52 @@ function manualOrderFees({ fulfillmentType, address, subtotal, totalQty, lines, 
 // route and the fee preview below, so a fee quoted for a cart is a fee quoted
 // for the SAME cart the order would be priced from. Returns { error } instead of
 // throwing; every caller answers 400 with it.
-function resolveManualOrderLines(items) {
+function resolveManualOrderLines(items, { storeId = null } = {}) {
+  const list = Array.isArray(items) ? items : [];
+
+  /* §183 — THE ANSWERS, WHICH THIS FUNCTION USED TO DROP ON THE FLOOR.
+     "Hot or iced? Extra shot?" is asked by the QR menu (§120) and was asked
+     nowhere else: this resolver read product_id, qty and unit_price and ignored
+     `choices` entirely, and the INSERT below carried no options_json column. So
+     a counter that collected an answer would have thrown it away between the
+     cashier's tap and the kitchen's ticket — no iced on the slip, no money for
+     the shot, no oat milk off the shelf. That is worse than not asking, which
+     is the reason the till is only being given the buttons now, with the road
+     they lead down built first.
+
+     VALIDATED BY THE SAME MODULE THE QR CHECKOUT USES, so a latte rung up at
+     the counter and a latte ordered from a table cost the same. Nothing is
+     priced from the post body: a delta that arrived from a till is not a delta
+     any more than one that arrived from a phone.
+
+     THE SHELF IS OPTIONAL HERE and `storeId` is why. The create route knows
+     which counter is selling and passes it, so a sold-out extra is refused
+     rather than sold twice. The fee-preview endpoint that shares this helper
+     knows no store and passes none, which leaves the pick-any floor unclamped —
+     correct for a preview that writes nothing and refuses nobody. */
+
+  // THE SHAPE CHECK COMES FIRST, and its position is load-bearing. `invalid_item`
+  // is this resolver's oldest refusal and the loop below still owns it; asking
+  // about the answers first would hand a line with a garbage product_id to the
+  // module, which can only report it as `choice_wrong_product` — a different
+  // error for the same malformed request, and a caller reading it would go
+  // looking for an option that was never the problem.
+  for (const it of list) {
+    if (!parseInt(it.product_id, 10) || !(Number(it.qty) > 0)) return { error: 'invalid_item' };
+  }
+
+  const answers = productOptions.resolveAnswers(
+    tdb(),
+    list.map(it => ({ product_id: parseInt(it.product_id, 10), qty: Number(it.qty),
+                      choices: it.choices })),
+    storeId ? { isChoiceSoldOut: manualOrderAddonSoldOut(storeId) } : {}
+  );
+  if (answers.error) return { error: answers.error, product_id: answers.product_id || null };
+
   const resolved = [];
-  for (const it of (Array.isArray(items) ? items : [])) {
+  let idx = -1;
+  for (const it of list) {
+    idx += 1;
     const pid = parseInt(it.product_id, 10);
     const qty = Number(it.qty);
     if (!pid || !(qty > 0)) return { error: 'invalid_item' };
@@ -25465,7 +25512,15 @@ function resolveManualOrderLines(items) {
       if (!Number.isFinite(up) || up < 0) return { error: 'bad_unit_price', product_id: pid };
       unitPrice = up;
     }
-    unitPrice = Math.round(unitPrice * 100) / 100;
+    // BASE PLUS WHAT WAS CHOSEN. The base is the catalogue's price or the
+    // operator's override; the delta is the sum of this tenant's own
+    // price_delta columns, resolved from choice ids alone. A negative delta
+    // could in principle take a line below zero, which is not a price —
+    // clamped rather than refused, exactly as the QR checkout clamps it,
+    // because the operator's own numbers put it there and a customer standing
+    // at a counter should not meet a 500.
+    unitPrice = Math.round((unitPrice + answers.lines[idx].delta) * 100) / 100;
+    if (!(unitPrice >= 0)) unitPrice = 0;
     // The cost snapshot for the order INSERT, resolved beside the price for the
     // same reason the checkout does it here rather than at the INSERT.
     //
@@ -25479,9 +25534,41 @@ function resolveManualOrderLines(items) {
     // only shippingFee/packingFee off the result and inserts nothing, so it
     // simply carries one more unread field per line.
     resolved.push({ p, qty, unitPrice, lineTotal: Math.round(unitPrice * qty * 100) / 100,
-                    unitCostAtSale: costAtSale(tdb(), p.id) });
+                    unitCostAtSale: costAtSale(tdb(), p.id),
+                    // The array that goes into options_json — a snapshot in both
+                    // languages, so the line still reads "Heat up?: Yes" on the
+                    // ticket after the option is edited or deleted. Empty on the
+                    // overwhelming majority of lines and written as NULL below,
+                    // which is the shape every reader already handles.
+                    options: answers.lines[idx].options });
   }
-  return { resolved };
+  return { resolved, addonWant: answers.addonWant };
+}
+
+// Whether a stock-backed extra has run out at the counter that is selling.
+// Built per call rather than per choice: one read of the location's shelf
+// answers every question on the order. §47's rule governs the verdict — an
+// absent shelf record IS sold out, not "untracked" — and it is the same rule
+// the till's own tiles and the QR menu's picker are drawn by. Applying it here
+// is deliberate and was weighed: a counter refused a coffee because the oat
+// milk count is stale is a bad minute at the till, but the alternative is a
+// shelf that goes quietly negative and a margin report nobody can reconcile.
+// The till greys these out in its sheet, so a refusal here means the count
+// moved between the catalogue read and the sale.
+function manualOrderAddonSoldOut(storeId) {
+  let map = null;
+  return (c) => {
+    if (map === null) {
+      try { map = inventory.getAvailableMap(storeId); }
+      catch (e) { console.warn('[manual-order options] shelf unreadable:', e.message); map = false; }
+    }
+    // Unreadable shelf refuses nobody. The count is an optimisation on top of
+    // the real gate (the commit below still moves the true figure), and a
+    // counter that cannot sell because a read failed is the worse failure.
+    if (map === false) return false;
+    const a = map.get(c.stock_product_id);
+    return !a || a.available <= 0;
+  };
 }
 
 // The two fees the New-order wizard prefills, for the cart and destination the
@@ -25586,9 +25673,17 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
   // catalog sell_price; staff may override per line (negotiated/wholesale). ──
   const items = Array.isArray(b.items) ? b.items : [];
   if (!items.length) return res.status(400).json({ success: false, error: 'no_items' });
+  // WHICH COUNTER IS SELLING, read early and only to gate §183's stock-backed
+  // extras. The authoritative store validation is further down — it refuses a
+  // bad id, a missing store and a counter sale with no store at all, and it is
+  // deliberately NOT moved up here: reordering a live route's refusals to suit
+  // a new read is how an error that used to be a 400 quietly becomes a 404. A
+  // garbage id simply leaves the shelf unread, and the block below still
+  // refuses the order.
+  const optionStoreId = parseInt(b.store_id, 10) || null;
   // Shared with the fee preview above, so the cart a fee was quoted for and the
   // cart the order is priced from are resolved by one piece of code.
-  const lineResult = resolveManualOrderLines(items);
+  const lineResult = resolveManualOrderLines(items, { storeId: optionStoreId });
   if (lineResult.error) {
     const out = { success: false, error: lineResult.error };
     if (lineResult.product_id) out.product_id = lineResult.product_id;
@@ -26010,11 +26105,22 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
       // prints the supplier-direct flag off ship_from_supplier, and a later edit
       // to the product must not rewrite how a past order was fulfilled — which is
       // the whole reason they are snapshot columns rather than a join.
+      // §183 — options_json AND options_cost_at_sale, the two columns this path
+      // was the last writer of order lines to leave null. database.js describes
+      // the first as "chosen option labels + price deltas, for the receipt"; the
+      // web, mini-app and QR checkouts have all filled it for as long as any of
+      // them has had options, lib/feie.js prints it on both ticket templates,
+      // the admin order detail parses it back out, and prepareCommitUnreservedOrder
+      // rebuilds a line's stock-backed extras FROM it — which is why writing it
+      // is the whole of the counter's add-on stock fix and no new deduction code
+      // was needed. NULL when nothing was chosen, never '[]': that is the shape
+      // every reader already handles.
       const insItem = tx.prepare(
         `INSERT INTO retail_order_items
            (order_id, product_id, name_en, name_cn, sku, size, qty, unit_price, line_total,
-            ship_modes, needs_ice_pack, ship_from_supplier, unit_cost_at_sale)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+            ship_modes, needs_ice_pack, ship_from_supplier, unit_cost_at_sale, options_json,
+            options_cost_at_sale)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       );
       for (const r of resolved) {
         insItem.run(
@@ -26023,7 +26129,21 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
           r.p.needs_ice_pack ? 1 : 0,
           r.p.ship_from_supplier ? 1 : 0,
           // Snapshotted by resolveManualOrderLines() alongside the price.
-          r.unitCostAtSale ?? null
+          r.unitCostAtSale ?? null,
+          (r.options && r.options.length) ? JSON.stringify(r.options) : null,
+          // What the chosen stock-backed extras COST us. A QR sale and a till
+          // sale at one counter must be costed by the same code or the margin
+          // report cannot be reconciled — routes/shop-menu.js writes this from
+          // the same helper for the same reason.
+          //
+          // `tx`, NOT tdb(), and §24's discipline is the whole of the reason.
+          // On SQLite the two are the same connection and this reads the same
+          // rows either way; on pg `tx` is a checked-out client and tdb() is
+          // the pool, so an ambient handle here would read the cost OUTSIDE
+          // the transaction that is writing the line. Caught by
+          // test_tx_conversion_manual_order's source assertion, which exists
+          // for exactly the mistake this was.
+          optionsCostAtSale(tx, r.options)
         );
       }
       tx.prepare(

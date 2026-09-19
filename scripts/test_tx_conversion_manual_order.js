@@ -73,8 +73,14 @@ const stripComments = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^[ \t]*
 // rate through the real taxSettings(), and a fixture with no such table would
 // have exercised the catch that silently charges nothing — which is the one
 // branch that must not be the one under test.
+//
+// The two option tables arrive with §183: the route now resolves a line's
+// answers — what they cost and what they snapshot — through
+// lib/product-options, which reads both. Absent, every case here failed with
+// "no such table", which reads like a conversion defect and is not one.
 const DB_TABLES = ['retail_customers', 'retail_orders', 'retail_order_items',
-                   'retail_payments', 'retail_stores', 'storefront_config'];
+                   'retail_payments', 'retail_stores', 'storefront_config',
+                   'retail_product_options', 'retail_product_option_choices'];
 
 // ── Extraction ─────────────────────────────────────────────────────────────
 // Anchors carry NO line ending — a `\r\n` anchor is the specific mistake §24
@@ -178,16 +184,35 @@ function makeHandler(db, spies) {
        row sets. Given a stub they would have asserted the stub.
        It carries costAtSale, its own dependency, extracted the same way — the
        cost snapshot the operator cannot override. */
+    /* §183 added two more of its own dependencies, and BOTH are the real thing
+       for the reason the note below gives about costAtSale. productOptions
+       decides what a line's answers cost and what it snapshots into
+       options_json; manualOrderAddonSoldOut decides whether a stock-backed
+       extra may be sold at all. Stubbed, the cases below would assert the
+       stub's idea of a line rather than the route's. */
     resolveManualOrderLines: new Function(
-      'tdb', 'productUnitCostYuan',
+      'tdb', 'productUnitCostYuan', 'productOptions', 'inventory',
       `${extractFunction(RETAIL_SRC, 'costAtSale')}\n`
+      + `${extractFunction(RETAIL_SRC, 'manualOrderAddonSoldOut')}\n`
       + `${extractFunction(RETAIL_SRC, 'resolveManualOrderLines')}\nreturn resolveManualOrderLines;`
       // The REAL cost resolver, not left undefined. costAtSale swallows its own
       // errors and answers null, so an absent dependency here would not fail —
       // it would quietly snapshot a null cost on every line while these cases
       // assert the committed rows. A silent null is the shape of an assertion
       // that stops meaning anything.
-    )(() => db, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan),
+    )(() => db, require(path.join(ROOT, 'lib', 'product-cost')).productUnitCostYuan,
+      require(path.join(ROOT, 'lib', 'product-options')),
+      require(path.join(ROOT, 'lib', 'inventory'))),
+    /* §183 — WHAT THE CHOSEN EXTRAS COST US, snapshotted onto the line beside
+       the price. Real, and for the same reason costAtSale above is real: it
+       swallows its own errors and answers null, so leaving it undefined would
+       not have failed loudly — it would have thrown inside the transaction and
+       looked like a rollback defect. Its own dependency, chosenOptionCostYuan,
+       is the pure lib. */
+    optionsCostAtSale: new Function(
+      'chosenOptionCostYuan',
+      `${extractFunction(RETAIL_SRC, 'optionsCostAtSale')}\nreturn optionsCostAtSale;`
+    )(require(path.join(ROOT, 'lib', 'option-cost')).chosenOptionCostYuan),
     /* The counter-sale gate the handler consults before taking money. Extracted
        rather than stubbed true/false: whether the till is shut for a store is a
        real read, and a stub would decide it here instead of letting the fixture

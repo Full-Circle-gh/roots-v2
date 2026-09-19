@@ -67,7 +67,12 @@ const { isShopCode } = require('../lib/shop-code');
 const { getCategoryTree } = require('../lib/category-tree');
 const { themeToCssVars, sanitizeTheme } = require('../lib/brand-theme');
 const inventory = require('../lib/inventory');
-const optionLimits = require('../lib/option-limits');
+// §183 — what a product asks and whether an answer is allowed, shared with the
+// counter till. Both rule sets used to live in this file: which choices a
+// product still offers, and whether a posted answer is allowed. They moved
+// rather than being copied; the module header says why. lib/option-limits is
+// no longer required here because the one caller that used it went with them.
+const productOptions = require('../lib/product-options');
 // resolveProductImage and normalizeCurrency are retail.js's, exported for this
 // file so the photo fallback and the money format cannot drift from the
 // storefront's. routes/retail-shops.js requires retail.js the same way; both
@@ -346,75 +351,29 @@ function shopName(shop) {
 function attachOptions(shop, listings) {
   const pids = listings.map(r => r.store_product_id);
   if (!pids.length) return;
-  const ph = pids.map(() => '?').join(',');
-  const options = tdb().prepare(
-    `SELECT id, product_id, question_en, question_cn, type, is_required, min_choices, max_choices, sort_order
-       FROM retail_product_options
-      WHERE product_id IN (${ph}) AND type IN ('single','multi')
-      ORDER BY sort_order ASC, id ASC`
-  ).all(...pids);
-  if (!options.length) return;
 
-  const oph = options.map(() => '?').join(',');
-  const choices = tdb().prepare(
-    `SELECT id, option_id, label_en, label_cn, price_delta, is_default, stock_product_id, sort_order
-       FROM retail_product_option_choices
-      WHERE option_id IN (${oph})
-      ORDER BY sort_order ASC, id ASC`
-  ).all(...options.map(o => o.id));
-  if (!choices.length) return;
-
-  const addonIds = [...new Set(choices.map(c => c.stock_product_id).filter(Boolean))];
+  // THE SHELF IS THIS SHOP'S, and it is the half §183 left with the caller.
+  // A choice carrying a stock_product_id is a real thing on a real shelf here;
+  // a sugar level has none and is never asked about. §47 governs the verdict —
+  // an absent shelf record IS sold out, not "untracked" — and the online
+  // store's own sellableStockSql takes the opposite view for its own reasons.
+  const addonIds = [...new Set(tdb().prepare(
+    `SELECT DISTINCT c.stock_product_id
+       FROM retail_product_option_choices c
+       JOIN retail_product_options o ON o.id = c.option_id
+      WHERE o.product_id IN (${pids.map(() => '?').join(',')})
+        AND c.stock_product_id IS NOT NULL`
+  ).all(...pids).map(r => r.stock_product_id))];
   const addonAvail = addonIds.length
     ? inventory.getAvailableMap(shop.location_id, addonIds, SHOP_CHANNEL)
     : new Map();
-  const extraSoldOut = (c) => {
-    if (!c.stock_product_id) return false;          // a sugar level has no shelf
+  const isChoiceSoldOut = (c) => {
     const a = addonAvail.get(c.stock_product_id);
-    return !a || a.available <= 0;                  // absent shelf record IS sold out — §47
+    return !a || a.available <= 0;
   };
 
-  const byOpt = new Map();
-  for (const c of choices) {
-    if (!byOpt.has(c.option_id)) byOpt.set(c.option_id, []);
-    byOpt.get(c.option_id).push({
-      id: c.id,
-      en: c.label_en || c.label_cn || '',
-      cn: c.label_cn || c.label_en || '',
-      d: Number(c.price_delta) || 0,
-      def: c.is_default ? 1 : 0,
-      out: extraSoldOut(c) ? 1 : 0,
-    });
-  }
-
-  const byProduct = new Map();
-  for (const o of options) {
-    const cs = byOpt.get(o.id) || [];
-    // A QUESTION WITH NOTHING TO ANSWER IT IS NOT ASKED. An option whose
-    // choices were all deleted would otherwise render as a heading with empty
-    // space under it, and — if it were required — as an order that can never
-    // be placed.
-    if (!cs.length) continue;
-    // HOW MANY of a pick-any group may be ticked, clamped here and NOT on the
-    // client. The floor is measured against the choices still pickable, so a
-    // "choose 2" whose stock-backed extras have sold down to one asks for one
-    // rather than becoming unanswerable — lib/option-limits.js carries the rule.
-    // A ceiling needs no such clamp; it simply stops binding.
-    const lim = optionLimits.effectiveLimits(o, cs.filter(c => !c.out).length);
-    if (!byProduct.has(o.product_id)) byProduct.set(o.product_id, []);
-    byProduct.get(o.product_id).push({
-      id: o.id,
-      q_en: o.question_en || o.question_cn || '',
-      q_cn: o.question_cn || o.question_en || '',
-      multi: o.type === 'multi' ? 1 : 0,
-      // A floor of 1 or more IS required; the flag and the floor agree on save,
-      // and the clamp above can only lower the floor, never the flag.
-      req: (o.is_required || lim.min > 0) ? 1 : 0,
-      min: lim.min,
-      max: lim.max,
-      choices: cs,
-    });
-  }
+  const byProduct = productOptions.questionsForProducts(tdb(), pids, { isChoiceSoldOut });
+  if (!byProduct.size) return;
 
   for (const r of listings) {
     const opts = byProduct.get(r.store_product_id);
@@ -427,7 +386,7 @@ function attachOptions(shop, listings) {
     // a drink whose required "milk?" has run out of every milk cannot be made,
     // and the honest answer is the sold-out bar the card already knows how to
     // draw, not a picker the customer cannot satisfy.
-    if (!r.sold_out && opts.some(o => o.req && o.choices.every(c => c.out))) r.sold_out = true;
+    if (!r.sold_out && productOptions.requiredQuestionIsUnanswerable(opts)) r.sold_out = true;
   }
 }
 
@@ -3841,125 +3800,47 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
     wanted.set(pid, (wanted.get(pid) || 0) + qty);
   }
 
-  // ── THE ANSWERS, CHECKED AGAINST THE QUESTIONS (§120) ────────────────────
-  // Everything here is asked of the DATABASE, never of the post body: which
-  // product a choice belongs to, what it costs, whether its question was
-  // required, and whether the thing it promises is still on the shelf.
-  const postedChoiceIds = [...new Set(rows.flatMap(r => r.choices))];
-  const choiceById = new Map();
-  if (postedChoiceIds.length) {
-    const cph = postedChoiceIds.map(() => '?').join(',');
-    for (const c of tdb().prepare(
-      `SELECT c.id, c.option_id, c.label_en, c.label_cn, c.price_delta, c.stock_product_id,
-              o.product_id, o.type, o.is_required, o.min_choices, o.max_choices,
-              o.question_en, o.question_cn
-         FROM retail_product_option_choices c
-         JOIN retail_product_options o ON o.id = c.option_id
-        WHERE c.id IN (${cph})`
-    ).all(...postedChoiceIds)) choiceById.set(c.id, c);
-  }
-  // Every question the products on this order carry, so a REQUIRED one that was
-  // simply left out of the post body is caught. The client blocks on it too
-  // (rule 2B), and the client is not the thing being trusted.
+  // ── THE ANSWERS, CHECKED AGAINST THE QUESTIONS (§120; moved out in §183) ─
+  // Every rule that used to be written out here — a choice belongs to the
+  // product it was posted for, a single-answer question takes exactly one
+  // answer, a pick-any group's floor and ceiling bind, a required question must
+  // be answered, nothing is priced from the post body — now lives in
+  // lib/product-options.js, and the counter till obeys the same copy. The rules
+  // did not change; read the module header for why they moved.
+  //
+  // THE SHELF STAYS HERE, because WHOSE shelf is this shop's question and not a
+  // rule about options. §47 governs the verdict as it governs everything else
+  // on this shop's shelf: counted units at THIS location, absent record is
+  // sold out.
   const orderedPids = [...wanted.keys()];
-  const pph = orderedPids.map(() => '?').join(',');
-  const questions = tdb().prepare(
-    `SELECT id, product_id, type, is_required, min_choices, max_choices
-       FROM retail_product_options
-      WHERE product_id IN (${pph}) AND type IN ('single','multi')`
-  ).all(...orderedPids);
-  const liveChoiceCount = new Map();
-  // PICKABLE choices, not merely existing ones — a stock-backed extra that has
-  // run out is not an answer anybody could have given. The menu clamped each
-  // group's floor by this same count (attachOptions), so measuring it any other
-  // way here would reject an order the page itself told the customer to place:
-  // "choose 2 sides" with two of three sold out is served as "choose 1".
-  const pickableChoiceCount = new Map();
-  if (questions.length) {
-    const qph = questions.map(() => '?').join(',');
-    const qChoices = tdb().prepare(
-      `SELECT option_id, id, stock_product_id FROM retail_product_option_choices
-        WHERE option_id IN (${qph})`
-    ).all(...questions.map(q => q.id));
-    for (const c of qChoices) liveChoiceCount.set(c.option_id, (liveChoiceCount.get(c.option_id) || 0) + 1);
-    const qAddonIds = [...new Set(qChoices.map(c => c.stock_product_id).filter(Boolean))];
-    const qAddonAvail = qAddonIds.length
-      ? inventory.getAvailableMap(shop.location_id, qAddonIds, SHOP_CHANNEL)
-      : new Map();
-    for (const c of qChoices) {
-      if (c.stock_product_id) {
-        const a = qAddonAvail.get(c.stock_product_id);
-        if (!a || a.available <= 0) continue;          // absent shelf record IS sold out — §47
-      }
-      pickableChoiceCount.set(c.option_id, (pickableChoiceCount.get(c.option_id) || 0) + 1);
-    }
-  }
-  const questionsFor = new Map();
-  for (const q of questions) {
-    // A question with no answers left is not asked — the same rule the menu
-    // renders by, and without it a required one could make the product
-    // impossible to order rather than merely unanswerable.
-    if (!(liveChoiceCount.get(q.id) > 0)) continue;
-    if (!questionsFor.has(q.product_id)) questionsFor.set(q.product_id, []);
-    questionsFor.get(q.product_id).push(q);
-  }
+  const optAddonIds = [...new Set(tdb().prepare(
+    `SELECT DISTINCT c.stock_product_id
+       FROM retail_product_option_choices c
+       JOIN retail_product_options o ON o.id = c.option_id
+      WHERE o.product_id IN (${orderedPids.map(() => '?').join(',')})
+        AND c.stock_product_id IS NOT NULL`
+  ).all(...orderedPids).map(r => r.stock_product_id))];
+  const optAddonAvail = optAddonIds.length
+    ? inventory.getAvailableMap(shop.location_id, optAddonIds, SHOP_CHANNEL)
+    : new Map();
+  const isChoiceSoldOut = (c) => {
+    const a = optAddonAvail.get(c.stock_product_id);
+    return !a || a.available <= 0;          // absent shelf record IS sold out — §47
+  };
 
-  // Stock-backed extras add their own demand, one per unit bought — exactly as
-  // the web checkout's expandStockLines has always counted them. Aggregated
-  // here so three lattes each taking an oat milk ask the shelf for three.
-  const addonWant = new Map();
-  for (const r of rows) {
-    const seenOpt = new Set();
-    // Answers per question on THIS line, so a pick-any group's ceiling can be
-    // counted. A duplicate choice id counts once: the tick-box it came from can
-    // only be on or off, so posting it twice is not two sides, it is one.
-    const answerCount = new Map();
-    for (const cid of r.choices) {
-      const c = choiceById.get(cid);
-      if (!c) return res.status(400).json({ success: false, error: 'bad_choice', store_product_id: r.pid });
-      if (c.product_id !== r.pid) {
-        return res.status(400).json({ success: false, error: 'choice_wrong_product', store_product_id: r.pid });
-      }
-      if (c.type !== 'single' && c.type !== 'multi') {
-        return res.status(400).json({ success: false, error: 'bad_choice', store_product_id: r.pid });
-      }
-      // A single-answer question takes ONE answer. Two would be a price built
-      // from a question the customer was never shown twice.
-      if (c.type === 'single') {
-        if (seenOpt.has(c.option_id)) {
-          return res.status(400).json({ success: false, error: 'too_many_answers', store_product_id: r.pid });
-        }
-        seenOpt.add(c.option_id);
-      }
-      if (!answerCount.has(c.option_id)) answerCount.set(c.option_id, new Set());
-      answerCount.get(c.option_id).add(c.id);
-      if (c.stock_product_id) {
-        addonWant.set(c.stock_product_id, (addonWant.get(c.stock_product_id) || 0) + r.qty);
-      }
-    }
-    // RULE 2B, SERVER SIDE. The page blocks first and names the question; this
-    // is the same rule where it cannot be skipped by posting straight at the
-    // endpoint.
-    const answered = new Set(r.choices.map(cid => choiceById.get(cid).option_id));
-    for (const q of (questionsFor.get(r.pid) || [])) {
-      // HOW MANY, server side. A pick-any group's floor and ceiling are the same
-      // rule the sheet enforces with a greyed-out tick-box, in the one place a
-      // post straight at this endpoint cannot skip. The floor is measured
-      // against the choices still pickable — see pickableChoiceCount — so it is
-      // the floor the customer was actually shown.
-      const lim = optionLimits.effectiveLimits(q, pickableChoiceCount.get(q.id) || 0);
-      const n = (answerCount.get(q.id) || new Set()).size;
-      if (lim.max && n > lim.max) {
-        return res.status(400).json({ success: false, error: 'too_many_answers', store_product_id: r.pid });
-      }
-      if (lim.min && n < lim.min) {
-        return res.status(400).json({ success: false, error: 'too_few_answers', store_product_id: r.pid });
-      }
-      if (q.is_required && !answered.has(q.id)) {
-        return res.status(400).json({ success: false, error: 'choice_required', store_product_id: r.pid });
-      }
-    }
+  const answers = productOptions.resolveAnswers(
+    tdb(), rows.map(r => ({ product_id: r.pid, qty: r.qty, choices: r.choices })),
+    { isChoiceSoldOut }
+  );
+  if (answers.error) {
+    return res.status(400).json({
+      success: false, error: answers.error, store_product_id: answers.product_id || null,
+    });
   }
+  // Stock-backed extras add their own demand, one per unit bought, exactly as
+  // the web checkout's expandStockLines has always counted them — aggregated by
+  // the module, so three lattes each taking an oat milk ask the shelf for three.
+  const addonWant = answers.addonWant;
 
   // AVAILABILITY IS RE-CHECKED AT SUBMIT, not trusted from the page the
   // customer has been reading. The menu they loaded may be minutes old and the
@@ -3997,12 +3878,14 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
       if (!a || a.available < need) deadAddons.add(aid);
     }
     if (deadAddons.size) {
-      for (const r of rows) {
-        for (const cid of r.choices) {
-          const c = choiceById.get(cid);
-          if (c && c.stock_product_id && deadAddons.has(c.stock_product_id)) { soldOut.push(r.pid); break; }
+      // Read off the RESOLVED answers rather than the posted ids: the snapshot
+      // already carries each choice's shelf link, looked up from this tenant's
+      // own tables, so this pass needs no second lookup of its own.
+      rows.forEach((r, i) => {
+        for (const o of answers.lines[i].options) {
+          if (o.stock_product_id && deadAddons.has(o.stock_product_id)) { soldOut.push(r.pid); break; }
         }
-      }
+      });
     }
   }
   // De-duplicated: since §120 one product may hold several lines, and the
@@ -4019,33 +3902,21 @@ router.post('/s/:shopCode/order', ORDER_LIMIT, express.json({ limit: '32kb' }), 
   }
 
   const cur = normalizeCurrency(cfg('currency', null));
-  const lines = rows.map(({ pid, qty, choices }) => {
-    const l = byId.get(pid);
-    // BASE PLUS WHAT WAS CHOSEN. The base is the shop's listing price and every
-    // delta is this tenant's own price_delta; nothing in this sum came from the
-    // browser. The order of the answers follows the order they were posted in,
-    // which is the order the questions were asked (see pkChosen).
-    let unit = Number(l.price) || 0;
-    const opts = choices.map(cid => {
-      const c = choiceById.get(cid);
-      unit = Math.round((unit + (Number(c.price_delta) || 0)) * 100) / 100;
-      // SNAPSHOTTED WITH THE QUESTION, and in both languages, exactly as the
-      // web checkout writes it — so the line still reads "Heat up?: Yes" on the
-      // ticket, the order page and the till after the option is edited or
-      // deleted. `label` (not label_en) is the key lib/feie.js reads.
-      return {
-        option_id: c.option_id, choice_id: c.id,
-        label: c.label_en, label_cn: c.label_cn || null,
-        question_en: c.question_en || null, question_cn: c.question_cn || null,
-        delta: Number(c.price_delta) || 0,
-        stock_product_id: c.stock_product_id || null,
-      };
-    });
+  const lines = rows.map((r, i) => {
+    const l = byId.get(r.pid);
+    // BASE PLUS WHAT WAS CHOSEN. The base is the shop's listing price (§42 puts
+    // it on the listing, not on the product) and the delta is the sum of this
+    // tenant's own price_delta columns, resolved by lib/product-options.js from
+    // choice IDS alone. Nothing in this sum came from the browser, and the base
+    // is the half the module deliberately does not know.
+    let unit = Math.round(((Number(l.price) || 0) + answers.lines[i].delta) * 100) / 100;
     // A negative delta could in principle take a line below zero, which is not
     // a price. Clamped rather than refused: the operator's own numbers put it
     // there and a customer standing at a counter should not meet a 500.
     if (!(unit >= 0)) unit = 0;
-    return { l, pid, qty, unit, opts, lineTotal: Math.round(unit * qty * 100) / 100 };
+    const opts = answers.lines[i].options;
+    return { l, pid: r.pid, qty: r.qty, unit, opts,
+             lineTotal: Math.round(unit * r.qty * 100) / 100 };
   });
   const subtotal = Math.round(lines.reduce((n, r) => n + r.lineTotal, 0) * 100) / 100;
 

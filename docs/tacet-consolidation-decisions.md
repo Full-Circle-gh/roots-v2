@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.324
+# Tacet shared-core consolidation — decisions record, v4.325
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -21,6 +21,8 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 **So: read the claim, then find the code by NAME** — a function, a column, a table, a constant — **and cite the position you actually found if you are writing a new entry.** This applies to every document this file points at as evidence, not only to this one.
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-09-19 · v4.325 — **§183 · THE COUNTER ASKS WHAT THE MENU ASKS, AND THE ANSWER HAS SOMEWHERE TO GO — REPORTED BY ASH:** *"the till doesn't show the variants of the products"*, then, when offered a choice between labelled tiles and a collapsing picker, the report that set the scope: *"the problem with your option 1 is that there are few options customers need to do it's not just size . stuff like hot or iced , extra shoot etc"*. **TWO DEFECTS, AND THE SECOND IS NOT A UI DEFECT.** The counter-catalogue query never selected `variant_label`, so two sizes of one drink drew two tiles with the same name — §129's finding on the QR menu, kept one surface over. And the till asked none of §120's questions, which drawing buttons would not have fixed: `resolveManualOrderLines` ignored `choices` and the manual-order INSERT was **the last writer of order lines in this machine still leaving `options_json` and `options_cost_at_sale` null**, so a collected answer would have been dropped between the cashier's tap and the kitchen's ticket — no iced on the slip, no ¥6 for the shot, no oat milk off the shelf. A button that silently forgets is worse than no button, which is why the road was built before the buttons. **`lib/product-options.js` is new and both routes call it**; the rules came OUT of `routes/shop-menu.js` rather than being copied, because two copies of what an extra costs drift into a counter charging a different price from the QR menu for the same coffee. Sizes stay as tiles (`Name · Label`, searchable in both languages) and only the QUESTIONS get a sheet: a size is a different product with its own price and shelf, an answer is not, and collapsing costs a tap on every sale. **A line is now a product PLUS its answers**, so every stock gate was re-read — `inCart` sums across a product's lines, which is a defect the feature would otherwise have introduced. **A bug in this work was caught by an existing suite:** the INSERT first read the option cost through the ambient `tdb()` inside the transaction, and `test_tx_conversion_manual_order`'s §24 source assertion refused it. **No Chinese was composed** — all nine pairs are copied from locked live ones, so `docs/tacet-delivery-vocabulary.md` is untouched. `scripts/test_till_options.js` (fast shard, mutant-verified) is new; `scripts/test_till_back.js`, already red on clean main because its stub never learned §150's route, is fixed here and called out.
 
 2026-09-18 · v4.324 — **§182 · WALLET MONEY IS REVENUE AT THE SALE, AND THE TWO REVENUE FIGURES ARE LABELLED APART — REPORTED BY ASH:** *"the 30 days revenue in finance section are not identital to the total revenue in report"*. Finance read ¥144,854 against Reports' ¥155,793 for the same thirty days. **Most of the gap was legitimate and the rest was a hole nobody had found.** `retail_orders.total` is the CASH RESIDUAL of a bill — §93 stores the credit tenders beside it rather than folded into it, so a refund can return each ¥ to the tender it came from — and Finance's revenue line summed `total` alone. Wallet money was therefore counted NEVER: not at the top-up, which §36 rules out, and not at the sale, which `total` had already netted off. The cost read has no such gap, so a wallet-settled order brought its full cost of goods into the card and no revenue at all, and gross profit was understated by the whole of store-credit spend, every period. Revenue is now `total + balance_used`, recognised at the sale, which is the rule the route header had stated since §36 and the code had never kept. **Points stay out and that is a decision:** `points_amount` is a discount the shop granted itself, no customer paid it, and a points-settled sale earning nothing while costing real stock is the truth about a giveaway. **The remaining difference is not a defect and is now disclosed on both screens** — Reports is cash-basis (top-ups booked on the day they land, gzgrocery valued off the stock ledger), Finance is order-basis. `docs/tacet-delivery-vocabulary.md` v1.138 records the Chinese. **gzgrocery's own two valuations are FLAGGED AND NOT TOUCHED** — see the section's last paragraph for why that is a separate change.
 2026-09-18 · v4.323 — **§181 · A SHOP-WIDE CLOSE OUTRANKS EVERY CHANNEL CELL, AND THE SWITCH THAT APPLIES BELONGS WHEREVER THE MASKED STATE IS SHOWN — REPORTED BY ASH:** *"in store I believe that's counter till? when I open yuexiu it close automatic. I can't open counter till for yuexiu now. it shows closed"*, then *"I want to have same feature of closing and open shop as I have on PC should work on the phone. also overviews all those options because right now seems that the sales section where all those toggles channels are in not working properly. audit that page... check for dead ends, errors"*. The till was never opening: `csCellOpen` reports every channel at a shop with `fulfillment_open = 0` as closed, so the write landed and the next read hid it. Four defects in one loop — the hidden write is now refused by name (`409 shop_closed`), the shop-wide state is reported (`shopOpen` on every cell, store and location), the phone re-reads instead of patching its own copy, and the phone gains the shop switch it never had. The audit Ash asked for found three more on the same screen: a failed read left it loading forever, a queued Meituan change was not shown, and the footer denied the control directly above it. A fifth bug was found by the new suite's own log line and fixed here — `refillQueueForCell`'s SELECT carried `//` comments inside the SQL literal, so every Meituan reopen ever made queued nothing. `docs/tacet-delivery-vocabulary.md` v1.137 records the Chinese.
@@ -19293,3 +19295,178 @@ would be the pre-§182 cash-only figure back as a second opinion.
 107, `test_finance_presentation.js` 31 unchanged). No schema change and no
 migration — `balance_used` is a column `database.js` already carries. No change
 to `.gitignore` or CI.
+## §183 — THE COUNTER ASKS WHAT THE MENU ASKS, AND THE ANSWER HAS SOMEWHERE TO GO
+
+**2026-09-18 · Ash reported it, twice, and the second report is the one that
+set the scope.**
+
+First: *"the till doesn't show the variants of the products"*. Told that sizes
+were the smaller half and offered a choice between labelled tiles and a
+collapsing picker, he named the real gap instead: *"the problem with your
+option 1 is that there are few options customers need to do it's not just size
+. stuff like hot or iced , extra shoot etc"*.
+
+### Two defects behind one report, and the second is not a UI defect at all
+
+**THE SIZE WAS NEVER READ.** Variants are independent `store_products` rows
+linked by `variant_group_id`, and siblings carry the SAME `name_en` and
+`name_cn` by construction. The counter catalogue query
+(`routes/retail-shops.js`, the `/counter-catalogue` route) selected id, names,
+sku, category and price and **never `variant_label`**, so a drink sold in two
+sizes drew two tiles reading "Latte" and "Latte" at two prices with the size
+written nowhere. That is not a choice presented badly; it is a duplicate
+listing, and it is word for word the finding §129 recorded on the QR menu three
+days earlier ("two cards with the SAME photograph and the SAME name — Almond
+Butter, ¥50 and ¥76 — with the size rendered nowhere"). The same defect had
+been found, named and fixed one surface over, and the counter kept it.
+
+**THE QUESTIONS WERE NEVER ASKED — AND COULD NOT HAVE BEEN ANSWERED.** Hot or
+iced, extra shot, sugar level are `retail_product_options` +
+`retail_product_option_choices`, which §120 gave the QR menu and which the web
+storefront and mini app have read for as long as either has existed. The till
+read none of them. **The load-bearing discovery is that drawing the buttons
+would not have been enough, and would have been actively worse:**
+
+- `resolveManualOrderLines` (`routes/retail.js`) read `product_id`, `qty` and
+  `unit_price` and ignored `choices` entirely.
+- The manual-order `INSERT INTO retail_order_items` carried no `options_json`
+  column and no `options_cost_at_sale`. **It was the last writer of order lines
+  in this machine still leaving both null** — the web, mini-app and QR
+  checkouts have filled them for as long as any of them has had options.
+
+So a till that collected an answer would have dropped it between the cashier's
+tap and the kitchen's ticket: no "iced" on the slip, no ¥6 for the shot, and no
+oat milk off the shelf. **A button that silently forgets is worse than no
+button**, because the cashier who knows the till cannot do it shouts to the
+kitchen, and the one who taps a button trusts it. That is why the road was
+built before the buttons and why this is one change rather than two.
+
+### The rules moved into one module; they were not copied
+
+`lib/product-options.js` is new and owns both halves: **what a product asks**
+(`questionsForProducts`, `requiredQuestionIsUnanswerable`) and **whether a
+posted answer is allowed and what it costs** (`resolveAnswers`). Every rule in
+it came OUT of `routes/shop-menu.js`, which is now a caller rather than the
+owner — `attachOptions` and the checkout's ~120-line validation block both
+reduce to calls, and `lib/option-limits` is no longer required in that file
+because its one caller went with the rules.
+
+**COPYING WAS THE CHEAPER OPTION AND IS REFUSED, and the reason is the shape of
+the failure rather than a preference for tidiness.** These are money-and-stock
+rules: what an extra shot adds to a price and which oat milk comes off which
+shelf. Two copies drift, and the drift shows up as a counter charging a
+different price from the QR menu for the same coffee — invisible at the till,
+invisible on the ticket, and surfacing only when a month's margin will not
+reconcile. §181's lesson one week earlier was the same one from the other end:
+a rule stated in one place that a second place does not consult is not a rule.
+
+**WHAT THE MODULE DELIBERATELY DOES NOT KNOW: availability, and the base
+price.** Whose shelf an extra comes off is a question about ONE location and
+the two callers reach it differently (the QR menu has a shop and its location;
+the till has a store id and the `avail` map its tiles are already gated by), so
+both pass the sold-out verdict in as a predicate and the module queries no
+inventory. The base price is §42's — it lives on the listing, not the product —
+so the module returns a `delta` and each caller adds its own base and clamps.
+An earlier draft that owned both would have had to know which caller it was
+serving, which is the same coupling in the other direction.
+
+### Sizes stay as tiles; answers get a sheet. The two are not the same thing
+
+The QR menu collapses siblings into one card with a picker (§129). **The
+counter does not, and the difference is deliberate.** A size is a different
+PRODUCT with its own price, its own shelf and its own questions; an answer is
+not. A cashier with somebody waiting wants one tap, and the till's grid is
+built on muscle memory — its own source says so where it keeps a sold-out tile
+in its slot rather than reshuffling. So sizes remain one tile each with the
+label printed under the name (`Name · Label`, the shape the back office already
+uses in `11-meituan.js`, `12-guanyi.js` and `29-channel-sync.js`), the label is
+searchable in both languages, and collapsing was weighed and rejected: it costs
+a tap on every sale and reshuffles the grid.
+
+The QUESTIONS get a sheet, because the alternative multiplies. Three questions
+of three answers is twenty-seven tiles for one drink.
+
+### A line is a product plus its answers, and several consequences follow
+
+One latte hot and one latte iced are two lines on one bill. So `findLine` is
+keyed on product + sorted choice ids rather than product alone, and **every
+stock gate had to be re-read**: `inCart` now sums across every line carrying a
+product (it returned the first match), the stepper's cap measures the same way,
+and `bumpQty`'s old `next > st` is replaced. Left alone, a two-line product
+would have sold twice past its shelf — a real defect introduced BY the feature,
+not present before it.
+
+### Decisions recorded rather than left implicit
+
+**A SOLD-OUT EXTRA IS REFUSED AT THE COUNTER, and the softer option was
+weighed.** §47 governs: an absent shelf record IS sold out, not untracked. The
+sheet greys such a choice (§120 rule 1A) and the server refuses one that slipped
+through. The argument against is real — a cashier holding the oat milk carton
+while the till refuses the sale is a bad minute — but the till already refuses
+to sell a PRODUCT past its shelf, so carving an exception for extras would put
+two rules on one screen and let a count go quietly negative. If this proves
+wrong in practice it should be changed with evidence from the counter, not
+pre-emptively.
+
+**A REQUIRED QUESTION WITH NO ANSWER LEFT TAKES THE PRODUCT.** Reported to the
+till as `stock: 0` rather than as a new flag, because a zero shelf is the only
+"cannot sell this" the tiles already understand and a made-here row (stock
+`null`) would otherwise never gate at all.
+
+**THE SHELF LINK RIDES THE TILL'S PAYLOAD AND NOT THE PUBLIC MENU'S.**
+`questionsForProducts` takes `withStockLink`, off by default. The till mirrors
+this location's shelf locally between catalogue reads, so an extra that is also
+sold as a product of its own has a tile to keep honest after a sale; the QR
+menu is served to anybody with the URL and an internal product id has no
+business there.
+
+**NOTHING IS PRICED FROM THE POST BODY.** A body carries choice IDS. Every
+label, question, delta and shelf link is read back from this tenant's own
+tables. Consequently the till posts the BASE price on a menu line and never the
+summed one — posting the sum would have the till pricing the extras and the
+server pricing them again, which is a double charge on every answered line.
+
+### A bug in this work, caught by an existing suite
+
+The first draft of the INSERT called `optionsCostAtSale(tdb(), r.options)` —
+the ambient pool handle, inside the transaction writing the line.
+`test_tx_conversion_manual_order`'s source assertion ("no ambient `tdb()`
+survives inside the transaction body") caught it. On SQLite the two are the
+same connection and it read the same rows either way; on pg `tx` is a
+checked-out client and `tdb()` is the pool, so the cost would have been read
+outside the transaction. §24's discipline earned its keep on a line written six
+days after it was last cited.
+
+### Chinese: nothing was composed, so the vocabulary document is untouched
+
+All nine pairs the sheet needs were already locked and live and are COPIED:
+`Choose your options · 选择选项` and `Please choose: · 请选择 ` from
+`routes/shop-menu.js` (themselves the mini app's), `Required · 必选` from the
+product editor, §153's four pick-any pieces (`Choose · 选 `, `Up to · 最多 `,
+`At least · 至少 `, ` 项`), `Out of stock · 缺货` and `Add · 添加` from the
+till's own table. Copying a locked pair into the second screen that needs it is
+not composing — the precedent §120 and §129 both set and stated. The one word
+that does NOT survive the crossing is the basket: the QR menu says `Add to
+basket · 加入购物车` and a till has a bill and lines, so the bare verb already
+in this file is used instead.
+
+### Tests
+
+`scripts/test_till_options.js`, 38 assertions across twelve sections, in the
+FAST shard with an npm alias. The read side runs the real express router
+against a real database; the write side runs `lib/product-options` against the
+same fixtures; the wiring neither can observe (the INSERT's columns, the
+transaction handle, what the till posts) is asserted against source.
+`TILLOPT_MUTANT=1` makes `resolveAnswers` trust a delta the caller posted — the
+one thing the module exists to prevent — and per §24 asserts it modified the
+source before its red counts. The mutant fails exactly one case, the one it
+targets.
+
+**A ROTTED SUITE WAS FIXED ON THE WAY PAST, and it is called out rather than
+slipped in.** `scripts/test_till_back.js` was already red on clean `main`: its
+fetch stub never grew an arm for `/stores/:id/counter-catalogue` when §150 moved
+the till onto that route, so the URL fell through to the stores arm, which
+answers a LIST where the till reads `data.rows`. Every tile silently vanished
+and five cases died on a null `[data-add]`. It went unnoticed because that suite
+lives in the SLOW shard, which is not run — which is the cost of that standing
+decision showing up in the ledger, not an argument against it.
