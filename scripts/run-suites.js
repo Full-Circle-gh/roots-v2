@@ -116,6 +116,10 @@ const SLOW = new Set([
   'test_mobile_customers.js',
   'test_mobile_customer_record.js', 'test_mobile_mirrored_order.js',
   'test_mobile_mirrored_order_info.js',
+  /* The combine/split gate on the phone. Same reason as every m-probe suite
+     above it: no findChrome() of its own, so isSlow() cannot see the browser
+     and the fast shard would skip its whole run and report a tick. */
+  'test_mobile_parcel_merge.js',
   /* Drives Chromium through scripts/lib/m-probe like the rest of this block,
      and like the rest of this block it defines no findChrome() of its own and
      prints no Chromium skip line — so isSlow() below cannot see the browser and
