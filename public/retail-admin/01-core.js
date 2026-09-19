@@ -238,6 +238,11 @@ const TD_ERR = {
   not_cancellable:        ['That order is past the point where it can be cancelled.', '该订单已无法取消。'],
   not_reversible:         ['That cannot be undone.', '该操作无法撤销。'],
   not_shippable:          ['That order is not ready to ship.', '该订单尚不可发货。'],
+  // §193 — reachable from three routes now (parcel dispatch, parcel prepare and
+  // the JD label), and until now it had no entry at all: a Chinese admin read
+  // the bare code in English. Both halves are live verbatim — '该包裹' from
+  // invalid_shipment_id below, '正在等待补货。' from lib/push-events.js.
+  parcel_awaiting_restock: ['That parcel is waiting on a restock.', '该包裹正在等待补货。'],
   not_payable:            ['That order cannot be paid for in its current state.', '该订单当前状态无法付款。'],
   not_delivered:          ['That has not been delivered yet.', '尚未送达。'],
   has_tracking:           ['A waybill is already attached.', '已关联运单号。'],

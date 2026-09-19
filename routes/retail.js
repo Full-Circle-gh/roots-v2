@@ -7320,8 +7320,13 @@ function notifyOrderStatusChange(orderId, newStatus) {
    rather than `=== 'pickup'` because the real question is "does a parcel of
    ours leave?", which lib/fulfilment.js says is the one it answers.
 
-   ONCE PER PARCEL, for free: a shipment can only be dispatched once (the route
-   refuses `already_dispatched` above), so there is no stamp to keep. */
+   ONCE PER PARCEL, and §193 is why that sentence needs the second half it now
+   has. It used to be free: a shipment can only be dispatched once (the dispatch
+   route refuses `already_dispatched`), so there was no stamp to keep. The JD
+   waybill route is a second door to the same event — minting a label stamps
+   dispatched_at itself — so it reads the parcel's dispatched_at before its own
+   UPDATE and calls this only when that read was empty. Still no stamp, but the
+   guard now lives in two places and a third door would owe the same one. */
 /* §190 — WHICH BOX. The customer of a split order has two parcels coming on
    different days, and "one of the parcels" makes them count boxes to work out
    which one landed. The word is free: every mode already has a locked pair, and
@@ -31939,10 +31944,30 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
   if (!jd.jdEnabled(jc)) return res.status(409).json({ success: false, error: 'jd_not_configured' });
 
   const o = tdb().prepare(
-    `SELECT id, order_no, status, store_id, recipient_name, recipient_phone, address_full, address_json, tracking_number
+    `SELECT id, order_no, status, store_id, recipient_name, recipient_phone, address_full, address_json,
+            tracking_number, awaiting_restock_pids
        FROM retail_orders WHERE id = ?`).get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
-  if (!['paid', 'preparing', 'dispatched'].includes(o.status)) {
+  /* §193 — A PARKED ORDER'S OTHER BOX GETS ITS LABEL. §187 opened the parcel
+     dispatch and prepare routes to 'awaiting_restock' and deliberately left
+     this one narrow, on the reading that minting a label ships the whole order.
+     That reading was already false when it was written: this route resolves ONE
+     shipment, stamps that shipment's tracking, and commits that shipment's
+     stock (§58 addendum). What it ships is a box.
+
+     The cost of leaving it out was the same order §187 was reported on,
+     TC000784: the drawer offers "Create JD label" on the ambient box that the
+     shortage never touched, the operator fills the dialog, and the server
+     answers 409 not_shippable — "That order is not ready to ship", about a box
+     that is ready and sitting on the bench. The only way out was to paste a
+     waybill bought elsewhere, which is exactly the free JD tracking this route
+     exists to get.
+
+     THE TEST IS THE PARCEL, NOT THE ORDER — the same rule as §187, enforced by
+     the same helper below, and the park itself is untouched: the order stays
+     'awaiting_restock' (see the flip further down) and the short products keep
+     waiting on a real restock. */
+  if (!['paid', 'preparing', 'dispatched', 'awaiting_restock'].includes(o.status)) {
     return res.status(409).json({ success: false, error: 'not_shippable', status: o.status });
   }
   if (!o.recipient_name || !o.recipient_phone || !o.address_full) {
@@ -31967,9 +31992,23 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
   if (shipment.mode === 'supplier') {
     return res.status(409).json({ success: false, error: 'supplier_parcel_no_label' });
   }
+  // §193 — the shortage's own question, asked of THIS box. A parcel holding a
+  // line the order is parked on is not shippable however it is labelled, so it
+  // is refused here exactly as the dispatch route refuses it. 0 held lines is
+  // the licence: the shortage has nothing to say about this box.
+  if (parcelHeldLines(id, shipment.id, orderWaitingPids(o))) {
+    return res.status(409).json({ success: false, error: 'parcel_awaiting_restock' });
+  }
   if (shipment.tracking_number) {
     return res.status(409).json({ success: false, error: 'already_has_waybill', number: shipment.tracking_number });
   }
+  /* §193 — read BEFORE the UPDATE below stamps it. Minting a label sends a box
+     that may never have been through the dispatch route (the drawer's label
+     button and its "Mark this parcel dispatched" button are two ways to the
+     same event, and the operator can take either first). This is the flag that
+     tells the two apart, and it is what keeps §188's customer line once per
+     parcel now that the parcel has a second door out. */
+  const parcelAlreadyOut = !!shipment.dispatched_at;
 
   // JD 时效产品 — the operator picks one of three real services in the drawer
   // and we pass its code here. Codes verified against JD's printed 时效产品:
@@ -32070,8 +32109,17 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
         WHERE id = ?`).run(waybill, derived, id);
   }
 
+  /* §193 — AND THE PARK SURVIVES THE LABEL, which is the load-bearing half of
+     this section, in §187's words and for §187's reason: exactly one reader
+     acts on 'awaiting_restock' (checkAwaitingRestockForRestock scans that
+     status and nothing else). Flip the order here and the restock lands, the
+     sweep looks straight past it, and the order sits "dispatched" forever with
+     food nobody was told to make. The customer push rides on the same flag and
+     is skipped with it — "your order is on the way" is not true of an order
+     whose kitchen lines have not been made. The parcel carries its own JD
+     tracking and says so on both screens. */
   let firstDispatch = false;
-  if (o.status !== 'dispatched') {
+  if (o.status !== 'dispatched' && o.status !== 'awaiting_restock') {
     tdb().prepare(
       "UPDATE retail_orders SET status = 'dispatched', dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
     firstDispatch = true;
@@ -32086,8 +32134,33 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
   logActivity(req.user.id, req.user.username, 'jd_waybill_created', 'retail_order', id,
     { waybill, product, shipment_id: shipment.id, package_count: packageCount }, req.ip);
   if (firstDispatch) { try { notifyOrderStatusChange(id, 'dispatched'); } catch (e) { /* best-effort */ } }
+  /* §193 — §188'S LINE, ON THE LABEL PATH. A parked order never sets
+     firstDispatch (the guard above), so without this the box goes out and its
+     customer hears nothing — the silence §188 was written to end, reappearing
+     through the other door. Gated on the parcel not already being out, because
+     the dispatch route has then already said it and §188 is once per parcel.
+     Best-effort, like both of its siblings: the waybill is minted and the stock
+     committed, so throwing here would fail a shipment that has really happened
+     over a message nobody is waiting on. */
+  if (o.status === 'awaiting_restock' && !parcelAlreadyOut) {
+    try { notifyParcelShippedWhileParked(id, shipment.mode); }
+    catch (e) {
+      // Swallowed on purpose: the waybill is minted at JD, the parcel stamped
+      // as gone and its stock committed by the time this runs, so throwing here
+      // would report a failure for a shipment that has really happened — and
+      // the operator's retry would mint a SECOND waybill. The notifier logs its
+      // own failures; this is the belt to that braces.
+    }
+  }
 
-  res.json({ success: true, data: { id, shipment_id: shipment.id, waybill, presort: cr.presort, order_status: 'dispatched' } });
+  /* §193 — THE STATUS THE ORDER ACTUALLY HOLDS, not the literal 'dispatched'
+     this used to return unconditionally: a parked order keeps its park and both
+     drawers re-render off this value. READ BACK RATHER THAN DERIVED, the way
+     the parcel dispatch route reads it, because the commit between here and the
+     flip above is free to move the order and a value computed from the opening
+     SELECT would then describe a row that no longer exists. */
+  const afterStatus = tdb().prepare('SELECT status FROM retail_orders WHERE id = ?').get(id)?.status || o.status;
+  res.json({ success: true, data: { id, shipment_id: shipment.id, waybill, presort: cr.presort, order_status: afterStatus } });
 });
 
 router.delete('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, (req, res) => {
