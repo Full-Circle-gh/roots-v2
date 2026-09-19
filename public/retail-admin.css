@@ -7846,6 +7846,33 @@
   }
   @keyframes ar-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
   @media (prefers-reduced-motion: reduce) { .ar-dot { animation: none; } }
+  /* §189 — the parcel that was already out when the order was cancelled.
+     Sits INSIDE the shipment card, above its actions row, because the box is
+     what somebody has to go and chase and the card is the box. Tinted with the
+     cancelled hue rather than given its own colour: the order IS cancelled, and
+     a new colour for one panel would read as a new kind of state. */
+  .parcel-recovery {
+    margin-top: var(--s3);
+    padding: var(--s4);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--st-cancelled) 7%, var(--bg-elev-1));
+    border: 1px solid color-mix(in srgb, var(--st-cancelled) 22%, transparent);
+  }
+  .parcel-recovery .pr-head {
+    font-size: 14px; font-weight: 500; color: var(--text-1); line-height: 1.5;
+  }
+  .parcel-recovery .pr-sub {
+    margin-top: 4px; font-size: 12.5px; line-height: 1.6; color: var(--text-3);
+  }
+  /* Answered: one quiet line. The case is closed, so it states the outcome and
+     gets out of the way — it is history on a cancelled order, not a control. */
+  .parcel-recovery.done {
+    display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap;
+    background: var(--bg-elev-1); border-color: var(--line-soft);
+  }
+  .parcel-recovery .pr-meta {
+    font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums;
+  }
   .manifest .mf-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .manifest .mf-zh { font-family: var(--f-sans); font-size: 11px; font-weight: 300; color: var(--text-3); }
   /* SKU + quantity are the packer's two critical fields — shared mono chips

@@ -2366,6 +2366,16 @@
       <div class="status-chip st-dispatched"             data-status="delayed"          onclick="setOrderStatus(this)" title="The carrier, the platform or our own rider has left someone waiting · 配送需要跟进"><span class="dot"></span>Needs a call</div>
       <div class="status-chip st-awaiting_restock"       data-status="awaiting_restock" onclick="setOrderStatus(this)" title="Paid orders waiting for stock to arrive · 待补货订单"><span class="dot"></span>Awaiting restock<span class="chip-ct alert" id="oc-awaiting_restock"></span></div>
       <div class="status-chip st-cancelled"              data-status="cancelled"        onclick="setOrderStatus(this)"><span class="dot"></span>Cancelled</div>
+      <!-- §189 — boxes already out when their order was cancelled, and nobody
+           has said what became of them. A PSEUDO-STATUS, resolved server-side
+           by an EXISTS over retail_shipments, never a real o.status value.
+           THE CHIP HAS TO EXIST FOR THE DASHBOARD ROW TO WORK AT ALL — see the
+           'delayed' note above, which shipped filterless for six days because
+           tdSecOpenOrders finds the chip by data-status and does nothing
+           quietly when there is none. No count badge: the orders-counts
+           endpoint does not carry this pseudo-status, and the dashboard row
+           already carries the number. -->
+      <div class="status-chip st-cancelled"              data-status="recover_parcel"   onclick="setOrderStatus(this)" title="Cancelled orders with a parcel that was already out — say whether it came back · 已取消但包裹已发出,待确认是否收回"><span class="dot"></span>To recover</div>
       <div class="status-chip st-refunded"               data-status="refunded"         onclick="setOrderStatus(this)"><span class="dot"></span>Refunded</div>
       <div class="status-chip st-refunded"               data-status="refunds_open"     onclick="setOrderStatus(this)" title="Pending refund requests · 待处理退款"><span class="dot"></span>Refund queue<span class="chip-ct alert" id="refund-queue-count"></span></div>
       <div class="status-chip st-awaiting_restock"       data-status="needs_invoice"    onclick="setOrderStatus(this)" title="Orders with an invoice request — the count is the ones still to issue · 开票申请订单,计数为待开票"><span class="dot"></span>Invoice<span class="chip-ct alert" id="oc-needs_invoice"></span></div>
@@ -2498,6 +2508,11 @@
       <!-- Pseudo-status: the "Delivery needs a call" chip. Resolved by
            lib/delivery-alerts.js server-side, never a real o.status value. -->
       <option value="delayed"></option>
+      <!-- Pseudo-status: the "Parcels to recover" chip (§189). An EXISTS over
+           retail_shipments server-side, never a real o.status value. A <select>
+           silently refuses a value it has no <option> for, which widens the
+           list to everything with the chip lit as though it had worked. -->
+      <option value="recover_parcel"></option>
     </select>
 
     <!-- Bulk attach tracking modal -->

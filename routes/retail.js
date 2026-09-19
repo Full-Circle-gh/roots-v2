@@ -2054,6 +2054,41 @@ function parcelHeldLines(orderId, shipmentId, waiting) {
    never returned to the shelf: a silent loss of one, on the order least likely
    to be looked at again. Asked as a count, the reversal returns exactly what is
    still here. */
+/* §189 — MARK THE BOXES THAT WERE ALREADY OUT WHEN THE ORDER WAS CANCELLED.
+   Idempotent by the `recovery_needed_at IS NULL` guard, so a re-run of the
+   cancel branch cannot re-open a case somebody has already closed — which
+   matters because closing one can move stock.
+
+   THE SAME THREE STAMPS orderShippedQty reads, and deliberately so: what makes
+   a box worth chasing is that its units left the count, and §180 established
+   that packing is when that happens. A packed box still on the bench is the
+   easiest possible recovery and the one most likely to be forgotten.
+
+   A SUPPLIER PARCEL IS NOT EXCLUDED. It ships from the supplier rather than
+   from us, so "go and get it back" is a phone call to them instead of to a
+   courier — a different action, not a reason to leave it off the list. */
+function flagParcelsForRecovery(orderId) {
+  return tdb().prepare(
+    `UPDATE retail_shipments
+        SET recovery_needed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+      WHERE order_id = ?
+        AND recovery_needed_at IS NULL
+        AND (prepared_at IS NOT NULL OR dispatched_at IS NOT NULL OR delivered_at IS NOT NULL)`
+  ).run(orderId).changes;
+}
+
+// The units on ONE parcel, which is what goes back on the shelf when that
+// parcel is recovered. Per parcel rather than per order because two boxes can
+// be out on one cancelled order and only one of them come back.
+function parcelStockLines(orderId, shipmentId) {
+  return tdb().prepare(
+    `SELECT product_id, SUM(qty) AS qty
+       FROM retail_order_items
+      WHERE order_id = ? AND shipment_id = ? AND product_id IS NOT NULL
+      GROUP BY product_id HAVING qty > 0`
+  ).all(orderId, shipmentId);
+}
+
 function orderShippedQty(orderId) {
   const m = new Map();
   for (const r of tdb().prepare(
@@ -17115,6 +17150,36 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   // §84 — units already ordered and not on the shelf. Same never-null shape as
   // every other fire here, so a client can read it without a guard.
   let batch_owed = { count: 0, items: [] };
+  /* §189 — boxes that were already out when their order was cancelled, and
+     that nobody has said what became of yet. Same never-null shape as every
+     other fire here, so a client can read it without a guard, and the same
+     zero-count default: a query failure renders an ABSENT block rather than a
+     broken one, which for this block is the right degradation because it is
+     absent at zero by design. NOT store-scoped — a box in a courier's van is
+     not on anybody's shelf, so the header's store picker leaves it alone, for
+     the reason the Inbox queues above give. */
+  let parcel_recovery = { count: 0, items: [] };
+  try {
+    const prCount = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM retail_shipments
+        WHERE recovery_needed_at IS NOT NULL AND recovery_outcome IS NULL`
+    ).get().n || 0;
+    if (prCount) {
+      /* THE ORDER NUMBER TRAVELS WITH IT, because this row opens onto orders
+         and TC000784 is what identifies one. `waiting_since` is the stamp
+         itself — how long the box has been out with nobody chasing it, which
+         is the fact the row states. */
+      const prItems = tdb().prepare(
+        `SELECT s.id AS shipment_id, s.order_id, s.mode, o.order_no,
+                s.recovery_needed_at AS waiting_since
+           FROM retail_shipments s
+           JOIN retail_orders o ON o.id = s.order_id
+          WHERE s.recovery_needed_at IS NOT NULL AND s.recovery_outcome IS NULL
+          ORDER BY s.recovery_needed_at ASC, s.id ASC LIMIT @preview`
+      ).all({ preview: previewLimit });
+      parcel_recovery = { count: prCount, items: prItems };
+    }
+  } catch (e) { console.warn('[dashboard/ops parcel_recovery]', e.message); }
 
   // Optional per-store scope (mirrors the dashboard's store picker). When a
   // store_id is supplied we count that store's own shelf (its retail_store_stock
@@ -17951,7 +18016,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, kitchen_ready, batch_owed, channel_sync_stale, channel_items_attention, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, kitchen_ready, batch_owed, parcel_recovery, channel_sync_stale, channel_items_attention, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.
@@ -26696,6 +26761,24 @@ function buildOrderFilter(query) {
     // issued ones stay browsable in this view but sort below the open work.
     filterSql += ` AND ${fapiaoQueue.requestedSql('o')}
              AND ${fapiaoQueue.issuableSql('o')}`;
+  } else if (status === 'recover_parcel') {
+    /* §189 — pseudo-status: the orders behind the dashboard's "Parcels to
+       recover" row. A box that was packed or gone when its order was cancelled,
+       and that nobody has said what became of yet.
+
+       A PSEUDO-STATUS RATHER THAN THE 'cancelled' TAB, and the delayed filter
+       directly below is the argument: that card navigated to a tab which by
+       definition could not contain what it counted, so the row said one number
+       and the screen showed another set. The cancelled tab would have the same
+       shape of problem — every cancelled order this shop has ever had, with
+       nothing marking the handful that need chasing. The row counts parcels and
+       this lists the orders those parcels are on, which is the closest an
+       order-level filter gets and is what the drawer needs to be opened on. */
+    filterSql += ` AND EXISTS (
+               SELECT 1 FROM retail_shipments rcx
+                WHERE rcx.order_id = o.id
+                  AND rcx.recovery_needed_at IS NOT NULL
+                  AND rcx.recovery_outcome IS NULL)`;
   } else if (status === 'delayed') {
     // Pseudo-status: the orders behind the dashboard's "Delivery needs a call"
     // card (§98). THE CARD HAD NOWHERE TO SEND ANYBODY — it navigated to the
@@ -27443,6 +27526,14 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     // sent while the order stays parked. Always 0 for an order that is not
     // parked right now, so nothing outside the restock queue reads differently.
     held_lines: parcelHeldLines(id, s.id, waitingPids),
+    // §189 — this box was already out when the order was cancelled. NULL on
+    // every parcel of every order that ends normally; an open case (needed_at
+    // set, outcome still null) is what the drawer draws a control for and what
+    // the Needs-you count counts.
+    recovery_needed_at: s.recovery_needed_at || null,
+    recovery_outcome:   s.recovery_outcome   || null,
+    recovery_closed_at: s.recovery_closed_at || null,
+    recovery_closed_by: s.recovery_closed_by || null,
     items: o.items.filter(it => it.shipment_id === s.id),
     tracking: buildShipmentTrackingView(s),
   }));
@@ -28518,6 +28609,93 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch',
 // filed any JD claim. Clearing every delayed air parcel on the order at once
 // (a single order rarely has more than one) drops the badge and the card
 // together. Pass { cleared: false } to re-open a mistakenly-cleared alert.
+/* §189 — CLOSE A PARCEL-RECOVERY CASE, and say what became of the box.
+ *
+ * The one question the system cannot answer for itself: did it come back?
+ * Ash decided (2026-09-19) that it is asked rather than assumed, because goods
+ * returned from a customer are not automatically sellable again — fresh food
+ * least of all — and a system that quietly put them back on the shelf would be
+ * inventing the one fact only the person holding the box has.
+ *
+ *   { outcome: 'recovered' }      the units go back on the shelf
+ *   { outcome: 'not_recovered' }  no stock moves; the loss is recorded
+ *
+ * THE STOCK IS RETURNED THROUGH reverseOrderStock, THE SAME DOOR THE CANCEL
+ * USES, scoped to this parcel's own lines. §187's cancel already returned
+ * everything that was still in the building and deliberately left these units
+ * out; this is the other half of that same reversal, arriving late because the
+ * answer arrived late. The two sets are disjoint by construction — the cancel
+ * subtracted exactly what orderShippedQty counted — so nothing is returned
+ * twice, and reverseCommittedLines' own idempotency is the backstop.
+ *
+ * CLOSING IS ONE-WAY AND ATOMIC. The UPDATE carries `recovery_outcome IS NULL`,
+ * so two operators answering at once cannot both move the stock: the second
+ * gets `already_closed` and no ledger row is written. Re-opening a closed case
+ * is not offered, because the undo for "I put it back on the shelf by mistake"
+ * is Quick stock, which leaves a ledger row with a person's name on it.
+ */
+const RECOVERY_OUTCOMES = new Set(['recovered', 'not_recovered']);
+router.post('/api/retail-admin/orders/:id/shipments/:sid/recovery',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id  = parseInt(req.params.id, 10);
+  const sid = parseInt(req.params.sid, 10);
+  const outcome = String(req.body?.outcome || '').trim();
+  if (!RECOVERY_OUTCOMES.has(outcome)) {
+    return res.status(400).json({ success: false, error: 'bad_outcome' });
+  }
+  const o = tdb().prepare('SELECT id, order_no FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  const ship = tdb().prepare(
+    'SELECT id, mode, recovery_needed_at, recovery_outcome FROM retail_shipments WHERE id = ? AND order_id = ?'
+  ).get(sid, id);
+  if (!ship) return res.status(404).json({ success: false, error: 'shipment_not_found' });
+  if (!ship.recovery_needed_at) {
+    return res.status(409).json({ success: false, error: 'no_recovery_open' });
+  }
+
+  const actorLabel = req.user.display_name || req.user.username || null;
+  // Atomic: only the operator who wins this UPDATE moves the stock below.
+  const upd = tdb().prepare(
+    `UPDATE retail_shipments
+        SET recovery_outcome = ?, recovery_closed_at = CURRENT_TIMESTAMP,
+            recovery_closed_by = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND recovery_needed_at IS NOT NULL AND recovery_outcome IS NULL`
+  ).run(outcome, actorLabel, sid);
+  if (upd.changes !== 1) {
+    return res.status(409).json({ success: false, error: 'already_closed' });
+  }
+
+  let returned = 0;
+  if (outcome === 'recovered') {
+    const lines = parcelStockLines(id, sid);
+    if (lines.length) {
+      try {
+        reverseOrderStock(id, {
+          lines,
+          actorUserId: req.user.id,
+          actorLabel,
+          note: `parcel recovered — ${o.order_no} parcel ${sid}`,
+        });
+        returned = lines.length;
+      } catch (e) {
+        // Logged, not thrown: the case is already closed above and re-running
+        // this route would be refused, so throwing would strand the operator
+        // with a closed case and no way to retry. The ledger is the record of
+        // whether the stock actually moved, and a missing row is visible there.
+        console.error('[parcel-recovery reverse]', id, sid, e);
+      }
+    }
+  }
+
+  logActivity(req.user.id, req.user.username, 'parcel_recovery_closed', 'retail_order', id,
+    { shipment_id: sid, mode: ship.mode, outcome, lines_returned: returned }, req.ip);
+
+  res.json({ success: true, data: {
+    shipment_id: sid, outcome, lines_returned: returned,
+    fulfillment: buildOrderFulfillment(id),
+  } });
+});
+
 router.post('/api/retail-admin/orders/:id/air-delay/ack',
   requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
@@ -32645,6 +32823,13 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
            Empty for every order with no packed or shipped parcel, which is every
            order this branch saw before today. */
         const gone = orderShippedQty(id);
+        /* §189 — AND SOMEBODY IS TOLD THOSE UNITS ARE OUT THERE. §187 stopped
+           the reversal crediting the shelf with them, which made the count
+           honest and told nobody: a box on its way to a person who is no longer
+           a customer, and no screen anywhere saying so. Stamped here, on the
+           parcels that were packed or gone at the moment of the cancel, because
+           this is the only point that knows both facts at once. */
+        flagParcelsForRecovery(id);
         /* AN EMPTY LIST IS NOT "REVERSE NOTHING" TO reverseOrderStock — it falls
            through to reverseCommittedOrder, which reverses the WHOLE order. So
            when the scoping leaves nothing behind (every unit on the order is

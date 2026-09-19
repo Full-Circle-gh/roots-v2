@@ -4073,6 +4073,45 @@ addColumn('retail_shipments', 'prepared_at', 'DATETIME');
 addColumn('retail_shipments', 'air_delay_cleared_at', 'DATETIME');
 addColumn('retail_shipments', 'air_delay_cleared_by', 'TEXT');
 
+/* §189 — A BOX THAT WENT OUT ON AN ORDER THAT WAS THEN CANCELLED.
+ *
+ * §187 let a parked order send the parcels its shortage does not touch, and
+ * §187's cancel scoping stopped the refund crediting the shelf with units that
+ * are in a courier's van. What it could not do is tell anybody those units are
+ * out there: the money went back, the count stayed honest, and a box nobody
+ * owned was on its way to somebody who is no longer a customer.
+ *
+ * FOUR COLUMNS ON THE PARCEL, not a new table, because the parcel IS the
+ * subject — the same shape and the same reasoning as air_delay_cleared_at/by
+ * directly above, which records what was done about one box's problem.
+ *
+ *   recovery_needed_at   stamped when the order was cancelled while this box
+ *                        was packed or gone. NULL = nothing to recover, which
+ *                        is every parcel on every order that ends normally.
+ *   recovery_outcome     'recovered' | 'not_recovered'. NULL while open, and
+ *                        "open" is what puts it on the Needs-you list.
+ *   recovery_closed_at   when somebody answered.
+ *   recovery_closed_by   who answered, so the ledger row has a name behind it.
+ *
+ * THE OUTCOME IS ASKED, NEVER ASSUMED, and that is Ash's decision (2026-09-19)
+ * rather than a shortcut: goods that came back from a customer are not
+ * automatically sellable again — fresh food especially — so a system that
+ * quietly returned the stock would be inventing an answer only the person
+ * holding the box can give. 'recovered' puts that parcel's units back on the
+ * shelf; 'not_recovered' moves no stock and records the loss.
+ */
+addColumn('retail_shipments', 'recovery_needed_at', 'DATETIME');
+addColumn('retail_shipments', 'recovery_outcome',   'TEXT');
+addColumn('retail_shipments', 'recovery_closed_at', 'DATETIME');
+addColumn('retail_shipments', 'recovery_closed_by', 'TEXT');
+try {
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_retail_shipments_recovery
+             ON retail_shipments(recovery_needed_at)
+           WHERE recovery_needed_at IS NOT NULL AND recovery_outcome IS NULL`);
+} catch { /* Partial index: older SQLite builds reject the WHERE clause, and the
+              Needs-you count is a small scan either way. Not worth failing
+              startup over an optimisation. */ }
+
 // ── The late-parcel case (§98) ──────────────────────────────────────────────
 // WHAT WAS DONE ABOUT A PARCEL THAT ARRIVED LATE AND SPOILED THE FOOD, step by
 // step, for as long as it takes. The alert above already existed and already

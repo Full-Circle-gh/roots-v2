@@ -3062,6 +3062,36 @@ function tdAttnRender() {
     });
   }
 
+  /* §189 — boxes that were already out when their order was cancelled, and that
+     nobody has said what became of yet. Amber rather than red: the money is
+     already back with the customer and the shelf count is already honest, so
+     nothing is wrong right now — what is waiting is a decision only a person
+     can make, and it gets stale rather than urgent.
+
+     IT CARRIES A CLOCK, unlike the Restock row below. recovery_needed_at is a
+     real stamp taken at the cancel, so "oldest 3d" is a measured age and not
+     invented precision — and age is the whole point here: the longer a box is
+     out, the less likely it comes back.
+
+     ORDER NUMBERS IN THE STATE LINE, for the reason the kitchen row above gives
+     about product names: the row opens onto orders, and TC000784 is what
+     identifies one. They are DATA, so they carry no EN/CN pair and the
+     separator is the one the rest of this file joins meta fragments with. */
+  const pr = DASH_OPS.parcel_recovery || { count: 0, items: [] };
+  if (pr.count && dashCardWants('parcel_recovery')) {
+    const prShown = (pr.items || []).map(it => it.order_no).filter(Boolean).slice(0, 2);
+    const prRest = Math.max(0, Number(pr.count || 0) - prShown.length);
+    fires.push({
+      sev: 'amber', icon: 'box',
+      label: cuT('Parcels to recover', '待收回包裹'),
+      n: pr.count, mins: tdOldestMins(pr.items),
+      state: prShown.length
+        ? prShown.join(cuT(', ', '，')) + (prRest > 0 ? ` +${prRest} ${cuT('more', '更多')}` : '')
+        : null,
+      cta: cuT('Open orders', '前往订单'), go: "tdSecOpenOrders('recover_parcel')",
+    });
+  }
+
   // Restock — the one fire with no clock and never any. "15 out of stock" is a
   // state, not a queue: nothing records when a product went short, and inventing
   // a duration for it would be inventing precision. It states its condition
