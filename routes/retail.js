@@ -7224,6 +7224,49 @@ function notifyOrderStatusChange(orderId, newStatus) {
   } catch (e) { console.error('[notify-status]', e); }
 }
 
+/* §188 — ONE BOX OF A PARKED ORDER HAS LEFT, AND THE CUSTOMER IS TOLD SO.
+   §187 let a parked order send the parcels the shortage does not touch, and
+   deliberately stopped short of saying anything: the order keeps its park, so
+   `firstDispatch` is never set and notifyOrderStatusChange never runs. That is
+   right about the ORDER — "your order has shipped" is untrue while the kitchen
+   lines have not been made — and it left the customer with nothing at all. A
+   box arriving unannounced, days before the rest, reads as a short delivery.
+
+   IN-APP ONLY, AND THAT IS THE DECISION HERE. The WeChat subscribe message
+   costs one one-shot consent per send, and the send worth spending it on is the
+   one that says the whole order is on its way. So this writes the notification
+   row and does NOT touch sendSubscribeMessage — which is also why it does not
+   go through notifyOrderStatusChange, whose whole back half is that push.
+
+   NOT A NEW STATUS. `ORDER_STATUS_NOTIF` is keyed on the status column and the
+   order's status has deliberately not changed; adding a key there would have
+   made the push fire and burnt the consent. The type is its own
+   ('order_parcel_shipped'), which is safe because the customer's notification
+   screen renders title/body and routes on ref_type — it does not switch on
+   type. Checked rather than assumed: miniapp/pages/notifications/notifications.js.
+
+   SHIPS-NOTHING ORDERS ARE EXCLUDED, per this document's Rule 5 (notifications
+   branch on fulfilment type): a pickup customer is never told a parcel shipped
+   and a counter sale walked out with the goods. shipsNothing is the predicate
+   rather than `=== 'pickup'` because the real question is "does a parcel of
+   ours leave?", which lib/fulfilment.js says is the one it answers.
+
+   ONCE PER PARCEL, for free: a shipment can only be dispatched once (the route
+   refuses `already_dispatched` above), so there is no stamp to keep. */
+function notifyParcelShippedWhileParked(orderId) {
+  const o = tdb().prepare(
+    'SELECT id, fulfillment_type, channel FROM retail_orders WHERE id = ?'
+  ).get(orderId);
+  if (!o || shipsNothing(o)) return;
+  notifyForOrder(orderId, (row) => ({
+    category: 'order', type: 'order_parcel_shipped',
+    title_en: 'Part of your order has shipped',
+    title_cn: '订单部分已发货',
+    body_en: `Order ${row.order_no} — one of the parcels has shipped. The rest follows once the remaining items are back in stock.`,
+    body_cn: `订单 ${row.order_no} — 其中一个包裹已发货，其余商品待补货后发货。`,
+  }));
+}
+
 // RFC3339 timestamp in Asia/Shanghai (+08:00), the format WeChat's shipping API
 // wants for upload_time, e.g. "2026-06-29T15:29:35+08:00". Independent of the
 // server's own TZ.
@@ -28444,6 +28487,20 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch',
     { shipment_id: sid, mode: ship.mode, first: firstDispatch }, req.ip);
   if (firstDispatch) {
     try { notifyOrderStatusChange(id, 'dispatched'); } catch (e) { /* best-effort */ }
+  }
+  /* §188 — the parked order's own line, which §187 left silent. `firstDispatch`
+     is false here by construction (the guard above never sets it for a parked
+     order), so this is not an alternative branch to the push above but the case
+     that push deliberately does not cover. Best-effort like its sibling: a
+     failed notification must never undo a dispatch that has already happened. */
+  if (o.status === 'awaiting_restock') {
+    try { notifyParcelShippedWhileParked(id); }
+    catch (e) {
+      // Swallowed on purpose: the parcel is already stamped as gone and the
+      // stock already committed, so throwing here would fail a dispatch that
+      // has really happened over a message nobody is waiting on. The notifier
+      // logs its own failures; this is the belt to that braces.
+    }
   }
 
   // §187 — the status the order ACTUALLY holds, not the literal 'dispatched'
