@@ -68,6 +68,12 @@ How a session answers Ash, in every brief:
 - **End with a recommendation.** Say what to do, not just the options.
 - **Say so when a request is a bad idea**, and say why, before doing it. The
   flag comes first; the work still gets done unless Ash changes course.
+- **No day-estimates.** Say what the job touches and how risky it is. Asked how
+  long, answer in what a session can actually judge — "one pass", or "several
+  rounds with you in between". Where something genuinely has to be waited on,
+  name which: CI, a deploy, or a question only Ash can answer. This is here
+  because a change quoted as "a few days" shipped in under an hour; an inflated
+  estimate invites scoping down work that did not need it.
 
 ## Citations
 
