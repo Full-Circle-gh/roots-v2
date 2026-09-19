@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.326
+# Tacet shared-core consolidation — decisions record, v4.327
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+2026-09-19 · v4.327 — **§185 · WHOLESALE COUNTS IN THE PRODUCT RANKINGS, AND THEY READ THE ORDER RECORD LIKE EVERYTHING ELSE — DECIDED BY ASH**, asked in terms at the end of §184 — *"should wholesale count in top products? Right now gzgrocery is excluded from those two product screens entirely"* — and answered *"yes"*. **THE QUESTION WAS RIGHT AND THE PREMISE BEHIND IT WAS HALF WRONG, which changed the work.** Top products on the dashboard and a product's own Sales card did drop gzgrocery outright, and that is the half Ash decided. Catalogue highlights already counted it — but off `retail_stock_ledger`, the record §184 established is the wrong one: dated by when the daemon wrote the row rather than by the order, and carrying no money at all. So the same case could land in one week on the units tile and another on a revenue figure, and `goingNowhere` needed a SECOND `NOT IN` to ask one question. **ALL THREE NOW READ THE MIRROR'S ORDER LINES**, which carry `line_total` written at the sale, so a ranking is by the price of the day. **`rising` GAINS THE CHANNEL AND ITS OLD REASON IS GONE RATHER THAN OVERRULED:** it was held out because the ledger "sometimes carries a same-week reverse… risks painting a false spike", and a reversed order read off the mirror is flipped to `cancelled` and dropped from BOTH windows by `PAID_O` — the hazard belonged to the record, not the channel. **THE CUSTOMER READS KEEP THE EXCLUSION, and that is why `PAIDO_ALL` is a SECOND constant rather than `PAIDO` widened:** a gzgrocery mirror carries no `customer_id`, so top customers, new-vs-returning and the cohort subqueries would either see nothing or, where they did, count a pallet as a person. `scripts/test_product_wholesale.js` is new and mutant-verified in both halves — and its FIRST draft was not, because one binder mapped `${PAIDO}` and `${PAIDO_ALL}` to the same predicate and could not tell the regression from the fix; that is recorded below. No Chinese, no schema, no migration, no change to `.gitignore` or CI.
 2026-09-19 · v4.326 — **§184 · gzgrocery IS READ FROM THE ORDER RECORD ON THE REPORTS DASHBOARD, AND THE LEDGER VALUATION BESIDE IT IS GONE — the second half of Ash's §182 report:** *"the 30 days revenue in finance section are not identital to the total revenue in report"*. §182 closed the wallet half and FLAGGED this one rather than fixing it, on a reason that turned out to be wrong: that mirror rows exist only from the day `GZGROCERY_MIRROR_ORDERS` was switched on, so repointing Reports would zero earlier periods. **`backfillGzMirrors()` mirrors the whole `gzgrocery_orders` table at startup**, so the history was already there and the blocker was not real; that correction is what made this a one-PR change. **THE DAEMON WRITES TWO RECORDS FOR ONE ORDER, IN ONE BRANCH, ALWAYS TOGETHER** — a `retail_stock_ledger` row (reason `gzgrocery_order`) and a `retail_orders` mirror — so the question was never whether to count the channel but WHICH record to read. Finance read the mirror; the dashboard excluded the mirror from every revenue SUM and folded `guanyiPickupSales()` back in, which values the LEDGER. **The ledger loses on three counts:** it carries no price, so the figure was looked up LIVE on every request and a gz price change moved a past month's reported revenue; it is dated by when the daemon wrote the row rather than by the order's own date, so takings landed in the wrong day and sometimes the wrong month; and it carries no cost, while the mirror's items carry `unit_cost_at_sale`. **NOT A DOUBLE COUNT — a substitution**, and that is why nothing was inflated before, only misvalued and misdated. **THE LEGACY HALF SURVIVES, AND IS THE WHOLE REASON FOR A NEW FUNCTION:** `guanyi_pickup_log` holds drift pickups inferred before the order read existed, which have no order behind them to mirror, so deleting the fold outright would have deleted real history from the curve. `guanyiLegacyPickupSales()` reads that source and no other. **AOV LOSES ITS gzgrocery CASE TOO, as a correction:** `orders` counted the mirrors all along via `PAID_ALL`, so the old AVG was a mean over a different population than its own denominator. **FLAGGED AND NOT TOUCHED:** `/api/retail-admin/sales/summary`'s gzgrocery card and the two product-level aggregations still read the ledger or exclude the channel — their own screens, their own questions, and one PR per change. `scripts/test_dashboard_gzgrocery.js` is new, mutant-verified red in three places. No Chinese: no string on any screen changed, so `docs/tacet-delivery-vocabulary.md` is untouched. No schema and no migration. No change to `.gitignore` or CI.
 2026-09-19 · v4.325 — **§183 · THE COUNTER ASKS WHAT THE MENU ASKS, AND THE ANSWER HAS SOMEWHERE TO GO — REPORTED BY ASH:** *"the till doesn't show the variants of the products"*, then, when offered a choice between labelled tiles and a collapsing picker, the report that set the scope: *"the problem with your option 1 is that there are few options customers need to do it's not just size . stuff like hot or iced , extra shoot etc"*. **TWO DEFECTS, AND THE SECOND IS NOT A UI DEFECT.** The counter-catalogue query never selected `variant_label`, so two sizes of one drink drew two tiles with the same name — §129's finding on the QR menu, kept one surface over. And the till asked none of §120's questions, which drawing buttons would not have fixed: `resolveManualOrderLines` ignored `choices` and the manual-order INSERT was **the last writer of order lines in this machine still leaving `options_json` and `options_cost_at_sale` null**, so a collected answer would have been dropped between the cashier's tap and the kitchen's ticket — no iced on the slip, no ¥6 for the shot, no oat milk off the shelf. A button that silently forgets is worse than no button, which is why the road was built before the buttons. **`lib/product-options.js` is new and both routes call it**; the rules came OUT of `routes/shop-menu.js` rather than being copied, because two copies of what an extra costs drift into a counter charging a different price from the QR menu for the same coffee. Sizes stay as tiles (`Name · Label`, searchable in both languages) and only the QUESTIONS get a sheet: a size is a different product with its own price and shelf, an answer is not, and collapsing costs a tap on every sale. **A line is now a product PLUS its answers**, so every stock gate was re-read — `inCart` sums across a product's lines, which is a defect the feature would otherwise have introduced. **A bug in this work was caught by an existing suite:** the INSERT first read the option cost through the ambient `tdb()` inside the transaction, and `test_tx_conversion_manual_order`'s §24 source assertion refused it. **No Chinese was composed** — all nine pairs are copied from locked live ones, so `docs/tacet-delivery-vocabulary.md` is untouched. `scripts/test_till_options.js` (fast shard, mutant-verified) is new; `scripts/test_till_back.js`, already red on clean main because its stub never learned §150's route, is fixed here and called out.
 
@@ -19571,3 +19572,80 @@ harness now binds it deliberately: a suite that reports a crash where it means
 `npm run test:fast` 293/293 green on `95f725e` after rebasing onto §183. No
 schema change, no migration, no change to `.gitignore` or CI. No string on any
 screen changed, so `docs/tacet-delivery-vocabulary.md` is untouched.
+
+## §185 — WHOLESALE COUNTS IN THE PRODUCT RANKINGS, AND THEY READ THE ORDER RECORD
+
+**DECIDED BY ASH.** §184 shipped with a question attached, because it was not a
+session's to answer: *"should wholesale count in top products? Right now
+gzgrocery is excluded from those two product screens entirely."* The answer was
+*"yes"*.
+
+### The premise the question was put on was half wrong
+
+The session that asked it had read `NOTGZO` at three sites and summarised them
+alike. Reading the bodies showed two different situations:
+
+- **Top products** (dashboard) and **`products/:id/sales`** excluded gzgrocery
+  outright, on no stated reason, from their first commit. That is the half Ash
+  decided, and the decision is simply applied.
+- **`products/highlights`** already counted it. Its own header said so —
+  `bestSeller` and `goingNowhere` were "storefront + gzgrocery" — but it got
+  there through a SECOND query against `retail_stock_ledger`, merged in by hand.
+
+So the work is not one change but two, and the second is §184's finding one
+level down.
+
+### The ledger is the wrong record here for the same reasons
+
+§184 established it for money; it holds for units. A ledger row is dated by
+`l.created_at` — when the daemon wrote it — while the mirror's order line is
+dated by the order. So a case could fall in one week on the units tile and
+another on any figure taken from the order record, and the two tiles on one band
+could disagree about the same sale. The ledger also carries no money, which is
+why a units tile could count wholesale while a revenue tile beside it could not.
+
+`goingNowhere` carried the cost of that split openly: two `NOT IN` clauses, one
+per record, to answer the single question *did this product sell at all*. It is
+one clause now.
+
+### `rising` gains the channel, and the reason it lacked one is gone
+
+It was held out deliberately: *"the ledger sometimes carries a same-week reverse
+(a corrected drift read), and folding that into a %-jump metric risks painting a
+false spike from a sync hiccup."* That was true of the ledger. Read off the
+mirrors it is not: a reversed gzgrocery order is flipped to `cancelled` by
+`ensureGzMirror`, and `PAID_O` drops a cancelled order from **both** windows, so
+there is no half-counted week left to spike. **The hazard belonged to the record,
+not to the channel** — which is the whole shape of §184 and §185 together.
+
+### DECIDED: `PAIDO_ALL` is a second constant, never `PAIDO` widened
+
+`PAIDO` on the dashboard also carries **top customers**, **new-vs-returning
+buyers** and the **cohort subqueries**. A gzgrocery mirror has no `customer_id`
+— the daemon writes none, because a wholesale pickup has no storefront account —
+so widening the shared constant would either change nothing in those reads or,
+where it did, count a pallet as a person. Two names, two questions. The suite
+asserts both declarations, so a later tidy-up that merges them fails.
+
+### Held by
+
+`scripts/test_product_wholesale.js`, new, auto-discovered into the fast shard. It
+slices each route's own SQL out and runs it against a fixture where one product
+sold 2 units through the mini app and 18 as a wholesale case.
+
+**MUTANT-VERIFIED IN BOTH HALVES** — Top products reverted to `PAIDO` goes red,
+and highlights re-excluding gzgrocery goes red.
+
+**THE FIRST DRAFT WAS NOT, AND THE REASON IS WORTH KEEPING.** Its binder mapped
+both `${PAIDO}` and `${PAIDO_ALL}` to the same predicate, so the mutation it was
+written to catch passed cleanly: the suite could not distinguish the regression
+from the fix. `${PAIDO}` means different things in the two routes — storefront-
+only on the dashboard, the bare allow-list in highlights — and the binder is now
+told which, with each route's own declaration asserted so the binding cannot
+quietly stop matching the code. A second trap from §184 was avoided the same
+way: `${hasImageFallbackSql('p')}` is bound to a constant so the ranking query
+RUNS, because a suite that reports a SQLite parse error where it means "the
+ranking is wrong" teaches the next reader to distrust it.
+
+`npm run test:fast` 294/294 green. No Chinese — no string on any screen changed.
+No schema, no migration, no change to `.gitignore` or CI.
