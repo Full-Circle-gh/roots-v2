@@ -458,6 +458,7 @@ Page({
   _clearPendingTimers() {
     if (this._placingWatchdog) { clearTimeout(this._placingWatchdog); this._placingWatchdog = null; }
     if (this._browseDebounce)  { clearTimeout(this._browseDebounce);  this._browseDebounce = null; }
+    if (this._noticeQueueTimer) { clearTimeout(this._noticeQueueTimer); this._noticeQueueTimer = null; }
   },
 
   onUnload() { this._clearPendingTimers(); },
@@ -1619,46 +1620,46 @@ Page({
         // Eligibility just changed, so the rider-phone notice may have to appear
         // or disappear (switching to an out-of-city address retires it).
         this.syncRiderPhoneWarn();
-        // First time a fresh-batch notice appears for this checkout visit,
-        // pop the modal once so it can't be missed. The inline banner stays
-        // put afterwards as a persistent reminder, and re-quotes (slot
-        // changes) only refresh the banner — they don't re-pop.
-        // Don't auto-pop over the Guangzhou-only popup — that flow re-quotes
-        // right after opening its own popup, and we don't want two stacked.
-        // The batch banner stays put, so it's reachable once they dismiss it.
-        if (data.batch_notice && !this.data.batchNoticeSeen && !this.data.localOnlyPopup) {
-          this.setData({ batchNoticePopup: true, batchNoticeSeen: true });
-        }
-        // Same one-time-popup behaviour for the generic "Ships soon" pre-order
-        // notice. Don't stack it on top of the batch popup (a cart could hold
-        // both) — if the batch modal is auto-showing this visit, the pre-order
-        // banner still appears and its tap target opens the modal on demand.
-        const batchAutoShowing = data.batch_notice && this.data.batchNoticePopup;
-        if (data.preorder_notice && !this.data.preorderNoticeSeen && !this.data.localOnlyPopup && !batchAutoShowing) {
-          this.setData({ preorderNoticePopup: true, preorderNoticeSeen: true });
-        }
-        // The Guangzhou dated-batch notice, same one-time popup, and last in the
-        // same anti-stacking chain. A cart can't raise this AND the pre-order
-        // one (complementary gates), but it can raise this alongside the batch
-        // notice if the address changed mid-visit, so it still yields to it.
-        const preorderAutoShown = data.preorder_notice && this.data.preorderNoticePopup;
-        if (data.local_fresh_notice && !this.data.localFreshNoticeSeen
-            && !this.data.localOnlyPopup && !batchAutoShowing && !preorderAutoShown) {
-          this.setData({ localFreshNoticePopup: true, localFreshNoticeSeen: true });
-        }
-        // "Sent from another shop" — auto-opens once PER ADDRESS, not once per
-        // visit: the answer is a property of where the order is going, so a
-        // customer who switches to an address served by a different shop has to
-        // be told again. Same anti-stacking rules as the two notices above; the
-        // banner stays put either way, so nothing is lost if we skip the pop.
-        const moveSig = this._addressSignature();
-        const preorderAutoShowing = data.preorder_notice && this.data.preorderNoticePopup;
-        const localFreshAutoShowing = data.local_fresh_notice && this.data.localFreshNoticePopup;
-        if (data.store_move_notice && this._storeMoveSeenFor !== moveSig
-            && !this.data.localOnlyPopup && !batchAutoShowing && !preorderAutoShowing
-            && !localFreshAutoShowing) {
-          this._storeMoveSeenFor = moveSig;
-          this.setData({ storeMoveNoticePopup: true });
+        // THE NOTICES QUEUE UP; THEY DO NOT COMPETE. A basket can raise more
+        // than one of these at once — the server computes batch_notice and
+        // preorder_notice independently (routes/retail.js), so a cart holding
+        // a batch-made dish AND a sold-out backorder extra raises both. Until
+        // now they yielded to each other: whichever rendered first popped, and
+        // the rest were left to their inline banner, which a customer who
+        // taps straight past the first modal never reads. Ash, on exactly that
+        // cart: "there should be 2 pop up one after another". So every notice
+        // that is due this pass joins a queue, the first one opens now, and
+        // each close pulls the next one up.
+        //
+        // The "seen" marks still make this once per visit: a re-quote (slot or
+        // address change) refreshes the banners and enqueues nothing.
+        // Nothing is enqueued over the Guangzhou-only popup either — that flow
+        // re-quotes right after opening its own popup, and the banners stay put
+        // so every notice is still reachable once it is dismissed.
+        if (!this.data.localOnlyPopup) {
+          const due = [];
+          if (data.batch_notice && !this.data.batchNoticeSeen) {
+            this.setData({ batchNoticeSeen: true });
+            due.push('batch');
+          }
+          if (data.preorder_notice && !this.data.preorderNoticeSeen) {
+            this.setData({ preorderNoticeSeen: true });
+            due.push('preorder');
+          }
+          if (data.local_fresh_notice && !this.data.localFreshNoticeSeen) {
+            this.setData({ localFreshNoticeSeen: true });
+            due.push('localFresh');
+          }
+          // "Sent from another shop" queues once PER ADDRESS, not once per
+          // visit: the answer is a property of where the order is going, so a
+          // customer who switches to an address served by a different shop has
+          // to be told again.
+          const moveSig = this._addressSignature();
+          if (data.store_move_notice && this._storeMoveSeenFor !== moveSig) {
+            this._storeMoveSeenFor = moveSig;
+            due.push('storeMove');
+          }
+          if (due.length) this.enqueueNotices(due);
         }
         // Forget the "already shown" mark when the notice stops applying, so it
         // pops again if the customer returns to an address that does move.
@@ -2207,6 +2208,62 @@ Page({
     }));
   },
 
+  // ── The notice queue ──────────────────────────────────────────────────
+  // One modal on screen at a time, and not one notice dropped. A cart that
+  // raises two of the four shows both, in this order: fresh batch, pre-order,
+  // next local batch, sent-from-another-shop. That order is the order the
+  // server computes them in, and it runs cheapest-surprise-last — a date the
+  // customer can read comes before an open-ended wait.
+  //
+  // The queue holds KEYS, not copy: what each key resolves to is re-read from
+  // this.data at the moment it opens, so a notice the latest quote dropped is
+  // skipped rather than opened over stale text.
+  NOTICE_KEYS: {
+    batch:      { popup: 'batchNoticePopup',      notice: 'batchNotice' },
+    preorder:   { popup: 'preorderNoticePopup',   notice: 'preorderNotice' },
+    localFresh: { popup: 'localFreshNoticePopup', notice: 'localFreshNotice' },
+    storeMove:  { popup: 'storeMoveNoticePopup',  notice: 'storeMoveNotice' },
+  },
+
+  // Is any of the four modals on screen right now? Asked before opening, so a
+  // second notice never lands on top of the first and buries it.
+  anyNoticePopupOpen() {
+    const d = this.data;
+    return !!(d.batchNoticePopup || d.preorderNoticePopup
+      || d.localFreshNoticePopup || d.storeMoveNoticePopup);
+  },
+
+  enqueueNotices(keys) {
+    this._noticeQueue = (this._noticeQueue || []).concat(keys);
+    if (!this.anyNoticePopupOpen()) this.showNextNotice();
+  },
+
+  // Pull the next notice that still applies. Keys whose notice has gone (a
+  // re-quote cleared it while an earlier modal was up) are dropped silently.
+  showNextNotice() {
+    const q = this._noticeQueue || [];
+    while (q.length) {
+      const map = this.NOTICE_KEYS[q.shift()];
+      if (map && this.data[map.notice]) {
+        this.setData({ [map.popup]: true });
+        return;
+      }
+    }
+  },
+
+  // Called by every close handler. The gap lets the closed card leave the
+  // screen before the next arrives — the cards open with a 220ms pop and have
+  // no exit animation, so opening the next one in the same frame reads as one
+  // modal changing its mind rather than two notices in a row.
+  advanceNotices() {
+    if (!(this._noticeQueue || []).length) return;
+    if (this._noticeQueueTimer) clearTimeout(this._noticeQueueTimer);
+    this._noticeQueueTimer = setTimeout(() => {
+      this._noticeQueueTimer = null;
+      this.showNextNotice();
+    }, 240);
+  },
+
   // "Made fresh for you" modal — auto-opens once per visit, and the banner's
   // tap target re-opens it on demand. Closing leaves the inline banner.
   openBatchNotice() {
@@ -2214,6 +2271,7 @@ Page({
   },
   closeBatchNotice() {
     this.setData({ batchNoticePopup: false });
+    this.advanceNotices();
   },
 
   // "Ships soon" pre-order modal — same once-per-visit + re-openable banner UX.
@@ -2222,12 +2280,14 @@ Page({
   },
   closePreorderNotice() {
     this.setData({ preorderNoticePopup: false });
+    this.advanceNotices();
   },
   openLocalFreshNotice() {
     if (this.data.localFreshNotice) this.setData({ localFreshNoticePopup: true });
   },
   closeLocalFreshNotice() {
     this.setData({ localFreshNoticePopup: false });
+    this.advanceNotices();
   },
 
   // Identifies the address a quote was for, so the store-move notice can pop
@@ -2246,6 +2306,7 @@ Page({
   },
   closeStoreMoveNotice() {
     this.setData({ storeMoveNoticePopup: false });
+    this.advanceNotices();
   },
 
   onVoucherInput(e) {
@@ -2945,6 +3006,10 @@ Page({
       localFreshNoticePopup: false,
       storeMoveNoticePopup: false,
     });
+    // …and drop anything still queued behind them, or the queue would reopen a
+    // notice on top of the local-only popup the moment one of those closes.
+    this._noticeQueue = [];
+    if (this._noticeQueueTimer) { clearTimeout(this._noticeQueueTimer); this._noticeQueueTimer = null; }
   },
 
   // Back-compat thin wrapper — existing callers (place-order guard, submit

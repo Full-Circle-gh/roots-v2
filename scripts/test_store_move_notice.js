@@ -79,9 +79,9 @@ check('the renderer reads the server field, and stays silent without it',
   () => /function renderCoStoreMove/.test(webSrc) &&
         /const n=d&&d\.store_move_notice;\s*\n\s*if\(!n\)\{ box\.innerHTML=''; return; \}/.test(webSrc));
 
-check('it auto-opens the popup once per checkout visit',
+check('it queues the popup once per checkout visit',
   () => /co\.storeMoveSeen=false;/.test(webSrc) &&
-        /if\(!co\.storeMoveSeen&&!coNoticePopupOpen\(\)\)\{ co\.storeMoveSeen=true; coStoreMovePopup\(\); \}/.test(webSrc));
+        /if\(!co\.storeMoveSeen\)\{ co\.storeMoveSeen=true; coQueueNotice\(coStoreMovePopup\); \}/.test(webSrc));
 
 // The banner is the persistent half — the popup is dismissed once and the
 // reason must still be reachable afterwards, which is what Details is for.
@@ -89,10 +89,10 @@ check('…and leaves a banner behind it with a way back in',
   () => /id="cosmMore"/.test(webSrc) &&
         /\$\('#cosmMore'\)\.addEventListener\('click',coStoreMovePopup\)/.test(webSrc));
 
-// Guarding the auto-open is only half of it: the helper it guards ON has a
-// hardcoded list of overlays, and a new modal that does not join the list is
-// invisible to the two notices that check before opening themselves.
-check('the anti-stacking helper knows about this overlay too',
+// Queueing is only half of it: the queue starts and moves on by asking which
+// overlays are up, from a hardcoded list, and a modal that does not join that
+// list is invisible to every notice waiting behind it.
+check('the open-check the queue asks knows about this overlay too',
   () => {
     const m = webSrc.match(/function coNoticePopupOpen\(\)\{[\s\S]*?\n\}/);
     return !!m && /#cosmPop/.test(m[0]);

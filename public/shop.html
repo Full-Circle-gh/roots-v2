@@ -1665,7 +1665,7 @@ function openCart(){location.hash='#/cart';}
 // Delivery-only MVP: pick/add address → /checkout/quote (fees + slots) → place
 // via /orders (handles the out-of-stock fallback). Server re-prices & re-checks
 // stock authoritatively. Payment is Phase 3c (order is created pending_payment).
-var co = { addrId:null, addrs:[], slotId:null, slotKind:'', mode:'standard', note:'', voucher:'', payment:'alipay', usePoints:false, useBalance:false, quote:null, placing:false, idem:null, fallback:null, showAddForm:false, pollTimer:null, offersDone:false, _offers:null, _offerSig:'', _offerSkew:0, _offerTimer:null,
+var co = { addrId:null, addrs:[], noticeQueue:[], slotId:null, slotKind:'', mode:'standard', note:'', voucher:'', payment:'alipay', usePoints:false, useBalance:false, quote:null, placing:false, idem:null, fallback:null, showAddForm:false, pollTimer:null, offersDone:false, _offers:null, _offerSig:'', _offerSkew:0, _offerTimer:null,
   // Add-address form region (mirrors the mini-app: pick a served zone → canonical
   // Chinese province/city/district written onto the address, never free text — the
   // server can't derive a 省 from an English city, which is why free text failed).
@@ -1843,6 +1843,7 @@ async function renderCheckout(){
   co.batchSeen=false;      // fresh-batch popup auto-shows once per checkout visit
   co.localFreshSeen=false; // next-fresh-batch popup auto-shows once per checkout visit
   co.storeMoveSeen=false;  // sent-from-another-shop popup auto-shows once per checkout visit
+  co.noticeQueue=[];       // notices waiting their turn behind the modal that's up (see coQueueNotice)
   co.addrPickerOpen=false;
   const n=coItems().reduce((a,l)=>a+(Number(l.qty)||0),0);
   // Two wrappers for the PC 2-column layout (form left, order rail right).
@@ -2527,15 +2528,12 @@ function renderCoPreorder(d){
     <div><div class="copo-t">${esc(t||'')}</div><div class="copo-m">${esc(m||'')}</div></div>
     <button class="copo-more" id="copoMore">${state.lang==='cn'?'详情':'Details'}</button></div>`;
   $('#copoMore').addEventListener('click',coPreorderPopup);
-  // YIELD TO A MODAL THAT IS ALREADY UP, exactly as the two notices below this
-  // one do. batch_notice renders immediately before this and opens itself, and
-  // a cart CAN raise both: the server computes them independently, and only
-  // preorder/local_fresh are complements (routes/retail.js). So a basket with a
-  // batch-made dish and a sold-out backorder extra opened two overlays, the
-  // second burying the first. The mini app has guarded this since it shipped
-  // (miniapp/pages/checkout/checkout.js, `batchAutoShowing`); this client had
-  // the helper and used it on only two of its four notices.
-  if(!co.preorderSeen&&!coNoticePopupOpen()){ co.preorderSeen=true; coPreorderPopup(); }
+  // JOIN THE QUEUE rather than opening on top of whatever is up. batch_notice
+  // renders immediately before this one, and a cart CAN raise both: the server
+  // computes them independently, and only preorder/local_fresh are complements
+  // (routes/retail.js). So a basket with a batch-made dish and a sold-out
+  // backorder extra gets both modals, batch first and this one on its close.
+  if(!co.preorderSeen){ co.preorderSeen=true; coQueueNotice(coPreorderPopup); }
 }
 function coPreorderPopup(){
   const n=co.quote&&co.quote.preorder_notice; if(!n)return;
@@ -2553,7 +2551,7 @@ function coPreorderPopup(){
     <button class="copo-go" id="copoGot">${L==='cn'?'知道了':'Got it'}</button>
   </div>`;
   ov.hidden=false;
-  const close=()=>{ov.hidden=true;};
+  const close=()=>{ov.hidden=true;coNoticeClosed();};
   ov.onclick=e=>{if(e.target===ov)close();};
   $('#copoGot').addEventListener('click',close);
 }
@@ -2601,11 +2599,11 @@ function renderCoBatch(d){
     <div><div class="cob-t">${esc(t||'')}</div><div class="cob-m">${esc(m||'')}</div></div>
     <button class="cob-more" id="cobMore">${state.lang==='cn'?'详情':'Details'}</button></div>`;
   $('#cobMore').addEventListener('click',coBatchPopup);
-  // Same guard. This one renders FIRST in the pass, so today it is the notice
-  // that wins and nothing is on screen when it asks — but a renderer added
-  // above it, or a reorder of that one line, would otherwise stack silently.
-  // The guard is what makes the order of the render pass not matter.
-  if(!co.batchSeen&&!coNoticePopupOpen()){ co.batchSeen=true; coBatchPopup(); }
+  // Same queue. This one renders FIRST in the pass, so today it is the notice
+  // that opens straight away and the others fall in behind it — but the queue,
+  // not that fact, is what keeps a second modal off the top of this one.
+  // Render order here IS the order the customer reads them in.
+  if(!co.batchSeen){ co.batchSeen=true; coQueueNotice(coBatchPopup); }
 }
 function coBatchPopup(){
   const n=co.quote&&co.quote.batch_notice; if(!n)return;
@@ -2630,7 +2628,7 @@ function coBatchPopup(){
     <button class="cob-go" id="cobGot">${L==='cn'?'知道了':'Got it'}</button>
   </div>`;
   ov.hidden=false;
-  const close=()=>{ov.hidden=true;};
+  const close=()=>{ov.hidden=true;coNoticeClosed();};
   ov.onclick=e=>{if(e.target===ov)close();};
   $('#cobGot').addEventListener('click',close);
 }
@@ -2654,15 +2652,44 @@ function renderCoLocalFresh(d){
     <div><div class="cob-t">${esc(t||'')}</div><div class="cob-m">${esc(m||'')}</div></div>
     <button class="cob-more" id="colfMore">${state.lang==='cn'?'详情':'Details'}</button></div>`;
   $('#colfMore').addEventListener('click',coLocalFreshPopup);
-  // Only auto-open onto an empty screen. preorder_notice can never co-occur
-  // with this one (the server's two address gates are complements), but
-  // batch_notice renders just above and opens itself, and a second overlay
-  // dropped on top of the first would bury it.
-  if(!co.localFreshSeen&&!coNoticePopupOpen()){ co.localFreshSeen=true; coLocalFreshPopup(); }
+  // Same queue. preorder_notice can never co-occur with this one (the server's
+  // two address gates are complements), but batch_notice renders just above and
+  // can, so this waits its turn behind it instead of landing on top.
+  if(!co.localFreshSeen){ co.localFreshSeen=true; coQueueNotice(coLocalFreshPopup); }
 }
 // Is one of the checkout notice modals on screen right now?
 function coNoticePopupOpen(){
   return ['#cobPop','#copoPop','#colfPop','#cosmPop'].some(id=>{const el=$(id);return !!el&&!el.hidden;});
+}
+// THE NOTICES QUEUE UP; THEY DO NOT COMPETE. A cart can raise more than one —
+// batch_notice and preorder_notice are computed independently by the server, so
+// a basket holding a batch-made dish AND a sold-out backorder extra raises two.
+// They used to stand down for one another: the first to render popped, the rest
+// were left to their inline banner, which a customer who taps past the first
+// modal never reads. They now open one after another, oldest first, and the
+// banner is still there for any the customer tapped past. Mirrors the mini app
+// (miniapp/pages/checkout/checkout.js: enqueueNotices / advanceNotices).
+function coQueueNotice(fn){
+  co.noticeQueue.push(fn);
+  if(!coNoticePopupOpen()) coNoticeNext();
+}
+// Open the next one that still has something to say. A renderer whose notice
+// the latest quote dropped returns without opening, so the queue walks on
+// rather than stopping on it.
+function coNoticeNext(){
+  while(co.noticeQueue.length){
+    co.noticeQueue.shift()();
+    if(coNoticePopupOpen()) return;
+  }
+}
+// Called by every notice modal's close. The gap lets the closed card leave
+// before the next arrives — these cards fade in over ~180ms and have no exit
+// animation, so swapping them in one frame reads as one modal changing its
+// mind rather than two notices in a row.
+function coNoticeClosed(){
+  if(!co.noticeQueue.length) return;
+  clearTimeout(co._noticeTimer);
+  co._noticeTimer=setTimeout(coNoticeNext,240);
 }
 function coLocalFreshPopup(){
   const n=co.quote&&co.quote.local_fresh_notice; if(!n)return;
@@ -2688,7 +2715,7 @@ function coLocalFreshPopup(){
     <button class="cob-go" id="colfGot">${L==='cn'?'知道了':'Got it'}</button>
   </div>`;
   ov.hidden=false;
-  const close=()=>{ov.hidden=true;};
+  const close=()=>{ov.hidden=true;coNoticeClosed();};
   ov.onclick=e=>{if(e.target===ov)close();};
   $('#colfGot').addEventListener('click',close);
 }
@@ -2717,11 +2744,10 @@ function renderCoStoreMove(d){
     <div><div class="copo-t">${esc(t||'')}</div><div class="copo-m">${esc(m||'')}</div></div>
     <button class="copo-more" id="cosmMore">${state.lang==='cn'?'详情':'Details'}</button></div>`;
   $('#cosmMore').addEventListener('click',coStoreMovePopup);
-  // Last of the four notices to render, so it is the one most likely to find a
-  // modal already up — this cart can raise the batch notice too. Only auto-open
-  // onto an empty screen; the banner stays either way, so nothing is lost when
-  // the pop is skipped.
-  if(!co.storeMoveSeen&&!coNoticePopupOpen()){ co.storeMoveSeen=true; coStoreMovePopup(); }
+  // Last of the four to render, so it is the one most likely to find a modal
+  // already up — this cart can raise the batch notice too. It goes to the back
+  // of the queue and opens when the ones ahead of it are closed.
+  if(!co.storeMoveSeen){ co.storeMoveSeen=true; coQueueNotice(coStoreMovePopup); }
 }
 function coStoreMovePopup(){
   const n=co.quote&&co.quote.store_move_notice; if(!n)return;
@@ -2740,7 +2766,7 @@ function coStoreMovePopup(){
     <button class="copo-go" id="cosmGot">${L==='cn'?'知道了':'Got it'}</button>
   </div>`;
   ov.hidden=false;
-  const close=()=>{ov.hidden=true;};
+  const close=()=>{ov.hidden=true;coNoticeClosed();};
   ov.onclick=e=>{if(e.target===ov)close();};
   $('#cosmGot').addEventListener('click',close);
 }

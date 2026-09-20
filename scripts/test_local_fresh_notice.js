@@ -413,9 +413,9 @@ let PORT = 0;
     () => /function renderCoLocalFresh/.test(webSrc) &&
           /const n=d&&d\.local_fresh_notice;\s*\n\s*if\(!n\)\{ box\.innerHTML=''; return; \}/.test(webSrc));
 
-  check('it auto-opens the popup once per checkout visit',
+  check('it queues the popup once per checkout visit',
     () => /co\.localFreshSeen=false;/.test(webSrc) &&
-          /if\(!co\.localFreshSeen&&!coNoticePopupOpen\(\)\)\{ co\.localFreshSeen=true; coLocalFreshPopup\(\); \}/.test(webSrc));
+          /if\(!co\.localFreshSeen\)\{ co\.localFreshSeen=true; coQueueNotice\(coLocalFreshPopup\); \}/.test(webSrc));
 
   // The banner is the persistent half — the popup is dismissed once and the
   // date must still be reachable afterwards, which is what Details is for.
