@@ -31,7 +31,7 @@
 //      reads.
 //
 // It reports all five per request, plus what the supplying shop's printer is
-// set to, because "no paper" has its own answer: until §196 a transfer printed
+// set to, because "no paper" has its own answer: until §197 a transfer printed
 // nowhere at all, by omission rather than by decision.
 //
 // Mutates nothing, and proves it: the connection is opened readonly and a
