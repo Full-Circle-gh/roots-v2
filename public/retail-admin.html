@@ -11654,6 +11654,13 @@
               </div>
             </div>
             <div style="border-top:1px solid var(--line);margin:4px 0 14px"></div>
+            <div class="field-label">Stock requests · 补货申请</div>
+            <div class="muted" style="font-size:12px;margin-bottom:10px">A stock request prints at the shop that has to fill it, the moment it is sent. It uses that shop's own printer — the one set below — so there is nothing extra to configure. · 补货申请发出时,在供货门店自动打印,使用该门店下方设置的打印机,无需另行配置。</div>
+            <select id="feie-transfer-when" aria-label="When a stock request prints · 补货申请何时打印" style="margin-bottom:14px">
+              <option value="sent">When a request arrives · 请求到达时</option>
+              <option value="off">Never — notification only · 不打印,仅通知</option>
+            </select>
+            <div style="border-top:1px solid var(--line);margin:4px 0 14px"></div>
             <div class="field-label">Out-of-Guangzhou orders · 广州以外订单</div>
             <div class="muted" style="font-size:12px;margin-bottom:8px">Orders shipping outside Guangzhou always print at this store's printer (the warehouse that ships them). In-Guangzhou orders print at their own store. · 广州以外的订单始终在此门店出单;市内订单仍在各自门店打印。</div>
             <select id="feie-ooc" aria-label="Which printer prints out-of-city orders · 市外订单的打印门店" style="margin-bottom:14px">

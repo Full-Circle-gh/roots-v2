@@ -1033,6 +1033,11 @@ async function loadPrinterPrefs() {
     if (kWhen) kWhen.value = p.kitchen_print_on || 'sent';
     if (kCopies) kCopies.value = Number(p.kitchen_copies) || 1;
 
+    // §197 — the stock-request slip. One control, because it needs no printer
+    // of its own: it prints on the supplying shop's row in the map below.
+    const tWhen = document.getElementById('feie-transfer-when');
+    if (tWhen) tWhen.value = p.transfer_print_on || 'sent';
+
     const box = document.getElementById('feie-stores');
     if (box) {
       const stores = p.stores || [];
@@ -1167,6 +1172,7 @@ async function _savePrinter() {
       kitchen_vendor: document.getElementById('feie-kitchen-vendor')?.value || 'feie',
       kitchen_print_on: document.getElementById('feie-kitchen-when')?.value || 'sent',
       kitchen_copies: document.getElementById('feie-kitchen-copies')?.value || 1,
+      transfer_print_on: document.getElementById('feie-transfer-when')?.value || 'sent',
       by_store:   _collectPrinterByStore(),
       out_of_city_store_id: document.getElementById('feie-ooc')?.value || null,
     };

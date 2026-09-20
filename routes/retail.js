@@ -121,6 +121,7 @@ let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
 const _feie = require('../lib/feie');   // Feie cloud-printer client (order auto-print)
 const _kprint = require('../lib/kitchen-print');  // the kitchen queue's own slip — same rail, its own SN
+const _tprint = require('../lib/transfer-print'); // the supplier's stock-request slip — same rail, the shops' own map
 const _printers = require('../lib/printers');  // which BRAND of cloud printer a row points at (§171)
 const _nuonuo = require('../lib/nuonuo'); // 诺诺发票 e-fapiao auto-issue (dormant until creds)
 const _aliyunSms = require('../lib/aliyun-sms'); // 阿里云短信 delivered-notice SMS (dormant until creds)
@@ -30670,6 +30671,11 @@ function loadPrinterPrefs() {
     kitchen_vendor: _printers.resolve(get('printer.kitchen_vendor', null)).id,
     kitchen_print_on: get('printer.kitchen_print_on', _kprint.DEFAULT_PRINT_ON),
     kitchen_copies: get('printer.kitchen_copies', 1),
+    // §197 — the stock-request slip, which needs NO printer of its own: it
+    // routes on `by_store` below, keyed on the supplying shop. So this is one
+    // switch and not a block: 'sent' or 'off', default ON, because the tenant
+    // who has never opened this page is the one the report came from.
+    transfer_print_on: get('printer.transfer_print_on', _tprint.DEFAULT_PRINT_ON),
     shop_name:  get('printer.shop_name', tenantBrandLabel()),
     by_store:   (by_store && typeof by_store === 'object') ? by_store : {},
     // Orders shipping OUTSIDE Guangzhou always print at this store's printer
@@ -31057,6 +31063,7 @@ router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
     kitchen_vendor: prefs.kitchen_vendor,
     kitchen_print_on: prefs.kitchen_print_on,
     kitchen_copies: prefs.kitchen_copies,
+    transfer_print_on: prefs.transfer_print_on,
     shop_name:  prefs.shop_name,
     // "Is printing switched on at all?" is ANY vendor being configured, not
     // Feie being configured (§171) — otherwise a Shangpeng-only tenant is
@@ -31103,6 +31110,15 @@ router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), asyn
     if (b.kitchen_copies !== undefined) {
       upsert.run('printer.kitchen_copies',
         JSON.stringify(Math.max(1, Math.min(5, parseInt(b.kitchen_copies, 10) || 1))), req.user.id);
+    }
+    // §197. Validated by name against the module that reads it, exactly as the
+    // kitchen's is — an unknown value falls back to the default rather than
+    // being stored, so a stale client cannot switch a shop's paper off by
+    // sending a word nobody recognises.
+    if (b.transfer_print_on !== undefined) {
+      const v = String(b.transfer_print_on || '');
+      upsert.run('printer.transfer_print_on',
+        JSON.stringify(_tprint.PRINT_ON.includes(v) ? v : _tprint.DEFAULT_PRINT_ON), req.user.id);
     }
     if (b.by_store !== undefined && b.by_store && typeof b.by_store === 'object') {
       const clean = {};

@@ -35,6 +35,12 @@ try { _events = require('./events'); } catch (e) { console.warn('[restock] event
 // rather than on `printer.by_store`. Best-effort and fire-and-forget: a request
 // must never fail to reach the queue because a printer is offline.
 const _kprint = require('../lib/kitchen-print');
+// THE SAME EVENT, ON THE SUPPLIER'S OWN PRINTER (§197). A shop-to-shop request
+// printed nowhere until now, and the comment above said why it was not owed a
+// slip — "a store transfer has its own paper trail". It did not have one. This
+// is that paper trail: the shops' existing `printer.by_store` map keyed on the
+// request's own `from_store_id`, so nothing new is configured to get it.
+const _tprint = require('../lib/transfer-print');
 // "Which finished requests still count as news" — shared with routes/retail.js,
 // which reads the same clause for the dashboard's Needs-you row. See the header
 // of that file for why it is one definition and not two.
@@ -1404,9 +1410,15 @@ router.post('/api/restock', requireRestockAccess, tacetOnly, (req, res) => {
     if (initialStatus === 'sent') {
       _fireRestockPush(id, 'sent', _actorOperatorId(req));
       _broadcastRestock(id, 'sent', req.user.id);
-      // Paper, for the kitchen queue. No-ops for every other direction — a
-      // store transfer has its own paper trail and never reaches this roll.
+      // Paper, for the kitchen queue. No-ops for every other direction — the
+      // kitchen's roll is its own, and §51's note on lib/kitchen-print.js says
+      // why it cannot be keyed on a location.
       _kprint.autoPrintKitchenRequest(id, 'sent');
+      // And paper for the SHOP that has to fill it (§197), which is the same
+      // event on the other roll. No-ops for a kitchen request and for any
+      // request with no supplier named; the two calls can never both print,
+      // because each refuses what the other takes.
+      _tprint.autoPrintTransferRequest(id, 'sent');
     }
     res.json({ success: true, id, rs_number });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1521,6 +1533,15 @@ function _advanceOrderStatus(order, status, req) {
   if (status === 'sent' || status === 'prepared') {
     _kprint.autoPrintKitchenRequest(order.id, status);
   }
+  // The supplier's slip (§197), for the one event that means anything on their
+  // floor. A draft sent later must print exactly as one sent on creation does —
+  // the two paths are the same request arriving, and a slip that depended on
+  // which button raised it is the kind of difference nobody can see from the
+  // shop floor. 'prepared' deliberately prints nothing: by then the goods have
+  // left, and the only people who would read it are the ones who packed them.
+  if (status === 'sent') {
+    _tprint.autoPrintTransferRequest(order.id, 'sent');
+  }
   return transfer;
 }
 
@@ -1630,22 +1651,26 @@ router.post('/api/restock/:id/reprint', requireRestockAccess, kitchenScopedOrder
   // works transfers legitimately and passes through, which is correct for the
   // endpoints that serve both.
   //
-  // This endpoint does not serve both. It only ever prints a kitchen request,
-  // for anybody, so it needs the object type refused rather than the caller
-  // scoped. Leaning on the middleware let a warehouse picker's reprint reach a
-  // store transfer, and the failed print then stamped print_status on a row
-  // that was never owed a slip.
-  if ((order.to_role || 'warehouse') !== 'kitchen') {
-    return res.status(403).json({
-      error: 'This is a transfer between locations, not a kitchen request · 这是门店之间的调拨,不是厨房制作请求。',
-    });
-  }
+  // THIS ENDPOINT NOW SERVES BOTH, AND THE REFUSAL IS GONE RATHER THAN WIDENED
+  // (§197). It refused a transfer because a transfer had no slip to reprint —
+  // the failed print then stamped print_status on a row that was never owed
+  // one, which is the defect the refusal was added for. A transfer has a slip
+  // now, so the honest fix is to print it. The object type still decides WHICH
+  // roll: the two modules refuse each other's rows by construction, so there is
+  // no arrangement in which one request reaches both.
+  const isKitchen = (order.to_role || 'warehouse') === 'kitchen';
   // The slip says what state the job is in, so reprint the one that matches
   // where the request actually IS — not the event that happened to print first.
-  const kind = order.status === 'prepared' || order.status === 'delivered' ? 'prepared' : 'sent';
-  const r = await _kprint.printKitchenRequest(order.id, kind, { conn, force: true })
-    .catch(e => ({ ok: false, msg: e.message }));
-  _kprint.recordPrintResult(conn, order.id, r);
+  // A transfer has only the one slip: 'sent' is the whole of its vocabulary.
+  const kind = !isKitchen ? 'sent'
+             : (order.status === 'prepared' || order.status === 'delivered') ? 'prepared'
+             : 'sent';
+  const mod = isKitchen ? _kprint : _tprint;
+  const print = isKitchen
+    ? _kprint.printKitchenRequest(order.id, kind, { conn, force: true })
+    : _tprint.printTransferRequest(order.id, kind, { conn, force: true });
+  const r = await print.catch(e => ({ ok: false, msg: e.message }));
+  mod.recordPrintResult(conn, order.id, r);
   logActivity(req.user.id, req.user.username, 'reprint', 'restock', order.id, { ok: !!r.ok, kind }, req.ip);
   if (!r.ok) return res.status(502).json({ success: false, error: r.msg || 'print_failed' });
   res.json({ success: true });

@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.145 · 2026-09-20 · §197 GIVES THE STOCK REQUEST A SLIP AND COMPOSES ONE SENTENCE FOR THE SETTING THAT SWITCHES IT.** A shop-to-shop request printed nowhere; it prints at the supplying shop now. **The slip itself composes nothing** — `补货申请` is locked, `送到` is lifted from the phone's own `送到哪家门店？`, and `Items 件数` and `Note 备注` are already on the paper this one is modelled on, in `lib/feie.js`. The one new string is the help line under the printer setting, and it is composed out of the locked pair plus the shape §51's kitchen help already uses. See *The supplier's stock-request slip*.
+
 **v1.144 · 2026-09-20 · §195 RETIRES `SHIPS SOON · 现订现发` FROM THE BROWSE BAND AND COMPOSES NOTHING.** Two surfaces said it while five said `PRE-ORDER · 可预订` for the same shelf state, so a shopper tapping a card watched the word change under them. The live pair on the majority wins; no Chinese is minted, and the retired pair keeps its other job as the checkout popup's title. The band also gains the restock window — the same numerals and the same live `天` §194 declared, in the band's upper case. See *A pre-order's restock window* and *One word for a reservable row*. **v1.143 · 2026-09-20 · §194 GIVES THE PRE-ORDER POPUP ITS RESTOCK WINDOW — COMPOSING ONE CLAUSE OUT OF LIVE WORDS AND LEAVING THE SENTENCE AROUND IT VERBATIM.** The popup became the tenant's to edit, and the one thing it could never say was roughly when the item comes back. The sentence it has shipped since `backorder_gz` existed is untouched; a four-character clause is inserted into it, and `预计`, `内` and `补货` are each already live and customer-facing. The window itself is a numeral and the live day counter. See *A pre-order's restock window*. **v1.142 · 2026-09-19 · §193 GIVES `parcel_awaiting_restock` THE SENTENCE IT NEVER HAD — LIFTING TWO LIVE FRAGMENTS AND COMPOSING NOTHING.** §187 minted the error code and registered no pair for it, so a Chinese admin has read the bare code in English ever since; §193 makes the JD label route a third caller, which is the busiest of the three. Both halves are live verbatim and only the join is new. See *A parcel the shortage is holding*.
 
 **v1.141 · 2026-09-19 · §190 NAMES THE BOX IN §188's NOTIFICATION — COMPOSING THREE SENTENCES AND NO NEW WORDS.** *"one of the parcels"* made a split order's customer count boxes to work out which one had landed. Every mode already has a locked pair and two of them are already customer-facing on the printed slip, so each sentence is a live mode word in front of §188's live `包裹已发货`. The generic line survives as the fallback for a mode added later. See *Which box has gone*.
@@ -7764,3 +7766,65 @@ neither appender. §170 ruled that an add-on picker is not a browse surface and
 kept its date off that screen; a window arriving without that date would leave
 the list reading `PRE-ORDER · 2-4 DAYS` beside a bare `NEXT BATCH`. Both
 appenders arrive together or neither does.
+
+
+## The supplier's stock-request slip (§197)
+
+**WHAT THIS IS.** A request raised by one shop against another now prints at the
+shop that has to fill it, on that shop's own printer. Everything on the paper is
+a string that was already live; the one composed string is in the setting that
+switches the paper on, which is an office screen and not the slip.
+
+### On the slip — nothing composed
+
+| Where | English | Chinese | Source |
+|---|---|---|---|
+| slip title | Stock request | 补货申请 | **LOCKED** — the pair `restock:request` carries in `lib/capabilities.js` and the one `申请` in the receipt vocabulary was matched to |
+| destination line | For {shop} | 送到 {shop} | **LIFTED** — `public/m.html`'s live `For which store? · 送到哪家门店？`, with the question dropped and the shop's own name supplied |
+| item block head | Items 件数 | — | **LIVE** — `lib/feie.js`'s packing slip, verbatim, one glued pair as it already prints there |
+| note head | Note 备注 | — | **LIVE** — `lib/feie.js`'s kitchen request, verbatim |
+| time | Time | — | **LIVE** — same slip, same line |
+
+**THE SHOP NAMED ON IT IS THE DESTINATION AND THAT IS A VOCABULARY DECISION AS
+WELL AS A LAYOUT ONE.** The person holding the slip is standing in the supplying
+shop. Printing their own name back at them names where they are; the name worth
+ink is the one that decides where the goods go. It is the same rule the `sent`
+push already follows — *"which end is worth naming is the end the reader is not
+at"*.
+
+**NO PRICE, NO TOTAL, NO COST.** §51 ruled this for the kitchen ticket and the
+reason carries unchanged: a transfer moves value between two shelves of one
+business, and a money column invites the shop filling it to think the other one
+owes them something.
+
+### The setting — one composed sentence
+
+| Where | English | Chinese | Source |
+|---|---|---|---|
+| settings, heading | Stock requests | 补货申请 | **LOCKED**, as above |
+| settings, help | A stock request prints at the shop that has to fill it, the moment it is sent. It uses that shop's own printer — the one set below — so there is nothing extra to configure. | 补货申请发出时,在供货门店自动打印,使用该门店下方设置的打印机,无需另行配置。 | **COMPOSED** under Rule 4's standing delegation — see below |
+| settings, option | When a request arrives | 请求到达时 | **LIVE PAIR** — the kitchen printer's own `When it prints` select in `public/retail-admin.html`, verbatim |
+| settings, option | Never — notification only | 不打印,仅通知 | **LIVE PAIR** — same select, verbatim |
+
+**THE COMPOSED SENTENCE, AND WHAT WAS REJECTED.** The live candidate was §51's
+kitchen help — `制作请求进入队列时,厨房自动打印制作单;没有打印机则留空。` — and it
+was REJECTED rather than adapted, for a reason worth recording: its last clause
+tells the reader to leave the SN blank if there is no printer, and this setting
+has no SN to leave blank. It routes on the shop map further down the same page.
+A sentence ending in an instruction the screen cannot carry out is worse than no
+sentence.
+
+What was kept from it is the SHAPE — *when it happens, then what prints, then
+where it is configured* — and every word inside is live: `补货申请` is locked,
+`自动打印` and `打印机` are both in that same kitchen help line, `供货门店` is
+`供货` joined to the `门店` this document uses throughout, and `无需另行配置` is
+the plainest reading of "nothing extra to configure". Composed by Claude Opus 5
+on 2026-09-20 under the 2026-09-06 amendment, declared here in the same commit
+as the code that uses it.
+
+**`供货` IS THE ONE WORD WORTH FLAGGING FOR A READER WHO SPEAKS THE LANGUAGE.**
+It means to supply goods, and it is the right word for the end this slip prints
+at, but it does not otherwise appear in this system's vocabulary — every other
+screen says `门店` and lets position carry the direction. If Ash prefers the
+plainer `发货门店` (the shop that sends), that is a one-word change in
+`public/retail-admin.html` and this row.
