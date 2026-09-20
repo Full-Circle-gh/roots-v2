@@ -50,6 +50,50 @@ function it(name, fn) {
 const section = (t) => console.log('\n' + t);
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
+// ── The PDP page, loaded and RUN ───────────────────────────────────────────
+// Section 8 below executes the builder rather than describing it. A regex
+// proves a line was written; only a run proves the value reaches the button.
+// Same shape as the harness in scripts/test_fresh_today_label.js, kept local
+// because neither suite exports one.
+function runPdp(product, lang, onLocalRun) {
+  const g = global;
+  const saved = { Page: g.Page, wx: g.wx, getApp: g.getApp, App: g.App, Component: g.Component };
+  let page = null;
+  g.Page = (o) => { page = o; return o; };
+  g.Component = (o) => o;
+  g.App = (o) => o;
+  g.getApp = () => ({ globalData: { lang: 'en', customer: {} }, authReady: Promise.resolve() });
+  g.wx = new Proxy({}, { get: (t, k) => {
+    if (k === 'getStorageSync') return () => null;
+    if (k === 'getSystemInfoSync') return () => ({ windowWidth: 375, statusBarHeight: 20 });
+    if (k === 'getAccountInfoSync') return () => ({ miniProgram: { appId: 'wxtest' } });
+    return () => {};
+  } });
+  try {
+    const full = path.join(ROOT, 'miniapp/pages/product/product.js');
+    delete require.cache[require.resolve(full)];
+    require(full);
+    const ctx = {
+      data: Object.assign({}, page.data, { product, lang }),
+      _variants: [],
+      _onLocalRun: onLocalRun,
+      setData(patch) { Object.assign(this.data, patch); },
+      recomputeFlashCountdown() {},
+    };
+    for (const k of Object.keys(page)) if (typeof page[k] === 'function') ctx[k] = page[k];
+    ctx.recomputeDisplay.call(ctx);
+    return { label: ctx.data.addBtnLabel, long: ctx.data.addBtnLong };
+  } finally {
+    for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete g[k]; else g[k] = v; }
+  }
+}
+// A fresh meal the kitchen has yet to make, as the server decorates it.
+const pdpRow = (extra) => Object.assign({
+  id: 1, name_en: 'Quinoa Salad', name_cn: '藜麦沙拉', price: 44,
+  stock: 0, oos_preorder: 1, is_batch_made: 1,
+  local_fresh_in_days: 0, local_fresh_date: '2026-09-20', fresh_ship_date: '2026-09-21',
+}, extra || {});
+
 const freshEta = require(path.join(ROOT, 'miniapp/utils/fresh-eta.js'));
 const { freshArrivalLabel, withFreshArrival } = freshEta;
 
@@ -307,6 +351,112 @@ section('6 · THE SHOP LIST HAS A LINE WIDE ENOUGH TO DRAW IT ON');
       'a full-width olive bar on every batch row is not what this is');
     assert.ok(/white-space:\s*nowrap/.test(rowPreTag[0]),
       'the line is wide enough; say so, so no later tightening folds it again');
+  });
+}
+
+// ── …AND SO DOES THE PDP'S BUY BUTTON ──────────────────────────────────────
+// The same §170 length, one surface further on. The PDP's sticky bar puts the
+// label on the left of the buy button and the price on its right, and the
+// button is flex:1 inside that bar. A flex item's default min-width is auto,
+// so the button could not be squeezed below its own min-content width — a
+// nowrap label plus the price — and instead pushed the BAR wider than the
+// 750rpx screen. The price went over the right edge: `NEXT BATCH · TOMORROW¥4`,
+// with the second 4 off-screen. Reported by Ash from the PDP, 2026-09-20.
+//
+// Two things had to be true and neither was: the button may not grow past the
+// bar (min-width:0), and when the label is too long for the room it must be
+// the LABEL that gives, never the price — a clipped word is still readable,
+// a clipped number is a different number. These cases pin both, plus the
+// length test that decides which labels step down.
+section('8 · THE PDP BUY BUTTON KEEPS THE LABEL AND THE PRICE ON ONE LINE');
+{
+  const WXSS = read('miniapp/pages/product/product.wxss');
+  const WXML = read('miniapp/pages/product/product.wxml');
+  const JS = read('miniapp/pages/product/product.js');
+  const btn = WXSS.match(/^\.add-btn \{[^}]*\}/m);
+  const label = WXSS.match(/^\.add-label \{[^}]*\}/m);
+  const long = WXSS.match(/^\.add-btn\.is-long \.add-label \{[^}]*\}/m);
+  const prices = WXSS.match(/^\.add-prices \{[^}]*\}/m);
+
+  it('the button cannot push the sticky bar past the screen', () => {
+    assert.ok(btn, '.add-btn must exist');
+    assert.ok(/min-width:\s*0/.test(btn[0]),
+      'without min-width:0 a nowrap label widens the bar and the price falls off the edge');
+  });
+  it('the label and the price can never touch', () => {
+    assert.ok(/gap:\s*\d+rpx/.test(btn[0]),
+      'the child margins were the only spacing; a gap is what survives a shrink');
+  });
+  it('the price never gives — the label does', () => {
+    assert.ok(prices && /flex-shrink:\s*0/.test(prices[0]),
+      'a clipped price is a wrong price');
+    assert.ok(label && /min-width:\s*0/.test(label[0]) && /text-overflow:\s*ellipsis/.test(label[0]),
+      'the label is the half that yields, and it yields visibly');
+  });
+  it('the §170 label steps down a size rather than overflowing', () => {
+    assert.ok(long, '.add-btn.is-long .add-label must exist — it is the whole fix');
+    const size = long[0].match(/font-size:\s*calc\((\d+)rpx/);
+    const base = label[0].match(/font-size:\s*calc\((\d+)rpx/);
+    assert.ok(size && base && Number(size[1]) < Number(base[1]),
+      'is-long must be SMALLER than the ordinary label, or it fixes nothing');
+  });
+  it('the markup carries the class, off a flag the page computes', () => {
+    assert.ok(/addBtnLong \? 'is-long'/.test(WXML),
+      'the button must take .is-long from addBtnLong');
+  });
+  it('the flag asks whether a DATE was appended, not how long the label is', () => {
+    // A character count is the tempting version and it is wrong: `下批现做 ·
+    // 9月21日` is 12 characters to `ADD TO BASKET`'s 13 and half again as
+    // wide, so a threshold that leaves the English button alone shrinks the
+    // Chinese one or overflows it. Comparing the built label against the bare
+    // word it was built from cannot drift apart from the label itself.
+    assert.ok(/addBtnLong:[\s\S]{0,120}preKind === 'batch'/.test(JS),
+      'only a fresh-batch row can carry a date, so only it can be long');
+    assert.ok(/addBtnLabel !== \(L === 'cn' \? '下批现做' : 'NEXT BATCH'\)/.test(JS),
+      'the flag is "the appender added something", tested against the bare word');
+    assert.ok(!/addBtnLong:[\s\S]{0,200}\.length/.test(JS),
+      'no character count — see above; it cannot be right in both languages');
+  });
+  it('RUN: every dated label the builder can produce trips the flag', () => {
+    // Both languages and both arrival shapes, straight off recomputeDisplay.
+    const cases = [
+      [pdpRow(), 'en', false, 'NEXT BATCH · TOMORROW'],
+      [pdpRow(), 'en', true, 'NEXT BATCH · TODAY'],
+      [pdpRow(), 'cn', false, '下批现做 · 明天'],
+      [pdpRow({ local_fresh_in_days: 2, local_fresh_date: '2026-09-22',
+                fresh_ship_date: '2026-09-23' }), 'en', false, 'NEXT BATCH · SEP 23'],
+      [pdpRow({ local_fresh_in_days: 2, local_fresh_date: '2026-09-22',
+                fresh_ship_date: '2026-09-23' }), 'cn', false, '下批现做 · 9月23日'],
+    ];
+    for (const [p, lang, onRun, expected] of cases) {
+      const got = runPdp(p, lang, onRun);
+      assert.strictEqual(got.label, expected, `label for ${lang}/${onRun}`);
+      assert.strictEqual(got.long, true, `${expected} must step down a size`);
+    }
+  });
+  it('RUN: …and no undated label does, or the whole button shrinks for nothing', () => {
+    const inStock = { id: 2, name_en: 'Quinoa Salad', name_cn: '藜麦沙拉', price: 44, stock: 5 };
+    const grocery = { id: 3, name_en: 'Tea', name_cn: '茶', price: 30, stock: 0, oos_preorder: 1 };
+    const gone = { id: 4, name_en: 'Gone', name_cn: '没了', price: 10, stock: 0 };
+    const cases = [
+      [inStock, 'en', true, 'ADD TO BASKET'],
+      [inStock, 'cn', true, '加入购物车'],
+      [grocery, 'en', false, 'PRE-ORDER'],   // the §108 carve-out: no batch, no date
+      [gone, 'en', false, 'SOLD OUT'],
+    ];
+    for (const [p, lang, onRun, expected] of cases) {
+      const got = runPdp(p, lang, onRun);
+      assert.strictEqual(got.label, expected, `label for ${lang}`);
+      assert.strictEqual(got.long, false, `${expected} keeps the full size`);
+    }
+  });
+  it('and the bare word it compares against is the one the label is built from', () => {
+    // If the two ever drift the flag silently goes always-on or always-off,
+    // and nothing else would catch it: the button would just be the wrong
+    // size. Both spellings live in this file, so pin that there is one pair.
+    const words = JS.match(/'下批现做' : 'NEXT BATCH'/g) || [];
+    assert.ok(words.length >= 2,
+      'the label builds from this pair and the flag compares against it');
   });
 }
 

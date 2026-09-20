@@ -834,6 +834,27 @@ Page({
     // An empty/failed designed page falls back to the classic description below.
     const useBlocks = !!(p.use_block_design && Array.isArray(p.description_blocks) && p.description_blocks.length);
 
+    // §108 — the button says what the badge above it says. It used to read
+    // `preorder`, the ship-vs-run question, so a Guangzhou shopper waiting on
+    // a later batch was offered a plain ADD TO BASKET under a NEXT BATCH
+    // badge. Both now come off `preKind`, so the page cannot contradict
+    // itself and the word is the same one every other surface uses.
+    const addBtnLabel = soldOut
+      ? (L === 'cn' ? '已售罄' : 'SOLD OUT')
+      : hasVariants
+        ? (L === 'cn' ? '选择规格' : 'CHOOSE A SIZE')
+        : preKind === 'batch'
+          // §170 — the badge's date comes down to the button too, and this is
+          // the one surface where it is doing more than informing: this is the
+          // tap that commits, so "arrives tomorrow" belongs on it more than
+          // anywhere else on the page. §108's rule is unbroken — the WORD is
+          // still the badge's word, and both still come off one `preKind`.
+          ? freshEta.withFreshArrival(
+              L === 'cn' ? '下批现做' : 'NEXT BATCH', p, this._onLocalRun, L)
+          : preKind === 'preorder'
+            ? (L === 'cn' ? '预订' : 'PRE-ORDER')
+            : (L === 'cn' ? '加入购物车' : 'ADD TO BASKET');
+
     this.setData({
       bundle,
       whatsInside,
@@ -887,26 +908,25 @@ Page({
       hasVariants,
       oosLabel: L === 'cn' ? '售罄' : 'SOLD OUT',
       preLabel: L === 'cn' ? '可预订' : 'PRE-ORDER',
-      // §108 — the button says what the badge above it says. It used to read
-      // `preorder`, the ship-vs-run question, so a Guangzhou shopper waiting on
-      // a later batch was offered a plain ADD TO BASKET under a NEXT BATCH
-      // badge. Both now come off `preKind`, so the page cannot contradict
-      // itself and the word is the same one every other surface uses.
-      addBtnLabel: soldOut
-        ? (L === 'cn' ? '已售罄' : 'SOLD OUT')
-        : hasVariants
-          ? (L === 'cn' ? '选择规格' : 'CHOOSE A SIZE')
-          : preKind === 'batch'
-            // §170 — the badge's date comes down to the button too, and this is
-            // the one surface where it is doing more than informing: this is the
-            // tap that commits, so "arrives tomorrow" belongs on it more than
-            // anywhere else on the page. §108's rule is unbroken — the WORD is
-            // still the badge's word, and both still come off one `preKind`.
-            ? freshEta.withFreshArrival(
-                L === 'cn' ? '下批现做' : 'NEXT BATCH', p, this._onLocalRun, L)
-            : preKind === 'preorder'
-              ? (L === 'cn' ? '预订' : 'PRE-ORDER')
-              : (L === 'cn' ? '加入购物车' : 'ADD TO BASKET'),
+      addBtnLabel,
+      // THE DATE IS WHAT OVERFLOWS THE BUTTON, so the date is what this asks
+      // about. §170 appends an arrival to the §108 word, and the pair does not
+      // fit beside the price at the usual size: `NEXT BATCH` is 183rpx of Toni
+      // at 32rpx and the 1.15 font scale, `NEXT BATCH · TOMORROW` is 389, and
+      // the sticky bar leaves the whole button 468 for label, price and
+      // padding together. .is-long steps a DATED label down a size in
+      // product.wxss; the bare word keeps the size it has always had.
+      //
+      // The test is whether the appender added anything — never how many
+      // characters came back. A count gets Chinese wrong: `下批现做 · 9月21日`
+      // is 12 characters to `ADD TO BASKET`'s 13 and half again as wide,
+      // because a CJK glyph takes a whole em where a Latin cap takes under
+      // half of one. Comparing against the bare word also needs no updating
+      // when a new arrival shape is added — it is the same one string the
+      // label above was built from, and the two cannot drift apart without
+      // scripts/test_fresh_batch_eta.js §8 saying so.
+      addBtnLong: !soldOut && !hasVariants && preKind === 'batch'
+        && addBtnLabel !== (L === 'cn' ? '下批现做' : 'NEXT BATCH'),
       soldOut,
       preorder,
       preKind,

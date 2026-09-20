@@ -267,8 +267,13 @@ section('3 · the mini app — the surface the report came from');
     // the batch, so a Guangzhou shopper waiting on a later batch was offered a
     // plain ADD TO BASKET under a NEXT BATCH badge.
     // Anchored on the computed one — the first `addBtnLabel:` in the file is
-    // the `data` block's plain default.
-    const at = MPROD.indexOf('addBtnLabel: soldOut');
+    // the `data` block's plain default. The anchor takes either shape the
+    // expression has had: it was a key inside setData until the label had to
+    // be measured to size the button (the PDP buy-bar overflow, 2026-09-20),
+    // which lifted it to a `const` just above. WHERE it is written is a
+    // coordinate; that it forks on `preKind` and not on `preorder` is the
+    // decision, and that is what the three assertions below actually test.
+    const at = MPROD.search(/addBtnLabel(: | = )soldOut/);
     assert.notStrictEqual(at, -1, 'the computed button label is still where it was');
     // 500 was enough until §170 put a six-line comment inside this expression;
     // the window has to reach the preorder branch or the case passes vacuously.
