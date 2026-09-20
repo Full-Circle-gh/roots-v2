@@ -1665,6 +1665,31 @@ input,textarea,[contenteditable],[contenteditable] *,.sel,.sel *{
               <div class="field" style="margin-bottom:2px"><label class="stacked">Tagline CN · 标语(中文)</label><input id="pa-edit-tagline-cn" type="text" placeholder="例如:肠道值得更好的关怀"></div>
             </div>
           </details>
+          <!-- The tenant's own warning about this product, raised when it goes
+               into the cart. A NOTICE IS SHARED, NOT RETYPED: a kombucha line
+               is six flavours wanting one sentence, so the picker attaches this
+               product to an existing notice and editing the words fixes every
+               product carrying it. -->
+          <details class="pa-left-acc" id="pe-acc-cartnotice">
+            <summary><span class="pe-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16" x2="12" y2="16"/></svg></span> Add-to-cart notice · 加入购物车提示 <span id="pe-cartnotice-dot" class="pe-acc-dot"></span></summary>
+            <div class="pa-left-acc-body">
+              <div class="helper" style="font-size:11px;margin-bottom:8px">Shown once when a customer adds this product to the basket, and again on their order. · 顾客将本商品加入购物车时显示一次,并在订单页再次显示。</div>
+              <div class="field"><label class="stacked">Notice · 提示</label>
+                <select id="pa-cn-pick" onchange="paCartNoticePick()">
+                  <option value="">— None · 无提示</option>
+                  <option value="new">+ New notice · 新建提示</option>
+                </select>
+              </div>
+              <div id="pa-cn-fields" hidden>
+                <div class="helper" style="font-size:11px;margin:4px 0 8px">Editing these words changes the notice for every product it is on. · 修改此处文字会影响所有使用该提示的商品。</div>
+                <div class="field"><label class="stacked">Headline EN · 标题(英文)</label><input id="pa-cn-title-en" type="text" placeholder="e.g. Let it rest before you open it"></div>
+                <div class="field"><label class="stacked">Headline CN · 标题(中文)</label><input id="pa-cn-title-cn" type="text" placeholder="例如:开瓶前请先静置"></div>
+                <div class="field"><label class="stacked">Message EN · 文案(英文)</label><textarea id="pa-cn-body-en" rows="3" placeholder="One or two short lines."></textarea></div>
+                <div class="field" style="margin-bottom:2px"><label class="stacked">Message CN · 文案(中文)</label><textarea id="pa-cn-body-cn" rows="3" placeholder="一两句简短文字。"></textarea></div>
+                <div class="helper" style="font-size:11px;margin-top:6px">English · 中文 — customers see one, based on their WeChat language. · 顾客按微信语言看到其中一种。</div>
+              </div>
+            </div>
+          </details>
           <!-- Hidden until the platform says this tenant HAS a cast to sign with
                (§156). Starting visible would flash a control at every shop that
                has none, in the half-second before the answer lands. -->
@@ -3164,6 +3189,10 @@ function peMount(p) {
   document.getElementById('pa-edit-colophon-tagline-en').value = p.colophon_tagline_en || '';
   document.getElementById('pa-edit-colophon-tagline-cn').value = p.colophon_tagline_cn || '';
   paRenderColophonGrid();
+  // Async — the picker fills when the tenant's notice list lands. The snapshot
+  // the dirty guard compares against is retaken then (see paFillCartNotice's
+  // caller below), so an arriving notice is not read as an unsaved edit.
+  paFillCartNotice(p.id).then(() => { if (PA_SAVED_SNAPSHOT !== null) PA_SAVED_SNAPSHOT = peSerializeState(); });
 
   window._paTemplate = p.page_template || null;
   window._paBlocks = Array.isArray(p.description_blocks)
@@ -3395,6 +3424,193 @@ async function peTogglePublish() {
 
 // Switch the inspector between the selected-block form and page-level
 // settings (card chrome, colophon, presets). Block is the default.
+
+
+/* ── ADD-TO-CART NOTICE ─────────────────────────────────────────────────────
+   The tenant's own warning about a product — "this kombucha is alive; stand it
+   in the fridge overnight before you open it" — raised when the product goes
+   into the cart, restated on the product page and again on the order.
+
+   IT IS EDITED HERE BECAUSE THIS IS WHERE SOMEBODY IS STANDING WHEN THEY THINK
+   OF IT. A tenant setting up kombucha is in the product editor, not in a
+   marketing screen; filing it under Marketing beside the campaign pop-ups would
+   be filing it under a heading nobody with this problem opens (§194's argument
+   for giving the pre-order notice its own card rather than a row inside Fresh
+   batches).
+
+   A NOTICE IS SHARED, NOT RETYPED. It lives in `cart_notices.list` (storefront
+   config) and names the products it covers, so the six flavours of one line
+   carry one sentence and one edit fixes all of them. That is also why this card
+   saves to a DIFFERENT endpoint from the rest of the editor: the product PATCH
+   writes columns on the product, and this writes one config key. Both happen
+   under the single Save button, so the operator sees one action.
+
+   The whole list is held here as loaded, and only the parts this product
+   touches are rewritten on save — an operator editing one product must not
+   flatten a notice attached to twenty others. */
+let PA_NOTICES = [];        // the tenant's whole cart_notices.list, as loaded
+let PA_NOTICES_LOADED = false;
+let PA_NOTICE_ORIG = '';    // which notice this product was on when it loaded
+
+function paNoticeUid() {
+  return 'cn_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+}
+
+// The label a notice wears in the picker: its own headline, either language,
+// falling back to its message and finally to its id, so a half-filled notice is
+// still findable rather than an empty row.
+function paNoticeLabel(n) {
+  const t = (n.title_en || n.title_cn || n.body_en || n.body_cn || '').trim();
+  return t ? t.slice(0, 60) : n.id;
+}
+
+async function paLoadCartNotices() {
+  if (PA_NOTICES_LOADED) return;
+  try {
+    const r = await fetch('/api/retail-admin/config', { credentials: 'same-origin', cache: 'no-store' });
+    const j = await r.json();
+    const list = j && j.data && j.data.cart_notices && j.data.cart_notices.list;
+    PA_NOTICES = Array.isArray(list) ? list : [];
+    PA_NOTICES_LOADED = true;
+  } catch (e) {
+    // A config read that fails leaves the card empty rather than breaking the
+    // editor — but it must NOT then be treated as "this tenant has no notices",
+    // because saving on that reading would delete every one of them. The unset
+    // flag is what stops the save path touching the list at all.
+    PA_NOTICES = [];
+  }
+}
+
+// Fill the card for the open product. Called after the product loads; awaits
+// the config read, so the picker is briefly empty on a cold open — which is
+// correct, an empty picker is what "we do not know yet" looks like.
+async function paFillCartNotice(pid) {
+  await paLoadCartNotices();
+  const sel = document.getElementById('pa-cn-pick');
+  if (!sel) return;
+  const mine = PA_NOTICES.find(n => Array.isArray(n.product_ids) && n.product_ids.map(Number).includes(Number(pid)));
+  PA_NOTICE_ORIG = mine ? String(mine.id) : '';
+  sel.innerHTML =
+    '<option value="">— None · 无提示</option>'
+    + PA_NOTICES.map(n => `<option value="${escapeAttr(String(n.id))}">${escapeHtml(paNoticeLabel(n))}</option>`).join('')
+    + '<option value="new">+ New notice · 新建提示</option>';
+  sel.value = PA_NOTICE_ORIG;
+  paCartNoticeFields(mine || null);
+  paCartNoticePick();
+}
+
+function paCartNoticeFields(n) {
+  const v = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
+  v('pa-cn-title-en', n && n.title_en);
+  v('pa-cn-title-cn', n && n.title_cn);
+  v('pa-cn-body-en',  n && n.body_en);
+  v('pa-cn-body-cn',  n && n.body_cn);
+}
+
+// Picking in the dropdown: an existing notice loads its words, "new" clears
+// them for typing, "none" hides the fields. Switching away from a notice does
+// NOT edit that notice — it detaches this product from it, which is what the
+// save path below does.
+function paCartNoticePick() {
+  const sel = document.getElementById('pa-cn-pick');
+  const box = document.getElementById('pa-cn-fields');
+  if (!sel || !box) return;
+  const id = sel.value;
+  box.hidden = !id;
+  if (id && id !== 'new') paCartNoticeFields(PA_NOTICES.find(n => String(n.id) === id) || null);
+  else if (id === 'new' && sel.dataset.was !== 'new') paCartNoticeFields(null);
+  sel.dataset.was = id;
+  const dot = document.getElementById('pe-cartnotice-dot');
+  if (dot) dot.style.display = id ? 'inline-block' : 'none';
+}
+
+// The card's state, for the dirty guard. Not part of the product PATCH body —
+// it is saved through the config endpoint — but a notice typed and not saved is
+// an unsaved change like any other, and the guard that asks before leaving has
+// to be able to see it.
+function paCartNoticeState() {
+  const g = id => (document.getElementById(id)?.value || '').trim();
+  return {
+    pick: document.getElementById('pa-cn-pick')?.value || '',
+    title_en: g('pa-cn-title-en'), title_cn: g('pa-cn-title-cn'),
+    body_en:  g('pa-cn-body-en'),  body_cn:  g('pa-cn-body-cn'),
+  };
+}
+
+// Write the card back into cart_notices.list and PUT it. Returns true when
+// there was nothing to do or the write succeeded.
+//
+// `updated_at` IS STAMPED ONLY WHEN THE WORDS CHANGED, and that is the detail
+// worth guarding. Every phone remembers a notice as seen under
+// `cart_notice_seen:<id>:<updated_at>`, so a stamp bumped on every save would
+// re-show an untouched notice to every customer each time any product on it was
+// edited for an unrelated reason. Bumped when the copy really changed, it does
+// exactly what an operator means by fixing a wrong word: everybody sees it once
+// more.
+async function paSaveCartNotice(pid) {
+  if (!PA_NOTICES_LOADED) return true;   // never saw the list — must not rewrite it
+  const st = paCartNoticeState();
+  const id = st.pick;
+  let list = PA_NOTICES.map(n => ({ ...n, product_ids: (Array.isArray(n.product_ids) ? n.product_ids : []).map(Number) }));
+  const pidN = Number(pid);
+  let changed = false;
+
+  // Detach from anything that is no longer the pick — including the notice it
+  // was on, when the operator has moved it to another.
+  list.forEach(n => {
+    if (String(n.id) === id) return;
+    if (n.product_ids.includes(pidN)) { n.product_ids = n.product_ids.filter(x => x !== pidN); changed = true; }
+  });
+
+  if (id === 'new') {
+    if (st.title_en || st.title_cn || st.body_en || st.body_cn) {
+      list.push({
+        id: paNoticeUid(), enabled: true,
+        title_en: st.title_en, title_cn: st.title_cn,
+        body_en: st.body_en, body_cn: st.body_cn,
+        product_ids: [pidN], updated_at: Date.now(),
+      });
+      changed = true;
+    }
+  } else if (id) {
+    const n = list.find(x => String(x.id) === id);
+    if (n) {
+      if (!n.product_ids.includes(pidN)) { n.product_ids.push(pidN); changed = true; }
+      const copyChanged = (n.title_en || '') !== st.title_en || (n.title_cn || '') !== st.title_cn
+        || (n.body_en || '') !== st.body_en || (n.body_cn || '') !== st.body_cn;
+      if (copyChanged) {
+        n.title_en = st.title_en; n.title_cn = st.title_cn;
+        n.body_en = st.body_en; n.body_cn = st.body_cn;
+        n.updated_at = Date.now();
+        changed = true;
+      }
+    }
+  }
+
+  // A notice nothing points at any more is dropped rather than left as a row
+  // that can never fire — the picker is the only way back to one, and an
+  // unattached entry in it is a line the operator has to read past every time.
+  const kept = list.filter(n => n.product_ids.length);
+  if (kept.length !== list.length) changed = true;
+  if (!changed) return true;
+
+  try {
+    const r = await fetch('/api/retail-admin/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ 'cart_notices.list': kept }),
+    });
+    const j = await r.json();
+    if (!j.success) throw new Error(j.error || 'save_failed');
+    PA_NOTICES = kept;
+    await paFillCartNotice(pid);
+    return true;
+  } catch (e) {
+    toast('Notice not saved · 提示未保存: ' + e.message, 'err');
+    return false;
+  }
+}
 
 // Show a small dot on each left-rail accordion (Card chrome / Colophon)
 // when it carries content, so the office can see what's configured without
@@ -3818,7 +4034,10 @@ function peCollectBody() {
 // snapshot to know if there are unsaved changes.
 function peSerializeState() {
   paBlocksSyncFromDOM();
-  return JSON.stringify(peCollectBody());
+  // The add-to-cart notice rides in the fingerprint but NOT in the PATCH body:
+  // it is saved through the config endpoint, and a notice typed and not saved
+  // is an unsaved change like any other.
+  return JSON.stringify({ product: peCollectBody(), notice: paCartNoticeState() });
 }
 function peIsDirty() {
   return PA_SAVED_SNAPSHOT !== null && peSerializeState() !== PA_SAVED_SNAPSHOT;
@@ -3845,6 +4064,10 @@ async function paSaveEdit() {
     const j = await r.json();
     if (!j.success) throw new Error(j.error || 'save_failed');
     PA_CURRENT = { ...PA_CURRENT, ...j.data };
+    // The notice is a config key, not a product column, so it takes a second
+    // write — under the same Save, so the operator performs one action. A
+    // failure here says so on its own and does not undo the product save.
+    await paSaveCartNotice(PA_CURRENT.id);
     // Reflect the save into the cached catalog row so the switcher list and a
     // subsequent re-mount show the fresh values.
     const idx = PA_ALL_PRODUCTS.findIndex(x => x.id === PA_CURRENT.id);

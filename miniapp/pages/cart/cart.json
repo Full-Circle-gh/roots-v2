@@ -2,6 +2,7 @@
   "navigationBarTitleText": "Cart",
   "backgroundColor": "#F2E7DF",
   "usingComponents": {
-    "popup-manager": "/components/popup-manager/popup-manager"
+    "popup-manager": "/components/popup-manager/popup-manager",
+    "cart-notice": "/components/cart-notice/cart-notice"
   }
 }

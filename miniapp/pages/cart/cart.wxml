@@ -94,4 +94,5 @@
   </view>
 
   <popup-manager page="cart"></popup-manager>
+  <cart-notice></cart-notice>
 </view>

@@ -51,6 +51,7 @@ Page({
     etaLabel: '',                // local (same-city) delivery arrival time, e.g. "2:50 PM"
     partialShip: null,           // {line, sub} when some-but-not-all parcels shipped
     airDelay: null,              // {line, sub} when a late air parcel may be unsafe to eat
+    careNotes: [],               // the tenant's add-to-cart notices for the items in this order
     trackingEvents: [],
     trackingEventsVisible: [],   // computed: 1 latest by default, all when expanded
     trackingEventsExpanded: false,
@@ -516,6 +517,22 @@ Page({
                 sub:  "For your safety, please don't eat any fresh or perishable items from this order. We're very sorry — we'll be in touch." })
         : null;
 
+      // The tenant's add-to-cart notices, restated on the order. THIS IS THE
+      // SURFACE THAT DOES THE WORK. "Stand it in the fridge overnight once it
+      // arrives" is a fact about a box landing on Thursday; the card that
+      // carried it was tapped away on Monday by somebody choosing flavours. The
+      // pop-up is how they are told — this is where they look it up with the
+      // thing in their hands. Server-grouped one per notice, so a case of six
+      // is one line rather than six.
+      const careNotes = (Array.isArray(data.cart_notices) ? data.cart_notices : [])
+        .map(n => ({
+          id: n.id,
+          line: lang.pick(n.title_en, n.title_cn, L),
+          sub:  lang.pick(n.body_en,  n.body_cn,  L),
+          items: (n.items || []).map(it => lang.pick(it.name_en, it.name_cn, L)).filter(Boolean).join(' · '),
+        }))
+        .filter(n => n.line || n.sub);
+
       // Local (same-city / Guangzhou) delivery has no waybill — the store sets a
       // same-day arrival time instead. Surface it as a single label the page
       // shows above the items ("Estimated arrival · 2:50 PM").
@@ -574,6 +591,7 @@ Page({
         etaLabel,
         partialShip,
         airDelay,
+        careNotes,
         trackingEvents,
         trackingEventsVisible,
         refundView,

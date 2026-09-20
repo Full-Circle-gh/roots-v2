@@ -1,0 +1,13 @@
+<!-- Modelled on the checkout's bn-card (pages/checkout/checkout.wxml) so a
+     customer meets one kind of notice card in this app, not two. The badge is a
+     plain "!" rather than an emoji: this card carries whatever a tenant needs to
+     say about a product, and a pictogram that suits kombucha suits nothing else. -->
+<view wx:if="{{open}}" class="cn-backdrop" bindtap="onClose" catchtouchmove="noop">
+  <view class="cn-card" catchtap="noop">
+    <view class="cn-hero"><view class="cn-badge">!</view></view>
+    <view wx:if="{{kicker}}" class="cn-kicker f-toni">{{kicker}}</view>
+    <view wx:if="{{title}}" class="cn-title f-bear">{{title}}</view>
+    <view wx:if="{{body}}" class="cn-body">{{body}}</view>
+    <view class="cn-cta f-toni" catchtap="onClose">{{cta}}</view>
+  </view>
+</view>
