@@ -35581,6 +35581,96 @@ function noticeProductIds(items) {
   return [...new Set(ids)];
 }
 
+// ─── The pre-order notice's copy, and the one number in it ────────────────
+// §194 — THE ONLY CHECKOUT NOTICE THE TENANT COULD NOT EDIT. The batch notice
+// has carried operator copy since the fresh-batch card shipped
+// (batchScheduleCfg's twelve fields); the store-move notice renders ONLY from
+// operator copy. This one was four string literals in the route, so changing a
+// word in it meant a code change and a deploy. Reported by Ash: *"tenent need
+// to have place where this pop up can be edit and change as he wish"*.
+//
+// ONE KEY, `notice.preorder`, holding one object — the shape `batch.schedule`
+// uses, not the six separate rows `notice.store_move.*` uses. The card saves
+// all of it in one PUT, so one row is one write and one read.
+//
+// BLANK FALLS BACK TO THE BUILT-IN TEXT, and that is a DELIBERATE break from
+// the store-move notice, which renders nothing at all when its copy is blank.
+// The difference is that store-move had never shipped when it was written, so
+// silence cost a tenant nothing. This notice is live and has been showing to
+// customers for as long as `backorder_gz` has existed: if blank meant silence,
+// every tenant's pre-order popup would switch OFF the day this deploys and
+// nobody would learn it from the screen. Blank means "unchanged" here.
+const PREORDER_NOTICE_COPY_FIELDS =
+  ['kicker_en', 'kicker_cn', 'title_en', 'title_cn', 'message_en', 'message_cn'];
+
+// Whole days, and the pair is the OPERATOR'S ESTIMATE — nothing in this product
+// can derive it. There is no lead-time column on a product, a supplier or a
+// purchase order, which is why this is typed rather than computed: a window we
+// worked out ourselves would be a guess wearing a calculation's clothes.
+//
+// Absent is a real answer and means NO WINDOW: the notice keeps the wording it
+// has always had. That is the `ready_hour` contract (see batchScheduleCfg) —
+// an unset number changes nothing for anybody.
+function preorderNoticeCfg() {
+  const out = { min_days: null, max_days: null };
+  for (const f of PREORDER_NOTICE_COPY_FIELDS) out[f] = '';
+  let raw;
+  try { raw = cfgValue('notice.preorder', null); } catch (e) { raw = null; }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const f of PREORDER_NOTICE_COPY_FIELDS) {
+    out[f] = typeof raw[f] === 'string' ? raw[f].trim() : '';
+  }
+  const day = (v) => {
+    const n = parseInt(v, 10);
+    return (Number.isFinite(n) && n >= 0 && n <= 365) ? n : null;
+  };
+  let lo = day(raw.min_days);
+  let hi = day(raw.max_days);
+  // One number typed on its own is a window of one day, not half a window: an
+  // operator who knows "three days" should not have to type it twice, and a
+  // half-filled pair must never render as "3-" or as nothing.
+  if (lo == null) lo = hi;
+  if (hi == null) hi = lo;
+  if (lo != null && hi != null && lo > hi) { const t = lo; lo = hi; hi = t; }
+  out.min_days = lo;
+  out.max_days = hi;
+  return out;
+}
+
+// The window as the customer reads it, or null when none is set.
+//
+// `天` is live throughout the product as the day counter, and the numerals do
+// the rest — there is no composed Chinese in this label, only a number and a
+// unit. The EN plural is the only thing with a branch in it.
+function preorderWindowLabel(cfg) {
+  const lo = cfg && cfg.min_days;
+  const hi = cfg && cfg.max_days;
+  if (lo == null || hi == null) return null;
+  if (lo === hi) {
+    return { en: `${lo} day${lo === 1 ? '' : 's'}`, cn: `${lo} 天` };
+  }
+  return { en: `${lo}-${hi} days`, cn: `${lo}-${hi} 天` };
+}
+
+// The operator's sentence, with `{window}` filled in — or the built-in one.
+//
+// THE PLACEHOLDER AND THE NUMBER ARE ONE DECISION, WHICH IS WHY THIS REFUSES
+// THE HALF CASE. An operator who writes "usually within {window}" and then
+// clears the two day fields would otherwise ship "usually within ." to a
+// paying customer. The batch notice never meets this: its `{ship_date}` is
+// computed at the moment the notice fires and always exists. Ours is typed and
+// can be taken away, so copy that ASKS for a window it no longer has falls
+// back to the built-in text whole, rather than rendering a broken sentence.
+function preorderMessage(custom, win, fallback) {
+  const s = typeof custom === 'string' ? custom.trim() : '';
+  if (!s) return fallback;
+  if (s.includes('{window}')) {
+    if (!win) return fallback;
+    return s.split('{window}').join(win);
+  }
+  return s;
+}
+
 function computePreorderNotice(zone, address, productIds, slotId, slotKind) {
   // Never promise a shopper on the local run that their order "ships soon":
   // the local pre-order gate in POST /orders refuses that line whatever day
@@ -35630,11 +35720,34 @@ function computePreorderNotice(zone, address, productIds, slotId, slotKind) {
     return st != null && st <= 0;                            // genuinely sold out
   }).map((r) => ({ id: r.id, name_en: r.name_en, name_cn: r.name_cn }));
   if (!items.length) return null;
+
+  /* §194 — THE OPERATOR'S COPY FIRST, THE BUILT-IN TEXT BEHIND IT. Same shape
+     as computeBatchNotice's `cfg.kicker_en ||` chain, so the two notices are
+     configured the same way and a reader of one recognises the other.
+
+     THE DEFAULT MESSAGE HAS TWO FORMS AND THE WINDOW PICKS BETWEEN THEM. A
+     tenant who has set no window gets the sentence this notice has always
+     shipped, character for character — that is what makes this change
+     invisible until somebody chooses to configure it. A tenant who HAS set one
+     gets the same sentence with the estimate in it, so the number is worth
+     typing without also having to write the copy around it. */
+  const cfg = preorderNoticeCfg();
+  const win = preorderWindowLabel(cfg);
+
+  const bareEn = 'Some items in your order are currently out of stock. Your order is a pre-order — we’ll ship everything together as soon as they’re back in stock.';
+  const bareCn = '您订单中的部分商品目前缺货。此为预订订单，我们将在补货后尽快为您一并发货。';
+  const defEn = win
+    ? `Some items in your order are currently out of stock. Your order is a pre-order — they are usually back in stock within ${win.en}, and we’ll ship everything together as soon as they are.`
+    : bareEn;
+  const defCn = win
+    ? `您订单中的部分商品目前缺货。此为预订订单，预计 ${win.cn} 内补货，我们将在补货后尽快为您一并发货。`
+    : bareCn;
+
   return {
-    kicker_en: 'Pre-order',  kicker_cn: '预订',
-    title_en:  'Ships soon', title_cn:  '现订现发',
-    message_en: 'Some items in your order are currently out of stock. Your order is a pre-order — we’ll ship everything together as soon as they’re back in stock.',
-    message_cn: '您订单中的部分商品目前缺货。此为预订订单，我们将在补货后尽快为您一并发货。',
+    kicker_en: cfg.kicker_en || 'Pre-order',  kicker_cn: cfg.kicker_cn || '预订',
+    title_en:  cfg.title_en  || 'Ships soon', title_cn:  cfg.title_cn  || '现订现发',
+    message_en: preorderMessage(cfg.message_en, win && win.en, defEn),
+    message_cn: preorderMessage(cfg.message_cn, win && win.cn, defCn),
     items,
   };
 }

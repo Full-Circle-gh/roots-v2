@@ -610,11 +610,17 @@ section('7 · the two fresh-batch checkout notices head the same way (§108)');
       'the date moved into the message, it was not dropped');
     assert.ok(/make_date: makeDate/.test(LOCAL), 'and it still rides as a field');
   });
-  it('the GROCERY notice is untouched — it names no batch, having none', () => {
+  /* §194 gave this notice the operator copy the two above it already had, so
+     the heading is read through the same `cfg.x ||` chain they are. What this
+     check is for is unchanged and still the point: the grocery notice names NO
+     BATCH, because it has none — only a restock window the operator typed. */
+  it('the GROCERY notice heads the same way, through the operator\'s copy', () => {
     const PRE = sliceBlock(RETAIL,
       'function computePreorderNotice(zone, address, productIds, slotId, slotKind)');
-    assert.ok(/kicker_en: 'Pre-order'/.test(PRE));
-    assert.ok(/title_en:  'Ships soon'/.test(PRE));
+    assert.ok(/cfg\.kicker_en \|\| 'Pre-order'/.test(PRE), 'default kicker, operator first');
+    assert.ok(/cfg\.title_en  \|\| 'Ships soon'/.test(PRE), 'default title, operator first');
+    assert.ok(!/\{ship_date\}|\{delivery_date\}|\{make_date\}/.test(PRE),
+      'and no batch date can be smuggled in through an operator field');
   });
 }
 

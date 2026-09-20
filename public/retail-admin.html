@@ -10248,6 +10248,30 @@
                   <span class="meta">only if you batch-make · 仅现做商家需要</span>
                 </div>
               </div>
+
+              <!-- Pre-orders — the checkout popup a sold-out-but-orderable item
+                   raises, and the restock estimate that goes in it. Its own card
+                   rather than a row inside Fresh batches: a pre-ordered grocery
+                   row names no batch and has nothing to do with the kitchen's
+                   rhythm, and a setting filed under a heading it does not belong
+                   to is a setting nobody finds. -->
+              <div class="sales-ch dlv-hc">
+                <div class="sales-ch-top">
+                  <div class="sales-ch-id">
+                    <span class="sales-ch-ico" style="background:rgba(178,207,237,.2);color:#2456a3">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18v13H3z"/><path d="M8 7V4h8v3"/><path d="M9 13h6"/></svg>
+                    </span>
+                    <div>
+                      <div class="sales-ch-name">Pre-orders · 预订</div>
+                      <div class="sales-ch-stat" id="dlv-st-preorder"><span class="sales-dot off"></span>Loading… · 加载中…</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="sales-ch-blurb">Selling something you're out of? Set what the checkout popup says, and roughly how long the restock takes. · 缺货商品仍可下单时:设置结账弹窗文案与大致补货时间。</div>
+                <div class="sales-ch-foot">
+                  <button class="btn btn-sm" type="button" onclick="dlvGo('preorder')">Edit · 编辑</button>
+                </div>
+              </div>
             </div>
 
             <div class="sales-eyebrow">Carriers &amp; tracking · 承运商与追踪</div>
@@ -10923,6 +10947,83 @@
 
               <div class="fb-save">
                 <button class="btn" onclick="saveBatchSchedule()">Save · 保存</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ══ PRE-ORDERS VIEW ══ §194 — the checkout popup an out-of-stock but
+               still-orderable product raises, and the restock window that goes
+               inside it. Built to the Fresh batches card's shape and reusing its
+               fb-* classes deliberately: the two settings do the same job for
+               two kinds of product, and an operator who has configured one
+               should recognise the other on sight.
+
+               loadDeliverySettings() fills these by id and savePreorderNotice()
+               reads them back, writing `notice.preorder` WHOLESALE — a field
+               that loses its id is a field the next save deletes. -->
+          <div class="dlv-view" data-dlv="preorder" hidden>
+            <button type="button" class="dlv-back" onclick="dlvGo('hub')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Delivery · 配送</button>
+            <h2>Pre-orders · 预订</h2>
+            <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4);">
+              Shown at checkout when the basket holds something that is sold out but you have left orderable. Which products those are is set per product, in the product editor. · 当购物车中含有缺货但仍允许下单的商品时,结账时显示。哪些商品属于此类,在商品编辑页设置。
+            </div>
+
+            <div class="card fb-group" id="po-window" style="margin-bottom: var(--s4);">
+              <h3 class="fb-h">Restock window · 预计补货时间</h3>
+              <div class="fb-sub">Roughly how long a restock takes. Leave both blank and no estimate is shown — the popup reads exactly as it does today. · 补货大约需要多久。两项都留空则不显示估计时间,弹窗与现在完全一致。</div>
+              <div class="fb-field">
+                <div class="fb-pair">
+                  <div><label for="po-min-days">From · 最快(天)</label><input id="po-min-days" type="number" min="0" max="365" step="1" placeholder="2"></div>
+                  <div><label for="po-max-days">To · 最慢(天)</label><input id="po-max-days" type="number" min="0" max="365" step="1" placeholder="4"></div>
+                </div>
+              </div>
+              <div class="fb-sub" style="margin-top:10px">This is an estimate you type, not one we work out — nothing in the system knows your suppliers' lead times. Say "usually" in the wording below rather than promising a date. · 这是您自己填写的估计值,系统无法推算供应商的补货周期。文案请用"预计",不要承诺具体日期。</div>
+            </div>
+
+            <div class="card fb-group" id="po-copy">
+              <h3 class="fb-h">Checkout popup · 结账弹窗</h3>
+              <div class="fb-sub">Leave any field blank to use the default wording. The only placeholder is {window}, which fills in with the days above. · 任意字段留空则使用默认文案。只有一个占位符 {window},会自动填入上方的天数。</div>
+
+              <div class="fb-msg">
+                <div class="fb-fields">
+                  <div class="fb-field">
+                    <span class="fb-name">Popup eyebrow · 弹窗小标题</span>
+                    <div class="fb-pair">
+                      <div><label for="po-kicker-en">English</label><input id="po-kicker-en" type="text" maxlength="40" placeholder="Pre-order"></div>
+                      <div><label for="po-kicker-cn">中文</label><input id="po-kicker-cn" type="text" maxlength="40" placeholder="预订"></div>
+                    </div>
+                  </div>
+                  <div class="fb-field">
+                    <span class="fb-name">Popup title · 弹窗标题</span>
+                    <div class="fb-pair">
+                      <div><label for="po-title-en">English</label><input id="po-title-en" type="text" maxlength="60" placeholder="Ships soon"></div>
+                      <div><label for="po-title-cn">中文</label><input id="po-title-cn" type="text" maxlength="60" placeholder="现订现发"></div>
+                    </div>
+                  </div>
+                  <div class="fb-field">
+                    <span class="fb-name">Checkout notice · 结账提示</span>
+                    <div class="fb-pair">
+                      <div><label for="po-msg-en">English</label><textarea id="po-msg-en" rows="4" placeholder="Some items in your order are currently out of stock. Your order is a pre-order — they are usually back in stock within {window}, and we'll ship everything together as soon as they are."></textarea></div>
+                      <div><label for="po-msg-cn">中文</label><textarea id="po-msg-cn" rows="4" placeholder="您订单中的部分商品目前缺货。此为预订订单,预计 {window} 内补货,我们将在补货后尽快为您一并发货。"></textarea></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="fb-preview">
+                  <div class="fb-plab">At checkout · 结账时</div>
+                  <div class="fb-phone">
+                    <div class="fb-pop">
+                      <div class="fb-pop-kick" id="po-pv-kick"></div>
+                      <div class="fb-pop-ttl" id="po-pv-ttl"></div>
+                      <p class="fb-pop-body" id="po-pv-body"></p>
+                    </div>
+                  </div>
+                  <div class="fb-pnote" id="po-pv-note"></div>
+                </div>
+              </div>
+
+              <div class="fb-save">
+                <button class="btn" onclick="savePreorderNotice()">Save · 保存</button>
               </div>
             </div>
           </div>
