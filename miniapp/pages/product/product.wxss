@@ -901,22 +901,61 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* §170 PUT A DATE ON THIS BUTTON, AND THE DATE IS WHAT OVERFLOWED IT.
-   MEASURED, not estimated — against public/fonts/ToniGroteskPro.otf at the
-   1.15 --font-scale every page ships with, in the 468rpx the sticky bar
-   leaves the whole button (750 screen − 64 bar padding − 198 stepper − 20):
+/* THE APPENDER'S ANSWER SITS UNDER THE WORD, NOT BESIDE IT.
+   Two attempts to shrink it onto one line both clipped it, the second because
+   it was sized against `¥44` while this button draws its price in full. There
+   is no readable single size: the button leaves label and price 404rpx
+   together, and this page's widest price column — a struck `¥158.50` over
+   `SAVE ¥30.50` — takes 231 of them, leaving 173 where even 21rpx type needs
+   214.
 
-     NEXT BATCH              32rpx/0.1em    183rpx   ¥44  89 · ¥128 106
-     NEXT BATCH · TOMORROW   32rpx/0.1em    389rpx   ← 66rpx over the button
-     NEXT BATCH · TOMORROW   26rpx/0.02em   265rpx   ← 33rpx clear at ¥128
+   Stacked, the label needs only the WIDER of its two pieces. Measured from
+   public/fonts/ToniGroteskPro.otf at the 1.15 --font-scale:
 
-   So the dated label steps down to 26rpx and gives back the wide tracking;
-   the bare word never moves. One step, chosen because 28rpx still overruns
-   a three-digit price and 24rpx starts reading as a caption rather than the
-   thing you are about to tap. */
-.add-btn.is-long .add-label {
-  font-size: calc(26rpx * var(--font-scale));
-  letter-spacing: 0.02em;
+     NEXT BATCH   28rpx/0.1em    160rpx  ← the widest piece, so the column
+     PRE-ORDER    28rpx/0.1em    132rpx
+     TOMORROW     20rpx/0.06em    91rpx
+     10-14 DAYS   20rpx/0.06em    92rpx
+     下批现做       28rpx/0.1em     77rpx
+     9月23日       20rpx/0.06em    55rpx
+
+   160 against the worst case's 173 clears it, and against a plain `¥44` it
+   clears by 155. The word keeps near its full size instead of shrinking to a
+   caption, and the ` · ` goes, having only ever cost width.
+
+   DO NOT SIZE THIS BY EYE OR FROM ANOTHER SURFACE'S PRICE — that is the
+   mistake this replaces, twice over. §8 of scripts/test_fresh_batch_eta.js
+   reads these fonts and adds up every label the page can build beside every
+   price column it can draw; change a size here and it names the pair that
+   stopped fitting. */
+.add-label-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 0;
+  gap: 2rpx;
+}
+.add-word {
+  font-size: calc(28rpx * var(--font-scale));
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+/* Quieter than the word above it: this informs, the word is what you tap.
+   Tracking is its own rather than the button's 0.1em — a short arrival or a
+   day count does not need spacing out, and the em it saves is real. */
+.add-qual {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.06em;
+  line-height: 1.1;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 /* Compare-at + live price grouped on the right of the add button. Stacked
    (was over now) so the pair stays narrow — the label keeps to one line

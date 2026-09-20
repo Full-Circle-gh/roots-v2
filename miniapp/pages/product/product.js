@@ -12,6 +12,16 @@ const delivery = require('../../utils/delivery');
 const config   = require('../../utils/config');
 const freshEta = require('../../utils/fresh-eta');
 
+// ONE PRICE FORMAT FOR THIS PAGE. Three copies of this line already sat in
+// three builders here, and a fourth site — the buy button — had its own rule
+// that forced two decimals on every price. That was the odd one out: the shop
+// list, the size picker and the "was" line all show `¥44`, and only the button
+// said `¥44.00`. It also cost the button 75rpx it did not have, which is how
+// the band beside it came to be measured against the wrong number twice. A
+// price that is a whole number is written as one; anything else keeps its two
+// decimals, exactly as before.
+const money = n => '¥' + (Number.isInteger(n) ? n : Number(n).toFixed(2));
+
 // WHICH CHARACTER SIGNS THIS PAGE — the mini app's half of lib/brand-signature
 // resolveCharacter(). A WeChat bundle cannot require from lib/, so this is a
 // real and permanent duplication of the RULE (never of the data — the cast, the
@@ -250,6 +260,10 @@ Page({
     notFound: false,       // the server ANSWERED: this product is gone
     loadError: false,      // we never got an answer — network / mid-deploy 5xx
     addBtnLabel: 'ADD TO BASKET',
+    // The stacked pair, empty until an appender has something to add — the
+    // first frame draws the single label above, as it always did.
+    addBtnWord: '',
+    addBtnQual: '',
     soldOut: false,
     preorder: false,       // 0-stock but out-of-city pre-order allowed
     preKind: '',           // '' | 'batch' | 'preorder' — see _preKind
@@ -484,9 +498,9 @@ Page({
     // struck-through in the add button with a SAVE badge. Flash takes priority.
     const cmp = Number(p.compare_at_price) || 0;
     const hasCmp = !isFlash && cmp > v && v > 0;
-    const priceWas = hasCmp ? '¥' + cmp.toFixed(2) : '';
+    const priceWas = hasCmp ? money(cmp) : '';
     const saveN = hasCmp ? Math.round((cmp - v) * 100) / 100 : 0;
-    const saveLabel = saveN > 0 ? (L === 'cn' ? '省¥' : 'SAVE ¥') + (Number.isInteger(saveN) ? saveN : saveN.toFixed(2)) : '';
+    const saveLabel = saveN > 0 ? (L === 'cn' ? '省' : 'SAVE ') + money(saveN) : '';
     // free_of (comma list like "gluten,nuts") → allergen-free badges. The whole
     // shop is 100% plant-based, so EVERY product also carries the PLANT-BASED
     // badge by default (regardless of `free_of`). EGG FREE is intentionally
@@ -793,7 +807,6 @@ Page({
     this._bundle = (p.bundle && Array.isArray(p.bundle.items) && p.bundle.items.length) ? p.bundle : null;
     let bundle = null;
     if (this._bundle) {
-      const money = n => '¥' + (Number.isInteger(n) ? n : Number(n).toFixed(2));
       const items = this._bundle.items.map(it => {
         const st = it.stock == null ? null : Number(it.stock);
         return {
@@ -851,9 +864,11 @@ Page({
     // badge. Both now come off `preKind`, so the page cannot contradict
     // itself and the word is the same one every other surface uses.
     // The bare §108 word for this row's kind, before either appender touches
-    // it. `addBtnLong` below compares the built label against exactly this, so
-    // "the appender added something" stays one question however many appenders
-    // there are and whatever shape their answers take.
+    // it. `addBtnQual` below splits the built label on exactly this, so "what
+    // did the appender add" stays one question however many appenders there
+    // are and whatever shape their answers take. (§195 wrote this to widen a
+    // font step-down to a second appender; the step-down is now a stacked
+    // line, and this value is what made that a one-line change too.)
     const addBtnBare = preKind === 'batch'
       ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
       : preKind === 'preorder'
@@ -879,6 +894,14 @@ Page({
             ? freshEta.withRestockWindow(L === 'cn' ? '预订' : 'PRE-ORDER', preWin, L)
             : (L === 'cn' ? '加入购物车' : 'ADD TO BASKET');
 
+    // Whatever an appender added to the bare word, or '' when none did — the
+    // one string, split, never derived twice. See `addBtnQual` in setData.
+    const BAND_SEP = ' · ';
+    const addBtnQual = (!soldOut && !hasVariants && addBtnBare
+      && addBtnLabel.indexOf(addBtnBare + BAND_SEP) === 0)
+      ? addBtnLabel.slice(addBtnBare.length + BAND_SEP.length)
+      : '';
+
     this.setData({
       bundle,
       whatsInside,
@@ -891,7 +914,7 @@ Page({
       // CN page keeps the EN name as a subtitle.
       subtitle: L === 'en' ? '' : lang.pick(p.name_cn, p.name_en, 'en'),
       priceN: v,
-      price: v > 0 ? '¥' + v.toFixed(2) : '—',
+      price: v > 0 ? money(v) : '—',
       isFlash,
       flashWas,
       flashOff,
@@ -933,31 +956,34 @@ Page({
       oosLabel: L === 'cn' ? '售罄' : 'SOLD OUT',
       preLabel: L === 'cn' ? '可预订' : 'PRE-ORDER',
       addBtnLabel,
-      // THE DATE IS WHAT OVERFLOWS THE BUTTON, so the date is what this asks
-      // about. §170 appends an arrival to the §108 word, and the pair does not
-      // fit beside the price at the usual size: `NEXT BATCH` is 183rpx of Toni
-      // at 32rpx and the 1.15 font scale, `NEXT BATCH · TOMORROW` is 389, and
-      // the sticky bar leaves the whole button 468 for label, price and
-      // padding together. .is-long steps a DATED label down a size in
-      // product.wxss; the bare word keeps the size it has always had.
+      // THE APPENDER'S ANSWER GETS ITS OWN LINE ON THIS BUTTON, and that is a
+      // width answer, not a style one. Every other surface draws the band as
+      // one string, which is what fresh-eta.js exists to guarantee; this
+      // button is the only place it has to share a line with a price, and the
+      // two do not fit:
       //
-      // The test is whether the appender added anything — never how many
-      // characters came back. A count gets Chinese wrong: `下批现做 · 9月21日`
-      // is 12 characters to `ADD TO BASKET`'s 13 and half again as wide,
-      // because a CJK glyph takes a whole em where a Latin cap takes under
-      // half of one. Comparing against the bare word also needs no updating
-      // when a new arrival shape is added — it is the same one string the
-      // label above was built from, and the two cannot drift apart without
-      // scripts/test_fresh_batch_eta.js §8 saying so.
-      // §195 WIDENS THIS TO THE OTHER APPENDER RATHER THAN ADDING A SECOND
-      // FLAG. The rule above is already the right one — "did the appender add
-      // anything" — but it was written when only a batch row had an appender,
-      // so it named that kind and that kind's bare word. A pre-order row now
-      // has one too, and `PRE-ORDER · 2-4 DAYS` is wider than `NEXT BATCH ·
-      // TOMORROW`, so leaving this gated on 'batch' would put the defect §170
-      // fixed straight back on the surface it was reported from. The bare word
-      // comes off the same expression the label was built from, per kind.
-      addBtnLong: !soldOut && !hasVariants && !!preKind && addBtnLabel !== addBtnBare,
+      //   the button leaves label and price      404rpx together
+      //   `NEXT BATCH · TOMORROW`  at 32rpx      389rpx  (§170)
+      //   `PRE-ORDER · 10-14 DAYS` at 26rpx      246rpx  (§195)
+      //   a discounted, non-round price (`¥158.50`
+      //     struck over `SAVE ¥30.50`) takes     231rpx
+      //
+      // No readable single size closes that. It was tried twice — 26rpx, then
+      // 24 — and clipped the qualifier both times, the second because the
+      // label was sized against `¥44` while this button draws its price in
+      // full. §195 inherited that sizing, which is why `PRE-ORDER · 10-14
+      // DAYS` overflows `¥44.00` by 6rpx on the surface §170 was reported
+      // from. Stacked, the label needs only the WIDER of its two pieces —
+      // 160rpx at the sizes in product.wxss — which clears the worst price
+      // this page can draw and keeps the word near full size.
+      //
+      // ONE DERIVATION, STILL. The qualifier is not computed a second time; it
+      // is taken off the label the appenders already built, split on the
+      // separator they share. So it cannot disagree with `addBtnLabel`, it
+      // needs no fork of its own, and a third appender works here with no edit
+      // — the same property §195 relied on when it widened `addBtnBare`.
+      addBtnWord: addBtnQual ? addBtnBare : '',
+      addBtnQual,
       soldOut,
       preorder,
       preKind,
@@ -1179,7 +1205,6 @@ Page({
   // "Add to basket · ¥XX" reflecting every current selection (both sheets).
   _sheetBtnLabel() {
     const L = this.data.lang;
-    const money = v => '¥' + (Number.isInteger(v) ? v : v.toFixed(2));
     let delta = 0;
     this.data.options.forEach(o => this._selIds(o).forEach(cid => {
       const c = o.choices.find(x => x.id === cid);
@@ -1280,7 +1305,6 @@ Page({
   // a flash sale is active on that specific size.
   _openVariantPicker() {
     const L = this.data.lang;
-    const money = v => '¥' + (Number.isInteger(v) ? v : v.toFixed(2));
     // §195 — one read for the whole sheet, not one per size row.
     const preWin = config.get('notice.preorder', null);
     const options = this._variants.map(m => {
