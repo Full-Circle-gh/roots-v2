@@ -245,8 +245,18 @@ section('5 · the web storefront — RULE 5, the run opens for one mode only');
 const shopCtx = { state: { lang: 'en', customer: null }, console };
 vm.createContext(shopCtx);
 vm.runInContext(
+  // stockState builds the band, so both of its appenders come in AS SHIPPED
+  // rather than stubbed — a stub here would let this suite and the page
+  // disagree about the one thing the band says. The sandbox's `state` carries
+  // no config, so slPreorderWindow answers null and nothing is appended: every
+  // case below reads exactly as it did before §195.
   [grab(SHOP, 'oosBackorder'), grab(SHOP, 'oosPreorderLocal'),
-    grab(SHOP, 'shopperOnLocalRun'), grab(SHOP, 'stockState')].join('\n'),
+    grab(SHOP, 'shopperOnLocalRun'),
+    grab(SHOP, 'freshArrivalLabel'), grab(SHOP, 'withFreshArrival'),
+    grab(SHOP, 'restockWindowLabel'), grab(SHOP, 'withRestockWindow'),
+    grab(SHOP, 'slPreorderWindow'),
+    'const SL_MONTHS_EN=[];',
+    grab(SHOP, 'stockState')].join('\n'),
   shopCtx);
 
 // A shopper whose default address rides the same-day local run.
@@ -258,7 +268,7 @@ it('a local-run shopper may pre-order the new mode — live row, no dead pill', 
   onRun(true);
   const ss = shopCtx.stockState({ ...ALL });
   assert.strictEqual(ss.soldOut, false, 'the row stays alive');
-  assert.strictEqual(ss.badge, 'SHIPS SOON');
+  assert.strictEqual(ss.badge, 'PRE-ORDER');   // §195 renamed the band; the row is what is asserted
 });
 it('…and the SAME shopper still gets a dead SOLD OUT for the old mode', () => {
   onRun(true);

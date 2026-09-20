@@ -148,6 +148,14 @@ function webCtx(onRun, lang = 'en') {
     // for. scripts/test_fresh_batch_eta.js is where the dated shapes are pinned.
     sliceBlock(SHOP, 'function freshArrivalLabel(p,onRun)') + '\n' +
     sliceBlock(SHOP, 'function withFreshArrival(base,p,onRun)') + '\n' +
+    // §195 — the grocery half of the band gained an appender of its own, so it
+    // is part of the decider path too. `state` here carries no config, so
+    // slPreorderWindow answers null and nothing is appended: every fixture
+    // below reads exactly as it did. scripts/test_preorder_band.js is where
+    // the windowed shapes are pinned.
+    sliceBlock(SHOP, 'function restockWindowLabel(cfg)') + '\n' +
+    sliceBlock(SHOP, 'function withRestockWindow(base,cfg)') + '\n' +
+    sliceBlock(SHOP, 'function slPreorderWindow()') + '\n' +
     'const SL_MONTHS_EN=[];\n' +
     sliceBlock(SHOP, 'function slStock(m)') + '\n' +
     sliceBlock(SHOP, 'function stockState(p)') + '\n' +
@@ -217,11 +225,15 @@ section('2 · the web storefront — an out-of-city shopper reads the SAME word 
     assert.strictEqual(away.stockState({ ...FRESH_TODAY }).badge, 'NEXT BATCH');
   });
   it('a GROCERY row is the carve-out: no batch is being cooked, so PRE-ORDER stands', () => {
-    // §108 changed the word for a meal the kitchen makes. Nothing is being
-    // made for a sold-out bag of rice, so it keeps the wording it had — the
-    // picker's PRE-ORDER and the card's SHIPS SOON, both untouched.
+    /* §108 changed the word for a meal the kitchen makes. Nothing is being
+       made for a sold-out bag of rice, so it keeps the grocery wording.
+
+       §195 MADE THE TWO LINES BELOW AGREE, which is the change this assertion
+       records: the picker said PRE-ORDER and the card said SHIPS SOON for the
+       same row, which is why this test's own name said one thing while its
+       second line asserted the other. One state, one word, both surfaces. */
     assert.strictEqual(away.slStock({ ...GROCERY_OUT }).preTxt, 'PRE-ORDER');
-    assert.strictEqual(away.stockState({ ...GROCERY_OUT }).badge, 'SHIPS SOON');
+    assert.strictEqual(away.stockState({ ...GROCERY_OUT }).badge, 'PRE-ORDER');
   });
   it('the add toast uses the row\'s OWN word, not a second opinion (§108)', () => {
     // It used to re-derive "is this a reservation" at the toast

@@ -461,6 +461,11 @@ Page({
     const p = this.data.product;
     const L = this.data.lang;
     if (!p) return;
+    // §195 — the operator's restock window, read ONCE for the whole pass. The
+    // badge and the buy button both append it and §108 requires them to agree;
+    // two reads could not disagree today, but they are two things that would
+    // have to be changed together tomorrow, which is the same defect early.
+    const preWin = config.get('notice.preorder', null);
     const img = absUrl(p.image_url) || p.image_data || '';
     // Photo gallery — normalise each entry (data-URIs pass through; relative
     // URLs get absolutised). Drives the hero swiper when there's >1 photo.
@@ -622,7 +627,13 @@ Page({
               L === 'cn' ? '下批现做' : 'NEXT BATCH', p, this._onLocalRun, L);
             stockTagKind = 'pre';
           } else if (preKind === 'preorder') {
-            stockTag = L === 'cn' ? '可预订' : 'PRE-ORDER';
+            /* §195 — THE WINDOW, WHERE THE BATCH ROW GETS ITS DATE. A grocery row
+           names no batch, so `withFreshArrival` correctly gives it nothing;
+           what it can name is the restock window the operator typed (§194),
+           which is the same number the checkout popup prints. Unset → the
+           bare word, exactly as before. */
+            stockTag = freshEta.withRestockWindow(
+              L === 'cn' ? '可预订' : 'PRE-ORDER', preWin, L);
             stockTagKind = 'pre';
           }
         } else {
@@ -839,6 +850,16 @@ Page({
     // a later batch was offered a plain ADD TO BASKET under a NEXT BATCH
     // badge. Both now come off `preKind`, so the page cannot contradict
     // itself and the word is the same one every other surface uses.
+    // The bare §108 word for this row's kind, before either appender touches
+    // it. `addBtnLong` below compares the built label against exactly this, so
+    // "the appender added something" stays one question however many appenders
+    // there are and whatever shape their answers take.
+    const addBtnBare = preKind === 'batch'
+      ? (L === 'cn' ? '下批现做' : 'NEXT BATCH')
+      : preKind === 'preorder'
+        ? (L === 'cn' ? '预订' : 'PRE-ORDER')
+        : '';
+
     const addBtnLabel = soldOut
       ? (L === 'cn' ? '已售罄' : 'SOLD OUT')
       : hasVariants
@@ -852,7 +873,10 @@ Page({
           ? freshEta.withFreshArrival(
               L === 'cn' ? '下批现做' : 'NEXT BATCH', p, this._onLocalRun, L)
           : preKind === 'preorder'
-            ? (L === 'cn' ? '预订' : 'PRE-ORDER')
+            // §195 — the window comes down to the button for the same reason
+            // §170's date did: this is the tap that commits, so "back in a few
+            // days" belongs on it more than anywhere else on the page.
+            ? freshEta.withRestockWindow(L === 'cn' ? '预订' : 'PRE-ORDER', preWin, L)
             : (L === 'cn' ? '加入购物车' : 'ADD TO BASKET');
 
     this.setData({
@@ -925,8 +949,15 @@ Page({
       // when a new arrival shape is added — it is the same one string the
       // label above was built from, and the two cannot drift apart without
       // scripts/test_fresh_batch_eta.js §8 saying so.
-      addBtnLong: !soldOut && !hasVariants && preKind === 'batch'
-        && addBtnLabel !== (L === 'cn' ? '下批现做' : 'NEXT BATCH'),
+      // §195 WIDENS THIS TO THE OTHER APPENDER RATHER THAN ADDING A SECOND
+      // FLAG. The rule above is already the right one — "did the appender add
+      // anything" — but it was written when only a batch row had an appender,
+      // so it named that kind and that kind's bare word. A pre-order row now
+      // has one too, and `PRE-ORDER · 2-4 DAYS` is wider than `NEXT BATCH ·
+      // TOMORROW`, so leaving this gated on 'batch' would put the defect §170
+      // fixed straight back on the surface it was reported from. The bare word
+      // comes off the same expression the label was built from, per kind.
+      addBtnLong: !soldOut && !hasVariants && !!preKind && addBtnLabel !== addBtnBare,
       soldOut,
       preorder,
       preKind,
@@ -1250,6 +1281,8 @@ Page({
   _openVariantPicker() {
     const L = this.data.lang;
     const money = v => '¥' + (Number.isInteger(v) ? v : v.toFixed(2));
+    // §195 — one read for the whole sheet, not one per size row.
+    const preWin = config.get('notice.preorder', null);
     const options = this._variants.map(m => {
       const regular = Number(m.price ?? m.sell_price) || 0;
       const eff = Number(m.effective_price) > 0 ? Number(m.effective_price) : regular;
@@ -1278,7 +1311,8 @@ Page({
       const preorder = !!rowKind;
       const preTxt = rowKind === 'batch'
         ? freshEta.withFreshArrival(L === 'cn' ? '下批现做' : 'NEXT BATCH', m, this._onLocalRun, L)
-        : rowKind === 'preorder' ? (L === 'cn' ? '可预订' : 'PRE-ORDER')
+        : rowKind === 'preorder'
+          ? freshEta.withRestockWindow(L === 'cn' ? '可预订' : 'PRE-ORDER', preWin, L)
         : '';
       const soldOut = out && !orderable;
       return {

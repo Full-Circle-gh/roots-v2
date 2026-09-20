@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.143 · 2026-09-20 · §194 GIVES THE PRE-ORDER POPUP ITS RESTOCK WINDOW — COMPOSING ONE CLAUSE OUT OF LIVE WORDS AND LEAVING THE SENTENCE AROUND IT VERBATIM.** The popup became the tenant's to edit, and the one thing it could never say was roughly when the item comes back. The sentence it has shipped since `backorder_gz` existed is untouched; a four-character clause is inserted into it, and `预计`, `内` and `补货` are each already live and customer-facing. The window itself is a numeral and the live day counter. See *A pre-order's restock window*. **v1.142 · 2026-09-19 · §193 GIVES `parcel_awaiting_restock` THE SENTENCE IT NEVER HAD — LIFTING TWO LIVE FRAGMENTS AND COMPOSING NOTHING.** §187 minted the error code and registered no pair for it, so a Chinese admin has read the bare code in English ever since; §193 makes the JD label route a third caller, which is the busiest of the three. Both halves are live verbatim and only the join is new. See *A parcel the shortage is holding*.
+**v1.144 · 2026-09-20 · §195 RETIRES `SHIPS SOON · 现订现发` FROM THE BROWSE BAND AND COMPOSES NOTHING.** Two surfaces said it while five said `PRE-ORDER · 可预订` for the same shelf state, so a shopper tapping a card watched the word change under them. The live pair on the majority wins; no Chinese is minted, and the retired pair keeps its other job as the checkout popup's title. The band also gains the restock window — the same numerals and the same live `天` §194 declared, in the band's upper case. See *A pre-order's restock window* and *One word for a reservable row*. **v1.143 · 2026-09-20 · §194 GIVES THE PRE-ORDER POPUP ITS RESTOCK WINDOW — COMPOSING ONE CLAUSE OUT OF LIVE WORDS AND LEAVING THE SENTENCE AROUND IT VERBATIM.** The popup became the tenant's to edit, and the one thing it could never say was roughly when the item comes back. The sentence it has shipped since `backorder_gz` existed is untouched; a four-character clause is inserted into it, and `预计`, `内` and `补货` are each already live and customer-facing. The window itself is a numeral and the live day counter. See *A pre-order's restock window*. **v1.142 · 2026-09-19 · §193 GIVES `parcel_awaiting_restock` THE SENTENCE IT NEVER HAD — LIFTING TWO LIVE FRAGMENTS AND COMPOSING NOTHING.** §187 minted the error code and registered no pair for it, so a Chinese admin has read the bare code in English ever since; §193 makes the JD label route a third caller, which is the busiest of the three. Both halves are live verbatim and only the join is new. See *A parcel the shortage is holding*.
 
 **v1.141 · 2026-09-19 · §190 NAMES THE BOX IN §188's NOTIFICATION — COMPOSING THREE SENTENCES AND NO NEW WORDS.** *"one of the parcels"* made a split order's customer count boxes to work out which one had landed. Every mode already has a locked pair and two of them are already customer-facing on the printed slip, so each sentence is a live mode word in front of §188's live `包裹已发货`. The generic line survives as the fallback for a mode added later. See *Which box has gone*.
 
@@ -7693,3 +7693,74 @@ is typed and can be cleared, so operator copy that asks for a window with no day
 behind it falls back to the built-in sentence whole. A half-sentence
 (`…内补货` with nothing before it, or the English `within .`) must never reach a
 customer, and the failure would be invisible to whoever cleared the boxes.
+
+## One word for a reservable row — the browse band (2026-09-20)
+
+**RETIREMENT, not a composition.** Nothing is minted here. One live pair stops
+being drawn in one register and another live pair takes its place there.
+
+| key | EN | CN | status |
+|---|---|---|---|
+| `bandReservable` | PRE-ORDER | 可预订 | **LIVE, now on every browse surface** |
+| `bandReservable` (PDP buy button) | PRE-ORDER | 预订 | LIVE, unchanged — a button says what it does |
+| ~~`bandShipsSoon`~~ | ~~SHIPS SOON~~ | ~~现订现发~~ | **RETIRED FROM THE BAND** — still live as the popup title |
+
+**WHAT WAS WRONG.** The shop grid and the web storefront card drew
+`SHIPS SOON · 现订现发`. The PDP badge, the PDP buy button, the PDP size rows,
+the shop's variant size sheet and the favourites tile drew `PRE-ORDER · 可预订`.
+Same product, same shelf state, two words — and the word changed as the shopper
+tapped from the card into the page. Rule 1 calls a within-register difference a
+defect, and this was one, five surfaces to two.
+
+**HOW THE SPLIT SURVIVED.** It was written down as a reason rather than as a
+defect: the grid's own note argued the website *"names the promise instead of
+the mechanism"*. That is a real distinction and it is not being called wrong —
+it is being outvoted by the five surfaces that never adopted it. It also fought
+the window §195 appends: **`SHIPS SOON · 2-4 DAYS` says soon and then says how
+long**, which is the reading the band exists to save a shopper from.
+
+`scripts/test_fresh_today_label.js` had been asserting both halves in a single
+case whose NAME read *"a GROCERY row is the carve-out: no batch is being cooked,
+so PRE-ORDER stands"* while its second line asserted `SHIPS SOON`. The test knew.
+
+**WHERE THE RETIRED PAIR STAYS, AND WHY THAT IS NOT A HALF-RETIREMENT.**
+`现订现发` remains the default TITLE of the checkout pre-order popup
+(`computePreorderNotice`). Rule 1's two registers: the band names the STATE a
+shopper is browsing, the popup titles the PROMISE at the moment they commit.
+Retiring it there was never the change, and a tenant may now rewrite it anyway
+(§194).
+
+**`预订` VS `可预订` ON THE PDP BUTTON IS DELIBERATE AND UNCHANGED.** The badge
+says what the row IS (`可预订` — reservable); the button says what the tap DOES
+(`预订` — reserve). A button that reads "reservable" describes itself instead of
+offering an action. Both are live and both predate this entry.
+
+### The window in the band's register
+
+| key | EN | CN | provenance |
+|---|---|---|---|
+| `bandRestockWindow` (range) | `2-4 DAYS` | `2-4 天` | numerals + the live `天`; upper case because the band is |
+| `bandRestockWindow` (single) | `3 DAYS` / `1 DAY` | `3 天` | as above; only the EN plural branches |
+
+Drawn as `PRE-ORDER · 2-4 DAYS` / `可预订 · 2-4 天`, on the separator
+`withFreshArrival` already uses — a reader comparing two rows must not be able
+to tell which appender drew which.
+
+**THE SAME NUMBER APPEARS IN TWO CASES AND THAT IS A REGISTER DIFFERENCE, NOT
+DRIFT.** The band is upper case (`2-4 DAYS`); the checkout popup says the same
+window lower case inside a sentence (`usually back in stock within 2-4 days`).
+Chinese has no case, so both read `2-4 天` and the two must be identical there —
+`scripts/test_preorder_band.js` asserts exactly that, and folds the English case
+out before comparing the four implementations.
+
+**A ZERO-DAY WINDOW IS NOT DRAWN, IN ANY REGISTER.** `0/0` would read
+`PRE-ORDER · 0 DAYS` on the band and *"within 0 days"* in the popup. The first
+is §80's defect — a label describing a wait that is not happening — and the
+second is not a sentence anyone writes on purpose. Treated as unset everywhere.
+A range that merely STARTS at zero (`0-2 天`) is a real window and is kept.
+
+**NOT DRAWN ON THE ADD-TO-ORDER PICKER**, which takes the renamed word and
+neither appender. §170 ruled that an add-on picker is not a browse surface and
+kept its date off that screen; a window arriving without that date would leave
+the list reading `PRE-ORDER · 2-4 DAYS` beside a bare `NEXT BATCH`. Both
+appenders arrive together or neither does.

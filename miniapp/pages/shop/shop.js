@@ -667,6 +667,11 @@ Page({
   _toRows(products, L) {
     const money = v => '¥' + (Number.isInteger(v) ? v : v.toFixed(2));
     const onLocalRun = !!this._onLocalRun;
+    // §195 — read ONCE per pass, not per row. It is the same object for every
+    // row on the page (a shop-wide setting, not a product one), and a row that
+    // read it separately could only ever differ from its neighbours by being
+    // wrong. Also keeps the config module out of the row loop entirely.
+    const preWin = config.get('notice.preorder', null);
     return products.map(p => {
       const members = p._members || null;
       const regular = Number(p.price ?? p.sell_price) || 0;
@@ -725,9 +730,17 @@ Page({
         soldCaption: soldUnits > 0 ? (L === 'cn' ? `已售 ${soldUnits}` : `${soldUnits} SOLD`) : '',
         outOfStock,
         preorder,
-        // Band text for a reservable (out-but-orderable) row. The website
-        // names the promise instead of the mechanism — a meal we cook in runs
-        // says NEXT BATCH, anything else SHIPS SOON — so say the same here.
+        // Band text for a reservable (out-but-orderable) row. A meal we cook
+        // in runs says NEXT BATCH; anything else says PRE-ORDER, the one word
+        // every browse surface now uses for this state.
+        //
+        // §195 RETIRED `SHIPS SOON · 现订现发` FROM THE BAND, which this card
+        // and the web card were the last two surfaces still drawing. The PDP,
+        // its button, its size rows and favourites had said PRE-ORDER all
+        // along, so a shopper tapping this card watched the word change under
+        // them. The promise-vs-mechanism argument that chose SHIPS SOON is not
+        // overturned so much as outvoted: it also fought the window below,
+        // since "SHIPS SOON · 2-4 DAYS" says soon and then says how long.
         // …and NOTHING at all when that batch is today's: the row is orderable
         // now, the kitchen serves it inside the customer's own window, and a
         // band promising a future batch would be describing a wait that is not
@@ -735,12 +748,13 @@ Page({
         // §170 appends WHEN it arrives — the make day for a shopper the local
         // run serves, the day after for a couriered order. The server settled
         // both dates; utils/fresh-eta picks between them and does the wording.
-        // SHIPS SOON keeps its bare word: a grocery row names no batch, so
-        // there is no date to name and the helper returns '' for it anyway.
+        // …and §195 gives the grocery row the other appender: it still names
+        // no batch and still gets nothing from withFreshArrival, but it can
+        // name the operator's restock window. Unset → the bare word, as before.
         preText: preToday ? ''
           : p.is_batch_made
             ? freshEta.withFreshArrival(L === 'cn' ? '下批现做' : 'NEXT BATCH', p, onLocalRun, L)
-            : (L === 'cn' ? '现订现发' : 'SHIPS SOON'),
+            : freshEta.withRestockWindow(L === 'cn' ? '可预订' : 'PRE-ORDER', preWin, L),
         // image_data may now be a streamed-image URL (/api/retail/products/:id/
         // image) since the list omits inline base64 — absUrl() resolves it
         // against the API host. data: URIs and absolute URLs pass through.
@@ -1271,6 +1285,10 @@ Page({
   _openVariantPicker(repId, members) {
     const L = this.data.lang;
     const onLocalRun = !!this._onLocalRun;
+    // §195 — hoisted out of the row loop below for the same reason _toRows
+    // hoists it: one shop-wide setting, read once, so no size row can differ
+    // from the size row above it.
+    const preWin = config.get('notice.preorder', null);
     const money = v => '¥' + (Number.isInteger(v) ? v : v.toFixed(2));
     const options = members.map(m => {
       const regular = Number(m.price ?? m.sell_price) || 0;
@@ -1305,7 +1323,8 @@ Page({
          silent case exists to withhold. */
       const preText = kind === 'batch'
         ? freshEta.withFreshArrival(L === 'cn' ? '下批现做' : 'NEXT BATCH', m, onLocalRun, L)
-        : kind === 'preorder' ? (L === 'cn' ? '可预订' : 'PRE-ORDER')
+        : kind === 'preorder'
+          ? freshEta.withRestockWindow(L === 'cn' ? '可预订' : 'PRE-ORDER', preWin, L)
         : '';
       return {
         id: m.id,

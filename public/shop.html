@@ -4996,7 +4996,9 @@ function slToRows(products){
       priceWas=wasN>0?slMoney(wasN):'';
       subline=(p.size||'').toString().trim();
     }
-    const batchTxt=p.is_batch_made?withFreshArrival(L==='cn'?'下批现做':'NEXT BATCH',p,onLocalRun):(L==='cn'?'现订现发':'SHIPS SOON');
+    const batchTxt=p.is_batch_made
+      ?withFreshArrival(L==='cn'?'下批现做':'NEXT BATCH',p,onLocalRun)
+      :withRestockWindow(L==='cn'?'可预订':'PRE-ORDER',slPreorderWindow());
     return {id:p.id,name:pick(p.name_en,p.name_cn),subline,badge:slPickBadge(p.tags),
       soldCaption:soldUnits>0?(L==='cn'?'已售 '+soldUnits:soldUnits+' SOLD'):'',
       outOfStock,nextBatch,batchToday,batchTxt,oosLabel:state.lang==='cn'?'售罄':'SOLD OUT',
@@ -5498,6 +5500,36 @@ function withFreshArrival(base,p,onRun){
   const eta=freshArrivalLabel(p,onRun);
   return eta?(base+' · '+eta):base;
 }
+/* §195 — the OTHER appender, for the row that names no batch. The copy in
+   miniapp/utils/fresh-eta.js is the original and carries the reasoning; this
+   file can require nothing, which is why a copy exists at all. Keep the two
+   folding a pair identically — scripts/test_preorder_band.js runs both, plus
+   the server's and the admin preview's, over the same pairs and fails if any
+   two disagree. */
+function restockWindowLabel(cfg){
+  if(!cfg||typeof cfg!=='object')return'';
+  const day=v=>{const n=parseInt(v,10);return(isFinite(n)&&n>=0&&n<=365)?n:null;};
+  let lo=day(cfg.min_days),hi=day(cfg.max_days);
+  if(lo==null)lo=hi;
+  if(hi==null)hi=lo;
+  if(lo==null||hi==null)return'';
+  if(lo>hi){const t=lo;lo=hi;hi=t;}
+  if(lo===0&&hi===0)return'';           // a zero-day window names no wait
+  const cn=state.lang==='cn';
+  if(lo===hi)return cn?(lo+' 天'):(lo+' DAY'+(lo===1?'':'S'));
+  return cn?(lo+'-'+hi+' 天'):(lo+'-'+hi+' DAYS');
+}
+function withRestockWindow(base,cfg){
+  if(!base)return base||'';
+  const w=restockWindowLabel(cfg);
+  return w?(base+' · '+w):base;
+}
+/* The operator's restock window, off the storefront config this page already
+   holds. One read, one place, so no card can differ from the card beside it. */
+function slPreorderWindow(){
+  const c=state.config;
+  return (c&&c.notice&&c.notice.preorder)||null;
+}
 function shopperOnLocalRun(){
   const addrs=(state.customer&&Array.isArray(state.customer.addresses))?state.customer.addresses:[];
   if(!addrs.length)return false;
@@ -5558,7 +5590,9 @@ function stockState(p){
   const preLocal=(vs&&vs.length>1)?vs.some(v=>oosPreorderLocal(v)):oosPreorderLocal(p);
   if(oosBackorder(p)&&onRun&&fresh&&freshToday) return {oos:false,soldOut:false,localFresh:false,badge:''};
   if(oosBackorder(p)&&(!onRun||fresh||preLocal)) return {oos:true,soldOut:false,localFresh:onRun&&fresh,preLocal,
-    badge:p.is_batch_made?withFreshArrival(state.lang==='cn'?'下批现做':'NEXT BATCH',p,onRun):(state.lang==='cn'?'现订现发':'SHIPS SOON')};
+    badge:p.is_batch_made
+      ?withFreshArrival(state.lang==='cn'?'下批现做':'NEXT BATCH',p,onRun)
+      :withRestockWindow(state.lang==='cn'?'可预订':'PRE-ORDER',slPreorderWindow())};
   return {oos:true,soldOut:true,localFresh:false,badge:state.lang==='cn'?'售罄':'SOLD OUT'};
 }
 function cardHtml(p){

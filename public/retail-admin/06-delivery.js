@@ -543,6 +543,9 @@ function poWindowLabel() {
   if (hi == null) hi = lo;
   if (lo == null || hi == null) return null;
   if (lo > hi) { const t = lo; lo = hi; hi = t; }
+  // A zero-day window names no wait (§195) — treated as unset in all four
+  // copies of this fold, so the preview cannot show what the band will not.
+  if (lo === 0 && hi === 0) return null;
   if (lo === hi) return { en: lo + ' day' + (lo === 1 ? '' : 's'), cn: lo + ' 天' };
   return { en: lo + '-' + hi + ' days', cn: lo + '-' + hi + ' 天' };
 }

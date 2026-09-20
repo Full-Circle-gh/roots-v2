@@ -236,9 +236,13 @@ section('5 · ALL SEVEN BROWSE SURFACES, BY NAME — §108\'s LESSON IS THE POIN
     assert.ok(/freshEta\.withFreshArrival\(copy\.nextBatch/.test(FAV));
   });
   it('web storefront card AND its size sheet', () => {
-    assert.ok(/batchTxt=p\.is_batch_made\?withFreshArrival\(/.test(WEB), 'card');
+    // §195 gave the non-batch branch an appender of its own, so these two
+    // expressions wrapped onto three lines. Matched across the break: what is
+    // asserted is that a BATCH row still reaches withFreshArrival, which is
+    // §170's decision and is unchanged.
+    assert.ok(/batchTxt=p\.is_batch_made\s*\?withFreshArrival\(/.test(WEB), 'card');
     assert.ok(/preTxt=kind==='batch'\?withFreshArrival\(/.test(WEB), 'size sheet');
-    assert.ok(/badge:p\.is_batch_made\?withFreshArrival\(/.test(WEB), 'the badge two functions down');
+    assert.ok(/badge:p\.is_batch_made\s*\?withFreshArrival\(/.test(WEB), 'the badge two functions down');
   });
 
   it('every miniapp surface goes through the ONE helper — no second derivation', () => {
@@ -269,8 +273,15 @@ section('6 · WHAT §170 DELIBERATELY DID NOT TOUCH');
     assert.ok(/preText: preToday \? ''/.test(SHOP),
       'a date must not be what brings the band back on the one morning §80 silenced it');
   });
-  it('a reservable GROCERY row still reads PRE-ORDER, undated', () => {
-    assert.ok(/: kind === 'preorder' \? \(L === 'cn' \? '可预订' : 'PRE-ORDER'\)/.test(SHOP));
+  it('a reservable GROCERY row still reads PRE-ORDER, and still names no DATE', () => {
+    /* §170's point stands and is what is asserted: a grocery row names no
+       batch, so no batch DATE may reach it. §195 gave it the other appender —
+       the operator's restock window, which is a typed estimate and not a date
+       — so the bare literal became a call. The word is unchanged. */
+    assert.ok(/kind === 'preorder'\s*\n?\s*\? freshEta\.withRestockWindow\(L === 'cn' \? '可预订' : 'PRE-ORDER'/
+      .test(SHOP), 'the word is the same; only the appender is new');
+    assert.ok(!/kind === 'preorder'[\s\S]{0,120}withFreshArrival/.test(SHOP),
+      'and the DATED appender must never reach it');
   });
 }
 
@@ -296,7 +307,11 @@ section('7 · THE VOCABULARY IS LIFTED, NOT COMPOSED');
   });
   it('no Chinese beyond those three forms entered the helper', () => {
     const cn = (CLIENT.match(/[一-鿿]+/g) || []);
-    const allowed = new Set(['今天', '明天', '月', '日', '供应商直发', '单独送达', '下批现做']);
+    // §195 adds `天`, the live day counter, for the restock window. Declared in
+    // docs/tacet-delivery-vocabulary.md v1.144 — which is what this guard is
+    // for: a form in the helper that is not in the record is undeclared, and
+    // an undeclared string is indistinguishable from a locked one.
+    const allowed = new Set(['今天', '明天', '月', '日', '供应商直发', '单独送达', '下批现做', '天']);
     for (const s of cn) {
       assert.ok(allowed.has(s), `undeclared Chinese in the helper: ${s}`);
     }
@@ -410,10 +425,18 @@ section('8 · THE PDP BUY BUTTON KEEPS THE LABEL AND THE PRICE ON ONE LINE');
     // wide, so a threshold that leaves the English button alone shrinks the
     // Chinese one or overflows it. Comparing the built label against the bare
     // word it was built from cannot drift apart from the label itself.
-    assert.ok(/addBtnLong:[\s\S]{0,120}preKind === 'batch'/.test(JS),
-      'only a fresh-batch row can carry a date, so only it can be long');
-    assert.ok(/addBtnLabel !== \(L === 'cn' \? '下批现做' : 'NEXT BATCH'\)/.test(JS),
+    /* §195 WIDENED THIS TO THE SECOND APPENDER, and the rule it was written on
+       is what made that a one-line change: "did the appender add anything"
+       never asked which appender. `PRE-ORDER · 2-4 DAYS` is wider than the
+       label whose overflow was reported here, so leaving the flag gated on
+       'batch' would have put this defect straight back. The bare word is now
+       built per kind, a line above the label, and both come off one preKind. */
+    assert.ok(/addBtnLong:[\s\S]{0,160}!!preKind/.test(JS),
+      'any row with an appender can be long, not only a fresh-batch one');
+    assert.ok(/addBtnLabel !== addBtnBare/.test(JS),
       'the flag is "the appender added something", tested against the bare word');
+    assert.ok(/const addBtnBare = preKind === 'batch'[\s\S]{0,200}'下批现做' : 'NEXT BATCH'/.test(JS),
+      'and that bare word is still the one the label is built from');
     assert.ok(!/addBtnLong:[\s\S]{0,200}\.length/.test(JS),
       'no character count — see above; it cannot be right in both languages');
   });

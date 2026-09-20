@@ -66,11 +66,15 @@ Page({
       // (miniapp/pages/shop/shop.js preText). Reused rather than reworded so
       // one product does not read two ways in one app. §108 split them: a
       // fresh meal the kitchen has yet to make says NEXT BATCH like everywhere
-      // else, and only a grocery row — nothing being cooked for it — keeps
-      // SHIPS SOON, which is also what computePreorderNotice titles its
-      // checkout notice with.
+      // else, and a grocery row — nothing being cooked for it — takes the
+      // other word.
+      //
+      // §195 RENAMED THAT OTHER WORD FROM `SHIPS SOON` TO `PRE-ORDER`, and the
+      // key goes with it rather than keeping a name that no longer says what
+      // it holds. The grid and this screen still read identically; what
+      // changed is what both of them say. See the shop grid's own note.
       nextBatch: 'NEXT BATCH',
-      shipsSoon: 'SHIPS SOON',
+      preorder: 'PRE-ORDER',
       pickRequired: 'Please choose an option',
       opAdd: 'Add',
       opCancel: 'Cancel',
@@ -121,7 +125,7 @@ Page({
         payIncomplete: '支付未完成',
         soldOut: '已售罄',
         nextBatch: '下批现做',
-        shipsSoon: '现订现发',
+        preorder: '可预订',
         pickRequired: '请选择一个选项',
         opAdd: '加入',
         opCancel: '取消',
@@ -244,8 +248,19 @@ Page({
           // is. Still no local-run term, for the reason above — every pill this
           // screen can draw belongs to an order we ship, the run having been
           // refused upstream — so this is only ever "is the kitchen making one".
+          //
+          // §195 BRINGS THE RENAMED WORD HERE AND DELIBERATELY NOT THE WINDOW.
+          // §170 made the same call about its date and pinned it: an add-on
+          // picker is not a browse surface. The WORD has to travel — this
+          // screen lifts the grid's pairs precisely so one product does not
+          // read two ways in one app — but an appender that came here without
+          // §170's would leave this list saying `PRE-ORDER · 2-4 DAYS` beside
+          // a bare `NEXT BATCH`, which is the inconsistency one screen down
+          // from the one being fixed. Both appenders arrive together or
+          // neither does, and that is §170's decision to revisit, not this
+          // one's. scripts/test_fresh_batch_eta.js §6 holds it.
           preText: !preorder ? ''
-            : (p.is_batch_made ? this.data.copy.nextBatch : this.data.copy.shipsSoon),
+            : (p.is_batch_made ? this.data.copy.nextBatch : this.data.copy.preorder),
           // Carried so the stepper's supplier-direct exemption actually works —
           // it was reading an undefined field, capping supplier items that hold
           // no stock of ours.
