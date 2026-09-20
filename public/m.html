@@ -9305,9 +9305,24 @@ function rqStoreName(id){
   return s ? (LANG==='en'?(s.name_en||s.name_cn||s.code||''):(s.name_cn||s.name_en||s.code||'')) : '';
 }
 // One line per chosen product, in the shape the restock API takes.
+/* ONE LINE PER CHOSEN PRODUCT, IN THE SHAPE THE RESTOCK API TAKES.
+   §200 — THE ID IS SENT, AND ITS ABSENCE IS THE WHOLE OF THE REPORT Ash filed
+   on RS-260920-001: a banana asked of Tianhe, marked Sent by Tianhe, and never
+   arriving anywhere Yuexiu could count it in.
+   This sent `product_id: null` for every line. `_applyDispatch` selects the
+   lines it can move with `product_id IS NOT NULL`, so a request raised on this
+   screen had ZERO movable lines: no stock left the supplier, `goods_state`
+   stayed 'none', and the order still went to 'prepared'. The destination's
+   Receive screen filters on `goods_state = 'in_transit'`, so it was invisible
+   there — for ever, since nothing reaches the dispatch again by itself.
+   THE ID IS THE RIGHT ONE. `loadRqProducts` reads /api/retail-admin/products,
+   which selects `store_products`, and `store_products.id` is exactly what
+   `retail_store_stock` keys on and what `_checkTransferIds` validates. If it
+   ever cannot be matched, the server now refuses the dispatch out loud rather
+   than reporting a move of nothing as a success. */
 function rqItems(){
   return rqChosen().map(p=>({
-    product_id:null,
+    product_id:(p.id==null?null:Number(p.id)),
     product_name:p.name_en||p.name_cn||('#'+p.id),
     product_cn:p.name_cn||null,
     sku:p.sku||null,
