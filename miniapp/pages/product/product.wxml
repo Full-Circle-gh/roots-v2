@@ -288,7 +288,7 @@
         <view class="qty-val f-gothic">{{qty}}</view>
         <view class="qty-btn" bindtap="incQty">+</view>
       </view>
-      <button class="add-btn f-toni {{soldOut ? 'sold-out' : ''}} {{(!soldOut && hasVariants) ? 'no-price' : ''}}" bindtap="addToCart" disabled="{{soldOut}}">
+      <button class="add-btn f-toni {{soldOut ? 'sold-out' : ''}} {{(!soldOut && hasVariants) ? 'no-price' : ''}} {{addBtnLong ? 'is-long' : ''}}" bindtap="addToCart" disabled="{{soldOut}}">
         <text class="add-label">{{addBtnLabel}}</text>
         <view wx:if="{{!soldOut && !hasVariants}}" class="add-prices">
           <view wx:if="{{priceWas}}" class="add-was-row">

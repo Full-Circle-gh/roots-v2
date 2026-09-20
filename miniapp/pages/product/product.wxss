@@ -858,14 +858,28 @@
   border-right: 3rpx solid var(--ink);
   font-size: calc(32rpx * var(--font-scale));
 }
+/* THE LABEL AND THE PRICE SHARE ONE LINE, AND THE BAR MAY NOT GROW PAST THE
+   SCREEN. Both halves of that were missing: the button is flex:1 in the bar,
+   whose default min-width:auto let its min-content width (a nowrap label +
+   the price) push the bar wider than the 750, so the price slid off the right
+   edge — `NEXT BATCH · TOMORROW¥4`, reported by Ash from the PDP, 2026-09-20.
+   min-width:0 lets the button be as wide as the bar allows and no wider; the
+   gap replaces the child margins that used to do the spacing, so the two
+   halves can never touch. The label shrinks (.add-label) rather than the
+   price: a digit lost is a wrong number, a letter lost is still readable.
+   The side padding comes in from 28rpx and the gap sits at 16rpx: together
+   they hand the label 24rpx it did not have, which is a quarter of what the
+   long band needed back. */
 .add-btn {
   flex: 1;
+  min-width: 0;
   background: var(--ink);
   color: var(--lime);
-  padding: 24rpx 0;
+  padding: 24rpx;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16rpx;
   border-radius: 0;
   letter-spacing: 0.1em;
 }
@@ -877,11 +891,32 @@
 /* No price on the right (variant products, price lives in the size picker):
    center the lone label instead of leaving it pinned to the left edge. */
 .add-btn.no-price { justify-content: center; }
-.add-btn.no-price .add-label { margin-left: 0; }
 .add-label {
   font-size: calc(32rpx * var(--font-scale));
-  margin-left: 28rpx;
   white-space: nowrap;
+  /* Last line of defence at the largest font scales: clip the WORD, never
+     let it push the price out of the button. It should never be reached —
+     .is-long below sizes the §170 label to fit first. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* §170 PUT A DATE ON THIS BUTTON, AND THE DATE IS WHAT OVERFLOWED IT.
+   MEASURED, not estimated — against public/fonts/ToniGroteskPro.otf at the
+   1.15 --font-scale every page ships with, in the 468rpx the sticky bar
+   leaves the whole button (750 screen − 64 bar padding − 198 stepper − 20):
+
+     NEXT BATCH              32rpx/0.1em    183rpx   ¥44  89 · ¥128 106
+     NEXT BATCH · TOMORROW   32rpx/0.1em    389rpx   ← 66rpx over the button
+     NEXT BATCH · TOMORROW   26rpx/0.02em   265rpx   ← 33rpx clear at ¥128
+
+   So the dated label steps down to 26rpx and gives back the wide tracking;
+   the bare word never moves. One step, chosen because 28rpx still overruns
+   a three-digit price and 24rpx starts reading as a caption rather than the
+   thing you are about to tap. */
+.add-btn.is-long .add-label {
+  font-size: calc(26rpx * var(--font-scale));
+  letter-spacing: 0.02em;
 }
 /* Compare-at + live price grouped on the right of the add button. Stacked
    (was over now) so the pair stays narrow — the label keeps to one line
@@ -891,7 +926,8 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 0;
-  margin-right: 28rpx;
+  /* Never shrinks — a clipped price is a wrong price. */
+  flex-shrink: 0;
   line-height: 1.05;
 }
 .add-price {
