@@ -995,6 +995,10 @@ const state = {
      being built and this is a record coming back, and a screen reset that
      empties the basket must not also throw away the answer. */
   mbs:{list:null,tried:false,err:''},
+  /* §198 — what became of what you asked another shop for. Named `rqs` for the
+     Ask-for-stock screen's `rq` the way `mbs` is named for `mb`. */
+  rqs:{list:null,tried:false,err:''},
+  pickWaiting:0,
   /* AN EXPENSE CLAIM (§87 step two). What one employee spent on the shop's
      behalf, before anybody has approved it — so nothing on this screen is money
      in the books, and the copy says so rather than leaving it to be assumed.
@@ -1176,6 +1180,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
      something may have changed since they last looked, which is the opposite of
      the basket screens that must survive a reopen intact. */
   if(route==='askbuysent'){ const m=state.mbs; m.tried=false; m.list=null; m.err=''; }
+  if(route==='askstocksent'){ const m=state.rqs; m.tried=false; m.list=null; m.err=''; }
   if(route==='kitchenready'){ const k=state.kr; k.tried=false; k.pendingTried=false; k.seen=false; k.order=null; k.orderId=null; k.err=''; }
   if(route==='receivexfer'){ const x=state.xfr; x.tried=false; x.order=null; x.orderId=null; x.step='list'; x.held=null; x.err=''; }
   if(route==='pick'){ const k=state.pik; k.tried=false; k.list=null; k.step='list'; k.result=null; k.err=''; k.dest='all';
@@ -4953,6 +4958,15 @@ const MORE_GROUPS=[
        them. The app itself is deleted (§48 step 4). */
     ['askkitchen','chef-hat','Ask the kitchen','向厨房下单'],
     ['askstock','package','Ask for stock','申请补货'],
+    /* §198 — THE ANSWER COMING BACK, and the row whose absence was half of the
+       report that built it: "i dont see it on my mobile". Ask to buy has had
+       its companion since §175 and Ask for stock had nothing, so two rows under
+       one heading behaved differently for no reason anybody could see. It sits
+       directly beneath the screen it answers for, which is where `askbuysent`
+       sits relative to `askbuy` below. NO Features gate: `askstock` has none
+       either, and a companion cannot be gated where the screen it reports on is
+       not — that would hide the answer and leave the question. */
+    ['askstocksent','clipboard-list','Your stock requests','我的补货申请'],
     /* THE THIRD REQUEST SCREEN (§86), and the only one that spends: the kitchen
        asks the buyer to BUY a material. Sixth element is a Features switch —
        `production`, the one that already gates Materials and Recipes on the
@@ -9772,6 +9786,105 @@ function screenAskBuySent(){
   }).join('')}</div>`;
 }
 
+/* ══ WHAT BECAME OF WHAT YOU ASKED ANOTHER SHOP FOR (§198) ═════════════════
+   Ash, on the request Yuexiu raised against Tianhe: "i dont see it on my
+   mobile". He was right, and there was nothing to see — between pressing Send
+   and the supplier dispatching, a stock request appeared on no screen this app
+   could open. Receive-from-another-shop lists only what is already in transit,
+   so the whole of the WAITING — the part anybody actually wonders about — was
+   blank.
+
+   THIS IS §175's SCREEN, FOR THE OTHER REQUEST. Ask to buy has answered back
+   since §175 and Ask for stock answered nothing, which is two rows under one
+   heading on one phone behaving differently for no reason a reader could find.
+   Everything below is that screen's arrangement, deliberately: the same header,
+   the same per-line pills, the same handling of an empty list.
+
+   THE LINE CARRIES THE STATE, NOT THE REQUEST. A picker walks a freezer and
+   ticks lines one at a time, so a request is routinely part dispatched and part
+   not; a single word across the whole of it would be wrong about at least one
+   line. The header carries only what is genuinely request-level — its number,
+   its day, who it was asked of, and whether the whole thing was withdrawn.
+
+   THE WORD IS THE SERVER'S. `state` arrives decided and this screen maps it to
+   a pill. Two screens each deciding what a null means is how they come to
+   disagree.
+
+   WHAT WAS ACTUALLY SENT IS DRAWN WHERE IT DIFFERS, and only there. "Arrived"
+   against a line that asked for 20 and got 12 is a true word about a thing the
+   asker still needs, and the number is the whole of what makes it readable;
+   printing it on every line would bury it. No price anywhere — a transfer moves
+   value between two shelves of one business. */
+function loadRqSent(force){
+  const m=state.rqs;
+  if(m.tried&&!force) return;
+  m.tried=true;
+  api('/api/restock/mine').then(j=>{
+    const rows=Array.isArray(j)?j:((j&&j.data)||[]);
+    m.list=rows; m.err=''; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    /* AN EMPTY LIST AND A LIST THAT COULD NOT BE READ ARE DIFFERENT THINGS —
+       §175's rule, and the reason is the same one: telling somebody they have
+       asked for nothing, when in fact the read failed, is the wrong thing to be
+       told and the wrong thing to act on. */
+    m.list=[]; m.err=T('That list could not be read. Try again.','无法读取列表，请重试。');
+    render();
+  });
+}
+const RQS_PILL={arrived:'success', sent:'clear', waiting:'clear'};
+function rqsWord(st){
+  return st==='arrived' ? T('Counted in','已点收')
+       : st==='sent'    ? T('Dispatched','已发货')
+       :                  T('Waiting','待处理');
+}
+function rqsFrom(r){
+  const en=r.from_name_en||'', cn=r.from_name_cn||'';
+  return LANG==='en'?(en||cn):(cn||en);
+}
+function screenAskStockSent(){
+  loadRqSent();
+  const m=state.rqs;
+  if(!m.list) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(m.err) return `<div style="padding:34px 24px;text-align:center;font-size:15px;color:var(--brick-ink)">${escAttr(m.err)}</div>`;
+  if(!m.list.length) return nothingYet(T('Nothing asked for yet','还没有申请'),
+    T('What you ask another shop for shows up here, and what became of it.','你向其他门店提交的补货申请及其进展会显示在这里。'));
+  return `<div>${m.list.map(r=>{
+    const items=r.items||[];
+    const from=rqsFrom(r);
+    return `<div style="border-top:1px solid var(--border-default);padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="num" style="flex:1;min-width:0;font-size:15px;font-weight:500">${escAttr(r.rs_number||('#'+r.id))}</span>
+        ${r.withdrawn?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('Withdrawn','已撤回')}</span>`:''}
+        <span style="font-size:13px;color:var(--text-secondary)">${escAttr(fmtDay(r.sent_at||r.date)||'')}</span>
+      </div>
+      ${/* WHO IT WAS ASKED OF, under the number. It is the one fact this list
+           has that the buying one does not need — that screen asks the buyer,
+           and there is only ever one of those; this one can ask any shop. */''}
+      ${from?`<div style="font-size:13px;color:var(--text-secondary);margin-top:2px">${escAttr(from)}</div>`:''}
+      ${items.map(l=>{
+        const [bg,fg]=PILL[RQS_PILL[l.state]||'clear'];
+        /* THE NUMBER THAT LEFT, WHERE IT IS NOT THE NUMBER THAT WAS ASKED FOR.
+           A picker sends what is on the shelf, which is not always what was
+           written down, and the gap is the whole reason somebody opens this
+           screen a second time. Drawn only when the two differ: on every line
+           it would be noise, and on the one line it matters it is the answer. */
+        const asked=Number(l.qty_requested)||0;
+        const sent=l.qty_sent==null?null:Number(l.qty_sent);
+        const short=(sent!=null&&sent!==asked)
+          ? ' · '+T(sent+' sent',''+sent+' 已发出') : '';
+        return `<div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+          <span style="flex:1;min-width:0">
+            <span style="display:block;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(xfrName(l))}</span>
+            <span style="display:block;font-size:12.5px;color:var(--text-secondary)"><span class="num">${escAttr(String(asked))}</span> ${escAttr(l.unit||'')}${escAttr(short)}</span>
+          </span>
+          <span class="pill" style="background:${bg};color:${fg}">${rqsWord(l.state)}</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('')}</div>`;
+}
+
 function rqSendKitchen(){
   const r=state.rq;
   // The purpose is mandatory and the server refuses a request without it by
@@ -10536,6 +10649,11 @@ function pikDispatch(){
     }).catch(e=>{ failed.push({rs:o.rs_number||('#'+o.id),error:e.message}); })
   )).then(()=>{
     k.busy=false; k.result={failed:failed}; k.step='sent'; render();
+    /* §198 — the dot counts what is still waiting, so it has to be re-read the
+       moment some of it stops waiting. Without this the row stays lit over a
+       screen that says "Nothing to pick" until the next minute ticks, which is
+       exactly how a dot teaches people to stop believing it. */
+    pollPickWaiting();
     // The shelf this app counts has just changed underneath it.
     state.qs.itemsTried=false; loadQsItems(true);
     loadPik(true);
@@ -12515,6 +12633,7 @@ SUBS.askkitchen={title:['Ask the kitchen','向厨房下单'],render:()=>screenAs
 SUBS.askstock={title:['Ask for stock','申请补货'],render:()=>screenAskStock()};
 SUBS.askbuy={title:['Ask to buy','采购申请'],render:()=>screenAskBuy()};
 SUBS.askbuysent={title:['Your buying requests','我的采购申请'],render:()=>screenAskBuySent()};
+SUBS.askstocksent={title:['Your stock requests','我的补货申请'],render:()=>screenAskStockSent()};
 
 /* ══════════════════════════════════════════════════════════════════════════
    AN EXPENSE CLAIM (§87 step two) — Ash chose ONE CARD, every field visible.
@@ -19946,6 +20065,10 @@ const ROUTE_CAP={
      deliberately NOT a purchasing key: reading what became of your own ask is
      not reading the buying department. */
   askbuysent:'production:request',
+  /* §198. The same key the screen it answers for carries, and the same key the
+     route scopes itself with — somebody who may ask may read back what they
+     asked. Never `restock:pick`: this is the ASKER's side. */
+  askstocksent:'restock:request',
   /* SAYING WHAT YOU SPENT IS NOT READING THE BOOKS (§87 part five). The screen
      is gated on the key its own Submit is gated on server-side
      (lib/cap-routes.js), and that key is deliberately NOT `finance:record` —
@@ -20298,11 +20421,68 @@ function pollKitchenReady(){
       if((state.kitchenReady>0)!==litBefore) render();
     }).catch(()=>{ _kitchenReadyBusy=false; });
 }
+/* ══ ANYTHING FOR ME TO PICK (§198) ════════════════════════════════════════
+   THE MARK THE PICK ROW NEVER CARRIED, and the third thing that made Ash's
+   request invisible: a push is one moment on one phone that may be in a pocket
+   or swiped away, and after it the only way to find out was to open More, find
+   Pick among thirty rows and choose a location — which is to say, to already
+   know.
+
+   MODELLED ON THE READY POLL ABOVE, DELIBERATELY, down to the announcement
+   rule: never on the first poll of a session, so a backlog of four waiting
+   requests lights the dot rather than toasting four times at a phone being
+   unlocked. No chime — a chime belongs to a customer arriving, and this is a
+   colleague asking.
+
+   ITS OWN fetch RATHER THAN api(), for the reason fetchUnseenOrders states: a
+   401 out of a heartbeat would navigate a phone sitting in a pocket to the
+   login screen. */
+const PICK_POLL_MS=60000;
+let _pickPrev=null, _pickBusy=false;
+function pollPickWaiting(){
+  if(!canRoute('pick')||_pickBusy) return;
+  _pickBusy=true;
+  return fetch('/api/restock/pick-count',{credentials:'same-origin',headers:{accept:'application/json'}})
+    .then(r=>r.ok?r.json():null)
+    .then(j=>{
+      _pickBusy=false;
+      const d=j&&j.data!==undefined?j.data:j;
+      if(!d) return;
+      const n=Number(d.count||0);
+      const arrived=_pickPrev!==null&&n>_pickPrev;
+      const litBefore=state.pickWaiting>0;
+      _pickPrev=n; state.pickWaiting=n;
+      if(arrived){
+        showToast(n>1?T(n+' shops are waiting on you',n+' 家门店正在等待发货')
+                     :T('A shop has asked you for stock','有门店向你发起补货申请'));
+        return;   // showToast has already repainted
+      }
+      /* Repaint only when the dot actually changes state — render() rewrites
+         the app in one innerHTML and would throw away the scroll position of
+         whatever list is being read. */
+      if((state.pickWaiting>0)!==litBefore) render();
+    }).catch(()=>{ _pickBusy=false; });
+}
+/* Gated on the row it points at, for the reason readyFromKitchen is: a dot must
+   never promise work behind a door this operator cannot open. */
+function waitingToPick(){ return canRoute('pick') ? Number(state.pickWaiting||0) : 0; }
+/* DECLARED ABOVE THE IIFE THAT READS THEM, and this is not tidiness. The block
+   below runs at LOAD, so `PICK_POLL_MS` has to be initialised by then — a const
+   read in its temporal dead zone throws a ReferenceError that aborts the whole
+   script and takes every declaration after it down with it. §198 shipped this
+   the wrong way round for exactly one test run; scripts/test_mobile_payment.js
+   caught it, reporting a symbol two thousand lines further down that never got
+   the chance to initialise. */
 (function startKitchenReadyPoll(){
   setTimeout(pollKitchenReady,2000);
   setInterval(pollKitchenReady,KITCHEN_READY_POLL_MS);
   window.addEventListener('focus',pollKitchenReady);
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) pollKitchenReady(); });
+  // §198 — the same four events, because it is the same kind of fact.
+  setTimeout(pollPickWaiting,2400);
+  setInterval(pollPickWaiting,PICK_POLL_MS);
+  window.addEventListener('focus',pollPickWaiting);
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) pollPickWaiting(); });
 })();
 
 /* ONE SOURCE, THE SERVER'S COUNT — and the second source this used to OR in is
@@ -20347,12 +20527,16 @@ function readyFromKitchen(){ return canSeeKitchenReady() && canRoute('kitchenrea
    which of thirty rows it meant — and on a role with no tab bar at all
    (flatNav) this list IS the home screen, so the row dot is the only one
    there is. */
-function moreRowDot(key){ return key==='kitchenready' ? readyFromKitchen()>0 : false; }
+function moreRowDot(key){ return key==='kitchenready' ? readyFromKitchen()>0
+                               : key==='pick'         ? waitingToPick()>0
+                               : false; }
 /* The More dot counts unseen REVIEWS, so it must not light for an operator who
    cannot open the Inbox: a dot promising work, over a folder that does not
    contain it. Unknown keys (a flattened bar's rows) carry no dot. */
 function tabDot(k){ return k==='orders' ? unseenOrders()
-  : k==='more' ? ((canRoute('inbox') && unseenReviews()>0) || readyFromKitchen()>0) : false; }
+  : k==='more' ? ((canRoute('inbox') && unseenReviews()>0) || readyFromKitchen()>0
+                  || waitingToPick()>0)   /* §198 — the folder says something inside wants you */
+  : false; }
 /* Unseen is one 6px Sage dot — never a count, never red. A count in the chrome
    turns arriving work into an alarm, and a record arriving is the CUSTOMER
    acting, not the system: it does not earn Dusk either. */

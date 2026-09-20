@@ -1,6 +1,14 @@
 # Tacet delivery vocabulary — locked
 
-**v1.145 · 2026-09-20 · §197 GIVES A PRODUCT ITS OWN NOTICE AT THE BASKET — COMPOSING SEVEN OPERATOR PAIRS AND NOT ONE CUSTOMER-FACING WORD.** A tenant can now warn a shopper about a product at the moment it goes into the basket, and every word the shopper reads is the tenant's own, typed in both languages. The card's only chrome of its own is `知道了`, live on all four checkout notice cards. What is composed is the back-office card that edits it, built on live halves — `加入购物车` is the button the gesture fires on and `提示` is this product's noun for a customer notice. `加购提示` was rejected: `加购` is live in the opposite sense, *added after the order was paid*, and would name a different feature. See *A product's own notice at the basket*. **v1.144 · 2026-09-20 · §195 RETIRES `SHIPS SOON · 现订现发` FROM THE BROWSE BAND AND COMPOSES NOTHING.** Two surfaces said it while five said `PRE-ORDER · 可预订` for the same shelf state, so a shopper tapping a card watched the word change under them. The live pair on the majority wins; no Chinese is minted, and the retired pair keeps its other job as the checkout popup's title. The band also gains the restock window — the same numerals and the same live `天` §194 declared, in the band's upper case. See *A pre-order's restock window* and *One word for a reservable row*. **v1.143 · 2026-09-20 · §194 GIVES THE PRE-ORDER POPUP ITS RESTOCK WINDOW — COMPOSING ONE CLAUSE OUT OF LIVE WORDS AND LEAVING THE SENTENCE AROUND IT VERBATIM.** The popup became the tenant's to edit, and the one thing it could never say was roughly when the item comes back. The sentence it has shipped since `backorder_gz` existed is untouched; a four-character clause is inserted into it, and `预计`, `内` and `补货` are each already live and customer-facing. The window itself is a numeral and the live day counter. See *A pre-order's restock window*. **v1.142 · 2026-09-19 · §193 GIVES `parcel_awaiting_restock` THE SENTENCE IT NEVER HAD — LIFTING TWO LIVE FRAGMENTS AND COMPOSING NOTHING.** §187 minted the error code and registered no pair for it, so a Chinese admin has read the bare code in English ever since; §193 makes the JD label route a third caller, which is the busiest of the three. Both halves are live verbatim and only the join is new. See *A parcel the shortage is holding*.
+**v1.148 · 2026-09-20 · §198's LAST TWO STRINGS — THE PICK ROW LEARNS TO SAY SOMEBODY IS WAITING, AND BOTH ANNOUNCEMENTS ARE ASSEMBLED FROM LIVE FRAGMENTS.** A request reaching a supplier announced itself by push and nothing else; the row it lands on now carries a dot, and the dot's arrival toast needs words. **Neither is minted**: `发起补货申请` is lifted verbatim from `restock:request`'s own capability label, `正在等待` from `lib/push-events.js`, and `门店` / `发货` are everywhere in this system. No new character enters the vocabulary. See *Somebody is waiting on you*.
+
+**v1.147 · 2026-09-20 · §198's SECOND HALF — THE ASKER'S OWN SCREEN, TWO STRINGS COMPOSED AND EVERY OTHER WORD LIFTED WHOLE.** Ask for stock gained the companion Ask to buy has had since §175, and the two composed strings are its title and its empty state — **both built by swapping ONE noun in the live pair the sibling screen already ships**, which is the strongest form of composition this document recognises and the reason nothing else here is new. The three line states are live pairs taken verbatim from three different files. See *The asker's own list*.
+
+**v1.146 · 2026-09-20 · §198 GIVES THE STOCK REQUEST A SLIP AND COMPOSES ONE SENTENCE FOR THE SETTING THAT SWITCHES IT.** A shop-to-shop request printed nowhere; it prints at the supplying shop now. **The slip itself composes nothing** — `补货申请` is locked, `送到` is lifted from the phone's own `送到哪家门店？`, and `Items 件数` and `Note 备注` are already on the paper this one is modelled on, in `lib/feie.js`. The one new string is the help line under the printer setting, and it is composed out of the locked pair plus the shape §51's kitchen help already uses. See *The supplier's stock-request slip*.
+
+**v1.145 · 2026-09-20 · §197 GIVES A PRODUCT ITS OWN NOTICE AT THE BASKET — COMPOSING SEVEN OPERATOR PAIRS AND NOT ONE CUSTOMER-FACING WORD.** A tenant can now warn a shopper about a product at the moment it goes into the basket, and every word the shopper reads is the tenant's own, typed in both languages. The card's only chrome of its own is `知道了`, live on all four checkout notice cards. What is composed is the back-office card that edits it, built on live halves — `加入购物车` is the button the gesture fires on and `提示` is this product's noun for a customer notice. `加购提示` was rejected: `加购` is live in the opposite sense, *added after the order was paid*, and would name a different feature. See *A product's own notice at the basket*.
+
+**v1.144 · 2026-09-20 · §195 RETIRES `SHIPS SOON · 现订现发` FROM THE BROWSE BAND AND COMPOSES NOTHING.** Two surfaces said it while five said `PRE-ORDER · 可预订` for the same shelf state, so a shopper tapping a card watched the word change under them. The live pair on the majority wins; no Chinese is minted, and the retired pair keeps its other job as the checkout popup's title. The band also gains the restock window — the same numerals and the same live `天` §194 declared, in the band's upper case. See *A pre-order's restock window* and *One word for a reservable row*. **v1.143 · 2026-09-20 · §194 GIVES THE PRE-ORDER POPUP ITS RESTOCK WINDOW — COMPOSING ONE CLAUSE OUT OF LIVE WORDS AND LEAVING THE SENTENCE AROUND IT VERBATIM.** The popup became the tenant's to edit, and the one thing it could never say was roughly when the item comes back. The sentence it has shipped since `backorder_gz` existed is untouched; a four-character clause is inserted into it, and `预计`, `内` and `补货` are each already live and customer-facing. The window itself is a numeral and the live day counter. See *A pre-order's restock window*. **v1.142 · 2026-09-19 · §193 GIVES `parcel_awaiting_restock` THE SENTENCE IT NEVER HAD — LIFTING TWO LIVE FRAGMENTS AND COMPOSING NOTHING.** §187 minted the error code and registered no pair for it, so a Chinese admin has read the bare code in English ever since; §193 makes the JD label route a third caller, which is the busiest of the three. Both halves are live verbatim and only the join is new. See *A parcel the shortage is holding*.
 
 **v1.141 · 2026-09-19 · §190 NAMES THE BOX IN §188's NOTIFICATION — COMPOSING THREE SENTENCES AND NO NEW WORDS.** *"one of the parcels"* made a split order's customer count boxes to work out which one had landed. Every mode already has a locked pair and two of them are already customer-facing on the printed slip, so each sentence is a live mode word in front of §188's live `包裹已发货`. The generic line survives as the fallback for a mode added later. See *Which box has gone*.
 
@@ -7832,3 +7840,150 @@ none of it.
 **REGISTER: OPERATOR** (Rule 1) for every pair above. The CUSTOMER register for
 this feature is the tenant's own text plus `知道了`, and this document locks
 neither: a tenant's own words about their own product are theirs.
+
+## The supplier's stock-request slip (§198)
+
+**WHAT THIS IS.** A request raised by one shop against another now prints at the
+shop that has to fill it, on that shop's own printer. Everything on the paper is
+a string that was already live; the one composed string is in the setting that
+switches the paper on, which is an office screen and not the slip.
+
+### On the slip — nothing composed
+
+| Where | English | Chinese | Source |
+|---|---|---|---|
+| slip title | Stock request | 补货申请 | **LOCKED** — the pair `restock:request` carries in `lib/capabilities.js` and the one `申请` in the receipt vocabulary was matched to |
+| destination line | For {shop} | 送到 {shop} | **LIFTED** — `public/m.html`'s live `For which store? · 送到哪家门店？`, with the question dropped and the shop's own name supplied |
+| item block head | Items 件数 | — | **LIVE** — `lib/feie.js`'s packing slip, verbatim, one glued pair as it already prints there |
+| note head | Note 备注 | — | **LIVE** — `lib/feie.js`'s kitchen request, verbatim |
+| time | Time | — | **LIVE** — same slip, same line |
+
+**THE SHOP NAMED ON IT IS THE DESTINATION AND THAT IS A VOCABULARY DECISION AS
+WELL AS A LAYOUT ONE.** The person holding the slip is standing in the supplying
+shop. Printing their own name back at them names where they are; the name worth
+ink is the one that decides where the goods go. It is the same rule the `sent`
+push already follows — *"which end is worth naming is the end the reader is not
+at"*.
+
+**NO PRICE, NO TOTAL, NO COST.** §51 ruled this for the kitchen ticket and the
+reason carries unchanged: a transfer moves value between two shelves of one
+business, and a money column invites the shop filling it to think the other one
+owes them something.
+
+### The setting — one composed sentence
+
+| Where | English | Chinese | Source |
+|---|---|---|---|
+| settings, heading | Stock requests | 补货申请 | **LOCKED**, as above |
+| settings, help | A stock request prints at the shop that has to fill it, the moment it is sent. It uses that shop's own printer — the one set below — so there is nothing extra to configure. | 补货申请发出时,在供货门店自动打印,使用该门店下方设置的打印机,无需另行配置。 | **COMPOSED** under Rule 4's standing delegation — see below |
+| settings, option | When a request arrives | 请求到达时 | **LIVE PAIR** — the kitchen printer's own `When it prints` select in `public/retail-admin.html`, verbatim |
+| settings, option | Never — notification only | 不打印,仅通知 | **LIVE PAIR** — same select, verbatim |
+
+**THE COMPOSED SENTENCE, AND WHAT WAS REJECTED.** The live candidate was §51's
+kitchen help — `制作请求进入队列时,厨房自动打印制作单;没有打印机则留空。` — and it
+was REJECTED rather than adapted, for a reason worth recording: its last clause
+tells the reader to leave the SN blank if there is no printer, and this setting
+has no SN to leave blank. It routes on the shop map further down the same page.
+A sentence ending in an instruction the screen cannot carry out is worse than no
+sentence.
+
+What was kept from it is the SHAPE — *when it happens, then what prints, then
+where it is configured* — and every word inside is live: `补货申请` is locked,
+`自动打印` and `打印机` are both in that same kitchen help line, `供货门店` is
+`供货` joined to the `门店` this document uses throughout, and `无需另行配置` is
+the plainest reading of "nothing extra to configure". Composed by Claude Opus 5
+on 2026-09-20 under the 2026-09-06 amendment, declared here in the same commit
+as the code that uses it.
+
+**`供货` IS THE ONE WORD WORTH FLAGGING FOR A READER WHO SPEAKS THE LANGUAGE.**
+It means to supply goods, and it is the right word for the end this slip prints
+at, but it does not otherwise appear in this system's vocabulary — every other
+screen says `门店` and lets position carry the direction. If Ash prefers the
+plainer `发货门店` (the shop that sends), that is a one-word change in
+`public/retail-admin.html` and this row.
+
+
+## The asker's own list (§198)
+
+**WHAT THIS IS.** *Your stock requests* — what became of what you asked another
+shop for. It is §175's screen written for the other request, and its vocabulary
+is that screen's wherever the two say the same thing, which is nearly
+everywhere.
+
+**THE TWO SCREENS MUST NOT DRIFT APART, and that is a vocabulary rule and not
+only a design one.** They sit under one heading on one phone, four rows apart.
+A reader who learns `待处理` on one and meets a different word for the same
+state on the other has been taught that the two are different things.
+
+### Composed — two, each one noun away from a live pair
+
+| Where | English | Chinese | Built from |
+|---|---|---|---|
+| the More row, and the screen title | Your stock requests | 我的补货申请 | **COMPOSED** — `Your buying requests · 我的采购申请` is live in `public/m.html`, and `采购` is swapped for the locked `补货`. Both halves of the result are live: `我的…申请` is the sibling row's own shape and `补货申请` is locked. |
+| empty state, second line | What you ask another shop for shows up here, and what became of it. | 你向其他门店提交的补货申请及其进展会显示在这里。 | **COMPOSED** — the sibling's live `你向采购提交的申请及其进展会显示在这里。` with its one wrong noun replaced: `采购` (the buyer) becomes `其他门店` (another shop), and the bare `申请` becomes the locked `补货申请` because with the buyer gone the word alone no longer says which kind. Sentence shape, punctuation and ending are that pair's, untouched. |
+
+Composed by Claude Opus 5 on 2026-09-20 under the 2026-09-06 amendment, declared
+here in the same commit as the code that uses them.
+
+**WHAT WAS REJECTED.** `调拨` — transfer — was the obvious alternative for the
+title and is live in this system (`调拨收货`, and the refusal `这是门店之间的调拨`).
+It was rejected because **the screen is not about transfers, it is about
+ASKING**: it lists things nobody has agreed to send yet, and half of what it
+shows will read `待处理` forever if the supplier never picks it. `补货申请` says
+what the row on it actually is. The word `调拨` remains correct on the two
+screens that handle goods genuinely in motion, and is deliberately left there.
+
+### Lifted whole — nothing composed
+
+| Where | English | Chinese | Source |
+|---|---|---|---|
+| empty state, first line | Nothing asked for yet | 还没有申请 | **LIVE PAIR** — the Ask-to-buy companion, `public/m.html`, verbatim |
+| read failed | That list could not be read. Try again. | 无法读取列表，请重试。 | **LIVE PAIR** — same screen, verbatim, and it exists for the same reason: an empty list and a list that could not be read are different things |
+| line state | Waiting | 待处理 | **LIVE PAIR** — same screen's `mbsWord`, verbatim; the same word for the same state on both |
+| line state | Dispatched | 已发货 | **LIVE** — `public/m.html`, the parcel's own word (`包裹已发货`), with the noun the screen already supplies dropped |
+| line state | Counted in | 已点收 | **LIVE PAIR** — `routes/restock.js`'s own `received` notification title, verbatim. The screen and the push that announces the same event now say the same word, which they did not before only because the screen did not exist. |
+| quantity actually sent | {n} sent | {n} 已发出 | **LIVE** — `已发出` is live across `public/m.html` and the desktop admin; the numeral is a numeral |
+| header, withdrawn | Withdrawn | 已撤回 | **LIVE PAIR** — the Ask-to-buy companion, verbatim |
+
+**THE SHOP'S NAME IS NOT A STRING.** The header names the shop the request was
+asked of, and it is that shop's own `name_cn` / `name_en` read off its row —
+typed by whoever set the shop up, never translated here and never composed. A
+name is not vocabulary.
+
+
+## Somebody is waiting on you (§198)
+
+**WHAT THIS IS.** Two toasts, announcing that another shop has asked this one
+for stock. They ride the Pick row's dot — the row had no mark of any kind, so a
+push was the only thing that ever said a request had arrived, and a push is one
+moment on one phone that may be in a pocket.
+
+**THE DOT ITSELF HAS NO STRING**, which is the first thing to say about it. It
+is a 6px Sage dot and never a number: a count in the chrome turns arriving work
+into an alarm, and the number belongs on the screen it points at. That rule is
+already written on the tab bar's dots and is only being obeyed here.
+
+| Where | English | Chinese | Built from |
+|---|---|---|---|
+| toast, one | A shop has asked you for stock | 有门店向你发起补货申请 | **COMPOSED** — `发起补货申请` is VERBATIM the label `lib/capabilities.js` gives `restock:request`, the capability this very row is gated on; `有门店` is live in `public/m.html` (four places); `向你` is the plainest join. |
+| toast, several | {n} shops are waiting on you | {n} 家门店正在等待发货 | **COMPOSED** — `正在等待` is lifted from `lib/push-events.js`'s live `正在等待补货。`, with its noun swapped for `发货`, which is live across this file and the desktop admin. `家…门店` is the ordinary measure for shops and `{n}` is a numeral. |
+
+Composed by Claude Opus 5 on 2026-09-20 under the 2026-09-06 amendment,
+declared here in the same commit as the code that uses them.
+
+**WHY THE SINGULAR AND THE PLURAL ARE DIFFERENT SENTENCES rather than one with a
+number in it.** The Chinese is the reason. `1 家门店正在等待发货` is not wrong,
+but it reads as a report on a queue; the thing that has actually happened when
+the count goes from nothing to one is that a shop has ASKED, and the word for
+asking is the one the capability already uses. The kitchen's own arrival toast
+splits the same way and for the same reason, and the two now match.
+
+**NO CHIME, AND NO RED.** A chime belongs to a customer arriving; this is a
+colleague asking. The pill and the dot spend Sage, never Brick — an arriving
+request is work, not a fault, and `docs/tacet-delivery-vocabulary.md` has said
+what Brick is reserved for since it was first spent.
+
+**WHAT IS DELIBERATELY NOT SAID.** The toast names no shop and no product. It
+fires from a count, and a count cannot honestly name anything; the screen one
+tap away names both. A toast that guessed which shop would be wrong the first
+time two asked at once.

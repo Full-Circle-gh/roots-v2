@@ -35,6 +35,12 @@ try { _events = require('./events'); } catch (e) { console.warn('[restock] event
 // rather than on `printer.by_store`. Best-effort and fire-and-forget: a request
 // must never fail to reach the queue because a printer is offline.
 const _kprint = require('../lib/kitchen-print');
+// THE SAME EVENT, ON THE SUPPLIER'S OWN PRINTER (§198). A shop-to-shop request
+// printed nowhere until now, and the comment above said why it was not owed a
+// slip — "a store transfer has its own paper trail". It did not have one. This
+// is that paper trail: the shops' existing `printer.by_store` map keyed on the
+// request's own `from_store_id`, so nothing new is configured to get it.
+const _tprint = require('../lib/transfer-print');
 // "Which finished requests still count as news" — shared with routes/retail.js,
 // which reads the same clause for the dashboard's Needs-you row. See the header
 // of that file for why it is one definition and not two.
@@ -966,6 +972,29 @@ router.get('/api/restock', requireRestockAccess, (req, res) => {
     // span days (slow ferments, multi-step recipes), so a "stale" sent
     // request to the kitchen is still real work, not noise. The original
     // sweep was designed for the store→warehouse Fulfill tab only.
+    //
+    // AND SO IS EVERY OPEN TRANSFER BETWEEN TWO NAMED LOCATIONS (§198), for
+    // exactly the reason the kitchen already is. Ash raised a request from
+    // Yuexiu against Tianhe in the evening; by the time anyone at Tianhe opened
+    // the app, THIS SWEEP HAD ARCHIVED IT — `archived_at` stamped, off every
+    // active list, nobody having touched it. "there is no printing in tianhe
+    // for it, i dont see it on my mobile" is partly this line.
+    //
+    // The sweep's own comment says what it was built for: a single-day
+    // store→warehouse Fulfill tab. It is simply WRONG about a request one shop
+    // raises against another. A shop does not walk its freezer on demand, the
+    // supplier may be closed, and work that legitimately spans days is not
+    // stale — which is the same sentence the kitchen exclusion above rests on.
+    //
+    // NOTHING GROWS FOREVER BECAUSE OF THIS. Archiving an abandoned request is
+    // already a person's call: PUT /api/restock/:id/archive takes one, and
+    // POST /api/restock/archive-bulk takes a tab's worth. What is removed here
+    // is a CLOCK deciding that an unanswered request has stopped mattering.
+    //
+    // Both ends named is what identifies a real transfer. A row with only one
+    // end set cannot be routed to a Pick screen at all and is a legacy shape
+    // (#259 added the pair), so it keeps the old behaviour rather than being
+    // quietly rescued into a list nothing draws it on.
     // The shop's own midnight, not Guangzhou's (audit A-05).
     const SHIFT = require('../lib/business-date').sqlDayShiftForShop(tdb());
     tdb().prepare(`
@@ -974,6 +1003,7 @@ router.get('/api/restock', requireRestockAccess, (req, res) => {
        WHERE archived_at IS NULL
          AND status NOT IN ('prepared','delivered','draft')
          AND COALESCE(to_role, 'warehouse') != 'kitchen'
+         AND NOT (from_store_id IS NOT NULL AND to_store_id IS NOT NULL)
          AND date(created_at, '${SHIFT}') < date('now', '${SHIFT}')
     `).run();
   }
@@ -1296,6 +1326,149 @@ function _attachRecorded(order, items) {
   }
 }
 
+/* ── What became of what YOU asked for (§198) ───────────────────────────────
+ *
+ * THE SCREEN THAT DID NOT EXIST, and the half of Ash's report that paper does
+ * not fix: "i dont see it on my mobile". Between pressing Send and the supplier
+ * dispatching, a stock request existed on NO screen the asker could open. The
+ * Receive-from-another-shop list shows only what is already in transit, so the
+ * whole of the waiting — the part somebody actually wonders about — was blank.
+ *
+ * ASK TO BUY HAS HAD THIS SINCE §175 AND ASK FOR STOCK HAD NOTHING, which is
+ * the whole argument for this route: two request screens sitting under one
+ * heading on the same phone, one of which answers back.
+ *
+ * SCOPED TO THE CALLER by `created_by`, the column the request already stamps,
+ * and `tacetOnly` besides — a kitchen session's user id is a row in a different
+ * table, so without the realm gate two people with the same integer id would
+ * read each other's requests. §175's route can scope by the column alone
+ * because only one realm ever reaches it.
+ *
+ * THE LINE CARRIES THE STATE, NOT THE REQUEST — §175's rule, and it is if
+ * anything more true here. A picker walks a freezer and ticks lines one at a
+ * time, so a request is routinely part dispatched and part not, and any single
+ * word printed across the whole of it is wrong about at least one line.
+ *
+ * `state` IS DECIDED HERE AND NOT ON THE PHONE, for §175's reason: two screens
+ * each deciding what a null means is how they come to disagree.
+ *
+ * WHAT WAS ACTUALLY SENT IS PART OF THE ANSWER, and it is why `qty_sent` rides
+ * along. "Arrived" against a line that asked for 20 and got 12 is a true word
+ * about a thing the asker still needs; the number is what makes it readable.
+ * Nothing here carries a price — a transfer moves value between two shelves of
+ * one business, which is §51's rule for the slip applied to the screen.
+ *
+ * DECLARED BEFORE /:id, because /:id would otherwise match the word and answer
+ * 404 for a row whose id is 'mine'. */
+/* ── IS THERE ANYTHING FOR ME TO PICK (§198) ────────────────────────────────
+ *
+ * THE MARK THE PICK ROW NEVER CARRIED. A request reaching a supplier announced
+ * itself by push and nothing else, and a push is one moment on one phone that
+ * may be in a pocket, on silent, or swiped away on a lock screen. After that
+ * the only way to find out was to open More, find Pick among thirty rows, and
+ * choose a location — which is to say, to already know. §175 made this argument
+ * for the kitchen's Ready dot and it is unchanged here.
+ *
+ * A COUNT, SO THE PHONE CAN COMPARE IT AND ANNOUNCE AN ARRIVAL. What the phone
+ * DRAWS is one 6px Sage dot, never a number: a count in the chrome turns
+ * arriving work into an alarm, and the number belongs on the screen it points
+ * at. The standing rule on the tab bar's dots, applied to a row.
+ *
+ * SCOPED TO THE SHELVES THIS OPERATOR CAN ACT ON. `req.scopeStores` is the same
+ * list the push fan-out narrows on (routes/push.js) — null means unscoped and
+ * therefore every location. A dot must never promise work behind a door this
+ * operator cannot open, which is the rule the Ready dot and the Inbox count
+ * both follow.
+ *
+ * WHAT COUNTS IS WHAT THE PICK SCREEN ITSELF LISTS, and it is deliberately the
+ * same clause: open, not yet dispatched, supplied by one of my shops. Two
+ * surfaces disagreeing about what is waiting is a dot that stays lit over an
+ * empty screen, which teaches people to stop believing it.
+ *
+ * DECLARED BEFORE /:id, for the reason kitchen-ready is. */
+router.get('/api/restock/pick-count', requireRestockAccess, tacetOnly, (req, res) => {
+  const scope = Array.isArray(req.scopeStores) ? req.scopeStores.filter(n => Number.isFinite(Number(n))) : null;
+  // An operator scoped to NO store can act nowhere; counting every shop's work
+  // for them would be the promise-behind-a-locked-door this endpoint avoids.
+  if (scope && scope.length === 0) return res.json({ success: true, data: { count: 0 } });
+  const where = scope ? ` AND from_store_id IN (${scope.map(() => '?').join(',')})` : '';
+  const row = tdb().prepare(`
+    SELECT COUNT(*) AS c
+      FROM restock_orders
+     WHERE archived_at IS NULL
+       AND status IN ('sent','received')
+       AND COALESCE(goods_state,'none') = 'none'
+       AND from_store_id IS NOT NULL
+       AND to_store_id IS NOT NULL
+       AND COALESCE(to_role,'warehouse') != 'kitchen'
+       AND COALESCE(from_role,'store')   != 'kitchen'${where}
+  `).get(...(scope || []));
+  res.json({ success: true, data: { count: row ? row.c : 0 } });
+});
+
+router.get('/api/restock/mine', requireRestockAccess, tacetOnly, (req, res) => {
+  const me = (req.user && req.user.id) || null;
+  if (!me) return res.json({ success: true, data: [] });
+  const conn = tdb();
+  // Kitchen requests are excluded outright: "Ask the kitchen" is a different
+  // screen with a different answer (kitchen-ready), and folding the two into
+  // one list would put a tray of food and a case of almonds under one heading.
+  const rows = conn.prepare(`
+    SELECT id, rs_number, date, status, notes, sent_at, delivered_at, archived_at,
+           from_store_id, to_store_id, store_name, store_cn
+      FROM restock_orders
+     WHERE created_by = ?
+       AND status <> 'draft'
+       AND COALESCE(to_role,'warehouse') != 'kitchen'
+       AND COALESCE(from_role,'store')   != 'kitchen'
+     ORDER BY COALESCE(sent_at, date) DESC, id DESC
+     LIMIT 60`).all(me);
+  if (rows.length) {
+    const marks = rows.map(() => '?').join(',');
+    const lines = conn.prepare(`
+      SELECT id, restock_id, product_name, product_cn, sku,
+             qty_requested, qty_sent, unit, COALESCE(is_checked, 0) AS is_checked
+        FROM restock_items
+       WHERE restock_id IN (${marks}) AND qty_requested > 0
+       ORDER BY id`).all(...rows.map(r => r.id));
+    const delivered = new Set(rows.filter(r => r.status === 'delivered' || r.delivered_at).map(r => r.id));
+    const byReq = new Map(rows.map(r => [r.id, []]));
+    for (const l of lines) {
+      /* ORDER MATTERS. A delivered request's lines were all dispatched first,
+         so reading arrival before dispatch is what stops a counted-in line
+         reading as merely on its way. `is_checked` is the picker's tick — the
+         same flag the Pick screen writes one PUT at a time — and it is the
+         only per-line fact about dispatch there is. */
+      l.state = delivered.has(l.restock_id) ? 'arrived'
+              : (l.is_checked ? 'sent' : 'waiting');
+      delete l.is_checked;
+      byReq.get(l.restock_id).push(l);
+    }
+    // The shop it was asked OF, by name. The phone sends no store_name at all
+    // on this flow, so the location id answers first and the free text is the
+    // fallback for rows written before #259 gave it one.
+    const nameOf = (id) => {
+      if (!id) return '';
+      try {
+        const r = conn.prepare('SELECT name_en, name_cn FROM retail_stores WHERE id = ?').get(id);
+        return r ? { name_en: r.name_en || '', name_cn: r.name_cn || '' } : '';
+      } catch (e) { return ''; }
+    };
+    rows.forEach(r => {
+      r.items = byReq.get(r.id) || [];
+      // WITHDRAWN IS THE ONE GENUINELY REQUEST-LEVEL FACT, exactly as it is on
+      // §175's screen. Archiving is how a request stops being outstanding, and
+      // an asker reading a list of what they asked for must not be shown a
+      // dead row as though somebody were still walking a freezer for it.
+      r.withdrawn = !!r.archived_at;
+      const from = nameOf(r.from_store_id);
+      r.from_name_en = from ? from.name_en : '';
+      r.from_name_cn = from ? from.name_cn : (r.store_cn || r.store_name || '');
+    });
+  }
+  res.json({ success: true, data: rows });
+});
+
 router.get('/api/restock/:id', requireRestockAccess, kitchenScopedOrder, (req, res) => {
   const order = tdb().prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
@@ -1404,9 +1577,15 @@ router.post('/api/restock', requireRestockAccess, tacetOnly, (req, res) => {
     if (initialStatus === 'sent') {
       _fireRestockPush(id, 'sent', _actorOperatorId(req));
       _broadcastRestock(id, 'sent', req.user.id);
-      // Paper, for the kitchen queue. No-ops for every other direction — a
-      // store transfer has its own paper trail and never reaches this roll.
+      // Paper, for the kitchen queue. No-ops for every other direction — the
+      // kitchen's roll is its own, and §51's note on lib/kitchen-print.js says
+      // why it cannot be keyed on a location.
       _kprint.autoPrintKitchenRequest(id, 'sent');
+      // And paper for the SHOP that has to fill it (§198), which is the same
+      // event on the other roll. No-ops for a kitchen request and for any
+      // request with no supplier named; the two calls can never both print,
+      // because each refuses what the other takes.
+      _tprint.autoPrintTransferRequest(id, 'sent');
     }
     res.json({ success: true, id, rs_number });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -1521,6 +1700,15 @@ function _advanceOrderStatus(order, status, req) {
   if (status === 'sent' || status === 'prepared') {
     _kprint.autoPrintKitchenRequest(order.id, status);
   }
+  // The supplier's slip (§198), for the one event that means anything on their
+  // floor. A draft sent later must print exactly as one sent on creation does —
+  // the two paths are the same request arriving, and a slip that depended on
+  // which button raised it is the kind of difference nobody can see from the
+  // shop floor. 'prepared' deliberately prints nothing: by then the goods have
+  // left, and the only people who would read it are the ones who packed them.
+  if (status === 'sent') {
+    _tprint.autoPrintTransferRequest(order.id, 'sent');
+  }
   return transfer;
 }
 
@@ -1630,22 +1818,26 @@ router.post('/api/restock/:id/reprint', requireRestockAccess, kitchenScopedOrder
   // works transfers legitimately and passes through, which is correct for the
   // endpoints that serve both.
   //
-  // This endpoint does not serve both. It only ever prints a kitchen request,
-  // for anybody, so it needs the object type refused rather than the caller
-  // scoped. Leaning on the middleware let a warehouse picker's reprint reach a
-  // store transfer, and the failed print then stamped print_status on a row
-  // that was never owed a slip.
-  if ((order.to_role || 'warehouse') !== 'kitchen') {
-    return res.status(403).json({
-      error: 'This is a transfer between locations, not a kitchen request · 这是门店之间的调拨,不是厨房制作请求。',
-    });
-  }
+  // THIS ENDPOINT NOW SERVES BOTH, AND THE REFUSAL IS GONE RATHER THAN WIDENED
+  // (§198). It refused a transfer because a transfer had no slip to reprint —
+  // the failed print then stamped print_status on a row that was never owed
+  // one, which is the defect the refusal was added for. A transfer has a slip
+  // now, so the honest fix is to print it. The object type still decides WHICH
+  // roll: the two modules refuse each other's rows by construction, so there is
+  // no arrangement in which one request reaches both.
+  const isKitchen = (order.to_role || 'warehouse') === 'kitchen';
   // The slip says what state the job is in, so reprint the one that matches
   // where the request actually IS — not the event that happened to print first.
-  const kind = order.status === 'prepared' || order.status === 'delivered' ? 'prepared' : 'sent';
-  const r = await _kprint.printKitchenRequest(order.id, kind, { conn, force: true })
-    .catch(e => ({ ok: false, msg: e.message }));
-  _kprint.recordPrintResult(conn, order.id, r);
+  // A transfer has only the one slip: 'sent' is the whole of its vocabulary.
+  const kind = !isKitchen ? 'sent'
+             : (order.status === 'prepared' || order.status === 'delivered') ? 'prepared'
+             : 'sent';
+  const mod = isKitchen ? _kprint : _tprint;
+  const print = isKitchen
+    ? _kprint.printKitchenRequest(order.id, kind, { conn, force: true })
+    : _tprint.printTransferRequest(order.id, kind, { conn, force: true });
+  const r = await print.catch(e => ({ ok: false, msg: e.message }));
+  mod.recordPrintResult(conn, order.id, r);
   logActivity(req.user.id, req.user.username, 'reprint', 'restock', order.id, { ok: !!r.ok, kind }, req.ip);
   if (!r.ok) return res.status(502).json({ success: false, error: r.msg || 'print_failed' });
   res.json({ success: true });

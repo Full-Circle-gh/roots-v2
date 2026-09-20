@@ -345,12 +345,28 @@ const printStatus = (id) =>
   eq(prints.length, 0, 'and posts nothing');
   cfg('printer.kitchen_sn', '550540977');
 
-  // The same guard every other kitchen action carries.
+  /* THIS ASSERTION IS REWRITTEN BY §198, AND IT IS NAMED RATHER THAN QUIETLY
+     EDITED. It read: a reprint of a store transfer answers 403. That refusal
+     was right for as long as a transfer HAD NO SLIP — the failed print then
+     stamped print_status on a row that was never owed one, which is the defect
+     it was added for. §198 gave a transfer its own slip on the supplying shop's
+     printer, so refusing is no longer the honest answer and the endpoint prints
+     the other roll instead.
+
+     WHAT IS BEING PINNED HERE IS UNCHANGED and is the claim that matters: a
+     transfer STILL never reaches the KITCHEN's printer, by hand or otherwise.
+     Here the transfer has no supplier printer configured at all, so the reprint
+     reports a failure rather than a silent tick — and posts nothing anywhere.
+     `scripts/test_transfer_print.js` Part C holds the same crossing from the
+     other side, with both printers present. */
+  prints.length = 0;
   const refused = await call('POST', `/api/restock/${transferId}/reprint`);
-  eq(refused.status, 403, 'a store transfer cannot be printed onto the kitchen roll by hand either');
+  eq(refused.status, 502, 'a transfer reprint with no printer at its supplier reports a failure');
+  eq(prints.length, 0, 'and posts nothing — least of all onto the kitchen roll');
 
   // The queue screen decides whether to OFFER a reprint from print_status, so a
-  // request that was never printing must not carry one.
+  // request that was never printing must not carry one. A supplier with no
+  // printer is not a failed print on either roll.
   eq(printStatus(transferId).print_status, null, 'a transfer carries no print state at all');
 
   ok(notes.operator.length > 0, 'and the push fan-out still happens — paper is an addition, not a replacement');
