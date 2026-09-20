@@ -560,7 +560,37 @@ function _applyDispatch(orderId, actorUser) {
        AND product_id IS NOT NULL
        AND COALESCE(qty_sent, qty_requested, 0) > 0
   `).all(o.id).filter(it => _sentQty(it) > 0);
-  if (!lines.length) return { ok: true, skipped: 'no_lines' };
+  /* A TRANSFER THAT MOVES NOTHING IS NOT A SUCCESS (§200).
+   *
+   * This returned ok:true for a transfer with a full basket on it, and that one
+   * word is what turned a broken request into a silent "Sent". Ash's banana:
+   * Yuexiu asked Tianhe, Tianhe pressed Send, the status went to 'prepared',
+   * `goods_state` stayed 'none' — and the Receive screen at the far end filters
+   * on 'in_transit', so nobody could ever count it in. Nothing said a word.
+   *
+   * The cause was upstream (the phone sent `product_id: null` on every line,
+   * fixed in public/m.html), but the SILENCE was here, and it is the half worth
+   * keeping fixed: whatever makes a line unmovable next time, the person who
+   * pressed Send is told instead of the goods quietly not going.
+   *
+   * ZERO LINES AND ZERO MOVABLE LINES ARE DIFFERENT THINGS, and only the second
+   * is a fault. An order with nothing asked for is a no-op and stays one. */
+  if (!lines.length) {
+    const asked = conn.prepare(`
+      SELECT COUNT(*) AS c FROM restock_items
+       WHERE restock_id = ? AND COALESCE(qty_sent, qty_requested, 0) > 0
+    `).get(o.id).c;
+    if (asked > 0) {
+      console.warn(`[restock-dispatch] ${label}: refused — ${asked} line(s) asked for, none carries a product the shelf knows`);
+      return {
+        ok: false,
+        error: 'No stock was moved. None of these lines is linked to a product, '
+             + 'so there is no shelf to take them off. Raise the request again '
+             + 'from the product list, and tell whoever looks after the system.',
+      };
+    }
+    return { ok: true, skipped: 'no_lines' };
+  }
 
   // Refuse the whole dispatch if any line's product cannot be matched across the
   // two catalogues — same all-or-nothing rule as a mid-transfer failure.

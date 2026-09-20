@@ -7695,6 +7695,78 @@ addColumn('staff_expenses', 'voided_by', 'INTEGER');
 addColumn('staff_expenses', 'voided_at', 'DATETIME');
 addColumn('staff_expenses', 'void_note', 'TEXT');
 
+/* ── §200 · THE TRANSFER LINES THAT NAME NO PRODUCT ────────────────────────
+ *
+ * WHAT WENT WRONG. The phone's Ask-for-stock screen sent `product_id: null` on
+ * every line it raised. `_applyDispatch` moves only lines with a product id, so
+ * such a request had ZERO movable lines: pressing Send set the status to
+ * 'prepared' and moved nothing, `goods_state` stayed 'none', and the receiving
+ * shop's Receive screen — which filters on 'in_transit' — never showed it. The
+ * goods could not be counted in, and nothing reaches the dispatch again by
+ * itself. Both halves are fixed forward (public/m.html, routes/restock.js).
+ *
+ * THIS IS THE REPAIR FOR THE ROWS ALREADY WRITTEN, and without it every request
+ * raised on that screen stays dead for good. It fills `product_id` by matching
+ * the line's SKU against the store catalogue.
+ *
+ * FOUR THINGS KEEP IT SAFE, and each one is a refusal rather than a guess:
+ *
+ *   1. ONLY WHERE THE STOCK NEVER MOVED. `dispatched_at IS NULL`, `goods_state`
+ *      'none' and `stock_applied_at IS NULL` together mean this order has not
+ *      taken a single unit off a shelf under either the old one-step model or
+ *      the new two-step one. Filling an id on such a row cannot double-count
+ *      anything; it can only let a correct dispatch happen later. A delivered
+ *      order is left exactly as it is.
+ *   2. ONLY ON AN EXACT, UNIQUE SKU. Two catalogue rows sharing a SKU, or none
+ *      matching, is not a match — it is a question, and a migration must not
+ *      answer one. Those lines are counted and left.
+ *   3. NEVER A KITCHEN REQUEST. Those carry no locations and move no stock by
+ *      design; a product id on one would mean nothing.
+ *   4. IT MOVES NO STOCK ITSELF. It writes one integer per line. Whether the
+ *      goods go is still somebody pressing Send, and still subject to every
+ *      guard in _applyDispatch.
+ *
+ * Recorded in `_migrations`, so it runs once. What it could not match is logged
+ * with a count rather than swallowed — a line left unmatched is a real thing to
+ * go and look at, not an absence.
+ */
+try {
+  const ran = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('restock_line_product_id_backfill_v1');
+  if (!ran) {
+    let filled = 0, ambiguous = 0, unmatched = 0;
+    try {
+      const rows = db.prepare(`
+        SELECT ri.id AS line_id, TRIM(ri.sku) AS sku
+          FROM restock_items ri
+          JOIN restock_orders ro ON ro.id = ri.restock_id
+         WHERE ri.product_id IS NULL
+           AND ri.sku IS NOT NULL AND TRIM(ri.sku) <> ''
+           AND ro.dispatched_at IS NULL
+           AND COALESCE(ro.goods_state, 'none') = 'none'
+           AND ro.stock_applied_at IS NULL
+           AND COALESCE(ro.to_role, 'warehouse') <> 'kitchen'
+           AND COALESCE(ro.from_role, 'store')   <> 'kitchen'
+      `).all();
+      const match = db.prepare(
+        "SELECT id FROM store_products WHERE TRIM(sku) = ? AND COALESCE(is_active, 1) = 1");
+      const put = db.prepare('UPDATE restock_items SET product_id = ? WHERE id = ?');
+      const tx = db.transaction(() => {
+        for (const r of rows) {
+          const hits = match.all(r.sku);
+          if (hits.length === 0) { unmatched++; continue; }
+          if (hits.length > 1)  { ambiguous++; continue; }
+          put.run(hits[0].id, r.line_id);
+          filled++;
+        }
+      });
+      tx();
+    } catch (e) { console.error('[migration restock_line_product_id_backfill_v1] scan', e); }
+    console.log(`[migration] restock_line_product_id_backfill_v1: linked ${filled} transfer line(s) to the catalogue; `
+      + `${ambiguous} left on a duplicate SKU, ${unmatched} with no match`);
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('restock_line_product_id_backfill_v1');
+  }
+} catch (e) { console.error('[migration restock_line_product_id_backfill_v1]', e); }
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
 module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;
