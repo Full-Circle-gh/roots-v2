@@ -121,6 +121,22 @@
         </view>
       </view>
 
+      <!-- The tenant's add-to-cart notice, stated PERMANENTLY. The card that
+           fires on the add is how a customer is told; this is where they can
+           come back and look it up, and it is the half a pop-up cannot do — it
+           is shown once, to somebody choosing flavours, and is gone.
+           Same frame as the supplier note above it: one kind of aside on this
+           page, not two. -->
+      <view wx:if="{{careNoteTitle || careNoteBody}}" class="supplier-note">
+        <view class="supplier-note-ico">
+          <view class="supplier-note-glyph">!</view>
+        </view>
+        <view class="supplier-note-body">
+          <text wx:if="{{careNoteTitle}}" class="supplier-note-title f-bear">{{careNoteTitle}}</text>
+          <text wx:if="{{careNoteBody}}" class="supplier-note-sub f-toni">{{careNoteBody}}</text>
+        </view>
+      </view>
+
       <!-- Social proof — live "N people bought this …" nudge. Real sales
            only (narrowest window with data); hidden when there's none. -->
       <view wx:if="{{socialProof}}" class="social-proof">
@@ -411,4 +427,5 @@
   </block>
   <cs-button variant="fab" placement="product"></cs-button>
   <popup-manager page="product"></popup-manager>
+  <cart-notice id="cart-notice" bind:closed="onCartNoticeClosed"></cart-notice>
 </view>

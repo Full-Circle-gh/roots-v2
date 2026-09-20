@@ -393,4 +393,5 @@
   </view>
 
   <popup-manager page="shop"></popup-manager>
+  <cart-notice></cart-notice>
 </view>

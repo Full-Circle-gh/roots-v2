@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.144 · 2026-09-20 · §195 RETIRES `SHIPS SOON · 现订现发` FROM THE BROWSE BAND AND COMPOSES NOTHING.** Two surfaces said it while five said `PRE-ORDER · 可预订` for the same shelf state, so a shopper tapping a card watched the word change under them. The live pair on the majority wins; no Chinese is minted, and the retired pair keeps its other job as the checkout popup's title. The band also gains the restock window — the same numerals and the same live `天` §194 declared, in the band's upper case. See *A pre-order's restock window* and *One word for a reservable row*. **v1.143 · 2026-09-20 · §194 GIVES THE PRE-ORDER POPUP ITS RESTOCK WINDOW — COMPOSING ONE CLAUSE OUT OF LIVE WORDS AND LEAVING THE SENTENCE AROUND IT VERBATIM.** The popup became the tenant's to edit, and the one thing it could never say was roughly when the item comes back. The sentence it has shipped since `backorder_gz` existed is untouched; a four-character clause is inserted into it, and `预计`, `内` and `补货` are each already live and customer-facing. The window itself is a numeral and the live day counter. See *A pre-order's restock window*. **v1.142 · 2026-09-19 · §193 GIVES `parcel_awaiting_restock` THE SENTENCE IT NEVER HAD — LIFTING TWO LIVE FRAGMENTS AND COMPOSING NOTHING.** §187 minted the error code and registered no pair for it, so a Chinese admin has read the bare code in English ever since; §193 makes the JD label route a third caller, which is the busiest of the three. Both halves are live verbatim and only the join is new. See *A parcel the shortage is holding*.
+**v1.145 · 2026-09-20 · §197 GIVES A PRODUCT ITS OWN NOTICE AT THE BASKET — COMPOSING SEVEN OPERATOR PAIRS AND NOT ONE CUSTOMER-FACING WORD.** A tenant can now warn a shopper about a product at the moment it goes into the basket, and every word the shopper reads is the tenant's own, typed in both languages. The card's only chrome of its own is `知道了`, live on all four checkout notice cards. What is composed is the back-office card that edits it, built on live halves — `加入购物车` is the button the gesture fires on and `提示` is this product's noun for a customer notice. `加购提示` was rejected: `加购` is live in the opposite sense, *added after the order was paid*, and would name a different feature. See *A product's own notice at the basket*. **v1.144 · 2026-09-20 · §195 RETIRES `SHIPS SOON · 现订现发` FROM THE BROWSE BAND AND COMPOSES NOTHING.** Two surfaces said it while five said `PRE-ORDER · 可预订` for the same shelf state, so a shopper tapping a card watched the word change under them. The live pair on the majority wins; no Chinese is minted, and the retired pair keeps its other job as the checkout popup's title. The band also gains the restock window — the same numerals and the same live `天` §194 declared, in the band's upper case. See *A pre-order's restock window* and *One word for a reservable row*. **v1.143 · 2026-09-20 · §194 GIVES THE PRE-ORDER POPUP ITS RESTOCK WINDOW — COMPOSING ONE CLAUSE OUT OF LIVE WORDS AND LEAVING THE SENTENCE AROUND IT VERBATIM.** The popup became the tenant's to edit, and the one thing it could never say was roughly when the item comes back. The sentence it has shipped since `backorder_gz` existed is untouched; a four-character clause is inserted into it, and `预计`, `内` and `补货` are each already live and customer-facing. The window itself is a numeral and the live day counter. See *A pre-order's restock window*. **v1.142 · 2026-09-19 · §193 GIVES `parcel_awaiting_restock` THE SENTENCE IT NEVER HAD — LIFTING TWO LIVE FRAGMENTS AND COMPOSING NOTHING.** §187 minted the error code and registered no pair for it, so a Chinese admin has read the bare code in English ever since; §193 makes the JD label route a third caller, which is the busiest of the three. Both halves are live verbatim and only the join is new. See *A parcel the shortage is holding*.
 
 **v1.141 · 2026-09-19 · §190 NAMES THE BOX IN §188's NOTIFICATION — COMPOSING THREE SENTENCES AND NO NEW WORDS.** *"one of the parcels"* made a split order's customer count boxes to work out which one had landed. Every mode already has a locked pair and two of them are already customer-facing on the printed slip, so each sentence is a live mode word in front of §188's live `包裹已发货`. The generic line survives as the fallback for a mode added later. See *Which box has gone*.
 
@@ -7764,3 +7764,71 @@ neither appender. §170 ruled that an add-on picker is not a browse surface and
 kept its date off that screen; a window arriving without that date would leave
 the list reading `PRE-ORDER · 2-4 DAYS` beside a bare `NEXT BATCH`. Both
 appenders arrive together or neither does.
+
+## A product's own notice at the basket (2026-09-20, §197)
+
+A tenant can put a warning on a product — *"this kombucha is alive; stand it in
+the fridge overnight before you open it"* — and it is raised when the product
+goes into the basket, restated on the product page, and restated again on the
+order. Rule 4 worked in order under the standing delegation of *The delegation
+becomes standing*.
+
+**NOTHING CUSTOMER-FACING IS COMPOSED HERE, AND THAT IS THE WHOLE CHARACTER OF
+THIS CHANGE.** Every word a shopper reads on the card is the TENANT'S OWN, typed
+into the product editor in both languages. The only chrome the card carries of
+its own is its button, and that is `知道了` — live on all four checkout notice
+cards, the mini app's content-check dialog and the admin keyboard sheet. The
+card's badge is `!`, which belongs to no language.
+
+### The operator register — the product editor's card
+
+| key | EN | CN | provenance |
+|---|---|---|---|
+| accordion | `Add-to-cart notice` | `加入购物车提示` | **COMPOSED** by Claude (Opus), 2026-09-20 — both halves live |
+| picker label | `Notice` | `提示` | live |
+| picker, none | `— None` | `无提示` | **COMPOSED** — `无` and `提示` both live |
+| picker, new | `+ New notice` | `新建提示` | **COMPOSED** — `新建` and `提示` both live |
+| headline fields | `Headline EN` / `Headline CN` | `标题(英文)` / `标题(中文)` | live, lifted whole |
+| message fields | `Message EN` / `Message CN` | `文案(英文)` / `文案(中文)` | live, lifted whole |
+| bilingual hint | `English · 中文 — customers see one, based on their WeChat language.` | `顾客按微信语言看到其中一种。` | live, lifted whole from the pop-ups editor |
+| message placeholder | `One or two short lines.` | `一两句简短文字。` | live, lifted whole from the pop-ups editor |
+| headline placeholder | `e.g. Let it rest before you open it` | `例如:开瓶前请先静置` | **COMPOSED** |
+| what it does | `Shown once when a customer adds this product to the basket, and again on their order.` | `顾客将本商品加入购物车时显示一次,并在订单页再次显示。` | **COMPOSED** |
+| what editing does | `Editing these words changes the notice for every product it is on.` | `修改此处文字会影响所有使用该提示的商品。` | **COMPOSED** |
+| save failure | `Notice not saved` | `提示未保存` | **COMPOSED** — `未保存` live |
+
+**HOW `加入购物车提示` WAS ARRIVED AT.** `加入购物车` is the mini app's own button
+and toast for this exact gesture — it is what the shopper taps and what the
+confirmation says — so the control is named after the thing it fires on, in the
+words the product already uses for it. `提示` is the product's noun for a notice
+shown to a customer: `结账提示` (checkout notice), `空购物车提示` (empty-basket
+notice), `新鲜提示` (freshness tip) are all live admin labels, and the second of
+those already contains `购物车提示` as a live construction. The compound is new;
+neither half is.
+
+**ONE CANDIDATE WAS REJECTED AND THE REJECTION IS THE POINT.** **`加购提示`** is
+shorter and `加购` is live — but live in a DIFFERENT SENSE: `加购获得` on the
+loyalty ledger, `下单后又加购了商品` on the orders pill and `下单后加购` on the phone
+all mean *added to an order after it was paid for* (§ the add-on flow). A control
+named `加购提示` would read to an operator as a notice about ORDER ADD-ONS, which
+is a real and different feature in this product. Rule 2's ban on a word that
+asserts the wrong event applies to operator labels as much as customer ones, so
+the longer, unambiguous compound wins over the live-but-wrong one.
+
+**THE TWO HELPER SENTENCES ARE COMPOSED FROM LIVE PARTS.** `顾客` (522 live),
+`本商品` (live in the product editor's own copy), `加入购物车`, `显示`, `订单页`,
+`修改`, `文字`, `影响` and `商品` are each live and admin-facing. What is new is
+the sentences, because nothing in this product has previously had to say *this is
+shown once, at the basket, and shared between products*.
+
+**THE HEADLINE PLACEHOLDER IS COMPOSED and is example text, not a label.** It
+exists to show an operator what belongs in the field, and it is deliberately the
+case Ash described. `开瓶` (open the bottle) is not otherwise live; `静置` (let it
+stand) is not otherwise live. Both are ordinary Chinese for what they say and
+neither is a term this product defines elsewhere, so nothing can drift against
+them. A tenant who types over it — which is the point of a placeholder — ships
+none of it.
+
+**REGISTER: OPERATOR** (Rule 1) for every pair above. The CUSTOMER register for
+this feature is the tenant's own text plus `知道了`, and this document locks
+neither: a tenant's own words about their own product are theirs.

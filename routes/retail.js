@@ -2422,6 +2422,98 @@ function resolveProductImage(id) {
   return sib ? (sib.image_data || sib.image_url || null) : null;
 }
 
+// ── ADD-TO-CART NOTICES ─────────────────────────────────────────────────────
+// A tenant's own warning on a product, raised the moment it goes into the cart:
+// *"this kombucha is alive — stand it in the fridge overnight before you open
+// it"*. It is neither of the two things that already look like it. `popups.list`
+// is a CAMPAIGN pop-up: page-scoped, scheduled, and it knows nothing about what
+// a customer is buying. The four checkout notices are computed from the CART by
+// POST /api/retail/quote and speak about delivery. This one belongs to the
+// PRODUCT, and it travels with the product wherever the product is served.
+//
+// ONE CONFIG KEY, NOT A PRODUCT COLUMN, AND THAT IS THE LOAD-BEARING CHOICE. A
+// kombucha line is six flavours wanting one sentence. A per-product textarea
+// would have an operator retype it six times and drift six ways, and the seventh
+// flavour would ship with nothing. So a notice names the products it covers and
+// one edit fixes all of them:
+//
+//   cart_notices.list = [{ id, enabled, title_en, title_cn, body_en, body_cn,
+//                          product_ids: [12, 13], updated_at }]
+//
+// `updated_at` IS THE NOTICE'S IDENTITY to a phone that has already shown it —
+// the same key shape popup-manager settled on (`popup_seen:<id>:<updated_at>`,
+// and the comment there is worth reading: keying on the id alone meant an edited
+// pop-up shipped to a phone that could never display it again). Change the
+// wording and every customer meets it once more; leave it alone and nobody is
+// interrupted twice.
+//
+// BLANK IS SILENCE HERE, unlike the pre-order notice where blank means
+// "unchanged" (§194). The difference is the same one that decided the store-move
+// notice: this has never shipped, so a notice with nothing in it has never shown
+// anybody anything, and switching it off costs no tenant a screen they were
+// relying on.
+function cartNoticeList() {
+  const raw = cfgValue('cart_notices.list', []);
+  return Array.isArray(raw) ? raw : [];
+}
+
+// The customer-facing shape, or null when there is nothing to say. Both
+// languages ride along and the client picks — never glued, per the README's
+// bilingual rule. A notice is renderable when ANY of the four copy fields has
+// something in it: a tenant who fills only the Chinese side has still written a
+// notice, and dropping it because `title_en` is blank would hide it from the
+// half of the shop that would read it.
+function shapeCartNotice(n) {
+  if (!n || typeof n !== 'object') return null;
+  const s = k => (typeof n[k] === 'string' ? n[k].trim() : '');
+  const title_en = s('title_en'), title_cn = s('title_cn');
+  const body_en  = s('body_en'),  body_cn  = s('body_cn');
+  if (!title_en && !title_cn && !body_en && !body_cn) return null;
+  return {
+    id: String(n.id || ''),
+    title_en, title_cn, body_en, body_cn,
+    updated_at: Number(n.updated_at) || 0,
+  };
+}
+
+// product id → its notice, built ONCE per request. Called per row on a grid that
+// pulls hundreds, so the alternative — a config read per product — is the shape
+// of a slow page rather than a wrong one, which is the harder kind to notice.
+// FIRST MATCH WINS: a product listed on two notices shows the earlier one rather
+// than stacking two modals on one add. That is a deliberate ceiling — §196 built
+// a QUEUE at checkout because four notices genuinely co-occur there; an add is
+// one gesture about one product and has no such case.
+function cartNoticeIndex() {
+  const idx = new Map();
+  for (const n of cartNoticeList()) {
+    if (!n || n.enabled === false) continue;
+    const shaped = shapeCartNotice(n);
+    if (!shaped) continue;
+    const ids = Array.isArray(n.product_ids) ? n.product_ids : [];
+    for (const raw of ids) {
+      const id = Number(raw);
+      if (Number.isFinite(id) && !idx.has(id)) idx.set(id, shaped);
+    }
+  }
+  return idx;
+}
+
+// Stamp `cart_notice` onto every row that has one. Rows without stay untouched
+// rather than carrying `cart_notice: null` — the clients test for the key, and a
+// payload that ships an empty field per product on a 500-row grid pays for a
+// notice nobody wrote.
+function attachCartNotices(rows) {
+  if (!Array.isArray(rows) || !rows.length) return rows;
+  const idx = cartNoticeIndex();
+  if (!idx.size) return rows;
+  for (const r of rows) {
+    if (!r) continue;
+    const n = idx.get(Number(r.id));
+    if (n) r.cart_notice = n;
+  }
+  return rows;
+}
+
 router.get('/api/retail/products', (req, res) => {
   const { q, category, sort } = req.query;
   const limit  = Math.min(parseInt(req.query.limit  || '50', 10) || 50, 500);
@@ -2528,6 +2620,10 @@ router.get('/api/retail/products', (req, res) => {
   decorateFreshBatch(rows);
   attachSoldCounts(rows);
   resolveAutoBadges(rows);
+  // The product's own add-to-cart notice, if the tenant wrote one. Stamped on
+  // the LIST as well as the PDP because a customer can add straight from the
+  // grid's + button and from favourites without ever opening the product.
+  attachCartNotices(rows);
   const termClause = terms.map(() => 'AND ' + termClauseFor()).join(' ');
   const termParams = terms.flatMap(t => { const s = `%${t}%`; return SEARCH_COLS.map(() => s); });
   const idsClause = idList.length ? `AND p.id IN (${idList.map(() => '?').join(',')})` : '';
@@ -3392,6 +3488,12 @@ router.get('/api/retail/products/:id', (req, res) => {
   } else {
     product.variants = [];
   }
+  // The add-to-cart notice, on the hero AND on every size row. A variant picker
+  // adds a SIBLING, not the product whose page is open, so a notice stamped only
+  // on the hero would be the right warning attached to the wrong id — and the
+  // 500ml bottle that needs the fridge would go in silently while the 330ml that
+  // does not raised the card.
+  attachCartNotices([product].concat(product.variants || []));
   // Same pre-order flags for the single (non-variant) product hero.
   product.oos_preorder = isPreorderPolicy(effectiveOosPolicy(product));
   product.oos_preorder_local = isLocalRunPreorder(effectiveOosPolicy(product));
@@ -3797,6 +3899,10 @@ router.post('/api/retail/checkout/offers', express.json(), (req, res) => {
     .slice(0, cap)
     .map(r => lazifyProductImage(r, baseUrl));
 
+  // The checkout upsell is an add-to-cart surface like any other, and BOTH
+  // CLIENTS OR NEITHER: the web shop's offer row already hands the notice to
+  // cartAdd, so the mini app's has to be given one to hand over.
+  attachCartNotices(offers);
   res.json({ success: true, data: offers, meta: { server_time_ms: now } });
 });
 
@@ -12961,6 +13067,26 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
   // Can the customer still redirect it to another address? Same shape as
   // reschedule — the button is server-decided, the client only renders it.
   o.address_change = addressChangeEligibility(o);
+  // The add-to-cart notices this order's items carry, restated on the order.
+  // THIS IS THE HALF THAT ACTUALLY DOES THE JOB, and it is worth saying why
+  // rather than treating it as a bonus surface. "Stand it in the fridge
+  // overnight once it arrives" is a fact about a box that lands on a Thursday;
+  // the modal that raised it was tapped away on Monday, by somebody choosing
+  // flavours. A pop-up is how the customer is TOLD; the order page is where
+  // they can go and look it up when the thing is in their hands.
+  // One entry per notice, not per line: a case of six kombuchas is one sentence
+  // about the case, and six copies of it is a page nobody reads.
+  const noticeIdx = cartNoticeIndex();
+  if (noticeIdx.size) {
+    const byNotice = new Map();
+    for (const it of o.items) {
+      const n = noticeIdx.get(Number(it.product_id));
+      if (!n) continue;
+      if (!byNotice.has(n.id)) byNotice.set(n.id, { ...n, items: [] });
+      byNotice.get(n.id).items.push({ name_en: it.name_en, name_cn: it.name_cn });
+    }
+    if (byNotice.size) o.cart_notices = [...byNotice.values()];
+  }
   return o;
 }
 
@@ -39599,6 +39725,10 @@ router.get('/api/retail/favorites', requireRetailAuth, (req, res) => {
   // + button on a meal the kitchen was making that morning. See the helper.
   decorateFreshBatch(rows);
   resolveAutoBadges(rows);
+  // The product's own add-to-cart notice, if the tenant wrote one. Stamped on
+  // the LIST as well as the PDP because a customer can add straight from the
+  // grid's + button and from favourites without ever opening the product.
+  attachCartNotices(rows);
   res.json({ success: true, data: rows, meta: { count: rows.length, server_time_ms: now } });
 });
 

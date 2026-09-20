@@ -1,0 +1,98 @@
+/* The checkout's bn-card rules, scoped to this component. A component cannot
+   reach a page's wxss, so these are copied rather than shared — the copy is
+   deliberate and the two are expected to be kept in step by eye, which is what
+   every other component in this app does with the house card.
+   Values are lifted verbatim from pages/checkout/checkout.wxss. */
+.cn-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(26, 35, 20, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 48rpx;
+  animation: cnFade 180ms ease-out;
+}
+.cn-card {
+  width: 100%;
+  max-width: 640rpx;
+  max-height: 86vh;
+  overflow-y: auto;
+  background: #FFFCF7;
+  border-radius: 32rpx;
+  padding: 0 0 36rpx;
+  box-shadow: 0 24rpx 60rpx rgba(26, 35, 20, 0.38);
+  animation: cnPop 220ms cubic-bezier(.2,.9,.3,1.1);
+}
+/* Hero band — the soft lime wash the fresh-batch and pre-order cards use, with
+   the badge straddling its lower edge. */
+.cn-hero {
+  height: 132rpx;
+  background: linear-gradient(135deg, #e9efd0 0%, #d9e6b3 100%);
+  border-radius: 32rpx 32rpx 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 44rpx;
+  position: relative;
+}
+.cn-badge {
+  position: absolute;
+  bottom: -36rpx;
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 50%;
+  background: #FFFCF7;
+  box-shadow: 0 8rpx 20rpx rgba(26, 35, 20, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 52rpx;
+  line-height: 1;
+  font-weight: 700;
+  color: #6d7a2a;
+}
+.cn-kicker {
+  text-align: center;
+  font-size: 22rpx;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #6d7a2a;
+  padding: 0 48rpx;
+  margin-bottom: 8rpx;
+}
+.cn-title {
+  text-align: center;
+  font-size: calc(46rpx * var(--font-scale, 1));
+  line-height: 1.12;
+  color: #1a2314;
+  padding: 0 48rpx;
+  margin-bottom: 20rpx;
+}
+.cn-body {
+  font-size: calc(27rpx * var(--font-scale, 1));
+  line-height: 1.55;
+  color: #2a3a22;
+  text-align: center;
+  padding: 0 48rpx;
+  margin-bottom: 30rpx;
+  white-space: pre-wrap;   /* a tenant's line breaks are theirs to keep */
+}
+.cn-cta {
+  margin: 0 40rpx;
+  padding: 26rpx 0;
+  text-align: center;
+  background: #1a2314;
+  color: var(--lime, #c3e000);
+  border-radius: 16rpx;
+  font-size: 28rpx;
+  letter-spacing: 0.04em;
+}
+.cn-cta:active { opacity: 0.85; }
+@keyframes cnFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cnPop {
+  from { opacity: 0; transform: translateY(24rpx) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}

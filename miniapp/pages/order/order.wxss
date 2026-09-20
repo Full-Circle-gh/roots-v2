@@ -293,6 +293,43 @@
   color: var(--ink);
 }
 
+.care-note-banner {
+  margin: 32rpx 44rpx 0;
+  padding: 24rpx 28rpx;
+  border-radius: 4rpx;
+  border-left: 8rpx solid #6d7a2a;
+  background: rgba(217, 230, 179, 0.28);
+  display: flex;
+  align-items: flex-start;
+  gap: 18rpx;
+}
+.care-note-banner .care-note-icon {
+  font-size: calc(30rpx * var(--font-scale));
+  line-height: 1.2;
+  font-weight: 700;
+  color: #6d7a2a;
+}
+.care-note-banner .care-note-body { flex: 1; min-width: 0; }
+.care-note-banner .care-note-line {
+  font-size: calc(28rpx * var(--font-scale));
+  color: #1a2314;
+}
+.care-note-banner .care-note-sub {
+  font-size: calc(23rpx * var(--font-scale));
+  margin-top: 6rpx;
+  line-height: 1.45;
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+/* Which items the notice is about — a case of six kombuchas is one notice, so
+   the names go here rather than the notice being repeated per line. */
+.care-note-banner .care-note-items {
+  font-size: calc(21rpx * var(--font-scale));
+  margin-top: 8rpx;
+  letter-spacing: 0.04em;
+  color: #6d7a2a;
+}
+
 .partial-banner {
   margin: 32rpx 44rpx 0;
   padding: 22rpx 26rpx;

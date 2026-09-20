@@ -1248,6 +1248,11 @@ Page({
       effective_price: raw.effective_price,
       is_on_flash: raw.is_on_flash,
       bundle_worth: raw.bundle_worth,   // a bundle card: its "separately" worth
+      // The tenant's add-to-cart notice. Carried across because this call site
+      // builds a literal — a grid + is an add like any other, and the customer
+      // who never opens the product page is exactly the one who has not read
+      // the notice anywhere else.
+      cart_notice: raw.cart_notice,
     }, 1, []);
 
     // §108 — the toast says what the card said. It used to say "pre-order" for
