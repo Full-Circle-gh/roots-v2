@@ -35646,6 +35646,12 @@ function preorderWindowLabel(cfg) {
   const lo = cfg && cfg.min_days;
   const hi = cfg && cfg.max_days;
   if (lo == null || hi == null) return null;
+  // A ZERO-DAY WINDOW NAMES NO WAIT (§195). "usually back in stock within 0
+  // days" is not a sentence anyone writes on purpose; treated as unset, which
+  // is the one answer that cannot mislead. A range that merely STARTS at zero
+  // is a real window and is kept. The mini-app band and the admin preview fold
+  // this identically — scripts/test_preorder_band.js holds all of them to it.
+  if (lo === 0 && hi === 0) return null;
   if (lo === hi) {
     return { en: `${lo} day${lo === 1 ? '' : 's'}`, cn: `${lo} 天` };
   }

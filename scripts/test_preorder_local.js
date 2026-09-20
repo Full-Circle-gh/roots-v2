@@ -655,8 +655,14 @@ console.log('\nweb storefront — stockState / slStock');
     // the word plus the arrival now, so it is part of stockState's and
     // slStock's own path. Fixtures here carry no `local_fresh_in_days`, so it
     // returns the bare word and every case below reads exactly as it did.
+    // §195's appender joins them for the same reason §170's did: the band is
+    // the word plus whatever was appended, so both appenders are part of
+    // stockState's and slStock's own path now. `state.config` in this sandbox
+    // carries no `notice.preorder`, so slPreorderWindow returns null and the
+    // window appends nothing — every case below reads exactly as it did.
     [grab('oosBackorder'), grab('oosPreorderLocal'), grab('shopperOnLocalRun'),
       grab('freshArrivalLabel'), grab('withFreshArrival'),
+      grab('restockWindowLabel'), grab('withRestockWindow'), grab('slPreorderWindow'),
       'const SL_MONTHS_EN=[];',
       grab('stockState'), grab('slStock')].join('\n'),
     sandbox,
@@ -764,14 +770,21 @@ console.log('\nweb storefront — stockState / slStock');
   );
   const row = (p) => vm.runInContext('slToRows([' + JSON.stringify(p) + '])', sandbox)[0];
 
-  it('signed out → SHIPS SOON, exactly as before', () => {
+  /* §195 RENAMED THIS BAND FROM `SHIPS SOON` TO `PRE-ORDER`, and these
+     assertions firing is how the rename was caught rather than a cost of it.
+     The web card and the shop grid were the last two surfaces saying SHIPS
+     SOON while the PDP, its button, its size rows and favourites said
+     PRE-ORDER — the same product reading two ways as a shopper tapped through.
+     What is asserted is unchanged in kind: the row stays orderable, the +
+     button still renders, and the band says the ONE word for this state. */
+  it('signed out → PRE-ORDER, the row still live', () => {
     sandbox.state.customer = null;
     const r = row(BACKORDER);
     assert.strictEqual(r.nextBatch, true);
     assert.strictEqual(r.outOfStock, false, 'the + button still renders');
-    assert.strictEqual(r.batchTxt, 'SHIPS SOON');
+    assert.strictEqual(r.batchTxt, 'PRE-ORDER');
   });
-  it('out-of-city keeps SHIPS SOON, and a batch meal keeps NEXT BATCH', () => {
+  it('out-of-city keeps PRE-ORDER, and a batch meal keeps NEXT BATCH', () => {
     signIn(false);
     assert.strictEqual(row(BACKORDER).nextBatch, true);
     assert.strictEqual(row(BACKORDER).outOfStock, false);
@@ -870,20 +883,23 @@ console.log('\nmini-app add-to-order — the sold-out pill (NEXT BATCH / SHIPS S
     assert.ok(/^\.row-pre \{/m.test(wxss), 'and has a style, or it renders as bare text');
   });
 
-  it('a fresh meal says NEXT BATCH here too; grocery keeps SHIPS SOON (§108)', () => {
-    assert.ok(/p\.is_batch_made \? this\.data\.copy\.nextBatch : this\.data\.copy\.shipsSoon/.test(js),
+  it('a fresh meal says NEXT BATCH here too; grocery says PRE-ORDER (§108)', () => {
+    // §195 renamed the grocery pair and the key that holds it — `shipsSoon`
+    // no longer described what it contained. The TEST is unchanged: the word
+    // is chosen by what the ITEM is, never by where the shopper is.
+    assert.ok(/p\.is_batch_made\s*\n?\s*\? this\.data\.copy\.nextBatch/.test(js),
       'chosen by what the item IS, the one test every surface now uses');
     assert.ok(/nextBatch: 'NEXT BATCH'/.test(js) && /nextBatch: '下批现做'/.test(js),
       'and both halves of the live pair are here');
-    assert.ok(/shipsSoon: 'SHIPS SOON'/.test(js) && /shipsSoon: '现订现发'/.test(js),
-      'the grocery pair stays, unchanged');
+    assert.ok(/preorder: 'PRE-ORDER'/.test(js) && /preorder: '可预订'/.test(js),
+      'the grocery pair is the one every other surface uses');
   });
 
   it('both pairs are the shop grid\'s own, and neither is minted here', () => {
     // Lifted, not reworded: one product must not read two ways in one app. If
     // the grid ever changes either wording this fails, which is the point.
     const shopJs = fs.readFileSync(path.join(ROOT, 'miniapp/pages/shop/shop.js'), 'utf8');
-    assert.ok(/'现订现发' : 'SHIPS SOON'/.test(shopJs),
+    assert.ok(/'可预订' : 'PRE-ORDER'/.test(shopJs),
       'the grid still uses the grocery pair — if it moved, move this one with it');
     assert.ok(/'下批现做' : 'NEXT BATCH'/.test(shopJs),
       'and the fresh-meal pair too');

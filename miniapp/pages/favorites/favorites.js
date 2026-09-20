@@ -7,6 +7,7 @@ const cart     = require('../../utils/cart');
 const lang     = require('../../utils/lang');
 const delivery = require('../../utils/delivery');
 const freshEta = require('../../utils/fresh-eta');
+const config   = require('../../utils/config');
 
 const COPY_EN = {
   kicker: 'FAVORITES',
@@ -120,6 +121,10 @@ Page({
     const L = this.data.lang;
     const all = this.data.all || [];
     const copy = this.data.copy;
+    // §195 — one read per pass, not per tile: it is a shop-wide setting, and a
+    // tile reading it separately could only differ from its neighbours by
+    // being wrong.
+    const preWin = config.get('notice.preorder', null);
 
     // Build category chips from actual data + "All" head.
     const catSet = new Set();
@@ -164,9 +169,13 @@ Page({
          Whether the date is today is the SERVER's answer (§82) — this page
          never compares a date against the handset's clock. */
       const today = preorder && !!this._onLocalRun && !!p.local_fresh_today;
+      // §195 — a grocery tile names no batch and so got nothing from §170's
+      // appender. What it can name is the operator's restock window, the same
+      // number the shop grid and the checkout popup print. Unset → the bare
+      // word, exactly as before.
       const preText = (!preorder || today) ? ''
         : p.is_batch_made ? freshEta.withFreshArrival(copy.nextBatch, p, this._onLocalRun, L)
-                          : copy.preorder;
+                          : freshEta.withRestockWindow(copy.preorder, preWin, L);
       const priceDrop = flash && reg > eff ? Math.round(reg - eff) : 0;
       const name = L === 'cn' ? (p.name_cn || p.name_en) : (p.name_en || p.name_cn);
       const cnSub = L === 'cn' ? (p.name_en || '') : (p.name_cn || '');
