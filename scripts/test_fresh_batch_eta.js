@@ -55,7 +55,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 // proves a line was written; only a run proves the value reaches the button.
 // Same shape as the harness in scripts/test_fresh_today_label.js, kept local
 // because neither suite exports one.
-function runPdp(product, lang, onLocalRun) {
+function runPdp(product, lang, onLocalRun, cfg) {
   const g = global;
   const saved = { Page: g.Page, wx: g.wx, getApp: g.getApp, App: g.App, Component: g.Component };
   let page = null;
@@ -64,14 +64,21 @@ function runPdp(product, lang, onLocalRun) {
   g.App = (o) => o;
   g.getApp = () => ({ globalData: { lang: 'en', customer: {} }, authReady: Promise.resolve() });
   g.wx = new Proxy({}, { get: (t, k) => {
-    if (k === 'getStorageSync') return () => null;
+    // §195 reads the operator's restock window off the cached storefront
+    // config, so a case that wants a window hands one in here.
+    if (k === 'getStorageSync') return (key) =>
+      (key === 'config_cache_v1' ? { data: cfg || {}, at: Date.now() } : null);
     if (k === 'getSystemInfoSync') return () => ({ windowWidth: 375, statusBarHeight: 20 });
     if (k === 'getAccountInfoSync') return () => ({ miniProgram: { appId: 'wxtest' } });
     return () => {};
   } });
   try {
     const full = path.join(ROOT, 'miniapp/pages/product/product.js');
-    delete require.cache[require.resolve(full)];
+    // config caches its hydrate, so it is reloaded with the page — otherwise
+    // the first case's window would be every later case's window too.
+    for (const m of ['miniapp/utils/config.js', 'miniapp/pages/product/product.js']) {
+      delete require.cache[require.resolve(path.join(ROOT, m))];
+    }
     require(full);
     const ctx = {
       data: Object.assign({}, page.data, { product, lang }),
@@ -82,7 +89,8 @@ function runPdp(product, lang, onLocalRun) {
     };
     for (const k of Object.keys(page)) if (typeof page[k] === 'function') ctx[k] = page[k];
     ctx.recomputeDisplay.call(ctx);
-    return { label: ctx.data.addBtnLabel, long: ctx.data.addBtnLong };
+    return { label: ctx.data.addBtnLabel, word: ctx.data.addBtnWord,
+             qual: ctx.data.addBtnQual, price: ctx.data.price };
   } finally {
     for (const [k, v] of Object.entries(saved)) { if (v === undefined) delete g[k]; else g[k] = v; }
   }
@@ -383,14 +391,20 @@ section('6 · THE SHOP LIST HAS A LINE WIDE ENOUGH TO DRAW IT ON');
 // the LABEL that gives, never the price — a clipped word is still readable,
 // a clipped number is a different number. These cases pin both, plus the
 // length test that decides which labels step down.
-section('8 · THE PDP BUY BUTTON KEEPS THE LABEL AND THE PRICE ON ONE LINE');
+section('8 · THE PDP BUY BUTTON FITS THE BAND BESIDE EVERY PRICE IT DRAWS');
 {
   const WXSS = read('miniapp/pages/product/product.wxss');
   const WXML = read('miniapp/pages/product/product.wxml');
   const JS = read('miniapp/pages/product/product.js');
+  // app.wxss ships this on `page`, and every `calc(Nrpx * var(--font-scale))`
+  // in the file is multiplied by it. Read, never assumed: raising it is a real
+  // way to make a label stop fitting.
+  const SCALE = Number(read('miniapp/app.wxss').match(/--font-scale:\s*([\d.]+)/)[1]);
   const btn = WXSS.match(/^\.add-btn \{[^}]*\}/m);
   const label = WXSS.match(/^\.add-label \{[^}]*\}/m);
-  const long = WXSS.match(/^\.add-btn\.is-long \.add-label \{[^}]*\}/m);
+  const stack = WXSS.match(/^\.add-label-stack \{[^}]*\}/m);
+  const word = WXSS.match(/^\.add-word \{[^}]*\}/m);
+  const qual = WXSS.match(/^\.add-qual \{[^}]*\}/m);
   const prices = WXSS.match(/^\.add-prices \{[^}]*\}/m);
 
   it('the button cannot push the sticky bar past the screen', () => {
@@ -408,71 +422,239 @@ section('8 · THE PDP BUY BUTTON KEEPS THE LABEL AND THE PRICE ON ONE LINE');
     assert.ok(label && /min-width:\s*0/.test(label[0]) && /text-overflow:\s*ellipsis/.test(label[0]),
       'the label is the half that yields, and it yields visibly');
   });
-  it('the §170 label steps down a size rather than overflowing', () => {
-    assert.ok(long, '.add-btn.is-long .add-label must exist — it is the whole fix');
-    const size = long[0].match(/font-size:\s*calc\((\d+)rpx/);
-    const base = label[0].match(/font-size:\s*calc\((\d+)rpx/);
-    assert.ok(size && base && Number(size[1]) < Number(base[1]),
-      'is-long must be SMALLER than the ordinary label, or it fixes nothing');
-  });
-  it('the markup carries the class, off a flag the page computes', () => {
-    assert.ok(/addBtnLong \? 'is-long'/.test(WXML),
-      'the button must take .is-long from addBtnLong');
-  });
-  it('the flag asks whether a DATE was appended, not how long the label is', () => {
-    // A character count is the tempting version and it is wrong: `下批现做 ·
-    // 9月21日` is 12 characters to `ADD TO BASKET`'s 13 and half again as
-    // wide, so a threshold that leaves the English button alone shrinks the
-    // Chinese one or overflows it. Comparing the built label against the bare
-    // word it was built from cannot drift apart from the label itself.
-    /* §195 WIDENED THIS TO THE SECOND APPENDER, and the rule it was written on
-       is what made that a one-line change: "did the appender add anything"
-       never asked which appender. `PRE-ORDER · 2-4 DAYS` is wider than the
-       label whose overflow was reported here, so leaving the flag gated on
-       'batch' would have put this defect straight back. The bare word is now
-       built per kind, a line above the label, and both come off one preKind. */
-    assert.ok(/addBtnLong:[\s\S]{0,160}!!preKind/.test(JS),
-      'any row with an appender can be long, not only a fresh-batch one');
-    assert.ok(/addBtnLabel !== addBtnBare/.test(JS),
-      'the flag is "the appender added something", tested against the bare word');
-    assert.ok(/const addBtnBare = preKind === 'batch'[\s\S]{0,200}'下批现做' : 'NEXT BATCH'/.test(JS),
-      'and that bare word is still the one the label is built from');
-    assert.ok(!/addBtnLong:[\s\S]{0,200}\.length/.test(JS),
-      'no character count — see above; it cannot be right in both languages');
-  });
-  it('RUN: every dated label the builder can produce trips the flag', () => {
-    // Both languages and both arrival shapes, straight off recomputeDisplay.
-    const cases = [
-      [pdpRow(), 'en', false, 'NEXT BATCH · TOMORROW'],
-      [pdpRow(), 'en', true, 'NEXT BATCH · TODAY'],
-      [pdpRow(), 'cn', false, '下批现做 · 明天'],
-      [pdpRow({ local_fresh_in_days: 2, local_fresh_date: '2026-09-22',
-                fresh_ship_date: '2026-09-23' }), 'en', false, 'NEXT BATCH · SEP 23'],
-      [pdpRow({ local_fresh_in_days: 2, local_fresh_date: '2026-09-22',
-                fresh_ship_date: '2026-09-23' }), 'cn', false, '下批现做 · 9月23日'],
-    ];
-    for (const [p, lang, onRun, expected] of cases) {
-      const got = runPdp(p, lang, onRun);
-      assert.strictEqual(got.label, expected, `label for ${lang}/${onRun}`);
-      assert.strictEqual(got.long, true, `${expected} must step down a size`);
+  it('the appended answer stacks under the word rather than competing for the line', () => {
+    assert.ok(stack, '.add-label-stack must exist — it is the whole fix');
+    assert.ok(/flex-direction:\s*column/.test(stack[0]),
+      'the word and what the appender added are stacked; side by side is the bug');
+    assert.ok(/min-width:\s*0/.test(stack[0]),
+      'the stack yields before the price does, like the single label');
+    assert.ok(word && qual, '.add-word and .add-qual must both exist');
+    const n = (r) => Number(r[0].match(/font-size:\s*calc\((\d+)rpx/)[1]);
+    assert.ok(n(qual) < n(word),
+      'the qualifier informs and the word is what you tap — it reads quieter');
+    for (const r of [word, qual]) {
+      assert.ok(/white-space:\s*nowrap/.test(r[0]),
+        'neither line may fold — folding is what put the date under the word');
     }
   });
-  it('RUN: …and no undated label does, or the whole button shrinks for nothing', () => {
+  it('the markup stacks, and only when an appender added something', () => {
+    assert.ok(/wx:if="\{\{addBtnQual\}\}"[\s\S]{0,240}add-word[\s\S]{0,140}add-qual/.test(WXML),
+      'a row with an appended answer draws the word and that answer as two lines');
+    assert.ok(/<text wx:else class="add-label">\{\{addBtnLabel\}\}<\/text>/.test(WXML),
+      'every other row still draws the single label it always did');
+  });
+  it('the qualifier is SPLIT off the built label, never derived a second time', () => {
+    // §195's lesson, kept: "did the appender add anything" never asks WHICH
+    // appender, so neither does this. Taking the qualifier off the one label
+    // the appenders already built means it cannot disagree with it, and a
+    // third appender needs no edit here. A second fork would be two things to
+    // change together tomorrow, which is the same defect early.
+    assert.ok(/addBtnLabel\.indexOf\(addBtnBare \+ BAND_SEP\) === 0/.test(JS),
+      'the split is anchored on the bare word plus the shared separator');
+    assert.ok(/addBtnLabel\.slice\(addBtnBare\.length \+ BAND_SEP\.length\)/.test(JS),
+      'and the qualifier is the remainder of that same string');
+    assert.ok(!/addBtnQual[\s\S]{0,200}freshEta\./.test(JS),
+      'no second call to an appender — that is the drift this avoids');
+    assert.ok(/const addBtnBare = preKind === 'batch'[\s\S]{0,200}'下批现做' : 'NEXT BATCH'/.test(JS),
+      'and the bare word is still the one the label is built from (§195)');
+  });
+  it('RUN: every appended answer the builder can produce gets its own line', () => {
+    // Both appenders, both languages, every shape each can return — straight
+    // off recomputeDisplay, not off a regex.
+    const W = (lo, hi) => ({ notice: { preorder: { min_days: lo, max_days: hi } } });
+    const grocery = { id: 9, name_en: 'Tea', name_cn: '茶', price: 30, stock: 0, oos_preorder: 1 };
+    const cases = [
+      // §170 — the batch arrival
+      [pdpRow(), 'en', false, null, 'NEXT BATCH', 'TOMORROW'],
+      [pdpRow(), 'en', true, null, 'NEXT BATCH', 'TODAY'],
+      [pdpRow(), 'cn', false, null, '下批现做', '明天'],
+      [pdpRow({ local_fresh_in_days: 2, local_fresh_date: '2026-09-22',
+                fresh_ship_date: '2026-09-23' }), 'en', false, null, 'NEXT BATCH', 'SEP 23'],
+      [pdpRow({ local_fresh_in_days: 2, local_fresh_date: '2026-09-22',
+                fresh_ship_date: '2026-09-23' }), 'cn', false, null, '下批现做', '9月23日'],
+      // §195 — the operator's restock window
+      [grocery, 'en', false, W(3, 5), 'PRE-ORDER', '3-5 DAYS'],
+      [grocery, 'en', false, W(10, 14), 'PRE-ORDER', '10-14 DAYS'],
+      [grocery, 'en', false, W(1, 1), 'PRE-ORDER', '1 DAY'],
+      [grocery, 'cn', false, W(10, 14), '预订', '10-14 天'],
+    ];
+    for (const [p, lang, onRun, cfg, expectWord, expectQual] of cases) {
+      const got = runPdp(p, lang, onRun, cfg);
+      assert.strictEqual(got.word, expectWord, `word for ${lang}`);
+      assert.strictEqual(got.qual, expectQual, `qualifier for ${lang}`);
+      // The two pieces must rejoin to exactly the joined form, or this button
+      // is saying something no other surface says.
+      assert.strictEqual(`${got.word} · ${got.qual}`, got.label,
+        `the stacked pieces must rebuild ${got.label}`);
+    }
+  });
+  it('RUN: …and a row no appender touched stays one line', () => {
     const inStock = { id: 2, name_en: 'Quinoa Salad', name_cn: '藜麦沙拉', price: 44, stock: 5 };
     const grocery = { id: 3, name_en: 'Tea', name_cn: '茶', price: 30, stock: 0, oos_preorder: 1 };
     const gone = { id: 4, name_en: 'Gone', name_cn: '没了', price: 10, stock: 0 };
     const cases = [
-      [inStock, 'en', true, 'ADD TO BASKET'],
-      [inStock, 'cn', true, '加入购物车'],
-      [grocery, 'en', false, 'PRE-ORDER'],   // the §108 carve-out: no batch, no date
-      [gone, 'en', false, 'SOLD OUT'],
+      [inStock, 'en', true, null, 'ADD TO BASKET'],
+      [inStock, 'cn', true, null, '加入购物车'],
+      // No window configured, and §195's zero-day window, which names no wait.
+      [grocery, 'en', false, {}, 'PRE-ORDER'],
+      [grocery, 'en', false, { notice: { preorder: { min_days: 0, max_days: 0 } } }, 'PRE-ORDER'],
+      [gone, 'en', false, null, 'SOLD OUT'],
     ];
-    for (const [p, lang, onRun, expected] of cases) {
-      const got = runPdp(p, lang, onRun);
+    for (const [p, lang, onRun, cfg, expected] of cases) {
+      const got = runPdp(p, lang, onRun, cfg);
       assert.strictEqual(got.label, expected, `label for ${lang}`);
-      assert.strictEqual(got.long, false, `${expected} keeps the full size`);
+      assert.strictEqual(got.qual, '', `${expected} stays a single line`);
+      assert.strictEqual(got.word, '', `${expected} draws no stacked word`);
     }
   });
+  it('RUN: the button price is the one every other surface shows', () => {
+    // `¥44.00` here and `¥44` in the list was the 75rpx that made two attempts
+    // at this label too small. A non-round price still keeps its decimals.
+    assert.strictEqual(runPdp({ id: 5, name_en: 'W', price: 44, stock: 5 }, 'en', true, null).price, '¥44');
+    assert.strictEqual(runPdp({ id: 6, name_en: 'W', price: 44.5, stock: 5 }, 'en', true, null).price, '¥44.50');
+  });
+  // ── DOES IT ACTUALLY FIT — measured, not asserted about ─────────────────
+  // Every case above pins that the RULE is written. None of them pins that the
+  // result FITS, and that is exactly how this bug survived two fixes. The
+  // first sized the label against `¥44`, which is what the shop LIST draws,
+  // while this button drew `¥44.00` — 164rpx against 89. §195 then inherited
+  // that sizing, so `PRE-ORDER · 10-14 DAYS` was over the edge on the very
+  // surface §170 was reported from. Nothing was watching either time.
+  //
+  // So this reads the shipped fonts and adds up the real strings: every label
+  // recomputeDisplay can build, beside every price column it can draw. Sizes
+  // and tracking come FROM product.wxss rather than being repeated here, so a
+  // change to a rule is a change to the sum.
+  const FONTS = {
+    toni: 'public/fonts/ToniGroteskPro.otf',   // .f-toni — the label
+    price: 'public/fonts/LilitaOne.ttf',       // Bear Serif maps digits and ¥ here
+  };
+  // The bar's fixed furniture, in rpx of the 750 design width (product.wxss).
+  const SCREEN = 750, BAR_PADDING = 64, STEPPER = 198, BAR_GAP = 20;
+  const BTN_PADDING = 48, BTN_GAP = 16;
+  const ROOM = SCREEN - BAR_PADDING - STEPPER - BAR_GAP - BTN_PADDING - BTN_GAP;
+
+  function rule(selector) {
+    const m = WXSS.match(new RegExp('^' + selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ' \\{[^}]*\\}', 'm'));
+    assert.ok(m, `${selector} must exist in product.wxss`);
+    const size = m[0].match(/font-size:\s*calc\((\d+(?:\.\d+)?)rpx/);
+    const track = m[0].match(/letter-spacing:\s*(-?\d*\.?\d+)em/);
+    assert.ok(size, `${selector} must state a font-size in rpx`);
+    return { size: Number(size[1]), track: track ? Number(track[1]) : null };
+  }
+
+  it('the sizes this measures are the ones product.wxss actually ships', () => {
+    // If a rule stops stating its own size or tracking, the sums below would
+    // quietly measure something the page does not draw.
+    assert.strictEqual(rule('.add-label').size, 32);
+    assert.strictEqual(rule('.add-word').size, 28);
+    assert.strictEqual(rule('.add-qual').size, 20);
+    assert.strictEqual(rule('.add-qual').track, 0.06);
+    assert.strictEqual(rule('.add-price').size, 36);
+    assert.ok(/letter-spacing:\s*0\.1em/.test(btn[0]),
+      'the word and the plain label inherit the button tracking; the sums assume it');
+  });
+
+  it('MEASURED: every label fits beside every price the button can draw', () => {
+    const { textWidthRpx } = require(path.join(ROOT, 'scripts/lib/font-advance.js'));
+    const w = (font, text, r) => textWidthRpx(path.join(ROOT, FONTS[font]), text, r.size, r.track, SCALE);
+
+    const plain = { size: rule('.add-label').size, track: 0.1 };        // inherited
+    const wordR = { size: rule('.add-word').size, track: 0.1 };         // inherited
+    const qualR = rule('.add-qual');
+    const priceR = { size: rule('.add-price').size, track: 0.1 };
+    const wasR = { size: rule('.add-was').size, track: 0.1 };
+    const saveR = { size: rule('.add-save').size, track: 0.04 };
+
+    // The price column is as wide as its widest row: the live price, or the
+    // struck compare-at plus its SAVE badge on the line above it.
+    const columns = [
+      ['¥44', w('price', '¥44', priceR)],
+      ['¥128', w('price', '¥128', priceR)],
+      ['¥44.50', w('price', '¥44.50', priceR)],
+      ['¥58 struck + SAVE ¥14',
+        w('price', '¥58', wasR) + w('toni', 'SAVE ¥14', saveR) + 10 * SCALE],
+      // The widest the column gets: three integer digits AND two decimals on
+      // both rows. This is the case that kills every single-line size.
+      ['¥158.50 struck + SAVE ¥30.50',
+        w('price', '¥158.50', wasR) + w('toni', 'SAVE ¥30.50', saveR) + 10 * SCALE],
+    ];
+    // A single label costs its own width; a stacked one costs the WIDER of its
+    // two lines, which is the whole reason it fits.
+    const single = (t) => [t, () => w('toni', t, plain)];
+    const stacked = (a, b) => [`${a} / ${b}`,
+      () => Math.max(w('toni', a, wordR), w('toni', b, qualR))];
+    const labels = [
+      single('ADD TO BASKET'), single('CHOOSE A SIZE'), single('SOLD OUT'),
+      single('PRE-ORDER'), single('加入购物车'), single('选择规格'),
+      // §170's arrivals
+      stacked('NEXT BATCH', 'TOMORROW'), stacked('NEXT BATCH', 'TODAY'),
+      stacked('NEXT BATCH', 'SEP 23'),
+      stacked('下批现做', '明天'), stacked('下批现做', '9月23日'),
+      // §195's windows, including the widest a 365-day cap allows
+      stacked('PRE-ORDER', '1 DAY'), stacked('PRE-ORDER', '10-14 DAYS'),
+      stacked('PRE-ORDER', '100-365 DAYS'),
+      stacked('预订', '10-14 天'), stacked('预订', '100-365 天'),
+    ];
+
+    const over = [];
+    for (const [label, width] of labels) {
+      for (const [priceName, priceW] of columns) {
+        const slack = ROOM - priceW - width();
+        if (slack < 0) over.push(`${label} beside ${priceName}: ${slack.toFixed(1)}rpx over`);
+      }
+    }
+    // ONE PAIR IS KNOWN NOT TO FIT, AND IT IS OLDER THAN §170: an ordinary
+    // `ADD TO BASKET` beside a deeply discounted, non-round price. That column
+    // is 231rpx of the 404 and the plain label is 223, so it was already 50rpx
+    // over before any appender existed — it simply had no min-width:0 to make
+    // it visible, and pushed the price off the screen instead. Recorded here
+    // rather than fixed: fixing it means resizing the compare-at row, which is
+    // not this change, and the case below proves it now degrades safely. A
+    // THIRD pair joining this list means something regressed.
+    const KNOWN = [
+      'ADD TO BASKET beside ¥158.50 struck + SAVE ¥30.50',
+      'CHOOSE A SIZE beside ¥158.50 struck + SAVE ¥30.50',
+    ];
+    const unexpected = over.filter(o => !KNOWN.some(k => o.startsWith(k)));
+    assert.deepStrictEqual(unexpected, [],
+      `these pairs do not fit in the ${ROOM}rpx the button has:\n      ` + unexpected.join('\n      '));
+    // And every STACKED label — what the appenders add, and what this change
+    // is for — fits outright, with nothing on the known list.
+    assert.ok(!over.some(o => o.includes(' / ')),
+      `a stacked label must fit every price column:\n      ` + over.join('\n      '));
+  });
+
+  it('when a label cannot fit, the PRICE is what survives', () => {
+    // The known pair above is only tolerable because of this. Before it, an
+    // over-wide label pushed the bar past the screen and took the price with
+    // it — which is the bug that started all of this.
+    assert.ok(/min-width:\s*0/.test(btn[0]),
+      'the button must be squeezable, or the bar grows past the 750 instead');
+    assert.ok(/flex-shrink:\s*0/.test(prices[0]),
+      'the price column never gives — a clipped price is a wrong price');
+    for (const sel of ['.add-label', '.add-word', '.add-qual']) {
+      const r = WXSS.match(new RegExp('^\\' + sel + ' \\{[^}]*\\}', 'm'));
+      assert.ok(r && /overflow:\s*hidden/.test(r[0]) && /text-overflow:\s*ellipsis/.test(r[0]),
+        `${sel} clips itself rather than pushing the price out`);
+    }
+  });
+
+  it('MEASURED: …and the price the button draws is the one every other surface does', () => {
+    // The 75rpx that made two attempts at this label too small.
+    const builder = JS.slice(JS.indexOf('recomputeDisplay()'));
+    assert.ok(/price: v > 0 \? money\(v\) : '—'/.test(builder),
+      'the button price goes through the page-wide money(), not its own toFixed(2)');
+    assert.ok(!/price: v > 0 \? '¥' \+ v\.toFixed\(2\)/.test(builder),
+      'and may not go back to forcing two decimals');
+    assert.strictEqual((JS.match(/^const money = /gm) || []).length, 1,
+      'one money() for the page — three local copies and a fourth rule is how they drifted');
+    const { textWidthRpx } = require(path.join(ROOT, 'scripts/lib/font-advance.js'));
+    const at = (t) => textWidthRpx(path.join(ROOT, FONTS.price), t, 36, 0.1, SCALE);
+    assert.ok(at('¥44.00') - at('¥44') > 60,
+      'the decimals are worth more than 60rpx — that is why this case exists');
+  });
+
   it('and the bare word it compares against is the one the label is built from', () => {
     // If the two ever drift the flag silently goes always-on or always-off,
     // and nothing else would catch it: the button would just be the wrong

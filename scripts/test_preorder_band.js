@@ -30,8 +30,11 @@
  * PRE-ORDER on the PDP, its button, its size rows and favourites — the same
  * product reading two ways depending on which screen you were on.
  *
- * §3 holds the width flag §170 needed and §195 had to widen, because
+ * §3 holds the width rule §170 needed and §195 had to widen, because
  * `PRE-ORDER · 2-4 DAYS` is wider than the label whose overflow was reported.
+ * That rule was a font step-down when §195 was written and is a stacked line
+ * now — the step-down never actually fit. What §3 pins is unchanged: whatever
+ * the treatment is, a window gets it on the same terms a date does.
  *
  * No network, no DB, no WeChat runtime: every function is lifted from source
  * and run in a vm sandbox.
@@ -261,13 +264,26 @@ it('shop.html reads it from the config the page already holds', () => {
 });
 
 /* ── 3 · the PDP buy button, which §170 already had to measure ──────────── */
-section('3 · the buy button’s width flag covers BOTH appenders');
+section('3 · the buy button’s width rule covers BOTH appenders');
 
-it('the flag is no longer gated on the batch kind alone', () => {
-  assert.ok(/addBtnLong: !soldOut && !hasVariants && !!preKind && addBtnLabel !== addBtnBare/
-    .test(PDPJS), 'a pre-order label with a window must trip the same step-down');
-  assert.ok(!/preKind === 'batch'\s*\n\s*&& addBtnLabel !==/.test(PDPJS),
-    'the old batch-only gate is gone, not merely added to');
+it('the rule is not gated on the batch kind alone', () => {
+  /* §195 WIDENED A FONT STEP-DOWN; THE STEP-DOWN IS NOW A STACK, and this case
+     keeps what it was written to protect — that a pre-order label carrying a
+     window is treated exactly like a batch label carrying a date, whatever
+     that treatment is.
+
+     The step-down is gone because it never worked: it was sized against `¥44`
+     while the button drew `¥44.00`, so `PRE-ORDER · 10-14 DAYS` was 6rpx over
+     the edge beside an ordinary price and 73 beside a discounted one. The
+     qualifier takes a line of its own instead, which needs only the wider of
+     the two pieces and fits every price this page can draw. §8 of
+     test_fresh_batch_eta.js measures that from the shipped font files. */
+  assert.ok(/addBtnLabel\.indexOf\(addBtnBare \+ BAND_SEP\) === 0/.test(PDPJS),
+    'the split is anchored on the bare word, whichever appender supplied the rest');
+  assert.ok(!/preKind === 'batch'[\s\S]{0,80}addBtnQual/.test(PDPJS),
+    'and it must not be re-gated on one kind');
+  assert.ok(!/addBtnLong/.test(PDPJS),
+    'the step-down it replaces is gone, not left beside it');
 });
 
 it('the bare word it compares against is built per kind', () => {

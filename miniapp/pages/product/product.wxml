@@ -288,8 +288,20 @@
         <view class="qty-val f-gothic">{{qty}}</view>
         <view class="qty-btn" bindtap="incQty">+</view>
       </view>
-      <button class="add-btn f-toni {{soldOut ? 'sold-out' : ''}} {{(!soldOut && hasVariants) ? 'no-price' : ''}} {{addBtnLong ? 'is-long' : ''}}" bindtap="addToCart" disabled="{{soldOut}}">
-        <text class="add-label">{{addBtnLabel}}</text>
+      <button class="add-btn f-toni {{soldOut ? 'sold-out' : ''}} {{(!soldOut && hasVariants) ? 'no-price' : ''}}" bindtap="addToCart" disabled="{{soldOut}}">
+        <!-- §170's arrival and §195's window both take a line UNDER the word
+             rather than sharing one with it. The joined form does not fit
+             beside this page's widest price at any readable size — the
+             reasoning and the measurements are on `addBtnQual` in product.js,
+             and §8 of scripts/test_fresh_batch_eta.js adds the strings up from
+             the shipped font files so a later resize cannot quietly clip it
+             again. A row no appender touched draws the single label it always
+             did, unchanged. -->
+        <view wx:if="{{addBtnQual}}" class="add-label-stack">
+          <text class="add-word">{{addBtnWord}}</text>
+          <text class="add-qual">{{addBtnQual}}</text>
+        </view>
+        <text wx:else class="add-label">{{addBtnLabel}}</text>
         <view wx:if="{{!soldOut && !hasVariants}}" class="add-prices">
           <view wx:if="{{priceWas}}" class="add-was-row">
             <text class="add-was f-aleo">{{priceWas}}</text>
