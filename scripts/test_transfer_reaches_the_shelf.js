@@ -162,6 +162,41 @@ const shelf = (storeId) => F.shelf(h.db, storeId, BANANA);
   ok(!/adjustStock|retail_store_stock/.test(mig),
      'IT MOVES NO STOCK ITSELF — it writes one integer per line and nothing else');
 
+  section('Part E · a stuck order can be unstuck by somebody');
+
+  /* THE ROUTE THAT HAD NO CALLER. `POST /:id/retry-dispatch` was built for
+     exactly the state this section is about and was wired to NO screen, so a
+     stuck order could not be unstuck by anybody — it sat at 'prepared' with
+     goods_state 'none', off the Pick list (whose run is sent/received) and off
+     the destination's Receive list (which filters on in_transit), for ever.
+     That is the same defect as the rest of this section one layer up: a thing
+     built, mapped, and never given a door. */
+  const stuck = (await ask({ product_id: null, product_name: 'Banana', sku: 'P-900', qty_requested: 1, unit: 'pcs' })).body.id;
+  await call('PUT', `/api/restock/${stuck}/status`, { status: 'prepared' });
+  await settle();
+  eq(row(stuck).goods_state, 'none', 'a refused dispatch leaves the order stuck, by construction');
+
+  // Link it the way the backfill does, then retry — which is the live path for
+  // every request already written before this shipped.
+  h.db.prepare('UPDATE restock_items SET product_id = ? WHERE restock_id = ?').run(BANANA, stuck);
+  const before = shelf(TIANHE);
+  r = await call('POST', `/api/restock/${stuck}/retry-dispatch`);
+  eq(r.status, 200, 'Send again goes through');
+  eq(row(stuck).goods_state, 'in_transit', 'and the goods finally leave');
+  eq(shelf(TIANHE), before - 1, 'one unit off the supplier’s shelf, exactly once');
+
+  // Idempotent: the common second tap must not move anything twice.
+  r = await call('POST', `/api/restock/${stuck}/retry-dispatch`);
+  eq(shelf(TIANHE), before - 1, 'tapping it again moves nothing — the goods had already gone');
+
+  const mm = fs.readFileSync(path.join(h.REPO, 'public/m.html'), 'utf8');
+  ok(/retry-dispatch/.test(mm), 'and the phone actually calls it — the route has a door now');
+  ok(/o\.status==='prepared' && \(!o\.goods_state\|\|o\.goods_state==='none'\)/.test(mm),
+     'the Pick screen collects exactly the stuck shape');
+  ok(/Did not leave the shelf/.test(mm), 'and says so in words, where the picker is');
+  ok(!/var\(--brick/.test(mm.slice(mm.indexOf('Did not leave the shelf') - 900, mm.indexOf('Did not leave the shelf') + 900)),
+     'in Amber, not Brick — it is work owed, not a fault by whoever is reading it');
+
   server.close();
   done();
 })().catch(e => { console.error(e); server.close(); process.exit(1); });
