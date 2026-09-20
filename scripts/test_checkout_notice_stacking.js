@@ -302,5 +302,70 @@ check('a notice enqueued while a modal is up waits its turn', () => {
   return open(inst).join(',') === 'storeMove';
 });
 
+
+/* ── A CLOSED OVERLAY MUST ACTUALLY LEAVE THE SCREEN ───────────────────────
+   Everything above this asserts the queue's BOOKKEEPING: which notice opens,
+   which is pulled up next, and what `coNoticePopupOpen()` believes. All of it
+   passed while all four notices were painted permanently over a live checkout,
+   because the bookkeeping and the pixels had come apart.
+
+   THE DEFECT, exactly. Each overlay closes by setting `hidden`, which the UA
+   stylesheet renders as `display:none`. But `.copo-overlay` and its siblings
+   declare `display:flex`, and an AUTHOR rule beats the UA one — so the
+   attribute went on, `coNoticePopupOpen()` read it and agreed the modal had
+   closed, and the dark panel stayed over the checkout with no way past it. The
+   customer tapped 知道了 and nothing happened. Confirmed in Chromium against
+   the shipped page, on all four notices AND on the checkout upsell, which is
+   built the same way and shows far more often.
+
+   THE RULE, GENERALLY, because a fifth overlay written next month will copy one
+   of these blocks: any overlay on this page that closes by setting `hidden` and
+   declares a display of its own must carry its own `[hidden]{display:none}`.
+   Asserted over EVERY such class rather than the five that were wrong, so the
+   next one cannot be added without it.
+
+   Why this is a source check and not a render: the slow shard is not run
+   (CLAUDE.md), so a Chromium assertion here would protect nothing. The browser
+   was used to FIND and to CONFIRM the defect; this holds the shape that caused
+   it. */
+console.log('\nA closed overlay is not still on the screen');
+
+// Classes given to an element that this page closes by setting .hidden.
+const HIDDEN_CLOSED_OVERLAYS = [
+  { cls: 'copo-overlay', what: 'pre-order + store-move notices' },
+  { cls: 'cob-overlay',  what: 'fresh-batch + next-local-batch notices' },
+  { cls: 'coof-overlay', what: 'the checkout upsell' },
+  { cls: 'lm-overlay',   what: 'the sign-in sheet' },
+  { cls: 'cnote-overlay', what: 'the add-to-cart notice' },
+];
+
+for (const o of HIDDEN_CLOSED_OVERLAYS) {
+  check(`.${o.cls} (${o.what}) hides when closed`, () => {
+    const declares = new RegExp(`\\.${o.cls}\\s*\\{[^}]*display\\s*:\\s*(?!none)[a-z-]+`).test(webSrc);
+    if (!declares) return true;                     // nothing to override
+    return new RegExp(`\\.${o.cls}\\[hidden\\]\\s*\\{[^}]*display\\s*:\\s*none`).test(webSrc);
+  });
+}
+
+// The list above is hand-kept, so it goes stale silently the moment somebody
+// adds an overlay. This catches the one they add: any class built into an
+// element on this page and given a display of its own, whose id is then closed
+// with .hidden, must be named above.
+check('no overlay closed by .hidden is missing from the list above', () => {
+  const named = new Set(HIDDEN_CLOSED_OVERLAYS.map(o => o.cls));
+  // id → class, from the `ov.id='x'; ov.className='y'` pattern every one uses
+  const built = [...webSrc.matchAll(/\.id\s*=\s*'([\w-]+)';\s*\w+\.className\s*=\s*'([\w-]+)'/g)];
+  for (const [, id, cls] of built) {
+    const closedByHidden = new RegExp(`#${id}'\\)[^\\n]*hidden\\s*=\\s*true`).test(webSrc)
+      || new RegExp(`\\$\\('#${id}'\\)`).test(webSrc);
+    const declares = new RegExp(`\\.${cls}\\s*\\{[^}]*display\\s*:\\s*(?!none)[a-z-]+`).test(webSrc);
+    if (closedByHidden && declares && !named.has(cls)) {
+      console.log(`      unlisted overlay: .${cls} (#${id})`);
+      return false;
+    }
+  }
+  return true;
+});
+
 console.log(failed ? `\n${failed} assertion(s) FAILED` : '\nAll assertions passed');
 process.exit(failed ? 1 : 0);
