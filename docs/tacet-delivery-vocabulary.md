@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.147 · 2026-09-20 · §197's LAST TWO STRINGS — THE PICK ROW LEARNS TO SAY SOMEBODY IS WAITING, AND BOTH ANNOUNCEMENTS ARE ASSEMBLED FROM LIVE FRAGMENTS.** A request reaching a supplier announced itself by push and nothing else; the row it lands on now carries a dot, and the dot's arrival toast needs words. **Neither is minted**: `发起补货申请` is lifted verbatim from `restock:request`'s own capability label, `正在等待` from `lib/push-events.js`, and `门店` / `发货` are everywhere in this system. No new character enters the vocabulary. See *Somebody is waiting on you*.
+
 **v1.146 · 2026-09-20 · §197's SECOND HALF — THE ASKER'S OWN SCREEN, TWO STRINGS COMPOSED AND EVERY OTHER WORD LIFTED WHOLE.** Ask for stock gained the companion Ask to buy has had since §175, and the two composed strings are its title and its empty state — **both built by swapping ONE noun in the live pair the sibling screen already ships**, which is the strongest form of composition this document recognises and the reason nothing else here is new. The three line states are live pairs taken verbatim from three different files. See *The asker's own list*.
 
 **v1.145 · 2026-09-20 · §197 GIVES THE STOCK REQUEST A SLIP AND COMPOSES ONE SENTENCE FOR THE SETTING THAT SWITCHES IT.** A shop-to-shop request printed nowhere; it prints at the supplying shop now. **The slip itself composes nothing** — `补货申请` is locked, `送到` is lifted from the phone's own `送到哪家门店？`, and `Items 件数` and `Note 备注` are already on the paper this one is modelled on, in `lib/feie.js`. The one new string is the help line under the printer setting, and it is composed out of the locked pair plus the shape §51's kitchen help already uses. See *The supplier's stock-request slip*.
@@ -7878,3 +7880,41 @@ screens that handle goods genuinely in motion, and is deliberately left there.
 asked of, and it is that shop's own `name_cn` / `name_en` read off its row —
 typed by whoever set the shop up, never translated here and never composed. A
 name is not vocabulary.
+
+
+## Somebody is waiting on you (§197)
+
+**WHAT THIS IS.** Two toasts, announcing that another shop has asked this one
+for stock. They ride the Pick row's dot — the row had no mark of any kind, so a
+push was the only thing that ever said a request had arrived, and a push is one
+moment on one phone that may be in a pocket.
+
+**THE DOT ITSELF HAS NO STRING**, which is the first thing to say about it. It
+is a 6px Sage dot and never a number: a count in the chrome turns arriving work
+into an alarm, and the number belongs on the screen it points at. That rule is
+already written on the tab bar's dots and is only being obeyed here.
+
+| Where | English | Chinese | Built from |
+|---|---|---|---|
+| toast, one | A shop has asked you for stock | 有门店向你发起补货申请 | **COMPOSED** — `发起补货申请` is VERBATIM the label `lib/capabilities.js` gives `restock:request`, the capability this very row is gated on; `有门店` is live in `public/m.html` (four places); `向你` is the plainest join. |
+| toast, several | {n} shops are waiting on you | {n} 家门店正在等待发货 | **COMPOSED** — `正在等待` is lifted from `lib/push-events.js`'s live `正在等待补货。`, with its noun swapped for `发货`, which is live across this file and the desktop admin. `家…门店` is the ordinary measure for shops and `{n}` is a numeral. |
+
+Composed by Claude Opus 5 on 2026-09-20 under the 2026-09-06 amendment,
+declared here in the same commit as the code that uses them.
+
+**WHY THE SINGULAR AND THE PLURAL ARE DIFFERENT SENTENCES rather than one with a
+number in it.** The Chinese is the reason. `1 家门店正在等待发货` is not wrong,
+but it reads as a report on a queue; the thing that has actually happened when
+the count goes from nothing to one is that a shop has ASKED, and the word for
+asking is the one the capability already uses. The kitchen's own arrival toast
+splits the same way and for the same reason, and the two now match.
+
+**NO CHIME, AND NO RED.** A chime belongs to a customer arriving; this is a
+colleague asking. The pill and the dot spend Sage, never Brick — an arriving
+request is work, not a fault, and `docs/tacet-delivery-vocabulary.md` has said
+what Brick is reserved for since it was first spent.
+
+**WHAT IS DELIBERATELY NOT SAID.** The toast names no shop and no product. It
+fires from a count, and a count cannot honestly name anything; the screen one
+tap away names both. A toast that guessed which shop would be wrong the first
+time two asked at once.

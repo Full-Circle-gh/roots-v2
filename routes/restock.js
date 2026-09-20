@@ -972,6 +972,29 @@ router.get('/api/restock', requireRestockAccess, (req, res) => {
     // span days (slow ferments, multi-step recipes), so a "stale" sent
     // request to the kitchen is still real work, not noise. The original
     // sweep was designed for the store→warehouse Fulfill tab only.
+    //
+    // AND SO IS EVERY OPEN TRANSFER BETWEEN TWO NAMED LOCATIONS (§197), for
+    // exactly the reason the kitchen already is. Ash raised a request from
+    // Yuexiu against Tianhe in the evening; by the time anyone at Tianhe opened
+    // the app, THIS SWEEP HAD ARCHIVED IT — `archived_at` stamped, off every
+    // active list, nobody having touched it. "there is no printing in tianhe
+    // for it, i dont see it on my mobile" is partly this line.
+    //
+    // The sweep's own comment says what it was built for: a single-day
+    // store→warehouse Fulfill tab. It is simply WRONG about a request one shop
+    // raises against another. A shop does not walk its freezer on demand, the
+    // supplier may be closed, and work that legitimately spans days is not
+    // stale — which is the same sentence the kitchen exclusion above rests on.
+    //
+    // NOTHING GROWS FOREVER BECAUSE OF THIS. Archiving an abandoned request is
+    // already a person's call: PUT /api/restock/:id/archive takes one, and
+    // POST /api/restock/archive-bulk takes a tab's worth. What is removed here
+    // is a CLOCK deciding that an unanswered request has stopped mattering.
+    //
+    // Both ends named is what identifies a real transfer. A row with only one
+    // end set cannot be routed to a Pick screen at all and is a legacy shape
+    // (#259 added the pair), so it keeps the old behaviour rather than being
+    // quietly rescued into a list nothing draws it on.
     // The shop's own midnight, not Guangzhou's (audit A-05).
     const SHIFT = require('../lib/business-date').sqlDayShiftForShop(tdb());
     tdb().prepare(`
@@ -980,6 +1003,7 @@ router.get('/api/restock', requireRestockAccess, (req, res) => {
        WHERE archived_at IS NULL
          AND status NOT IN ('prepared','delivered','draft')
          AND COALESCE(to_role, 'warehouse') != 'kitchen'
+         AND NOT (from_store_id IS NOT NULL AND to_store_id IS NOT NULL)
          AND date(created_at, '${SHIFT}') < date('now', '${SHIFT}')
     `).run();
   }
@@ -1336,6 +1360,52 @@ function _attachRecorded(order, items) {
  *
  * DECLARED BEFORE /:id, because /:id would otherwise match the word and answer
  * 404 for a row whose id is 'mine'. */
+/* ── IS THERE ANYTHING FOR ME TO PICK (§197) ────────────────────────────────
+ *
+ * THE MARK THE PICK ROW NEVER CARRIED. A request reaching a supplier announced
+ * itself by push and nothing else, and a push is one moment on one phone that
+ * may be in a pocket, on silent, or swiped away on a lock screen. After that
+ * the only way to find out was to open More, find Pick among thirty rows, and
+ * choose a location — which is to say, to already know. §175 made this argument
+ * for the kitchen's Ready dot and it is unchanged here.
+ *
+ * A COUNT, SO THE PHONE CAN COMPARE IT AND ANNOUNCE AN ARRIVAL. What the phone
+ * DRAWS is one 6px Sage dot, never a number: a count in the chrome turns
+ * arriving work into an alarm, and the number belongs on the screen it points
+ * at. The standing rule on the tab bar's dots, applied to a row.
+ *
+ * SCOPED TO THE SHELVES THIS OPERATOR CAN ACT ON. `req.scopeStores` is the same
+ * list the push fan-out narrows on (routes/push.js) — null means unscoped and
+ * therefore every location. A dot must never promise work behind a door this
+ * operator cannot open, which is the rule the Ready dot and the Inbox count
+ * both follow.
+ *
+ * WHAT COUNTS IS WHAT THE PICK SCREEN ITSELF LISTS, and it is deliberately the
+ * same clause: open, not yet dispatched, supplied by one of my shops. Two
+ * surfaces disagreeing about what is waiting is a dot that stays lit over an
+ * empty screen, which teaches people to stop believing it.
+ *
+ * DECLARED BEFORE /:id, for the reason kitchen-ready is. */
+router.get('/api/restock/pick-count', requireRestockAccess, tacetOnly, (req, res) => {
+  const scope = Array.isArray(req.scopeStores) ? req.scopeStores.filter(n => Number.isFinite(Number(n))) : null;
+  // An operator scoped to NO store can act nowhere; counting every shop's work
+  // for them would be the promise-behind-a-locked-door this endpoint avoids.
+  if (scope && scope.length === 0) return res.json({ success: true, data: { count: 0 } });
+  const where = scope ? ` AND from_store_id IN (${scope.map(() => '?').join(',')})` : '';
+  const row = tdb().prepare(`
+    SELECT COUNT(*) AS c
+      FROM restock_orders
+     WHERE archived_at IS NULL
+       AND status IN ('sent','received')
+       AND COALESCE(goods_state,'none') = 'none'
+       AND from_store_id IS NOT NULL
+       AND to_store_id IS NOT NULL
+       AND COALESCE(to_role,'warehouse') != 'kitchen'
+       AND COALESCE(from_role,'store')   != 'kitchen'${where}
+  `).get(...(scope || []));
+  res.json({ success: true, data: { count: row ? row.c : 0 } });
+});
+
 router.get('/api/restock/mine', requireRestockAccess, tacetOnly, (req, res) => {
   const me = (req.user && req.user.id) || null;
   if (!me) return res.json({ success: true, data: [] });

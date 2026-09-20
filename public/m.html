@@ -998,6 +998,7 @@ const state = {
   /* §197 — what became of what you asked another shop for. Named `rqs` for the
      Ask-for-stock screen's `rq` the way `mbs` is named for `mb`. */
   rqs:{list:null,tried:false,err:''},
+  pickWaiting:0,
   /* AN EXPENSE CLAIM (§87 step two). What one employee spent on the shop's
      behalf, before anybody has approved it — so nothing on this screen is money
      in the books, and the copy says so rather than leaving it to be assumed.
@@ -10648,6 +10649,11 @@ function pikDispatch(){
     }).catch(e=>{ failed.push({rs:o.rs_number||('#'+o.id),error:e.message}); })
   )).then(()=>{
     k.busy=false; k.result={failed:failed}; k.step='sent'; render();
+    /* §197 — the dot counts what is still waiting, so it has to be re-read the
+       moment some of it stops waiting. Without this the row stays lit over a
+       screen that says "Nothing to pick" until the next minute ticks, which is
+       exactly how a dot teaches people to stop believing it. */
+    pollPickWaiting();
     // The shelf this app counts has just changed underneath it.
     state.qs.itemsTried=false; loadQsItems(true);
     loadPik(true);
@@ -20415,11 +20421,68 @@ function pollKitchenReady(){
       if((state.kitchenReady>0)!==litBefore) render();
     }).catch(()=>{ _kitchenReadyBusy=false; });
 }
+/* ══ ANYTHING FOR ME TO PICK (§197) ════════════════════════════════════════
+   THE MARK THE PICK ROW NEVER CARRIED, and the third thing that made Ash's
+   request invisible: a push is one moment on one phone that may be in a pocket
+   or swiped away, and after it the only way to find out was to open More, find
+   Pick among thirty rows and choose a location — which is to say, to already
+   know.
+
+   MODELLED ON THE READY POLL ABOVE, DELIBERATELY, down to the announcement
+   rule: never on the first poll of a session, so a backlog of four waiting
+   requests lights the dot rather than toasting four times at a phone being
+   unlocked. No chime — a chime belongs to a customer arriving, and this is a
+   colleague asking.
+
+   ITS OWN fetch RATHER THAN api(), for the reason fetchUnseenOrders states: a
+   401 out of a heartbeat would navigate a phone sitting in a pocket to the
+   login screen. */
+const PICK_POLL_MS=60000;
+let _pickPrev=null, _pickBusy=false;
+function pollPickWaiting(){
+  if(!canRoute('pick')||_pickBusy) return;
+  _pickBusy=true;
+  return fetch('/api/restock/pick-count',{credentials:'same-origin',headers:{accept:'application/json'}})
+    .then(r=>r.ok?r.json():null)
+    .then(j=>{
+      _pickBusy=false;
+      const d=j&&j.data!==undefined?j.data:j;
+      if(!d) return;
+      const n=Number(d.count||0);
+      const arrived=_pickPrev!==null&&n>_pickPrev;
+      const litBefore=state.pickWaiting>0;
+      _pickPrev=n; state.pickWaiting=n;
+      if(arrived){
+        showToast(n>1?T(n+' shops are waiting on you',n+' 家门店正在等待发货')
+                     :T('A shop has asked you for stock','有门店向你发起补货申请'));
+        return;   // showToast has already repainted
+      }
+      /* Repaint only when the dot actually changes state — render() rewrites
+         the app in one innerHTML and would throw away the scroll position of
+         whatever list is being read. */
+      if((state.pickWaiting>0)!==litBefore) render();
+    }).catch(()=>{ _pickBusy=false; });
+}
+/* Gated on the row it points at, for the reason readyFromKitchen is: a dot must
+   never promise work behind a door this operator cannot open. */
+function waitingToPick(){ return canRoute('pick') ? Number(state.pickWaiting||0) : 0; }
+/* DECLARED ABOVE THE IIFE THAT READS THEM, and this is not tidiness. The block
+   below runs at LOAD, so `PICK_POLL_MS` has to be initialised by then — a const
+   read in its temporal dead zone throws a ReferenceError that aborts the whole
+   script and takes every declaration after it down with it. §197 shipped this
+   the wrong way round for exactly one test run; scripts/test_mobile_payment.js
+   caught it, reporting a symbol two thousand lines further down that never got
+   the chance to initialise. */
 (function startKitchenReadyPoll(){
   setTimeout(pollKitchenReady,2000);
   setInterval(pollKitchenReady,KITCHEN_READY_POLL_MS);
   window.addEventListener('focus',pollKitchenReady);
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) pollKitchenReady(); });
+  // §197 — the same four events, because it is the same kind of fact.
+  setTimeout(pollPickWaiting,2400);
+  setInterval(pollPickWaiting,PICK_POLL_MS);
+  window.addEventListener('focus',pollPickWaiting);
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) pollPickWaiting(); });
 })();
 
 /* ONE SOURCE, THE SERVER'S COUNT — and the second source this used to OR in is
@@ -20464,12 +20527,16 @@ function readyFromKitchen(){ return canSeeKitchenReady() && canRoute('kitchenrea
    which of thirty rows it meant — and on a role with no tab bar at all
    (flatNav) this list IS the home screen, so the row dot is the only one
    there is. */
-function moreRowDot(key){ return key==='kitchenready' ? readyFromKitchen()>0 : false; }
+function moreRowDot(key){ return key==='kitchenready' ? readyFromKitchen()>0
+                               : key==='pick'         ? waitingToPick()>0
+                               : false; }
 /* The More dot counts unseen REVIEWS, so it must not light for an operator who
    cannot open the Inbox: a dot promising work, over a folder that does not
    contain it. Unknown keys (a flattened bar's rows) carry no dot. */
 function tabDot(k){ return k==='orders' ? unseenOrders()
-  : k==='more' ? ((canRoute('inbox') && unseenReviews()>0) || readyFromKitchen()>0) : false; }
+  : k==='more' ? ((canRoute('inbox') && unseenReviews()>0) || readyFromKitchen()>0
+                  || waitingToPick()>0)   /* §197 — the folder says something inside wants you */
+  : false; }
 /* Unseen is one 6px Sage dot — never a count, never red. A count in the chrome
    turns arriving work into an alarm, and a record arriving is the CUSTOMER
    acting, not the system: it does not earn Dusk either. */
