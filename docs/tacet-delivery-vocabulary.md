@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.149 · 2026-09-20 · §200's BAND — THE THREE PAIRS THAT NAME AN ORDER WHICH NEVER LEFT THE SHELF.** A stuck transfer had no screen and therefore no words; it has both now. **Every fragment is live**: `已标记`, `扣减`, `已发出`, `点收`, `此前`, `发送中…` and `重新` are all in `public/m.html` or the desktop admin today, and `重新发货` is `重新打印`'s own shape with the verb this screen actually does. The two composed strings are assemblies of those words and nothing more. See *An order that never left the shelf*.
+
 **v1.148 · 2026-09-20 · §198's LAST TWO STRINGS — THE PICK ROW LEARNS TO SAY SOMEBODY IS WAITING, AND BOTH ANNOUNCEMENTS ARE ASSEMBLED FROM LIVE FRAGMENTS.** A request reaching a supplier announced itself by push and nothing else; the row it lands on now carries a dot, and the dot's arrival toast needs words. **Neither is minted**: `发起补货申请` is lifted verbatim from `restock:request`'s own capability label, `正在等待` from `lib/push-events.js`, and `门店` / `发货` are everywhere in this system. No new character enters the vocabulary. See *Somebody is waiting on you*.
 
 **v1.147 · 2026-09-20 · §198's SECOND HALF — THE ASKER'S OWN SCREEN, TWO STRINGS COMPOSED AND EVERY OTHER WORD LIFTED WHOLE.** Ask for stock gained the companion Ask to buy has had since §175, and the two composed strings are its title and its empty state — **both built by swapping ONE noun in the live pair the sibling screen already ships**, which is the strongest form of composition this document recognises and the reason nothing else here is new. The three line states are live pairs taken verbatim from three different files. See *The asker's own list*.
@@ -7987,3 +7989,33 @@ what Brick is reserved for since it was first spent.
 fires from a count, and a count cannot honestly name anything; the screen one
 tap away names both. A toast that guessed which shop would be wrong the first
 time two asked at once.
+
+
+## An order that never left the shelf (§200)
+
+**WHAT THIS NAMES.** A transfer whose paperwork says sent and whose stock never
+moved. It had no screen at all until §200's amendment — it is off the Pick run
+and off the Receive list — so it had never needed words, and the words it
+needs are unusually load-bearing: the person reading them has to understand
+that the SYSTEM is wrong, not them.
+
+| Where | English | Chinese | Source |
+|---|---|---|---|
+| band heading | Did not leave the shelf | 未实际发货 | **COMPOSED** — `实际` and `发货` are both live throughout `public/m.html`; the negation is the plainest form. Says what did not happen, not who failed to do it. |
+| band body | Marked sent, but the stock never moved, so the shop cannot count it in. | 已标记发出,但库存未实际扣减,门店无法点收。 | **COMPOSED** from live words only: `已标记` (7 live uses), `扣减` (8), `库存`, `门店` and `点收` — the last verbatim from `routes/restock.js`'s own `已点收` notification, so the band and the alert that closes the loop use one word. |
+| the button | Send again | 重新发货 | **LIFTED** — `重新打印` is live in `public/retail-admin/04-orders.js` (§51 registered it); `重新` carries, and `发货` is the verb this screen does instead of printing. |
+| the button, busy | Sending… | 发送中… | **LIVE PAIR** — `public/m.html`'s own `打印中…` shape with its live verb `发送`; the ellipsis is that pair's. |
+| toast, moved | Sent — the shop can count it in now | 已发出 — 门店可以点收了 | **COMPOSED** — `已发出` and `点收` both live, joined by the em dash this file's toasts already use. |
+| toast, already gone | Those goods had already left | 这批货此前已发出 | **COMPOSED** — `此前` (2 live uses) and `已发出`; it answers the second tap, and must read as reassurance rather than a refusal, because tapping twice is the ordinary thing a person does when they are not sure the first one worked. |
+
+Composed by Claude Opus 5 on 2026-09-20 under the 2026-09-06 amendment,
+declared here in the same commit as the code that uses them.
+
+**IT SAYS WHAT DID NOT HAPPEN, NEVER WHO DID NOT DO IT.** The picker did press
+Send; the system took the press and moved nothing. Wording that read as *"you
+did not send this"* would be false as well as unkind, and the English was
+written first with that constraint and the Chinese built to match it.
+
+**AMBER, NOT BRICK, AND THAT IS A VOCABULARY DECISION TOO.** Brick is reserved
+for a fault; this is work still owed. The colour and the words have to agree,
+or one of them is lying.

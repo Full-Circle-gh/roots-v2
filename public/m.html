@@ -940,7 +940,7 @@ const state = {
      walking, which the old screen never had to ask because it ran pinned to
      one. Named pik so it cannot be confused with the local `pk` in the
      packaging screen. */
-  pik:{list:null,tried:false,at:null,dest:'all',step:'list',busy:false,err:'',result:null},
+  pik:{list:null,stuck:[],tried:false,at:null,dest:'all',step:'list',busy:false,err:'',result:null},
   /* RECEIVING A TRANSFER (§48) — the STORE end of a stock movement, which is a
      different job from the `rcv*` supplier receiving above: that one counts a
      purchase order in from a supplier, this one counts in what another location
@@ -1484,6 +1484,27 @@ reg('xfrCount', ()=>{ state.xfr.step='count'; state.xfr.err=''; render(); });
 reg('xfrConfirm', ()=>xfrConfirm());
 reg('pikAt', id=>{ const k=state.pik; k.at=Number(id); k.tried=false; k.list=null; k.dest='all'; render(); });
 reg('pikDest', d=>{ state.pik.dest=String(d); render(); });
+/* SEND AGAIN (§200) — the only caller `POST /:id/retry-dispatch` has ever had.
+   The route was built for exactly this and wired to no screen, which is why a
+   stuck order could not be unstuck by anybody. It is idempotent: goods already
+   gone come back "already", and nothing moves twice. */
+reg('pikRetry', id=>{
+  const k=state.pik;
+  if(k.busy) return;
+  k.busy=true; k.err=''; render();
+  apiWrite('/api/restock/'+Number(id)+'/retry-dispatch',{}).then(j=>{
+    k.busy=false;
+    showToast((j&&j.stock_moved===false&&j.already)
+      ? T('Those goods had already left','这批货此前已发出')
+      : T('Sent — the shop can count it in now','已发出 — 门店可以点收了'));
+    k.tried=false; loadPik(true);
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    k.busy=false;
+    k.err=e.message||T('That did not send. Nothing has changed — try again.','未发送,数据未变 — 请重试。');
+    render();
+  });
+});
 reg('pikAll', key=>{ const L=pikVisible().find(x=>x.key===String(key)); if(L) pikWriteLine(L,null); });
 reg('pikShort', key=>pikAskShort(String(key)));
 reg('pikDispatch', ()=>pikDispatch());
@@ -10547,6 +10568,20 @@ function loadPik(force){
       return mine && ['sent','received'].indexOf(o.status)>=0
                   && (!o.goods_state||o.goods_state==='none');
     });
+    /* WHAT WENT NOWHERE (§200). An order whose dispatch did not apply sits at
+       status 'prepared' with goods_state 'none': the paperwork says it was
+       sent and the stock never left. It is on NO screen — not this one, whose
+       run is 'sent'/'received', and not the destination's Receive list, which
+       filters on 'in_transit' — so nothing can reach it and it stays that way
+       for ever. That is what happened to RS-260920-001, Ash's banana.
+       It belongs HERE, with the person who has to walk the freezer, and
+       nowhere else. */
+    k.stuck=rows.filter(o=>{
+      const mine=o.from_store_id ? o.from_store_id===k.at
+        : ((o.from_role||'store')==='store' && (o.to_role||'warehouse')==='warehouse');
+      return mine && o.status==='prepared' && (!o.goods_state||o.goods_state==='none')
+                  && (o.to_role||'warehouse')!=='kitchen';
+    });
     // Each in FULL, because the merged row needs every contributing line.
     return Promise.all(want.map(o=>api('/api/restock/'+o.id).then(d=>(d&&d.data)||d)))
       .then(full=>{ k.list=full; k.err=''; render(); });
@@ -11849,7 +11884,31 @@ function screenPick(){
   }
   if(!k.list) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const lines=pikLines();
-  if(!lines.length) return nothingYet(T('Nothing to pick','暂无拣货'),
+  /* THE BAND ABOVE THE RUN (§200) — orders whose stock never left, drawn
+     WHEREVER the pick list is, including over an empty one. Drawing it only
+     beside a run would hide it on exactly the morning it matters: a shop with
+     nothing to pick and one order that silently went nowhere. Amber, not
+     Brick: it is work owed, not a fault by the person reading it. */
+  const stuckHtml=(k.stuck&&k.stuck.length)?`<div style="padding:0 16px 4px">
+    <div style="border:1px solid var(--amber-ink);border-radius:12px;padding:14px 16px;background:var(--amber-tint)">
+      <div style="font-size:14px;font-weight:500;color:var(--amber-ink)">${
+        T('Did not leave the shelf','未实际发货')}</div>
+      <div style="font-size:13px;color:var(--amber-ink);margin-top:4px;line-height:1.5">${
+        T('Marked sent, but the stock never moved, so the shop cannot count it in.',
+          '已标记发出,但库存未实际扣减,门店无法点收。')}</div>
+      ${k.stuck.map(o=>`<div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+        <span style="flex:1;min-width:0">
+          <span class="num" style="display:block;font-size:14px;font-weight:500">${escAttr(o.rs_number||('#'+o.id))}</span>
+          <span style="display:block;font-size:12.5px;color:var(--amber-ink)">${
+            (o.item_count||0)} ${T('items','项')}${o.to_store_id?' · '+escAttr(rqStoreName(o.to_store_id)):''}</span>
+        </span>
+        <button class="row" ${k.busy?'disabled':''} style="min-height:38px;padding:8px 18px;border-radius:999px;width:auto;
+          display:inline-flex;border:1px solid var(--amber-ink);background:var(--surface-card);color:var(--amber-ink);font-size:14px"
+          onclick="APP.cmd('pikRetry',${o.id})">${k.busy?T('Sending…','发送中…'):T('Send again','重新发货')}</button>
+      </div>`).join('')}
+    </div></div>`:'';
+
+  if(!lines.length) return stuckHtml+nothingYet(T('Nothing to pick','暂无拣货'),
     T('Requests for this location to supply show up here.','需要本地点发货的申请会显示在这里。'));
 
   const dests=pikDests();
@@ -11879,7 +11938,7 @@ function screenPick(){
   }).join('');
 
   const allDone=lines.length>0&&lines.every(L=>L.done);
-  return `<div style="margin-top:12px;padding:0 16px 10px;font-size:13px;color:var(--text-secondary)">${
+  return `${stuckHtml}<div style="margin-top:12px;padding:0 16px 10px;font-size:13px;color:var(--text-secondary)">${
       escAttr(rqStoreName(k.at))} · <span class="num">${picked}</span>/${lines.length} ${T('picked','已拣')}</div>
     ${filter}${err}<div>${rows}</div>
     <div style="padding:16px;position:sticky;bottom:0;background:var(--surface-card);border-top:1px solid var(--border-default)">
