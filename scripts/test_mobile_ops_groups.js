@@ -71,12 +71,12 @@ it('eight groups, each with a heading in both languages', () => {
 });
 
 /* TWENTY-FIVE SINCE 2026-09-20, and the count moved for the one reason it may:
-   a row was ADDED, not lost, duplicated or swapped. `askstocksent` (§197, what
+   a row was ADDED, not lost, duplicated or swapped. `askstocksent` (§198, what
    became of what you asked ANOTHER SHOP for) joins Ask someone else as the
    group's third "answer coming back", beside `kitchenready` and `askbuysent`.
    It went in because Ask to buy had answered back since §175 and Ask for stock
    answered nothing — two rows under one heading behaving differently — which is
-   half of the report §197 exists for: "i dont see it on my mobile".
+   half of the report §198 exists for: "i dont see it on my mobile".
    It was twenty-four from 2026-09-18, when `askbuysent` (§175) joined the same
    group, and twenty-three from 2026-09-17, when `recipes` (§164's read-only
    screen) joined Making things. The set below is what actually guards this — a

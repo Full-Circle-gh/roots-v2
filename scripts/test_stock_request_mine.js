@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * WHAT BECAME OF WHAT YOU ASKED ANOTHER SHOP FOR (§197).
+ * WHAT BECAME OF WHAT YOU ASKED ANOTHER SHOP FOR (§198).
  *
  *   node scripts/test_stock_request_mine.js
  *

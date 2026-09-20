@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * THE SUPPLIER'S PAPER COPY — the slip that prints when one shop asks another
- * for stock (§197).
+ * for stock (§198).
  *
  *   node scripts/test_transfer_print.js
  *

@@ -43,6 +43,21 @@
       </view>
     </view>
 
+    <!-- The tenant's own notices about what is in this order — "stand it in
+         the fridge overnight once it arrives". The card that raised each of
+         these was shown at the add, days before the box turns up; this is the
+         copy the customer can come back to. One per notice, naming the items it
+         covers. Same frame as the banners above, in the calm colour: this is
+         care information, not a warning about the delivery. -->
+    <view wx:for="{{careNotes}}" wx:key="id" class="care-note-banner">
+      <view class="care-note-icon">!</view>
+      <view class="care-note-body">
+        <view wx:if="{{item.line}}" class="care-note-line f-bear">{{item.line}}</view>
+        <view wx:if="{{item.sub}}" class="care-note-sub">{{item.sub}}</view>
+        <view wx:if="{{item.items}}" class="care-note-items f-toni">{{item.items}}</view>
+      </view>
+    </view>
+
     <!-- Local (same-city) delivery ETA — Guangzhou orders have no waybill, so
          the store sets an estimated arrival time the customer can see here. -->
     <view wx:if="{{etaLabel}}" class="eta-banner">

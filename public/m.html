@@ -995,7 +995,7 @@ const state = {
      being built and this is a record coming back, and a screen reset that
      empties the basket must not also throw away the answer. */
   mbs:{list:null,tried:false,err:''},
-  /* §197 — what became of what you asked another shop for. Named `rqs` for the
+  /* §198 — what became of what you asked another shop for. Named `rqs` for the
      Ask-for-stock screen's `rq` the way `mbs` is named for `mb`. */
   rqs:{list:null,tried:false,err:''},
   pickWaiting:0,
@@ -4958,7 +4958,7 @@ const MORE_GROUPS=[
        them. The app itself is deleted (§48 step 4). */
     ['askkitchen','chef-hat','Ask the kitchen','向厨房下单'],
     ['askstock','package','Ask for stock','申请补货'],
-    /* §197 — THE ANSWER COMING BACK, and the row whose absence was half of the
+    /* §198 — THE ANSWER COMING BACK, and the row whose absence was half of the
        report that built it: "i dont see it on my mobile". Ask to buy has had
        its companion since §175 and Ask for stock had nothing, so two rows under
        one heading behaved differently for no reason anybody could see. It sits
@@ -9786,7 +9786,7 @@ function screenAskBuySent(){
   }).join('')}</div>`;
 }
 
-/* ══ WHAT BECAME OF WHAT YOU ASKED ANOTHER SHOP FOR (§197) ═════════════════
+/* ══ WHAT BECAME OF WHAT YOU ASKED ANOTHER SHOP FOR (§198) ═════════════════
    Ash, on the request Yuexiu raised against Tianhe: "i dont see it on my
    mobile". He was right, and there was nothing to see — between pressing Send
    and the supplier dispatching, a stock request appeared on no screen this app
@@ -10649,7 +10649,7 @@ function pikDispatch(){
     }).catch(e=>{ failed.push({rs:o.rs_number||('#'+o.id),error:e.message}); })
   )).then(()=>{
     k.busy=false; k.result={failed:failed}; k.step='sent'; render();
-    /* §197 — the dot counts what is still waiting, so it has to be re-read the
+    /* §198 — the dot counts what is still waiting, so it has to be re-read the
        moment some of it stops waiting. Without this the row stays lit over a
        screen that says "Nothing to pick" until the next minute ticks, which is
        exactly how a dot teaches people to stop believing it. */
@@ -20065,7 +20065,7 @@ const ROUTE_CAP={
      deliberately NOT a purchasing key: reading what became of your own ask is
      not reading the buying department. */
   askbuysent:'production:request',
-  /* §197. The same key the screen it answers for carries, and the same key the
+  /* §198. The same key the screen it answers for carries, and the same key the
      route scopes itself with — somebody who may ask may read back what they
      asked. Never `restock:pick`: this is the ASKER's side. */
   askstocksent:'restock:request',
@@ -20421,7 +20421,7 @@ function pollKitchenReady(){
       if((state.kitchenReady>0)!==litBefore) render();
     }).catch(()=>{ _kitchenReadyBusy=false; });
 }
-/* ══ ANYTHING FOR ME TO PICK (§197) ════════════════════════════════════════
+/* ══ ANYTHING FOR ME TO PICK (§198) ════════════════════════════════════════
    THE MARK THE PICK ROW NEVER CARRIED, and the third thing that made Ash's
    request invisible: a push is one moment on one phone that may be in a pocket
    or swiped away, and after it the only way to find out was to open More, find
@@ -20469,7 +20469,7 @@ function waitingToPick(){ return canRoute('pick') ? Number(state.pickWaiting||0)
 /* DECLARED ABOVE THE IIFE THAT READS THEM, and this is not tidiness. The block
    below runs at LOAD, so `PICK_POLL_MS` has to be initialised by then — a const
    read in its temporal dead zone throws a ReferenceError that aborts the whole
-   script and takes every declaration after it down with it. §197 shipped this
+   script and takes every declaration after it down with it. §198 shipped this
    the wrong way round for exactly one test run; scripts/test_mobile_payment.js
    caught it, reporting a symbol two thousand lines further down that never got
    the chance to initialise. */
@@ -20478,7 +20478,7 @@ function waitingToPick(){ return canRoute('pick') ? Number(state.pickWaiting||0)
   setInterval(pollKitchenReady,KITCHEN_READY_POLL_MS);
   window.addEventListener('focus',pollKitchenReady);
   document.addEventListener('visibilitychange',()=>{ if(!document.hidden) pollKitchenReady(); });
-  // §197 — the same four events, because it is the same kind of fact.
+  // §198 — the same four events, because it is the same kind of fact.
   setTimeout(pollPickWaiting,2400);
   setInterval(pollPickWaiting,PICK_POLL_MS);
   window.addEventListener('focus',pollPickWaiting);
@@ -20535,7 +20535,7 @@ function moreRowDot(key){ return key==='kitchenready' ? readyFromKitchen()>0
    contain it. Unknown keys (a flattened bar's rows) carry no dot. */
 function tabDot(k){ return k==='orders' ? unseenOrders()
   : k==='more' ? ((canRoute('inbox') && unseenReviews()>0) || readyFromKitchen()>0
-                  || waitingToPick()>0)   /* §197 — the folder says something inside wants you */
+                  || waitingToPick()>0)   /* §198 — the folder says something inside wants you */
   : false; }
 /* Unseen is one 6px Sage dot — never a count, never red. A count in the chrome
    turns arriving work into an alarm, and a record arriving is the CUSTOMER

@@ -2,6 +2,7 @@
 // Tiny event-emitter so the cart tab can update its badge without polling.
 
 const api = require('./api');
+const cartNotice = require('./cart-notice');
 
 function absUrl(u) {
   if (!u) return '';
@@ -88,6 +89,15 @@ function add(product, qty = 1, options = []) {
     });
   }
   save();
+  // The tenant's own warning about this product ("stand it in the fridge
+  // overnight"), if it carries one and this customer has not met it yet. Raised
+  // HERE rather than at each of the eleven call sites because a notice that
+  // fires from the product page and stays silent from the shop grid or the
+  // favourites tab is worse than no notice: the customer who added without ever
+  // opening the product is the one who has not read it anywhere else. The card
+  // itself is drawn by components/cart-notice on whatever screen is carrying
+  // it, so an add made from a screen without one is late rather than lost.
+  cartNotice.queue(product);
 }
 
 function setQty(key, qty) {

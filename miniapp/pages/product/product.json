@@ -6,6 +6,7 @@
   "usingComponents": {
     "cs-button": "/components/cs-button/cs-button",
     "popup-manager": "/components/popup-manager/popup-manager",
+    "cart-notice": "/components/cart-notice/cart-notice",
     "product-blocks": "/components/product-blocks/product-blocks"
   }
 }

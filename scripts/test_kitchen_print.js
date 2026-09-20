@@ -345,11 +345,11 @@ const printStatus = (id) =>
   eq(prints.length, 0, 'and posts nothing');
   cfg('printer.kitchen_sn', '550540977');
 
-  /* THIS ASSERTION IS REWRITTEN BY §197, AND IT IS NAMED RATHER THAN QUIETLY
+  /* THIS ASSERTION IS REWRITTEN BY §198, AND IT IS NAMED RATHER THAN QUIETLY
      EDITED. It read: a reprint of a store transfer answers 403. That refusal
      was right for as long as a transfer HAD NO SLIP — the failed print then
      stamped print_status on a row that was never owed one, which is the defect
-     it was added for. §197 gave a transfer its own slip on the supplying shop's
+     it was added for. §198 gave a transfer its own slip on the supplying shop's
      printer, so refusing is no longer the honest answer and the endpoint prints
      the other roll instead.
 

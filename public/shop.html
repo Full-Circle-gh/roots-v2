@@ -1189,6 +1189,35 @@
     /* Drop-ship line — the supplier ships this item straight to the customer,
        so it arrives in its own parcel, separately from the rest of the order.
        Shared across the cart page, checkout review and post-order detail. */
+    /* Add-to-cart notice — the tenant's own warning about a product. The card
+       reuses the checkout notice's overlay proportions (.copo-*) so the web
+       shop shows one kind of notice card, not two; the strip is the PDP's
+       standing copy of the same words. */
+    .pd-care{display:flex;gap:10px;align-items:flex-start;margin:14px 0 0;padding:12px 14px;border-left:3px solid var(--olive);background:rgba(217,230,179,.28);border-radius:4px;}
+    .pd-care .gly{font-weight:700;color:var(--olive);line-height:1.3;}
+    .pd-care .cnt{flex:1;min-width:0;}
+    .pd-care .t{font-weight:700;font-size:14px;line-height:1.3;}
+    .pd-care .b{font-size:13px;line-height:1.5;margin-top:3px;white-space:pre-wrap;}
+    .cnote-overlay{position:fixed;inset:0;z-index:1400;background:rgba(26,35,20,.55);display:flex;align-items:center;justify-content:center;padding:0 24px;}
+    /* `display:flex` above is an AUTHOR rule and beats the UA stylesheet's
+       `[hidden]{display:none}`, so an overlay that sets .hidden=true to close
+       needs this line or it never closes. The sign-in overlay carries the same
+       rule for the same reason. */
+    .cnote-overlay[hidden]{display:none;}
+    .cnote-card{width:100%;max-width:340px;background:#FFFCF7;border-radius:16px;padding:0 0 18px;box-shadow:0 12px 30px rgba(26,35,20,.38);text-align:center;overflow:hidden;}
+    .cnote-hero{height:66px;background:linear-gradient(135deg,#e9efd0 0%,#d9e6b3 100%);position:relative;margin-bottom:24px;}
+    .cnote-badge{position:absolute;left:50%;bottom:-18px;transform:translateX(-50%);width:48px;height:48px;border-radius:50%;background:#FFFCF7;box-shadow:0 4px 10px rgba(26,35,20,.16);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;color:var(--olive);}
+    .cnote-kicker{font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--olive);padding:0 24px;margin-bottom:4px;}
+    .cnote-title{font-size:20px;line-height:1.15;padding:0 24px;margin-bottom:10px;}
+    .cnote-body{font-size:14px;line-height:1.55;color:#2a3a22;padding:0 24px;margin-bottom:16px;white-space:pre-wrap;}
+    .cnote-go{display:block;width:calc(100% - 40px);margin:0 20px;padding:13px 0;background:#1a2314;color:var(--lime,#c3e000);border:0;border-radius:8px;font-size:14px;letter-spacing:.04em;cursor:pointer;}
+    /* The order page's restatement of the same notice — care information, so it
+       takes the olive rule rather than the berry one the delay banner uses. */
+    .co-care{display:flex;gap:10px;align-items:flex-start;margin:0 0 10px;padding:12px 14px;border-left:3px solid var(--olive);background:rgba(217,230,179,.28);border-radius:4px;}
+    .co-care .gly{font-weight:700;color:var(--olive);}
+    .co-care .t{font-weight:700;font-size:14px;line-height:1.3;}
+    .co-care .b{font-size:13px;line-height:1.5;margin-top:3px;white-space:pre-wrap;}
+    .co-care .who{font-size:11px;letter-spacing:.04em;color:var(--olive);margin-top:5px;}
     .sup-tag{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--olive);margin-top:3px;line-height:1.3;}
     .sup-tag .gly{font-weight:700;margin-right:3px;}
     .co-line.tot{font-family:var(--bf-gothic);font-size:24px;border-top:1.5px solid var(--ink);margin-top:8px;padding-top:10px;letter-spacing:.03em;}
@@ -1655,7 +1684,79 @@ function cartBadge(){const n=cartCount();const lbl=n>99?'99+':String(n);
   const t=$('#tabCartBadge');if(t){t.textContent=lbl;t.hidden=n<=0;}}
 function lineKey(pid,choices){return pid+':'+(choices||[]).slice().sort((a,b)=>a-b).join(',');}
 function cartAdd(line){const c=cartGet();const k=lineKey(line.product_id,line.choices);
-  const ex=c.find(l=>l.key===k);if(ex)ex.qty+=line.qty;else c.push({...line,key:k});cartSave(c);}
+  const ex=c.find(l=>l.key===k);if(ex)ex.qty+=line.qty;else c.push({...line,key:k});cartSave(c);
+  // The tenant's add-to-cart notice, if this product carries one. Raised HERE,
+  // at the one door every add goes through, for the reason the mini app puts it
+  // inside cart.add(): a notice that fires from the product page and stays
+  // silent from the grid's + is worse than none, because the customer who never
+  // opened the page is the one who has not read it anywhere else.
+  cnQueue(line.cart_notice);}
+
+/* ── ADD-TO-CART NOTICES ───────────────────────────────────────────────────
+   The web half of miniapp/utils/cart-notice.js, rule for rule — BOTH CLIENTS
+   OR NEITHER (§196): the same bottle behaving differently in the mini app and
+   the web shop is exactly the drift the checkout-notice suite exists to catch.
+   Which notice a product carries is the server's answer (`cart_notice` on the
+   payload); this file only decides whether it has been seen and draws the card.
+   Seen is per VERSION — `cart_notice_seen:<id>:<updated_at>` — so a tenant who
+   fixes a wrong word ships it to a browser that will show it once more, while
+   an untouched notice still shows exactly once. */
+var cnPending=[];
+function cnSeenKey(n){return 'cart_notice_seen:'+n.id+':'+(n.updated_at||0);}
+function cnHasSeen(n){try{return !!localStorage.getItem(cnSeenKey(n));}catch{return false;}}
+function cnMarkSeen(n){try{localStorage.setItem(cnSeenKey(n),String(Date.now()));}catch{/* private mode — showing it twice is the acceptable failure */}}
+function cnQueue(n){
+  if(!n||!n.id)return false;
+  if(cnHasSeen(n))return false;
+  if(cnPending.some(x=>x.id===n.id))return true;   // two of the same bottle, one card
+  cnPending.push(n);
+  return true;
+}
+// Marked seen as it leaves, and a notice seen since it was queued is walked
+// PAST rather than stopping the queue — §196's rule, same reason.
+function cnTake(){
+  while(cnPending.length){
+    const n=cnPending.shift();
+    if(cnHasSeen(n))continue;
+    cnMarkSeen(n);
+    return n;
+  }
+  return null;
+}
+// Show the next queued notice, if any. `kicker` is the confirmation the caller
+// would otherwise have toasted — passed in rather than composed here, because
+// the size picker says something different from an in-stock add (§108) and this
+// card must not be where the two start disagreeing.
+function cnShowNext(kicker){
+  const n=cnTake(); if(!n)return false;
+  const L=state.lang;
+  const title=pick(n.title_en,n.title_cn), body=pick(n.body_en,n.body_cn);
+  if(!title&&!body)return cnShowNext(kicker);
+  let ov=$('#cnotePop');
+  if(!ov){ov=document.createElement('div');ov.id='cnotePop';ov.className='cnote-overlay';document.body.appendChild(ov);}
+  ov.innerHTML=`<div class="cnote-card">
+    <div class="cnote-hero"><div class="cnote-badge">!</div></div>
+    ${kicker?`<div class="cnote-kicker">${esc(kicker)}</div>`:''}
+    ${title?`<div class="cnote-title">${esc(title)}</div>`:''}
+    ${body?`<div class="cnote-body">${esc(body)}</div>`:''}
+    <button class="cnote-go" id="cnoteGot">${L==='cn'?'知道了':'Got it'}</button>
+  </div>`;
+  ov.hidden=false;
+  // Closing pulls the next one up rather than dropping it: one gesture can add
+  // two flagged products, and the second card must wait rather than vanish.
+  const close=()=>{ov.hidden=true;if(cnPending.length)cnShowNext('');};
+  ov.onclick=e=>{if(e.target===ov)close();};
+  $('#cnoteGot').addEventListener('click',close);
+  return true;
+}
+// The strip the PDP shows permanently — the card is how a customer is TOLD, and
+// this is where they look it up afterwards.
+function cnStrip(n){
+  if(!n)return '';
+  const title=pick(n.title_en,n.title_cn), body=pick(n.body_en,n.body_cn);
+  if(!title&&!body)return '';
+  return `<div class="pd-care"><span class="gly">!</span><div class="cnt">${title?`<div class="t">${esc(title)}</div>`:''}${body?`<div class="b">${esc(body)}</div>`:''}</div></div>`;
+}
 
 // Cart icon / add-to-cart confirmation now route to the full-page Cart (#/cart),
 // which mirrors the mini-app Cart tab. The slide-up drawer was removed.
@@ -2997,9 +3098,16 @@ function coCloseOffers(){const ov=$('#coOffers');if(ov)ov.hidden=true;if(co._off
 async function coOfferAdd(id){
   const o=(co._offers||[]).find(x=>Number(x.id)===id); if(!o)return;
   if(o.has_options){co.offersDone=true;coCloseOffers();location.hash='#/product/'+id;return;}  // needs a choice — go to PDP
-  cartAdd({product_id:o.id,qty:1,choices:[],name:pick(o.name_en,o.name_cn),price:Number(o.effective_price)||Number(o.price)||0,image:o.image_data||o.image_url||'',optLabel:'',ship_from_supplier:!!o.ship_from_supplier});
+  cartAdd({product_id:o.id,qty:1,choices:[],name:pick(o.name_en,o.name_cn),price:Number(o.effective_price)||Number(o.price)||0,image:o.image_data||o.image_url||'',optLabel:'',ship_from_supplier:!!o.ship_from_supplier,cart_notice:o.cart_notice});
   co._offers=(co._offers||[]).filter(x=>Number(x.id)!==id); co._offerSig='';   // can't re-offer; cart changed
-  toast(state.lang==='cn'?'已加入 🌱':'Added 🌱');
+  const said=state.lang==='cn'?'已加入 🌱':'Added 🌱';
+  // THE CHECKOUT IS NOT THIS CARD'S SURFACE WHILE A CHECKOUT NOTICE IS UP.
+  // §196 built a queue there precisely because a second overlay landing on the
+  // first buries it, and that queue knows nothing about this one — so an upsell
+  // add made from behind a delivery notice toasts instead, and the notice it
+  // queued waits for a screen that can show it properly. The order page
+  // restates it either way.
+  if(coNoticePopupOpen()||!cnShowNext(said))toast(said);
   await coQuote();        // full re-quote (fees + slots + stock-gate)
   coRenderOfferList();
 }
@@ -3265,6 +3373,17 @@ async function renderOrderDetail(id){
     const sup=it.ship_from_supplier?supTag():'';
     return `<div class="co-line"><span>${esc(pick(it.name_en,it.name_cn))} ×${it.qty}${sup}</span><span>${money(Number(it.line_total)||Number(it.unit_price)*it.qty||0)}</span></div>`;
   }).join('');
+  // The tenant's add-to-cart notices, restated on the order — and this is the
+  // surface that does the work. "Stand it in the fridge overnight once it
+  // arrives" is a fact about a box landing on Thursday; the card that carried it
+  // was closed on Monday by somebody choosing flavours. Server-grouped one per
+  // notice, so a case of six kombuchas is one line and not six.
+  const careRows=(Array.isArray(o.cart_notices)?o.cart_notices:[]).map(n=>{
+    const t=pick(n.title_en,n.title_cn), b=pick(n.body_en,n.body_cn);
+    if(!t&&!b)return '';
+    const who=(n.items||[]).map(it=>pick(it.name_en,it.name_cn)).filter(Boolean).join(' · ');
+    return `<div class="co-care"><span class="gly">!</span><div class="cnt">${t?`<div class="t">${esc(t)}</div>`:''}${b?`<div class="b">${esc(b)}</div>`:''}${who?`<div class="who">${esc(who)}</div>`:''}</div></div>`;
+  }).join('');
   const isPickup=o.fulfillment_type==='pickup';
   const where=isPickup
     ? [pick(o.pickup_store_name_en,o.pickup_store_name_cn),o.pickup_store_address].filter(Boolean).map(esc).join('<br>')
@@ -3289,7 +3408,7 @@ async function renderOrderDetail(id){
   v.innerHTML=`<div class="wrap"><div class="co">
     <div class="crumb"><a href="#/orders">${cn?'我的订单':'My orders'}</a> / ${esc(o.order_no||('#'+o.id))}</div>
     <h1 style="display:flex;justify-content:space-between;align-items:center;gap:12px">${esc(o.order_no||('#'+o.id))}<span class="oc-st st-${esc(o.status)}">${esc(orderStatusLabel(o.status))}</span></h1>
-    <div class="co-sec"><h3>${cn?'商品':'Items'}</h3>${itemRows||'<div class="co-line">—</div>'}</div>
+    <div class="co-sec"><h3>${cn?'商品':'Items'}</h3>${careRows}${itemRows||'<div class="co-line">—</div>'}</div>
     <div class="co-sec"><h3>${isPickup?(cn?'自提门店':'Pickup store'):(cn?'配送至':'Delivering to')}</h3>
       <div style="font-size:14px;line-height:1.5">${where||'—'}</div>
       ${slot?`<div style="font-size:13px;color:var(--muted);margin-top:6px">${slot}</div>`:''}
@@ -5373,17 +5492,25 @@ function slAddRaw(raw,srcEl){
   const kind=slStock(raw).kind;
   cartAdd({product_id:raw.id,qty:1,choices:[],
     name:pick(raw.name_en,raw.name_cn),
-    price,image:slImg(raw),size:raw.size||'',optLabel:'',ship_from_supplier:!!raw.ship_from_supplier});
+    price,image:slImg(raw),size:raw.size||'',optLabel:'',ship_from_supplier:!!raw.ship_from_supplier,
+    cart_notice:raw.cart_notice});
   const flew=flyToCart(srcEl,slImg(raw));
   // A reservation always gets its own toast (even alongside the animation) so a
   // quick-add never looks like a normal in-stock add — and since §108 it uses
   // the same word the card's own band does, so tapping NEXT BATCH cannot answer
   // "pre-order".
-  if(kind){toast(kind==='batch'
-    ?(state.lang==='cn'?'已加入购物车，下批现做 🌱':'Added — next batch 🌱')
-    :(state.lang==='cn'?'已预订，加入购物车 🌱':'Added — pre-order 🌱'));return;}
+  const said=kind
+    ?(kind==='batch'
+      ?(state.lang==='cn'?'已加入购物车，下批现做 🌱':'Added — next batch 🌱')
+      :(state.lang==='cn'?'已预订，加入购物车 🌱':'Added — pre-order 🌱'))
+    :(state.lang==='cn'?'已加入 🌱':'Added 🌱');
+  // An add-to-cart notice takes the screen and CARRIES that same line as its
+  // kicker, rather than letting a toast fire underneath a modal saying the same
+  // thing twice. Nothing is lost — the confirmation moves onto the card.
+  if(cnShowNext(said))return;
+  if(kind){toast(said);return;}
   if(flew)return;                                 // animation replaces toast when it runs
-  toast(state.lang==='cn'?'已加入 🌱':'Added 🌱');
+  toast(said);
 }
 // Fly the product image from the tapped + button into the cart icon (header or mobile tabbar).
 function flyToCart(srcEl,imgUrl){
@@ -5715,6 +5842,7 @@ async function renderProduct(id){
           ? (state.lang==='cn'?'当前缺货，可预订，整单等补货后一并发货。':'Out of stock now — pre-order; your whole order ships together once it’s back in stock.')
           : (state.lang==='cn'?'当前缺货，外地可预订，下批/补货后发出。':'Out of stock now — orderable outside Guangzhou; ships on the next batch / restock.')}</div>`:''}
         ${rc>0?`<div class="rating"><span class="stars">${'★'.repeat(Math.round(avg))}<span class="off">${'★'.repeat(5-Math.round(avg))}</span></span>${avg.toFixed(1)} · ${rc} ${state.lang==='cn'?'条评价':'reviews'}</div>`:''}
+        ${cnStrip(p.cart_notice)}
         <div class="pd-buy">
           ${ss.soldOut
             ? `<button class="btn-primary" id="addBtn" disabled>${state.lang==='cn'?'已售罄':'Sold out'}</button>`
@@ -5815,8 +5943,10 @@ async function renderProduct(id){
       popts.forEach(o=>selIds(o).forEach(cid=>{const c=findChoice(o,cid); if(c) chosen.push({...c,question:pick(o.question_en,o.question_cn)});}));
       cartAdd({product_id:p.id,qty,choices:chosen.map(c=>Number(c.id)),
         name:pick(p.name_en,p.name_cn),price:unit(),image:thumb(p),
-        optLabel:chosen.map(c=>{const v=pick(c.label_en,c.label_cn); if(!v)return''; return c.question?c.question+': '+v:v;}).filter(Boolean).join(' · '),ship_from_supplier:!!p.ship_from_supplier});
-      toast(state.lang==='cn'?'已加入购物车 🌱':'Added to cart 🌱');
+        optLabel:chosen.map(c=>{const v=pick(c.label_en,c.label_cn); if(!v)return''; return c.question?c.question+': '+v:v;}).filter(Boolean).join(' · '),ship_from_supplier:!!p.ship_from_supplier,
+        cart_notice:p.cart_notice});
+      const said=state.lang==='cn'?'已加入购物车 🌱':'Added to cart 🌱';
+      if(!cnShowNext(said))toast(said);
       return true;
     }
 
@@ -5916,13 +6046,17 @@ async function renderProduct(id){
         cartAdd({product_id:m.id,qty,choices:[],
           name:pick(m.name_en,m.name_cn),price:slEff(m),
           image:slImg(m)||thumb(p),size:m.size||m.variant_label||'',optLabel:'',
-          ship_from_supplier:!!m.ship_from_supplier});
+          ship_from_supplier:!!m.ship_from_supplier,
+          // The SIZE's own notice: the server stamps every sibling, and the
+          // 500ml that needs the fridge need not be the one whose page is open.
+          cart_notice:m.cart_notice});
         const vKind=slStock(m).kind;   // §108 — this size's own word, as the sheet drew it
-        toast(vKind==='batch'
+        const vSaid=vKind==='batch'
           ? (state.lang==='cn'?'已加入购物车，下批现做 🌱':'Added — next batch 🌱')
           : vKind==='preorder'
             ? (state.lang==='cn'?'已预订，加入购物车 🌱':'Added — pre-order 🌱')
-            : (state.lang==='cn'?'已加入购物车 🌱':'Added to cart 🌱'));
+            : (state.lang==='cn'?'已加入购物车 🌱':'Added to cart 🌱');
+        if(!cnShowNext(vSaid))toast(vSaid);
       });
     }
     $('#addBtn').addEventListener('click',()=>{

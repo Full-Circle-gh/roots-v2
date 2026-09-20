@@ -161,7 +161,7 @@ it('B moved no row, and the 收货 collision it left open is now CLOSED', () => 
      GROUP'S HEADING rather than by a count of groups, so adding a ninth does
      not silently narrow what this counts. */
   const ops = groups.slice(groups.indexOf("h:['Take an order'"), groups.indexOf("h:['Marketing'"));
-  /* TWENTY-FIVE SINCE 2026-09-20: `askstocksent` (§197, what became of what you
+  /* TWENTY-FIVE SINCE 2026-09-20: `askstocksent` (§198, what became of what you
      asked ANOTHER SHOP for) was added to Ask someone else. It was twenty-four
      from 2026-09-18, when `askbuysent` (§175) joined the same group, and
      twenty-three from 2026-09-17, when `recipes` (§164's read-only screen)

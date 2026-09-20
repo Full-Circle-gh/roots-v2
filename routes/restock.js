@@ -35,7 +35,7 @@ try { _events = require('./events'); } catch (e) { console.warn('[restock] event
 // rather than on `printer.by_store`. Best-effort and fire-and-forget: a request
 // must never fail to reach the queue because a printer is offline.
 const _kprint = require('../lib/kitchen-print');
-// THE SAME EVENT, ON THE SUPPLIER'S OWN PRINTER (§197). A shop-to-shop request
+// THE SAME EVENT, ON THE SUPPLIER'S OWN PRINTER (§198). A shop-to-shop request
 // printed nowhere until now, and the comment above said why it was not owed a
 // slip — "a store transfer has its own paper trail". It did not have one. This
 // is that paper trail: the shops' existing `printer.by_store` map keyed on the
@@ -973,7 +973,7 @@ router.get('/api/restock', requireRestockAccess, (req, res) => {
     // request to the kitchen is still real work, not noise. The original
     // sweep was designed for the store→warehouse Fulfill tab only.
     //
-    // AND SO IS EVERY OPEN TRANSFER BETWEEN TWO NAMED LOCATIONS (§197), for
+    // AND SO IS EVERY OPEN TRANSFER BETWEEN TWO NAMED LOCATIONS (§198), for
     // exactly the reason the kitchen already is. Ash raised a request from
     // Yuexiu against Tianhe in the evening; by the time anyone at Tianhe opened
     // the app, THIS SWEEP HAD ARCHIVED IT — `archived_at` stamped, off every
@@ -1326,7 +1326,7 @@ function _attachRecorded(order, items) {
   }
 }
 
-/* ── What became of what YOU asked for (§197) ───────────────────────────────
+/* ── What became of what YOU asked for (§198) ───────────────────────────────
  *
  * THE SCREEN THAT DID NOT EXIST, and the half of Ash's report that paper does
  * not fix: "i dont see it on my mobile". Between pressing Send and the supplier
@@ -1360,7 +1360,7 @@ function _attachRecorded(order, items) {
  *
  * DECLARED BEFORE /:id, because /:id would otherwise match the word and answer
  * 404 for a row whose id is 'mine'. */
-/* ── IS THERE ANYTHING FOR ME TO PICK (§197) ────────────────────────────────
+/* ── IS THERE ANYTHING FOR ME TO PICK (§198) ────────────────────────────────
  *
  * THE MARK THE PICK ROW NEVER CARRIED. A request reaching a supplier announced
  * itself by push and nothing else, and a push is one moment on one phone that
@@ -1581,7 +1581,7 @@ router.post('/api/restock', requireRestockAccess, tacetOnly, (req, res) => {
       // kitchen's roll is its own, and §51's note on lib/kitchen-print.js says
       // why it cannot be keyed on a location.
       _kprint.autoPrintKitchenRequest(id, 'sent');
-      // And paper for the SHOP that has to fill it (§197), which is the same
+      // And paper for the SHOP that has to fill it (§198), which is the same
       // event on the other roll. No-ops for a kitchen request and for any
       // request with no supplier named; the two calls can never both print,
       // because each refuses what the other takes.
@@ -1700,7 +1700,7 @@ function _advanceOrderStatus(order, status, req) {
   if (status === 'sent' || status === 'prepared') {
     _kprint.autoPrintKitchenRequest(order.id, status);
   }
-  // The supplier's slip (§197), for the one event that means anything on their
+  // The supplier's slip (§198), for the one event that means anything on their
   // floor. A draft sent later must print exactly as one sent on creation does —
   // the two paths are the same request arriving, and a slip that depended on
   // which button raised it is the kind of difference nobody can see from the
@@ -1819,7 +1819,7 @@ router.post('/api/restock/:id/reprint', requireRestockAccess, kitchenScopedOrder
   // endpoints that serve both.
   //
   // THIS ENDPOINT NOW SERVES BOTH, AND THE REFUSAL IS GONE RATHER THAN WIDENED
-  // (§197). It refused a transfer because a transfer had no slip to reprint —
+  // (§198). It refused a transfer because a transfer had no slip to reprint —
   // the failed print then stamped print_status on a row that was never owed
   // one, which is the defect the refusal was added for. A transfer has a slip
   // now, so the honest fix is to print it. The object type still decides WHICH

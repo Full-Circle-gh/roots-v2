@@ -1033,7 +1033,7 @@ async function loadPrinterPrefs() {
     if (kWhen) kWhen.value = p.kitchen_print_on || 'sent';
     if (kCopies) kCopies.value = Number(p.kitchen_copies) || 1;
 
-    // §197 — the stock-request slip. One control, because it needs no printer
+    // §198 — the stock-request slip. One control, because it needs no printer
     // of its own: it prints on the supplying shop's row in the map below.
     const tWhen = document.getElementById('feie-transfer-when');
     if (tWhen) tWhen.value = p.transfer_print_on || 'sent';

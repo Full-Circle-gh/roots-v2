@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
- * A STOCK REQUEST STAYS VISIBLE UNTIL SOMEBODY ANSWERS IT (§197).
+ * A STOCK REQUEST STAYS VISIBLE UNTIL SOMEBODY ANSWERS IT (§198).
  *
  *   node scripts/test_transfer_stays_visible.js
  *
  * THE TWO SILENT KILLERS behind "there is no printing in tianhe for it, i dont
  * see it on my mobile". Paper and the asker's own list are the other halves of
- * §197; these two are why a request that WAS routed correctly still reached
+ * §198; these two are why a request that WAS routed correctly still reached
  * nobody.
  *
  *   PART A  THE SWEEP. Every `tab=active` fetch archived any open non-kitchen

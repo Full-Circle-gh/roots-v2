@@ -11,6 +11,7 @@ const track    = require('../../utils/track');
 const delivery = require('../../utils/delivery');
 const config   = require('../../utils/config');
 const freshEta = require('../../utils/fresh-eta');
+const cartNotice = require('../../utils/cart-notice');
 
 // ONE PRICE FORMAT FOR THIS PAGE. Three copies of this line already sat in
 // three builders here, and a fourth site — the buy button — had its own rule
@@ -945,6 +946,14 @@ Page({
       // Drop-ship product — show an up-front "ships directly from supplier,
       // may arrive separately" notice before the customer adds it to the cart.
       shipFromSupplier: !!p.ship_from_supplier,
+      // The tenant's add-to-cart notice, stated on the page as well as on the
+      // card. This is the HERO's own. A variant page has no in-page size
+      // switcher — the sizes live in a sheet that adds straight from itself —
+      // so the strip is the notice on the product whose page this is, and the
+      // card that fires on the add is the picked SIZE's. They can differ, and
+      // when they do the card is the one about what is actually in the cart.
+      careNoteTitle: lang.pick(p.cart_notice && p.cart_notice.title_en, p.cart_notice && p.cart_notice.title_cn, L),
+      careNoteBody:  lang.pick(p.cart_notice && p.cart_notice.body_en,  p.cart_notice && p.cart_notice.body_cn,  L),
       badges,
       options,
       optionsSingle,
@@ -1198,6 +1207,10 @@ Page({
       price: this.data.priceN + delta,
       bundle_worth: p.bundle_worth,   // a bundle product: its "separately" worth
       ship_from_supplier: p.ship_from_supplier,
+      // The tenant's add-to-cart notice, carried across because this call site
+      // builds a literal rather than passing the product row. cart.add() reads
+      // it off whatever it is handed.
+      cart_notice: p.cart_notice,
     }, this.data.qty, chosen);
     return true;
   },
@@ -1255,12 +1268,38 @@ Page({
       : kind === 'preorder'
         ? (cn ? '已预订，加入购物车' : 'Added — pre-order')
         : (cn ? '已加入购物车' : 'Added to cart');
+    // An add-to-cart notice is waiting → it takes the screen, and the page does
+    // NOT leave until the customer has closed it. Both halves matter. The toast
+    // is dropped because it would land on top of the card and cover the words
+    // it was raised to deliver, so the card carries the same confirmation as its
+    // kicker instead — nothing is lost, it just moves. And the navigate-back
+    // stays parked: this page goes back to the shop 500ms after an add, which
+    // would take the card down with it before it could be read.
+    const card = this.selectComponent('#cart-notice');
+    if (card && cartNotice.waiting() && card.showNext(title)) { this._leaveOnNoticeClose = true; return; }
     wx.showToast({
       title,
       icon: kind ? 'none' : 'success',
       duration: kind ? 1500 : 1200,
     });
-    setTimeout(() => wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/home/home' }) }), 500);
+    this._leaveAfterAdd(500);
+  },
+
+  // The page's exit after an add — the shop the customer came from, or the home
+  // tab when this page was opened from a share card and has nothing behind it.
+  _leaveAfterAdd(delayMs) {
+    setTimeout(() => wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/home/home' }) }), delayMs);
+  },
+
+  // The notice card closed (and had nothing queued behind it). Leave ONLY if
+  // this page parked its exit on that card. The component also drains notices
+  // queued on other screens — a + tapped on the shop grid, a favourite added
+  // from the favourites tab — and one of those closing on a product page the
+  // customer is simply reading must not walk them out of it.
+  onCartNoticeClosed() {
+    if (!this._leaveOnNoticeClose) return;
+    this._leaveOnNoticeClose = false;
+    this._leaveAfterAdd(0);
   },
 
   // "Buy together" → add every in-stock item to the cart at its own price
@@ -1277,6 +1316,7 @@ Page({
         id: it.id, name_en: it.name_en, name_cn: it.name_cn, sku: it.sku,
         size: it.size, image_url: it.image_url, image_data: it.image_data,
         price: Number(it.price) || 0,
+        cart_notice: it.cart_notice,
       }, 1, []);
       added++;
     });
@@ -1395,6 +1435,10 @@ Page({
       effective_price: m.effective_price,
       is_on_flash: m.is_on_flash,
       ship_from_supplier: m.ship_from_supplier,
+      // The SIZE's own notice. The server stamps every sibling, so the 500ml
+      // that needs the fridge raises its card and the 330ml that does not stays
+      // quiet — reading it off the hero would get that backwards half the time.
+      cart_notice: m.cart_notice,
     }, this.data.qty, []);
     this.setData({ vpShow: false });
     // §108 — this size's OWN word, not the page's: a shopper can open the sheet
