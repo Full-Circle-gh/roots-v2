@@ -40,7 +40,8 @@
 const path = require('path');
 const Database = require('better-sqlite3');
 
-const DB_PATH = process.env.ROOTS_DB || path.join(__dirname, '..', 'data', 'roots.db');
+const HOME = process.env.ROOTS_HOME || path.join(__dirname, '..');
+const DB_PATH = process.env.ROOTS_DB || path.join(HOME, 'data', 'roots.db');
 const WANTED = (process.argv[2] || '').trim();
 const db = new Database(DB_PATH, { readonly: true });
 
@@ -88,6 +89,8 @@ const rows = db.prepare(`
   SELECT id, rs_number, date, status, created_at, sent_at, archived_at,
          store_name, store_cn, created_by,
          from_store_id, to_store_id, print_status, print_error, printed_at,
+         COALESCE(goods_state,'none') AS goods_state, dispatched_at,
+         received_confirmed_at,
          COALESCE(from_role,'store')   AS from_role,
          COALESCE(to_role,'warehouse') AS to_role
     FROM restock_orders
@@ -105,7 +108,7 @@ if (!rows.length) {
 // The capability resolution the server itself does, so this reports the same
 // answer the request middleware would — never a guess off the preset table.
 let resolveOperator = null;
-try { ({ resolveOperator } = require('../lib/operator-caps')); } catch (e) {
+try { ({ resolveOperator } = require(path.join(HOME, 'lib', 'operator-caps.js'))); } catch (e) {
   console.log(`   (operator-caps unavailable: ${e.message} — section 3 will be skipped)`);
 }
 let tenant = null;
@@ -150,6 +153,30 @@ for (const o of rows) {
     ? ' — ' + items.slice(0, 4).map(i => `${i.qty_requested}×${i.product_cn || i.product_name}`).join(', ')
       + (items.length > 4 ? '…' : '')
     : ''));
+
+  /* WHERE THE GOODS THEMSELVES ARE — a SECOND fact from the status beside it,
+     and the one the first run of this script could not answer.
+     `status` is how far the PAPERWORK got; `goods_state` is whether the stock
+     actually moved. They come apart, and the gap is a real failure mode the
+     route names in as many words: a dispatch that rolled back leaves an order
+     at status 'prepared' with goods_state 'none', and NOTHING reaches
+     _applyDispatch again by itself. The Receive-from-another-shop screen
+     filters on goods_state === 'in_transit', so such an order is invisible at
+     the receiving end while its own paperwork says it was sent. */
+  const GOODS = {
+    none: 'not dispatched — the stock has not left the supplier',
+    in_transit: 'dispatched — it should be on the Receive screen at the destination',
+    settled: 'counted in at the destination',
+  };
+  console.log(`   goods       ${o.goods_state} — ${GOODS[o.goods_state] || 'unrecognised'}` +
+    (o.dispatched_at ? `  (dispatched ${o.dispatched_at})` : '') +
+    (o.received_confirmed_at ? `  (received ${o.received_confirmed_at})` : ''));
+  if (o.status === 'prepared' && o.goods_state === 'none') {
+    console.log('   !! STUCK: the paperwork says prepared, the stock never moved.');
+    console.log('      This is the rolled-back dispatch routes/restock.js warns about. It shows');
+    console.log('      nowhere at the receiving end. POST /api/restock/:id/retry-dispatch is the');
+    console.log('      route built for exactly this.');
+  }
 
   // 2 · the sweep
   if (o.archived_at) {
