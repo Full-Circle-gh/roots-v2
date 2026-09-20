@@ -2609,6 +2609,18 @@ function coInjectPreorderStyle(){
   .copo-m{font-size:13px;line-height:1.5;color:var(--muted,#6b6358);}
   .copo-more{margin-left:auto;flex:0 0 auto;align-self:center;font:inherit;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent,#6d9c2a);background:none;border:0;cursor:pointer;}
   .copo-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:120;padding:20px;}
+  /* CLOSING SETS .hidden, AND WITHOUT THIS LINE THAT DOES NOTHING. The rule
+     above is an AUTHOR rule and beats the UA stylesheet's own
+     [hidden]{display:none}, so the overlay kept painting after the customer
+     tapped Got it: the attribute was set, coNoticePopupOpen() read it and
+     agreed the modal had closed, and the dark panel stayed over the checkout
+     with no way past it. Every other overlay on this page that closes the
+     same way already carries its own guard (.lm-overlay[hidden],
+     #acctMenu[hidden], .cnote-overlay[hidden]); these three did not.
+     NOTE FOR THE NEXT EDIT: this block is a JS template literal. A backtick
+     in a comment here ends the string and takes the whole page's script with
+     it — which is how this very comment was first written. */
+  .copo-overlay[hidden]{display:none;}
   .copo-card{background:#fff;border-radius:20px;max-width:380px;width:100%;padding:26px 22px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.25);}
   .copo-hero{font-size:40px;}
   .copo-kicker{margin-top:6px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent,#6d9c2a);}
@@ -2669,6 +2681,18 @@ function coInjectBatchStyle(){
   .cob-m{font-size:13px;line-height:1.5;color:var(--muted,#6b6358);}
   .cob-more{margin-left:auto;flex:0 0 auto;align-self:center;font:inherit;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent,#6d9c2a);background:none;border:0;cursor:pointer;}
   .cob-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:120;padding:20px;}
+  /* CLOSING SETS .hidden, AND WITHOUT THIS LINE THAT DOES NOTHING. The rule
+     above is an AUTHOR rule and beats the UA stylesheet's own
+     [hidden]{display:none}, so the overlay kept painting after the customer
+     tapped Got it: the attribute was set, coNoticePopupOpen() read it and
+     agreed the modal had closed, and the dark panel stayed over the checkout
+     with no way past it. Every other overlay on this page that closes the
+     same way already carries its own guard (.lm-overlay[hidden],
+     #acctMenu[hidden], .cnote-overlay[hidden]); these three did not.
+     NOTE FOR THE NEXT EDIT: this block is a JS template literal. A backtick
+     in a comment here ends the string and takes the whole page's script with
+     it — which is how this very comment was first written. */
+  .cob-overlay[hidden]{display:none;}
   .cob-card{background:#fff;border-radius:20px;max-width:380px;width:100%;padding:26px 22px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.25);}
   .cob-hero{font-size:40px;}
   .cob-kicker{margin-top:6px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent,#6d9c2a);}
@@ -3046,6 +3070,18 @@ function coInjectOfferStyle(){
   const s=document.createElement('style'); s.id='coofStyle';
   s.textContent=`
   .coof-overlay{position:fixed;inset:0;z-index:3000;background:rgba(26,35,20,.55);display:flex;align-items:center;justify-content:center;padding:16px;animation:coofFade .18s ease-out}
+  /* CLOSING SETS .hidden, AND WITHOUT THIS LINE THAT DOES NOTHING. The rule
+     above is an AUTHOR rule and beats the UA stylesheet's own
+     [hidden]{display:none}, so the overlay kept painting after the customer
+     tapped Got it: the attribute was set, coNoticePopupOpen() read it and
+     agreed the modal had closed, and the dark panel stayed over the checkout
+     with no way past it. Every other overlay on this page that closes the
+     same way already carries its own guard (.lm-overlay[hidden],
+     #acctMenu[hidden], .cnote-overlay[hidden]); these three did not.
+     NOTE FOR THE NEXT EDIT: this block is a JS template literal. A backtick
+     in a comment here ends the string and takes the whole page's script with
+     it — which is how this very comment was first written. */
+  .coof-overlay[hidden]{display:none;}
   @keyframes coofFade{from{opacity:0}to{opacity:1}}
   .coof-wrap{width:100%;max-width:420px;max-height:86vh;overflow-y:auto;background:#FFFCF7;border-radius:20px;padding:0 0 8px;box-shadow:0 18px 48px rgba(26,35,20,.38);animation:coofPop .22s cubic-bezier(.2,.9,.3,1.1)}
   @keyframes coofPop{from{transform:scale(.92);opacity:.6}to{transform:scale(1);opacity:1}}
