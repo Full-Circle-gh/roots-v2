@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.142 · 2026-09-19 · §193 GIVES `parcel_awaiting_restock` THE SENTENCE IT NEVER HAD — LIFTING TWO LIVE FRAGMENTS AND COMPOSING NOTHING.** §187 minted the error code and registered no pair for it, so a Chinese admin has read the bare code in English ever since; §193 makes the JD label route a third caller, which is the busiest of the three. Both halves are live verbatim and only the join is new. See *A parcel the shortage is holding*.
+**v1.143 · 2026-09-20 · §194 GIVES THE PRE-ORDER POPUP ITS RESTOCK WINDOW — COMPOSING ONE CLAUSE OUT OF LIVE WORDS AND LEAVING THE SENTENCE AROUND IT VERBATIM.** The popup became the tenant's to edit, and the one thing it could never say was roughly when the item comes back. The sentence it has shipped since `backorder_gz` existed is untouched; a four-character clause is inserted into it, and `预计`, `内` and `补货` are each already live and customer-facing. The window itself is a numeral and the live day counter. See *A pre-order's restock window*. **v1.142 · 2026-09-19 · §193 GIVES `parcel_awaiting_restock` THE SENTENCE IT NEVER HAD — LIFTING TWO LIVE FRAGMENTS AND COMPOSING NOTHING.** §187 minted the error code and registered no pair for it, so a Chinese admin has read the bare code in English ever since; §193 makes the JD label route a third caller, which is the busiest of the three. Both halves are live verbatim and only the join is new. See *A parcel the shortage is holding*.
 
 **v1.141 · 2026-09-19 · §190 NAMES THE BOX IN §188's NOTIFICATION — COMPOSING THREE SENTENCES AND NO NEW WORDS.** *"one of the parcels"* made a split order's customer count boxes to work out which one had landed. Every mode already has a locked pair and two of them are already customer-facing on the printed slip, so each sentence is a live mode word in front of §188's live `包裹已发货`. The generic line survives as the fallback for a mode added later. See *Which box has gone*.
 
@@ -7603,3 +7603,93 @@ Rejected, and why:
 - **`缺货`** — live in the product-stock sense (*out of stock*). It describes
   the shelf, not this order's wait, and the admin already reserves `待补货` /
   `等待补货` for the wait.
+
+## A pre-order's restock window — the checkout popup (2026-09-20)
+
+Rule 4 is worked in order under the standing delegation of *The delegation
+becomes standing*: a live pair first, the source second, composing last. **Every
+word below is live**; what is composed is one clause and the join.
+
+### The customer register — what a shopper reads at checkout
+
+| key | EN | CN | provenance |
+|---|---|---|---|
+| `preorderWindow` (range) | `2-4 days` | `2-4 天` | numeral + the live day counter `天`; nothing composed |
+| `preorderWindow` (single) | `3 days` / `1 day` | `3 天` | as above; only the EN plural branches |
+| `preorderRestockClause` | `they are usually back in stock within {window}` | `预计 {window} 内补货` | **COMPOSED** by Claude (Opus), 2026-09-20 — all three words live |
+
+**THE SENTENCE AROUND IT IS NOT COMPOSED AND IS NOT RETIRED.** The default
+message a tenant sees with no window set is the one that has shipped since this
+notice existed, character for character:
+
+> 您订单中的部分商品目前缺货。此为预订订单，我们将在补货后尽快为您一并发货。
+
+With a window set, the clause is inserted and nothing else moves:
+
+> 您订单中的部分商品目前缺货。此为预订订单，**预计 2-4 天内补货**，我们将在补货后尽快为您一并发货。
+
+**HOW THE CLAUSE WAS ARRIVED AT, word by word.** `预计` is live and
+customer-facing in two places for exactly this sense — an estimate, not a
+recorded fact: the order page's `预计送达` and the fresh-batch notice's
+`预计 {delivery_date} 新鲜送达`. That matters under Rule 2, which bans a word that
+asserts a past event from labelling an estimate; `预计` is the product's own
+estimate word and carries the hedge the English "usually" carries. `补货` is live
+in the very sentence this clause joins (`我们将在补货后尽快为您一并发货`) and in the
+order status `等待补货`, so the clause and its neighbours name the same event with
+the same word. `内` is live as the within-a-span particle in `48 小时内` (the
+fresh-batch tip) and `30 天内` (the sign-in screen). `天` is the live day counter
+throughout.
+
+**TWO CANDIDATES WERE CONSIDERED AND REJECTED, recorded so the search is not
+repeated.** **`到货`** — live, and the more natural word for goods ARRIVING —
+names arrival at the customer's door, which is not what this window measures: the
+estimate is when OUR shelf is refilled, and the courier leg is still ahead of it.
+Using it would promise a delivery date the system has not computed, which is the
+§138 exposure this notice exists inside. **`通常`** ("usually") maps the English
+hedge more literally than `预计` does, but it is not live anywhere in this product
+and `预计` already carries the hedge in the register a customer meets it in, so
+the live pair wins under preference 1.
+
+**REGISTER: CUSTOMER** (Rule 1). The orders-list chip and the order drawer keep
+`预订` whatever a tenant writes here, and that is deliberate — see the operator
+table below.
+
+### The operator register — the back-office card
+
+Every pair here is admin-facing. Where the Fresh batches card already had a pair
+for the same control it is **lifted whole**, so an operator who has configured
+one card meets no new vocabulary on the other.
+
+| key | EN | CN | provenance |
+|---|---|---|---|
+| `preorderCard` | `Pre-orders` | `预订` | LIFTED — the notice's own live kicker |
+| `preorderPopup` | `Checkout popup` | `结账弹窗` | LIFTED from the Fresh batches card |
+| `preorderEyebrow` | `Popup eyebrow` | `弹窗小标题` | LIFTED from the Fresh batches card |
+| `preorderTitle` | `Popup title` | `弹窗标题` | LIFTED from the Fresh batches card |
+| `preorderNotice` | `Checkout notice` | `结账提示` | LIFTED from the Fresh batches card |
+| `preorderWindowField` | `Restock window` | `预计补货时间` | **COMPOSED** by Claude (Opus), 2026-09-20 — `预计` + `补货` + `时间`, all live |
+| `preorderWindowFrom` | `From` | `最快(天)` | **COMPOSED** by Claude (Opus), 2026-09-20 |
+| `preorderWindowTo` | `To` | `最慢(天)` | **COMPOSED** by Claude (Opus), 2026-09-20 |
+| `preorderHubDefault` | `Default wording · no time named` | `默认文案 · 未提时间` | **COMPOSED** by Claude (Opus), 2026-09-20 — `默认文案` lifted from the Fresh batches card's *any field blank* line |
+| `preorderHubCustom` | `Own wording` | `自定义文案` | **COMPOSED** by Claude (Opus), 2026-09-20 |
+| `preorderHubWindow` | `Back in stock within X` | `预计 X 内补货` | the customer clause above, reused on the hub status line |
+
+**`最快` / `最慢` RATHER THAN `最少` / `最多`.** The boxes hold days of waiting,
+and fast/slow is how a wait is described; least/most reads as a quantity of goods,
+which is what every other numeric box on these screens holds. Neither pair is
+live for this control. **Ash should correct either if it reads wrong to a Chinese
+operator; nothing depends on the exact phrasing.**
+
+**THE OPERATOR CHIP DOES NOT FOLLOW THE TENANT'S COPY, and that is Rule 1 rather
+than a gap.** A tenant who renames the popup's eyebrow to something seasonal does
+not rename the `预订` chip on the orders list or in the order drawer. Cross-register
+differences are deliberate: an operator scanning a list needs one stable word for
+the state whatever sentence the storefront is currently running.
+
+**`{window}` IS THE ONLY PLACEHOLDER, AND IT CAN BE ABSENT, WHICH NO OTHER
+PLACEHOLDER IN THIS PRODUCT CAN.** `{ship_date}`, `{delivery_date}` and
+`{make_date}` are computed when their notice fires and always resolve. This one
+is typed and can be cleared, so operator copy that asks for a window with no days
+behind it falls back to the built-in sentence whole. A half-sentence
+(`…内补货` with nothing before it, or the English `within .`) must never reach a
+customer, and the failure would be invisible to whoever cleared the boxes.

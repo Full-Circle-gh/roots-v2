@@ -291,6 +291,24 @@ async function loadDeliveryZones() {
     if ($('#batch-local-title-cn'))  $('#batch-local-title-cn').value  = batch.local_title_cn || '';
     if ($('#batch-local-msg-en'))    $('#batch-local-msg-en').value    = batch.local_message_en || '';
     if ($('#batch-local-msg-cn'))    $('#batch-local-msg-cn').value    = batch.local_message_cn || '';
+
+    /* §194 — the pre-order popup's own copy, one key (`notice.preorder`).
+       EVERY FIELD IS OPTIONAL AND BLANK IS THE NORMAL STATE: the server falls
+       back to the built-in wording field by field, so an untouched card here
+       and a card never opened at all produce exactly the same popup. The two
+       day boxes are left EMPTY rather than defaulted to a number — a window
+       nobody chose is a promise nobody made. */
+    const po = (cfg?.data && cfg.data.notice && cfg.data.notice.preorder) || {};
+    if ($('#po-kicker-en')) $('#po-kicker-en').value = po.kicker_en || '';
+    if ($('#po-kicker-cn')) $('#po-kicker-cn').value = po.kicker_cn || '';
+    if ($('#po-title-en'))  $('#po-title-en').value  = po.title_en || '';
+    if ($('#po-title-cn'))  $('#po-title-cn').value  = po.title_cn || '';
+    if ($('#po-msg-en'))    $('#po-msg-en').value    = po.message_en || '';
+    if ($('#po-msg-cn'))    $('#po-msg-cn').value    = po.message_cn || '';
+    if ($('#po-min-days'))  $('#po-min-days').value  = po.min_days != null ? po.min_days : '';
+    if ($('#po-max-days'))  $('#po-max-days').value  = po.max_days != null ? po.max_days : '';
+    poWire();
+    poSync();
     const bcb = $('#batch-enabled');
     if (bcb && !bcb._wired) {
       bcb._wired = true;
@@ -403,6 +421,144 @@ async function saveBoxLabelSetting() {
     document.body.classList.toggle('ord-box-label', on);
     toast('Saved · 已保存');
   } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
+}
+
+/* §194 — THE PRE-ORDER POPUP, WHICH UNTIL NOW COULD ONLY BE CHANGED BY A
+   DEPLOY. Writes `notice.preorder` WHOLESALE, the way saveBatchSchedule writes
+   `batch.schedule`: a field omitted here is a field the save deletes.
+
+   A BLANK FIELD IS SAVED AS A BLANK STRING, not skipped. The server reads
+   blank as "use the built-in wording", so clearing a box has to be able to
+   UNDO an override — skipping empties would make a custom line unremovable
+   from this screen, which is the state this whole card exists to get out of. */
+async function savePreorderNotice() {
+  const txt = (sel) => (($(sel) && $(sel).value) || '').trim();
+  // Whole days, 0–365. A blank box is null — no window — and NOT zero: zero
+  // is a real answer ("back today") and must be typeable.
+  const day = (sel) => {
+    const raw = (($(sel) && $(sel).value) || '').trim();
+    if (raw === '') return null;
+    let n = Math.round(Number(raw));
+    if (!Number.isFinite(n)) return null;
+    if (n < 0) n = 0;
+    if (n > 365) n = 365;
+    return n;
+  };
+  let lo = day('#po-min-days');
+  let hi = day('#po-max-days');
+  // Mirror the server's own normalisation so the card cannot show one thing
+  // and the checkout another: one number alone is a one-day window, and a
+  // reversed pair is the operator's fingers, not their intent.
+  if (lo == null) lo = hi;
+  if (hi == null) hi = lo;
+  if (lo != null && hi != null && lo > hi) { const t = lo; lo = hi; hi = t; }
+  if ($('#po-min-days')) $('#po-min-days').value = lo != null ? lo : '';
+  if ($('#po-max-days')) $('#po-max-days').value = hi != null ? hi : '';
+
+  // Copy that ASKS for a window we no longer have would reach a customer as a
+  // half-sentence, so the server falls back to its built-in text whole in that
+  // case. Say so here rather than letting the operator discover it at a
+  // checkout — the save still goes through; this is a warning, not a gate.
+  const wantsWindow = /\{window\}/.test(txt('#po-msg-en') + txt('#po-msg-cn'));
+  const body = {
+    'notice.preorder': {
+      kicker_en: txt('#po-kicker-en'),
+      kicker_cn: txt('#po-kicker-cn'),
+      title_en:  txt('#po-title-en'),
+      title_cn:  txt('#po-title-cn'),
+      message_en: txt('#po-msg-en'),
+      message_cn: txt('#po-msg-cn'),
+      min_days: lo,
+      max_days: hi,
+    },
+  };
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body });
+    poSync();
+    if (wantsWindow && lo == null) {
+      toast(cuT('Saved — but {window} has no days to fill it, so the default wording is used.',
+                '已保存 — 但 {window} 没有天数可填，因此使用默认文案。'), 'warn');
+    } else {
+      toast('Saved · 已保存');
+    }
+    if (typeof dlvHubRender === 'function') dlvHubRender();
+  } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
+}
+
+// The pre-order popup preview — same contract as fbRenderPreview: each input
+// falls back to its own placeholder, and those placeholders ARE the server's
+// built-in wording, so a blank card previews what will actually ship.
+function poRenderPreview() {
+  const kick = $('#po-pv-kick');
+  if (!kick) return;
+  const pick = (sel) => {
+    const el = $(sel);
+    if (!el) return { text: '', fell: false };
+    const v = (el.value || '').trim();
+    return { text: v || el.placeholder || '', fell: !v };
+  };
+  const k = pick('#po-kicker-en'), kc = pick('#po-kicker-cn');
+  const t = pick('#po-title-en'),  tc = pick('#po-title-cn');
+  const b = pick('#po-msg-en'),    bc = pick('#po-msg-cn');
+
+  const win = poWindowLabel();
+  // {window} resolves the moment both day boxes agree on an answer; until then
+  // it is shown as the token it still is, exactly as {delivery_date} is on the
+  // batch card.
+  // The resolved window follows the SHELL's language, not the field's: the
+  // preview is showing one of the two halves, and filling an English sentence
+  // with '2-4 \u5929' would preview a popup no customer can ever see.
+  const isCn = cuT('en', 'cn') === 'cn';
+  const fill = (s) => escapeHtml(s).replace(/\{window\}/g, win
+    ? '<span class="fb-res">' + escapeHtml(isCn ? win.cn : win.en) + '</span>'
+    : '<span class="fb-tok">{window}</span>');
+
+  kick.innerHTML = fill(cuT(k.text, kc.text));
+  $('#po-pv-ttl').innerHTML  = fill(cuT(t.text, tc.text));
+  $('#po-pv-body').innerHTML = fill(cuT(b.text, bc.text));
+
+  const note = $('#po-pv-note');
+  if (note) {
+    note.textContent = win
+      ? cuT('Shown whenever the basket holds a sold-out item you left orderable.',
+            '只要购物车中含有缺货但仍可下单的商品，就会显示。')
+      : cuT('No restock window set — the popup names no time. Fill in the days above to add one.',
+            '未设置补货时间 — 弹窗不提时间。在上方填写天数即可添加。');
+  }
+}
+
+// What the two day boxes currently say, in both languages, or null when they
+// say nothing. Mirrors the server's preorderWindowLabel character for
+// character — the preview must not be able to promise a different window
+// from the one the checkout will print.
+function poWindowLabel() {
+  const num = (sel) => {
+    const raw = (($(sel) && $(sel).value) || '').trim();
+    if (raw === '') return null;
+    const n = Math.round(Number(raw));
+    return (Number.isFinite(n) && n >= 0 && n <= 365) ? n : null;
+  };
+  let lo = num('#po-min-days'), hi = num('#po-max-days');
+  if (lo == null) lo = hi;
+  if (hi == null) hi = lo;
+  if (lo == null || hi == null) return null;
+  if (lo > hi) { const t = lo; lo = hi; hi = t; }
+  if (lo === hi) return { en: lo + ' day' + (lo === 1 ? '' : 's'), cn: lo + ' 天' };
+  return { en: lo + '-' + hi + ' days', cn: lo + '-' + hi + ' 天' };
+}
+
+function poSync() { poRenderPreview(); }
+
+// One delegated listener for the whole view — same reason as fbWire: the
+// inputs are markup, so nothing re-wires when the language flips or the view
+// reopens.
+function poWire() {
+  const view = document.querySelector('.dlv-view[data-dlv="preorder"]');
+  if (!view || view._poWired) return;
+  view._poWired = true;
+  view.addEventListener('input', () => poSync());
+  view.addEventListener('change', () => poSync());
+  if (window.onLangChange) onLangChange(() => poSync());
 }
 
 async function saveBatchSchedule() {
@@ -1302,6 +1458,7 @@ function dlvGo(view) {
   sec.setAttribute('data-dlv', view);
   sec.querySelectorAll(':scope > .dlv-view').forEach(v => { v.hidden = v.getAttribute('data-dlv') !== view; });
   if (view === 'hub') dlvHubRender();
+  if (view === 'preorder') { poWire(); poSync(); }
   if (view === 'qy' && typeof loadQingyunStores === 'function') loadQingyunStores();
   window.scrollTo({ top: 0 });
 }
@@ -1391,6 +1548,22 @@ function dlvHubRender() {
   const bCut = val('#batch-cutoff') === '' ? 20 : Number(val('#batch-cutoff'));
   if (bOn) _dlvStat('dlv-st-fresh', 'ok', cuT('Every ' + iv + ' day' + (iv === 1 ? '' : 's') + ', order by ' + bCut + ':00', '每 ' + iv + ' 天制作一批,' + bCut + ':00 截单'));
   else _dlvStat('dlv-st-fresh', 'off', cuT('Off', '关闭'));
+
+  // Pre-orders. The line reports the WINDOW, because that is the only part a
+  // glance can be wrong about: custom copy is visible the moment the card
+  // opens, a missing estimate is not.
+  const poWin = typeof poWindowLabel === 'function' ? poWindowLabel() : null;
+  const poCustom = ['#po-kicker-en', '#po-kicker-cn', '#po-title-en', '#po-title-cn',
+    '#po-msg-en', '#po-msg-cn'].some((s) => (val(s) || '').trim() !== '');
+  if (poWin) {
+    _dlvStat('dlv-st-preorder', 'ok',
+      cuT('Back in stock within ' + poWin.en + (poCustom ? ' · own wording' : ''),
+          '预计 ' + poWin.cn + ' 内补货' + (poCustom ? ' · 自定义文案' : '')));
+  } else if (poCustom) {
+    _dlvStat('dlv-st-preorder', 'ok', cuT('Own wording · no time named', '自定义文案 · 未提时间'));
+  } else {
+    _dlvStat('dlv-st-preorder', 'off', cuT('Default wording · no time named', '默认文案 · 未提时间'));
+  }
 
   // Carriers — status stashed by loadShippingIntegrations / loadQingyunStores.
   const ship = window._shipStatus || {};

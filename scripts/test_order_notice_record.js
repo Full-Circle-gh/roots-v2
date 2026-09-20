@@ -146,9 +146,21 @@ check('…and an unreadable column is treated as "nothing was said"', () => {
   return /catch \(e\) \{ pids = \[\]; \}/.test(win);
 });
 
-// The drawer and the screen the customer read must name it the same way.
-check('the pre-order label is the checkout notice’s own kicker, lifted whole', () =>
-  /kicker_en: 'Pre-order',\s+kicker_cn: '预订'/.test(routeSrc)
+/* The drawer and the screen the customer read must name it the same way.
+
+   §194 PUT AN OPERATOR OVERRIDE IN FRONT OF THAT KICKER, and the assertion is
+   now on the DEFAULT rather than on a bare literal. The pair below is still the
+   word a tenant who has configured nothing sees, which is the case this check
+   was written for.
+
+   A TENANT WHO RENAMES THE KICKER DOES NOT RENAME THE DRAWER, and that is Rule
+   1 of the vocabulary document working rather than a gap: the popup is the
+   CUSTOMER register and the drawer chip is the OPERATOR register, and a
+   cross-register difference is deliberate. An operator reading the orders list
+   needs one stable word for the state whatever marketing sentence the
+   storefront is currently using for it. */
+check('the pre-order label is the checkout notice’s own default kicker', () =>
+  /kicker_en: cfg\.kicker_en \|\| 'Pre-order',\s+kicker_cn: cfg\.kicker_cn \|\| '预订'/.test(routeSrc)
   && /cuT\('Pre-order', '预订'\)/.test(adminSrc));
 
 check('the move label is built on the live 改派 · <reason> shape', () =>
