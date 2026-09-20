@@ -6644,6 +6644,7 @@ function pwCatOptionsHtml() {
     });
     html += '</optgroup>';
   });
+  html += '<option value="__add_cat__">' + escapeHtml(cuT('+ Add a new category…', '+ 添加新分类…')) + '</option>';
   return html;
 }
 function pwWhatHtml() {
@@ -6676,8 +6677,55 @@ function pwWhatHtml() {
 }
 function pwSet(key, val) { if (_pw) _pw[key] = val; }
 function pwSetCat(v) {
+  if (v === '__add_cat__') { pwAddCategoryFlow(); return; }
   const parts = String(v || '').split('|||');
   _pw.top = parts[0] || ''; _pw.sub = parts[1] || '';
+}
+
+// Lets the wizard mint a brand-new top-level category inline instead of
+// bouncing the operator out to Mini App Backend → Categories mid-flow. Reuses
+// the same PUT /api/retail-admin/category-tree the full editor (01-core.js
+// catSave) writes — this is not a parallel store, just a one-node append. New
+// category has no subcategories yet; add those later from the Categories tab.
+async function pwAddCategoryFlow() {
+  const bodyHtml = '<h3 class="tdlg-title">' + escapeHtml(cuT('Add a new category', '添加新分类')) + '</h3>'
+    + '<p class="tdlg-sub">' + escapeHtml(cuT('This becomes a section in the shop. You can add subcategories later.', '这将成为商城中的一个分类栏目,子分类可稍后添加。')) + '</p>'
+    + '<div class="tdlg-field"><label for="pw-newcat-en">' + escapeHtml(cuT('Name (English)', '名称(英文)')) + '</label>'
+    + '<input id="pw-newcat-en" type="text" placeholder="' + escapeAttr(cuT('e.g. Bakery', '例如 烘焙')) + '"></div>'
+    + '<div class="tdlg-field"><label for="pw-newcat-cn">' + escapeHtml(cuT('中文名 (optional)', '中文名(可选)')) + '</label>'
+    + '<input id="pw-newcat-cn" type="text"></div>';
+  const footHtml = '<button type="button" class="tdlg-btn tdlg-btn--ghost" data-cancel>' + escapeHtml(cuT('Cancel', '取消')) + '</button>'
+    + '<button type="button" class="tdlg-btn tdlg-btn--primary" data-submit>' + escapeHtml(cuT('Add', '添加')) + '</button>';
+  const { scrim, closer, ready } = askCustom('tdlg-neutral', bodyHtml, footHtml, '#pw-newcat-en');
+  scrim.querySelectorAll('[data-cancel]').forEach(b => b.addEventListener('click', () => closer(null)));
+  const submit = () => {
+    const en = (document.getElementById('pw-newcat-en') || {}).value || '';
+    const cn = (document.getElementById('pw-newcat-cn') || {}).value || '';
+    if (!en.trim()) { toast(cuT('Name it in English first', '请先填写英文名称'), 'err'); return; }
+    closer({ en: en.trim(), cn: cn.trim() });
+  };
+  scrim.querySelector('[data-submit]').addEventListener('click', submit);
+  scrim.querySelector('#pw-newcat-en').addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+  const result = await ready;
+  if (!result) { pwRender(); return; }
+  const dupe = (PA_CAT_TREE || []).find(t => t.name.toLowerCase() === result.en.toLowerCase());
+  if (dupe) {
+    toast(cuT('That category already exists', '该分类已存在'), 'err');
+    _pw.top = dupe.name; _pw.sub = '';
+    pwRender();
+    return;
+  }
+  try {
+    const newTree = (PA_CAT_TREE || []).map(t => ({ id: t.id, name: t.name, name_cn: t.name_cn, subs: (t.subs || []).map(s => ({ id: s.id, name: s.name, name_cn: s.name_cn })) }))
+      .concat([{ name: result.en, name_cn: result.cn, subs: [] }]);
+    const j = await api('/api/retail-admin/category-tree', { method: 'PUT', body: { tree: newTree } });
+    PA_CAT_TREE = Array.isArray(j.data) ? j.data : newTree;
+    _pw.top = result.en; _pw.sub = '';
+    toast(cuT('Category added', '分类已添加'), 'ok');
+  } catch (e) {
+    toast(cuT('Could not add the category', '添加分类失败') + ': ' + e.message, 'err');
+  }
+  pwRender();
 }
 function pwNextWhat() {
   if (!_pw.name_en.trim() && !_pw.name_cn.trim()) { toast(cuT('Add a name first', '请先填写名称'), 'err'); return; }
