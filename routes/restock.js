@@ -1302,6 +1302,103 @@ function _attachRecorded(order, items) {
   }
 }
 
+/* ── What became of what YOU asked for (§197) ───────────────────────────────
+ *
+ * THE SCREEN THAT DID NOT EXIST, and the half of Ash's report that paper does
+ * not fix: "i dont see it on my mobile". Between pressing Send and the supplier
+ * dispatching, a stock request existed on NO screen the asker could open. The
+ * Receive-from-another-shop list shows only what is already in transit, so the
+ * whole of the waiting — the part somebody actually wonders about — was blank.
+ *
+ * ASK TO BUY HAS HAD THIS SINCE §175 AND ASK FOR STOCK HAD NOTHING, which is
+ * the whole argument for this route: two request screens sitting under one
+ * heading on the same phone, one of which answers back.
+ *
+ * SCOPED TO THE CALLER by `created_by`, the column the request already stamps,
+ * and `tacetOnly` besides — a kitchen session's user id is a row in a different
+ * table, so without the realm gate two people with the same integer id would
+ * read each other's requests. §175's route can scope by the column alone
+ * because only one realm ever reaches it.
+ *
+ * THE LINE CARRIES THE STATE, NOT THE REQUEST — §175's rule, and it is if
+ * anything more true here. A picker walks a freezer and ticks lines one at a
+ * time, so a request is routinely part dispatched and part not, and any single
+ * word printed across the whole of it is wrong about at least one line.
+ *
+ * `state` IS DECIDED HERE AND NOT ON THE PHONE, for §175's reason: two screens
+ * each deciding what a null means is how they come to disagree.
+ *
+ * WHAT WAS ACTUALLY SENT IS PART OF THE ANSWER, and it is why `qty_sent` rides
+ * along. "Arrived" against a line that asked for 20 and got 12 is a true word
+ * about a thing the asker still needs; the number is what makes it readable.
+ * Nothing here carries a price — a transfer moves value between two shelves of
+ * one business, which is §51's rule for the slip applied to the screen.
+ *
+ * DECLARED BEFORE /:id, because /:id would otherwise match the word and answer
+ * 404 for a row whose id is 'mine'. */
+router.get('/api/restock/mine', requireRestockAccess, tacetOnly, (req, res) => {
+  const me = (req.user && req.user.id) || null;
+  if (!me) return res.json({ success: true, data: [] });
+  const conn = tdb();
+  // Kitchen requests are excluded outright: "Ask the kitchen" is a different
+  // screen with a different answer (kitchen-ready), and folding the two into
+  // one list would put a tray of food and a case of almonds under one heading.
+  const rows = conn.prepare(`
+    SELECT id, rs_number, date, status, notes, sent_at, delivered_at, archived_at,
+           from_store_id, to_store_id, store_name, store_cn
+      FROM restock_orders
+     WHERE created_by = ?
+       AND status <> 'draft'
+       AND COALESCE(to_role,'warehouse') != 'kitchen'
+       AND COALESCE(from_role,'store')   != 'kitchen'
+     ORDER BY COALESCE(sent_at, date) DESC, id DESC
+     LIMIT 60`).all(me);
+  if (rows.length) {
+    const marks = rows.map(() => '?').join(',');
+    const lines = conn.prepare(`
+      SELECT id, restock_id, product_name, product_cn, sku,
+             qty_requested, qty_sent, unit, COALESCE(is_checked, 0) AS is_checked
+        FROM restock_items
+       WHERE restock_id IN (${marks}) AND qty_requested > 0
+       ORDER BY id`).all(...rows.map(r => r.id));
+    const delivered = new Set(rows.filter(r => r.status === 'delivered' || r.delivered_at).map(r => r.id));
+    const byReq = new Map(rows.map(r => [r.id, []]));
+    for (const l of lines) {
+      /* ORDER MATTERS. A delivered request's lines were all dispatched first,
+         so reading arrival before dispatch is what stops a counted-in line
+         reading as merely on its way. `is_checked` is the picker's tick — the
+         same flag the Pick screen writes one PUT at a time — and it is the
+         only per-line fact about dispatch there is. */
+      l.state = delivered.has(l.restock_id) ? 'arrived'
+              : (l.is_checked ? 'sent' : 'waiting');
+      delete l.is_checked;
+      byReq.get(l.restock_id).push(l);
+    }
+    // The shop it was asked OF, by name. The phone sends no store_name at all
+    // on this flow, so the location id answers first and the free text is the
+    // fallback for rows written before #259 gave it one.
+    const nameOf = (id) => {
+      if (!id) return '';
+      try {
+        const r = conn.prepare('SELECT name_en, name_cn FROM retail_stores WHERE id = ?').get(id);
+        return r ? { name_en: r.name_en || '', name_cn: r.name_cn || '' } : '';
+      } catch (e) { return ''; }
+    };
+    rows.forEach(r => {
+      r.items = byReq.get(r.id) || [];
+      // WITHDRAWN IS THE ONE GENUINELY REQUEST-LEVEL FACT, exactly as it is on
+      // §175's screen. Archiving is how a request stops being outstanding, and
+      // an asker reading a list of what they asked for must not be shown a
+      // dead row as though somebody were still walking a freezer for it.
+      r.withdrawn = !!r.archived_at;
+      const from = nameOf(r.from_store_id);
+      r.from_name_en = from ? from.name_en : '';
+      r.from_name_cn = from ? from.name_cn : (r.store_cn || r.store_name || '');
+    });
+  }
+  res.json({ success: true, data: rows });
+});
+
 router.get('/api/restock/:id', requireRestockAccess, kitchenScopedOrder, (req, res) => {
   const order = tdb().prepare('SELECT * FROM restock_orders WHERE id = ?').get(req.params.id);
   if (!order) return res.status(404).json({ error: 'Not found · 未找到' });
