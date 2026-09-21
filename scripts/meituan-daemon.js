@@ -52,6 +52,7 @@ const batchCadence = require('../lib/batch-cadence');
 const mtBundles = require('../lib/meituan-bundles');
 const { getBrowser, closeAll } = require('../lib/meituan-browser');
 const { sweepStockDrift } = require('../lib/meituan-drift-sweep');
+const { isStoreTradingOnChannel } = require('../lib/store-trading');
 const { stallTick } = require('../lib/meituan-queue-stall');
 const { alertPlatform, alertMerchant, alertBoth } = require('../lib/ops-alert');
 // ── Whose problem is it? (audit P-01) ─────────────────────────────────────
@@ -827,16 +828,17 @@ function pushableStores(stores) {
 // (store_business_status.target_open). The channel flag above is all-or-nothing;
 // this is one store. target_open is a command the daemon nulls once applied, so
 // it falls through to is_open, the 营业/置休 state. Absent means on.
+// It reads the SHARED predicate rather than the two columns directly. Those two
+// are the Meituan POI's own 营业/停业 state and they are not the only switch over
+// this location: store_business_status.fulfillment_open is the shop-wide master,
+// and when it is 0 lib/inventory has already dropped the store from every routing
+// pool, so the shop cannot take an order at all. Pushing stock to a channel for a
+// shop that cannot fulfil it is not a push anyone wants. Reading target_open/
+// is_open alone let that happen whenever the POI read back as 营业 under a closed
+// master — which is a state the merchant site can produce on its own.
 function storePushEnabled(storeCode) {
   if (!storeCode) return true;
-  try {
-    const row = db.prepare('SELECT target_open, is_open FROM store_business_status WHERE store_code = ?')
-                  .get(storeCode);
-    if (!row) return true;
-    if (row.target_open === 0 || row.target_open === 1) return row.target_open === 1;
-    if (row.is_open === 0 || row.is_open === 1) return row.is_open === 1;
-    return true;
-  } catch { return true; }
+  return isStoreTradingOnChannel(db, storeCode, 'meituan');
 }
 
 function meituanChannelEnabled() {
@@ -1547,11 +1549,17 @@ async function main() {
     // Level-triggered backstop for the edge-triggered queue: re-enqueue anything
     // whose stock no longer matches what Meituan last accepted. Runs before the
     // push so recovered rows go out in this same cycle. No browser, so it's safe
-    // to run while a store is closed — the push itself still waits for opening.
+    // to run while a store is shut FOR THE NIGHT — the push itself still waits
+    // for opening, and the drift is recorded and queued meanwhile.
+    //
+    // A location SWITCHED OFF is a different thing and the sweep now drops it
+    // itself: not trading is not drift. Opening hours are still the daemon's to
+    // gate, and still gate only the push.
     if (now - lastDriftSweep >= DRIFT_SWEEP_MS) {
       lastDriftSweep = now;
       sweepStockDrift(db, {
         storeCodes: stores.map(s => s.storeCode), // getStoreConfigs already drops SKIP_STORES
+        channelKey: 'meituan',
         channel: '外卖', log, logSync, notifyMerchant: (t) => alertMerchant(ACCOUNT, t), alerts,
       });
     }
