@@ -66,6 +66,8 @@ const inventory = require('../lib/inventory'); // isQingyunSameCityToday — sam
 const phoneCn = require('../lib/phone-cn'); // is this a number a rider can call? (advisory — see the file)
 // Hold-vs-refuse decision + the statements that implement it (see lib/qingyun-queue).
 const qingyunQueue = require('../lib/qingyun-queue');
+const pointMemory = require('../lib/delivery-point-memory'); // answers operators have already given for an address
+const { withTransaction } = require('../lib/db-transaction'); // one transaction or neither write (§24)
 const { storeHours, within } = require('../lib/store-hours'); // opening hours, for the alert window
 
 const STORES = (process.env.QINGYUN_STORES || 'tianhe')
@@ -751,23 +753,81 @@ async function drainPushQueue(storeCode, br) {
       //
       // ORDER MATTERS, and it is the whole of this catch block:
       //   1. hold            — the geocoder is down; give the attempt back, retry later
-      //   2. awaiting_choice — the NAME search found several places and could
+      //   2. remembered      — a person already answered this exact address on an
+      //                        earlier order; apply that point and requeue
+      //   3. awaiting_choice — the NAME search found several places and could
       //                        not choose; park it with the candidates
-      //   3. needs_point     — nothing could be placed at all; park it with a map
-      //   4. outcome         — a real failure; decide one attempt or five
-      // 1, 2 and 3 all `continue`, so only a genuine push failure reaches the
+      //   4. needs_point     — nothing could be placed at all; park it with a map
+      //   5. outcome         — a real failure; decide one attempt or five
+      // 1, 2, 3 and 4 all `continue`, so only a genuine push failure reaches the
       // outcome. These branches were written weeks apart and meet here; a
       // resolution that dropped any of them would fail silently — parked orders
       // would burn attempts and page ops, or a refused phone would retry four
       // more times.
       //
-      // 2 before 3 because the two markers are mutually exclusive on one error
+      // 2 comes before both parking branches because it is the only one that can
+      // make the question go away: the point it applies is the same answer the
+      // operator would have typed into the surface those branches draw, so
+      // parking first and consulting the memory afterwards would show a
+      // question that was already answered. It sits AFTER the hold for the
+      // opposite reason — a geocoder outage is not a question anyone asked a
+      // person, and answering it from the memory would ship addresses the
+      // memory has never been asked about.
+      //
+      // 3 before 4 because the two markers are mutually exclusive on one error
       // (lib/qingyun-payload throws one or the other, never both) but the order
       // still documents the intent: when there is something to pick from, the
       // pick state wins. They are separate `if`s rather than an else-chain for
       // the same reason every other branch here is — each one `continue`s, and
       // a future marker added to the wrong end of an else-chain is a bug that
       // does not announce itself.
+
+      // ── Already answered ────────────────────────────────────────────────
+      // Both parked states below ask a person a question. If someone has
+      // already answered it for this exact address text — tapped the building,
+      // or picked the place off the list — the question is not asked again
+      // (decisions §203, Ash: the reuse is silent). The remembered SOURCE is
+      // written unchanged, so a picked name stays subject to MAX_DROP_KM and
+      // only a tapped building carries the exemption it earned.
+      if (qingyunQueue.shouldMarkNeedsPoint(e) || qingyunQueue.shouldMarkAwaitingChoice(e)) {
+        // Re-read rather than close over the `order` the try block loaded: that
+        // one is out of scope here, and the address is re-read anyway before it
+        // is written back, so a ship-to edit made while the push was in flight
+        // is the version this answers against.
+        const parkedOrder = db.prepare(
+          'SELECT id, order_no, address_json FROM retail_orders WHERE id = ?'
+        ).get(row.retail_order_id) || {};
+        let parked = {};
+        try { parked = JSON.parse(parkedOrder.address_json || '{}') || {}; } catch { parked = {}; }
+        const hit = parked.pickup ? null : pointMemory.recall(db, parked);
+        // alreadyApplied is the loop guard: if this order is ALREADY carrying
+        // the remembered point and the build parked anyway, the memory has
+        // nothing to add and the row parks as it would have.
+        if (hit && !pointMemory.alreadyApplied(parked, hit)) {
+          // Both writes or neither, the same rule the confirm endpoint follows:
+          // a point on an order that was never requeued is an order that looks
+          // fixed and never ships, and a requeue without the point sends the
+          // drain back to the address it just refused. Through
+          // lib/db-transaction rather than better-sqlite3's db.transaction()
+          // for the reasons that file gives — §24.
+          const applied = await withTransaction(db, (tx) => {
+            tx.prepare('UPDATE retail_orders SET address_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+              .run(JSON.stringify(pointMemory.pinnedSnapshot(parked, hit)), row.retail_order_id);
+            return tx.prepare(qingyunQueue.RECALLED_POINT_SQL).run(row.attempts, row.id).changes > 0;
+          });
+          if (applied) {
+            pointMemory.markUsed(db, hit.key);
+            log(storeCode, `push: order ${parkedOrder.order_no || row.retail_order_id} POINT RECALLED from `
+              + `${hit.answeredOrderNo || 'an earlier order'} (${hit.source}`
+              + `${hit.placeName ? `, ${hit.placeName}` : ''}) — requeued without asking`);
+            logSync(storeCode, 'push', 'ok', {
+              order: row.retail_order_id, point_recalled: true, source: hit.source,
+              from_order_no: hit.answeredOrderNo || null,
+            }, null);
+            continue;
+          }
+        }
+      }
       if (qingyunQueue.shouldMarkAwaitingChoice(e)) {
         const pt = e.point || {};
         db.prepare(qingyunQueue.AWAITING_CHOICE_SQL).run(

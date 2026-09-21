@@ -6479,6 +6479,39 @@ addColumn('qingyun_push_queue', 'guessed_precision', 'TEXT');
 // which kind of wait it is.
 addColumn('qingyun_push_queue', 'candidates_json',   'TEXT');
 
+// ── The answers operators have already given ──────────────────────────────
+// A point confirmed on the map, or a place picked off the name list, applies to
+// the order it was given for and to nothing else — and the NEXT order to the
+// same address used to ask the same question again, because the geocoder
+// returns the same coarse area for the same text every time. That is a retry
+// performed by a person, and this table is what stops it: keyed on the address
+// TEXT, read by the drain before it parks a row (lib/delivery-point-memory).
+//
+// Keyed on the text, never on the customer: a customer has several addresses
+// and a memory keyed on them would answer for all of them at once. An edit to
+// the text retires the answer by construction — the key stops matching — which
+// is the same rule a staff_pin already follows on an order.
+//
+// It is NOT a write-back to retail_customer_addresses (D5 stands): the
+// customer's saved record still holds the address as they gave it, and this
+// holds what an operator worked out about it. Decisions §203.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS retail_delivery_point_memory (
+    address_key       TEXT PRIMARY KEY,   -- province|city|district|address|detail, normalised
+    address_text      TEXT NOT NULL,      -- the same address as a person reads it
+    lat               REAL NOT NULL,
+    lng               REAL NOT NULL,
+    source            TEXT NOT NULL,      -- 'staff_pin' (map tap) | 'poi_picked' (chosen name)
+    place_name        TEXT,               -- the name picked, when it was a name
+    answered_order_id INTEGER,            -- which order it was answered on
+    answered_order_no TEXT,
+    used_count        INTEGER NOT NULL DEFAULT 0,
+    last_used_at      DATETIME,
+    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 // Meituan-only bundles (套餐/combos) that have no single roots product. Each is
 // defined as a set of component products; its sellable stock is computed as the
 // minimum of what its components can make, and pushed to the bundle's Meituan

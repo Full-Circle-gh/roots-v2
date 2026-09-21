@@ -37,7 +37,7 @@ Precise is not the same as correct. A rooftop-grade match can still be the wrong
 | D2 | "Trustworthy" is exactly what the gate already accepts: `geo_source = customer_pin`, or `geocode:*` at rooftop or street grade. |
 | D3 | Coarse points enter a new state, `needs_point`. It is not an error state. **Narrowed 2026-08-11: only coarse points we cannot vouch for. A coarse point close to the collecting store dispatches. See §4.3.** |
 | D4 | Operator confirms the point on a map inside the order drawer. |
-| D5 | A confirmed point applies to that order only. It never writes back to the customer's saved address. |
+| D5 | A confirmed point applies to that order only. It never writes back to the customer's saved address. **Amended 2026-09-21 (decisions §203): it is also kept in `retail_delivery_point_memory`, keyed on the address TEXT, so the same address is not asked about twice. `retail_customer_addresses` is still never written — see §5.5.** |
 | D6 | With auto-push off, a `needs_point` order holds indefinitely. Dispatch is attended; someone opens every order. |
 | D7 | With auto-push on, the tenant chooses: hold indefinitely, or push the guessed point after a fixed delay. |
 | D8 | The fallback delay is fixed in code, not configurable. |
@@ -145,7 +145,7 @@ No precision grade is invented. A `staff_pin` is not recorded as rooftop to slip
 
 The `ABS_MAX_KM` ceiling (50 km, `:453`) still applies and is not overridden by confirmation. Past that there is no same-city rider trip whatever anyone confirmed.
 
-A `staff_pin` does not survive an address text edit. The point was chosen against the old text; if the text changes it is discarded and the order re-parks. This is D5 holding at the edges.
+A `staff_pin` does not survive an address text edit. The point was chosen against the old text; if the text changes it is discarded and the order re-parks. This is D5 holding at the edges. The memory in §5.5 follows the same rule for the same reason, and gets it for free: the address text IS its key, so an edited address simply no longer matches.
 
 **On D2.** This widens the accept rule, which D2 said not to touch. The widening is deliberate and consistent with D2's intent: the rule was written to stop the automatic path weakening itself, and a human deliberately pointing at a building is a stronger signal than anything already on the list. D2 is amended to: automatic sources are unchanged; a new explicitly-human source is added.
 
@@ -236,6 +236,25 @@ different things, and both end by pointing back at the map.
 **Not for customers.** Staff-only, drawer-only. The storefront and mini-app
 pickers have their own search and are untouched. The expired-order branch (§5.2)
 gets no search box either — it renders no map, so there would be nothing to move.
+
+
+### 5.5 The same address is asked about once — added 2026-09-21
+
+**An answer given on this surface is kept, and the next order to the identical address ships on it without asking.** Decisions §203, decided by Ash, who asked for the reuse to be silent.
+
+**Why this is not a reversal of D5.** D5 says a staff point must not be written into the customer's saved address, because the customer did not choose it and would never see it to correct it. That holds unchanged. The answer goes into `retail_delivery_point_memory` — the operators' own record of addresses they have already worked out — which sits beside the customer's record rather than inside it.
+
+**Keyed on the address text, never on the customer.** A customer has more than one address; a memory keyed on them answers for all of them at once, so one wrong tap would route every future order for every address they have to a door chosen for a different one. Keyed on the text, a wrong answer reaches exactly the address it was given for. The key is `province|city|district|address|detail`, normalised for whitespace, and an address with no street line is never remembered at all — a point remembered against `广东省广州市` would be handed to every future order that also failed to say more than a city.
+
+**The source makes the round trip unchanged.** `staff_pin` is exempt from `MAX_DROP_KM` (§5.1) and `poi_picked` is not, so a memory that promoted a picked name to a tapped building would hand it that exemption a week later — the laundering this surface exists to prevent, arriving through a cache. The whitelist is applied on the way in and again on the way out, so a row corrupted since it was written never becomes a delivery target.
+
+**Read last, not first.** The payload builder runs exactly as before; the memory answers only the two questions that would otherwise park the row (§5 and the candidate surface), so a fresher precise resolve still wins. It is read after the geocoder hold, because an outage is not a question anyone asked a person.
+
+**The orders already parked are released with it.** A parked row never retries itself, so without this two orders to one address would each ask. Confirming one releases the others whose address key matches, after the confirm's own transaction commits; closed orders and rows that already have a courier copy are skipped.
+
+**Silent on the screen, not in the record.** The order's snapshot carries `geo_memory` naming the order the point was placed on, the drain logs `POINT RECALLED`, and the activity log names every order a confirm released.
+
+Held by `scripts/test_point_memory.js`.
 
 ## 6. Orders list — ⛔ DECLINED 2026-08-08
 
