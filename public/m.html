@@ -10754,7 +10754,21 @@ function loadXfr(force){
     x.list=[]; x.err=''; render();
   });
 }
-function xfrArrived(o){ return !!(o&&o.delivered_at); }
+/* WHAT MAKES A DELIVERY COUNTABLE IS THAT THE GOODS LEFT, NOT THAT SOMEBODY
+   MARKED IT DELIVERED (§208). This read `delivered_at`, and NOTHING IN ANY
+   CLIENT HAS EVER WRITTEN THAT COLUMN — its only writer is the 'delivered'
+   status transition (routes/restock.js `_advanceOrderStatus`), and no screen
+   in this app, retail-admin, store-admin or cms calls it. So every transfer
+   that reached this screen said "Still on its way", the count never opened,
+   and a delivery sitting on the counter could not be put on the shelf.
+
+   `goods_state === 'in_transit'` is the condition the RECEIVE ENDPOINT itself
+   tests, and its own note says why it is the right one: at Roots the driver
+   marking delivered and the store counting are genuinely concurrent, so one
+   must never gate the other. The server was always ready to take the count;
+   only this line refused to ask for it. */
+function xfrCountable(o){ return !!(o&&o.goods_state==='in_transit'); }
+function xfrSettled(o){ return !!(o&&(o.goods_state==='settled'||o.received_confirmed_at)); }
 function xfrItems(){
   const xs=state.xfr.order&&state.xfr.order.items;
   // Only lines that were actually sent. A line asked for and not picked has
@@ -10774,9 +10788,10 @@ function xfrOpen(id){
   x.busy=true; x.err=''; x.order=null; x.held=null; x.orderId=Number(id); render();
   api('/api/restock/'+Number(id)).then(j=>{
     x.order=(j&&j.data)||j; x.busy=false;
-    // Counting in something that has not arrived is the one thing this screen
-    // must not invite, so an order still on the road says so instead.
-    x.step=xfrArrived(x.order)?'count':'transit';
+    // The list draws in-transit orders and nothing else, so the fallback is a
+    // race rather than a state anybody navigates to: the delivery settled in
+    // another hand between this list loading and this tap.
+    x.step=xfrCountable(x.order)?'count':'transit';
     render();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
@@ -11806,10 +11821,19 @@ function screenReceiveTransfer(){
     if(x.busy&&!x.order) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
     const o=x.order||{};
     if(x.step==='transit'){
+      /* TWO OPPOSITE FACTS, NEVER ONE SENTENCE. Uncountable because the goods
+         have not left is not uncountable because somebody already counted them,
+         and a screen that said "still on its way" about a settled delivery
+         would send somebody to look for boxes that are already on the shelf.
+         Both pairs below are live strings already used elsewhere on this
+         screen — nothing is composed here. */
+      const done=xfrSettled(o);
       return backRow(T('Receive from another shop','调拨收货'))+err+`<div style="padding:0 16px">
         <div style="font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
-        <div style="font-size:14px;color:var(--text-secondary);margin-top:10px;line-height:1.55">${
-          T('Still on its way. Count it in when it arrives.','仍在途中，到货后再清点入库。')}</div></div>`;
+        ${done?`<div style="font-size:15px;font-weight:500;margin-top:10px">${T('Counted in','已入库')}</div>`:''}
+        <div style="font-size:14px;color:var(--text-secondary);margin-top:${done?'6px':'10px'};line-height:1.55">${
+          done?T('The shelf has been updated.','库存已更新。')
+              :T('Still on its way. Count it in when it arrives.','仍在途中，到货后再清点入库。')}</div></div>`;
     }
     const items=xfrItems();
     if(x.step==='confirm'){
