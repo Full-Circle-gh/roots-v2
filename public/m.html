@@ -1030,7 +1030,7 @@ const state = {
      own, so it has to survive the re-renders this screen does for other reasons
      — opening a receipt, another row's decision landing. Held in the DOM alone,
      checking the photo before approving would silently throw the pick away. */
-  apr:{rows:null,tried:false,err:'',busy:0,waiting:0,shot:null,shotFor:null,owed:[],cats:[],cat:{}},
+  apr:{rows:null,tried:false,err:'',busy:0,waiting:0,shot:null,shotFor:null,owed:[],cats:[],cat:{},paid:{}},
   /* WRITING A BROADCAST (§63). Four steps, one decision each: what it says, who
      gets it, when it goes, and a last look before it does. `count` is the
      server's own audience preview — never derived here, because the phone does
@@ -12800,12 +12800,21 @@ reg('aprDecide', (id,decision)=>{
      claim's own value alone rather than blanking it. */
   const picked=a.cat[Number(id)];
   const body=(decision==='approve'&&picked)?{decision:decision,category:picked}:{decision:decision};
+  /* §207 — AND SO DOES WHO PAID. Sent only on approve and only where it DIFFERS
+     from what the claim already says; absent otherwise, and the server leaves
+     the claim's own answer alone rather than blanking it — which matters more
+     here than for the category, because a blank `paid_by` has no meaning at all:
+     it is the field that decides whether a debt exists. */
+  const paid=a.paid[Number(id)];
+  const row=(a.rows||[]).find(x=>x.id===Number(id));
+  if(decision==='approve'&&paid&&row&&paid!==row.paid_by) body.paid_by=paid;
   a.busy=Number(id); a.err=''; render();
   apiWrite('/staff-expenses/'+Number(id)+'/decide',body).then(()=>{
     a.busy=0; a.tried=false; a.shot=null; a.shotFor=null;
     // Spent — the claim carries it now. Left here it would be offered back on
     // the decided row, over whatever the server actually stored.
     delete a.cat[Number(id)];
+    delete a.paid[Number(id)];
     aprLoad();
     if(window.toast) toast(decision==='approve'?T('Approved','已通过'):T('Not approved','已拒绝'));
   }).catch(e=>{
@@ -12821,6 +12830,45 @@ reg('aprDecide', (id,decision)=>{
    and redrawing the queue under a wheel somebody has just closed is a jump this
    screen does not need. */
 reg('aprCatPick', (id,value)=>{ state.apr.cat[Number(id)]=String(value==null?'':value); });
+
+/* §207 — WHO PAID, CHOSEN ON A CLAIM STILL WAITING. Same mechanism as the
+   category above: remembered, not sent, and it goes with the Approve tap. */
+reg('aprPaidPick', (id,value)=>{ state.apr.paid[Number(id)]=String(value==null?'':value); });
+
+/* §207 — CORRECTING WHO PAID ON A CLAIM ALREADY IN THE BOOKS. Ash, off the
+   desktop queue: *"whoever in charge of approval should be able to change own
+   money to company money if needed"*. Somebody at the till taps *My own money*
+   by habit having actually paid on the shop's account, and the claim then sits
+   in **Owed to your team** as a debt the business does not owe — until a real
+   transfer is made against it. The only way out before this was to void the
+   claim and ask them to send it again.
+
+   **NO MONEY MOVES.** The posted ledger row does not read this field at all:
+   same date, same amount, same category, same description either way. What
+   changes is whether the business still owes a person.
+
+   **IT OVERRIDES WHAT THE SUBMITTER SAID, AND THE RECORD IS THE GUARD.** The
+   amount, the note and the date stay theirs; which account the money left is a
+   fact about the shop's statements, which the approver holds. The server logs
+   the value it replaced.
+
+   SAVED ON CHANGE, NO CONFIRM — undone by making the same change again. */
+reg('aprPaidSet', (id,value)=>{
+  const a=state.apr;
+  const paid=String(value==null?'':value);
+  if(a.busy||!paid){ render(); return; }
+  a.busy=Number(id); a.err=''; render();
+  apiWrite('/staff-expenses/'+Number(id)+'/paid-by',{paid_by:paid}).then(()=>{
+    a.busy=0; a.tried=false;
+    aprLoad();
+    if(window.toast) toast(T('Saved','已保存'));
+  }).catch(e=>{
+    a.busy=0;
+    if(String(e.message)==='auth') return;
+    a.err=e.message||E('Could not do that.','操作失败。');
+    render();
+  });
+});
 
 /* §146 — RE-FILING A CLAIM THAT IS ALREADY IN THE BOOKS. **NO MONEY MOVES** —
    same claim, same sum, same person. What changes is which line of the category
@@ -12934,6 +12982,52 @@ function aprCatCell(r){
     onchange="APP.cmd('${cmd}',${r.id},this.value)">${blank}${opts}</select>`;
 }
 
+/* §207 — WHO PAID, AND THE APPROVER CAN CHANGE IT. The desktop's block carries
+   the argument in full; the short of it is that the field is the one submitters
+   get wrong most often, a wrong answer invents a debt rather than merely
+   misfiling a cost, and nothing could fix it but voiding the claim.
+
+   A <select> LIKE THE CATEGORY BESIDE IT, not the chips the expense FORM uses
+   for the identical pair. The form's chips are right where a claim is typed
+   one-handed with the money still in mind; in the queue this is a correction
+   made once, and a control shaped unlike the one above it would read as a
+   different kind of act.
+
+   NO BLANK OPTION, unlike the category. A category may honestly be "not yet";
+   who paid may not — it is the field that decides whether a debt exists, and the
+   validator refuses a third answer for that reason.
+
+   ON A WAITING CLAIM AND ON AN APPROVED, UNSETTLED ONE. Not on a settled one:
+   saying the business never owed money it has already handed back leaves a real
+   transfer with nothing behind it, and the server refuses it. Not on a rejected
+   or voided one — there is no debt either way. A PURCHASE ORDER DOES NOT
+   WITHDRAW IT, though it withdraws the category: that refusal is about the
+   ledger and this touches none, and somebody who paid for a food processor out
+   of their own pocket is owed the money whether it has arrived or not. */
+function aprPaidable(r){
+  if(r.status==='submitted') return true;
+  return r.status==='approved'&&!Number(r.settled);
+}
+
+function aprPaidCell(r){
+  const a=state.apr;
+  if(!aprPaidable(r)) return '';
+  const waiting=r.status==='submitted';
+  const chosen=waiting&&a.paid[r.id]!==undefined?a.paid[r.id]:(r.paid_by==='employee'?'employee':'company');
+  const opts=[['employee',T('own money','个人支付')],['company',T('company','公司')]]
+    .map(v=>`<option value="${escAttr(v[0])}"${v[0]===chosen?' selected':''}>${escAttr(v[1])}</option>`).join('');
+  const cmd=waiting?'aprPaidPick':'aprPaidSet';
+  /* LABELLED, WHERE THE CATEGORY IS NOT. Every option in a category picker is a
+     category and it announces itself; `own money / company` read cold beside a
+     name and an amount could be a payment method, a supplier or an account. The
+     two words are the expense form's own, over this identical pair. */
+  return `<label style="display:flex;align-items:center;gap:10px">
+    <span style="font-size:12.5px;color:var(--text-secondary);flex:none">${T('Who paid','由谁付款')}</span>
+    <select style="flex:1;min-width:0;font-size:13.5px;height:40px"${a.busy?' disabled':''}
+      onchange="APP.cmd('${cmd}',${r.id},this.value)">${opts}</select>
+  </label>`;
+}
+
 function aprRow(r){
   const a=state.apr;
   const waiting=r.status==='submitted';
@@ -12950,7 +13044,12 @@ function aprRow(r){
   const filing=aprCatCell(r);
   if(r.category) bits.push(catLabel(r.category));
   else if(!filing) bits.push(T('Not recorded','未记录'));
-  bits.push(own?T('own money','个人支付'):T('company','公司'));
+  /* §207 — SAID ON THE META LINE ONLY WHERE NO PICKER FOLLOWS, the rule the
+     blank category one line above already follows: a row carrying the control
+     would state the same fact twice, and the one that can be changed is the one
+     worth reading. */
+  const whoPaid=aprPaidCell(r);
+  if(!whoPaid) bits.push(own?T('own money','个人支付'):T('company','公司'));
   const busy=a.busy===r.id;
   return `<div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
@@ -12970,6 +13069,10 @@ function aprRow(r){
     ${/* Under the note and above everything optional: it is a fact about the
          claim, and the receipt is a way OUT of the row. */''}
     ${filing}
+    ${/* §207 — beside the category, and above the receipt for the reason the
+         category is: both are facts about the claim the approver may correct,
+         and the photo is a way OUT of the row. */''}
+    ${whoPaid}
     ${r.has_receipt?`<button class="btn2" style="align-self:flex-start;padding:0 12px;height:36px;font-size:13px"
         onclick="APP.cmd('aprShot',${r.id})">${a.shotFor===r.id?T('Hide photo','收起照片'):T('View photo','查看照片')}</button>`:''}
     ${a.shotFor===r.id?(a.shot
