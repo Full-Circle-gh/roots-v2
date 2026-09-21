@@ -65,8 +65,10 @@ const PPG_SECTIONS = [
   { key: 'page', en: 'Shopper page', cn: '顾客页面', carry: [],
     what_en: 'Description, product details, designed page', what_cn: '描述、产品详情、已设计页面' },
 ];
-// The right column, in dock DOM order. Its visual order is CSS.
-const PPG_SIDE = ['#pd-sales-card', '#pd-sec-shipping', '#pd-sec-flags', '#pd-sec-freeof', '#pd-sec-notes', '#pd-foot-acts'];
+// The right column, in dock DOM order. Its visual order is CSS. The three
+// chip groups go into one card (#ppg-details) as rows; the rest stand alone.
+const PPG_SIDE = ['#pd-sales-card', '#pd-foot-acts'];
+const PPG_DETAILS = ['#pd-sec-shipping', '#pd-sec-flags', '#pd-sec-freeof', '#pd-sec-notes'];
 // The writing cards, carried only when Edit unfolds them.
 const PPG_WRITE = ['#pd-sec-facts', '#pd-sec-desc'];
 // Where the dock's summary rows point (pdExpand('sizes') / ('more')) now land.
@@ -137,8 +139,18 @@ function ppgCarryAll() {
   // a hairline. Carried after Where it shows so the restore order holds.
   const basics = document.getElementById('pd-sec-basics');
   if (basics && basics.closest('#ppg')) ppgCarry('#pd-sec-photos', basics);
+  // Sales first, then the three chip groups (consecutive in the dock, so the
+  // restore order holds), then notes and the record's actions.
   const side = ppgMount('side');
-  for (const sel of PPG_SIDE) ppgCarry(sel, side);
+  const details = document.getElementById('ppg-details');
+  ppgCarry(PPG_SIDE[0], side);
+  for (const sel of PPG_DETAILS) ppgCarry(sel, details);
+  for (const sel of PPG_SIDE.slice(1)) ppgCarry(sel, side);
+  // The notes card's "(staff only — never shown to shoppers)" aside is hidden
+  // on the page; the box says it instead, in the words its aria-label already
+  // carries, until something is typed.
+  const notes = document.getElementById('pd-notes');
+  if (notes && !notes.placeholder) notes.placeholder = cuT('Never shown to shoppers', '顾客不可见');
   // The shop switch and the save state: one node each, parked in the header.
   ppgCarry('#pd-head-tags', document.getElementById('ppg-tags'));
   ppgCarry('#pd-save-status', document.getElementById('ppg-state'));
@@ -168,8 +180,21 @@ function pdExpand(section) {
     ppgRenderPageCard();
     ppgWatchStock(true);
     window.scrollTo({ top: 0, behavior: 'auto' });
+    ppgFitSide();
+    window.addEventListener('resize', ppgFitSide);
   }
   ppgShow(ppgPick(section));
+}
+// The right column is capped at the bottom of the window from where it
+// starts on the unscrolled page, so the page never has to scroll for it; on
+// a short screen the column scrolls inside itself. CSS cannot know where the
+// column starts, so this measures it.
+function ppgFitSide() {
+  const side = document.getElementById('ppg-side');
+  if (!side || !_ppgOpen) return;
+  const top = side.getBoundingClientRect().top + window.scrollY;
+  const cap = Math.max(240, window.innerHeight - top - 16);
+  side.style.setProperty('--ppg-side-cap', cap + 'px');
 }
 function ppgPick(section) {
   const keys = ppgVisibleKeys();
@@ -200,6 +225,7 @@ function pdCollapseToPanel() {
   _ppgOpen = false;
   _ppgCurrent = null;
   ppgWatchStock(false);
+  window.removeEventListener('resize', ppgFitSide);
   ppgCarryHome();
   ppgWriteReset();
   const stage = document.getElementById('ppg');

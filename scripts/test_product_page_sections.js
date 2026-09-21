@@ -61,9 +61,9 @@ function lift() {
   const to = PPG.indexOf('// ── Carrying nodes out and home');
   assert.ok(from > 0 && to > from, 'the constants and the resolver moved; re-anchor this test');
   const src = PPG.slice(from, to).replace(/typeof _cfgCache !== 'undefined' \? _cfgCache : null/, 'null');
-  return new Function(src + '\nreturn { PPG_SECTIONS, PPG_SIDE, PPG_WRITE, PPG_ALIASES, ppgResolveLayout };')();
+  return new Function(src + '\nreturn { PPG_SECTIONS, PPG_SIDE, PPG_DETAILS, PPG_WRITE, PPG_ALIASES, ppgResolveLayout };')();
 }
-const { PPG_SECTIONS, PPG_SIDE, PPG_WRITE, PPG_ALIASES, ppgResolveLayout } = lift();
+const { PPG_SECTIONS, PPG_SIDE, PPG_DETAILS, PPG_WRITE, PPG_ALIASES, ppgResolveLayout } = lift();
 
 console.log('\nThe old expanded page is gone, not hidden');
 it('no rule, node or function of the old page survives', () => {
@@ -97,7 +97,7 @@ it('31-product-page.js loads after every part it defines over or reads (05, 09, 
 
 console.log('\nEvery carried node exists once, inside the dock editor');
 const carried = [
-  ...PPG_SECTIONS.flatMap(s => s.carry), '#pd-sec-photos', ...PPG_SIDE, ...PPG_WRITE, '#pd-head-tags', '#pd-save-status',
+  ...PPG_SECTIONS.flatMap(s => s.carry), '#pd-sec-photos', ...PPG_SIDE, ...PPG_DETAILS, ...PPG_WRITE, '#pd-head-tags', '#pd-save-status',
 ];
 const editorStart = HTML.indexOf('<div class="pu-editor" id="pd-editor"');
 const editorEnd = HTML.indexOf('</div><!-- /#pd-bg pa-split-editor -->');
@@ -137,8 +137,9 @@ it('sibling order in the markup is what the carry lists assume', () => {
   assert.deepStrictEqual(idOrderInHtml(['pd-sec-stock', 'pd-sec-sourcing']), ['pd-sec-stock', 'pd-sec-sourcing']);
   assert.deepStrictEqual(idOrderInHtml(['pd-sec-shipping', 'pd-sec-flags', 'pd-sec-freeof', 'pd-sec-notes']),
     ['pd-sec-shipping', 'pd-sec-flags', 'pd-sec-freeof', 'pd-sec-notes']);
-  assert.deepStrictEqual(PPG_SIDE.slice(1, 5), ['#pd-sec-shipping', '#pd-sec-flags', '#pd-sec-freeof', '#pd-sec-notes'],
-    'PPG_SIDE must list the Details cards in dock order — the right column\'s visual order is CSS');
+  assert.deepStrictEqual(PPG_DETAILS, ['#pd-sec-shipping', '#pd-sec-flags', '#pd-sec-freeof', '#pd-sec-notes'],
+    'PPG_DETAILS must list the Details cards in dock order — the card\'s visual order is CSS');
+  assert.deepStrictEqual(PPG_SIDE, ['#pd-sales-card', '#pd-foot-acts']);
   assert.deepStrictEqual(idOrderInHtml(['pd-sec-facts', 'pd-sec-desc']), ['pd-sec-facts', 'pd-sec-desc']);
   assert.deepStrictEqual(idOrderInHtml(['pd-save-status', 'pd-foot-acts']), ['pd-save-status', 'pd-foot-acts']);
 });
@@ -193,6 +194,7 @@ function buildDock() {
   const state = N('ppg-state'); ppg.appendChild(state);
   const mounts = {};
   for (const key of ['basics', 'where', 'cost', 'stock', 'sold', 'write', 'side']) { mounts[key] = N('mount-' + key); ppg.appendChild(mounts[key]); }
+  mounts.side.appendChild(N('ppg-details'));
   return { all, editor, ppg, mounts };
 }
 function snapshot(n) { return { id: n.id, children: n.children.map(snapshot) }; }
@@ -219,9 +221,10 @@ it('carry everything out, then home: the dock is byte-for-byte what it was', () 
   const c = loadCarry(dom);
   c.ppgCarryAll();
   // Everything landed on the page…
-  for (const sel of [...PPG_SECTIONS.flatMap(s => s.carry), ...PPG_SIDE, '#pd-head-tags', '#pd-save-status']) {
+  for (const sel of [...PPG_SECTIONS.flatMap(s => s.carry), ...PPG_SIDE, ...PPG_DETAILS, '#pd-head-tags', '#pd-save-status']) {
     assert.ok(dom.all[sel.slice(1)].closest('#ppg'), `${sel} was not carried onto the page`);
   }
+  for (const sel of PPG_DETAILS) assert.strictEqual(dom.all[sel.slice(1)].parentElement.id, 'ppg-details', `${sel} belongs in the details card`);
   assert.strictEqual(dom.all['pd-sec-photos'].parentElement, dom.all['pd-sec-basics'], 'photos belong inside the Basics card');
   // …and the writing cards only when Edit asks.
   for (const sel of PPG_WRITE) c.ppgCarry(sel, dom.mounts.write);
