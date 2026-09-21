@@ -2643,7 +2643,7 @@ addColumn('retail_orders', 'wx_shipping_locked_at',   'DATETIME'); // NULL = fre
 // rejected) flips back to a live status — otherwise phantom stock accumulates.
 addColumn('retail_orders', 'channel_stock_restored', 'INTEGER DEFAULT 0');
 
-// §208 — this order is an Eleme 预订单 whose stock is DELIBERATELY still on the
+// §209 — this order is an Eleme 预订单 whose stock is DELIBERATELY still on the
 // shelf, waiting for the kitchen to start. 1 = held, 0 = deducted (or never
 // held, which is every order that predates this column).
 //

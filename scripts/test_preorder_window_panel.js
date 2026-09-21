@@ -1,7 +1,7 @@
-// §210 — the card says whether the pre-order window is open, and why not
+// §211 — the card says whether the pre-order window is open, and why not
 // (npm run test:preorder-window-panel).
 //
-// Ash, after §209 pointed him at the allowance: "ok add" — the missing thing
+// Ash, after §210 pointed him at the allowance: "ok add" — the missing thing
 // being that nothing on screen said whether the window was open right now or
 // what number a platform was being shown.
 //

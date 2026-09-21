@@ -275,7 +275,7 @@ async function loadDeliveryZones() {
       if (el) el.checked = Array.isArray(batch.preorder_channels) && batch.preorder_channels.includes(c);
     }
     if ($('#batch-skip'))     $('#batch-skip').value     = (Array.isArray(batch.skip_dates) ? batch.skip_dates : []).join('\n');
-    // §210 — the live window state, beside the fields that decide it. Fired and
+    // §211 — the live window state, beside the fields that decide it. Fired and
     // not awaited: it is one small read, and the rest of this card must not wait
     // on it to finish drawing.
     renderPreorderNow();
@@ -380,7 +380,7 @@ async function saveHolidayMode() {
   try {
     await api('/api/retail-admin/config', { method: 'PUT', body });
     toast('Saved · 已保存');
-    // §210 — the card's own answer to "did that do anything", refreshed from the
+    // §211 — the card's own answer to "did that do anything", refreshed from the
     // server rather than predicted here.
     renderPreorderNow();
   } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
@@ -571,7 +571,7 @@ function poWire() {
   if (window.onLangChange) onLangChange(() => poSync());
 }
 
-/* §210 — THE PRE-ORDER WINDOW, AS IT IS THIS MINUTE.
+/* §211 — THE PRE-ORDER WINDOW, AS IT IS THIS MINUTE.
    Six conditions decide whether a platform is shown more than the shelf, and an
    operator who had one of them wrong saw the same filled-in card as one who had
    them all right. The server already names the FIRST condition that failed

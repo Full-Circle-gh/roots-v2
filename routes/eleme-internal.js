@@ -35,7 +35,7 @@ const { notifyStockGaps } = require('../lib/channel-line-report');
 // §85 — the pre-order window, and whether a shortfall it explains should page.
 const channelPublish = require('../lib/channel-publish');
 const cadence = require('../lib/batch-cadence');
-// §208 — when a booked order's stock comes off the shelf, and what counts as the
+// §209 — when a booked order's stock comes off the shelf, and what counts as the
 // kitchen having started. One file, so the ingest, the status poll and the sweep
 // below cannot drift apart on it.
 const preorderStock = require('../lib/channel-preorder-stock');
@@ -512,7 +512,7 @@ router.post('/ingest-order', (req, res) => {
     // now would drift the count low permanently and then under-report that number to
     // every other channel on the next push. Record the order, skip the deduction.
     const bornVoid = internalStatus === 'cancelled' || internalStatus === 'refunded';
-    /* §208 — A 预订单 BOOKED FOR LATER KEEPS ITS STOCK ON THE SHELF UNTIL THE
+    /* §209 — A 预订单 BOOKED FOR LATER KEEPS ITS STOCK ON THE SHELF UNTIL THE
        KITCHEN STARTS. Ash: 饿了么的预定单，需要等到开始备餐的时候才会自动扣库存。
 
        Every rule about WHEN that is lives in lib/channel-preorder-stock.js, and
@@ -616,7 +616,7 @@ router.post('/ingest-order', (req, res) => {
       // it starts in that state — which is what makes the re-deduct branch in
       // /update-order-status correct if Eleme later revives the order.
       if (bornVoid) db.prepare('UPDATE retail_orders SET channel_stock_restored = 1 WHERE id = ?').run(oid);
-      // §208 — a held booking is in that same state ("not currently deducted"),
+      // §209 — a held booking is in that same state ("not currently deducted"),
       // and channel_stock_deferred is what says WHY, so the revival branch in
       // /update-order-status does not mistake it for a cancel that came back.
       if (holdStock) {
@@ -661,7 +661,7 @@ router.post('/ingest-order', (req, res) => {
     const preorderWindow = cadence.preorderWindow(db, { channel: 'eleme' });
     for (const it of bornVoid ? [] : items) {
       if (!it.productId) { unresolved.push({ name: it.name, nameEn: it.nameEn, sku: it.sku, qty: it.qty, reason: it.matchBy }); continue; }
-      /* §208 — held, so nothing comes off the shelf yet. AFTER the unresolved
+      /* §209 — held, so nothing comes off the shelf yet. AFTER the unresolved
          push and not before it: whether a line matched a product is a fact about
          the ORDER, true the moment it arrives, and an unmatched line is worth
          saying out loud now rather than hours later when the food is due. The
@@ -840,7 +840,7 @@ router.post('/ingest-order', (req, res) => {
       } catch (logErr) { console.error('[eleme-internal] order_born_void log failed:', logErr.message); }
     }
 
-    // §208 — and the same rule for a held booking, for the same reason. "The
+    // §209 — and the same rule for a held booking, for the same reason. "The
     // stock is still on the shelf and that is on purpose" has to be readable
     // from the log, or the first person to compare the shelf against the day's
     // orders is looking at what reads exactly like the bug this replaced.
@@ -891,7 +891,7 @@ function storeCodeOf(retailOrderId) {
   } catch (_) { return null; }
 }
 
-/* §208 — TAKE A HELD BOOKING'S STOCK OFF THE SHELF, EXACTLY ONCE.
+/* §209 — TAKE A HELD BOOKING'S STOCK OFF THE SHELF, EXACTLY ONCE.
    The other half of the hold at ingest. Two callers reach it — the status poll,
    when Eleme's label says the kitchen started, and the clock sweep below — and
    they share this one function rather than each writing the deduction, because
@@ -1101,7 +1101,7 @@ router.post('/update-order-status', (req, res) => {
     let restocked = 0, rededucted = 0, released = 0;
     const confirmedVoid   = isConfirmedVoid(desc);
     const alreadyRestored = !!prev && prev.channel_stock_restored === 1;
-    // §208 — held on purpose, not restored after a void. The two look identical
+    // §209 — held on purpose, not restored after a void. The two look identical
     // in channel_stock_restored and must not be treated alike: a held booking
     // has to survive the revival branch below untouched, or the next poll
     // deducts it and the hold never happens.
@@ -1157,7 +1157,7 @@ router.post('/update-order-status', (req, res) => {
       }
     }
 
-    /* §208 — THE KITCHEN STARTED, so the goods come off the shelf now.
+    /* §209 — THE KITCHEN STARTED, so the goods come off the shelf now.
        Two triggers, whichever lands first: Eleme's own label saying the food is
        being made or has moved, or the clock reaching prep time (the booked
        window less the configured lead). The clock is tested here as well as in
@@ -1236,7 +1236,7 @@ router.post('/auto-deliver-past-eta', (_req, res) => {
 });
 
 /* POST /api/internal/eleme/release-due-preorder-stock
-   §208 — THE CLOCK'S OWN SWEEP, because the poll is not a guarantee.
+   §209 — THE CLOCK'S OWN SWEEP, because the poll is not a guarantee.
 
    The status poll releases a held booking the moment it sees prep start, and
    for an order still on Eleme's in-progress list that is almost always first.

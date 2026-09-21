@@ -1,11 +1,11 @@
-// §208 — an Eleme 预订单 keeps its stock on the shelf until the kitchen starts
+// §209 — an Eleme 预订单 keeps its stock on the shelf until the kitchen starts
 // (npm run test:eleme-preorder-stock).
 //
 // Ash: 饿了么的预定单，需要等到开始备餐的时候才会自动扣库存。
 //
 // What has to hold, and each case exists because getting it wrong is silent:
 //
-//   0  no setting at all             → deducts at order time (§209: off by default)
+//   0  no setting at all             → deducts at order time (§210: off by default)
 //   A  booked, only accepted        → NOTHING comes off the shelf
 //   B  booked, 备餐中 at first sight → deducts at ingest, hold never applies
 //   C  booked inside the lead        → deducts at ingest (prep time is now)
@@ -205,7 +205,7 @@ const check = (name, cond, detail) => {
   if (!cond) failures++;
 };
 
-/* §209 — THE HOLD SHIPS OFF, so every case below that expects one has to say
+/* §210 — THE HOLD SHIPS OFF, so every case below that expects one has to say
    so first. Checked here rather than assumed: a default that quietly came back
    on would make the whole shop's count overstate, and this is the assertion
    that would go red. */

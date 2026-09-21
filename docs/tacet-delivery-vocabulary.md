@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.154 · 2026-09-21 · §210 SHOWS WHETHER THE PRE-ORDER WINDOW IS OPEN RIGHT NOW — COMPOSING EIGHT SHORT LINES OUT OF THE CARD'S OWN WORDS AND MINTING NO NEW TERM.** Ash, after §209 pointed him at §85's allowance: *"ok add"*. The six conditions that open a window had no readout, so a correct card and a mistyped one looked identical. **EVERY CHINESE FRAGMENT IS ALREADY ON THIS CARD OR LIVE BESIDE IT** — `按货架数量显示` is the Channels row's own sentence verbatim, `预订可售数量` / `预订截单` / `预订开始` are the three rows above, `制作日` is the skip-dates row's, `款` and `「分批现做」商品` are the quantity row's, `当日截单` is the save's own refusal, `已开启` / `未开启` are the switch labels, and `各平台`, `当前状态`, `原因`, `不起作用`, `可再接` are live. What is composed is the ORDER the words come in. **EVERY ONE IS RESOLVED WITH `cuT` AND NOT WRITTEN AS AN `EN · CN` STRING**, because five of them carry an hour or a count: the walker splits a text node on its first ` · ` and keeps one side, so a pair with a number in it ships as half a sentence in one language. See *Whether the pre-order window is open* at the end.
+**v1.154 · 2026-09-21 · §211 SHOWS WHETHER THE PRE-ORDER WINDOW IS OPEN RIGHT NOW — COMPOSING EIGHT SHORT LINES OUT OF THE CARD'S OWN WORDS AND MINTING NO NEW TERM.** Ash, after §210 pointed him at §85's allowance: *"ok add"*. The six conditions that open a window had no readout, so a correct card and a mistyped one looked identical. **EVERY CHINESE FRAGMENT IS ALREADY ON THIS CARD OR LIVE BESIDE IT** — `按货架数量显示` is the Channels row's own sentence verbatim, `预订可售数量` / `预订截单` / `预订开始` are the three rows above, `制作日` is the skip-dates row's, `款` and `「分批现做」商品` are the quantity row's, `当日截单` is the save's own refusal, `已开启` / `未开启` are the switch labels, and `各平台`, `当前状态`, `原因`, `不起作用`, `可再接` are live. What is composed is the ORDER the words come in. **EVERY ONE IS RESOLVED WITH `cuT` AND NOT WRITTEN AS AN `EN · CN` STRING**, because five of them carry an hour or a count: the walker splits a text node on its first ` · ` and keeps one side, so a pair with a number in it ships as half a sentence in one language. See *Whether the pre-order window is open* at the end.
 
 **v1.153 · 2026-09-21 · §207 LETS THE APPROVER CORRECT WHO PAID — ONE COMPOSED STRING, EVERY SCREEN WORD COPIED.** The two options the new picker offers (`own money · 个人支付`, `company · 公司`) and its label (`Who paid · 由谁付款`) are the phone's own live pairs, already over this exact field; `Saved · 已保存` is the queue's own. What is composed is ONE server refusal, and it is composed from two live parts. The two other refusals the route makes are borrowed whole from sentences the file already says. See *Correcting who paid on an approved claim (§207)*.
 
@@ -8224,7 +8224,7 @@ sentence for states this file already names would be four ways to be told one
 thing.
 
 
-## Whether the pre-order window is open (§210, 2026-09-21)
+## Whether the pre-order window is open (§211, 2026-09-21)
 
 §85 publishes `shelf + allowance` to a platform while six conditions hold: the
 batch schedule on, an allowance set, the channel ticked, the hour inside

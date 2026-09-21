@@ -22906,7 +22906,7 @@ router.get('/api/retail-admin/tier-counts', requireRetailAdmin, (req, res) => {
   }
 });
 
-/* §210 — IS THE PRE-ORDER WINDOW OPEN RIGHT NOW, AND WHAT IS EACH PLATFORM
+/* §211 — IS THE PRE-ORDER WINDOW OPEN RIGHT NOW, AND WHAT IS EACH PLATFORM
    BEING SHOWN? Live context for the batch schedule card, the same shape and the
    same promise as tier-counts above: read-only, cheap, and degrades to an empty
    answer rather than breaking the settings page.

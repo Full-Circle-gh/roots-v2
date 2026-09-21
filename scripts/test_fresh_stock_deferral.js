@@ -107,7 +107,7 @@ db.exec(`
     -- §187 behaviour is owned by test_restock_parcel_dispatch.js; what this
     -- suite needs is the column, and one assertion that the hold-back does not
     -- disturb the §58 rules above.
-    -- §208 — the Eleme 预订单 hold. commitUnreservedOrder reads it to refuse a
+    -- §209 — the Eleme 预订单 hold. commitUnreservedOrder reads it to refuse a
     -- held booking's stock (the channel path takes that one), so a table
     -- without it fails at prepare() rather than at an assertion. Nothing in
     -- this suite sets it; the default is what every order here carries.

@@ -517,7 +517,7 @@ async function autoDeliverPastEta() {
   } catch (err) { log('all', `autoDeliverPastEta error: ${err.message}`); }
 }
 
-// §208 — take a held 预订单's stock off the shelf once the clock reaches prep
+// §209 — take a held 预订单's stock off the shelf once the clock reaches prep
 // time. The poll already does this for any booked order Eleme's label moves; the
 // sweep is for the ones the poll never sees again — completed and dropped off
 // the in-progress list, or sitting through a closed store's poll window. Touches
@@ -947,7 +947,7 @@ async function main() {
     if (Date.now() - lastDeliverSweep >= DELIVER_SWEEP_MS) {
       lastDeliverSweep = Date.now();
       await autoDeliverPastEta();
-      // §208 — on the same tick and for the same reason: an order the poll will
+      // §209 — on the same tick and for the same reason: an order the poll will
       // never see again must not keep its stock on the shelf for ever.
       await releaseDuePreorderStock();
     }

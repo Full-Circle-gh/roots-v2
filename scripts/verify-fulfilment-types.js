@@ -59,7 +59,7 @@ db.exec(`
     reminder_ship_sent_at DATETIME, reminder_pickup_sent_at DATETIME,
     sms_delivered_sent_at DATETIME,
     wx_shipping_uploaded_at DATETIME, wx_shipping_status TEXT, wx_shipping_attempts INTEGER DEFAULT 0,
-    -- §208 — the Eleme 预订单 hold. commitUnreservedOrder reads it to refuse a
+    -- §209 — the Eleme 预订单 hold. commitUnreservedOrder reads it to refuse a
     -- held booking's stock (the channel path takes that one), so a table
     -- without it fails at prepare() rather than at an assertion. Nothing in
     -- this suite sets it; the default is what every order here carries.
