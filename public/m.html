@@ -1510,6 +1510,7 @@ reg('pikAll', key=>{ const L=pikVisible().find(x=>x.key===String(key)); if(L) pi
 reg('pikShort', key=>pikShortOpen(String(key)));
 reg('pikShortTyped', (id,v)=>pikShortTyped(id,v));
 reg('pikShortCommit', ()=>pikShortCommit());
+reg('pikUndo', key=>pikUndo(String(key)));
 reg('pikDispatch', ()=>pikDispatch());
 reg('pikList', ()=>{ const k=state.pik; k.step='list'; k.result=null; k.err=''; k.tried=false; render(); loadPik(true); });
 reg('kqOpen', id=>kqOpen(id));
@@ -10761,6 +10762,45 @@ function pikShortCommit(){
   k.short=null; k.shortErr='';
   pikWriteLine(L,per);
 }
+/* PUTTING A PICKED LINE BACK (§214). Ash, looking at a ticked line with a
+   green circle and nothing else on it: *"no way to undo , change"*. Ticking was
+   a one-way door — pick 2 when you meant 1, or tick the wrong row, and the only
+   way out was to dispatch it wrong and fix it at the far end as a receipt
+   discrepancy.
+
+   SAFE BY CONSTRUCTION, NOT BY CARE. The line edit the server already refuses
+   once `goods_state` leaves 'none' is this same endpoint, so an undo after the
+   van has gone is a 409 rather than a quantity that moved. This screen lists
+   only runs that have not been dispatched, so it should never see one — and the
+   refusal is drawn anyway, because "should never" is not a reason to swallow
+   what the server says.
+
+   IT CLEARS THE QUANTITY TOO, through `clear_qty_sent`. Un-ticking alone leaves
+   a stale `qty_sent` on an unchecked line, which dispatch would still read — see
+   the endpoint's own note. Undone means untouched. */
+function pikUndo(key){
+  const k=state.pik;
+  if(k.busy) return;
+  const L=pikVisible().find(x=>x.key===key);
+  if(!L) return;
+  k.short=null; k.shortErr='';
+  k.busy=true; k.err=''; render();
+  return Promise.all(L.parts.map(p=>
+    apiWrite('/api/restock/'+p.orderId+'/item/'+p.itemId,{is_checked:0,clear_qty_sent:true},'PUT')
+      .then(()=>{
+        const o=pikOrders().find(x=>x.id===p.orderId);
+        const it=o&&(o.items||[]).find(x=>x.id===p.itemId);
+        if(it){ it.qty_sent=null; it.is_checked=0; }
+      })
+  )).then(()=>{ k.busy=false; render(); })
+    .catch(e=>{
+      if(String(e.message)==='auth') return;
+      k.busy=false;
+      k.err=e.code==='norealm'?T('This account cannot pick transfers.','此账号无法拣货。')
+                              :(e.message||T('That line did not save. Nothing has changed — try again.','该项未保存,数据未变 — 请重试。'));
+      render();
+    });
+}
 /* THE DISPATCH. One PUT per order, which is what fires _applyDispatch. A
    failure is SHOWN and nothing more — retrying it is its own work, and offering
    a retry here would be building that feature by the back door. */
@@ -12255,7 +12295,14 @@ function screenPick(){
       ${shorting
         ? `<span style="display:flex;gap:8px;align-items:center">${L.parts.map(p=>shortField(L,p,solo)).join('')}</span>`
         : L.done
-        ? `<span style="color:var(--sage-ink);display:flex">${ic('circle-check',20)}</span>`
+        /* THE TICK STAYS THE STATUS AND UNDO IS ITS OWN CONTROL. Making the
+           tick itself undo would put a destructive tap exactly where the thumb
+           already is a moment after pressing Picked. */
+        ? `<span style="display:flex;gap:10px;align-items:center">
+             <button class="btn2" style="min-height:36px;padding:0 12px;font-size:13px;width:auto"${k.busy?' disabled':''}
+               onclick="APP.cmd('pikUndo','${L.key}')">${T('Undo','撤销')}</button>
+             <span style="color:var(--sage-ink);display:flex">${ic('circle-check',20)}</span>
+           </span>`
         : `<span style="display:flex;gap:8px">
              <button class="btn2" style="min-height:36px;padding:0 12px;font-size:13px;width:auto"${k.busy?' disabled':''}
                onclick="APP.cmd('pikShort','${L.key}')">${T('Short','缺货')}</button>
