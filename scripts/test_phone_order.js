@@ -109,6 +109,21 @@ const ctx = {
 ctx.reg = (n, f) => { ctx.CMD[n] = f; };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
+/* searchBox draws every search field on the phone and the × that empties it.
+   It lives with the shared render helpers rather than inside this block, so it
+   is sliced in separately — stubbing it would hide what the customer, product
+   and city fields actually put on the glass, which is half of what this suite
+   checks. */
+{
+  const at = M.indexOf('function searchBox(');
+  if (at < 0) { console.error('FAIL — searchBox not found in public/m.html'); process.exit(1); }
+  let depth = 0, end = -1;
+  for (let j = M.indexOf('{', at); j < M.length; j++) {
+    if (M[j] === '{') depth++;
+    else if (M[j] === '}' && --depth === 0) { end = j + 1; break; }
+  }
+  vm.runInContext(M.slice(at, end), ctx, { filename: 'm.html#searchBox' });
+}
 vm.runInContext(BLOCK + '\nglobalThis.__ONW={onwBlank,onwReset,onwBlocked,onwBody,onwAddress,onwHasWork,'
   + 'onwSubtotal,onwTotal,onwDistrictRequired,onwErrText,onwFeeNote,onwLinesHtml,onwFootHtml,'
   + 'screenNewOrder,ONW_WHERE,ONW_ORIGINS,ONW_FULS,onwSyncStore};', ctx);

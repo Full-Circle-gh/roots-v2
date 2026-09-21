@@ -556,6 +556,21 @@ input:focus,textarea:focus{outline:none;border-color:var(--border-focus)}
   color:var(--text-secondary);cursor:pointer;flex:none}
 .dmgbtn.on{background:var(--brick-tint);border-color:var(--brick);color:var(--brick-ink)}
 .dmgbtn .n{font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+/* A SEARCH FIELD AND THE × THAT EMPTIES IT. The span is what the × is
+   positioned against, so its `right` is measured from the FIELD's own edge
+   rather than from whatever padding the screen around it happens to use —
+   fifteen boxes, a dozen different paddings, one control landing in the same
+   place in all of them.
+   THE FIELD RESERVES ITS RIGHT-HAND PADDING PERMANENTLY, not only while the ×
+   shows: a padding that arrived with the first character would shuffle the text
+   under the caret as it was being typed. */
+.srchwrap{position:relative;display:block;width:100%;min-width:0}
+/* 46px = the button's 44 plus the 2 it is inset by, so the text area ends
+   exactly where the button begins. 44 left a two-pixel strip that LOOKED like
+   text but answered taps as the ×, which is the kind of thing that is invisible
+   in a screenshot and maddening under a thumb. */
+.srchwrap>input{padding-right:46px}
+.srchclr{position:absolute;right:2px;top:50%;transform:translateY(-50%)}
 /* The supplier header's secondary action — small, quiet, never a CTA. */
 .minibtn{height:44px;padding:0 11px;border-radius:999px;border:1px solid var(--border-default);
   background:transparent;color:var(--text-secondary);font-size:12.5px;font-weight:500;cursor:pointer;
@@ -1407,6 +1422,7 @@ document.addEventListener('click', kbTapAway);
    nothing takes focus away when the field is never rebuilt. */
 reg('qsSearch', v=>{
   state.qs.q=String(v||'');
+  searchClearShow('mQsClr', !!state.qs.q);
   const host=document.getElementById('mQsBody');
   if(host) host.innerHTML=qsBodyHtml();
   else render();
@@ -1437,23 +1453,43 @@ reg('rqSearch', v=>{
   if(host) host.innerHTML=rqBodyHtml();
   else render();
 });
-/* THE × INSIDE THE FIELD. It cannot go through rqSearch, because the value
-   rqSearch clears is the one it was handed and this one is handed nothing — so
-   it empties the element first, then does precisely what a keystroke does and
-   nothing more. It neither re-renders the app nor puts focus back: the input is
-   never rebuilt and never blurred, which is what searchClearBtn's onmousedown
-   buys. (Naming either of those two calls in this comment would put the word
-   inside the rqSearch slice test_search_repaint_equivalence reads, which runs
-   to the next reg — so they are described here rather than written.) */
-reg('rqClear', ()=>{
-  const el=document.getElementById('mRqQ');
-  if(el) el.value='';
-  state.rq.q='';
-  searchClearShow('mRqClr', false);
-  const host=document.getElementById('mRqBody');
-  if(host) host.innerHTML=rqBodyHtml();
-  else render();
-});
+/* EVERY × ON THE PHONE REGISTERS HERE, because every one of them does the same
+   three things — empty the field, take itself away, hand the screen's own
+   keystroke handler an empty query — and the table is the whole difference
+   between them. The button's id IS its command; see searchBox.
+   HANDING IT TO THE SCREEN'S OWN HANDLER is the point: each search box already
+   knows what an empty query means for its list, whether that is a filter run
+   again, a debounced fetch restarted, or nothing at all. The × does not get a
+   second opinion about any of it, so it cannot drift from what backspacing to
+   empty already does.
+   Customers is the one exception, registered below with its reason. */
+[['mRqQ','mRqClr','rqSearch'],
+ ['mQsQ','mQsClr','qsSearch'],
+ ['mBatQ','mBatClr','batSearch'],
+ ['mMbQ','mMbClr','mbSearch'],
+ ['mProdQ','mProdClr','prodSearch'],
+ ['mRcpQ','mRcpClr','rcpSearch'],
+ ['mExpQ','mExpClr','expQ'],
+ ['mRcvQ','mRcvClr','rcvQuery'],
+ ['mRcvToQ','mRcvToClr','rcvToQuery'],
+ ['mWstQ','mWstClr','wstSearch'],
+ ['mOnwCustQ','mOnwCustClr','onwCustQ'],
+ ['mOnwProdQ','mOnwProdClr','onwProdQ'],
+ ['mOnwCityQ','mOnwCityClr','onwCityQ'],
+ ['mCaddrCityQ','mCaddrCityClr','caddrCityQ'],
+ ['mSearch','mSearchClr','orderSheetQ'],
+].forEach(([inputId,btnId,searchCmd])=>reg(btnId,()=>searchClearRun(inputId,btnId,searchCmd)));
+/* CUSTOMERS FETCHES ON ENTER, so custSearch on its own would empty the box and
+   leave the list showing results for a query that is no longer in it — a
+   control that visibly does nothing. Clearing a search here means asking for
+   the list again, so it does. `custClear` is a different button and stays one:
+   it drops the segment, tier, channel and tag filters as well. */
+reg('mCustClr', ()=>{ searchClearRun('mCustQ','mCustClr','custSearch'); loadCustomers(); });
+/* THE ORDER-SEARCH SHEET KEEPS NO STATE FOR WHAT IS TYPED — its list is built
+   when the sheet opens and Enter is what runs the search — so this handler
+   exists only to show and hide the ×, and deliberately repaints nothing. It is
+   what lets that box use the same control as the other fourteen. */
+reg('orderSheetQ', v=>{ searchClearShow('mSearchClr', !!String(v||'')); });
 reg('rqBump', (id,d)=>rqBump(Number(id),Number(d)));
 reg('rqPurpose', k=>{ state.rq.purpose=String(k); render(); });
 reg('rqTo', id=>{ state.rq.to=Number(id);
@@ -1475,6 +1511,7 @@ reg('rqFrom', id=>{ state.rq.from=Number(id); render(); });
    which a search cannot change. */
 reg('mbSearch', v=>{
   state.mb.q=String(v||'');
+  searchClearShow('mMbClr', !!state.mb.q);
   const host=document.getElementById('mMbBody');
   if(host) host.innerHTML=mbBodyHtml();
   else render();   // not on this screen (or not painted yet) — fall back
@@ -1569,6 +1606,7 @@ reg('hdRetryShelf', ()=>{
    and the input between them is left alone. */
 reg('batSearch', v=>{
   state.bat.q=String(v||'');
+  searchClearShow('mBatClr', !!state.bat.q);
   const top=document.getElementById('mBatTop');
   const body=document.getElementById('mBatBody');
   if(top&&body){ top.innerHTML=batTopHtml(); body.innerHTML=batBodyHtml(); }
@@ -2586,7 +2624,7 @@ reg('custNew', ()=>{
    which the browser is already showing. The render() that stood here rebuilt the
    whole app to redraw a field with the character the user had just typed into
    it, and destroyed that field's soft keyboard doing so. */
-reg('custSearch', v=>{ state.custQ=String(v||''); });
+reg('custSearch', v=>{ state.custQ=String(v||''); searchClearShow('mCustClr', !!state.custQ); });
 reg('custSearchGo', ()=>loadCustomers());
 reg('custClear', ()=>{ state.custSeg='all'; state.custTier=[]; state.custChan=[]; state.custTags=[];
   state.custQ=''; loadCustomers(); });
@@ -2654,6 +2692,7 @@ reg('goRestock', which=>{
    from and dropped its soft keyboard back to letters. */
 reg('prodSearch', v=>{
   state.prodQ=String(v||'');
+  searchClearShow('mProdClr', !!state.prodQ);
   const host=document.getElementById('mProdBody');
   if(host) host.innerHTML=prodBodyHtml();
   else render();
@@ -2954,6 +2993,7 @@ reg('wstPickStore', id=>{ const w=state.wst;
    land, which happens once per pause in typing rather than once per key. */
 reg('wstSearch', v=>{ const w=state.wst, el=document.getElementById('mWstQ');
   w.q=String(v||''); state.focus={id:'mWstQ',pos:el?el.selectionStart:null};
+  searchClearShow('mWstClr', !!w.q);
   clearTimeout(w.timer); w.timer=setTimeout(loadWastePicks,180); });
 reg('wstPick', id=>{ const w=state.wst;
   const p=(w.picks||[]).find(x=>String(x.id)===String(id)); if(!p) return;
@@ -3040,12 +3080,14 @@ let rcvQTimer=null;
    the next one. */
 reg('rcvQuery', v=>{
   state.rcvQ=String(v||'');
+  searchClearShow('mRcvClr', !!state.rcvQ);
   state.rcvOpen=null; state.rcvDetail=null;
   rcvPatch();
   clearTimeout(rcvQTimer); rcvQTimer=setTimeout(()=>loadDeliveries(true),320); });
 let rcvToTimer=null;
 reg('rcvToQuery', v=>{
   state.rcvToQ=String(v||'');
+  searchClearShow('mRcvToClr', !!state.rcvToQ);
   rcvPatch();
   clearTimeout(rcvToTimer); rcvToTimer=setTimeout(()=>loadToReceive(true),320); });
 reg('rcvToRetry', ()=>{ state.rcvToErr=null; render(); loadToReceive(true); });
@@ -3706,6 +3748,49 @@ function nothingYet(title,msg){
    so they keep falling back to the name. */
 const revKey=r=>r.key||r.cust[0];
 const escAttr=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+/* ── The × that empties a search box ──────────────────────────────────────
+   Ash, on a screenshot of Ask for stock: "add a quick delete X of the search
+   bar". Emptying a field was one backspace per character, so what an operator
+   did instead was leave the wrong query sitting there and scroll past it.
+
+   THE HARD PART IS THAT THESE FIELDS MUST NOT BE REBUILT. A rebuilt <input>
+   opens a fresh soft keyboard on its letter page; that is the defect the search
+   handlers were split for, reported from the kitchen as typing a SKU giving one
+   digit, then the alphabet, then one digit. Every obvious way to add a clear
+   button walks straight back into it, so all three doors are held shut here:
+
+     appending the × on the first keystroke  would rebuild the field's wrapper,
+       so it is drawn always and HIDDEN when the box is empty — showing it is a
+       style flip on an element that is already there;
+     clearing through a full repaint         would rebuild the whole app, so the
+       × hands the screen's OWN keystroke handler an empty query and lets it
+       repaint exactly what it repaints for any other keystroke;
+     letting the tap blur and re-focus       would close the keyboard and reopen
+       it on the letter page, so `onmousedown` refuses the focus change rather
+       than undoing one. The click still fires, and the field never loses focus.
+
+   The label is the live `Clear · 清除` pair, already shipping on the waybill
+   and ETA controls further down this file. Nothing here is composed.
+
+   THE BUTTON'S id IS ITS COMMAND. There is nothing else to tell fifteen
+   identical controls apart, and a table at the commands keeps the pairing in
+   one readable place instead of fifteen. */
+function searchBox(inner,id,q,wrapStyle){
+  return `<span class="srchwrap"${wrapStyle?` style="${wrapStyle}"`:''}>${inner}<button id="${id}" class="iconbtn srchclr" type="button"
+    aria-label="${T('Clear','清除')}"${q?'':' style="display:none"'}
+    onmousedown="event.preventDefault()" onclick="APP.cmd('${id}')">${ic('x',18,2)}</button></span>`;
+}
+/* Clearing the inline display hands the button back to .iconbtn's own
+   display:flex rather than guessing at it here. */
+function searchClearShow(id,on){ const b=document.getElementById(id); if(b) b.style.display=on?'':'none'; }
+/* Empty the element — the handler is told a value, it cannot read one — take
+   the button away, then do precisely what a keystroke does and nothing more. */
+function searchClearRun(inputId,btnId,searchCmd){
+  const el=document.getElementById(inputId);
+  if(el) el.value='';
+  searchClearShow(btnId,false);
+  if(CMD[searchCmd]) CMD[searchCmd]('');
+}
 const cfgGet=(path,dflt)=>{ let v=state.cfg; for(const k of String(path).split('.')){ if(v==null) return dflt; v=v[k]; } return v==null?dflt:v; };
 const desktopNote=()=>`<div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Best edited on desktop','建议在电脑端编辑')}</div>`;
 function flagGate(flag){
@@ -6982,8 +7067,8 @@ function sheetWaste(){
     </div>` : `
     <div style="display:flex;flex-direction:column;gap:6px">
       <span class="eyebrow">${T('Product','产品')}</span>
-      <input id="mWstQ" inputmode="search" enterkeyhint="search" value="${escAttr(w.q)}"
-        placeholder="${T('Search products','搜索商品')}" style="width:100%" oninput="APP.cmd('wstSearch',this.value)">
+      ${searchBox(`<input id="mWstQ" inputmode="search" enterkeyhint="search" value="${escAttr(w.q)}"
+        placeholder="${T('Search products','搜索商品')}" style="width:100%" oninput="APP.cmd('wstSearch',this.value)">`,'mWstClr',!!w.q)}
       <div id="mWstPicksBox">${wstPicksHtml()}</div>
     </div>`;
   /* Whole units, so a stepper and never a number field: the API refuses a
@@ -7411,7 +7496,12 @@ function onwFeeNote(ft,d){
 function onwRepaint(id,build){
   const box=document.getElementById(id);
   const on=document.activeElement;
-  if(box&&on&&box.previousElementSibling===on) box.innerHTML=build();
+  /* CONTAINS, NOT ===. The field is wrapped in the .srchwrap span that carries
+     its ×, so the box's previous sibling is that span and the focused input is
+     inside it. An identity check fell through to render() on every keystroke,
+     which rebuilds the field — the exact defect this guard exists to avoid. */
+  const prev=box?box.previousElementSibling:null;
+  if(box&&on&&prev&&(prev===on||prev.contains(on))) box.innerHTML=build();
   else render();
 }
 function onwRepaintDistricts(){
@@ -7554,15 +7644,15 @@ function screenNewOrder(){
           <span style="font-size:15.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(o.cust.nickname||'—')}</span>
           <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${escAttr(o.cust.phone||'')}</span></span>
         <button class="iconbtn" style="width:36px;height:36px;margin-right:-4px" onclick="APP.cmd('onwUnpickCust')" aria-label="${T('Remove','移除')}">${ic('x',20,2)}</button></div>`
-    : onwField('',`<input id="mOnwCustQ" inputmode="search" enterkeyhint="search" value="${escAttr(o.custQ)}"
-         placeholder="${T('Search name or phone, or leave as guest','搜索姓名或电话,或留空作为访客')}" oninput="APP.cmd('onwCustQ',this.value)">
+    : onwField('',searchBox(`<input id="mOnwCustQ" inputmode="search" enterkeyhint="search" value="${escAttr(o.custQ)}"
+         placeholder="${T('Search name or phone, or leave as guest','搜索姓名或电话,或留空作为访客')}" oninput="APP.cmd('onwCustQ',this.value)">`,'mOnwCustClr',!!o.custQ)+`
        <div id="mOnwCustBox">${onwCustPicksHtml()}</div>`))
     + onwField(T('Name','姓名'),`<input id="mOnwName" value="${escAttr(o.name)}" maxlength="80" oninput="APP.cmd('onwName',this.value)">`)
     + onwField(T('Phone','电话'),`<input id="mOnwPhone" inputmode="tel" value="${escAttr(o.phone)}" maxlength="20" oninput="APP.cmd('onwPhone',this.value)">`)
     + (o.cust?'':`<button class="chip ${o.saveCust?'on':''}" style="align-self:flex-start" onclick="APP.cmd('onwSaveCust')"><span>${T('Also save as a customer','同时存为顾客')}</span></button>`);
   const what=onwField('',
-      `<input id="mOnwProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(o.q)}"
-         placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('onwProdQ',this.value)">
+      searchBox(`<input id="mOnwProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(o.q)}"
+         placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('onwProdQ',this.value)">`,'mOnwProdClr',!!o.q)+`
        <div id="mOnwProdBox">${onwProdPicksHtml()}</div>`)
     + onwLinesHtml();
   /* HOW. Two answers, not three: a walk-in rings up at the till, which is a
@@ -7577,8 +7667,8 @@ function screenNewOrder(){
       ? `<div class="card" style="padding:12px 14px;display:flex;align-items:center;gap:12px">
            <span style="flex:1;min-width:0;font-size:15.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(o.city)}</span>
            <button class="iconbtn" style="width:36px;height:36px;margin-right:-4px" onclick="APP.cmd('onwUnpickCity')" aria-label="${T('Remove','移除')}">${ic('x',20,2)}</button></div>`
-      : `<input id="mOnwCityQ" inputmode="search" enterkeyhint="search" value="${escAttr(o.cityQ)}"
-           placeholder="${T('Select a city…','请选择城市…')}" oninput="APP.cmd('onwCityQ',this.value)">
+      : searchBox(`<input id="mOnwCityQ" inputmode="search" enterkeyhint="search" value="${escAttr(o.cityQ)}"
+           placeholder="${T('Select a city…','请选择城市…')}" oninput="APP.cmd('onwCityQ',this.value)">`,'mOnwCityClr',!!o.cityQ)+`
          <div id="mOnwCityBox">${onwCityPicksHtml()}</div>`,
       o.province?T('Province','省')+' · '+escAttr(o.province):'')
     + (o.city?onwField(T('District','区'),`<div id="mOnwDistBox">${onwDistrictsHtml()}</div>`):'')
@@ -7649,14 +7739,17 @@ reg('onwFee', (which,v)=>{
    fall back to a full render. */
 reg('onwProdQ', v=>{ const o=state.onw, el=document.getElementById('mOnwProdQ');
   o.q=String(v||''); state.focus={id:'mOnwProdQ',pos:el?el.selectionStart:null};
+  searchClearShow('mOnwProdClr', !!o.q);
   clearTimeout(o.pickTimer); o.pickTimer=setTimeout(loadOnwProducts,180); });
 reg('onwCustQ', v=>{ const o=state.onw, el=document.getElementById('mOnwCustQ');
   o.custQ=String(v||''); state.focus={id:'mOnwCustQ',pos:el?el.selectionStart:null};
+  searchClearShow('mOnwCustClr', !!o.custQ);
   clearTimeout(o.custTimer); o.custTimer=setTimeout(loadOnwCustomers,180); });
 /* The city list is already in memory, so this one filters rather than fetches
    — and patches the same way, for the same keyboard. */
 reg('onwCityQ', v=>{ const o=state.onw, el=document.getElementById('mOnwCityQ');
   o.cityQ=String(v||''); state.focus={id:'mOnwCityQ',pos:el?el.selectionStart:null};
+  searchClearShow('mOnwCityClr', !!o.cityQ);
   onwRepaint('mOnwCityBox',onwCityPicksHtml); });
 reg('onwPickCity', i=>{
   const o=state.onw, c=onwCityMatches()[Number(i)];
@@ -8749,16 +8842,16 @@ function screenReceiving(){
   if(state.rcvSeg==='toreceive'){
     const toSearch=`<div style="padding:0 16px 12px;position:relative">
       <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',17)}</span>
-      <input id="mRcvToQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.rcvToQ)}" style="padding-left:42px"
-        placeholder="${T('Product, SKU, order or supplier','商品、SKU、单号或供应商')}" oninput="APP.cmd('rcvToQuery',this.value)"></div>`;
+      ${searchBox(`<input id="mRcvToQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.rcvToQ)}" style="padding-left:42px"
+        placeholder="${T('Product, SKU, order or supplier','商品、SKU、单号或供应商')}" oninput="APP.cmd('rcvToQuery',this.value)">`,'mRcvToClr',!!state.rcvToQ)}</div>`;
     return `<div id="mRcvSegs">${rcvSegsHtml()}</div>`+toSearch+`<div id="mRcvToBody">${rcvToBodyHtml()}</div>`;
   }
   const chips=`<div class="hscroll" style="display:flex;gap:8px;padding:0 16px 2px">${
     RCV_FLAGS.map(f=>`<button class="chip${state.rcvFlag===f.key?' on':''}" onclick="APP.cmd('rcvFlag','${f.key}')">${T(f.en,f.zh)}</button>`).join('')}</div>`;
   const search=`<div style="padding:0 16px 12px;position:relative">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',17)}</span>
-    <input id="mRcvQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.rcvQ)}" style="padding-left:42px"
-      placeholder="${T('Product, SKU, supplier or person','商品、SKU、供应商或收货人')}" oninput="APP.cmd('rcvQuery',this.value)"></div>`;
+    ${searchBox(`<input id="mRcvQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.rcvQ)}" style="padding-left:42px"
+      placeholder="${T('Product, SKU, supplier or person','商品、SKU、供应商或收货人')}" oninput="APP.cmd('rcvQuery',this.value)">`,'mRcvClr',!!state.rcvQ)}</div>`;
   return `<div id="mRcvSegs">${rcvSegsHtml()}</div>`+search+chips+`<div id="mRcvBody">${rcvBodyHtml()}</div>`;
 }
 /* The two lists, split out of screenReceiving so a keystroke — and the answer it
@@ -8900,10 +8993,10 @@ function screenProductCatalogue(){
     loadCatalogue();
     return `<div>
       <div style="padding:12px 16px 4px">
-        <input id="mProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.prodQ)}"
+        ${searchBox(`<input id="mProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.prodQ)}"
           placeholder="${T('Search name or SKU','搜索名称或 SKU')}" style="width:100%"
           oninput="APP.cmd('prodSearch',this.value)"
-          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></div>
+          onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">`,'mProdClr',!!state.prodQ)}</div>
       <div id="mProdBody">${prodBodyHtml()}</div>
     </div>`;
 }
@@ -9784,8 +9877,8 @@ function screenAskBuy(){
   const rows=mbLines();
   const search=`<div style="padding:4px 16px 12px;position:relative">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
-    <input id="mMbQ" inputmode="search" enterkeyhint="search" value="${escAttr(m.q)}" style="padding-left:42px"
-      placeholder="${T('Search materials','搜索物料')}" oninput="APP.cmd('mbSearch',this.value)"></div>`;
+    ${searchBox(`<input id="mMbQ" inputmode="search" enterkeyhint="search" value="${escAttr(m.q)}" style="padding-left:42px"
+      placeholder="${T('Search materials','搜索物料')}" oninput="APP.cmd('mbSearch',this.value)">`,'mMbClr',!!m.q)}</div>`;
   const intro=`<div style="margin-top:12px;padding:0 16px 12px;font-size:14px;color:var(--text-secondary);line-height:1.55">${
       T('The buyer orders it — nothing is ordered until they place it.','由采购下单 — 下单后才会生成采购单。')}</div>`;
   const body = `<div id="mMbBody">${mbBodyHtml()}</div>`;
@@ -11715,8 +11808,8 @@ function screenStockAdd(){
 
   const search=`<div style="padding:12px 16px;position:relative">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
-    <input id="mQsQ" inputmode="search" enterkeyhint="search" value="${escAttr(qs.q)}" style="padding-left:42px"
-      placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('qsSearch',this.value)"></div>`;
+    ${searchBox(`<input id="mQsQ" inputmode="search" enterkeyhint="search" value="${escAttr(qs.q)}" style="padding-left:42px"
+      placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('qsSearch',this.value)">`,'mQsClr',!!qs.q)}</div>`;
 
   /* EVERYTHING BELOW THE SEARCH BOX, IN ONE PATCHABLE BOX. qsSearch repaints
      this and nothing else, so the input element survives a whole search. It
@@ -11801,38 +11894,6 @@ function qsBodyHtml(){
    would render as one. titleOf is the hook that exists for a title that is not
    a fixed word; Receive is the other screen using it. `title` stays the
    array so the stack entry is still valid on its own. */
-/* THE × THAT EMPTIES A SEARCH BOX. Clearing a query by hand is one backspace
-   per character with a product name in the field, so what an operator actually
-   does is leave the wrong query sitting there and scroll past it. The control
-   sits INSIDE the field and mirrors the magnifier across it — both 39px from
-   their own edge — so the pair reads as one row.
-   IT IS DRAWN EVEN WHEN THE BOX IS EMPTY, hidden rather than absent, and that
-   is the whole reason it is built this way rather than appended on the first
-   keystroke. Showing it is then a style flip on an element that already exists,
-   and NOTHING AROUND THE INPUT IS REBUILT — which is the rule the search
-   handlers above this file's commands keep, because a rebuilt <input> opens a
-   fresh soft keyboard on its letter page.
-   `onmousedown` REFUSES THE FOCUS CHANGE rather than putting focus back after
-   it. Tapping a button blurs the field, a blur closes the keyboard, and
-   re-focusing reopens it on the letter page — the same defect through a
-   different door. Prevented, the field never loses focus at all, so there is no
-   rescue here and none is needed. The click still fires.
-   The input reserves its right-hand padding permanently, not only while the ×
-   shows: a padding that appears with the first character would shuffle the text
-   under the caret as it is being typed.
-   Written to be lifted onto the other search boxes on this page; the request
-   picker is the only one carrying it so far. */
-function searchClearBtn(id,cmd,shown){
-  return `<button id="${id}" class="iconbtn" type="button" aria-label="${T('Clear','清除')}"
-    style="position:absolute;right:17px;top:50%;transform:translateY(-50%)${shown?'':';display:none'}"
-    onmousedown="event.preventDefault()" onclick="APP.cmd('${cmd}')">${ic('x',18,2)}</button>`;
-}
-/* Clearing the inline display hands the button back to .iconbtn's own
-   display:flex, rather than guessing at it here. */
-function searchClearShow(id,on){
-  const b=document.getElementById(id);
-  if(b) b.style.display=on?'':'none';
-}
 /* ── The two request screens ──────────────────────────────────────────────
    One product picker, drawn once, with the question that belongs to each
    direction above it: what the kitchen request is FOR, or which two locations
@@ -11842,9 +11903,8 @@ function rqPicker(){
   if(!r.products) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const search=`<div style="padding:4px 16px 12px;position:relative">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
-    <input id="mRqQ" inputmode="search" enterkeyhint="search" value="${escAttr(r.q)}" style="padding-left:42px;padding-right:44px"
-      placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('rqSearch',this.value)">
-    ${searchClearBtn('mRqClr','rqClear',!!r.q)}</div>`;
+    ${searchBox(`<input id="mRqQ" inputmode="search" enterkeyhint="search" value="${escAttr(r.q)}" style="padding-left:42px"
+      placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('rqSearch',this.value)">`,'mRqClr',!!r.q)}</div>`;
   /* EVERYTHING THE QUERY CHANGES, IN ONE PATCHABLE BOX, and the search input
      deliberately outside it. rqSearch repaints this box and nothing else, so the
      input element survives a whole search — a re-render would rebuild it, and a
@@ -12693,8 +12753,8 @@ function screenLogBatch(){
   loadQsCtx();
   const search=`<div style="padding:12px 16px;position:relative">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
-    <input id="mBatQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.bat.q)}" style="padding-left:42px"
-      placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('batSearch',this.value)"></div>`;
+    ${searchBox(`<input id="mBatQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.bat.q)}" style="padding-left:42px"
+      placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('batSearch',this.value)">`,'mBatClr',!!state.bat.q)}</div>`;
   /* TWO PATCH TARGETS, NOT ONE, and the reason is the header line: it sits ABOVE
      the search box and is drawn only when the list has rows, so a search that
      empties the list has to remove it — and it cannot share a container with
@@ -12894,8 +12954,8 @@ function screenRecipes(){
   const r=state.rcp;
   const search=`<div style="padding:12px 16px;position:relative">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
-    <input id="mRcpQ" inputmode="search" enterkeyhint="search" value="${escAttr(r.q)}" style="padding-left:42px"
-      placeholder="${T('Search recipes','搜索食谱')}" oninput="APP.cmd('rcpSearch',this.value)"></div>`;
+    ${searchBox(`<input id="mRcpQ" inputmode="search" enterkeyhint="search" value="${escAttr(r.q)}" style="padding-left:42px"
+      placeholder="${T('Search recipes','搜索食谱')}" oninput="APP.cmd('rcpSearch',this.value)">`,'mRcpClr',!!r.q)}</div>`;
   return search+`<div id="mRcpBody">${rcpBodyHtml()}</div>`;
 }
 /* Split from the screen so a keystroke repaints the list without rebuilding the
@@ -13011,6 +13071,7 @@ SUBS.recipeone={title:['Recipes','食谱'],
   render:()=>screenRecipeOne()};
 reg('rcpSearch', v=>{ const r=state.rcp, el=document.getElementById('mRcpQ');
   r.q=String(v||''); state.focus={id:'mRcpQ',pos:el?el.selectionStart:null};
+  searchClearShow('mRcpClr', !!r.q);
   /* Patch the list alone. The rows are already in memory — this filters them —
      so a render() would only serve to destroy the field being typed into. */
   const b=document.getElementById('mRcpBody'); if(b) b.innerHTML=rcpBodyHtml(); else render(); });
@@ -13766,8 +13827,8 @@ function screenExpensePicker(){
   const x=state.exp;
   const search=`<div style="padding:4px 16px 10px;position:relative">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
-    <input id="mExpQ" inputmode="search" enterkeyhint="search" value="${escAttr(x.q)}" style="padding-left:42px"
-      placeholder="${T('Search categories','搜索分类')}" oninput="APP.cmd('expQ',this.value)"></div>`;
+    ${searchBox(`<input id="mExpQ" inputmode="search" enterkeyhint="search" value="${escAttr(x.q)}" style="padding-left:42px"
+      placeholder="${T('Search categories','搜索分类')}" oninput="APP.cmd('expQ',this.value)">`,'mExpClr',!!x.q)}</div>`;
   return `<div style="padding:12px 0 24px">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px 10px">
       <span style="font-size:15px;font-weight:500">${T('Category','分类')}</span>
@@ -13973,6 +14034,7 @@ reg('expPickClose', ()=>{ const x=state.exp; x.pick=false; x.q=''; render(); });
    expPickBodyHtml for what that is protecting. */
 reg('expQ', v=>{
   state.exp.q=String(v||'');
+  searchClearShow('mExpClr', !!state.exp.q);
   const host=document.getElementById('mExpPickBody');
   if(host) host.innerHTML=expPickBodyHtml();
   else render();
@@ -15488,12 +15550,16 @@ reg('caddrSet', (k,v)=>{ const s=state.caddr; if(s) s[k]=String(v==null?'':v); }
 reg('caddrCityQ', v=>{
   const s=state.caddr; if(!s) return;
   s.cityQ=String(v||'');
+  searchClearShow('mCaddrCityClr', !!s.cityQ);
   /* The list under the field is the one thing a keystroke DOES change, so it is
      patched in place while the field above it keeps focus — the wizard's
      onwRepaint, whose guard (is the box the sibling of what has focus?) is what
      makes the patch safe to skip when it is not. */
   const box=document.getElementById('mCaddrCityBox'), on=document.activeElement;
-  if(box&&on&&box.previousElementSibling===on) box.innerHTML=caddrCityPicks(); else render();
+  /* contains, not === — the field now sits inside its .srchwrap span. See
+     onwRepaint, which carries the same guard for the same reason. */
+  const prev=box?box.previousElementSibling:null;
+  if(box&&on&&prev&&(prev===on||prev.contains(on))) box.innerHTML=caddrCityPicks(); else render();
 });
 reg('caddrPickCity', i=>{
   const s=state.caddr; if(!s) return;
@@ -19576,9 +19642,10 @@ function sheetSearch(){
   const results=searchIndex();
   return `<div style="position:absolute;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column;animation:tFade .2s ease both">
     <div style="flex:none;padding:calc(env(safe-area-inset-top,0px) + 16px) 10px 12px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border-default)">
-      <input id="mSearch" autofocus inputmode="search" enterkeyhint="search"
+      ${searchBox(`<input id="mSearch" autofocus inputmode="search" enterkeyhint="search"
         placeholder="${T('Search orders — number, name, phone','搜索订单 — 单号、姓名、手机')}"
-        onkeydown="if(event.key==='Enter'){APP.cmd('orderSearch',this.value.trim())}">
+        oninput="APP.cmd('orderSheetQ',this.value)"
+        onkeydown="if(event.key==='Enter'){APP.cmd('orderSearch',this.value.trim())}">`,'mSearchClr',false,'flex:1')}
       <button onclick="APP.cmd('closeSearch')" style="background:transparent;border:none;color:var(--text-secondary);font-size:15px;font-weight:500;cursor:pointer;padding:8px 6px;font-family:inherit;flex:none">${T('Cancel','取消')}</button></div>
     <div style="flex:1;overflow-y:auto;padding:14px 0">
       <button class="row" style="min-height:52px;padding:11px 20px" onclick="APP.cmd('orderSearch',(document.getElementById('mSearch')||{}).value?document.getElementById('mSearch').value.trim():'')">
@@ -19783,11 +19850,11 @@ function screenCustomers(){
       <span style="flex:1"></span>
       ${mCan('customers:export')?`<button onclick="APP.cmd('custExport')" style="display:inline-flex;align-items:center;gap:5px;background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-secondary)">${ic('download',14,2)} ${T('Export','导出')}</button>`:''}
     </div>
-    <div style="padding:0 16px 12px"><input id="mCustQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.custQ)}"
+    <div style="padding:0 16px 12px">${searchBox(`<input id="mCustQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.custQ)}"
       placeholder="${T('Search name or phone','搜索姓名或手机')}" style="width:100%"
       oninput="APP.cmd('custSearch',this.value)"
       onchange="APP.cmd('custSearchGo')"
-      onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();APP.cmd('custSearchGo')}"></div>
+      onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();APP.cmd('custSearchGo')}">`,'mCustClr',!!state.custQ)}</div>
     ${chipRow(segs,state.custSeg||'all','custSeg')}
     <div style="height:8px"></div>
     ${chipRowMulti(tiers,state.custTier||[],'custTier')}
@@ -20342,8 +20409,8 @@ function sheetCustAddr(){
              what its key is, which is the right default and the wrong one here:
              this field's Enter narrows a list rather than finishing a form, and
              the list is the next thing the thumb goes to. */
-          : `<input id="mCaddrCityQ" inputmode="search" enterkeyhint="search" value="${escAttr(s.cityQ)}" placeholder="${T('Search a city','搜索城市')}"
-               oninput="APP.cmd('caddrCityQ',this.value)">
+          : searchBox(`<input id="mCaddrCityQ" inputmode="search" enterkeyhint="search" value="${escAttr(s.cityQ)}" placeholder="${T('Search a city','搜索城市')}"
+               oninput="APP.cmd('caddrCityQ',this.value)">`,'mCaddrCityClr',!!s.cityQ)+`
              <div id="mCaddrCityBox">${caddrCityPicks()}</div>`)}
         ${s.city?caddrField(T('District','区'),caddrDistricts()):''}
         ${txt('address',T('Street address','街道地址'),s.address,'maxlength="200"')}

@@ -105,6 +105,9 @@ function node(id) {
     let html = '';
     nodes.set(id, {
       id, writes: 0,
+      // Every real element has one, and the × that empties this box is shown
+      // and hidden through it. A node without a style is not a node.
+      style: {},
       get innerHTML() { return html; },
       set innerHTML(v) { html = v; this.writes++; },
       focus() { this.focused = (this.focused || 0) + 1; },
@@ -132,7 +135,11 @@ vm.runInContext(sliceConst('MB_UNIT_CN'), sandbox, { filename: 'm.html#MB_UNIT_C
 // A `const` in a vm context is a lexical binding, not a property of the sandbox
 // object, so it is read back explicitly rather than off `sandbox`.
 const UNIT_CN = vm.runInContext('MB_UNIT_CN', sandbox);
-for (const fn of ['mbUnit', 'mbLines', 'mbChosen', 'mbCountCell', 'mbBodyHtml', 'mbFootHtml',
+// searchBox draws the search field and the × that empties it. Sliced from
+// source rather than stubbed: this suite is about what a keystroke does to the
+// field, and the × lives on the field.
+for (const fn of ['searchBox', 'searchClearShow',
+                  'mbUnit', 'mbLines', 'mbChosen', 'mbCountCell', 'mbBodyHtml', 'mbFootHtml',
                   'mbPatch', 'mbTypeOpen', 'mbTypeCommit', 'mbBump',
                   'mbDateLabel', 'mbUrgent', 'mbDateOpen', 'mbDateSet', 'mbMarksHtml', 'mbItems']) {
   vm.runInContext(sliceFn(fn), sandbox, { filename: `m.html#${fn}` });

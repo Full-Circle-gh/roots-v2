@@ -132,14 +132,17 @@ function makeSandbox(state) {
 // Helpers that genuinely filter are sliced from the NEW tree and shared by both
 // sides — they are not what changed, and stubbing them would hide a filter bug
 // behind two identical stubs.
-/* searchClearBtn is here for a different reason: it is not a filter, it is the
-   × added to the request picker AFTER both baselines below were taken. The old
-   rqPicker never called it, so it is loaded from the new tree purely to let the
-   old side run at all — and the equivalence half is expected to report the
-   button as a difference, because it is one. See the EQUIV note above: that
-   half is a migration proof, off by default, and a legitimate later edit to one
-   of these screens is exactly what turns it red. */
-const SHARED = ['qsRows', 'rqLines', 'batLines', 'searchClearBtn'];
+/* searchBox is here for a different reason: it is not a filter. It is the
+   search field wrapper carrying the × that empties the box, added to all
+   fifteen of the phone's search boxes AFTER both baselines below were taken.
+   The old screens never called it, so it is loaded from the new tree purely to
+   let the old side run at all — and the equivalence half is expected to report
+   the button as a difference, because it is one. See the EQUIV note above:
+   that half is a migration proof, off by default, and a legitimate later edit
+   to one of these screens is exactly what turns it red.
+   The × itself is covered by scripts/test_search_clear.js, which holds the
+   rules this suite's handler half and that one share. */
+const SHARED = ['qsRows', 'rqLines', 'batLines', 'searchBox'];
 
 function load(sb, src, names) {
   for (const n of SHARED) vm.runInContext(sliceFn(NEW_SRC, n), sb, { filename: `shared#${n}` });
