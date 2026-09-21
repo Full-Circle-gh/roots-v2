@@ -7695,6 +7695,77 @@ addColumn('staff_expenses', 'voided_by', 'INTEGER');
 addColumn('staff_expenses', 'voided_at', 'DATETIME');
 addColumn('staff_expenses', 'void_note', 'TEXT');
 
+/* ── §201 · THE ONE STORE-OWNED TABLE THE CATALOGUE SPLIT FORGOT ───────────
+ *
+ * `restock_items.product_id` holds the id the SHELF is keyed on — a
+ * `store_products` id, which is what `retail_store_stock(store_id, product_id)`
+ * uses and what `_applyDispatch` moves stock through. Its foreign key pointed
+ * at `products`, the KITCHEN catalogue, and has since the day the two split.
+ *
+ * `store_products_seed_fk_v1` above repointed every store-owned table —
+ * retail_order_items, retail_product_options, retail_reviews,
+ * retail_store_stock, retail_stock_reservations, retail_stock_ledger,
+ * retail_product_substitutes, retail_customer_favorites — and this one was not
+ * on its list. A miss, not a decision: nothing about a transfer line makes it
+ * kitchen-owned.
+ *
+ * IT HID FOR AS LONG AS IT DID BECAUSE NOBODY WROTE THE COLUMN. The phone's
+ * Ask-for-stock screen sent `product_id: null` on every line (§200), and the
+ * ids written by older clients happened to exist in both tables. §200 made the
+ * phone send the real id — and turned a latent fault into a live one, because
+ * on Roots 72 of 370 active store products have no `products` row at all:
+ * every one of them now threw a foreign-key error on insert, so the request did
+ * not save. It is also why §200's own backfill ran and linked nothing: the
+ * UPDATE violated this key, the transaction rolled back, and the migration
+ * recorded itself anyway.
+ *
+ * THE FIX IS THE SIBLING TABLES', APPLIED HERE. Same rebuild routine, same
+ * guards: foreign_keys OFF inside one transaction, a temp table renamed into
+ * place so dependents are not rewritten, indexes recreated, and a
+ * `foreign_key_check` that rolls the whole thing back on any violation.
+ *
+ * NOTHING IS RECORDED UNLESS IT WORKED — the ledger insert is INSIDE the
+ * transaction, which is the lesson §200's backfill taught by getting it wrong.
+ */
+try {
+  const done = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('restock_items_fk_store_products_v1');
+  const have = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='restock_items'").get();
+  const haveStore = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='store_products'").get();
+  // Only touch a table whose FK actually still names `products`. A database
+  // built from the current schema.sql already has it right, and rebuilding a
+  // correct table is risk with nothing on the other side of it.
+  const wrong = have && /REFERENCES\s+products\s*\(/i.test(have.sql);
+  if (!done && have && haveStore && wrong) {
+    db.pragma('foreign_keys = OFF');
+    db.pragma('legacy_alter_table = ON');
+    try {
+      db.transaction(() => {
+        const idxSqls = db.prepare(
+          "SELECT sql FROM sqlite_master WHERE type='index' AND tbl_name='restock_items' AND sql IS NOT NULL")
+          .all().map(r => r.sql);
+        const createSql = have.sql.replace(/REFERENCES\s+products\s*\(/gi, 'REFERENCES store_products(');
+        const tmpSql = createSql.replace(
+          /(CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`']?)restock_items(["`']?)/i, '$1_fk_tmp_restock_items$2');
+        if (tmpSql === createSql) throw new Error('could not rename CREATE for restock_items');
+        db.exec(tmpSql);
+        db.exec('INSERT INTO _fk_tmp_restock_items SELECT * FROM restock_items');
+        db.exec('DROP TABLE restock_items');
+        db.exec('ALTER TABLE _fk_tmp_restock_items RENAME TO restock_items');
+        for (const s of idxSqls) db.exec(s);
+        const issues = db.pragma('foreign_key_check(restock_items)');
+        if (issues.length) {
+          throw new Error('FK check failed: ' + JSON.stringify(issues).slice(0, 300));
+        }
+        db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('restock_items_fk_store_products_v1');
+      })();
+      console.log('[migration] restock_items_fk_store_products_v1: product_id now references store_products');
+    } finally {
+      db.pragma('legacy_alter_table = OFF');
+      db.pragma('foreign_keys = ON');
+    }
+  }
+} catch (e) { console.error('[migration restock_items_fk_store_products_v1] left untouched:', e); }
+
 /* ── §200 · THE TRANSFER LINES THAT NAME NO PRODUCT ────────────────────────
  *
  * WHAT WENT WRONG. The phone's Ask-for-stock screen sent `product_id: null` on
@@ -7730,8 +7801,23 @@ addColumn('staff_expenses', 'void_note', 'TEXT');
  * with a count rather than swallowed — a line left unmatched is a real thing to
  * go and look at, not an absence.
  */
+/* v2, AND v1 IS THE REASON IT EXISTS. v1 ran on 2026-09-20 and linked nothing:
+ * its UPDATE violated the foreign key §201 has just repointed, the transaction
+ * rolled back, and — this is the defect — the ledger insert sat OUTSIDE the
+ * try, so a migration that had done nothing recorded itself as done and could
+ * never run again. Two changes, both of them the lesson:
+ *
+ *   1. THE LEDGER INSERT IS INSIDE THE TRANSACTION. Work that rolls back must
+ *      take its own record with it, or the next deploy believes a repair that
+ *      did not happen.
+ *   2. IT RUNS AFTER THE FK REPOINT ABOVE, in the same boot, because the write
+ *      it makes is exactly the one the old key refused.
+ *
+ * v1's row is left in `_migrations` rather than deleted: it is true that it
+ * ran, and the honest record of a failed repair is that it ran and did nothing.
+ */
 try {
-  const ran = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('restock_line_product_id_backfill_v1');
+  const ran = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('restock_line_product_id_backfill_v2');
   if (!ran) {
     let filled = 0, ambiguous = 0, unmatched = 0;
     try {
@@ -7758,14 +7844,19 @@ try {
           put.run(hits[0].id, r.line_id);
           filled++;
         }
+        // INSIDE the transaction — see the note above. If any write throws,
+        // this row goes back with it and the repair is genuinely retried.
+        db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('restock_line_product_id_backfill_v2');
       });
       tx();
-    } catch (e) { console.error('[migration restock_line_product_id_backfill_v1] scan', e); }
-    console.log(`[migration] restock_line_product_id_backfill_v1: linked ${filled} transfer line(s) to the catalogue; `
-      + `${ambiguous} left on a duplicate SKU, ${unmatched} with no match`);
-    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('restock_line_product_id_backfill_v1');
+      console.log(`[migration] restock_line_product_id_backfill_v2: linked ${filled} transfer line(s) to the catalogue; `
+        + `${ambiguous} left on a duplicate SKU, ${unmatched} with no match`);
+    } catch (e) {
+      // Counted as NOT done, deliberately: the next boot tries again.
+      console.error('[migration restock_line_product_id_backfill_v2] rolled back, will retry next boot:', e.message);
+    }
   }
-} catch (e) { console.error('[migration restock_line_product_id_backfill_v1]', e); }
+} catch (e) { console.error('[migration restock_line_product_id_backfill_v2]', e); }
 
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;

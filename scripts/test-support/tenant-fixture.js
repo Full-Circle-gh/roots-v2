@@ -177,8 +177,17 @@ function inTenant(T, tenantId, fn) {
 //
 // Pass a different storeSku to build the MISMATCH case the transfer guard
 // (_checkTransferIds) exists to refuse.
-function seedProduct(conn, { id, name, sku, storeName = null, storeSku = null }) {
-  conn.prepare('INSERT INTO products (id, name_en, sku) VALUES (?,?,?)').run(id, name, sku);
+/* `storeOnly: true` SEEDS THE SHAPE THIS HELPER COULD NOT EXPRESS (§201), and
+ * the omission is why three suites passed over a live fault. Every product here
+ * went into BOTH catalogues under one id, so the two were indistinguishable to
+ * any test — while on Roots 72 of 370 active store products have no `products`
+ * row at all. A store-only product is the ordinary case for anything the shop
+ * sells and the kitchen does not make, and it is the case that breaks when a
+ * store-owned table's foreign key points at the kitchen catalogue. */
+function seedProduct(conn, { id, name, sku, storeName = null, storeSku = null, storeOnly = false }) {
+  if (!storeOnly) {
+    conn.prepare('INSERT INTO products (id, name_en, sku) VALUES (?,?,?)').run(id, name, sku);
+  }
   conn.prepare('INSERT INTO store_products (id, name_en, sku) VALUES (?,?,?)')
       .run(id, storeName || name, storeSku === null ? sku : storeSku);
 }

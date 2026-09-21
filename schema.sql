@@ -480,7 +480,18 @@ CREATE TABLE IF NOT EXISTS restock_items (
   -- before this column existed, and lib/kitchen-ready.js reads both.
   seen_at       DATETIME,
   FOREIGN KEY (restock_id) REFERENCES restock_orders(id) ON DELETE CASCADE,
-  FOREIGN KEY (product_id) REFERENCES products(id)
+  -- STORE_PRODUCTS, NOT PRODUCTS (§201). This column holds the id the SHELF is
+  -- keyed on: `retail_store_stock(store_id, product_id)` is a store_products
+  -- id, and `_applyDispatch` moves stock through it. When the catalogue split,
+  -- `store_products_seed_fk_v1` repointed every store-owned table — order
+  -- items, stock, reservations, the ledger, reviews, favourites — and MISSED
+  -- this one, so a transfer line went on pointing at the kitchen catalogue.
+  -- Nothing caught it because the only client wrote NULL here, and the ids
+  -- written before that happened to exist in both tables. The day the phone
+  -- started sending the real id, 72 of Roots' 370 active store products became
+  -- untransferable: the insert threw a foreign-key error. Repointed on existing
+  -- databases by restock_items_fk_store_products_v1.
+  FOREIGN KEY (product_id) REFERENCES store_products(id)
 );
 
 -- ── Production Batches (kitchen production log) ─────────────────────

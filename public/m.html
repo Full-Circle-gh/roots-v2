@@ -11908,7 +11908,14 @@ function screenPick(){
       </div>`).join('')}
     </div></div>`:'';
 
-  if(!lines.length) return stuckHtml+nothingYet(T('Nothing to pick','暂无拣货'),
+  /* THE REFUSAL IS DRAWN ON EVERY PATH, INCLUDING THIS ONE (§201). It was not,
+     and that is the whole of Ash's "I click Send again and nothing happens":
+     the server refused with a 409 and a sentence, `k.err` was set, and this
+     return dropped it — so on a shop with nothing to pick and one stuck order,
+     which is exactly the shape a stuck order makes, the button did nothing
+     visible at all. An error that is only shown beside a list nobody has is
+     the same as no error. */
+  if(!lines.length) return stuckHtml+err+nothingYet(T('Nothing to pick','暂无拣货'),
     T('Requests for this location to supply show up here.','需要本地点发货的申请会显示在这里。'));
 
   const dests=pikDests();

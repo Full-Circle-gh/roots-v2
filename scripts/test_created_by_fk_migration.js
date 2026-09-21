@@ -80,9 +80,17 @@ for (const id of [1, 2, 3]) {
     .run(id, 'u' + id, 'x', 'kitchen');
 }
 db.prepare("INSERT INTO recipes (id, name_en, sku) VALUES (9001,'Batch Recipe','R-9001')").run();
-// restock_items.product_id → products(id), so the line items need real products.
+// restock_items.product_id → store_products(id), so the line items need real
+// STORE products. This read the kitchen catalogue until §201, and the comment
+// it carried
+// stated the assumption that section corrects: the column holds the id the
+// SHELF is keyed on, and its foreign key had pointed at the KITCHEN catalogue
+// since the two split — the one store-owned table store_products_seed_fk_v1
+// forgot to repoint. Seeded into both here, because this suite is about the
+// created_by rebuild and needs neither catalogue to be the interesting one.
 for (let p = 900; p <= 904; p++) {
   db.prepare('INSERT INTO products (id, name_en, sku) VALUES (?,?,?)').run(p, 'P' + p, 'SKU-P' + p);
+  db.prepare('INSERT INTO store_products (id, name_en, sku) VALUES (?,?,?)').run(p, 'P' + p, 'SKU-P' + p);
 }
 
 const insO = db.prepare('INSERT INTO restock_orders (rs_number, date, status, store_name, created_by, from_role, to_role) VALUES (?,?,?,?,?,?,?)');

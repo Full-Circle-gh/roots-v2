@@ -148,11 +148,42 @@ for (const o of rows) {
   console.log(`   supplier    ${o.from_store_id ? storeName(o.from_store_id) : 'NOT NAMED — falls back to the role pair'}`);
   console.log(`   destination ${o.to_store_id ? storeName(o.to_store_id) : (o.store_cn || o.store_name || 'NOT NAMED')}`);
   const items = db.prepare(
-    'SELECT product_name, product_cn, sku, qty_requested, unit FROM restock_items WHERE restock_id = ? AND qty_requested > 0 ORDER BY id').all(o.id);
-  console.log(`   lines       ${items.length}` + (items.length
-    ? ' — ' + items.slice(0, 4).map(i => `${i.qty_requested}×${i.product_cn || i.product_name}`).join(', ')
-      + (items.length > 4 ? '…' : '')
-    : ''));
+    `SELECT product_id, product_name, product_cn, sku, qty_requested, unit
+       FROM restock_items WHERE restock_id = ? AND qty_requested > 0 ORDER BY id`).all(o.id);
+  console.log(`   lines       ${items.length}`);
+  /* PER LINE, BECAUSE THE LINE IS WHERE THE FAULT LIVES. A transfer moves only
+     lines carrying a product_id; one without is unmovable and the whole
+     dispatch is refused. The SKU is printed beside it because that is what the
+     backfill matches on — a line with neither an id nor a SKU cannot be
+     repaired automatically, and saying so is the difference between "it did
+     not work" and knowing why. */
+  for (const i of items) {
+    const name = (i.product_cn || i.product_name || '?');
+    const sku = String(i.sku || '').trim();
+    console.log(`     ${String(i.qty_requested).padStart(4)} × ${name}`);
+    console.log(`          product_id ${i.product_id == null ? 'NULL  !! unmovable — a dispatch skips this line' : i.product_id}` +
+      `   sku ${sku ? sku : "(none)  !! and the SKU backfill has nothing to match on"}`);
+    /* WHY THE REPAIR DID NOT TAKE, for a line still unlinked. The backfill
+       matches an exact, unique, ACTIVE store_products SKU and refuses anything
+       else. Which of those three it failed is the whole answer, and inferring
+       it from the outside is exactly the guessing this file exists to stop. */
+    if (i.product_id == null && sku) {
+      try {
+        const act = db.prepare(
+          "SELECT id FROM store_products WHERE TRIM(sku) = ? AND COALESCE(is_active,1) = 1").all(sku);
+        const any = db.prepare('SELECT id, COALESCE(is_active,1) AS act FROM store_products WHERE TRIM(sku) = ?').all(sku);
+        if (act.length === 1) {
+          console.log(`          -> SKU ${sku} matches product ${act[0].id} exactly once; the backfill SHOULD have linked it`);
+        } else if (act.length > 1) {
+          console.log(`          -> SKU ${sku} matches ${act.length} active products (${act.map(x => x.id).join(', ')}) — ambiguous, refused on purpose`);
+        } else if (any.length) {
+          console.log(`          -> SKU ${sku} exists but every match is INACTIVE (${any.map(x => x.id).join(', ')}) — refused`);
+        } else {
+          console.log(`          -> SKU ${sku} is in NO store_products row at all — nothing to link to`);
+        }
+      } catch (e) { console.log(`          -> sku probe failed: ${e.message}`); }
+    }
+  }
 
   /* WHERE THE GOODS THEMSELVES ARE — a SECOND fact from the status beside it,
      and the one the first run of this script could not answer.
@@ -211,6 +242,93 @@ for (const o of rows) {
     (o.print_error ? ` — ${o.print_error}` : '') +
     (o.printed_at ? ` at ${o.printed_at}` : ''));
 }
+
+// ── 1b · did the repair actually run ──────────────────────────────────────
+// A migration that never ran and one that ran and matched nothing look
+// identical from the rows, and they need opposite actions.
+console.log('\n1b · the repair migration');
+if (!hasTable('_migrations')) {
+  console.log('   (_migrations table absent)');
+} else {
+  const mig = db.prepare('SELECT applied_at FROM _migrations WHERE name = ?')
+    .get('restock_line_product_id_backfill_v1');
+  console.log(`   restock_line_product_id_backfill_v1   ${mig ? 'ran ' + mig.applied_at : 'NOT RUN'}`);
+  console.log('   NOTE: "ran" says it executed, NOT that it linked anything — it refuses');
+  console.log('         every SKU that is absent, inactive or ambiguous, by design.');
+}
+
+/* WHAT THE REPAIR SEES TODAY, RUN VERBATIM. The clause is copied from
+   database.js rather than described, because a description of a WHERE is not a
+   WHERE: v1 ran, the banana's SKU matches exactly once, and the line was still
+   skipped — so the question is which predicate excluded it, and the only
+   honest way to ask is to ask the query. Each candidate is printed with the
+   four order-level facts the clause turns on, so a row that is MISSING from
+   this list can be read against the row above it. */
+console.log('\n1c · the repair clause, as the migration itself writes it');
+try {
+  const cand = db.prepare(`
+    SELECT ri.id AS line_id, ro.rs_number, TRIM(ri.sku) AS sku
+      FROM restock_items ri
+      JOIN restock_orders ro ON ro.id = ri.restock_id
+     WHERE ri.product_id IS NULL
+       AND ri.sku IS NOT NULL AND TRIM(ri.sku) <> ''
+       AND ro.dispatched_at IS NULL
+       AND COALESCE(ro.goods_state, 'none') = 'none'
+       AND ro.stock_applied_at IS NULL
+       AND COALESCE(ro.to_role, 'warehouse') <> 'kitchen'
+       AND COALESCE(ro.from_role, 'store')   <> 'kitchen'
+  `).all();
+  console.log(`   ${cand.length} line(s) the clause would link right now`);
+  for (const c of cand) console.log(`     ${c.rs_number}  line ${c.line_id}  sku ${c.sku}`);
+
+  // Every unlinked line, with the four facts, so an ABSENCE above is explained.
+  const unl = db.prepare(`
+    SELECT ri.id AS line_id, ro.rs_number, TRIM(COALESCE(ri.sku,'')) AS sku,
+           ro.dispatched_at, COALESCE(ro.goods_state,'none') AS goods_state,
+           ro.stock_applied_at, ro.status
+      FROM restock_items ri
+      JOIN restock_orders ro ON ro.id = ri.restock_id
+     WHERE ri.product_id IS NULL
+       AND COALESCE(ro.to_role,'warehouse') <> 'kitchen'
+     ORDER BY ri.id DESC LIMIT 10
+  `).all();
+  console.log(`   every unlinked non-kitchen line (newest 10):`);
+  for (const u of unl) {
+    console.log(`     ${u.rs_number}  line ${u.line_id}  status ${u.status}  sku ${u.sku || '(none)'}`);
+    console.log(`        dispatched_at ${u.dispatched_at || 'NULL'}   goods ${u.goods_state}   stock_applied_at ${u.stock_applied_at || 'NULL'}`);
+  }
+} catch (e) { console.log(`   clause probe failed: ${e.message}`); }
+
+/* THE FOREIGN KEY NOBODY MENTIONED, and the reason the repair could run and
+   link nothing. `restock_items.product_id` REFERENCES products(id), and the id
+   this system actually moves stock on is a `store_products` id — those are two
+   tables. With `foreign_keys = ON`, writing a store_products id that has no
+   products row throws, the migration's transaction rolls back, and it records
+   itself as having run. It also decides whether the FORWARD fix is safe: the
+   phone now sends that id on every new request. */
+console.log('\n1d · the two catalogues, and the key between them');
+try {
+  const nP = db.prepare('SELECT COUNT(*) AS c FROM products').get().c;
+  const nS = db.prepare('SELECT COUNT(*) AS c FROM store_products').get().c;
+  console.log(`   products ${nP}   store_products ${nS}`);
+  const orphan = db.prepare(`
+    SELECT COUNT(*) AS c FROM store_products sp
+     WHERE COALESCE(sp.is_active,1) = 1
+       AND NOT EXISTS (SELECT 1 FROM products p WHERE p.id = sp.id)`).get().c;
+  console.log(`   active store_products with NO products row of the same id: ${orphan}`);
+  if (orphan > 0) {
+    console.log('   !! Writing any of those ids into restock_items.product_id violates');
+    console.log('      the FK and throws. That is both why the backfill linked nothing');
+    console.log('      and a live risk for every new request the phone raises.');
+  }
+  for (const sku of ['A-3']) {
+    const r = db.prepare('SELECT id FROM store_products WHERE TRIM(sku) = ?').get(sku);
+    if (!r) { console.log(`   sku ${sku}: no store_products row`); continue; }
+    const inP = db.prepare('SELECT 1 FROM products WHERE id = ?').get(r.id);
+    console.log(`   sku ${sku} -> store_products ${r.id};  products row ${inP ? 'EXISTS' : 'MISSING  !! this is the one'}`);
+  }
+  console.log(`   PRAGMA foreign_keys = ${db.pragma('foreign_keys', { simple: true })}`);
+} catch (e) { console.log(`   catalogue probe failed: ${e.message}`); }
 
 // ── 2 · the push rail as a whole ──────────────────────────────────────────
 console.log('\n2 · the push rail');
