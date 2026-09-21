@@ -299,6 +299,37 @@ try {
   }
 } catch (e) { console.log(`   clause probe failed: ${e.message}`); }
 
+/* THE FOREIGN KEY NOBODY MENTIONED, and the reason the repair could run and
+   link nothing. `restock_items.product_id` REFERENCES products(id), and the id
+   this system actually moves stock on is a `store_products` id — those are two
+   tables. With `foreign_keys = ON`, writing a store_products id that has no
+   products row throws, the migration's transaction rolls back, and it records
+   itself as having run. It also decides whether the FORWARD fix is safe: the
+   phone now sends that id on every new request. */
+console.log('\n1d · the two catalogues, and the key between them');
+try {
+  const nP = db.prepare('SELECT COUNT(*) AS c FROM products').get().c;
+  const nS = db.prepare('SELECT COUNT(*) AS c FROM store_products').get().c;
+  console.log(`   products ${nP}   store_products ${nS}`);
+  const orphan = db.prepare(`
+    SELECT COUNT(*) AS c FROM store_products sp
+     WHERE COALESCE(sp.is_active,1) = 1
+       AND NOT EXISTS (SELECT 1 FROM products p WHERE p.id = sp.id)`).get().c;
+  console.log(`   active store_products with NO products row of the same id: ${orphan}`);
+  if (orphan > 0) {
+    console.log('   !! Writing any of those ids into restock_items.product_id violates');
+    console.log('      the FK and throws. That is both why the backfill linked nothing');
+    console.log('      and a live risk for every new request the phone raises.');
+  }
+  for (const sku of ['A-3']) {
+    const r = db.prepare('SELECT id FROM store_products WHERE TRIM(sku) = ?').get(sku);
+    if (!r) { console.log(`   sku ${sku}: no store_products row`); continue; }
+    const inP = db.prepare('SELECT 1 FROM products WHERE id = ?').get(r.id);
+    console.log(`   sku ${sku} -> store_products ${r.id};  products row ${inP ? 'EXISTS' : 'MISSING  !! this is the one'}`);
+  }
+  console.log(`   PRAGMA foreign_keys = ${db.pragma('foreign_keys', { simple: true })}`);
+} catch (e) { console.log(`   catalogue probe failed: ${e.message}`); }
+
 // ── 2 · the push rail as a whole ──────────────────────────────────────────
 console.log('\n2 · the push rail');
 const vapid = !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
