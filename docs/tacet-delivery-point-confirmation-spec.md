@@ -37,7 +37,7 @@ Precise is not the same as correct. A rooftop-grade match can still be the wrong
 | D2 | "Trustworthy" is exactly what the gate already accepts: `geo_source = customer_pin`, or `geocode:*` at rooftop or street grade. |
 | D3 | Coarse points enter a new state, `needs_point`. It is not an error state. **Narrowed 2026-08-11: only coarse points we cannot vouch for. A coarse point close to the collecting store dispatches. See §4.3.** |
 | D4 | Operator confirms the point on a map inside the order drawer. |
-| D5 | A confirmed point applies to that order only. It never writes back to the customer's saved address. **Amended 2026-09-21 (decisions §203): it is also kept in `retail_delivery_point_memory`, keyed on the address TEXT, so the same address is not asked about twice. `retail_customer_addresses` is still never written — see §5.5.** |
+| D5 | A confirmed point applies to that order only. It never writes back to the customer's saved address. **Amended 2026-09-21 (decisions §204): it is also kept in `retail_delivery_point_memory`, keyed on the address TEXT, so the same address is not asked about twice. `retail_customer_addresses` is still never written — see §5.5.** |
 | D6 | With auto-push off, a `needs_point` order holds indefinitely. Dispatch is attended; someone opens every order. |
 | D7 | With auto-push on, the tenant chooses: hold indefinitely, or push the guessed point after a fixed delay. |
 | D8 | The fallback delay is fixed in code, not configurable. |
@@ -240,7 +240,7 @@ gets no search box either — it renders no map, so there would be nothing to mo
 
 ### 5.5 The same address is asked about once — added 2026-09-21
 
-**An answer given on this surface is kept, and the next order to the identical address ships on it without asking.** Decisions §203, decided by Ash, who asked for the reuse to be silent.
+**An answer given on this surface is kept, and the next order to the identical address ships on it without asking.** Decisions §204, decided by Ash, who asked for the reuse to be silent.
 
 **Why this is not a reversal of D5.** D5 says a staff point must not be written into the customer's saved address, because the customer did not choose it and would never see it to correct it. That holds unchanged. The answer goes into `retail_delivery_point_memory` — the operators' own record of addresses they have already worked out — which sits beside the customer's record rather than inside it.
 

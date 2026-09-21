@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Offline self-test for the delivery-point MEMORY (decisions §203).
+ * Offline self-test for the delivery-point MEMORY (decisions §204).
  *
  *   node scripts/test_point_memory.js
  *

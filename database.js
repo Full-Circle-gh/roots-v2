@@ -6494,7 +6494,7 @@ addColumn('qingyun_push_queue', 'candidates_json',   'TEXT');
 //
 // It is NOT a write-back to retail_customer_addresses (D5 stands): the
 // customer's saved record still holds the address as they gave it, and this
-// holds what an operator worked out about it. Decisions §203.
+// holds what an operator worked out about it. Decisions §204.
 db.exec(`
   CREATE TABLE IF NOT EXISTS retail_delivery_point_memory (
     address_key       TEXT PRIMARY KEY,   -- province|city|district|address|detail, normalised
