@@ -62,6 +62,7 @@ const { coldMsRemaining, isColdStartChallenge } = require('../lib/browser-warmup
 // the recovery message the group is waiting on.
 const { latchStore } = require('../lib/alert-latch');
 const { sweepStockDrift } = require('../lib/meituan-drift-sweep');
+const { isStoreTradingOnChannel } = require('../lib/store-trading');
 // Opening hours off the store's own row, cached — so an admin edit takes effect
 // without a restart. Same module qingyun-daemon reads.
 const { storeHours, within, syncWindow, envLeadMin } = require('../lib/store-hours');
@@ -278,16 +279,17 @@ function pushableStores() {
 // (store_business_status.target_open). The channel flag above is all-or-nothing;
 // this is one store. target_open is a command the daemon nulls once applied, so
 // it falls through to is_open, the 营业/置休 state. Absent means on.
+// It reads the SHARED predicate rather than the two columns directly. Those two
+// are the Meituan POI's own 营业/停业 state and they are not the only switch over
+// this location: store_business_status.fulfillment_open is the shop-wide master,
+// and when it is 0 lib/inventory has already dropped the store from every routing
+// pool, so the shop cannot take an order at all. Pushing stock to a channel for a
+// shop that cannot fulfil it is not a push anyone wants. Reading target_open/
+// is_open alone let that happen whenever the POI read back as 营业 under a closed
+// master — which is a state the merchant site can produce on its own.
 function storePushEnabled(storeCode) {
   if (!storeCode) return true;
-  try {
-    const row = db.prepare('SELECT target_open, is_open FROM store_business_status WHERE store_code = ?')
-                  .get(storeCode);
-    if (!row) return true;
-    if (row.target_open === 0 || row.target_open === 1) return row.target_open === 1;
-    if (row.is_open === 0 || row.is_open === 1) return row.is_open === 1;
-    return true;
-  } catch { return true; }
+  return isStoreTradingOnChannel(db, storeCode, 'shangou');
 }
 
 function meituanChannelEnabled() {
@@ -955,6 +957,10 @@ async function main() {
       lastDriftSweep = now;
       sweepStockDrift(db, {
         storeCodes: SHANGOU_STORES, // only this daemon's stores — the queue is shared
+        // The sweep drops any of them that is not trading on 闪购 — a shut location
+        // is not drift, and re-queuing behind it only refilled a queue the close
+        // had just cleared and paged a human who had nothing to do.
+        channelKey: 'shangou',
         channel: '闪购', log, logSync, notifyMerchant: (t) => alertMerchant(ACCOUNT, t), alerts,
       });
     }

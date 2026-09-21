@@ -900,12 +900,18 @@ async function main() {
     // whose stock no longer matches what Eleme last accepted. Runs BEFORE the push
     // so recovered rows go out in this same cycle.
     //
-    // Deliberately NOT gated on opening hours or on the channel close switch. It
-    // touches no browser, so there is no bot-footprint reason to sleep it, and the
-    // rows it writes are just pending work: processStockQueue's own
-    // channelClosedStores('eleme') gate holds them until the store reopens rather
-    // than dropping them. Gating the sweep instead would mean a store that closed
-    // mid-incident came back with its drift still unrecorded and unqueued.
+    // Deliberately NOT gated on opening hours: it touches no browser, so there is
+    // no bot-footprint reason to sleep it, and the rows it writes are just pending
+    // work that processStockQueue holds until the doors open.
+    //
+    // It IS gated on the close switch now, inside the sweep — a location switched
+    // off is skipped outright. That reverses what this comment used to claim: that
+    // gating would leave "a store that closed mid-incident back with its drift
+    // still unrecorded and unqueued". The sweep is level-triggered, so the first
+    // sweep after a reopen sees the identical mismatch and queues it; nothing is
+    // lost. What the ungated version cost was real — a queue refilling itself
+    // behind a shop lib/store-close.js had just cleared, and a chronic alert
+    // paging a human about a location nobody can act on.
     //
     // configs is already this daemon's own stores — getStoreConfigs applies
     // ELEME_SKIP_STORES and requires a linked eleme_shops.shop_id.

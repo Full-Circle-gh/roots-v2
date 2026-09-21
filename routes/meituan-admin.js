@@ -14,6 +14,7 @@
 const express = require('express');
 const router  = express.Router();
 const { tdb } = require('../lib/tenant-db');
+const { isStoreTradingOnChannel } = require('../lib/store-trading');
 const { requireRetailAdmin } = require('./retail');
 const bundleLib = require('../lib/meituan-bundles');
 const bundleStock = require('../lib/bundle-stock');
@@ -352,17 +353,14 @@ router.post('/api/retail-admin/meituan/enable', requireRetailAdmin, express.json
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-// Mirrors lib/meituan-bundles.js storePushEnabled: the Sales card's
-// per-location toggle is the one switch, and this is the admin's copy of the
-// read so the store lines can show a paused store as paused.
+// Is this store's Meituan stock sync running? The SAME call the daemons and
+// lib/meituan-bundles now make, not an admin-side copy of the read — a screen that
+// answers this question differently from the code that acts on it is how a paused
+// store shows as pushing. The shop-wide fulfillment_open master counts here too:
+// it is what the Sales page's location switch writes.
 function csStorePushEnabled(db, code) {
-  try {
-    const row = db.prepare('SELECT target_open, is_open FROM store_business_status WHERE store_code = ?').get(code);
-    if (!row) return true;
-    if (row.target_open === 0 || row.target_open === 1) return row.target_open === 1;
-    if (row.is_open === 0 || row.is_open === 1) return row.is_open === 1;
-    return true;
-  } catch (e) { return true; }
+  if (!code) return true;
+  return isStoreTradingOnChannel(db, code, 'meituan');
 }
 
 // Per-store health, derived from what the daemons actually recorded.
