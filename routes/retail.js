@@ -62,6 +62,7 @@ const addressCn = require('../lib/address-cn');
 // tested directly (scripts/test_address_pin.js) instead of only through a route.
 const addressPin = require('../lib/address-pin');
 const qingyunQueue = require('../lib/qingyun-queue');
+const pointMemory = require('../lib/delivery-point-memory');
 // One shared opinion about phone numbers. Used here to tidy what we STORE and to
 // warn/flag when a recipient number can't take a rider's call — never to reject
 // one. See the warning at the top of lib/phone-cn.js.
@@ -30339,6 +30340,20 @@ router.post('/api/retail-admin/orders/:id/qingyun/confirm-point', requireRetailA
     requeued = await withTransaction(tdb(), (tx) => {
       tx.prepare('UPDATE retail_orders SET address_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
         JSON.stringify({ ...addr, lat: pin.lat, lng: pin.lng, geo_source: 'staff_pin', geo_precision: null }), id);
+      // The THIRD write, and the only one that outlives this order: the answer
+      // goes into the operators' own record of answered addresses, so the next
+      // order to this exact text ships without asking again (decisions §203).
+      // Still not retail_customer_addresses — D5 is untouched, and the reason
+      // it is untouched is in lib/delivery-point-memory's header.
+      //
+      // Inside the transaction so a confirm that rolls back is not remembered,
+      // but it cannot abort one: the helper swallows its own failure, because
+      // not remembering costs a tap later and a rolled-back confirm costs this
+      // order its rider.
+      pointMemory.remember(tx, {
+        addr, lat: pin.lat, lng: pin.lng, source: 'staff_pin',
+        orderId: id, orderNo: o.order_no,
+      });
       // Guarded on status='needs_point' AND no copy, so a drain that completed
       // while the operator was looking at the map wins and this rolls back
       // whole — rather than leaving a staff point on an order that already has
@@ -30361,9 +30376,16 @@ router.post('/api/retail-admin/orders/:id/qingyun/confirm-point', requireRetailA
     return res.status(500).json({ success: false, error: 'confirm_failed' });
   }
 
+  // Any OTHER order parked on this same address is waiting on the answer that
+  // was just given, and a parked row never retries itself — so it would ask the
+  // identical question again rather than inherit it. Released here, after the
+  // commit, because these are other orders' dispatches (§203).
+  const alsoReleased = pointMemory.releaseWaiting(
+    tdb(), pointMemory.recall(tdb(), addr), { excludeOrderId: id });
+
   logActivity(req.user.id, req.user.username, 'qingyun_confirm_point', 'retail_order', id,
-    { lat: pin.lat, lng: pin.lng, source: 'staff_pin' }, req.ip);
-  res.json({ success: true, requeued, push_status: 'pending' });
+    { lat: pin.lat, lng: pin.lng, source: 'staff_pin', also_released: alsoReleased }, req.ip);
+  res.json({ success: true, requeued, push_status: 'pending', also_released: alsoReleased });
 });
 
 // ── Pick which place, when the name search found several ──────────────────
@@ -30439,6 +30461,15 @@ router.post('/api/retail-admin/orders/:id/qingyun/confirm-place', requireRetailA
       // refused. No precision grade is invented either — nobody measured one.
       tx.prepare('UPDATE retail_orders SET address_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
         JSON.stringify({ ...addr, lat: pin.lat, lng: pin.lng, geo_source: 'poi_picked', geo_precision: null }), id);
+      // Remembered for the next order to this address, exactly as confirm-point
+      // remembers a map tap — a question asked twice is asked twice whichever
+      // surface asked it. The SOURCE is carried into the memory unchanged, so
+      // the reuse stays subject to MAX_DROP_KM: what is remembered here is that
+      // an operator chose a NAME, not that anyone stood at a door.
+      pointMemory.remember(tx, {
+        addr, lat: pin.lat, lng: pin.lng, source: 'poi_picked',
+        placeName: pick.name || null, orderId: id, orderNo: o.order_no,
+      });
       const r = tx.prepare(qingyunQueue.CONFIRM_CHOICE_SQL).run(id);
       if (!r.changes) throw new Error('row_moved');
       return true;
@@ -30458,9 +30489,15 @@ router.post('/api/retail-admin/orders/:id/qingyun/confirm-place', requireRetailA
   // The NAME goes in the activity log, not just the coordinate. When a delivery
   // turns out to have gone to the wrong 小区, the question asked afterwards is
   // "which one did they pick", and a pair of decimals does not answer it.
+  // Same release as confirm-point, for the same reason: the other orders parked
+  // on this address are waiting on the answer just given, and nothing else will
+  // hand it to them.
+  const alsoReleased = pointMemory.releaseWaiting(
+    tdb(), pointMemory.recall(tdb(), addr), { excludeOrderId: id });
+
   logActivity(req.user.id, req.user.username, 'qingyun_confirm_place', 'retail_order', id,
-    { lat: pin.lat, lng: pin.lng, source: 'poi_picked', name: pick.name || '', idx }, req.ip);
-  res.json({ success: true, requeued, push_status: 'pending', name: pick.name || '' });
+    { lat: pin.lat, lng: pin.lng, source: 'poi_picked', name: pick.name || '', idx, also_released: alsoReleased }, req.ip);
+  res.json({ success: true, requeued, push_status: 'pending', name: pick.name || '', also_released: alsoReleased });
 });
 
 // ── None of these is the place — give me a map instead ────────────────────

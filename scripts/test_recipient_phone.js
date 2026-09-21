@@ -355,45 +355,66 @@ it('the daemon uses the shared outcome, and the catch block is in the right ORDE
   assert.ok(/qingyunQueue\.pushFailureOutcome\(\{[\s\S]{0,120}attemptsBefore: row\.attempts/.test(daemonSrc),
     'daemon must not re-implement the decision');
 
-  // Four branches, four different meanings, and each of the first three exits
-  // with `continue`. They must appear in this order:
+  // FIVE branches now, five different meanings, and each of the first four
+  // exits with `continue`. They must appear in this order:
   //
   //   1. shouldHoldForGeocoder    — the provider is down. Give the attempt back.
-  //   2. shouldMarkAwaitingChoice — the NAME search found several places and
+  //   2. pointMemory.recall       — a person already answered this address on an
+  //                                 earlier order. Apply it and requeue; nobody
+  //                                 is asked again (decisions §203).
+  //   3. shouldMarkAwaitingChoice — the NAME search found several places and
   //                                 could not choose. Park it with the list.
-  //   3. shouldMarkNeedsPoint     — nothing could be placed at all. Park it
+  //   4. shouldMarkNeedsPoint     — nothing could be placed at all. Park it
   //                                 with a map; no attempt, no page.
-  //   4. pushFailureOutcome       — a real failure. One attempt, or five.
+  //   5. pushFailureOutcome       — a real failure. One attempt, or five.
   //
-  // This is asserted because branches 3 and 4 were written a fortnight apart, on
+  // This is asserted because branches 4 and 5 were written a fortnight apart, on
   // separate branches, and first met in a rebase — the conflict landed exactly
   // here. A resolution that dropped any would fail silently: parked orders
   // would burn attempts and page ops, or a refused phone would retry four more
   // times. Positions, not just presence, because "both are in the file" was
   // already true of the broken resolutions.
   //
-  // Branch 2 joined later, with POI-first resolution. Its marker is mutually
-  // exclusive with branch 3's, so the order between those two cannot change
+  // Branch 3 joined later, with POI-first resolution. Its marker is mutually
+  // exclusive with branch 4's, so the order between those two cannot change
   // behaviour today — it is pinned anyway, because that exclusivity is a
   // property of the thrower and this file cannot see it.
-  const holdAt    = daemonSrc.indexOf('shouldHoldForGeocoder');
-  const choiceAt  = daemonSrc.indexOf('shouldMarkAwaitingChoice');
-  const pointAt   = daemonSrc.indexOf('shouldMarkNeedsPoint');
+  //
+  // Branch 2 joined last and is the reason the positions below are taken from
+  // the STATEMENT each branch runs rather than from the predicate it tests: the
+  // memory branch tests branches 3 and 4's own predicates (it answers either
+  // question), so the predicate names no longer appear in branch order. What
+  // each branch DOES is unambiguous, and it is what the order is about. Branch 2
+  // must precede both parks — parking first would draw a question that has
+  // already been answered — and must follow the hold, because a geocoder outage
+  // is not a question anyone asked a person.
+  const holdAt    = daemonSrc.indexOf('qingyunQueue.HOLD_SQL');
+  const memoryAt  = daemonSrc.indexOf('pointMemory.recall(');
+  const choiceAt  = daemonSrc.indexOf('qingyunQueue.AWAITING_CHOICE_SQL');
+  const pointAt   = daemonSrc.indexOf('qingyunQueue.NEEDS_POINT_SQL');
   const outcomeAt = daemonSrc.indexOf('pushFailureOutcome');
+  // Presence of the shared predicates is checked separately from the order:
+  // the daemon must still ask lib/qingyun-queue rather than re-deciding.
+  for (const p of ['shouldHoldForGeocoder', 'shouldMarkAwaitingChoice', 'shouldMarkNeedsPoint']) {
+    assert.ok(daemonSrc.includes(`qingyunQueue.${p}(`), `${p} is no longer consulted`);
+  }
   assert.ok(holdAt > -1, 'the geocoder hold branch is missing');
+  assert.ok(memoryAt > -1, 'the remembered-point branch is missing — the same address would ask twice');
   assert.ok(choiceAt > -1, 'the awaiting_choice branch is missing');
   assert.ok(pointAt > -1, 'the needs_point branch is missing — a rebase dropped it');
   assert.ok(outcomeAt > -1, 'the failure outcome is missing');
-  assert.ok(holdAt < choiceAt, 'a held row must not be parked for a choice');
+  assert.ok(holdAt < memoryAt, 'an outage must not be answered out of the memory');
+  assert.ok(memoryAt < choiceAt && memoryAt < pointAt,
+    'an address already answered must not be parked and asked again');
   assert.ok(choiceAt < pointAt, 'when there is a list to pick from, the pick state wins');
   assert.ok(pointAt < outcomeAt,
     'a parked row must never reach the outcome — it would spend an attempt and page ops');
 
-  // …and all three early branches really do exit, or the order above buys
+  // …and all four early branches really do exit, or the order above buys
   // nothing.
   const between = daemonSrc.slice(holdAt, outcomeAt);
-  assert.strictEqual((between.match(/\n\s*continue;/g) || []).length, 3,
-    'the hold, awaiting_choice and needs_point branches must each continue, not fall through');
+  assert.strictEqual((between.match(/\n\s*continue;/g) || []).length, 4,
+    'the hold, memory, awaiting_choice and needs_point branches must each continue, not fall through');
 });
 it('createOrder failures carry the structured code the classifier needs', () => {
   assert.ok(/err\.qyCode = res\.code;/.test(daemonSrc) && /err\.qyMsg = res\.msg;/.test(daemonSrc),
