@@ -5,6 +5,7 @@
 //
 // What has to hold, and each case exists because getting it wrong is silent:
 //
+//   0  no setting at all             → deducts at order time (§209: off by default)
 //   A  booked, only accepted        → NOTHING comes off the shelf
 //   B  booked, 备餐中 at first sight → deducts at ingest, hold never applies
 //   C  booked inside the lead        → deducts at ingest (prep time is now)
@@ -204,6 +205,27 @@ const check = (name, cond, detail) => {
   if (!cond) failures++;
 };
 
+/* §209 — THE HOLD SHIPS OFF, so every case below that expects one has to say
+   so first. Checked here rather than assumed: a default that quietly came back
+   on would make the whole shop's count overstate, and this is the assertion
+   that would go red. */
+console.log('\n0 · with no setting at all, a booking deducts at order time');
+{
+  const before = stockOf(101);
+  const r = ingest({
+    elemeOrderId: `900000000000000${++seq}`,
+    items: [{ name: '香烤南瓜汤', sku: 'RT-330', qty: 2, unitPrice: 38, lineTotal: 76 }],
+    total: 76, preOrderAt: stampIn(180), statusDesc: '待接单',
+  });
+  check('nothing is held by default', r.body.stockHeld === false, JSON.stringify(r.body));
+  check('shelf down by 2 at order time', stockOf(101) === before - 2, `${before} → ${stockOf(101)}`);
+}
+
+// Everything from here on runs with the hold switched on for Eleme, which is
+// how a shop that wants it would run.
+raw.prepare("INSERT INTO storefront_config (key, value_json) VALUES ('channel.preorder_stock_hold', ?)")
+  .run(JSON.stringify({ channels: ['eleme'], lead_minutes: 120 }));
+
 const booking = (over, extra = {}) => ({
   elemeOrderId: `900000000000000${++seq}`,
   items: [{ name: '香烤南瓜汤', sku: 'RT-330', qty: 2, unitPrice: 38, lineTotal: 76 }],
@@ -369,7 +391,7 @@ console.log('\nH · the sweep releases what the poll never saw');
 // ── I. The lead is a setting ──────────────────────────────────────────────────
 console.log('\nI · lead_minutes comes from config');
 {
-  raw.prepare("INSERT INTO storefront_config (key, value_json) VALUES ('channel.preorder_stock_hold', ?)")
+  raw.prepare("UPDATE storefront_config SET value_json = ? WHERE key = 'channel.preorder_stock_hold'")
     .run(JSON.stringify({ channels: ['eleme'], lead_minutes: 30 }));
 
   const r = ingest(booking(60, { statusDesc: '待接单' }));
@@ -385,7 +407,8 @@ console.log('\nI · lead_minutes comes from config');
   const off = ingest(booking(180, { statusDesc: '待接单' }));
   check('channels: [] switches the hold off', off.body.stockHeld === false, JSON.stringify(off.body));
 
-  raw.prepare("DELETE FROM storefront_config WHERE key = 'channel.preorder_stock_hold'").run();
+  raw.prepare("UPDATE storefront_config SET value_json = ? WHERE key = 'channel.preorder_stock_hold'")
+    .run(JSON.stringify({ channels: ['eleme'], lead_minutes: 120 }));
 }
 
 // ── J. The label test, on its own ─────────────────────────────────────────────
