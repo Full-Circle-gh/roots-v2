@@ -150,7 +150,7 @@ const shelf = (storeId) => F.shelf(h.db, storeId, BANANA);
   section('Part D · the rows already written are repaired, never guessed');
 
   const src = fs.readFileSync(path.join(h.REPO, 'database.js'), 'utf8');
-  const mig = src.slice(src.indexOf('restock_line_product_id_backfill_v1'));
+  const mig = src.slice(src.indexOf("restock_line_product_id_backfill_v2"));
   ok(/dispatched_at IS NULL/.test(mig) && /goods_state, 'none'\) = 'none'/.test(mig)
      && /stock_applied_at IS NULL/.test(mig),
      'it touches ONLY orders whose stock never moved, so it cannot double-count anything');
