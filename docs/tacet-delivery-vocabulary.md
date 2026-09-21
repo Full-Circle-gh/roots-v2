@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.151 · 2026-09-21 · §203 SPLITS A FOURTH STATE OUT OF THE COURIER WAIT AND MINTS NOTHING NEW.** Three different situations printed `排队发单中…` — nobody has drained it, and *the order is fine and waiting for you*. The booked half now says `尚未呼叫运力`, **lifted verbatim from the ship-from confirm body in the same file**, and its note is assembled from `已核对`, `查看运力比价` and `不产生费用`, all live in that same drawer today. The queue wait also carries its age, rendered by `courierAgo`'s existing pairs rather than a new way to say four minutes. `scripts/test_qingyun_wait_states.js` counts each half in the shipped drawer and fails a word used only here. See *Four ways to say no rider yet*.
+
 **v1.150 · 2026-09-21 · §202 SPLITS ONE STATE INTO TWO AND MINTS NOTHING.** *Dispatched* meant the picker's tick, not the departure, so the asker's screen and the receiving screen disagreed while both told the truth. Four states now — and all four Chinese halves were already live: `待处理` and `已点收` on this screen and the `received` notification, `已拣` **verbatim from the Pick screen's own counter**, `在途` from this file's order filters. The suite now counts each half across `public/` and `routes/` and fails a word used only here, so the easy mistake is refused structurally rather than by memory. See *The four words a line can wear*.
 
 **v1.149 · 2026-09-20 · §200's BAND — THE THREE PAIRS THAT NAME AN ORDER WHICH NEVER LEFT THE SHELF.** A stuck transfer had no screen and therefore no words; it has both now. **Every fragment is live**: `已标记`, `扣减`, `已发出`, `点收`, `此前`, `发送中…` and `重新` are all in `public/m.html` or the desktop admin today, and `重新发货` is `重新打印`'s own shape with the verb this screen actually does. The two composed strings are assemblies of those words and nothing more. See *An order that never left the shelf*.
@@ -8058,3 +8060,56 @@ is enforced by a suite instead of by a reader remembering it.
 **ONLY THE LAST STATE SPENDS A COLOUR.** Sage on *Counted in*; the two middle
 states are neutral. Arriving is the end of the journey — the others are
 progress, and progress that shouts stops being read.
+
+
+## Four ways to say no rider yet (§203)
+
+**WHAT THIS NAMES.** The line in the order drawer's *Same-city courier* block
+when no delivery exists on the courier platform yet. There are four reasons for
+that and the block had three sentences, because the two most different reasons
+shared one:
+
+| Row state | What is true | What it said before |
+|---|---|---|
+| `pending` / `processing` | nobody has drained it yet | Queued for push… |
+| `ready` | **checked, and deliberately held until staff call the delivery** | Queued for push… |
+| held on a geocoder outage | the map service is down, it retries itself | Held — map service unavailable |
+| `error` / `skipped` | refused; a person must act | Push refused |
+
+The second row is the healthy resting state of every booked order. Saying it
+with the first row's words told a store that an order working exactly as
+designed was an order nothing had looked at.
+
+| Where | English | Chinese | Source |
+|---|---|---|---|
+| the line, booked | No courier called yet | 尚未呼叫运力 | **LIFTED VERBATIM** — the ship-from confirm body in `public/retail-admin/04-orders.js` has said `尚未呼叫运力,不产生费用` since the override shipped. Same drawer, same fact, so it is the same words. |
+| the note, booked | The address is checked. Compare couriers below when you want a rider — nothing is charged until you dispatch. | 地址已核对。需要骑手时点击下方“查看运力比价” — 发起配送前不产生费用。 | **COMPOSED from live fragments only**: `已核对` (5 live uses, incl. `付款已核对` on this screen), `查看运力比价` **verbatim from the button it points at**, `骑手` (79 live uses), `不产生费用` from the same confirm body as the line above. No new character. |
+| the line, waiting | Queued for push… · 4m ago | 排队发单中… · 4 分钟前 | **UNCHANGED PAIR plus `courierAgo`'s own** — the age is rendered by the drawer's existing ago-helper, whose `分钟前` is live throughout this file. |
+
+Composed by Claude Opus 5 on 2026-09-21 under the 2026-09-06 amendment,
+declared here in the same commit as the code that uses it.
+
+**THE NOTE NAMES THE BUTTON THAT IS ACTUALLY ON THE SCREEN.** `查看运力比价` is
+not a description of the action, it is the label of the control three lines
+below it, quoted. A note that said *"compare the couriers"* in any other words
+would be a second name for one button, which is how a screen comes to disagree
+with itself — the same reasoning §202 gives for taking `已拣` from the Pick
+screen rather than minting one.
+
+**WHAT WAS REJECTED.** `待呼叫` — tidy, and the obvious mint for "waiting to be
+called" — is not used. It is not live anywhere in this system, and the live
+phrase already says the same thing in words a picker has read before. `已就绪` /
+*Ready* was rejected for a different reason: it is the queue row's internal
+status name, and naming a screen after a database enum teaches the reader the
+schema instead of the situation.
+
+**THE AGE IS NOT DECORATION.** Two minutes of `排队发单中…` is the geocoder
+working; two hours is a stall, and before this both printed the identical five
+words. The age is spent only on the plain wait — the hold carries `自 HH:MM`
+already, the booked state is not waiting on us, and a refusal is not a wait at
+all.
+
+**NO COLOUR IS SPENT ON THE BOOKED STATE.** Amber is for the hold and the
+refusal, which are things going wrong. A booked order waiting for someone to
+call a rider is ordinary work, and ordinary work that shouts stops being read.
+Its tick is the same neutral grey as the queue wait it replaced.
