@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.152 · 2026-09-21 · §206 REBUILDS THE FULL PRODUCT PAGE — COPYING EVERY SECTION NAME AND COMPOSING THE WORDS A SETTINGS CARD NEEDS.** The page's six section names, its right-column headings and every state it reports are the dock's own pairs, lifted whole. What is new is the Settings card that orders and hides sections, one summary row's label, one door's label, and three sentences of explanation — composed from live parts and declared below with what was rejected. `scripts/test_product_page_sections.js` asserts every static label on the page and the card is an EN · CN pair. See *The product page's sections and the card that orders them*.
+
 **v1.151 · 2026-09-21 · §203 SPLITS A FOURTH STATE OUT OF THE COURIER WAIT AND MINTS NOTHING NEW.** Three different situations printed `排队发单中…` — nobody has drained it, and *the order is fine and waiting for you*. The booked half now says `尚未呼叫运力`, **lifted verbatim from the ship-from confirm body in the same file**, and its note is assembled from `已核对`, `查看运力比价` and `不产生费用`, all live in that same drawer today. The queue wait also carries its age, rendered by `courierAgo`'s existing pairs rather than a new way to say four minutes. `scripts/test_qingyun_wait_states.js` counts each half in the shipped drawer and fails a word used only here. See *Four ways to say no rider yet*.
 
 **v1.150 · 2026-09-21 · §202 SPLITS ONE STATE INTO TWO AND MINTS NOTHING.** *Dispatched* meant the picker's tick, not the departure, so the asker's screen and the receiving screen disagreed while both told the truth. Four states now — and all four Chinese halves were already live: `待处理` and `已点收` on this screen and the `received` notification, `已拣` **verbatim from the Pick screen's own counter**, `在途` from this file's order filters. The suite now counts each half across `public/` and `routes/` and fails a word used only here, so the easy mistake is refused structurally rather than by memory. See *The four words a line can wear*.
@@ -8113,3 +8115,59 @@ all.
 refusal, which are things going wrong. A booked order waiting for someone to
 call a rider is ordinary work, and ordinary work that shouts stops being read.
 Its tick is the same neutral grey as the queue wait it replaced.
+
+
+## The product page's sections and the card that orders them (§206)
+
+**WHAT THIS NAMES.** The full product page (Ash, 2026-09-21: *"build a from
+scratch … exactly like the mock up"*) is a rail of six sections, one open at a
+time, and a right column that never moves; Settings › Operations › Product page
+lets a business order and hide those sections once. **Register: OPERATOR**
+(Rule 1) throughout — nothing here is customer-facing.
+
+**COPIED, NOT COMPOSED.** The rail and the section headings are the dock's own
+tab strip and card headings, lifted whole: `Basics · 基础`, `Where it shows ·
+分类与陈列`, `Cost & Pricing · 成本与定价`, `Stock · 库存`, `How it's sold · 售卖方式`,
+`Shopper page · 顾客页面` (the dock's summary row, `09-products.js`). The right
+column keeps `Sales · 销量`, `Shipping · 配送方式`, `Free of · 不含`, `Flags · 标记`,
+`Internal notes · 内部备注`. The summary rows reuse `Description · 描述`, `Product
+details · 产品详情`, `Written · 已填写`, `Not written yet · 尚未填写`, `Designed page ·
+已设计页面`, `Designed page — out of date · 已设计页面 — 已过期`, `Default template ·
+默认模板`. The header keeps `New product · 新产品`, `SKU · 货号`, `on hand · 在库`,
+`Products · 产品` and the crumb's `Back to the list and quick-edit panel ·
+返回列表与快捷面板`. The card's controls keep `Edit · 编辑`, `Close · 关闭`, `Move up ·
+上移`, `Move down · 下移` (`19-recipes.js`), `Drag to reorder · 拖动以排序`
+(`vaRender`), `Saved · 已保存`, `Saving… · 保存中…` and `Save failed: · 保存失败: `
+(`02-settings-ops.js`).
+
+| Where | English | Chinese | Source |
+|---|---|---|---|
+| Shopper page, third row's label | Page design | 页面设计 | **COMPOSED** — live `页面` (the dock's `Page · 页面` tab) + live `设计` (`产品页设计`, the design switch's title). Rejected: bare `设计`, which in a list of three rows does not say design OF WHAT; `已设计页面`, which is a state and is already the row's VALUE. |
+| Shopper page, the door | Open the page editor | 打开产品页编辑器 | **COMPOSED** — live `打开` (`打开整页编辑器`) + live `产品页编辑器` (`Product editor · 产品页编辑器`, the dock's mode button). Rejected: the live `打开整页编辑器` whole, because its English half (*Open the full Product Page Editor*) is not this button's words, and a pair is a pair. |
+| Shopper page, under the door | Writing and design happen there. This form holds the shop facts. | 文案与设计在编辑器中完成，此表单只保存商品信息。 | **COMPOSED** — live `文案` (`Copy · 文案`, `小程序文案`), `设计`, `编辑器` (`产品页编辑器`), `表单` (`空白表单`, `读取表单失败`), `保存`, `商品` (`件商品`). `商品信息` is the one join with no live precedent. |
+| The rail's foot | Sales, shipping, flags and notes stay on the right. | 销量、配送方式、标记和备注固定显示在右侧。 | **COMPOSED** from the four live card headings + live `固定` (`固定金额`) + live `显示`. `右侧` has no live precedent (`右下角` does). |
+| The rail's aria label | Sections | 分区 | **COMPOSED** by trimming live `Product sections · 产品分区` — the page already says which product. |
+| Settings card, title | Product page | 产品页 | **COMPOSED** by trimming live `打开完整产品页`. |
+| Settings card, sub-line | The order your product page shows its sections in, and which ones it shows at all. | 产品页各分区的显示顺序，以及显示哪些分区。 | **COMPOSED** — `产品页`, `分区`, `显示` all live; `顺序` live (`As ordered · 原顺序`). |
+| Settings card, note | A hidden section keeps its data. Switch it back on and everything is still there. Basics cannot be hidden: a product needs a name. | 隐藏的分区会保留其数据，重新开启后一切仍在。基础分区不能隐藏：产品需要一个名称。 | **COMPOSED** — `隐藏` live (`Hide · 隐藏`), `保留` live (`一直保留`), `开启` live (`开启系统告警`), `基础` live, `名称` live. |
+| Settings card, reset | Reset to default order | 重置为默认顺序 | **COMPOSED** — `重置` live (`重置密码`), `默认` live (`Default · 默认`), `顺序` live. Rejected: `恢复默认`, not live anywhere in this admin. |
+| Settings card, the locked row | Always shown | 始终显示 | **COMPOSED** — `始终` live (`始终包邮`) + `显示`. Rejected: `固定显示`, kept for the rail's foot where *fixed in place* is the meaning; here the meaning is *cannot be switched off*. |
+| Settings card, the switch's aria label | Show this section | 显示此分区 | **COMPOSED** — live `显示此规格` with the noun swapped for live `分区`. |
+| Settings card, under each name | Name, second-language name, SKU, photos | 名称、名称(第二语言)、货号、图片 | **COMPOSED** by joining the section's own live field labels with `、`. Same for the other five: `商店分区、子分类、标签、规格` · `成本、价格、毛利` · `各门店库存、低库存提醒、缺货时的处理方式、货源` · `规格、套装、推荐搭配、选项` · `描述、产品详情、已设计页面`. |
+| Shopper page, second row's value | 5 of 5 filled | 已填写 5/5 | **COMPOSED** — live `已填写` in front of the numerals; a numeral needs no label. |
+
+Composed by Claude Fable 5.1 on 2026-09-21 under the 2026-09-06 amendment,
+declared here in the same commit as the code that uses it.
+
+**THE COST & PRICING DESCRIPTION DELIBERATELY DROPS ITS FIRST CLAUSE IN
+CHINESE.** The English reads *What one unit is made of, cost, price, margin*;
+the Chinese reads `成本、价格、毛利`. The build list's own title has no sourced
+Chinese and `21-product-build.js` forbids minting one (`物料清单` and every other
+candidate is unsourced) — so the line names the three things that DO have live
+words and leaves the fourth to the section heading above it, which already says
+成本与定价.
+
+**NOTHING WAS COMPOSED FOR A STATE.** Every value the Shopper page rows can
+show is a pair the dock's summary rows already carry; the page reports the same
+facts in the same words, so the drawer and the page can never disagree about
+whether a description is written.

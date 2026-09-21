@@ -814,6 +814,7 @@
 <link rel="preload" href="/assets/retail-admin/08-customers.js" as="script">
 <link rel="preload" href="/assets/retail-admin/09-products.js" as="script">
 <link rel="preload" href="/assets/retail-admin/10-extras.js" as="script">
+<link rel="preload" href="/assets/retail-admin/31-product-page.js" as="script">
 <style>
   /* Anti-FOUC for the language layer: the raw markup carries BOTH languages
      ("EN · 中文") and the app JS hides one at boot, stamping data-ui-lang on
@@ -4842,9 +4843,12 @@
                product page." Sync state lives on Sales › Channel sync, which is
                the one place that can also repair it. ═══ -->
 
-          <!-- ═══ Focused panes — Basics · Stock · Page · Details. Every field
-               below is the SAME node as before (same ids, same wiring); only the
-               grouping changed. pdTab() in 09-products.js swaps the active pane. ═══ -->
+          <!-- ═══ Focused panes — Basics · Cost & Pricing · Stock · Page · Details.
+               Every field below is the SAME node as before (same ids, same
+               wiring); only the grouping changed. pdTab() in 09-products.js
+               swaps the active pane. The full product page (#ppg, further down)
+               carries these same nodes into its own sections while it is open —
+               see retail-admin/31-product-page.js. ═══ -->
           <div class="pd-tabs" id="pd-tabs" role="tablist" aria-label="Product sections · 产品分区">
             <button type="button" class="pd-tab is-active" data-pane="basics"  role="tab" aria-selected="true"  onclick="pdTab('basics')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 15l-4.5-4-8.5 8"/></svg><span class="pd-tab-txt">Basics · 基础</span></button>
             <!-- The build list, the price and the margin, on ONE pane. Sits
@@ -4870,17 +4874,16 @@
                the SAME node/id as before — only grouping/wrappers changed, so
                save/load wiring is untouched. -->
           <div class="pd-pane is-active" data-pane="basics" role="tabpanel">
-            <div class="pd-pp-sech" data-pp-only="1">Basics · 基础</div>
             <div class="pdb-grid">
 
               <!-- Basics: name + price -->
-              <section class="pdb-card pdb-c7">
+              <section class="pdb-card pdb-c7" id="pd-sec-basics">
                 <!-- Dock-only: expanded, the pane already carries a "Basics"
                      section heading directly above this card, so the card
                      repeating the word is the only duplicated heading on the
                      full page. Every other card names something the pane
                      heading does not (Photos, Sourcing, Shipping…). -->
-                <div class="pd-sec-h" data-dock-only="1">Basics · 基础</div>
+                <div class="pd-sec-h">Basics · 基础</div>
                 <div class="pdb-fields">
                   <div class="field"><label for="pd-name-en" class="stacked">Name · 名称</label><input type="text" id="pd-name-en"></div>
                   <div class="field"><label for="pd-name-cn" class="stacked">Name (second language) · 名称(第二语言)</label><input type="text" id="pd-name-cn"></div>
@@ -4936,9 +4939,8 @@
                    card inside the Basics pane with its own small heading, so
                    the heading below is page-only and the card's is dock-only —
                    the same pair the Basics card carries. -->
-              <div class="pd-pp-sech" data-pp-only="1">Where it shows · 分类与陈列</div>
               <section class="pdb-card pdb-c7" id="pd-sec-where">
-                <div class="pd-sec-h" data-dock-only="1">Where it shows · 分类与陈列</div>
+                <div class="pd-sec-h">Where it shows · 分类与陈列</div>
                 <div class="pdb-fields">
                   <div class="field"><label for="pd-top-category" class="stacked">Shop section · 商店分区 <span class="muted" style="font-weight:400;">(left rail)</span></label>
                     <select id="pd-top-category" onchange="pdOnTopCatChange()"><option value="">— none · 无 —</option></select></div>
@@ -4975,8 +4977,7 @@
                else is copied from live markup. See 21-product-build.js's header
                for the sources. Do not "finish" the English-only ones. -->
           <div class="pd-pane" data-pane="cost" role="tabpanel">
-            <div class="pd-pp-sech" data-pp-only="1">Cost &amp; Pricing · 成本与定价</div>
-            <div class="pd-bl-wrap">
+            <div class="pd-bl-wrap" id="pd-sec-cost">
 
               <div class="pd-bl-main">
                 <section class="pdb-card">
@@ -5041,8 +5042,7 @@
                 <!-- pd-cost-card, and the class earns its keep: this card holds
                      ONE field and the four things that explain it — where the
                      figure came from, two warnings, the margin it produces. The
-                     rail’s .pdb-fields grid is pinned to two columns on the full
-                     page (.pd-pp-mount rule in retail-admin.css), which put all
+                     rail’s .pdb-fields grid is a two-up grid, which put all
                      of that in the first column and left the second empty: a
                      ~126px measure that broke the unit-mismatch sentence into
                      one and two words a line and stood the card six inches tall.
@@ -5080,9 +5080,8 @@
                the .pd-heavy blocks appear in their place. Nothing is duplicated:
                one set of ids, one set of renderers, two presentations. -->
           <div class="pd-pane" data-pane="stock" role="tabpanel">
-            <div class="pd-pp-sech" data-pp-only="1">Stock · 库存</div>
             <div class="pdb-grid">
-            <section class="pdb-card pdb-c7">
+            <section class="pdb-card pdb-c7" id="pd-sec-stock">
               <!-- Counts first. The tab is called Stock, and it used to open on
                    a sourcing row, a sizes row, a paragraph, a jump button and a
                    SKU field before a single number. SKU moved to Basics — it is
@@ -5119,7 +5118,7 @@
                  data is still the single pd-ship-from-supplier checkbox (kept
                  hidden) so save/load code is untouched — these two cards are
                  just a clearer face on the same value. -->
-            <section class="pdb-card pdb-c5 pd-heavy">
+            <section class="pdb-card pdb-c5 pd-heavy" id="pd-sec-sourcing">
               <div class="pd-sec-h">Sourcing · 货源</div>
               <div class="pd-source-choice" id="pd-source-choice">
                 <button type="button" class="pd-radio-card is-on" data-src="own" onclick="pdSetSourceMode(false)">
@@ -5147,7 +5146,6 @@
                  width; split across two containers neither could.
                  #pd-sec-sizes stays the id: the dock's summary rows jump here
                  by it, and so does pdExpand('sizes'|'more'). -->
-            <div class="pd-pp-sech" data-pp-only="1">How it's sold · 售卖方式</div>
             <div class="pe-rows pdb-belowgrid pdb-vgrid pd-heavy" id="pd-sec-sizes">
             <div id="pd-variants" class="pd-variants"></div>
             <div id="pd-bundle-product" class="pd-variants"></div>
@@ -5162,9 +5160,8 @@
                container ancestor would trap that fixed element inside the card. -->
           <div class="pd-pane" data-pane="page" role="tabpanel">
             <div class="pd-summary" id="pd-sum-page"></div>
-            <div class="pd-pp-sech" data-pp-only="1">Page · 页面</div>
             <div class="pdb-grid-auto pd-heavy">
-            <section class="pdb-card">
+            <section class="pdb-card" id="pd-sec-facts">
               <div class="pd-sec-h" style="margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 <span style="display:inline-flex;align-items:center;gap:7px;">Product details · 产品详情</span>
                 <button type="button" id="pd-facts-autofill" class="btn btn-sm pd-facts-body" onclick="pdFactsAutofill()" style="margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500;font-family:var(--f-sans);" title="Read your description (or pasted text) and fill these boxes automatically · 读取描述并自动填充"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:5px"><path d="M7 2.5l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z"/><path d="M12.5 10.5v3M11 12h3"/></svg>Auto-fill from text · 智能填充</button>
@@ -5180,7 +5177,7 @@
               <div class="field pd-facts-body"><label class="stacked">Serving suggestion · 食用建议</label>
                 <div class="pd-row2"><textarea id="pd-fact-serving-en" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;font:inherit;padding:6px 8px;" placeholder="How to enjoy it"></textarea><textarea id="pd-fact-serving-cn" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;font:inherit;padding:6px 8px;" placeholder="如何享用"></textarea></div></div>
             </section>
-            <section class="pdb-card">
+            <section class="pdb-card" id="pd-sec-desc">
             <label class="stacked">Description · 描述
               <span class="pd-desc-modebar">
                 <button type="button" class="pd-mode-btn active" data-mode="classic" onclick="pdDescMode()" title="Edit the description here with the rich-text toolbar · 在此用富文本工具栏编辑描述">Classic · 经典</button>
@@ -5262,7 +5259,6 @@
                Same checkbox nodes/ids/handlers — only the grouping wrappers changed. -->
           <div class="pd-pane" data-pane="details" role="tabpanel">
             <div class="pd-summary" id="pd-sum-details"></div>
-            <div class="pd-pp-sech" data-pp-only="1">Details · 详情</div>
             <div class="pdb-grid pd-heavy">
 
               <!-- Shipping -->
@@ -5317,7 +5313,7 @@
                header's controls where it read as a label for the Expand button. -->
           <span id="pd-save-status" class="pd-save-status" aria-live="polite"></span>
           <span class="pd-foot-sp"></span>
-          <div class="pd-foot-acts">
+          <div class="pd-foot-acts" id="pd-foot-acts">
             <button class="btn" id="pd-dup-btn" type="button" onclick="pdDuplicate(false)" title="Make a copy as a new product · 复制为新产品"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>Duplicate · 复制</button>
             <!-- products:delete, the cap requiredCapFor() answers for the DELETE
                  this calls (audit K-01). Editing a product and deleting one are
@@ -5327,79 +5323,89 @@
             <button class="btn pd-versions-btn" onclick="pdOpenVersions()" title="See every saved version of this product and roll back to any of them · 查看此产品的所有历史版本并还原"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M8 4v4l2.5 1.5"/><path d="M2.6 6.5A5.5 5.5 0 1 1 2.5 9"/><path d="M2.5 4v2.5H5"/></svg>Version history · 历史版本</button>
           </div>
         </div>
-        <!-- The page's second column. It lives INSIDE #pd-editor on purpose:
-             thousands of lines of this stylesheet are scoped `#pd-editor …`, so
-             a block moved outside the editor arrives stripped of its card, its
-             heading, its fields and its chips. Empty in the dock, filled by
-             pdMoveSideBlocks() only while the page is open. -->
-        <aside id="pd-pp-side" class="pd-pp-side"></aside>
       </div>
       </div><!-- /#pd-bg pa-split-editor -->
     </div><!-- /#pa-split -->
 
-    <!-- ── The full product page. Expand moves the SAME #pd-editor node out of
-         the dock and into #pd-pp-mount; Collapse moves it back. One node, so
-         every id, value and renderer survives the trip untouched — the two
-         views differ only in the chrome around them and in which of the pane's
-         .pd-summary / .pd-heavy blocks CSS shows. Hidden until Expand. ── -->
-    <div id="pd-pagestage" class="pd-pagestage" style="display:none;">
-      <!-- The crumb is the ONLY way out, and it is also the eyebrow (§1.7a).
-           It used to end in the product's name, which printed the name twice
-           inside 60px — the title two lines down is the name. And the Collapse
-           button that used to sit top-right called this exact same function:
-           one exit drawn twice. It is gone. -->
-      <div class="pd-pp-crumb">
-        <button type="button" onclick="pdCollapseToPanel()" title="Back to the list and quick-edit panel · 返回列表与快捷面板"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Products · 产品</button>
+    <!-- ── The full product page (§206, 2026-09-21). Built as its own page:
+         a crumb, a header, a rail of sections, ONE section at a time, and a
+         right column that never moves. Every field on it is the dock's own
+         node, carried into the mounts below by retail-admin/31-product-page.js
+         while the page is open and carried home on collapse — one node per
+         field, so ids, typed-but-unsaved values and every renderer survive.
+         The rail is painted from the tenant's own order (Settings › Operations
+         › Product page); the page carries no field markup of its own except
+         the Shopper page summary, which exists only here. Hidden until Expand.
+         Styled by the `.ppg` block in retail-admin.css and nothing else: no
+         `#pd-editor …` rule reaches in here, which is the point. ── -->
+    <div id="ppg" class="ppg" style="display:none;">
+      <div class="ppg-crumb">
+        <button type="button" onclick="pdCollapseToPanel()" title="Back to the list and quick-edit panel · 返回列表与快捷面板"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>Products · 产品</button>
       </div>
-      <!-- Header, on the same alignment grid as the columns below it. The
-           product's own photo leads, because the biggest view of one product
-           should show the product; the drawer header has carried one all along
-           and the page dropped it. The picture makes the identity block two
-           lines tall, which gives the state block on the right two lines to
-           match — so the save line stops hanging alone under a control.
-           Everything the editor's own head used to carry lives here
-           (pdMoveHeadState). -->
-      <div class="pd-pp-head" id="pd-pp-head">
-        <div class="pd-pp-id">
-          <div class="pd-pp-thumb" id="pd-pp-thumb"></div>
-          <div class="pd-pp-idtxt">
-            <div class="pd-pp-title" data-no-i18n>
-              <span id="pd-pp-name"></span>
-              <span class="pd-pp-alt" id="pd-pp-name-alt"></span>
-              <span id="pd-pp-badge"></span>
-            </div>
-            <div class="pd-pp-sub" id="pd-pp-sub" data-no-i18n></div>
+      <div class="ppg-head">
+        <div class="ppg-id">
+          <div class="ppg-thumb" id="ppg-thumb"></div>
+          <div class="ppg-idtxt">
+            <div class="ppg-title" data-no-i18n><span id="ppg-name"></span><span class="ppg-alt" id="ppg-name-alt"></span></div>
+            <div class="ppg-sub" id="ppg-sub" data-no-i18n></div>
           </div>
         </div>
-        <div class="pd-pp-acts" id="pd-pp-acts">
-          <span id="pd-pp-tags" class="pd-pp-tags"></span>
-          <div class="pd-pp-savestate" id="pd-pp-state"></div>
+        <!-- The shop switch and the save state are the dock's own nodes
+             (#pd-head-tags, #pd-save-status), parked here while the page is
+             open. One switch, one status line — never a second copy. -->
+        <div class="ppg-acts">
+          <span class="ppg-tags" id="ppg-tags"></span>
+          <span class="ppg-state" id="ppg-state"></span>
         </div>
       </div>
-      <!-- ── The condensed header ────────────────────────────────────────────
-           This page is three screens tall and writes on every keystroke, so the
-           one line that says it saved cannot be the first thing to scroll away
-           (§1.7: the page header is never scrolled away). Past the header, this
-           56px bar takes over: which product, whether it is in the shop,
-           whether it saved, and the way out.
-
-           It carries no control the resting header does not — it IS the header,
-           smaller. The shop switch and the save state are the SAME two nodes,
-           moved in and out (pdPinHead), never a second copy, because there is
-           only one of each and a duplicate would drift.
-
-           The bar is sticky with a negative bottom margin, so it takes no room
-           in the flow: shrinking a sticky header in place would yank the whole
-           page up by its own height the moment it condensed. The 1px sentinel
-           above it is what the observer watches. ── -->
-      <div class="pd-pp-sentinel" id="pd-pp-sentinel" aria-hidden="true"></div>
-      <div class="pd-pp-bar" id="pd-pp-bar">
-        <div class="pd-pp-bar-thumb" id="pd-pp-bar-thumb"></div>
-        <div class="pd-pp-bar-name" id="pd-pp-bar-name" data-no-i18n></div>
-        <span class="pd-pp-bar-sp"></span>
-        <button type="button" class="pd-pp-bar-back" onclick="pdCollapseToPanel()" title="Back to the list and quick-edit panel · 返回列表与快捷面板"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Products · 产品</button>
+      <div class="ppg-body">
+        <nav class="ppg-rail" id="ppg-rail" aria-label="Sections · 分区"></nav>
+        <div class="ppg-main" id="ppg-main">
+          <div class="ppg-sec" data-sec="basics" hidden>
+            <h2 class="ppg-sec-h">Basics · 基础</h2>
+            <div class="ppg-mount" data-mount="basics"></div>
+          </div>
+          <div class="ppg-sec" data-sec="where" hidden>
+            <h2 class="ppg-sec-h">Where it shows · 分类与陈列</h2>
+            <div class="ppg-mount" data-mount="where"></div>
+          </div>
+          <div class="ppg-sec" data-sec="cost" hidden>
+            <h2 class="ppg-sec-h">Cost &amp; Pricing · 成本与定价</h2>
+            <div class="ppg-mount" data-mount="cost"></div>
+          </div>
+          <div class="ppg-sec" data-sec="stock" hidden>
+            <h2 class="ppg-sec-h">Stock · 库存</h2>
+            <div class="ppg-mount" data-mount="stock"></div>
+          </div>
+          <div class="ppg-sec" data-sec="sold" hidden>
+            <h2 class="ppg-sec-h">How it's sold · 售卖方式</h2>
+            <div class="ppg-mount" data-mount="sold"></div>
+          </div>
+          <!-- The one section with markup of its own: a summary of what the
+               shopper's page holds and one door into the editor that writes
+               it. The classic description and the Product details boxes are
+               still this form's fields — Edit unfolds them under the summary,
+               so a product with no designed page keeps its only editor. -->
+          <div class="ppg-sec" data-sec="page" hidden>
+            <h2 class="ppg-sec-h">Shopper page · 顾客页面</h2>
+            <div class="ppg-card" id="ppg-page-card">
+              <div class="ppg-rows">
+                <div class="ppg-row"><span class="t">Description · 描述</span><span class="v" id="ppg-page-desc" data-no-i18n></span><button type="button" class="ppg-link" id="ppg-write-btn" onclick="ppgWriteToggle()" aria-expanded="false" aria-controls="ppg-write">Edit · 编辑</button></div>
+                <div class="ppg-row"><span class="t">Product details · 产品详情</span><span class="v" id="ppg-page-facts" data-no-i18n></span></div>
+                <div class="ppg-row"><span class="t">Page design · 页面设计</span><span class="v" id="ppg-page-design" data-no-i18n></span></div>
+              </div>
+              <div class="ppg-page-foot">
+                <button type="button" class="btn" onclick="pdOpenPageDesign()">Open the page editor · 打开产品页编辑器</button>
+                <span class="ppg-note">Writing and design happen there. This form holds the shop facts. · 文案与设计在编辑器中完成，此表单只保存商品信息。</span>
+              </div>
+            </div>
+            <div class="ppg-mount" data-mount="write" id="ppg-write" hidden></div>
+          </div>
+        </div>
+        <aside class="ppg-side" id="ppg-side">
+          <div class="ppg-mount" data-mount="side"></div>
+        </aside>
       </div>
-      <div id="pd-pp-mount" class="pd-pp-mount"></div>
     </div>
 
     <!-- The Designer Sections modal (#pa-edit-bg) is GONE. Nothing on this
@@ -11359,6 +11365,27 @@
             </div>
           </div>
 
+          <!-- ── Product page · 产品页 (§206) — the order the full product page
+               shows its sections in, and which it shows at all. One setting
+               for the whole business, kept in storefront_config under
+               product_page.sections and painted by retail-admin/31-product-page.js
+               (ppgSettingsRender). Saves on every change: a drag or a switch is
+               the whole decision, so a Save button would only be a second click
+               to say the same thing. data-no-i18n: every string in the list is
+               baked by cuT(). ── -->
+          <div class="group-card" id="ppg-settings-card">
+            <div class="group-card-head">
+              <h3>Product page · 产品页</h3>
+              <div class="muted">The order your product page shows its sections in, and which ones it shows at all. · 产品页各分区的显示顺序，以及显示哪些分区。</div>
+            </div>
+            <div class="ppg-setrows" id="ppg-setrows" data-no-i18n></div>
+            <div class="ppg-setnote">A hidden section keeps its data. Switch it back on and everything is still there. Basics cannot be hidden: a product needs a name. · 隐藏的分区会保留其数据，重新开启后一切仍在。基础分区不能隐藏：产品需要一个名称。</div>
+            <div class="ppg-setfoot">
+              <button type="button" class="btn btn-sm" onclick="ppgSettingsReset()">Reset to default order · 重置为默认顺序</button>
+              <span class="muted" id="ppg-set-status" aria-live="polite"></span>
+            </div>
+          </div>
+
           <!-- ── Support button · 客服按钮 — hide the floating platform-support
                launcher (bottom-right) for operators who don't want it. ── -->
           <div class="group-card" data-sees="customer">
@@ -14380,6 +14407,7 @@
 <script src="/assets/retail-admin/28-shops.js"></script>
 <script src="/assets/retail-admin/29-channel-sync.js"></script>
 <script src="/assets/retail-admin/30-install.js"></script>
+<script src="/assets/retail-admin/31-product-page.js"></script>
 <script src="/assets/retail-admin/27-keyboard.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->

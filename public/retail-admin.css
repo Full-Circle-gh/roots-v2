@@ -2909,8 +2909,7 @@
      --td-text2 on --td-raised — a fourth reading of a component that already
      has one. If any of it needs to change, it changes in Orders first and every
      table follows.
-     Only `top` is local: 56px is the locked topbar's height — the same figure
-     the expanded editor's #pd-pp-bar pins at. z-index 5 sits under the topbar's
+     Only `top` is local: 56px is the locked topbar's height. z-index 5 sits under the topbar's
      12 and over the rows, and the fill is fully opaque so a selected or hovered
      row passing underneath cannot bleed through. */
   #pa-table thead th {
@@ -3064,18 +3063,15 @@
     background: var(--td-raised); border-style: dashed; cursor: default;
   }
   /* ── The Cost card in the Cost & Pricing rail ──────────────────────────
-     ONE FIELD, SO ONE COLUMN. `.pdb-fields` is a two-up grid, and on the full
-     page it is pinned to exactly two columns (`.pd-pp-mount #pd-editor
-     .pu-editor-body .pdb-fields`) so forms do not spread to three across. That
-     rule is right for a form and wrong here: this card holds a single field
+     ONE FIELD, SO ONE COLUMN. `.pdb-fields` is a two-up grid, which is right
+     for a form and wrong here: this card holds a single field
      whose helper content — the source line, the recipe warnings, the margin,
      the not-complete tag — all sits INSIDE it, so pinning it to column one
      halved the measure to ~126px in a 300px rail and left column two empty.
      The unit-mismatch sentence came out one and two words to a line, six
      inches tall, beside a column of nothing. A field with no partner has
      nothing to sit beside; it takes the card. */
-  #pd-editor .pd-cost-card .pdb-fields,
-  .pd-pp-mount #pd-editor .pu-editor-body .pd-cost-card .pdb-fields {
+  #pd-editor .pd-cost-card .pdb-fields {
     grid-template-columns: minmax(0, 1fr);
   }
   /* The explanations under the field are a stack. They used to carry their
@@ -3609,340 +3605,6 @@
   .pa-split-editor #pd-editor .pd-head-thumb { width: 38px; height: 38px; }
   .pa-split-editor #pd-editor .pu-editor-head #pd-title { font-size: 16px; }
 
-  /* ── Two zoom levels ───────────────────────────────────────────────────────
-     Docked (default): the pane shows its .pd-summary rows and hides the
-     .pd-heavy blocks they stand for. Expanded (#pd-editor.pd-fullpage, living
-     inside #pd-pagestage): the tab strip and the summaries go, every pane shows
-     at once as a stacked section, and .pd-heavy opens out. The nodes are the
-     same in both — only which ones are painted changes.
-     Both hide rules are written with :not(.pd-fullpage) rather than a bare
-     `#pd-editor .pd-heavy` — the layout rules they have to beat (`#pd-editor
-     .pdb-grid`, `.pdb-grid-auto`, `.pdb-vgrid`) carry the same id+class weight
-     and sit later in the file, so equal specificity would lose to them. */
-  #pd-editor:not(.pd-fullpage) .pd-heavy,
-  #pd-editor:not(.pd-fullpage) [data-pp-only] { display: none; }
-  #pd-editor.pd-fullpage .pd-summary { display: none; }
-  #pd-editor.pd-fullpage .pd-tabs { display: none; }
-  /* The mirror of [data-pp-only]: a card heading that only repeats the pane
-     heading standing above it on the page. One card carries it — Basics. */
-  #pd-editor.pd-fullpage [data-dock-only] { display: none; }
-  /* The footer is empty on the page — the save status went up to the header
-     and the record's actions went to the foot of the index. */
-  .pd-pp-mount #pd-editor .pu-editor-foot { display: none; }
-  /* Details holds exactly the four cards that move to the second column
-     (shipping, flags, free-of, notes), so on the page the pane is an empty grid
-     under a heading for nothing. Docked it is a real tab and stays. */
-  #pd-editor.pd-fullpage .pd-pane[data-pane="details"] { display: none; }
-  /* Photos, now the lower half of the Basics card rather than a card beside it:
-     drop its own card chrome and separate it with a hairline instead. */
-  #pd-editor.pd-fullpage .pdb-card > #pd-sec-photos {
-    border: 0; border-radius: 0; background: none; padding: 0;
-    border-top: 1px solid var(--td-border); padding-top: 18px; margin-top: 4px;
-  }
-  /* Sales is the one block on the page you cannot change. On Paper it looked
-     like the cards around it that you can; on the raised surface it reads as
-     something reported to you. */
-  #pd-editor.pd-fullpage .pd-sales-card { background: var(--td-raised); }
-  .pd-summary:empty { display: none; }
-  /* Every pane on screen at once, each reading as its own section. The
-     .is-active selector is repeated so this outranks the pane-entrance rule
-     for that one pane too — four panes fading in together is noise, and the
-     entrance keyframe holds opacity:0 under `fill-mode: both`, which is not a
-     state a whole page should be able to get stuck in. */
-  #pd-editor.pd-fullpage .pd-pane,
-  #pd-editor.pd-fullpage .pd-pane.is-active { display: block; animation: none; }
-  #pd-editor.pd-fullpage .pd-pane + .pd-pane { margin-top: 30px; }
-  /* Section heading above each pane on the full page — the words the tab strip
-     was carrying, now that there is no tab strip. */
-  .pd-pp-sech {
-    font: 500 18px var(--f-sans); color: var(--td-text);
-    letter-spacing: -.005em; margin: 0 2px 14px;
-    padding-top: 2px; scroll-margin-top: 76px;
-  }
-  #pd-editor.pd-fullpage .pdb-belowgrid + .pd-pp-sech { margin-top: 26px; }
-  /* A section heading that sits INSIDE a card grid (Where it shows) is a grid
-     item like the cards around it, so the grid's 14px gap is all the air it
-     gets above. Give it the same separation a heading between panes has. */
-  #pd-editor.pd-fullpage .pdb-grid > .pd-pp-sech { margin-top: 16px; }
-  #pd-editor.pd-fullpage .pdb-grid > .pd-pp-sech:first-child { margin-top: 0; }
-  /* Jump targets clear the sticky topbar. */
-  #pd-editor.pd-fullpage .pd-pane,
-  #pd-sec-sizes { scroll-margin-top: 76px; }
-  /* Sizes used to be pinned to one column because it was a single box in a
-     grid built for pairs — on its own it would have been stranded in half a
-     row. It now shares that grid with the other three, so the pin comes off
-     and the pairs are real. */
-  /* Docked, Sourcing has stepped out of the Stock grid and left "Stock &
-     status" alone in a 7-of-12 track. Let it take the whole row rather than
-     sit beside five columns of nothing. */
-  #pd-editor:not(.pd-fullpage) .pd-pane[data-pane="stock"] .pdb-grid > .pdb-c7 { grid-column: 1 / -1; }
-
-  /* While the full page is open the catalogue steps aside entirely — page
-     title, sub-view switch, health band, toolbar, sub-bar and the list row.
-     The breadcrumb inside the stage is the way back. */
-  #tab-products.pd-page-open > .t-ord-eyebrow,
-  #tab-products.pd-page-open > .pa-head-row,
-  #tab-products.pd-page-open > .stk-views,
-  #tab-products.pd-page-open #pa-kpis,
-  #tab-products.pd-page-open .pa-chips,
-  #tab-products.pd-page-open .pa-toolbar,
-  #tab-products.pd-page-open .pa-subbar,
-  #tab-products.pd-page-open #pa-split { display: none; }
-
-  /* The stage the editor moves into. Sits where the split row was, centred and
-     capped so a wide screen doesn't stretch a form to 2000px. */
-  /* 1220, not 1040 — the page carries three columns now and the rail is 236px,
-     so a 1512 window leaves about this much. The old cap was right for a single
-     column of form and would squeeze the middle one to nothing. */
-  .pd-pagestage { max-width: 1220px; margin: 0 auto; scroll-margin-top: 76px; }
-  .pd-pp-crumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--td-text2); margin-bottom: 16px; }
-  .pd-pp-crumb button {
-    display: inline-flex; align-items: center; gap: 6px; padding: 0;
-    background: none; border: 0; cursor: pointer;
-    font: 400 13px var(--f-sans); color: var(--td-text2);
-  }
-  .pd-pp-crumb button:hover { color: var(--td-text); }
-  /* ── The page header ──────────────────────────────────────────────────────
-     Two blocks side by side, each two lines tall, so nothing floats: the
-     product's photo and its name over the status line on the left; the shop
-     switch over the save state on the right, both flush to the same edge as
-     the column below them.
-
-     It used to be a 1fr/auto grid with four cells, and the save state sat in
-     the fourth one alone under a button with 700px of empty header beside it.
-     Giving the left block a picture is what makes both sides two lines tall. */
-  .pd-pp-head {
-    display: flex; align-items: flex-start; gap: 24px;
-    padding-bottom: 22px; margin-bottom: 28px;
-    border-bottom: 1px solid var(--td-border);
-  }
-  .pd-pp-id { display: flex; gap: 16px; min-width: 0; flex: 1; }
-  /* The product's own photo. Same node type as the drawer's .pd-head-thumb but
-     its own element — the drawer's lives inside #pd-editor and thousands of
-     rules are scoped there, so it cannot simply be moved out here. With no
-     image it is a quiet raised tile, never a broken-picture glyph. */
-  .pd-pp-thumb {
-    width: 56px; height: 56px; border-radius: 12px; flex: none;
-    border: 1px solid var(--td-border);
-    background: var(--td-raised) no-repeat center / cover;
-  }
-  .pd-pp-idtxt { min-width: 0; }
-  .pd-pp-title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; font: 500 26px var(--f-sans); letter-spacing: -.015em; line-height: 1.25; color: var(--td-text); min-width: 0; }
-  .pd-pp-alt { font-size: 15px; font-weight: 400; color: var(--td-text2); }
-  .pd-pp-acts { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; flex: none; padding-top: 4px; }
-  .pd-pp-tags { display: flex; align-items: center; gap: 8px; }
-  .pd-pp-tags:empty { display: none; }
-  /* The status line: SKU, where it shows, price. Real values, read from the
-     form — never a description of the page. */
-  .pd-pp-sub { font-size: 15px; color: var(--td-text2); font-variant-numeric: tabular-nums; min-width: 0; margin-top: 4px; }
-  .pd-pp-sub:empty { display: none; }
-  .pd-pp-savestate { display: flex; align-items: center; }
-
-  /* ── The condensed header ─────────────────────────────────────────────────
-     Takes over once the resting header has scrolled past, so the page never
-     stops saying which product you are in and whether it saved (§1.7 — the
-     page header is never scrolled away).
-
-     `top: 56px` is the exact topbar height, the same figure #pa-table's band uses
-     two thousand lines up; the bar pins flush under it with no gap, so it is
-     square-topped rather than rounded — a rounded edge there reads as a
-     floating pill instead of an attached bar.
-
-     The negative bottom margin takes the bar out of the flow entirely. That is
-     the whole reason this is a second element rather than the header shrinking
-     in place: a sticky box that shrinks gives back its own height, and the
-     page below it jumps up by 60-odd pixels at the moment it condenses. */
-  .pd-pp-sentinel { height: 1px; margin-bottom: -1px; }
-  .pd-pp-bar {
-    position: sticky; top: 56px; z-index: 5;
-    /* -56, not -57: box-sizing is border-box product-wide (top of this file),
-       so the hairline is inside the 56px, not added to it. */
-    margin-bottom: -56px;
-    display: flex; align-items: center; gap: 14px;
-    height: 56px; background: var(--td-paper);
-    border-bottom: 1px solid var(--td-border);
-    visibility: hidden; opacity: 0;
-    transition: opacity .15s var(--ease-out, ease);
-  }
-  .pd-pagestage.is-pinned .pd-pp-bar { visibility: visible; opacity: 1; }
-  .pd-pp-bar-thumb {
-    width: 28px; height: 28px; border-radius: 7px; flex: none;
-    border: 1px solid var(--td-border);
-    background: var(--td-raised) no-repeat center / cover;
-  }
-  .pd-pp-bar-name { font: 500 15px var(--f-sans); color: var(--td-text); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pd-pp-bar-sp { flex: 1; min-width: 8px; }
-  .pd-pp-bar-back { display: inline-flex; align-items: center; gap: 6px; padding: 0; background: none; border: 0; cursor: pointer; font: 400 13px var(--f-sans); color: var(--td-text2); white-space: nowrap; }
-  .pd-pp-bar-back:hover { color: var(--td-text); }
-  /* Inside the bar the two live nodes sit on one line, save state first: it is
-     a report and reads left-to-right ahead of the switch, which is a control. */
-  .pd-pp-bar .pd-pp-acts { flex-direction: row; align-items: center; gap: 14px; padding-top: 0; }
-  .pd-pp-bar .pd-pp-savestate { order: -1; }
-  /* Inside the stage the editor is the page, not a card floating on it. */
-  .pd-pp-mount #pd-editor {
-    width: auto; height: auto; max-width: 100%; max-height: none;
-    border: 0; background: none; border-radius: 0; box-shadow: none;
-    /* The short story, then the things you set once. The head and foot are
-       display:none here, so only .pu-editor-body and .pd-pp-side take a track. */
-    display: grid; grid-template-columns: minmax(0, 1fr) 340px;
-    gap: 32px; align-items: start;
-  }
-  /* The second column. Sticky so it stays put while the form scrolls past it. */
-  #pd-editor .pd-pp-side { display: none; }
-  /* NOT sticky. A column that holds still while the one beside it moves gives
-     the page two scroll rates in one view — you scroll, half the screen stays,
-     then it starts moving too. One page, one scroll. */
-  .pd-pp-mount #pd-editor .pd-pp-side {
-    display: flex; flex-direction: column; gap: 20px; min-width: 0;
-  }
-  .pd-pp-mount #pd-editor .pd-pp-side:empty { display: none; }
-  /* Blocks authored as grid children are just cards in a column here; their
-     pdb-c* span classes are inert outside .pdb-grid. */
-  #pd-editor .pd-pp-side > .pdb-card,
-  #pd-editor .pd-pp-side > .pd-card,
-  #pd-editor .pd-pp-side > .pe-rows { width: 100%; }
-  /* "Sell it in more ways" keeps its heading, sized to the column rather than
-     to a page-width section. */
-  #pd-editor .pd-pp-side > .pd-pp-sech { font-size: 15px; margin: 4px 2px 0; }
-  /* Sales at 340px: three numbers across is too tight, two rows of two is not. */
-  #pd-editor .pd-pp-side .pd-sales-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-  /* Duplicate · Version history · Delete, stacked full-width rather than a row
-     that wraps into a ragged block at this width. */
-  #pd-editor .pd-pp-side .pd-foot-acts { flex-direction: column; align-items: stretch; gap: 8px; }
-  #pd-editor .pd-pp-side .pd-foot-acts .btn { justify-content: center; }
-  /* ── The form column is ONE column ────────────────────────────────────────
-     The cards inside it are authored as a 12-track grid and go 2-up as soon as
-     they have 600px, which put "Where it shows" beside "Basics" under a heading
-     that said Basics — a section heading has to own everything under it or it
-     is not a heading. Two cards abreast inside a column that already sits
-     beside a second column also reads as three columns of stuff, which is most
-     of why the page felt busy. One card per row; the spans that only mean
-     something in a 12-track grid are neutralised so none of them can conjure an
-     implicit column here. */
-  .pd-pp-mount #pd-editor .pu-editor-body .pdb-grid,
-  .pd-pp-mount #pd-editor .pu-editor-body .pdb-grid-auto {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  /* .pdb-vgrid is deliberately NOT in that list. Those are the four toggle
-     rows of "How it's sold", and two-up is what the component was drawn for —
-     the open one still spans the full width. This is one section with four
-     rows in it, not two cards abreast under a heading that owns one of them,
-     which is the thing that made the page read as three columns. */
-  .pd-pp-mount #pd-editor .pu-editor-body [class*="pdb-c"] { grid-column: 1 / -1; }
-  /* Fields stay two abreast — at the column's full width auto-fit would put
-     three on a line, and a form reads worse the wider its rows get. */
-  .pd-pp-mount #pd-editor .pu-editor-body .pdb-fields {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  @media (max-width: 720px) {
-    .pd-pp-mount #pd-editor .pu-editor-body .pdb-fields { grid-template-columns: minmax(0, 1fr); }
-  }
-
-  /* Under this the second column has no honest width left, so it drops under
-     the form. 1400 and not 1040: the query reads the VIEWPORT and the rail
-     spends 236px of it before this page sees a pixel. */
-  @media (max-width: 1400px) {
-    .pd-pp-mount #pd-editor { grid-template-columns: minmax(0, 1fr); }
-    .pd-pp-mount #pd-editor .pd-pp-side {
-      position: static;
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    }
-  }
-  @media (max-width: 720px) {
-    .pd-pp-head { flex-direction: column; gap: 14px; }
-    .pd-pp-acts { flex-direction: row; align-items: center; gap: 14px; padding-top: 0; }
-    /* The bar stays at phone width — the topbar is locked at 56px on every
-       screen (§1.1), so it pins to the same line — but the name has to give
-       way to the two things that change. */
-    .pd-pp-bar { gap: 10px; }
-    .pd-pp-bar-thumb { display: none; }
-  }
-  .pd-pp-mount #pd-editor .pu-editor-body { overflow: visible; overscroll-behavior: auto; }
-  .pd-pp-mount #pd-editor .pu-editor-head,
-  .pd-pp-mount #pd-editor .pu-editor-foot { background: none; }
-  /* The editor's whole head goes on the page — every part of it now lives in
-     the stage header above. Three stacked headers before the first field
-     (breadcrumb · title row · this band) become one. This replaces the
-     narrower `.pd-head-id { display: none }` that used to sit here.
-       · .pd-head-id said the product's name a second time; the stage above
-         already names it.
-       · #pd-expand-btn is the DOCK's control. It says Expand there and
-         relabels itself to Collapse here (pdSyncFullscreenBtn), which put two
-         buttons carrying the same word and the same handler ~130px apart in
-         the same band. The stage's Collapse is the page's one way back
-         (§1.7a — a sub-page takes up to two exits, not the same exit twice).
-       · #pd-head-tags moves into the title row (pdMoveHeadState), so the shop
-         switch stops floating alone in a full-width strip above the sales
-         card, and the save status travels up with it.
-     Hidden rather than emptied: an empty head still paints its padding, which
-     is a gap where a heading used to be. */
-  .pd-pp-mount #pd-editor .pu-editor-head { display: none; }
-  /* The stage's own status pill would now sit beside the In-shop tag saying
-     the same thing about the same value — except the tag is the one you can
-     act on, and it also carries Sold out and Bundle. Keep the tag. */
-  #pd-pagestage #pd-pp-badge { display: none; }
-
-  /* These three groups (Shipping · Free of · Flags) used to carry their layout
-     as inline styles. It moved here so the side column can restyle them as
-     chips — which an inline declaration would have made impossible. These are
-     the DOCK's shape, reproducing exactly what the inline styles did, and they
-     sit ABOVE the chip block so the side column's equal-specificity rules win
-     on order rather than on !important. */
-  #pd-editor .pd-chipset { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
-  #pd-editor .pd-chipset.pd-chipset-col { flex-direction: column; align-items: flex-start; gap: 9px; }
-
-  /* ── Set-once settings, as chips ──────────────────────────────────────────
-     Shipping, Free of and the product flags are thirteen checkboxes between
-     them. In a form column they cost as much page as the price does, and they
-     are set once when a product is created and then left alone. In the side
-     column they become pills: same inputs, same ids, same change handlers —
-     the checkbox is still what saves, it is just drawn as the pill instead of
-     sitting next to one.
-
-     Two things make this work and neither is decoration:
-       · the real <input> stays in the DOM (clipped, not display:none) so it is
-         still focusable, still keyboard-operable, and still dispatches change;
-       · :has(:checked) paints the ON state, so nothing has to be told when a
-         value flips — including a flip that came from a save, a revert or the
-         version history restoring an older product. */
-  #pd-editor .pd-pp-side .pd-chipset,
-  #pd-editor .pd-pp-side .pd-chipset.pd-chipset-col {
-    display: flex; flex-direction: row; flex-wrap: wrap;
-    align-items: center; gap: 8px;
-  }
-  #pd-editor .pd-pp-side .pd-chipset > label {
-    display: inline-flex; align-items: center; gap: 0;
-    height: 30px; padding: 0 12px; border-radius: 999px;
-    border: 1px solid var(--td-border); background: var(--td-surface);
-    font: 500 13px var(--f-sans); color: var(--td-text2);
-    cursor: pointer; user-select: none; white-space: nowrap;
-    transition: background .15s ease, border-color .15s ease, color .15s ease;
-  }
-  #pd-editor .pd-pp-side .pd-chipset > label:hover { border-color: var(--td-text2); color: var(--td-text); }
-  #pd-editor .pd-pp-side .pd-chipset > label:has(input:checked) {
-    background: var(--td-text); border-color: var(--td-text); color: var(--td-paper);
-  }
-  /* Clipped, not hidden — a display:none input leaves the chip unreachable by
-     keyboard, which would make this a picture of a control rather than one. */
-  /* !important earns its keep exactly once here: every one of these inputs
-     carries an inline `width:15px;height:15px`, and an inline declaration beats
-     any selector. Without it the raw checkbox goes on painting inside the pill.
-     Scoped to chips in the side column, so it cannot reach anything else. */
-  #pd-editor .pd-pp-side .pd-chipset > label > input[type=checkbox] {
-    position: absolute !important;
-    width: 1px !important; height: 1px !important;
-    margin: 0 !important; padding: 0 !important; border: 0 !important;
-    clip-path: inset(50%); overflow: hidden; appearance: none;
-  }
-  #pd-editor .pd-pp-side .pd-chipset > label:has(input:focus-visible) {
-    outline: 2px solid var(--td-dusk); outline-offset: 2px;
-  }
-  /* The little brass glyphs inside these labels were drawn to sit beside a
-     checkbox. Inside a filled pill they fight the fill and say nothing the
-     word does not. */
-  #pd-editor .pd-pp-side .pd-chipset > label > svg { display: none; }
-  #pd-editor .pd-pp-side .pd-chipset-cap { font-size: 13px; color: var(--td-text2); margin-top: 12px; }
-
   /* ── Dock summary rows — a fact and a way through to change it ───────────── */
   .pd-sumcard { border: 1px solid var(--td-border); border-radius: 14px; background: var(--td-surface); overflow: hidden; }
   .pd-sumrow {
@@ -3969,9 +3631,6 @@
   /* A summary that follows a block of real fields needs air above it. */
   #pd-sum-more { margin-top: 18px; }
 
-  @media (max-width: 720px) {
-    .pd-pp-title { font-size: 20px; }
-  }
 
   /* Empty state shown in the editor pane when no product is selected. */
   .pd-empty { background: var(--td-surface); border: 1px dashed var(--td-border); border-radius: 14px; padding: 56px 24px; text-align: center; color: var(--td-text2); font-family: var(--f-sans); }
@@ -15997,3 +15656,392 @@ html[data-ui-lang="cn"] #tab-guanyi { line-height: 1.7; }
    tab's own states explain themselves through the panel's fields; "the last
    push failed" has nothing on this screen to point at, so it says so. */
   .mt-pwhy { font: 400 12.5px/1.5 var(--f-sans); color: var(--td-amber-ink); margin-top: 6px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THE FULL PRODUCT PAGE — #ppg (§206, 2026-09-21)
+
+   Built from the mockup in reference/product-page-sections-mockup.html,
+   option A: a rail of sections on the left, ONE section at a time in the
+   middle, and a right column that never moves. Every rule in this block is
+   scoped `.ppg` and nothing outside it styles the page: the field nodes are
+   carried OUT of #pd-editor while the page is open (31-product-page.js), so
+   the thousands of `#pd-editor …` rules above do not reach them, and this
+   block dresses them from the design system's own values — 40px inputs,
+   13px/500 labels, 24px cards on a 14px radius, one hairline, two weights.
+
+   The rules the dock keeps are at the top: hide the heavy blocks it summarises,
+   and step the catalogue aside while the page is open.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Docked, the panes show their .pd-summary rows and hide the .pd-heavy
+   blocks those rows stand for. On the page the same blocks are carried out of
+   #pd-editor, so this rule stops applying to them without a second rule. */
+#pd-editor .pd-heavy { display: none; }
+.pd-summary:empty { display: none; }
+
+/* While the page is open the catalogue steps aside entirely — page title,
+   sub-view switch, health band, toolbar, sub-bar and the list row. The crumb
+   inside the page is the way back. */
+#tab-products.pd-page-open > .t-ord-eyebrow,
+#tab-products.pd-page-open > .pa-head-row,
+#tab-products.pd-page-open > .stk-views,
+#tab-products.pd-page-open #pa-kpis,
+#tab-products.pd-page-open .pa-chips,
+#tab-products.pd-page-open .pa-toolbar,
+#tab-products.pd-page-open .pa-subbar,
+#tab-products.pd-page-open #pa-split { display: none; }
+
+/* ── The stage ──────────────────────────────────────────────────────────── */
+/* 1220, not 1120: three columns and a 240px rail leave about this much on a
+   1512 window; the 1120 column would squeeze the middle one to nothing. */
+.ppg { max-width: 1220px; margin: 0 auto; padding: 0 0 96px; font-family: var(--f-sans); color: var(--td-text); font-size: 15px; line-height: 1.6; }
+.ppg *, .ppg *::before, .ppg *::after { box-sizing: border-box; }
+.ppg .num { font-variant-numeric: tabular-nums; }
+
+.ppg-crumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--td-text2); margin-bottom: 16px; }
+.ppg-crumb button { display: inline-flex; align-items: center; gap: 6px; padding: 0; background: none; border: 0; cursor: pointer; font: 400 13px var(--f-sans); color: var(--td-text2); }
+.ppg-crumb button:hover { color: var(--td-text); }
+.ppg-crumb button:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; border-radius: 4px; }
+
+/* §1.7 — title, status line, and the page's live state on the right. */
+.ppg-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--td-border); }
+.ppg-id { display: flex; gap: 16px; min-width: 0; flex: 1; }
+.ppg-thumb { width: 56px; height: 56px; flex: none; border-radius: 12px; border: 1px solid var(--td-border); background: var(--td-raised) no-repeat center / cover; }
+.ppg-idtxt { min-width: 0; }
+.ppg-title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; font: 500 26px var(--f-sans); letter-spacing: -.015em; line-height: 1.25; color: var(--td-text); min-width: 0; }
+.ppg-alt { font-size: 15px; font-weight: 400; color: var(--td-text2); }
+.ppg-alt:empty { display: none; }
+.ppg-sub { font-size: 15px; color: var(--td-text2); font-variant-numeric: tabular-nums; margin-top: 4px; min-width: 0; }
+.ppg-sub:empty { display: none; }
+.ppg-acts { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; flex: none; padding-top: 4px; }
+.ppg-tags, .ppg-tags .pd-head-tags { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ppg-tags:empty { display: none; }
+.ppg-state { display: flex; align-items: center; min-height: 20px; }
+
+/* ── Three columns: rail · one section · the fixed right column ─────────── */
+.ppg-body { display: grid; grid-template-columns: 172px minmax(0, 1fr) 300px; gap: 28px; margin-top: 28px; align-items: start; }
+.ppg-main { min-width: 0; }
+
+/* The rail. Sticky under the locked 56px topbar; the same shape as the
+   Reports chapter rail, which is the house precedent for "one screen answers
+   one question". Painted by ppgRenderRail from the tenant's own order. */
+.ppg-rail { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 2px; }
+.ppg-rail button { display: block; width: 100%; text-align: left; padding: 7px 12px; border: 0; border-radius: 8px; background: none; cursor: pointer; font: 400 15px/1.4 var(--f-sans); color: var(--td-text2); }
+.ppg-rail button:hover { color: var(--td-text); background: rgba(var(--td-heat-rgb), .04); }
+.ppg-rail button.is-on { color: var(--td-text); font-weight: 500; background: var(--td-raised); }
+.ppg-rail button:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
+.ppg-rail-k { display: block; font-size: 13px; font-weight: 400; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+.ppg-rail-k:empty { display: none; }
+.ppg-rail-hint { margin-top: 14px; padding: 0 12px; font-size: 13px; color: var(--td-text2); line-height: 1.5; }
+
+/* A section: its heading and the blocks carried into it. */
+.ppg-sec-h { font: 500 18px var(--f-sans); letter-spacing: -.005em; text-transform: none; color: var(--td-text); margin: 0 2px 14px; padding: 0; }
+.ppg-mount { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.ppg-mount:empty { display: none; }
+
+/* ── Cards, labels, inputs — the design system's own values ─────────────── */
+.ppg .pdb-card, .ppg .pd-card, .ppg-card {
+  background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px;
+  padding: 24px; min-width: 0; display: block;
+}
+.ppg .pd-sec-h, .ppg .pd-card-h {
+  font: 500 15px var(--f-sans); color: var(--td-text); letter-spacing: 0; text-transform: none;
+  margin: 0 0 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.ppg .pd-sec-h .muted { font-weight: 400; font-size: 13px; }
+/* The page heading already says Basics and Where it shows; the card must not
+   say it a second time three lines below. */
+.ppg #pd-sec-basics > .pd-sec-h, .ppg #pd-sec-where > .pd-sec-h { display: none; }
+
+.ppg .pdb-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.ppg .field { margin: 0; min-width: 0; }
+.ppg .field + .field, .ppg .pd-row2 + .field { margin-top: 16px; }
+.ppg .pdb-fields .field { margin: 0; }
+.ppg .pd-row2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.ppg label.stacked, .ppg .stacked {
+  display: block; font: 500 13px var(--f-sans); color: var(--td-text);
+  text-transform: none; letter-spacing: 0; margin-bottom: 6px;
+}
+.ppg label.stacked .muted, .ppg .stacked .muted { color: var(--td-text2); font-weight: 400; margin-left: 4px; }
+.ppg .muted { color: var(--td-text2); }
+.ppg .helper { font-size: 13px; color: var(--td-text2); margin-top: 6px; line-height: 1.5; }
+.ppg input[type=text], .ppg input[type=number], .ppg input[type=url], .ppg select, .ppg textarea {
+  width: 100%; height: 40px; padding: 0 12px; margin: 0;
+  border: 1px solid var(--td-border); border-radius: 8px;
+  background-color: var(--td-surface); color: var(--td-text);
+  font: 400 15px var(--f-sans); box-shadow: none;
+}
+.ppg select { background-repeat: no-repeat; background-position: right 12px center; padding-right: 34px; color-scheme: light; }
+:root[data-theme="dark"] .ppg select, :root:not([data-theme="light"]) .ppg select { color-scheme: dark; }
+.ppg textarea { height: auto; min-height: 64px; padding: 8px 12px; resize: vertical; line-height: 1.5; }
+.ppg input:focus, .ppg select:focus, .ppg textarea:focus, .ppg .pd-rte:focus { outline: none; border-color: var(--td-dusk); box-shadow: none; }
+.ppg input::placeholder, .ppg textarea::placeholder { color: var(--td-text2); opacity: .7; }
+.ppg input[readonly], .ppg #pd-cost.is-derived { background: var(--td-raised); border-style: dashed; cursor: default; }
+.ppg input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--td-text); margin: 0; }
+.ppg .btn {
+  display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px;
+  border: 1px solid var(--td-border); border-radius: 8px; background: var(--td-surface);
+  color: var(--td-text); font: 500 13px var(--f-sans); cursor: pointer; text-transform: none; letter-spacing: 0;
+  transition: border-color .15s var(--ease-out, ease);
+}
+.ppg .btn:hover { border-color: var(--td-text2); background: var(--td-surface); }
+.ppg .btn.btn-sm { height: 32px; padding: 0 12px; }
+.ppg .btn:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
+.ppg .btn svg { width: 14px; height: 14px; }
+
+/* ── Basics: the name fields, then the photos as the lower half of the card ─ */
+.ppg #pd-sec-basics > #pd-sec-photos {
+  border: 0; border-radius: 0; background: none; padding: 20px 0 0; margin-top: 20px;
+  border-top: 1px solid var(--td-border);
+}
+.ppg #pd-sec-basics > #pd-sec-photos > .pd-sec-h { display: flex; font-size: 13px; margin-bottom: 8px; }
+.ppg .pe-photos-strip { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+.ppg .pd-gallery { display: contents; }
+.ppg .pd-gallery .pd-thumb { width: 88px; height: 88px; border-radius: 10px; border: 1px solid var(--td-border); background: var(--td-raised); }
+.ppg .pe-add-tile {
+  width: 88px; height: 88px; border: 1px dashed var(--td-border); border-radius: 10px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  color: var(--td-text2); font: 500 12px var(--f-sans); cursor: pointer; flex: none; background: var(--td-surface);
+}
+.ppg .pe-add-tile:hover { border-color: var(--td-text2); color: var(--td-text); }
+.ppg #pd-img-file { display: none; }
+.ppg .pdb-photo-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.ppg .pdb-photo-actions .muted { font-size: 13px !important; }
+
+/* ── Where it shows: the field-help popovers keep their own rules ────────── */
+
+/* ── Cost & Pricing: the build list, then price · figures · cost in a row ── */
+.ppg .pd-bl-wrap { display: flex; flex-direction: column; gap: 14px; }
+.ppg .pd-bl-main { min-width: 0; }
+.ppg .pd-bl-rail { position: static; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.ppg .pd-bl-rail .pdb-fields { grid-template-columns: minmax(0, 1fr); }
+.ppg .pd-bl-sub { color: var(--td-text2); font-size: 13px; margin: -6px 0 16px; }
+.ppg .bl-group + .bl-group { margin-top: 24px; }
+.ppg .bl-group-h { display: flex; align-items: baseline; gap: 8px; font-size: 13px; font-weight: 500; color: var(--td-text2); padding-bottom: 8px; border-bottom: 1px solid var(--td-border); }
+.ppg .bl-group-n { margin-left: auto; font-variant-numeric: tabular-nums; }
+.ppg .bl-row { display: grid; grid-template-columns: minmax(0, 1fr) 88px 74px 84px 30px; gap: 12px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--td-border); }
+.ppg .bl-row:last-child { border-bottom: none; }
+.ppg .bl-name { min-width: 0; }
+.ppg .bl-name .n { font-size: 15px; color: var(--td-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ppg .bl-name .s { font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ppg .bl-name .s.warn { color: var(--td-amber-ink); }
+.ppg .bl-row .bl-in, .ppg .bl-row .bl-unit { height: 36px; padding: 0 9px; background: var(--td-paper); }
+.ppg .bl-row .bl-in { text-align: right; font-variant-numeric: tabular-nums; }
+.ppg .bl-row .bl-unit { font-size: 13px; color: var(--td-text2); }
+.ppg .bl-cost { text-align: right; font-variant-numeric: tabular-nums; font-size: 15px; }
+.ppg .bl-row.is-nocost .bl-cost { color: var(--td-amber-ink); }
+.ppg .bl-x { background: none; border: none; color: var(--td-text2); cursor: pointer; padding: 5px; border-radius: 8px; line-height: 0; }
+.ppg .bl-x svg { width: 15px; height: 15px; }
+.ppg .bl-x:hover { background: var(--td-brick-tint); color: var(--td-brick-ink); }
+.ppg .bl-x:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 1px; }
+.ppg .bl-skel { height: 44px; border-radius: 8px; background: var(--td-raised); margin-bottom: 8px; opacity: .6; }
+.ppg .bl-empty { text-align: center; padding: 32px 16px 8px; }
+.ppg .bl-empty-wave { display: block; margin: 0 auto 16px; color: var(--td-text2); opacity: .45; }
+.ppg .bl-empty-h { font-size: 18px; font-weight: 500; margin-bottom: 8px; }
+.ppg .bl-empty-p { color: var(--td-text2); margin: 0 auto; max-width: 46ch; font-size: 15px; }
+.ppg .pd-bl-pickwrap { position: relative; margin-top: 16px; }
+.ppg .pd-bl-pick-ico { position: absolute; left: 12px; top: 12px; width: 16px; height: 16px; color: var(--td-text2); pointer-events: none; }
+.ppg .pd-bl-pickwrap .pd-bl-q { padding-left: 36px; background: var(--td-paper); }
+.ppg .bl-pick { position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 5; background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 12px; max-height: 300px; overflow: auto; box-shadow: 0 1px 2px rgba(17, 26, 43, .05), 0 4px 16px rgba(17, 26, 43, .04); }
+.ppg .bl-pick-hint, .ppg .bl-pick-none { padding: 9px 14px; color: var(--td-text2); font-size: 13px; font-variant-numeric: tabular-nums; }
+.ppg .bl-pick-hint { border-bottom: 1px solid var(--td-border); }
+.ppg .bl-pick-item { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; width: 100%; padding: 9px 14px; cursor: pointer; text-align: left; background: none; border: none; color: var(--td-text); font: 400 15px var(--f-sans); }
+.ppg .bl-pick-item:hover, .ppg .bl-pick-item:focus-visible { background: var(--td-raised); outline: none; }
+.ppg .bl-pick-n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ppg .bl-pick-item .s { color: var(--td-text2); font-size: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ppg .bl-kind { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 8px; vertical-align: middle; flex: none; }
+.ppg .bl-kind.k-food { background: var(--td-sage-ink); }
+.ppg .bl-kind.k-pack { background: var(--td-amber-ink); }
+.ppg .bl-pick-standin { display: inline-block; margin-left: 7px; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 500; letter-spacing: .02em; background: var(--td-amber-tint); color: var(--td-amber-ink); white-space: nowrap; vertical-align: middle; }
+.ppg .pd-bl-figs { background: var(--td-raised); border-color: transparent; }
+.ppg .bl-rrow { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: 7px 0; }
+.ppg .bl-rrow .k { color: var(--td-text2); font-size: 15px; }
+.ppg .bl-rrow .v { font-size: 15px; font-variant-numeric: tabular-nums; }
+.ppg .bl-warnv { color: var(--td-amber-ink); }
+.ppg .bl-rule { height: 1px; background: var(--td-border); margin: 8px 0; }
+.ppg .bl-big { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding-top: 4px; }
+.ppg .bl-big .k { font-size: 15px; color: var(--td-text2); }
+.ppg .bl-big .v { font-size: 30px; font-weight: 500; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; color: var(--td-sage-ink); }
+.ppg .bl-big .v.is-neg { color: var(--td-brick-ink); }
+.ppg .bl-delta { text-align: right; font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.ppg .bl-delta.down { color: var(--td-amber-ink); }
+.ppg .bl-note { color: var(--td-text2); font-size: 13px; line-height: 1.6; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--td-border); }
+.ppg .bl-note.is-warn { color: var(--td-amber-ink); }
+.ppg .pd-bl-actions { margin-top: 16px; display: flex; gap: 8px; }
+.ppg #pd-bl-save.is-dirty { border-color: var(--td-dusk); color: var(--td-dusk); }
+.ppg .bl-err { margin-top: 12px; padding: 11px 14px; border-radius: 8px; background: var(--td-brick-tint); color: var(--td-brick-ink); font-size: 13px; line-height: 1.6; }
+.ppg .bl-bridge { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; padding: 12px 14px; border-radius: 8px; background: var(--td-sage-tint); border: 1px solid var(--td-border); }
+.ppg .bl-bridge.is-unbuilt { background: var(--td-amber-tint); }
+.ppg .bl-bridge-t { flex: 1 1 260px; font-size: 13px; line-height: 1.6; }
+.ppg .bl-bridge.is-unbuilt .bl-bridge-t { color: var(--td-amber-ink); }
+/* The cost card: one field and the four things that explain it, stacked. */
+.ppg .pd-cost-card .pd-cost-src { margin-top: 8px; }
+.ppg .pd-cost-card .pd-cost-alerts { display: flex; flex-direction: column; gap: 6px; align-items: stretch; margin-top: 9px; }
+.ppg .pd-cost-card .pd-cost-margin { border-top: 1px solid var(--td-border); padding-top: 9px; margin-top: 11px; font-size: 13px; line-height: 1.5; }
+.ppg .pd-cost-flag { display: inline-flex; align-items: center; gap: 7px; margin-top: 12px; font-size: 13px; color: var(--td-text2); cursor: pointer; }
+.ppg .pd-cost-flag input { width: 14px; height: 14px; }
+.ppg .pd-cost-flag:has(input:checked) { color: var(--td-amber-ink); font-weight: 500; }
+
+/* ── Stock: counts first, then the sourcing choice ──────────────────────── */
+.ppg .pd-onhand { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; }
+.ppg .pd-onhand[hidden] { display: none; }
+.ppg .pd-onhand-split { margin-bottom: 14px; }
+.ppg #pd-stock-fields .field { margin-top: 0; }
+.ppg #pd-stock-fields .field + .field { margin-top: 16px; }
+.ppg .pd-storefields { display: flex; flex-wrap: wrap; gap: 12px 14px; }
+.ppg .pd-storefield { display: flex; flex-direction: column; gap: 6px; width: 120px; }
+.ppg .pd-storefield > span { font: 500 13px var(--f-sans); color: var(--td-text); }
+.ppg .pd-storefield input[type=number] { text-align: center; font-variant-numeric: tabular-nums; }
+.ppg .pd-stock-matrix input[type=number] { height: 36px; text-align: center; }
+.ppg #pd-oos-block, .ppg #pd-supplier-block { border-top: 1px solid var(--td-border) !important; padding-top: 16px !important; margin-top: 16px; }
+.ppg #pd-oos-block > div:first-child, .ppg #pd-supplier-block > div:first-child { font-weight: 500 !important; font-size: 13px; margin-bottom: 6px !important; }
+.ppg #pd-oos-policy { border: 1px solid var(--td-border) !important; border-radius: 8px !important; padding: 0 12px !important; }
+.ppg #pd-stock-supplier-note { font-size: 13px !important; line-height: 1.5; }
+.ppg .pd-source-choice { display: flex; flex-direction: column; gap: 10px; }
+.ppg .pd-radio-card {
+  display: flex; gap: 12px; align-items: flex-start; text-align: left; width: 100%;
+  padding: 14px 16px; border: 1px solid var(--td-border); border-radius: 8px;
+  background: var(--td-surface); cursor: pointer; font: inherit; color: inherit;
+  transition: border-color .15s var(--ease-out, ease);
+}
+.ppg .pd-radio-card:hover { border-color: var(--td-text2); }
+.ppg .pd-radio-card.is-on { border-color: var(--td-text); }
+.ppg .pd-radio-card:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
+.ppg .pd-radio-dot { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--td-text2); flex: none; margin-top: 3px; position: relative; }
+.ppg .pd-radio-card.is-on .pd-radio-dot { border: 5px solid var(--td-text); }
+.ppg .pd-radio-txt b { display: block; font-weight: 500; font-size: 15px; color: var(--td-text); }
+.ppg .pd-radio-txt span { display: block; font-size: 13px; color: var(--td-text2); margin-top: 2px; line-height: 1.5; }
+
+/* ── How it's sold: four boxes, two-up, an open one takes the row ────────── */
+.ppg #pd-sec-sizes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; margin: 0; }
+.ppg #pd-sec-sizes > .pd-variants { border: 1px solid var(--td-border); border-radius: 14px; background: var(--td-surface); padding: 0 20px; min-width: 0; }
+.ppg #pd-sec-sizes > .pd-variants:empty { display: none; }
+.ppg #pd-sec-sizes > .pd-variants:hover { border-color: var(--td-text2); }
+.ppg #pd-sec-sizes > .pd-variants:has(.pd-var-toggle[aria-expanded="true"]) { grid-column: 1 / -1; padding-bottom: 20px; }
+.ppg .pd-var-toggle { display: flex; align-items: center; gap: 8px; width: 100%; padding: 18px 2px; background: none; border: 0; border-radius: 0; cursor: pointer; font: inherit; color: inherit; text-align: left; }
+.ppg .pd-var-toggle:hover { background: none; }
+.ppg .pd-var-toggle:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; border-radius: 8px; }
+.ppg .pd-var-caret { color: var(--td-text2); font-size: 11px; width: 10px; }
+.ppg .pd-var-head { font: 500 15px var(--f-sans); color: var(--td-text); letter-spacing: 0; text-transform: none; margin: 0; }
+.ppg .pd-var-toggle .pd-var-summary { margin-left: auto; font-size: 13px; color: var(--td-text2); }
+.ppg .pd-var-toggle:hover .pd-var-summary { color: var(--td-text); }
+.ppg .va-row-head span { font-size: 12px; letter-spacing: 0; text-transform: none; color: var(--td-text2); font-weight: 500; }
+.ppg .va-row input[type=text], .ppg .va-row input[type=number] { height: 36px; padding: 0 8px; font-size: 14px; }
+.ppg .va-actions .btn, .ppg .bu-chips + .btn { margin-top: 4px; }
+.ppg .bp-mode { display: flex; gap: 11px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--td-border); border-radius: 8px; background: var(--td-surface); cursor: pointer; }
+.ppg .bp-mode.is-on { border-color: var(--td-text); }
+.ppg .bp-mode input { accent-color: var(--td-text); }
+.ppg .opt-block { border: 1px solid var(--td-border); border-radius: 8px; padding: 12px 14px; background: var(--td-surface); }
+.ppg .bu-chip, .ppg .bp-chip { background: var(--td-raised); border: 1px solid var(--td-border); border-radius: 999px; color: var(--td-text); font-size: 13px; padding: 3px 10px; }
+.ppg .bu-picklist { border: 1px solid var(--td-border); border-radius: 8px; background: var(--td-surface); }
+
+/* ── Shopper page: the summary card, and the writing cards under it ──────── */
+.ppg-rows { border: 1px solid var(--td-border); border-radius: 8px; overflow: hidden; }
+.ppg-row { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-top: 1px solid var(--td-border); }
+.ppg-row:first-child { border-top: 0; }
+.ppg-row .t { font-weight: 500; min-width: 140px; flex: none; }
+.ppg-row .v { color: var(--td-text2); flex: 1; min-width: 0; }
+.ppg-link { background: none; border: 0; padding: 0; cursor: pointer; font: 500 13px var(--f-sans); color: var(--td-text); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--td-border); }
+.ppg-link:hover { text-decoration-color: currentColor; }
+.ppg-link:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; border-radius: 4px; }
+.ppg-page-foot { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+.ppg-note { font-size: 13px; color: var(--td-text2); }
+#ppg-write { margin-top: 14px; }
+#ppg-write[hidden] { display: none; }
+.ppg .pd-facts-body .pd-row2 textarea, .ppg .pd-facts-body .pd-row2 input { padding: 8px 12px !important; }
+.ppg #pd-sec-desc > label.stacked { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 15px; margin-bottom: 12px; }
+.ppg .pd-desc-modebar { margin-left: auto; }
+.ppg .pd-mode-btn { height: 30px; padding: 0 12px; border: 1px solid var(--td-border); border-radius: 8px; background: var(--td-surface); color: var(--td-text2); font: 500 13px var(--f-sans); cursor: pointer; }
+.ppg .pd-mode-btn.active, .ppg .pd-mode-btn:hover { color: var(--td-text); border-color: var(--td-text2); }
+.ppg .pd-desc-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.ppg .pd-desc-lang { font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; color: var(--td-text); margin-bottom: 6px; }
+.ppg .pd-rte { border: 1px solid var(--td-border); border-radius: 8px; background: var(--td-surface); min-height: 160px; padding: 10px 12px; }
+.ppg .pd-rte-toolbar { border: 1px solid var(--td-border); border-radius: 8px; background: var(--td-raised); }
+.ppg #pd-design-stale { border-color: var(--td-amber) !important; background: var(--td-amber-tint) !important; font-size: 13px !important; }
+
+/* ── The right column: read, then set once ──────────────────────────────── */
+.ppg-side { position: sticky; top: 76px; min-width: 0; }
+.ppg-side .ppg-mount { gap: 14px; }
+.ppg-side #pd-sec-freeof { order: 2; }
+.ppg-side #pd-sec-flags { order: 3; }
+.ppg-side #pd-sec-notes { order: 4; }
+.ppg-side #pd-foot-acts { order: 5; }
+/* Sales is the one block on the page you cannot change: it sits on the raised
+   surface, so it reads as something reported to you. */
+.ppg #pd-sales-card { background: var(--td-raised); border-color: transparent; }
+.ppg .pd-sales-head { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
+.ppg #pd-sales-title { font: 500 15px var(--f-sans); color: var(--td-text); }
+.ppg .pd-sales-chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.ppg .pd-chip { height: 22px; padding: 0 9px; border-radius: 999px; font: 400 12px var(--f-sans); color: var(--td-text2); border: 1px solid var(--td-border); background: none; cursor: pointer; }
+.ppg .pd-chip:hover { border-color: var(--td-text2); color: var(--td-text); }
+.ppg .pd-chip.pd-chip-active { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); font-weight: 500; }
+.ppg .pd-sales-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.ppg .pd-sales-kpi:nth-child(3) { grid-column: 1 / -1; }
+.ppg .pd-sales-kpi .v { font: 500 22px var(--f-sans); line-height: 1.1; color: var(--td-text); font-variant-numeric: tabular-nums; }
+.ppg .pd-sales-kpi .l { font-size: 13px; color: var(--td-text2); margin-top: 2px; }
+/* Shipping · Free of · Flags are chips: the word is the control. The little
+   brass glyphs drawn beside checkboxes say nothing the word does not. */
+.ppg .pd-chipset { display: flex; flex-wrap: wrap; gap: 8px; }
+.ppg .pd-chipset.pd-chipset-col { flex-direction: row; align-items: center; }
+.ppg .pd-chipset > label {
+  position: relative; height: 30px; padding: 0 12px; border: 1px solid var(--td-border); border-radius: 999px;
+  background: var(--td-surface); color: var(--td-text); font: 500 13px var(--f-sans) !important; white-space: nowrap;
+  transition: border-color .15s var(--ease-out, ease);
+}
+.ppg .pd-chipset > label:hover { border-color: var(--td-text2); }
+.ppg .pd-chipset > label:has(input:checked) { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+.ppg .pd-chipset > label:has(input:focus-visible) { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
+.ppg .pd-chipset > label > input[type=checkbox] { position: absolute; opacity: 0; pointer-events: none; margin: 0; }
+.ppg .pd-chipset > label > svg { display: none; }
+.ppg #pd-ship-local-hint { font-size: 13px !important; color: var(--td-text2) !important; margin-top: 10px !important; line-height: 1.5; }
+.ppg #pd-sec-notes textarea { padding: 8px 12px !important; }
+.ppg #pd-foot-acts { display: flex; flex-direction: column; gap: 8px; padding: 0; border: 0; background: none; }
+.ppg #pd-foot-acts .btn { justify-content: center; width: 100%; }
+.ppg #pd-foot-acts #pd-delete-btn { order: 2; }
+
+/* ── Narrow: one column, the rail becomes a row of chips ────────────────── */
+@media (max-width: 1000px) {
+  .ppg-body { grid-template-columns: minmax(0, 1fr); }
+  .ppg-rail { position: static; flex-direction: row; flex-wrap: wrap; gap: 4px; }
+  .ppg-rail button { width: auto; }
+  .ppg-rail-k { display: inline; margin-left: 6px; }
+  .ppg-rail-hint { display: none; }
+  .ppg-side { position: static; }
+  .ppg-head { flex-direction: column; gap: 14px; }
+  .ppg-acts { flex-direction: row; align-items: center; padding-top: 0; }
+  .ppg .pd-bl-rail { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .ppg .pdb-fields, .ppg .pd-row2, .ppg .pd-desc-cols, .ppg #pd-sec-sizes { grid-template-columns: minmax(0, 1fr); }
+  .ppg-title { font-size: 20px; }
+  .ppg .pdb-card, .ppg .pd-card, .ppg-card { padding: 18px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ppg * { transition: none !important; }
+}
+
+/* ── Settings › Operations › Product page: order and hide ───────────────── */
+.ppg-setrows { border: 1px solid var(--td-border); border-radius: 8px; overflow: hidden; margin-top: 4px; }
+.ppg-setrow { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto auto; gap: 14px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--td-border); background: var(--td-surface); font-family: var(--f-sans); }
+.ppg-setrow:first-child { border-top: 0; }
+.ppg-setrow.is-dragging { background: var(--td-raised); box-shadow: inset 3px 0 0 var(--td-text); }
+.ppg-grip { color: var(--td-text2); cursor: grab; display: grid; place-items: center; }
+.ppg-grip:active { cursor: grabbing; }
+.ppg-grip svg { width: 16px; height: 16px; }
+.ppg-setwhat { min-width: 0; }
+.ppg-setwhat .n { font-weight: 500; font-size: 15px; color: var(--td-text); }
+.ppg-setwhat .d { font-size: 13px; color: var(--td-text2); }
+.ppg-setrow.is-off .n, .ppg-setrow.is-off .d { color: var(--td-text2); }
+.ppg-setrow.is-off .n { text-decoration: line-through; text-decoration-color: var(--td-border); }
+.ppg-setlock { font-size: 13px; color: var(--td-text2); white-space: nowrap; }
+.ppg-setmove { display: inline-flex; gap: 2px; }
+.ppg-setmove button { width: 28px; height: 28px; border: 1px solid var(--td-border); border-radius: 6px; background: var(--td-surface); color: var(--td-text2); cursor: pointer; font: 500 13px var(--f-sans); }
+.ppg-setmove button:hover:not(:disabled) { color: var(--td-text); border-color: var(--td-text2); }
+.ppg-setmove button:disabled { opacity: .35; cursor: default; }
+.ppg-sw { display: inline-flex; width: 34px; height: 20px; border-radius: 999px; background: var(--td-border); position: relative; flex: none; border: 0; padding: 0; cursor: pointer; transition: background .2s var(--ease-out, ease); }
+.ppg-sw.is-on { background: var(--td-sage-ink); }
+.ppg-sw i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(17,26,43,.2); transition: left .2s var(--ease-out, ease); }
+.ppg-sw.is-on i { left: 16px; }
+.ppg-sw:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
+.ppg-setnote { font-size: 13px; color: var(--td-text2); margin-top: 12px; line-height: 1.55; }
+.ppg-setfoot { display: flex; align-items: center; gap: 12px; margin-top: 14px; }

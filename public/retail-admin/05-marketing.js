@@ -1588,6 +1588,9 @@ async function loadConfig() {
     // stored value, not the markup default, so the control agrees with what
     // the sweeper is actually doing.
     if (typeof paSyncLowStockDigestUi === 'function') paSyncLowStockDigestUi(c);
+    // The product page's section order and hiding (§206) — the Settings card
+    // and the page's own rail both read this, painted from the stored value.
+    if (typeof ppgSettingsRender === 'function') ppgSettingsRender(c);
     // Bulk attach tracking is an opt-in Orders tool — the toolbar button only
     // shows when the operator enabled it under Settings → Delivery.
     document.body.classList.toggle('ord-bulk-tracking', !!c.delivery?.bulkTracking);
