@@ -1420,20 +1420,65 @@ router.get('/api/restock/pick-count', requireRestockAccess, tacetOnly, (req, res
   const scope = Array.isArray(req.scopeStores) ? req.scopeStores.filter(n => Number.isFinite(Number(n))) : null;
   // An operator scoped to NO store can act nowhere; counting every shop's work
   // for them would be the promise-behind-a-locked-door this endpoint avoids.
-  if (scope && scope.length === 0) return res.json({ success: true, data: { count: 0 } });
+  if (scope && scope.length === 0) return res.json({ success: true, data: { count: 0, shop_count: 0, oldest_at: null, shops: [] } });
   const where = scope ? ` AND from_store_id IN (${scope.map(() => '?').join(',')})` : '';
-  const row = tdb().prepare(`
-    SELECT COUNT(*) AS c
-      FROM restock_orders
-     WHERE archived_at IS NULL
+  /* THE CLAUSE IS WRITTEN ONCE AND USED TWICE, because the count and the names
+     beside it disagreeing is the dot-over-an-empty-screen fault this endpoint
+     exists to avoid, one level down. */
+  const WAITING = `
+       archived_at IS NULL
        AND status IN ('sent','received')
        AND COALESCE(goods_state,'none') = 'none'
        AND from_store_id IS NOT NULL
        AND to_store_id IS NOT NULL
        AND COALESCE(to_role,'warehouse') != 'kitchen'
-       AND COALESCE(from_role,'store')   != 'kitchen'${where}
+       AND COALESCE(from_role,'store')   != 'kitchen'${where}`;
+  const row = tdb().prepare(`
+    SELECT COUNT(*) AS c,
+           COUNT(DISTINCT to_store_id) AS shop_count,
+           /* datetime(), AND IT IS NOT DECORATION. sent_at is written by the
+              API as a full ISO instant ('…T14:00:00.000Z') while created_at
+              is SQLite's own CURRENT_TIMESTAMP ('… 14:00:00'), and MIN() over
+              two string shapes compares the shapes: 'T' sorts after ' ', so a
+              raw MIN picks 14:00 over an earlier 09:00 and the row reads
+              "oldest 2h" over a shop that has waited seven. datetime() folds
+              both to one UTC form first, which is also the form the phone's
+              _date() reads as UTC. */
+           MIN(datetime(COALESCE(sent_at, created_at))) AS oldest_at
+      FROM restock_orders
+     WHERE ${WAITING}
   `).get(...(scope || []));
-  res.json({ success: true, data: { count: row ? row.c : 0 } });
+  /* WHO IS WAITING, AND SINCE WHEN (§215). The dot on the Pick row needs
+     neither — it is one 6px mark and a number in the chrome would turn arriving
+     work into an alarm — but Home's "Needs you" row is a full sentence and this
+     is what fills it: a shop's NAME is what decides whether the walk happens
+     now or after the delivery run, and it saves opening the screen to find out.
+     The COUNT stays first and stays exactly what it was, because that is what
+     the dot reads and what §198's test pins.
+     ASKING SHOPS, NOT SUPPLYING ONES: `to_store_id` is the shop that asked.
+     DISTINCT, because two requests from one shop are one name; ordered by that
+     shop's OLDEST wait so the head of the list is the shop kept waiting longest,
+     which is the order Home prints them in. Four is a cap on the wire, not a
+     display rule — the row itself shows two and counts off the rest. */
+  const shops = row && row.c ? tdb().prepare(`
+    SELECT s.id, COALESCE(s.name_en,'') AS name_en, COALESCE(s.name_cn,'') AS name_cn
+      FROM retail_stores s
+      JOIN (SELECT to_store_id AS sid, MIN(datetime(COALESCE(sent_at, created_at))) AS waiting_since
+              FROM restock_orders
+             WHERE ${WAITING}
+             GROUP BY to_store_id) w ON w.sid = s.id
+     ORDER BY w.waiting_since, s.id
+     LIMIT 4
+  `).all(...(scope || [])) : [];
+  res.json({
+    success: true,
+    data: {
+      count: row ? row.c : 0,
+      shop_count: row ? row.shop_count : 0,
+      oldest_at: (row && row.oldest_at) || null,
+      shops,
+    },
+  });
 });
 
 router.get('/api/restock/mine', requireRestockAccess, tacetOnly, (req, res) => {

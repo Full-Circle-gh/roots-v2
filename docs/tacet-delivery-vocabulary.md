@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.156 · 2026-09-21 · §215 PUTS A SHOP'S STOCK REQUEST ON HOME — ONE COMPOSED STRING, COMPOSED ONLY BECAUSE THE LIVE PAIR WOULD HAVE COLLIDED.** A request one shop raises against another announced itself with a push and then a 6px dot; it is a row in Home's *Needs you* list now. `Stock requests · 补货申请` is live (the back office, and the phone's own notification log) and was rejected: this app already carries `Your stock requests · 我的补货申请` for the ASKER's list, and the new row is its mirror image — what other shops have asked of me. Everything else on the row is live or is data. See *The row that says another shop is waiting (§215)*.
+
 **v1.155 · 2026-09-21 · §212 GIVES THE RECEIVE SCREEN A DONE TAB — ONE COMPOSED STRING, IN A FRAME THE SCREEN ALREADY USES.** Both tab labels are live (`On its way · 在途` off the stock-requests pill, `Done · 已完成` off the kitchen queue's own segmented control), as are the empty heading (`Nothing finished yet · 暂无已完成`) and every word of the receipt a finished delivery opens on (`sent · 发出`, `items · 项`, `Counted in · 已入库`, `The shelf has been updated. · 库存已更新。`). What is composed is the empty tab's ONE line of body text, built on the frame of the sentence the sibling tab already says. See *The Done tab on the receive screen (§212)*.
 
 **v1.154 · 2026-09-21 · §209 GIVES THE RECEIVE SCREEN A BAND AND A TICK — TWO COMPOSED STRINGS, BOTH CUT FROM ONE LIVE PAIR.** Counting a delivery in was five actions a line, every line a keypad; it is now one tap for the whole delivery or one tap a line, with the keypad kept for the figure that is not the one on the van. Both new words come off the SAME live pair — the purchasing side's `Everything arrived? · 全部到货了吗？`, which already asks this exact question about a delivery one screen away. Everything else the screen renders (`sent · 发出`, `counted · 已点`, `Confirm receipt · 确认收货`, `Saving… · 保存中…`, both failure sentences) was already there and is untouched. See *The band and the tick on the receive screen (§209)*.
@@ -8293,3 +8295,37 @@ first preference working exactly as intended.
 
 Composed by Claude Opus 5 on 2026-09-21 under the 2026-09-06 amendment,
 declared here in the same commit as the code that uses it.
+
+
+## The row that says another shop is waiting (§215)
+
+**WHAT THIS NAMES.** The row on Home's *Needs you* list that tells a shop
+another shop is waiting on it for stock. Reported by Ash off the live Home:
+*"if shop has asked for stock it should show here"*. **Register: OPERATOR**
+(Rule 1) — no shopper sees it.
+
+**ONE COMPOSED STRING, AND THE LIVE PAIR IS THE ONE THAT HAD TO BE REJECTED.**
+`Stock requests · 补货申请` is live in two places today — the back office's own
+field label (`public/retail-admin.html`) and the phone's notification log
+(`restock_request`, `public/retail-admin/02-settings-ops.js`) — and it means
+exactly this kind of thing. It is still wrong HERE, and the reason is one screen
+away: this same app carries `Your stock requests · 我的补货申请`, the list of what
+**I** asked other shops for. The new row is that row's mirror image — what other
+shops have asked **of me** — and two rows a thumb apart whose Chinese differs by
+the word 我的 is how somebody opens the wrong one. What the name has to carry is
+who is asking.
+
+| Where | English | Chinese | Note |
+| --- | --- | --- | --- |
+| The Home fire, `opsFires` in `public/m.html` | Shops asking for stock | 门店补货申请 | **COMPOSED** from two live parts, both from this app: `门店` (in `有门店向你发起补货申请`, the toast this very count already raises, and in `全部门店` on the Pick screen's own filter) and `补货申请` (live, above). Nothing is added — the asker is named in front of the thing asked for. Rejected: `补货申请` alone, for the 我的补货申请 collision that is the whole reason this row is named at all; `有门店向你发起补货申请` whole, which is a sentence and this is a row label standing over a count and two shop names; `拣货`, the Pick screen's own name, which says what I will DO rather than what has happened and is a word for the walk, not for the request; `待发货`, unsourced here and about goods in motion rather than a request nobody has started. |
+
+Composed by Claude Opus 5 on 2026-09-21 under the 2026-09-06 amendment,
+declared here in the same commit as the code that uses it.
+
+**EVERYTHING ELSE ON THE ROW IS LIVE, OR IS NOT A STRING AT ALL.** The sub-line
+is built from `最久` (the *oldest* prefix every aged fire on this screen already
+uses), `更多` (the *+N more* tail the kitchen row uses over product names) and
+the `，` these fires join fragments with. **The shop names are DATA** — the
+catalogue's own `name_en`/`name_cn`, carried as a pair from the server so the row
+follows the language switch — and the count is a numeral, which Rule 4's own note
+says needs no label. The row gained one word.

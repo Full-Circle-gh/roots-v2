@@ -99,6 +99,42 @@ const CASES = [
   ]],
 ];
 
+/* ── A SHOP HAS ASKED THIS ONE FOR STOCK (§215) ────────────────────────────
+   Reported by Ash off the live Home: "if shop has asked for stock it should
+   show here". It did not — the whole announcement was a push, then a 6px dot
+   on More, which is a mark you find only if you already know to look.
+   The row rides the Pick poll rather than /dashboard/ops, so the FIRST case
+   seeds no snapshot at all: a shop waiting on stock must not be invisible
+   because an unrelated dashboard call is slow. */
+const PICK = `state.pickWaiting=3; state.pickAsking={shop_count:3,oldest_at:'2026-08-22 07:00:00',
+  shops:[{id:2,name_en:'Yuexiu',name_cn:'越秀'},{id:3,name_en:'Haizhu',name_cn:'海珠'},
+         {id:4,name_en:'Tianhe',name_cn:'天河'}]};`;
+CASES.push(['a stock request reaches Home', `state.ops=null; ${PICK} APP.cmd('tab','home');`, [
+  ['the row is there',            `txt('content').includes('Shops asking for stock')`],
+  ['with no ops snapshot at all', `state.ops===null`],
+  ['the pill counts REQUESTS',    `/Shops asking for stock[\\s\\S]{0,120}\\b3\\b/.test(txt('content'))`],
+  // Two names then a tail, and the tail counts off SHOPS — a "+1 more" built
+  // off the pill's 3 would name a shop that does not exist.
+  ['it names who is waiting',     `txt('content').includes('Yuexiu, Haizhu')`],
+  ['and counts off the rest by SHOP', `txt('content').includes('+1 more')`],
+  ['it carries a real clock',     `/oldest \\d+[mhd]/.test(txt('content'))`],
+  ['in Chinese too', `(function(){ APP.cmd('toggleLang'); var zh=txt('content'); APP.cmd('toggleLang');
+     return zh.indexOf('门店补货申请')>=0 && zh.indexOf('越秀，海珠')>=0 && zh.indexOf('最久')>=0; })()`],
+]]);
+CASES.push(['and it sorts above a shelf state, which has no age', `state.ops={out_of_stock:{count:9}};
+  ${PICK} APP.cmd('tab','home');`, [
+  ['both rows are drawn', `txt('content').includes('Shops asking for stock') && txt('content').includes('Restock needed')`],
+  // A colleague who has been waiting since yesterday outranks a count that
+  // cannot be ranked by waiting at all.
+  ['the shop asking comes first',
+   `txt('content').indexOf('Shops asking for stock') < txt('content').indexOf('Restock needed')`],
+]]);
+CASES.push(['nothing waiting, nothing said', `state.ops={unhandled:{count:0,items:[]}};
+  state.pickWaiting=0; state.pickAsking={shop_count:0,oldest_at:null,shops:[]}; APP.cmd('tab','home');`, [
+  ['no row', `!txt('content').includes('Shops asking for stock')`],
+  ['and no heading over an empty list', `!txt('content').includes('Needs you')`],
+]]);
+
 // ── Quick actions belong to the operator ──────────────────────────────────
 // The three defaults are ours; the list is theirs. These cases hold the whole
 // contract: what the picker offers is capability-filtered, a change lands on
