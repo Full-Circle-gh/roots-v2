@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.150 · 2026-09-21 · §202 SPLITS ONE STATE INTO TWO AND MINTS NOTHING.** *Dispatched* meant the picker's tick, not the departure, so the asker's screen and the receiving screen disagreed while both told the truth. Four states now — and all four Chinese halves were already live: `待处理` and `已点收` on this screen and the `received` notification, `已拣` **verbatim from the Pick screen's own counter**, `在途` from this file's order filters. The suite now counts each half across `public/` and `routes/` and fails a word used only here, so the easy mistake is refused structurally rather than by memory. See *The four words a line can wear*.
+
 **v1.149 · 2026-09-20 · §200's BAND — THE THREE PAIRS THAT NAME AN ORDER WHICH NEVER LEFT THE SHELF.** A stuck transfer had no screen and therefore no words; it has both now. **Every fragment is live**: `已标记`, `扣减`, `已发出`, `点收`, `此前`, `发送中…` and `重新` are all in `public/m.html` or the desktop admin today, and `重新发货` is `重新打印`'s own shape with the verb this screen actually does. The two composed strings are assemblies of those words and nothing more. See *An order that never left the shelf*.
 
 **v1.148 · 2026-09-20 · §198's LAST TWO STRINGS — THE PICK ROW LEARNS TO SAY SOMEBODY IS WAITING, AND BOTH ANNOUNCEMENTS ARE ASSEMBLED FROM LIVE FRAGMENTS.** A request reaching a supplier announced itself by push and nothing else; the row it lands on now carries a dot, and the dot's arrival toast needs words. **Neither is minted**: `发起补货申请` is lifted verbatim from `restock:request`'s own capability label, `正在等待` from `lib/push-events.js`, and `门店` / `发货` are everywhere in this system. No new character enters the vocabulary. See *Somebody is waiting on you*.
@@ -8019,3 +8021,40 @@ written first with that constraint and the Chinese built to match it.
 **AMBER, NOT BRICK, AND THAT IS A VOCABULARY DECISION TOO.** Brick is reserved
 for a fault; this is work still owed. The colour and the words have to agree,
 or one of them is lying.
+
+
+## The four words a line can wear (§202)
+
+**WHAT CHANGED AND WHY IT IS A VOCABULARY MATTER.** *Your stock requests* had
+three states and the middle one, *Dispatched*, was lit by the picker's tick.
+Ticking happens at the shelf; dispatching happens when the van leaves. One word
+covered both and was wrong about one of them, which sent Ash to a screen that
+correctly said the opposite.
+
+| State | English | Chinese | Source |
+|---|---|---|---|
+| nobody has touched it | Waiting | 待处理 | **LIVE PAIR** — this screen's own, and the Ask-to-buy companion's before it |
+| ticked at the supplier | Picked | 已拣 | **LIFTED VERBATIM** from the Pick screen's counter, `n/n 已拣` — the screen where the tick is made |
+| the run has left | On its way | 在途 | **LIVE** — the half of `On the way` in this file's order filters (`在途 / 待发送`) |
+| counted in at the far end | Counted in | 已点收 | **LIVE PAIR** — `routes/restock.js`'s own `received` notification |
+
+**`已拣` IS THE ONE WORTH EXPLAINING.** It is taken from the Pick screen rather
+than composed for this one, and deliberately: the person who makes the tick and
+the person who asked for the goods now read **the same word for the same act**.
+A separate word would have been two names for one event, which is how two
+screens come to disagree — the very fault this section exists to fix.
+
+**WHAT WAS REJECTED.** `已发货` — the old middle word, live and correct
+elsewhere — is not reused for *Picked*, because it says the goods have GONE and
+at that moment they have not. It keeps its job on the parcel screens, where it
+is true.
+
+**NOTHING IS COMPOSED, AND THE GATE IS NOW STRUCTURAL.**
+`scripts/test_stock_request_mine.js` counts each Chinese half across `public/`
+and `routes/` and requires at least two uses, so a word minted for this screen
+fails rather than shipping quietly. That is the first time this document's rule
+is enforced by a suite instead of by a reader remembering it.
+
+**ONLY THE LAST STATE SPENDS A COLOUR.** Sage on *Counted in*; the two middle
+states are neutral. Arriving is the end of the journey — the others are
+progress, and progress that shouts stops being read.

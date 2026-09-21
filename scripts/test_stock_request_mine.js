@@ -118,14 +118,25 @@ const find = (rows, id) => rows.find(r => r.id === id);
   eq(mineRow.items.length, 2, 'every line comes back');
   eq(mineRow.items.map(l => l.state).join(','), 'waiting,waiting', 'and starts waiting');
 
-  // The picker ticks ONE line — the same PUT the Pick screen writes, one per
-  // contributing request.
+  /* THE TICK IS NOT THE SEND, and this assertion MOVED to say so (§202).
+     It read 'sent' and asserted the line "reads as dispatched" — which was the
+     small lie Ash caught on his banana: `is_checked` is written at the shelf
+     while the goods are still in the supplier's shop, possibly hours from
+     leaving. The state is 'picked' now, and the line below proves the
+     difference is real rather than a rename. */
   const lineId = mineRow.items[0].id;
   await call('PUT', `/api/restock/${r1.id}/item/${lineId}`, { qty_sent: 12, is_checked: 1 });
   mineRow = find(await mine(), r1.id);
-  eq(mineRow.items[0].state, 'sent', 'the ticked line reads as dispatched');
+  eq(mineRow.items[0].state, 'picked',
+     'a ticked line reads PICKED — somebody has it in their hand, it has not left');
   eq(mineRow.items[1].state, 'waiting',
-     'AND THE ONE BESIDE IT STILL READS WAITING — part-dispatched is the ordinary case, not an edge');
+     'AND THE ONE BESIDE IT STILL READS WAITING — part-picked is the ordinary case, not an edge');
+
+  // Dispatch the run: the order's own fact, written once, for every line.
+  h.db.prepare("UPDATE restock_orders SET goods_state='in_transit' WHERE id=?").run(r1.id);
+  mineRow = find(await mine(), r1.id);
+  eq(mineRow.items.map(l => l.state).join(','), 'transit,transit',
+     'once the run is dispatched every line is ON ITS WAY — including one nobody ticked, because the van does not carry lines separately');
 
   // What actually left, where it is not what was asked for.
   eq(Number(mineRow.items[0].qty_sent), 12, 'the quantity that left rides along');
@@ -174,7 +185,30 @@ const find = (rows, id) => rows.find(r => r.id === id);
   ok(caps.presetCapsFor('store_stock').includes('restock:request'),
      'store_stock holds the key the row is gated on — the role this screen was built for can open it');
 
+  /* THE FOUR WORDS, AND THAT NONE OF THEM IS NEW (§202). Every state this
+     screen can show must be a pair that already exists somewhere else in the
+     tree — the rule the vocabulary document exists to keep. A rename that
+     invents Chinese is the failure mode, and it is silent: the screen looks
+     finished either way. Each half is counted across public/ and routes/, so a
+     word used ONLY here fails. */
   const m = fs.readFileSync(path.join(h.REPO, 'public/m.html'), 'utf8');
+  const admin = fs.readFileSync(path.join(h.REPO, 'public/retail-admin/04-orders.js'), 'utf8');
+  const route = fs.readFileSync(path.join(h.REPO, 'routes/restock.js'), 'utf8');
+  const corpus = m + admin + route;
+  for (const [state, en, cn] of [
+    ['waiting', 'Waiting', '待处理'],
+    ['picked',  'Picked',  '已拣'],
+    ['transit', 'On its way', '在途'],
+    ['arrived', 'Counted in', '已点收'],
+  ]) {
+    ok(new RegExp(`${state}'?\\s*\\?\\s*T\\('${en}'`).test(m.replace(/\s+/g, ' '))
+       || m.includes(`T('${en}','${cn}')`),
+       `${state} shows "${en} · ${cn}"`);
+    const uses = corpus.split(cn).length - 1;
+    ok(uses >= 2,
+       `${cn} is a live word, used ${uses}× — not minted for this screen`);
+  }
+
   ok(/\['askstocksent','clipboard-list','Your stock requests','我的补货申请'\]/.test(m),
      'the More row exists');
   ok(/askstocksent:'restock:request'/.test(m),

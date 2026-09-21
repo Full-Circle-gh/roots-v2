@@ -1445,7 +1445,8 @@ router.get('/api/restock/mine', requireRestockAccess, tacetOnly, (req, res) => {
   // one list would put a tray of food and a case of almonds under one heading.
   const rows = conn.prepare(`
     SELECT id, rs_number, date, status, notes, sent_at, delivered_at, archived_at,
-           from_store_id, to_store_id, store_name, store_cn
+           from_store_id, to_store_id, store_name, store_cn,
+           COALESCE(goods_state, 'none') AS goods_state
       FROM restock_orders
      WHERE created_by = ?
        AND status <> 'draft'
@@ -1461,16 +1462,32 @@ router.get('/api/restock/mine', requireRestockAccess, tacetOnly, (req, res) => {
         FROM restock_items
        WHERE restock_id IN (${marks}) AND qty_requested > 0
        ORDER BY id`).all(...rows.map(r => r.id));
-    const delivered = new Set(rows.filter(r => r.status === 'delivered' || r.delivered_at).map(r => r.id));
+    /* FOUR STATES, BECAUSE THREE TOLD A SMALL LIE (§202). The middle one read
+     * "Dispatched" and lit on the picker's TICK — which happens at the shelf,
+     * while the goods are still in the supplier's shop and possibly hours from
+     * leaving. Ash caught it on his own banana: the line said dispatched and
+     * the Receive screen at the far end said Nothing on its way, and both were
+     * telling the truth about different things.
+     *
+     * TICKING AND SENDING ARE TWO EVENTS and the asker cares about the
+     * difference: PICKED means somebody has it in their hand, ON ITS WAY means
+     * it has left. They come from two different facts — `is_checked` is the
+     * line's, written one PUT at a time as a picker walks the freezer;
+     * `goods_state` is the ORDER's, written once when the run is dispatched —
+     * which is exactly why one could never stand in for the other.
+     *
+     * ORDER MATTERS, and it reads backwards from the end of the journey: a
+     * counted-in line was on its way first, and an in-transit line was picked
+     * first, so the later fact must win or a finished line reads as unfinished. */
+    const delivered = new Set(rows
+      .filter(r => r.status === 'delivered' || r.delivered_at || r.goods_state === 'settled')
+      .map(r => r.id));
+    const moving = new Set(rows.filter(r => r.goods_state === 'in_transit').map(r => r.id));
     const byReq = new Map(rows.map(r => [r.id, []]));
     for (const l of lines) {
-      /* ORDER MATTERS. A delivered request's lines were all dispatched first,
-         so reading arrival before dispatch is what stops a counted-in line
-         reading as merely on its way. `is_checked` is the picker's tick — the
-         same flag the Pick screen writes one PUT at a time — and it is the
-         only per-line fact about dispatch there is. */
       l.state = delivered.has(l.restock_id) ? 'arrived'
-              : (l.is_checked ? 'sent' : 'waiting');
+              : moving.has(l.restock_id)    ? 'transit'
+              : (l.is_checked ? 'picked' : 'waiting');
       delete l.is_checked;
       byReq.get(l.restock_id).push(l);
     }
