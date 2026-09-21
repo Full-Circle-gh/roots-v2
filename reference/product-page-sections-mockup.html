@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Product Page Sections</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TACET — EXPANDED PRODUCT PAGE, three layout options + the
+   Settings card that lets a tenant order and hide sections.
+   Static mockup, no live data. Built to docs/tacet-desktop-patterns.md.
+
+   Asked for by Ash, 2026-09-20: "expanded version of product page
+   is not clear at all, big mess, a lot of scrolling ... not enough
+   freedom for tenant to arrange the page as he wants."
+
+   What is the same in every option, and is NOT up for choice here:
+   · every field keeps its id and wiring; only grouping changes
+   · the right column is fixed: Sales · Shipping · Free of · Flags ·
+     Internal notes · record actions
+   · the "Shopper page" section is a summary plus one button into
+     the page editor (Ash's call; the alternative keeps the rich
+     text editor on this form)
+   · tenants order and hide sections in Settings › Products, once
+
+   What differs is how the middle column shows the six sections:
+   A  section rail, one section at a time        (recommended)
+   B  everything on one page, jump list, cards fold
+   C  tabs across the top, one section at a time
+
+   CHROME IS QUOTED, NEVER DRAWN (§0). Rail and topbar are absent;
+   this renders the content stage only (1220px, the live cap for
+   the three-column page). Do not implement shell furniture from
+   this file.
+
+   Tokens are the LIVE --td-* block from retail-admin.css. Never
+   hard-code a hex against this file (§1.2). Light first here
+   because the screenshot that started this was light.
+   ============================================================ */
+:root {
+  --td-surface:    #FFFFFF;
+  --td-raised:     #F6F3EC;
+  --td-border:     #E4E0D5;
+  --td-header:     #DAD5C6;
+  --td-text:       #111A2B;
+  --td-text2:      #58606E;
+  --td-heat-rgb:   17, 26, 43;
+  --td-dusk:       #6E67AF;
+  --td-dusk-hi:    #7E77BF;
+  --td-dusk-tint:  #EEEDF6;
+  --td-sage:       #A3B49F;
+  --td-sage-tint:  #EDF1EC;
+  --td-sage-ink:   #4A6249;
+  --td-amber:      #C9954A;
+  --td-amber-tint: #F7EEDE;
+  --td-amber-ink:  #8A6425;
+  --td-brick:      #B4533E;
+  --td-brick-tint: #F6E7E3;
+  --td-brick-ink:  #B4533E;
+  --td-paper:      #FBF9F4;
+  --f-sans: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --r-control: 8px; --r-card: 14px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --td-surface: #18233A; --td-raised: #1E2A44; --td-border: #2A3550; --td-header: #364058;
+    --td-text: #FBF9F4; --td-text2: #9AA3B2; --td-heat-rgb: 251, 249, 244;
+    --td-dusk-tint: #262A4A; --td-sage-tint: #1E2C26; --td-sage-ink: #A3B49F;
+    --td-amber-tint: #33290F; --td-amber-ink: #C9954A; --td-brick-tint: #351B14; --td-brick-ink: #D07A66;
+    --td-paper: #111A2B; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --td-surface: #18233A; --td-raised: #1E2A44; --td-border: #2A3550; --td-header: #364058;
+  --td-text: #FBF9F4; --td-text2: #9AA3B2; --td-heat-rgb: 251, 249, 244;
+  --td-dusk-tint: #262A4A; --td-sage-tint: #1E2C26; --td-sage-ink: #A3B49F;
+  --td-amber-tint: #33290F; --td-amber-ink: #C9954A; --td-brick-tint: #351B14; --td-brick-ink: #D07A66;
+  --td-paper: #111A2B; color-scheme: dark;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { background: var(--td-paper); }
+body { font-family: var(--f-sans); font-size: 15px; line-height: 1.6; color: var(--td-text); -webkit-font-smoothing: antialiased; }
+.num { font-variant-numeric: tabular-nums; }
+button { font: inherit; color: inherit; cursor: pointer; background: none; border: 0; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, label:focus-within { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ── mockup chrome (not part of the design) ─────────────────── */
+.mk-bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 90; display: flex; align-items: center; gap: 6px 18px; flex-wrap: wrap;
+  padding: 10px 24px; background: var(--td-text); color: var(--td-paper); font-size: 13px; }
+.mk-bar b { font-weight: 500; margin-right: 6px; }
+.mk-bar label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; opacity: .75; }
+.mk-bar label:hover { opacity: 1; }
+.mk-bar input { accent-color: var(--td-paper); }
+.mk-bar input:checked + span { text-decoration: underline; text-underline-offset: 3px; opacity: 1; }
+.mk-note { max-width: 1220px; margin: 0 auto; padding: 24px 32px 0; color: var(--td-text2); font-size: 13px; line-height: 1.55; }
+.mk-note b { color: var(--td-text); font-weight: 500; }
+.mk-note .rec { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 9px; border-radius: 999px; background: var(--td-sage-tint); color: var(--td-sage-ink); font-weight: 500; margin-left: 6px; }
+.state { position: absolute; opacity: 0; pointer-events: none; }
+#sc-a:checked ~ .wrap .screen:not(.s-a),
+#sc-b:checked ~ .wrap .screen:not(.s-b),
+#sc-c:checked ~ .wrap .screen:not(.s-c),
+#sc-set:checked ~ .wrap .screen:not(.s-set),
+#sc-cmp:checked ~ .wrap .screen:not(.s-cmp) { display: none; }
+
+/* ── the stage ─────────────────────────────────────────────── */
+.stage { max-width: 1220px; margin: 0 auto; padding: 32px 32px 96px; }
+.crumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--td-text2); margin-bottom: 16px; }
+.crumb button { display: inline-flex; align-items: center; gap: 6px; color: var(--td-text2); }
+.crumb button:hover { color: var(--td-text); }
+.crumb svg { width: 14px; height: 14px; }
+.pp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--td-border); }
+.pp-id { display: flex; gap: 16px; min-width: 0; }
+.pp-thumb { width: 56px; height: 56px; flex: none; border-radius: 12px; border: 1px solid var(--td-border); background: #2f3a1e; position: relative; overflow: hidden; }
+.pp-thumb::after { content: ""; position: absolute; inset: 14px 16px; border-radius: 6px; background: #b7c94a; opacity: .85; }
+.pp-title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; font-size: 26px; font-weight: 500; letter-spacing: -.015em; line-height: 1.25; }
+.pp-alt { font-size: 15px; font-weight: 400; color: var(--td-text2); }
+.pp-sub { font-size: 15px; color: var(--td-text2); margin-top: 4px; }
+.pp-acts { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; flex: none; padding-top: 4px; }
+.pill { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 6px 0 12px; border-radius: 999px; background: var(--td-raised); font-size: 13px; }
+.sw { display: inline-flex; width: 34px; height: 20px; border-radius: 999px; background: var(--td-border); position: relative; flex: none; }
+.sw.on { background: var(--td-sage-ink); }
+.sw i { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.sw.on i { left: 16px; }
+.saved { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--td-text2); }
+.saved i { width: 6px; height: 6px; border-radius: 50%; background: var(--td-sage-ink); }
+
+/* three-column body */
+.body3 { display: grid; grid-template-columns: 172px minmax(0, 1fr) 300px; gap: 28px; margin-top: 28px; align-items: start; }
+.body2 { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 28px; margin-top: 28px; align-items: start; }
+@media (max-width: 1000px) { .body3 { grid-template-columns: minmax(0, 1fr); } .body2 { grid-template-columns: minmax(0, 1fr); } .srail { position: static !important; display: flex; flex-wrap: wrap; gap: 4px; } }
+
+/* A · section rail */
+.srail { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 2px; }
+.srail button { text-align: left; padding: 7px 12px; border-radius: var(--r-control); color: var(--td-text2); font-size: 15px; line-height: 1.4; }
+.srail button:hover { color: var(--td-text); background: rgba(var(--td-heat-rgb), .04); }
+.srail button.on { color: var(--td-text); font-weight: 500; background: var(--td-raised); }
+.srail button .k { display: block; font-size: 13px; font-weight: 400; color: var(--td-text2); }
+.srail .hint { margin-top: 14px; padding: 0 12px; font-size: 13px; color: var(--td-text2); line-height: 1.5; }
+
+/* C · tab strip */
+.tabs { display: flex; gap: 22px; border-bottom: 1px solid var(--td-border); margin-bottom: 24px; overflow-x: auto; }
+.tabs button { padding: 0 0 11px; color: var(--td-text2); position: relative; white-space: nowrap; }
+.tabs button:hover { color: var(--td-text); }
+.tabs button.on { color: var(--td-text); font-weight: 500; }
+.tabs button.on::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--td-text); }
+
+/* sections */
+.sec { display: none; }
+.sec.on { display: block; }
+.sec-h { font-size: 18px; font-weight: 500; letter-spacing: -.005em; margin: 0 2px 14px; }
+.card { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: var(--r-card); padding: 24px; }
+.card + .card { margin-top: 14px; }
+.card-h { font-size: 15px; font-weight: 500; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; }
+.card-h .meta { font-weight: 400; color: var(--td-text2); font-size: 13px; white-space: nowrap; }
+.card-h.stack { flex-direction: column; align-items: flex-start; gap: 2px; }
+.card-h.stack .meta { white-space: normal; }
+.ranges { display: flex; gap: 4px; margin: -4px 0 12px; }
+.card-h .sp { flex: 1; }
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 640px) { .two { grid-template-columns: minmax(0, 1fr); } }
+.field + .field, .two + .two, .two + .field, .field + .two { margin-top: 16px; }
+label.l { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+label.l .hint { font-weight: 400; color: var(--td-text2); }
+.inp { display: flex; align-items: center; gap: 8px; width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--td-border); border-radius: var(--r-control); background: var(--td-surface); color: var(--td-text); font: inherit; }
+.inp:focus { outline: none; border-color: var(--td-dusk); }
+.inp.pick { justify-content: space-between; color: var(--td-text); }
+.inp.pick svg { width: 16px; height: 16px; color: var(--td-text2); }
+textarea.inp { height: auto; min-height: 64px; padding: 8px 12px; resize: vertical; }
+.hr { border-top: 1px solid var(--td-border); margin: 20px 0; }
+.photos { display: flex; gap: 10px; flex-wrap: wrap; }
+.ph { width: 88px; height: 88px; border-radius: 10px; border: 1px solid var(--td-border); background: var(--td-raised); position: relative; }
+.ph.cover { background: #2f3a1e; }
+.ph.cover::after { content: ""; position: absolute; inset: 22px 26px; border-radius: 8px; background: #b7c94a; opacity: .85; }
+.ph.cover b { position: absolute; left: 0; right: 0; bottom: 0; font-size: 11px; font-weight: 500; text-align: center; color: #fff; background: rgba(17,26,43,.55); border-radius: 0 0 9px 9px; padding: 1px 0; }
+.ph.add { display: grid; place-items: center; color: var(--td-text2); font-size: 13px; border-style: dashed; background: var(--td-surface); }
+.ph.add svg { width: 18px; height: 18px; }
+.hintline { font-size: 13px; color: var(--td-text2); margin-top: 10px; display: flex; gap: 10px; align-items: center; }
+.btn { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px; border: 1px solid var(--td-border); border-radius: var(--r-control); background: var(--td-surface); font-size: 13px; font-weight: 500; }
+.btn:hover { border-color: var(--td-text2); }
+.btn.sm { height: 32px; padding: 0 12px; }
+.btn.danger { color: var(--td-brick-ink); border-color: var(--td-brick); }
+.btn.danger:hover { background: var(--td-brick-tint); }
+.btn.primary { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
+.btn.primary:hover { background: var(--td-dusk-hi); }
+
+/* build list */
+.bl { border: 1px solid var(--td-border); border-radius: var(--r-control); overflow: hidden; }
+.bl-row { display: grid; grid-template-columns: minmax(0, 1fr) 84px 84px; gap: 12px; padding: 9px 14px; border-top: 1px solid var(--td-border); align-items: center; }
+.bl-row:first-child { border-top: 0; background: var(--td-raised); font-size: 13px; color: var(--td-text2); font-weight: 500; }
+.bl-row .r { text-align: right; }
+.bl-row.tot { background: var(--td-raised); font-weight: 500; }
+.sub { font-size: 13px; color: var(--td-text2); }
+.kpi3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.kpi3 .v { font-size: 24px; font-weight: 500; line-height: 1.1; }
+.kpi3 .l { font-size: 13px; color: var(--td-text2); margin-top: 4px; }
+
+/* radio cards */
+.radio { display: flex; gap: 12px; padding: 14px 16px; border: 1px solid var(--td-border); border-radius: var(--r-control); cursor: pointer; }
+.radio + .radio { margin-top: 10px; }
+.radio.on { border-color: var(--td-text); }
+.radio .dot { width: 16px; height: 16px; flex: none; margin-top: 3px; border-radius: 50%; border: 1.5px solid var(--td-text2); }
+.radio.on .dot { border: 5px solid var(--td-text); }
+.radio .t { display: block; font-weight: 500; }
+.radio .s { display: block; font-size: 13px; color: var(--td-text2); }
+.stk { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.stkbox { width: 100%; height: 40px; text-align: center; font: 400 15px var(--f-sans); border: 1px solid var(--td-border); border-radius: var(--r-control); background: var(--td-surface); color: var(--td-text); }
+.stkbox.low { border-color: var(--td-amber); color: var(--td-amber-ink); }
+
+/* summary rows (How it's sold · Shopper page) */
+.rows { border: 1px solid var(--td-border); border-radius: var(--r-control); overflow: hidden; }
+.row { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-top: 1px solid var(--td-border); }
+.row:first-child { border-top: 0; }
+.row .t { font-weight: 500; min-width: 120px; }
+.row .v { color: var(--td-text2); flex: 1; min-width: 0; }
+.row .go { font-size: 13px; font-weight: 500; }
+
+/* side column */
+.side { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 76px; }
+.side .card.sales { background: var(--td-raised); border-color: transparent; }
+.ranges button { height: 22px; padding: 0 9px; border-radius: 999px; font-size: 12px; color: var(--td-text2); border: 1px solid var(--td-border); }
+.ranges button.on { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+.kpi2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.kpi2 .v { font-size: 22px; font-weight: 500; line-height: 1.1; }
+.kpi2 .l { font-size: 13px; color: var(--td-text2); margin-top: 2px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips label { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border: 1px solid var(--td-border); border-radius: 999px; font-size: 13px; cursor: pointer; background: var(--td-surface); }
+.chips label:hover { border-color: var(--td-text2); }
+.chips label:has(input:checked) { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); font-weight: 500; }
+.chips input { position: absolute; opacity: 0; width: 0; height: 0; }
+.side-acts { display: flex; flex-direction: column; gap: 8px; }
+.side-acts .btn { justify-content: center; }
+
+/* B · folding cards */
+.fold .card-h { cursor: pointer; margin-bottom: 0; }
+.fold .card-h .chev { width: 16px; height: 16px; color: var(--td-text2); transition: transform 200ms cubic-bezier(.16,1,.3,1); }
+.fold.open .card-h { margin-bottom: 14px; }
+.fold.open .card-h .chev { transform: rotate(180deg); }
+.fold .fold-body { display: none; }
+.fold.open .fold-body { display: block; }
+.fold .card-h .sum { font-weight: 400; color: var(--td-text2); font-size: 13px; }
+.fold.open .card-h .sum { display: none; }
+.jump button.on { font-weight: 500; }
+
+/* settings card */
+.set-col { max-width: 760px; }
+.set-h1 { font-size: 24px; font-weight: 500; letter-spacing: -.01em; }
+.set-sub { color: var(--td-text2); margin-top: 2px; }
+.setrows { border: 1px solid var(--td-border); border-radius: var(--r-control); overflow: hidden; margin-top: 16px; }
+.setrow { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 14px; border-top: 1px solid var(--td-border); background: var(--td-surface); }
+.setrow:first-child { border-top: 0; }
+.setrow .grip { color: var(--td-text2); cursor: grab; display: grid; place-items: center; }
+.setrow .grip svg { width: 16px; height: 16px; }
+.setrow .n { font-weight: 500; }
+.setrow .d { font-size: 13px; color: var(--td-text2); }
+.setrow.off .n, .setrow.off .d { color: var(--td-text2); }
+.setrow.off .n { text-decoration: line-through; text-decoration-color: var(--td-border); }
+.setrow .lock { font-size: 13px; color: var(--td-text2); }
+.setrow.dragging { background: var(--td-raised); box-shadow: inset 3px 0 0 var(--td-text); }
+.setnote { font-size: 13px; color: var(--td-text2); margin-top: 12px; line-height: 1.55; }
+
+/* comparison */
+.cmp { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
+.cmp th { background: var(--td-raised); text-align: left; font-weight: 500; color: var(--td-text2); padding: 10px 12px; border-bottom: 1px solid var(--td-border); font-size: 13px; }
+.cmp td { padding: 10px 12px; border-bottom: 1px solid var(--td-border); vertical-align: top; }
+.cmp td:first-child { font-weight: 500; white-space: nowrap; }
+.cmp .ok { color: var(--td-sage-ink); }
+.cmp .warn { color: var(--td-amber-ink); }
+.cmpwrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+
+<input class="state" type="radio" name="sc" id="sc-a" checked>
+<input class="state" type="radio" name="sc" id="sc-b">
+<input class="state" type="radio" name="sc" id="sc-c">
+<input class="state" type="radio" name="sc" id="sc-set">
+<input class="state" type="radio" name="sc" id="sc-cmp">
+
+<div class="mk-bar">
+  <b>Product page options</b>
+  <label for="sc-a"><input type="radio" name="mk" checked onclick="document.getElementById('sc-a').checked=true"><span>A · Section rail</span></label>
+  <label for="sc-b"><input type="radio" name="mk" onclick="document.getElementById('sc-b').checked=true"><span>B · One page, folding cards</span></label>
+  <label for="sc-c"><input type="radio" name="mk" onclick="document.getElementById('sc-c').checked=true"><span>C · Tabs across the top</span></label>
+  <label for="sc-set"><input type="radio" name="mk" onclick="document.getElementById('sc-set').checked=true"><span>Settings · order and hide</span></label>
+  <label for="sc-cmp"><input type="radio" name="mk" onclick="document.getElementById('sc-cmp').checked=true"><span>Compare</span></label>
+</div>
+
+<div class="wrap">
+
+<!-- ═══════════════════════ A · SECTION RAIL ═══════════════════════ -->
+<section class="screen s-a">
+  <div class="mk-note"><b>Option A.</b> A short list of sections on the left. Click one, see only that one. The right column never moves. The page remembers the section you had open. <span class="rec">Recommended</span></div>
+  <div class="stage">
+    <div class="crumb"><button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Products</button></div>
+    <div class="pp-head" data-head></div>
+    <div class="body3">
+      <nav class="srail" data-rail="a" aria-label="Sections">
+        <button class="on" data-go="basics">Basics</button>
+        <button data-go="where">Where it shows</button>
+        <button data-go="cost">Cost &amp; pricing</button>
+        <button data-go="stock">Stock <span class="k">19 on hand</span></button>
+        <button data-go="sold">How it's sold</button>
+        <button data-go="page">Shopper page</button>
+        <div class="hint">Sales, shipping, flags and notes stay on the right.</div>
+      </nav>
+      <div data-sections="a" data-mode="one"></div>
+      <aside class="side" data-side></aside>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ B · ONE PAGE, FOLDING CARDS ═══════════════════════ -->
+<section class="screen s-b">
+  <div class="mk-note"><b>Option B.</b> Everything on one page, but each section is a card that folds to one line. The left list jumps down the page. Folded cards stay folded next time. Less clicking than A, more scrolling.</div>
+  <div class="stage">
+    <div class="crumb"><button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Products</button></div>
+    <div class="pp-head" data-head></div>
+    <div class="body3">
+      <nav class="srail jump" data-rail="b" aria-label="Jump to">
+        <button class="on" data-jump="basics">Basics</button>
+        <button data-jump="where">Where it shows</button>
+        <button data-jump="cost">Cost &amp; pricing</button>
+        <button data-jump="stock">Stock <span class="k">19 on hand</span></button>
+        <button data-jump="sold">How it's sold</button>
+        <button data-jump="page">Shopper page</button>
+        <div class="hint">Fold what you never touch. It stays folded.</div>
+      </nav>
+      <div data-sections="b" data-mode="fold"></div>
+      <aside class="side" data-side></aside>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ C · TABS ACROSS THE TOP ═══════════════════════ -->
+<section class="screen s-c">
+  <div class="mk-note"><b>Option C.</b> The dock's tab strip, carried onto the page and widened. One section at a time. Closest to what exists today and the cheapest to build. Tabs run out of room once a tenant renames or adds sections.</div>
+  <div class="stage">
+    <div class="crumb"><button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Products</button></div>
+    <div class="pp-head" data-head></div>
+    <div class="body2">
+      <div>
+        <nav class="tabs" data-rail="c" aria-label="Sections">
+          <button class="on" data-go="basics">Basics</button>
+          <button data-go="where">Where it shows</button>
+          <button data-go="cost">Cost &amp; pricing</button>
+          <button data-go="stock">Stock</button>
+          <button data-go="sold">How it's sold</button>
+          <button data-go="page">Shopper page</button>
+        </nav>
+        <div data-sections="c" data-mode="one"></div>
+      </div>
+      <aside class="side" data-side></aside>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ SETTINGS · ORDER AND HIDE ═══════════════════════ -->
+<section class="screen s-set">
+  <div class="mk-note"><b>Settings › Products › Product page.</b> An admin sets this once for the whole business. Drag to reorder. Switch off what this business never uses. Every operator sees the same page. Works the same under A, B or C.</div>
+  <div class="stage">
+    <div class="set-col">
+      <div class="set-h1">Product page</div>
+      <div class="set-sub">The order your product page shows its sections in, and which ones it shows at all.</div>
+      <div class="setrows" id="setrows">
+        <div class="setrow" draggable="true"><span class="grip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01"/></svg></span><div><div class="n">Basics</div><div class="d">Name, second-language name, SKU, photos</div></div><span class="lock">Always shown</span></div>
+        <div class="setrow" draggable="true"><span class="grip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01"/></svg></span><div><div class="n">Where it shows</div><div class="d">Shop section, subcategory, badge, size or weight</div></div><span class="sw on" role="switch" aria-checked="true" tabindex="0"><i></i></span></div>
+        <div class="setrow" draggable="true"><span class="grip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01"/></svg></span><div><div class="n">Cost &amp; pricing</div><div class="d">What one unit is made of, cost, price, margin</div></div><span class="sw on" role="switch" aria-checked="true" tabindex="0"><i></i></span></div>
+        <div class="setrow" draggable="true"><span class="grip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01"/></svg></span><div><div class="n">Stock</div><div class="d">On hand per store, low-stock alert, out-of-stock rule, sourcing</div></div><span class="sw on" role="switch" aria-checked="true" tabindex="0"><i></i></span></div>
+        <div class="setrow" draggable="true"><span class="grip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01"/></svg></span><div><div class="n">How it's sold</div><div class="d">Sizes, bundles, buy together, options</div></div><span class="sw on" role="switch" aria-checked="true" tabindex="0"><i></i></span></div>
+        <div class="setrow" draggable="true"><span class="grip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01"/></svg></span><div><div class="n">Shopper page</div><div class="d">Description, facts, designed page</div></div><span class="sw on" role="switch" aria-checked="true" tabindex="0"><i></i></span></div>
+        <div class="setrow off" draggable="true"><span class="grip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01"/></svg></span><div><div class="n">Free of</div><div class="d">Allergen chips in the right column</div></div><span class="sw" role="switch" aria-checked="false" tabindex="0"><i></i></span></div>
+      </div>
+      <div class="setnote">A hidden section keeps its data. Switch it back on and everything is still there. Basics cannot be hidden: a product needs a name.</div>
+      <div style="display:flex;gap:8px;margin-top:16px"><button class="btn sm">Reset to default order</button></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════ COMPARE ═══════════════════════ -->
+<section class="screen s-cmp">
+  <div class="mk-note"><b>Side by side.</b> Same fields, same right column, same Settings card in all three. Only the middle column differs.</div>
+  <div class="stage">
+    <div class="cmpwrap">
+    <table class="cmp">
+      <thead><tr><th></th><th>A · Section rail</th><th>B · One page, folding cards</th><th>C · Tabs across the top</th></tr></thead>
+      <tbody>
+        <tr><td>Scrolling</td><td class="ok">One section's worth, never more</td><td class="warn">Whole page, shorter once cards are folded</td><td class="ok">One section's worth</td></tr>
+        <tr><td>Finding a field</td><td class="ok">Read the list, click once</td><td class="ok">Read the list, click once, page jumps</td><td class="warn">Read the strip; labels shorten when the strip is full</td></tr>
+        <tr><td>Seeing two sections together</td><td class="warn">No, one at a time</td><td class="ok">Yes, unfold both</td><td class="warn">No, one at a time</td></tr>
+        <tr><td>Room for tenant sections</td><td class="ok">List grows downward, no limit</td><td class="ok">List grows downward</td><td class="warn">Strip runs out around seven</td></tr>
+        <tr><td>Looks like the rest of Tacet</td><td class="ok">Same as the Reports chapter rail</td><td class="warn">New pattern for the desktop admin</td><td class="ok">Same as the dock's tab strip</td></tr>
+        <tr><td>Build</td><td>Moderate. The rail is new; sections are the panes that already exist</td><td>Moderate. Fold state per operator is new; jump list is new</td><td>Small. The tab strip already exists, it is hidden on the page today</td></tr>
+        <tr><td>Risk</td><td colspan="3">Low in all three. Every field keeps its id and wiring. Save and load do not change. The Settings card is the one new piece of stored data, per tenant.</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <div class="mk-note" style="padding-left:0;padding-right:0"><b>Recommendation: A.</b> It ends the scrolling, it has a house precedent, and it has room for whatever a tenant adds later. B is the fallback if you want to see two sections at once. C is the quick fix if you want something this week and a better page later.</div>
+  </div>
+</section>
+
+</div><!-- /wrap -->
+
+<script>
+(function () {
+  var CHEV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>';
+  var ARROW = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg>';
+  var PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+
+  var HEAD =
+    '<div class="pp-id"><div class="pp-thumb"></div><div>' +
+      '<div class="pp-title">Zhoug — Green Chilli Dip <span class="pp-alt">青辣椒酱（Zhoug）</span></div>' +
+      '<div class="pp-sub num">SKU 1-225 · Fresh &amp; Deli, Spreads &amp; Dips · ¥42</div>' +
+    '</div></div>' +
+    '<div class="pp-acts"><span class="pill">In shop <span class="sw on"><i></i></span></span><span class="saved"><i></i>All changes saved</span></div>';
+
+  // One string per section. The same six render in A, B and C.
+  var SEC = {
+    basics: { title: 'Basics', sum: 'Zhoug — Green Chilli Dip · SKU 1-225 · 1 photo', html:
+      '<div class="card">' +
+        '<div class="two"><div><label class="l" for="f-name">Name</label><input class="inp" id="f-name" value="Zhoug — Green Chilli Dip"></div>' +
+        '<div><label class="l" for="f-name2">Name <span class="hint">· second language</span></label><input class="inp" id="f-name2" value="青辣椒酱（Zhoug）"></div></div>' +
+        '<div class="two"><div><label class="l" for="f-sku">SKU</label><input class="inp num" id="f-sku" value="1-225"></div><div></div></div>' +
+        '<div class="hr"></div>' +
+        '<label class="l">Photos <span class="hint">· up to 8, the first is the cover</span></label>' +
+        '<div class="photos"><span class="ph cover"><b>Main</b></span><span class="ph add">' + PLUS + '</span></div>' +
+        '<div class="hintline"><button class="btn sm">From library</button><span>1 of 8</span></div>' +
+      '</div>' },
+    where: { title: 'Where it shows', sum: 'Fresh & Deli › Spreads & Dips · badge Auto · 230 g', html:
+      '<div class="card">' +
+        '<div class="two"><div><label class="l">Shop section <span class="hint">· left rail</span></label><div class="inp pick">Fresh &amp; Deli' + CHEV + '</div></div>' +
+        '<div><label class="l">Subcategory <span class="hint">· section heading</span></label><div class="inp pick">Spreads &amp; Dips' + CHEV + '</div></div></div>' +
+        '<div class="two"><div><label class="l">Badge <span class="hint">· shop card chip</span></label><div class="inp pick">Auto' + CHEV + '</div></div>' +
+        '<div><label class="l" for="f-size">Size / weight</label><input class="inp" id="f-size" value="230g"></div></div>' +
+      '</div>' },
+    cost: { title: 'Cost & pricing', sum: 'Cost ¥12.00 · price ¥42 · margin 71%', html:
+      '<div class="card">' +
+        '<div class="card-h">What one unit is made of <span class="meta">example figures</span></div>' +
+        '<div class="sub" style="margin-bottom:12px">This list is the product’s cost. There is no other cost field.</div>' +
+        '<div class="bl">' +
+          '<div class="bl-row"><div>Item</div><div class="r">Amount</div><div class="r">Cost</div></div>' +
+          '<div class="bl-row"><div>Green chilli</div><div class="r num">80 g</div><div class="r num">¥3.20</div></div>' +
+          '<div class="bl-row"><div>Coriander</div><div class="r num">40 g</div><div class="r num">¥1.60</div></div>' +
+          '<div class="bl-row"><div>Garlic</div><div class="r num">10 g</div><div class="r num">¥0.30</div></div>' +
+          '<div class="bl-row"><div>Olive oil</div><div class="r num">60 ml</div><div class="r num">¥4.80</div></div>' +
+          '<div class="bl-row"><div>Glass jar</div><div class="r num">1</div><div class="r num">¥2.10</div></div>' +
+          '<div class="bl-row tot"><div>Cost of one unit</div><div></div><div class="r num">¥12.00</div></div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn sm">Add an item</button><button class="btn sm">Use a recipe</button></div>' +
+      '</div>' +
+      '<div class="card"><div class="kpi3">' +
+        '<div><label class="l" for="f-price">Price</label><input class="inp num" id="f-price" value="¥42"></div>' +
+        '<div><div class="l" style="font-size:13px;font-weight:500;margin-bottom:6px">Cost</div><div class="v num">¥12.00</div><div class="l">from the list above</div></div>' +
+        '<div><div class="l" style="font-size:13px;font-weight:500;margin-bottom:6px">Margin</div><div class="v num">71%</div><div class="l">¥30.00 per unit</div></div>' +
+      '</div></div>' },
+    stock: { title: 'Stock', sum: 'Tianhe 12 · Yuexiu 7 · we hold it', html:
+      '<div class="card">' +
+        '<div class="card-h">On hand <span class="meta">per store</span></div>' +
+        '<div class="stk"><div><label class="l" for="f-th">Tianhe</label><input class="stkbox num" id="f-th" value="12"></div>' +
+        '<div><label class="l" for="f-yx">Yuexiu</label><input class="stkbox num low" id="f-yx" value="7"></div></div>' +
+        '<div class="two" style="margin-top:16px"><div><label class="l" for="f-low">Low-stock alert at</label><input class="inp num" id="f-low" value="8"></div>' +
+        '<div><label class="l">When out of stock</label><div class="inp pick">Pre-order outside Guangzhou' + CHEV + '</div></div></div>' +
+      '</div>' +
+      '<div class="card"><div class="card-h">Sourcing</div>' +
+        '<label class="radio on"><span class="dot"></span><span><span class="t">We hold the stock</span><span class="s">Counted per store above. When it hits zero, your out-of-stock rule decides what shoppers see.</span></span></label>' +
+        '<label class="radio"><span class="dot"></span><span><span class="t">Ships directly from supplier</span><span class="s">The supplier holds and ships it. We don’t count stock here.</span></span></label>' +
+      '</div>' },
+    sold: { title: 'How it’s sold', sum: 'One size · no bundle · no options', html:
+      '<div class="card"><div class="rows">' +
+        '<div class="row"><span class="t">Sizes</span><span class="v">One size · ¥42</span><button class="btn sm">Add a size</button></div>' +
+        '<div class="row"><span class="t">Bundle</span><span class="v">Not sold as part of a set</span><button class="btn sm">Make a bundle</button></div>' +
+        '<div class="row"><span class="t">Buy together</span><span class="v">No suggestions</span><button class="btn sm">Add</button></div>' +
+        '<div class="row"><span class="t">Options</span><span class="v">The shopper makes no choices</span><button class="btn sm">Add a choice</button></div>' +
+      '</div></div>' },
+    page: { title: 'Shopper page', sum: 'Description written · 5 of 5 facts · designed page', html:
+      '<div class="card">' +
+        '<div class="rows">' +
+          '<div class="row"><span class="t">Description</span><span class="v">Written in both languages · 84 words</span></div>' +
+          '<div class="row"><span class="t">Facts</span><span class="v">Origin, ingredients, storage, shelf life, serving · all filled</span></div>' +
+          '<div class="row"><span class="t">Design</span><span class="v">Designed page · 9 sections · last edited 3 days ago</span></div>' +
+        '</div>' +
+        '<div style="display:flex;gap:8px;margin-top:14px;align-items:center"><button class="btn">Open the page editor ' + ARROW + '</button><span class="sub">Writing and design happen there. This form holds the shop facts.</span></div>' +
+      '</div>' }
+  };
+  var ORDER = ['basics', 'where', 'cost', 'stock', 'sold', 'page'];
+
+  var SIDE =
+    '<div class="card sales"><div class="card-h">Sales <span class="meta">last 30 days</span></div><div class="ranges"><button>7d</button><button class="on">30d</button><button>90d</button><button>All</button></div>' +
+      '<div class="kpi2"><div><div class="v num">19</div><div class="l">units sold</div></div><div><div class="v num">¥828</div><div class="l">revenue</div></div>' +
+      '<div style="grid-column:1/-1"><div class="v num">#62 / 214</div><div class="l">rank</div></div></div>' +
+      '<div class="sub" style="margin-top:12px">Last sale today · 13 selling days</div></div>' +
+    '<div class="card"><div class="card-h">Shipping</div><div class="chips">' +
+      '<label><input type="checkbox" checked>Air</label><label><input type="checkbox">Land</label><label><input type="checkbox">Local only</label></div></div>' +
+    '<div class="card"><div class="card-h">Free of</div><div class="chips">' +
+      '<label><input type="checkbox">Nuts</label><label><input type="checkbox">Soy</label><label><input type="checkbox">Gluten</label><label><input type="checkbox">5 Spice</label><label><input type="checkbox">Animal products</label><label><input type="checkbox">Dairy</label><label><input type="checkbox">Egg</label></div></div>' +
+    '<div class="card"><div class="card-h">Flags</div><div class="chips">' +
+      '<label><input type="checkbox">Sold at markets</label><label><input type="checkbox">Made fresh in batches</label><label><input type="checkbox">Restock-only, internal</label></div></div>' +
+    '<div class="card"><div class="card-h stack">Internal notes <span class="meta">Staff only, never shown to shoppers</span></div><textarea class="inp" aria-label="Internal notes"></textarea></div>' +
+    '<div class="side-acts"><button class="btn">Duplicate</button><button class="btn">Version history</button><button class="btn danger">Delete</button></div>';
+
+  document.querySelectorAll('[data-head]').forEach(function (el) { el.innerHTML = HEAD; });
+  document.querySelectorAll('[data-side]').forEach(function (el) { el.innerHTML = SIDE; });
+
+  // A and C: one section at a time.  B: all, as folding cards.
+  document.querySelectorAll('[data-sections]').forEach(function (host) {
+    var mode = host.getAttribute('data-mode');
+    var key = host.getAttribute('data-sections');
+    host.innerHTML = ORDER.map(function (id, i) {
+      var s = SEC[id];
+      if (mode === 'fold') {
+        var open = i < 2 ? ' open' : '';
+        return '<div class="card fold' + open + '" id="' + key + '-' + id + '" data-fold>' +
+          '<div class="card-h" role="button" tabindex="0">' + s.title + '<span class="sum">' + s.sum + '</span><span class="sp"></span><span class="chev">' + CHEV + '</span></div>' +
+          '<div class="fold-body">' + s.html.replace(/class="card"/g, 'class="fold-inner"').replace(/<div class="fold-inner">/, '<div>') + '</div></div>';
+      }
+      return '<div class="sec' + (i === 0 ? ' on' : '') + '" data-sec="' + id + '"><div class="sec-h">' + s.title + '</div>' + s.html + '</div>';
+    }).join('');
+    if (mode === 'fold') host.querySelectorAll('.fold-body .card').forEach(function(c){ c.style.marginTop = '14px'; });
+  });
+  // In B the inner cards lose their border so a card is not inside a card.
+  document.querySelectorAll('.fold-inner').forEach(function (c) { c.style.borderTop = '1px solid var(--td-border)'; c.style.paddingTop = '16px'; c.style.marginTop = '16px'; });
+
+  document.querySelectorAll('[data-rail]').forEach(function (rail) {
+    var key = rail.getAttribute('data-rail');
+    rail.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      rail.querySelectorAll('button').forEach(function (x) { x.classList.toggle('on', x === b); });
+      var go = b.getAttribute('data-go');
+      if (go) {
+        document.querySelectorAll('[data-sections="' + key + '"] .sec').forEach(function (s) { s.classList.toggle('on', s.getAttribute('data-sec') === go); });
+        try { localStorage.setItem('mk-last-' + key, go); } catch (err) {}
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      var jump = b.getAttribute('data-jump');
+      if (jump) {
+        var card = document.getElementById(key + '-' + jump);
+        if (card) { card.classList.add('open'); card.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+      }
+    });
+    // Remember the last open section (A and C).
+    try {
+      var last = localStorage.getItem('mk-last-' + key);
+      var btn = last && rail.querySelector('[data-go="' + last + '"]');
+      if (btn) btn.click();
+    } catch (err) {}
+  });
+
+  document.querySelectorAll('[data-fold] > .card-h').forEach(function (h) {
+    function toggle() { h.parentElement.classList.toggle('open'); }
+    h.addEventListener('click', toggle);
+    h.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+  });
+
+  // Settings: switches flip, rows drag.
+  document.querySelectorAll('#setrows .sw').forEach(function (sw) {
+    function flip() { var on = !sw.classList.contains('on'); sw.classList.toggle('on', on); sw.setAttribute('aria-checked', on ? 'true' : 'false'); sw.closest('.setrow').classList.toggle('off', !on); }
+    sw.addEventListener('click', flip);
+    sw.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } });
+  });
+  var dragging = null, list = document.getElementById('setrows');
+  if (list) {
+    list.addEventListener('dragstart', function (e) { dragging = e.target.closest('.setrow'); if (dragging) dragging.classList.add('dragging'); });
+    list.addEventListener('dragend', function () { if (dragging) dragging.classList.remove('dragging'); dragging = null; });
+    list.addEventListener('dragover', function (e) {
+      e.preventDefault(); var over = e.target.closest('.setrow'); if (!over || over === dragging || !dragging) return;
+      var r = over.getBoundingClientRect(); var after = (e.clientY - r.top) > r.height / 2;
+      list.insertBefore(dragging, after ? over.nextSibling : over);
+    });
+  }
+})();
+</script>
+</body>
+</html>

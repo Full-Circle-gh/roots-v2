@@ -3653,293 +3653,6 @@ function pdToggleShopTag() {
   pdScheduleAutosave();
 }
 
-// ── Two zoom levels on one editor ───────────────────────────────────────────
-// Docked, #pd-editor sits in the right column beside the list and shows the
-// quick fields plus a summary row for anything with sub-rows. Expanded, the
-// SAME node moves into #pd-pagestage and everything opens out on one page.
-// Moving the node (rather than rendering a second copy) is what keeps ids,
-// typed-but-unsaved values, the RTE's contents and every va*/bu*/bp*/opt*
-// renderer working across the switch without a line of sync code.
-function pdIsExpanded() {
-  const st = document.getElementById('pd-pagestage');
-  return !!(st && st.style.display !== 'none');
-}
-function pdMoveEditor(where) {
-  const ed = document.getElementById('pd-editor');
-  const home = document.getElementById(where === 'ppage' ? 'pd-pp-mount' : 'pd-bg');
-  if (!ed || !home || ed.parentElement === home) return;
-  home.appendChild(ed);
-}
-// The editor's two pieces of live state — "All changes saved" and the shop
-// switch — belong beside the title while the full page is open, and back in
-// the drawer's own chrome when it closes. Docked they are fine where they
-// are: the drawer is one screen tall, so the footer is always in view. On the
-// page the footer is three screens down, which is the whole reason this moves:
-// a page that writes every keystroke has to say so where you are looking.
-// Same trick as the editor itself — move the node, never render a second one.
-function pdMoveHeadState(where) {
-  const status = document.getElementById('pd-save-status');
-  const tags   = document.getElementById('pd-head-tags');
-  if (where === 'ppage') {
-    // Two slots, not one: the shop switch is a control and sits with the
-    // Collapse button on the top row; the save state is a report and sits
-    // under it, right-aligned against the same edge.
-    const tagSlot = document.getElementById('pd-pp-tags');
-    const stateSlot = document.getElementById('pd-pp-state');
-    if (!tagSlot || !stateSlot) return;
-    if (tags) tagSlot.appendChild(tags);
-    if (status) stateSlot.appendChild(status);
-    return;
-  }
-  // Home again. Order matters inside the footer — the status reads first, then
-  // the spacer, then the record's actions.
-  const foot = document.querySelector('#pd-editor .pu-editor-foot');
-  const band = document.querySelector('#pd-editor .pd-head-state');
-  if (foot && status) foot.insertBefore(status, foot.firstChild);
-  if (band && tags) band.insertBefore(tags, band.firstChild);
-}
-// ── The page's second column ────────────────────────────────────────────────
-// The page is weighted, not uniform. The LEFT column is the short story of a
-// product — what it is called, what it costs, what it looks like, where it
-// shows, how much there is, what sizes, what the shop page says. The RIGHT one
-// holds what you read but cannot change (sales) and what you set once when the
-// product is created and then leave alone for a year (how it ships, what it is
-// free of, the flags, the internal note) — plus the record's own actions, which
-// otherwise sit below every field on the page with Delete at the end of it.
-//
-// Docked, none of this applies: the drawer shows one pane at a time, so nothing
-// is competing and every block stays where it was authored.
-//
-// The blocks are MOVED, not re-rendered — same rule as the editor itself. Each
-// move remembers the parent and the sibling it left, so collapsing puts every
-// block back exactly where it came from rather than somewhere that merely looks
-// right today.
-//
-// 🔴 The side column lives INSIDE #pd-editor. Thousands of lines of
-// retail-admin.css are scoped `#pd-editor …`, so a block moved outside the
-// editor arrives stripped of its card, heading, fields and chips.
-const PD_SIDE_BLOCKS = [
-  '#pd-sales-card',      // read-only: the one block on the page you cannot change
-  '#pd-sec-shipping',
-  '#pd-sec-freeof',
-  '#pd-sec-flags',
-  '#pd-sec-notes',
-  '.pd-foot-acts',       // Duplicate · Version history · Delete
-];
-let _pdSideHomes = null;
-
-function pdMoveSideBlocks(where) {
-  if (where === 'ppage') {
-    const side = document.getElementById('pd-pp-side');
-    // Already out there. Moving again would record the side column as each
-    // block's home and strand them there on collapse.
-    if (!side || _pdSideHomes) return;
-    _pdSideHomes = [];
-    for (const sel of PD_SIDE_BLOCKS) {
-      const el = document.querySelector(sel);
-      if (!el) continue;
-      _pdSideHomes.push({ el, parent: el.parentElement, next: el.nextElementSibling });
-      side.appendChild(el);
-    }
-    return;
-  }
-  if (!_pdSideHomes) return;
-  // Back-to-front: each block's remembered `next` sibling is itself a block
-  // that moved, so restoring in reverse means the anchor is always home before
-  // the thing that points at it.
-  for (const h of _pdSideHomes.slice().reverse()) {
-    if (!h.parent) continue;
-    const anchor = h.next && h.next.parentElement === h.parent ? h.next : null;
-    h.parent.insertBefore(h.el, anchor);
-  }
-  _pdSideHomes = null;
-}
-
-// Photos belong to Basics, not beside it. Two cards standing side by side read
-// as two separate questions; on the page the photo strip becomes the lower half
-// of the Basics card, under a hairline. Same move-and-remember rule.
-let _pdPhotosHome = null;
-
-function pdMovePhotos(where) {
-  const photos = document.getElementById('pd-sec-photos');
-  if (!photos) return;
-  if (where === 'ppage') {
-    if (_pdPhotosHome) return;
-    const basics = document.querySelector('#pd-editor .pd-pane[data-pane="basics"] .pdb-card');
-    if (!basics || basics === photos) return;
-    _pdPhotosHome = { parent: photos.parentElement, next: photos.nextElementSibling };
-    basics.appendChild(photos);
-    return;
-  }
-  if (!_pdPhotosHome || !_pdPhotosHome.parent) { _pdPhotosHome = null; return; }
-  const h = _pdPhotosHome;
-  const anchor = h.next && h.next.parentElement === h.parent ? h.next : null;
-  h.parent.insertBefore(photos, anchor);
-  _pdPhotosHome = null;
-}
-
-// Expand. `section` optionally scrolls to one part of the page — 'basics',
-// 'stock', 'sizes', 'more', 'page' or 'details' — which is what the dock's
-// summary rows pass when the operator taps through from a summary.
-function pdExpand(section) {
-  const ed = document.getElementById('pd-editor');
-  const stage = document.getElementById('pd-pagestage');
-  if (!ed || !stage || ed.style.display === 'none') return;   // nothing open
-  ed.classList.add('pd-fullpage');
-  // Leaving the drawer for the page: the drawer chrome and its scrim go first,
-  // or a fixed-position shell would follow the editor out and cover the page.
-  pdCloseDrawer();
-  pdMoveEditor('ppage');
-  // The full page REPLACES the catalogue — title, sub-view switch, pulse,
-  // chips, toolbar and the list all step aside, and the breadcrumb becomes the
-  // way back. One class does it so nothing has to remember an inline display.
-  document.getElementById('tab-products')?.classList.add('pd-page-open');
-  stage.style.display = '';
-  pdMoveHeadState('ppage');
-  pdMoveSideBlocks('ppage');
-  pdMovePhotos('ppage');
-  pdSyncPageHead();
-  pdSyncFullscreenBtn(true);
-  window.scrollTo({ top: 0, behavior: 'auto' });
-  // After the scroll home, so the observer's first report is the true one.
-  pdWatchPin(true);
-  if (section) {
-    // 'sizes' and 'more' were two sections and are now one ("How it's sold"),
-    // so both dock summary rows land on the same block. The two names stay
-    // because the summaries that pass them are still two separate rows.
-    const el = (section === 'more' || section === 'sizes')
-               ? document.getElementById('pd-sec-sizes')
-             : ed.querySelector(`.pd-pane[data-pane="${section}"]`);
-    if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
-  }
-}
-function pdCollapseToPanel() {
-  const ed = document.getElementById('pd-editor');
-  const stage = document.getElementById('pd-pagestage');
-  if (ed) ed.classList.remove('pd-fullpage');
-  // Unpin FIRST. The condensed bar is holding .pd-pp-acts, which is where the
-  // shop switch and the save state are parked; hand it back to the header
-  // before pdMoveHeadState comes looking for them.
-  pdWatchPin(false);
-  // Status and shop switch come home BEFORE the stage is hidden — leave them
-  // parked in the title row and they ride a `display:none` container back into
-  // invisibility while the drawer shows an empty footer.
-  pdMoveHeadState('dock');
-  // Same reason, and same order — the side column is inside the editor.
-  pdMovePhotos('dock');
-  pdMoveSideBlocks('dock');
-  pdMoveEditor('dock');
-  if (stage) stage.style.display = 'none';
-  document.getElementById('tab-products')?.classList.remove('pd-page-open');
-  // Back to the glance: the drawer comes with it, but only if a product is
-  // actually open — collapsing on the way to closing must not re-open it.
-  if (_paEditorOpen) pdOpenDrawer();
-  pdSyncFullscreenBtn(false);
-  // State can have moved while the page was open (a size added, a bundle set
-  // up, a description written) — repaint the summaries that stand for it.
-  pdRenderSummaries();
-  // Land at the top of the catalogue rather than at whatever depth the full
-  // page was scrolled to, which would drop the operator into the middle of a
-  // list they were not reading.
-  window.scrollTo({ top: 0, behavior: 'auto' });
-}
-function pdSyncFullscreenBtn(on) {
-  const btn = document.getElementById('pd-expand-btn');
-  if (btn) btn.innerHTML = on ? '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M6 3v3H3M10 3v3h3M6 13v-3H3M10 13v-3h3"/></svg>Collapse · 收起' : '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3"/></svg>Expand · 展开';
-}
-// The Expand button now toggles between the two zoom levels.
-function pdToggleFullscreen() { pdIsExpanded() ? pdCollapseToPanel() : pdExpand(); }
-
-// ── The condensed header ────────────────────────────────────────────────────
-// The full page is three screens tall and writes on every keystroke, so the
-// one line that says it saved cannot be the first thing to scroll away (§1.7:
-// the page header is never scrolled away). Past the header, #pd-pp-bar takes
-// over: which product, whether it is in the shop, whether it saved, the way
-// out.
-//
-// The switch and the save state are the SAME nodes in both places — .pd-pp-acts
-// moves into the bar and back, which is this page's one rule about live state
-// kept once more: move the node, never render a second one. Two copies of a
-// switch is two things to keep in step, and they drift.
-//
-// The name is the single exception, because a bar that names the record cannot
-// borrow the node from a header that is off screen. Both are painted in the
-// same pass of pdSyncPageHead, so they cannot disagree.
-let _pdPinObs = null;
-function pdPinHead(on) {
-  const stage = document.getElementById('pd-pagestage');
-  const bar   = document.getElementById('pd-pp-bar');
-  const acts  = document.getElementById('pd-pp-acts');
-  const head  = document.getElementById('pd-pp-head');
-  if (!stage || !bar || !acts || !head) return;
-  if (!!on === stage.classList.contains('is-pinned')) return;
-  stage.classList.toggle('is-pinned', !!on);
-  // Ahead of the back button, so the way out stays last in the row and last in
-  // the tab order — same order as the resting header, where it is the crumb.
-  if (on) bar.insertBefore(acts, bar.querySelector('.pd-pp-bar-back'));
-  else head.appendChild(acts);
-}
-// Watch a 1px sentinel sitting where the bar would pin, rather than listening
-// to scroll: the browser reports the crossing once instead of on every frame.
-function pdWatchPin(on) {
-  if (_pdPinObs) { _pdPinObs.disconnect(); _pdPinObs = null; }
-  if (!on) { pdPinHead(false); return; }
-  const sent = document.getElementById('pd-pp-sentinel');
-  if (!sent || typeof IntersectionObserver !== 'function') return;
-  // -56px = the topbar's locked height, which is also where the bar perches,
-  // so the sentinel leaves the box at exactly the moment the bar gets there.
-  _pdPinObs = new IntersectionObserver(
-    (entries) => { for (const e of entries) pdPinHead(!e.isIntersecting); },
-    { rootMargin: '-56px 0px 0px 0px', threshold: 0 });
-  _pdPinObs.observe(sent);
-}
-// Breadcrumb + title of the full page, read from the live form so a rename
-// typed a second ago is already reflected up top.
-function pdSyncPageHead() {
-  const nm = (document.getElementById('pd-name-en').value || '').trim();
-  const alt = (document.getElementById('pd-name-cn').value || '').trim();
-  const shown = nm || alt || cuT('New product', '新产品');
-  const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
-  set('pd-pp-name', shown);
-  set('pd-pp-name-alt', nm && alt ? alt : '');
-  // The condensed bar says the name too. It is the only thing on this page
-  // rendered twice, and only because the bar has to name the record while the
-  // header that names it is off screen — both are painted here, in one pass,
-  // so they cannot disagree.
-  set('pd-pp-bar-name', shown);
-  const p = (PA_PRODUCTS || []).find(x => x.id === _pdSelectedId);
-  // The product's own photo, at both sizes. No image is a quiet raised tile —
-  // the same tile the drawer header shows — never a placeholder graphic.
-  { const img = p && (p.image_data || p.image_url);
-    for (const id of ['pd-pp-thumb', 'pd-pp-bar-thumb']) {
-      const th = document.getElementById(id);
-      if (th) th.style.backgroundImage = img ? 'url("' + img + '")' : '';
-    } }
-  const badge = document.getElementById('pd-pp-badge');
-  if (badge) badge.innerHTML = p ? _paStatusCell({ p, group: null }) : '';
-  // The line under the title: the few facts that identify this record without
-  // scrolling to them. Read from the live form, so a SKU typed a second ago is
-  // already up here. Anything blank drops out rather than showing an empty slot.
-  const sub = document.getElementById('pd-pp-sub');
-  if (sub) {
-    const val = (id) => ((document.getElementById(id) || {}).value || '').trim();
-    const sel = (id) => {
-      const el = document.getElementById(id);
-      if (!el || !el.selectedOptions || !el.selectedOptions[0]) return '';
-      const t = (el.selectedOptions[0].textContent || '').trim();
-      return t.startsWith('—') ? '' : t;
-    };
-    const sku = val('pd-sku');
-    const where = [sel('pd-top-category'), sel('pd-subcategory')].filter(Boolean).join(', ');
-    const price = val('pd-price');
-    const bits = [];
-    if (sku) bits.push(cuT('SKU ', '货号 ') + sku);
-    if (where) bits.push(where);
-    if (price) bits.push(acWrap(price));
-    sub.textContent = bits.join(' · ');
-  }
-}
-
 // ── Dock summaries ──────────────────────────────────────────────────────────
 // What the docked panes show in place of the sections that only open out on
 // the full page. Each is a read of live state, never a second source of truth:
@@ -6306,11 +6019,12 @@ function pdRebuildDesign() {
   // "should the shop show the designed page?" — see pdAutoComposeBlocks.
   pdAutoComposeBlocks(id, document.getElementById('pd-blockdesign-toggle'), true, true);
 }
-function pdWireAutosave() {
-  const ed = document.getElementById('pd-editor');
-  if (!ed || ed._autosaveWired) return;
-  ed._autosaveWired = true;
-  const onEdit = e => {
+// The one handler for an edit anywhere in the form. Named, not a closure,
+// because the form has two homes: the dock (#pd-editor) and the full product
+// page (#ppg), which carries the same field nodes out of the dock while it is
+// open. Both listen with THIS function — a second copy of these rules would be
+// a second place for them to drift (§142, §144 are the same family of mistake).
+function pdEditorEdit(e) {
     const t = e.target;
     if (!t || !t.closest) return;
     if (t.id === 'pd-img-file') return;  // file picker handled via gallery mutations
@@ -6323,9 +6037,13 @@ function pdWireAutosave() {
     // Editing the description or the Product details boxes makes a built design stale.
     if (t.closest('.pd-rte') || (t.id && t.id.indexOf('pd-fact-') === 0) || t.id === 'pd-name-en' || t.id === 'pd-name-cn' || t.id === 'pd-weight') pdMarkDesignStale();
     if (t.id && t.id.indexOf('pd-fact-') === 0) pdFactsMarkTouched();
-  };
-  ed.addEventListener('input', onEdit);
-  ed.addEventListener('change', onEdit);
+}
+function pdWireAutosave() {
+  const ed = document.getElementById('pd-editor');
+  if (!ed || ed._autosaveWired) return;
+  ed._autosaveWired = true;
+  ed.addEventListener('input', pdEditorEdit);
+  ed.addEventListener('change', pdEditorEdit);
 }
 
 // Snapshot / restore the editable form state. Used to capture the "as-opened"
