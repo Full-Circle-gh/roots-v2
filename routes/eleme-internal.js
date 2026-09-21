@@ -35,6 +35,10 @@ const { notifyStockGaps } = require('../lib/channel-line-report');
 // §85 — the pre-order window, and whether a shortfall it explains should page.
 const channelPublish = require('../lib/channel-publish');
 const cadence = require('../lib/batch-cadence');
+// §208 — when a booked order's stock comes off the shelf, and what counts as the
+// kitchen having started. One file, so the ingest, the status poll and the sweep
+// below cannot drift apart on it.
+const preorderStock = require('../lib/channel-preorder-stock');
 
 const INTERNAL_SECRET = process.env.ELEME_INTERNAL_SECRET || 'eleme-daemon-internal';
 
@@ -146,7 +150,11 @@ function internalStatusForChannel(desc) {
   // Rider assigned and heading to the store to COLLECT — its own bucket so the
   // floor knows "someone is coming, have it ready".
   if (/骑手|到店|待取货|待取餐/.test(d))                             return 'rider_pickup';
-  if (/待配送|待接单|已接单|待拣货|拣货|备货|待发货|制作|待出餐/.test(d)) return 'preparing';
+  // 备餐 joins 备货 here, and its absence was a real hole: 备货 is the grocery
+  // word and the only one this list had, while 备餐中 — the kitchen word, and
+  // the one an Eleme 外卖 order actually carries while the food is being made —
+  // matched nothing and left the order sitting on whatever it was before.
+  if (/待配送|待接单|已接单|待拣货|拣货|备货|备餐|待发货|制作|待出餐/.test(d)) return 'preparing';
   if (/配送|派送|取货/.test(d))                                      return 'dispatched';
   // The same lifecycle, worded as an ASCII enum. Eleme mixes the two: the fields
   // that carry a real stage (header.orderLatestStatus in particular) speak
@@ -504,6 +512,21 @@ router.post('/ingest-order', (req, res) => {
     // now would drift the count low permanently and then under-report that number to
     // every other channel on the next push. Record the order, skip the deduction.
     const bornVoid = internalStatus === 'cancelled' || internalStatus === 'refunded';
+    /* §208 — A 预订单 BOOKED FOR LATER KEEPS ITS STOCK ON THE SHELF UNTIL THE
+       KITCHEN STARTS. Ash: 饿了么的预定单，需要等到开始备餐的时候才会自动扣库存。
+
+       Every rule about WHEN that is lives in lib/channel-preorder-stock.js, and
+       deliberately not here: the label test it runs is NARROWER than this file's
+       status map (已接单 moves an order to 'preparing' and is not a kitchen
+       starting), and merging the two would silently undo the hold.
+
+       Fails open in every uncertain case — no booking flag, a label already past
+       prep, the clock already there — so a normal order deducts at ingest exactly
+       as it always has. */
+    const holdCfg = preorderStock.holdCfg(db, { channel: 'eleme' });
+    const holdStock = !bornVoid && preorderStock.shouldHold({
+      preorderAt: preOrderAt, statusDesc: channelStatus, cfg: holdCfg,
+    });
     // 打包费 and 配送费, into the two columns Meituan already fills. They are
     // ADDENDS to `subtotal`, and that is exactly why they belong here: since
     // 67fc00a subtotal is itemsTotal — the GOODS the priced lines agree on, with
@@ -593,6 +616,12 @@ router.post('/ingest-order', (req, res) => {
       // it starts in that state — which is what makes the re-deduct branch in
       // /update-order-status correct if Eleme later revives the order.
       if (bornVoid) db.prepare('UPDATE retail_orders SET channel_stock_restored = 1 WHERE id = ?').run(oid);
+      // §208 — a held booking is in that same state ("not currently deducted"),
+      // and channel_stock_deferred is what says WHY, so the revival branch in
+      // /update-order-status does not mistake it for a cancel that came back.
+      if (holdStock) {
+        db.prepare('UPDATE retail_orders SET channel_stock_restored = 1, channel_stock_deferred = 1 WHERE id = ?').run(oid);
+      }
       for (const it of items) {
         // Real line money now, not 0/0 — and the channel's own SKU token is kept
         // even on an UNMATCHED line, which has no store_products row to read one
@@ -632,6 +661,14 @@ router.post('/ingest-order', (req, res) => {
     const preorderWindow = cadence.preorderWindow(db, { channel: 'eleme' });
     for (const it of bornVoid ? [] : items) {
       if (!it.productId) { unresolved.push({ name: it.name, nameEn: it.nameEn, sku: it.sku, qty: it.qty, reason: it.matchBy }); continue; }
+      /* §208 — held, so nothing comes off the shelf yet. AFTER the unresolved
+         push and not before it: whether a line matched a product is a fact about
+         the ORDER, true the moment it arrives, and an unmatched line is worth
+         saying out loud now rather than hours later when the food is due. The
+         oversell check is the opposite — it compares against a shelf that has
+         not been touched yet, so it belongs with the deduction and moves with
+         it. */
+      if (holdStock) continue;
       const cur  = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?').get(storeId, it.productId);
       const oldQ = cur ? cur.physical_qty : 0;
       // One six-pack is one line of one, and six off the shelf.
@@ -803,7 +840,27 @@ router.post('/ingest-order', (req, res) => {
       } catch (logErr) { console.error('[eleme-internal] order_born_void log failed:', logErr.message); }
     }
 
+    // §208 — and the same rule for a held booking, for the same reason. "The
+    // stock is still on the shelf and that is on purpose" has to be readable
+    // from the log, or the first person to compare the shelf against the day's
+    // orders is looking at what reads exactly like the bug this replaced.
+    if (holdStock) {
+      try {
+        db.prepare(`
+          INSERT INTO eleme_sync_log (store_code, event_type, status, detail, error_msg)
+          VALUES (?, 'order_stock_held', 'ok', ?, ?)
+        `).run(
+          storeCode || storeCodeOf(orderId),
+          JSON.stringify({ ref, orderNo, channelStatus, preOrderAt,
+                           leadMinutes: holdCfg.leadMinutes, items: items.length }),
+          `预订单 booked for ${preOrderAt} — stock stays on the shelf until prep`
+            + ` (${holdCfg.leadMinutes} min before, or an earlier prep label)`
+        );
+      } catch (logErr) { console.error('[eleme-internal] order_stock_held log failed:', logErr.message); }
+    }
+
     res.json({ ok: true, orderId, orderNo, items: items.length, deducted, unresolved, bornVoid,
+                stockHeld: holdStock, preOrderAt, leadMinutes: holdCfg.leadMinutes,
                 subtotal, total, itemsTotal, channelTotal, moneyGap: moneyGap || null,
                 settlementGap: settleGap || null });
   } catch (err) {
@@ -811,6 +868,129 @@ router.post('/ingest-order', (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+/* The store this mirrored order came in for. eleme_sync_log.store_code is NOT
+   NULL (database.js), so a log row written without one does not fail loudly —
+   it throws into a catch and the event simply never appears, which is the exact
+   silence every log line in this file was added to break. The import row holds
+   the code the daemon polled under, and is the only place this side of the
+   process has it. */
+function storeCodeOf(retailOrderId) {
+  try {
+    const row = db.prepare(
+      'SELECT store_code FROM eleme_order_import WHERE retail_order_id = ? ORDER BY id DESC LIMIT 1'
+    ).get(retailOrderId);
+    if (row && row.store_code) return row.store_code;
+    // The import row is the daemon's to write and this route never requires it,
+    // so the order's own store answers when it is missing. Without this fallback
+    // an order ingested but not yet mirrored logs nothing at all.
+    const via = db.prepare(
+      'SELECT s.code AS code FROM retail_orders o JOIN retail_stores s ON s.id = o.store_id WHERE o.id = ?'
+    ).get(retailOrderId);
+    return (via && via.code) || null;
+  } catch (_) { return null; }
+}
+
+/* §208 — TAKE A HELD BOOKING'S STOCK OFF THE SHELF, EXACTLY ONCE.
+   The other half of the hold at ingest. Two callers reach it — the status poll,
+   when Eleme's label says the kitchen started, and the clock sweep below — and
+   they share this one function rather than each writing the deduction, because
+   two copies of "deduct and clear the flag" is two chances to clear the flag
+   without deducting.
+
+   IDEMPOTENT BY THE FLAG, re-read here rather than trusted from the caller: the
+   UPDATE that clears channel_stock_deferred is the guard, so a second call for
+   the same order finds 0 and does nothing. The lines come from
+   retail_order_items — the same source the void restock reads — so a held order
+   deducts precisely what it was recorded as carrying.
+
+   The oversell report is the ingest's, moved to where the shelf is actually
+   touched. §85's pre-order allowance is applied here too: a shortfall the
+   window explains is expected and does not page. */
+function releaseHeldStock(orderId, { elemeOrderId = null, storeCode = null, why = 'prep' } = {}) {
+  const o = db.prepare(
+    `SELECT id, order_no, status, store_id, channel_preorder_at,
+            COALESCE(channel_stock_deferred, 0) AS held
+       FROM retail_orders WHERE id = ?`
+  ).get(orderId);
+  if (!o || !o.held) return { released: 0, skipped: 'not_held' };
+  // A void takes nothing off the shelf, whatever the clock says. The flag STAYS
+  // set rather than being cleared here: a rejected refund flips the order back
+  // to live, and a booking that comes back is a booking still waiting for its
+  // kitchen — clearing it would hand that order to the revival branch instead,
+  // which deducts immediately.
+  if (o.status === 'cancelled' || o.status === 'refunded') return { released: 0, skipped: 'void' };
+
+  // The flag first, in the same statement that tests it: two polls landing
+  // together cannot both pass this, and the one that does owns the deduction.
+  const claim = db.prepare(
+    `UPDATE retail_orders
+        SET channel_stock_deferred = 0, channel_stock_restored = 0
+      WHERE id = ? AND COALESCE(channel_stock_deferred, 0) = 1`
+  ).run(orderId);
+  if (!claim.changes) return { released: 0, skipped: 'not_held' };
+
+  const lines = db.prepare(
+    `SELECT product_id, name_en, name_cn, sku, qty, COALESCE(pack_units, 1) AS pack_units
+       FROM retail_order_items WHERE order_id = ? AND product_id IS NOT NULL`
+  ).all(orderId);
+
+  const code = storeCode || storeCodeOf(orderId);
+  const preorderWindow = cadence.preorderWindow(db, { channel: 'eleme' });
+  const oversold = [];
+  let released = 0;
+  for (const it of lines) {
+    const cur  = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?')
+      .get(o.store_id, it.product_id);
+    const oldQ = cur ? cur.physical_qty : 0;
+    const took = packDeduct(it.qty, it.pack_units);
+    if (oldQ < took && !channelPublish.oversellExpected({ have: oldQ, want: took, window: preorderWindow })) {
+      oversold.push({ name: it.name_cn, nameEn: it.name_en, sku: it.sku, have: oldQ, want: took });
+    }
+    try {
+      inventory.adjustStock({
+        storeId: o.store_id, productId: it.product_id,
+        // §84: unclamped, as on every other Eleme path and for the same debt.
+        deltaQty: -took,
+        actorLabel: 'Eleme pre-order',
+        reason: 'eleme_preorder_prep',
+        note: `Eleme ${elemeOrderId || o.order_no} — prep started (${why}), took ${it.name_en} x${it.qty}`
+              + (took !== it.qty ? ` (${took} units)` : ''),
+      });
+      released++;
+    } catch (e) {
+      console.error('[eleme-internal] pre-order release failed:', e.message);
+    }
+  }
+
+  try {
+    db.prepare(`
+      INSERT INTO eleme_sync_log (store_code, event_type, status, detail, error_msg)
+      VALUES (?, 'order_stock_released', 'ok', ?, ?)
+    `).run(code, JSON.stringify({
+      elemeOrderId: elemeOrderId ? String(elemeOrderId) : null,
+      orderNo: o.order_no, why, released, lines: lines.length,
+      preOrderAt: o.channel_preorder_at,
+    }), `预订单 prep started (${why === 'label' ? 'platform label' : 'prep time reached'})`
+        + ` — deducted ${released} line(s)`);
+  } catch (logErr) { console.error('[eleme-internal] order_stock_released log failed:', logErr.message); }
+
+  // The shelf really did go short, now that the goods were actually needed —
+  // the same sentence the ingest says, at the moment it became true.
+  if (oversold.length) {
+    try {
+      db.prepare(`
+        INSERT INTO eleme_sync_log (store_code, event_type, status, detail, error_msg)
+        VALUES (?, 'order_oversold', 'warn', ?, ?)
+      `).run(code, JSON.stringify({ ref: elemeOrderId ? String(elemeOrderId) : o.order_no, oversold }),
+        `${oversold.length} line(s) exceeded on-hand when prep started: ` +
+          oversold.map(x => `${x.nameEn || x.name}${x.sku ? ` (${x.sku})` : ''} have ${x.have} want ${x.want}`).join('; '));
+    } catch (logErr) { console.error('[eleme-internal] order_oversold log failed:', logErr.message); }
+    notifyStockGaps({ channel: 'eleme', storeCode: code, orderNo: o.order_no, unresolved: [], oversold });
+  }
+
+  return { released, oversold: oversold.length };
+}
 
 // POST /api/internal/eleme/update-order-status
 // Later polls re-read the same order as it moves 待接单 → 配送中 → 已完成, so this
@@ -841,7 +1021,10 @@ router.post('/update-order-status', (req, res) => {
     // Snapshot BEFORE advancing: the restock below keys off the PREVIOUS state,
     // which is what makes it idempotent under a repeating poll.
     const prev = db.prepare(
-      'SELECT status, channel_status, store_id, channel_stock_restored FROM retail_orders WHERE id = ?'
+      `SELECT status, channel_status, store_id, channel_stock_restored,
+              COALESCE(channel_stock_deferred, 0) AS channel_stock_deferred,
+              channel_preorder_at
+         FROM retail_orders WHERE id = ?`
     ).get(imp.retail_order_id);
     const internal = internalStatusForChannel(desc);
     // channel_status is ALWAYS written (the drawer shows Eleme's exact label);
@@ -915,9 +1098,14 @@ router.post('/update-order-status', (req, res) => {
     // count low — which then under-reports to Eleme and every other channel on the
     // next push. Runs only on the TRANSITION, so a poll that re-reads the same
     // 已取消 label can never restock twice.
-    let restocked = 0, rededucted = 0;
+    let restocked = 0, rededucted = 0, released = 0;
     const confirmedVoid   = isConfirmedVoid(desc);
     const alreadyRestored = !!prev && prev.channel_stock_restored === 1;
+    // §208 — held on purpose, not restored after a void. The two look identical
+    // in channel_stock_restored and must not be treated alike: a held booking
+    // has to survive the revival branch below untouched, or the next poll
+    // deducts it and the hold never happens.
+    const stockHeld = !!prev && prev.channel_stock_deferred === 1;
     const orderLines = () => db.prepare(
       `SELECT product_id, name_en, qty, COALESCE(pack_units, 1) AS pack_units
          FROM retail_order_items WHERE order_id = ? AND product_id IS NOT NULL`
@@ -947,7 +1135,7 @@ router.post('/update-order-status', (req, res) => {
       } catch (e) {
         console.error('[eleme-internal] restock on cancel failed:', e.message);
       }
-    } else if (prev && alreadyRestored && !confirmedVoid) {
+    } else if (prev && alreadyRestored && !confirmedVoid && !stockHeld) {
       // Stock is out of our count for an order that has since gone live again —
       // the refund was rejected, the rider picked it up, or it was born void and
       // Eleme revived it. Re-deduct so we don't over-report stock we no longer have.
@@ -969,18 +1157,39 @@ router.post('/update-order-status', (req, res) => {
       }
     }
 
+    /* §208 — THE KITCHEN STARTED, so the goods come off the shelf now.
+       Two triggers, whichever lands first: Eleme's own label saying the food is
+       being made or has moved, or the clock reaching prep time (the booked
+       window less the configured lead). The clock is tested here as well as in
+       the sweep because the poll sees this order every five minutes anyway, and
+       a deduction that waits up to half an hour for a sweep it could have made
+       now is half an hour of stock we no longer have still on sale.
+
+       AFTER the void branches, never before: a cancel arriving on the same poll
+       as prep time must not deduct. releaseHeldStock re-reads the row and
+       refuses a void for that reason too. */
+    if (prev && stockHeld && !confirmedVoid && preorderStock.dueForRelease({
+      preorderAt: prev.channel_preorder_at || preVal,
+      statusDesc: desc,
+      leadMinutes: preorderStock.holdCfg(db, { channel: 'eleme' }).leadMinutes,
+    })) {
+      const out = releaseHeldStock(imp.retail_order_id, { elemeOrderId, why: preorderStock.prepStarted(desc) ? 'label' : 'clock' });
+      released = out.released || 0;
+    }
+
     if (restocked || rededucted) {
       try {
         db.prepare(`
           INSERT INTO eleme_sync_log (store_code, event_type, status, detail, error_msg)
           VALUES (?, ?, 'ok', ?, NULL)
-        `).run(null, restocked ? 'order_restocked' : 'order_rededucted',
+        `).run(storeCodeOf(imp.retail_order_id), restocked ? 'order_restocked' : 'order_rededucted',
           JSON.stringify({ elemeOrderId: String(elemeOrderId), statusDesc: desc, restocked, rededucted }));
       } catch (logErr) { console.error('[eleme-internal] restock log failed:', logErr.message); }
     }
 
     res.json({
-      ok: true, changed: r.changes > 0, restocked, rededucted,
+      ok: true, changed: r.changes > 0, restocked, rededucted, released,
+      stockHeld: stockHeld && !released,
       status: statusWrite || (prev && prev.status) || null,
     });
   } catch (err) {
@@ -1022,6 +1231,50 @@ router.post('/auto-deliver-past-eta', (_req, res) => {
     res.json({ ok: true, delivered: r.changes });
   } catch (err) {
     console.error('[eleme-internal] auto-deliver-past-eta error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* POST /api/internal/eleme/release-due-preorder-stock
+   §208 — THE CLOCK'S OWN SWEEP, because the poll is not a guarantee.
+
+   The status poll releases a held booking the moment it sees prep start, and
+   for an order still on Eleme's in-progress list that is almost always first.
+   It is the orders NOT on that list this exists for, and there are three kinds:
+   one Eleme completed and dropped (the same blind spot auto-deliver-past-eta
+   was written for), one whose store was shut when the poll came round, and one
+   whose label simply never names a kitchen stage. Left to the poll alone, each
+   of those keeps selling goods that are already spoken for.
+
+   Time is compared in SQL, both sides UTC — channel_preorder_at is stored UTC
+   (lib/eleme-browser.js toUtcStamp) and CURRENT_TIMESTAMP is UTC — with the
+   lead as a datetime() modifier so the threshold is the setting rather than a
+   literal. Cancelled and refunded orders are excluded here AND refused inside
+   releaseHeldStock; the second one is what makes the endpoint safe to call
+   from anywhere, the first is what keeps it from looking at them at all.
+
+   Idempotent: the flag is the guard, so a store polled twice releases once. */
+router.post('/release-due-preorder-stock', (_req, res) => {
+  try {
+    const cfg = preorderStock.holdCfg(db, { channel: 'eleme' });
+    const due = db.prepare(`
+      SELECT id, order_no
+        FROM retail_orders
+       WHERE channel = 'eleme'
+         AND COALESCE(channel_stock_deferred, 0) = 1
+         AND status NOT IN ('cancelled', 'refunded')
+         AND channel_preorder_at IS NOT NULL AND channel_preorder_at != ''
+         AND datetime(channel_preorder_at, ?) <= datetime('now')
+    `).all(preorderStock.leadModifier(cfg.leadMinutes));
+
+    let orders = 0, lines = 0;
+    for (const o of due) {
+      const out = releaseHeldStock(o.id, { why: 'clock' });
+      if (out.released) { orders++; lines += out.released; }
+    }
+    res.json({ ok: true, due: due.length, orders, lines, leadMinutes: cfg.leadMinutes });
+  } catch (err) {
+    console.error('[eleme-internal] release-due-preorder-stock error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

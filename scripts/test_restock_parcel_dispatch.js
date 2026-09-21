@@ -130,6 +130,11 @@ db.exec(`
   CREATE TABLE retail_orders (
     id INTEGER PRIMARY KEY, order_no TEXT, status TEXT, fulfillment_type TEXT,
     store_id INTEGER, channel TEXT, paid_at DATETIME, updated_at DATETIME,
+    -- §208 — the Eleme 预订单 hold. commitUnreservedOrder reads it to refuse a
+    -- held booking's stock (the channel path takes that one), so a table
+    -- without it fails at prepare() rather than at an assertion. Nothing in
+    -- this suite sets it; the default is what every order here carries.
+    channel_stock_deferred INTEGER DEFAULT 0,
     awaiting_restock_pids TEXT
   );
   CREATE TABLE retail_order_items (

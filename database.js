@@ -2643,6 +2643,18 @@ addColumn('retail_orders', 'wx_shipping_locked_at',   'DATETIME'); // NULL = fre
 // rejected) flips back to a live status — otherwise phantom stock accumulates.
 addColumn('retail_orders', 'channel_stock_restored', 'INTEGER DEFAULT 0');
 
+// §208 — this order is an Eleme 预订单 whose stock is DELIBERATELY still on the
+// shelf, waiting for the kitchen to start. 1 = held, 0 = deducted (or never
+// held, which is every order that predates this column).
+//
+// Its neighbour above answers "is this order's stock currently off our count",
+// and a held booking answers that one 'no' too — so both are set on a hold, and
+// this is what tells the two states apart. Without it the revival branch in
+// /update-order-status, which exists to re-deduct an order that came back from
+// a void, would read a held booking as a revived cancel and deduct it on the
+// very next poll.
+addColumn('retail_orders', 'channel_stock_deferred', 'INTEGER DEFAULT 0');
+
 // Free-text origin for a staff-keyed order whose channel is 'other' — the New
 // order form requires it, so the catch-all bucket stays auditable instead of
 // becoming the next unattributable pile. NULL for every other channel.
