@@ -263,8 +263,46 @@ function _fireRestockPush(orderId, kind, actorTenantUserId) {
       // NO KITCHEN-REALM SEND FOR THIS ONE. Counting a delivery in is Tacet's
       // (tacetOnly on PUT /:id/receive), and the kitchen app has no screen that
       // shows it — a push into that realm would open on nothing.
-      title = `✓ ${label} counted in · 已点收`;
-      body  = compose(toName ? `Counted at ${toName}` : 'Counted in');
+      /* A SHORT DELIVERY CHANGES THIS PUSH RATHER THAN ADDING ONE (§216). Ash
+         was told the gap was invisible and asked for it to be raised; the
+         temptation is a second notification, and it would go to the SAME people
+         this one already reaches — `restock:pick` at the `from` store, per
+         PUSH_AUDIENCE — which is the two-for-one-event mistake §211 exists to
+         avoid. The sender is already being told the boxes were counted. What
+         was missing is WHAT the count said.
+
+         §39 IS WHY THIS MATTERS RATHER THAN BEING A NICETY: the receipt books
+         the COUNTED figure, so Tianhe loses 2 and Yuexiu gains 1 and the
+         business is quietly one short. The row has always carried asked, sent
+         and counted side by side — legible to anyone who opened it, and nobody
+         opens a transfer that already closed.
+
+         SHORT ONLY, DELIBERATELY. An over-count is also a discrepancy and is
+         not an alarm: nothing is missing, and a notification for every extra
+         unit would teach people to swipe these away.
+
+         THE PRODUCT NAMES CARRY THE CHINESE. Bodies on this fan-out are English
+         by existing convention (see every branch above), so the gap is written
+         as names and numerals — `薄荷 4/5` — which need no translating and
+         read the same to both halves of the team. */
+      const gaps = tdb().prepare(`
+        SELECT product_name, product_cn, qty_requested, qty_sent, qty_received
+          FROM restock_items
+         WHERE restock_id = ?
+           AND qty_received IS NOT NULL
+           AND qty_received < COALESCE(qty_sent, qty_requested)
+         ORDER BY id`).all(orderId);
+      if (gaps.length) {
+        const sentOf = (g) => Math.round(g.qty_sent == null ? g.qty_requested : g.qty_sent);
+        const named = gaps.slice(0, 3)
+          .map(g => (g.product_cn || g.product_name || '?') + ' ' + Math.round(g.qty_received) + '/' + sentOf(g))
+          .join(', ');
+        title = `⚠ ${label} short · 短少`;
+        body  = `${gaps.length} short at ${toName}` + (named ? ' · ' + named + (gaps.length > 3 ? '…' : '') : '');
+      } else {
+        title = `✓ ${label} counted in · 已点收`;
+        body  = compose(toName ? `Counted at ${toName}` : 'Counted in');
+      }
       perm  = null;
     } else { return; }
     // Opens the kitchen SPA, which carries the restock module. This pointed at

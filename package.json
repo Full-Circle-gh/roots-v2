@@ -74,6 +74,7 @@
     "test:transfer-done-tab": "node scripts/test_transfer_done_tab.js",
     "test:pick-short-inline": "node scripts/test_pick_short_inline.js",
     "test:pick-undo": "node scripts/test_pick_undo.js",
+    "test:short-delivery-alert": "node scripts/test_short_delivery_alert.js",
     "test:shop-channel": "node scripts/test_shop_channel.js",
     "test:address": "node scripts/test_address_pin.js && node scripts/test_address_clients.js",
     "test:batch-timing": "node scripts/test_batch_timing.js",
