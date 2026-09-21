@@ -940,7 +940,7 @@ const state = {
      walking, which the old screen never had to ask because it ran pinned to
      one. Named pik so it cannot be confused with the local `pk` in the
      packaging screen. */
-  pik:{list:null,stuck:[],tried:false,at:null,dest:'all',step:'list',busy:false,err:'',result:null},
+  pik:{list:null,stuck:[],tried:false,at:null,dest:'all',step:'list',busy:false,err:'',result:null,short:null,shortErr:''},
   /* RECEIVING A TRANSFER (§48) — the STORE end of a stock movement, which is a
      different job from the `rcv*` supplier receiving above: that one counts a
      purchase order in from a supplier, this one counts in what another location
@@ -1183,7 +1183,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   if(route==='askstocksent'){ const m=state.rqs; m.tried=false; m.list=null; m.err=''; }
   if(route==='kitchenready'){ const k=state.kr; k.tried=false; k.pendingTried=false; k.seen=false; k.order=null; k.orderId=null; k.err=''; }
   if(route==='receivexfer'){ const x=state.xfr; x.tried=false; x.order=null; x.orderId=null; x.step='list'; x.held=null; x.err=''; x.typing={}; x.typeErr={}; x.tab='active'; x.doneTried=false; }
-  if(route==='pick'){ const k=state.pik; k.tried=false; k.list=null; k.step='list'; k.result=null; k.err=''; k.dest='all';
+  if(route==='pick'){ const k=state.pik; k.tried=false; k.list=null; k.step='list'; k.result=null; k.err=''; k.dest='all'; k.short=null; k.shortErr='';
     // The freezer is re-asked on every entry where there is a choice: which one
     // they are standing in is a fact about now, not about last time.
     if(pikStores().length>1) k.at=null; }
@@ -1507,7 +1507,9 @@ reg('pikRetry', id=>{
   });
 });
 reg('pikAll', key=>{ const L=pikVisible().find(x=>x.key===String(key)); if(L) pikWriteLine(L,null); });
-reg('pikShort', key=>pikAskShort(String(key)));
+reg('pikShort', key=>pikShortOpen(String(key)));
+reg('pikShortTyped', (id,v)=>pikShortTyped(id,v));
+reg('pikShortCommit', ()=>pikShortCommit());
 reg('pikDispatch', ()=>pikDispatch());
 reg('pikList', ()=>{ const k=state.pik; k.step='list'; k.result=null; k.err=''; k.tried=false; render(); loadPik(true); });
 reg('kqOpen', id=>kqOpen(id));
@@ -10696,32 +10698,68 @@ function pikWriteLine(L,per){
    is its sum, because a number the operator types twice is a number they can
    disagree with themselves about. The remainder still gates the save: nothing
    may be allocated that was not asked for. */
-function pikAskShort(key){
+/* SHORT IS A NUMBER, NOT A SHEET (§213). Ash, off the live Pick screen:
+   *"once clicking short no need pop up screen . it just need to turn into a
+   numbers keyboards, taping a number and enter . once tap enter that's the
+   number selected"*. The same complaint as §210 one screen along, and the same
+   answer: the row already prints the number, so the row can take it.
+
+   A PICK LINE CAN HAVE SEVERAL DESTINATIONS — one product two shops asked for
+   on one run — which is why this is not simply §210 copied. A single-part line
+   (every line on Ash's screen) turns its own figure into the field. A
+   multi-part line opens one field per destination, each labelled with the shop,
+   because two shops short by different amounts is two numbers and no single
+   field can say it.
+
+   EMPTY IS THE WAY OUT, exactly as on the receive screen: the sheet had a
+   Cancel and this has no button at all, so blurring with nothing typed closes
+   the field and writes nothing. Partially filled stays open — a half-answered
+   multi-destination line is not a decision yet.
+
+   THE THREE REFUSALS ARE THE SHEET'S OWN, lifted word for word, so what the
+   picker is told did not change when its container did. */
+function pikShortOpen(key){
+  const k=state.pik;
+  if(k.busy) return;
   const L=pikVisible().find(x=>x.key===key);
   if(!L) return;
-  state.ask={
-    title:T('How many did you find?','找到多少？'),
-    body:L.name+(L.sku?' · '+L.sku:'')+' · '+T('asked for '+L.asked,'申请 '+L.asked),
-    fields:L.parts.map(p=>({id:String(p.itemId),
-      label:p.dest+' · '+T('asked '+p.asked,'申请 '+p.asked), numeric:true, value:''})),
-    validate:v=>{
-      let sum=0;
-      for(const p of L.parts){
-        const raw=String(v[String(p.itemId)]||'').trim();
-        if(!/^\d+$/.test(raw)) return T('Enter a whole number for each store, 0 or more.','每家门店请输入 0 或以上的整数。');
-        const n=parseInt(raw,10);
-        if(n>p.asked) return T('More than was asked for.','超过申请数量。');
-        sum+=n;
-      }
-      if(sum<=0) return T('Nothing to send.','没有可发出的数量。');
-      return null;
-    },
-    run:v=>{
-      const per={};
-      L.parts.forEach(p=>{ per[p.itemId]=parseInt(String(v[String(p.itemId)]).trim(),10); });
-      pikWriteLine(L,per);
-    } };
+  k.short={key:key,vals:{}};
+  k.shortErr='';
+  state.focus={id:'pikshort-'+L.parts[0].itemId,pos:0};
   render();
+}
+/* Stored and nothing else — no render, no state.focus. §210's rule, and the
+   reason is the one learned on the Ask-to-buy screen: a field rebuilt under a
+   thumb drops the soft keyboard and reopens on its letter page. */
+function pikShortTyped(itemId,v){
+  const k=state.pik;
+  if(k.short) k.short.vals[String(itemId)]=String(v==null?'':v);
+}
+function pikShortClose(){ const k=state.pik; k.short=null; k.shortErr=''; render(); }
+/* Called on every blur. Reads the WHOLE line rather than the field that lost
+   focus: one destination answered is not an answer, and committing per field
+   would write half a line. */
+function pikShortCommit(){
+  const k=state.pik;
+  if(!k.short||k.busy) return;
+  const L=pikVisible().find(x=>x.key===k.short.key);
+  if(!L) { pikShortClose(); return; }
+  const raw=p=>String(k.short.vals[String(p.itemId)]==null?'':k.short.vals[String(p.itemId)]).trim();
+  if(L.parts.every(p=>raw(p)==='')) { pikShortClose(); return; }   // nothing typed: never mind
+  if(L.parts.some(p=>raw(p)==='')) { render(); return; }           // still answering
+  let sum=0;
+  for(const p of L.parts){
+    const r=raw(p);
+    if(!/^\d+$/.test(r)){ k.shortErr=T('Enter a whole number for each store, 0 or more.','每家门店请输入 0 或以上的整数。'); render(); return; }
+    const n=parseInt(r,10);
+    if(n>p.asked){ k.shortErr=T('More than was asked for.','超过申请数量。'); render(); return; }
+    sum+=n;
+  }
+  if(sum<=0){ k.shortErr=T('Nothing to send.','没有可发出的数量。'); render(); return; }
+  const per={};
+  L.parts.forEach(p=>{ per[p.itemId]=parseInt(raw(p),10); });
+  k.short=null; k.shortErr='';
+  pikWriteLine(L,per);
 }
 /* THE DISPATCH. One PUT per order, which is what fires _applyDispatch. A
    failure is SHOWN and nothing more — retrying it is its own work, and offering
@@ -12186,15 +12224,37 @@ function screenPick(){
 
   const visible=pikVisible();
   const picked=lines.filter(L=>L.done).length;
+  /* ONE FIELD PER DESTINATION, and on the ordinary one-shop line that is the
+     line's own number turning into a box (§213). `enterkeyhint="done"` so the
+     phone's key finishes it, and the blur finishes it too — a thumb landing
+     anywhere else is somebody done typing. */
+  const shortField=(L,p,solo)=>`<span style="display:flex;flex-direction:column;gap:3px;align-items:${solo?'flex-end':'stretch'}">
+      ${solo?'':`<span style="font-size:11.5px;color:var(--text-secondary)">${escAttr(p.dest)} · ${p.asked}</span>`}
+      <input id="pikshort-${p.itemId}" class="num" inputmode="numeric" enterkeyhint="done"
+        value="${escAttr(k.short&&k.short.vals[String(p.itemId)]!=null?k.short.vals[String(p.itemId)]:'')}"
+        aria-label="${escAttr(T('How many did you find?','找到多少？')+' · '+p.dest+' · '+L.name)}"
+        style="width:74px;height:44px;text-align:center;font-size:20px;font-weight:500;padding:0;
+          border-radius:8px;border:1.5px solid var(--border-focus);background:var(--surface-card);
+          color:var(--text-primary);font-family:inherit"
+        oninput="APP.cmd('pikShortTyped',${p.itemId},this.value)"
+        onblur="APP.cmd('pikShortCommit')"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">
+    </span>`;
+
   const rows=visible.map(L=>{
     const split=L.parts.map(p=>escAttr(p.dest)+' '+(L.done?(p.sent==null?p.asked:p.sent):p.asked)).join(' · ');
+    const shorting=!!(k.short&&k.short.key===L.key);
+    const solo=L.parts.length===1;
     return `<div style="padding:12px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px">
-      <span class="num" style="min-width:44px;font-size:20px;font-weight:500;color:${L.done?'var(--text-secondary)':'var(--text-primary)'}">${L.done?L.sent:L.asked}</span>
+      ${shorting&&solo?'':`<span class="num" style="min-width:44px;font-size:20px;font-weight:500;color:${L.done?'var(--text-secondary)':'var(--text-primary)'}">${L.done?L.sent:L.asked}</span>`}
       <span style="flex:1;min-width:0">
         <span style="display:block;font-size:15px;font-weight:500${L.done?';color:var(--text-secondary)':''}">${escAttr(L.name)}</span>
         <span style="display:block;font-size:12.5px;color:var(--text-secondary)">${split}</span>
+        ${shorting&&k.shortErr?`<span style="display:block;font-size:12.5px;color:var(--brick-ink);margin-top:3px">${escAttr(k.shortErr)}</span>`:''}
       </span>
-      ${L.done
+      ${shorting
+        ? `<span style="display:flex;gap:8px;align-items:center">${L.parts.map(p=>shortField(L,p,solo)).join('')}</span>`
+        : L.done
         ? `<span style="color:var(--sage-ink);display:flex">${ic('circle-check',20)}</span>`
         : `<span style="display:flex;gap:8px">
              <button class="btn2" style="min-height:36px;padding:0 12px;font-size:13px;width:auto"${k.busy?' disabled':''}
