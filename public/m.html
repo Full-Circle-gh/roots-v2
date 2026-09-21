@@ -945,7 +945,7 @@ const state = {
      different job from the `rcv*` supplier receiving above: that one counts a
      purchase order in from a supplier, this one counts in what another location
      sent. Named xfr rather than rcv so the two can never be mistaken for one. */
-  xfr:{list:null,tried:false,order:null,orderId:null,step:'list',held:null,busy:false,err:''},
+  xfr:{list:null,tried:false,order:null,orderId:null,step:'list',held:null,busy:false,err:'',typing:{},typeErr:{}},
   /* WHAT THE KITCHEN HAS FINISHED (§48). The count already lived here — the
      dot polls /api/restock/kitchen-ready — but the LIST behind it was the last
      thing on /stock's launcher that this app could only point at. */
@@ -1182,7 +1182,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   if(route==='askbuysent'){ const m=state.mbs; m.tried=false; m.list=null; m.err=''; }
   if(route==='askstocksent'){ const m=state.rqs; m.tried=false; m.list=null; m.err=''; }
   if(route==='kitchenready'){ const k=state.kr; k.tried=false; k.pendingTried=false; k.seen=false; k.order=null; k.orderId=null; k.err=''; }
-  if(route==='receivexfer'){ const x=state.xfr; x.tried=false; x.order=null; x.orderId=null; x.step='list'; x.held=null; x.err=''; }
+  if(route==='receivexfer'){ const x=state.xfr; x.tried=false; x.order=null; x.orderId=null; x.step='list'; x.held=null; x.err=''; x.typing={}; x.typeErr={}; }
   if(route==='pick'){ const k=state.pik; k.tried=false; k.list=null; k.step='list'; k.result=null; k.err=''; k.dest='all';
     // The freezer is re-asked on every entry where there is a choice: which one
     // they are standing in is a fact about now, not about last time.
@@ -1549,19 +1549,43 @@ reg('batSearch', v=>{
 });
 reg('batBump', (id,d)=>batBump(Number(id),Number(d)));
 reg('batNext', ()=>batContinue());
-reg('xfrAsk', id=>{
+/* THE NUMBER IS THE FIELD (§210). This opened a sheet — a whole modal, a
+   restated title, a Cancel and a Confirm — around ONE number. Ash, off the
+   live screen: *"why having this pop up at all . if I want to change the
+   number I click on the number and type a number . only number keyboard comes
+   up . not better ?"*. It is better, and the sheet was never earning its
+   ceremony: it restated the product name the row was already showing and the
+   sent figure printed underneath it, then asked for the one thing the row
+   could have asked for itself.
+
+   THIS IS THE QUICK-STOCK CONTROL'S PATTERN, NOT A NEW ONE (qsTypeOpen /
+   qsTyped / qsTypeCommit, one screen away): open arms ONE state.focus and
+   renders once, typing renders NEVER, and the digits live in state rather than
+   on the DOM so a repaint this row did not ask for cannot eat them. The rule
+   that shape exists for was learned on the Ask-to-buy screen and is worth
+   restating where it is copied: rebuilding a field under a thumb drops the soft
+   keyboard, and a rebuilt field reopens on its LETTER page — one digit, then
+   the alphabet, then one digit. */
+reg('xfrType', id=>{
   const it=xfrItems().find(y=>y.id===Number(id));
-  if(!it) return;
-  const cur=xfrCount(it);
-  state.ask={ title:T('Count what actually arrived.','清点实际到货数量。'), body:xfrName(it),
-    fields:[{id:'n',label:T('sent','发出')+' '+xfrSent(it),numeric:true,value:cur==null?'':String(cur)}],
-    validate:v=>/^\d+$/.test(String(v.n||'').trim())?null
-      :T('Enter what arrived — a whole number, 0 or more.','请输入到货数量 — 0 或以上的整数。'),
-    run:v=>xfrSaveCount(Number(id), parseInt(String(v.n).trim(),10)) };
+  if(!it||state.xfr.busy) return;
+  const cur=xfrCount(it), seed=cur==null?'':String(cur);
+  state.xfr.typing[it.id]=seed;
+  delete state.xfr.typeErr[it.id];
+  state.focus={id:'xfrnum-'+it.id,pos:seed.length};
   render(); });
+/* Stored and nothing else — no render, no state.focus. The field is not
+   rebuilt by its own typing, so there is no caret to put back, and an armed
+   focus would be spent by whatever rendered next. */
+reg('xfrTyped', (id,v)=>{ state.xfr.typing[Number(id)]=String(v==null?'':v); });
+reg('xfrTypeCommit', id=>xfrTypeCommit(Number(id)));
 reg('xfrTick', id=>{
   const it=xfrItems().find(y=>y.id===Number(id));
-  if(it) xfrSaveCount(it.id, xfrSent(it));
+  if(!it) return;
+  // A field left open over the line being ticked would sit there showing a
+  // figure the tick has just overruled.
+  delete state.xfr.typing[it.id]; delete state.xfr.typeErr[it.id];
+  xfrSaveCount(it.id, xfrSent(it));
 });
 reg('xfrAllArrived', ()=>xfrAllArrived());
 reg('qsFlush', id=>qsFlush(Number(id)));
@@ -10790,7 +10814,7 @@ function xfrName(it){
 }
 function xfrOpen(id){
   const x=state.xfr;
-  x.busy=true; x.err=''; x.order=null; x.held=null; x.orderId=Number(id); render();
+  x.busy=true; x.err=''; x.order=null; x.held=null; x.typing={}; x.typeErr={}; x.orderId=Number(id); render();
   api('/api/restock/'+Number(id)).then(j=>{
     x.order=(j&&j.data)||j; x.busy=false;
     // The list draws in-transit orders and nothing else, so the fallback is a
@@ -10846,6 +10870,31 @@ function xfrSaveCount(itemId,qty){
    Never throws away a count somebody typed: a line already counted keeps its
    figure, so ticking the rest does not overwrite the short line they just
    corrected. */
+/* AN EMPTY FIELD IS NOT ZERO HERE, and that is the one place this parts company
+   with the quick-stock control it copies. There, the field IS the amount, so
+   clearing it means add nothing. Here NULL and 0 are different facts the server
+   holds apart — nobody looked, against none arrived — and the receive endpoint
+   refuses to settle around a NULL for exactly that reason. So a field left empty
+   closes and writes nothing, leaving the line as it was; saying none arrived is
+   typing 0, which is a thing somebody did.
+
+   A NON-NUMBER KEEPS THE FIELD OPEN AND SAYS WHY rather than being stripped to
+   the digits inside it: "1o" silently becoming 1 puts a quantity nobody entered
+   onto a shelf. The sentence is the one the sheet used to say, kept word for
+   word so the refusal did not change when its container did. */
+function xfrTypeCommit(id){
+  const x=state.xfr;
+  if(x.typing[id]==null) return;
+  const raw=String(x.typing[id]).trim();
+  if(raw===''){ delete x.typing[id]; delete x.typeErr[id]; render(); return; }
+  if(!/^\d+$/.test(raw)){
+    x.typeErr[id]=T('Enter what arrived — a whole number, 0 or more.','请输入到货数量 — 0 或以上的整数。');
+    state.focus={id:'xfrnum-'+id,pos:raw.length};
+    render(); return;
+  }
+  delete x.typing[id]; delete x.typeErr[id];
+  xfrSaveCount(id, parseInt(raw,10));
+}
 function xfrAllArrived(){
   const x=state.xfr;
   if(x.busy||!x.order) return;
@@ -11933,16 +11982,34 @@ function screenReceiveTransfer(){
       <div>${items.map(it=>{
         const got=xfrCount(it);
         const full=got===xfrSent(it);
+        const typing=x.typing[it.id];
+        const terr=x.typeErr[it.id];
+        /* THE NUMBER IS THE FIELD, and when it is open it IS the number — no
+           second copy of the figure beside it to disagree with what is being
+           typed. `enterkeyhint="done"` so the phone's own key commits, and the
+           blur commits too, because a thumb landing anywhere else on the screen
+           is somebody finishing. */
+        const numCell = typing!=null
+          ? `<input id="xfrnum-${it.id}" class="num" inputmode="numeric" enterkeyhint="done"
+               value="${escAttr(typing)}" aria-label="${escAttr(T('Count what actually arrived.','清点实际到货数量。')+' · '+xfrName(it))}"
+               style="width:82px;height:44px;text-align:center;font-size:20px;font-weight:500;padding:0;
+                 border-radius:8px;border:1.5px solid var(--border-focus);background:var(--surface-card);
+                 color:var(--text-primary);font-family:inherit"
+               oninput="APP.cmd('xfrTyped',${it.id},this.value)"
+               onblur="APP.cmd('xfrTypeCommit',${it.id})"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur()}">`
+          : `<button class="num" style="min-width:52px;height:44px;padding:0 8px;text-align:right;background:none;border:0;
+                 font-family:inherit;cursor:pointer;font-size:20px;font-weight:500;
+                 color:${got==null?'var(--text-secondary)':(full?'var(--text-primary)':'var(--amber-ink)')}"
+               aria-label="${escAttr(T('Count what actually arrived.','清点实际到货数量。')+' · '+xfrName(it))}"
+               onclick="APP.cmd('xfrType',${it.id})">${got==null?'—':got}</button>`;
         return `<div style="width:100%;border-top:1px solid var(--border-default);padding:8px 16px;display:flex;align-items:center;gap:10px">
-          <button style="flex:1;min-width:0;text-align:left;display:flex;align-items:center;gap:12px;padding:6px 0;
-              background:none;border:0;font-family:inherit;color:inherit;min-height:44px;cursor:pointer"
-            onclick="APP.cmd('xfrAsk',${it.id})">
-            <span style="flex:1;min-width:0">
-              <span style="display:block;font-size:15px;font-weight:500">${escAttr(xfrName(it))}</span>
-              <span style="display:block;font-size:13px;color:var(--text-secondary)">${T('sent','发出')} <span class="num">${xfrSent(it)}</span></span>
-            </span>
-            <span class="num" style="font-size:20px;font-weight:500;color:${got==null?'var(--text-secondary)':(full?'var(--text-primary)':'var(--amber-ink)')}">${got==null?'—':got}</span>
-          </button>
+          <span style="flex:1;min-width:0">
+            <span style="display:block;font-size:15px;font-weight:500">${escAttr(xfrName(it))}</span>
+            <span style="display:block;font-size:13px;color:var(--text-secondary)">${T('sent','发出')} <span class="num">${xfrSent(it)}</span></span>
+            ${terr?`<span style="display:block;font-size:13px;color:var(--brick-ink);margin-top:3px">${escAttr(terr)}</span>`:''}
+          </span>
+          ${numCell}
           <button aria-label="${escAttr(T('All here','到齐')+' · '+xfrName(it))}"
             style="width:44px;height:44px;flex:none;border-radius:999px;display:flex;align-items:center;justify-content:center;
               background:${full?'var(--sage-ink)':'transparent'};border:${full?'0':'1.5px solid var(--edge)'};

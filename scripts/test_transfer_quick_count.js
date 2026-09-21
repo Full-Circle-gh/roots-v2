@@ -52,14 +52,23 @@ const ALL = (() => {
   const i = M.indexOf('function xfrAllArrived(){');
   return i < 0 ? '' : M.slice(i, M.indexOf('\nfunction ', i + 10));
 })();
+const slice = (start, from) => {
+  const i = M.indexOf(start, from || 0);
+  return i < 0 ? '' : M.slice(i, M.indexOf('\n});', i) + 4);
+};
+const COMMIT = (() => {
+  const i = M.indexOf('function xfrTypeCommit(id){');
+  return i < 0 ? '' : M.slice(i, M.indexOf('\nfunction ', i + 10));
+})();
+const TYPE = slice("reg('xfrType', id=>{");
 
 section('1. the two doors exist and are wired');
 ok(/onclick="APP\.cmd\('xfrAllArrived'\)"/.test(M), 'the band calls xfrAllArrived');
 ok(/onclick="APP\.cmd\('xfrTick',\$\{it\.id\}\)"/.test(M), 'each row has a tick that calls xfrTick with its line');
-ok(/reg\('xfrTick',[\s\S]{0,140}?xfrSaveCount\(it\.id, xfrSent\(it\)\)/.test(M),
+ok(/reg\('xfrTick',[\s\S]{0,600}?xfrSaveCount\(it\.id, xfrSent\(it\)\)/.test(M),
    'xfrTick counts the line in at what was sent, through the existing save');
-ok(/onclick="APP\.cmd\('xfrAsk',\$\{it\.id\}\)"/.test(M),
-   'and the keypad is still reachable — a count that is not qty_sent must stay sayable');
+ok(/onclick="APP\.cmd\('xfrType',\$\{it\.id\}\)"/.test(M),
+   'and the number opens a field — a count that is not qty_sent must stay sayable');
 
 section('2. the band goes through the confirm screen, not around it');
 ok(ALL.length > 0, 'xfrAllArrived exists');
@@ -84,13 +93,41 @@ ok(!/xfrCount\(it\)\?\?xfrSent\(it\)/.test(M) && !/qty_received:xfrSent\(it\)\}\
 ok(!/xfrStep|xfrBump|xfrPlus|xfrMinus/.test(M),
    'and no stepper was added — the rejected option stays rejected');
 
-section('5. the band is a whole-delivery act, drawn as one');
+section('5. the number is the field — no sheet around one digit (§210)');
+ok(!/state\.ask=\{ title:T\('Count what actually arrived/.test(M),
+   'the modal sheet is gone from this screen');
+ok(/<input id="xfrnum-\$\{it\.id\}"[\s\S]{0,200}?inputmode="numeric"/.test(M),
+   'the number opens an inline field, and it asks for the number pad');
+ok(/enterkeyhint="done"/.test(M), "and the phone's own key commits it");
+ok(/onblur="APP\.cmd\('xfrTypeCommit',\$\{it\.id\}\)"/.test(M),
+   'a thumb landing elsewhere commits too');
+// The whole reason this pattern and not a simpler one: a field rebuilt under a
+// thumb drops the soft keyboard and reopens on its letter page.
+ok(/reg\('xfrTyped', \(id,v\)=>\{ state\.xfr\.typing\[Number\(id\)\]=String\(v==null\?'':v\); \}\);/.test(M),
+   'typing stores and nothing else — no render, no state.focus');
+ok(/state\.focus=\{id:'xfrnum-'\+it\.id,pos:seed\.length\}/.test(M),
+   'opening arms exactly one focus, spent by the render on the next line');
+ok(TYPE.indexOf('render()') > -1 && !/render\(\);[\s\S]*render\(\)/.test(TYPE),
+   'and opening renders once');
+
+section('6. an empty field is not zero, and a non-number is refused');
+ok(/if\(raw===''\)\{ delete x\.typing\[id\]; delete x\.typeErr\[id\]; render\(\); return; \}/.test(COMMIT),
+   'clearing the field writes nothing — NULL and 0 are different facts');
+ok(/if\(!\/\^\\d\+\$\/\.test\(raw\)\)\{/.test(COMMIT),
+   '"1o" is refused rather than stripped to 1');
+ok(/Enter what arrived — a whole number, 0 or more\./.test(COMMIT)
+   && /请输入到货数量 — 0 或以上的整数。/.test(COMMIT),
+   'in the sentence the sheet used to say, word for word, both halves');
+ok(/xfrSaveCount\(id, parseInt\(raw,10\)\)/.test(COMMIT),
+   'and a real number goes through the existing save, holding rules intact');
+
+section('7. the band is a whole-delivery act, drawn as one');
 ok(/const allTicked=items\.length>0&&items\.every\(it=>xfrCount\(it\)===xfrSent\(it\)\)/.test(M),
    'it knows when there is nothing left for it to do');
 ok(/x\.busy\|\|allTicked\?' disabled':''/.test(M),
    'and disables itself then, rather than offering a no-op');
 
-section('6. the composed Chinese is declared');
+section('8. the composed Chinese is declared');
 ok(/T\('Everything arrived','全部到货'\)/.test(M), "the band says 'Everything arrived · 全部到货'");
 ok(/T\('All here','到齐'\)/.test(M), "the tick says 'All here · 到齐'");
 ok(/\|\s*Everything arrived\s*\|\s*全部到货\s*\|/.test(V),
@@ -100,7 +137,7 @@ ok(/\|\s*All here\s*\|\s*到齐\s*\|/.test(V),
 ok(/Composed by[\s\S]{0,400}?§209|§209[\s\S]{0,4000}?Composed by/.test(V),
    'both marked composed, and by whom');
 
-section('7. the tick is reachable without sight or a fine fingertip');
+section('9. the tick is reachable without sight or a fine fingertip');
 ok(/aria-label="\$\{escAttr\(T\('All here','到齐'\)\+' · '\+xfrName\(it\)\)\}"/.test(M),
    'the icon-only tick carries an accessible name naming its line');
 ok(/width:44px;height:44px/.test(M), 'and is a 44px target');
