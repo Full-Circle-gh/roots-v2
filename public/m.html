@@ -999,6 +999,11 @@ const state = {
      Ask-for-stock screen's `rq` the way `mbs` is named for `mb`. */
   rqs:{list:null,tried:false,err:''},
   pickWaiting:0,
+  /* §215 — WHO is waiting and SINCE WHEN, beside the count. The Pick row's dot
+     needs neither; Home's "Needs you" row is a sentence and this is what fills
+     it. Held apart from `pickWaiting` because that number is read by the dot on
+     every screen and must not depend on this ever arriving. */
+  pickAsking:{shop_count:0,oldest_at:null,shops:[]},
   /* AN EXPENSE CLAIM (§87 step two). What one employee spent on the shop's
      behalf, before anybody has approved it — so nothing on this screen is money
      in the books, and the copy says so rather than leaving it to be assumed.
@@ -15566,7 +15571,14 @@ function fapiaoMonthEnd(){
 /* Severity, then oldest first, and a fire with no clock sorts last — a state
    cannot be ranked by how long it has waited. */
 function opsFires(){
-  const o=state.ops; if(!o) return null;
+  /* §215 — NO LONGER GATED ON THE SNAPSHOT HAVING ARRIVED. Every fire below but
+     one is built from /dashboard/ops, and bailing on a null `o` was the cheap
+     way to say "nothing to draw yet". The stock-request row does not come from
+     that snapshot — it rides the Pick poll, which answers on its own clock —
+     and a shop waiting on stock must not be invisible because an unrelated
+     dashboard call is slow or has failed. With `o` empty every `c(...)` reads
+     0, so the list is empty exactly as it was before. */
+  const o=state.ops||{};
   const f=[];
   // Ranked by how long the oldest thing in each queue has waited, so a
   // two-day restock outranks a refund from an hour ago. A fire with no clock
@@ -15696,6 +15708,56 @@ function opsFires(){
       c('batch_owed'),boIt,
       boNm.length?boNm.join(T(', ','，'))+(boRest>0?' +'+boRest+' '+T('more','更多'):''):'',
       "APP.cmd('push','kitchenqueue')");
+  }
+  /* §215 — A SHOP HAS ASKED THIS ONE FOR STOCK. Reported by Ash off the live
+     Home, pointing at the "Needs you" list: "if shop has asked for stock it
+     should show here". It did not, and the argument is §198's own, one screen
+     further on: that request announced itself with a push — one moment on one
+     phone, possibly in a pocket — and after that it was a 6px dot on More,
+     which is a mark you find only if you already know to look. Home is the
+     screen the day starts on.
+
+     THE DOT STAYS, exactly as it does for the kitchen row above: it is what
+     carries the fact on every screen that is NOT Home, and on a flatNav role it
+     is the only mark there is. Both read the same count, so neither can outlive
+     the other.
+
+     `waitingToPick()` RATHER THAN THE RAW COUNT, so the row inherits the gate
+     the dot already has — a fire must never promise work behind a door this
+     operator cannot open, and the Pick screen is `restock:pick`. The server
+     applies the same gate again and answers 0.
+
+     THE PILL COUNTS REQUESTS AND THE LINE NAMES SHOPS, which are two
+     denominators, so the tail counts off SHOPS (`shop_count`) and never the
+     pill's number — "+1 more" under a pill reading 3 would otherwise mean
+     neither. Two names then the tail, as the kitchen row does with products.
+
+     IT CARRIES A CLOCK and the clock is real: `oldest_at` is the moment the
+     earliest of these was sent, so "oldest 3h" is measured rather than
+     invented — which is why this row sorts above Restock, whose age is
+     deliberately null. */
+  const pikN=waitingToPick();
+  if(pikN){
+    const pk=state.pickAsking||{};
+    const pkNm=(pk.shops||[]).map(x=>(LANG==='en'?(x.name_en||x.name_cn):(x.name_cn||x.name_en))||'')
+      .filter(Boolean).slice(0,2);
+    const pkRest=Math.max(0,Number(pk.shop_count||0)-pkNm.length);
+    const pkAge=pk.oldest_at?oldestOf([{waiting_since:pk.oldest_at}]):'';
+    const pkMeta=[
+      pkNm.length?pkNm.join(T(', ','，'))+(pkRest>0?' +'+pkRest+' '+T('more','更多'):''):'',
+      pkAge?T('oldest '+pkAge,'最久 '+pkAge):'',
+    ].filter(Boolean).join(T(', ','，'));
+    /* NOT "Stock requests · 补货申请", though that pair is live on the desktop
+       and would have cost nothing. This app ALREADY has a row called `Your
+       stock requests · 我的补货申请` — the asker's own list, what I asked other
+       shops FOR — and this row is its mirror image: what other shops have asked
+       OF me. Two rows a thumb apart whose names differ by one word is how an
+       operator opens the wrong one. The name says who is asking, which is the
+       whole difference. Declared in docs/tacet-delivery-vocabulary.md. */
+    f.push({sev:'amber',icon:'route',label:T('Shops asking for stock','门店补货申请'),n:pikN,
+      meta:pkMeta,age:false,
+      mins:pk.oldest_at?oldestMins([{waiting_since:pk.oldest_at}]):null,
+      go:"APP.cmd('push','pick')"});
   }
   const oos=c('out_of_stock'), low=c('low_stock');
   if(oos+low){
@@ -20991,6 +21053,13 @@ function pollKitchenReady(){
    login screen. */
 const PICK_POLL_MS=60000;
 let _pickPrev=null, _pickBusy=false;
+/* Everything this poll puts on the glass, as one string: the dot's lit/unlit,
+   and the three facts §215's Home row prints. */
+function _pickSig(){
+  const a=state.pickAsking||{};
+  return [state.pickWaiting>0?1:0,state.pickWaiting,a.shop_count||0,a.oldest_at||'',
+          (a.shops||[]).map(s=>s.id).join('-')].join('|');
+}
 function pollPickWaiting(){
   if(!canRoute('pick')||_pickBusy) return;
   _pickBusy=true;
@@ -21002,17 +21071,26 @@ function pollPickWaiting(){
       if(!d) return;
       const n=Number(d.count||0);
       const arrived=_pickPrev!==null&&n>_pickPrev;
-      const litBefore=state.pickWaiting>0;
+      /* §215 — THE SAME POLL NOW FEEDS A ROW AS WELL AS A DOT, so what the
+         repaint has to notice has grown with it. A dot only changes when it
+         lights or goes out; the Home row prints the COUNT, the shops' NAMES and
+         the AGE, and any of the three can move while the dot sits still — one
+         of two waiting requests being picked leaves the dot lit and the row
+         wrong. The signature is what is actually on the glass, so a tick that
+         changes nothing visible still costs nothing. */
+      const before=_pickSig();
       _pickPrev=n; state.pickWaiting=n;
+      state.pickAsking={shop_count:Number(d.shop_count||0),oldest_at:d.oldest_at||null,
+                        shops:Array.isArray(d.shops)?d.shops:[]};
       if(arrived){
         showToast(n>1?T(n+' shops are waiting on you',n+' 家门店正在等待发货')
                      :T('A shop has asked you for stock','有门店向你发起补货申请'));
         return;   // showToast has already repainted
       }
-      /* Repaint only when the dot actually changes state — render() rewrites
+      /* Repaint only when something visible actually changed — render() rewrites
          the app in one innerHTML and would throw away the scroll position of
          whatever list is being read. */
-      if((state.pickWaiting>0)!==litBefore) render();
+      if(_pickSig()!==before) render();
     }).catch(()=>{ _pickBusy=false; });
 }
 /* Gated on the row it points at, for the reason readyFromKitchen is: a dot must

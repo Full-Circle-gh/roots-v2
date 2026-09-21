@@ -102,6 +102,12 @@ const SRC = [
   sliceBlock(M_HTML, 'function fapiaoMonthEnd()'),
   sliceBlock(M_HTML, 'function oldestMins(items)'),
   sliceBlock(M_HTML, 'function oldestOf(items)'),
+  /* §215's row asks whether this operator can pick BEFORE it asks whether
+     anything is waiting — the count it draws is `waitingToPick()`, not the raw
+     state, so the gate cannot be lost in a later edit. Every other capability
+     call in opsFires sits behind a count and short-circuits on an empty
+     payload; this one does not, so the real function comes along. */
+  sliceBlock(M_HTML, 'function waitingToPick()'),
   sliceBlock(M_HTML, 'function opsFires()'),
 ].join(';\n');
 
@@ -110,7 +116,11 @@ function ctxWith(state) {
   // §1.18 shapes drift here without anything noticing. TD_TZ is left unset so
   // its own fallback stands, which is the store zone the runner already pins
   // the process to.
-  const ctx = { state, T: (en) => en, LANG: 'en', tdWhen,
+  /* canRoute is stubbed OPEN rather than sliced: it reaches ROUTE_CAP, mCan
+     and the whole capability tree, none of which this file is about. What is
+     under test here is the SHAPE of the fires — an operator who cannot reach a
+     screen is the m-probe suites' subject, with a real app around them. */
+  const ctx = { state, T: (en) => en, LANG: 'en', tdWhen, canRoute: () => true,
     Date, Math, Number, String, isNaN };
   vm.createContext(ctx);
   // `const` is block-scoped to the script and never lands on the context
