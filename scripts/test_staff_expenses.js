@@ -1311,5 +1311,223 @@ it('re-filing drops the ledger caches it just invalidated', () => {
   assert.match(fn[0], /FIN_DATA = null/, 'and so is the staircase');
 });
 
+console.log('\n10 · correcting who paid (§207)');
+
+it('the route exists, is gated on approve alone, and is mapped above the generic prefix', () => {
+  assert.match(ROUTE_CODE, /router\.post\('\/api\/retail-admin\/staff-expenses\/:id\/paid-by', requireRetailAdmin, requireApprover/,
+    'it asserts whether the business owes a person money — that is /settle\'s axis, not a heading');
+  // Below `staff-expenses` the general rule returns `expenses:submit`, which
+  // EVERY floor preset holds — so a submitter could mark their own approved
+  // claim as own-money and conjure a debt the shop would pay out.
+  const mapped = CAPROUTES.indexOf("paid-by$/.test(P)) return 'expenses:approve'");
+  const generic = CAPROUTES.indexOf("P.startsWith('/api/retail-admin/staff-expenses')");
+  assert.ok(mapped > 0, 'the route must be mapped in cap-routes at all, on expenses:approve');
+  assert.ok(mapped < generic, 'and above the prefix that would gate it on expenses:submit');
+});
+
+it('it writes ONE column and calls no poster at all', () => {
+  const fn = ROUTE_CODE.slice(ROUTE_CODE.indexOf("staff-expenses/:id/paid-by'"));
+  const body = fn.slice(0, fn.indexOf('\n});'));
+  assert.match(body, /UPDATE staff_expenses SET paid_by = \? WHERE id = \?/);
+  assert.ok(!/postClaim|postRetailPOExpenses|expense_entries/.test(body),
+    'the ledger row does not read paid_by — a re-post here would take a new id for an unchanged row');
+  assert.ok(!/withTransaction/.test(body),
+    'one column on one table needs no transaction, which is the shape /settle has');
+});
+
+it('and the claim it is about is the ONE thing the poster must keep ignoring', () => {
+  /* THE ROUTE'S WHOLE DESIGN RESTS ON THIS. If `postClaim` or
+     `claimDescription` ever reads `paid_by`, the route above becomes a silent
+     no-op on the books: the claim says one thing, the ledger another, and
+     nothing on screen says so. Asserted here as well as end-to-end in
+     test_staff_expenses_transaction_timing.js, because this is the file a
+     change to lib/expense-posting.js is most likely to be run against. */
+  assert.ok(!/paid_by|paidBy/.test(POSTING),
+    'lib/expense-posting.js must not read who paid — see the /paid-by route header');
+});
+
+it('it refuses a settled claim, where re-filing allows one', () => {
+  const fn = ROUTE_CODE.slice(ROUTE_CODE.indexOf("staff-expenses/:id/paid-by'"));
+  const body = fn.slice(0, fn.indexOf('\n});'));
+  // Marking an already-repaid claim as company-paid says the business never
+  // owed money it has already handed over — a real transfer with nothing
+  // behind it. /decide and /void refuse a settled claim for the same class of
+  // reason, and this borrows their sentence rather than minting a second one.
+  assert.match(body, /if \(claim\.settled\) return res\.status\(409\)\.json\(\{ error: ERR\.settled \}\)/);
+  assert.match(body, /claim\.status !== 'approved'.*ERR\.notApprovedPaid/s);
+});
+
+it('it does NOT refuse a claim on a purchase order, though /category does', () => {
+  // That refusal is about the ledger — the order owns the cost, so a category
+  // set on the claim moves nothing. This route never touches the ledger, and
+  // somebody who paid out of their own pocket is owed the money whether the
+  // goods have arrived or not. Refusing would leave the one debt nobody could
+  // correct.
+  const fn = ROUTE_CODE.slice(ROUTE_CODE.indexOf("staff-expenses/:id/paid-by'"));
+  const body = fn.slice(0, fn.indexOf('\n});'));
+  assert.ok(!/po_id|awaiting_delivery/.test(body));
+});
+
+it('who paid stays a CLOSED set — the route reuses the validator\'s Set, not a copy', () => {
+  // Two copies of a closed set is how the third spelling gets in, and a third
+  // spelling of "my own money" is a debt nobody can query for.
+  assert.match(ROUTE_CODE, /require\('\.\.\/lib\/expense-claim'\)/);
+  assert.match(ROUTE_CODE, /PAID_BY/);
+  assert.match(ROUTE_CODE, /!PAID_BY\.has\(paidBy\)\) return res\.status\(400\)\.json\(\{ error: CLAIM_ERR\.paidBy \}\)/);
+  assert.ok(!/new Set\(\['company', 'employee'\]\)/.test(ROUTE_CODE),
+    'the route must not declare a second copy of the set');
+});
+
+it('the decision carries it, COALESCEd so an older client blanks nothing', () => {
+  // A blank `paid_by` has no meaning at all — it is the field that decides
+  // whether a debt exists — so a bare assignment here is worse than the same
+  // mistake would have been for the category.
+  assert.match(ROUTE_CODE, /paid_by = COALESCE\(\?, paid_by\)/);
+  assert.match(ROUTE_CODE, /const filedPaidBy = decision === 'approve' && paidByRaw \? paidByRaw : null;/);
+});
+
+it('the correction is logged with the value it replaced, on both paths', () => {
+  /* IT OVERRIDES WHAT THE SUBMITTER ASSERTED, and §87 part five's rule for
+     that is that the RECORD is the guard rather than a refusal. A log that
+     reported only the new value would be indistinguishable from the claim
+     having always said this, which is the whole point of recording it. */
+  assert.match(ROUTE_CODE, /was_paid_by: claim\.paid_by/);
+  assert.match(ROUTE_CODE, /was_paid_by: \(filedPaidBy && filedPaidBy !== claim\.paid_by\) \? claim\.paid_by : undefined/);
+});
+
+/* THE PICKER, RUN RATHER THAN GREPPED — the technique section 9 uses on the
+   category cell, and for the same reason: a source assertion cannot see two
+   rows marked `selected` or a value that reaches the markup unescaped. */
+function paidCellCtx(which) {
+  const ctx = {
+    Map, Array, String, Number, Object,
+    escapeHtml: (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;'),
+  };
+  ctx.escapeAttr = ctx.escapeHtml;
+  ctx.escAttr = ctx.escapeHtml;
+  ctx.cuT = (en) => en;
+  ctx.T = (en) => en;
+  vm2.createContext(ctx);
+  if (which === 'desk') {
+    const src = DESK.slice(DESK.indexOf('function finAprPaidable('), DESK.indexOf('window.finAprPaidPick'));
+    ctx.FIN_APR_PAID = {};
+    ctx.FIN_APR_BUSY = 0;
+    new vm2.Script(src + '\nthis.cell = finAprPaidCell;').runInContext(ctx);
+  } else {
+    const src = PHONE.slice(PHONE.indexOf('function aprPaidable('), PHONE.indexOf('function aprRow('));
+    ctx.state = { apr: { paid: {}, busy: 0 } };
+    new vm2.Script(src + '\nthis.cell = aprPaidCell;').runInContext(ctx);
+  }
+  return ctx;
+}
+const PAID_WAITING  = { id: 9, status: 'submitted', paid_by: 'employee', settled: 0, awaiting_delivery: 0, po_id: null };
+const PAID_APPROVED = { id: 9, status: 'approved',  paid_by: 'employee', settled: 0, awaiting_delivery: 0, po_id: null };
+
+for (const which of ['desk', 'phone']) {
+  it(`${which}: two options, exactly one marked, and the claim's own is the one`, () => {
+    const ctx = paidCellCtx(which);
+    const html = ctx.cell(PAID_APPROVED);
+    assert.strictEqual((html.match(/<option/g) || []).length, 2, 'who paid is a closed set of two');
+    assert.strictEqual((html.match(/selected/g) || []).length, 1, 'two marked rows is a browser coin-toss');
+    assert.match(html, /value="employee" selected/);
+    assert.strictEqual((html.match(/<\/select>/g) || []).length, 1);
+    assert.match(ctx.cell({ ...PAID_APPROVED, paid_by: 'company' }), /value="company" selected/);
+  });
+
+  it(`${which}: there is NO blank option, unlike the category`, () => {
+    // A category may honestly be "not yet"; who paid may not. It is the field
+    // that decides whether a debt exists, and the validator refuses a third
+    // answer for exactly that reason.
+    const ctx = paidCellCtx(which);
+    assert.ok(!/value=""/.test(ctx.cell(PAID_WAITING)));
+    assert.ok(!/value=""/.test(ctx.cell(PAID_APPROVED)));
+  });
+
+  it(`${which}: a claim that has never said returns the safe half of the pair`, () => {
+    // `paid_by` is NOT NULL in practice, but a row read from an older write, or
+    // a payload that lost the field, must not render with nothing selected —
+    // the operator would then be one click from setting a value they never
+    // chose. `company` is the half that owes nobody.
+    const ctx = paidCellCtx(which);
+    assert.match(ctx.cell({ ...PAID_APPROVED, paid_by: null }), /value="company" selected/);
+  });
+
+  it(`${which}: it is offered on a waiting claim and an approved one, and nowhere else`, () => {
+    const ctx = paidCellCtx(which);
+    assert.ok(ctx.cell(PAID_WAITING), 'a waiting claim — it rides with the Approve click');
+    assert.ok(ctx.cell(PAID_APPROVED), 'and an approved one — this is the half nothing could do before');
+    // A settled claim: the server refuses it, and the screen says so before the
+    // click rather than after it.
+    assert.strictEqual(ctx.cell({ ...PAID_APPROVED, settled: 1 }), '');
+    assert.strictEqual(ctx.cell({ ...PAID_APPROVED, status: 'rejected' }), '');
+    assert.strictEqual(ctx.cell({ ...PAID_APPROVED, status: 'voided' }), '');
+  });
+
+  it(`${which}: a purchase order does NOT withdraw it, though it withdraws the category`, () => {
+    // The debt is owed whether the food processor has arrived or not.
+    const ctx = paidCellCtx(which);
+    assert.ok(ctx.cell({ ...PAID_APPROVED, awaiting_delivery: 1 }));
+    assert.ok(ctx.cell({ ...PAID_APPROVED, po_id: 12 }));
+  });
+
+  it(`${which}: the two rows send to two different places`, () => {
+    // Crossed, a correction on an approved claim would sit in memory and never
+    // reach the books, or a waiting claim would be written before it was
+    // decided.
+    const ctx = paidCellCtx(which);
+    assert.match(ctx.cell(PAID_WAITING), /PaidPick/);
+    assert.ok(!/PaidPick/.test(ctx.cell(PAID_APPROVED)));
+    assert.match(ctx.cell(PAID_APPROVED), /aprPaidSet|finAprPaidSet/);
+  });
+
+  it(`${which}: the picker is LABELLED, where the category picker is not`, () => {
+    // Every option in a category picker is a category and it announces itself.
+    // `own money / company` read cold beside a name and an amount could be a
+    // payment method, a supplier or an account.
+    const ctx = paidCellCtx(which);
+    assert.match(ctx.cell(PAID_APPROVED), /Who paid/);
+  });
+}
+
+it('the meta line does not say who paid twice on a row that carries the picker', () => {
+  // The rule the blank category already follows: said only where no picker
+  // follows, and the one that can be changed is the one worth reading.
+  assert.match(codeOnly(CLIENT), /if \(!whoPaid\) bits\.push\(r\.paid_by === 'employee'/);
+  assert.match(PHONE_CODE, /if\(!whoPaid\) bits\.push\(own\?/);
+});
+
+it('the pick rides WITH the approval, and only where it actually differs', () => {
+  // Sending it unchanged would be a no-op the server has to absorb; sending it
+  // on a reject would be an edit made in passing.
+  for (const [name, src] of [['desk', codeOnly(CLIENT)], ['phone', PHONE_CODE]]) {
+    assert.match(src, /decision === 'approve' && paid && row && paid !== row\.paid_by|decision==='approve'&&paid&&row&&paid!==row\.paid_by/,
+      `${name}: the pick must be sent only on approve and only when it moves`);
+  }
+});
+
+it('a pick made on a waiting claim survives opening the receipt', () => {
+  // Held in the DOM alone it would be thrown away by the very act of checking
+  // the photo before approving — the queue re-renders for reasons that have
+  // nothing to do with the pick.
+  assert.match(codeOnly(CLIENT), /let FIN_APR_PAID = \{\};/);
+  assert.match(codeOnly(CLIENT), /delete FIN_APR_PAID\[claim\];/);
+  assert.match(PHONE_CODE, /paid:\{\}/);
+  assert.match(PHONE_CODE, /delete a\.paid\[Number\(id\)\];/);
+});
+
+it('the correction drops the Transactions cache and NOT the staircase', () => {
+  /* THE OMISSION IS THE POINT, and it is the one place this parts company with
+     re-filing. A decision drops both because it writes `expense_entries`; this
+     writes one column on `staff_expenses` and no total in Finance moves by a
+     fen. What DOES go stale is the Transactions list, which prints
+     `Staff claim · own money` off this very field. */
+  const fn = codeOnly(CLIENT).match(/finAprPaidSet = async function[\s\S]*?^\};/m);
+  assert.ok(fn, 'the desktop correction call must exist');
+  assert.match(fn[0], /FIN_TX = null; FIN_TX_SEEN = false;/, 'the row whose mark reads off paid_by');
+  assert.ok(!/FIN_DATA = null/.test(fn[0]),
+    'no total moved — dropping the staircase would re-pull the whole of Finance for nothing');
+});
+
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

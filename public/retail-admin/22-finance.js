@@ -2231,6 +2231,11 @@ let FIN_APR_SHOT = null;     // the receipt currently open: { id, data, err }
    very act of checking the photo before approving. Keyed by claim id, cleared
    when that claim is decided. */
 let FIN_APR_CAT = {};
+/* §207 — WHO PAID, CHOSEN ON A WAITING CLAIM, same mechanism and same reason as
+   the category above it: it rides with the Approve click, so it has to survive
+   every re-render that happens between the two. Keyed by claim id, cleared when
+   that claim is decided. */
+let FIN_APR_PAID = {};
 
 /* THE ROW IS BUSY, NOT THE SCREEN. Ported verbatim from the phone's reasoning:
    a manager working down a queue of six clicks the next one while the last is
@@ -2455,6 +2460,105 @@ window.finAprCatPick = function finAprCatPick(id, value) {
   FIN_APR_CAT[Number(id)] = String(value == null ? '' : value);
 };
 
+/* ── §207 — WHO PAID, AND THE APPROVER CAN CHANGE IT ────────────────────────
+   Ash, off this very screen: *"whoever in charge of approval should be able to
+   change own money to company money if needed"*. The person at the till taps
+   *My own money* out of habit having actually paid on the shop's account, and
+   the claim then sits in **Owed to your team** as a debt the business does not
+   owe — until somebody transfers real money against it. Before this the only
+   way out was to void the claim and ask them to send it again.
+
+   **IT IS AN EDIT OF WHAT THE SUBMITTER SAID, AND THAT IS DELIBERATE.** The
+   amount, the note and the date stay theirs — only the person who spent the
+   money knows those. Which account it left is a fact about the shop's
+   statements, and the approver is the one holding them. The record is the guard,
+   not a refusal: the server logs the value it replaced, §87 part five's own
+   argument.
+
+   **NO MONEY MOVES IN THE BOOKS.** `lib/expense-posting.js` never reads
+   `paid_by` — the ledger row is identical either way. What changes is whether
+   the business still owes a person.
+
+   A TWO-OPTION <select>, NOT A PAIR OF CHIPS, because it sits beside the
+   category picker on the same row and a second control shaped differently would
+   read as a different kind of act. The phone's expense FORM uses chips, and that
+   is right where a claim is typed one-handed; this is a correction, made once,
+   on a desktop.
+
+   OFFERED ON A WAITING CLAIM AND ON AN APPROVED, UNSETTLED ONE. Not on a
+   settled one — the server refuses it, because saying the business never owed
+   money it has already handed back leaves a real transfer with nothing behind
+   it. Not on a rejected or voided one: there is no debt either way. Said before
+   the click rather than after it, the rule §146's picker already follows.
+
+   UNLIKE THE CATEGORY, A PURCHASE ORDER DOES NOT WITHDRAW IT. That refusal is
+   about the ledger, and this touches none: somebody who paid for a food
+   processor out of their own pocket is owed the money whether it has arrived or
+   not. */
+function finAprPaidable(r) {
+  if (r.status === 'submitted') return true;
+  return r.status === 'approved' && !Number(r.settled);
+}
+
+function finAprPaidCell(r) {
+  if (!finAprPaidable(r)) return '';
+  const waiting = r.status === 'submitted';
+  // `undefined` rather than a falsy test, for the reason the category cell gives
+  // one line of its own: both values here are truthy, but the habit is what
+  // keeps the two cells reading alike.
+  const chosen = waiting && FIN_APR_PAID[r.id] !== undefined
+    ? FIN_APR_PAID[r.id] : (r.paid_by === 'employee' ? 'employee' : 'company');
+  // NO BLANK OPTION, and that is the difference from the category. A category
+  // may honestly be "not yet"; who paid may not — it is the field that decides
+  // whether a debt exists, and the validator refuses a third answer for exactly
+  // that reason (lib/expense-claim.js, PAID_BY).
+  const opts = [['employee', cuT('own money', '个人支付')], ['company', cuT('company', '公司')]]
+    .map(([v, label]) => `<option value="${escapeAttr(v)}"${v === chosen ? ' selected' : ''}>`
+      + escapeHtml(label) + '</option>').join('');
+  const busy = !!FIN_APR_BUSY;
+  const handler = waiting
+    ? `onchange="finAprPaidPick(${r.id}, this.value)"`
+    : `onchange="finAprPaidSet(${r.id}, this.value)"`;
+  return '<span class="fin-apr-catwrap">'
+    + `<span class="fin-apr-paidlab">${escapeHtml(cuT('Who paid', '由谁付款'))}</span>`
+    + `<select class="fin-apr-cat fin-apr-paid" id="fin-apr-paid-${r.id}"${busy ? ' disabled' : ''} ${handler}>`
+    + opts + '</select></span>';
+}
+
+/* Remembered rather than sent — see FIN_APR_PAID. No re-render, the same
+   reasoning finAprCatPick gives: the <select> already shows the choice. */
+window.finAprPaidPick = function finAprPaidPick(id, value) {
+  FIN_APR_PAID[Number(id)] = String(value == null ? '' : value);
+};
+
+/* §207 — SAVED ON CHANGE, on a claim already approved. No confirm: it is undone
+   by making the same change again, and the server logs the value it replaced.
+
+   THE STAIRCASE IS NOT DROPPED, AND THE OMISSION IS THE POINT. A decision drops
+   both caches because it writes `expense_entries`; this writes one column on
+   `staff_expenses` and no total in Finance moves by a fen. What DOES go stale is
+   the Transactions list, which prints `Staff claim · own money` off this very
+   field — so that one cache is dropped and the summary's is left alone. */
+window.finAprPaidSet = async function finAprPaidSet(id, value) {
+  const claim = Number(id);
+  const paid = String(value == null ? '' : value);
+  if (!claim || !paid || FIN_APR_BUSY) { finAprRender(); return; }
+  FIN_APR_BUSY = claim;
+  finAprRender();
+  try {
+    await api('/api/retail-admin/staff-expenses/' + claim + '/paid-by',
+      { method: 'POST', body: { paid_by: paid } });
+    FIN_APR_BUSY = 0;
+    FIN_TX = null; FIN_TX_SEEN = false;     // the row whose mark reads off paid_by
+    await finAprLoad();
+    if (window.toast) toast(cuT('Saved', '已保存'));
+  } catch (e) {
+    FIN_APR_BUSY = 0;
+    if (window.toast) toast(e.message, 'err');
+    finAprRender();
+  }
+};
+
 /* ── RE-FILING AN APPROVED CLAIM (§146) ─────────────────────────────────────
    **NO MONEY MOVES.** Same claim, same sum, same date, same person — what
    changes is which line of the category breakdown it sits on, and whether the
@@ -2511,6 +2615,14 @@ window.finAprDecide = async function finAprDecide(id, decision) {
      the claim's own value alone (`COALESCE`) rather than blanking it. */
   const picked = FIN_APR_CAT[claim];
   const body = (decision === 'approve' && picked) ? { decision, category: picked } : { decision };
+  /* §207 — AND SO DOES WHO PAID, in the same request and for the same reason.
+     Sent only on approve and only where it DIFFERS from what the claim already
+     says: the field is absent otherwise, and the server leaves the claim's own
+     answer alone (`COALESCE`) rather than blanking it — which matters here more
+     than for the category, because a blank `paid_by` has no meaning at all. */
+  const paid = FIN_APR_PAID[claim];
+  const row = (FIN_APR && FIN_APR.rows || []).find(r => r.id === claim);
+  if (decision === 'approve' && paid && row && paid !== row.paid_by) body.paid_by = paid;
   FIN_APR_BUSY = claim;
   finAprRender();
   try {
@@ -2520,6 +2632,7 @@ window.finAprDecide = async function finAprDecide(id, decision) {
     // The pick is spent — the claim carries it now. Left here it would be
     // offered back on the decided row, over whatever the server actually stored.
     delete FIN_APR_CAT[claim];
+    delete FIN_APR_PAID[claim];
     FIN_APR_SHOT = null;
     FIN_TX = null; FIN_TX_SEEN = false;     // the ledger this just wrote to
     FIN_DATA = null;                        // and the staircase drawn from it
@@ -2636,7 +2749,12 @@ function finAprRow(r) {
   const filing = finAprCatCell(r);
   if (r.category) bits.push(finCatLabel(r.category));
   else if (!filing) bits.push(cuT('Not recorded', '未记录'));
-  bits.push(r.paid_by === 'employee' ? cuT('own money', '个人支付') : cuT('company', '公司'));
+  /* §207 — SAID ON THE META LINE ONLY WHERE NO PICKER FOLLOWS, the rule the
+     blank category one line above already follows. A row carrying the control
+     would otherwise state the same fact twice, two lines apart, and the one
+     that can be changed is the one worth reading. */
+  const whoPaid = finAprPaidCell(r);
+  if (!whoPaid) bits.push(r.paid_by === 'employee' ? cuT('own money', '个人支付') : cuT('company', '公司'));
   // §114. On the meta line beside whose money it was, because it is the same
   // kind of fact about the purchase — and because an approver reads this line
   // before pressing anything.
@@ -2721,6 +2839,10 @@ function finAprRow(r) {
     // Under the note and above everything optional: it is a fact about the
     // claim, and the receipt and the order link are ways OUT of the row.
     + filing
+    // §207 — beside the category and for the same reason it sits there: both are
+    // facts about the claim that the approver may correct, and everything below
+    // them is a way OUT of the row.
+    + whoPaid
     + (coming ? `<span class="fin-apr-comingwrap">${coming}</span>` : '')
     + (shotBtn ? `<span class="fin-apr-shotwrap">${shotBtn}</span>` : '')
     + '</td>'

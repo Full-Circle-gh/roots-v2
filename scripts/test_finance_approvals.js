@@ -344,5 +344,41 @@ it('self-approval is marked, and the SERVER is what marks it', () => {
   assert.match(ROUTE, /mine: r\.submitted_by != null && r\.submitted_by === \(req\.user\?\.id \|\| null\)/);
 });
 
+it('§207 — who paid is a control on the queue, not just a word on the meta line', () => {
+  /* Ash, off this screen: "whoever in charge of approval should be able to
+     change own money to company money if needed". Somebody at the till taps
+     *My own money* by habit having paid on the shop's account, and the claim
+     then sits in Owed to your team as a debt the business does not owe. */
+  assert.match(APR_CODE, /function finAprPaidCell\(r\)/);
+  assert.match(APR_CODE, /window\.finAprPaidPick/);
+  assert.match(APR_CODE, /window\.finAprPaidSet/);
+  assert.match(APR_CODE, /staff-expenses\/' \+ claim \+ '\/paid-by/);
+  // And it is actually drawn — a renderer nothing calls is a control nobody has.
+  assert.match(APR_CODE, /const whoPaid = finAprPaidCell\(r\);/);
+});
+
+it('§207 — the correction drops Transactions and leaves the staircase alone', () => {
+  /* THE OMISSION IS THE DECISION. A decision drops both caches because it
+     writes `expense_entries`; this writes one column on `staff_expenses` and no
+     total in Finance moves by a fen. What DOES go stale is the Transactions
+     list, which prints `Staff claim · own money` off this very field. */
+  const fn = APR_CODE.match(/finAprPaidSet = async function[\s\S]*?^\};/m);
+  assert.ok(fn, 'the correction call must exist');
+  assert.match(fn[0], /FIN_TX = null; FIN_TX_SEEN = false;/);
+  assert.ok(!/FIN_DATA = null/.test(fn[0]),
+    'no total moved — dropping the staircase would re-pull the whole of Finance for nothing');
+  assert.match(CLIENT_CODE, /r\.paid_by === 'employee'[\s\S]{0,200}Staff claim/,
+    'and the Transactions row really does read this field');
+});
+
+it('§207 — the pill and the picker read the SAME fact, so they cannot disagree', () => {
+  // The "Owed to your team" pill is `paid_by === 'employee' && !settled`. A
+  // correction that did not reload would leave the pill asserting a debt the
+  // server has just been told does not exist.
+  assert.match(APR_CODE, /const owed = r\.paid_by === 'employee' && !Number\(r\.settled\);/);
+  const fn = APR_CODE.match(/finAprPaidSet = async function[\s\S]*?^\};/m);
+  assert.match(fn[0], /await finAprLoad\(\);/);
+});
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

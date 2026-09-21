@@ -81,6 +81,20 @@ const ERR = {
   needCategory:   'pick a category · 选择分类',
   forbiddenFile:  'this account cannot change an expense category · 此账号无法修改费用分类',
   onOrderCat:     'this claim is on a purchase order — set the category on the order · 该笔已记入采购单 — 请在采购单上修改分类',
+  /* §207 — THE ONE THING THE RE-ASSIGN ROUTE REFUSES ON ITS OWN.
+
+     A claim that is not approved has no debt to move: a submitted one may still
+     be rejected, and a rejected or voided one was deliberately taken back out.
+     `/decide` carries the field for the first of those, in the same request that
+     approves it.
+
+     THE OTHER TWO REFUSALS ARE BORROWED RATHER THAN WRITTEN AGAIN. A settled
+     claim gets `ERR.settled` — the sentence `/decide` and `/void` already say
+     for the same state — and a value that is neither `company` nor `employee`
+     gets the VALIDATOR's own `say who paid`, so the submit form and this route
+     refuse a third spelling in identical words. Composed here: one string, and
+     it is declared in docs/tacet-delivery-vocabulary.md v1.153. */
+  notApprovedPaid: 'only an approved claim can be reassigned · 仅审批通过的申请可修改付款方式',
 };
 
 /* WHO MAY DECIDE. `lib/cap-routes.js` gates the decide route on
@@ -168,7 +182,12 @@ function requireCanceller(req, res, next) {
 // boots the express app and the database behind it. It did, and it left the dev
 // database in a state that turned a neighbouring suite red. Pure rules belong in
 // a pure file, the way lib/category-text.js already does it.
-const { readBody } = require('../lib/expense-claim');
+/* §207 also takes `PAID_BY` and the validator's own refusal out of it. WHO PAID
+   IS A CLOSED SET OF TWO — the file's header says why, and it says it once — so
+   the route that CHANGES the answer after the fact tests membership against the
+   same Set the submit path does, and refuses a third spelling in the same
+   sentence. Two copies of a closed set is how the third spelling gets in. */
+const { readBody, PAID_BY, ERR: CLAIM_ERR } = require('../lib/expense-claim');
 // The one place a claim reaches the books, and a file for the same reason: it is
 // runnable against a fixture without an app behind it.
 const { postClaim } = require('../lib/expense-posting');
@@ -613,6 +632,38 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
     const filedCategory = decision === 'approve'
       ? storeCategory(db, (req.body || {}).category, 'accounting')
       : null;
+
+    /* §207 — WHO PAID, CORRECTED AT THE MOMENT OF APPROVAL.
+
+       **THIS IS AN EDIT OF WHAT THE SUBMITTER ASSERTED, AND IT IS THE ONE THE
+       HEADER'S REFUSAL DOES NOT COVER.** That refusal is about the amount, the
+       note and the date — facts only the person who spent the money holds. Who
+       paid is not one of them: the employee taps *My own money* out of habit
+       having actually used the shop's WeChat Pay account, and the person who can
+       tell is the person looking at the shop's statements, which is the
+       approver. Ash asked for exactly this, off the live queue.
+
+       **THE GUARD IS THE RECORD, NOT THE REFUSAL** — §87 part five's own
+       argument for letting an approver approve their own claim. The value that
+       was replaced travels in the activity log below, so a correction can be
+       read backwards and a wrong one can be found.
+
+       IT MOVES NO MONEY IN THE BOOKS. `lib/expense-posting.js` does not read
+       `paid_by` at any point — the ledger row is byte-for-byte the same either
+       way. What changes is whether the business still owes a person, which is
+       the `/pending` owed query and nothing else. That is why this is applied by
+       the same UPDATE as the status and needs no re-post.
+
+       ONLY ON APPROVE, and the same COALESCE as the category: a client that does
+       not send the field leaves the claim's own answer alone. A bare assignment
+       would blank `paid_by` on every claim decided by a client older than this
+       change, and `paid_by` has no meaning when blank — it is the field that
+       decides whether a debt exists. */
+    const paidByRaw = String((req.body || {}).paid_by || '');
+    if (paidByRaw && !PAID_BY.has(paidByRaw)) {
+      return res.status(400).json({ error: CLAIM_ERR.paidBy });
+    }
+    const filedPaidBy = decision === 'approve' && paidByRaw ? paidByRaw : null;
     let raisedPoId = null;
 
     // AWAITED (§90's fix). This route was never `async` and never awaited this
@@ -641,8 +692,9 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
       // every client older than this change, and the phone until it is reloaded.
       tx.prepare(`UPDATE staff_expenses
                      SET status = ?, decided_by = ?, decided_at = datetime('now'), decided_note = ?,
-                         category = COALESCE(?, category), expense_id = NULL
-                   WHERE id = ?`).run(status, decidedBy, note, filedCategory, claim.id);
+                         category = COALESCE(?, category), paid_by = COALESCE(?, paid_by),
+                         expense_id = NULL
+                   WHERE id = ?`).run(status, decidedBy, note, filedCategory, filedPaidBy, claim.id);
       // Posted from the row AS IT NOW STANDS, not from the one read above: the
       // status this decision just wrote is what decides whether a row exists.
       const fresh = tx.prepare('SELECT * FROM staff_expenses WHERE id = ?').get(claim.id);
@@ -678,8 +730,14 @@ router.post('/api/retail-admin/staff-expenses/:id/decide', requireRetailAdmin, r
       // §146: the category AS DECIDED, and the claim's own when the approver
       // left it alone. Logging `claim.category` unconditionally would report the
       // blank the approver had just filled in.
+      // §207: the same shape for who paid — the value AS DECIDED, and `was` only
+      // where the approver actually moved it. A log that reported `paid_by`
+      // unconditionally could not be read backwards, which is the whole of why
+      // this correction is allowed at all.
       { amount: fen(claim.amount), category: filedCategory || claim.category,
         filed: filedCategory ? true : undefined,
+        paid_by: filedPaidBy || claim.paid_by,
+        was_paid_by: (filedPaidBy && filedPaidBy !== claim.paid_by) ? claim.paid_by : undefined,
         self: claim.submitted_by === decidedBy, po_id: raisedPoId }, req.ip);
     const after = db.prepare('SELECT status, expense_id, po_id FROM staff_expenses WHERE id = ?').get(claim.id);
     res.json({ success: true, data: after });
@@ -851,6 +909,104 @@ router.post('/api/retail-admin/staff-expenses/:id/category', requireRetailAdmin,
     res.json({ success: true, data: after });
   } catch (e) {
     console.error('[staff-expenses category]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ── POST /api/retail-admin/staff-expenses/:id/paid-by ──────────────────────
+/* §207 — CORRECTING WHO PAID, ON A CLAIM ALREADY IN THE BOOKS.
+
+   **THE FIELD THE SUBMITTER GETS WRONG MOST OFTEN, AND THE ONE NOTHING COULD
+   FIX.** Requested by Ash off the live approvals queue: *"whoever in charge of
+   approval should be able to change own money to company money if needed"*.
+   Somebody standing at a till taps *My own money* by habit having paid on the
+   shop's WeChat Pay account, and the result is a debt the business does not owe
+   sitting in *Owed to your team* until somebody transfers real money against it.
+   The only way out before this was to void the claim and ask them to send it
+   again — §146's exact complaint about the category, with worse consequences,
+   because a wrong category misfiles a cost and a wrong `paid_by` invents a
+   payment.
+
+   **NOTHING IS POSTED, DELETED OR RE-POSTED HERE, AND THAT IS NOT A SHORTCUT.**
+   `lib/expense-posting.js` does not read `paid_by` — not in `postClaim`, not in
+   `claimDescription`. The ledger row for a company-paid claim and an
+   employee-paid one are identical: same date, same amount, same category, same
+   description, same `payment_method`. So this route writes ONE column on ONE
+   table and calls no poster at all, the shape `/settle` has. A re-post here
+   would delete and re-insert an unchanged ledger row for nothing, taking a new
+   `id` with it.
+
+   `scripts/test_staff_expenses.js` asserts that independence rather than
+   trusting it — a later edit that makes the posted row depend on who paid turns
+   this route into a silent no-op on the books, and the test is what says so.
+
+   **WHAT DOES CHANGE IS WHO THE BUSINESS OWES**, which lives entirely in the
+   `/pending` owed query (`paid_by = 'employee' AND COALESCE(settled,0) = 0`) and
+   in the pill the two queues draw from the same fact.
+
+   ── WHAT IT REFUSES, AND THE TWO IT DELIBERATELY DOES NOT ──────────────────
+   A claim that is not approved: `/decide` carries the field instead, in the
+   request that approves it, so there is no window in which a decision and a
+   correction could half-apply.
+
+   A SETTLED CLAIM IS REFUSED, and this is where the route parts company with
+   §146's re-filing, which allows one. Re-filing moves nothing — same money, new
+   heading. This moves the debt itself: marking an already-repaid claim as
+   company-paid says the business never owed the money it has already handed
+   over, leaving a real transfer with nothing behind it. `/decide` and `/void`
+   refuse a settled claim for the same class of reason and in the same sentence,
+   which is the one reused here.
+
+   A CLAIM ON A PURCHASE ORDER IS **NOT** REFUSED, though `/category` refuses
+   one. That refusal is about the ledger: the order owns the cost, so a category
+   set on the claim would move nothing. This route never touches the ledger, and
+   an employee who paid for a food processor out of their own pocket is owed the
+   money whether the goods have arrived or not — the owed query counts that claim
+   exactly like any other. Refusing here would leave the one debt nobody could
+   correct.
+
+   GATED ON `expenses:approve`, NOT `requireFiler`. §146 opened re-filing to the
+   bookkeeper because renaming a heading is strictly less power than voiding.
+   This is not a heading: it asserts whether the business owes a person money,
+   which is the same axis as `/settle` — and `/settle` is an approver's call for
+   the reason its own header gives. Ash's words name the approver too. */
+router.post('/api/retail-admin/staff-expenses/:id/paid-by', requireRetailAdmin, requireApprover, express.json(), (req, res) => {
+  try {
+    const db = tdb();
+    if (!/^\d+$/.test(String(req.params.id))) return res.status(404).json({ error: ERR.notFound });
+    const claim = db.prepare('SELECT * FROM staff_expenses WHERE id = ?').get(req.params.id);
+    if (!claim) return res.status(404).json({ error: ERR.notFound });
+
+    if (claim.status !== 'approved') return res.status(409).json({ error: ERR.notApprovedPaid });
+    if (claim.settled) return res.status(409).json({ error: ERR.settled });
+
+    // THE VALIDATOR'S OWN SET AND THE VALIDATOR'S OWN SENTENCE. A third spelling
+    // of "my own money" is a debt nobody can query for — lib/expense-claim.js
+    // says it, and the route that rewrites the field afterwards must not be the
+    // hole in it.
+    const paidBy = String((req.body || {}).paid_by || '');
+    if (!PAID_BY.has(paidBy)) return res.status(400).json({ error: CLAIM_ERR.paidBy });
+
+    // ALREADY SAYS THAT — answered without a write, the same courtesy `/category`
+    // extends. There is nothing to log and nothing to change.
+    if (paidBy === claim.paid_by) {
+      return res.json({ success: true, data: { id: claim.id, paid_by: paidBy, settled: 0 } });
+    }
+
+    db.prepare('UPDATE staff_expenses SET paid_by = ? WHERE id = ?').run(paidBy, claim.id);
+
+    // WHAT IT SAID BEFORE travels beside what it says now, exactly as §146's
+    // re-filing logs `was`. A correction that cannot be read backwards is
+    // indistinguishable from the claim having always said this — and since this
+    // route overrides what the SUBMITTER asserted, that record is the only guard
+    // there is.
+    logActivity(req.user?.id || null, req.user?.username || null, 'update', 'staff_expense', claim.id,
+      { amount: fen(claim.amount), paid_by: paidBy, was_paid_by: claim.paid_by,
+        owed_to: paidBy === 'employee' ? claim.submitted_by : undefined }, req.ip);
+    const after = db.prepare('SELECT id, paid_by, settled FROM staff_expenses WHERE id = ?').get(claim.id);
+    res.json({ success: true, data: after });
+  } catch (e) {
+    console.error('[staff-expenses paid-by]', e.message);
     res.status(500).json({ error: e.message });
   }
 });

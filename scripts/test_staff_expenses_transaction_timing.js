@@ -362,6 +362,138 @@ function call(method, url, body) {
       + 'is how a queue renders before the options it offers exist');
   });
 
+  console.log('\n6 · correcting who paid, on a claim already in the books (§207)');
+
+  /* THE CLAIM THIS SECTION IS ABOUT. Submitted as own-money, which is what a
+     person at a till taps by habit — and which, if it is wrong, is a debt the
+     business does not owe sitting in *Owed to your team* until somebody makes a
+     real transfer against it. */
+  async function submitOwnMoney(amount) {
+    const r = await call('POST', '/api/retail-admin/staff-expenses', {
+      date: '2026-09-10', amount: amount || 100, category: 'Transport',
+      note: 'tx timing test paid-by', paid_by: 'employee',
+    });
+    assert.strictEqual(r.status, 200, JSON.stringify(r.body));
+    claimIds.push(r.body.id);
+    return r.body.id;
+  }
+
+  await it('an approver moves an approved claim from own money to company money', async () => {
+    const claimId = await submitOwnMoney();
+    await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`, { decision: 'approve' });
+    const owedBefore = await call('GET', '/api/retail-admin/staff-expenses/pending');
+    assert.ok((owedBefore.body.data.owed || []).some(o => String(o.ids || '').split(',').includes(String(claimId))),
+      'it starts as a debt — that is the state being corrected');
+
+    const moved = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/paid-by`, { paid_by: 'company' });
+    assert.strictEqual(moved.status, 200, JSON.stringify(moved.body));
+    assert.strictEqual(moved.body.data.paid_by, 'company');
+    const row = db.prepare('SELECT paid_by, status FROM staff_expenses WHERE id = ?').get(claimId);
+    assert.strictEqual(row.paid_by, 'company');
+    assert.strictEqual(row.status, 'approved', 'and it is still approved — this is not a reversal');
+  });
+
+  await it('and the debt is gone from the owed list the moment it is', async () => {
+    const claimId = await submitOwnMoney(137);
+    await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`, { decision: 'approve' });
+    await call('POST', `/api/retail-admin/staff-expenses/${claimId}/paid-by`, { paid_by: 'company' });
+    const q = await call('GET', '/api/retail-admin/staff-expenses/pending');
+    const stillOwed = (q.body.data.owed || [])
+      .some(o => String(o.ids || '').split(',').includes(String(claimId)));
+    assert.ok(!stillOwed, 'the whole point: what the shop owes its people is a query over this field');
+  });
+
+  await it('**THE LEDGER ROW DOES NOT MOVE** — not its id, not one column of it', async () => {
+    /* THIS IS THE ASSERTION THE ROUTE'S DESIGN RESTS ON. It writes one column
+       and calls no poster, which is only correct while `lib/expense-posting.js`
+       ignores `paid_by`. An edit that makes the posted row depend on who paid
+       turns this route into a silent no-op on the books — the claim would say
+       one thing and the ledger another, with nothing on screen to say so — and
+       this is what would catch it. */
+    const claimId = await submitOwnMoney(211);
+    await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`, { decision: 'approve' });
+    const before = db.prepare('SELECT * FROM expense_entries WHERE claim_id = ?').get(claimId);
+    assert.ok(before, 'posted');
+
+    await call('POST', `/api/retail-admin/staff-expenses/${claimId}/paid-by`, { paid_by: 'company' });
+    const after = db.prepare('SELECT * FROM expense_entries WHERE claim_id = ?').get(claimId);
+    assert.ok(after, 'still posted — nothing was deleted and left unreplaced');
+    assert.deepStrictEqual(after, before,
+      'a re-post here would take a new id for an unchanged row, and a poster that '
+      + 'read paid_by would change the books behind an approver correcting a typo');
+  });
+
+  await it('it moves the other way too — a company-paid claim that was really out of pocket', async () => {
+    const r = await call('POST', '/api/retail-admin/staff-expenses', {
+      date: '2026-09-10', amount: 42, category: 'Transport',
+      note: 'tx timing test paid-by back', paid_by: 'company',
+    });
+    claimIds.push(r.body.id);
+    await call('POST', `/api/retail-admin/staff-expenses/${r.body.id}/decide`, { decision: 'approve' });
+    const moved = await call('POST', `/api/retail-admin/staff-expenses/${r.body.id}/paid-by`, { paid_by: 'employee' });
+    assert.strictEqual(moved.status, 200, JSON.stringify(moved.body));
+    const q = await call('GET', '/api/retail-admin/staff-expenses/pending');
+    assert.ok((q.body.data.owed || []).some(o => String(o.ids || '').split(',').includes(String(r.body.id))),
+      'the correction runs both ways — a debt can be created as well as cleared');
+  });
+
+  await it('a SETTLED claim is refused — unlike re-filing, this one would strand a transfer', async () => {
+    // The money has already been handed back. Saying the business never owed it
+    // leaves a real transfer with nothing behind it, which is why /decide and
+    // /void refuse a settled claim — and this borrows their sentence.
+    const claimId = await submitOwnMoney(63);
+    await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`, { decision: 'approve' });
+    const paid = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/settle`, { settled: true });
+    assert.strictEqual(paid.status, 200, JSON.stringify(paid.body));
+    const moved = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/paid-by`, { paid_by: 'company' });
+    assert.strictEqual(moved.status, 409, JSON.stringify(moved.body));
+    const row = db.prepare('SELECT paid_by FROM staff_expenses WHERE id = ?').get(claimId);
+    assert.strictEqual(row.paid_by, 'employee', 'and nothing was written');
+  });
+
+  await it('a claim still WAITING is refused — /decide is the route that carries it', async () => {
+    const claimId = await submitOwnMoney(71);
+    const moved = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/paid-by`, { paid_by: 'company' });
+    assert.strictEqual(moved.status, 409, JSON.stringify(moved.body));
+  });
+
+  await it('a third spelling of "my own money" is refused, in the validator\'s own words', async () => {
+    const claimId = await submitOwnMoney(29);
+    await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`, { decision: 'approve' });
+    for (const bad of ['owner', 'EMPLOYEE', '', 'petty cash']) {
+      const r = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/paid-by`, { paid_by: bad });
+      assert.strictEqual(r.status, 400, `"${bad}" must be refused: ${JSON.stringify(r.body)}`);
+    }
+    const row = db.prepare('SELECT paid_by FROM staff_expenses WHERE id = ?').get(claimId);
+    assert.strictEqual(row.paid_by, 'employee', 'and the field still says one of the two');
+  });
+
+  await it('the decision carries who paid, and a client that sends none blanks nothing', async () => {
+    // The COALESCE, and it matters more here than for the category: a blank
+    // `paid_by` has no meaning at all — it is the field that decides whether a
+    // debt exists.
+    const corrected = await submitOwnMoney(55);
+    const dec = await call('POST', `/api/retail-admin/staff-expenses/${corrected}/decide`,
+      { decision: 'approve', paid_by: 'company' });
+    assert.strictEqual(dec.status, 200, JSON.stringify(dec.body));
+    assert.strictEqual(db.prepare('SELECT paid_by FROM staff_expenses WHERE id = ?').get(corrected).paid_by,
+      'company', 'corrected at the moment of approval, in one request');
+
+    const untouched = await submitOwnMoney(56);
+    await call('POST', `/api/retail-admin/staff-expenses/${untouched}/decide`, { decision: 'approve' });
+    assert.strictEqual(db.prepare('SELECT paid_by FROM staff_expenses WHERE id = ?').get(untouched).paid_by,
+      'employee', 'every client older than this change sends no field and must change nothing');
+  });
+
+  await it('a bad value on the DECISION refuses the decision itself, rather than approving half of it', async () => {
+    const claimId = await submitOwnMoney(57);
+    const dec = await call('POST', `/api/retail-admin/staff-expenses/${claimId}/decide`,
+      { decision: 'approve', paid_by: 'petty cash' });
+    assert.strictEqual(dec.status, 400, JSON.stringify(dec.body));
+    const row = db.prepare('SELECT status FROM staff_expenses WHERE id = ?').get(claimId);
+    assert.strictEqual(row.status, 'submitted', 'the claim is untouched — refused before the transaction opens');
+  });
+
   // Best-effort cleanup — this runs against the shared dev database (tenant 1
   // maps to it directly), so leave it as it was found.
   for (const id of claimIds) {

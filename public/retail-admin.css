@@ -14863,6 +14863,20 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   max-width: 280px; width: auto;
 }
 #tab-finance .fin-apr-cat[disabled] { opacity: .55; cursor: default; }
+/* §207 — WHO PAID, on the line under the category and dressed as its twin. The
+   two are the same kind of control — a fact about the claim the approver may
+   correct — so they share `.fin-apr-cat` and differ only in carrying a label.
+
+   THIS ONE IS LABELLED AND THE CATEGORY IS NOT, and the asymmetry is not an
+   oversight. A category picker announces itself: every option in it is a
+   category. `own money / company` announces nothing — read cold beside a name
+   and an amount it could be a payment method, a supplier or an account. Two
+   words the phone's own expense form already uses over the identical pair. */
+#tab-finance .fin-apr-catwrap .fin-apr-paidlab {
+  display: inline-block; margin-right: 8px;
+  font: 400 12.5px/1.5 var(--f-sans); color: var(--td-text2);
+}
+#tab-finance .fin-apr-paid { max-width: 180px; }
 #tab-finance .fin-apr-shotwrap { display: block; margin-top: 8px; }
 #tab-finance .fin-apr-shotbtn { padding: 3px 12px; font-size: 13px; }
 

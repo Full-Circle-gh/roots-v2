@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.153 · 2026-09-21 · §207 LETS THE APPROVER CORRECT WHO PAID — ONE COMPOSED STRING, EVERY SCREEN WORD COPIED.** The two options the new picker offers (`own money · 个人支付`, `company · 公司`) and its label (`Who paid · 由谁付款`) are the phone's own live pairs, already over this exact field; `Saved · 已保存` is the queue's own. What is composed is ONE server refusal, and it is composed from two live parts. The two other refusals the route makes are borrowed whole from sentences the file already says. See *Correcting who paid on an approved claim (§207)*.
+
 **v1.152 · 2026-09-21 · §206 REBUILDS THE FULL PRODUCT PAGE — COPYING EVERY SECTION NAME AND COMPOSING THE WORDS A SETTINGS CARD NEEDS.** The page's six section names, its right-column headings and every state it reports are the dock's own pairs, lifted whole. What is new is the Settings card that orders and hides sections, one summary row's label, one door's label, and three sentences of explanation — composed from live parts and declared below with what was rejected. `scripts/test_product_page_sections.js` asserts every static label on the page and the card is an EN · CN pair. See *The product page's sections and the card that orders them*.
 
 **v1.151 · 2026-09-21 · §203 SPLITS A FOURTH STATE OUT OF THE COURIER WAIT AND MINTS NOTHING NEW.** Three different situations printed `排队发单中…` — nobody has drained it, and *the order is fine and waiting for you*. The booked half now says `尚未呼叫运力`, **lifted verbatim from the ship-from confirm body in the same file**, and its note is assembled from `已核对`, `查看运力比价` and `不产生费用`, all live in that same drawer today. The queue wait also carries its age, rendered by `courierAgo`'s existing pairs rather than a new way to say four minutes. `scripts/test_qingyun_wait_states.js` counts each half in the shipped drawer and fails a word used only here. See *Four ways to say no rider yet*.
@@ -8171,3 +8173,50 @@ words and leaves the fourth to the section heading above it, which already says
 show is a pair the dock's summary rows already carry; the page reports the same
 facts in the same words, so the drawer and the page can never disagree about
 whether a description is written.
+
+## Correcting who paid on an approved claim (§207)
+
+**WHAT THIS NAMES.** The approvals queue — on the desktop and on the phone —
+now carries a two-option picker for who paid, and a route behind it that
+corrects the field on a claim already approved. Ash, off the live queue:
+*"whoever in charge of approval should be able to change own money to company
+money if needed"*. **Register: OPERATOR** (Rule 1) throughout; no shopper ever
+sees any of it.
+
+**COPIED, NOT COMPOSED — EVERY WORD ON SCREEN.** All four pairs the two
+surfaces render are live, and three of them are live *over this exact field*,
+which is the strongest form of the first preference: the same words already name
+the same fact elsewhere in the product.
+
+| Where | English | Chinese | Source |
+| --- | --- | --- | --- |
+| The picker's label | Who paid | 由谁付款 | **COPIED** — the phone's expense form, `public/m.html`, directly above the two chips that set this same field. |
+| First option | own money | 个人支付 | **COPIED** — the meta line of both approval queues, over this field. |
+| Second option | company | 公司 | **COPIED** — the meta line of both approval queues, over this field. |
+| After a correction saves | Saved | 已保存 | **COPIED** — the queue's own re-filing toast (§146), one function away. |
+
+**THE PICKER IS LABELLED AND THE CATEGORY PICKER BESIDE IT IS NOT, and the
+asymmetry is the reason the label pair was needed at all.** Every option in a
+category picker is a category, so it announces itself. `个人支付 / 公司` read cold
+beside a name and an amount could be a payment method, a supplier, or an
+account. The label is the form's own, over the same two values, so the two
+surfaces name one thing.
+
+**ONE COMPOSED STRING, AND IT IS A SERVER REFUSAL.**
+
+| Where | English | Chinese | Note |
+| --- | --- | --- | --- |
+| `ERR.notApprovedPaid`, `routes/staff-expenses.js` | only an approved claim can be reassigned | 仅审批通过的申请可修改付款方式 | **COMPOSED** from two live parts, both in this file: `仅审批通过的申请` (the opening of `notApproved`, `notApprovedVoid` and `notApprovedCat`, verbatim) + `可修改` + `付款方式` (the closing noun of `ERR.paidBy`, `请选择付款方式`, which is the validator's name for this very field). Rejected: `仅审批通过的申请可修改付款人` — `付款人` is *the payer as a person*, which is not what the field holds (it holds which account the money left, and `company` is not a person) and is unsourced here; `仅审批通过的申请可修改` — true but says nothing about which field, and this route sits beside three others that refuse the same state about different fields. |
+
+Composed by Claude Opus 5 on 2026-09-21 under the 2026-09-06 amendment,
+declared here in the same commit as the code that uses it.
+
+**THE OTHER TWO REFUSALS ARE BORROWED WHOLE RATHER THAN WRITTEN AGAIN**, which
+is why there is one composed string here and not three. A settled claim gets
+`ERR.settled` — *this claim has already been paid back · 该申请已完成付款* — the
+sentence `/decide` and `/void` already say for the same state and the same
+reason. A value that is neither `company` nor `employee` gets the validator's
+own `ERR.paidBy` — *say who paid · 请选择付款方式* — so the submit form and the
+correction route refuse a third spelling in identical words. A third and fourth
+sentence for states this file already names would be four ways to be told one
+thing.
