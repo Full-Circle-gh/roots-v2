@@ -5422,6 +5422,22 @@ function renderQyShipFrom(o) {
     // A hold is nobody's fault and needs no action — but it must not read as a
     // normal queue wait, or an outage looks like latency until 待配送 runs dry.
     const held = !refused && sf.push_held;
+    // Checked, and deliberately not created yet: a booked order waiting for
+    // staff to call the delivery. It shared the queue-wait wording with
+    // 'pending' until now, and that is the one pair an operator most needs
+    // told apart — a HEALTHY order waiting on them, and an order nothing has
+    // looked at, behind the same five words. On 2026-09-21 that cost a store
+    // a trading-hours call about a same-city delivery that was not broken.
+    const booked = !refused && !held && sf.awaiting_dispatch;
+    // How long the queue wait has actually run. Two minutes is the geocoder
+    // doing its job; the identical sentence after two hours is a stall, and
+    // the screen said neither. Only on the plain wait — the other three states
+    // carry their own age, or are not a wait at all. courierAgo is the
+    // drawer's existing ago-renderer, so this borrows its live wording
+    // instead of minting a second way to say "4 minutes ago".
+    const queuedFor = (!refused && !held && !booked && sf.push_since)
+      ? ` · ${courierAgo(sf.push_since)}`
+      : '';
     // "since 14:20" — the hold's age is the outage's age, and an operator
     // deciding whether to chase it needs that more than the fact of the hold.
     // Absent or unparseable timestamp just omits the clause.
@@ -5442,7 +5458,9 @@ function renderQyShipFrom(o) {
                 ? `⚠ ${cuT('Push refused — nobody is collecting this', '发单被拒 — 无人接单')}`
                 : held
                   ? `⏸ ${cuT('Held — map service unavailable, retrying', '已挂起 — 地图服务不可用,正在重试')}${escapeHtml(heldSince)}`
-                  : cuT('Queued for push…', '排队发单中…')}
+                  : booked
+                    ? `✓ ${cuT('No courier called yet', '尚未呼叫运力')}`
+                    : `${cuT('Queued for push…', '排队发单中…')}${escapeHtml(queuedFor)}`}
             </span>
             ${refused
               ? `<button class="btn btn-sm" onclick="qyRetryPush(${o.id}, this)">${cuT('Retry push', '重新发单')}</button>`
@@ -5453,6 +5471,11 @@ function renderQyShipFrom(o) {
             ? `<div class="muted" style="font-size:11px; margin-top:4px; line-height:1.5;">${cuT(
                 'Nothing is wrong with this address — the geocoder is down. It pushes itself once the service is back.',
                 '地址没有问题 — 地图服务暂时不可用,恢复后会自动发出。')}</div>`
+            : ''}
+          ${booked
+            ? `<div class="muted" style="font-size:11px; margin-top:4px; line-height:1.5;">${cuT(
+                'The address is checked. Compare couriers below when you want a rider — nothing is charged until you dispatch.',
+                '地址已核对。需要骑手时点击下方“查看运力比价” — 发起配送前不产生费用。')}</div>`
             : ''}
           ${refused
             ? `<div class="muted" style="font-size:11px; margin-top:4px; line-height:1.5;">${cuT(

@@ -30017,6 +30017,22 @@ function qingyunShipFromState(retailOrderId) {
       // unreachable. The predicate is shared with the endpoint's own guard so
       // the button can never be offered on a row the endpoint would refuse.
       needs_attention: qingyunQueue.needsAttention(q),
+      // ── Checked, and waiting for someone to call the delivery ─────────
+      // The healthy resting state of a booked order: the address resolved, and
+      // the copy is deliberately not created until staff reach for a courier.
+      // Reported because the drawer cannot tell it from a plain queue wait
+      // otherwise — `push_status` alone would make the client re-derive the
+      // rule, and a client that re-derived it differently would put "nobody
+      // has touched this" on an order that is working exactly as designed.
+      // Same delegation as awaiting_point / awaiting_choice above: one
+      // predicate, read by the screen and by the endpoints that act on it.
+      awaiting_dispatch: qingyunQueue.awaitingDispatch(q),
+      // When the row joined the queue. This is the AGE OF THE WAIT, and it is
+      // the fact that separates "queued, working" from "queued, wedged" — two
+      // minutes and two hours printed the identical five words before this.
+      // Sent raw (SQLite UTC 'YYYY-MM-DD HH:MM:SS'); the drawer renders it with
+      // the same ago-helper the courier card already uses.
+      push_since: q.created_at || null,
       blocked_by: null,
       stale: null,
       // ── Waiting for a delivery point ──────────────────────────────────
