@@ -68,7 +68,7 @@ function fixture() {
     CREATE TABLE retail_shipments (
       id INTEGER PRIMARY KEY, order_id INTEGER, mode TEXT, dispatched_at TEXT,
       delivered_at TEXT, tracking_status TEXT, tracking_synced_at TEXT,
-      local_eta TEXT, air_delay_cleared_at TEXT);
+      local_eta TEXT, eta_source TEXT, air_delay_cleared_at TEXT);
     CREATE TABLE retail_delay_cases (id INTEGER PRIMARY KEY, shipment_id INTEGER, order_id INTEGER);
     CREATE TABLE delivery_jobs (id INTEGER PRIMARY KEY, retail_order_id INTEGER,
       order_status INTEGER, updated_at TEXT);`);
@@ -151,6 +151,80 @@ it('the ids are bound, never interpolated', () => {
   const f = alerts.alertFilter(fixture(), 'o');
   assert.ok(f.params.length > 0, 'the fixture has a stuck rider to bind');
   assert.ok(f.params.every(Number.isInteger), 'only integer row ids may be bound');
+});
+
+console.log('\na time an operator typed means a person has this delivery');
+
+/* Ash, 2026-09-21, off the live phone on TC000812: "we order delivery manually
+   not from the system, and added a time manually — seems that the system
+   ignores it."
+   The Qingyun copy exists because auto-push created it, but nobody ever
+   dispatched a carrier through it, so order_status stays 20 (待配送) for good.
+   The stuck-rider rule read that as "a rider was requested and none grabbed
+   it", and fifteen minutes after the typed time it put the order on the card —
+   on every such order, for ever. */
+const manual = (db, orderId, src) =>
+  db.prepare('UPDATE retail_shipments SET eta_source = ? WHERE order_id = ? AND mode = ?')
+    .run(src, orderId, 'local');
+
+it('an operator-typed ETA takes the order off the card', () => {
+  const db = fixture();
+  assert.deepStrictEqual(alerts.localStuckRows(db).map(r => r.id), [4], 'the fixture starts stuck');
+  manual(db, 4, 'manual');
+  assert.deepStrictEqual(alerts.localStuckRows(db), [],
+    'a person who types an arrival time has arranged the delivery');
+  assert.deepStrictEqual(match(db), [1, 2, 3], 'and the card drops it with the list');
+});
+
+it('a COURIER-set ETA is untouched — the contrast that proves it is the flag', () => {
+  const db = fixture();
+  manual(db, 4, 'auto');
+  assert.deepStrictEqual(alerts.localStuckRows(db).map(r => r.id), [4],
+    'the daemon stamped this one; nobody said they had it');
+});
+
+it('an ETA with no provenance still alerts — history is not muted', () => {
+  // Rows written before eta_source existed carry NULL. Reading NULL as "manual"
+  // would silence every one of them in a single deploy.
+  const db = fixture();
+  assert.strictEqual(
+    db.prepare('SELECT eta_source FROM retail_shipments WHERE order_id = 4').get().eta_source, null);
+  assert.deepStrictEqual(alerts.localStuckRows(db).map(r => r.id), [4]);
+});
+
+it('the other three kinds of trouble are NOT exempted by a typed time', () => {
+  // They are carrier-REPORTED facts. A typed ETA says nothing about an
+  // exception, a late cold-chain leg, or a Meituan order past its time.
+  const db = fixture();
+  for (const id of [1, 2, 3]) {
+    db.prepare("INSERT INTO retail_shipments (order_id,mode,local_eta,eta_source) VALUES (?,'local','08:00','manual')").run(id);
+  }
+  const got = match(db);
+  for (const id of [1, 2, 3]) assert.ok(got.includes(id), `sub-type on order ${id} must survive`);
+});
+
+it('a tenant without the column keeps its rider check', () => {
+  // The column arrived by addColumn. Letting its absence throw into the catch
+  // would return [] and drop the whole rider check for that tenant — a bigger
+  // hole than the one being closed.
+  const db = fixture();
+  db.exec(`CREATE TABLE tmp AS SELECT id, order_id, mode, dispatched_at, delivered_at,
+             tracking_status, tracking_synced_at, local_eta, air_delay_cleared_at
+             FROM retail_shipments;
+           DROP TABLE retail_shipments;
+           ALTER TABLE tmp RENAME TO retail_shipments;`);
+  assert.ok(!db.prepare('PRAGMA table_info(retail_shipments)').all().some(c => c.name === 'eta_source'));
+  assert.deepStrictEqual(alerts.localStuckRows(db).map(r => r.id), [4]);
+});
+
+it('the time and its provenance are read off the SAME parcel', () => {
+  // Two parcels, and only the one carrying the time is the one whose
+  // provenance may speak for it. Sub-queries that ordered differently would
+  // pair a time with another parcel's flag.
+  const db = fixture();
+  db.prepare("INSERT INTO retail_shipments (id,order_id,mode,local_eta,eta_source) VALUES (45,4,'local',NULL,'manual')").run();
+  assert.deepStrictEqual(alerts.localStuckRows(db).map(r => r.id), [4],
+    'a parcel with no time must not lend its flag to the parcel that has one');
 });
 
 console.log('\nthe card counts the SET, not the sum of its parts');
