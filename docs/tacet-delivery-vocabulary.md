@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.154 · 2026-09-21 · §209 GIVES THE RECEIVE SCREEN A BAND AND A TICK — TWO COMPOSED STRINGS, BOTH CUT FROM ONE LIVE PAIR.** Counting a delivery in was five actions a line, every line a keypad; it is now one tap for the whole delivery or one tap a line, with the keypad kept for the figure that is not the one on the van. Both new words come off the SAME live pair — the purchasing side's `Everything arrived? · 全部到货了吗？`, which already asks this exact question about a delivery one screen away. Everything else the screen renders (`sent · 发出`, `counted · 已点`, `Confirm receipt · 确认收货`, `Saving… · 保存中…`, both failure sentences) was already there and is untouched. See *The band and the tick on the receive screen (§209)*.
+
 **v1.153 · 2026-09-21 · §207 LETS THE APPROVER CORRECT WHO PAID — ONE COMPOSED STRING, EVERY SCREEN WORD COPIED.** The two options the new picker offers (`own money · 个人支付`, `company · 公司`) and its label (`Who paid · 由谁付款`) are the phone's own live pairs, already over this exact field; `Saved · 已保存` is the queue's own. What is composed is ONE server refusal, and it is composed from two live parts. The two other refusals the route makes are borrowed whole from sentences the file already says. See *Correcting who paid on an approved claim (§207)*.
 
 **v1.152 · 2026-09-21 · §206 REBUILDS THE FULL PRODUCT PAGE — COPYING EVERY SECTION NAME AND COMPOSING THE WORDS A SETTINGS CARD NEEDS.** The page's six section names, its right-column headings and every state it reports are the dock's own pairs, lifted whole. What is new is the Settings card that orders and hides sections, one summary row's label, one door's label, and three sentences of explanation — composed from live parts and declared below with what was rejected. `scripts/test_product_page_sections.js` asserts every static label on the page and the card is an EN · CN pair. See *The product page's sections and the card that orders them*.
@@ -8220,3 +8222,43 @@ own `ERR.paidBy` — *say who paid · 请选择付款方式* — so the submit f
 correction route refuse a third spelling in identical words. A third and fourth
 sentence for states this file already names would be four ways to be told one
 thing.
+
+
+## The band and the tick on the receive screen (§209)
+
+**WHAT THIS NAMES.** The screen a shop counts an incoming transfer on now
+carries two ways through that are not the keypad: a band above the list that
+counts the WHOLE delivery in at what was sent, and a tick on each row that does
+the same for THAT LINE. Ash, off the live screen with a single banana on it:
+*"need to write manually ? not efficient"*. **Register: OPERATOR** (Rule 1)
+throughout; no shopper sees any of it.
+
+**TWO COMPOSED STRINGS, AND BOTH ARE CUT FROM ONE LIVE PAIR.** The purchasing
+side already asks this exact question about a delivery — `Everything arrived? ·
+全部到货了吗？`, the confirm that books a whole purchase order in at the ordered
+quantity, in this same file. It is the same fact about the same kind of event,
+one screen away, which is the first preference in its strongest form. What it is
+not is a button label or a row control, so it is cut rather than copied whole.
+
+| Where | English | Chinese | Note |
+| --- | --- | --- | --- |
+| The band over the list, `screenReceiveTransfer` | Everything arrived | 全部到货 | **COMPOSED** by restructuring the live `全部到货了吗？` (the purchasing Delivered confirm, same file) — the question particle `了吗？` dropped, nothing added. A button states what it will do; it does not ask. Rejected: the live pair verbatim, because a button labelled with a question reads as a prompt and this one commits; `确认收货`, because it is live on THIS screen as *Confirm receipt*, the button that settles the delivery two steps later — one label over two different acts on one journey is how somebody settles a count they meant to start; `全部收货`, unsourced here and `收货` is the receiving act, not the arriving fact the band asserts. |
+| The tick on each row, its accessible name | All here | 到齐 | **COMPOSED.** `到齐` is *arrived complete* — the line as a set, all of it present, which is precisely what the tick asserts and what distinguishes it from a count that happens to match. Rejected: `全部到货`, the band's own new pair, because the band means the whole delivery and the tick means one line of it, and the same words at two scopes on one screen would make the band look like a row that had lost its place; `确认收货`, for the collision above; `已收`, which says received and is silent on whether all of it came, the one thing the tick is for; `部分到货` (live, *Part arrived*, the purchasing list), which is the opposite state. |
+
+Composed by Claude Opus 5 on 2026-09-21 under the 2026-09-06 amendment,
+declared here in the same commit as the code that uses it.
+
+**THE TICK IS LABELLED AT ALL ONLY BECAUSE IT IS ICON-ONLY.** It draws a check
+and nothing else, so the name exists for a screen reader and is rendered
+`到齐 · <product>` — the state first, the thing it is about second, the product
+name carrying no new vocabulary because it is the catalogue's. A row whose number
+is visible needs no label for the number (Rule 4's numeral note); the tick is not
+a numeral.
+
+**WHAT WAS NOT MINTED, AND THE LIST IS LONGER THAN WHAT WAS.** `sent · 发出`,
+`counted · 已点`, `Confirm receipt · 确认收货`, `Saving… · 保存中…`, `Count what
+actually arrived. · 清点实际到货数量。`, `This account cannot receive transfers. ·
+此账号无法确认调拨收货。` and `That did not go through. Nothing has changed — try
+again. · 没有成功。数据没有变化 — 请重试。` were all already on this screen and are
+used unchanged, the last one now also reporting a failed band write. A screen
+that gained two ways to work gained two words.
