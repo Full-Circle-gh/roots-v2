@@ -316,11 +316,15 @@ try {
      WHERE COALESCE(sp.is_active,1) = 1
        AND NOT EXISTS (SELECT 1 FROM products p WHERE p.id = sp.id)`).get().c;
   console.log(`   active store_products with NO products row of the same id: ${orphan}`);
-  if (orphan > 0) {
-    console.log('   !! Writing any of those ids into restock_items.product_id violates');
-    console.log('      the FK and throws. That is both why the backfill linked nothing');
-    console.log('      and a live risk for every new request the phone raises.');
-  }
+  /* THE COUNT IS A STANDING FACT, NOT A FAULT — since §201. A store-only
+     product is the ordinary shape for anything the shop sells and the kitchen
+     does not make. It was a fault only while `restock_items.product_id`
+     pointed at the kitchen catalogue, when every one of these ids threw on
+     insert; that key now names `store_products`, so the number below is
+     inventory rather than an alarm. The check that matters is the key. */
+  const fk = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='restock_items'").get();
+  const pointsAtStore = !!fk && /REFERENCES\s+store_products\s*\(/i.test(fk.sql);
+  console.log(`   restock_items.product_id references ${pointsAtStore ? 'store_products — correct' : 'products  !! WRONG (§201): every id above throws on insert'}`);
   for (const sku of ['A-3']) {
     const r = db.prepare('SELECT id FROM store_products WHERE TRIM(sku) = ?').get(sku);
     if (!r) { console.log(`   sku ${sku}: no store_products row`); continue; }
