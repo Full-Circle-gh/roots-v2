@@ -1432,6 +1432,24 @@ reg('qsTypeBlur', id=>qsTypeBlur(Number(id)));
    a search cannot change. */
 reg('rqSearch', v=>{
   state.rq.q=String(v||'');
+  searchClearShow('mRqClr', !!state.rq.q);
+  const host=document.getElementById('mRqBody');
+  if(host) host.innerHTML=rqBodyHtml();
+  else render();
+});
+/* THE × INSIDE THE FIELD. It cannot go through rqSearch, because the value
+   rqSearch clears is the one it was handed and this one is handed nothing — so
+   it empties the element first, then does precisely what a keystroke does and
+   nothing more. It neither re-renders the app nor puts focus back: the input is
+   never rebuilt and never blurred, which is what searchClearBtn's onmousedown
+   buys. (Naming either of those two calls in this comment would put the word
+   inside the rqSearch slice test_search_repaint_equivalence reads, which runs
+   to the next reg — so they are described here rather than written.) */
+reg('rqClear', ()=>{
+  const el=document.getElementById('mRqQ');
+  if(el) el.value='';
+  state.rq.q='';
+  searchClearShow('mRqClr', false);
   const host=document.getElementById('mRqBody');
   if(host) host.innerHTML=rqBodyHtml();
   else render();
@@ -11783,6 +11801,38 @@ function qsBodyHtml(){
    would render as one. titleOf is the hook that exists for a title that is not
    a fixed word; Receive is the other screen using it. `title` stays the
    array so the stack entry is still valid on its own. */
+/* THE × THAT EMPTIES A SEARCH BOX. Clearing a query by hand is one backspace
+   per character with a product name in the field, so what an operator actually
+   does is leave the wrong query sitting there and scroll past it. The control
+   sits INSIDE the field and mirrors the magnifier across it — both 39px from
+   their own edge — so the pair reads as one row.
+   IT IS DRAWN EVEN WHEN THE BOX IS EMPTY, hidden rather than absent, and that
+   is the whole reason it is built this way rather than appended on the first
+   keystroke. Showing it is then a style flip on an element that already exists,
+   and NOTHING AROUND THE INPUT IS REBUILT — which is the rule the search
+   handlers above this file's commands keep, because a rebuilt <input> opens a
+   fresh soft keyboard on its letter page.
+   `onmousedown` REFUSES THE FOCUS CHANGE rather than putting focus back after
+   it. Tapping a button blurs the field, a blur closes the keyboard, and
+   re-focusing reopens it on the letter page — the same defect through a
+   different door. Prevented, the field never loses focus at all, so there is no
+   rescue here and none is needed. The click still fires.
+   The input reserves its right-hand padding permanently, not only while the ×
+   shows: a padding that appears with the first character would shuffle the text
+   under the caret as it is being typed.
+   Written to be lifted onto the other search boxes on this page; the request
+   picker is the only one carrying it so far. */
+function searchClearBtn(id,cmd,shown){
+  return `<button id="${id}" class="iconbtn" type="button" aria-label="${T('Clear','清除')}"
+    style="position:absolute;right:17px;top:50%;transform:translateY(-50%)${shown?'':';display:none'}"
+    onmousedown="event.preventDefault()" onclick="APP.cmd('${cmd}')">${ic('x',18,2)}</button>`;
+}
+/* Clearing the inline display hands the button back to .iconbtn's own
+   display:flex, rather than guessing at it here. */
+function searchClearShow(id,on){
+  const b=document.getElementById(id);
+  if(b) b.style.display=on?'':'none';
+}
 /* ── The two request screens ──────────────────────────────────────────────
    One product picker, drawn once, with the question that belongs to each
    direction above it: what the kitchen request is FOR, or which two locations
@@ -11792,8 +11842,9 @@ function rqPicker(){
   if(!r.products) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const search=`<div style="padding:4px 16px 12px;position:relative">
     <span style="position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text-secondary);display:flex;pointer-events:none">${ic('search',18)}</span>
-    <input id="mRqQ" inputmode="search" enterkeyhint="search" value="${escAttr(r.q)}" style="padding-left:42px"
-      placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('rqSearch',this.value)"></div>`;
+    <input id="mRqQ" inputmode="search" enterkeyhint="search" value="${escAttr(r.q)}" style="padding-left:42px;padding-right:44px"
+      placeholder="${T('Search products','搜索商品')}" oninput="APP.cmd('rqSearch',this.value)">
+    ${searchClearBtn('mRqClr','rqClear',!!r.q)}</div>`;
   /* EVERYTHING THE QUERY CHANGES, IN ONE PATCHABLE BOX, and the search input
      deliberately outside it. rqSearch repaints this box and nothing else, so the
      input element survives a whole search — a re-render would rebuild it, and a

@@ -132,7 +132,14 @@ function makeSandbox(state) {
 // Helpers that genuinely filter are sliced from the NEW tree and shared by both
 // sides — they are not what changed, and stubbing them would hide a filter bug
 // behind two identical stubs.
-const SHARED = ['qsRows', 'rqLines', 'batLines'];
+/* searchClearBtn is here for a different reason: it is not a filter, it is the
+   × added to the request picker AFTER both baselines below were taken. The old
+   rqPicker never called it, so it is loaded from the new tree purely to let the
+   old side run at all — and the equivalence half is expected to report the
+   button as a difference, because it is one. See the EQUIV note above: that
+   half is a migration proof, off by default, and a legitimate later edit to one
+   of these screens is exactly what turns it red. */
+const SHARED = ['qsRows', 'rqLines', 'batLines', 'searchClearBtn'];
 
 function load(sb, src, names) {
   for (const n of SHARED) vm.runInContext(sliceFn(NEW_SRC, n), sb, { filename: `shared#${n}` });
