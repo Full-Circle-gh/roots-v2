@@ -257,6 +257,48 @@ if (!hasTable('_migrations')) {
   console.log('         every SKU that is absent, inactive or ambiguous, by design.');
 }
 
+/* WHAT THE REPAIR SEES TODAY, RUN VERBATIM. The clause is copied from
+   database.js rather than described, because a description of a WHERE is not a
+   WHERE: v1 ran, the banana's SKU matches exactly once, and the line was still
+   skipped — so the question is which predicate excluded it, and the only
+   honest way to ask is to ask the query. Each candidate is printed with the
+   four order-level facts the clause turns on, so a row that is MISSING from
+   this list can be read against the row above it. */
+console.log('\n1c · the repair clause, as the migration itself writes it');
+try {
+  const cand = db.prepare(`
+    SELECT ri.id AS line_id, ro.rs_number, TRIM(ri.sku) AS sku
+      FROM restock_items ri
+      JOIN restock_orders ro ON ro.id = ri.restock_id
+     WHERE ri.product_id IS NULL
+       AND ri.sku IS NOT NULL AND TRIM(ri.sku) <> ''
+       AND ro.dispatched_at IS NULL
+       AND COALESCE(ro.goods_state, 'none') = 'none'
+       AND ro.stock_applied_at IS NULL
+       AND COALESCE(ro.to_role, 'warehouse') <> 'kitchen'
+       AND COALESCE(ro.from_role, 'store')   <> 'kitchen'
+  `).all();
+  console.log(`   ${cand.length} line(s) the clause would link right now`);
+  for (const c of cand) console.log(`     ${c.rs_number}  line ${c.line_id}  sku ${c.sku}`);
+
+  // Every unlinked line, with the four facts, so an ABSENCE above is explained.
+  const unl = db.prepare(`
+    SELECT ri.id AS line_id, ro.rs_number, TRIM(COALESCE(ri.sku,'')) AS sku,
+           ro.dispatched_at, COALESCE(ro.goods_state,'none') AS goods_state,
+           ro.stock_applied_at, ro.status
+      FROM restock_items ri
+      JOIN restock_orders ro ON ro.id = ri.restock_id
+     WHERE ri.product_id IS NULL
+       AND COALESCE(ro.to_role,'warehouse') <> 'kitchen'
+     ORDER BY ri.id DESC LIMIT 10
+  `).all();
+  console.log(`   every unlinked non-kitchen line (newest 10):`);
+  for (const u of unl) {
+    console.log(`     ${u.rs_number}  line ${u.line_id}  status ${u.status}  sku ${u.sku || '(none)'}`);
+    console.log(`        dispatched_at ${u.dispatched_at || 'NULL'}   goods ${u.goods_state}   stock_applied_at ${u.stock_applied_at || 'NULL'}`);
+  }
+} catch (e) { console.log(`   clause probe failed: ${e.message}`); }
+
 // ── 2 · the push rail as a whole ──────────────────────────────────────────
 console.log('\n2 · the push rail');
 const vapid = !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY);
