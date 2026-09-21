@@ -21,6 +21,10 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { inlineTdDatetime } = require('./lib/m-probe');
+/* The state-key check, which used to be thirty inline lines further down. It
+   is a module now so the FAST shard can run it too — see its header, and the
+   note over the call site. */
+const { stateKeyProblems } = require('./lib/m-state-keys');
 
 const APP = path.join(__dirname, '..', 'public', 'm.html');
 
@@ -516,43 +520,23 @@ function main() {
   }
 
   // ── Static pass: every state key is declared, exactly once ─────────────
-  // The app has ONE state object and ~120 keys on it. Two screens can pick the
-  // same short name without either author noticing: `state.pos` was the
-  // operator's ROLE (loadMe writes it; the money gate reads it) and a later
-  // edit reused it for the purchase-order list. Nothing failed — the two just
-  // took turns clobbering each other, and the symptom would have been revenue
-  // appearing for a warehouse operator, which no render test looks for.
-  // So: every state.x the file touches must appear in the literal, once.
+  // THE CHECK MOVED OUT OF THIS FILE AND IS ONLY CALLED FROM IT NOW. It lived
+  // here as thirty inline lines, and here is the slow shard — which this repo
+  // does not run. On 2026-09-18 §181 added three undeclared keys; this caught
+  // all three that day and told nobody for three days, because nothing ran it.
+  // The logic is scripts/lib/m-state-keys.js and the gate calls it through
+  // scripts/test_mobile_state_keys.js, which reads one file and needs no
+  // browser. It is still asked HERE as well, deliberately: this suite already
+  // has the file open, the call costs nothing, and a render pass that noticed a
+  // broken state object and said nothing would be its own kind of silence.
   {
-    const raw = (src.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
-    const js2 = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
-    const lit = (js2.match(/\bconst state\s*=\s*\{([\s\S]*?)\n\};/) || [])[1] || '';
-    if (!lit) { console.error('FAIL static — cannot find the state literal'); process.exit(1); }
-    // TOP-LEVEL keys only, and several per line. A regex cannot do this: the
-    // literal packs many keys on one line AND contains nested objects
-    // (`sw:{fapiao:…, affiliate:…}` is a map of feature flags, not of state
-    // keys). So walk it, tracking brace depth and skipping quoted strings.
-    const seen = new Map();
-    {
-      let depth = 0, q = null, ident = '';
-      for (let i = 0; i < lit.length; i++) {
-        const c = lit[i];
-        if (q) { if (c === '\\') i++; else if (c === q) q = null; continue; }
-        if (c === "'" || c === '"' || c === '`') { q = c; ident = ''; continue; }
-        if (c === '{' || c === '[' || c === '(') { depth++; ident = ''; continue; }
-        if (c === '}' || c === ']' || c === ')') { depth--; ident = ''; continue; }
-        if (/[A-Za-z0-9_$]/.test(c)) { ident += c; continue; }
-        if (c === ':' && depth === 0 && ident) seen.set(ident, (seen.get(ident) || 0) + 1);
-        ident = '';
-      }
-    }
-    const dupes = [...seen].filter(([, n]) => n > 1).map(([k]) => k).sort();
-    for (const k of dupes) console.error(`FAIL static — state.${k} is declared twice`);
-    const used = new Set([...js2.matchAll(/\bstate\.([a-zA-Z_$][\w$]*)/g)].map((m) => m[1]));
-    const undecl = [...used].filter((k) => !seen.has(k)).sort();
-    for (const k of undecl) console.error(`FAIL static — state.${k} is used but never declared in the state literal`);
-    if (dupes.length || undecl.length) {
-      console.error(`\n${dupes.length + undecl.length} state key problem${dupes.length + undecl.length === 1 ? '' : 's'}.`);
+    const r = stateKeyProblems(src);
+    if (r.error) { console.error(`FAIL static — ${r.error}`); process.exit(1); }
+    for (const k of r.dupes) console.error(`FAIL static — state.${k} is declared twice`);
+    for (const k of r.undeclared) console.error(`FAIL static — state.${k} is used but never declared in the state literal`);
+    const bad = r.dupes.length + r.undeclared.length;
+    if (bad) {
+      console.error(`\n${bad} state key problem${bad === 1 ? '' : 's'}.`);
       process.exit(1);
     }
   }

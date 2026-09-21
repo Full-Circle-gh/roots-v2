@@ -35,6 +35,9 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
+/* One answer to "where does the state literal end", shared with the state-key
+   guard, so this case and that one cannot drift apart over it. */
+const { stateLiteral } = require('./lib/m-state-keys');
 
 const ROOT = path.join(__dirname, '..');
 const read = (...p) => fs.readFileSync(path.join(ROOT, ...p), 'utf8');
@@ -130,10 +133,11 @@ it('state.askOpen is declared in the state literal, not conjured at runtime', ()
      three keys §181 had never declared were added to the literal in 2026-09-21
      with a note explaining why, `askOpen` slid past 6000, and this case failed
      over a key nobody had touched. A window that moves when unrelated lines are
-     added is a tripwire on the file's length, not on what it declares. Same
-     expression test_mobile_screens.js's static guard uses, so the two agree
-     about where the literal ends. */
-  const wider = (MHTML.match(/\bconst state\s*=\s*\{([\s\S]*?)\n\};/) || [])[1] || '';
+     added is a tripwire on the file's length, not on what it declares. It asks
+     scripts/lib/m-state-keys.js, which is where the state-key guard itself gets
+     the literal's bounds — so there is ONE answer to "where does the literal
+     end" and these two cases cannot drift apart over it. */
+  const wider = stateLiteral(MHTML);
   assert.ok(wider, 'the state literal cannot be found at all');
   assert.ok(/\baskOpen\s*:/.test(wider),
     'state.askOpen is read but never declared in the state literal — the slow shard would fail on this');
