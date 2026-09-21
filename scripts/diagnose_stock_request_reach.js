@@ -148,11 +148,22 @@ for (const o of rows) {
   console.log(`   supplier    ${o.from_store_id ? storeName(o.from_store_id) : 'NOT NAMED — falls back to the role pair'}`);
   console.log(`   destination ${o.to_store_id ? storeName(o.to_store_id) : (o.store_cn || o.store_name || 'NOT NAMED')}`);
   const items = db.prepare(
-    'SELECT product_name, product_cn, sku, qty_requested, unit FROM restock_items WHERE restock_id = ? AND qty_requested > 0 ORDER BY id').all(o.id);
-  console.log(`   lines       ${items.length}` + (items.length
-    ? ' — ' + items.slice(0, 4).map(i => `${i.qty_requested}×${i.product_cn || i.product_name}`).join(', ')
-      + (items.length > 4 ? '…' : '')
-    : ''));
+    `SELECT product_id, product_name, product_cn, sku, qty_requested, unit
+       FROM restock_items WHERE restock_id = ? AND qty_requested > 0 ORDER BY id`).all(o.id);
+  console.log(`   lines       ${items.length}`);
+  /* PER LINE, BECAUSE THE LINE IS WHERE THE FAULT LIVES. A transfer moves only
+     lines carrying a product_id; one without is unmovable and the whole
+     dispatch is refused. The SKU is printed beside it because that is what the
+     backfill matches on — a line with neither an id nor a SKU cannot be
+     repaired automatically, and saying so is the difference between "it did
+     not work" and knowing why. */
+  for (const i of items) {
+    const name = (i.product_cn || i.product_name || '?');
+    const sku = String(i.sku || '').trim();
+    console.log(`     ${String(i.qty_requested).padStart(4)} × ${name}`);
+    console.log(`          product_id ${i.product_id == null ? 'NULL  !! unmovable — a dispatch skips this line' : i.product_id}` +
+      `   sku ${sku ? sku : "(none)  !! and the SKU backfill has nothing to match on"}`);
+  }
 
   /* WHERE THE GOODS THEMSELVES ARE — a SECOND fact from the status beside it,
      and the one the first run of this script could not answer.
