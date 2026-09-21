@@ -1559,6 +1559,11 @@ reg('xfrAsk', id=>{
       :T('Enter what arrived — a whole number, 0 or more.','请输入到货数量 — 0 或以上的整数。'),
     run:v=>xfrSaveCount(Number(id), parseInt(String(v.n).trim(),10)) };
   render(); });
+reg('xfrTick', id=>{
+  const it=xfrItems().find(y=>y.id===Number(id));
+  if(it) xfrSaveCount(it.id, xfrSent(it));
+});
+reg('xfrAllArrived', ()=>xfrAllArrived());
 reg('qsFlush', id=>qsFlush(Number(id)));
 reg('leave', href=>{ if(typeof href==='string'&&href.charAt(0)==='/'&&href.charAt(1)!=='/') location.href=href; });
 reg('tab', t=>{ if(t!=='more'&&!canRoute(t)) return; forgetPushed(); state.stack=[]; state.tab=t; state.detailId=null;
@@ -10825,6 +10830,49 @@ function xfrSaveCount(itemId,qty){
     render();
   });
 }
+/* THE BAND, AND IT GOES THROUGH THE CONFIRM SCREEN RATHER THAN AROUND IT.
+   Every line takes the quantity that was sent — and the LAST one is HELD,
+   exactly as a typed count is held by xfrSaveCount above, for exactly the
+   reason given there: sending all of them would settle the delivery before
+   anybody had seen the totals.
+
+   SO THE SAFEGUARD IS THE CONFIRM SCREEN, NOT A DIALOG. The purchasing side's
+   one-tap equivalent asks *"Everything arrived? · 全部到货了吗？"* in a modal
+   because it settles on the spot and has nothing else to show. This lands on a
+   screen that already prints counted against sent and lists every line that
+   differs. A modal in front of it would be a second confirmation of the same
+   act, and a worse one — it carries no numbers.
+
+   Never throws away a count somebody typed: a line already counted keeps its
+   figure, so ticking the rest does not overwrite the short line they just
+   corrected. */
+function xfrAllArrived(){
+  const x=state.xfr;
+  if(x.busy||!x.order) return;
+  const items=xfrItems();
+  if(!items.length) return;
+  const last=items[items.length-1];
+  const val=it=>{ const c=xfrCount(it); return c==null?xfrSent(it):c; };
+  const counts=items.filter(it=>it.id!==last.id&&xfrCount(it)==null)
+                    .map(it=>({item_id:it.id,qty_received:xfrSent(it)}));
+  // A held line that is no longer the last one has to go with this write, the
+  // same rule xfrSaveCount follows.
+  if(x.held&&x.held.item_id!==last.id&&!counts.some(c=>c.item_id===x.held.item_id))
+    counts.push({item_id:x.held.item_id,qty_received:x.held.qty});
+  const settle=()=>{ x.held={item_id:last.id,qty:val(last)}; x.busy=false; x.step='confirm'; render(); };
+  if(!counts.length){ settle(); return; }
+  x.busy=true; x.err=''; render();
+  apiWrite('/api/restock/'+x.order.id+'/receive',{counts:counts},'PUT').then(()=>{
+    counts.forEach(c=>{ const it=(x.order.items||[]).find(y=>y.id===c.item_id); if(it) it.qty_received=c.qty_received; });
+    settle();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    x.busy=false;
+    x.err=e.code==='norealm' ? T('This account cannot receive transfers.','此账号无法确认调拨收货。')
+                             : T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
+    render();
+  });
+}
 function xfrConfirm(){
   const x=state.xfr;
   if(x.busy) return;
@@ -11856,21 +11904,51 @@ function screenReceiveTransfer(){
           <button class="btn2" style="width:auto;padding:11px 26px"${x.busy?' disabled':''}
             onclick="APP.cmd('xfrConfirm')">${x.busy?T('Saving…','保存中…'):T('Confirm receipt','确认收货')}</button></div>`;
     }
-    // The count itself: one row per line, each opening a number entry.
+    /* TYPING IS NO LONGER THE ONLY WAY IN (§209). Ash, off the live screen
+       with a single banana on it: *"need to write manually ? not efficient"*.
+       Five actions to count one line in — tap, keypad, type, save, confirm —
+       and a van-load of twenty was twenty keypads.
+
+       TWO WAYS THROUGH, AND THE KEYPAD IS STILL THE THIRD. The band counts the
+       WHOLE delivery in at what was sent; the tick on a row counts THAT LINE in
+       at what was sent; the number stays tappable for the only case neither
+       covers, which is a figure that is not the one on the van.
+
+       WHAT IS DELIBERATELY NOT HERE IS A PRE-FILLED NUMBER. A stepper starting
+       at qty_sent is fewer taps again and was rejected for it: every line would
+       already hold the right answer, so Confirm could be pressed without anybody
+       opening a box, and a short delivery would go on the shelf as full. A tick
+       is a person saying they looked. A pre-filled number is the screen saying
+       it for them, and §39 — what the store counts is what the store holds —
+       is worth more than the taps it costs. */
+    const allTicked=items.length>0&&items.every(it=>xfrCount(it)===xfrSent(it));
     return backRow(T('Receive from another shop','调拨收货'))+err+`
       <div style="padding:0 16px 6px;font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
       <div style="padding:0 16px 12px;font-size:13px;color:var(--text-secondary)">${
         T('Count what actually arrived.','清点实际到货数量。')}</div>
+      ${items.length?`<div style="padding:0 16px 14px">
+        <button class="btn2" style="width:100%;padding:13px 18px;display:flex;align-items:center;justify-content:center;gap:9px"${
+            x.busy||allTicked?' disabled':''} onclick="APP.cmd('xfrAllArrived')">
+          <span style="display:flex">${ic('check',19)}</span>${x.busy?T('Saving…','保存中…'):T('Everything arrived','全部到货')}</button></div>`:''}
       <div>${items.map(it=>{
         const got=xfrCount(it);
-        return `<button class="row" style="width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px"
-          onclick="APP.cmd('xfrAsk',${it.id})">
-          <span style="flex:1;min-width:0">
-            <span style="display:block;font-size:15px;font-weight:500">${escAttr(xfrName(it))}</span>
-            <span style="display:block;font-size:13px;color:var(--text-secondary)">${T('sent','发出')} <span class="num">${xfrSent(it)}</span></span>
-          </span>
-          <span class="num" style="font-size:20px;font-weight:500;color:${got==null?'var(--text-secondary)':'var(--text-primary)'}">${got==null?'—':got}</span>
-        </button>`;
+        const full=got===xfrSent(it);
+        return `<div style="width:100%;border-top:1px solid var(--border-default);padding:8px 16px;display:flex;align-items:center;gap:10px">
+          <button style="flex:1;min-width:0;text-align:left;display:flex;align-items:center;gap:12px;padding:6px 0;
+              background:none;border:0;font-family:inherit;color:inherit;min-height:44px;cursor:pointer"
+            onclick="APP.cmd('xfrAsk',${it.id})">
+            <span style="flex:1;min-width:0">
+              <span style="display:block;font-size:15px;font-weight:500">${escAttr(xfrName(it))}</span>
+              <span style="display:block;font-size:13px;color:var(--text-secondary)">${T('sent','发出')} <span class="num">${xfrSent(it)}</span></span>
+            </span>
+            <span class="num" style="font-size:20px;font-weight:500;color:${got==null?'var(--text-secondary)':(full?'var(--text-primary)':'var(--amber-ink)')}">${got==null?'—':got}</span>
+          </button>
+          <button aria-label="${escAttr(T('All here','到齐')+' · '+xfrName(it))}"
+            style="width:44px;height:44px;flex:none;border-radius:999px;display:flex;align-items:center;justify-content:center;
+              background:${full?'var(--sage-ink)':'transparent'};border:${full?'0':'1.5px solid var(--edge)'};
+              color:${full?'var(--surface-card)':'var(--edge)'};cursor:pointer"${x.busy?' disabled':''}
+            onclick="APP.cmd('xfrTick',${it.id})">${ic('check',20,2.2)}</button>
+        </div>`;
       }).join('')}</div>`;
   }
   if(!x.list) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
