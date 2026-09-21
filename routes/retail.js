@@ -30342,7 +30342,7 @@ router.post('/api/retail-admin/orders/:id/qingyun/confirm-point', requireRetailA
         JSON.stringify({ ...addr, lat: pin.lat, lng: pin.lng, geo_source: 'staff_pin', geo_precision: null }), id);
       // The THIRD write, and the only one that outlives this order: the answer
       // goes into the operators' own record of answered addresses, so the next
-      // order to this exact text ships without asking again (decisions §203).
+      // order to this exact text ships without asking again (decisions §204).
       // Still not retail_customer_addresses — D5 is untouched, and the reason
       // it is untouched is in lib/delivery-point-memory's header.
       //
@@ -30379,7 +30379,7 @@ router.post('/api/retail-admin/orders/:id/qingyun/confirm-point', requireRetailA
   // Any OTHER order parked on this same address is waiting on the answer that
   // was just given, and a parked row never retries itself — so it would ask the
   // identical question again rather than inherit it. Released here, after the
-  // commit, because these are other orders' dispatches (§203).
+  // commit, because these are other orders' dispatches (§204).
   const alsoReleased = pointMemory.releaseWaiting(
     tdb(), pointMemory.recall(tdb(), addr), { excludeOrderId: id });
 

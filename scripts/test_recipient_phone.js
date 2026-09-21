@@ -361,7 +361,7 @@ it('the daemon uses the shared outcome, and the catch block is in the right ORDE
   //   1. shouldHoldForGeocoder    — the provider is down. Give the attempt back.
   //   2. pointMemory.recall       — a person already answered this address on an
   //                                 earlier order. Apply it and requeue; nobody
-  //                                 is asked again (decisions §203).
+  //                                 is asked again (decisions §204).
   //   3. shouldMarkAwaitingChoice — the NAME search found several places and
   //                                 could not choose. Park it with the list.
   //   4. shouldMarkNeedsPoint     — nothing could be placed at all. Park it

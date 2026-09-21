@@ -786,7 +786,7 @@ async function drainPushQueue(storeCode, br) {
       // Both parked states below ask a person a question. If someone has
       // already answered it for this exact address text — tapped the building,
       // or picked the place off the list — the question is not asked again
-      // (decisions §203, Ash: the reuse is silent). The remembered SOURCE is
+      // (decisions §204, Ash: the reuse is silent). The remembered SOURCE is
       // written unchanged, so a picked name stays subject to MAX_DROP_KM and
       // only a tapped building carries the exemption it earned.
       if (qingyunQueue.shouldMarkNeedsPoint(e) || qingyunQueue.shouldMarkAwaitingChoice(e)) {
