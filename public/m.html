@@ -9868,10 +9868,20 @@ function loadRqSent(force){
     render();
   });
 }
-const RQS_PILL={arrived:'success', sent:'clear', waiting:'clear'};
+/* FOUR WORDS, AND EVERY ONE OF THEM IS ALREADY LIVE (§202).
+   It was three, and the middle one said "Dispatched" while meaning only that a
+   picker had TICKED the line — at the shelf, goods still in their shop. Ash
+   read it on his banana and went looking at the far end, where Receive said
+   Nothing on its way: both screens honest, about different facts.
+   PICKED is somebody holding it; ON ITS WAY is it having left. Only Sage on
+   the last one — arriving is the end of the journey and the only state worth a
+   colour; the two in the middle are progress, and progress that shouts stops
+   being read. */
+const RQS_PILL={arrived:'success', transit:'clear', picked:'clear', waiting:'clear'};
 function rqsWord(st){
   return st==='arrived' ? T('Counted in','已点收')
-       : st==='sent'    ? T('Dispatched','已发货')
+       : st==='transit' ? T('On its way','在途')
+       : st==='picked'  ? T('Picked','已拣')
        :                  T('Waiting','待处理');
 }
 function rqsFrom(r){
