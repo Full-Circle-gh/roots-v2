@@ -15694,17 +15694,17 @@ html[data-ui-lang="cn"] #tab-guanyi { line-height: 1.7; }
 /* ── The stage ──────────────────────────────────────────────────────────── */
 /* 1220, not 1120: three columns and a 240px rail leave about this much on a
    1512 window; the 1120 column would squeeze the middle one to nothing. */
-.ppg { max-width: 1220px; margin: 0 auto; padding: 0 0 96px; font-family: var(--f-sans); color: var(--td-text); font-size: 15px; line-height: 1.6; }
+.ppg { max-width: 1220px; margin: 0 auto; padding: 0 0 16px; font-family: var(--f-sans); color: var(--td-text); font-size: 15px; line-height: 1.6; }
 .ppg *, .ppg *::before, .ppg *::after { box-sizing: border-box; }
 .ppg .num { font-variant-numeric: tabular-nums; }
 
-.ppg-crumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--td-text2); margin-bottom: 16px; }
+.ppg-crumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--td-text2); margin-bottom: 10px; }
 .ppg-crumb button { display: inline-flex; align-items: center; gap: 6px; padding: 0; background: none; border: 0; cursor: pointer; font: 400 13px var(--f-sans); color: var(--td-text2); }
 .ppg-crumb button:hover { color: var(--td-text); }
 .ppg-crumb button:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; border-radius: 4px; }
 
 /* §1.7 — title, status line, and the page's live state on the right. */
-.ppg-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--td-border); }
+.ppg-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-bottom: 14px; border-bottom: 1px solid var(--td-border); }
 .ppg-id { display: flex; gap: 16px; min-width: 0; flex: 1; }
 .ppg-thumb { width: 56px; height: 56px; flex: none; border-radius: 12px; border: 1px solid var(--td-border); background: var(--td-raised) no-repeat center / cover; }
 .ppg-idtxt { min-width: 0; }
@@ -15719,7 +15719,7 @@ html[data-ui-lang="cn"] #tab-guanyi { line-height: 1.7; }
 .ppg-state { display: flex; align-items: center; min-height: 20px; }
 
 /* ── Three columns: rail · one section · the fixed right column ─────────── */
-.ppg-body { display: grid; grid-template-columns: 172px minmax(0, 1fr) 300px; gap: 28px; margin-top: 28px; align-items: start; }
+.ppg-body { display: grid; grid-template-columns: 172px minmax(0, 1fr) 320px; gap: 28px; margin-top: 18px; align-items: start; }
 .ppg-main { min-width: 0; }
 
 /* The rail. Sticky under the locked 56px topbar; the same shape as the
@@ -15960,32 +15960,49 @@ html[data-ui-lang="cn"] #tab-guanyi { line-height: 1.7; }
 .ppg #pd-design-stale { border-color: var(--td-amber) !important; background: var(--td-amber-tint) !important; font-size: 13px !important; }
 
 /* ── The right column: read, then set once ──────────────────────────────── */
-.ppg-side { position: sticky; top: 76px; min-width: 0; }
-.ppg-side .ppg-mount { gap: 14px; }
-.ppg-side #pd-sec-freeof { order: 2; }
-.ppg-side #pd-sec-flags { order: 3; }
-.ppg-side #pd-sec-notes { order: 4; }
-.ppg-side #pd-foot-acts { order: 5; }
+/* Compact on purpose: the column has to fit beside Basics on a laptop screen
+   without scrolling. One card holds Shipping · Free of · Flags as three
+   labelled rows; Sales is one line of three figures; the actions are a row. */
+/* The column never makes the PAGE scroll: it is capped at the window and
+   scrolls inside itself on a short screen, so Basics stays a single screen. */
+.ppg-side { position: sticky; top: 76px; min-width: 0; max-height: var(--ppg-side-cap, calc(100vh - 92px)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; padding: 1px; margin: -1px; }
+.ppg-side .ppg-mount { gap: 10px; }
+.ppg-side #pd-sales-card { order: -1; }
+.ppg-side .ppg-details { order: 0; }
+.ppg-side #pd-foot-acts { order: 2; }
+.ppg-side .pdb-card, .ppg-side .pd-card, .ppg-side .ppg-card { padding: 12px 16px; }
 /* Sales is the one block on the page you cannot change: it sits on the raised
    surface, so it reads as something reported to you. */
 .ppg #pd-sales-card { background: var(--td-raised); border-color: transparent; }
-.ppg .pd-sales-head { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; margin-bottom: 14px; }
+.ppg .pd-sales-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .ppg #pd-sales-title { font: 500 15px var(--f-sans); color: var(--td-text); }
 .ppg .pd-sales-chips { display: flex; gap: 4px; flex-wrap: wrap; }
-.ppg .pd-chip { height: 22px; padding: 0 9px; border-radius: 999px; font: 400 12px var(--f-sans); color: var(--td-text2); border: 1px solid var(--td-border); background: none; cursor: pointer; }
+.ppg .pd-chip { height: 22px; padding: 0 8px; border-radius: 999px; font: 400 12px var(--f-sans); color: var(--td-text2); border: 1px solid var(--td-border); background: none; cursor: pointer; }
 .ppg .pd-chip:hover { border-color: var(--td-text2); color: var(--td-text); }
 .ppg .pd-chip.pd-chip-active { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); font-weight: 500; }
-.ppg .pd-sales-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.ppg .pd-sales-kpi:nth-child(3) { grid-column: 1 / -1; }
-.ppg .pd-sales-kpi .v { font: 500 22px var(--f-sans); line-height: 1.1; color: var(--td-text); font-variant-numeric: tabular-nums; }
-.ppg .pd-sales-kpi .l { font-size: 13px; color: var(--td-text2); margin-top: 2px; }
-/* Shipping · Free of · Flags are chips: the word is the control. The little
-   brass glyphs drawn beside checkboxes say nothing the word does not. */
-.ppg .pd-chipset { display: flex; flex-wrap: wrap; gap: 8px; }
+.ppg .pd-sales-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ppg .pd-sales-kpi .v { font: 500 18px var(--f-sans); line-height: 1.1; color: var(--td-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ppg .pd-sales-kpi .l { font-size: 12px; color: var(--td-text2); margin-top: 2px; }
+.ppg .pd-sales-context { margin-top: 10px; font-size: 12.5px; }
+/* Shipping · Free of · Flags: each dock card becomes a row — its heading in
+   a narrow label column, its chips beside it. The word is the control; the
+   little brass glyphs drawn beside checkboxes say nothing the word does not. */
+.ppg-details { display: flex; flex-direction: column; gap: 0; }
+.ppg-details > .pdb-card {
+  display: block; border: 0; border-radius: 0; background: none;
+  padding: 8px 0; border-top: 1px solid var(--td-border);
+}
+.ppg-details > .pdb-card:first-child { border-top: 0; padding-top: 0; }
+.ppg-details > .pdb-card:last-child { padding-bottom: 0; }
+.ppg-details #pd-sec-freeof { order: 2; }
+.ppg-details #pd-sec-flags { order: 3; }
+.ppg-details #pd-sec-notes { order: 4; }
+.ppg-details > .pdb-card > .pd-sec-h { margin: 0 0 6px; font-size: 12.5px; color: var(--td-text2); font-weight: 500; }
+.ppg .pd-chipset { display: flex; flex-wrap: wrap; gap: 6px; }
 .ppg .pd-chipset.pd-chipset-col { flex-direction: row; align-items: center; }
 .ppg .pd-chipset > label {
-  position: relative; height: 30px; padding: 0 12px; border: 1px solid var(--td-border); border-radius: 999px;
-  background: var(--td-surface); color: var(--td-text); font: 500 13px var(--f-sans) !important; white-space: nowrap;
+  position: relative; height: 26px; padding: 0 10px; border: 1px solid var(--td-border); border-radius: 999px;
+  background: var(--td-surface); color: var(--td-text); font: 500 12.5px var(--f-sans) !important; white-space: nowrap;
   transition: border-color .15s var(--ease-out, ease);
 }
 .ppg .pd-chipset > label:hover { border-color: var(--td-text2); }
@@ -15993,10 +16010,16 @@ html[data-ui-lang="cn"] #tab-guanyi { line-height: 1.7; }
 .ppg .pd-chipset > label:has(input:focus-visible) { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
 .ppg .pd-chipset > label > input[type=checkbox] { position: absolute; opacity: 0; pointer-events: none; margin: 0; }
 .ppg .pd-chipset > label > svg { display: none; }
-.ppg #pd-ship-local-hint { font-size: 13px !important; color: var(--td-text2) !important; margin-top: 10px !important; line-height: 1.5; }
-.ppg #pd-sec-notes textarea { padding: 8px 12px !important; }
-.ppg #pd-foot-acts { display: flex; flex-direction: column; gap: 8px; padding: 0; border: 0; background: none; }
-.ppg #pd-foot-acts .btn { justify-content: center; width: 100%; }
+.ppg #pd-ship-local-hint { font-size: 12px !important; color: var(--td-text2) !important; margin-top: 4px !important; line-height: 1.4; }
+/* Notes: the fourth row of the same card. The "(staff only — never shown to
+   shoppers)" aside becomes the box's placeholder (set on carry), so the row
+   is a label and two lines of box. */
+.ppg #pd-sec-notes > .pd-sec-h .muted { display: none; }
+.ppg #pd-sec-notes textarea { padding: 6px 10px !important; min-height: 48px; font-size: 14px; }
+/* The record's actions: one row, Delete last and quiet. */
+.ppg #pd-foot-acts { display: flex; flex-direction: row; gap: 8px; padding: 0; border: 0; background: none; }
+.ppg #pd-foot-acts .btn { justify-content: center; flex: 1 1 0; min-width: 0; width: auto; height: 32px; padding: 0 8px; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ppg #pd-foot-acts .btn svg { display: none; }
 .ppg #pd-foot-acts #pd-delete-btn { order: 2; }
 
 /* ── Narrow: one column, the rail becomes a row of chips ────────────────── */
