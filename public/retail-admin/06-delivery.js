@@ -275,6 +275,10 @@ async function loadDeliveryZones() {
       if (el) el.checked = Array.isArray(batch.preorder_channels) && batch.preorder_channels.includes(c);
     }
     if ($('#batch-skip'))     $('#batch-skip').value     = (Array.isArray(batch.skip_dates) ? batch.skip_dates : []).join('\n');
+    // §210 — the live window state, beside the fields that decide it. Fired and
+    // not awaited: it is one small read, and the rest of this card must not wait
+    // on it to finish drawing.
+    renderPreorderNow();
     if ($('#batch-kicker-en')) $('#batch-kicker-en').value = batch.kicker_en || '';
     if ($('#batch-kicker-cn')) $('#batch-kicker-cn').value = batch.kicker_cn || '';
     if ($('#batch-title-en'))  $('#batch-title-en').value  = batch.title_en || '';
@@ -376,6 +380,9 @@ async function saveHolidayMode() {
   try {
     await api('/api/retail-admin/config', { method: 'PUT', body });
     toast('Saved · 已保存');
+    // §210 — the card's own answer to "did that do anything", refreshed from the
+    // server rather than predicted here.
+    renderPreorderNow();
   } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
 }
 
@@ -562,6 +569,89 @@ function poWire() {
   view.addEventListener('input', () => poSync());
   view.addEventListener('change', () => poSync());
   if (window.onLangChange) onLangChange(() => poSync());
+}
+
+/* §210 — THE PRE-ORDER WINDOW, AS IT IS THIS MINUTE.
+   Six conditions decide whether a platform is shown more than the shelf, and an
+   operator who had one of them wrong saw the same filled-in card as one who had
+   them all right. The server already names the FIRST condition that failed
+   (lib/batch-cadence.js `preorderWindow` returns a `reason`); this turns each
+   reason into the row it is about, so the fix is where the eye already is.
+
+   EVERY WORD BELOW IS THIS CARD'S OWN OR LIVE ELSEWHERE IN THE ADMIN — 已开启 /
+   未开启 are the switch labels, 预订可售数量 / 预订截单 / 预订开始 are the three
+   rows above, 按货架数量显示 is the Channels row's own sentence, 制作日 is the
+   skip-dates row's, 分批现做 is the product flag's, and 当日截单 is the save's own
+   refusal. The declarations are in docs/tacet-delivery-vocabulary.md v1.154. */
+const PREORDER_NOW_CHANNELS = {
+  meituan:   'Meituan · 美团',
+  eleme:     'Eleme · 饿了么',
+  gzgrocery: 'gzgrocery · 管易',
+};
+
+// The hour as the card writes hours: a bare number and :00, the same shape the
+// inputs beside it carry.
+function preorderNowHour(h) { return (h == null ? '—' : String(h) + ':00'); }
+
+/* Why a channel is not being shown more than the shelf. One line per reason
+   `preorderWindow` can return, each naming the row that fixes it. An unknown
+   reason prints itself rather than being swallowed — a reason added to the
+   server and not here should look unfinished, not fine. */
+function preorderNowReason(reason, d) {
+  /* cuT, never an 'EN · CN' string with a number in it: the walker splits a text
+     node on its FIRST ' · ' and keeps one side, so a pair carrying an hour would
+     be a half-sentence in one language (scripts/check-i18n-banners.js states the
+     rule and what it cost). Resolved here, nothing reaches the node to split. */
+  const open = preorderNowHour(d.open_hour);
+  const lock = preorderNowHour(d.lock_hour);
+  switch (reason) {
+    case 'no_schedule':      return cuT('Batch schedule is off', '分批排期未开启');
+    case 'no_allowance':     return cuT('No quantity set', '未设预订可售数量');
+    case 'channel_off':      return cuT('Channel not ticked', '未勾选此渠道');
+    case 'no_lock_hour':     return cuT('No cut-off hour', '未设预订截单');
+    case 'before_open_hour': return cuT('Opens at ' + open, open + ' 开始预订');
+    case 'past_lock':        return cuT('Past ' + lock, '已过预订截单 ' + lock);
+    case 'past_cutoff':      return cuT('Past the order-by hour', '已过当日截单');
+    case 'not_a_batch_day':  return cuT('Not a batch day today', '今天不是制作日');
+    default:                 return String(reason || '—');
+  }
+}
+
+async function renderPreorderNow() {
+  const host = $('#batch-preorder-now');
+  if (!host) return;
+  let d = null;
+  try {
+    const r = await api('/api/retail-admin/preorder-window');
+    d = (r && r.data) || null;
+  } catch (e) { d = null; }
+  if (!d) { host.textContent = '—'; return; }
+
+  const rows = Object.keys(PREORDER_NOW_CHANNELS).map((ch) => {
+    const c = (d.channels && d.channels[ch]) || { open: false, reason: 'no_schedule' };
+    const state = c.open ? cuT('Open', '已开启') : cuT('Off', '未开启');
+    const lock = preorderNowHour(c.lock_hour);
+    const body = c.open
+      ? cuT('shelf + ' + c.qty + ' shown, cut-off ' + lock,
+            '按货架数量 +' + c.qty + ' 显示,' + lock + ' 截单')
+      : preorderNowReason(c.reason, d);
+    return '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:baseline;margin-bottom:4px;">'
+      + '<b style="min-width:9em;">' + PREORDER_NOW_CHANNELS[ch] + '</b>'
+      + '<span style="font-weight:700;color:' + (c.open ? 'var(--st-preparing, #5C7A4E)' : 'var(--text-3)') + ';">' + state + '</span>'
+      + '<span>' + body + '</span></div>';
+  });
+
+  /* THE SEVENTH CONDITION, AND THE ONLY ONE NOT ON THIS CARD. The allowance
+     reaches batch-made products and nothing else, so a shop with none has set a
+     window that cannot change a single number — and no other screen says so. */
+  const made = Number(d.batch_made) || 0;
+  rows.push('<div style="margin-top:6px;' + (made ? '' : 'color:var(--st-awaiting_restock, #8A6516);font-weight:700;') + '">'
+    + (made
+       ? cuT(made + ' batch-made products can take the extra', made + ' 款「分批现做」商品可再接此数量')
+       : cuT('No batch-made products, so nothing changes', '没有「分批现做」商品,数量不起作用'))
+    + '</div>');
+
+  host.innerHTML = rows.join('');
 }
 
 async function saveBatchSchedule() {

@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.154 · 2026-09-21 · §210 SHOWS WHETHER THE PRE-ORDER WINDOW IS OPEN RIGHT NOW — COMPOSING EIGHT SHORT LINES OUT OF THE CARD'S OWN WORDS AND MINTING NO NEW TERM.** Ash, after §209 pointed him at §85's allowance: *"ok add"*. The six conditions that open a window had no readout, so a correct card and a mistyped one looked identical. **EVERY CHINESE FRAGMENT IS ALREADY ON THIS CARD OR LIVE BESIDE IT** — `按货架数量显示` is the Channels row's own sentence verbatim, `预订可售数量` / `预订截单` / `预订开始` are the three rows above, `制作日` is the skip-dates row's, `款` and `「分批现做」商品` are the quantity row's, `当日截单` is the save's own refusal, `已开启` / `未开启` are the switch labels, and `各平台`, `当前状态`, `原因`, `不起作用`, `可再接` are live. What is composed is the ORDER the words come in. **EVERY ONE IS RESOLVED WITH `cuT` AND NOT WRITTEN AS AN `EN · CN` STRING**, because five of them carry an hour or a count: the walker splits a text node on its first ` · ` and keeps one side, so a pair with a number in it ships as half a sentence in one language. See *Whether the pre-order window is open* at the end.
+
 **v1.153 · 2026-09-21 · §207 LETS THE APPROVER CORRECT WHO PAID — ONE COMPOSED STRING, EVERY SCREEN WORD COPIED.** The two options the new picker offers (`own money · 个人支付`, `company · 公司`) and its label (`Who paid · 由谁付款`) are the phone's own live pairs, already over this exact field; `Saved · 已保存` is the queue's own. What is composed is ONE server refusal, and it is composed from two live parts. The two other refusals the route makes are borrowed whole from sentences the file already says. See *Correcting who paid on an approved claim (§207)*.
 
 **v1.152 · 2026-09-21 · §206 REBUILDS THE FULL PRODUCT PAGE — COPYING EVERY SECTION NAME AND COMPOSING THE WORDS A SETTINGS CARD NEEDS.** The page's six section names, its right-column headings and every state it reports are the dock's own pairs, lifted whole. What is new is the Settings card that orders and hides sections, one summary row's label, one door's label, and three sentences of explanation — composed from live parts and declared below with what was rejected. `scripts/test_product_page_sections.js` asserts every static label on the page and the card is an EN · CN pair. See *The product page's sections and the card that orders them*.
@@ -8220,3 +8222,62 @@ own `ERR.paidBy` — *say who paid · 请选择付款方式* — so the submit f
 correction route refuse a third spelling in identical words. A third and fourth
 sentence for states this file already names would be four ways to be told one
 thing.
+
+
+## Whether the pre-order window is open (§210, 2026-09-21)
+
+§85 publishes `shelf + allowance` to a platform while six conditions hold: the
+batch schedule on, an allowance set, the channel ticked, the hour inside
+[start, cut-off), the ordering cut-off not passed, and today on the cadence. A
+seventh sits outside the card entirely — the allowance reaches batch-made
+products and nothing else. An operator with all seven right and one with a
+mistyped anchor date saw the same four filled boxes.
+
+The card now carries a read-only strip naming the state per channel, and for a
+shut one the FIRST condition that failed — which `lib/batch-cadence.js` has
+always returned and nothing ever showed.
+
+**LIFTED WHOLE, and this is most of the strip.**
+
+| Where from | Pair |
+| --- | --- |
+| The batch card's Channels row | `按货架数量显示` |
+| The batch card's three pre-order rows | `预订开始` · `预订截单` · `预订可售数量` |
+| The batch card's quantity row | `款` (measure word for a product) · `「分批现做」商品` |
+| The batch card's skip-dates row | `制作日` |
+| `saveBatchSchedule()`'s own refusal | `当日截单` |
+| The card's enable switch | `已开启` / `未开启` |
+| The Channels row, and `04-orders.js` | `各平台` · `当前状态` |
+
+**COMPOSED, by Claude, under the 2026-09-06 amendment's standing delegation.**
+Eight lines, each one live fragments in a new order and no new term among them.
+
+| Where | English | Chinese | Built from |
+| --- | --- | --- | --- |
+| Row heading | Right now | 当前状态 | live, lifted; new only as a heading |
+| Row description | What each platform is being shown right now, and why. | 各平台当前看到的数量,以及原因。 | `各平台` (this card) + `当前` + `数量` + `原因` |
+| Open state | shelf + N shown, cut-off H:00 | 按货架数量 +N 显示,H:00 截单 | the Channels row's sentence with the number in it, + `截单` |
+| `no_schedule` | Batch schedule is off | 分批排期未开启 | `分批` (from `分批现做`) + `排期` (live, `已排期`) + `未开启` |
+| `no_allowance` | No quantity set | 未设预订可售数量 | `未设` (live, `未设送达时间`) + the row's own name |
+| `channel_off` | Channel not ticked | 未勾选此渠道 | `未勾选` (live) + `渠道` (this card) |
+| `no_lock_hour` | No cut-off hour | 未设预订截单 | `未设` + the row's own name |
+| `before_open_hour` | Opens at H:00 | H:00 开始预订 | the row's own `预订开始`, in the order a clock reads |
+| `past_lock` | Past H:00 | 已过预订截单 H:00 | `已过` (live, `配送日期已过`) + the row's own name |
+| `past_cutoff` | Past the order-by hour | 已过当日截单 | `已过` + the save's own `当日截单` |
+| `not_a_batch_day` | Not a batch day today | 今天不是制作日 | `今天` + `制作日` (this card) |
+| Footer, some | N batch-made products can take the extra | N 款「分批现做」商品可再接此数量 | the quantity row's `每款现做商品…可再接的数量`, restructured |
+| Footer, none | No batch-made products, so nothing changes | 没有「分批现做」商品,数量不起作用 | `没有` + the row's own noun + `不起作用` (live) |
+
+Composed by Claude Opus 5 on 2026-09-21 under the 2026-09-06 amendment,
+declared here in the same commit as the code that uses them.
+
+**TWO CANDIDATES WERE REJECTED AND THE REJECTIONS ARE RECORDED.** `此处不可修改`
+("cannot be edited here") was written for the row description and then removed
+rather than reworded: the row holds no control, so the sentence answered a
+question the screen does not raise, and Rule 4's first preference is to
+restructure rather than to mint. `可用此数量` was rejected for the footer in
+favour of `可再接此数量`, because `可再接` is the quantity row's own verb for
+exactly this act — taking more orders than the shelf covers — and a second verb
+for one act on one card is how two rows come to look like two features.
+
+**NOTHING IS RETIRED.** Every source string still reads where it was.

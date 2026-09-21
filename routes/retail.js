@@ -22906,6 +22906,57 @@ router.get('/api/retail-admin/tier-counts', requireRetailAdmin, (req, res) => {
   }
 });
 
+/* §210 — IS THE PRE-ORDER WINDOW OPEN RIGHT NOW, AND WHAT IS EACH PLATFORM
+   BEING SHOWN? Live context for the batch schedule card, the same shape and the
+   same promise as tier-counts above: read-only, cheap, and degrades to an empty
+   answer rather than breaking the settings page.
+
+   THE CARD COULD NOT ANSWER ITS OWN QUESTION. §85's window has six conditions —
+   the schedule on, an allowance set, the channel ticked, the hour inside
+   [open, lock), the ordering cutoff not passed, and today on the cadence — and
+   an operator who set all six correctly saw exactly what one who mistyped the
+   anchor date saw: four filled boxes and no way to tell. `preorderWindow`
+   already names the FIRST condition that failed; until now nothing showed it.
+
+   The batch-made count rides along because it is the seventh condition and the
+   only one not in this card at all: the allowance reaches batch-made products
+   and nothing else (lib/channel-publish.js), so a shop with none has set a
+   window that can never change a number, and no other screen would say so. */
+router.get('/api/retail-admin/preorder-window', requireRetailAdmin, (req, res) => {
+  try {
+    const now = new Date();
+    const cfg = batchCadence.readCfg(tdb());
+    const tz  = batchCadence.tzOf(tdb());
+    const parts = businessDate.zoneParts(tz, now);
+    const channels = {};
+    for (const ch of batchCadence.PREORDER_CHANNELS) {
+      const w = batchCadence.preorderWindow(tdb(), { channel: ch, now, cfg, tz });
+      channels[ch] = { open: !!w.open, qty: w.qty || 0, lock_hour: w.lock_hour, reason: w.reason };
+    }
+    // Active batch-made products, which are the only ones an allowance reaches.
+    let batchMade = 0;
+    try {
+      const row = tdb().prepare(
+        'SELECT COUNT(*) AS n FROM store_products WHERE COALESCE(is_batch_made, 0) = 1 AND COALESCE(is_active, 1) = 1'
+      ).get();
+      batchMade = (row && row.n) || 0;
+    } catch (_) { batchMade = 0; }
+    res.json({ success: true, data: {
+      hour: parts.hour,
+      date: parts.ymd,
+      open_hour: cfg ? cfg.preorder_open_hour : null,
+      lock_hour: cfg ? cfg.lock_hour : null,
+      cutoff_hour: cfg ? cfg.cutoff_hour : null,
+      qty: cfg ? cfg.preorder_qty : 0,
+      batch_made: batchMade,
+      channels,
+    } });
+  } catch (e) {
+    console.error('[retail-admin/preorder-window]', e.message);
+    res.json({ success: true, data: null });
+  }
+});
+
 // Body: { 'fees.freeShippingThreshold': 449, 'theme.accent': 'forest-kale', … }
 // Each entry is a dotted key; value is anything JSON-serialisable. Whole
 // thing applied in one txn so partial failures roll back.
