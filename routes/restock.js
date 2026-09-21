@@ -1696,7 +1696,12 @@ router.put('/api/restock/:id', requireRestockAccess, kitchenScopedOrder, (req, r
 // kitchen queue split, decisions §61) can reach the exact same dispatch/push/
 // print path when the last line catches the order up, rather than a second
 // copy that could drift from this one.
-function _advanceOrderStatus(order, status, req) {
+/* `opts.announce === false` STAMPS THE STATUS AND TELLS NOBODY, and it exists
+   for exactly one caller: the receipt endpoint, which has already told both
+   sides itself in better words (§211). Everything else keeps the old
+   behaviour by leaving it off — the fan-out below is the default. */
+function _advanceOrderStatus(order, status, req, opts) {
+  const announce = !opts || opts.announce !== false;
   const now = new Date().toISOString();
   const tsCol = { sent:'sent_at', received:'received_at', prepared:'prepared_at', delivered:'delivered_at' }[status];
   tdb().prepare(`UPDATE restock_orders SET status = ?, ${tsCol} = ? WHERE id = ?`).run(status, now, order.id);
@@ -1735,7 +1740,7 @@ function _advanceOrderStatus(order, status, req) {
   }
   // Push fan-out — only for the cross-side transitions the other party
   // actually needs to act on. `received` is internal warehouse state.
-  if (status === 'sent' || status === 'prepared' || status === 'delivered') {
+  if (announce && (status === 'sent' || status === 'prepared' || status === 'delivered')) {
     _fireRestockPush(order.id, status, _actorOperatorId(req));
     _broadcastRestock(order.id, status, req.user.id);
   }
@@ -2097,6 +2102,42 @@ router.put('/api/restock/:id/receive', requireRestockAccess, tacetOnly, (req, re
   // THE PUSH IS ITS OWN KIND, and it is not the broadcast's compromise above:
   // the sender is waiting to hear the boxes were counted, and until now this
   // endpoint sent them nothing at all.
+  /* THE PAPERWORK FOLLOWS THE GOODS (§211). Ash, having counted a real
+     transfer in: *"once received the package at the location and record
+     everything ... where it goes after that"*. The goods went where they
+     should — onto the shelf, into the ledger, out to every channel. The ORDER
+     went nowhere: `goods_state` settled, and `status` sat at 'prepared' for
+     ever, because Active and History are split on STATUS and only 'delivered'
+     closes a transfer.
+
+     NOTHING HAS EVER WRITTEN THAT STATUS. It is the same dead column §208
+     found gating the Receive screen, biting a second time one screen along:
+     its only writer is this function, and until now no client called it with
+     'delivered'. So a fully counted transfer stayed in Active looking like
+     open work, never reached History, and was never swept — the daily archive
+     deliberately skips shop-to-shop rows (§198).
+
+     COUNTED IN *IS* THE CLOSURE, so the receipt writes it. A separate "mark
+     delivered" step was rejected in §208 for the reason that still holds: it
+     asks the sending shop to assert a fact only the receiving shop can know.
+
+     SILENTLY, AND THAT IS THE POINT OF `announce:false`. Both sides have
+     already been told, in the two lines below, and better: the sender gets
+     *counted in · 已点收*, which is what happened, rather than 'delivered''s
+     *已送达*, which is about a driver's leg. Left to announce itself this
+     would send the SAME audience — `restock:pick` at the `from` store, for
+     both kinds — two pushes for one event. */
+  const fromIdx = STATUS_FLOW.indexOf(order.status);
+  if (fromIdx >= 0 && fromIdx < STATUS_FLOW.indexOf('delivered')
+      && (order.to_role || 'warehouse') !== 'kitchen') {
+    try { _advanceOrderStatus(order, 'delivered', req, { announce: false }); }
+    catch (e) {
+      // The stock has already moved and been stamped. A status that could not
+      // be written leaves the order in Active — untidy, and the old behaviour
+      // exactly — which is not worth failing a settled receipt over.
+      console.warn('[restock-receipt] could not close order ' + order.id + ':', e.message);
+    }
+  }
   _fireRestockPush(order.id, 'received', _actorOperatorId(req));
   _broadcastRestock(order.id, 'delivered', req.user.id);
   res.json({ success: true, settled: true, counts_written: written, moved: receipt.moved || 0 });
