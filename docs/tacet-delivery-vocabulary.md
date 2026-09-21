@@ -1,5 +1,7 @@
 # Tacet delivery vocabulary — locked
 
+**v1.155 · 2026-09-21 · §212 GIVES THE RECEIVE SCREEN A DONE TAB — ONE COMPOSED STRING, IN A FRAME THE SCREEN ALREADY USES.** Both tab labels are live (`On its way · 在途` off the stock-requests pill, `Done · 已完成` off the kitchen queue's own segmented control), as are the empty heading (`Nothing finished yet · 暂无已完成`) and every word of the receipt a finished delivery opens on (`sent · 发出`, `items · 项`, `Counted in · 已入库`, `The shelf has been updated. · 库存已更新。`). What is composed is the empty tab's ONE line of body text, built on the frame of the sentence the sibling tab already says. See *The Done tab on the receive screen (§212)*.
+
 **v1.154 · 2026-09-21 · §209 GIVES THE RECEIVE SCREEN A BAND AND A TICK — TWO COMPOSED STRINGS, BOTH CUT FROM ONE LIVE PAIR.** Counting a delivery in was five actions a line, every line a keypad; it is now one tap for the whole delivery or one tap a line, with the keypad kept for the figure that is not the one on the van. Both new words come off the SAME live pair — the purchasing side's `Everything arrived? · 全部到货了吗？`, which already asks this exact question about a delivery one screen away. Everything else the screen renders (`sent · 发出`, `counted · 已点`, `Confirm receipt · 确认收货`, `Saving… · 保存中…`, both failure sentences) was already there and is untouched. See *The band and the tick on the receive screen (§209)*.
 
 **v1.153 · 2026-09-21 · §207 LETS THE APPROVER CORRECT WHO PAID — ONE COMPOSED STRING, EVERY SCREEN WORD COPIED.** The two options the new picker offers (`own money · 个人支付`, `company · 公司`) and its label (`Who paid · 由谁付款`) are the phone's own live pairs, already over this exact field; `Saved · 已保存` is the queue's own. What is composed is ONE server refusal, and it is composed from two live parts. The two other refusals the route makes are borrowed whole from sentences the file already says. See *Correcting who paid on an approved claim (§207)*.
@@ -8262,3 +8264,32 @@ actually arrived. · 清点实际到货数量。`, `This account cannot receive 
 again. · 没有成功。数据没有变化 — 请重试。` were all already on this screen and are
 used unchanged, the last one now also reporting a failed band write. A screen
 that gained two ways to work gained two words.
+
+
+## The Done tab on the receive screen (§212)
+
+**WHAT THIS NAMES.** The receive screen gained two tabs — the deliveries still
+coming, and the ones this shop has already counted in — and a finished one now
+opens on its receipt: sent against counted, line by line. Ash: *"where can I see
+history deliveries"*. **Register: OPERATOR** (Rule 1); no shopper sees any of it.
+
+**THE TAB LABELS AND THE RECEIPT ARE ENTIRELY COPIED.** Both segments and every
+word of the detail are live pairs, and the two segment labels are lifted from
+controls that already mean these things elsewhere in the product — which is the
+first preference working exactly as intended.
+
+| Where | English | Chinese | Source |
+| --- | --- | --- | --- |
+| First segment | On its way | 在途 | **COPIED** — `rqsWord`, the per-line pill on *Your stock requests*, over this same state. |
+| Second segment | Done | 已完成 | **COPIED** — the kitchen queue's own segmented control, the screen this pattern is taken from seg for seg. |
+| Empty Done heading | Nothing finished yet | 暂无已完成 | **COPIED** — the kitchen-ready screen's empty state, same sense. |
+| The receipt's lines | sent / items / Counted in / The shelf has been updated. | 发出 / 项 / 已入库 / 库存已更新。 | **COPIED** — all four already on this screen. |
+
+**ONE COMPOSED STRING, AND IT IS THE EMPTY TAB'S BODY.**
+
+| Where | English | Chinese | Note |
+| --- | --- | --- | --- |
+| The Done tab with nothing in it | What you count in shows up here. | 已清点入库的调拨会显示在这里。 | **COMPOSED** on the frame of the sibling tab's own live body — `其他地点发来的货会显示在这里。` — with only the subject changed, so the two empty states read as one pair rather than as two authors. Rejected: that live sentence verbatim, because it promises *goods on their way* and this list holds the ones that have stopped moving — an empty Done tab would tell somebody deliveries were coming; `厨房为你制作完成的申请会显示在这里。` (live, the kitchen-ready empty body), whose subject is the kitchen making things, not a shop counting them; leaving the body out, which `nothingYet` has no shape for — it draws a heading and a line, and a heading alone on a 390px screen reads as a failure rather than an empty list. |
+
+Composed by Claude Opus 5 on 2026-09-21 under the 2026-09-06 amendment,
+declared here in the same commit as the code that uses it.

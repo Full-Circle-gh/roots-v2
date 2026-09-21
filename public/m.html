@@ -945,7 +945,7 @@ const state = {
      different job from the `rcv*` supplier receiving above: that one counts a
      purchase order in from a supplier, this one counts in what another location
      sent. Named xfr rather than rcv so the two can never be mistaken for one. */
-  xfr:{list:null,tried:false,order:null,orderId:null,step:'list',held:null,busy:false,err:'',typing:{},typeErr:{}},
+  xfr:{list:null,tried:false,order:null,orderId:null,step:'list',held:null,busy:false,err:'',typing:{},typeErr:{},tab:'active',done:null,doneTried:false},
   /* WHAT THE KITCHEN HAS FINISHED (§48). The count already lived here — the
      dot polls /api/restock/kitchen-ready — but the LIST behind it was the last
      thing on /stock's launcher that this app could only point at. */
@@ -1182,7 +1182,7 @@ function push(route){ const s=SUBS[route]; if(!s||!canRoute(route)) return;
   if(route==='askbuysent'){ const m=state.mbs; m.tried=false; m.list=null; m.err=''; }
   if(route==='askstocksent'){ const m=state.rqs; m.tried=false; m.list=null; m.err=''; }
   if(route==='kitchenready'){ const k=state.kr; k.tried=false; k.pendingTried=false; k.seen=false; k.order=null; k.orderId=null; k.err=''; }
-  if(route==='receivexfer'){ const x=state.xfr; x.tried=false; x.order=null; x.orderId=null; x.step='list'; x.held=null; x.err=''; x.typing={}; x.typeErr={}; }
+  if(route==='receivexfer'){ const x=state.xfr; x.tried=false; x.order=null; x.orderId=null; x.step='list'; x.held=null; x.err=''; x.typing={}; x.typeErr={}; x.tab='active'; x.doneTried=false; }
   if(route==='pick'){ const k=state.pik; k.tried=false; k.list=null; k.step='list'; k.result=null; k.err=''; k.dest='all';
     // The freezer is re-asked on every entry where there is a choice: which one
     // they are standing in is a fact about now, not about last time.
@@ -1480,6 +1480,7 @@ reg('krList', ()=>{ state.kr.order=null; state.kr.orderId=null; state.kr.err='';
 reg('krTab', t=>{ const k=state.kr; if(k.tab===String(t)) return; k.tab=String(t); k.order=null; k.orderId=null; k.err=''; render(); });
 reg('xfrOpen', id=>xfrOpen(id));
 reg('xfrList', ()=>{ const x=state.xfr; x.order=null; x.orderId=null; x.step='list'; x.held=null; x.err=''; render(); });
+reg('xfrTab', t=>{ const x=state.xfr; x.tab=String(t)==='done'?'done':'active'; x.err=''; render(); });
 reg('xfrCount', ()=>{ state.xfr.step='count'; state.xfr.err=''; render(); });
 reg('xfrConfirm', ()=>xfrConfirm());
 reg('pikAt', id=>{ const k=state.pik; k.at=Number(id); k.tried=false; k.list=null; k.dest='all'; render(); });
@@ -10761,17 +10762,59 @@ function pikDispatch(){
    a delivery counted in against the wrong shop is stock that never arrives and
    stock that arrives twice. */
 function xfrStoreIds(){ return (state.stores||[]).map(s=>s.id); }
+/* WHAT THIS SHOP HAS ALREADY COUNTED IN (§212). Ash: *"where can I see
+   history deliveries"*. The answer was one screen, *Your stock requests*, and
+   it is scoped `WHERE created_by = you` — so it shows what you ASKED for and
+   says nothing about what you RECEIVED. A colleague raising the request put the
+   delivery you counted out of your reach entirely.
+
+   `tab=history` IS `status = 'delivered'`, which §211 made true of every counted
+   transfer an hour ago. Before that this tab would have been permanently empty,
+   which is why it is only worth building now.
+
+   SETTLED, NOT MERELY DELIVERED. A driver can mark a run delivered through the
+   status door without anybody counting it; that order is in history AND still
+   countable, and it belongs on the On-its-way tab where the work is. Filtering
+   on the receipt rather than the status keeps one order out of two tabs. */
+function loadXfrDone(force){
+  const x=state.xfr;
+  if(x.doneTried&&!force) return;
+  x.doneTried=true;
+  api('/api/restock?tab=history').then(j=>{
+    const rows=Array.isArray(j)?j:((j&&j.data)||[]);
+    x.done=rows.filter(o=>(o.to_role||'warehouse')!=='kitchen' && xfrSettled(o) && xfrMine(o));
+    x.err=''; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    x.done=[]; x.err=''; render();
+  });
+}
 function xfrMine(o){
   // Since #259 an order records to_store_id, so this is an id comparison rather
   // than a guess. Rows written before that column existed carry only the name.
   if(o.to_store_id) return xfrStoreIds().indexOf(o.to_store_id)>=0;
   return true;
 }
+/* `tab=all`, NOT `tab=active`, AND THE REASON IS §208'S ALL OVER AGAIN. This
+   screen's truth is `goods_state`, never `status` — and `tab=active` is a
+   STATUS filter that excludes `delivered`. So a run a driver marked delivered
+   before the shop counted it was hidden from the one screen that can count it:
+   still in transit, still owed, and invisible. The server's own note on the
+   receive endpoint says that pair is genuinely concurrent at Roots, so it is a
+   case to expect rather than a curiosity; it went unseen only because nothing
+   wrote 'delivered' until §211. `tab=all` is every non-archived order and the
+   `in_transit` filter below is what this list has always actually meant.
+
+   THE ARCHIVE SWEEP RUNS ON `tab=active` AND SO NO LONGER FIRES FROM HERE —
+   called out because a read quietly mutating is worth knowing about either way.
+   It still fires from the Pick screen and both kitchen screens, and §198
+   already exempts every shop-to-shop transfer from it, which is all this list
+   holds. */
 function loadXfr(force){
   const x=state.xfr;
   if(x.tried&&!force) return;
   x.tried=true;
-  api('/api/restock?tab=active').then(j=>{
+  api('/api/restock?tab=all').then(j=>{
     const rows=Array.isArray(j)?j:((j&&j.data)||[]);
     // A kitchen request is not a delivery: it moves no stock and closes when
     // the kitchen makes it, so it has nothing to count in.
@@ -10938,6 +10981,8 @@ function xfrConfirm(){
     // The shelf this app counts has just changed underneath it.
     state.qs.itemsTried=false; loadQsItems(true);
     loadXfr(true);
+    // And the delivery just counted belongs on the other tab now.
+    x.doneTried=false; x.done=null;
   }).catch(e=>{
     if(String(e.message)==='auth') return;
     x.busy=false;
@@ -11925,12 +11970,27 @@ function screenReceiveTransfer(){
          Both pairs below are live strings already used elsewhere on this
          screen — nothing is composed here. */
       const done=xfrSettled(o);
+      /* A FINISHED DELIVERY IS A RECEIPT, NOT A SENTENCE (§212). Opened off the
+         Done tab this said only that the shelf had been updated — true, and no
+         use to somebody asking what actually turned up. Sent against counted,
+         line by line, is the whole reason anybody looks a delivery up weeks
+         later, and the gap is drawn in Amber where there is one. */
+      const lines=done?xfrItems():[];
       return backRow(T('Receive from another shop','调拨收货'))+err+`<div style="padding:0 16px">
         <div style="font-size:18px;font-weight:500">${escAttr(o.rs_number||('#'+(o.id||'')))}</div>
         ${done?`<div style="font-size:15px;font-weight:500;margin-top:10px">${T('Counted in','已入库')}</div>`:''}
         <div style="font-size:14px;color:var(--text-secondary);margin-top:${done?'6px':'10px'};line-height:1.55">${
           done?T('The shelf has been updated.','库存已更新。')
-              :T('Still on its way. Count it in when it arrives.','仍在途中，到货后再清点入库。')}</div></div>`;
+              :T('Still on its way. Count it in when it arrives.','仍在途中，到货后再清点入库。')}</div></div>
+        ${lines.length?`<div style="margin-top:16px">${lines.map(it=>{
+          const got=xfrGot(it), full=got===xfrSent(it);
+          return `<div style="border-top:1px solid var(--border-default);padding:12px 16px;display:flex;align-items:center;gap:12px">
+            <span style="flex:1;min-width:0">
+              <span style="display:block;font-size:15px;font-weight:500">${escAttr(xfrName(it))}</span>
+              <span style="display:block;font-size:13px;color:var(--text-secondary)">${T('sent','发出')} <span class="num">${xfrSent(it)}</span></span>
+            </span>
+            <span class="num" style="font-size:20px;font-weight:500;color:${full?'var(--text-primary)':'var(--amber-ink)'}">${got==null?'—':got}</span>
+          </div>`;}).join('')}</div>`:''}`;
     }
     const items=xfrItems();
     if(x.step==='confirm'){
@@ -12018,18 +12078,40 @@ function screenReceiveTransfer(){
         </div>`;
       }).join('')}</div>`;
   }
-  if(!x.list) return `<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  if(!x.list.length) return nothingYet(T('Nothing on its way','暂无在途'),
-    T('Deliveries from another location show up here.','其他地点发来的货会显示在这里。'));
-  return err+`<div>${x.list.map(o=>`<button class="row" style="width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px"
+  /* TWO TABS, AND THE SECOND ONE IS THE ANSWER TO "where can I see history
+     deliveries" (§212). The pattern is the kitchen queue's, seg for seg, so a
+     shop that already reads To-make/Done reads this without being told. */
+  const seg=(key,label)=>`<button class="row" style="min-height:40px;padding:7px 14px;border-radius:999px;width:auto;display:inline-flex;
+    border:1px solid ${x.tab===key?'var(--text-primary)':'var(--border-default)'};background:${x.tab===key?'var(--text-primary)':'var(--surface-card)'};
+    color:${x.tab===key?'var(--surface-card)':'var(--text-primary)'};font-size:14px" onclick="APP.cmd('xfrTab','${key}')">${escAttr(label)}</button>`;
+  const tabs=`<div style="display:flex;gap:8px;padding:12px 16px">${
+    seg('active',T('On its way','在途'))}${seg('done',T('Done','已完成'))}</div>`;
+  const listRow=(o,sub)=>`<button class="row" style="width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border-default);display:flex;align-items:center;gap:12px"
       onclick="APP.cmd('xfrOpen',${o.id})">
       <span style="flex:1;min-width:0">
         <span style="display:block;font-size:15px;font-weight:500">${escAttr(o.rs_number||('#'+o.id))}</span>
-        <span style="display:block;font-size:13px;color:var(--text-secondary)">${(o.item_count||0)} ${T('items','项')}${
-          o.to_store_id?' · '+escAttr(rqStoreName(o.to_store_id)):''}</span>
+        <span style="display:block;font-size:13px;color:var(--text-secondary)">${sub}</span>
       </span>
       <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>
-    </button>`).join('')}</div>`;
+    </button>`;
+  const where=o=>o.to_store_id?' · '+escAttr(rqStoreName(o.to_store_id)):'';
+
+  if(x.tab==='done'){
+    loadXfrDone();
+    if(!x.done) return tabs+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    if(!x.done.length) return tabs+nothingYet(T('Nothing finished yet','暂无已完成'),
+      T('What you count in shows up here.','已清点入库的调拨会显示在这里。'));
+    // The DAY is what a delivery is looked up by weeks later, so it leads the
+    // meta line here where the item count leads it on the tab of work to do.
+    return tabs+err+`<div>${x.done.map(o=>listRow(o,
+      escAttr(fmtDay(o.delivered_at||o.date)||'')+' · '+(o.item_count||0)+' '+T('items','项')+where(o))).join('')}</div>`;
+  }
+
+  if(!x.list) return tabs+`<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!x.list.length) return tabs+nothingYet(T('Nothing on its way','暂无在途'),
+    T('Deliveries from another location show up here.','其他地点发来的货会显示在这里。'));
+  return tabs+err+`<div>${x.list.map(o=>listRow(o,
+    (o.item_count||0)+' '+T('items','项')+where(o))).join('')}</div>`;
 }
 function screenPick(){
   const k=state.pik;

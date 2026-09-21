@@ -71,6 +71,7 @@
     "test:transfer-receive-gate": "node scripts/test_transfer_receive_gate.js",
     "test:transfer-quick-count": "node scripts/test_transfer_quick_count.js",
     "test:transfer-closes": "node scripts/test_transfer_closes_on_receipt.js",
+    "test:transfer-done-tab": "node scripts/test_transfer_done_tab.js",
     "test:shop-channel": "node scripts/test_shop_channel.js",
     "test:address": "node scripts/test_address_pin.js && node scripts/test_address_clients.js",
     "test:batch-timing": "node scripts/test_batch_timing.js",
