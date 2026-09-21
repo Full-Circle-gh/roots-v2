@@ -2002,15 +2002,29 @@ router.put('/api/restock/:id/item/:item_id', requireRestockAccess, kitchenScoped
       error: 'These goods have already left the warehouse, so the lines can no longer be changed. Record what actually arrived when you confirm the receipt.',
     });
   }
+  /* `clear_qty_sent` PUTS A LINE BACK TO UNTOUCHED, and it needs its own flag
+     because `COALESCE(?, qty_sent)` cannot express it: a missing `qty_sent` and
+     a `qty_sent` of null are the same request on the wire, and the existing
+     meaning of both — leave it alone — is what every caller but one relies on.
+     It is opt-in and explicit for that reason; nothing that does not ask for it
+     changes (§214).
+
+     WHY UN-TICKING ALONE WOULD NOT BE ENOUGH. Dispatch reads
+     `COALESCE(qty_sent, qty_requested)` and never looks at `is_checked`, so a
+     line un-ticked with a stale `qty_sent` would dispatch the OLD figure — a
+     picker undoing "1 of 2" and sending without re-picking would move 1 and
+     nobody would see why. Un-ticked with a quantity on it is a state that has
+     never existed on this table, and this keeps it that way. */
   const { is_checked, qty_sent } = req.body;
+  const clearSent = req.body && req.body.clear_qty_sent === true;
   tdb().prepare(`UPDATE restock_items SET
     is_checked = COALESCE(?, is_checked),
-    qty_sent   = COALESCE(?, qty_sent)
-    WHERE id = ?`).run(
-      is_checked == null ? null : (is_checked ? 1 : 0),
-      qty_sent == null ? null : parseFloat(qty_sent),
-      item.id
-    );
+    qty_sent   = ${clearSent ? 'NULL' : 'COALESCE(?, qty_sent)'}
+    WHERE id = ?`).run.apply(null, clearSent
+      ? [is_checked == null ? null : (is_checked ? 1 : 0), item.id]
+      : [is_checked == null ? null : (is_checked ? 1 : 0),
+         qty_sent == null ? null : parseFloat(qty_sent),
+         item.id]);
   res.json({ success: true });
 });
 
