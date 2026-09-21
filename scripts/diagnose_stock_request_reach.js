@@ -163,6 +163,26 @@ for (const o of rows) {
     console.log(`     ${String(i.qty_requested).padStart(4)} × ${name}`);
     console.log(`          product_id ${i.product_id == null ? 'NULL  !! unmovable — a dispatch skips this line' : i.product_id}` +
       `   sku ${sku ? sku : "(none)  !! and the SKU backfill has nothing to match on"}`);
+    /* WHY THE REPAIR DID NOT TAKE, for a line still unlinked. The backfill
+       matches an exact, unique, ACTIVE store_products SKU and refuses anything
+       else. Which of those three it failed is the whole answer, and inferring
+       it from the outside is exactly the guessing this file exists to stop. */
+    if (i.product_id == null && sku) {
+      try {
+        const act = db.prepare(
+          "SELECT id FROM store_products WHERE TRIM(sku) = ? AND COALESCE(is_active,1) = 1").all(sku);
+        const any = db.prepare('SELECT id, COALESCE(is_active,1) AS act FROM store_products WHERE TRIM(sku) = ?').all(sku);
+        if (act.length === 1) {
+          console.log(`          -> SKU ${sku} matches product ${act[0].id} exactly once; the backfill SHOULD have linked it`);
+        } else if (act.length > 1) {
+          console.log(`          -> SKU ${sku} matches ${act.length} active products (${act.map(x => x.id).join(', ')}) — ambiguous, refused on purpose`);
+        } else if (any.length) {
+          console.log(`          -> SKU ${sku} exists but every match is INACTIVE (${any.map(x => x.id).join(', ')}) — refused`);
+        } else {
+          console.log(`          -> SKU ${sku} is in NO store_products row at all — nothing to link to`);
+        }
+      } catch (e) { console.log(`          -> sku probe failed: ${e.message}`); }
+    }
   }
 
   /* WHERE THE GOODS THEMSELVES ARE — a SECOND fact from the status beside it,
@@ -221,6 +241,20 @@ for (const o of rows) {
   console.log(`   print       ${o.print_status || '(never attempted)'}` +
     (o.print_error ? ` — ${o.print_error}` : '') +
     (o.printed_at ? ` at ${o.printed_at}` : ''));
+}
+
+// ── 1b · did the repair actually run ──────────────────────────────────────
+// A migration that never ran and one that ran and matched nothing look
+// identical from the rows, and they need opposite actions.
+console.log('\n1b · the repair migration');
+if (!hasTable('_migrations')) {
+  console.log('   (_migrations table absent)');
+} else {
+  const mig = db.prepare('SELECT applied_at FROM _migrations WHERE name = ?')
+    .get('restock_line_product_id_backfill_v1');
+  console.log(`   restock_line_product_id_backfill_v1   ${mig ? 'ran ' + mig.applied_at : 'NOT RUN'}`);
+  console.log('   NOTE: "ran" says it executed, NOT that it linked anything — it refuses');
+  console.log('         every SKU that is absent, inactive or ambiguous, by design.');
 }
 
 // ── 2 · the push rail as a whole ──────────────────────────────────────────
