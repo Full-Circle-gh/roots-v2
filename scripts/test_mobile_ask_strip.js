@@ -124,9 +124,17 @@ it('state.askOpen is declared in the state literal, not conjured at runtime', ()
      caught it was test_mobile_screens.js's static state-key guard — which lives
      in the slow shard, and this repo does not run the slow shard. A defect
      findable only there is a defect that ships. */
-  /* The literal runs well past `stack:[]`, and askOpen sits beside `quick`
-     some sixty keys in, so the window has to be wide enough to reach it. */
-  const wider = MHTML.slice(MHTML.indexOf('tab:\'home\''), MHTML.indexOf('tab:\'home\'') + 6000);
+  /* THE LITERAL'S OWN BOUNDS, NOT A BYTE BUDGET. This read a fixed 6000-char
+     window from `tab:'home'`, which is a guess about how far in `askOpen` sits
+     — and a guess that a comment added ABOVE it silently invalidates. It did:
+     three keys §181 had never declared were added to the literal in 2026-09-21
+     with a note explaining why, `askOpen` slid past 6000, and this case failed
+     over a key nobody had touched. A window that moves when unrelated lines are
+     added is a tripwire on the file's length, not on what it declares. Same
+     expression test_mobile_screens.js's static guard uses, so the two agree
+     about where the literal ends. */
+  const wider = (MHTML.match(/\bconst state\s*=\s*\{([\s\S]*?)\n\};/) || [])[1] || '';
+  assert.ok(wider, 'the state literal cannot be found at all');
   assert.ok(/\baskOpen\s*:/.test(wider),
     'state.askOpen is read but never declared in the state literal — the slow shard would fail on this');
   assert.ok(/askOpen:null/.test(wider),

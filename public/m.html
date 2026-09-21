@@ -750,7 +750,24 @@ const state = {
   dcMore:null,
   affiliate:null, affiliateTried:false, affRows:null, affSeg:'', affErr:null, invSeg:'all', invLoaded:false,
   geo:null, geoTried:false, chan:null, chanTried:false, sales:null, salesSummary:null, dlvBusy:false, dlvErr:null,
-  chanSheet:null, chanBusy:null, chanErr:null,
+  /* THREE KEYS THAT WORKED WITHOUT BEING DECLARED, WHICH IS THE PROBLEM. §181
+     added the Sales board's retry and the shop switch and wrote straight to
+     `state`, where an assignment creates a key silently; the app has behaved
+     correctly ever since, and scripts/test_mobile_screens.js has been red about
+     it since the day it landed. What the check is FOR is the collision that
+     would not announce itself: `state.pos` was the operator's ROLE and a later
+     edit reused it for the purchase-order list, and the two simply took turns
+     clobbering each other. A key nobody can see in the literal is a name the
+     next author is free to take.
+     FIVE NAMES, FIVE DIFFERENT FACTS, AND THEY ARE WORTH READING TOGETHER —
+     which is why they sit on adjacent lines rather than being scattered:
+       chanBusy     ONE channel cell at one shop, keyed `channel|storeCode`
+       shopBusy     a WHOLE shop being switched, keyed storeCode
+       chanErr      the sheet's WRITE failed  ·  shopErr  the switch's did
+       chanLoadErr  the board's READ failed — a different screen state entirely,
+                    which is why it is not chanErr wearing a second hat */
+  chanSheet:null, chanBusy:null, chanErr:null, chanLoadErr:null,
+  shopBusy:null, shopErr:null,
   team:null, teamTried:false, teamErr:null, teamEnforce:false, teamBusy:null, teamActErr:null,
   roles:[],            /* the tenant's own roles, so a role is named the way its shop names it */
   caps:null,           /* the signed-in operator's effective permissions; null = unknown, treated as allowed */
