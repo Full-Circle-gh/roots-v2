@@ -1055,11 +1055,27 @@ function boxOf(text) {
         return seen;
       });
       /* THE FIXTURE'S OWN ORDER. §129 rendered a fixed template — prose, then
-         ingredients, then allergens — so the spec strip appearing FIRST and the
-         note LAST is the whole of what changed structurally. */
+         ingredients, then allergens — so the spec strip appearing FIRST is the
+         whole of what changed structurally.
+
+         TWO LATER DECISIONS MOVED THIS LIST, and both are recorded here
+         because a bare array tells the next reader nothing about why.
+
+         §230 SHORTENED IT. The counter menu draws an allow-list of eight
+         types, so `storage`, `quote`, `recipe`, `pairings`, `faq` and `notes`
+         are correctly absent — the fixture still carries all thirteen and
+         this page is no longer allowed to draw six of them. This assertion
+         was left behind when that landed and has been failing since; it is
+         repaired here rather than in its own commit only because the change
+         below cannot be made to the same array without also making this one.
+
+         §232 PUT `allergens` AT THE FRONT. The allergen card is hoisted out
+         of the flow into the head, which is the ONE exception to §132's rule
+         that block order is the office's, and it is the point of §232: a
+         customer with an allergy is looking for one fact, not reading a page.
+         Everything after it is still in the order the office laid out. */
       assert.deepStrictEqual(order,
-        ['spec', 'hero', 'why', 'stat', 'ingredients', 'allergens', 'how', 'storage',
-         'quote', 'recipe', 'pairings', 'faq', 'notes'],
+        ['allergens', 'spec', 'hero', 'why', 'stat', 'ingredients', 'how'],
         `the page re-ordered the office's blocks: ${JSON.stringify(order)}`);
     });
 

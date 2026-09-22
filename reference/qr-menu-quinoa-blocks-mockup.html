@@ -279,25 +279,18 @@ main{padding:20px 18px 60px;overflow-x:auto}
    B puts a fixed masthead under the photo — name, price, the free-of flags,
    what it contains — and only then hands the page to the office's blocks.
    ═══════════════════════════════════════════════════════════════════ */
-.o-b .mast{padding-top:calc(15 * var(--u))}
-.o-b .mast-t{display:flex;align-items:baseline;justify-content:space-between;
-  gap:calc(12 * var(--u))}
-.o-b .mast-n{font-family:var(--f-bear);font-size:26px;line-height:28px;min-width:0}
-.o-b .mast-p{flex:none;font-family:var(--f-bear);font-size:26px;line-height:28px;
-  font-variant-numeric:tabular-nums}
-.o-b .mast-f{display:flex;flex-wrap:wrap;gap:calc(5 * var(--u));
-  margin-top:calc(13 * var(--u))}
-.o-b .fchip{border:1.5px solid var(--ink);border-radius:999px;
-  padding:calc(4 * var(--u)) calc(10 * var(--u));font-family:var(--f-bear);
-  font-size:calc(11.5 * var(--u));line-height:normal;letter-spacing:.03em;
-  text-transform:uppercase}
-.o-b .mast-a{display:flex;align-items:center;flex-wrap:wrap;
-  gap:calc(5 * var(--u)) calc(9 * var(--u));margin-top:calc(11 * var(--u));
-  padding-top:calc(11 * var(--u));border-top:1px dashed rgba(0,0,0,.14)}
-.o-b .mast-al{flex:none;font-family:var(--f-bear);font-size:calc(9.5 * var(--u));
-  letter-spacing:.1em;text-transform:uppercase;color:var(--olive);
-  line-height:calc(13 * var(--u))}
-.o-b .mast-end{margin-top:calc(15 * var(--u));border-top:2px solid var(--ink)}
+.o-b .mast{padding-top:15px;padding-bottom:15px;border-bottom:2px solid var(--ink)}
+.o-b .mast-n{font-family:var(--f-bear);font-size:26px;line-height:28px}
+/* WHAT SHIPPED IS THE CARD, NOT A LINE. .acard carries the contains /
+   may-contain split, the none-declared state, the chip centring, the CJK
+   bracket trim and the .chipset specificity fix -- each measured, each with
+   a test behind it. A summary line would have re-opened all of them to save
+   a hundred pixels. NO PRICE: .sheet-f pins it below, all the way down. NO
+   FREE-OF FLAGS: buildMenu() refuses that column, because an absent tag
+   there means "not tagged" and never "contains". */
+.o-b .mast .acard{margin-top:15px}
+/* the head drew the ink rule, so the first band's heading does not */
+.o-b .pb:first-of-type .pb-h,.o-b .pb:first-of-type .pb-why-h{border-top:0;padding-top:0}
 /* the office's allergen card is no longer the first place this is said, so
    it keeps its full detail and simply stops being load-bearing */
 
@@ -431,11 +424,13 @@ function sheet(opt){
   const r = {story:A?'r-story':'', list:A?'r-list':'', card:A?'r-card':'', bleed:(A||C)?'r-bleed':''};
 
   let head = `<div class="dt-hd"><div class="dt-nm">Quinoa Salad</div></div>`;
+  /* WHAT SHIPPED, AND IT IS NOT THE COMPACT LINE THIS PANEL FIRST DREW.
+     .acard carries the contains / may-contain split, the none-declared
+     state, the chip centring, the CJK bracket trim and the .chipset
+     specificity fix -- each measured, each with a test behind it. The card
+     is HOISTED whole; a summary line would have re-opened all of them. */
   if (opt === 'b') head = `<div class="mast">
-      <div class="mast-n">Quinoa Salad</div>
-      <div class="mast-a"><span class="mast-al">Contains</span><span class="achip has">Sesame</span>
-        <span class="mast-al">May contain</span><span class="achip may">Gluten (oats)</span><span class="achip may">Tree nuts</span></div>
-      <div class="mast-end"></div>
+      <div class="mast-n">Quinoa Salad</div>${B_ALG}
     </div>`;
 
   const why = C ? band(B_WHY, 'ground') : band(B_WHY, r.list);
