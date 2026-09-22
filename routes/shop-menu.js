@@ -1176,22 +1176,26 @@ img{display:block;max-width:100%}
 .acard{border:1px solid var(--ink);padding:calc(12 * var(--u));margin-top:calc(18 * var(--u))}
 .atitle{font-family:var(--f-bear);font-size:calc(16 * var(--u));line-height:1;
   padding-bottom:calc(9 * var(--u));border-bottom:2px solid var(--ink);margin-bottom:calc(10 * var(--u))}
-/* THE LABEL SITS ABOVE ITS CHIPS, AND BOTH CENTRE ON THE CARD. Centring them
-   beside a fixed 96px label only centred them in what the label left over, so
-   a short label like CONTAINS pushed its chip well right of the card's middle
-   and it still read as misplaced — the second report of the same thing. With
-   the label on its own line there is no leftover column to be centred in: the
-   chips have the card's full width and the card's own middle. It also ends the
-   collision this card was always one long chip away from. */
-.arow{display:flex;flex-direction:column;align-items:center;gap:calc(6 * var(--u));padding:calc(8 * var(--u)) 0}
-.arow+.arow{border-top:1px dashed rgba(0,0,0,.14)}
+/* THE LABEL SITS ABOVE ITS VALUES, AND BOTH START AT THE LEFT EDGE.
+   Centring them beside a fixed 96px label only centred them in what the label
+   left over, so a short label like CONTAINS pushed its chip well right of the
+   card's middle and it still read as misplaced — the second report of the same
+   thing. The label went onto its own line for that, and §236 takes the second
+   half of the fix: centred, the three statements had no shared edge to read
+   down, and the eye crossed the card six times to read three facts. Flush
+   left they stack on one axis. */
+.arow{display:flex;flex-direction:column;align-items:flex-start;gap:calc(7 * var(--u));padding:calc(10 * var(--u)) 0}
+.arow+.arow{border-top:1px solid rgba(0,0,0,.14)}
 /* 9.5px at 1.35 is 12.825px, and the chips under it then start on a fraction
    of a pixel — the last box in this column that was not a whole number. See
    .dt-k for what that costs and how it was measured. */
-.alab{flex:none;max-width:100%;text-align:center;font-family:var(--f-bear);
+.alab{flex:none;max-width:100%;text-align:left;font-family:var(--f-bear);
   font-size:calc(9.5 * var(--u));letter-spacing:.1em;text-transform:uppercase;color:var(--olive);
   line-height:calc(13 * var(--u))}
-.achips{width:100%;min-width:0;display:flex;flex-wrap:wrap;justify-content:center;gap:calc(5 * var(--u))}
+.achips{width:100%;min-width:0;display:flex;flex-wrap:wrap;justify-content:flex-start;gap:calc(6 * var(--u))}
+/* The may-contain sentence. Body size, muted, wrapping like the prose it is. */
+.aline{width:100%;min-width:0;font-size:calc(12 * var(--u));line-height:calc(16 * var(--u));
+  color:var(--olive);overflow-wrap:anywhere}
 /* Class selectors rather than a child combinator: no angle bracket may appear
    in this stylesheet, and the combinator's own character is one — the rule is
    stated at the head of the file and this is where its cost is paid. Naming it
@@ -1226,8 +1230,20 @@ img{display:block;max-width:100%}
    has a FIXED 24px height and the line box had to stop disagreeing with it.
    Here the pill takes its height FROM the line box, so the font's own figure is
    the one that balances. */
-.achip{border-radius:999px;padding:calc(4 * var(--u)) calc(10 * var(--u));font-size:calc(11.5 * var(--u));line-height:normal;
-  font-family:var(--f-bear);letter-spacing:.03em}
+/* §236 — THE PRODUCT PAGE'S OWN BADGE, AND ONE SHAPE FOR THE WHOLE CARD.
+   The mini app draws its dietary badges as squared outline boxes (.badge in
+   miniapp/pages/product/product.wxss: a 3rpx ink rule, transparent, caps at
+   .08em) and that row is the calmest object on the page — because it is one
+   shape repeated, which is exactly what this card was not. It carried three:
+   a filled pill, a dashed pill and a solid green one, three visual languages
+   inside five centimetres.
+   Ash, on his own badge row: "what about this style".
+   So the pill is retired for the box, and THE FILL IS THE ONLY DIFFERENCE
+   between what is in the food and what is not. One shape, two states, and no
+   third colour anywhere on the card. */
+.achip{border-radius:0;padding:calc(6 * var(--u)) calc(10 * var(--u)) calc(5 * var(--u));
+  font-size:calc(10.5 * var(--u));line-height:1;font-family:var(--f-bear);
+  letter-spacing:.08em;text-transform:uppercase;border:1.5px solid var(--ink)}
 /* A FULL-WIDTH CLOSING BRACKET RESERVES A WHOLE CHARACTER BOX AND DRAWS ITS INK
    IN THE LEFT HALF OF IT. So a chip reading 麸质（燕麦） carries about two thirds
    of a character of blank at its right end, its text sits nearly 4px left of
@@ -1243,15 +1259,12 @@ img{display:block;max-width:100%}
    overshoots, and the measurement says .67 lands it dead centre. */
 .achip.tr{padding-right:calc(10 * var(--u) - .67em)}
 .achip.tl{padding-left:calc(10 * var(--u) - .67em)}
-/* CONTAINS reads louder than MAY CONTAIN, and neither borrows the page's lime:
-   lime is this menu's "yes, add it" colour and an allergen is not that. */
+/* IN THE FOOD IS FILLED; NOT IN THE FOOD IS THE OUTLINE. Neither borrows the
+   page's lime: lime is this menu's "yes, add it" colour and an allergen is
+   not that, nor is a box a customer cannot tap.
+   .may is gone with the dashed pill — that row is a sentence now, .aline. */
 .achip.has{background:var(--ink);color:var(--oat)}
-.achip.may{background:transparent;color:var(--olive);border:1.5px dashed var(--olive)}
-/* FREE OF is the opposite statement to the two above it, so it borrows
-   neither: filled forest, the tenant's own primary. Still not lime — lime is
-   this menu's "yes, add it" colour and a chip that is not tappable must not
-   wear it. */
-.achip.free{background:var(--forest);color:var(--oat)}
+.achip.free{background:transparent;color:var(--ink)}
 .anone{font-size:calc(12 * var(--u));color:var(--olive);font-style:italic}
 
 /* .nut-card from miniapp/pages/product/product.wxss, converted at the same
@@ -3098,6 +3111,22 @@ function detailBody(it, code, listed, sig, qrShown) {
       `<div class="achips"><span class="l-en chipset">${one(en)}</span>` +
       `<span class="l-cn chipset">${one(cn.length ? cn : en)}</span></div></div>`;
   };
+  /* §236 — MAY-CONTAIN IS A SENTENCE, SO IT IS SET AS ONE. A box is a shape
+     for a token. This field holds tokens on most products and a whole
+     sentence on some — the longest on the live catalogue is 90 characters,
+     "May be produced in a facility handling tree nuts, soy, or other
+     allergens — check latest label" — and a box around that is a box with a
+     paragraph in it. Joined with the comma the office would have typed and
+     set as text, it reads the same either way. */
+  const algLine = (label, en, cn) => {
+    if (!en.length && !cn.length) return '';
+    // The separator is the one the office typed — splitChips ate it, and an
+    // ASCII comma between two Chinese words is the wrong punctuation.
+    const run = (list, sep) => esc(list.join(sep));
+    return `<div class="arow"><div class="alab">${bi(label.en, label.cn)}</div>` +
+      `<div class="aline"><span class="l-en">${run(en, ', ')}</span>` +
+      `<span class="l-cn">${run(cn.length ? cn : en, '、')}</span></div></div>`;
+  };
   // THE THIRD ROW IS NOT THE OFFICE'S CARD, it is the product's free_of column
   // with the card's own words subtracted — see blockRead.freeOfChips. A flag
   // the card already names, in either row and either language, never reaches
@@ -3107,13 +3136,25 @@ function detailBody(it, code, listed, sig, qrShown) {
     const freeRow = chips.length
       ? algRow(L.freeOf, chips.map(c => c.en), chips.map(c => c.cn), 'free')
       : '';
+    // §236 — "NOTHING HERE" IS NOT AN ALLERGEN. Half the catalogue writes the
+    // contains field as "None declared" (or one of four Chinese spellings of
+    // it), and a filled box is for what is IN the food — so the office's own
+    // phrase prints in the row's quiet state instead. Their words, not the
+    // component's: 本产品不含已知致敏原 says more than 未声明 does.
+    const noneEn = blockRead.saysNone(a.contains_en);
+    const noneCn = blockRead.saysNone(a.contains_cn);
+    const containsRow = (noneEn || noneCn)
+      ? `<div class="arow"><div class="alab">${bi(L.contains.en, L.contains.cn)}</div>` +
+        `<div class="achips"><span class="anone">` +
+        bi(noneEn || L.none.en, noneCn || L.none.cn) + `</span></div></div>`
+      : algRow(L.contains, a.contains_en, a.contains_cn, 'has');
     return `<div class="acard"><div class="atitle">${bi(L.allergens.en, L.allergens.cn)}</div>` +
-      (algRow(L.contains, a.contains_en, a.contains_cn, 'has') ||
+      (containsRow ||
         // "None declared" is the mini app's own empty state for this row, and it
         // is a statement rather than a blank: the office looked and found none.
         `<div class="arow"><div class="alab">${bi(L.contains.en, L.contains.cn)}</div>` +
         `<div class="achips"><span class="anone">${bi(L.none.en, L.none.cn)}</span></div></div>`) +
-      algRow(L.mayContain, a.may_en, a.may_cn, 'may') +
+      algLine(L.mayContain, a.may_en, a.may_cn) +
       freeRow +
       `</div>`;
   };

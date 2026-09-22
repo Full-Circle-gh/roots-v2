@@ -272,6 +272,18 @@
     }).map(function (f) { return L === 'cn' ? f.cn : f.en; });
   }
 
+  // Matched whole, never by prefix: a phrase this misses is merely loud, and
+  // one it swallows hides an allergen. Same list as NONE_PHRASES in
+  // lib/product-blocks-read.js.
+  var NONE_PHRASES = ['none', 'none declared', 'no known allergens', 'no allergens', 'n/a', 'na',
+    '无', '未声明', '未声明常见致敏原', '无已知致敏原',
+    '本产品不含已知致敏原', '不含已知致敏原', '不含常见致敏原'];
+  function saysNone(list) {
+    if (!list || list.length !== 1) return '';
+    var only = String(list[0] == null ? '' : list[0]).trim();
+    return NONE_PHRASES.indexOf(only.toLowerCase().replace(/[.。]$/, '')) > -1 ? only : '';
+  }
+
   function rAllergenCard(b, L, freeOf) {
     var contains = splitChips(pickLang(b.contains_en, b.contains_cn, L));
     var mayContain = splitChips(pickLang(b.may_contain_en, b.may_contain_cn, L));
@@ -281,20 +293,26 @@
     var mayContainLabel = L === 'cn' ? '可能含有微量' : 'May contain traces of';
     var emptyText = L === 'cn' ? '未声明' : 'None declared';
 
-    var containsChips = contains.length
-      ? contains.map(function (c) {
-          return '<span class="spb-al-chip spb-al-chip-strong">' + escapeHtml(c) + '</span>';
-        }).join('')
-      : '<span class="spb-allergen-empty">' + escapeHtml(emptyText) + '</span>';
+    // §236 — "nothing here" is not an allergen: a contains field the office
+    // wrote as "None declared" (or one of four Chinese spellings) prints in
+    // the quiet state, in THEIR words. Same list as saysNone() in
+    // lib/product-blocks-read.js, which this file cannot require.
+    var none = saysNone(contains);
+    var containsChips = none
+      ? '<span class="spb-allergen-empty">' + escapeHtml(none) + '</span>'
+      : contains.length
+        ? contains.map(function (c) {
+            return '<span class="spb-al-chip spb-al-chip-strong">' + escapeHtml(c) + '</span>';
+          }).join('')
+        : '<span class="spb-allergen-empty">' + escapeHtml(emptyText) + '</span>';
 
+    // §236 — MAY-CONTAIN IS A SENTENCE, SO IT IS SET AS ONE. A box is a shape
+    // for a token; this field holds a 90-character facility warning on some
+    // products, and a box around that is a box with a paragraph in it.
     var mayRow = mayContain.length
       ? '<div class="spb-allergen-row">' +
           '<span class="spb-allergen-lbl">' + escapeHtml(mayContainLabel) + '</span>' +
-          '<div class="spb-allergen-chips">' +
-            mayContain.map(function (c) {
-              return '<span class="spb-al-chip spb-al-chip-soft">' + escapeHtml(c) + '</span>';
-            }).join('') +
-          '</div>' +
+          '<div class="spb-allergen-line">' + escapeHtml(mayContain.join(L === 'cn' ? '、' : ', ')) + '</div>' +
         '</div>'
       : '';
 

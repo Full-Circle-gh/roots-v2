@@ -4824,19 +4824,16 @@
     margin-bottom: 6px;
     text-transform: uppercase;
   }
-  .pa-prev-allergen-chips {
-    display: flex; flex-wrap: wrap; gap: 4px;
-  }
-  .pa-prev-allergen-chip {
-    display: inline-block;
-    padding: 4px 10px;
-    font-size: 11px;
-    font-weight: 600;
-    border-radius: 3px;
-    line-height: 1.3;
-  }
-  .pa-prev-allergen-chip-strong { background: #E96174; color: #fff; }
-  .pa-prev-allergen-chip-soft   { background: #F2E7DF; color: #1a1a17; border: 1px solid rgba(26,26,23,0.18); }
+  /* §236 — A SECOND `.pa-prev-allergen-chip` AND `-chips` STOOD HERE, from an
+     older preview, along with two hyphenated fill variants of it, which
+     nothing in the tree renders at all. (They are not named here: the suite
+     greps this file for them, and a comment that spelled them out would pass
+     for the third chip style coming back.) The live preview's own rules are
+     further down this file and win by source order, so these only ever said a
+     different thing about the same elements — a 3px radius and a third chip
+     style, both of which the card no longer has. The sibling classes of that
+     old preview (`-head`, `-emoji`, `-section`, `-label`) are equally dead and
+     are left where they are: they are not this change's to sweep. */
 
   /* Preview empty state */
   .pa-prev-empty {
@@ -4997,30 +4994,38 @@
     font-size: 8.5px; letter-spacing: 0.22em; text-transform: uppercase;
     color: rgba(26, 26, 23, 0.6);
   }
+  /* §236 — label over values, flush left; one shape, and the fill is the
+     only difference between what is in the food and what is not. */
   .pa-prev-allergen-row {
-    display: flex; align-items: baseline; gap: 8px;
-    padding: 6px 0;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+    padding: 9px 0;
   }
   .pa-prev-allergen-row + .pa-prev-allergen-row {
-    border-top: 1px dashed rgba(26, 26, 23, 0.3);
+    border-top: 1px solid rgba(26, 26, 23, 0.14);
   }
   .pa-prev-allergen-lbl {
     font-family: 'Toni Grotesk', sans-serif;
     font-size: 9px; letter-spacing: 0.18em; text-transform: uppercase;
     color: rgba(26, 26, 23, 0.6);
-    flex: 0 0 76px; line-height: 1.4;
+    line-height: 1.4;
   }
   .pa-prev-allergen-chips {
-    display: flex; flex-wrap: wrap; gap: 5px; flex: 1;
+    display: flex; flex-wrap: wrap; gap: 5px; width: 100%;
+  }
+  .pa-prev-allergen-line {
+    font-family: 'Aleo', serif;
+    font-size: 10.5px; line-height: 1.45;
+    color: rgba(26, 26, 23, 0.6); width: 100%;
   }
   .pa-prev-allergen-chip {
     display: inline-block;
-    padding: 4px 9px 3px; border-radius: 999px;
+    padding: 5px 9px 4px; border: 1.5px solid #1a1a17; border-radius: 0;
     font-family: 'Toni Grotesk', sans-serif;
-    font-size: 10px; line-height: 1;
+    font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    line-height: 1;
   }
-  .pa-prev-allergen-chip.strong { background: #E96174; color: #fff; font-weight: 700; }
-  .pa-prev-allergen-chip.soft   { background: #F2CA6C; color: #1a1a17; }
+  .pa-prev-allergen-chip.strong { background: #1a1a17; color: #F2E7DF; }
+  .pa-prev-allergen-chip.free   { background: transparent; color: #1a1a17; }
   .pa-prev-allergen-empty {
     font-family: 'Aleo', serif; font-style: italic;
     font-size: 11px; color: rgba(26, 26, 23, 0.6);

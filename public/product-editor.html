@@ -1354,13 +1354,16 @@
   .pa-prev-allergen-ttl { display: flex; align-items: center; gap: 8px; font-family: 'Bear Serif', serif; font-size: 18px; line-height: 1; color: var(--pa-fg, #1a1a17); }
   .pa-prev-allergen-warn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; background: var(--pa-accent, #E96174); color: #F2E7DF; border-radius: 4px; font-family: 'Toni Grotesk', sans-serif; font-size: 13px; font-weight: 700; }
   .pa-prev-allergen-meta { font-family: 'Toni Grotesk', sans-serif; font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
-  .pa-prev-allergen-row { display: flex; align-items: baseline; gap: 10px; padding: 8px 0; }
-  .pa-prev-allergen-row + .pa-prev-allergen-row { border-top: 1px dashed rgba(26, 26, 23, 0.3); }
-  .pa-prev-allergen-lbl { font-family: 'Toni Grotesk', sans-serif; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); flex: 0 0 88px; line-height: 1.4; }
-  .pa-prev-allergen-chips { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
-  .pa-prev-allergen-chip { display: inline-block; padding: 5px 10px 4px; border-radius: 999px; font-family: 'Toni Grotesk', sans-serif; font-size: 11.5px; line-height: 1; }
-  .pa-prev-allergen-chip.strong { background: #E96174; color: #fff; font-weight: 700; }
-  .pa-prev-allergen-chip.soft { background: #F2CA6C; color: #1a1a17; }
+  /* §236 — label over values, flush left; one shape for the card, and the
+     fill is the only difference between what is in the food and what is not. */
+  .pa-prev-allergen-row { display: flex; flex-direction: column; align-items: flex-start; gap: 7px; padding: 10px 0; }
+  .pa-prev-allergen-row + .pa-prev-allergen-row { border-top: 1px solid rgba(26, 26, 23, 0.14); }
+  .pa-prev-allergen-lbl { font-family: 'Toni Grotesk', sans-serif; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); line-height: 1.4; }
+  .pa-prev-allergen-chips { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+  .pa-prev-allergen-line { font-family: 'Aleo', serif; font-size: 11.5px; line-height: 1.45; color: rgba(26, 26, 23, 0.6); width: 100%; }
+  .pa-prev-allergen-chip { display: inline-block; padding: 6px 10px 5px; border: 1.5px solid #1a1a17; border-radius: 0; font-family: 'Toni Grotesk', sans-serif; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; line-height: 1; }
+  .pa-prev-allergen-chip.strong { background: #1a1a17; color: #F2E7DF; }
+  .pa-prev-allergen-chip.free { background: transparent; color: #1a1a17; }
   .pa-prev-allergen-empty { font-family: 'Aleo', serif; font-style: italic; font-size: 13px; color: rgba(26, 26, 23, 0.6); }
   /* 06 · HOW TO USE GRID */
   .pa-prev-how { padding: 30px 22px 30px; }
@@ -5677,10 +5680,22 @@ function _paPreviewBlockHtml(b) {
     const mayContain = _paSplitChips(pickT(b.may_contain_en, b.may_contain_cn));
     if (!contains.length && !mayContain.length) return '';
     const chips = (arr, cls) => arr.map(c => `<span class="pa-prev-allergen-chip ${cls}">${esc(c)}</span>`).join('');
+    // §236 — a contains field the office wrote as "nothing to declare" is the
+    // quiet state, in their words. Same list as NONE_PHRASES in
+    // lib/product-blocks-read.js; matched whole, never by prefix.
+    const NONE_PHRASES = ['none', 'none declared', 'no known allergens', 'no allergens', 'n/a', 'na',
+      '无', '未声明', '未声明常见致敏原', '无已知致敏原',
+      '本产品不含已知致敏原', '不含已知致敏原', '不含常见致敏原'];
+    const saysNone = (list) => {
+      if (!list || list.length !== 1) return '';
+      const only = String(list[0] == null ? '' : list[0]).trim();
+      return NONE_PHRASES.indexOf(only.toLowerCase().replace(/[.。]$/, '')) > -1 ? only : '';
+    };
+    const noneSaid = saysNone(contains);
     return `<div class="pa-prev-block pa-prev-allergen"><div class="pa-prev-allergen-card">
       <div class="pa-prev-allergen-top"><span class="pa-prev-allergen-ttl"><span class="pa-prev-allergen-warn">!</span> ${T('Allergens', '过敏原')}</span><span class="pa-prev-allergen-meta">GB-7718</span></div>
-      <div class="pa-prev-allergen-row"><span class="pa-prev-allergen-lbl">${T('Contains', '含有')}</span><span class="pa-prev-allergen-chips">${contains.length ? chips(contains, 'strong') : `<span class="pa-prev-allergen-empty">${T('None declared', '未声明')}</span>`}</span></div>
-      ${mayContain.length ? `<div class="pa-prev-allergen-row"><span class="pa-prev-allergen-lbl">${T('May contain traces of', '可能含有微量')}</span><span class="pa-prev-allergen-chips">${chips(mayContain, 'soft')}</span></div>` : ''}
+      <div class="pa-prev-allergen-row"><span class="pa-prev-allergen-lbl">${T('Contains', '含有')}</span><span class="pa-prev-allergen-chips">${noneSaid ? `<span class="pa-prev-allergen-empty">${esc(noneSaid)}</span>` : contains.length ? chips(contains, 'strong') : `<span class="pa-prev-allergen-empty">${T('None declared', '未声明')}</span>`}</span></div>
+      ${mayContain.length ? `<div class="pa-prev-allergen-row"><span class="pa-prev-allergen-lbl">${T('May contain traces of', '可能含有微量')}</span><span class="pa-prev-allergen-line">${esc(mayContain.join(T(', ', '、')))}</span></div>` : ''}
     </div></div>`;
   }
   if (b.type === 'how_to_use') {

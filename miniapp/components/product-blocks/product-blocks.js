@@ -130,6 +130,22 @@ function _segmentHighlighted(s) {
 // template stays declarative. Returning { type: '_skip' } drops the block
 // (e.g. all fields empty, or unknown type → forward-compatibility with
 // older mini-app builds receiving a newer block schema).
+// §236 — "NOTHING HERE" IS NOT AN ALLERGEN. Half the catalogue writes the
+// contains field as "None declared", and the Chinese half spells it four ways.
+// A filled box is for what is IN the food, so the office's own phrase prints
+// in the card's quiet state instead — their words, not the component's.
+// Matched WHOLE, never by prefix: a phrase this misses is merely loud, one it
+// swallows hides an allergen. Same list as NONE_PHRASES in
+// lib/product-blocks-read.js, which a WeChat bundle cannot require.
+const _NONE_PHRASES = ['none', 'none declared', 'no known allergens', 'no allergens', 'n/a', 'na',
+  '无', '未声明', '未声明常见致敏原', '无已知致敏原',
+  '本产品不含已知致敏原', '不含已知致敏原', '不含常见致敏原'];
+function _saysNone(list) {
+  if (!list || list.length !== 1) return '';
+  const only = String(list[0] == null ? '' : list[0]).trim();
+  return _NONE_PHRASES.indexOf(only.toLowerCase().replace(/[.。]$/, '')) > -1 ? only : '';
+}
+
 // ── FREE OF, AND WHY THE CARD WINS ─────────────────────────────────────────
 //
 // free_of is the filter tag set behind the shop's GLUTEN FREE chips — four
@@ -282,9 +298,14 @@ function _resolveBlock(b, L, freeOf) {
       freeOf:          _freeOfChips(freeOf, said, L),
       contains,
       mayContain,
-      // Empty-contains state per v1 spec
-      containsEmpty:   contains.length === 0,
-      emptyText:       L === 'cn' ? '未声明' : 'None declared',
+      // §236 — a sentence, not a row of boxes: this field holds a 90-character
+      // facility warning on some products and a box around that is a box with
+      // a paragraph in it.
+      mayContainLine: mayContain.join(L === 'cn' ? '、' : ', '),
+      // Empty-contains state per v1 spec, and §236's: a contains field the
+      // office wrote as "nothing to declare" is the same state, in their words.
+      containsEmpty:   contains.length === 0 || !!_saysNone(contains),
+      emptyText:       _saysNone(contains) || (L === 'cn' ? '未声明' : 'None declared'),
     };
   }
 

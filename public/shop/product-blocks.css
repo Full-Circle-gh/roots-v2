@@ -297,14 +297,19 @@
   font-weight: 700;
   flex: none;
 }
+/* §236 — THE LABEL SITS OVER ITS VALUES, AND BOTH START AT THE LEFT EDGE.
+   Beside a fixed 176u column the three statements each began at a different
+   place on the line, so there was no shared axis to read down. Stacked, the
+   values also get the card's full width, which the long ones need. */
 .shop-product-blocks .spb-allergen-row {
   display: flex;
-  align-items: baseline;
-  gap: calc(20 * var(--u));
-  padding: calc(16 * var(--u)) 0;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(14 * var(--u));
+  padding: calc(20 * var(--u)) 0;
 }
 .shop-product-blocks .spb-allergen-row + .spb-allergen-row {
-  border-top: calc(2 * var(--u)) dashed var(--ink-30);
+  border-top: calc(2 * var(--u)) solid var(--ink-12);
 }
 .shop-product-blocks .spb-allergen-lbl {
   font-family: var(--f-bear);
@@ -312,36 +317,46 @@
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--ink-60);
-  flex: 0 0 calc(176 * var(--u));
   line-height: 1.4;
 }
 .shop-product-blocks .spb-allergen-chips {
   display: flex;
   flex-wrap: wrap;
   gap: calc(12 * var(--u));
-  flex: 1;
+  width: 100%;
 }
+/* The may-contain sentence: body size, muted, wrapping like the prose it is. */
+.shop-product-blocks .spb-allergen-line {
+  font-family: var(--f-aleo);
+  font-size: calc(24 * var(--u) * var(--font-scale));
+  line-height: 1.45;
+  color: var(--ink-60);
+  width: 100%;
+  overflow-wrap: break-word;
+}
+/* §236 — THE PRODUCT PAGE'S OWN BADGE, AND ONE SHAPE FOR THE WHOLE CARD.
+   The mini app's dietary badges are squared outline boxes with a caps label,
+   and that row is the calmest thing on the page because it is one shape
+   repeated. This card carried three — a berry pill, a corn pill and a forest
+   one — so it is the box now, and THE FILL IS THE ONLY DIFFERENCE between
+   what is in the food and what is not. */
 .shop-product-blocks .spb-al-chip {
   display: inline-block;
-  padding: calc(10 * var(--u)) calc(20 * var(--u)) calc(8 * var(--u));
-  border-radius: calc(999 * var(--u));
+  padding: calc(12 * var(--u)) calc(20 * var(--u)) calc(10 * var(--u));
+  border: calc(3 * var(--u)) solid var(--ink);
+  border-radius: 0;
   font-family: var(--f-bear);
-  font-size: calc(25 * var(--u) * var(--font-scale));
+  font-size: calc(21 * var(--u) * var(--font-scale));
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   line-height: 1;
 }
 .shop-product-blocks .spb-al-chip-strong {
-  background: var(--berry);
-  color: var(--ink);
-  font-weight: 700;
-}
-/* FREE OF states the opposite of the two rows above it, so it borrows the
-   colour of neither: filled forest, the brand's primary. */
-.shop-product-blocks .spb-al-chip-free {
-  background: var(--forest);
+  background: var(--ink);
   color: var(--oat);
 }
-.shop-product-blocks .spb-al-chip-soft {
-  background: var(--corn);
+.shop-product-blocks .spb-al-chip-free {
+  background: transparent;
   color: var(--ink);
 }
 .shop-product-blocks .spb-allergen-empty {

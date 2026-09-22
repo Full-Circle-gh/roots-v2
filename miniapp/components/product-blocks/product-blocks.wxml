@@ -88,12 +88,9 @@
               </block>
             </view>
           </view>
-          <view wx:if="{{item.mayContain.length}}" class="pb-allergen-row">
+          <view wx:if="{{item.mayContainLine}}" class="pb-allergen-row">
             <text class="pb-allergen-lbl">{{item.mayContainLabel}}</text>
-            <view class="pb-allergen-chips">
-              <text wx:for="{{item.mayContain}}" wx:key="*this"
-                    class="pb-al-chip pb-al-chip-soft">{{item}}</text>
-            </view>
+            <text class="pb-allergen-line">{{item.mayContainLine}}</text>
           </view>
           <view wx:if="{{item.freeOf.length}}" class="pb-allergen-row">
             <text class="pb-allergen-lbl">{{item.freeOfLabel}}</text>
