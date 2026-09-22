@@ -317,6 +317,84 @@ check('hide_qr: false is not hiding — only a true hides', () => {
   const off = [{ type: 'why', rows: [{ claim_en: 'Live cultures' }], hide_qr: false }];
   assert.strictEqual(R.pageBlocks(off).length, 1);
 });
+
+/* ── §230 · THE TENANT'S ALLOW-LIST, AND THE THIRD STATE IT NEEDED ─────────
+   Ash: the blocks Quinoa Salad shows are the blocks every product shows. A
+   rule like that can only exist if "nobody has said" is distinguishable from
+   "somebody said show it", so the flag went from a boolean to three states.
+
+   IT IS AN ALLOW-LIST. The first draft read the ask as a block-list — the two
+   types Quinoa Salad has switched off, switched off everywhere — and that is
+   a weaker rule: it answers for nothing Quinoa Salad does not carry, so
+   `pull_quote`, `recipe_steps` and every type the editor gains later keep
+   drawing. These checks pin the stronger reading.
+
+   THE LIST IS THE CALLER'S, ALWAYS. This module holds no database handle and
+   no seed of its own — a second copy of the seed here is exactly the drift
+   §132's two implementations were written to avoid. */
+const DEFAULTED = [
+  { type: 'hero_intro', body_en: 'Brewed slowly' },
+  { type: 'storage_box', left: { head_en: 'Chill', num_en: '0–4°' } },
+  { type: 'notes_callout', text_en: 'Stir before use.' },
+];
+const ALLOW = ['hero_intro', 'allergen_card'];
+
+check('a type OFF the allow-list does not draw, although no block says so', () => {
+  assert.deepStrictEqual(R.pageBlocks(DEFAULTED, ALLOW).map(b => b.type), ['hero_intro'],
+    'the allow-list was not applied — 216 products would still print the storage card');
+});
+check('A TYPE NOBODY LISTED IS ALSO OFF — the block-list reading would show it', () => {
+  /* The whole correction. `pull_quote` is on no allow-list here and is not one
+     of the types the office ever switched off, so a rule built from "what is
+     switched off" would draw it. An allow-list answers for it without anybody
+     having named it. */
+  const quote = [{ type: 'pull_quote', text_en: 'Best soup in town.', who_en: 'A regular' }];
+  assert.strictEqual(R.pageBlocks(quote, ALLOW).length, 0,
+    'a type the allow-list never mentions still drew — this is the block-list bug');
+  assert.strictEqual(R.pageBlocks(quote, ALLOW.concat('pull_quote')).length, 1,
+    'and listing it did not bring it back');
+});
+check('NO LIST MEANS NO RULE — the pre-§230 reading, exactly', () => {
+  assert.strictEqual(R.pageBlocks(DEFAULTED).length, 3,
+    'a caller that passes nothing now hides blocks it never asked to hide');
+  assert.strictEqual(R.pageBlocks(DEFAULTED, null).length, 3,
+    'null is not "allow nothing" — it is "no rule in force"');
+});
+check('AN EMPTY LIST IS DIFFERENT AGAIN — allow nothing, and it is honoured', () => {
+  assert.strictEqual(R.pageBlocks(DEFAULTED, []).length, 0,
+    'an empty allow-list drew blocks — the two empty states have been conflated');
+});
+check('an explicit FALSE beats the allow-list: this one product shows it', () => {
+  const kept = [
+    { type: 'storage_box', hide_qr: false, left: { head_en: 'Chill', num_en: '0–4°' } },
+    { type: 'notes_callout', text_en: 'Stir before use.' },
+  ];
+  assert.deepStrictEqual(R.pageBlocks(kept, ALLOW).map(b => b.type), ['storage_box'],
+    'the office switched this one back on and the allow-list overruled them');
+});
+check('an explicit TRUE still hides a type the allow-list allows', () => {
+  const off = [{ type: 'hero_intro', body_en: 'Brewed slowly', hide_qr: true }];
+  assert.strictEqual(R.pageBlocks(off, ALLOW).length, 0,
+    'an allowed type could no longer be switched off on one product');
+});
+check('hiddenHere resolves the three states on its own', () => {
+  assert.strictEqual(R.hiddenHere({ type: 'storage_box' }, ALLOW), true, 'absent did not ask the list');
+  assert.strictEqual(R.hiddenHere({ type: 'storage_box', hide_qr: false }, ALLOW), false, 'false did not win');
+  assert.strictEqual(R.hiddenHere({ type: 'hero_intro', hide_qr: true }, ALLOW), true, 'true did not win');
+  assert.strictEqual(R.hiddenHere({ type: 'hero_intro' }, ALLOW), false, 'an allowed type was hidden');
+  assert.strictEqual(R.hiddenHere({ type: 'storage_box' }, undefined), false, 'no list still hid something');
+  assert.strictEqual(R.hiddenHere(null, ALLOW), false, 'a missing block threw or hid');
+});
+check('a nutrition block held back by the allow-list still blocks the column fallback', () => {
+  /* The same trap as the flag's own version above, one level down: the
+     fallback asks the UNFILTERED source, so a nutrition block held back by the
+     ALLOW-LIST rather than by a flag must also stop the column printing. */
+  const nut = [{ type: 'nutrition_facts', basis_en: 'Per 100ml',
+                 rows: [{ label_en: 'Energy', value: '98kJ' }] }];
+  assert.strictEqual(R.pageBlocks(nut, ALLOW).length, 0, 'the allow-list did not hold it back');
+  assert.strictEqual(R.hasNutritionBlock(nut), true,
+    'the column fallback would print the table the allow-list just held back');
+});
 check('THE WORDS ARE NOT DELETED — the block is untouched in the source', () => {
   R.pageBlocks(HIDDEN);
   assert.deepStrictEqual(HIDDEN[1].rows, [{ claim_en: 'Live cultures' }],

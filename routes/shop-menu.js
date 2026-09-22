@@ -99,6 +99,7 @@ const wechatOa = require('../lib/wechat-oa');
 const { allocateShopOrderCode } = require('../lib/shop-order-code');
 const { nutritionRows } = require('../lib/nutrition-rows');
 const blockRead = require('../lib/product-blocks-read');
+const qrBlockDefaults = require('../lib/qr-menu-block-defaults');
 // WHAT A PRODUCT PAGE SIGNS ITSELF WITH (§158). The same module the mini app's
 // storefront config and the product editor read, so this page cannot sign a
 // product differently from the phone: one cast, one auto-map, one house line.
@@ -2909,14 +2910,19 @@ function menuSignature(req) {
 // The sheet's body for one product. Returns '' when the product has nothing to
 // say — the caller then renders no sheet at all and the card stays untappable,
 // because an empty panel is worse than a card that does not respond.
-function detailBody(it, code, listed, sig) {
+function detailBody(it, code, listed, sig, qrShown) {
   /* §132 — EVERY BLOCK THE OFFICE WROTE, IN THE ORDER IT WROTE THEM.
      §120 read two block types, §129 added the paragraph and the note, and this
      reads all thirteen. The order is no longer this function's: it was a fixed
      prose-then-ingredients-then-allergens template, and it is now whatever the
      office laid out in the editor, which is what "same as the mini app" means
      before any single block is drawn. */
-  const blocks = blockRead.pageBlocks(it.description_blocks);
+  /* §230 — THE TENANT'S ALLOW-LIST TRAVELS IN, it is not read here. Every
+     product on this page resolves against the same list and it costs one row,
+     so it is read once for the request beside the signature rather than once
+     per product — and a reader that fetched it itself could not be called from
+     the mini app's harness or from a script holding no tenant handle. */
+  const blocks = blockRead.pageBlocks(it.description_blocks, qrShown);
   const nut = nutritionRows(it.nutrition);
   const L = blockRead.LABELS;
 
@@ -3411,6 +3417,12 @@ router.get('/s/:shopCode', (req, res) => {
      signed by the same shop, and a per-card lookup would put one identical
      query behind every tile on the page. */
   const sig = menuSignature(req);
+  /* §230 — THE BLOCK TYPES THIS TENANT'S COUNTER MENU MAY DRAW, read here for
+     the same reason as the signature: one row, identical for every product on
+     the page. It is an ALLOW-LIST: a type absent from it does not draw unless
+     the block itself says so. Absent config means the seed in
+     lib/qr-menu-block-defaults — the eight Quinoa Salad shows. */
+  const qrShown = qrBlockDefaults.readShownTypes(tdb());
 
   const head = `<div class="bar"><div class="nm">${bi(name.en, name.cn)}</div>${toggle(lang)}</div>`;
 
@@ -3506,7 +3518,7 @@ router.get('/s/:shopCode', (req, res) => {
     // ingredients, no nutrition and no allergen flags opens a sheet saying
     // nothing, which is worse than a card that does not respond — so the whole
     // detail apparatus is absent for it rather than empty.
-    const detail = detailBody(it, code, listed, sig);
+    const detail = detailBody(it, code, listed, sig, qrShown);
     const tap = detail
       ? ` data-open="${it.store_product_id}" role="button" tabindex="0"` : '';
     return `<div class="it${it.sold_out ? ' out' : ''}${detail ? ' has-dt' : ''}"${tap}>` +

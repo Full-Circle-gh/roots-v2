@@ -113,7 +113,15 @@ yes(/if\(cfg\.timezone\) window\.TD_TZ = cfg\.timezone;/.test(M),
 /* A settings read that nothing writes is the failure mode this pins: TD_TZ set
    from a key the endpoint does not return leaves every stamp on the fallback
    and looks, from the page, exactly like a working feature. */
-yes(/res\.json\(\{ success: true, data: \{ \.\.\.loadConfig\(\), timezone \} \}\)/.test(RET),
+/* §230 gave this handler a second thing to add — the QR menu's block default
+   — so the response is assembled into a local before it is sent rather than
+   built inside res.json(). The guarantee is unchanged and is asserted in two
+   halves: the zone is spread into the payload, and that payload is what goes
+   out as `data`. Matching the old one-liner would fail on a rewrite that still
+   returns the key, which is a test protecting its own phrasing. */
+yes(/\{ \.\.\.loadConfig\(\), timezone \}/.test(RET),
+  'GET /api/retail-admin/config no longer builds its payload from loadConfig() + timezone');
+yes(/res\.json\(\{ success: true, data: cfgOut \}\)/.test(RET),
   'GET /api/retail-admin/config really returns `timezone` — the key is not invented here');
 
 /* Deliberately left on the handset's clock, and the only one. A greeting is a

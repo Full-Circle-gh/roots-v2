@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.372
+# Tacet shared-core consolidation — decisions record, v4.373
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -22,6 +22,7 @@ Section numbers are permanent by the rule above and always resolve. **Line numbe
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+2026-09-22 · v4.373 — **§230 · THE QR MENU DRAWS THE BLOCKS QUINOA SALAD DRAWS, AND NOTHING ELSE — DECIDED BY ASH**: *"i want by default that the blocks of quinoa salad that now shows on the qr code menu will be the default for all products"*. **THE FIRST IMPLEMENTATION READ THAT AS A BLOCK-LIST AND ASH REJECTED IT** — *"have all the product of the main menu QR code show the same blocks for each product. This is not what you did"* — and the distinction is the whole entry: a list of the types #196 has switched OFF (`storage_box`, `notes_callout`) answers for nothing that product does not carry, so `pull_quote` (11 products, 4 listed), `recipe_steps` (8) and `ingredients_line` (1) kept drawing and every block type the editor gains later would arrive on the counter menu switched on. **The rule is an ALLOW-LIST**: the eight types Quinoa Salad DRAWS — `spec_strip`, `hero_intro`, `big_stat`, `why`, `ingredients_chips`, `allergen_card`, `how_to_use`, `nutrition_facts` — are the eight the menu may draw, and a type absent from it does not draw unless the block says so. **WHY THE MISREADING WAS EASY**, recorded so it is not re-derived: the two rules agree on every product carrying only the nine common types, which is most of the catalogue, and diverge only on the unusual product and the next new block type. **`ingredients_line` IS THE ONE TO WATCH** — it is the other ingredients block and carries the same items as `ingredients_chips`, so a product using it would show no ingredients at a counter; one product carries it and it is listed nowhere today. **THE COPY HALF WAS NOT DONE**: the live read (`scripts/diagnose_qr_block_defaults.js`) found only two products in 287 carrying any `hide_qr` flag and **no product anywhere having switched off a type Quinoa Salad shows**, so a bulk write would have edited 216 products to reach the state the rule reaches by itself while burying the office's two real choices in a sweep. **THE FLAG GAINS A THIRD STATE**: `true` hides, **`false` SHOWS against an allow-list that omits its type** — new, and now persisted where `paBlocksCollect` used to delete it — and ABSENT asks the list; `paSetHideQr` DELETES rather than writes whenever the office lands on the list's own answer, so a block that agrees keeps following it. **THREE EMPTY STATES STAY DISTINCT AND THAT IS LOAD-BEARING**: no `storefront_config` row means the seed, a stored `[]` means allow nothing, and no list passed to the reader means no rule in force; a malformed row falls back to the seed and never to `[]`, which would empty every detail sheet in the shop while looking shipped. **NO ROW IS WRITTEN AND NO MIGRATION RUNS.** The editor's copy of the list starts at `null`, not `[]`, or every eye would paint shut before the config landed, and GET `/api/retail-admin/config` always answers with the EFFECTIVE list computed by the same function `routes/shop-menu.js` reads — `scripts/test_qr_menu_block_defaults.js` fails the build on a second copy of the seed in either file. **No Chinese was composed** (the *following the default* hint was deliberately not added, the existing hidden-block note being true either way), so `docs/tacet-delivery-vocabulary.md` is untouched. **NOT IN THIS CHANGE:** a screen for editing the list. No schema change, no migration, no change to `.gitignore`, CI, or anything governing how sessions and builds work. `npm run test:fast` **329/329 green**; `scripts/test_product_blocks_read.js` 39 → **47**, `scripts/test_product_editor_hide_qr.js` 11 → **13**, `scripts/test_qr_menu_block_defaults.js` new at **18**.
 2026-09-22 · v4.372 — **§229 · THE CUSTOMER CHECKOUT ANSWERS TO THE SAME OPTION RULES AS THE MENU AND THE TILL, AND THE REFUSAL NAMES THE ITEM — ASKED FOR BY ASH** (*"fix all"*), closing the second gap §227 flagged. **THE RULE HAD TWO OF ITS THREE DOORS LOCKED.** §120 gave the QR menu a server-side check and §183 moved the counter till onto the same module; `/api/retail/orders` — the mini app and the web storefront, which is most of the shop's revenue — kept an inline copy whose only question was HOW MANY answers a pick-any group took: `checkOptionLimits` reads `type = 'multi' AND (min_choices > 0 OR max_choices > 0)`, and **a REQUIRED SINGLE question is not of type 'multi'**, so a dressing, a packaging choice or *heat it up?* was never checked at all. **THE INLINE COPY WAS WEAKER IN FOUR MORE WAYS**, each now a case: a choice id matching no row was SILENTLY DROPPED (the loop walked the rows the lookup returned, not the ids that were posted); a single-answer question could be answered twice and both deltas charged; a `text` option's choice was accepted though neither storefront renders one; and nothing capped a line's choices. That is the drift `lib/product-options.js`'s header predicted in as many words, and it accumulated silently because nobody compares two implementations nobody remembers are two. **`checkOptionLimits` IS DELETED RATHER THAN WIDENED.** Widening it would have left the third copy alive; `addonAvailabilityById` stays and is handed to the module as the sold-out predicate, which is how **the storefront keeps its own shelf** — the whole company's sellable count, because the online shop does not route to a location until checkout, where the QR menu asks per-location. The module takes that verdict from the caller for exactly this reason, so moving onto it did not move the shop onto the menu's answer. **THE PART ASH DECIDED, AND IT IS NOT THE SERVER HALF.** Put to him as a choice, because turning the check on ALONE makes things worse: neither client had a word for any of these codes, so the customer met `出错：choice_required` — a raw code, no item named, nowhere to go — and the person most likely to meet it did nothing wrong, since **the cart lives in the handset's own storage** and a line added before its product gained a question carries no answer and cannot grow one. Offered refuse-and-name, auto-apply-the-default, or flag-it-in-the-cart, **Ash chose refuse, name the item, send them to pick** — consistent with the two doors already locked, and it refuses to let the system quietly decide a choice on the customer's behalf, which is the habit that produced §227. So both clients name the product and offer the product page: a modal in the mini app, a message plus a hop on the web. **NO CHINESE IS COMPOSED** — `请选择` is the product sheet's own word for this and already sits in the web checkout's error map, `选规格` is live on the mini-app checkout, `取消` is live on three screens; `docs/tacet-delivery-vocabulary.md` is untouched. **NOT WIDENED, DELIBERATELY:** `priceCart` (behind `/quote`) and `deriveAddonLineMoney` keep their inline reads and are RIGHT to — both only price, neither validates, and one prices from a snapshot already stored. Making `/quote` refuse too would be the flag-it-earlier option Ash did not choose. **THE COVERAGE ADMISSION, WHICH IS THE ENTRY'S REAL LESSON.** `resolveAnswers` is now called once per basket and read back as `answers.lines[i]`; pinning that to `lines[0]` prices one line's extras onto another, and **every case in the new suite still passes under that mutation** — a refusal is decided inside the module before the loop indexes anything, so what the mixed-basket case holds is that the refusal NAMES the right product, a different claim from the one the first draft's comment made. The mutation is caught by `scripts/test_preorder_park.js`, whose paid order carries `choices` on the SECOND of two lines. Rather than leave that load-bearing by accident, the new suite ASSERTS THAT SIBLING'S SHAPE, so simplifying it to one line fails loudly instead of removing the shard's only detector in silence. `scripts/test_checkout_required_options.js`, new, auto-discovered into the fast shard, 18 checks, driving the REAL route over HTTP against a real database. **MUTANT-VERIFIED** — removing the `is_required` branch in the module lets the order through to a 409 on stock instead of a 400 on the question. No schema change, no migration, no capability change, and no change to `.gitignore`, CI, or anything governing how sessions and builds work. `npm run test:fast` **330/330 green**.
 
 
@@ -19812,3 +19813,132 @@ the order-record read goes red.
 
 `npm run test:fast` 295/295 green on `c2c4849`. No Chinese, no schema, no
 migration, no change to `.gitignore` or CI.
+
+## §230 — THE QR MENU DRAWS THE BLOCKS QUINOA SALAD DRAWS, AND NOTHING ELSE
+
+**Ash, 2026-09-22: *"in the product editor we can select which block it will
+show on that menu and which not. i want by default that the blocks of quinoa
+salad that now shows on the qr code menu will be the default for all
+products."*** Asked to choose between a one-time copy and a standing rule:
+***"copy it once and make it a rule."***
+
+### THE FIRST IMPLEMENTATION READ THIS AS A BLOCK-LIST, AND ASH REJECTED IT
+
+**This is the part of the section worth reading.** The first pass took the two
+types Quinoa Salad has switched OFF — `storage_box` and `notes_callout` — and
+switched those off across the catalogue. Ash, on seeing it: ***"What I ask you
+to do is to check which blocks available to view of the quinoa salad in the QR
+code menu and have all the product of the main menu QR code show the same
+blocks for each product. This is not what you did."***
+
+He is right, and the two rules are not variants of one idea:
+
+* A **block-list** answers only for types somebody has already switched off. It
+  says **nothing** about a type the reference product does not carry. On this
+  catalogue that left `pull_quote` (11 products, 4 listed), `recipe_steps` (8)
+  and `ingredients_line` (1) drawing — none of which Quinoa Salad has — and it
+  would have let **every block type the editor gains in future** arrive on the
+  counter menu switched on.
+* An **allow-list** answers for types nobody has considered yet. That is what
+  "show the same blocks" means, and it is the rule that shipped.
+
+**WHY THE MISREADING WAS EASY, so it is not re-derived.** The two rules agree
+on every product carrying only the nine common types, which is most of the
+catalogue, so a spot check cannot tell them apart. They diverge on the unusual
+product and on the next new block type — exactly where nobody looks.
+
+### The rule
+
+`lib/qr-menu-block-defaults.js` holds `SEED_SHOWN`: the eight types Quinoa
+Salad (#196) draws, in its own order — `spec_strip`, `hero_intro`, `big_stat`,
+`why`, `ingredients_chips`, `allergen_card`, `how_to_use`, `nutrition_facts`.
+A type absent from the list does not draw unless the block itself says so.
+
+**WHAT IS DELIBERATELY ABSENT**, each a consequence rather than an oversight:
+`storage_box` and `notes_callout` (switched off on #196 by the office);
+`pull_quote`, `recipe_steps` and `ingredients_line` (not on #196 at all);
+`image_band`, `pairings`, `faq` and `stat_callout` (supported by the reader,
+carried by no product here). **`ingredients_line` is the one to watch**: it is
+the OTHER ingredients block and carries the same items as `ingredients_chips`,
+so a product using it would show no ingredients at a counter — which matters
+for an allergy. One product carries it and it is not listed on any menu today.
+If one ever is, that line in the seed is where it gets decided.
+
+### The live read came first, and it is what the rule is built from
+
+`scripts/diagnose_qr_block_defaults.js`, read-only against production (run
+35713986310):
+
+* **Quinoa Salad (#196)** carries ten blocks, two switched off.
+* **Two products in a 287-product catalogue carry any flag at all**: #196, and
+  #377 Almond Banana Berry (`notes_callout`).
+* **No product anywhere has switched OFF a type Quinoa Salad shows.** The
+  §142-accident shape the diagnostic was built to find returned zero.
+* **216 products** carry a type the allow-list omits.
+
+**DECIDED: the copy half is not done, and the ask is met in full without it.**
+Nothing contradicts the pattern, so a bulk write would edit 216 products to
+reach the state the rule reaches on its own — while burying the office's two
+real choices inside a sweep nobody could later tell from an accident. Reported
+to Ash rather than performed.
+
+### DECIDED: the flag gets a THIRD state, because that is what a rule needs
+
+| `hide_qr`  | meaning                                                      |
+|------------|--------------------------------------------------------------|
+| `true`     | hidden here. The office switched this block off.              |
+| `false`    | shown here, **against** an allow-list that omits its type.    |
+| absent     | ask the tenant's allow-list.                                  |
+
+**The `false` is new and is now PERSISTED.** `paBlocksCollect` used to delete a
+falsy flag on the way out — correct when absent already meant shown, and a
+silent re-hide now. Conversely `paSetHideQr` **deletes** rather than writes
+whenever the office lands on the list's own answer, so a block that agrees with
+the rule keeps following it: an explicit value there would quietly exempt that
+product from the next change to the list, with nothing in the editor saying why.
+
+### DECIDED: no row is written, and three empty states stay distinct
+
+`storefront_config` key `qrMenu.shownBlockTypes`. **No migration, no backfill.**
+
+* **No row** → the seed. This is how the change ships at all.
+* **A stored `[]`** → allow nothing. A real answer, reachable only deliberately.
+* **No list passed to the reader** → no rule in force, everything draws. This is
+  the pre-§230 behaviour and what a caller with no tenant handle gets.
+
+A **malformed** row — not a list, unparseable, absent table — falls back to the
+seed and never to `[]`, because the second would empty every detail sheet in
+the shop and look like a shipped feature.
+
+### ONE RULE, AND THE THING THAT WOULD HAVE BROKEN IT
+
+The editor's eye claims to describe what the counter menu draws. It runs in a
+browser and cannot `require` the module, so it carries a **copy of the
+resolution** — and the seed list itself is the one thing it must never copy:
+GET `/api/retail-admin/config` now always answers with the EFFECTIVE list,
+computed by the same function `routes/shop-menu.js` reads.
+`scripts/test_qr_menu_block_defaults.js` fails the build on a second copy in
+either file. The editor's list starts at **`null`, not `[]`** — an empty list
+means "allow nothing" and would paint every eye shut before the config landed.
+
+The menu reads the list **once per request**, beside `menuSignature` and for the
+same reason §179 gives.
+
+### NO NEW STRINGS, AND THAT WAS A DESIGN CHOICE
+
+The obvious addition — a line under the switch reading "following the QR menu
+default" — was **not made**. The note already shown under a hidden block is true
+whichever way the block came to be hidden, and whether the answer came from the
+rule or from a flag is machinery the office does not act on. Restructuring to
+fit a live pair rather than minting one, per §30 rule 3. **No Chinese was
+composed, so `docs/tacet-delivery-vocabulary.md` is untouched.**
+
+### What is NOT in this change
+
+**There is no screen for editing the list.** It is one `storefront_config` key
+and the PUT endpoint already takes arbitrary dotted keys, so changing it needs
+no deploy — but it needs somebody who knows the key. A control for it is a
+separate PR and a separate decision.
+
+`npm run test:fast` 329/329 green. No Chinese, no schema, no migration, no
+change to `.gitignore` or CI.

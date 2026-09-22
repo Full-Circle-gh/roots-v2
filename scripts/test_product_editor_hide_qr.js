@@ -94,17 +94,61 @@ section('One writer owns the flag');
 check('every write to hide_qr happens inside paSetHideQr', () => {
   const owner = fnBody(SRC, 'paSetHideQr');
   assert.ok(owner, 'paSetHideQr is gone — the flag has no single owner any more');
-  assert.ok(/hide_qr\s*=\s*true/.test(owner) && /delete\s+b\.hide_qr/.test(owner),
+  /* §230 CHANGED WHAT THE OWNER WRITES, not that it owns it. The flag was
+     set to a literal true; it is now set to the boolean it was handed, and
+     only where that disagrees with the tenant's allow-list — so the assertion
+     is that it both writes a value and deletes, not that it writes `true`. */
+  assert.ok(/b\.hide_qr\s*=\s*!!hidden/.test(owner) && /delete\s+b\.hide_qr/.test(owner),
     'paSetHideQr no longer sets and clears the flag');
+  assert.ok(/paQrTypeShownByDefault\(/.test(owner),
+    'paSetHideQr writes the flag without consulting the allow-list — it will store an ' +
+    'explicit value that merely repeats the rule, and that block then sits out ' +
+    'the next change to it');
   // Count writes across the whole file; only the owner's may remain. The
-  // normaliser in paBlocksCollect is a delete-when-falsy, not a write, and is
-  // named explicitly rather than matched loosely.
+  // normaliser in paBlocksCollect is a delete-when-not-boolean, not a write.
   const writes = [...SRC.matchAll(/\b[a-z]+\.hide_qr\s*=\s*(?!=)/g)].length;
   const inOwner = [...owner.matchAll(/\b[a-z]+\.hide_qr\s*=\s*(?!=)/g)].length;
-  const normaliser = /if \(!b\.hide_qr\) delete b\.hide_qr; else b\.hide_qr = true;/.test(SRC) ? 1 : 0;
-  assert.strictEqual(writes - inOwner - normaliser, 0,
-    `${writes - inOwner - normaliser} write(s) to hide_qr sit outside paSetHideQr — ` +
+  assert.strictEqual(writes - inOwner, 0,
+    `${writes - inOwner} write(s) to hide_qr sit outside paSetHideQr — ` +
     'two opinions about one flag is how the first bug happened');
+});
+
+/* ── §230 · THE THIRD STATE ─────────────────────────────────────────────────
+   An absent flag no longer means "shows". It means "ask the tenant's
+   allow-list", and the editor must resolve it the same way the counter menu
+   does or the eye describes a page that is not being drawn. */
+check('the editor resolves the flag through ONE reader, not inline', () => {
+  assert.ok(/function paQrHidden\(/.test(SRC),
+    'paQrHidden is gone — the three-state rule has no single reader in the editor');
+  const reader = fnBody(SRC, 'paQrHidden');
+  assert.ok(/hide_qr === true/.test(reader) && /hide_qr === false/.test(reader),
+    'paQrHidden does not distinguish an explicit false from an absent flag, ' +
+    'which is the whole of the third state');
+  /* Nothing may read the raw flag for DISPLAY. A bare `b.hide_qr` in the row
+     markup or the inspector is the old boolean reading, and it draws an open
+     eye on a block the menu is about to skip. */
+  const displayReads = [...SRC.matchAll(/\$\{[^}]*\bb\.hide_qr\b/g)].length;
+  assert.strictEqual(displayReads, 0,
+    `${displayReads} template(s) still read b.hide_qr directly instead of paQrHidden(b)`);
+});
+check('the allow-list is fetched, never hardcoded beside the server\'s', () => {
+  assert.ok(/paLoadQrDefaults/.test(SRC), 'nothing loads the tenant allow-list');
+  const load = fnBody(SRC, 'paLoadQrDefaults');
+  assert.ok(/retail-admin\/config/.test(load),
+    'the allow-list does not come from the config endpoint');
+  /* The seed lives in lib/qr-menu-block-defaults.js and is served from there.
+     A copy in this file is a second source that agrees today and drifts after
+     the first time somebody edits one of them — so the list this editor
+     resolves against starts EMPTY and is only ever filled from the endpoint.
+     (PA_SPINE is a different list, the editor's own section order, and is not
+     what this rule is about.) */
+  assert.ok(/let PA_QR_SHOWN_TYPES = null;/.test(SRC),
+    'PA_QR_SHOWN_TYPES does not start null — a seed copied into the editor is a ' +
+    'second source of truth, and the eye will disagree with the menu the day they drift');
+  const fills = [...SRC.matchAll(/PA_QR_SHOWN_TYPES\s*=\s*(?!=)/g)].length;
+  const inLoader = [...load.matchAll(/PA_QR_SHOWN_TYPES\s*=\s*(?!=)/g)].length;
+  assert.strictEqual(fills - inLoader, 1,
+    'the allow-list is written somewhere other than its declaration and its loader');
 });
 check('it syncs the form BEFORE it mutates, like its siblings', () => {
   const owner = fnBody(SRC, 'paSetHideQr');
@@ -154,11 +198,22 @@ check('and so is the checkbox handler that writes it', () => {
 });
 
 section('The flag still means what the QR menu reads');
-check('an absent flag is still "shows" — nothing is written by default', () => {
+check('an absent flag is left absent — nothing is written by default', () => {
   const collect = fnBody(SRC, 'paBlocksCollect');
   assert.ok(collect, 'paBlocksCollect is gone');
-  assert.ok(/if \(!b\.hide_qr\) delete b\.hide_qr;/.test(collect),
-    'a falsy hide_qr is persisted instead of deleted — every product would carry a field nobody set');
+  assert.ok(/b\.hide_qr !== true && b\.hide_qr !== false/.test(collect)
+            && /delete b\.hide_qr/.test(collect),
+    'a non-boolean hide_qr is persisted instead of deleted — every product would carry a field nobody set');
+});
+check('...and a deliberate FALSE survives the save', () => {
+  /* §230. Before the default existed, a false was deleted on the way out
+     because it said nothing an absent flag did not. It now says the opposite
+     of the default — this block shows although its type is hidden — and
+     deleting it would re-hide the block on the next save, silently, on the
+     one product where somebody had asked for it. */
+  const collect = fnBody(SRC, 'paBlocksCollect');
+  assert.ok(!/if \(!b\.hide_qr\) delete b\.hide_qr/.test(collect),
+    'the old falsy-delete is back: an explicit "show this one" is thrown away on save');
 });
 
 console.log(fail ? `\n${fail} check(s) failed\n` : `\nAll ${pass} checks passed\n`);
